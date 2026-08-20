@@ -5,6 +5,8 @@ interface PosRegisterHeaderProps {
   staffName?: string;
   onUnpair?: () => void;
   onEndShift?: () => void;
+  /** Opens tablet settings / unpair flow when set. */
+  onSettings?: () => void;
 }
 
 export default function PosRegisterHeader({
@@ -12,8 +14,10 @@ export default function PosRegisterHeader({
   staffName,
   onUnpair,
   onEndShift,
+  onSettings,
 }: PosRegisterHeaderProps) {
   const staffInitial = staffName?.trim().charAt(0).toUpperCase() || '?';
+  const settingsAction = onSettings ?? onUnpair;
 
   return (
     <header className="flex h-16 shrink-0 items-center justify-between border-b border-surface-variant bg-surface px-margin-mobile shadow-sm md:px-margin-tablet">
@@ -35,22 +39,19 @@ export default function PosRegisterHeader({
           </span>
         </div>
 
-        <div className="hidden items-center gap-1 md:flex">
-          <button
-            type="button"
-            className="flex h-12 w-12 items-center justify-center rounded-full text-on-surface-variant transition-colors hover:bg-surface-container-high"
-            aria-label="Notifications"
-          >
-            <MaterialIcon name="notifications" />
-          </button>
-          <button
-            type="button"
-            className="flex h-12 w-12 items-center justify-center rounded-full text-on-surface-variant transition-colors hover:bg-surface-container-high"
-            aria-label="Settings"
-          >
-            <MaterialIcon name="settings" />
-          </button>
-        </div>
+        {settingsAction && (
+          <div className="hidden items-center gap-1 md:flex">
+            <button
+              type="button"
+              onClick={settingsAction}
+              className="flex h-12 w-12 items-center justify-center rounded-full text-on-surface-variant transition-colors hover:bg-surface-container-high"
+              aria-label="Settings"
+              title="Tablet settings"
+            >
+              <MaterialIcon name="settings" />
+            </button>
+          </div>
+        )}
 
         {staffName && (
           <div className="flex items-center gap-2 rounded-lg border-l border-outline-variant pl-3 md:gap-3 md:pl-4">

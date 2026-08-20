@@ -7,6 +7,7 @@ export const supabase = supabaseDashPartner;
 
 const PARTNER_STORAGE_KEY = `sb-${projectId}-auth-dash-partner`;
 const LEGACY_DRIVER_STORAGE_KEY = `sb-${projectId}-auth-driver`;
+const REMEMBER_ME_KEY = 'roam-partner-remember-me';
 
 /** One-time copy for partners who signed in before the dedicated partner session key existed. */
 export function migrateLegacyPartnerSession() {
@@ -17,6 +18,52 @@ export function migrateLegacyPartnerSession() {
     if (legacy) localStorage.setItem(PARTNER_STORAGE_KEY, legacy);
   } catch {
     // ignore quota / private mode
+  }
+}
+
+/** Prefer sessionStorage when "Remember me" is off so closing the tab ends the session. */
+function hydrateEphemeralPartnerSession() {
+  if (typeof window === 'undefined') return;
+  try {
+    const ephemeral = sessionStorage.getItem(PARTNER_STORAGE_KEY);
+    if (ephemeral && !localStorage.getItem(PARTNER_STORAGE_KEY)) {
+      localStorage.setItem(PARTNER_STORAGE_KEY, ephemeral);
+    }
+  } catch {
+    // ignore
+  }
+}
+
+hydrateEphemeralPartnerSession();
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('pagehide', () => {
+    try {
+      if (localStorage.getItem(REMEMBER_ME_KEY) === '0') {
+        const raw = localStorage.getItem(PARTNER_STORAGE_KEY);
+        if (raw) sessionStorage.setItem(PARTNER_STORAGE_KEY, raw);
+        localStorage.removeItem(PARTNER_STORAGE_KEY);
+      }
+    } catch {
+      // ignore
+    }
+  });
+}
+
+export function applyPartnerRememberMe(remember: boolean) {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(REMEMBER_ME_KEY, remember ? '1' : '0');
+    const raw = localStorage.getItem(PARTNER_STORAGE_KEY);
+    if (!raw) return;
+    if (remember) {
+      sessionStorage.removeItem(PARTNER_STORAGE_KEY);
+      return;
+    }
+    sessionStorage.setItem(PARTNER_STORAGE_KEY, raw);
+    localStorage.removeItem(PARTNER_STORAGE_KEY);
+  } catch {
+    // ignore
   }
 }
 

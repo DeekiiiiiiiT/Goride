@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import type { ItemMaster, StorageZone } from '../../types/enterprise-inventory';
+import { MaterialIcon } from '../../signup/components/MaterialIcon';
 import StatusChip from './StatusChip';
 
 interface ItemMasterListViewProps {
@@ -196,6 +197,79 @@ interface UomConversionEditorViewProps {
 }
 
 export function UomConversionEditorView({ item, onBack, onSave, useApi }: UomConversionEditorViewProps) {
+  const defaultCodes = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          [
+            item.purchaseUomCode,
+            item.storageUomCode,
+            item.recipeUomCode,
+            item.baseUomCode,
+            ...item.conversions.flatMap((c) => [c.fromUomCode, c.toUomCode]),
+          ].filter(Boolean),
+        ),
+      ),
+    [item],
+  );
+
+  const [rows, setRows] = useState(() =>
+    item.conversions.map((c) => ({
+      ...c,
+      localId: c.id,
+    })),
+  );
+  const [saving, setSaving] = useState(false);
+
+  const updateRow = (
+    localId: string,
+    patch: Partial<{ fromUomCode: string; toUomCode: string; factor: number }>,
+  ) => {
+    setRows((current) =>
+      current.map((row) => (row.localId === localId ? { ...row, ...patch } : row)),
+    );
+  };
+
+  const addRow = () => {
+    const from = defaultCodes[0] ?? 'each';
+    const to = defaultCodes[1] ?? defaultCodes[0] ?? 'each';
+    setRows((current) => [
+      ...current,
+      {
+        id: '',
+        localId: `new-${Date.now()}`,
+        fromUomId: '',
+        toUomId: '',
+        fromUomCode: from,
+        toUomCode: to,
+        factor: 1,
+      },
+    ]);
+  };
+
+  const removeRow = (localId: string) => {
+    setRows((current) => current.filter((row) => row.localId !== localId));
+  };
+
+  const handleSave = async () => {
+    if (!onSave) return;
+    setSaving(true);
+    try {
+      await onSave(
+        rows.map((row) => ({
+          id: row.id || row.localId,
+          fromUomId: row.fromUomId,
+          toUomId: row.toUomId,
+          fromUomCode: row.fromUomCode.trim(),
+          toUomCode: row.toUomCode.trim(),
+          factor: Number(row.factor) || 0,
+        })),
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <div className="mx-auto max-w-3xl space-y-inset-md p-margin-mobile md:p-margin-tablet">
       <button type="button" onClick={onBack} className="text-label-md text-primary-container">
@@ -206,26 +280,73 @@ export function UomConversionEditorView({ item, onBack, onSave, useApi }: UomCon
         Purchase ({item.purchaseUomCode}) → Storage ({item.storageUomCode}) → Recipe ({item.recipeUomCode}) → Base ({item.baseUomCode})
       </p>
       <ul className="space-y-inset-sm">
-        {item.conversions.map((c) => (
+        {rows.map((c) => (
           <li
-            key={c.id}
-            className="flex items-center justify-between rounded-lg border border-outline-variant bg-surface-container-lowest px-inset-md py-3"
+            key={c.localId}
+            className="grid gap-2 rounded-lg border border-outline-variant bg-surface-container-lowest px-inset-md py-3 sm:grid-cols-[1fr_auto_1fr_5rem_auto] sm:items-center"
           >
-            <span className="text-body-sm font-medium">1 {c.fromUomCode} = {c.factor} {c.toUomCode}</span>
+            <input
+              value={c.fromUomCode}
+              onChange={(e) => updateRow(c.localId, { fromUomCode: e.target.value })}
+              list={`uom-codes-${item.id}`}
+              className="rounded-lg border border-outline-variant px-2 py-2 text-body-sm"
+              aria-label="From UOM"
+            />
+            <span className="text-center text-label-sm text-on-surface-variant">=</span>
+            <div className="flex items-center gap-2">
+              <input
+                type="number"
+                min={0}
+                step="any"
+                value={c.factor}
+                onChange={(e) => updateRow(c.localId, { factor: Number(e.target.value) || 0 })}
+                className="w-24 rounded-lg border border-outline-variant px-2 py-2 text-body-sm"
+                aria-label="Factor"
+              />
+              <input
+                value={c.toUomCode}
+                onChange={(e) => updateRow(c.localId, { toUomCode: e.target.value })}
+                list={`uom-codes-${item.id}`}
+                className="min-w-0 flex-1 rounded-lg border border-outline-variant px-2 py-2 text-body-sm"
+                aria-label="To UOM"
+              />
+            </div>
+            <span className="hidden text-label-sm text-on-surface-variant sm:inline">factor</span>
+            <button
+              type="button"
+              onClick={() => removeRow(c.localId)}
+              className="rounded-lg border border-outline-variant px-3 py-2 text-label-sm text-error"
+            >
+              Remove
+            </button>
           </li>
         ))}
       </ul>
-      {onSave && (
+      <datalist id={`uom-codes-${item.id}`}>
+        {defaultCodes.map((code) => (
+          <option key={code} value={code} />
+        ))}
+      </datalist>
+      <div className="flex flex-wrap gap-2">
         <button
           type="button"
-          disabled={!useApi}
-          onClick={() => void onSave(item.conversions)}
-          className="rounded-lg bg-primary-container px-4 py-2 text-label-md font-semibold text-on-primary-container disabled:opacity-50"
+          onClick={addRow}
+          className="rounded-lg border border-outline-variant px-4 py-2 text-label-md font-semibold"
         >
-          Save conversions
+          Add conversion
         </button>
-      )}
+        {onSave && (
+          <button
+            type="button"
+            disabled={!useApi || saving}
+            onClick={() => void handleSave()}
+            className="rounded-lg bg-primary-container px-4 py-2 text-label-md font-semibold text-on-primary-container disabled:opacity-50"
+          >
+            {saving ? 'Saving…' : 'Save conversions'}
+          </button>
+        )}
+      </div>
     </div>
   );
 }
-import { MaterialIcon } from '../../signup/components/MaterialIcon';
+

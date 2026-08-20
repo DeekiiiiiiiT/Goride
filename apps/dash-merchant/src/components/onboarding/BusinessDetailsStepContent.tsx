@@ -9,13 +9,11 @@ import {
 } from '../../signup/types';
 import { MaterialIcon } from '../../signup/components/MaterialIcon';
 import { inputClass } from './OnboardingShell';
-import { PartnerWizardProgress } from './PartnerWizardProgress';
 
 interface BusinessDetailsStepContentProps {
   data: SignUpFormData;
   onChange: (patch: Partial<SignUpFormData>) => void;
   typeConfig?: MerchantBusinessTypeConfig | null;
-  stepNumber?: number;
 }
 
 function ChipPill({
@@ -46,7 +44,6 @@ export default function BusinessDetailsStepContent({
   data,
   onChange,
   typeConfig,
-  stepNumber = 4,
 }: BusinessDetailsStepContentProps) {
   const labels = getVerticalLabels(typeConfig?.vertical_type, typeConfig?.fulfillment_type);
   const isPickAndPack = typeConfig?.fulfillment_type === 'pick_and_pack';
@@ -56,8 +53,6 @@ export default function BusinessDetailsStepContent({
   if (isPickAndPack) {
     return (
       <div className="space-y-10">
-        <PartnerWizardProgress currentStep={stepNumber} />
-
         <header>
           <h2 className="text-headline-md font-semibold text-on-surface">Operations Setup</h2>
           <p className="mt-2 text-body-lg text-on-surface-variant">

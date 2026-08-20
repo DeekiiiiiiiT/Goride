@@ -894,6 +894,7 @@ export default function OrdersPage({ merchant, onNavigate, onOpenMobileNav }: Or
           merchant={merchant}
           onBack={() => setViewOrderId(null)}
           onReject={handleOpenReject}
+          onHelp={() => onNavigate?.('account')}
         />
       )}
 

@@ -49,7 +49,7 @@ export default function OnboardingWizardShell({
         {children}
         <PartnerAccountFooter email={session.user.email} className="mt-inset-md border-t border-outline-variant pt-inset-md" />
         <p className="pb-4 text-center text-label-sm text-on-surface-variant/70">
-          © 2024 Roam Rush Partner •{' '}
+          © {new Date().getFullYear()} Roam Rush Partner •{' '}
           <a href="mailto:support@roamdash.com" className="text-primary underline">
             support@roamdash.com
           </a>

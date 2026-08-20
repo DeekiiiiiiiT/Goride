@@ -7,6 +7,17 @@
   "types": "src/index.ts",
   "exports": {
     ".": "./src/index.ts",
+    "./types/team": "./src/types/team.ts",
+    "./types/restaurant-mgmt": "./src/types/restaurant-mgmt.ts",
+    "./station-api": "./src/station-api.ts",
+    "./capabilities": "./src/capabilities.ts",
+    "./venue-ops-presets": "./src/venue-ops-presets.ts",
+    "./command-origin": "./src/command-origin.ts",
+    "./auth": "./src/auth.ts",
+    "./restaurant-mgmt-api": "./src/restaurant-mgmt-api.ts",
+    "./store-tablet-session": "./src/store-tablet-session.ts",
+    "./station-shift-session": "./src/station-shift-session.ts",
+    "./tablet-enroll-errors": "./src/tablet-enroll-errors.ts",
     "./*": "./src/*"
   },
   "dependencies": {

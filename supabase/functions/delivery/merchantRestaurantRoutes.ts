@@ -208,6 +208,10 @@ export function registerMerchantRestaurantRoutes(app: {
         discount: pricing.discount,
         total: pricing.total,
         delivery_address: "In-store",
+        merchant_notes:
+          typeof body.notes === "string" && body.notes.trim()
+            ? body.notes.trim().slice(0, 2000)
+            : null,
         placed_at: new Date().toISOString(),
       })
       .select()

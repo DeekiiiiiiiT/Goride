@@ -4,9 +4,14 @@ import { MaterialIcon } from '../../signup/components/MaterialIcon';
 interface MenuPageHeaderProps {
   merchant: Merchant;
   onOpenNav?: () => void;
+  onNotifications?: () => void;
 }
 
-export default function MenuPageHeader({ merchant, onOpenNav }: MenuPageHeaderProps) {
+export default function MenuPageHeader({
+  merchant,
+  onOpenNav,
+  onNotifications,
+}: MenuPageHeaderProps) {
   return (
     <header className="safe-t sticky top-0 z-50 flex h-14 w-full items-center justify-between border-b border-outline-variant bg-surface/80 px-margin-mobile backdrop-blur-md md:px-margin-tablet lg:h-16">
       <div className="flex min-w-0 items-center gap-inset-sm">
@@ -33,6 +38,7 @@ export default function MenuPageHeader({ merchant, onOpenNav }: MenuPageHeaderPr
       </div>
       <button
         type="button"
+        onClick={onNotifications}
         className="flex h-10 w-10 items-center justify-center rounded-full text-primary transition-colors hover:bg-surface-container-high active:scale-95"
         aria-label="Notifications"
       >

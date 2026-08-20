@@ -35,5 +35,8 @@ jobs:
       - name: Test dash-merchant
         run: pnpm --filter @roam/dash-merchant test
 
+      - name: Typecheck rush-command
+        run: pnpm --filter @roam/rush-command typecheck
+
       - name: Build
         run: pnpm build

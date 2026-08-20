@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { JOB_STATION_OPTIONS, type JobStation } from '../../types/team';
 import { MaterialIcon } from '../../signup/components/MaterialIcon';
+import FirstPartyQr from '../shared/FirstPartyQr';
 
 export interface StoreTabletPairingData {
   storeName: string;
@@ -18,10 +19,6 @@ interface StoreTabletSettingsPanelProps {
   isRegenerating?: boolean;
   /** When on, only show QR codes for stations with pairing links (enabled stations). */
   venueOpsEnabled?: boolean;
-}
-
-function qrImageUrl(link: string) {
-  return `https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(link)}`;
 }
 
 export default function StoreTabletSettingsPanel({
@@ -141,10 +138,11 @@ export default function StoreTabletSettingsPanel({
                   key={option.value}
                   className="flex flex-col items-center gap-inset-sm rounded-lg border border-outline-variant p-inset-md text-center"
                 >
-                  <img
-                    src={qrImageUrl(link)}
+                  <FirstPartyQr
+                    value={link}
+                    size={120}
                     alt={`QR code for ${option.label} tablet`}
-                    className="h-[120px] w-[120px] rounded-md border border-outline-variant bg-white"
+                    className="rounded-md border border-outline-variant bg-white p-1"
                   />
                   <p className="text-body-sm font-semibold text-on-background">{option.label}</p>
                   <button

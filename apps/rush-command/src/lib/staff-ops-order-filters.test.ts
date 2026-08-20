@@ -107,8 +107,8 @@ describe('staff-ops-order-filters', () => {
       { id: 'burger', name: 'Burger with drink deal', prep_station_id: 'grill' },
     ]);
     const barIds = resolveBarPrepStationIds([
-      { id: 'prep-bar', name: 'Expo' },
-      { id: 'grill', name: 'Grill' },
+      { id: 'prep-bar', name: 'Expo', kind: 'bar' },
+      { id: 'grill', name: 'Grill', kind: 'kitchen' },
     ]);
     expect(barIds).toEqual(['prep-bar']);
     expect(
@@ -121,5 +121,17 @@ describe('staff-ops-order-filters', () => {
         lookup,
       ),
     ).toBe(false);
+
+    // Transition: kind null still uses id/name heuristics
+    expect(
+      resolveBarPrepStationIds([
+        { id: 'prep-bar', name: 'Expo', kind: null },
+        { id: 'grill', name: 'Grill', kind: null },
+      ]),
+    ).toEqual(['prep-bar']);
+    // Explicit non-bar kind skips name heuristics
+    expect(
+      resolveBarPrepStationIds([{ id: 'x', name: 'Bar snacks', kind: 'kitchen' }]),
+    ).toEqual([]);
   });
 });

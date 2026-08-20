@@ -21,6 +21,7 @@ import {
   computePerformanceMetrics,
   shouldShowPerformanceWarning,
 } from '../lib/performance-metrics';
+import { useOrderStatusMutation } from '../hooks/useOrderStatusMutation';
 import {
   getStoreClosedSubtitle,
   MerchantHour,
@@ -116,6 +117,7 @@ export default function DashboardPage({ merchant, onNavigate, onOpenMobileNav }:
     realtimeStatus,
     isTabVisible,
   });
+  const orderStatusMutation = useOrderStatusMutation({ merchantId: merchant.id });
 
   useEffect(() => {
     const interval = window.setInterval(() => setTick((value) => value + 1), 1000);
@@ -588,8 +590,25 @@ export default function DashboardPage({ merchant, onNavigate, onOpenMobileNav }:
                     </span>
                     <button
                       type="button"
-                      onClick={() => onNavigate('orders')}
-                      className={`min-h-[48px] rounded-lg px-4 py-2 text-label-md font-semibold transition-transform active:scale-95 ${
+                      disabled={orderStatusMutation.isPending}
+                      onClick={() => {
+                        if (order.isNew) {
+                          orderStatusMutation.mutate(
+                            { orderId: order.id, status: 'accepted' },
+                            {
+                              onSuccess: () => toast.success('Order accepted'),
+                            },
+                          );
+                          return;
+                        }
+                        orderStatusMutation.mutate(
+                          { orderId: order.id, status: 'ready' },
+                          {
+                            onSuccess: () => toast.success('Order marked ready'),
+                          },
+                        );
+                      }}
+                      className={`min-h-[48px] rounded-lg px-4 py-2 text-label-md font-semibold transition-transform active:scale-95 disabled:opacity-50 ${
                         order.isNew
                           ? 'bg-primary-container text-on-primary-container'
                           : 'border border-primary text-primary'

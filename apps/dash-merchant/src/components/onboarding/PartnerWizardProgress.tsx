@@ -1,13 +1,8 @@
-import { WIZARD_TOTAL_STEPS } from '../../lib/partner-onboarding-config';
+import { WIZARD_STEPS, WIZARD_TOTAL_STEPS } from '../../lib/partner-onboarding-config';
 
-const STEP_LABELS: Record<number, string> = {
-  1: 'Business Profile',
-  2: 'Location',
-  3: 'Operations Setup',
-  4: 'Contact & Hours',
-  5: 'Verify & Compliance',
-  6: 'Bank Details',
-};
+const STEP_LABELS: Record<number, string> = Object.fromEntries(
+  WIZARD_STEPS.map((step) => [step.id, step.label]),
+);
 
 export function partnerWizardStepLabel(step: number): string {
   return STEP_LABELS[step] ?? 'Setup';

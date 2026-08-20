@@ -13,6 +13,7 @@ interface PartnerDesktopShellProps {
   onSupport?: () => void;
   onGoOffline?: () => void;
   onSettings?: () => void;
+  onNotifications?: () => void;
   isAcceptingOrders: boolean;
   onToggleAcceptingOrders: (next: boolean) => void;
   togglePending?: boolean;
@@ -31,6 +32,7 @@ export default function PartnerDesktopShell({
   onSupport,
   onGoOffline,
   onSettings,
+  onNotifications,
   isAcceptingOrders,
   onToggleAcceptingOrders,
   togglePending,
@@ -51,6 +53,8 @@ export default function PartnerDesktopShell({
         togglePending={togglePending}
         notificationCount={notificationCount}
         onSettings={onSettings}
+        onNotifications={onNotifications ?? (() => onNavigate('orders'))}
+        onAccount={onSettings}
       />
       <div className="flex flex-1 overflow-hidden">
         <PartnerSideNav

@@ -313,10 +313,9 @@ export default function CounterOrdersPage({
       />
 
       <OrderAcceptedSheet
-        order={acceptedOrder}
         open={!!acceptedOrder}
-        avgPrepTimeMins={merchant.avg_prep_time_mins || 12}
-        onClose={() => setAcceptedOrderId(null)}
+        orderNumber={acceptedOrder?.order_number ?? ''}
+        defaultPrepTimeMins={merchant.avg_prep_time_mins || 12}
         onStartPreparing={handleStartPreparing}
         isSubmitting={updateStatusMutation.isPending}
       />

@@ -35,8 +35,13 @@ export function usePrepStations(merchantId: string) {
   });
 
   const updateMutation = useMutation({
-    mutationFn: ({ id, patch }: { id: string; patch: { name?: string; sortOrder?: number } }) =>
-      updatePrepStation(id, patch),
+    mutationFn: ({
+      id,
+      patch,
+    }: {
+      id: string;
+      patch: { name?: string; sortOrder?: number; kind?: PrepStation['kind'] };
+    }) => updatePrepStation(id, patch),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: prepStationKeys.merchant(merchantId) });
       toast.success('Prep station updated');
@@ -61,19 +66,19 @@ export function usePrepStations(merchantId: string) {
     prepStations,
     useApi,
     isLoading: useApi && query.isLoading,
-    createPrepStation: (name: string) => {
-      if (!useApi) {
-        toast.info('Enable prep stations preview to save changes');
-        return;
-      }
-      createMutation.mutate({ name });
-    },
-    updatePrepStation: (id: string, patch: { name?: string; sortOrder?: number }) => {
+    updatePrepStation: (id: string, patch: { name?: string; sortOrder?: number; kind?: PrepStation['kind'] }) => {
       if (!useApi) {
         toast.info('Enable prep stations preview to save changes');
         return;
       }
       updateMutation.mutate({ id, patch });
+    },
+    createPrepStation: (name: string, kind?: PrepStation['kind']) => {
+      if (!useApi) {
+        toast.info('Enable prep stations preview to save changes');
+        return;
+      }
+      createMutation.mutate({ name, kind });
     },
     deletePrepStation: (id: string) => {
       if (!useApi) {

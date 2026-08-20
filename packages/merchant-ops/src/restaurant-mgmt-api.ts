@@ -82,6 +82,8 @@ export interface CreatePosOrderInput {
   guestName?: string | null;
   guestPhone?: string | null;
   discount?: number;
+  /** Cart / ticket note stored on orders.merchant_notes */
+  notes?: string | null;
 }
 
 export async function createPosOrder(input: CreatePosOrderInput) {
@@ -102,6 +104,7 @@ export async function createPosOrder(input: CreatePosOrderInput) {
       guestName: input.guestName,
       guestPhone: input.guestPhone,
       discount: input.discount,
+      notes: input.notes,
     }),
   });
 }

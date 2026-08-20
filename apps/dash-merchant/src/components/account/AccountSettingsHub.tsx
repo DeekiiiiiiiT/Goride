@@ -178,7 +178,7 @@ export default function AccountSettingsHub({
           <SettingsMenuRow
             icon="account_balance"
             label="Bank & Payouts"
-            onClick={() => onNavigate('earnings')}
+            onClick={() => onOpenSection('bank')}
           />
           {isOwner && (
             <SettingsMenuRow

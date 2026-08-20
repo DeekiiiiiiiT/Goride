@@ -17,13 +17,6 @@ export default function TopSellingItemsCard({
     <section className="flex flex-col gap-inset-sm rounded-xl border border-outline-variant bg-surface-container-lowest p-inset-sm shadow-sm">
       <header className="mb-inset-xs flex items-center justify-between">
         <h2 className="text-headline-md text-on-surface">Top Selling Items</h2>
-        <button
-          type="button"
-          className="rounded-full p-1 transition-colors hover:bg-surface-container"
-          aria-label="More options"
-        >
-          <MaterialIcon name="more_vert" className="text-on-surface-variant" />
-        </button>
       </header>
 
       <div className="flex flex-col gap-inset-md">
@@ -62,20 +55,10 @@ export default function TopSellingItemsCard({
         )}
       </div>
 
-      {onViewAll && (
+      {onViewAll && !compact && (
         <button
           type="button"
           onClick={onViewAll}
-          className="mt-inset-sm flex h-12 w-full items-center justify-center rounded-lg text-label-md text-primary transition-colors hover:bg-surface-container"
-        >
-          View All Items
-          <MaterialIcon name="chevron_right" className="ml-inset-base text-[16px]" />
-        </button>
-      )}
-
-      {!onViewAll && !compact && (
-        <button
-          type="button"
           className="mt-inset-sm flex h-12 w-full items-center justify-center rounded-lg text-label-md text-primary transition-colors hover:bg-surface-container"
         >
           View All Items

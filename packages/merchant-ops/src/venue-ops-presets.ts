@@ -54,15 +54,19 @@ export const FIXTURE_VENUE_OPS: VenueOpsData = {
   })),
 };
 
+export type PrepStationKind = 'kitchen' | 'bar' | 'other';
+
 export interface PrepStation {
   id: string;
   name: string;
   sortOrder: number;
+  /** Null until backfilled / set — bar queue falls back to name heuristics. */
+  kind?: PrepStationKind | null;
 }
 
 export const FIXTURE_PREP_STATIONS: PrepStation[] = [
-  { id: 'prep-grill', name: 'Grill', sortOrder: 0 },
-  { id: 'prep-fry', name: 'Fry', sortOrder: 1 },
-  { id: 'prep-bar', name: 'Bar', sortOrder: 2 },
-  { id: 'prep-cold', name: 'Cold', sortOrder: 3 },
+  { id: 'prep-grill', name: 'Grill', sortOrder: 0, kind: 'kitchen' },
+  { id: 'prep-fry', name: 'Fry', sortOrder: 1, kind: 'kitchen' },
+  { id: 'prep-bar', name: 'Bar', sortOrder: 2, kind: 'bar' },
+  { id: 'prep-cold', name: 'Cold', sortOrder: 3, kind: 'kitchen' },
 ];

@@ -288,9 +288,9 @@ export default function EditItemView({
               <input
                 type="checkbox"
                 className="peer sr-only"
-                checked={!formData.is_available}
+                checked={formData.is_available}
                 onChange={(event) =>
-                  setFormData((prev) => ({ ...prev, is_available: !event.target.checked }))
+                  setFormData((prev) => ({ ...prev, is_available: event.target.checked }))
                 }
               />
               <div className="peer h-6 w-11 rounded-full bg-surface-container-highest after:absolute after:left-[2px] after:top-[2px] after:h-5 after:w-5 after:rounded-full after:border after:border-outline-variant after:bg-white after:transition-all peer-checked:bg-primary-container peer-checked:after:translate-x-5 peer-focus:outline-none" />

@@ -14,6 +14,8 @@ interface PartnerTopBarProps {
   togglePending?: boolean;
   notificationCount?: number;
   onSettings?: () => void;
+  onNotifications?: () => void;
+  onAccount?: () => void;
 }
 
 export default function PartnerTopBar({
@@ -25,6 +27,8 @@ export default function PartnerTopBar({
   togglePending = false,
   notificationCount = 0,
   onSettings,
+  onNotifications,
+  onAccount,
 }: PartnerTopBarProps) {
   return (
     <header className="safe-t relative z-20 flex h-14 w-full shrink-0 items-center justify-between gap-inset-sm border-b border-outline-variant bg-surface px-margin-mobile py-inset-xs shadow-sm lg:h-16 lg:px-margin-tablet">
@@ -63,6 +67,7 @@ export default function PartnerTopBar({
         <div className="flex items-center gap-inset-xs text-on-surface-variant lg:gap-inset-sm">
           <button
             type="button"
+            onClick={onNotifications}
             className="relative flex h-10 w-10 items-center justify-center rounded-full transition-colors hover:bg-surface-container-low active:scale-95"
             aria-label="Notifications"
           >
@@ -81,6 +86,7 @@ export default function PartnerTopBar({
           </button>
           <button
             type="button"
+            onClick={onAccount ?? onSettings}
             className="ml-inset-xs flex h-10 w-10 items-center justify-center overflow-hidden rounded-full border border-outline-variant active:scale-95"
             aria-label="Account"
           >

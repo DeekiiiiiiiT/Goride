@@ -69,6 +69,7 @@ export default function PosRegisterPage({
   const [fulfillmentType, setFulfillmentType] = useState<InStoreFulfillmentType>('counter');
   const [guestName, setGuestName] = useState('');
   const [tableLabel, setTableLabel] = useState('');
+  const [cartNote, setCartNote] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<PosPaymentMethod>('card');
   const [submitting, setSubmitting] = useState(false);
   const [lastOrderNumber, setLastOrderNumber] = useState('');
@@ -109,6 +110,7 @@ export default function PosRegisterPage({
 
   const handleClearCart = () => {
     cart.clear();
+    setCartNote('');
     setOrderNumber(draftOrderNumber());
   };
 
@@ -134,6 +136,7 @@ export default function PosRegisterPage({
               markPaid: false,
               guestName: guestName || null,
               tableLabel: tableLabel || null,
+              notes: cartNote || null,
             });
             const order = result.order as { id?: string; order_number?: string };
             const orderId = String(order?.id ?? '');
@@ -167,6 +170,7 @@ export default function PosRegisterPage({
             markPaid: true,
             guestName: guestName || null,
             tableLabel: tableLabel || null,
+            notes: cartNote || null,
           });
           setLastOrderNumber(String(result.order?.order_number ?? ''));
           setPrintJobCreated(Boolean((result as { printJobCreated?: boolean }).printJobCreated));
@@ -179,6 +183,7 @@ export default function PosRegisterPage({
       cart.clear();
       setGuestName('');
       setTableLabel('');
+      setCartNote('');
       setPendingOrderId(null);
       setClientSecret(null);
       setTerminalReady(false);
@@ -206,6 +211,7 @@ export default function PosRegisterPage({
           staffName={staffName || undefined}
           onUnpair={onUnpair}
           onEndShift={onEndShift}
+          onSettings={onUnpair}
         />
       )}
 
@@ -233,6 +239,7 @@ export default function PosRegisterPage({
           fulfillmentType={fulfillmentType}
           guestName={guestName}
           tableLabel={tableLabel}
+          cartNote={cartNote}
           paymentMethod={paymentMethod}
           terminalReady={terminalReady}
           paymentMockMode={paymentMockMode}
@@ -246,6 +253,7 @@ export default function PosRegisterPage({
           onFulfillmentChange={setFulfillmentType}
           onGuestNameChange={setGuestName}
           onTableLabelChange={setTableLabel}
+          onCartNoteChange={setCartNote}
           onPaymentMethodChange={handlePaymentMethodChange}
           onBackToCheckout={() => setStep('checkout')}
           onCompleteSale={completeSale}

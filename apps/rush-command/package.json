@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "typecheck": "tsc --noEmit -p tsconfig.merchant-ops.json",
     "preview": "vite preview",
     "test": "vitest run",
     "build:mobile": "node ../../scripts/assert-vite-supabase-env.mjs && vite build",
@@ -42,6 +43,7 @@
     "clsx": "*",
     "leaflet": "^1.9.4",
     "lucide-react": "^0.487.0",
+    "qrcode.react": "^4.2.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-easy-crop": "^6.0.2",

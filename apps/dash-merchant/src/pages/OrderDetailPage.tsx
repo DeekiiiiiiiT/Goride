@@ -19,6 +19,7 @@ interface OrderDetailPageProps {
   merchant: Merchant;
   onBack: () => void;
   onReject: (orderId: string) => void;
+  onHelp?: () => void;
 }
 
 export default function OrderDetailPage({
@@ -26,6 +27,7 @@ export default function OrderDetailPage({
   merchant,
   onBack,
   onReject,
+  onHelp,
 }: OrderDetailPageProps) {
   const queryClient = useQueryClient();
   const isTabVisible = usePageVisibility();
@@ -145,6 +147,7 @@ export default function OrderDetailPage({
           order={order}
           onBack={onBack}
           onConfirmPickup={() => updateStatusMutation.mutate({ status: 'picked_up' })}
+          onHelp={onHelp}
           isSubmitting={updateStatusMutation.isPending}
         />
       </div>

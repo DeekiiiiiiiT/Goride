@@ -275,6 +275,7 @@ export function fetchMerchantSettings(): Promise<{
     allows_pickup: boolean;
     allows_scheduled: boolean;
     allows_doubledash: boolean;
+    max_daily_capacity: number | null;
   };
 }> {
   return deliveryFetch('/merchant/settings') as Promise<{
@@ -282,6 +283,7 @@ export function fetchMerchantSettings(): Promise<{
       allows_pickup: boolean;
       allows_scheduled: boolean;
       allows_doubledash: boolean;
+      max_daily_capacity: number | null;
     };
   }>;
 }
@@ -290,6 +292,7 @@ export function saveMerchantSettings(settings: {
   allows_pickup?: boolean;
   allows_scheduled?: boolean;
   allows_doubledash?: boolean;
+  max_daily_capacity?: number | null;
 }) {
   return deliveryFetch('/merchant/settings', {
     method: 'PUT',

@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { API_ENDPOINTS, supabaseAnonFunctionHeaders } from '@roam/api-client';
+import { API_ENDPOINTS } from '@roam/api-client';
 import { toast } from 'sonner';
 import { merchantOrdersKeys } from '../lib/merchant-orders-query';
 import { getAuthHeaders } from '../lib/partner-api';
@@ -26,10 +26,16 @@ export function useOrderStatusMutation(options?: {
       if (!session) throw new Error('Not authenticated');
 
       const headers = await getAuthHeaders();
-      const res = await fetch(`${API_ENDPOINTS.delivery}/merchant/orders/${orderId}/status`, {
-        method: 'POST',
+      // Must match OrderDetailPage + rush-command: PUT /orders/:id/status (not POST /merchant/...)
+      const res = await fetch(`${API_ENDPOINTS.delivery}/orders/${orderId}/status`, {
+        method: 'PUT',
         headers,
-        body: JSON.stringify({ status, notes, estimatedPrepTimeMins }),
+        body: JSON.stringify({
+          status,
+          actorType: 'merchant',
+          notes,
+          estimatedPrepTimeMins,
+        }),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));

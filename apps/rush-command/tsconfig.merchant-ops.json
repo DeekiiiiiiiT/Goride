@@ -1,0 +1,21 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "isolatedModules": true,
+    "baseUrl": ".",
+    "paths": {
+      "@roam/merchant-ops": ["../../packages/merchant-ops/src"],
+      "@roam/merchant-ops/*": ["../../packages/merchant-ops/src/*"],
+      "@roam/api-client": ["../../packages/api-client/src"],
+      "@roam/types": ["../../packages/types/src"]
+    }
+  },
+  "include": ["src/lib/merchant-ops-import-smoke.ts"],
+  "exclude": ["node_modules", "dist"]
+}

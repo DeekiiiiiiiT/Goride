@@ -277,6 +277,21 @@ export default function EnterpriseInventoryFlow({
             item={selectedItem}
             onBack={() => setView('item-detail')}
             useApi={useApi}
+            onSave={useApi ? async (conversions) => {
+              try {
+                const api = await import('../../lib/enterprise-inventory-api');
+                const saved = await api.saveUomConversions(selectedItem.id, conversions);
+                setItems((prev) =>
+                  prev.map((row) =>
+                    row.id === selectedItem.id ? { ...row, conversions: saved } : row,
+                  ),
+                );
+                toast.success('Conversions saved');
+                setView('item-detail');
+              } catch (error) {
+                toast.error(error instanceof Error ? error.message : 'Failed to save conversions');
+              }
+            } : undefined}
           />
         ) : null;
       case 'vendors':
@@ -465,6 +480,11 @@ export default function EnterpriseInventoryFlow({
           <RecipeEditorV2View
             recipes={recipes}
             menuItems={menuItems}
+            inventoryItems={items.map((i) => ({
+              id: i.id,
+              name: i.name,
+              recipeUomCode: i.recipeUomCode,
+            }))}
             useApi={useApi}
             onBack={goHub}
             onSave={useApi ? async (menuItemId, recipe) => {

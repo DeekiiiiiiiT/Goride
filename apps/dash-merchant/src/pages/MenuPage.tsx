@@ -380,7 +380,11 @@ export default function MenuPage({ merchant, onNavigate, onOpenMobileNav, setupB
       </div>
 
       <div className="min-h-dvh bg-background pb-24 lg:hidden">
-      <MenuPageHeader merchant={merchant} onOpenNav={onOpenMobileNav} />
+      <MenuPageHeader
+        merchant={merchant}
+        onOpenNav={onOpenMobileNav}
+        onNotifications={() => onNavigate?.('orders')}
+      />
       {setupBanner && <SetupMenuBanner onViewProgress={setupBanner.onViewProgress} />}
 
       {isLoading ? (

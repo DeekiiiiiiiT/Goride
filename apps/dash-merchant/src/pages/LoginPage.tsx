@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { GOOGLE_OAUTH_EMAIL_ONLY_SCOPES, useForgotPassword } from '@roam/auth-client';
 import { isNativeCapacitorPlatform } from '@roam/types';
-import { supabase } from '../lib/partner-supabase';
+import { supabase, applyPartnerRememberMe } from '../lib/partner-supabase';
 import { toast } from 'sonner';
 import { MaterialIcon } from '../signup/components/MaterialIcon';
 import { useVisualViewport } from '../hooks/useVisualViewport';
@@ -143,6 +143,7 @@ export default function LoginPage({
       } else {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
+        applyPartnerRememberMe(rememberMe);
         toast.success('Welcome back!');
         onSuccess();
       }

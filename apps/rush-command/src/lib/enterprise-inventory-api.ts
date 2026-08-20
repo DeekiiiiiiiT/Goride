@@ -227,6 +227,25 @@ export async function saveRecipe(menuItemId: string, recipe: RecipeV2): Promise<
   });
 }
 
+export async function saveUomConversions(
+  itemId: string,
+  conversions: ItemMaster['conversions'],
+): Promise<ItemMaster['conversions']> {
+  const data = await deliveryFetch(`/merchant/enterprise-inventory/items/${itemId}/conversions`, {
+    method: 'PUT',
+    body: JSON.stringify({
+      conversions: conversions.map((c) => ({
+        fromUomId: c.fromUomId || undefined,
+        toUomId: c.toUomId || undefined,
+        fromUomCode: c.fromUomCode,
+        toUomCode: c.toUomCode,
+        factor: c.factor,
+      })),
+    }),
+  });
+  return (data.conversions as ItemMaster['conversions']) ?? [];
+}
+
 export async function createTransfer(input: {
   fromNodeId: string;
   toNodeId: string;

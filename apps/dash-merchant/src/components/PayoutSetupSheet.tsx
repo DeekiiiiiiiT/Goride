@@ -12,9 +12,16 @@ interface PayoutSetupSheetProps {
   open: boolean;
   onClose: () => void;
   onSaved?: () => void;
+  /** First-order prompt vs Settings/Earnings update path */
+  mode?: 'first-order' | 'update';
 }
 
-export default function PayoutSetupSheet({ open, onClose, onSaved }: PayoutSetupSheetProps) {
+export default function PayoutSetupSheet({
+  open,
+  onClose,
+  onSaved,
+  mode = 'first-order',
+}: PayoutSetupSheetProps) {
   const [bankName, setBankName] = useState('');
   const [accountHolderName, setAccountHolderName] = useState('');
   const [accountNumber, setAccountNumber] = useState('');
@@ -69,10 +76,12 @@ export default function PayoutSetupSheet({ open, onClose, onSaved }: PayoutSetup
             <MaterialIcon name="account_balance" className="text-primary" />
           </div>
           <h2 id="payout-setup-title" className="text-headline-md font-semibold text-on-surface">
-            Set up payouts
+            {mode === 'update' ? 'Bank & payouts' : 'Set up payouts'}
           </h2>
           <p className="mt-1 text-body-sm text-on-surface-variant">
-            You received your first order — add where we should send your earnings.
+            {mode === 'update'
+              ? 'Add or update where we should send your earnings.'
+              : 'You received your first order — add where we should send your earnings.'}
           </p>
         </div>
 
@@ -199,7 +208,7 @@ export default function PayoutSetupSheet({ open, onClose, onSaved }: PayoutSetup
             disabled={isSaving}
             className="flex h-12 w-full items-center justify-center rounded-lg text-label-md font-semibold text-primary"
           >
-            Set up later
+            {mode === 'update' ? 'Cancel' : 'Set up later'}
           </button>
         </div>
       </div>

@@ -11,6 +11,7 @@ import TeamMembersView from '../components/account/TeamMembersView';
 import NotificationSettingsView from '../components/account/NotificationSettingsView';
 import HelpSupportView from '../components/account/HelpSupportView';
 import PromotionsView from '../components/account/PromotionsView';
+import PayoutSetupSheet from '../components/PayoutSetupSheet';
 
 interface SettingsPageProps {
   merchant: Merchant;
@@ -158,14 +159,21 @@ export default function SettingsPage({
   }
 
   return (
-    <AccountSettingsHub
-      merchant={merchant}
-      isOwner={isOwner}
-      onNavigate={onNavigate}
-      onOpenSection={setActiveSection}
-      onSignOut={onSignOut}
-      onOpenMobileNav={onOpenMobileNav}
-      notificationCount={notificationCount}
-    />
+    <>
+      <AccountSettingsHub
+        merchant={merchant}
+        isOwner={isOwner}
+        onNavigate={onNavigate}
+        onOpenSection={setActiveSection}
+        onSignOut={onSignOut}
+        onOpenMobileNav={onOpenMobileNav}
+        notificationCount={notificationCount}
+      />
+      <PayoutSetupSheet
+        open={activeSection === 'bank'}
+        mode="update"
+        onClose={() => setActiveSection(null)}
+      />
+    </>
   );
 }

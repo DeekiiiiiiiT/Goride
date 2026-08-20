@@ -248,6 +248,99 @@ export function registerMerchantInventoryRoutes(app: {
     return c.json({ item: mapped });
   });
 
+  const upsertItemConversions = async (c: Context) => {
+    const g = await guard(c);
+    if ("error" in g) return g.error;
+    const { access, sb } = g;
+    const { id } = c.req.param();
+    const body = await c.req.json();
+
+    const companyId = await companyIdForMerchant(sb, access.merchant);
+    const { data: item } = await sb
+      .from("item_master")
+      .select("id")
+      .eq("id", id)
+      .eq("company_id", companyId)
+      .maybeSingle();
+    if (!item) return c.json({ error: "Not found" }, 404);
+
+    const { data: uomRows } = await sb.from("uom_definitions").select("id, code").eq("company_id", companyId);
+    const uomMap = new Map(
+      (uomRows ?? []).map((u) => [
+        String((u as Record<string, unknown>).id),
+        String((u as Record<string, unknown>).code),
+      ]),
+    );
+    const codeToId = new Map(
+      (uomRows ?? []).map((u) => [
+        String((u as Record<string, unknown>).code).toLowerCase(),
+        String((u as Record<string, unknown>).id),
+      ]),
+    );
+
+    const resolveUom = async (rawId: unknown, rawCode: unknown): Promise<string | null> => {
+      const idVal = typeof rawId === "string" ? rawId.trim() : "";
+      if (idVal && uomMap.has(idVal)) return idVal;
+      const code = String(rawCode ?? rawId ?? "").trim();
+      if (!code) return null;
+      const existing = codeToId.get(code.toLowerCase());
+      if (existing) return existing;
+      try {
+        return await resolveUomIdByCode(sb, companyId, code);
+      } catch {
+        return null;
+      }
+    };
+
+    const lines = Array.isArray(body.conversions) ? body.conversions : [];
+    const prepared: Array<{ from_uom_id: string; to_uom_id: string; factor: number }> = [];
+    for (const line of lines) {
+      const fromUomId = await resolveUom(line.fromUomId, line.fromUomCode);
+      const toUomId = await resolveUom(line.toUomId, line.toUomCode);
+      const factor = Number(line.factor);
+      if (!fromUomId || !toUomId) {
+        return c.json({ error: "Invalid UOM on conversion line" }, 400);
+      }
+      if (!(factor > 0)) {
+        return c.json({ error: "Conversion factor must be > 0" }, 400);
+      }
+      if (fromUomId === toUomId) {
+        return c.json({ error: "From and to UOM must differ" }, 400);
+      }
+      prepared.push({ from_uom_id: fromUomId, to_uom_id: toUomId, factor });
+    }
+
+    await sb.from("uom_conversions").delete().eq("item_id", id);
+    if (prepared.length > 0) {
+      const { error } = await sb.from("uom_conversions").insert(
+        prepared.map((row) => ({ item_id: id, ...row })),
+      );
+      if (error) return c.json({ error: error.message }, 500);
+    }
+
+    const { data: conversions } = await sb
+      .from("uom_conversions")
+      .select("id, from_uom_id, to_uom_id, factor")
+      .eq("item_id", id);
+
+    return c.json({
+      conversions: (conversions ?? []).map((cv) => {
+        const r = cv as Record<string, unknown>;
+        return {
+          id: String(r.id),
+          fromUomId: String(r.from_uom_id),
+          toUomId: String(r.to_uom_id),
+          fromUomCode: uomMap.get(String(r.from_uom_id)) ?? "",
+          toUomCode: uomMap.get(String(r.to_uom_id)) ?? "",
+          factor: Number(r.factor),
+        };
+      }),
+    });
+  };
+
+  app.put("/merchant/enterprise-inventory/items/:id/conversions", upsertItemConversions);
+  app.patch("/merchant/enterprise-inventory/items/:id/conversions", upsertItemConversions);
+
   app.post("/merchant/enterprise-inventory/items", async (c) => {
     const g = await guard(c);
     if ("error" in g) return g.error;
@@ -971,11 +1064,20 @@ export function registerMerchantInventoryRoutes(app: {
     }
 
     for (const line of body.ingredients ?? []) {
+      let uomId = typeof line.uomId === "string" && line.uomId.length >= 32 ? String(line.uomId) : undefined;
+      if (!uomId) {
+        const code = String(line.uomCode ?? line.uomId ?? "each");
+        try {
+          uomId = await resolveUomIdByCode(sb, companyId, code);
+        } catch {
+          return c.json({ error: `Unknown UOM: ${code}` }, 400);
+        }
+      }
       await sb.from("recipe_ingredients").insert({
         recipe_id: recipeId,
         item_id: line.itemId,
         qty_required: line.qtyRequired,
-        uom_id: line.uomId,
+        uom_id: uomId,
         yield_pct: line.yieldPct ?? 100,
       });
     }

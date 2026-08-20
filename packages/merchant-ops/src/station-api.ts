@@ -53,6 +53,7 @@ export async function fetchPrepStations(): Promise<PrepStation[]> {
 export async function createPrepStation(payload: {
   name: string;
   sortOrder?: number;
+  kind?: PrepStation['kind'];
 }): Promise<PrepStation> {
   const data = (await deliveryFetch('/merchant/venue-ops/prep-stations', {
     method: 'POST',
@@ -63,7 +64,7 @@ export async function createPrepStation(payload: {
 
 export async function updatePrepStation(
   id: string,
-  payload: { name?: string; sortOrder?: number },
+  payload: { name?: string; sortOrder?: number; kind?: PrepStation['kind'] },
 ): Promise<PrepStation> {
   const data = (await deliveryFetch(`/merchant/venue-ops/prep-stations/${id}`, {
     method: 'PATCH',

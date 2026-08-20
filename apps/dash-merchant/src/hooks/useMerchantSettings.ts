@@ -273,9 +273,9 @@ function buildFormData(merchant: Merchant): MerchantSettingsFormData {
     maxDailyCapacity: deliveryExtras.maxDailyCapacity,
     logoUrl: merchant.logo_url || '',
     coverImageUrl: merchant.cover_image_url || '',
-    website: extras.website,
-    instagram: extras.instagram,
-    facebook: extras.facebook,
+    website: merchant.website || extras.website || '',
+    instagram: merchant.instagram || extras.instagram || '',
+    facebook: merchant.facebook || extras.facebook || '',
   };
 }
 
@@ -336,11 +336,15 @@ export function useMerchantSettings(merchant: Merchant) {
 
   useEffect(() => {
     if (!serverSettings?.settings) return;
-    const { allows_pickup, allows_scheduled } = serverSettings.settings;
+    const { allows_pickup, allows_scheduled, max_daily_capacity } = serverSettings.settings;
     setFormData((prev) => ({
       ...prev,
       acceptsPickup: allows_pickup,
       acceptsScheduled: allows_scheduled,
+      maxDailyCapacity:
+        max_daily_capacity != null && max_daily_capacity > 0
+          ? String(max_daily_capacity)
+          : prev.maxDailyCapacity,
     }));
 
     const migrated = localStorage.getItem(settingsMigratedKey(merchant.id));
@@ -357,6 +361,9 @@ export function useMerchantSettings(merchant: Merchant) {
     void saveMerchantSettings({
       allows_pickup: localExtras.acceptsPickup,
       allows_scheduled: localExtras.acceptsScheduled,
+      max_daily_capacity: localExtras.maxDailyCapacity
+        ? Number(localExtras.maxDailyCapacity) || null
+        : null,
     })
       .then(() => {
         localStorage.setItem(settingsMigratedKey(merchant.id), '1');
@@ -495,6 +502,9 @@ export function useMerchantSettings(merchant: Merchant) {
           is_accepting_orders: data.isAcceptingOrders,
           logo_url: data.logoUrl,
           cover_image_url: data.coverImageUrl,
+          website: data.website || null,
+          instagram: data.instagram || null,
+          facebook: data.facebook || null,
         }),
       });
       if (!res.ok) throw new Error('Failed to update settings');
@@ -564,12 +574,8 @@ export function useMerchantSettings(merchant: Merchant) {
   });
 
   const saveProfile = async () => {
-    saveProfileExtras(merchant.id, {
-      website: formData.website,
-      instagram: formData.instagram,
-      facebook: formData.facebook,
-    });
     await updateMutation.mutateAsync(formData);
+    localStorage.removeItem(profileExtrasKey(merchant.id));
     toast.success('Profile saved');
   };
 
@@ -586,9 +592,11 @@ export function useMerchantSettings(merchant: Merchant) {
   };
 
   const saveDelivery = async () => {
+    const capacity = formData.maxDailyCapacity.trim();
     await saveMerchantSettings({
       allows_pickup: formData.acceptsPickup,
       allows_scheduled: formData.acceptsScheduled,
+      max_daily_capacity: capacity ? Number(capacity) || null : null,
     });
     localStorage.setItem(settingsMigratedKey(merchant.id), '1');
     localStorage.removeItem(deliveryExtrasKey(merchant.id));

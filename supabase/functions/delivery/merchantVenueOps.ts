@@ -82,6 +82,17 @@ async function requireOwnerMerchant(
   const ownerCheck = assertOwnerAccess(resolved);
   if (!ownerCheck.ok) return ownerCheck;
 
+  const caps = Array.isArray(resolved.merchant.capabilities)
+    ? resolved.merchant.capabilities.map(String)
+    : ["roam_delivery"];
+  if (!caps.includes("in_store_operations")) {
+    return {
+      ok: false,
+      status: 403,
+      message: "In-store operations not enabled for this merchant",
+    };
+  }
+
   return { ok: true, user, resolved };
 }
 
@@ -145,12 +156,24 @@ export async function seedVenueOpsFromBusinessType(
     .eq("id", merchantId);
 }
 
+const PREP_STATION_KINDS = new Set(["kitchen", "bar", "other"]);
+
 function mapPrepStationRow(row: Record<string, unknown>) {
+  const kindRaw = row.kind != null ? String(row.kind) : null;
   return {
     id: String(row.id),
     name: String(row.name),
     sortOrder: Number(row.sort_order ?? 0),
+    kind: kindRaw && PREP_STATION_KINDS.has(kindRaw) ? kindRaw : null,
   };
+}
+
+function parsePrepStationKind(value: unknown): string | null | undefined {
+  if (value === undefined) return undefined;
+  if (value === null || value === "") return null;
+  const kind = String(value);
+  if (!PREP_STATION_KINDS.has(kind)) return undefined;
+  return kind;
 }
 
 export function registerMerchantVenueOpsRoutes(app: Hono, deps: VenueOpsDeps) {
@@ -167,7 +190,7 @@ export function registerMerchantVenueOpsRoutes(app: Hono, deps: VenueOpsDeps) {
     const sb = getServiceSb();
     const { data, error } = await sb
       .from("merchant_prep_stations")
-      .select("id, name, sort_order")
+      .select("id, name, sort_order, kind")
       .eq("merchant_id", merchantId)
       .order("sort_order", { ascending: true })
       .order("name", { ascending: true });
@@ -191,6 +214,11 @@ export function registerMerchantVenueOpsRoutes(app: Hono, deps: VenueOpsDeps) {
     const name = String(body.name || "").trim();
     if (!name) return c.json({ error: "Name is required" }, 400);
 
+    const kind = parsePrepStationKind(body.kind);
+    if (body.kind !== undefined && kind === undefined) {
+      return c.json({ error: "Invalid kind (kitchen | bar | other)" }, 400);
+    }
+
     const merchantId = access.resolved.merchant.id as string;
     const sb = getServiceSb();
     const sortOrder = body.sortOrder != null ? Number(body.sortOrder) : 0;
@@ -200,8 +228,9 @@ export function registerMerchantVenueOpsRoutes(app: Hono, deps: VenueOpsDeps) {
         merchant_id: merchantId,
         name,
         sort_order: Number.isFinite(sortOrder) ? sortOrder : 0,
+        kind: kind ?? null,
       })
-      .select("id, name, sort_order")
+      .select("id, name, sort_order, kind")
       .single();
 
     if (error) return c.json({ error: error.message }, 500);
@@ -233,6 +262,13 @@ export function registerMerchantVenueOpsRoutes(app: Hono, deps: VenueOpsDeps) {
       }
       updates.sort_order = sortOrder;
     }
+    if (body.kind !== undefined) {
+      const kind = parsePrepStationKind(body.kind);
+      if (kind === undefined) {
+        return c.json({ error: "Invalid kind (kitchen | bar | other)" }, 400);
+      }
+      updates.kind = kind;
+    }
 
     if (Object.keys(updates).length === 1) {
       return c.json({ error: "No fields to update" }, 400);
@@ -245,7 +281,7 @@ export function registerMerchantVenueOpsRoutes(app: Hono, deps: VenueOpsDeps) {
       .update(updates)
       .eq("id", id)
       .eq("merchant_id", merchantId)
-      .select("id, name, sort_order")
+      .select("id, name, sort_order, kind")
       .single();
 
     if (error) return c.json({ error: error.message }, 500);

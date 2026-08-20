@@ -105,6 +105,8 @@ const MERCHANT_UPDATE_ALLOWLIST = new Set([
   "city",
   "postal_code",
   "website",
+  "instagram",
+  "facebook",
   "is_accepting_orders",
   "notification_settings",
 ]);
@@ -789,7 +791,7 @@ export function registerMerchantApplicationRoutes(app: Hono) {
     const serviceSb = getServiceSupabase();
     const { data } = await serviceSb
       .from("merchant_settings")
-      .select("allows_pickup, allows_scheduled, allows_doubledash")
+      .select("allows_pickup, allows_scheduled, allows_doubledash, max_daily_capacity")
       .eq("merchant_id", merchant.id)
       .maybeSingle();
 
@@ -798,6 +800,7 @@ export function registerMerchantApplicationRoutes(app: Hono) {
         allows_pickup: true,
         allows_scheduled: true,
         allows_doubledash: false,
+        max_daily_capacity: null,
       },
     });
   });
@@ -813,18 +816,44 @@ export function registerMerchantApplicationRoutes(app: Hono) {
     if (!merchant) return c.json({ error: "Merchant not found" }, 404);
 
     const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
-    const patch = {
-      merchant_id: merchant.id,
-      allows_pickup: body.allows_pickup !== undefined ? Boolean(body.allows_pickup) : true,
-      allows_scheduled: body.allows_scheduled !== undefined ? Boolean(body.allows_scheduled) : true,
-      allows_doubledash: body.allows_doubledash !== undefined ? Boolean(body.allows_doubledash) : false,
-    };
 
     const serviceSb = getServiceSupabase();
+    const { data: existing } = await serviceSb
+      .from("merchant_settings")
+      .select("allows_pickup, allows_scheduled, allows_doubledash, max_daily_capacity")
+      .eq("merchant_id", merchant.id)
+      .maybeSingle();
+
+    let maxDailyCapacity: number | null =
+      existing?.max_daily_capacity != null ? Number(existing.max_daily_capacity) : null;
+    if (body.max_daily_capacity !== undefined) {
+      const maxDailyRaw = body.max_daily_capacity;
+      if (maxDailyRaw === null || maxDailyRaw === "") {
+        maxDailyCapacity = null;
+      } else {
+        const parsed = Number(maxDailyRaw);
+        maxDailyCapacity = Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : null;
+      }
+    }
+
+    const patch = {
+      merchant_id: merchant.id,
+      allows_pickup: body.allows_pickup !== undefined
+        ? Boolean(body.allows_pickup)
+        : existing?.allows_pickup ?? true,
+      allows_scheduled: body.allows_scheduled !== undefined
+        ? Boolean(body.allows_scheduled)
+        : existing?.allows_scheduled ?? true,
+      allows_doubledash: body.allows_doubledash !== undefined
+        ? Boolean(body.allows_doubledash)
+        : existing?.allows_doubledash ?? false,
+      max_daily_capacity: maxDailyCapacity,
+    };
+
     const { data, error } = await serviceSb
       .from("merchant_settings")
       .upsert(patch, { onConflict: "merchant_id" })
-      .select("allows_pickup, allows_scheduled, allows_doubledash")
+      .select("allows_pickup, allows_scheduled, allows_doubledash, max_daily_capacity")
       .single();
     if (error) return c.json({ error: error.message }, 500);
     return c.json({ settings: data });

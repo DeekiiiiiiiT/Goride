@@ -454,18 +454,76 @@ export function LedgerAuditView({
 export function RecipeEditorV2View({
   recipes,
   menuItems,
+  inventoryItems,
   onBack,
   onSave,
   useApi,
 }: {
   recipes: RecipeV2[];
   menuItems: Array<{ id: string; name: string }>;
+  inventoryItems?: Array<{ id: string; name: string; recipeUomCode?: string }>;
   onBack?: () => void;
   onSave?: (menuItemId: string, recipe: RecipeV2) => Promise<void>;
   useApi?: boolean;
 }) {
   const [selected, setSelected] = useState(recipes[0]?.menuItemId ?? menuItems[0]?.id ?? '');
-  const recipe = recipes.find((r) => r.menuItemId === selected) ?? recipes[0];
+  const [draftByMenuItem, setDraftByMenuItem] = useState<Record<string, RecipeV2>>({});
+  const [saving, setSaving] = useState(false);
+
+  const baseRecipe =
+    recipes.find((r) => r.menuItemId === selected) ??
+    ({
+      id: `draft-${selected}`,
+      menuItemId: selected,
+      menuItemName: menuItems.find((m) => m.id === selected)?.name ?? 'Recipe',
+      yieldPct: 100,
+      ingredients: [],
+    } satisfies RecipeV2);
+
+  const recipe = draftByMenuItem[selected] ?? baseRecipe;
+
+  const setRecipe = (next: RecipeV2) => {
+    setDraftByMenuItem((prev) => ({ ...prev, [selected]: next }));
+  };
+
+  const updateIngredient = (ingId: string, patch: Partial<RecipeV2['ingredients'][number]>) => {
+    setRecipe({
+      ...recipe,
+      ingredients: recipe.ingredients.map((ing) =>
+        ing.id === ingId ? { ...ing, ...patch } : ing,
+      ),
+    });
+  };
+
+  const addIngredient = () => {
+    const first = inventoryItems?.[0];
+    const newIng = {
+      id: `new-${Date.now()}`,
+      itemId: first?.id ?? '',
+      itemName: first?.name ?? '',
+      qtyRequired: 1,
+      uomCode: first?.recipeUomCode ?? 'each',
+      yieldPct: 100,
+    };
+    setRecipe({ ...recipe, ingredients: [...recipe.ingredients, newIng] });
+  };
+
+  const removeIngredient = (ingId: string) => {
+    setRecipe({
+      ...recipe,
+      ingredients: recipe.ingredients.filter((ing) => ing.id !== ingId),
+    });
+  };
+
+  const handleSave = async () => {
+    if (!onSave) return;
+    setSaving(true);
+    try {
+      await onSave(recipe.menuItemId, recipe);
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <div className="mx-auto max-w-3xl space-y-inset-md p-margin-mobile md:p-margin-tablet">
@@ -483,26 +541,109 @@ export function RecipeEditorV2View({
         ))}
       </select>
       {recipe && (
-        <div className="rounded-xl border border-outline-variant p-inset-md">
-          <p className="text-label-sm text-on-surface-variant">Recipe yield: {recipe.yieldPct}%</p>
-          <ul className="mt-inset-sm space-y-2">
+        <div className="space-y-inset-md rounded-xl border border-outline-variant p-inset-md">
+          <label className="block">
+            <span className="text-label-sm text-on-surface-variant">Recipe yield %</span>
+            <input
+              type="number"
+              min={1}
+              max={100}
+              step={0.1}
+              value={recipe.yieldPct}
+              onChange={(e) => setRecipe({ ...recipe, yieldPct: Number(e.target.value) || 0 })}
+              className="mt-1 w-full rounded-lg border border-outline-variant px-3 py-2 text-body-sm"
+            />
+          </label>
+
+          <ul className="space-y-inset-sm">
             {recipe.ingredients.map((ing) => (
-              <li key={ing.id} className="flex justify-between text-body-sm">
-                <span>{ing.itemName}</span>
-                <span>{ing.qtyRequired} {ing.uomCode} · yield {ing.yieldPct}%</span>
+              <li
+                key={ing.id}
+                className="grid gap-2 rounded-lg border border-outline-variant p-3 sm:grid-cols-[1fr_5rem_5rem_5rem_auto]"
+              >
+                {inventoryItems && inventoryItems.length > 0 ? (
+                  <select
+                    value={ing.itemId}
+                    onChange={(e) => {
+                      const item = inventoryItems.find((i) => i.id === e.target.value);
+                      updateIngredient(ing.id, {
+                        itemId: e.target.value,
+                        itemName: item?.name ?? '',
+                        uomCode: item?.recipeUomCode ?? ing.uomCode,
+                      });
+                    }}
+                    className="rounded-lg border border-outline-variant px-2 py-2 text-body-sm"
+                  >
+                    {inventoryItems.map((item) => (
+                      <option key={item.id} value={item.id}>{item.name}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    value={ing.itemName}
+                    onChange={(e) => updateIngredient(ing.id, { itemName: e.target.value })}
+                    className="rounded-lg border border-outline-variant px-2 py-2 text-body-sm"
+                    placeholder="Ingredient"
+                  />
+                )}
+                <input
+                  type="number"
+                  min={0}
+                  step="any"
+                  value={ing.qtyRequired}
+                  onChange={(e) =>
+                    updateIngredient(ing.id, { qtyRequired: Number(e.target.value) || 0 })
+                  }
+                  className="rounded-lg border border-outline-variant px-2 py-2 text-body-sm"
+                  aria-label="Quantity"
+                />
+                <input
+                  value={ing.uomCode}
+                  onChange={(e) => updateIngredient(ing.id, { uomCode: e.target.value })}
+                  className="rounded-lg border border-outline-variant px-2 py-2 text-body-sm"
+                  aria-label="UOM"
+                />
+                <input
+                  type="number"
+                  min={1}
+                  max={100}
+                  value={ing.yieldPct}
+                  onChange={(e) =>
+                    updateIngredient(ing.id, { yieldPct: Number(e.target.value) || 0 })
+                  }
+                  className="rounded-lg border border-outline-variant px-2 py-2 text-body-sm"
+                  aria-label="Line yield %"
+                />
+                <button
+                  type="button"
+                  onClick={() => removeIngredient(ing.id)}
+                  className="rounded-lg border border-outline-variant px-3 py-2 text-label-sm text-error"
+                >
+                  Remove
+                </button>
               </li>
             ))}
           </ul>
-          {onSave && (
+
+          <div className="flex flex-wrap gap-2">
             <button
               type="button"
-              disabled={!useApi}
-              onClick={() => void onSave(recipe.menuItemId, recipe)}
-              className="mt-inset-md rounded-lg bg-primary-container px-4 py-2 text-label-md font-semibold text-on-primary-container disabled:opacity-50"
+              onClick={addIngredient}
+              className="rounded-lg border border-outline-variant px-4 py-2 text-label-md font-semibold"
             >
-              Save recipe
+              Add ingredient
             </button>
-          )}
+            {onSave && (
+              <button
+                type="button"
+                disabled={!useApi || saving}
+                onClick={() => void handleSave()}
+                className="rounded-lg bg-primary-container px-4 py-2 text-label-md font-semibold text-on-primary-container disabled:opacity-50"
+              >
+                {saving ? 'Saving…' : 'Save recipe'}
+              </button>
+            )}
+          </div>
         </div>
       )}
     </div>

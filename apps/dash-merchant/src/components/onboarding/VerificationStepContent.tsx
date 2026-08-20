@@ -6,6 +6,7 @@ import UploadArea from '../../signup/components/UploadArea';
 import { uploadMerchantDocument } from '../../lib/partner-api';
 import { inputClass } from './OnboardingShell';
 import { useMerchantBusinessTypes } from '../../hooks/useMerchantBusinessTypes';
+import { WIZARD_TOTAL_STEPS } from '../../lib/partner-onboarding-config';
 
 interface VerificationStepContentProps {
   data: SignUpFormData;
@@ -121,10 +122,12 @@ export default function VerificationStepContent({
       <div className="md:hidden">
         <div className="mb-2 flex items-center justify-between">
           <h2 className="text-title-md font-semibold text-on-surface">Verify & Compliance</h2>
-          <span className="text-label-md text-on-surface-variant">Step 5/6</span>
+          <span className="text-label-md text-on-surface-variant">
+            Step {WIZARD_TOTAL_STEPS}/{WIZARD_TOTAL_STEPS}
+          </span>
         </div>
         <div className="h-1.5 w-full overflow-hidden rounded-full bg-surface-container-highest">
-          <div className="h-full w-5/6 rounded-full bg-primary" />
+          <div className="h-full w-full rounded-full bg-primary" />
         </div>
       </div>
 

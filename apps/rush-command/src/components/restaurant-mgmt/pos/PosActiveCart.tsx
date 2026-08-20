@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { MaterialIcon } from '../../../signup/components/MaterialIcon';
 import { formatJmd } from '../../../lib/partner-utils';
 import type { PosCartLine, InStoreFulfillmentType, PosPaymentMethod } from '../../../types/restaurant-mgmt';
@@ -15,6 +16,7 @@ interface PosActiveCartProps {
   fulfillmentType: InStoreFulfillmentType;
   guestName: string;
   tableLabel: string;
+  cartNote: string;
   paymentMethod: PosPaymentMethod;
   terminalReady: boolean;
   paymentMockMode: boolean;
@@ -28,6 +30,7 @@ interface PosActiveCartProps {
   onFulfillmentChange: (type: InStoreFulfillmentType) => void;
   onGuestNameChange: (value: string) => void;
   onTableLabelChange: (value: string) => void;
+  onCartNoteChange: (value: string) => void;
   onPaymentMethodChange: (method: PosPaymentMethod) => void;
   onBackToCheckout: () => void;
   onCompleteSale: () => void;
@@ -103,6 +106,7 @@ export default function PosActiveCart({
   fulfillmentType,
   guestName,
   tableLabel,
+  cartNote,
   paymentMethod,
   terminalReady,
   paymentMockMode,
@@ -116,6 +120,7 @@ export default function PosActiveCart({
   onFulfillmentChange,
   onGuestNameChange,
   onTableLabelChange,
+  onCartNoteChange,
   onPaymentMethodChange,
   onBackToCheckout,
   onCompleteSale,
@@ -123,6 +128,18 @@ export default function PosActiveCart({
   lastOrderNumber,
 }: PosActiveCartProps) {
   const inCheckoutFlow = step === 'checkout' || step === 'payment';
+  const [noteOpen, setNoteOpen] = useState(false);
+  const [noteDraft, setNoteDraft] = useState(cartNote);
+
+  const openNoteEditor = () => {
+    setNoteDraft(cartNote);
+    setNoteOpen(true);
+  };
+
+  const saveNote = () => {
+    onCartNoteChange(noteDraft.trim());
+    setNoteOpen(false);
+  };
 
   if (step === 'success') {
     const receiptLabel = !useApi
@@ -162,9 +179,10 @@ export default function PosActiveCart({
           <div className="flex gap-2">
             <button
               type="button"
+              onClick={openNoteEditor}
               className="flex h-10 w-10 items-center justify-center rounded-full text-on-surface-variant transition-colors hover:bg-surface-container-high"
-              title="Add note"
-              aria-label="Add note"
+              title={cartNote ? 'Edit note' : 'Add note'}
+              aria-label={cartNote ? 'Edit note' : 'Add note'}
             >
               <MaterialIcon name="edit_note" />
             </button>
@@ -181,6 +199,12 @@ export default function PosActiveCart({
           </div>
         )}
       </div>
+
+      {step === 'register' && cartNote ? (
+        <p className="border-b border-surface-variant bg-surface-container-low px-6 py-2 text-body-sm text-on-surface-variant">
+          Note: {cartNote}
+        </p>
+      ) : null}
 
       {step === 'register' && (
         <>
@@ -297,6 +321,12 @@ export default function PosActiveCart({
                     className="mt-2 w-full rounded-lg border border-outline-variant px-3 py-3 text-body-md"
                   />
                 </label>
+
+                {cartNote ? (
+                  <p className="mt-4 rounded-lg bg-surface-container-low px-3 py-2 text-body-sm text-on-surface-variant">
+                    Note: {cartNote}
+                  </p>
+                ) : null}
 
                 {lines.length > 0 && (
                   <div className="mt-6 border-t border-surface-variant pt-4">
@@ -418,6 +448,48 @@ export default function PosActiveCart({
             )}
           </div>
         </>
+      )}
+
+      {noteOpen && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="pos-cart-note-title"
+            className="w-full max-w-md rounded-2xl bg-surface p-6 shadow-lg"
+          >
+            <h3 id="pos-cart-note-title" className="text-title-md font-semibold text-on-surface">
+              Order note
+            </h3>
+            <p className="mt-1 text-body-sm text-on-surface-variant">
+              Shown on the kitchen ticket and saved with the order.
+            </p>
+            <textarea
+              value={noteDraft}
+              onChange={(e) => setNoteDraft(e.target.value)}
+              rows={4}
+              maxLength={500}
+              placeholder="e.g. Extra napkins, allergy note…"
+              className="mt-4 w-full rounded-lg border border-outline-variant px-3 py-3 text-body-md"
+            />
+            <div className="mt-4 flex gap-3">
+              <button
+                type="button"
+                onClick={() => setNoteOpen(false)}
+                className="flex min-h-[48px] flex-1 items-center justify-center rounded-xl border border-outline-variant text-label-md font-semibold"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={saveNote}
+                className="flex min-h-[48px] flex-[2] items-center justify-center rounded-xl bg-primary text-label-md font-semibold text-on-primary"
+              >
+                Save note
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </aside>
   );

@@ -32,6 +32,11 @@ export default function MenuDesktopDashboard({
   onReorderItems,
 }: MenuDesktopDashboardProps) {
   const [search, setSearch] = useState('');
+  const [availabilityFilter, setAvailabilityFilter] = useState<'all' | 'available' | 'sold_out'>(
+    'all',
+  );
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [filterOpen, setFilterOpen] = useState(false);
 
   const activeCategoryId = selectedCategoryId ?? categories[0]?.id ?? null;
   const activeCategory = categories.find((category) => category.id === activeCategoryId);
@@ -50,13 +55,16 @@ export default function MenuDesktopDashboard({
   const categoryItems = useMemo(() => {
     const list = activeCategoryId ? itemsByCategory.get(activeCategoryId) || [] : [];
     const query = search.trim().toLowerCase();
-    if (!query) return list;
-    return list.filter(
-      (item) =>
+    return list.filter((item) => {
+      if (availabilityFilter === 'available' && !item.is_available) return false;
+      if (availabilityFilter === 'sold_out' && item.is_available) return false;
+      if (!query) return true;
+      return (
         item.name.toLowerCase().includes(query) ||
-        item.description?.toLowerCase().includes(query),
-    );
-  }, [activeCategoryId, itemsByCategory, search]);
+        item.description?.toLowerCase().includes(query)
+      );
+    });
+  }, [activeCategoryId, availabilityFilter, itemsByCategory, search]);
 
   return (
     <main className="flex min-h-0 min-w-0 flex-1 overflow-hidden bg-background">
@@ -171,26 +179,68 @@ export default function MenuDesktopDashboard({
               className="input-touch w-full rounded-lg border border-outline-variant bg-surface py-2 pl-10 pr-4 text-body-sm transition-all focus:border-primary-container focus:outline-none focus:ring-1 focus:ring-primary-container"
             />
           </div>
-          <div className="flex shrink-0 items-center gap-inset-sm self-end sm:self-auto">
+          <div className="relative flex shrink-0 items-center gap-inset-sm self-end sm:self-auto">
             <button
               type="button"
-              className="btn-touch hidden items-center gap-inset-xs rounded-lg border border-outline-variant px-3 py-1.5 text-label-md font-semibold text-on-surface-variant transition-colors hover:bg-surface-variant sm:flex"
+              onClick={() => setFilterOpen((open) => !open)}
+              className={`btn-touch hidden items-center gap-inset-xs rounded-lg border px-3 py-1.5 text-label-md font-semibold transition-colors sm:flex ${
+                availabilityFilter !== 'all'
+                  ? 'border-primary bg-primary-container/15 text-primary'
+                  : 'border-outline-variant text-on-surface-variant hover:bg-surface-variant'
+              }`}
             >
               <MaterialIcon name="filter_list" size={18} />
               Filter
             </button>
+            {filterOpen && (
+              <div className="absolute right-0 top-full z-20 mt-1 min-w-[160px] overflow-hidden rounded-lg border border-outline-variant bg-surface shadow-sm">
+                {(
+                  [
+                    ['all', 'All items'],
+                    ['available', 'Available'],
+                    ['sold_out', 'Sold out'],
+                  ] as const
+                ).map(([value, label]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => {
+                      setAvailabilityFilter(value);
+                      setFilterOpen(false);
+                    }}
+                    className={`flex w-full px-3 py-2 text-left text-label-md hover:bg-surface-container-low ${
+                      availabilityFilter === value ? 'text-primary' : 'text-on-surface'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            )}
             <div className="hidden overflow-hidden rounded-lg border border-outline-variant sm:flex">
               <button
                 type="button"
-                className="bg-surface-variant p-1.5 text-on-surface transition-colors hover:bg-surface-container-high"
+                onClick={() => setViewMode('grid')}
+                className={`p-1.5 transition-colors hover:bg-surface-container-high ${
+                  viewMode === 'grid'
+                    ? 'bg-surface-variant text-on-surface'
+                    : 'bg-surface text-on-surface-variant'
+                }`}
                 aria-label="Grid view"
+                aria-pressed={viewMode === 'grid'}
               >
                 <MaterialIcon name="grid_view" size={20} />
               </button>
               <button
                 type="button"
-                className="border-l border-outline-variant bg-surface p-1.5 text-on-surface-variant transition-colors hover:bg-surface-variant"
+                onClick={() => setViewMode('list')}
+                className={`border-l border-outline-variant p-1.5 transition-colors hover:bg-surface-variant ${
+                  viewMode === 'list'
+                    ? 'bg-surface-variant text-on-surface'
+                    : 'bg-surface text-on-surface-variant'
+                }`}
                 aria-label="List view"
+                aria-pressed={viewMode === 'list'}
               >
                 <MaterialIcon name="view_list" size={20} />
               </button>
@@ -222,7 +272,11 @@ export default function MenuDesktopDashboard({
               onReorder={(ordered) => {
                 if (activeCategoryId) onReorderItems?.(activeCategoryId, ordered);
               }}
-              className="grid grid-cols-1 gap-inset-md pb-inset-xl sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-[repeat(auto-fill,minmax(240px,1fr))]"
+              className={
+                viewMode === 'list'
+                  ? 'flex flex-col gap-inset-sm pb-inset-xl'
+                  : 'grid grid-cols-1 gap-inset-md pb-inset-xl sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-[repeat(auto-fill,minmax(240px,1fr))]'
+              }
               renderItem={(item, dragHandle) => (
                 <div className="relative">
                   {dragHandle && (

@@ -6,6 +6,7 @@ import EarningsSubNav from '../components/earnings/EarningsSubNav';
 import PayoutDetailView from '../components/earnings/PayoutDetailView';
 import QueryErrorState from '../components/QueryErrorState';
 import PartnerSkeleton from '../components/PartnerSkeleton';
+import PayoutSetupSheet from '../components/PayoutSetupSheet';
 
 interface EarningsPageProps {
   onNavigate: (page: PartnerTab) => void;
@@ -13,6 +14,8 @@ interface EarningsPageProps {
 
 export default function EarningsPage({ onNavigate }: EarningsPageProps) {
   const [selectedPayoutId, setSelectedPayoutId] = useState<string | null>(null);
+  const [showPayoutSetup, setShowPayoutSetup] = useState(false);
+  const [earningsTab, setEarningsTab] = useState<'earnings' | 'history'>('earnings');
   const { data, isLoading, isError, refetch } = useMerchantEarnings();
   const payoutQuery = useMerchantPayoutDetail(selectedPayoutId);
 
@@ -100,6 +103,7 @@ export default function EarningsPage({ onNavigate }: EarningsPageProps) {
         <h1 className="text-headline-md font-bold text-primary">Earnings</h1>
         <button
           type="button"
+          onClick={() => setShowPayoutSetup(true)}
           className="flex h-12 w-12 items-center justify-center rounded-full text-primary transition-colors hover:bg-surface-container active:scale-95"
           aria-label="Wallet"
         >
@@ -108,6 +112,68 @@ export default function EarningsPage({ onNavigate }: EarningsPageProps) {
       </header>
 
       <main className="mx-auto flex w-full max-w-3xl flex-grow flex-col gap-inset-lg px-margin-mobile pb-[100px] pt-16 md:px-margin-tablet md:pb-inset-lg">
+        {earningsTab === 'history' ? (
+          <section className="flex flex-col gap-inset-sm">
+            <h3 className="px-inset-xs text-headline-md text-on-surface">Payout & transaction history</h3>
+            {data.transactions.length === 0 ? (
+              <div className="rounded-xl border border-outline-variant bg-surface-container-lowest p-inset-md text-center text-body-sm text-on-surface-variant">
+                No transactions yet
+              </div>
+            ) : (
+              <div className="overflow-hidden rounded-xl border border-outline-variant bg-surface-container-lowest shadow-sm">
+                {data.transactions.map((transaction, index) => {
+                  const isPayout = transaction.type === 'payout' && transaction.payoutId;
+                  const row = (
+                    <>
+                      <div className="flex flex-col gap-inset-base text-left">
+                        <span className="text-body-lg text-on-surface">{transaction.title}</span>
+                        <span className="text-label-sm text-on-surface-variant">{transaction.date}</span>
+                      </div>
+                      <span
+                        className={`text-body-lg ${
+                          transaction.amount >= 0 ? 'text-primary' : 'text-error'
+                        }`}
+                      >
+                        {formatSignedJmd(transaction.amount)}
+                      </span>
+                    </>
+                  );
+
+                  if (isPayout) {
+                    return (
+                      <button
+                        key={transaction.id}
+                        type="button"
+                        onClick={() => setSelectedPayoutId(transaction.payoutId!)}
+                        className={`flex w-full items-center justify-between p-inset-md text-left transition-colors hover:bg-surface-container-low ${
+                          index < data.transactions.length - 1
+                            ? 'border-b border-outline-variant'
+                            : ''
+                        }`}
+                      >
+                        {row}
+                      </button>
+                    );
+                  }
+
+                  return (
+                    <div
+                      key={transaction.id}
+                      className={`flex items-center justify-between p-inset-md ${
+                        index < data.transactions.length - 1
+                          ? 'border-b border-outline-variant'
+                          : ''
+                      }`}
+                    >
+                      {row}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+        ) : (
+          <>
         <section className="flex flex-col items-center gap-inset-sm text-center">
           <h2 className="text-label-sm uppercase tracking-widest text-on-surface-variant">
             Current Balance
@@ -236,16 +302,27 @@ export default function EarningsPage({ onNavigate }: EarningsPageProps) {
           </button>
           <button
             type="button"
-            onClick={() => onNavigate('account')}
+            onClick={() => setShowPayoutSetup(true)}
             className="flex min-h-[48px] items-center gap-inset-xs text-body-sm text-primary transition-colors hover:text-primary-fixed-dim"
           >
             <MaterialIcon name="settings" className="text-[20px]" />
             Update Bank Details
           </button>
         </section>
+          </>
+        )}
       </main>
 
-      <EarningsSubNav onNavigate={onNavigate} />
+      <EarningsSubNav
+        activeTab={earningsTab}
+        onNavigate={onNavigate}
+        onSelectTab={setEarningsTab}
+      />
+      <PayoutSetupSheet
+        open={showPayoutSetup}
+        mode="update"
+        onClose={() => setShowPayoutSetup(false)}
+      />
     </div>
   );
 }

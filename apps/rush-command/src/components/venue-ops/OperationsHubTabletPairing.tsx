@@ -1,11 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
 import { buildCommandTabletUrl, getStoreTabletPairing } from '@roam/merchant-ops';
 import { MaterialIcon } from '../../signup/components/MaterialIcon';
+import FirstPartyQr from '../shared/FirstPartyQr';
 import type { JobStation } from '../../types/team';
-
-function qrImageUrl(link: string) {
-  return `https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${encodeURIComponent(link)}`;
-}
 
 interface OperationsHubTabletPairingProps {
   merchantId: string;
@@ -75,10 +72,11 @@ export default function OperationsHubTabletPairing({
       </div>
 
       <div className="flex flex-col items-center gap-inset-md rounded-lg border border-outline-variant bg-surface p-inset-md sm:flex-row sm:items-start">
-        <img
-          src={qrImageUrl(tabletEntryUrl)}
+        <FirstPartyQr
+          value={tabletEntryUrl}
+          size={160}
           alt="QR code to pair a store tablet"
-          className="h-40 w-40 rounded-md border border-outline-variant bg-white"
+          className="rounded-md border border-outline-variant bg-white p-1"
         />
         <div className="min-w-0 flex-1 space-y-inset-sm text-center sm:text-left">
           <div>

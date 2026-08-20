@@ -104,17 +104,22 @@ export function kitchenQueueForPrepStation(
   );
 }
 
-/** Prep stations for the bar KDS — prefer id/slug markers, fall back to name heuristics. */
+/** Prep stations for the bar KDS — prefer explicit kind, then id/name heuristics when kind is null. */
 export function resolveBarPrepStationIds(
-  prepStations: Array<{ id: string; name: string }>,
+  prepStations: Array<{ id: string; name: string; kind?: string | null }>,
 ): string[] {
-  const byMarker = prepStations.filter((station) =>
-    /(?:^|[-_])bar(?:$|[-_])|^bar$/i.test(station.id) ||
-    /(?:^|[-_])drink/i.test(station.id),
+  const byKind = prepStations.filter((station) => station.kind === 'bar');
+  if (byKind.length > 0) return byKind.map((station) => station.id);
+
+  const unset = prepStations.filter((station) => station.kind == null);
+  const byMarker = unset.filter(
+    (station) =>
+      /(?:^|[-_])bar(?:$|[-_])|^bar$/i.test(station.id) ||
+      /(?:^|[-_])drink/i.test(station.id),
   );
   if (byMarker.length > 0) return byMarker.map((station) => station.id);
 
-  return prepStations
+  return unset
     .filter((station) => /bar|drink|beverage|cocktail/i.test(station.name))
     .map((station) => station.id);
 }

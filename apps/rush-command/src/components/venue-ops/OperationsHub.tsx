@@ -41,7 +41,9 @@ export default function OperationsHub({
 
   const handleStationsChange = (stations: JobStation[]) => {
     setLocalStations(stations);
-    updateVenueOps({ enabledStations: stations, venueStyle: 'custom' });
+    void Promise.resolve(updateVenueOps({ enabledStations: stations, venueStyle: 'custom' })).catch(
+      () => setLocalStations(null),
+    );
   };
 
   return (
@@ -84,7 +86,8 @@ export default function OperationsHub({
           <div className="flex flex-col gap-inset-lg">
             {!useApi && (
               <p className="rounded-lg border border-outline-variant bg-surface-container-low px-inset-md py-inset-sm text-body-sm text-on-surface-variant">
-                Preview mode — turn on the venue operations flag in dev settings to save to your store.
+                Preview only — in-store operations is not enabled for this store, so station changes
+                will not save.
               </p>
             )}
             <BusinessTypeSummary businessTypeId={merchant?.business_type} />

@@ -8,6 +8,7 @@ interface ReadyOrderDetailProps {
   order: Order;
   onBack: () => void;
   onConfirmPickup: () => void;
+  onHelp?: () => void;
   isSubmitting?: boolean;
 }
 
@@ -15,6 +16,7 @@ export default function ReadyOrderDetail({
   order,
   onBack,
   onConfirmPickup,
+  onHelp,
   isSubmitting = false,
 }: ReadyOrderDetailProps) {
   const [checklist, setChecklist] = useState<Record<number, boolean>>({
@@ -58,6 +60,7 @@ export default function ReadyOrderDetail({
         </div>
         <button
           type="button"
+          onClick={onHelp}
           className="rounded-full px-3 py-2 text-label-md font-semibold text-primary transition-colors hover:bg-surface-container-low active:scale-95"
         >
           Help

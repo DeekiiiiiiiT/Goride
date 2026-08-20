@@ -5,7 +5,6 @@ import {
   patchVenueOps,
 } from '../lib/partner-api';
 import type { Merchant } from '../hooks/useMerchant';
-import { readFlag } from '../lib/partner-feature-flags';
 import { canAccessRestaurantMgmt } from '../lib/merchant-capabilities';
 import { FIXTURE_VENUE_OPS, type VenueOpsData } from '../lib/venue-ops-presets';
 import type { JobStation, VenueStyle } from '../types/team';
@@ -16,10 +15,8 @@ export const venueOpsKeys = {
 };
 
 export function useVenueOps(merchantId: string, merchant?: Merchant | null) {
-  const useApi =
-    readFlag(merchantId, 'venueOpsV2') ||
-    readFlag(merchantId, 'staffOperationsV1') ||
-    canAccessRestaurantMgmt(merchantId, merchant);
+  // Capability is the only write authorization; feature flags must not unlock API writes.
+  const useApi = canAccessRestaurantMgmt(merchantId, merchant);
   const queryClient = useQueryClient();
 
   const query = useQuery({
@@ -47,10 +44,10 @@ export function useVenueOps(merchantId: string, merchant?: Merchant | null) {
     enabledStations?: JobStation[];
   }) => {
     if (!useApi) {
-      toast.info('Enable venue operations preview to save changes');
-      return;
+      toast.info('In-store operations is not enabled for this store');
+      return Promise.reject(new Error('In-store operations not enabled'));
     }
-    patchMutation.mutate(patch);
+    return patchMutation.mutateAsync(patch);
   };
 
   return {

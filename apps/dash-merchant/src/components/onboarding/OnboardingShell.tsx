@@ -1,15 +1,13 @@
 import { ReactNode } from 'react';
 import { MaterialIcon } from '../../signup/components/MaterialIcon';
-import { WIZARD_TOTAL_STEPS } from '../../lib/partner-onboarding-config';
+import { WIZARD_STEPS, WIZARD_TOTAL_STEPS } from '../../lib/partner-onboarding-config';
 import { PartnerWizardMobileBanner, PartnerWizardProgress } from './PartnerWizardProgress';
 
-export const ONBOARDING_STEPS = [
-  { id: 1, icon: 'store', label: 'Info' },
-  { id: 2, icon: 'location_on', label: 'Location' },
-  { id: 3, icon: 'call', label: 'Contact' },
-  { id: 4, icon: 'schedule', label: 'Hours' },
-  { id: 5, icon: 'image', label: 'Brand' },
-] as const;
+export const ONBOARDING_STEPS = WIZARD_STEPS.map((step) => ({
+  id: step.id,
+  icon: step.icon,
+  label: step.label,
+}));
 
 const inputClass =
   'input-touch h-12 w-full rounded-lg border border-outline-variant bg-transparent px-4 text-body-sm text-on-surface outline-none transition-colors placeholder:text-on-surface-variant partner-field focus:border-primary-container focus:ring-1 focus:ring-primary-container';
@@ -31,7 +29,7 @@ export function OnboardingHeader({
   currentStep,
   showProgress = true,
 }: OnboardingHeaderFullProps) {
-  if (currentStep === 6 && showSetupTitle) {
+  if (currentStep === WIZARD_TOTAL_STEPS && showSetupTitle) {
     return (
       <header className="fixed top-0 z-50 flex w-full flex-col border-b border-outline-variant bg-surface safe-t safe-x">
         <div className="flex h-14 w-full items-center justify-between px-margin-mobile">

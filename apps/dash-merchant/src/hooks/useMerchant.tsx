@@ -60,6 +60,9 @@ export interface Merchant {
   go_live_rule?: GoLiveRule | null;
   capabilities?: string[];
   business_type?: string | null;
+  website?: string | null;
+  instagram?: string | null;
+  facebook?: string | null;
 }
 
 export interface MerchantProfileResponse {
