@@ -31,6 +31,7 @@ import {
   dismissGoLiveScreen,
   markRestaurantSetupInProgress,
   hasRestaurantSetupInProgress,
+  rememberGoLiveComplete,
 } from './lib/go-live';
 import { bootstrapPartnerMerchant, PendingTeamInviteError } from './lib/partner-api';
 import TeamInviteLandingPage from './pages/TeamInviteLandingPage';
@@ -192,6 +193,14 @@ function DashMerchantApp() {
     toggleAcceptingOrders,
     isPending: togglePending,
   } = useAcceptingOrdersToggle(merchant);
+
+  // If they are (or were) accepting orders, permanently settle the approval gate
+  // so pausing later cannot bounce them back to "You're approved!".
+  useEffect(() => {
+    if (merchant?.is_accepting_orders) {
+      rememberGoLiveComplete(merchant.id);
+    }
+  }, [merchant?.id, merchant?.is_accepting_orders]);
 
   useEffect(() => {
     if (wasOffline && isOnline) {

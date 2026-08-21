@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { API_ENDPOINTS } from '@roam/api-client';
 import { supabase } from '../lib/partner-supabase';
 import { toast } from 'sonner';
+import { rememberGoLiveComplete } from '../lib/go-live';
 import { Merchant } from './useMerchant';
 
 export function useAcceptingOrdersToggle(merchant: Merchant | null | undefined) {
@@ -10,6 +11,9 @@ export function useAcceptingOrdersToggle(merchant: Merchant | null | undefined) 
   const mutation = useMutation({
     mutationFn: async (isAccepting: boolean) => {
       if (!merchant) throw new Error('Merchant not loaded');
+
+      // Settle the first-time gate before pause so is_accepting_orders=false cannot reopen it.
+      rememberGoLiveComplete(merchant.id);
 
       const {
         data: { session },

@@ -1,7 +1,12 @@
 import { describe, expect, it, beforeEach, vi } from 'vitest';
-import { shouldShowGoLiveScreen } from './go-live';
+import {
+  rememberGoLiveComplete,
+  shouldShowGoLiveScreen,
+} from './go-live';
 
 describe('shouldShowGoLiveScreen', () => {
+  const store = new Map<string, string>();
+
   const merchant = {
     id: 'm1',
     verification_status: 'approved' as const,
@@ -10,11 +15,16 @@ describe('shouldShowGoLiveScreen', () => {
   };
 
   beforeEach(() => {
+    store.clear();
     vi.stubGlobal('localStorage', {
-      getItem: () => null,
-      setItem: () => undefined,
-      removeItem: () => undefined,
-      clear: () => undefined,
+      getItem: (key: string) => store.get(key) ?? null,
+      setItem: (key: string, value: string) => {
+        store.set(key, value);
+      },
+      removeItem: (key: string) => {
+        store.delete(key);
+      },
+      clear: () => store.clear(),
     });
   });
 
@@ -24,5 +34,10 @@ describe('shouldShowGoLiveScreen', () => {
 
   it('skips the gate when the restaurant is already accepting orders', () => {
     expect(shouldShowGoLiveScreen({ ...merchant, is_accepting_orders: true })).toBe(false);
+  });
+
+  it('does not reopen the gate after pause once go-live was remembered', () => {
+    rememberGoLiveComplete(merchant.id);
+    expect(shouldShowGoLiveScreen({ ...merchant, is_accepting_orders: false })).toBe(false);
   });
 });

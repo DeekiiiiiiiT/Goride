@@ -33,6 +33,7 @@ import PauseOrdersSheet, {
 } from '../components/PauseOrdersSheet';
 import QueryErrorState from '../components/QueryErrorState';
 import { MaterialIcon } from '../signup/components/MaterialIcon';
+import { rememberGoLiveComplete } from '../lib/go-live';
 import { formatElapsedTimer, formatJmd, formatTimeAgo, PartnerTab } from '../lib/partner-utils';
 
 interface DashboardPageProps {
@@ -125,6 +126,9 @@ export default function DashboardPage({ merchant, onNavigate, onOpenMobileNav }:
   }, []);
 
   const setAcceptingOrders = async (isAccepting: boolean) => {
+    // Pause must not reopen the first-time "You're approved" gate.
+    rememberGoLiveComplete(merchant.id);
+
     const {
       data: { session },
     } = await supabase.auth.getSession();

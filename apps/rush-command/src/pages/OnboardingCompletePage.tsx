@@ -222,7 +222,7 @@ export default function OnboardingCompletePage({
         </div>
 
         <div className="mt-12 flex flex-col items-center justify-center gap-4 sm:flex-row">
-          {!restaurantReady ? (
+          {!restaurantReady && (
             <button
               type="button"
               onClick={onOpenSetup}
@@ -232,26 +232,25 @@ export default function OnboardingCompletePage({
               <MaterialIcon name={setupInProgress ? 'arrow_back' : 'storefront'} />
               {setupInProgress ? 'Back to menu' : setupButtonLabel}
             </button>
-          ) : (
-            <>
-              <button
-                type="button"
-                onClick={handleGoLive}
-                disabled={isPending || loading || !canGoLive}
-                className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-secondary-container px-10 font-label-lg text-on-secondary-container disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
-              >
-                <MaterialIcon name="bolt" />
-                Go Live
-              </button>
-              <button
-                type="button"
-                onClick={onContinueToDashboard}
-                className="flex h-12 w-full items-center justify-center rounded-full border border-outline px-10 font-label-lg text-primary hover:bg-primary/5 sm:w-auto"
-              >
-                Continue to dashboard
-              </button>
-            </>
           )}
+          {restaurantReady && (
+            <button
+              type="button"
+              onClick={handleGoLive}
+              disabled={isPending || loading || !canGoLive}
+              className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-secondary-container px-10 font-label-lg text-on-secondary-container disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+            >
+              <MaterialIcon name="bolt" />
+              Go Live
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={onContinueToDashboard}
+            className="flex h-12 w-full items-center justify-center rounded-full border border-outline px-10 font-label-lg text-primary hover:bg-primary/5 sm:w-auto"
+          >
+            Continue to dashboard
+          </button>
         </div>
       </main>
 

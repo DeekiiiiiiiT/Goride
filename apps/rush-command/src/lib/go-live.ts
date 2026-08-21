@@ -10,8 +10,13 @@ export function hasCompletedGoLive(merchantId: string) {
   return localStorage.getItem(goLiveStorageKey(merchantId)) === '1';
 }
 
-export function markGoLiveComplete(merchantId: string) {
+/** Persist that the approval gate is done — does not clear setup/dismiss bypass flags. */
+export function rememberGoLiveComplete(merchantId: string) {
   localStorage.setItem(goLiveStorageKey(merchantId), '1');
+}
+
+export function markGoLiveComplete(merchantId: string) {
+  rememberGoLiveComplete(merchantId);
   clearRestaurantSetupInProgress(merchantId);
   localStorage.removeItem(goLiveDismissedKey(merchantId));
 }
@@ -23,6 +28,8 @@ export function goLiveDismissedKey(merchantId: string) {
 /** Owner finished setup but chose dashboard over going live yet. */
 export function dismissGoLiveScreen(merchantId: string) {
   localStorage.setItem(goLiveDismissedKey(merchantId), '1');
+  // Pausing later must not reopen this first-time screen.
+  rememberGoLiveComplete(merchantId);
 }
 
 export function hasDismissedGoLiveScreen(merchantId: string) {
@@ -46,7 +53,11 @@ export function clearRestaurantSetupInProgress(merchantId: string) {
   localStorage.removeItem(restaurantSetupInProgressKey(merchantId));
 }
 
-/** Post-approval go-live screen — skip when already live or owner finished the gate. */
+/**
+ * Post-approval go-live screen — first-time gate only.
+ * Pausing orders (is_accepting_orders=false) must NOT reopen this screen once
+ * the owner has already operated or left the gate.
+ */
 export function shouldShowGoLiveScreen(
   merchant: Pick<
     Merchant,
@@ -55,8 +66,10 @@ export function shouldShowGoLiveScreen(
 ): boolean {
   if (merchant.verification_status !== 'approved') return false;
   if (!merchant.verified_at) return false;
-  if (merchant.is_accepting_orders) return false;
   if (hasCompletedGoLive(merchant.id)) return false;
+  // Soft skip while currently accepting; rememberGoLiveComplete should run on load
+  // so a later pause does not fall through and trap the owner here.
+  if (merchant.is_accepting_orders) return false;
   return true;
 }
 
