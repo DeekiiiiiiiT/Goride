@@ -96,7 +96,6 @@ const MERCHANT_UPDATE_ALLOWLIST = new Set([
   "cuisine_types",
   "logo_url",
   "cover_image_url",
-  "delivery_radius_km",
   "avg_prep_time_mins",
   "business_type",
   "business_registration_number",

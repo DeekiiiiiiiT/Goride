@@ -1,9 +1,7 @@
 import type { MerchantBusinessTypeConfig } from '@roam/types';
 import { getVerticalLabels } from '@roam/vertical-config';
 import {
-  DELIVERY_RADIUS_OPTIONS,
   PREP_TIME_OPTIONS,
-  RETAIL_DELIVERY_RADIUS_OPTIONS,
   RETAIL_PREP_TIME_OPTIONS,
   SignUpFormData,
 } from '../../signup/types';
@@ -48,7 +46,6 @@ export default function BusinessDetailsStepContent({
   const labels = getVerticalLabels(typeConfig?.vertical_type, typeConfig?.fulfillment_type);
   const isPickAndPack = typeConfig?.fulfillment_type === 'pick_and_pack';
   const prepOptions = isPickAndPack ? RETAIL_PREP_TIME_OPTIONS : PREP_TIME_OPTIONS;
-  const radiusOptions = isPickAndPack ? RETAIL_DELIVERY_RADIUS_OPTIONS : DELIVERY_RADIUS_OPTIONS;
 
   if (isPickAndPack) {
     return (
@@ -75,21 +72,6 @@ export default function BusinessDetailsStepContent({
           </div>
         </section>
 
-        <section>
-          <label className="text-title-md font-semibold text-on-surface">Delivery radius*</label>
-          <p className="mt-1 text-body-md text-on-surface-variant">{labels.deliveryRadiusHelper}</p>
-          <div className="mt-4 flex flex-wrap gap-3">
-            {radiusOptions.map((option) => (
-              <ChipPill
-                key={option.value}
-                label={option.label.replace(' km', 'km')}
-                selected={data.deliveryRadius === option.value}
-                onClick={() => onChange({ deliveryRadius: option.value })}
-              />
-            ))}
-          </div>
-        </section>
-
         <section className="space-y-4 rounded-xl border border-outline-variant bg-surface-container-lowest p-6 shadow-sm">
           <h3 className="flex items-center gap-2 text-title-md font-semibold text-on-surface">
             <MaterialIcon name="inventory_2" className="text-primary" />
@@ -99,6 +81,10 @@ export default function BusinessDetailsStepContent({
             Connect stock alerts later from your partner dashboard.
           </p>
         </section>
+
+        <p className="text-body-sm text-on-surface-variant">
+          Delivery coverage for your store is set by Roam after approval.
+        </p>
       </div>
     );
   }
@@ -164,37 +150,9 @@ export default function BusinessDetailsStepContent({
         </div>
       </section>
 
-      <section className="overflow-hidden rounded-xl border border-outline-variant bg-white/80 p-6 shadow-sm backdrop-blur-sm">
-        <div className="mb-4 flex items-start justify-between">
-          <div>
-            <h3 className="text-title-md font-semibold text-on-surface">Delivery radius*</h3>
-            <div className="mt-1 flex items-center gap-2">
-              <MaterialIcon name="info" filled className="text-sm text-primary" />
-              <p className="text-body-md text-on-surface-variant">{labels.deliveryRadiusHelper}</p>
-            </div>
-          </div>
-          <MaterialIcon name="distance" className="text-on-surface-variant" />
-        </div>
-
-        <div className="relative mb-6 h-40 overflow-hidden rounded-lg border border-outline-variant bg-surface-container-high">
-          <div className="absolute inset-0 flex items-center justify-center">
-            <div className="flex h-20 w-20 animate-pulse items-center justify-center rounded-full border-2 border-primary bg-primary/20">
-              <MaterialIcon name="restaurant" className="text-primary" />
-            </div>
-          </div>
-        </div>
-
-        <div className="flex flex-wrap gap-3">
-          {radiusOptions.map((option) => (
-            <ChipPill
-              key={option.value}
-              label={option.label}
-              selected={data.deliveryRadius === option.value}
-              onClick={() => onChange({ deliveryRadius: option.value })}
-            />
-          ))}
-        </div>
-      </section>
+      <p className="text-body-sm text-on-surface-variant">
+        Delivery coverage for your restaurant is set by Roam after approval.
+      </p>
 
       <div className="flex items-center gap-4 rounded-xl bg-warning-container p-4">
         <MaterialIcon name="lightbulb" className="text-tertiary" />

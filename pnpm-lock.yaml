@@ -521,6 +521,9 @@ importers:
       '@roam/auth-client':
         specifier: workspace:*
         version: link:../../packages/auth-client
+      '@roam/business-config':
+        specifier: workspace:*
+        version: link:../../packages/business-config
       '@roam/location':
         specifier: workspace:*
         version: link:../../packages/location
@@ -1574,6 +1577,9 @@ importers:
       '@roam/auth-client':
         specifier: workspace:*
         version: link:../../packages/auth-client
+      '@roam/business-config':
+        specifier: workspace:*
+        version: link:../../packages/business-config
       '@roam/merchant-ops':
         specifier: workspace:*
         version: link:../../packages/merchant-ops

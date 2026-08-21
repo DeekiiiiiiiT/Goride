@@ -31,6 +31,7 @@
     "@dnd-kit/utilities": "^3.2.2",
     "@roam/api-client": "workspace:*",
     "@roam/auth-client": "workspace:*",
+    "@roam/business-config": "workspace:*",
     "@roam/merchant-ops": "workspace:*",
     "@roam/rush-chat": "workspace:*",
     "@roam/types": "workspace:*",

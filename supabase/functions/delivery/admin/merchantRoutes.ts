@@ -670,7 +670,13 @@ export function registerMerchantAdminRoutes(app: Hono) {
         updates.commission_rate = rate;
       }
     }
-    if (body.delivery_radius_km != null) updates.delivery_radius_km = Number(body.delivery_radius_km);
+    if (body.delivery_radius_km != null) {
+      const radius = Number(body.delivery_radius_km);
+      if (!Number.isFinite(radius) || radius < 1 || radius > 50) {
+        return c.json({ error: "delivery_radius_km must be between 1 and 50" }, 400);
+      }
+      updates.delivery_radius_km = radius;
+    }
     if (body.admin_internal_notes != null) updates.admin_internal_notes = String(body.admin_internal_notes);
     if (body.capabilities != null && Array.isArray(body.capabilities)) {
       const caps = [...new Set(["roam_delivery", ...body.capabilities.map(String)])];

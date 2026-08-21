@@ -96,7 +96,10 @@ export default function SettingsPage({
     removeShift,
     copyToAll,
     addSpecialDate,
+    updateSpecialDate,
     removeSpecialDate,
+    upsertHolidayOverride,
+    clearHolidayOverride,
     resetHours,
     saveProfile,
     saveHours,
@@ -140,7 +143,10 @@ export default function SettingsPage({
         onRemoveShift={removeShift}
         onCopyToAll={copyToAll}
         onAddSpecialDate={addSpecialDate}
+        onUpdateSpecialDate={updateSpecialDate}
         onRemoveSpecialDate={removeSpecialDate}
+        onUpsertHolidayOverride={upsertHolidayOverride}
+        onClearHolidayOverride={clearHolidayOverride}
       />
     );
   }

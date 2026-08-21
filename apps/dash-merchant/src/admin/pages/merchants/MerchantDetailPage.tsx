@@ -63,6 +63,8 @@ export function MerchantDetailPage() {
   const [globalFeePercent, setGlobalFeePercent] = useState(5);
   const [feeOverridePercent, setFeeOverridePercent] = useState('');
   const [feeSaving, setFeeSaving] = useState(false);
+  const [deliveryRadiusKm, setDeliveryRadiusKm] = useState('5');
+  const [radiusSaving, setRadiusSaving] = useState(false);
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -80,6 +82,13 @@ export function MerchantDetailPage() {
         override != null && Number.isFinite(Number(override))
           ? String(Math.round(Number(override) * 10000) / 100)
           : '',
+      );
+      setDeliveryRadiusKm(
+        String(
+          Number.isFinite(Number(res.merchant.delivery_radius_km))
+            ? Number(res.merchant.delivery_radius_km)
+            : 5,
+        ),
       );
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed to load merchant');
@@ -217,6 +226,27 @@ export function MerchantDetailPage() {
       toast.error(e instanceof Error ? e.message : 'Failed to clear override');
     } finally {
       setFeeSaving(false);
+    }
+  };
+
+  const saveDeliveryRadius = async () => {
+    if (!merchant || !canWrite) return;
+    const km = Number(deliveryRadiusKm);
+    if (!Number.isFinite(km) || km < 1 || km > 50) {
+      toast.error('Delivery radius must be between 1 and 50 km');
+      return;
+    }
+    setRadiusSaving(true);
+    try {
+      await patchMerchantOps(token, merchant.id, {
+        delivery_radius_km: Math.round(km),
+      });
+      toast.success('Delivery radius saved');
+      void load();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to save delivery radius');
+    } finally {
+      setRadiusSaving(false);
     }
   };
 
@@ -429,6 +459,40 @@ export function MerchantDetailPage() {
           ))}
         </section>
       )}
+
+      <section className="rounded-xl border border-slate-800 bg-slate-900/50 p-4 space-y-3">
+        <h3 className="text-sm font-medium text-white">Delivery coverage</h3>
+        <p className="text-sm text-slate-400">
+          How far customers can discover and order from this store. Partners cannot change this —
+          Roam sets coverage per merchant.
+        </p>
+        {canWrite ? (
+          <div className="flex flex-wrap items-end gap-2">
+            <div>
+              <label className="block text-xs text-slate-500 mb-1">Radius (km)</label>
+              <input
+                type="number"
+                min={1}
+                max={50}
+                step={1}
+                value={deliveryRadiusKm}
+                onChange={(e) => setDeliveryRadiusKm(e.target.value)}
+                className="w-28 px-3 py-1.5 text-sm rounded-lg bg-slate-950 border border-slate-700 text-white"
+              />
+            </div>
+            <button
+              type="button"
+              disabled={radiusSaving}
+              onClick={() => void saveDeliveryRadius()}
+              className="px-3 py-1.5 text-sm rounded-lg bg-amber-600 text-white disabled:opacity-50"
+            >
+              Save radius
+            </button>
+          </div>
+        ) : (
+          <p className="text-sm text-slate-300">{merchant.delivery_radius_km ?? 5} km</p>
+        )}
+      </section>
 
       <section className="rounded-xl border border-slate-800 bg-slate-900/50 p-4 space-y-3">
         <h3 className="text-sm font-medium text-white">Platform fee</h3>

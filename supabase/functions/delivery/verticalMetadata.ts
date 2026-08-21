@@ -194,6 +194,7 @@ export function verticalSnapshotFromMetadata(meta: BusinessTypeMetadata) {
     vertical_type: meta.vertical_type,
     fulfillment_type: meta.fulfillment_type,
     go_live_rule: meta.go_live_rule,
+    max_delivery_radius_km: meta.max_delivery_radius_km,
   };
 }
 

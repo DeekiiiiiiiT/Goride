@@ -10,9 +10,6 @@ interface DeliverySettingsViewProps {
   isSaving?: boolean;
 }
 
-const MAP_IMAGE_URL =
-  'https://lh3.googleusercontent.com/aida-public/AB6AXuDhKM4e_2af5Cx25gSoRugAptlLf-YNomtHngKZk2czsPdX2CG7jSSgtnpAUnv18UmM3ZbvxK2wv88P1hrYNpqFvuhKhGlxTto3CVtruX-oB7H0_yW3hpqAyH_CYR6oCaUFeIl3ea9xUIevFnVIovtOchlphd1NRel1uejvaDPbfQlFzb2KZrp1gK8HlUHf-ZrOoruQLxnRQ3YAvRoZhlYFYuAFCkYOGWmLuxyXyJ4rwe9dTlQSKgVrkV9G8sEWpb4zcIjcMJKHIVg';
-
 const inputClass =
   'h-12 w-full rounded border border-outline-variant bg-transparent px-4 text-body-lg text-on-surface outline-none transition-colors focus:border-primary-container focus:ring-1 focus:ring-primary-container';
 
@@ -48,13 +45,10 @@ export default function DeliverySettingsView({
   onSave,
   isSaving = false,
 }: DeliverySettingsViewProps) {
-  const radiusDisplay = Math.round(formData.deliveryRadiusKm);
-  const circleSize = 80 + (radiusDisplay / 20) * 120;
-
   const showHelp = () => {
     toast.message('Delivery Settings', {
       description:
-        'Set how far you deliver, minimum order amounts, fees, and which order types you accept.',
+        'Set minimum order amounts, fees, prep time, and which order types you accept. Delivery coverage is managed by Roam.',
     });
   };
 
@@ -81,49 +75,6 @@ export default function DeliverySettingsView({
       </header>
 
       <main className="mx-auto w-full max-w-3xl space-y-inset-md px-margin-mobile pb-20 pt-20 md:px-margin-tablet">
-        <section className="rounded-lg border border-outline-variant bg-surface-container-lowest p-inset-sm shadow-sm">
-          <h2 className="mb-inset-xs text-headline-md text-on-surface">Delivery Radius</h2>
-          <div className="mb-inset-sm flex items-center justify-between">
-            <span className="text-body-lg text-on-surface-variant">Radius</span>
-            <span className="text-headline-md text-primary">{radiusDisplay} km</span>
-          </div>
-          <input
-            aria-label="Delivery Radius Slider"
-            type="range"
-            min={1}
-            max={20}
-            step={1}
-            value={radiusDisplay}
-            onChange={(event) =>
-              onChange({ ...formData, deliveryRadiusKm: Number(event.target.value) })
-            }
-            className="mb-inset-sm h-2 w-full cursor-pointer appearance-none rounded-full bg-surface-variant accent-primary-container [&::-webkit-slider-thumb]:h-6 [&::-webkit-slider-thumb]:w-6 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary-container [&::-webkit-slider-thumb]:shadow-sm"
-          />
-          <div className="relative mb-inset-xs h-48 w-full overflow-hidden rounded-lg border border-outline-variant bg-surface-container">
-            <div
-              className="absolute inset-0 bg-cover bg-center opacity-50"
-              style={{ backgroundImage: `url('${MAP_IMAGE_URL}')` }}
-            />
-            <div
-              className="pointer-events-none absolute left-1/2 top-1/2 rounded-full border-2 border-primary-container bg-primary-container/20"
-              style={{
-                width: circleSize,
-                height: circleSize,
-                transform: 'translate(-50%, -50%)',
-              }}
-            />
-            <MaterialIcon
-              name="location_on"
-              filled
-              size={32}
-              className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-full text-primary-container"
-            />
-          </div>
-          <p className="mt-inset-xs text-body-sm text-on-surface-variant">
-            Your store will be visible to customers within this radius.
-          </p>
-        </section>
-
         <section className="space-y-inset-sm rounded-lg border border-outline-variant bg-surface-container-lowest p-inset-sm shadow-sm">
           <h2 className="mb-inset-xs text-headline-md text-on-surface">Order Requirements</h2>
 

@@ -219,7 +219,7 @@ export function MerchantDetailModal({
                       />
                       <DetailRow
                         icon={<MapPin className="w-3.5 h-3.5" />}
-                        label="Delivery radius"
+                        label="Delivery radius (Roam)"
                         value={`${merchant.delivery_radius_km ?? 0} km`}
                       />
                     </div>

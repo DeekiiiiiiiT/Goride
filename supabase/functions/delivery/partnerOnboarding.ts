@@ -192,6 +192,7 @@ export function merchantPayloadFromBody(
     vertical_type?: string;
     fulfillment_type?: string;
     go_live_rule?: string;
+    max_delivery_radius_km?: number;
   },
 ) {
   const cuisineTypes = Array.isArray(body.cuisineTypes)
@@ -206,6 +207,12 @@ export function merchantPayloadFromBody(
 
   const name = String(body.name || body.restaurantName || "").trim();
   const slugBase = name.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "") || "merchant";
+  // Coverage is Roam-owned; partners cannot set radius. Seed from business-type default.
+  const typeDefaultRadius = Number(verticalSnapshot?.max_delivery_radius_km);
+  const deliveryRadiusKm =
+    Number.isFinite(typeDefaultRadius) && typeDefaultRadius >= 1
+      ? Math.min(50, typeDefaultRadius)
+      : 5;
 
   return {
     owner_id: userId,
@@ -221,7 +228,7 @@ export function merchantPayloadFromBody(
     cuisine_types: cuisineTypes,
     logo_url: body.logoUrl || null,
     cover_image_url: body.coverImageUrl || null,
-    delivery_radius_km: parseDeliveryRadius(body.deliveryRadiusKm ?? body.deliveryRadius),
+    delivery_radius_km: deliveryRadiusKm,
     avg_prep_time_mins: parsePrepTime(body.avgPrepTimeMins ?? body.avgPrepTime),
     business_type: body.businessType || null,
     business_registration_number: body.businessRegistrationNumber || null,

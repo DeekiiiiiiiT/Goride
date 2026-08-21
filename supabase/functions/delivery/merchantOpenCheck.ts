@@ -3,6 +3,8 @@
  * Browse already filters is_accepting_orders; POST /orders must enforce too.
  */
 
+import { findJamaicaHolidayByDate } from "./jamaicaHolidays.ts";
+
 export type MerchantOpenCheckResult =
   | { ok: true }
   | { ok: false; status: 400 | 403 | 404 | 409; error: string };
@@ -157,6 +159,16 @@ export async function assertMerchantAcceptingOrders(
       return { ok: false, status: 409, error: "This store is currently closed" };
     }
     return assertDailyCapacity(serviceSb, merchantId, now);
+  }
+
+  // Roam-managed Jamaica public holidays — closed unless partner saved an override above.
+  const platformHoliday = findJamaicaHolidayByDate(today);
+  if (platformHoliday) {
+    return {
+      ok: false,
+      status: 409,
+      error: `This store is closed today (${platformHoliday.name})`,
+    };
   }
 
   const { data: hours } = await serviceSb

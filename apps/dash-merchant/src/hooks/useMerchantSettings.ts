@@ -461,8 +461,51 @@ export function useMerchantSettings(merchant: Merchant) {
     setSpecialDates((prev) => [...prev, { ...entry, id: crypto.randomUUID() }]);
   };
 
+  const updateSpecialDate = (id: string, patch: Partial<Omit<SpecialDate, 'id'>>) => {
+    setSpecialDates((prev) =>
+      prev.map((entry) => (entry.id === id ? { ...entry, ...patch } : entry)),
+    );
+  };
+
   const removeSpecialDate = (id: string) => {
     setSpecialDates((prev) => prev.filter((entry) => entry.id !== id));
+  };
+
+  const upsertHolidayOverride = (
+    holiday: { name: string; date: string },
+    patch: { isClosed: boolean; open?: string; close?: string },
+  ) => {
+    setSpecialDates((prev) => {
+      const existing = prev.find((entry) => entry.date === holiday.date);
+      if (existing) {
+        return prev.map((entry) =>
+          entry.date === holiday.date
+            ? {
+                ...entry,
+                name: holiday.name,
+                isClosed: patch.isClosed,
+                open: patch.open,
+                close: patch.close,
+              }
+            : entry,
+        );
+      }
+      return [
+        ...prev,
+        {
+          id: crypto.randomUUID(),
+          name: holiday.name,
+          date: holiday.date,
+          isClosed: patch.isClosed,
+          open: patch.open,
+          close: patch.close,
+        },
+      ];
+    });
+  };
+
+  const clearHolidayOverride = (date: string) => {
+    setSpecialDates((prev) => prev.filter((entry) => entry.date !== date));
   };
 
   const resetHours = () => {
@@ -498,7 +541,6 @@ export function useMerchantSettings(merchant: Merchant) {
           avg_prep_time_mins: data.avgPrepTimeMins,
           min_order_amount: data.minOrderAmount,
           delivery_fee: data.deliveryFee,
-          delivery_radius_km: data.deliveryRadiusKm,
           is_accepting_orders: data.isAcceptingOrders,
           logo_url: data.logoUrl,
           cover_image_url: data.coverImageUrl,
@@ -617,7 +659,10 @@ export function useMerchantSettings(merchant: Merchant) {
     removeShift,
     copyToAll,
     addSpecialDate,
+    updateSpecialDate,
     removeSpecialDate,
+    upsertHolidayOverride,
+    clearHolidayOverride,
     resetHours,
     saveProfile,
     saveHours,

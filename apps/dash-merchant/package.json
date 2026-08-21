@@ -32,6 +32,7 @@
     "@roam/admin-core": "workspace:*",
     "@roam/api-client": "workspace:*",
     "@roam/auth-client": "workspace:*",
+    "@roam/business-config": "workspace:*",
     "@roam/location": "workspace:*",
     "@roam/merchant-ops": "workspace:*",
     "@roam/play-store-launch": "workspace:*",

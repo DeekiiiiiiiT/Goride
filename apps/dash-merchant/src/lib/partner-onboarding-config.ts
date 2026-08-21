@@ -8,7 +8,8 @@ import { getCategoryTaxonomyKey } from '@roam/vertical-config';
  * - restaurant-info: restaurantName, description, businessType, phone, email, website
  * - categories: cuisineTypes, inventoryCategories
  * - location: location (lat/lng/address)
- * - business-details: businessRegistrationNumber, taxId, avgPrepTime, deliveryRadius
+ * - business-details: businessRegistrationNumber, taxId, avgPrepTime
+ *   (delivery radius is Roam-owned — set in admin after approval)
  * - operating-hours: hours
  * - branding: logoUrl, coverImageUrl
  * - verification: ownerFullName, identity documents (final step — submits application)
