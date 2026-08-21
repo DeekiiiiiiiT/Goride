@@ -4,11 +4,13 @@ import { supabase } from '../lib/partner-supabase';
 import { toast } from 'sonner';
 import { Merchant } from './useMerchant';
 
-export function useAcceptingOrdersToggle(merchant: Merchant) {
+export function useAcceptingOrdersToggle(merchant: Merchant | null | undefined) {
   const queryClient = useQueryClient();
 
   const mutation = useMutation({
     mutationFn: async (isAccepting: boolean) => {
+      if (!merchant) throw new Error('Merchant not loaded');
+
       const {
         data: { session },
       } = await supabase.auth.getSession();
@@ -48,11 +50,12 @@ export function useAcceptingOrdersToggle(merchant: Merchant) {
   });
 
   return {
-    isAcceptingOrders: merchant.is_accepting_orders,
+    isAcceptingOrders: merchant?.is_accepting_orders ?? false,
     toggleAcceptingOrders: (
       next: boolean,
       options?: { onSuccess?: () => void },
     ) => {
+      if (!merchant) return;
       mutation.mutate(next, {
         onSuccess: () => {
           options?.onSuccess?.();

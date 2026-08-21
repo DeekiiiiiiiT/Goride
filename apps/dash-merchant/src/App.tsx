@@ -186,6 +186,12 @@ function DashMerchantApp() {
   const { merchant, membership, pendingTeamInvite, isLoading: merchantLoading, error: merchantError, refetch } =
     useMerchant(session);
   const { isOnline, wasOffline, clearWasOffline } = useNetworkStatus();
+  // Must run every render — calling this after splash/auth early-returns crashes React (ROAM-DASH-MERCHANT-5).
+  const {
+    isAcceptingOrders,
+    toggleAcceptingOrders,
+    isPending: togglePending,
+  } = useAcceptingOrdersToggle(merchant);
 
   useEffect(() => {
     if (wasOffline && isOnline) {
@@ -398,12 +404,6 @@ function DashMerchantApp() {
     if (membership.permissions.includes('payouts')) tabs.push('earnings');
     return tabs;
   })();
-
-  const {
-    isAcceptingOrders,
-    toggleAcceptingOrders,
-    isPending: togglePending,
-  } = useAcceptingOrdersToggle(merchant);
 
   const handlePartnerNavigate = (page: PartnerTab) => {
     setOrdersOpenHistory(false);
