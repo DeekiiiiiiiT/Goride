@@ -23,19 +23,31 @@ export function formatCountdown(remainingSeconds: number) {
   return `${minutes}:${String(seconds).padStart(2, '0')}`;
 }
 
+function pluralUnit(count: number, singular: string, plural = `${singular}s`) {
+  return `${count} ${count === 1 ? singular : plural}`;
+}
+
+/** Relative age: minutes → hours → days → weeks (avoids huge "2617 min ago" labels). */
 export function formatTimeAgo(dateString: string) {
-  const mins = Math.round((Date.now() - new Date(dateString).getTime()) / 60000);
+  const mins = Math.max(0, Math.round((Date.now() - new Date(dateString).getTime()) / 60000));
   if (mins < 1) return 'Just now';
   if (mins < 60) return `${mins}m ago`;
   const hours = Math.floor(mins / 60);
   if (hours < 24) return `${hours}h ago`;
-  return `${Math.floor(hours / 24)}d ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days}d ago`;
+  return `${Math.floor(days / 7)}w ago`;
 }
 
 export function formatMinAgo(dateString: string) {
-  const mins = Math.round((Date.now() - new Date(dateString).getTime()) / 60000);
+  const mins = Math.max(0, Math.round((Date.now() - new Date(dateString).getTime()) / 60000));
   if (mins < 1) return 'Just now';
-  return `${mins} min ago`;
+  if (mins < 60) return `${pluralUnit(mins, 'min')} ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${pluralUnit(hours, 'hr')} ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${pluralUnit(days, 'day')} ago`;
+  return `${pluralUnit(Math.floor(days / 7), 'week')} ago`;
 }
 
 export type StoreStatus = 'open' | 'closed' | 'paused';

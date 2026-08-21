@@ -6,6 +6,7 @@ import { defineConfig, devices } from '@playwright/test';
  *
  * Run all:     pnpm test:e2e:rush
  * Customer:    pnpm test:e2e:rush:customer
+ * Customer area: pnpm test:e2e:rush:customer:<auth|shell|home|search|store|cart|checkout|cart-conflict|orders|account|profile|addresses|payment|promotions|favorites|notifications|help|about>
  * Partner:     pnpm test:e2e:rush:partner          (mobile + desktop)
  * Partner mobile only:  pnpm test:e2e:rush:partner:mobile
  * Partner desktop only: pnpm test:e2e:rush:partner:desktop

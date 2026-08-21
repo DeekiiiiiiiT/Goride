@@ -47,8 +47,9 @@ export default function PartnerSideNav({
 
   return (
     <nav
-      className={`flex h-full shrink-0 flex-col border-r border-outline-variant bg-surface-container-low py-inset-md px-inset-sm ${
-        compact ? 'w-20' : 'w-[4.5rem] xl:w-64'
+      className={`flex h-full shrink-0 flex-col border-r border-outline-variant bg-surface-container-low py-inset-md ${
+        // Icon rail is narrow — keep side padding light so hover squares can center
+        compact ? 'w-20 px-inset-xs' : 'w-[4.5rem] px-inset-xs xl:w-64 xl:px-inset-sm'
       }`}
       aria-label="Partner desktop navigation"
     >
@@ -72,20 +73,24 @@ export default function PartnerSideNav({
         </div>
       )}
 
-      <ul className="flex flex-1 flex-col gap-inset-xs">
+      <ul className="flex flex-1 flex-col items-center gap-inset-xs xl:items-stretch">
         {items.map((item) => {
           const isActive = activeKey === item.key;
 
           return (
-            <li key={item.key}>
+            <li key={item.key} className={compact ? 'w-full' : 'xl:w-full'}>
               <button
                 type="button"
                 onClick={() => handleNav(item.key, item.tab)}
-                className={`flex w-full items-center gap-inset-sm rounded-lg px-inset-sm py-inset-sm text-label-md font-semibold transition-all duration-200 ${
+                className={`flex items-center justify-center rounded-lg text-label-md font-semibold transition-all duration-200 ${
                   isActive
                     ? 'bg-secondary-container text-on-secondary-container'
                     : 'text-on-surface-variant hover:bg-surface-variant'
-                } ${compact ? 'justify-center' : ''}`}
+                } ${
+                  compact
+                    ? 'h-11 w-full'
+                    : 'h-11 w-11 xl:h-auto xl:w-full xl:justify-start xl:gap-inset-sm xl:px-inset-sm xl:py-inset-sm'
+                }`}
               >
                 <MaterialIcon name={item.icon} filled={isActive} size={22} />
                 {!compact && <span className="hidden xl:inline">{item.label}</span>}
@@ -99,7 +104,7 @@ export default function PartnerSideNav({
         <button
           type="button"
           onClick={onGoOffline}
-          className="mt-auto flex w-full items-center justify-center gap-inset-sm rounded-lg border border-outline-variant px-inset-md py-inset-sm text-label-md text-on-surface-variant transition-colors hover:bg-surface-variant xl:justify-center"
+          className="mt-auto mx-auto flex h-11 w-11 items-center justify-center rounded-lg border border-outline-variant text-label-md text-on-surface-variant transition-colors hover:bg-surface-variant xl:mx-0 xl:h-auto xl:w-full xl:gap-inset-sm xl:px-inset-md xl:py-inset-sm"
           aria-label="Go offline"
         >
           <MaterialIcon name="power_settings_new" size={20} />

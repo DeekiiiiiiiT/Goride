@@ -13,9 +13,11 @@ export function MaterialIcon({
 }: MaterialIconProps) {
   return (
     <span
-      className={`material-symbols-outlined ${className}`}
+      className={`material-symbols-outlined inline-flex shrink-0 items-center justify-center leading-none ${className}`}
       style={{
         fontSize: size,
+        width: size,
+        height: size,
         fontVariationSettings: `'FILL' ${filled ? 1 : 0}, 'wght' 400, 'GRAD' 0, 'opsz' 24`,
       }}
     >

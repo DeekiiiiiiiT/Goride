@@ -9,6 +9,7 @@ import {
 /**
  * UI smoke: cross-store cart conflict modal.
  * Keep API checkout/order checks in scripts/smoke-customer-*.mjs.
+ * Run: pnpm test:e2e:rush:customer:cart-conflict
  */
 test.describe('Roam Rush customer — cart conflict', () => {
   test.beforeEach(async ({ page }) => {

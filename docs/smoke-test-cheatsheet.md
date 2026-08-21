@@ -48,26 +48,74 @@ node scripts/smoke-customer-checkout.mjs
 node scripts/smoke-customer-all.mjs
 ```
 
-### Customer tests that still need the browser
+### Customer UI (Playwright) — Methods 1 / 2 / 3
 
-These are **UI-only**. Automated Playwright suite:
+Same idea as Partner: API scripts are separate; these commands click the live app UI via saved Playwright specs.
+
+**Test account:** `seed-customer@roamrush.app` / `RoamRushCustomer2026!`
+
+**Method #1 — you run it (free)**
 
 ```bash
 pnpm test:e2e:rush:customer
-pnpm test:e2e:rush          # customer + partner UI
+pnpm test:e2e:rush:customer:auth
+pnpm test:e2e:rush:customer:orders
 ```
 
-| Say this | Spec | What it checks |
-|----------|------|----------------|
-| **Customer cart conflict smoke** | `e2e/rush-customer-cart-conflict.spec.ts` | Cross-store “Start a new cart?” modal |
+**Method #2 — ask AI to run the saved script (cheap)**
 
-Still manual / not yet automated:
+Examples:
+
+- “Run `pnpm test:e2e:rush:customer`”
+- “Run the Customer UI orders smoke”
+- “Run Customer UI checkout”
+- “Run the customer cart conflict Playwright smoke”
+
+The AI executes the Playwright command — it does **not** click live.
+
+**Method #3 — live clicking (expensive)**
+
+Don’t name a script. Say something like:
+
+- “Open roamrush.app and click through checkout with me”
+- “Live-check the cart conflict modal on roamrush.app”
+
+**Run all Customer UI:**
+
+```bash
+pnpm test:e2e:rush:customer
+```
+
+**Scripts (ask AI: “Run pnpm test:e2e:rush:customer:XXX”)**
+
+- `pnpm test:e2e:rush:customer` — all Customer UI tests
+- `pnpm test:e2e:rush:customer:auth` — login & Popular near you
+- `pnpm test:e2e:rush:customer:shell` — Home → Search → Orders → Account round-trip
+- `pnpm test:e2e:rush:customer:home` — address chip, verticals, Popular near you
+- `pnpm test:e2e:rush:customer:search` — craving UI, browse, query
+- `pnpm test:e2e:rush:customer:store` — Island Grill menu + back
+- `pnpm test:e2e:rush:customer:cart` — cart with item + Go to Checkout
+- `pnpm test:e2e:rush:customer:checkout` — Checkout screen only (does **not** Place Order)
+- `pnpm test:e2e:rush:customer:cart-conflict` — Start a new cart? cross-store modal
+- `pnpm test:e2e:rush:customer:orders` — Your Orders (+ optional detail)
+- `pnpm test:e2e:rush:customer:account` — every Account settings row + header bell
+- `pnpm test:e2e:rush:customer:profile` — Edit Profile (no save)
+- `pnpm test:e2e:rush:customer:addresses` — Saved Addresses + Add Address (no save)
+- `pnpm test:e2e:rush:customer:payment` — WiPay / PayPal / Cash
+- `pnpm test:e2e:rush:customer:promotions` — Promotions + promo field
+- `pnpm test:e2e:rush:customer:favorites` — Favorites Restaurants / Items
+- `pnpm test:e2e:rush:customer:notifications` — Notification Settings
+- `pnpm test:e2e:rush:customer:help` — Help quick actions
+- `pnpm test:e2e:rush:customer:about` — About / Roam Rush
+
+**Does not click:** Place Order, Sign Out, Google sign-in, submit Help issue, save profile/address.
+
+Still Method #3 / later if needed:
 
 - Cart survives page refresh
 - Checkout button lock / high-tip confirm
-- Onboarding screens
-
-Ask AI: “Run `pnpm test:e2e:rush`” or “Run the Playwright customer cart smoke.”
+- Full onboarding tour screens
+- Live order tracking / rate order (need an active order)
 
 ---
 
@@ -226,7 +274,7 @@ Ask your AI to “run courier browser smoke”:
 1. `node scripts/smoke-customer-all.mjs`
 2. `node scripts/smoke-merchant-all.mjs`
 3. `node scripts/smoke-courier-all.mjs`
-4. Ask AI for **browser smoke** on cart conflict, partner dashboard, and courier offer UI
+4. `pnpm test:e2e:rush:customer` then `pnpm test:e2e:rush:partner` (UI packs)
 
 ---
 
@@ -244,6 +292,7 @@ Ask your AI to “run courier browser smoke”:
 
 ```
 ROAM RUSH (Customer)
+API:
 - smoke-customer-all.mjs — run all customer API tests
 - smoke-customer-auth.mjs — login & profile
 - smoke-customer-signup.mjs — new account
@@ -254,6 +303,27 @@ ROAM RUSH (Customer)
 - smoke-customer-cancel.mjs — cancel order
 - smoke-customer-issue.mjs — report issue
 - smoke-customer-review.mjs — rate order
+
+UI (pnpm test:e2e:rush:customer:XXX):
+- customer — all Customer UI tests
+- customer:auth — login
+- customer:shell — bottom nav round-trip
+- customer:home — home discovery
+- customer:search — search tab
+- customer:store — Island Grill menu
+- customer:cart — cart with item
+- customer:checkout — checkout read-only
+- customer:cart-conflict — Start a new cart?
+- customer:orders — Your Orders
+- customer:account — every Account row
+- customer:profile — Edit Profile
+- customer:addresses — Saved Addresses
+- customer:payment — Payment Methods
+- customer:promotions — Promotions
+- customer:favorites — Favorites
+- customer:notifications — Notification Settings
+- customer:help — Help
+- customer:about — About
 
 ROAM RUSH PARTNER
 - smoke-merchant-all.mjs — run all partner API tests
