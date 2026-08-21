@@ -99,7 +99,7 @@ export function AlmostThereView({ order, onClose, onHelp }: Props) {
               </div>
             </div>
             <div className="flex gap-2">
-              <CourierActions phone={order.courier.phone} />
+              <CourierActions phone={order.courier.phone} order={order} />
             </div>
           </div>
         </div>

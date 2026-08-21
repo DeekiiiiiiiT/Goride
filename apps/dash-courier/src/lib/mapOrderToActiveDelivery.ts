@@ -11,6 +11,9 @@ type OrderLike = AvailableOrder & {
   tip?: number;
   peak_pay_amount?: number;
   total?: number;
+  status?: string;
+  picked_up_at?: string | null;
+  delivered_at?: string | null;
   customer?: { name?: string | null; phone?: string | null } | null;
 };
 
@@ -41,6 +44,9 @@ function emptyActiveDelivery(): ActiveDelivery {
     earnings: { basePay: 0, distanceBonus: 0, tip: 0, peakPay: 0, total: 0 },
     tripDistanceKm: 0,
     tripMinutes: 0,
+    orderStatus: '',
+    pickedUpAt: null,
+    deliveredAt: null,
   };
 }
 
@@ -168,6 +174,9 @@ export function mapOrderToActiveDelivery(
     },
     tripDistanceKm,
     tripMinutes,
+    orderStatus: String(order.status || ''),
+    pickedUpAt: order.picked_up_at ? String(order.picked_up_at) : null,
+    deliveredAt: order.delivered_at ? String(order.delivered_at) : null,
   };
 }
 

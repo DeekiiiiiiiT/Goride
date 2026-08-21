@@ -1,10 +1,20 @@
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import { toast } from '@/lib/toast';
 import { courierPhoneHref, type TrackingOrder } from '@/lib/trackingContent';
+import { CustomerOrderChatWrap } from '@/components/CustomerOrderChatWrap';
+import { RushChatUnreadDot } from '@roam/rush-chat';
 
 type Courier = TrackingOrder['courier'];
 
-export function CourierProfileCard({ courier, compact }: { courier: Courier; compact?: boolean }) {
+export function CourierProfileCard({
+  courier,
+  compact,
+  order,
+}: {
+  courier: Courier;
+  compact?: boolean;
+  order?: TrackingOrder;
+}) {
   if (compact) {
     return (
       <div className="flex items-center gap-4">
@@ -47,14 +57,13 @@ export function CourierProfileCard({ courier, compact }: { courier: Courier; com
           </div>
         </div>
       </div>
-      <CourierActions phone={courier.phone} />
+      <CourierActions phone={courier.phone} order={order} />
     </div>
   );
 }
 
-export function CourierActions({ phone }: { phone?: string }) {
+export function CourierActions({ phone, order }: { phone?: string; order?: TrackingOrder }) {
   const callHref = courierPhoneHref(phone, 'tel');
-  const smsHref = courierPhoneHref(phone, 'sms');
 
   const openHref = (href: string | null, missing: string) => {
     if (!href) {
@@ -64,16 +73,42 @@ export function CourierActions({ phone }: { phone?: string }) {
     window.location.href = href;
   };
 
+  const chatButton = order ? (
+    <CustomerOrderChatWrap
+      orderId={order.id}
+      status={order.status}
+      courierId={order.courierId}
+      pickedUpAt={order.pickedUpAt}
+      deliveredAt={order.deliveredAt}
+      pair="customer_courier"
+      peerLabel={order.courier?.name || 'Your courier'}
+    >
+      {(openChat, ctx) => (
+        <button
+          type="button"
+          aria-label="Message courier"
+          onClick={openChat}
+          className="relative w-10 h-10 rounded-full bg-surface-variant flex items-center justify-center"
+        >
+          <MaterialIcon name="chat" />
+          <RushChatUnreadDot show={ctx.unreadCount > 0} className="right-0.5 top-0.5" />
+        </button>
+      )}
+    </CustomerOrderChatWrap>
+  ) : (
+    <button
+      type="button"
+      aria-label="Message courier"
+      onClick={() => toast.info('In-app chat opens once your courier is assigned')}
+      className="w-10 h-10 rounded-full bg-surface-variant flex items-center justify-center"
+    >
+      <MaterialIcon name="chat" />
+    </button>
+  );
+
   return (
     <div className="flex gap-2">
-      <button
-        type="button"
-        aria-label="Message courier"
-        onClick={() => openHref(smsHref, 'Courier phone is not available yet')}
-        className="w-10 h-10 rounded-full bg-surface-variant flex items-center justify-center"
-      >
-        <MaterialIcon name="chat" />
-      </button>
+      {chatButton}
       <button
         type="button"
         aria-label="Call courier"

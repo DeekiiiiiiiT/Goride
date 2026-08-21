@@ -53,6 +53,9 @@ export type ActiveDelivery = {
   earnings: DeliveryEarnings;
   tripDistanceKm: number;
   tripMinutes: number;
+  orderStatus?: string;
+  pickedUpAt?: string | null;
+  deliveredAt?: string | null;
 };
 
 export const MOCK_ACTIVE_DELIVERY: ActiveDelivery = {

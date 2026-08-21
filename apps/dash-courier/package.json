@@ -31,6 +31,7 @@
     "@roam/auth-client": "workspace:*",
     "@roam/business-config": "workspace:*",
     "@roam/play-store-launch": "workspace:*",
+    "@roam/rush-chat": "workspace:*",
     "@roam/types": "workspace:*",
     "@roam/ui": "workspace:*",
     "@roam/vertical-config": "workspace:*",

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { ExternalLink, Utensils, Store, Clock, CheckCircle2, Loader2 } from 'lucide-react';
 import { useAuth } from '../../auth/AuthContext';
 import { getMerchantStats } from '../../../services/dashMerchantVerificationService';
+import { OrderChatSupportPanel } from '../roam-dash/OrderChatSupportPanel';
 
 interface DashOverviewCardProps {
   onOpenAdmin?: () => void;
@@ -10,6 +11,7 @@ interface DashOverviewCardProps {
 export function DashOverviewCard({ onOpenAdmin }: DashOverviewCardProps) {
   const { session } = useAuth();
   const [loading, setLoading] = useState(true);
+  const [chatOrderId, setChatOrderId] = useState('');
   const [stats, setStats] = useState({
     pending: 0,
     in_review: 0,
@@ -110,6 +112,20 @@ export function DashOverviewCard({ onOpenAdmin }: DashOverviewCardProps) {
         <p className="mt-2 text-sm text-slate-500">
           Segment settings: Rush Admin → Platform Settings
         </p>
+      </div>
+
+      <div className="rounded-lg border border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800/30 p-4 space-y-3">
+        <h3 className="text-sm font-medium text-slate-900 dark:text-white">Support order chat</h3>
+        <p className="text-xs text-slate-500">
+          Paste an order UUID to view all chat pairs and join as Roam Support.
+        </p>
+        <input
+          value={chatOrderId}
+          onChange={(e) => setChatOrderId(e.target.value.trim())}
+          placeholder="Order UUID"
+          className="w-full rounded border border-slate-200 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-800"
+        />
+        {chatOrderId.length >= 32 ? <OrderChatSupportPanel orderId={chatOrderId} /> : null}
       </div>
     </div>
   );

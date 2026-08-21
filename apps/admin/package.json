@@ -43,6 +43,7 @@
     "@roam/finance-core": "workspace:*",
     "@roam/platform-settings": "workspace:*",
     "@roam/roam-shared": "workspace:*",
+    "@roam/rush-chat": "workspace:*",
     "@roam/toll-ui": "workspace:*",
     "@roam/types": "workspace:*",
     "@roam/ui": "workspace:*",

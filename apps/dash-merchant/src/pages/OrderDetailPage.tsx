@@ -13,6 +13,7 @@ import CompletedOrderDetail from '../components/order-detail/CompletedOrderDetai
 import { MaterialIcon } from '../signup/components/MaterialIcon';
 import { merchantOrdersKeys } from '../lib/merchant-orders-query';
 import { resolveOrdersRefetchInterval } from '../lib/merchant-orders-sync-policy';
+import { MerchantOrderChatWrap } from '../components/MerchantOrderChatWrap';
 
 interface OrderDetailPageProps {
   orderId: string;
@@ -117,6 +118,31 @@ export default function OrderDetailPage({
   const order = data.order;
   const status = order.status;
 
+  const chatBar = (
+    <div className="fixed bottom-20 left-0 right-0 z-[60] flex flex-wrap justify-center gap-2 px-4 pointer-events-none">
+      <div className="pointer-events-auto flex flex-wrap justify-center gap-2">
+        <MerchantOrderChatWrap
+          orderId={order.id}
+          status={status}
+          courierId={order.courier_id}
+          pickedUpAt={order.picked_up_at}
+          deliveredAt={order.delivered_at}
+          pair="customer_merchant"
+          peerLabel="Customer"
+        />
+        <MerchantOrderChatWrap
+          orderId={order.id}
+          status={status}
+          courierId={order.courier_id}
+          pickedUpAt={order.picked_up_at}
+          deliveredAt={order.delivered_at}
+          pair="merchant_courier"
+          peerLabel="Courier"
+        />
+      </div>
+    </div>
+  );
+
   if (status === 'preparing' || status === 'accepted') {
     const currentPrep =
       order.estimated_prep_time_mins ?? merchant.avg_prep_time_mins ?? 20;
@@ -136,6 +162,7 @@ export default function OrderDetailPage({
           onCancel={() => onReject(order.id)}
           isSubmitting={updateStatusMutation.isPending}
         />
+        {chatBar}
       </div>
     );
   }
@@ -150,6 +177,7 @@ export default function OrderDetailPage({
           onHelp={onHelp}
           isSubmitting={updateStatusMutation.isPending}
         />
+        {chatBar}
       </div>
     );
   }
@@ -158,6 +186,7 @@ export default function OrderDetailPage({
     return (
       <div className="fixed inset-0 z-[55] overflow-y-auto bg-background">
         <PickedUpOrderDetail order={order} onBack={onBack} onClose={onBack} />
+        {chatBar}
       </div>
     );
   }
@@ -166,6 +195,7 @@ export default function OrderDetailPage({
     return (
       <div className="fixed inset-0 z-[55] overflow-y-auto bg-background">
         <CompletedOrderDetail order={order} onBack={onBack} />
+        {chatBar}
       </div>
     );
   }

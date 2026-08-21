@@ -173,3 +173,29 @@ Define and implement a retention/anonymization policy for `order_messages` (e.g.
 - Grace-window lengths in §5 are reasonable defaults, not measured — worth confirming against actual support-ticket data if it exists (how often do post-delivery issues get reported, and how long after `delivered`?).
 - Whether in-app masked calling is in scope alongside chat, given §3.2 item 11.
 - Who owns support-side chat takeover in `rush-command` from a permissions standpoint — is this all support staff, or a restricted "trust & safety" tier?
+
+---
+
+## 9. As-built (implementation)
+
+Shipped against this audit with the following locked choices:
+
+| Topic | As-built |
+|---|---|
+| Gift / delegated | Out of v1 |
+| Courier stack / reassignment | `courier_user_id` on messages; system notice on ops redispatch |
+| Support home | `apps/admin` (`/delivery/admin/orders/:id/messages`) + Dash Overview panel — not rush-command |
+| Merchant surfaces | dash-merchant + rush-command order detail |
+| Grace | CC 30m / CM 60m / MC 15m past pickup |
+| Masked calling | Out of v1 |
+| Retention | `public.purge_order_messages_retention(days)` + `order-chat-retention` edge function |
+
+### Key artifacts
+
+- Migration: `supabase/migrations/20260825120000_order_messages.sql`
+- Edge: `delivery/orderChatAccess.ts`, `delivery/orderChat.ts`, `delivery/admin/orderChatRoutes.ts`, `delivery/orderChatNotify.ts`
+- Package: `@roam/rush-chat`
+- Types: `packages/types/src/orderChat.ts`
+- Flags: `ORDER_CHAT_CUSTOMER_COURIER`, `ORDER_CHAT_MERCHANT_COURIER`, `ORDER_CHAT_CUSTOMER_MERCHANT` (default on; set `FEATURE_*=0` to kill)
+- Push: `notifications/order-chat` + merchant-push fanout
+- SOS: `POST /delivery/orders/:id/chat/report-problem`

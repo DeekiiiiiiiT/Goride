@@ -1,5 +1,6 @@
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import type { TrackingOrder } from '@/lib/trackingContent';
+import { CustomerOrderChatWrap } from '@/components/CustomerOrderChatWrap';
 import { CourierProfileCard } from './CourierShared';
 import { CourierTrackingMap } from './CourierTrackingMap';
 
@@ -50,7 +51,19 @@ export function CourierAssignedView({ order, onBack, onHelp, onDetails }: Props)
             <StepIcon icon="home" />
           </div>
 
-          <CourierProfileCard courier={order.courier} />
+          <CourierProfileCard courier={order.courier} order={order} />
+
+          <div className="mb-4 flex flex-wrap justify-center gap-3">
+            <CustomerOrderChatWrap
+              orderId={order.id}
+              status={order.status}
+              courierId={order.courierId}
+              pickedUpAt={order.pickedUpAt}
+              deliveredAt={order.deliveredAt}
+              pair="customer_merchant"
+              peerLabel={order.merchantName}
+            />
+          </div>
 
           <div className="flex justify-between items-center border-t border-surface-variant pt-4 px-2">
             <div>

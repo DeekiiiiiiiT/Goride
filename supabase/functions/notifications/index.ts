@@ -410,4 +410,38 @@ app.post("/order-sms", async (c) => {
   }, 202);
 });
 
+/** In-order chat push — customer or courier audience. */
+app.post("/order-chat", async (c) => {
+  const serviceKey = c.req.header("x-service-role") || "";
+  if (serviceKey !== Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")) {
+    return c.json({ error: "Forbidden" }, 403);
+  }
+
+  const body = await c.req.json().catch(() => ({}));
+  const audienceRaw = String(body.audience || "customer");
+  const audience = audienceRaw === "courier" ? "courier" : "customer";
+  const userId = String(body.userId || "");
+  const title = String(body.title || "New message");
+  const message = String(body.message || "").slice(0, 200);
+  const orderId = body.orderId ? String(body.orderId) : null;
+  const pair = body.pair ? String(body.pair) : null;
+  const url = String(body.url || (orderId ? `/tracking?orderId=${orderId}` : "/"));
+  if (!userId || !message) {
+    return c.json({ error: "userId and message required" }, 400);
+  }
+
+  const result = await fanoutPush({
+    audience,
+    userId,
+    title,
+    message,
+    url,
+    extraPayload: { orderId, pair, event: "order_chat" },
+    logTag: "notifications/order-chat",
+  });
+
+  if (result.body) return c.json(result.body, result.code);
+  return c.json({ ok: true, status: result.status, sent: result.sent }, result.code);
+});
+
 Deno.serve(app.fetch);

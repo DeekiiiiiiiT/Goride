@@ -37,6 +37,7 @@ export * from './vehicleCatalog';
 export * from './vehicleCatalogPending';
 export * from './vendor';
 export * from './delivery';
+export * from './orderChat';
 export * from './courier';
 export * from './rides';
 export * from './cashSettlementDisplay';

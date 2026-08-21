@@ -80,7 +80,7 @@ export function OnTheWayView({ order, onBack, onHelp, onDetails }: Props) {
 
           <div className="flex items-center justify-between mb-6">
             <CourierProfileCard courier={order.courier} compact />
-            <CourierActions phone={order.courier.phone} />
+            <CourierActions phone={order.courier.phone} order={order} />
           </div>
 
           <button type="button" onClick={onDetails} className="w-full flex justify-between items-center border-t border-surface-variant pt-4">

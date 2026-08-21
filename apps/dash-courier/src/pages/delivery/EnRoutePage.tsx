@@ -1,13 +1,15 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import { DeliveryMap } from '@/components/map/DeliveryMap';
 import { SlideToArrive } from '@/components/delivery/SlideToArrive';
 import { NavigationPickerSheet } from '@/components/ui/NavigationPickerSheet';
 import type { ActiveDelivery } from '@/lib/mockActiveDelivery';
-import { openPhoneCall, openSmsMessage, toDialablePhone } from '@/lib/contactLinks';
+import { openPhoneCall, toDialablePhone } from '@/lib/contactLinks';
 import { openNavigationApp } from '@/lib/navigationUrls';
 import { realDispatchProvider } from '@/services/courierDispatch/RealDispatchProvider';
 import { useCourierRoute } from '@/hooks/useCourierRoute';
+import { CourierOrderChatWrap } from '@/components/CourierOrderChatWrap';
+import { supabase } from '@/lib/supabase';
 
 type EnRoutePageProps = {
   delivery: ActiveDelivery;
@@ -22,7 +24,15 @@ function formatTurnDistance(meters?: number): string {
 
 export function EnRoutePage({ delivery, onArrived }: EnRoutePageProps) {
   const [navPickerOpen, setNavPickerOpen] = useState(false);
+  const [courierUserId, setCourierUserId] = useState<string>('');
   const customerPhone = toDialablePhone(delivery.customerPhone);
+
+  useEffect(() => {
+    void supabase.auth.getUser().then(({ data: { user } }) => {
+      setCourierUserId(user?.id ?? '');
+    });
+  }, []);
+
   const gps = realDispatchProvider.getLastCoords();
   const route = useCourierRoute({
     fromLat: gps.lat,
@@ -109,7 +119,29 @@ export function EnRoutePage({ delivery, onArrived }: EnRoutePageProps) {
               </div>
             </div>
 
-            <div className="flex gap-2">
+            <div className="flex gap-2 items-center">
+              {courierUserId ? (
+                <>
+                  <CourierOrderChatWrap
+                    orderId={delivery.orderId}
+                    status={delivery.orderStatus || 'in_transit'}
+                    courierUserId={courierUserId}
+                    pickedUpAt={delivery.pickedUpAt}
+                    deliveredAt={delivery.deliveredAt}
+                    pair="customer_courier"
+                    peerLabel={delivery.customerFirstName || 'Customer'}
+                  />
+                  <CourierOrderChatWrap
+                    orderId={delivery.orderId}
+                    status={delivery.orderStatus || 'assigned'}
+                    courierUserId={courierUserId}
+                    pickedUpAt={delivery.pickedUpAt}
+                    deliveredAt={delivery.deliveredAt}
+                    pair="merchant_courier"
+                    peerLabel={delivery.storeName || delivery.restaurant}
+                  />
+                </>
+              ) : null}
               {customerPhone && (
                 <button
                   type="button"
@@ -118,16 +150,6 @@ export function EnRoutePage({ delivery, onArrived }: EnRoutePageProps) {
                 >
                   <MaterialIcon name="call" className="text-xl" filled />
                   Call
-                </button>
-              )}
-              {customerPhone && (
-                <button
-                  type="button"
-                  onClick={() => openSmsMessage(customerPhone, `Hi, your Roam Rush courier is nearby.`)}
-                  className="flex-1 h-[52px] bg-secondary-fixed text-on-secondary-fixed-variant rounded-xl flex items-center justify-center gap-2 text-xs font-semibold uppercase tracking-wide active:scale-95"
-                >
-                  <MaterialIcon name="chat" className="text-xl" filled />
-                  Message
                 </button>
               )}
               <button

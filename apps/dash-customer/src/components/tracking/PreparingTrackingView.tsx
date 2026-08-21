@@ -3,6 +3,7 @@ import { PaymentPendingBanner } from '@/components/orders/PaymentPendingBanner';
 import type { TrackingOrder } from '@/lib/trackingContent';
 import { formatJmd, formatPrepEta, remainingPrepMinutes, TRACKING_MAP_IMAGES } from '@/lib/trackingContent';
 import { toast } from '@/lib/toast';
+import { CustomerOrderChatWrap } from '@/components/CustomerOrderChatWrap';
 
 type Props = {
   order: TrackingOrder;
@@ -120,6 +121,17 @@ export function PreparingTrackingView({ order, onClose, onCancel, cancelPending,
           <button type="button" onClick={onHelp} className="w-full py-3 text-on-surface-variant text-body-md">
             Need Help?
           </button>
+          <div className="flex justify-center pt-2">
+            <CustomerOrderChatWrap
+              orderId={order.id}
+              status={order.status}
+              courierId={order.courierId}
+              pickedUpAt={order.pickedUpAt}
+              deliveredAt={order.deliveredAt}
+              pair="customer_merchant"
+              peerLabel={order.merchantName}
+            />
+          </div>
         </section>
       </main>
     </div>

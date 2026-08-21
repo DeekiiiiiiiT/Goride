@@ -32,6 +32,7 @@
     "@roam/api-client": "workspace:*",
     "@roam/auth-client": "workspace:*",
     "@roam/merchant-ops": "workspace:*",
+    "@roam/rush-chat": "workspace:*",
     "@roam/types": "workspace:*",
     "@roam/ui": "workspace:*",
     "@roam/vertical-config": "workspace:*",

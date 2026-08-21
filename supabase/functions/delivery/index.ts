@@ -103,6 +103,14 @@ function getPaymentsSupabase() {
   );
 }
 
+/** Public schema service client — order_messages lives in public for Realtime. */
+function getPublicServiceSupabase() {
+  return createClient(
+    Deno.env.get("SUPABASE_URL")!,
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+  );
+}
+
 // Auth-only client (uses default public schema so supabase.auth.getUser works)
 function getAuthClient(authHeader: string) {
   return createClient(
@@ -2345,7 +2353,11 @@ import { registerFinanceAdminRoutes } from "./admin/financeRoutes.ts";
 import { registerMarketAdminRoutes, registerPublicGeoRoutes } from "./admin/marketRoutes.ts";
 import { registerOpsAdminRoutes } from "./admin/opsRoutes.ts";
 import { registerSupportAdminRoutes } from "./admin/supportRoutes.ts";
+import { registerOrderChatRoutes } from "./orderChat.ts";
+import { registerAdminOrderChatRoutes } from "./admin/orderChatRoutes.ts";
 registerCustomerOrderRoutes(app, { getSupabase, getServiceSupabase });
+registerOrderChatRoutes(app, { getSupabase, getServiceSupabase, getPublicServiceSupabase });
+registerAdminOrderChatRoutes(app);
 registerCustomerAccountRoutes(app, { getSupabase, getServiceSupabase });
 registerCustomerDiscoveryRoutes(app, { getServiceSupabase, getSupabase });
 registerCourierConsumerRoutes(app, { getSupabase, getServiceSupabase });

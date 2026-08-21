@@ -6,6 +6,8 @@ import { requireProductAdmin, type ProductAdminUser } from "../../_shared/produc
 import { requireDashWrite } from "./dashPermissions.ts";
 import { getAuthAdmin, getDb, writeKvAudit } from "./merchantAdminShared.ts";
 import { dispatchOffersForOrder } from "../courierConsumerRoutes.ts";
+import { insertCourierReassignedSystemMessages } from "../orderChat.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 /** Orders considered "in flight" for the live ops board. */
 const LIVE_STATUSES = [
@@ -115,6 +117,15 @@ export function registerOpsAdminRoutes(app: Hono) {
       await db.from("courier_availability")
         .update({ active_order_id: null })
         .eq("driver_id", previousCourier);
+      try {
+        const publicSb = createClient(
+          Deno.env.get("SUPABASE_URL")!,
+          Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+        );
+        await insertCourierReassignedSystemMessages(publicSb, orderId, String(previousCourier));
+      } catch (e) {
+        console.warn("[ops redispatch] chat reassignment notice failed", e);
+      }
     }
     await db.from("courier_availability")
       .update({ active_order_id: null })
