@@ -13,11 +13,9 @@ import AddCategorySheet from '../components/menu/AddCategorySheet';
 import { MenuCategory, MenuItem, MenuView, createEmptyMenuItem } from '../types/menu';
 import QueryErrorState from '../components/QueryErrorState';
 import PartnerSkeleton from '../components/PartnerSkeleton';
-import PartnerDesktopShell from '../components/layout/PartnerDesktopShell';
 import MenuDesktopDashboard from '../components/menu/MenuDesktopDashboard';
 import CatalogImportPanel from '../components/menu/CatalogImportPanel';
 import { resolveGoLiveRule } from '@roam/vertical-config';
-import { useAcceptingOrdersToggle } from '../hooks/useAcceptingOrdersToggle';
 import { useMerchantMenu } from '../hooks/useMerchantMenu';
 import { useMenuReorder } from '../hooks/useMenuReorder';
 import { getAuthHeaders } from '../lib/partner-api';
@@ -56,8 +54,6 @@ export default function MenuPage({ merchant, onNavigate, onOpenMobileNav, setupB
   const [showCategorySheet, setShowCategorySheet] = useState(false);
   const [editingCategory, setEditingCategory] = useState<MenuCategory | null>(null);
   const queryClient = useQueryClient();
-  const { isAcceptingOrders, toggleAcceptingOrders, isPending: togglePending } =
-    useAcceptingOrdersToggle(merchant);
   const dragEnabled = readFlag(merchant.id, 'menuDragReorder');
   const { reorderCategories, reorderItems } = useMenuReorder(merchant.id);
 
@@ -319,63 +315,47 @@ export default function MenuPage({ merchant, onNavigate, onOpenMobileNav, setupB
 
   return (
     <>
-      <div className="hidden h-dvh lg:flex">
-        <PartnerDesktopShell
-          merchant={merchant}
-          activeNavKey="menu"
-          onNavigate={(tab) => onNavigate?.(tab)}
-          onHistory={() => onNavigate?.('orders')}
-          onSupport={() => onNavigate?.('account')}
-          onGoOffline={() => toggleAcceptingOrders(false)}
-          isAcceptingOrders={isAcceptingOrders}
-          onToggleAcceptingOrders={toggleAcceptingOrders}
-          togglePending={togglePending}
-          toggleLabel="Accepting Orders"
-          headerVariant="brand"
-          showRestaurantInfo
-          onSettings={() => onNavigate?.('account')}
-        >
-          {isLoading ? (
-            <main className="flex flex-1 flex-col gap-inset-sm bg-background p-gutter">
-              <PartnerSkeleton variant="list" count={5} />
-            </main>
-          ) : isError ? (
-            <main className="flex flex-1 items-center justify-center bg-background p-gutter">
-              <QueryErrorState message="Could not load menu" onRetry={() => refetch()} />
-            </main>
-          ) : categories.length === 0 && items.length === 0 ? (
-            <main className="flex flex-1 flex-col items-center justify-center bg-background p-inset-xl text-center">
-              <MaterialIcon name="restaurant_menu" className="mb-4 text-5xl text-on-surface-variant" />
-              <h2 className="mb-2 text-headline-md text-on-background">Start building your menu</h2>
-              <p className="mb-6 text-body-sm text-on-surface-variant">
-                Add categories to organize your items, then add menu items.
-              </p>
-              <button
-                type="button"
-                onClick={openAddCategory}
-                className="inline-flex h-12 items-center justify-center rounded-lg bg-primary-container px-inset-lg text-label-md text-white"
-              >
-                Add Category
-              </button>
-            </main>
-          ) : (
-            <MenuDesktopDashboard
-              categories={categories}
-              items={items}
-              selectedCategoryId={selectedCategoryId}
-              onSelectCategory={setSelectedCategoryId}
-              onAddCategory={openAddCategory}
-              onAddItem={() => openEditItem()}
-              onEditItem={openEditItem}
-              onToggleAvailability={(itemId, isAvailable) =>
-                toggleAvailabilityMutation.mutate({ itemId, isAvailable })
-              }
-              dragEnabled={dragEnabled}
-              onReorderCategories={reorderCategories}
-              onReorderItems={reorderItems}
-            />
-          )}
-        </PartnerDesktopShell>
+      <div className="hidden h-full min-h-0 flex-1 flex-col overflow-hidden lg:flex">
+        {isLoading ? (
+          <main className="flex flex-1 flex-col gap-inset-sm bg-background p-gutter">
+            <PartnerSkeleton variant="list" count={5} />
+          </main>
+        ) : isError ? (
+          <main className="flex flex-1 items-center justify-center bg-background p-gutter">
+            <QueryErrorState message="Could not load menu" onRetry={() => refetch()} />
+          </main>
+        ) : categories.length === 0 && items.length === 0 ? (
+          <main className="flex flex-1 flex-col items-center justify-center bg-background p-inset-xl text-center">
+            <MaterialIcon name="restaurant_menu" className="mb-4 text-5xl text-on-surface-variant" />
+            <h2 className="mb-2 text-headline-md text-on-background">Start building your menu</h2>
+            <p className="mb-6 text-body-sm text-on-surface-variant">
+              Add categories to organize your items, then add menu items.
+            </p>
+            <button
+              type="button"
+              onClick={openAddCategory}
+              className="inline-flex h-12 items-center justify-center rounded-lg bg-primary-container px-inset-lg text-label-md text-white"
+            >
+              Add Category
+            </button>
+          </main>
+        ) : (
+          <MenuDesktopDashboard
+            categories={categories}
+            items={items}
+            selectedCategoryId={selectedCategoryId}
+            onSelectCategory={setSelectedCategoryId}
+            onAddCategory={openAddCategory}
+            onAddItem={() => openEditItem()}
+            onEditItem={openEditItem}
+            onToggleAvailability={(itemId, isAvailable) =>
+              toggleAvailabilityMutation.mutate({ itemId, isAvailable })
+            }
+            dragEnabled={dragEnabled}
+            onReorderCategories={reorderCategories}
+            onReorderItems={reorderItems}
+          />
+        )}
         {categorySheet}
       </div>
 

@@ -9,7 +9,6 @@ import NewOrderDetailSheet from '../components/NewOrderDetailSheet';
 import NewOrderAlertView from '../components/NewOrderAlertView';
 import FirstOrderCelebrationView from '../components/FirstOrderCelebrationView';
 import PayoutSetupSheet from '../components/PayoutSetupSheet';
-import PartnerDesktopShell from '../components/layout/PartnerDesktopShell';
 import OrdersDesktopDashboard from '../components/orders/OrdersDesktopDashboard';
 import StoreStatusToggle from '../components/layout/StoreStatusToggle';
 import { useAcceptingOrdersToggle } from '../hooks/useAcceptingOrdersToggle';
@@ -56,6 +55,10 @@ interface OrdersPageProps {
   merchant: Merchant;
   onNavigate?: (tab: PartnerTab) => void;
   onOpenMobileNav?: () => void;
+  /** When true, open history view (desktop side-nav History). */
+  openHistory?: boolean;
+  onOpenHistoryHandled?: () => void;
+  onHistoryViewChange?: (active: boolean) => void;
 }
 
 type OrderFilter = 'placed' | 'preparing' | 'ready' | 'order_status';
@@ -88,7 +91,14 @@ function openOrderView(
   setters.setViewOrderId(order.id);
 }
 
-export default function OrdersPage({ merchant, onNavigate, onOpenMobileNav }: OrdersPageProps) {
+export default function OrdersPage({
+  merchant,
+  onNavigate,
+  onOpenMobileNav,
+  openHistory,
+  onOpenHistoryHandled,
+  onHistoryViewChange,
+}: OrdersPageProps) {
   const [filter, setFilter] = useState<OrderFilter>('placed');
   const [historyTab, setHistoryTab] = useState<HistoryTab>('completed');
   const [sortOrder, setSortOrder] = useState<SortOrder>('oldest');
@@ -99,6 +109,7 @@ export default function OrdersPage({ merchant, onNavigate, onOpenMobileNav }: Or
   const [showFirstOrderCelebration, setShowFirstOrderCelebration] = useState(false);
   const [showPayoutSetup, setShowPayoutSetup] = useState(false);
   const pendingPayoutSetupRef = useRef(false);
+  const prevOpenHistoryRef = useRef(openHistory);
   const [rejectOrderId, setRejectOrderId] = useState<string | null>(null);
   const [acceptedOrderId, setAcceptedOrderId] = useState<string | null>(null);
   const [viewOrderId, setViewOrderId] = useState<string | null>(null);
@@ -118,6 +129,22 @@ export default function OrdersPage({ merchant, onNavigate, onOpenMobileNav }: Or
     const interval = window.setInterval(() => setTick((value) => value + 1), 1000);
     return () => window.clearInterval(interval);
   }, []);
+
+  useEffect(() => {
+    if (openHistory) {
+      setFilter('order_status');
+      setHistoryTab('completed');
+      onOpenHistoryHandled?.();
+    } else if (prevOpenHistoryRef.current) {
+      // App cleared history (Orders side-nav) — return to live queue
+      setFilter('placed');
+    }
+    prevOpenHistoryRef.current = openHistory;
+  }, [openHistory, onOpenHistoryHandled]);
+
+  useEffect(() => {
+    onHistoryViewChange?.(filter === 'order_status');
+  }, [filter, onHistoryViewChange]);
 
   const handleRealtimeInsert = useCallback(
     (payload: { new: Record<string, unknown> }) => {
@@ -384,10 +411,6 @@ export default function OrdersPage({ merchant, onNavigate, onOpenMobileNav }: Or
     setShowPayoutSetup(false);
   };
 
-  const handleNavigate = (tab: PartnerTab) => {
-    onNavigate?.(tab);
-  };
-
   const { pullToRefreshProps, isRefreshing, pullDistance } = usePullToRefresh({
     onRefresh: async () => {
       await queryClient.invalidateQueries({ queryKey: merchantOrdersKeys.all });
@@ -397,61 +420,41 @@ export default function OrdersPage({ merchant, onNavigate, onOpenMobileNav }: Or
 
   return (
     <>
-    <div className="hidden h-dvh lg:flex">
-      <PartnerDesktopShell
-        merchant={merchant}
-        activeNavKey={isHistoryView ? 'history' : 'orders'}
-        onNavigate={(tab) => {
-          if (tab === 'orders') setFilter('placed');
-          handleNavigate(tab);
-        }}
-        onHistory={() => {
-          setFilter('order_status');
-          setHistoryTab('completed');
-        }}
-        onSupport={() => onNavigate?.('account')}
-        isAcceptingOrders={isAcceptingOrders}
-        onToggleAcceptingOrders={toggleAcceptingOrders}
-        togglePending={togglePending}
-        notificationCount={counts.placed}
-        headerVariant="merchant"
-        onSettings={() => onNavigate?.('account')}
-      >
-        {isHistoryView ? (
-          <main className="flex flex-1 flex-col overflow-hidden bg-background p-gutter">
-            <OrderHistoryView
-              tab={historyTab}
-              onTabChange={setHistoryTab}
-              orders={historyOrders}
-              completedOrders={completedHistoryOrders}
-              cancelledOrders={cancelledHistoryOrders}
-              isLoading={historyLoading}
-              onOrderClick={(orderId) => setViewOrderId(orderId)}
-              fallbackAvgPrepMins={merchant.avg_prep_time_mins}
-            />
-          </main>
-        ) : (
-          <OrdersDesktopDashboard
-            merchant={merchant}
-            queueOrders={queueOrders}
-            selectedOrderId={desktopSelectedOrderId}
-            onSelectOrder={setDesktopSelectedOrderId}
-            isLoading={isLoading}
-            newCount={counts.placed}
-            prepCount={counts.preparing}
-            stats={todayStats}
-            onReject={handleOpenReject}
-            onStartPreparing={handleDesktopStartPreparing}
-            onMarkReady={(orderId) => updateStatusMutation.mutate({ orderId, status: 'ready' })}
-            onContactSupport={() =>
-              toast.info('Help Center', {
-                description: 'Contact dispatch from Account → Help & Support.',
-              })
-            }
-            isSubmitting={updateStatusMutation.isPending}
+    <div className="hidden h-full min-h-0 flex-1 flex-col overflow-hidden lg:flex">
+      {isHistoryView ? (
+        <main className="flex flex-1 flex-col overflow-hidden bg-background p-gutter">
+          <OrderHistoryView
+            tab={historyTab}
+            onTabChange={setHistoryTab}
+            orders={historyOrders}
+            completedOrders={completedHistoryOrders}
+            cancelledOrders={cancelledHistoryOrders}
+            isLoading={historyLoading}
+            onOrderClick={(orderId) => setViewOrderId(orderId)}
+            fallbackAvgPrepMins={merchant.avg_prep_time_mins}
           />
-        )}
-      </PartnerDesktopShell>
+        </main>
+      ) : (
+        <OrdersDesktopDashboard
+          merchant={merchant}
+          queueOrders={queueOrders}
+          selectedOrderId={desktopSelectedOrderId}
+          onSelectOrder={setDesktopSelectedOrderId}
+          isLoading={isLoading}
+          newCount={counts.placed}
+          prepCount={counts.preparing}
+          stats={todayStats}
+          onReject={handleOpenReject}
+          onStartPreparing={handleDesktopStartPreparing}
+          onMarkReady={(orderId) => updateStatusMutation.mutate({ orderId, status: 'ready' })}
+          onContactSupport={() =>
+            toast.info('Help Center', {
+              description: 'Contact dispatch from Account → Help & Support.',
+            })
+          }
+          isSubmitting={updateStatusMutation.isPending}
+        />
+      )}
     </div>
 
     <div className="flex min-h-dvh flex-col bg-background text-on-background antialiased lg:hidden">

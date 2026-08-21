@@ -44,7 +44,7 @@ export default function PartnerHeader({
   const statusStyle = STATUS_STYLES[status];
 
   return (
-    <header className="sticky top-0 z-50 w-full border-b border-outline-variant bg-surface font-headline-md text-primary shadow-sm">
+    <header className="sticky top-0 z-50 w-full border-b border-outline-variant bg-surface font-headline-md text-primary shadow-sm lg:hidden">
       <div className="mx-auto flex h-16 w-full max-w-screen-xl items-center justify-between px-margin-mobile md:px-margin-tablet">
         <div className="flex min-w-0 items-center gap-inset-xs">
           {onOpenNav && (

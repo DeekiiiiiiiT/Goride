@@ -91,19 +91,56 @@ export default function AnalyticsPage({ merchant, onNavigate, onOpenMobileNav }:
   };
 
   return (
-    <div className="min-h-dvh bg-surface">
-      <AnalyticsMerchantHeader
-        merchant={merchant}
-        isAcceptingOrders={isAcceptingOrders}
-        onToggleAcceptingOrders={toggleAcceptingOrders}
-        togglePending={togglePending}
-        onOpenNav={onOpenMobileNav}
-      />
+    <div className="flex min-h-0 flex-1 flex-col bg-surface lg:overflow-y-auto">
+      {/* Mobile/tablet header — TopBar owns status at lg+ */}
+      <div className="lg:hidden">
+        <AnalyticsMerchantHeader
+          merchant={merchant}
+          isAcceptingOrders={isAcceptingOrders}
+          onToggleAcceptingOrders={toggleAcceptingOrders}
+          togglePending={togglePending}
+          onOpenNav={onOpenMobileNav}
+        />
+      </div>
 
       <main
-        className="mx-auto max-w-lg overflow-y-auto px-margin-mobile pb-4 pt-16 md:max-w-3xl md:px-margin-tablet"
+        className="mx-auto w-full max-w-lg flex-1 overflow-y-auto px-margin-mobile pb-4 pt-16 md:max-w-3xl md:px-margin-tablet lg:max-w-5xl lg:pt-inset-md"
         data-partner-scroll
       >
+        {/* md+ in-page Health / Reviews (bottom AnalyticsSubNav is md:hidden) */}
+        <div
+          className="mb-inset-md hidden gap-inset-xs border-b border-outline-variant md:flex"
+          role="tablist"
+          aria-label="Analytics sections"
+        >
+          <button
+            type="button"
+            role="tab"
+            aria-selected={navTab === 'health'}
+            onClick={() => handleSelectTab('health')}
+            className={`px-inset-md py-inset-sm text-label-md font-semibold transition-colors ${
+              navTab === 'health'
+                ? 'border-b-2 border-primary text-primary'
+                : 'text-on-surface-variant hover:text-primary'
+            }`}
+          >
+            Health
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={navTab === 'reviews'}
+            onClick={() => handleSelectTab('reviews')}
+            className={`px-inset-md py-inset-sm text-label-md font-semibold transition-colors ${
+              navTab === 'reviews'
+                ? 'border-b-2 border-primary text-primary'
+                : 'text-on-surface-variant hover:text-primary'
+            }`}
+          >
+            Reviews
+          </button>
+        </div>
+
         {navTab === 'reviews' ? (
           isLoading ? (
             <PartnerSkeleton variant="card" count={3} />

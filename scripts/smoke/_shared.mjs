@@ -3,6 +3,8 @@
  */
 import { execSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
+import { readFileSync, writeFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 
 export const PROJECT_REF = 'csfllzzastacofsvcdsc';
 export const SUPABASE_URL = `https://${PROJECT_REF}.supabase.co`;
@@ -26,6 +28,72 @@ export const DROP_OFF = {
   lng: -76.955,
 };
 
+function stripAnsi(text) {
+  return String(text || '')
+    .replace(/\u001b\[[0-9;]*m/g, '')
+    // Spinner / box-drawing noise from interactive CLI
+    .replace(/[│┃┊┊◑◐◓◒⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏]/g, '');
+}
+
+function keysFromPayload(parsed) {
+  const list = Array.isArray(parsed) ? parsed : parsed?.keys;
+  if (!Array.isArray(list)) return null;
+  const serviceKey = list.find((k) => k.id === 'service_role' || k.name === 'service_role')?.api_key;
+  const anonKey = list.find((k) => k.id === 'anon' || k.name === 'anon')?.api_key;
+  if (!serviceKey || !anonKey) return null;
+  return { serviceKey, anonKey };
+}
+
+function parseApiKeysJson(out) {
+  const cleaned = stripAnsi(out).trim();
+  // CLI may return `{ "keys": [...] }` or a bare `[...]` depending on -o json.
+  const objStart = cleaned.indexOf('{');
+  const arrStart = cleaned.indexOf('[');
+  let jsonText = '';
+  if (objStart >= 0 && (arrStart < 0 || objStart < arrStart)) {
+    const end = cleaned.lastIndexOf('}');
+    if (end > objStart) jsonText = cleaned.slice(objStart, end + 1);
+  } else if (arrStart >= 0) {
+    const end = cleaned.lastIndexOf(']');
+    if (end > arrStart) jsonText = cleaned.slice(arrStart, end + 1);
+  }
+  if (!jsonText) {
+    throw new Error(`Could not find API keys JSON in CLI output: ${cleaned.slice(0, 200)}`);
+  }
+  const parsed = JSON.parse(jsonText);
+  const keys = keysFromPayload(parsed);
+  if (!keys) throw new Error('Could not read Supabase API keys (log in: supabase login)');
+  return keys;
+}
+
+function readCachedApiKeys() {
+  try {
+    const cachePath = fileURLToPath(new URL('./.api-keys.cache.json', import.meta.url));
+    const raw = readFileSync(cachePath, 'utf8');
+    const parsed = JSON.parse(raw);
+    if (parsed?.anonKey && parsed?.serviceKey && parsed?.projectRef === PROJECT_REF) {
+      return { anonKey: parsed.anonKey, serviceKey: parsed.serviceKey };
+    }
+  } catch {
+    /* no cache */
+  }
+  return null;
+}
+
+function writeCachedApiKeys(keys) {
+  try {
+    const cachePath = fileURLToPath(new URL('./.api-keys.cache.json', import.meta.url));
+    writeFileSync(
+      cachePath,
+      JSON.stringify({ projectRef: PROJECT_REF, anonKey: keys.anonKey, serviceKey: keys.serviceKey }, null, 0),
+      'utf8',
+    );
+  } catch {
+    /* best-effort cache */
+  }
+}
+
+/** Fetch keys once; prefer env so pack runners avoid Windows CLI telemetry file locks. */
 export function getApiKeys() {
   if (process.env.SUPABASE_SERVICE_ROLE_KEY?.trim() && process.env.SUPABASE_ANON_KEY?.trim()) {
     return {
@@ -33,15 +101,53 @@ export function getApiKeys() {
       anonKey: process.env.SUPABASE_ANON_KEY.trim(),
     };
   }
-  const out = execSync(`npx supabase projects api-keys --project-ref ${PROJECT_REF}`, {
-    encoding: 'utf8',
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
-  const parsed = JSON.parse(out);
-  const serviceKey = parsed.keys?.find((k) => k.id === 'service_role' || k.name === 'service_role')?.api_key;
-  const anonKey = parsed.keys?.find((k) => k.id === 'anon' || k.name === 'anon')?.api_key;
-  if (!serviceKey || !anonKey) throw new Error('Could not read Supabase API keys (log in: supabase login)');
-  return { serviceKey, anonKey };
+
+  const cached = readCachedApiKeys();
+  if (cached) return cached;
+
+  // Windows: interactive spinner / telemetry EPERM break JSON parsing. Force plain CLI.
+  let lastErr;
+  for (let attempt = 1; attempt <= 4; attempt += 1) {
+    try {
+      const out = execSync(
+        `npx supabase projects api-keys --project-ref ${PROJECT_REF} -o json`,
+        {
+          encoding: 'utf8',
+          stdio: ['ignore', 'pipe', 'pipe'],
+          env: {
+            ...process.env,
+            CI: '1',
+            NO_COLOR: '1',
+            FORCE_COLOR: '0',
+            TERM: 'dumb',
+          },
+        },
+      );
+      const keys = parseApiKeysJson(out);
+      writeCachedApiKeys(keys);
+      return keys;
+    } catch (e) {
+      // CLI often prints valid JSON then exits non-zero on telemetry rename — use stdout if present.
+      const maybeOut = `${e?.stdout || ''}${e?.stderr || ''}`;
+      if (/"api_key"|"keys"/.test(maybeOut)) {
+        try {
+          const keys = parseApiKeysJson(maybeOut);
+          writeCachedApiKeys(keys);
+          return keys;
+        } catch {
+          /* fall through to retry */
+        }
+      }
+      lastErr = e;
+      if (attempt === 4) break;
+      const waitMs = 400 * attempt;
+      const until = Date.now() + waitMs;
+      while (Date.now() < until) {
+        /* sync backoff */
+      }
+    }
+  }
+  throw lastErr instanceof Error ? lastErr : new Error(String(lastErr));
 }
 
 export async function signIn(anonKey, email, password) {

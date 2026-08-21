@@ -12,7 +12,7 @@ export default function DashboardSimpleHeader({
   onOpenNav,
 }: DashboardSimpleHeaderProps) {
   return (
-    <header className="safe-t fixed top-0 left-0 z-50 flex h-16 w-full items-center justify-between border-b border-outline-variant bg-surface px-margin-mobile shadow-sm">
+    <header className="safe-t fixed top-0 left-0 z-50 flex h-16 w-full items-center justify-between border-b border-outline-variant bg-surface px-margin-mobile shadow-sm lg:hidden">
       <button
         type="button"
         onClick={onOpenNav}

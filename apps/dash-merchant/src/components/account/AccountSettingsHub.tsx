@@ -7,6 +7,7 @@ import StoreStatusToggle from '../layout/StoreStatusToggle';
 import { getStoreStatus, PartnerTab } from '../../lib/partner-utils';
 import { formatMemberSince } from '../../hooks/useMerchantSettings';
 import SettingsMenuRow from './SettingsMenuRow';
+import { InstallDesktopGuideCard } from '../pwa/PwaLifecycleHost';
 
 export type AccountSection =
   | 'profile'
@@ -54,26 +55,18 @@ export default function AccountSettingsHub({
   };
 
   return (
-    <div className="flex min-h-dvh flex-col bg-surface text-on-surface antialiased">
-      <header className="safe-t sticky top-0 z-50 w-full shrink-0 border-b border-outline-variant bg-surface shadow-sm">
+    <div className="flex min-h-0 flex-1 flex-col bg-surface text-on-surface antialiased lg:overflow-y-auto">
+      <header className="safe-t sticky top-0 z-50 w-full shrink-0 border-b border-outline-variant bg-surface shadow-sm lg:hidden">
         <div className="safe-x relative flex h-16 w-full items-center justify-between gap-inset-xs md:px-margin-tablet">
           <div className="z-10 flex shrink-0 items-center">
             <button
               type="button"
               onClick={onOpenMobileNav}
-              className={`btn-touch flex h-12 w-12 items-center justify-center rounded-full text-on-surface-variant transition-colors hover:bg-surface-container-high active:scale-95 lg:hidden ${onOpenMobileNav ? '' : 'invisible'}`}
+              className={`btn-touch flex h-12 w-12 items-center justify-center rounded-full text-on-surface-variant transition-colors hover:bg-surface-container-high active:scale-95 ${onOpenMobileNav ? '' : 'invisible'}`}
               aria-label="Open navigation"
               disabled={!onOpenMobileNav}
             >
               <MaterialIcon name="menu" size={24} />
-            </button>
-            <button
-              type="button"
-              onClick={() => onNavigate('dashboard')}
-              className="hidden h-12 w-12 items-center justify-center rounded-full text-primary transition-colors hover:bg-surface-container-high active:scale-95 lg:flex"
-              aria-label="Dashboard"
-            >
-              <MaterialIcon name="storefront" />
             </button>
           </div>
 
@@ -103,7 +96,7 @@ export default function AccountSettingsHub({
         </div>
       </header>
 
-      <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-inset-lg px-margin-mobile py-inset-md pb-[var(--app-bottom-nav-total)] md:px-margin-tablet lg:pb-inset-lg">
+      <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-inset-lg px-margin-mobile py-inset-md pb-[var(--app-bottom-nav-total)] md:px-margin-tablet lg:max-w-5xl lg:pb-inset-lg lg:pt-inset-md">
         <section className="flex flex-col items-center justify-center gap-inset-xs text-center">
           <div className="relative mb-inset-xs h-[120px] w-[120px] rounded-full border border-outline-variant bg-surface p-1 shadow-sm">
             {merchant.logo_url ? (
@@ -211,6 +204,8 @@ export default function AccountSettingsHub({
             onClick={() => handlePlaceholder('Legal & Terms')}
           />
         </section>
+
+        <InstallDesktopGuideCard />
 
         <button
           type="button"

@@ -10,9 +10,10 @@ import PayoutSetupSheet from '../components/PayoutSetupSheet';
 
 interface EarningsPageProps {
   onNavigate: (page: PartnerTab) => void;
+  onOpenMobileNav?: () => void;
 }
 
-export default function EarningsPage({ onNavigate }: EarningsPageProps) {
+export default function EarningsPage({ onNavigate, onOpenMobileNav }: EarningsPageProps) {
   const [selectedPayoutId, setSelectedPayoutId] = useState<string | null>(null);
   const [showPayoutSetup, setShowPayoutSetup] = useState(false);
   const [earningsTab, setEarningsTab] = useState<'earnings' | 'history'>('earnings');
@@ -90,16 +91,27 @@ export default function EarningsPage({ onNavigate }: EarningsPageProps) {
   };
 
   return (
-    <div className="flex min-h-dvh flex-col bg-surface text-on-surface antialiased">
-      <header className="safe-t fixed top-0 z-50 flex h-16 w-full items-center justify-between border-b border-outline-variant bg-surface/80 px-margin-mobile backdrop-blur-md md:px-margin-tablet">
-        <button
-          type="button"
-          onClick={() => onNavigate('account')}
-          className="flex h-12 w-12 items-center justify-center rounded-full text-primary transition-colors hover:bg-surface-container active:scale-95"
-          aria-label="Back"
-        >
-          <MaterialIcon name="arrow_back" />
-        </button>
+    <div className="flex min-h-0 flex-1 flex-col bg-surface text-on-surface antialiased lg:overflow-y-auto">
+      <header className="safe-t fixed top-0 z-50 flex h-16 w-full items-center justify-between border-b border-outline-variant bg-surface/80 px-margin-mobile backdrop-blur-md md:px-margin-tablet lg:hidden">
+        {onOpenMobileNav ? (
+          <button
+            type="button"
+            onClick={onOpenMobileNav}
+            className="flex h-12 w-12 items-center justify-center rounded-full text-primary transition-colors hover:bg-surface-container active:scale-95"
+            aria-label="Open navigation"
+          >
+            <MaterialIcon name="menu" />
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={() => onNavigate('account')}
+            className="flex h-12 w-12 items-center justify-center rounded-full text-primary transition-colors hover:bg-surface-container active:scale-95"
+            aria-label="Back"
+          >
+            <MaterialIcon name="arrow_back" />
+          </button>
+        )}
         <h1 className="text-headline-md font-bold text-primary">Earnings</h1>
         <button
           type="button"
@@ -111,7 +123,48 @@ export default function EarningsPage({ onNavigate }: EarningsPageProps) {
         </button>
       </header>
 
-      <main className="mx-auto flex w-full max-w-3xl flex-grow flex-col gap-inset-lg px-margin-mobile pb-[100px] pt-16 md:px-margin-tablet md:pb-inset-lg">
+      <main className="mx-auto flex w-full max-w-3xl flex-grow flex-col gap-inset-lg px-margin-mobile pb-[100px] pt-16 md:px-margin-tablet md:pb-inset-lg lg:max-w-5xl lg:pt-inset-md">
+        {/* md+ in-page Earnings / History (bottom EarningsSubNav is md:hidden) */}
+        <div
+          className="mb-inset-sm hidden gap-inset-xs border-b border-outline-variant md:flex"
+          role="tablist"
+          aria-label="Earnings sections"
+        >
+          <button
+            type="button"
+            role="tab"
+            aria-selected={earningsTab === 'earnings'}
+            onClick={() => setEarningsTab('earnings')}
+            className={`px-inset-md py-inset-sm text-label-md font-semibold transition-colors ${
+              earningsTab === 'earnings'
+                ? 'border-b-2 border-primary text-primary'
+                : 'text-on-surface-variant hover:text-primary'
+            }`}
+          >
+            Earnings
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={earningsTab === 'history'}
+            onClick={() => setEarningsTab('history')}
+            className={`px-inset-md py-inset-sm text-label-md font-semibold transition-colors ${
+              earningsTab === 'history'
+                ? 'border-b-2 border-primary text-primary'
+                : 'text-on-surface-variant hover:text-primary'
+            }`}
+          >
+            History
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowPayoutSetup(true)}
+            className="ml-auto px-inset-md py-inset-sm text-label-md font-semibold text-on-surface-variant hover:text-primary"
+          >
+            Bank details
+          </button>
+        </div>
+
         {earningsTab === 'history' ? (
           <section className="flex flex-col gap-inset-sm">
             <h3 className="px-inset-xs text-headline-md text-on-surface">Payout & transaction history</h3>

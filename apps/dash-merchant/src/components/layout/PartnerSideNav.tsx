@@ -1,6 +1,10 @@
 import { MaterialIcon } from '../../signup/components/MaterialIcon';
 import { Merchant } from '../../hooks/useMerchant';
-import { PARTNER_SIDE_NAV, PartnerSideNavKey } from '../../lib/partner-nav';
+import {
+  getAllowedSideNavItems,
+  PARTNER_SIDE_NAV,
+  PartnerSideNavKey,
+} from '../../lib/partner-nav';
 import { PartnerTab } from '../../lib/partner-utils';
 
 interface PartnerSideNavProps {
@@ -12,6 +16,7 @@ interface PartnerSideNavProps {
   onGoOffline?: () => void;
   showRestaurantInfo?: boolean;
   compact?: boolean;
+  allowedTabs?: PartnerTab[];
 }
 
 export default function PartnerSideNav({
@@ -23,8 +28,10 @@ export default function PartnerSideNav({
   onGoOffline,
   showRestaurantInfo = false,
   compact = false,
+  allowedTabs,
 }: PartnerSideNavProps) {
   const terminalId = `#${merchant.id.replace(/-/g, '').slice(0, 4).toUpperCase()}`;
+  const items = allowedTabs ? getAllowedSideNavItems(allowedTabs) : PARTNER_SIDE_NAV;
 
   const handleNav = (key: PartnerSideNavKey, tab?: PartnerTab) => {
     if (key === 'history') {
@@ -43,6 +50,7 @@ export default function PartnerSideNav({
       className={`flex h-full shrink-0 flex-col border-r border-outline-variant bg-surface-container-low py-inset-md px-inset-sm ${
         compact ? 'w-20' : 'w-[4.5rem] xl:w-64'
       }`}
+      aria-label="Partner desktop navigation"
     >
       {showRestaurantInfo && !compact && (
         <div className="mb-inset-lg hidden items-center gap-inset-xs px-2 xl:flex">
@@ -65,7 +73,7 @@ export default function PartnerSideNav({
       )}
 
       <ul className="flex flex-1 flex-col gap-inset-xs">
-        {PARTNER_SIDE_NAV.map((item) => {
+        {items.map((item) => {
           const isActive = activeKey === item.key;
 
           return (

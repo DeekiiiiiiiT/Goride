@@ -7,6 +7,7 @@
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
+import { getApiKeys } from './smoke/_shared.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.join(__dirname, '..');
@@ -28,6 +29,13 @@ const SCRIPTS = [
 
 console.log('=== Roam Rush Courier — full API smoke pack ===\n');
 
+const { anonKey, serviceKey } = getApiKeys();
+const childEnv = {
+  ...process.env,
+  SUPABASE_ANON_KEY: anonKey,
+  SUPABASE_SERVICE_ROLE_KEY: serviceKey,
+};
+
 let failed = 0;
 for (const script of SCRIPTS) {
   const scriptPath = path.join(root, 'scripts', script);
@@ -35,6 +43,7 @@ for (const script of SCRIPTS) {
   const result = spawnSync(process.execPath, [scriptPath], {
     stdio: 'inherit',
     cwd: root,
+    env: childEnv,
   });
   if (result.status !== 0) failed += 1;
   console.log('');

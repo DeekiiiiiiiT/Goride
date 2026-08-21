@@ -2,6 +2,13 @@ node_modules
 build
 dist
 
+# Playwright
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+.playwright-mcp/
+
 # Environment files — never commit real secrets
 .env
 .env.local
@@ -13,6 +20,7 @@ dist
 # Local smoke credentials (never commit)
 docs/products/.local-*-creds.txt
 docs/products/.local-*-creds.md
+scripts/smoke/.api-keys.cache.json
 
 # Capacitor / Android (driver)
 apps/driver/android/.gradle/

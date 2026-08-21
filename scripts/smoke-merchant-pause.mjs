@@ -27,11 +27,9 @@ async function main() {
     throw new Error('Expected is_accepting_orders=true after resume');
   }
 
-  if (original !== true) {
-    await setAcceptingOrders(anonKey, token, before.id, original);
-  }
+  await setAcceptingOrders(anonKey, token, before.id, true);
 
-  pass(`Pause/resume OK — restored accepting_orders=${original}`);
+  pass('Pause/resume OK — left accepting_orders=true');
 }
 
 main().catch((e) => {

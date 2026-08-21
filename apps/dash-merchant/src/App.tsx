@@ -16,11 +16,14 @@ import PartnerBootLoadingPage from './pages/PartnerBootLoadingPage';
 import PartnerAuthFlow from './components/PartnerAuthFlow';
 import PartnerBottomNav from './components/PartnerBottomNav';
 import PartnerMobileNavDrawer from './components/layout/PartnerMobileNavDrawer';
+import PartnerDesktopShell from './components/layout/PartnerDesktopShell';
 import AccountPendingPage from './pages/AccountPendingPage';
 import OnboardingCompletePage from './pages/OnboardingCompletePage';
 import UnifiedOnboardingWizard from './components/onboarding/UnifiedOnboardingWizard';
 import { useMerchant } from './hooks/useMerchant';
+import { useAcceptingOrdersToggle } from './hooks/useAcceptingOrdersToggle';
 import { PartnerTab } from './lib/partner-utils';
+import { resolveSideNavKey } from './lib/partner-nav';
 import {
   shouldShowGoLiveScreen,
   shouldBypassGoLiveGate,
@@ -82,6 +85,8 @@ function DashMerchantApp() {
   const [setupMenuMode, setSetupMenuMode] = useState(false);
   const [viewingGoLiveProgress, setViewingGoLiveProgress] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [ordersOpenHistory, setOrdersOpenHistory] = useState(false);
+  const [ordersHistoryActive, setOrdersHistoryActive] = useState(false);
   const mainContentRef = useRef<HTMLDivElement>(null);
   const [oauthReturnPending, setOauthReturnPending] = useState(
     () => typeof window !== 'undefined' && !!sessionStorage.getItem(PARTNER_OAUTH_INTENT_KEY),
@@ -394,7 +399,15 @@ function DashMerchantApp() {
     return tabs;
   })();
 
+  const {
+    isAcceptingOrders,
+    toggleAcceptingOrders,
+    isPending: togglePending,
+  } = useAcceptingOrdersToggle(merchant);
+
   const handlePartnerNavigate = (page: PartnerTab) => {
+    setOrdersOpenHistory(false);
+    setOrdersHistoryActive(false);
     setCurrentPage(page);
     setMobileNavOpen(false);
     requestAnimationFrame(() => {
@@ -403,6 +416,11 @@ function DashMerchantApp() {
   };
 
   const openMobileNav = () => setMobileNavOpen(true);
+
+  const activeNavKey =
+    currentPage === 'orders' && ordersHistoryActive
+      ? 'history'
+      : resolveSideNavKey(currentPage);
 
   const renderPage = () => {
     if (currentPage === 'earnings' && !allowedTabs.includes('earnings')) {
@@ -429,6 +447,9 @@ function DashMerchantApp() {
             merchant={merchant}
             onNavigate={handlePartnerNavigate}
             onOpenMobileNav={openMobileNav}
+            openHistory={ordersOpenHistory}
+            onOpenHistoryHandled={() => setOrdersOpenHistory(false)}
+            onHistoryViewChange={setOrdersHistoryActive}
           />
         );
       case 'menu':
@@ -458,7 +479,12 @@ function DashMerchantApp() {
           />
         );
       case 'earnings':
-        return <EarningsPage onNavigate={handlePartnerNavigate} />;
+        return (
+          <EarningsPage
+            onNavigate={handlePartnerNavigate}
+            onOpenMobileNav={openMobileNav}
+          />
+        );
       case 'account':
         return (
           <SettingsPage
@@ -493,19 +519,40 @@ function DashMerchantApp() {
         bottomNavVisible={currentPage !== 'earnings'}
         onNavigate={handlePartnerNavigate}
       />
-      <div
-        ref={mainContentRef}
-        className={
-          currentPage === 'earnings'
-            ? 'flex-1'
-            : 'partner-main-with-nav flex-1 lg:pb-0'
-        }
+      <PartnerDesktopShell
+        merchant={merchant}
+        activeNavKey={activeNavKey}
+        onNavigate={handlePartnerNavigate}
+        onHistory={() => {
+          setCurrentPage('orders');
+          setOrdersOpenHistory(true);
+          setMobileNavOpen(false);
+        }}
+        onSupport={() => handlePartnerNavigate('account')}
+        onGoOffline={() => toggleAcceptingOrders(false)}
+        onSettings={() => handlePartnerNavigate('account')}
+        onNotifications={() => handlePartnerNavigate('orders')}
+        isAcceptingOrders={isAcceptingOrders}
+        onToggleAcceptingOrders={toggleAcceptingOrders}
+        togglePending={togglePending}
+        allowedTabs={allowedTabs}
+        showRestaurantInfo
+        headerVariant="merchant"
       >
-        {pendingTeamInvite && (
-          <TeamInviteBanner invite={pendingTeamInvite} onResolved={() => void refetch()} />
-        )}
-        {renderPage()}
-      </div>
+        <div
+          ref={mainContentRef}
+          className={
+            currentPage === 'earnings'
+              ? 'flex min-h-0 flex-1 flex-col'
+              : 'partner-main-with-nav flex min-h-0 flex-1 flex-col lg:pb-0'
+          }
+        >
+          {pendingTeamInvite && (
+            <TeamInviteBanner invite={pendingTeamInvite} onResolved={() => void refetch()} />
+          )}
+          {renderPage()}
+        </div>
+      </PartnerDesktopShell>
       {currentPage !== 'earnings' && (
         <PartnerBottomNav
           active={currentPage}

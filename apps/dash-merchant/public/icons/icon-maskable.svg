@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Roam Rush Partner">
+  <!-- Safe zone: keep mark inside center ~80% for maskable crop -->
+  <rect width="512" height="512" fill="#10b981"/>
+  <g transform="translate(56 56) scale(0.78)">
+    <path fill="#fff" d="M160 144h192v48H272v176h-32V192H160v-48zm64 256h64v48h-64v-48z"/>
+  </g>
+</svg>

@@ -50,12 +50,24 @@ node scripts/smoke-customer-all.mjs
 
 ### Customer tests that still need the browser
 
-These are **UI-only** — ask your AI to “run customer browser smoke”:
+These are **UI-only**. Automated Playwright suite:
+
+```bash
+pnpm test:e2e:rush:customer
+pnpm test:e2e:rush          # customer + partner UI
+```
+
+| Say this | Spec | What it checks |
+|----------|------|----------------|
+| **Customer cart conflict smoke** | `e2e/rush-customer-cart-conflict.spec.ts` | Cross-store “Start a new cart?” modal |
+
+Still manual / not yet automated:
 
 - Cart survives page refresh
-- Cross-store cart conflict (“Start a new cart?” modal)
 - Checkout button lock / high-tip confirm
 - Onboarding screens
+
+Ask AI: “Run `pnpm test:e2e:rush`” or “Run the Playwright customer cart smoke.”
 
 ---
 
@@ -92,12 +104,57 @@ node scripts/smoke-merchant-all.mjs
 
 ### Partner tests that still need the browser
 
-Ask your AI to “run partner browser smoke”:
+Automated Playwright UI pack (Method #1 / #2) — pick-and-choose like the API scripts.
 
-- Dashboard order cards + drag between columns
-- Menu editor UI
-- Go-live / pause orders toggle on dashboard
+**Viewports:** every `pnpm test:e2e:rush:partner*` command runs **both**:
+- `partner-mobile` — Pixel 7 (bottom nav + drawer)
+- `partner-desktop` — Chrome 1280×800 (side nav + TopBar)
+
+**Run all Partner UI (mobile + desktop):**
+```bash
+pnpm test:e2e:rush:partner
+```
+
+**Viewport-only:**
+```bash
+pnpm test:e2e:rush:partner:mobile
+pnpm test:e2e:rush:partner:desktop
+```
+
+**Scripts (ask AI: “Run pnpm test:e2e:rush:partner:XXX”)**
+
+- `pnpm test:e2e:rush:partner` — run all Partner UI tests (both viewports)
+- `pnpm test:e2e:rush:partner:auth` — login & Island Grill shell
+- `pnpm test:e2e:rush:partner:dashboard` — dashboard snapshot + quick actions
+- `pnpm test:e2e:rush:partner:orders` — order queue + Ready detail
+- `pnpm test:e2e:rush:partner:pause` — pause/resume orders (leaves store open)
+- `pnpm test:e2e:rush:partner:menu` — menu overview
+- `pnpm test:e2e:rush:partner:analytics` — analytics + exit-nav → Orders
+- `pnpm test:e2e:rush:partner:exit-nav` — exit-nav round-trips (dashboard/account/menu/analytics/earnings)
+- `pnpm test:e2e:rush:partner:earnings` — earnings drawer / side nav / revenue
+- `pnpm test:e2e:rush:partner:account` — every Account settings row + header shortcuts
+- `pnpm test:e2e:rush:partner:settings` — Edit Profile + Delivery Settings
+- `pnpm test:e2e:rush:partner:hours` — Business Hours
+- `pnpm test:e2e:rush:partner:team` — Team Members
+- `pnpm test:e2e:rush:partner:promotions` — Promotions & Marketing
+- `pnpm test:e2e:rush:partner:notifications` — Notification Settings
+- `pnpm test:e2e:rush:partner:bank` — Bank & Payouts (read)
+
+**Release checklist (before promoting desktop Install to merchants):**
+1. `pnpm test:e2e:rush:partner:exit-nav` green on mobile + desktop
+2. Manual QA: `docs/partner-desktop-shell-qa.md`
+3. Web push still works after any SW change
+4. Capacitor build: no browser Install banner on native
+
+**Does not click:** Reject order, Delete menu item, Sign Out, Stripe disconnect.
+
+Still manual / Method #3 if needed:
+
+- Drag order cards between columns
+- Deep menu editor save flows
+- Accept → ready order flow in the UI (API has `smoke-merchant-order-flow.mjs`)
 - **No** in-store ops screens (Operations Hub, tablet pairing, kitchen stations) — those live in Command
+- First Partner desktop PWA install on staging Chrome (Phase C)
 
 ---
 

@@ -53,6 +53,17 @@ export function useWebPush(merchantId: string) {
 
   const registerServiceWorker = useCallback(async () => {
     if (!('serviceWorker' in navigator)) return null;
+    // Prefer the VitePWA registration already active; fall back to legacy /sw.js.
+    let registration = await navigator.serviceWorker.getRegistration();
+    if (!registration) {
+      registration = await Promise.race([
+        navigator.serviceWorker.ready,
+        new Promise<null>((resolve) => {
+          window.setTimeout(() => resolve(null), 2500);
+        }),
+      ]);
+    }
+    if (registration) return registration;
     return navigator.serviceWorker.register('/sw.js');
   }, []);
 

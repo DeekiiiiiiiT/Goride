@@ -411,7 +411,7 @@ export default function DashboardPage({ merchant, onNavigate, onOpenMobileNav }:
   };
 
   return (
-    <div className="min-h-dvh bg-background font-body-lg text-on-background">
+    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto bg-background font-body-lg text-on-background">
       {showClosedView ? (
         <DashboardSimpleHeader
           notificationCount={newOrders.length}
@@ -438,7 +438,7 @@ export default function DashboardPage({ merchant, onNavigate, onOpenMobileNav }:
           onActionClick={handlePendingActionClick}
         />
       ) : (
-      <main className="mx-auto flex max-w-screen-xl flex-col gap-inset-md px-margin-mobile pt-inset-sm md:px-margin-tablet">
+      <main className="mx-auto flex w-full max-w-screen-xl flex-col gap-inset-md px-margin-mobile pt-inset-sm md:px-margin-tablet lg:flex-1 lg:overflow-y-auto lg:pt-inset-md">
         {newOrders.length > 0 && (
           <button
             type="button"
@@ -523,6 +523,7 @@ export default function DashboardPage({ merchant, onNavigate, onOpenMobileNav }:
           </button>
         </section>
 
+        <div className="flex flex-col gap-inset-md lg:grid lg:grid-cols-2 lg:items-start lg:gap-inset-lg">
         <section>
           <div className="mb-inset-sm flex items-end justify-between">
             <h2 className="text-headline-md font-semibold text-on-surface">Active Orders</h2>
@@ -655,6 +656,7 @@ export default function DashboardPage({ merchant, onNavigate, onOpenMobileNav }:
             )}
           </div>
         </section>
+        </div>
       </main>
       )}
 

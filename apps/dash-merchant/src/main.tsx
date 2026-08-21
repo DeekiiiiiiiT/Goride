@@ -6,6 +6,7 @@ import * as Sentry from '@sentry/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from 'sonner';
 import App from './App';
+import { PwaProvider } from './components/pwa/PwaProvider';
 import { initPartnerNative } from './capacitor-native';
 import './index.css';
 
@@ -25,8 +26,10 @@ void initPartnerNative().finally(() => {
     <React.StrictMode>
       <Sentry.ErrorBoundary fallback={<p>Something went wrong. Please refresh the page.</p>}>
         <QueryClientProvider client={queryClient}>
-          <App />
-          <Toaster position="top-center" richColors />
+          <PwaProvider>
+            <App />
+            <Toaster position="top-center" richColors />
+          </PwaProvider>
         </QueryClientProvider>
       </Sentry.ErrorBoundary>
     </React.StrictMode>,

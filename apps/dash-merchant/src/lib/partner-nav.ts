@@ -46,19 +46,32 @@ export function getPartnerDrawerPrimaryItems(
 
 export type PartnerSideNavKey = PartnerTab | 'history' | 'support';
 
+/** Desktop side nav — all primary Partner destinations + History/Support. */
 export const PARTNER_SIDE_NAV: {
   key: PartnerSideNavKey;
   label: string;
   icon: string;
   tab?: PartnerTab;
 }[] = [
+  { key: 'dashboard', label: 'Dashboard', icon: 'dashboard', tab: 'dashboard' },
   { key: 'orders', label: 'Orders', icon: 'receipt_long', tab: 'orders' },
   { key: 'menu', label: 'Menu', icon: 'restaurant_menu', tab: 'menu' },
   { key: 'analytics', label: 'Analytics', icon: 'monitoring', tab: 'analytics' },
+  { key: 'earnings', label: 'Earnings', icon: 'payments', tab: 'earnings' },
+  { key: 'account', label: 'Account', icon: 'person', tab: 'account' },
   { key: 'history', label: 'History', icon: 'history' },
   { key: 'support', label: 'Support', icon: 'help_center' },
 ];
 
 export function resolveSideNavKey(activeTab: PartnerTab): PartnerSideNavKey {
   return activeTab;
+}
+
+/** Filter side nav by staff permissions (History/Support always kept). */
+export function getAllowedSideNavItems(allowedTabs: PartnerTab[]) {
+  return PARTNER_SIDE_NAV.filter((item) => {
+    if (item.key === 'history' || item.key === 'support') return true;
+    if (!item.tab) return true;
+    return allowedTabs.includes(item.tab);
+  });
 }
