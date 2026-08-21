@@ -1,5 +1,7 @@
 import { useState } from 'react';
 
+import { toast } from 'sonner';
+
 import QueryErrorState from '../QueryErrorState';
 
 import PartnerSkeleton from '../PartnerSkeleton';
@@ -316,7 +318,7 @@ export default function TeamMembersView({
 
             }
 
-            onSendInvite={({ email, name, role, permissions, jobStation, displayTitle }) =>
+            onSendInvite={({ email, name, role, permissions, jobStation }) =>
 
               sendInvite(email, role, permissions, name, jobStation)
 
@@ -373,6 +375,22 @@ export default function TeamMembersView({
                     </div>
 
                     <div className="flex items-center gap-1">
+
+                      {invite.inviteUrl ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            void navigator.clipboard.writeText(invite.inviteUrl!).then(
+                              () => toast.success('Invite link copied'),
+                              () => toast.error('Could not copy invite link'),
+                            );
+                          }}
+                          className="flex h-10 w-10 items-center justify-center rounded-full text-on-surface-variant transition-colors hover:bg-surface-variant"
+                          title="Copy invite link"
+                        >
+                          <MaterialIcon name="content_copy" />
+                        </button>
+                      ) : null}
 
                       <button
 

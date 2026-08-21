@@ -23,6 +23,7 @@ export const VALID_TEAM_PERMISSIONS = new Set<TeamPermission>([
   "menu",
   "analytics",
   "payouts",
+  "inventory",
 ]);
 
 function readJobStation(value: unknown): string | null {
@@ -77,6 +78,7 @@ export function jobStationRequiresOrders(station: string | null): boolean {
 
 export function mapTeamInvite(row: Record<string, unknown>, emailSent?: boolean) {
   const jobStation = row.job_station;
+  const token = row.token ? String(row.token) : "";
   return {
     id: String(row.id),
     email: String(row.email),
@@ -85,6 +87,7 @@ export function mapTeamInvite(row: Record<string, unknown>, emailSent?: boolean)
     emailSent: emailSent ?? Boolean(row.email_sent_at),
     emailSentAt: row.email_sent_at ? String(row.email_sent_at) : undefined,
     jobStation: readJobStation(jobStation),
+    inviteUrl: token ? buildTeamInviteUrl(token) : undefined,
   };
 }
 

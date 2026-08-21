@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/partner-supabase';
 import { Merchant } from '../hooks/useMerchant';
@@ -55,9 +55,9 @@ interface OrdersPageProps {
   merchant: Merchant;
   onNavigate?: (tab: PartnerTab) => void;
   onOpenMobileNav?: () => void;
-  /** When true, open history view (desktop side-nav History). */
-  openHistory?: boolean;
-  onOpenHistoryHandled?: () => void;
+  /** One-shot Orders entry: History nav → history, Orders nav → live queue. */
+  pendingView?: 'history' | 'live' | null;
+  onPendingViewHandled?: () => void;
   onHistoryViewChange?: (active: boolean) => void;
 }
 
@@ -95,8 +95,8 @@ export default function OrdersPage({
   merchant,
   onNavigate,
   onOpenMobileNav,
-  openHistory,
-  onOpenHistoryHandled,
+  pendingView = null,
+  onPendingViewHandled,
   onHistoryViewChange,
 }: OrdersPageProps) {
   const [filter, setFilter] = useState<OrderFilter>('placed');
@@ -109,7 +109,6 @@ export default function OrdersPage({
   const [showFirstOrderCelebration, setShowFirstOrderCelebration] = useState(false);
   const [showPayoutSetup, setShowPayoutSetup] = useState(false);
   const pendingPayoutSetupRef = useRef(false);
-  const prevOpenHistoryRef = useRef(openHistory);
   const [rejectOrderId, setRejectOrderId] = useState<string | null>(null);
   const [acceptedOrderId, setAcceptedOrderId] = useState<string | null>(null);
   const [viewOrderId, setViewOrderId] = useState<string | null>(null);
@@ -130,17 +129,16 @@ export default function OrdersPage({
     return () => window.clearInterval(interval);
   }, []);
 
-  useEffect(() => {
-    if (openHistory) {
+  useLayoutEffect(() => {
+    if (!pendingView) return;
+    if (pendingView === 'history') {
       setFilter('order_status');
       setHistoryTab('completed');
-      onOpenHistoryHandled?.();
-    } else if (prevOpenHistoryRef.current) {
-      // App cleared history (Orders side-nav) — return to live queue
+    } else {
       setFilter('placed');
     }
-    prevOpenHistoryRef.current = openHistory;
-  }, [openHistory, onOpenHistoryHandled]);
+    onPendingViewHandled?.();
+  }, [pendingView, onPendingViewHandled]);
 
   useEffect(() => {
     onHistoryViewChange?.(filter === 'order_status');

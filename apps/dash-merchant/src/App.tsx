@@ -86,8 +86,11 @@ function DashMerchantApp() {
   const [setupMenuMode, setSetupMenuMode] = useState(false);
   const [viewingGoLiveProgress, setViewingGoLiveProgress] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
-  const [ordersOpenHistory, setOrdersOpenHistory] = useState(false);
+  const [pendingOrdersView, setPendingOrdersView] = useState<'history' | 'live' | null>(null);
   const [ordersHistoryActive, setOrdersHistoryActive] = useState(false);
+  const [pendingAccountSection, setPendingAccountSection] = useState<'help' | 'hub' | null>(null);
+  const [accountHelpActive, setAccountHelpActive] = useState(false);
+  const supportReturnPageRef = useRef<PartnerTab>('dashboard');
   const mainContentRef = useRef<HTMLDivElement>(null);
   const [oauthReturnPending, setOauthReturnPending] = useState(
     () => typeof window !== 'undefined' && !!sessionStorage.getItem(PARTNER_OAUTH_INTENT_KEY),
@@ -415,9 +418,36 @@ function DashMerchantApp() {
   })();
 
   const handlePartnerNavigate = (page: PartnerTab) => {
-    setOrdersOpenHistory(false);
+    if (page === 'orders') {
+      setPendingOrdersView('live');
+    }
+    if (page === 'account') {
+      setPendingAccountSection('hub');
+      setAccountHelpActive(false);
+    }
     setOrdersHistoryActive(false);
     setCurrentPage(page);
+    setMobileNavOpen(false);
+    requestAnimationFrame(() => {
+      resetPartnerScroll(mainContentRef.current);
+    });
+  };
+
+  const openHistoryNav = () => {
+    setPendingOrdersView('history');
+    setCurrentPage('orders');
+    setMobileNavOpen(false);
+    requestAnimationFrame(() => {
+      resetPartnerScroll(mainContentRef.current);
+    });
+  };
+
+  const openSupportNav = () => {
+    supportReturnPageRef.current =
+      currentPage === 'account' ? 'dashboard' : currentPage;
+    setPendingAccountSection('help');
+    setCurrentPage('account');
+    setOrdersHistoryActive(false);
     setMobileNavOpen(false);
     requestAnimationFrame(() => {
       resetPartnerScroll(mainContentRef.current);
@@ -429,7 +459,9 @@ function DashMerchantApp() {
   const activeNavKey =
     currentPage === 'orders' && ordersHistoryActive
       ? 'history'
-      : resolveSideNavKey(currentPage);
+      : currentPage === 'account' && accountHelpActive
+        ? 'support'
+        : resolveSideNavKey(currentPage);
 
   const renderPage = () => {
     if (currentPage === 'earnings' && !allowedTabs.includes('earnings')) {
@@ -456,8 +488,8 @@ function DashMerchantApp() {
             merchant={merchant}
             onNavigate={handlePartnerNavigate}
             onOpenMobileNav={openMobileNav}
-            openHistory={ordersOpenHistory}
-            onOpenHistoryHandled={() => setOrdersOpenHistory(false)}
+            pendingView={pendingOrdersView}
+            onPendingViewHandled={() => setPendingOrdersView(null)}
             onHistoryViewChange={setOrdersHistoryActive}
           />
         );
@@ -502,6 +534,10 @@ function DashMerchantApp() {
             onNavigate={handlePartnerNavigate}
             onSignOut={handleSignOut}
             onOpenMobileNav={openMobileNav}
+            pendingSection={pendingAccountSection}
+            onPendingSectionHandled={() => setPendingAccountSection(null)}
+            onSectionChange={(section) => setAccountHelpActive(section === 'help')}
+            onExitSupport={() => handlePartnerNavigate(supportReturnPageRef.current)}
           />
         );
       default:
@@ -527,17 +563,15 @@ function DashMerchantApp() {
         allowedTabs={allowedTabs}
         bottomNavVisible={currentPage !== 'earnings'}
         onNavigate={handlePartnerNavigate}
+        onHistory={openHistoryNav}
+        onSupport={openSupportNav}
       />
       <PartnerDesktopShell
         merchant={merchant}
         activeNavKey={activeNavKey}
         onNavigate={handlePartnerNavigate}
-        onHistory={() => {
-          setCurrentPage('orders');
-          setOrdersOpenHistory(true);
-          setMobileNavOpen(false);
-        }}
-        onSupport={() => handlePartnerNavigate('account')}
+        onHistory={openHistoryNav}
+        onSupport={openSupportNav}
         onGoOffline={() => toggleAcceptingOrders(false)}
         onSettings={() => handlePartnerNavigate('account')}
         onNotifications={() => handlePartnerNavigate('orders')}

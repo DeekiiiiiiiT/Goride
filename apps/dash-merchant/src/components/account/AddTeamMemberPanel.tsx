@@ -31,7 +31,7 @@ interface AddTeamMemberPanelProps {
     permissions: TeamPermission[];
     jobStation: ReturnType<typeof jobStationSelectionToApi>;
     displayTitle?: string | null;
-  }) => boolean;
+  }) => boolean | Promise<boolean>;
   isSaving?: boolean;
   venueOpsV2?: boolean;
 }
@@ -39,9 +39,15 @@ interface AddTeamMemberPanelProps {
 const inputClass =
   'h-12 w-full rounded-lg border border-outline-variant bg-transparent px-4 text-body-lg text-on-background outline-none transition-colors placeholder:text-on-surface-variant/50 focus:border-primary-container focus:ring-1 focus:ring-primary-container';
 
-const ROLE_HINTS: Record<TeamRole, string> = {
+const PIN_ROLE_HINTS: Record<TeamRole, string> = {
   staff: 'Signs in with a PIN on the store tablet. No email needed.',
   manager: 'Signs in with a PIN on the store tablet, then gets the full manager dashboard.',
+  admin: 'Receives an email invite for full back-office access on any device.',
+};
+
+const EMAIL_ROLE_HINTS: Record<TeamRole, string> = {
+  staff: 'Receives an email invite for staff access on any device.',
+  manager: 'Receives an email invite for manager access on any device.',
   admin: 'Receives an email invite for full back-office access on any device.',
 };
 
@@ -91,15 +97,16 @@ export default function AddTeamMemberPanel({
   };
 
   const resetForm = () => {
+    const defaultRole: TeamRole = partnerOnly ? 'admin' : 'staff';
     setName('');
     setDisplayTitle('');
     setEmail('');
-    setRole('staff');
+    setRole(defaultRole);
     setJobStation('none');
-    setPermissions(ROLE_DEFAULT_PERMISSIONS.staff);
+    setPermissions(ROLE_DEFAULT_PERMISSIONS[defaultRole]);
   };
 
-  const handleSubmit = (event: React.FormEvent) => {
+  const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     const trimmedName = name.trim();
     const station = jobStationSelectionToApi(jobStation);
@@ -117,7 +124,7 @@ export default function AddTeamMemberPanel({
       return;
     }
 
-    const sent = onSendInvite({
+    const sent = await onSendInvite({
       email,
       name: trimmedName || undefined,
       role,
@@ -127,6 +134,8 @@ export default function AddTeamMemberPanel({
     });
     if (sent) resetForm();
   };
+
+  const roleHint = usesEmail ? EMAIL_ROLE_HINTS[role] : PIN_ROLE_HINTS[role];
 
   const canSubmit = usesPin ? !!name.trim() : !!email.trim();
 
@@ -202,7 +211,7 @@ export default function AddTeamMemberPanel({
             );
           })}
         </div>
-        <p className="text-body-sm text-on-surface-variant">{ROLE_HINTS[role]}</p>
+        <p className="text-body-sm text-on-surface-variant">{roleHint}</p>
       </div>
 
       {usesEmail && (

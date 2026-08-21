@@ -21,7 +21,32 @@ interface InviteResponse {
     role: string;
     permissions: string[];
     emailSent?: boolean;
+    inviteUrl?: string;
   };
+}
+
+async function copyInviteUrl(url: string) {
+  try {
+    await navigator.clipboard.writeText(url);
+    toast.success('Invite link copied');
+  } catch {
+    toast.error('Could not copy invite link');
+  }
+}
+
+function toastInviteEmailWarning(message: string, inviteUrl?: string) {
+  if (inviteUrl) {
+    toast.warning(message, {
+      action: {
+        label: 'Copy link',
+        onClick: () => {
+          void copyInviteUrl(inviteUrl);
+        },
+      },
+    });
+    return;
+  }
+  toast.warning(message);
 }
 
 export function useTeamMembers(_merchantId: string) {
@@ -60,7 +85,10 @@ export function useTeamMembers(_merchantId: string) {
     onSuccess: (data) => {
       invalidate();
       if (data.invite.emailSent === false) {
-        toast.warning('Invite saved but email could not be sent');
+        toastInviteEmailWarning(
+          'Invite saved but email could not be sent',
+          data.invite.inviteUrl,
+        );
       } else {
         toast.success('Invite sent');
       }
@@ -87,7 +115,10 @@ export function useTeamMembers(_merchantId: string) {
     onSuccess: (data) => {
       invalidate();
       if (data.invite.emailSent === false) {
-        toast.warning('Invite updated but email could not be sent');
+        toastInviteEmailWarning(
+          'Invite updated but email could not be sent',
+          data.invite.inviteUrl,
+        );
       } else {
         toast.success('Invite resent');
       }
@@ -152,26 +183,30 @@ export function useTeamMembers(_merchantId: string) {
     onError: (error: Error) => toast.error(error.message),
   });
 
-  const sendInvite = (
+  const sendInvite = async (
     email: string,
     role: TeamRole,
     permissions: TeamPermission[],
     name?: string,
     jobStation?: JobStation | null,
-  ) => {
+  ): Promise<boolean> => {
     const normalizedEmail = email.trim().toLowerCase();
     if (!normalizedEmail) {
       toast.error('Enter an email address');
       return false;
     }
-    inviteMutation.mutate({
-      email: normalizedEmail,
-      name: name?.trim() || undefined,
-      role,
-      permissions,
-      jobStation: jobStation ?? null,
-    });
-    return true;
+    try {
+      await inviteMutation.mutateAsync({
+        email: normalizedEmail,
+        name: name?.trim() || undefined,
+        role,
+        permissions,
+        jobStation: jobStation ?? null,
+      });
+      return true;
+    } catch {
+      return false;
+    }
   };
 
   const cancelInvite = (inviteId: string) => {

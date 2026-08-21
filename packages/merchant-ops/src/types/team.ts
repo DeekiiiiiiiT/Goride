@@ -75,6 +75,7 @@ export interface PendingInvite {
   emailSent?: boolean;
   emailSentAt?: string;
   jobStation?: JobStation | null;
+  inviteUrl?: string;
 }
 
 export interface TeamData {

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useState } from 'react';
 import { Merchant } from '../hooks/useMerchant';
 import { PartnerTab } from '../lib/partner-utils';
 import { resetPartnerScroll } from '../lib/reset-partner-scroll';
@@ -20,6 +20,12 @@ interface SettingsPageProps {
   onSignOut: () => void;
   onOpenMobileNav?: () => void;
   notificationCount?: number;
+  /** One-shot Account entry: Support → help, Account/Settings → hub. */
+  pendingSection?: 'help' | 'hub' | null;
+  onPendingSectionHandled?: () => void;
+  onSectionChange?: (section: AccountSection | null) => void;
+  /** Back from Help when opened via Support nav (not Account → Help). */
+  onExitSupport?: () => void;
 }
 
 export default function SettingsPage({
@@ -29,8 +35,29 @@ export default function SettingsPage({
   onSignOut,
   onOpenMobileNav,
   notificationCount = 0,
+  pendingSection = null,
+  onPendingSectionHandled,
+  onSectionChange,
+  onExitSupport,
 }: SettingsPageProps) {
   const [activeSection, setActiveSection] = useState<AccountSection | null>(null);
+  const [helpFromSupportNav, setHelpFromSupportNav] = useState(false);
+
+  useLayoutEffect(() => {
+    if (!pendingSection) return;
+    if (pendingSection === 'help') {
+      setHelpFromSupportNav(true);
+      setActiveSection('help');
+    } else {
+      setHelpFromSupportNav(false);
+      setActiveSection(null);
+    }
+    onPendingSectionHandled?.();
+  }, [pendingSection, onPendingSectionHandled]);
+
+  useEffect(() => {
+    onSectionChange?.(activeSection);
+  }, [activeSection, onSectionChange]);
 
   useEffect(() => {
     if (activeSection === 'team' && !isOwner) {
@@ -43,6 +70,20 @@ export default function SettingsPage({
       resetPartnerScroll();
     }
   }, [activeSection]);
+
+  const openAccountSection = (section: AccountSection) => {
+    if (section === 'help') setHelpFromSupportNav(false);
+    setActiveSection(section);
+  };
+
+  const handleHelpBack = () => {
+    if (helpFromSupportNav && onExitSupport) {
+      setHelpFromSupportNav(false);
+      onExitSupport();
+      return;
+    }
+    setActiveSection(null);
+  };
 
   const {
     formData,
@@ -142,8 +183,8 @@ export default function SettingsPage({
   if (activeSection === 'help') {
     return (
       <HelpSupportView
-        onBack={() => setActiveSection(null)}
-        onOpenSection={setActiveSection}
+        onBack={handleHelpBack}
+        onOpenSection={openAccountSection}
         onNavigate={onNavigate}
       />
     );
@@ -164,7 +205,7 @@ export default function SettingsPage({
         merchant={merchant}
         isOwner={isOwner}
         onNavigate={onNavigate}
-        onOpenSection={setActiveSection}
+        onOpenSection={openAccountSection}
         onSignOut={onSignOut}
         onOpenMobileNav={onOpenMobileNav}
         notificationCount={notificationCount}

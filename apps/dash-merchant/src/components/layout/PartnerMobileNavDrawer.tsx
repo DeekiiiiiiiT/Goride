@@ -19,6 +19,8 @@ interface PartnerMobileNavDrawerProps {
   allowedTabs: PartnerTab[];
   bottomNavVisible: boolean;
   onNavigate: (tab: PartnerTab) => void;
+  onHistory?: () => void;
+  onSupport?: () => void;
 }
 
 function TabNavButton({
@@ -75,6 +77,8 @@ export default function PartnerMobileNavDrawer({
   allowedTabs,
   bottomNavVisible,
   onNavigate,
+  onHistory,
+  onSupport,
 }: PartnerMobileNavDrawerProps) {
   if (!open) return null;
 
@@ -87,7 +91,13 @@ export default function PartnerMobileNavDrawer({
   };
 
   const handleMoreNav = (key: 'history' | 'support') => {
-    handleNav(key === 'history' ? 'orders' : 'account');
+    if (key === 'history') {
+      onHistory?.();
+      onClose();
+      return;
+    }
+    onSupport?.();
+    onClose();
   };
 
   const renderMoreItems = () => (
