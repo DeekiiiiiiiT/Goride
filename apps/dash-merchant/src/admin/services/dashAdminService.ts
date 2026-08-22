@@ -36,6 +36,8 @@ export interface DashMerchant {
   delivery_fee: number | null;
   delivery_radius_km: number | null;
   commission_rate: number | null;
+  pricing_tier_id?: string | null;
+  merchant_commission_rate?: number | null;
   rating: number | null;
   total_ratings: number | null;
   verification_status: MerchantVerificationStatus;
@@ -344,6 +346,8 @@ export function patchMerchantOps(
   payload: {
     is_accepting_orders?: boolean;
     commission_rate?: number | null;
+    merchant_commission_rate?: number | null;
+    pricing_tier_id?: string | null;
     delivery_radius_km?: number;
     admin_internal_notes?: string;
     capabilities?: string[];
@@ -1173,4 +1177,138 @@ export function deleteMerchantBusinessType(accessToken: string, id: string) {
     `/admin/onboarding/business-types/${id}`,
     { method: 'DELETE' },
   );
+}
+
+// ---------------------------------------------------------------------------
+// Pricing & Commission
+// ---------------------------------------------------------------------------
+
+export type MerchantTierRow = {
+  id: string;
+  slug: string;
+  name: string;
+  commission_rate: number;
+  search_boost: number;
+  default_delivery_radius_km: number;
+  promo_eligible: boolean;
+  sort_order: number;
+  is_active: boolean;
+};
+
+export type PricingMarketSummary = {
+  market: { id: string; slug: string; name: string; is_active: boolean };
+  profile: Record<string, unknown> | null;
+  pricing_v2_enabled: boolean;
+};
+
+export type PricingRulesPayload = {
+  pricing_v2_enabled?: boolean;
+  delivery?: {
+    base_fee_jmd?: number;
+    included_km?: number;
+    per_extra_km_jmd?: number;
+    max_fee_jmd?: number;
+  };
+  service_fee?: {
+    mode?: 'flat' | 'percent';
+    flat_jmd?: number;
+    percent?: number;
+    min_jmd?: number;
+    max_jmd?: number;
+  };
+  courier_delivery_share?: number;
+  cod?: { pause_threshold_jmd?: number };
+  launch_promos?: { free_delivery_first_n_orders?: number };
+  tax_rate_percent?: number;
+};
+
+export function fetchPricingOverview(accessToken: string) {
+  return deliveryFetch<{ markets: PricingMarketSummary[]; tiers: MerchantTierRow[] }>(
+    accessToken,
+    '/admin/pricing/overview',
+  );
+}
+
+export function fetchMarketPricing(accessToken: string, marketId: string) {
+  return deliveryFetch<{
+    market: Record<string, unknown>;
+    profile: Record<string, unknown> | null;
+    rules: PricingRulesPayload;
+  }>(accessToken, `/admin/pricing/markets/${marketId}`);
+}
+
+export function updateMarketPricing(
+  accessToken: string,
+  marketId: string,
+  rules: PricingRulesPayload,
+) {
+  return deliveryFetch(accessToken, `/admin/pricing/markets/${marketId}`, {
+    method: 'PUT',
+    body: JSON.stringify({ rules }),
+  });
+}
+
+export function fetchPricingTiers(accessToken: string) {
+  return deliveryFetch<{ tiers: MerchantTierRow[] }>(accessToken, '/admin/pricing/tiers');
+}
+
+export function updatePricingTier(
+  accessToken: string,
+  tierId: string,
+  payload: Partial<MerchantTierRow>,
+) {
+  return deliveryFetch(accessToken, `/admin/pricing/tiers/${tierId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function previewPricing(
+  accessToken: string,
+  payload: {
+    merchant_id: string;
+    subtotal: number;
+    dropoff_lat?: number;
+    dropoff_lng?: number;
+    tip?: number;
+    customer_order_count?: number;
+  },
+) {
+  return deliveryFetch(accessToken, '/admin/pricing/preview', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function fetchPricingAudit(accessToken: string, marketId?: string) {
+  const sp = marketId ? `?market_id=${encodeURIComponent(marketId)}` : '';
+  return deliveryFetch<{ entries: Array<Record<string, unknown>> }>(
+    accessToken,
+    `/admin/pricing/audit${sp}`,
+  );
+}
+
+export function fetchCodBalances(accessToken: string) {
+  return deliveryFetch<{ balances: Array<Record<string, unknown>> }>(
+    accessToken,
+    '/admin/pricing/cod/balances',
+  );
+}
+
+export function fetchCodEvents(accessToken: string, courierId?: string) {
+  const sp = courierId ? `?courier_id=${encodeURIComponent(courierId)}` : '';
+  return deliveryFetch<{ events: Array<Record<string, unknown>> }>(
+    accessToken,
+    `/admin/pricing/cod/events${sp}`,
+  );
+}
+
+export function settleCourierCash(
+  accessToken: string,
+  payload: { courier_id: string; amount_jmd: number; settlement_method: string; notes?: string },
+) {
+  return deliveryFetch(accessToken, '/admin/pricing/cod/settle', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
 }

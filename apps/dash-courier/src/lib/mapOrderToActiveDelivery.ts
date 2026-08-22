@@ -75,7 +75,14 @@ export function mapOrderToActiveDelivery(
   const pickup = order.merchant?.address || '';
   const dropoff = String(order.delivery_address || '');
   const tip = Math.max(0, Number(order.tip || 0));
-  const basePay = Math.max(0, Number(order.delivery_fee || 0));
+  const basePay = Math.max(
+    0,
+    Number(
+      (order as { delivery_fee_courier_amount?: number }).delivery_fee_courier_amount ??
+        order.delivery_fee ??
+        0,
+    ),
+  );
   const peakPay = Math.max(0, Number(order.peak_pay_amount || 0));
   const customerName = String(
     order.customer_name || order.customer?.name || 'Customer',

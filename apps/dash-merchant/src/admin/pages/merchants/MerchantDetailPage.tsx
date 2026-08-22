@@ -24,6 +24,8 @@ import {
   type MerchantAuditEntry,
   type MerchantDocumentDetail,
   type MerchantVerificationStatus,
+  fetchPricingTiers,
+  type MerchantTierRow,
 } from '../../services/dashAdminService';
 import type { AdminOutletContext } from '../../DashAdminPortal';
 
@@ -63,6 +65,9 @@ export function MerchantDetailPage() {
   const [globalFeePercent, setGlobalFeePercent] = useState(5);
   const [feeOverridePercent, setFeeOverridePercent] = useState('');
   const [feeSaving, setFeeSaving] = useState(false);
+  const [pricingTiers, setPricingTiers] = useState<MerchantTierRow[]>([]);
+  const [selectedTierId, setSelectedTierId] = useState('');
+  const [commissionOverridePercent, setCommissionOverridePercent] = useState('');
   const [deliveryRadiusKm, setDeliveryRadiusKm] = useState('5');
   const [radiusSaving, setRadiusSaving] = useState(false);
 
@@ -90,6 +95,15 @@ export function MerchantDetailPage() {
             : 5,
         ),
       );
+      setSelectedTierId(res.merchant.pricing_tier_id ?? '');
+      const commOverride = res.merchant.merchant_commission_rate;
+      setCommissionOverridePercent(
+        commOverride != null && Number.isFinite(Number(commOverride))
+          ? String(Math.round(Number(commOverride) * 10000) / 100)
+          : '',
+      );
+      const tiersRes = await fetchPricingTiers(token);
+      setPricingTiers(tiersRes.tiers ?? []);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed to load merchant');
     } finally {
@@ -186,6 +200,49 @@ export function MerchantDetailPage() {
       void load();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Restaurant Management update failed');
+    }
+  };
+
+  const savePricingTier = async () => {
+    if (!merchant || !canWrite) return;
+    setFeeSaving(true);
+    try {
+      await patchMerchantOps(token, merchant.id, {
+        pricing_tier_id: selectedTierId || null,
+      });
+      toast.success('Pricing tier saved');
+      void load();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to save tier');
+    } finally {
+      setFeeSaving(false);
+    }
+  };
+
+  const saveCommissionOverride = async () => {
+    if (!merchant || !canWrite) return;
+    const raw = commissionOverridePercent.trim();
+    setFeeSaving(true);
+    try {
+      if (!raw) {
+        await patchMerchantOps(token, merchant.id, { merchant_commission_rate: null });
+        toast.success('Commission override cleared');
+      } else {
+        const pct = Number(raw);
+        if (!Number.isFinite(pct) || pct < 0 || pct > 50) {
+          toast.error('Commission must be between 0 and 50%');
+          return;
+        }
+        await patchMerchantOps(token, merchant.id, {
+          merchant_commission_rate: Math.round(pct * 100) / 10000,
+        });
+        toast.success('Commission override saved');
+      }
+      void load();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to save commission');
+    } finally {
+      setFeeSaving(false);
     }
   };
 
@@ -495,45 +552,75 @@ export function MerchantDetailPage() {
       </section>
 
       <section className="rounded-xl border border-slate-800 bg-slate-900/50 p-4 space-y-3">
-        <h3 className="text-sm font-medium text-white">Platform fee</h3>
+        <h3 className="text-sm font-medium text-white">Pricing tier</h3>
         <p className="text-sm text-slate-400">
-          {merchant.commission_rate != null
-            ? `Override active — ${Math.round(Number(merchant.commission_rate) * 10000) / 100}% on new orders`
-            : `Using global ${globalFeePercent}%`}
+          {selectedTierId
+            ? `Tier: ${pricingTiers.find((t) => t.id === selectedTierId)?.name ?? 'Assigned'}`
+            : 'No tier assigned — uses market default'}
         </p>
         {canWrite && (
           <div className="flex flex-wrap items-end gap-2">
             <div>
-              <label className="block text-xs text-slate-500 mb-1">Override (%)</label>
-              <input
-                type="number"
-                min={0}
-                max={100}
-                step={0.1}
-                value={feeOverridePercent}
-                onChange={(e) => setFeeOverridePercent(e.target.value)}
-                placeholder={String(globalFeePercent)}
-                className="w-28 px-3 py-1.5 text-sm rounded-lg bg-slate-950 border border-slate-700 text-white"
-              />
+              <label className="block text-xs text-slate-500 mb-1">Tier</label>
+              <select
+                value={selectedTierId}
+                onChange={(e) => setSelectedTierId(e.target.value)}
+                className="px-3 py-1.5 text-sm rounded-lg bg-slate-950 border border-slate-700 text-white"
+              >
+                <option value="">— None —</option>
+                {pricingTiers.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name} ({Math.round(t.commission_rate * 100)}%)
+                  </option>
+                ))}
+              </select>
             </div>
             <button
               type="button"
               disabled={feeSaving}
-              onClick={() => void saveFeeOverride()}
+              onClick={() => void savePricingTier()}
               className="px-3 py-1.5 text-sm rounded-lg bg-amber-600 text-white disabled:opacity-50"
             >
-              Save override
-            </button>
-            <button
-              type="button"
-              disabled={feeSaving || merchant.commission_rate == null}
-              onClick={() => void clearFeeOverride()}
-              className="px-3 py-1.5 text-sm rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800 disabled:opacity-50"
-            >
-              Clear override
+              Save tier
             </button>
           </div>
         )}
+        <div className="pt-2 border-t border-slate-800">
+          <p className="text-xs text-slate-500 mb-2">Commission override (optional)</p>
+          {canWrite ? (
+            <div className="flex flex-wrap items-end gap-2">
+              <input
+                type="number"
+                min={0}
+                max={50}
+                step={0.1}
+                value={commissionOverridePercent}
+                onChange={(e) => setCommissionOverridePercent(e.target.value)}
+                placeholder="Use tier default"
+                className="w-28 px-3 py-1.5 text-sm rounded-lg bg-slate-950 border border-slate-700 text-white"
+              />
+              <button
+                type="button"
+                disabled={feeSaving}
+                onClick={() => void saveCommissionOverride()}
+                className="px-3 py-1.5 text-sm rounded-lg bg-amber-600 text-white disabled:opacity-50"
+              >
+                Save commission
+              </button>
+            </div>
+          ) : (
+            <p className="text-sm text-slate-300">
+              {merchant.merchant_commission_rate != null
+                ? `${Math.round(Number(merchant.merchant_commission_rate) * 10000) / 100}% override`
+                : 'Tier default'}
+            </p>
+          )}
+        </div>
+        <p className="text-xs text-slate-500">
+          Legacy service fee override: {merchant.commission_rate != null
+            ? `${Math.round(Number(merchant.commission_rate) * 10000) / 100}% (Model A)`
+            : `global ${globalFeePercent}%`}
+        </p>
       </section>
 
       <section className="rounded-xl border border-slate-800 bg-slate-900/50 p-4">

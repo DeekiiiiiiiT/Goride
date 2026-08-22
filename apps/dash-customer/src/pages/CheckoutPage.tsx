@@ -55,6 +55,7 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
   const [showPharmacyNotice, setShowPharmacyNotice] = useState(false);
   const [platformFeeRate, setPlatformFeeRate] = useState(0.05);
   const [merchantDeliveryFee, setMerchantDeliveryFee] = useState(0);
+  const [serviceFeeFlat, setServiceFeeFlat] = useState<number | undefined>(undefined);
   const [accountSuspended, setAccountSuspended] = useState(false);
   const [instructionsOpen, setInstructionsOpen] = useState(false);
 
@@ -68,8 +69,16 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
 
   const appliedPromo = getAppliedPromo();
   const totals = useMemo(
-    () => calculateOrderTotals(subtotal, appliedPromo, tip, merchantDeliveryFee, platformFeeRate),
-    [subtotal, appliedPromo, tip, merchantDeliveryFee, platformFeeRate],
+    () =>
+      calculateOrderTotals(
+        subtotal,
+        appliedPromo,
+        tip,
+        merchantDeliveryFee,
+        platformFeeRate,
+        serviceFeeFlat,
+      ),
+    [subtotal, appliedPromo, tip, merchantDeliveryFee, platformFeeRate, serviceFeeFlat],
   );
   const paymentLabel = getPaymentLabel(getCheckoutPreferences().paymentMethodId);
 
@@ -88,10 +97,17 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
     let cancelled = false;
     void (async () => {
       try {
-        const pricing = await fetchMerchantCheckoutPricing(merchantId, session?.access_token);
+        const pricing = await fetchMerchantCheckoutPricing({
+          merchantId,
+          accessToken: session?.access_token,
+          subtotal,
+          dropoffLat: pinLat,
+          dropoffLng: pinLng,
+        });
         if (cancelled || !pricing) return;
         setPlatformFeeRate(pricing.platformFeeRate);
         setMerchantDeliveryFee(pricing.deliveryFee);
+        setServiceFeeFlat(pricing.pricingModel === 'v2' ? pricing.serviceFee : undefined);
       } catch {
         /* keep fallback */
       }
@@ -99,7 +115,7 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [merchantId, session?.access_token]);
+  }, [merchantId, session?.access_token, subtotal, pinLat, pinLng]);
 
   useEffect(() => {
     const vertical = sessionStorage.getItem('roam_cart_vertical');

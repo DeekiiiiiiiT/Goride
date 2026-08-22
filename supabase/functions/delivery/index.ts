@@ -49,6 +49,7 @@ import {
 import { registerDashHealthRoutes } from "./dashHealthRoutes.ts";
 import { registerStripeConnectRoutes } from "./stripeConnectRoutes.ts";
 import { notifyCustomerOrderStatus } from "../_shared/dashOrderSms.ts";
+import { handleOrderDelivered } from "./courierCashLedger.ts";
 import {
   aggregateAnalyticsByDay,
   ANALYTICS_CACHE_CONTROL,
@@ -223,6 +224,10 @@ app.get("/merchants", async (c) => {
   app.get("/merchants/:id/pricing", async (c) => {
     const supabase = getServiceSupabase();
     const { id } = c.req.param();
+    const dropoffLat = c.req.query("dropoff_lat") ? Number(c.req.query("dropoff_lat")) : null;
+    const dropoffLng = c.req.query("dropoff_lng") ? Number(c.req.query("dropoff_lng")) : null;
+    const subtotalQ = c.req.query("subtotal") ? Number(c.req.query("subtotal")) : 0;
+
     let merchantId: string | null = null;
     let deliveryFee = 0;
     const byId = await supabase.from("merchants").select("id, delivery_fee").eq("id", id).maybeSingle();
@@ -237,9 +242,40 @@ app.get("/merchants", async (c) => {
       }
     }
     if (!merchantId) return c.json({ error: "Merchant not found" }, 404);
+
+    const { resolveDashOrderPricing } = await import("./pricingResolver.ts");
+    const v2 = await resolveDashOrderPricing(supabase, {
+      merchantId,
+      subtotal: subtotalQ > 0 ? subtotalQ : 1000,
+      dropoffLat,
+      dropoffLng,
+    });
+
+    if (v2?.pricingV2Enabled) {
+      return c.json({
+        merchant_id: merchantId,
+        pricing_model: "v2",
+        platform_fee_rate: null,
+        delivery_fee: v2.deliveryFee,
+        service_fee: v2.serviceFee,
+        merchant_commission_rate: v2.merchantCommissionRate,
+        merchant_commission_amount: v2.merchantCommissionAmount,
+        delivery_fee_courier_amount: v2.deliveryFeeCourierAmount,
+        delivery_fee_platform_amount: v2.deliveryFeePlatformAmount,
+        distance_km: v2.distanceKm,
+        tax: v2.tax,
+        total: v2.total,
+        pricing_profile_version: v2.pricingProfileVersion,
+        tier: v2.tierSlug,
+        free_delivery_applied: v2.freeDeliveryApplied,
+        has_override: false,
+      });
+    }
+
     const resolved = await resolveFeeRateForMerchant(supabase, merchantId);
     return c.json({
       merchant_id: merchantId,
+      pricing_model: "legacy",
       platform_fee_rate: resolved.rate,
       delivery_fee: deliveryFee,
       has_override: resolved.merchantOverride != null,
@@ -972,6 +1008,7 @@ app.put("/orders/:id/status", async (c) => {
         .eq("driver_id", user.id);
       if (status === "delivered") {
         await completeStackLeg(serviceSb, user.id, id);
+        await handleOrderDelivered(serviceSb, id, user.id);
       }
     }
 
@@ -1043,6 +1080,11 @@ app.put("/orders/:id/status", async (c) => {
   if (status === "delivered") {
     const courierId = (order as { courier_id?: string | null }).courier_id;
     if (courierId) await completeStackLeg(serviceSb, String(courierId), id);
+    await handleOrderDelivered(
+      serviceSb,
+      id,
+      courierId ? String(courierId) : null,
+    );
   }
 
   // Soft-launch: when merchant marks ready, fan out courier offers
@@ -2352,6 +2394,7 @@ import { registerCustomerAdminRoutes } from "./admin/customerRoutes.ts";
 import { registerFinanceAdminRoutes } from "./admin/financeRoutes.ts";
 import { registerMarketAdminRoutes, registerPublicGeoRoutes } from "./admin/marketRoutes.ts";
 import { registerOpsAdminRoutes } from "./admin/opsRoutes.ts";
+import { registerPricingAdminRoutes } from "./admin/pricingRoutes.ts";
 import { registerSupportAdminRoutes } from "./admin/supportRoutes.ts";
 import { registerOrderChatRoutes } from "./orderChat.ts";
 import { registerAdminOrderChatRoutes } from "./admin/orderChatRoutes.ts";
@@ -2378,6 +2421,7 @@ registerFinanceAdminRoutes(app);
 registerCourierAdminRoutes(app);
 registerMarketAdminRoutes(app);
 registerOpsAdminRoutes(app);
+registerPricingAdminRoutes(app);
 registerSupportAdminRoutes(app);
 registerPublicGeoRoutes(app, { getServiceSupabase });
 

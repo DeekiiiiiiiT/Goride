@@ -32,6 +32,18 @@ export type OrderTotals = {
   total: number;
 };
 
+export type CheckoutPricing = {
+  pricingModel: 'legacy' | 'v2';
+  platformFeeRate: number;
+  deliveryFee: number;
+  serviceFee: number;
+  tax: number;
+  total: number;
+  distanceKm?: number | null;
+  tier?: string;
+  freeDeliveryApplied?: boolean;
+};
+
 function roundMoney(value: number) {
   return Math.round(value * 100) / 100;
 }
@@ -75,11 +87,15 @@ export function calculateOrderTotals(
   tip = 0,
   deliveryFee = 0,
   platformFeeRate: number = PLATFORM_FEE_RATE,
+  serviceFeeFlat?: number,
 ): OrderTotals {
   const discount = computeDiscount(subtotal, appliedPromo);
   const discountedSubtotal = roundMoney(Math.max(0, subtotal - discount));
   const safeDeliveryFee = Math.max(0, deliveryFee);
-  const serviceFee = roundMoney(subtotal * clampFeeRate(platformFeeRate));
+  const serviceFee =
+    serviceFeeFlat != null && Number.isFinite(serviceFeeFlat)
+      ? roundMoney(Math.max(0, serviceFeeFlat))
+      : roundMoney(subtotal * clampFeeRate(platformFeeRate));
   const tax = roundMoney(discountedSubtotal * (TAX_RATE_PERCENT / 100));
   const safeTip = Math.max(0, tip);
   const total = roundMoney(discountedSubtotal + safeDeliveryFee + serviceFee + tax + safeTip);
@@ -95,29 +111,86 @@ export function calculateOrderTotals(
   };
 }
 
+export type FetchPricingOptions = {
+  merchantId: string;
+  accessToken?: string | null;
+  subtotal?: number;
+  dropoffLat?: number | null;
+  dropoffLng?: number | null;
+};
+
 /** Live merchant fee + delivery for cart/checkout display. */
 export async function fetchMerchantCheckoutPricing(
-  merchantId: string,
+  merchantIdOrOptions: string | FetchPricingOptions,
   accessToken?: string | null,
-): Promise<{ platformFeeRate: number; deliveryFee: number } | null> {
+): Promise<CheckoutPricing | null> {
+  const opts: FetchPricingOptions =
+    typeof merchantIdOrOptions === 'string'
+      ? { merchantId: merchantIdOrOptions, accessToken }
+      : merchantIdOrOptions;
+
   const { API_ENDPOINTS, supabaseAnonFunctionHeaders } = await import('@roam/api-client');
   const headers = supabaseAnonFunctionHeaders(
-    accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
+    opts.accessToken ? { Authorization: `Bearer ${opts.accessToken}` } : undefined,
   );
-  const res = await fetch(`${API_ENDPOINTS.delivery}/merchants/${merchantId}/pricing`, { headers });
+
+  const params = new URLSearchParams();
+  if (opts.subtotal != null && opts.subtotal > 0) {
+    params.set('subtotal', String(opts.subtotal));
+  }
+  if (opts.dropoffLat != null && opts.dropoffLng != null) {
+    params.set('dropoff_lat', String(opts.dropoffLat));
+    params.set('dropoff_lng', String(opts.dropoffLng));
+  }
+
+  const qs = params.toString();
+  const url = `${API_ENDPOINTS.delivery}/merchants/${opts.merchantId}/pricing${qs ? `?${qs}` : ''}`;
+  const res = await fetch(url, { headers });
   if (!res.ok) return null;
+
   const data = (await res.json().catch(() => ({}))) as {
-    platform_fee_rate?: number;
+    pricing_model?: string;
+    platform_fee_rate?: number | null;
     delivery_fee?: number;
+    service_fee?: number;
+    tax?: number;
+    total?: number;
+    distance_km?: number | null;
+    tier?: string;
+    free_delivery_applied?: boolean;
   };
+
+  if (data.pricing_model === 'v2') {
+    const deliveryFee = Math.max(0, Number(data.delivery_fee ?? 0));
+    const serviceFee = Math.max(0, Number(data.service_fee ?? 0));
+    const tax = Math.max(0, Number(data.tax ?? 0));
+    const total = Math.max(0, Number(data.total ?? 0));
+    return {
+      pricingModel: 'v2',
+      platformFeeRate: 0,
+      deliveryFee,
+      serviceFee,
+      tax,
+      total,
+      distanceKm: data.distance_km,
+      tier: data.tier,
+      freeDeliveryApplied: data.free_delivery_applied,
+    };
+  }
+
   if (typeof data.platform_fee_rate !== 'number' || !Number.isFinite(data.platform_fee_rate)) {
     return null;
   }
+  const deliveryFee =
+    typeof data.delivery_fee === 'number' && Number.isFinite(data.delivery_fee)
+      ? Math.max(0, data.delivery_fee)
+      : 0;
   return {
+    pricingModel: 'legacy',
     platformFeeRate: data.platform_fee_rate,
-    deliveryFee:
-      typeof data.delivery_fee === 'number' && Number.isFinite(data.delivery_fee)
-        ? Math.max(0, data.delivery_fee)
-        : 0,
+    deliveryFee,
+    serviceFee: 0,
+    tax: 0,
+    total: 0,
   };
 }

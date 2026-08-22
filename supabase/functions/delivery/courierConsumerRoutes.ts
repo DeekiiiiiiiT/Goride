@@ -6,6 +6,8 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { dualWriteDashPayment } from "../_shared/unifiedLedger/dualWriteDash.ts";
 import { getCourierRouteEstimate } from "../_shared/directionsRoute.ts";
 import { computeCourierCancelCompensation } from "../_shared/courierCancelCompensation.ts";
+import { courierDeliveryEarnings } from "../_shared/dashMoneySplit.ts";
+import { isCourierCashPaused } from "./courierCashLedger.ts";
 import { resolvePeakPayBonus } from "../_shared/courierPeakPay.ts";
 import { ORDER_CUSTOMER_EMBED_MINIMAL } from "./orderSelectEmbeds.ts";
 
@@ -148,7 +150,7 @@ async function rollbackStackAccept(
 
 function stackOrderEarnings(order: Record<string, unknown>): number {
   return (
-    Number(order.delivery_fee || 0) +
+    courierDeliveryEarnings(order) +
     Number(order.tip || 0) +
     Number(order.peak_pay_amount || 0)
   );
@@ -442,6 +444,13 @@ export function registerCourierConsumerRoutes(app: Hono, deps: Deps) {
 
     const gate = await requireActiveCourier(serviceSb, auth.userId);
     if (!gate.ok) return c.json({ error: gate.error }, gate.status);
+
+    if (await isCourierCashPaused(serviceSb, auth.userId)) {
+      return c.json({
+        error: "Your account is paused — settle your COD cash balance before accepting new deliveries.",
+        code: "cod_cash_paused",
+      }, 403);
+    }
 
     const { data: offer } = await serviceSb
       .from("courier_offers")
@@ -907,7 +916,7 @@ export function registerCourierConsumerRoutes(app: Hono, deps: Deps) {
     const serviceSb = getServiceSupabase();
     const { data: orders, error } = await serviceSb
       .from("orders")
-      .select("id, delivery_fee, tip, delivered_at")
+      .select("id, delivery_fee, delivery_fee_courier_amount, pricing_model, tip, peak_pay_amount, delivered_at")
       .eq("courier_id", auth.userId)
       .in("status", ["delivered", "completed"])
       .gte("delivered_at", periodStart)
@@ -916,7 +925,11 @@ export function registerCourierConsumerRoutes(app: Hono, deps: Deps) {
     if (error) return c.json({ error: error.message }, 500);
     const rows = orders || [];
     const amount = rows.reduce(
-      (sum, o) => sum + Number(o.delivery_fee || 0) + Number(o.tip || 0),
+      (sum, o) =>
+        sum +
+        courierDeliveryEarnings(o as Record<string, unknown>) +
+        Number(o.tip || 0) +
+        Number(o.peak_pay_amount || 0),
       0,
     );
 

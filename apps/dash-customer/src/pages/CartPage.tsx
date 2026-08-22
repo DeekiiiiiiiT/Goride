@@ -34,6 +34,7 @@ export default function CartPage({ onNavigate, session }: Props) {
   const [appliedPromo, setAppliedPromo] = useState(getAppliedPromo());
   const [platformFeeRate, setPlatformFeeRate] = useState(0.05);
   const [merchantDeliveryFee, setMerchantDeliveryFee] = useState(0);
+  const [serviceFeeFlat, setServiceFeeFlat] = useState<number | undefined>(undefined);
 
   const editingCartItem = items.find((i) => i.id === editingCartItemId);
   const editingMenuItem = editingCartItem && merchantId
@@ -59,10 +60,17 @@ export default function CartPage({ onNavigate, session }: Props) {
     let cancelled = false;
     void (async () => {
       try {
-        const pricing = await fetchMerchantCheckoutPricing(merchantId, session?.access_token);
+        const pricing = await fetchMerchantCheckoutPricing({
+          merchantId,
+          accessToken: session?.access_token,
+          subtotal,
+          dropoffLat: savedAddress?.lat,
+          dropoffLng: savedAddress?.lng,
+        });
         if (cancelled || !pricing) return;
         setPlatformFeeRate(pricing.platformFeeRate);
         setMerchantDeliveryFee(pricing.deliveryFee);
+        setServiceFeeFlat(pricing.pricingModel === 'v2' ? pricing.serviceFee : undefined);
       } catch {
         /* keep fallback */
       }
@@ -70,7 +78,7 @@ export default function CartPage({ onNavigate, session }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [merchantId, session?.access_token]);
+  }, [merchantId, session?.access_token, subtotal, savedAddress?.lat, savedAddress?.lng]);
 
   const { discount, deliveryFee, serviceFee, tax, total } = calculateOrderTotals(
     subtotal,
@@ -78,6 +86,7 @@ export default function CartPage({ onNavigate, session }: Props) {
     0,
     merchantDeliveryFee,
     platformFeeRate,
+    serviceFeeFlat,
   );
 
   const handleApplyPromo = async () => {

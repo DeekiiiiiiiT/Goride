@@ -47,6 +47,7 @@ import { DeliveryLedgerPage } from './pages/couriers/DeliveryLedgerPage';
 import { LiveOpsPage } from './pages/liveops/LiveOpsPage';
 import { MarketsPage } from './pages/markets/MarketsPage';
 import { ActivityLogPage } from './pages/activity/ActivityLogPage';
+import { PricingHubPage } from './pages/pricing/PricingHubPage';
 
 export type AdminOutletContext = { session: Session };
 
@@ -159,6 +160,7 @@ export function DashAdminPortal() {
             <Route path="customers" element={<CustomersListPage />} />
             <Route path="customers/:id" element={<CustomerDetailPage />} />
             <Route path="finance" element={<FinancePage />} />
+            <Route path="pricing" element={<PricingHubPage />} />
             <Route path="reviews" element={<ReviewsPage />} />
             <Route path="support" element={<SupportToolsPage />} />
             <Route path="play-store" element={<DashPlayStoreLaunchPage />} />

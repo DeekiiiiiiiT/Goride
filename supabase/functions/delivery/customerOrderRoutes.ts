@@ -16,6 +16,7 @@ import {
   loadDashGlobalPlatformFeeRate,
   resolveDashPlatformFeeRate,
 } from "./platformFeeRate.ts";
+import { resolveDashOrderPricing } from "./pricingResolver.ts";
 import { assertMerchantAcceptingOrders } from "./merchantOpenCheck.ts";
 import { ORDER_CUSTOMER_EMBED_WITH_USER } from "./orderSelectEmbeds.ts";
 
@@ -212,30 +213,6 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
         .eq("id", promo.id);
     }
 
-    const pricing = calculateOrderPricing({
-      lines: pricedLines,
-      taxRatePercent: 16.5,
-      discount,
-    });
-    // Soft-launch fee engine: merchant commission_rate override → global settings → 5%
-    const { data: merchantRow } = await serviceSb
-      .from("merchants")
-      .select("delivery_fee, commission_rate")
-      .eq("id", body.merchantId)
-      .maybeSingle();
-    const globalRate = await loadDashGlobalPlatformFeeRate(serviceSb);
-    const merchantOverride = merchantRow?.commission_rate != null
-      ? Number(merchantRow.commission_rate)
-      : null;
-    const feeRate = resolveDashPlatformFeeRate(merchantOverride, globalRate);
-    const platformFee = Math.round(pricing.subtotal * feeRate * 100) / 100;
-    const deliveryFee = Math.max(0, Number(merchantRow?.delivery_fee ?? 0));
-    const tip = Math.max(0, Number(body.tip) || 0);
-    const total = Math.round(
-      (pricing.subtotal - discount + platformFee + deliveryFee + pricing.tax + tip) * 100,
-    ) / 100;
-
-    // Service role: customers have SELECT-only RLS on orders (no INSERT policy).
     const customerRow = customer as {
       id: string;
       account_status?: string;
@@ -245,6 +222,77 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
     const dropoffLat = asCoord(body.deliveryLat) ?? asCoord(customerRow.default_lat);
     const dropoffLng = asCoord(body.deliveryLng) ?? asCoord(customerRow.default_lng);
     const hasDropoffPin = dropoffLat != null && dropoffLng != null && !(dropoffLat === 0 && dropoffLng === 0);
+
+    const pricing = calculateOrderPricing({
+      lines: pricedLines,
+      taxRatePercent: 16.5,
+      discount,
+    });
+    const tip = Math.max(0, Number(body.tip) || 0);
+    const paymentMethod = body.paymentMethod || "cash";
+
+    // Model B pricing when market profile has pricing_v2_enabled
+    const v2Pricing = await resolveDashOrderPricing(serviceSb, {
+      merchantId: body.merchantId,
+      subtotal: pricing.subtotal,
+      discount,
+      tip,
+      dropoffLat,
+      dropoffLng,
+      customerId: customer.id,
+    });
+
+    let deliveryFee: number;
+    let platformFee: number;
+    let total: number;
+    let pricingModel = "legacy";
+    let serviceFee = 0;
+    let merchantCommissionAmount = 0;
+    let deliveryFeePlatformAmount = 0;
+    let deliveryFeeCourierAmount = 0;
+    let distanceKm: number | null = null;
+    let pricingProfileVersion: number | null = null;
+    let pricingSnapshot: Record<string, unknown> | null = null;
+
+    if (v2Pricing?.pricingV2Enabled) {
+      pricingModel = "v2";
+      deliveryFee = v2Pricing.deliveryFee;
+      serviceFee = v2Pricing.serviceFee;
+      platformFee = serviceFee; // backward compat for legacy readers
+      merchantCommissionAmount = v2Pricing.merchantCommissionAmount;
+      deliveryFeePlatformAmount = v2Pricing.deliveryFeePlatformAmount;
+      deliveryFeeCourierAmount = v2Pricing.deliveryFeeCourierAmount;
+      distanceKm = v2Pricing.distanceKm;
+      pricingProfileVersion = v2Pricing.pricingProfileVersion;
+      pricingSnapshot = {
+        rules: v2Pricing.rules,
+        tier_slug: v2Pricing.tierSlug,
+        merchant_commission_rate: v2Pricing.merchantCommissionRate,
+        free_delivery_applied: v2Pricing.freeDeliveryApplied,
+      };
+      total = v2Pricing.total;
+      // Override tax from v2 engine (uses market tax rate)
+      pricing.tax = v2Pricing.tax;
+    } else {
+      // Legacy Model A: merchant commission_rate override → global settings → 5%
+      const { data: merchantRow } = await serviceSb
+        .from("merchants")
+        .select("delivery_fee, commission_rate")
+        .eq("id", body.merchantId)
+        .maybeSingle();
+      const globalRate = await loadDashGlobalPlatformFeeRate(serviceSb);
+      const merchantOverride = merchantRow?.commission_rate != null
+        ? Number(merchantRow.commission_rate)
+        : null;
+      const feeRate = resolveDashPlatformFeeRate(merchantOverride, globalRate);
+      platformFee = Math.round(pricing.subtotal * feeRate * 100) / 100;
+      serviceFee = platformFee;
+      deliveryFee = Math.max(0, Number(merchantRow?.delivery_fee ?? 0));
+      deliveryFeeCourierAmount = deliveryFee;
+      total = Math.round(
+        (pricing.subtotal - discount + platformFee + deliveryFee + pricing.tax + tip) * 100,
+      ) / 100;
+    }
 
     async function waitForOrderById(orderId: string) {
       for (let attempt = 0; attempt < 10; attempt++) {
@@ -317,6 +365,7 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
       }
     }
 
+    const isCash = paymentMethod === "cash";
     const insertPayload: Record<string, unknown> = {
       customer_id: customer.id,
       merchant_id: body.merchantId,
@@ -324,6 +373,14 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
       subtotal: pricing.subtotal,
       delivery_fee: deliveryFee,
       platform_fee: platformFee,
+      service_fee: serviceFee,
+      merchant_commission_amount: merchantCommissionAmount,
+      delivery_fee_platform_amount: deliveryFeePlatformAmount,
+      delivery_fee_courier_amount: deliveryFeeCourierAmount,
+      distance_km: distanceKm,
+      pricing_profile_version: pricingProfileVersion,
+      pricing_snapshot: pricingSnapshot,
+      pricing_model: pricingModel,
       tax: pricing.tax,
       tip,
       discount,
@@ -333,8 +390,10 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
       delivery_lat: hasDropoffPin ? dropoffLat : null,
       delivery_lng: hasDropoffPin ? dropoffLng : null,
       delivery_instructions: body.deliveryInstructions,
-      payment_method: body.paymentMethod || "cash",
-      payment_status: (body.paymentMethod || "cash") === "cash" ? "paid" : "pending",
+      payment_method: paymentMethod,
+      payment_status: isCash
+        ? (pricingModel === "v2" ? "pending_collection" : "paid")
+        : "pending",
       ...(appliedPromoCode ? { promo_code: appliedPromoCode } : {}),
     };
 

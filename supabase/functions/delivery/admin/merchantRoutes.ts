@@ -677,6 +677,20 @@ export function registerMerchantAdminRoutes(app: Hono) {
       }
       updates.delivery_radius_km = radius;
     }
+    if (Object.prototype.hasOwnProperty.call(body, "pricing_tier_id")) {
+      updates.pricing_tier_id = body.pricing_tier_id === null ? null : String(body.pricing_tier_id);
+    }
+    if (Object.prototype.hasOwnProperty.call(body, "merchant_commission_rate")) {
+      if (body.merchant_commission_rate === null) {
+        updates.merchant_commission_rate = null;
+      } else {
+        const rate = Number(body.merchant_commission_rate);
+        if (!Number.isFinite(rate) || rate < 0 || rate > 1) {
+          return c.json({ error: "merchant_commission_rate must be between 0 and 1" }, 400);
+        }
+        updates.merchant_commission_rate = rate;
+      }
+    }
     if (body.admin_internal_notes != null) updates.admin_internal_notes = String(body.admin_internal_notes);
     if (body.capabilities != null && Array.isArray(body.capabilities)) {
       const caps = [...new Set(["roam_delivery", ...body.capabilities.map(String)])];

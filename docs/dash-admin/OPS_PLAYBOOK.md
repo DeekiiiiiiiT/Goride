@@ -39,6 +39,16 @@
 - **Finance** → view payouts and disputes
 - Hold/release payouts (API: `POST /admin/finance/payouts/:id/hold|release`)
 
+## Pricing & Commission (Model B)
+
+- **Pricing** → configure market rules, merchant tiers, and COD controls
+- **Spanish Town launch defaults:** J$400 base delivery (≤2 km), J$60/extra km, J$120 service fee, 80/20 courier delivery split, 12–25% merchant commission by tier
+- **Enable Model B:** Pricing → Market Rules → select Spanish Town → check **Enable Model B pricing** → Save
+- **Merchant tiers:** Assign Basic (12%), Standard (20%), or Premium (25%) on merchant detail → Pricing tier
+- **Simulator:** Pricing → Simulator — test quotes before go-live
+- **COD ledger:** Cash orders use `pending_collection` until delivery; couriers auto-pause at J$10,000 held until Lynk/WiPay settlement recorded in Pricing → COD Ledger
+- **High-risk zones:** Markets → add exclude polygons for geofenced areas (blocks coverage)
+
 ## API reference
 
 See `supabase/functions/delivery/README.md` for full route list.

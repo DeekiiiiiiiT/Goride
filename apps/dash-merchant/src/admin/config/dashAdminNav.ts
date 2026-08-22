@@ -17,6 +17,7 @@ import {
   ScrollText,
   Map,
   Activity,
+  DollarSign,
 } from 'lucide-react';
 import type { AdminConfig } from '@roam/admin-core';
 
@@ -96,6 +97,7 @@ export const DASH_ADMIN_CONFIG: AdminConfig = {
     { id: 'orders', label: 'Orders', icon: ClipboardList },
     { id: 'customers', label: 'Customers', icon: UserCircle },
     { id: 'finance', label: 'Finance', icon: Wallet },
+    { id: 'pricing', label: 'Pricing', icon: DollarSign },
     { id: 'reviews', label: 'Reviews', icon: Star },
     { id: 'support', label: 'Support', icon: HeadphonesIcon },
     { id: 'play-store', label: 'Play Store', icon: Smartphone },
@@ -149,6 +151,7 @@ export function pathnameToNavId(pathname: string): string {
   if (pathname.startsWith('/team') || pathname.startsWith('/users')) return 'team';
   if (pathname.startsWith('/activity')) return 'activity';
   if (pathname.startsWith('/finance') || pathname.startsWith('/disputes')) return 'finance';
+  if (pathname.startsWith('/pricing')) return 'pricing';
   if (pathname.startsWith('/reviews')) return 'reviews';
   if (pathname.startsWith('/support')) return 'support';
   if (pathname.startsWith('/play-store')) return 'play-store';
@@ -187,6 +190,8 @@ export function navIdToPath(navId: string): string {
       return '/activity';
     case 'finance':
       return '/finance';
+    case 'pricing':
+      return '/pricing';
     case 'reviews':
       return '/reviews';
     case 'support':

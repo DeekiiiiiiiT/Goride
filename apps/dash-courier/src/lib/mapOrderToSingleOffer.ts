@@ -28,7 +28,14 @@ export function mapOrderToSingleOffer(
   const pickupAddress = order.merchant?.address || '';
   const dropoff = String(order.delivery_address || '');
   const tip = Math.max(0, Number(order.tip || 0));
-  const baseFare = Math.max(0, Number(order.delivery_fee || 0));
+  const baseFare = Math.max(
+    0,
+    Number(
+      (order as { delivery_fee_courier_amount?: number }).delivery_fee_courier_amount ??
+        order.delivery_fee ??
+        0,
+    ),
+  );
   const items = Array.isArray(order.items) ? order.items : [];
   const offerItems = items.map((item) => ({
     qty: Math.max(1, Number(item.quantity || 1)),
