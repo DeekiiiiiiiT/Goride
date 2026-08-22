@@ -1,5 +1,5 @@
-import { redirectPartnerTabletToCommand } from '@roam/merchant-ops';
 import { useEffect, useState, useCallback, useRef } from 'react';
+import { redirectPartnerTabletToCommand } from '@roam/merchant-ops';
 import { BrowserRouter } from 'react-router-dom';
 import { supabase, ensureValidPartnerSession, migrateLegacyPartnerSession } from './lib/partner-supabase';
 import { AuthRecoveryGate } from '@roam/auth-client';
@@ -42,6 +42,13 @@ import {
   readTeamInviteToken,
 } from './lib/teamInviteSession';
 import { DashAdminPortal } from './admin/DashAdminPortal';
+import PartnerAdminRemovedPage from './pages/PartnerAdminRemovedPage';
+import {
+  isOpsAdminSurface,
+  isPartnerAdminPathBlocked,
+  opsAdminBasename,
+} from './lib/ops-origin';
+import { isPwaInstallAllowed } from './pwa/pwaMeta';
 import {
   clearPartnerOAuthUrl,
   consumePartnerOAuthIntent,
@@ -58,16 +65,29 @@ const MERCHANT_WAIT_MAX_MS = 12_000;
 const PENDING_STATUSES = new Set(['pending', 'in_review', 'docs_requested']);
 
 export default function App() {
-  const isAdmin = window.location.pathname.startsWith('/admin');
+  useEffect(() => {
+    if (!isPwaInstallAllowed() && 'serviceWorker' in navigator) {
+      document.querySelectorAll('link[rel="manifest"]').forEach((el) => el.remove());
+      void navigator.serviceWorker.getRegistrations().then((regs) => {
+        for (const reg of regs) void reg.unregister();
+      });
+    }
+  }, []);
+
+  if (isPartnerAdminPathBlocked()) {
+    return <PartnerAdminRemovedPage />;
+  }
+
+  const isAdmin = isOpsAdminSurface();
 
   return (
     <AuthRecoveryGate
       title="Reset password"
       subtitle={isAdmin ? 'Roam Rush Admin' : 'Roam Rush Partner'}
-      signInHref={isAdmin ? '/admin' : '/'}
+      signInHref={isAdmin ? opsAdminBasename() || '/' : '/'}
     >
       {isAdmin ? (
-        <BrowserRouter basename="/admin">
+        <BrowserRouter basename={opsAdminBasename()}>
           <DashAdminPortal />
         </BrowserRouter>
       ) : (

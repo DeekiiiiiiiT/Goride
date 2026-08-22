@@ -121,12 +121,12 @@ const IMMERSIVE_STACK_PAGES: StackPage[] = [
   'payment-callback-paypal',
 ];
 
-/** Customer ordering app (roamrush.app). Admin portal: partner.roamrush.app/admin */
+/** Customer ordering app (roamrush.app). Rush Ops Console: ops.roamrush.app */
 export default function App() {
   const isAdmin = window.location.pathname.startsWith('/admin');
 
   if (isAdmin) {
-    window.location.replace('https://partner.roamrush.app/admin');
+    window.location.replace('https://ops.roamrush.app');
     return null;
   }
 

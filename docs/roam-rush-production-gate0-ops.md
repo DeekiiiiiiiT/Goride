@@ -88,7 +88,7 @@ Per app, place secrets **locally / CI only** (do not commit — gitignored):
 
 ## Rush Ops Console (2026-08-16)
 
-Primary staff console: **https://partner.roamrush.app/admin** (subtitle: Ops Console).
+Primary staff console: **https://ops.roamrush.app** (subtitle: Ops Console). `partner.roamrush.app/admin` is removed — use the ops host only.
 
 Covers Merchants, Couriers (embedded), Customers, Orders, Live Ops, Markets/zones, Finance, Team invites, Support cases, Activity audit.
 

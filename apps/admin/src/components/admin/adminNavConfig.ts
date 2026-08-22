@@ -133,7 +133,7 @@ export const ROAM_FLEET_CHILDREN: NavChild[] = [
 export const ROAM_DASH_CHILDREN: NavChild[] = [
   { id: 'roam-dash-overview', label: 'Overview', icon: BarChart3 },
   { id: 'dash-merchants', label: 'Merchants', icon: Store },
-  { id: 'roam-dash-admin-link', label: 'Open Rush Admin →', icon: ExternalLink, href: 'https://roamrush.app/admin' },
+  { id: 'roam-dash-admin-link', label: 'Open Rush Admin →', icon: ExternalLink, href: 'https://ops.roamrush.app' },
 ];
 
 export const ROAM_RIDES_CHILDREN: NavChild[] = [

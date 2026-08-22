@@ -18,6 +18,7 @@ import {
 } from '../../services/dashAdminService';
 import { canWriteDashAdmin } from '../../utils/dashAdminRoles';
 import type { AdminOutletContext } from '../../DashAdminPortal';
+import { opsAdminBasename } from '../../../lib/ops-origin';
 
 type TabId = 'overview' | 'market' | 'tiers' | 'simulator' | 'cod' | 'audit';
 
@@ -179,7 +180,7 @@ export function PricingHubPage() {
         <p className="text-sm text-slate-400 mt-1">
           Configure market fees, merchant tiers, driver splits, and COD controls.
           High-risk delivery zones are managed under{' '}
-          <a href="/admin/markets" className="text-amber-400 hover:underline">
+          <a href={`${opsAdminBasename()}/markets`} className="text-amber-400 hover:underline">
             Markets → exclude polygons
           </a>
           .

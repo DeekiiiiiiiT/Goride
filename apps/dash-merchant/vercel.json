@@ -88,11 +88,33 @@
       ]
     }
   ],
-  "rewrites": [
+  "redirects": [
     {
-      "source": "/admin/(.*)",
-      "destination": "/"
+      "source": "/admin",
+      "has": [{ "type": "host", "value": "partner.roamrush.app" }],
+      "destination": "/404",
+      "statusCode": 404
     },
+    {
+      "source": "/admin/:path*",
+      "has": [{ "type": "host", "value": "partner.roamrush.app" }],
+      "destination": "/404",
+      "statusCode": 404
+    },
+    {
+      "source": "/admin",
+      "has": [{ "type": "host", "value": "www.partner.roamrush.app" }],
+      "destination": "/404",
+      "statusCode": 404
+    },
+    {
+      "source": "/admin/:path*",
+      "has": [{ "type": "host", "value": "www.partner.roamrush.app" }],
+      "destination": "/404",
+      "statusCode": 404
+    }
+  ],
+  "rewrites": [
     {
       "source": "/((?!sw\\.js$|workbox-[^/]+\\.js$|manifest\\.webmanifest$|offline\\.html$|favicon\\.svg$|favicon\\.ico$|favicon-32\\.png$|apple-touch-icon\\.png$|icons/).*)",
       "destination": "/"

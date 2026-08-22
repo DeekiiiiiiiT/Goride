@@ -7,6 +7,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from 'sonner';
 import App from './App';
 import { PwaProvider } from './components/pwa/PwaProvider';
+import { isPwaInstallAllowed } from './pwa/pwaMeta';
 import { initPartnerNative } from './capacitor-native';
 import './index.css';
 
@@ -22,14 +23,18 @@ const queryClient = new QueryClient({
 });
 
 void initPartnerNative().finally(() => {
+  const shell = (
+    <>
+      <App />
+      <Toaster position="top-center" richColors />
+    </>
+  );
+
   ReactDOM.createRoot(document.getElementById('root')!).render(
     <React.StrictMode>
       <Sentry.ErrorBoundary fallback={<p>Something went wrong. Please refresh the page.</p>}>
         <QueryClientProvider client={queryClient}>
-          <PwaProvider>
-            <App />
-            <Toaster position="top-center" richColors />
-          </PwaProvider>
+          {isPwaInstallAllowed() ? <PwaProvider>{shell}</PwaProvider> : shell}
         </QueryClientProvider>
       </Sentry.ErrorBoundary>
     </React.StrictMode>,

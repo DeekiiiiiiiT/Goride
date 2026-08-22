@@ -2,9 +2,14 @@
 
 import { Capacitor } from '@capacitor/core';
 
-/** Install UI / SW registration only on web — never inside the Capacitor shell. */
+/** Install UI / SW registration only on web partner app — never ops admin or native shell. */
 export function isPwaInstallAllowed(): boolean {
-  return !Capacitor.isNativePlatform();
+  if (Capacitor.isNativePlatform()) return false;
+  if (typeof window !== 'undefined') {
+    if (window.location.hostname === 'ops.roamrush.app') return false;
+    if (window.location.pathname.startsWith('/admin')) return false;
+  }
+  return true;
 }
 
 export function getPwaAppName(): string {
