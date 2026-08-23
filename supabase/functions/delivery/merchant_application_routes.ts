@@ -27,6 +27,7 @@ import {
 import { resolveMerchantAccess, requireResolvedMerchantWithPermission } from "./merchantAuth.ts";
 import { findPendingInviteForEmail } from "./merchantTeam.ts";
 import { seedVenueOpsFromBusinessType } from "./merchantVenueOps.ts";
+import { assertCanEnableAcceptingOrders } from "./merchantPayoutGate.ts";
 
 type SupabaseClient = ReturnType<typeof createDeliveryClient>;
 
@@ -441,8 +442,17 @@ export function registerMerchantApplicationRoutes(app: Hono) {
     if (!authHeader) return c.json({ error: "Unauthorized" }, 401);
 
     const supabase = createDeliveryClient(authHeader);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return c.json({ error: "Unauthorized" }, 401);
+
     const { id } = c.req.param();
     const body = await c.req.json().catch(() => ({}));
+
+    const access = await requireResolvedMerchantWithPermission(user.id, user.email, "orders");
+    if (!access.ok) return c.json({ error: access.message }, access.status);
+    if (access.resolved.merchant.id !== id) {
+      return c.json({ error: "Forbidden" }, 403);
+    }
 
     const update: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(body as Record<string, unknown>)) {
@@ -452,6 +462,20 @@ export function registerMerchantApplicationRoutes(app: Hono) {
     }
     if (Object.keys(update).length === 0) {
       return c.json({ error: "No valid fields to update" }, 400);
+    }
+
+    const current = access.resolved.merchant as Record<string, unknown>;
+    if (Object.prototype.hasOwnProperty.call(update, "is_accepting_orders")) {
+      const nextAccepting = Boolean(update.is_accepting_orders);
+      const gate = assertCanEnableAcceptingOrders(
+        {
+          is_accepting_orders: current.is_accepting_orders as boolean | null,
+          payout_ready: current.payout_ready as boolean | null,
+          is_test_merchant: current.is_test_merchant as boolean | null,
+        },
+        nextAccepting,
+      );
+      if (!gate.ok) return c.json(gate.body, gate.status);
     }
 
     const { data, error } = await supabase
@@ -762,8 +786,14 @@ export function registerMerchantApplicationRoutes(app: Hono) {
         vertical_type: merchant.vertical_type,
         fulfillment_type: merchant.fulfillment_type,
         go_live_rule: merchant.go_live_rule ?? merchantGoLiveRuleFromRow(merchant as Record<string, unknown>),
+        payout_ready: Boolean((merchant as Record<string, unknown>).payout_ready),
+        is_test_merchant: Boolean((merchant as Record<string, unknown>).is_test_merchant),
       },
-      checklist,
+      checklist: {
+        ...checklist,
+        payoutReady: Boolean((merchant as Record<string, unknown>).payout_ready)
+          || Boolean((merchant as Record<string, unknown>).is_test_merchant),
+      },
       reviewChecklist,
       documents: documents || [],
     });

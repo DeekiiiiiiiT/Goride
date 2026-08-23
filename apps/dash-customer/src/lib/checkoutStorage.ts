@@ -27,8 +27,8 @@ const DEFAULTS: CheckoutPreferences = {
 };
 
 export function normalizePaymentMethodId(id: unknown): PaymentMethodId {
-  if (id === 'paypal' || id === 'cash' || id === 'wipay') return id;
-  // Migrate legacy fake card ids → wipay
+  if (id === 'paypal' || id === 'wipay') return id;
+  if (id === 'cash') return 'wipay';
   return 'wipay';
 }
 
@@ -78,20 +78,45 @@ export type LivePaymentOption = {
   label: string;
   icon: string;
   description: string;
+  comingSoon?: boolean;
 };
 
-export const PAYMENT_OPTIONS: LivePaymentOption[] = [
+export const LIVE_PAYMENT_OPTIONS: LivePaymentOption[] = [
   { id: 'wipay', label: 'WiPay', icon: 'credit_card', description: 'Pay securely with WiPay' },
   { id: 'paypal', label: 'PayPal', icon: 'account_balance_wallet', description: 'Pay with PayPal' },
-  { id: 'cash', label: 'Cash on delivery', icon: 'payments', description: 'Pay the courier in cash' },
 ];
+
+export const COMING_SOON_PAYMENT_OPTIONS: LivePaymentOption[] = [
+  {
+    id: 'cash',
+    label: 'Cash on delivery',
+    icon: 'payments',
+    description: 'Pay the courier in cash',
+    comingSoon: true,
+  },
+];
+
+/** All rails shown in payment UI (selectable + coming soon). */
+export const PAYMENT_OPTIONS: LivePaymentOption[] = [
+  ...LIVE_PAYMENT_OPTIONS,
+  ...COMING_SOON_PAYMENT_OPTIONS,
+];
+
+export function getSelectablePaymentOptions(): LivePaymentOption[] {
+  return LIVE_PAYMENT_OPTIONS;
+}
+
+export function isSelectablePaymentMethod(id: PaymentMethodId): boolean {
+  return id === 'wipay' || id === 'paypal';
+}
 
 export function getPaymentLabel(id: PaymentMethodId): string {
   return PAYMENT_OPTIONS.find((o) => o.id === id)?.label ?? 'WiPay';
 }
 
-export function getApiPaymentMethod(id: PaymentMethodId): 'cash' | 'wipay' | 'paypal' {
-  return id;
+export function getApiPaymentMethod(id: PaymentMethodId): 'wipay' | 'paypal' {
+  const normalized = normalizePaymentMethodId(id);
+  return normalized === 'paypal' ? 'paypal' : 'wipay';
 }
 
 /** Apply a server-saved default rail to local checkout prefs. */

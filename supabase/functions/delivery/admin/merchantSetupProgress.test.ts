@@ -2,6 +2,7 @@ import { assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import {
   computeSetupChecklist,
   isApplicationSetupComplete,
+  isGoLiveReady,
   missingSetupLabels,
   setupStageLabel,
 } from "./merchantSetupProgress.ts";
@@ -41,7 +42,37 @@ Deno.test("missingSetupLabels — lists gaps", () => {
     catalogComplete: false,
   });
   assertEquals(missing.includes("Identity documents"), true);
-  assertEquals(missing.includes("Bank / payouts"), false);
+  assertEquals(missing.includes("Bank / payouts"), true);
+});
+
+Deno.test("missingSetupLabels — payout verification when bank submitted but not verified", () => {
+  const missing = missingSetupLabels(
+    {
+      profileComplete: true,
+      documentsComplete: true,
+      bankComplete: true,
+      hoursComplete: true,
+      menuComplete: true,
+      catalogComplete: true,
+    },
+    "menu_min_5",
+    { payoutReady: false, isTestMerchant: false },
+  );
+  assertEquals(missing.includes("Payout verification"), true);
+});
+
+Deno.test("isGoLiveReady — requires payout unless test merchant", () => {
+  const checklist = {
+    profileComplete: true,
+    documentsComplete: true,
+    bankComplete: true,
+    hoursComplete: true,
+    menuComplete: true,
+    catalogComplete: true,
+  };
+  assertEquals(isGoLiveReady(checklist, "menu_min_5", { payoutReady: false }), false);
+  assertEquals(isGoLiveReady(checklist, "menu_min_5", { payoutReady: true }), true);
+  assertEquals(isGoLiveReady(checklist, "menu_min_5", { isTestMerchant: true }), true);
 });
 
 Deno.test("setupStageLabel — merchant incomplete", () => {

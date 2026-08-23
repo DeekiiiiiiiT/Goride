@@ -3,7 +3,7 @@ import { resolveGoLiveRule, resolveVerticalType } from '@roam/vertical-config';
 import { MaterialIcon } from '../signup/components/MaterialIcon';
 import { Merchant } from '../hooks/useMerchant';
 import { useAcceptingOrdersToggle } from '../hooks/useAcceptingOrdersToggle';
-import { markGoLiveComplete } from '../lib/go-live';
+import { markGoLiveComplete, isMerchantPayoutGoLiveReady } from '../lib/go-live';
 import { fetchApplicationStatus } from '../lib/partner-api';
 
 interface OnboardingCompletePageProps {
@@ -62,10 +62,27 @@ export default function OnboardingCompletePage({
 
   const applicationComplete = applicationItems.every((item) => checklist[item.key]);
   const restaurantReady = Boolean(checklist[restaurantSetupKey]);
-  const canGoLive = applicationComplete && restaurantReady;
+  const payoutReady = isMerchantPayoutGoLiveReady(merchant);
+  const bankSubmitted = Boolean(checklist.bankComplete);
+  const canGoLive = applicationComplete && restaurantReady && payoutReady;
 
-  const progressItems = [...applicationItems, { key: restaurantSetupKey, label: restaurantSetupLabel }];
-  const completedCount = progressItems.filter((item) => checklist[item.key]).length;
+  const payoutStatusLabel = merchant.is_test_merchant
+    ? 'Test store — payout bypass'
+    : merchant.payout_ready
+      ? 'Verified by Roam'
+      : bankSubmitted
+        ? 'Awaiting Roam verification'
+        : 'Add bank details in onboarding';
+
+  const progressItems = [
+    ...applicationItems,
+    { key: 'bankComplete', label: 'Payout setup' },
+    { key: restaurantSetupKey, label: restaurantSetupLabel },
+  ];
+  const completedCount = progressItems.filter((item) => {
+    if (item.key === 'bankComplete') return payoutReady;
+    return Boolean(checklist[item.key]);
+  }).length;
   const progressPct = progressItems.length
     ? Math.round((completedCount / progressItems.length) * 100)
     : 0;
@@ -156,6 +173,17 @@ export default function OnboardingCompletePage({
                           </div>
                         );
                       })}
+                      <div className="flex items-start gap-4 rounded-lg bg-surface-container-low p-4">
+                        <MaterialIcon
+                          name={payoutReady ? 'check_circle' : 'radio_button_unchecked'}
+                          filled={payoutReady}
+                          className={`mt-0.5 shrink-0 ${payoutReady ? 'text-primary' : 'text-primary-fixed-dim'}`}
+                        />
+                        <div>
+                          <p className="text-title-md text-on-surface">Payout setup</p>
+                          <p className="mt-1 text-body-md text-on-surface-variant">{payoutStatusLabel}</p>
+                        </div>
+                      </div>
                     </div>
                   </section>
 
@@ -243,6 +271,11 @@ export default function OnboardingCompletePage({
               <MaterialIcon name="bolt" />
               Go Live
             </button>
+          )}
+          {restaurantReady && !payoutReady && (
+            <p className="text-center text-body-sm text-on-surface-variant sm:w-full">
+              Roam must verify your payout details before you can accept orders.
+            </p>
           )}
           <button
             type="button"

@@ -38,6 +38,8 @@ export interface Merchant {
   is_active: boolean;
   is_verified: boolean;
   is_accepting_orders: boolean;
+  payout_ready?: boolean;
+  is_test_merchant?: boolean;
   avg_prep_time_mins: number;
   min_order_amount: number;
   delivery_fee: number;

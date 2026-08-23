@@ -78,16 +78,24 @@ export function shouldBypassGoLiveGate(merchantId: string): boolean {
   return hasDismissedGoLiveScreen(merchantId) || hasRestaurantSetupInProgress(merchantId);
 }
 
+/** Payout verified by admin, or test store bypass. */
+export function isMerchantPayoutGoLiveReady(
+  merchant: Pick<Merchant, 'payout_ready' | 'is_test_merchant'>,
+): boolean {
+  return Boolean(merchant.payout_ready || merchant.is_test_merchant);
+}
+
 export async function isVerticalGoLiveReady(
-  merchant: Pick<Merchant, 'go_live_rule'>,
+  merchant: Pick<Merchant, 'go_live_rule' | 'payout_ready' | 'is_test_merchant'>,
 ): Promise<boolean> {
   const status = await fetchApplicationStatus();
   const rule = resolveGoLiveRule(merchant.go_live_rule ?? status.merchant?.go_live_rule);
   const c = status.checklist;
-  if (rule === 'catalog_imported' || rule === 'pos_connected') {
-    return c.catalogComplete && c.profileComplete && c.hoursComplete && c.bankComplete;
-  }
-  return c.menuComplete && c.profileComplete && c.hoursComplete && c.bankComplete;
+  const setupReady =
+    rule === 'catalog_imported' || rule === 'pos_connected'
+      ? c.catalogComplete && c.profileComplete && c.hoursComplete && c.documentsComplete
+      : c.menuComplete && c.profileComplete && c.hoursComplete && c.documentsComplete;
+  return setupReady && isMerchantPayoutGoLiveReady(merchant);
 }
 
 /** Owner has not finished the partner onboarding application. */

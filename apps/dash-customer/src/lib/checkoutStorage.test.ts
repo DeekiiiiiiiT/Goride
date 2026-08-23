@@ -28,11 +28,11 @@ function stubLocalStorage() {
 describe('normalizePaymentMethodId', () => {
   it('keeps live rails', () => {
     expect(normalizePaymentMethodId('paypal')).toBe('paypal');
-    expect(normalizePaymentMethodId('cash')).toBe('cash');
     expect(normalizePaymentMethodId('wipay')).toBe('wipay');
   });
 
-  it('maps leftover fake card ids to WiPay', () => {
+  it('maps cash and legacy card ids to WiPay', () => {
+    expect(normalizePaymentMethodId('cash')).toBe('wipay');
     expect(normalizePaymentMethodId('visa_1212')).toBe('wipay');
   });
 });
@@ -44,7 +44,7 @@ describe('hydratePreferredPaymentMethod', () => {
 
   it('writes the account default into local checkout prefs', () => {
     saveCheckoutPreferences({ paymentMethodId: 'wipay' });
-    expect(hydratePreferredPaymentMethod('cash')).toBe('cash');
-    expect(getCheckoutPreferences().paymentMethodId).toBe('cash');
+    expect(hydratePreferredPaymentMethod('cash')).toBe('wipay');
+    expect(getCheckoutPreferences().paymentMethodId).toBe('wipay');
   });
 });

@@ -136,6 +136,7 @@
   "workspace": {
     "packageJson": {
       "dependencies": [
+        "npm:@playwright/test@^1.62.1",
         "npm:sharp@~0.35.3",
         "npm:typescript@^5.4.0"
       ]
@@ -234,7 +235,6 @@
             "npm:leaflet@^1.9.4",
             "npm:lucide-react@0.487",
             "npm:react-dom@^18.3.1",
-            "npm:react-router-dom@^7.6.0",
             "npm:react@^18.3.1",
             "npm:sonner@^2.0.3",
             "npm:tailwind-merge@*",
@@ -263,15 +263,19 @@
             "npm:@tailwindcss/vite@4.1.12",
             "npm:@tanstack/react-query@*",
             "npm:@types/google.maps@^3.64.1",
+            "npm:@types/leaflet@^1.9.21",
             "npm:@types/node@^20.10.0",
             "npm:@types/react-dom@^18.3.0",
             "npm:@types/react@^18.3.0",
             "npm:@vitejs/plugin-react@^4.7.0",
             "npm:class-variance-authority@~0.7.1",
             "npm:clsx@*",
+            "npm:leaflet@^1.9.4",
             "npm:lucide-react@0.487",
             "npm:react-dom@^18.3.1",
+            "npm:react-router-dom@^7.6.0",
             "npm:react@^18.3.1",
+            "npm:recharts@^3.8.1",
             "npm:sonner@^2.0.3",
             "npm:tailwind-merge@*",
             "npm:tailwindcss@4.1.12",
@@ -315,12 +319,20 @@
             "npm:react-router-dom@^7.6.0",
             "npm:react@^18.3.1",
             "npm:recharts@^3.8.1",
+            "npm:sharp@~0.35.3",
             "npm:sonner@^2.0.3",
             "npm:tailwind-merge@*",
             "npm:tailwindcss@4.1.12",
             "npm:typescript@^5.4.0",
+            "npm:vite-plugin-pwa@^1.3.0",
             "npm:vite@6.3.5",
-            "npm:vitest@^3.2.4"
+            "npm:vitest@^3.2.4",
+            "npm:workbox-core@^7.4.1",
+            "npm:workbox-expiration@^7.4.1",
+            "npm:workbox-precaching@^7.4.1",
+            "npm:workbox-routing@^7.4.1",
+            "npm:workbox-strategies@^7.4.1",
+            "npm:workbox-window@^7.4.1"
           ]
         }
       },
@@ -599,6 +611,50 @@
           ]
         }
       },
+      "apps/rush-command": {
+        "packageJson": {
+          "dependencies": [
+            "npm:@capacitor/android@^7.6.5",
+            "npm:@capacitor/app@^7.1.2",
+            "npm:@capacitor/browser@^7.0.5",
+            "npm:@capacitor/cli@^7.6.5",
+            "npm:@capacitor/core@^7.6.5",
+            "npm:@capacitor/ios@^7.6.8",
+            "npm:@capacitor/push-notifications@^7.0.7",
+            "npm:@capacitor/splash-screen@^7.0.5",
+            "npm:@capacitor/status-bar@^7.0.6",
+            "npm:@dnd-kit/core@^6.3.1",
+            "npm:@dnd-kit/sortable@10",
+            "npm:@dnd-kit/utilities@^3.2.2",
+            "npm:@sentry/react@^10.69.0",
+            "npm:@stripe/terminal-js@0.24",
+            "npm:@supabase/supabase-js@2",
+            "npm:@tailwindcss/vite@4.1.12",
+            "npm:@tanstack/react-query@*",
+            "npm:@types/leaflet@^1.9.21",
+            "npm:@types/node@^20.10.0",
+            "npm:@types/react-dom@^18.3.0",
+            "npm:@types/react@^18.3.0",
+            "npm:@vitejs/plugin-react@^4.7.0",
+            "npm:class-variance-authority@~0.7.1",
+            "npm:clsx@*",
+            "npm:leaflet@^1.9.4",
+            "npm:lucide-react@0.487",
+            "npm:qrcode.react@^4.2.0",
+            "npm:react-dom@^18.3.1",
+            "npm:react-easy-crop@^6.0.2",
+            "npm:react-router-dom@^7.6.0",
+            "npm:react@^18.3.1",
+            "npm:recharts@^3.8.1",
+            "npm:sonner@^2.0.3",
+            "npm:tailwind-merge@*",
+            "npm:tailwindcss@4.1.12",
+            "npm:typescript@^5.4.0",
+            "npm:vite@6.3.5",
+            "npm:vitest@^3.2.4"
+          ]
+        }
+      },
       "packages/admin-core": {
         "packageJson": {
           "dependencies": [
@@ -614,6 +670,38 @@
         "packageJson": {
           "dependencies": [
             "npm:@supabase/supabase-js@2",
+            "npm:vitest@^3.2.4"
+          ]
+        }
+      },
+      "packages/dash-admin": {
+        "packageJson": {
+          "dependencies": [
+            "npm:@supabase/supabase-js@2",
+            "npm:@types/leaflet@^1.9.21",
+            "npm:@types/react-dom@^18.3.0",
+            "npm:@types/react@^18.3.0",
+            "npm:leaflet@^1.9.4",
+            "npm:lucide-react@0.487",
+            "npm:react-dom@^18.3.1",
+            "npm:react-router-dom@^7.6.0",
+            "npm:react@^18.3.1",
+            "npm:recharts@^3.8.1",
+            "npm:sonner@^2.0.3",
+            "npm:typescript@^5.4.0"
+          ]
+        }
+      },
+      "packages/dash-pricing": {
+        "packageJson": {
+          "dependencies": [
+            "npm:vitest@^3.2.4"
+          ]
+        }
+      },
+      "packages/finance-core": {
+        "packageJson": {
+          "dependencies": [
             "npm:vitest@^3.2.4"
           ]
         }
@@ -656,6 +744,15 @@
           "dependencies": [
             "npm:lucide-react@0.487",
             "npm:vitest@^3.2.4"
+          ]
+        }
+      },
+      "packages/rush-chat": {
+        "packageJson": {
+          "dependencies": [
+            "npm:@supabase/supabase-js@2",
+            "npm:lucide-react@0.487",
+            "npm:sonner@^2.0.3"
           ]
         }
       },

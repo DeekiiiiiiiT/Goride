@@ -127,7 +127,12 @@ export function computeSetupChecklist(input: {
   };
 }
 
-export function isGoLiveReady(checklist: SetupChecklist, goLiveRule: GoLiveRule): boolean {
+export type GoLivePayoutContext = {
+  payoutReady?: boolean | null;
+  isTestMerchant?: boolean | null;
+};
+
+export function isSetupChecklistComplete(checklist: SetupChecklist, goLiveRule: GoLiveRule): boolean {
   const base =
     checklist.profileComplete &&
     checklist.documentsComplete &&
@@ -138,17 +143,38 @@ export function isGoLiveReady(checklist: SetupChecklist, goLiveRule: GoLiveRule)
   return base && checklist.menuComplete;
 }
 
+/** Setup checklist + admin-verified payout (or test-merchant bypass). */
+export function isGoLiveReady(
+  checklist: SetupChecklist,
+  goLiveRule: GoLiveRule,
+  payout?: GoLivePayoutContext,
+): boolean {
+  if (!isSetupChecklistComplete(checklist, goLiveRule)) return false;
+  if (!payout) return true;
+  if (payout.isTestMerchant === true) return true;
+  return payout.payoutReady === true;
+}
+
+export function payoutVerificationLabel(payout?: GoLivePayoutContext): string | null {
+  if (!payout || payout.isTestMerchant) return null;
+  if (payout.payoutReady) return null;
+  return "Payout verification";
+}
+
 export function missingSetupLabels(
   checklist: SetupChecklist,
   goLiveRule: GoLiveRule = "menu_min_5",
+  payout?: GoLivePayoutContext,
 ): string[] {
   const fields = SETUP_CHECKLIST_FIELDS.filter(({ key }) => {
-    if (key === "bankComplete") return false;
     if (key === "menuComplete" && goLiveRule !== "menu_min_5") return false;
     if (key === "catalogComplete" && goLiveRule === "menu_min_5") return false;
     return !checklist[key];
   });
-  return fields.map(({ label }) => label);
+  const labels = fields.map(({ label }) => label);
+  const payoutLabel = payoutVerificationLabel(payout);
+  if (payoutLabel) labels.push(payoutLabel);
+  return labels;
 }
 
 export function isApplicationSetupComplete(

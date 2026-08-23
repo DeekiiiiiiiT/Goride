@@ -4,6 +4,7 @@ import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import {
   PAYMENT_OPTIONS,
   getCheckoutPreferences,
+  isSelectablePaymentMethod,
   type PaymentMethodId,
 } from '@/lib/checkoutStorage';
 import { persistPreferredPaymentMethod } from '@/lib/paymentPreference';
@@ -91,11 +92,15 @@ export default function PaymentMethodsPage({ returnTo = 'account', mode = 'manag
             Checkout options
           </h2>
           <div className="flex flex-col gap-2">
-            {PAYMENT_OPTIONS.map((option) => (
+            {PAYMENT_OPTIONS.map((option) => {
+              const disabled = option.comingSoon === true || !isSelectablePaymentMethod(option.id);
+              return (
               <button
                 key={option.id}
                 type="button"
+                disabled={disabled}
                 onClick={() => {
+                  if (disabled) return;
                   setSelected(option.id);
                   if (!isSelectMode) {
                     void persistPreferredPaymentMethod(option.id).catch(() => {
@@ -104,7 +109,11 @@ export default function PaymentMethodsPage({ returnTo = 'account', mode = 'manag
                   }
                 }}
                 className={`bg-surface-container-lowest rounded-xl p-4 shadow-[0px_4px_20px_rgba(0,0,0,0.04)] border text-left flex items-center gap-3 ${
-                  selected === option.id ? 'border-primary' : 'border-surface-variant'
+                  disabled
+                    ? 'border-surface-variant opacity-60 cursor-not-allowed'
+                    : selected === option.id
+                      ? 'border-primary'
+                      : 'border-surface-variant'
                 }`}
               >
                 <div className="w-10 h-10 rounded-full bg-surface-container flex items-center justify-center text-primary">
@@ -114,11 +123,17 @@ export default function PaymentMethodsPage({ returnTo = 'account', mode = 'manag
                   <span className="text-body-md font-medium block">{option.label}</span>
                   <span className="text-body-sm text-on-surface-variant">{option.description}</span>
                 </div>
-                {selected === option.id && (
+                {option.comingSoon && (
+                  <span className="text-label-sm font-medium text-on-surface-variant bg-surface-container px-2 py-1 rounded-full shrink-0">
+                    Coming soon
+                  </span>
+                )}
+                {!disabled && selected === option.id && (
                   <MaterialIcon name="check_circle" className="text-primary" filled />
                 )}
               </button>
-            ))}
+            );
+            })}
           </div>
         </section>
 

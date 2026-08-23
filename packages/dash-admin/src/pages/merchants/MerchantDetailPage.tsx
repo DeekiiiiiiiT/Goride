@@ -185,6 +185,30 @@ export function MerchantDetailPage() {
     }
   };
 
+  const runPayoutReadyToggle = async () => {
+    if (!merchant || !canWrite) return;
+    const next = !merchant.payout_ready;
+    try {
+      await patchMerchantOps(token, merchant.id, { payout_ready: next });
+      toast.success(next ? 'Payout marked verified' : 'Payout verification revoked');
+      void load();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Payout update failed');
+    }
+  };
+
+  const runTestMerchantToggle = async () => {
+    if (!merchant || !canWrite) return;
+    const next = !merchant.is_test_merchant;
+    try {
+      await patchMerchantOps(token, merchant.id, { is_test_merchant: next });
+      toast.success(next ? 'Marked as test merchant' : 'Test merchant flag removed');
+      void load();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Test merchant update failed');
+    }
+  };
+
   const runRestaurantMgmtToggle = async () => {
     if (!merchant || !canWrite) return;
     const caps = merchant.capabilities ?? ['roam_delivery'];
@@ -417,6 +441,20 @@ export function MerchantDetailPage() {
                 Compliance queue
               </span>
             )}
+            {merchant.is_test_merchant && (
+              <span className="text-xs px-2 py-0.5 rounded-full bg-sky-500/15 text-sky-300">
+                Test merchant
+              </span>
+            )}
+            <span
+              className={`text-xs px-2 py-0.5 rounded-full ${
+                merchant.payout_ready
+                  ? 'bg-emerald-500/15 text-emerald-300'
+                  : 'bg-orange-500/15 text-orange-300'
+              }`}
+            >
+              Payout: {merchant.payout_ready ? 'Verified' : 'Pending'}
+            </span>
           </div>
         </div>
         {canWrite && merchant.onboarding_status !== 'draft' && (
@@ -426,6 +464,20 @@ export function MerchantDetailPage() {
             </button>
             <button type="button" onClick={() => void runOpsToggle()} className="px-3 py-1.5 text-sm rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800">
               {merchant.is_accepting_orders ? 'Force pause' : 'Resume orders'}
+            </button>
+            <button
+              type="button"
+              onClick={() => void runPayoutReadyToggle()}
+              className="px-3 py-1.5 text-sm rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800"
+            >
+              {merchant.payout_ready ? 'Revoke payout verification' : 'Mark payout verified'}
+            </button>
+            <button
+              type="button"
+              onClick={() => void runTestMerchantToggle()}
+              className="px-3 py-1.5 text-sm rounded-lg border border-amber-500/40 text-amber-200 hover:bg-amber-500/10"
+            >
+              {merchant.is_test_merchant ? 'Remove test flag' : 'Mark test merchant'}
             </button>
             <button
               type="button"

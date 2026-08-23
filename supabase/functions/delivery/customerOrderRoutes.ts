@@ -229,7 +229,14 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
       discount,
     });
     const tip = Math.max(0, Number(body.tip) || 0);
-    const paymentMethod = body.paymentMethod || "cash";
+    const paymentMethod = body.paymentMethod || "wipay";
+
+    if (paymentMethod === "cash" && Deno.env.get("DASH_ALLOW_CASH_ORDERS") !== "true") {
+      return c.json({
+        error: "Cash on delivery is not available yet. Please pay with card via WiPay or PayPal.",
+        code: "cash_not_available",
+      }, 400);
+    }
 
     // Model B pricing when market profile has pricing_v2_enabled
     const v2Pricing = await resolveDashOrderPricing(serviceSb, {

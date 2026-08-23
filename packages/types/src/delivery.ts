@@ -187,6 +187,8 @@ export interface Merchant {
   isActive: boolean;
   isVerified: boolean;
   isAcceptingOrders: boolean;
+  payoutReady?: boolean;
+  isTestMerchant?: boolean;
   avgPrepTimeMins: number;
   minOrderAmount: number;
   deliveryFee: number;

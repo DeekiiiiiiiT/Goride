@@ -16,6 +16,7 @@ import {
 import { mountDashTeamRoutes } from "./dashTeamRoutes.ts";
 import { mountOnboardingConfigAdminRoutes } from "./onboardingConfigRoutes.ts";
 import { registerDashPlayStoreLaunchRoutes } from "./playStoreLaunchShared.ts";
+import { assertCanEnableAcceptingOrders } from "../merchantPayoutGate.ts";
 import {
   ALLOWED_TRANSITIONS,
   canSuspendMerchant,
@@ -638,8 +639,53 @@ export function registerMerchantAdminRoutes(app: Hono) {
       updates.inventory_mode = caps.includes("in_store_operations") ? "enterprise" : "legacy";
     }
     const sb = getDb();
+    const { data: current, error: loadError } = await sb.from("merchants").select("*").eq("id", id).single();
+    if (loadError || !current) return c.json({ error: "Merchant not found" }, 404);
+    const currentRow = current as Record<string, unknown>;
+
+    if (Object.prototype.hasOwnProperty.call(body, "payout_ready")) {
+      const nextReady = Boolean(body.payout_ready);
+      updates.payout_ready = nextReady;
+      updates.payout_ready_at = nextReady ? new Date().toISOString() : null;
+      updates.payout_ready_by = nextReady ? admin.id : null;
+    }
+    if (Object.prototype.hasOwnProperty.call(body, "is_test_merchant")) {
+      updates.is_test_merchant = Boolean(body.is_test_merchant);
+    }
+
+    if (body.is_accepting_orders != null && Boolean(body.is_accepting_orders)) {
+      const gate = assertCanEnableAcceptingOrders(
+        {
+          is_accepting_orders: currentRow.is_accepting_orders as boolean | null,
+          payout_ready: (updates.payout_ready ?? currentRow.payout_ready) as boolean | null,
+          is_test_merchant: (updates.is_test_merchant ?? currentRow.is_test_merchant) as boolean | null,
+        },
+        true,
+        { adminBypass: true },
+      );
+      if (!gate.ok) return c.json(gate.body, gate.status);
+    }
+
     const { data, error } = await sb.from("merchants").update(updates).eq("id", id).select().single();
     if (error) return c.json({ error: error.message }, 500);
+    if (Object.prototype.hasOwnProperty.call(body, "payout_ready")) {
+      await logMerchantAudit(sb, {
+        merchant_id: id,
+        actor_id: admin.id,
+        actor_email: admin.email,
+        action: "payout_ready_updated",
+        notes: `payout_ready=${Boolean(body.payout_ready)}`,
+      });
+    }
+    if (Object.prototype.hasOwnProperty.call(body, "is_test_merchant")) {
+      await logMerchantAudit(sb, {
+        merchant_id: id,
+        actor_id: admin.id,
+        actor_email: admin.email,
+        action: "test_merchant_updated",
+        notes: `is_test_merchant=${Boolean(body.is_test_merchant)}`,
+      });
+    }
     await logMerchantAudit(sb, {
       merchant_id: id,
       actor_id: admin.id,

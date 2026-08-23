@@ -7,6 +7,7 @@ Plain-English guide for running smoke tests. You do **not** need to open the app
 1. Open a terminal in the **Goride** project folder.
 2. Be logged into Supabase CLI (`supabase login`) **or** set `SUPABASE_ANON_KEY` and `SUPABASE_SERVICE_ROLE_KEY` in your environment.
 3. Tell your AI assistant which test to run — copy a line from the tables below.
+4. **Cash-order smokes only:** set Supabase Edge secret `DASH_ALLOW_CASH_ORDERS=true` on non-prod (customer checkout is card-only in production).
 
 ## How to ask your AI to run a test
 

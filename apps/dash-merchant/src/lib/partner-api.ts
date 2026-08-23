@@ -61,6 +61,7 @@ export interface ApplicationStatusResponse {
     hoursComplete: boolean;
     menuComplete: boolean;
     catalogComplete: boolean;
+    payoutReady?: boolean;
   };
   reviewChecklist?: {
     profileComplete: boolean;

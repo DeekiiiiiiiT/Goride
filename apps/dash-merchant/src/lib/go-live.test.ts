@@ -1,5 +1,6 @@
 import { describe, expect, it, beforeEach, vi } from 'vitest';
 import {
+  isMerchantPayoutGoLiveReady,
   rememberGoLiveComplete,
   shouldShowGoLiveScreen,
 } from './go-live';
@@ -39,5 +40,13 @@ describe('shouldShowGoLiveScreen', () => {
   it('does not reopen the gate after pause once go-live was remembered', () => {
     rememberGoLiveComplete(merchant.id);
     expect(shouldShowGoLiveScreen({ ...merchant, is_accepting_orders: false })).toBe(false);
+  });
+});
+
+describe('isMerchantPayoutGoLiveReady', () => {
+  it('allows test merchants and payout_ready stores', () => {
+    expect(isMerchantPayoutGoLiveReady({ payout_ready: false, is_test_merchant: false })).toBe(false);
+    expect(isMerchantPayoutGoLiveReady({ payout_ready: true, is_test_merchant: false })).toBe(true);
+    expect(isMerchantPayoutGoLiveReady({ payout_ready: false, is_test_merchant: true })).toBe(true);
   });
 });

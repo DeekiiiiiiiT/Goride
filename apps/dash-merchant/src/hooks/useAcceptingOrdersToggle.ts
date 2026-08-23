@@ -43,14 +43,25 @@ export function useAcceptingOrdersToggle(merchant: Merchant | null | undefined) 
         }),
       });
 
-      if (!res.ok) throw new Error('Failed to update store status');
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({})) as { error?: string; code?: string };
+        const err = new Error(body.error || 'Failed to update store status') as Error & { code?: string };
+        err.code = body.code;
+        throw err;
+      }
       return res.json();
     },
     onSuccess: (_data, isAccepting) => {
       queryClient.invalidateQueries({ queryKey: ['my-merchant'] });
       toast.success(isAccepting ? 'You are now accepting orders' : 'Orders paused');
     },
-    onError: () => toast.error('Failed to update store status'),
+    onError: (error: Error & { code?: string }) => {
+      if (error.code === 'payout_not_ready') {
+        toast.error('Payout setup must be verified before accepting orders');
+        return;
+      }
+      toast.error(error.message || 'Failed to update store status');
+    },
   });
 
   return {

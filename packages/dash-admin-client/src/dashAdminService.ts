@@ -29,6 +29,8 @@ export interface DashMerchant {
   is_active: boolean;
   is_verified: boolean;
   is_accepting_orders: boolean;
+  payout_ready?: boolean;
+  is_test_merchant?: boolean;
   avg_prep_time_mins: number | null;
   min_order_amount: number | null;
   delivery_fee: number | null;
@@ -324,6 +326,8 @@ export function patchMerchantOps(
     delivery_radius_km?: number;
     admin_internal_notes?: string;
     capabilities?: string[];
+    payout_ready?: boolean;
+    is_test_merchant?: boolean;
   },
 ) {
   return deliveryFetch(accessToken, `/admin/merchants/${id}/ops`, {

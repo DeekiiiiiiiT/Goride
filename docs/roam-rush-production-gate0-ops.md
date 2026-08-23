@@ -41,6 +41,7 @@ Confirm in Supabase Edge Function secrets (and CI where applicable):
 | `WIPAY_API_KEY` | WiPay API auth |
 | `WIPAY_CALLBACK_SECRET` | Payment / refund callback HMAC |
 | `WIPAY_ENV` | `sandbox` vs live |
+| `DASH_ALLOW_CASH_ORDERS` | Set to `true` in non-prod only — allows smoke/e2e cash orders; must be unset in production |
 | `GOOGLE_MAPS_API_KEY` | Server geocode / maps (delivery function) |
 | `VAPID` / VAPID key pair | Web Push for courier offer alerts (also set client `VITE_VAPID_PUBLIC_KEY`) |
 | `FCM_SERVICE_ACCOUNT_JSON` | Firebase Cloud Messaging HTTP v1 (preferred; service account JSON) |
