@@ -185,8 +185,6 @@ export function navIdToPath(navId: string): string {
       return '/couriers/presence';
     case 'couriers-ledger':
       return '/couriers/ledger';
-    case 'customers':
-      return '/customers';
     case 'markets':
       return '/markets';
     case 'users-directory':

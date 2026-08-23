@@ -17,8 +17,8 @@ import {
   type IdentityDetail,
   type CourierCrossPersonaWarning,
 } from '@roam/dash-admin-client';
-import { useAdminConfirm } from '../../contexts/AdminConfirmContext';
-import { useDashAdminAccess } from '../../hooks/useDashAdminAccess';
+import { useAdminConfirm } from '../../../contexts/AdminConfirmContext';
+import { useDashAdminAccess } from '../../../hooks/useDashAdminAccess';
 
 type Props = {
   userId: string;
