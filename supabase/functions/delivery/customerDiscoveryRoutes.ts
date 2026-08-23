@@ -177,9 +177,11 @@ export function registerCustomerDiscoveryRoutes(app: Hono, deps: CustomerDiscove
     const serviceSb = getServiceSupabase();
     const lat = c.req.query("lat");
     const lng = c.req.query("lng");
-    const { resolveActiveMarketIdFromPin } = await import("./discoveryMarketFilter.ts");
+    const { resolveActiveMarketIdFromPin, merchantMatchesDiscoveryPin } = await import(
+      "./discoveryMarketFilter.ts"
+    );
     const pin = await resolveActiveMarketIdFromPin(serviceSb, lat, lng);
-    if (pin.missingPin || !pin.covered || !pin.marketId) {
+    if (pin.missingPin || !pin.covered || pin.marketIds.length === 0) {
       return c.json({
         merchants: [],
         items: [],
@@ -189,15 +191,22 @@ export function registerCustomerDiscoveryRoutes(app: Hono, deps: CustomerDiscove
       });
     }
 
+    let merchantQuery = serviceSb
+      .from("merchants")
+      .select("id, name, logo_url, cover_image_url, cuisine_type, rating, avg_prep_time_mins, delivery_fee, min_order_amount, market_id")
+      .eq("is_active", true)
+      .eq("is_accepting_orders", true)
+      .or(`name.ilike."${pattern}",cuisine_type.ilike."${pattern}"`)
+      .limit(20);
+
+    if (pin.parishBoundaryMode) {
+      merchantQuery = merchantQuery.in("market_id", pin.marketIds);
+    } else {
+      merchantQuery = merchantQuery.eq("market_id", pin.marketId);
+    }
+
     const [merchantsRes, itemsRes] = await Promise.all([
-      serviceSb
-        .from("merchants")
-        .select("id, name, logo_url, cover_image_url, cuisine_type, rating, avg_prep_time_mins, delivery_fee, min_order_amount, market_id")
-        .eq("is_active", true)
-        .eq("is_accepting_orders", true)
-        .eq("market_id", pin.marketId)
-        .or(`name.ilike."${pattern}",cuisine_type.ilike."${pattern}"`)
-        .limit(20),
+      merchantQuery,
       serviceSb
         .from("menu_items")
         .select(
@@ -227,7 +236,10 @@ export function registerCustomerDiscoveryRoutes(app: Hono, deps: CustomerDiscove
       .filter((row: Record<string, unknown>) => {
         const merchant = row.merchant as Record<string, unknown> | null;
         return merchant?.is_active && merchant?.is_accepting_orders &&
-          String(merchant?.market_id ?? "") === pin.marketId;
+          merchantMatchesDiscoveryPin(
+            merchant?.market_id != null ? String(merchant.market_id) : null,
+            pin,
+          );
       })
       .map((row: Record<string, unknown>) => {
         const merchant = (row.merchant as Record<string, unknown>) || {};
@@ -243,7 +255,14 @@ export function registerCustomerDiscoveryRoutes(app: Hono, deps: CustomerDiscove
         };
       });
 
-    return c.json({ merchants, items, query: q, market_id: pin.marketId });
+    return c.json({
+      merchants,
+      items,
+      query: q,
+      market_id: pin.marketId,
+      parish_id: pin.parishId,
+      parish_boundary_mode: pin.parishBoundaryMode,
+    });
   });
 
   // Public merchant reviews from completed customer ratings (no fake names)

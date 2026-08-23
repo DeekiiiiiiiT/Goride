@@ -139,7 +139,7 @@ app.get("/merchants", async (c) => {
 
   const { resolveActiveMarketIdFromPin } = await import("./discoveryMarketFilter.ts");
   const pin = await resolveActiveMarketIdFromPin(supabase, lat, lng);
-  if (pin.missingPin || !pin.covered || !pin.marketId) {
+  if (pin.missingPin || !pin.covered || pin.marketIds.length === 0) {
     return c.json({
       merchants: [],
       limit,
@@ -155,8 +155,13 @@ app.get("/merchants", async (c) => {
     .select("*")
     .eq("onboarding_status", "submitted")
     .eq("is_active", true)
-    .eq("is_accepting_orders", true)
-    .eq("market_id", pin.marketId);
+    .eq("is_accepting_orders", true);
+
+  if (pin.parishBoundaryMode) {
+    query = query.in("market_id", pin.marketIds);
+  } else {
+    query = query.eq("market_id", pin.marketId);
+  }
 
   if (cuisine) {
     query = query.eq("cuisine_type", cuisine);
@@ -178,6 +183,8 @@ app.get("/merchants", async (c) => {
     offset,
     hasMore: (data?.length ?? 0) === limit,
     market_id: pin.marketId,
+    parish_id: pin.parishId,
+    parish_boundary_mode: pin.parishBoundaryMode,
   });
 });
 
@@ -2450,6 +2457,7 @@ import { registerCourierAdminRoutes } from "./admin/courierRoutes.ts";
 import { registerMerchantAdminRoutes } from "./admin/merchantRoutes.ts";
 import { registerOrderAdminRoutes } from "./admin/orderRoutes.ts";
 import { registerCustomerAdminRoutes } from "./admin/customerRoutes.ts";
+import { registerIdentityAdminRoutes } from "./admin/identityRoutes.ts";
 import { registerFinanceAdminRoutes } from "./admin/financeRoutes.ts";
 import { registerMarketAdminRoutes, registerPublicGeoRoutes } from "./admin/marketRoutes.ts";
 import { registerOpsAdminRoutes } from "./admin/opsRoutes.ts";
@@ -2477,6 +2485,7 @@ registerDashboardAdminRoutes(app);
 registerMerchantAdminRoutes(app);
 registerOrderAdminRoutes(app);
 registerCustomerAdminRoutes(app);
+registerIdentityAdminRoutes(app);
 registerFinanceAdminRoutes(app);
 registerCourierAdminRoutes(app);
 registerMarketAdminRoutes(app);

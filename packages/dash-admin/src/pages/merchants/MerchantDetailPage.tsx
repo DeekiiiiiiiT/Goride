@@ -14,6 +14,7 @@ import {
   deactivateMerchant,
   deleteMerchant,
   getMerchantDetail,
+  recomputeMerchantMarket,
   patchMerchantOps,
   reactivateMerchant,
   reviewMerchantDocument,
@@ -27,7 +28,9 @@ import {
   fetchPricingTiers,
   type MerchantTierRow,
   listMarkets,
+  type MerchantTeamMemberRow,
   type DashMarketRow,
+  revokeMerchantStaff,
 } from '@roam/dash-admin-client';
 import type { AdminOutletContext } from '../../DashAdminPortal';
 
@@ -73,6 +76,8 @@ export function MerchantDetailPage() {
   const [deliveryRadiusKm, setDeliveryRadiusKm] = useState('5');
   const [radiusSaving, setRadiusSaving] = useState(false);
   const [markets, setMarkets] = useState<DashMarketRow[]>([]);
+  const [team, setTeam] = useState<MerchantTeamMemberRow[]>([]);
+  const [pendingInvites, setPendingInvites] = useState<Array<Record<string, unknown>>>([]);
   const [selectedMarketId, setSelectedMarketId] = useState('');
   const [marketSaving, setMarketSaving] = useState(false);
 
@@ -102,6 +107,8 @@ export function MerchantDetailPage() {
       );
       setSelectedTierId(res.merchant.pricing_tier_id ?? '');
       setSelectedMarketId(res.merchant.market_id ?? '');
+      setTeam(res.team ?? []);
+      setPendingInvites(res.pendingInvites ?? []);
       const commOverride = res.merchant.merchant_commission_rate;
       setCommissionOverridePercent(
         commOverride != null && Number.isFinite(Number(commOverride))
@@ -367,6 +374,31 @@ export function MerchantDetailPage() {
       void load();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed to unlock town');
+    } finally {
+      setMarketSaving(false);
+    }
+  };
+
+  const reassignMarketFromPin = async () => {
+    if (!merchant || !canWrite) return;
+    const ok = await confirm({
+      title: 'Reassign from store pin?',
+      description:
+        'Updates delivery town from the store map pin. Locked merchants stay locked — only the town value changes.',
+      confirmLabel: 'Reassign',
+    });
+    if (!ok) return;
+    setMarketSaving(true);
+    try {
+      const res = await recomputeMerchantMarket(token, merchant.id);
+      toast.success(
+        res.suggested_market_id
+          ? 'Delivery town reassigned from store pin'
+          : 'No matching town for store pin — town cleared',
+      );
+      void load();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Reassign failed');
     } finally {
       setMarketSaving(false);
     }
@@ -713,14 +745,24 @@ export function MerchantDetailPage() {
               Save town
             </button>
             {merchant.market_id_locked && (
-              <button
-                type="button"
-                disabled={marketSaving}
-                onClick={() => void unlockMarketAssignment()}
-                className="px-3 py-1.5 text-sm rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800 disabled:opacity-50"
-              >
-                Allow auto town from pin
-              </button>
+              <>
+                <button
+                  type="button"
+                  disabled={marketSaving}
+                  onClick={() => void reassignMarketFromPin()}
+                  className="px-3 py-1.5 text-sm rounded-lg border border-amber-600/50 text-amber-200 hover:bg-amber-500/10 disabled:opacity-50"
+                >
+                  Reassign from store pin
+                </button>
+                <button
+                  type="button"
+                  disabled={marketSaving}
+                  onClick={() => void unlockMarketAssignment()}
+                  className="px-3 py-1.5 text-sm rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800 disabled:opacity-50"
+                >
+                  Allow auto town from pin
+                </button>
+              </>
             )}
           </div>
         )}
@@ -831,6 +873,46 @@ export function MerchantDetailPage() {
             : `global ${globalFeePercent}%`}
         </p>
       </section>
+
+      {(team.length > 0 || pendingInvites.length > 0) && (
+        <section className="rounded-xl border border-slate-800 bg-slate-900/50 p-4">
+          <h3 className="text-sm font-medium text-white mb-3">Store team</h3>
+          <ul className="space-y-2 text-sm">
+            {team.map((member) => (
+              <li key={member.id} className="flex flex-wrap items-center justify-between gap-2 text-slate-300">
+                <span>{member.name || member.email} — {member.role}{member.is_owner ? ' (owner)' : ''}</span>
+                {canWrite && !member.is_owner && (
+                  <button
+                    type="button"
+                    className="text-xs text-red-400 hover:text-red-300"
+                    onClick={() => {
+                      void prompt({
+                        title: 'Revoke staff access',
+                        description: `Remove ${member.email} from this store.`,
+                        confirmLabel: 'Revoke',
+                        variant: 'danger',
+                        fields: [{ key: 'reason', label: 'Reason', required: true }],
+                      }).then(async (values) => {
+                        if (!values) return;
+                        await revokeMerchantStaff(token, member.id, values.reason);
+                        toast.success('Staff access revoked');
+                        void load();
+                      });
+                    }}
+                  >
+                    Revoke
+                  </button>
+                )}
+              </li>
+            ))}
+            {pendingInvites.map((inv) => (
+              <li key={String(inv.id)} className="text-slate-500">
+                Pending invite: {String(inv.email)} ({String(inv.role)})
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       <section className="rounded-xl border border-slate-800 bg-slate-900/50 p-4">
         <h3 className="text-sm font-medium text-white mb-3">Audit log</h3>

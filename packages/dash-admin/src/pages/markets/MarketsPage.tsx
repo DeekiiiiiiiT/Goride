@@ -35,6 +35,7 @@ import {
   restoreCoverageVersion,
   formatMerchantRecomputeToast,
   updateMarket,
+  updateParish,
   updateParishOutline,
   updateZone,
   type ActivityLogRow,
@@ -112,6 +113,7 @@ type TownCardProps = {
   town: DashMarketRow;
   canWrite: boolean;
   expanded: boolean;
+  parishBoundaryMode?: boolean;
   onToggleExpanded: () => void;
   onToggleActive: (m: DashMarketRow) => void;
   onOpenMap: (opts?: { editor?: EditorTarget }) => void;
@@ -122,6 +124,7 @@ function TownCard({
   town: m,
   canWrite,
   expanded,
+  parishBoundaryMode,
   onToggleExpanded,
   onToggleActive,
   onOpenMap,
@@ -148,6 +151,11 @@ function TownCard({
             {m.draft_dirty ? (
               <span className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300">
                 Unpublished
+              </span>
+            ) : null}
+            {parishBoundaryMode ? (
+              <span className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-sky-500/15 text-sky-300">
+                Uses parish border
               </span>
             ) : null}
           </h4>
@@ -290,6 +298,8 @@ type MapOverlayProps = {
   }) => void;
   onPublish: () => void;
   onRestore: (versionId: string) => void;
+  recomputeLocked: boolean;
+  onRecomputeLockedChange: (value: boolean) => void;
   onImportGeoJson: (text: string, promote: boolean) => void;
   onImportCsv: (text: string, promote: boolean) => void;
   onRefreshReadiness: () => void;
@@ -314,6 +324,8 @@ function TownMapOverlay({
   onSaveEditor,
   onPublish,
   onRestore,
+  recomputeLocked,
+  onRecomputeLockedChange,
   onImportGeoJson,
   onImportCsv,
   onRefreshReadiness,
@@ -596,6 +608,15 @@ function TownMapOverlay({
                   </div>
                 )}
               </div>
+              <label className="inline-flex items-center gap-1.5 text-[11px] text-slate-400 mr-1">
+                <input
+                  type="checkbox"
+                  checked={recomputeLocked}
+                  onChange={(e) => onRecomputeLockedChange(e.target.checked)}
+                  className="rounded border-slate-600"
+                />
+                Include locked merchants
+              </label>
               <button
                 type="button"
                 disabled={saving || !town.draft_dirty}
@@ -937,8 +958,10 @@ function ParishMapOverlay({
 
         <div className="flex-1 overflow-y-auto p-4 space-y-3">
           <p className="text-xs text-slate-200/90 rounded-lg border border-slate-500/40 bg-slate-500/10 px-3 py-2">
-            Editing parish outline. Town borders are reference only — they do not change customer
-            coverage.
+            Editing parish outline.
+            {parish.coverage_mode === 'parish_boundary'
+              ? ' Parish border mode — this outline is live customer delivery.'
+              : ' Town zones mode — this outline is an outer gate on town delivery.'}
           </p>
 
           <ZoneMapEditor
@@ -988,6 +1011,7 @@ export function MarketsPage() {
   const [mapTownId, setMapTownId] = useState<string | null>(null);
   const [mapParishId, setMapParishId] = useState<string | null>(null);
   const [parishEditing, setParishEditing] = useState(false);
+  const [recomputeLockedOnPublish, setRecomputeLockedOnPublish] = useState(false);
   const [tipTownId, setTipTownId] = useState<string | null>(null);
   const [readiness, setReadiness] = useState<MarketReadiness | null>(null);
   const [versions, setVersions] = useState<CoverageVersionRow[]>([]);
@@ -1268,6 +1292,7 @@ export function MarketsPage() {
     const isCollapsed = collapsed[p.id] !== false;
     const towns = p.towns ?? [];
     const hasParishBorder = parishFoundationVerts(p).length >= 3;
+    const parishBoundaryMode = p.coverage_mode === 'parish_boundary';
     return (
       <div key={p.id} className="rounded-xl border border-slate-800 bg-slate-900/40 overflow-hidden">
         <div className="flex flex-wrap items-center gap-2 px-4 py-3 border-b border-slate-800/80">
@@ -1283,8 +1308,46 @@ export function MarketsPage() {
             <p className="text-xs text-slate-500">
               Parish · {hasParishBorder ? 'border set' : 'no border yet'} · {towns.length} town
               {towns.length === 1 ? '' : 's'}
+              {parishBoundaryMode ? ' · parish border delivery' : ' · town zones + parish gate'}
             </p>
           </div>
+          {canWrite && (
+            <select
+              value={p.coverage_mode ?? 'town_zones'}
+              disabled={saving}
+              onChange={(e) => {
+                void (async () => {
+                  const mode = e.target.value as 'town_zones' | 'parish_boundary';
+                  if (
+                    mode === 'parish_boundary' &&
+                    !window.confirm(
+                      'Parish border mode uses the parish outline for customer delivery across all towns in this parish. Continue?',
+                    )
+                  ) {
+                    return;
+                  }
+                  setSaving(true);
+                  try {
+                    await updateParish(session.access_token, p.id, { coverage_mode: mode });
+                    toast.success(
+                      mode === 'parish_boundary'
+                        ? 'Parish border mode enabled'
+                        : 'Town zones mode enabled',
+                    );
+                    await load();
+                  } catch (err) {
+                    toast.error(err instanceof Error ? err.message : 'Update failed');
+                  } finally {
+                    setSaving(false);
+                  }
+                })();
+              }}
+              className="px-2 py-1 text-xs rounded-lg bg-slate-950 border border-slate-700 text-white"
+            >
+              <option value="town_zones">Town zones</option>
+              <option value="parish_boundary">Parish border</option>
+            </select>
+          )}
           <button
             type="button"
             onClick={() => openParishMap(p.id)}
@@ -1353,7 +1416,13 @@ export function MarketsPage() {
             {towns.length === 0 ? (
               <p className="text-xs text-slate-500">No towns in this parish yet.</p>
             ) : (
-              towns.map((t) => <TownCard key={t.id} {...townProps(t)} />)
+              towns.map((t) => (
+                <TownCard
+                  key={t.id}
+                  {...townProps(t)}
+                  parishBoundaryMode={parishBoundaryMode}
+                />
+              ))
             )}
           </div>
         )}
@@ -1373,7 +1442,8 @@ export function MarketsPage() {
             Delivery Markets
           </h2>
           <p className="text-sm text-slate-400 mt-1">
-            Two foundations: parish border, then town border. Non-delivery zones sit on towns.
+            Parish border sets the outer limit or whole-parish launch. Town borders apply when a
+            parish uses town zones mode.
           </p>
         </div>
         {canWrite && (
@@ -1391,9 +1461,8 @@ export function MarketsPage() {
       <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-100">
         <p className="font-medium text-amber-200">Ops playbook</p>
         <p className="mt-1 text-amber-100/80">
-          Open parish map → set parish border once → Open town map → set town border → add
-          non-delivery zones → Publish coverage → Activate. Customer delivery uses town borders
-          only.
+          Open parish map → set parish border → choose coverage mode → Open town map → set town
+          border (town zones mode) → add non-delivery zones → Publish coverage → Activate.
         </p>
       </div>
 
@@ -1479,6 +1548,8 @@ export function MarketsPage() {
           onClose={closeTownMap}
           onSetEditor={setEditor}
           onSaveEditor={(payload) => void saveEditor(payload)}
+          recomputeLocked={recomputeLockedOnPublish}
+          onRecomputeLockedChange={setRecomputeLockedOnPublish}
           onRefreshReadiness={() => void refreshOverlayMeta()}
           onRequestEditFoundationOnMap={() => {
             const delivery = primaryDeliveryArea(mapTown);
@@ -1519,7 +1590,9 @@ export function MarketsPage() {
             void (async () => {
               setSaving(true);
               try {
-                const published = await publishMarketCoverage(session.access_token, mapTown.id);
+                const published = await publishMarketCoverage(session.access_token, mapTown.id, {
+                  recompute_locked: recomputeLockedOnPublish,
+                });
                 toast.success(
                   `Coverage published${formatMerchantRecomputeToast(published.merchant_recompute)}`,
                 );
@@ -1542,6 +1615,7 @@ export function MarketsPage() {
                   mapTown.id,
                   versionId,
                   true,
+                  recomputeLockedOnPublish,
                 );
                 toast.success(
                   `Version restored and published${formatMerchantRecomputeToast(restored.merchant_recompute)}`,

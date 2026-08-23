@@ -65,27 +65,57 @@ Deno.test("asCoverageZones preserves market_id and kind", () => {
   assertEquals(zones[0].market_id, ST_MARKET);
 });
 
+const ST_PARISH = "parish-st-catherine";
+const ST_FOUNDATION: CoverageZone["polygon"] = [
+  { lat: 17.98, lng: -77.05 },
+  { lat: 17.98, lng: -76.85 },
+  { lat: 18.08, lng: -76.85 },
+  { lat: 18.08, lng: -77.05 },
+];
+
 function mockSb(opts: {
   markets: Array<Record<string, unknown>>;
   zonesByMarket: Record<string, Record<string, unknown>[]>;
   versions?: Record<string, { zones_json: unknown }>;
+  parishes?: Array<Record<string, unknown>>;
+  marketById?: Record<string, Record<string, unknown>>;
 }) {
   return {
     from(table: string) {
       if (table === "service_markets") {
         return {
-          select() {
+          select(_cols?: string) {
             return {
-              eq(_col: string, val: unknown) {
-                const rows = opts.markets.filter((m) => m.is_active === val || val === true);
-                return Promise.resolve({
-                  data: val === true ? opts.markets.filter((m) => m.is_active) : rows,
-                });
+              eq(col: string, val: unknown) {
+                if (col === "is_active") {
+                  return Promise.resolve({
+                    data: opts.markets.filter((m) => m.is_active === val),
+                  });
+                }
+                if (col === "id") {
+                  const id = String(val);
+                  const row = opts.marketById?.[id] ??
+                    opts.markets.find((m) => String(m.id) === id) ??
+                    null;
+                  return {
+                    maybeSingle() {
+                      return Promise.resolve({ data: row });
+                    },
+                  };
+                }
+                return Promise.resolve({ data: [] });
               },
               then(resolve: (v: unknown) => unknown) {
                 return Promise.resolve({ data: opts.markets }).then(resolve);
               },
             };
+          },
+        };
+      }
+      if (table === "service_parishes") {
+        return {
+          select() {
+            return Promise.resolve({ data: opts.parishes ?? [] });
           },
         };
       }
@@ -131,8 +161,8 @@ function mockSb(opts: {
 Deno.test("resolveMarketForPoint — covered returns market, never invents first market", async () => {
   const sb = mockSb({
     markets: [
-      { id: ST_MARKET, is_active: true, published_version_id: null },
-      { id: KINGSTON_MARKET, is_active: false, published_version_id: null },
+      { id: ST_MARKET, slug: "spanish-town", is_active: true, published_version_id: null, parish_id: null },
+      { id: KINGSTON_MARKET, slug: "kingston", is_active: false, published_version_id: null, parish_id: null },
     ],
     zonesByMarket: {
       [ST_MARKET]: [{
@@ -156,7 +186,7 @@ Deno.test("resolveMarketForPoint — covered returns market, never invents first
 
 Deno.test("assertSameMarketCoverage — same town ok; mismatch and miss reject", async () => {
   const sb = mockSb({
-    markets: [{ id: ST_MARKET, is_active: true, published_version_id: null }],
+    markets: [{ id: ST_MARKET, slug: "spanish-town", is_active: true, published_version_id: null, parish_id: ST_PARISH }],
     zonesByMarket: {
       [ST_MARKET]: [{
         id: "z-st",
@@ -166,6 +196,12 @@ Deno.test("assertSameMarketCoverage — same town ok; mismatch and miss reject",
         polygon: ST_INCLUDE.polygon,
       }],
     },
+    parishes: [{
+      id: ST_PARISH,
+      name: "St Catherine",
+      coverage_mode: "town_zones",
+      foundation_polygon: ST_FOUNDATION,
+    }],
   });
 
   const ok = await assertSameMarketCoverage(sb, {
@@ -206,4 +242,101 @@ Deno.test("assertSameMarketCoverage — same town ok; mismatch and miss reject",
   });
   assertEquals(noPin.ok, false);
   if (!noPin.ok) assertEquals(noPin.code, "dropoff_required");
+});
+
+Deno.test("assertSameMarketCoverage — outside parish foundation rejects", async () => {
+  const sb = mockSb({
+    markets: [{ id: ST_MARKET, slug: "spanish-town", is_active: true, published_version_id: null, parish_id: ST_PARISH }],
+    zonesByMarket: {
+      [ST_MARKET]: [{
+        id: "z-st-wide",
+        name: "Spanish Town wide",
+        market_id: ST_MARKET,
+        kind: "include",
+        polygon: [
+          { lat: 17.99, lng: -77.04 },
+          { lat: 17.99, lng: -76.80 },
+          { lat: 18.07, lng: -76.80 },
+          { lat: 18.07, lng: -77.04 },
+        ],
+      }],
+    },
+    parishes: [{
+      id: ST_PARISH,
+      name: "St Catherine",
+      coverage_mode: "town_zones",
+      foundation_polygon: ST_FOUNDATION,
+    }],
+  });
+
+  const outsideParish = await assertSameMarketCoverage(sb, {
+    dropoffLat: 18.02,
+    dropoffLng: -76.82,
+    merchantMarketId: ST_MARKET,
+  });
+  assertEquals(outsideParish.ok, false);
+  if (!outsideParish.ok) assertEquals(outsideParish.code, "outside_parish");
+});
+
+Deno.test("assertSameMarketCoverage — parish_boundary same parish ok", async () => {
+  const townB = "market-town-b";
+  const sb = mockSb({
+    markets: [
+      { id: ST_MARKET, slug: "a-town", is_active: true, published_version_id: null, parish_id: ST_PARISH },
+      { id: townB, slug: "b-town", is_active: true, published_version_id: null, parish_id: ST_PARISH },
+    ],
+    zonesByMarket: {},
+    parishes: [{
+      id: ST_PARISH,
+      name: "St Catherine",
+      coverage_mode: "parish_boundary",
+      foundation_polygon: ST_FOUNDATION,
+    }],
+    marketById: {
+      [townB]: { id: townB, parish_id: ST_PARISH },
+    },
+  });
+
+  const ok = await assertSameMarketCoverage(sb, {
+    dropoffLat: 18.015,
+    dropoffLng: -76.955,
+    merchantMarketId: townB,
+  });
+  assertEquals(ok.ok, true);
+});
+
+Deno.test("assertSameMarketCoverage — parish_boundary different parish fails", async () => {
+  const otherParish = "parish-other";
+  const sb = mockSb({
+    markets: [
+      { id: ST_MARKET, slug: "a-town", is_active: true, published_version_id: null, parish_id: ST_PARISH },
+      { id: KINGSTON_MARKET, slug: "kingston", is_active: true, published_version_id: null, parish_id: otherParish },
+    ],
+    zonesByMarket: {},
+    parishes: [
+      {
+        id: ST_PARISH,
+        name: "St Catherine",
+        coverage_mode: "parish_boundary",
+        foundation_polygon: ST_FOUNDATION,
+      },
+      {
+        id: otherParish,
+        name: "Kingston",
+        coverage_mode: "town_zones",
+        foundation_polygon: null,
+      },
+    ],
+    marketById: {
+      [KINGSTON_MARKET]: { id: KINGSTON_MARKET, parish_id: otherParish },
+    },
+  });
+
+  const fail = await assertSameMarketCoverage(sb, {
+    dropoffLat: 18.015,
+    dropoffLng: -76.955,
+    merchantMarketId: KINGSTON_MARKET,
+  });
+  assertEquals(fail.ok, false);
+  if (!fail.ok) assertEquals(fail.code, "merchant_out_of_parish");
 });

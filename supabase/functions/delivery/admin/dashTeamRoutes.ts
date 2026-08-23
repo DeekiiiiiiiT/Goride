@@ -23,14 +23,43 @@ function getAuthAdmin() {
   );
 }
 
+async function assertCanGrantRole(adminUser: ProductAdminUser, targetRoleName: string): Promise<Response | null> {
+  if (!adminUser.permissions.includes("roles.grant") && !adminUser.permissions.includes("system.config")) {
+    return new Response(JSON.stringify({ error: "forbidden", message: "Permission required: roles.grant" }), {
+      status: 403,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+  const pdb = getPlatformDb();
+  const [{ data: actorRoles }, { data: targetRole }] = await Promise.all([
+    pdb.from("roles").select("level").in("name", adminUser.roles),
+    pdb.from("roles").select("level").eq("name", targetRoleName).maybeSingle(),
+  ]);
+  const actorLevel = Math.max(...(actorRoles ?? []).map((r) => Number(r.level) || 0), 0);
+  const targetLevel = Number(targetRole?.level) || 0;
+  if (targetLevel >= actorLevel) {
+    return new Response(JSON.stringify({ error: "forbidden", message: "Cannot grant a role at or above your level" }), {
+      status: 403,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+  return null;
+}
+
 /** Roles this team console can grant/manage. */
-const MANAGED_ROLE_NAMES = ["dash_admin", "dash_ops", "courier_admin", "courier_ops"] as const;
+const MANAGED_ROLE_NAMES = [
+  "dash_admin", "dash_ops", "courier_admin", "courier_ops", "support_agent",
+] as const;
+const LISTABLE_CONSOLE_ROLES = [
+  "platform_owner", "platform_support", "platform_analyst", "identity_admin",
+  "dash_admin", "dash_ops", "courier_admin", "courier_ops", "support_agent", "superadmin",
+] as const;
 const MANAGED_ROLE_SET = new Set<string>(MANAGED_ROLE_NAMES);
 
 export function mountDashTeamRoutes(admin: Hono) {
   admin.get("/team", async (c) => {
     const pdb = getPlatformDb();
-    const { data: roles } = await pdb.from("roles").select("id, name").in("name", [...MANAGED_ROLE_NAMES]);
+    const { data: roles } = await pdb.from("roles").select("id, name, level").in("name", [...LISTABLE_CONSOLE_ROLES]);
     const roleIds = (roles ?? []).map((r) => r.id as string);
     if (!roleIds.length) return c.json({ members: [] });
 
@@ -68,6 +97,8 @@ export function mountDashTeamRoutes(admin: Hono) {
     if (!MANAGED_ROLE_SET.has(roleName)) {
       return c.json({ error: `role must be one of ${MANAGED_ROLE_NAMES.join(", ")}` }, 400);
     }
+    const grantDenied = await assertCanGrantRole(adminUser, roleName);
+    if (grantDenied) return grantDenied;
 
     const pdb = getPlatformDb();
     const { data: role } = await pdb.from("roles").select("id").eq("name", roleName).single();
@@ -75,28 +106,24 @@ export function mountDashTeamRoutes(admin: Hono) {
 
     const auth = getAuthAdmin();
 
-    // Resolve or create the target auth user. Invite by email if new; reuse if existing.
+    // Resolve or create the target auth user via invite; track pending state when undeliverable.
     let userId = "";
     const { data: invited, error: inviteErr } = await auth.auth.admin.inviteUserByEmail(email);
     if (invited?.user?.id) {
       userId = invited.user.id;
     } else {
-      // Already registered (or invite disabled) — fall back to createUser, then lookup.
-      const { data: created } = await auth.auth.admin.createUser({
+      await pdb.from("pending_invites").insert({
         email,
-        email_confirm: true,
+        role_id: role.id,
+        invited_by: adminUser.id,
       });
-      if (created?.user?.id) {
-        userId = created.user.id;
-      } else {
-        // User exists — page through admin list to find the id.
-        const { data: list } = await auth.auth.admin.listUsers({ page: 1, perPage: 200 });
-        const match = list?.users?.find((u) => (u.email || "").toLowerCase() === email);
-        if (match?.id) userId = match.id;
-      }
-      if (!userId) {
-        return c.json({ error: inviteErr?.message || "Could not resolve invited user" }, 500);
-      }
+      return c.json({
+        ok: true,
+        pending: true,
+        email,
+        role: roleName,
+        message: inviteErr?.message || "Invite queued for delivery",
+      }, 202);
     }
 
     // Grant the role idempotently (unique on user_id+role_id assumed at DB level).
@@ -126,6 +153,11 @@ export function mountDashTeamRoutes(admin: Hono) {
       return c.json({ error: `role must be one of ${MANAGED_ROLE_NAMES.join(", ")}` }, 400);
     }
     const userId = c.req.param("userId");
+    if (userId === adminUser.id) {
+      return c.json({ error: "cannot_modify_own_roles", message: "You cannot change your own roles" }, 400);
+    }
+    const grantDenied = await assertCanGrantRole(adminUser, roleName);
+    if (grantDenied) return grantDenied;
     const pdb = getPlatformDb();
     const { data: role } = await pdb.from("roles").select("id").eq("name", roleName).single();
     if (!role) return c.json({ error: "Role not found" }, 404);

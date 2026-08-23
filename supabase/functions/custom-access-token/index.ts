@@ -1,11 +1,9 @@
 /**
  * Auth Hook: custom_access_token
- * Ensures JWT app_metadata role/roles/organizationId are the only authz claims;
- * never elevates from user_metadata.
- * Configure in Dashboard → Authentication → Hooks (verify JWT off).
- * Fails closed when CUSTOM_ACCESS_TOKEN_HOOK_SECRET is unset (P0 audit).
+ * Merges DB-granted platform roles into JWT app_metadata cache (read-only cache).
  */
 import { Webhook } from "https://esm.sh/standardwebhooks@1.0.0";
+import { fetchUserRoleNames } from "../_shared/rbacQuery.ts";
 
 const PRIVILEGED_USER_META = new Set([
   "role",
@@ -50,13 +48,20 @@ Deno.serve(async (req) => {
     const appMeta = { ...((claims.app_metadata as Record<string, unknown>) || {}) };
     const userMeta = { ...((claims.user_metadata as Record<string, unknown>) || {}) };
 
-    // Strip privileged keys from user_metadata claims (defense in depth)
     for (const key of PRIVILEGED_USER_META) {
       delete userMeta[key];
     }
     claims.user_metadata = userMeta;
 
-    // Authz only from app_metadata already on the user record
+    const userId = event.user_id ?? (claims.sub as string | undefined);
+    if (userId) {
+      const dbRoles = await fetchUserRoleNames(userId);
+      if (dbRoles.length > 0) {
+        appMeta.roles = dbRoles;
+        appMeta.role = dbRoles[0];
+      }
+    }
+
     claims.app_metadata = appMeta;
     if (typeof appMeta.role === "string" && appMeta.role.trim()) {
       claims.role = "authenticated";

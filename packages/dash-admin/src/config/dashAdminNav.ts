@@ -83,6 +83,16 @@ export const DASH_ADMIN_CONFIG: AdminConfig = {
       children: [{ id: 'markets', label: 'Delivery Markets', icon: Map }],
     },
     {
+      id: 'users',
+      label: 'Users',
+      icon: UserCircle,
+      children: [
+        { id: 'users-directory', label: 'Directory', icon: Users },
+        { id: 'users-operators', label: 'Operators', icon: ShieldCheck },
+        { id: 'users-audit', label: 'Audit', icon: Activity },
+      ],
+    },
+    {
       id: 'team',
       label: 'Team',
       icon: Users,
@@ -147,8 +157,10 @@ export function pathnameToNavId(pathname: string): string {
   if (pathname.startsWith('/couriers')) return 'couriers';
   if (pathname.startsWith('/customers')) return 'customers';
   if (pathname.startsWith('/markets')) return 'markets';
-  if (pathname.startsWith('/team') || pathname.startsWith('/users')) return 'team';
-  if (pathname.startsWith('/activity')) return 'activity';
+  if (pathname.startsWith('/users/operators') || pathname.startsWith('/team')) return 'users-operators';
+  if (pathname.startsWith('/users/audit')) return 'users-audit';
+  if (pathname.startsWith('/users')) return 'users-directory';
+  if (pathname.startsWith('/activity')) return 'users-audit';
   if (pathname.startsWith('/finance') || pathname.startsWith('/disputes')) return 'finance';
   if (pathname.startsWith('/pricing')) return 'pricing';
   if (pathname.startsWith('/reviews')) return 'reviews';
@@ -183,10 +195,16 @@ export function navIdToPath(navId: string): string {
       return '/customers';
     case 'markets':
       return '/markets';
+    case 'users-directory':
+      return '/users';
+    case 'users-operators':
+      return '/users/operators';
+    case 'users-audit':
+      return '/users/audit';
     case 'team':
-      return '/team';
+      return '/users/operators';
     case 'activity':
-      return '/activity';
+      return '/users/audit';
     case 'finance':
       return '/finance';
     case 'pricing':

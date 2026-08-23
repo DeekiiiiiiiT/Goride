@@ -99,12 +99,38 @@ export function registerSupportAdminRoutes(app: Hono) {
   });
 
   audit.get("/events", async (c) => {
-    const action = c.req.query("action");
-    const actorId = c.req.query("actor_id");
+    const adminUser = c.get("adminUser") as ProductAdminUser;
     const page = Math.max(parseInt(c.req.query("page") || "1", 10) || 1, 1);
     const limit = Math.min(parseInt(c.req.query("limit") || "50", 10) || 50, 100);
     const offset = (page - 1) * limit;
+    const pdb = (await import("https://esm.sh/@supabase/supabase-js@2")).createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+      { db: { schema: "platform" } },
+    );
+    const { data: platformEvents, error: pErr, count: pCount } = await pdb
+      .from("permission_audit_log")
+      .select("*", { count: "exact" })
+      .order("created_at", { ascending: false })
+      .range(offset, offset + limit - 1);
+    if (!pErr && (platformEvents?.length ?? 0) > 0) {
+      return c.json({
+        events: (platformEvents ?? []).map((e) => ({
+          id: String(e.id),
+          actor_id: e.actor_user_id,
+          action: e.action,
+          target_id: e.target_user_id ?? e.resource_id,
+          details: JSON.stringify(e.metadata ?? {}),
+          created_at: e.created_at,
+        })),
+        total: pCount ?? 0,
+        page,
+        limit,
+      });
+    }
     const db = getDb();
+    const action = c.req.query("action");
+    const actorId = c.req.query("actor_id");
     let query = db.from("admin_audit_events").select("*", { count: "exact" }).order("created_at", { ascending: false });
     if (action) query = query.eq("action", action);
     if (actorId) query = query.eq("actor_id", actorId);

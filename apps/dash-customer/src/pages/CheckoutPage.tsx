@@ -284,6 +284,12 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
         if (error.code === 'merchant_out_of_market') {
           throw new Error(error.error || "This store doesn’t deliver to your area");
         }
+        if (error.code === 'outside_parish') {
+          throw new Error(error.error || "We don’t deliver outside this parish yet");
+        }
+        if (error.code === 'merchant_out_of_parish') {
+          throw new Error(error.error || "This store doesn’t deliver to your parish");
+        }
         if (error.code === 'dropoff_required') {
           throw new Error(error.error || 'Add a delivery pin before placing your order');
         }

@@ -1,54 +1,48 @@
 import type { ProductAdminUser } from "../../_shared/productAdmin.ts";
 
-export const DASH_WRITE_ROLES = new Set([
-  "dash_admin",
-  "platform_owner",
-  "platform_support",
-  "superadmin",
-]);
-
-export const DASH_DELETE_ROLES = new Set([
-  "platform_owner",
-  "superadmin",
-  "dash_admin",
-]);
-
-export const DASH_FORCE_APPROVE_ROLES = new Set([
-  "platform_owner",
-  "superadmin",
-  "dash_admin",
-]);
-
-export function hasAnyDashRole(roles: string[], allowed: ReadonlySet<string>): boolean {
-  return roles.some((r) => allowed.has(r));
+function hasPermission(admin: ProductAdminUser, key: string): boolean {
+  return admin.permissions?.includes(key) ?? false;
 }
 
 export function requireDashWrite(admin: ProductAdminUser): Response | null {
-  if (!hasAnyDashRole(admin.roles, DASH_WRITE_ROLES)) {
-    return new Response(
-      JSON.stringify({
-        error: "forbidden",
-        message: "dash_admin or platform role required for write actions",
-      }),
-      { status: 403, headers: { "Content-Type": "application/json" } },
-    );
+  if (
+    hasPermission(admin, "dash.users.write")
+    || hasPermission(admin, "system.config")
+  ) {
+    return null;
   }
-  return null;
+  return new Response(
+    JSON.stringify({
+      error: "forbidden",
+      message: "Permission required: dash.users.write",
+    }),
+    { status: 403, headers: { "Content-Type": "application/json" } },
+  );
 }
 
 export function requireDashDelete(admin: ProductAdminUser): Response | null {
-  if (!hasAnyDashRole(admin.roles, DASH_DELETE_ROLES)) {
-    return new Response(
-      JSON.stringify({
-        error: "forbidden",
-        message: "platform_owner, superadmin, or dash_admin required for delete actions",
-      }),
-      { status: 403, headers: { "Content-Type": "application/json" } },
-    );
+  if (
+    hasPermission(admin, "dash.users.write")
+    || hasPermission(admin, "users.delete")
+    || hasPermission(admin, "identity.delete")
+  ) {
+    return null;
   }
-  return null;
+  return new Response(
+    JSON.stringify({
+      error: "forbidden",
+      message: "Permission required for delete actions",
+    }),
+    { status: 403, headers: { "Content-Type": "application/json" } },
+  );
 }
 
-export function canForceApproveMerchant(adminRoles: string[]): boolean {
-  return hasAnyDashRole(adminRoles, DASH_FORCE_APPROVE_ROLES);
+export function canForceApproveMerchant(admin: ProductAdminUser): boolean {
+  return hasPermission(admin, "dash.compliance.approve")
+    || hasPermission(admin, "system.config");
+}
+
+/** @deprecated Use requireDashWrite — kept for transitional imports */
+export function hasAnyDashRole(_roles: string[], _allowed: ReadonlySet<string>): boolean {
+  return false;
 }

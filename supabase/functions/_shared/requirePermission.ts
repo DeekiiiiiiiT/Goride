@@ -5,6 +5,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getJwtRoles, jwtPrimaryRole } from "./authEdge.ts";
 import { logPermissionCheck } from "./auditLog.ts";
 import {
+  resolveEffectiveRoleNames,
   resolveUserPermissions,
   userHasPermissionResolved,
 } from "./rbacQuery.ts";
@@ -44,8 +45,9 @@ export async function requireAuthenticatedUser(
     return c.json({ error: "Unauthorized: invalid token" }, 401);
   }
 
-  const roles = getJwtRoles(user);
+  const roles = await resolveEffectiveRoleNames(user.id, user);
   const permissions = await resolveUserPermissions(user.id, user);
+  const primary = roles[0] || jwtPrimaryRole(user);
   const isPlatformUser = permissions.includes("system.config")
     || roles.some((r) => r === "platform_owner" || r === "superadmin" || r === "platform_support");
 
@@ -53,7 +55,7 @@ export async function requireAuthenticatedUser(
     user: {
       id: user.id,
       email: user.email || "",
-      role: jwtPrimaryRole(user),
+      role: primary,
       roles,
       permissions,
       isPlatformUser,

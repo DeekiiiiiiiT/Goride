@@ -45,6 +45,7 @@ import {
   resolveFeeRateForMerchant,
 } from "../platformFeeRate.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { suggestMarketIdForMerchantPin } from "./coverageZones.ts";
 
 const SLA_HOURS = 48;
 
@@ -449,7 +450,7 @@ export function registerMerchantAdminRoutes(app: Hono) {
           hint: "Complete all checklist items or use force with platform approval",
         }, 400);
       }
-      if (force && !canForceApproveMerchant(admin.roles)) {
+      if (force && !canForceApproveMerchant(admin)) {
         return c.json({ error: "force approve requires dash_admin or platform role" }, 403);
       }
     }
@@ -709,6 +710,61 @@ export function registerMerchantAdminRoutes(app: Hono) {
       notes: JSON.stringify(updates),
     });
     return c.json({ merchant: data });
+  });
+
+  admin.post("/merchants/:id/recompute-market", async (c) => {
+    const admin = adminFromCtx(c);
+    const denied = requireDashWrite(admin);
+    if (denied) return denied;
+    const id = c.req.param("id");
+    const sb = getDb();
+    const { data: merchant, error: loadErr } = await sb
+      .from("merchants")
+      .select("id, lat, lng, market_id, market_id_locked, email")
+      .eq("id", id)
+      .maybeSingle();
+    if (loadErr) return c.json({ error: loadErr.message }, 500);
+    if (!merchant) return c.json({ error: "Merchant not found" }, 404);
+
+    const lat = Number((merchant as Record<string, unknown>).lat);
+    const lng = Number((merchant as Record<string, unknown>).lng);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+      return c.json({ error: "Store pin required to reassign delivery town" }, 400);
+    }
+
+    const suggested = await suggestMarketIdForMerchantPin(sb, lat, lng);
+    const previous = (merchant as Record<string, unknown>).market_id != null
+      ? String((merchant as Record<string, unknown>).market_id)
+      : null;
+
+    const { data: updated, error: upErr } = await sb
+      .from("merchants")
+      .update({ market_id: suggested })
+      .eq("id", id)
+      .select()
+      .single();
+    if (upErr) return c.json({ error: upErr.message }, 500);
+
+    await logMerchantAudit(sb, {
+      merchant_id: id,
+      actor_id: admin.id,
+      actor_email: admin.email,
+      action: "market_recomputed_from_pin",
+      notes: JSON.stringify({ previous, suggested, locked: (merchant as Record<string, unknown>).market_id_locked === true }),
+    });
+    await writeKvAudit(
+      admin,
+      "roam_dash.merchant_market_recomputed",
+      id,
+      String((merchant as Record<string, unknown>).email ?? ""),
+      JSON.stringify({ previous, suggested }),
+    );
+
+    return c.json({
+      merchant: updated,
+      previous_market_id: previous,
+      suggested_market_id: suggested,
+    });
   });
 
   async function setOperationalStatus(

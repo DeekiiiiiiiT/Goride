@@ -154,3 +154,38 @@ export async function userHasProductAccessResolved(
   if (fromDb) return true;
   return getJwtRoles(user).some((r) => hasProductAdminAccess(r, product));
 }
+
+/** Active platform role names from DB (honours expires_at). */
+export async function fetchUserRoleNames(userId: string): Promise<string[]> {
+  const now = new Date().toISOString();
+  const { data, error } = await serviceClient()
+    .schema("platform")
+    .from("user_roles")
+    .select("expires_at, roles(name)")
+    .eq("user_id", userId);
+  if (error) {
+    console.warn("[rbac] fetchUserRoleNames failed:", error.message);
+    return [];
+  }
+  const names: string[] = [];
+  for (const row of data ?? []) {
+    const expiresAt = (row as { expires_at?: string | null }).expires_at;
+    if (expiresAt && expiresAt <= now) continue;
+    const role = (row as { roles?: { name?: string } | { name?: string }[] | null }).roles;
+    const roleObj = Array.isArray(role) ? role[0] : role;
+    const name = roleObj?.name;
+    if (name) names.push(name);
+  }
+  return [...new Set(names)];
+}
+
+/** Merge JWT roles with DB-granted roles (DB wins for write gates). */
+export async function resolveEffectiveRoleNames(
+  userId: string,
+  user: RbacUser,
+): Promise<string[]> {
+  const jwtRoles = getJwtRoles(user);
+  const dbRoles = await fetchUserRoleNames(userId);
+  if (dbRoles.length === 0) return jwtRoles;
+  return [...new Set([...jwtRoles, ...dbRoles])];
+}

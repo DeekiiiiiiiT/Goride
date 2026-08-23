@@ -25,6 +25,15 @@ export const PLATFORM_PERMISSIONS = {
 
   ROLES_MANAGE: 'roles.manage',
   AUDIT_READ: 'audit.read',
+
+  IDENTITY_READ: 'identity.read',
+  IDENTITY_RESTRICT: 'identity.status.restrict',
+  IDENTITY_BAN: 'identity.status.ban',
+  SESSIONS_READ: 'sessions.read',
+  SESSIONS_REVOKE: 'sessions.revoke',
+  ROLES_GRANT: 'roles.grant',
+  MERCHANT_STAFF_READ: 'merchant.staff.read',
+  MERCHANT_STAFF_REVOKE: 'merchant.staff.revoke',
 } as const;
 
 export type PlatformPermissionKey =

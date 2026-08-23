@@ -107,9 +107,29 @@ export function CourierDetailPage() {
       fields: [{ key: 'reason', label: 'Suspension reason', required: true, multiline: true }],
     });
     if (!values) return;
-    await suspendCourier(token, userId, values.reason);
-    toast.success('Suspended');
-    void load();
+    try {
+      await suspendCourier(token, userId, values.reason);
+      toast.success('Suspended');
+      void load();
+    } catch (e) {
+      const cross = (e as Error & { crossPersona?: { message?: string } }).crossPersona;
+      if (cross) {
+        const ok = await confirm({
+          title: 'Also a Rush customer',
+          description:
+            cross.message ||
+            'This courier can also order food. Suspending locks both apps until unsuspended.',
+          confirmLabel: 'Suspend anyway',
+          variant: 'danger',
+        });
+        if (!ok) return;
+        await suspendCourier(token, userId, values.reason, { confirmCrossPersona: true });
+        toast.success('Suspended');
+        void load();
+        return;
+      }
+      toast.error(e instanceof Error ? e.message : 'Failed to suspend');
+    }
   };
 
   const runDeactivate = async () => {

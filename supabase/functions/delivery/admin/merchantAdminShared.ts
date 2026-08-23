@@ -263,7 +263,21 @@ export async function writeKvAudit(
     console.error("[audit-bridge] failed:", e);
   }
 
-  // Structured mirror for queryable admin audit history (best-effort; table optional).
+  // Structured mirror — also write unified platform audit.
+  try {
+    const { writeAdminAuditBestEffort } = await import("./adminAuditWriter.ts");
+    await writeAdminAuditBestEffort({
+      actorUserId: admin.id,
+      targetUserId: targetId || undefined,
+      action,
+      metadata: { targetEmail, details },
+      resourceType: "admin_action",
+      resourceId: targetId || undefined,
+    });
+  } catch (e) {
+    console.error("[audit-unified] failed:", e);
+  }
+
   try {
     await getDb().from("admin_audit_events").insert({
       actor_id: admin.id || null,

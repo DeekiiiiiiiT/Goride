@@ -4,14 +4,15 @@
 import { Hono } from "https://deno.land/x/hono@v4.3.11/mod.ts";
 import { requireProductAdmin, type ProductAdminUser } from "../../_shared/productAdmin.ts";
 import {
-  DASH_FORCE_APPROVE_ROLES,
-  hasAnyDashRole,
+  canForceApproveMerchant,
   requireDashDelete,
   requireDashWrite,
 } from "./dashPermissions.ts";
 import { getDb, writeKvAudit } from "./merchantAdminShared.ts";
 import {
+  buildParishSyntheticZone,
   evaluateCoverage,
+  parseFoundationPolygon,
   type CoverageVertex,
   type CoverageZone,
 } from "./coverageEval.ts";
@@ -30,7 +31,7 @@ import {
 import {
   asCoverageZones,
   loadPublishedZonesForMarket,
-  recomputeUnlockedMerchantMarkets,
+  recomputeMerchantMarkets,
 } from "./coverageZones.ts";
 
 type Vertex = CoverageVertex;
@@ -306,6 +307,13 @@ export function registerMarketAdminRoutes(app: Hono) {
     if (body.sort_order != null && Number.isFinite(Number(body.sort_order))) {
       updates.sort_order = Math.trunc(Number(body.sort_order));
     }
+    if (body.coverage_mode != null) {
+      const mode = String(body.coverage_mode);
+      if (mode !== "town_zones" && mode !== "parish_boundary") {
+        return c.json({ error: "coverage_mode must be town_zones or parish_boundary" }, 400);
+      }
+      updates.coverage_mode = mode;
+    }
     if (Object.keys(updates).length === 0) return c.json({ error: "No fields to update" }, 400);
 
     const db = getDb();
@@ -318,7 +326,7 @@ export function registerMarketAdminRoutes(app: Hono) {
     return c.json({ parish: data });
   });
 
-  /** Set parish foundation outline (ops geography — not customer delivery). */
+  /** Set parish foundation outline. Used as outer gate (town_zones) or live delivery area (parish_boundary). */
   admin.put("/parishes/:parishId/outline", async (c) => {
     const adminUser = c.get("adminUser") as ProductAdminUser;
     const denied = requireDashWrite(adminUser);
@@ -327,7 +335,7 @@ export function registerMarketAdminRoutes(app: Hono) {
     if (body.confirm_foundation_edit !== true) {
       return c.json({
         error:
-          "Parish foundation border edits require confirm_foundation_edit. Town delivery still uses town borders + cutouts.",
+          "Parish foundation border edits require confirm_foundation_edit. In town_zones mode this is an outer gate; in parish_boundary mode it is the live delivery area.",
       }, 400);
     }
     const polygon = normalizePolygon(body.polygon);
@@ -424,7 +432,8 @@ export function registerMarketAdminRoutes(app: Hono) {
     if (writeGate) return writeGate;
 
     const db = getDb();
-    const result = await recomputeUnlockedMerchantMarkets(db);
+    const includeLocked = c.req.query("include_locked") === "true";
+    const result = await recomputeMerchantMarkets(db, { includeLocked });
 
     await writeKvAudit(
       c.get("adminUser") as ProductAdminUser,
@@ -439,6 +448,7 @@ export function registerMarketAdminRoutes(app: Hono) {
       skipped: result.skippedLocked + result.skippedNoPin,
       skipped_locked: result.skippedLocked,
       skipped_no_pin: result.skippedNoPin,
+      updated_locked: result.updatedLocked,
       unchanged: result.unchanged,
       total: result.updated + result.cleared + result.skippedLocked + result.skippedNoPin +
         result.unchanged,
@@ -581,7 +591,9 @@ export function registerMarketAdminRoutes(app: Hono) {
         zone_count: zonesJson.length,
       }),
     );
-    const merchantRecompute = await recomputeUnlockedMerchantMarkets(db);
+    const merchantRecompute = await recomputeMerchantMarkets(db, {
+      includeLocked: body.recompute_locked === true,
+    });
     return c.json({ market: updated, version: ver, merchant_recompute: merchantRecompute });
   });
 
@@ -667,7 +679,7 @@ export function registerMarketAdminRoutes(app: Hono) {
     }
 
     const merchantRecompute = republish
-      ? await recomputeUnlockedMerchantMarkets(db)
+      ? await recomputeMerchantMarkets(db, { includeLocked: body.recompute_locked === true })
       : null;
 
     const { data: market } = await db.from("service_markets").select("*").eq("id", marketId).single();
@@ -850,7 +862,7 @@ export function registerMarketAdminRoutes(app: Hono) {
         merchantsMin: Number(m.readiness_merchants_min ?? 0) || 0,
         couriersMin: Number(m.readiness_couriers_min ?? 0) || 0,
       });
-      const force = body.force === true && hasAnyDashRole(adminUser.roles, DASH_FORCE_APPROVE_ROLES);
+      const force = body.force === true && canForceApproveMerchant(adminUser);
       if (!readiness.ready && !force) {
         return c.json({
           error: "Town is not ready to activate",
@@ -1101,7 +1113,7 @@ export function registerPublicGeoRoutes(
     const db = deps.getServiceSupabase();
     const { data: markets, error } = await db
       .from("service_markets")
-      .select("id, slug, name, waitlist_enabled, published_version_id")
+      .select("id, slug, name, waitlist_enabled, published_version_id, parish_id")
       .eq("is_active", true);
     if (error) return c.json({ error: error.message }, 500);
 
@@ -1118,6 +1130,39 @@ export function registerPublicGeoRoutes(
       }
     }
 
+    const { data: parishes } = await db
+      .from("service_parishes")
+      .select("id, name, coverage_mode, foundation_polygon")
+      .eq("coverage_mode", "parish_boundary");
+    for (const p of parishes ?? []) {
+      const parish = p as Record<string, unknown>;
+      const foundation = parseFoundationPolygon(parish.foundation_polygon);
+      if (!foundation) continue;
+      const parishId = String(parish.id);
+      const parishName = String(parish.name ?? "Parish");
+      const parishMarkets = (markets ?? [])
+        .filter((m) => String((m as Record<string, unknown>).parish_id ?? "") === parishId)
+        .map((m) => m as Record<string, unknown>)
+        .sort((a, b) => String(a.slug ?? a.id).localeCompare(String(b.slug ?? b.id)));
+      for (const market of parishMarkets) {
+        const synthetic = buildParishSyntheticZone(
+          parishId,
+          String(market.id),
+          parishName,
+          foundation,
+        );
+        zones.push({
+          id: synthetic.id,
+          name: synthetic.name,
+          kind: "include",
+          polygon: synthetic.polygon,
+          market_id: market.id,
+          source: "parish_boundary",
+          priority: 100,
+        });
+      }
+    }
+
     // Stable priority sort
     zones.sort((a, b) => Number(b.priority ?? 0) - Number(a.priority ?? 0));
 
@@ -1131,6 +1176,7 @@ export function registerPublicGeoRoutes(
           priority: z.priority,
           kind: normalizeKind(z.kind),
           polygon: z.polygon,
+          source: z.source ?? null,
           market: market
             ? { id: market.id, slug: market.slug, name: market.name }
             : null,

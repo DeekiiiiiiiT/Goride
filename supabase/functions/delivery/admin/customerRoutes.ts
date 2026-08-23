@@ -224,7 +224,10 @@ export function registerCustomerAdminRoutes(app: Hono) {
     const denied = requireDashWrite(adminUser);
     if (denied) return denied;
     const body = await c.req.json().catch(() => ({}));
-    const reason = String(body.reason || "Suspended by admin").trim();
+    const reason = String(body.reason ?? "").trim();
+    if (!reason) {
+      return c.json({ error: "reason_required", message: "Suspension reason is required" }, 400);
+    }
     const db = getDb();
     const now = new Date().toISOString();
     const { data, error } = await db.from("customers").update({

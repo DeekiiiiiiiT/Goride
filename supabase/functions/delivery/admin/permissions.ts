@@ -1,46 +1,59 @@
 import type { ProductAdminUser } from "../../_shared/productAdmin.ts";
 
-/** Roles allowed to perform write actions (suspend, approve, compliance patch). */
-export const COURIER_WRITE_ROLES = new Set([
-  "courier_admin",
-  "platform_owner",
-  "platform_support",
-  "superadmin",
-]);
-
-export function hasAnyCourierRole(roles: string[], allowed: ReadonlySet<string>): boolean {
-  return roles.some((r) => allowed.has(r));
+function hasPermission(admin: ProductAdminUser, key: string): boolean {
+  return admin.permissions?.includes(key) ?? false;
 }
 
-/** Roles allowed to delete courier profiles. */
-export const COURIER_DELETE_ROLES = new Set([
-  "courier_admin",
-  "platform_owner",
-  "superadmin",
-]);
-
 export function requireWrite(admin: ProductAdminUser): Response | null {
-  if (!hasAnyCourierRole(admin.roles, COURIER_WRITE_ROLES)) {
-    return new Response(
-      JSON.stringify({
-        error: "forbidden",
-        message: "courier_admin or platform role required for write actions",
-      }),
-      { status: 403, headers: { "Content-Type": "application/json" } },
-    );
+  if (
+    hasPermission(admin, "courier.users.write")
+    || hasPermission(admin, "system.config")
+  ) {
+    return null;
   }
-  return null;
+  return new Response(
+    JSON.stringify({
+      error: "forbidden",
+      message: "Permission required: courier.users.write",
+    }),
+    { status: 403, headers: { "Content-Type": "application/json" } },
+  );
 }
 
 export function requireDelete(admin: ProductAdminUser): Response | null {
-  if (!hasAnyCourierRole(admin.roles, COURIER_DELETE_ROLES)) {
-    return new Response(
-      JSON.stringify({
-        error: "forbidden",
-        message: "platform_owner, superadmin, or courier_admin required for delete actions",
-      }),
-      { status: 403, headers: { "Content-Type": "application/json" } },
-    );
+  if (
+    hasPermission(admin, "courier.users.write")
+    || hasPermission(admin, "users.delete")
+    || hasPermission(admin, "identity.delete")
+  ) {
+    return null;
   }
-  return null;
+  return new Response(
+    JSON.stringify({
+      error: "forbidden",
+      message: "Permission required for delete actions",
+    }),
+    { status: 403, headers: { "Content-Type": "application/json" } },
+  );
+}
+
+export function requireComplianceApprove(admin: ProductAdminUser): Response | null {
+  if (
+    hasPermission(admin, "courier.compliance.approve")
+    || hasPermission(admin, "system.config")
+  ) {
+    return null;
+  }
+  return new Response(
+    JSON.stringify({
+      error: "forbidden",
+      message: "Permission required: courier.compliance.approve",
+    }),
+    { status: 403, headers: { "Content-Type": "application/json" } },
+  );
+}
+
+/** @deprecated */
+export function hasAnyCourierRole(_roles: string[], _allowed: ReadonlySet<string>): boolean {
+  return false;
 }

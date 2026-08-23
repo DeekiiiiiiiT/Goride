@@ -86,3 +86,18 @@ export function evaluateCoverage(
     matchedExclude: null,
   };
 }
+
+export type { ActiveCoverageZone, LatLng, ZoneKind } from './zonesPayload.ts';
+export {
+  DELIVERY_ZONES_CACHE_KEY,
+  DELIVERY_ZONES_CACHE_TTL_MS,
+  parseAllZonesPayload,
+} from './zonesPayload.ts';
+export { createZoneCache, type ZoneCacheStorage } from './zoneCache.ts';
+export { createDeliveryZoneLoader } from './zoneLoader.ts';
+export {
+  buildParishSyntheticZone,
+  isInsideParishFoundation,
+  parseFoundationPolygon,
+  type ParishCoverageMode,
+} from './parishCoverage.ts';

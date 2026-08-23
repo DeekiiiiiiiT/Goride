@@ -2,15 +2,26 @@
  * Shared published-zone loading for coverage checks (orders, pricing, admin test pin).
  */
 import {
+  buildParishSyntheticZone,
   evaluateCoverage,
+  isInsideParishFoundation,
+  parseFoundationPolygon,
   type CoverageEvalResult,
   type CoverageVertex,
   type CoverageZone,
+  type ParishCoverageMode,
 } from "./coverageEval.ts";
 import { normalizeKind } from "./coveragePlatform.ts";
 
 // deno-lint-ignore no-explicit-any
 type ServiceSb = { from: (t: string) => any };
+
+export type ParishContext = {
+  id: string;
+  name: string;
+  coverage_mode: ParishCoverageMode;
+  foundation_polygon: CoverageVertex[] | null;
+};
 
 export async function loadPublishedZonesForMarket(
   sb: ServiceSb,
@@ -48,9 +59,111 @@ export function asCoverageZones(rows: Record<string, unknown>[]): CoverageZone[]
   }));
 }
 
+async function loadParishMap(sb: ServiceSb): Promise<Map<string, ParishContext>> {
+  const { data: parishes } = await sb
+    .from("service_parishes")
+    .select("id, name, coverage_mode, foundation_polygon");
+  const map = new Map<string, ParishContext>();
+  for (const row of parishes ?? []) {
+    const p = row as Record<string, unknown>;
+    const mode = p.coverage_mode === "parish_boundary" ? "parish_boundary" : "town_zones";
+    map.set(String(p.id), {
+      id: String(p.id),
+      name: String(p.name ?? "Parish"),
+      coverage_mode: mode,
+      foundation_polygon: parseFoundationPolygon(p.foundation_polygon),
+    });
+  }
+  return map;
+}
+
+export async function loadParishCoverageContext(
+  sb: ServiceSb,
+  parishId: string,
+): Promise<ParishContext | null> {
+  const map = await loadParishMap(sb);
+  return map.get(parishId) ?? null;
+}
+
+type ActiveMarketRow = {
+  id: string;
+  slug: string;
+  parish_id: string | null;
+  is_active: boolean;
+  published_version_id: string | null;
+};
+
+async function loadActiveMarkets(sb: ServiceSb): Promise<ActiveMarketRow[]> {
+  const { data: markets } = await sb
+    .from("service_markets")
+    .select("id, slug, parish_id, is_active, published_version_id")
+    .eq("is_active", true);
+  return (markets ?? []).map((m) => {
+    const row = m as Record<string, unknown>;
+    return {
+      id: String(row.id),
+      slug: String(row.slug ?? row.id),
+      parish_id: row.parish_id != null ? String(row.parish_id) : null,
+      is_active: row.is_active !== false,
+      published_version_id: row.published_version_id != null
+        ? String(row.published_version_id)
+        : null,
+    };
+  });
+}
+
+async function buildCoverageZonesForMarkets(
+  sb: ServiceSb,
+  markets: ActiveMarketRow[],
+  parishMap: Map<string, ParishContext>,
+): Promise<CoverageZone[]> {
+  const parishBoundaryMarkets = new Map<string, ActiveMarketRow[]>();
+  const townZoneMarkets: ActiveMarketRow[] = [];
+
+  for (const market of markets) {
+    const parish = market.parish_id ? parishMap.get(market.parish_id) : null;
+    if (parish?.coverage_mode === "parish_boundary" && parish.foundation_polygon) {
+      const list = parishBoundaryMarkets.get(parish.id) ?? [];
+      list.push(market);
+      parishBoundaryMarkets.set(parish.id, list);
+    } else {
+      townZoneMarkets.push(market);
+    }
+  }
+
+  const allZones: CoverageZone[] = [];
+
+  for (const [parishId, parishMarkets] of parishBoundaryMarkets) {
+    const parish = parishMap.get(parishId);
+    if (!parish?.foundation_polygon) continue;
+    const sorted = [...parishMarkets].sort((a, b) => a.slug.localeCompare(b.slug));
+    for (const market of sorted) {
+      allZones.push(
+        buildParishSyntheticZone(parishId, market.id, parish.name, parish.foundation_polygon),
+      );
+    }
+  }
+
+  for (const market of townZoneMarkets) {
+    const published = await loadPublishedZonesForMarket(sb, market);
+    allZones.push(
+      ...asCoverageZones(published).map((z) => ({
+        ...z,
+        market_id: z.market_id ?? market.id,
+      })),
+    );
+  }
+
+  return allZones;
+}
+
 export type MarketPointResolve = {
   covered: boolean;
   marketId: string | null;
+  parishId: string | null;
+  parishBoundaryMode: boolean;
+  marketIds: string[];
+  outsideParish: boolean;
   zones: CoverageZone[];
   eval: CoverageEvalResult;
 };
@@ -62,40 +175,73 @@ export async function resolveMarketForPoint(
   lng: number,
 ): Promise<MarketPointResolve> {
   const emptyEval = evaluateCoverage(lat, lng, []);
-  const { data: markets } = await sb
-    .from("service_markets")
-    .select("id, published_version_id, is_active")
-    .eq("is_active", true);
-
-  if (!markets?.length) {
-    return { covered: false, marketId: null, zones: [], eval: emptyEval };
-  }
-
-  const allZones: CoverageZone[] = [];
-  for (const m of markets) {
-    const market = m as Record<string, unknown>;
-    const published = await loadPublishedZonesForMarket(sb, market);
-    allZones.push(
-      ...asCoverageZones(published).map((z) => ({
-        ...z,
-        market_id: z.market_id ?? String(market.id),
-      })),
-    );
-  }
-
-  const evalResult = evaluateCoverage(lat, lng, allZones);
-  if (evalResult.inZone && evalResult.matchedInclude?.market_id) {
+  const markets = await loadActiveMarkets(sb);
+  if (!markets.length) {
     return {
-      covered: true,
-      marketId: evalResult.matchedInclude.market_id,
+      covered: false,
+      marketId: null,
+      parishId: null,
+      parishBoundaryMode: false,
+      marketIds: [],
+      outsideParish: false,
+      zones: [],
+      eval: emptyEval,
+    };
+  }
+
+  const parishMap = await loadParishMap(sb);
+  const allZones = await buildCoverageZonesForMarkets(sb, markets, parishMap);
+  const evalResult = evaluateCoverage(lat, lng, allZones);
+
+  if (!evalResult.inZone || !evalResult.matchedInclude?.market_id) {
+    return {
+      covered: false,
+      marketId: null,
+      parishId: null,
+      parishBoundaryMode: false,
+      marketIds: [],
+      outsideParish: false,
       zones: allZones,
       eval: evalResult,
     };
   }
 
+  const matchedMarketId = evalResult.matchedInclude.market_id;
+  const matchedMarket = markets.find((m) => m.id === matchedMarketId);
+  const parish = matchedMarket?.parish_id ? parishMap.get(matchedMarket.parish_id) : null;
+  const parishBoundaryMode = parish?.coverage_mode === "parish_boundary";
+
+  if (!parishBoundaryMode && parish?.foundation_polygon) {
+    if (!isInsideParishFoundation(lat, lng, parish.foundation_polygon)) {
+      return {
+        covered: false,
+        marketId: null,
+        parishId: parish.id,
+        parishBoundaryMode: false,
+        marketIds: [],
+        outsideParish: true,
+        zones: allZones,
+        eval: {
+          ...evalResult,
+          inZone: false,
+          reason: "Outside parish boundary",
+        },
+      };
+    }
+  }
+
+  const parishId = matchedMarket?.parish_id ?? null;
+  const marketIds = parishBoundaryMode && parishId
+    ? markets.filter((m) => m.parish_id === parishId).map((m) => m.id)
+    : [matchedMarketId];
+
   return {
-    covered: false,
-    marketId: null,
+    covered: true,
+    marketId: matchedMarketId,
+    parishId,
+    parishBoundaryMode,
+    marketIds,
+    outsideParish: false,
     zones: allZones,
     eval: evalResult,
   };
@@ -105,14 +251,18 @@ export type SameMarketAssert =
   | { ok: true; marketId: string; eval: CoverageEvalResult }
   | {
     ok: false;
-    code: "dropoff_required" | "out_of_coverage" | "merchant_out_of_market";
+    code:
+      | "dropoff_required"
+      | "out_of_coverage"
+      | "outside_parish"
+      | "merchant_out_of_market"
+      | "merchant_out_of_parish";
     error: string;
     eval?: CoverageEvalResult;
   };
 
 /**
- * Same-town rule: dropoff must be in an active published zone M,
- * and merchant.market_id must equal M.
+ * Same-town rule (town_zones) or same-parish rule (parish_boundary).
  */
 export async function assertSameMarketCoverage(
   sb: ServiceSb,
@@ -134,6 +284,14 @@ export async function assertSameMarketCoverage(
 
   const resolved = await resolveMarketForPoint(sb, lat, lng);
   if (!resolved.covered || !resolved.marketId) {
+    if (resolved.outsideParish) {
+      return {
+        ok: false,
+        code: "outside_parish",
+        error: "We don’t deliver outside this parish yet",
+        eval: resolved.eval,
+      };
+    }
     return {
       ok: false,
       code: "out_of_coverage",
@@ -146,7 +304,36 @@ export async function assertSameMarketCoverage(
     ? String(opts.merchantMarketId).trim()
     : null;
 
-  if (!merchantMarketId || merchantMarketId !== resolved.marketId) {
+  if (!merchantMarketId) {
+    return {
+      ok: false,
+      code: "merchant_out_of_market",
+      error: "This store doesn’t deliver to your area",
+      eval: resolved.eval,
+    };
+  }
+
+  if (resolved.parishBoundaryMode) {
+    const { data: merchantMarket } = await sb
+      .from("service_markets")
+      .select("parish_id")
+      .eq("id", merchantMarketId)
+      .maybeSingle();
+    const merchantParishId = merchantMarket?.parish_id != null
+      ? String(merchantMarket.parish_id)
+      : null;
+    if (!merchantParishId || merchantParishId !== resolved.parishId) {
+      return {
+        ok: false,
+        code: "merchant_out_of_parish",
+        error: "This store doesn’t deliver to your parish",
+        eval: resolved.eval,
+      };
+    }
+    return { ok: true, marketId: merchantMarketId, eval: resolved.eval };
+  }
+
+  if (merchantMarketId !== resolved.marketId) {
     return {
       ok: false,
       code: "merchant_out_of_market",
@@ -166,26 +353,39 @@ export async function suggestMarketIdForMerchantPin(
 ): Promise<string | null> {
   const { data: markets } = await sb
     .from("service_markets")
-    .select("id, published_version_id");
+    .select("id, slug, parish_id, published_version_id, is_active");
 
   if (!markets?.length) return null;
 
-  const allZones: CoverageZone[] = [];
-  for (const m of markets) {
-    const market = m as Record<string, unknown>;
-    const published = await loadPublishedZonesForMarket(sb, market);
-    const zones = asCoverageZones(published).map((z) => ({
-      ...z,
-      market_id: z.market_id ?? String(market.id),
-    }));
-    allZones.push(...zones);
+  const parishMap = await loadParishMap(sb);
+  const rows = (markets as Record<string, unknown>[]).map((m) => ({
+    id: String(m.id),
+    slug: String(m.slug ?? m.id),
+    parish_id: m.parish_id != null ? String(m.parish_id) : null,
+    is_active: m.is_active !== false,
+    published_version_id: m.published_version_id != null ? String(m.published_version_id) : null,
+  }));
+
+  const allZones = await buildCoverageZonesForMarkets(sb, rows, parishMap);
+  const evalResult = evaluateCoverage(lat, lng, allZones);
+  if (!evalResult.inZone || !evalResult.matchedInclude?.market_id) return null;
+
+  const matchedId = evalResult.matchedInclude.market_id;
+  const matched = rows.find((m) => m.id === matchedId);
+  const parish = matched?.parish_id ? parishMap.get(matched.parish_id) : null;
+
+  if (parish?.coverage_mode === "town_zones" && parish.foundation_polygon) {
+    if (!isInsideParishFoundation(lat, lng, parish.foundation_polygon)) return null;
   }
 
-  const evalResult = evaluateCoverage(lat, lng, allZones);
-  if (evalResult.inZone && evalResult.matchedInclude?.market_id) {
-    return evalResult.matchedInclude.market_id;
+  if (parish?.coverage_mode === "parish_boundary" && matched?.parish_id) {
+    const inParish = rows
+      .filter((m) => m.parish_id === matched.parish_id)
+      .sort((a, b) => a.slug.localeCompare(b.slug));
+    return inParish[0]?.id ?? matchedId;
   }
-  return null;
+
+  return matchedId;
 }
 
 export type MerchantMarketRecomputeResult = {
@@ -194,21 +394,29 @@ export type MerchantMarketRecomputeResult = {
   skippedLocked: number;
   skippedNoPin: number;
   unchanged: number;
+  updatedLocked: number;
+};
+
+export type RecomputeMerchantMarketsOpts = {
+  includeLocked?: boolean;
 };
 
 /**
- * Reassign unlocked merchants from published coverage.
- * Locked rows are never touched.
+ * Reassign merchants from published coverage.
+ * Locked rows skipped unless includeLocked is true.
  */
-export async function recomputeUnlockedMerchantMarkets(
+export async function recomputeMerchantMarkets(
   sb: ServiceSb,
+  opts: RecomputeMerchantMarketsOpts = {},
 ): Promise<MerchantMarketRecomputeResult> {
+  const includeLocked = opts.includeLocked === true;
   const result: MerchantMarketRecomputeResult = {
     updated: 0,
     cleared: 0,
     skippedLocked: 0,
     skippedNoPin: 0,
     unchanged: 0,
+    updatedLocked: 0,
   };
 
   const { data: merchants, error } = await sb
@@ -218,7 +426,8 @@ export async function recomputeUnlockedMerchantMarkets(
 
   for (const row of merchants) {
     const m = row as Record<string, unknown>;
-    if (m.market_id_locked === true) {
+    const wasLocked = m.market_id_locked === true;
+    if (wasLocked && !includeLocked) {
       result.skippedLocked += 1;
       continue;
     }
@@ -236,16 +445,24 @@ export async function recomputeUnlockedMerchantMarkets(
       continue;
     }
 
-    const { error: upErr } = await sb
-      .from("merchants")
-      .update({ market_id: suggested })
-      .eq("id", String(m.id))
-      .eq("market_id_locked", false);
+    let updateQuery = sb.from("merchants").update({ market_id: suggested }).eq("id", String(m.id));
+    if (!includeLocked) {
+      updateQuery = updateQuery.eq("market_id_locked", false);
+    }
+    const { error: upErr } = await updateQuery;
     if (upErr) continue;
 
+    if (wasLocked) result.updatedLocked += 1;
     if (suggested == null) result.cleared += 1;
     else result.updated += 1;
   }
 
   return result;
+}
+
+/** @deprecated Use recomputeMerchantMarkets */
+export async function recomputeUnlockedMerchantMarkets(
+  sb: ServiceSb,
+): Promise<MerchantMarketRecomputeResult> {
+  return recomputeMerchantMarkets(sb, { includeLocked: false });
 }

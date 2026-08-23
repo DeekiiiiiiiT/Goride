@@ -4,7 +4,7 @@
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getJwtRoles, jwtPrimaryRole } from "./authEdge.ts";
-import { userHasProductAccessResolved } from "./rbacQuery.ts";
+import { resolveEffectiveRoleNames, resolveUserPermissions, userHasProductAccessResolved } from "./rbacQuery.ts";
 
 /** Product identifiers */
 export type ProductKey = "fleet" | "enterprise" | "dash" | "rides" | "driver" | "haul" | "courier";
@@ -25,7 +25,7 @@ export const PRODUCT_ADMIN_ROLES: Record<ProductKey, Set<string>> = {
   rides: new Set([...PLATFORM_ROLES, "rides_admin", "rides_ops"]),
   driver: new Set([...PLATFORM_ROLES, "driver_admin", "driver_ops"]),
   haul: new Set([...PLATFORM_ROLES, "haul_admin", "haul_ops"]),
-  courier: new Set([...PLATFORM_ROLES, "courier_admin", "courier_ops"]),
+  courier: new Set([...PLATFORM_ROLES, "courier_admin", "courier_ops", "dash_admin", "dash_ops"]),
 };
 
 export type ProductAdminUser = {
@@ -34,6 +34,8 @@ export type ProductAdminUser = {
   role: string;
   /** All roles on the JWT (for write gates when primary role differs). */
   roles: string[];
+  /** Resolved permission keys from DB + JWT fallback. */
+  permissions: string[];
   isPlatformRole: boolean;
 };
 
@@ -66,7 +68,7 @@ export async function requireProductAdmin(
     return c.json({ error: "Unauthorized: invalid token" }, 401);
   }
 
-  const roles = getJwtRoles(user);
+  const roles = await resolveEffectiveRoleNames(user.id, user);
   const allowedRoles = PRODUCT_ADMIN_ROLES[product];
   const matchedProduct = roles.find((r) => allowedRoles.has(r) && !PLATFORM_ROLES.has(r));
   const matchedPlatform = roles.find((r) => PLATFORM_ROLES.has(r));
@@ -78,7 +80,7 @@ export async function requireProductAdmin(
     platformDbOk = await dbIsPlatformUser(user.id);
   }
 
-  if (!matchedProduct && !dbAccess && !platformDbOk) {
+  if (!matchedProduct && !matchedPlatform && !dbAccess && !platformDbOk) {
     return c.json(
       {
         error: "Forbidden",
@@ -91,13 +93,19 @@ export async function requireProductAdmin(
   }
 
   const effectiveRole = matchedProduct
-    ?? (dbAccess ? `${product}_admin` : (platformDbOk ? matchedPlatform! : jwtPrimaryRole(user)));
+    ?? matchedPlatform
+    ?? (dbAccess ? `${product}_admin` : jwtPrimaryRole(user))
+    ?? roles[0]
+    ?? "";
+
+  const permissions = await resolveUserPermissions(user.id, user);
 
   return {
     id: user.id,
     email: user.email || "",
     role: effectiveRole,
     roles,
+    permissions,
     isPlatformRole: PLATFORM_ROLES.has(effectiveRole),
   };
 }
@@ -124,7 +132,7 @@ export async function requireProductAdminAny(
     return c.json({ error: "Unauthorized: invalid token" }, 401);
   }
 
-  const roles = getJwtRoles(user);
+  const roles = await resolveEffectiveRoleNames(user.id, user);
   let matched: string | undefined;
   for (const product of products) {
     const allowed = PRODUCT_ADMIN_ROLES[product];
@@ -159,6 +167,7 @@ export async function requireProductAdminAny(
     email: user.email || "",
     role: matched,
     roles,
+    permissions: await resolveUserPermissions(user.id, user),
     isPlatformRole: PLATFORM_ROLES.has(matched),
   };
 }

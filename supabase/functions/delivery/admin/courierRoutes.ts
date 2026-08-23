@@ -10,6 +10,10 @@ import {
   type ProductAdminUser,
 } from "../../_shared/productAdmin.ts";
 import {
+  buildCourierSuspendCrossPersonaWarning,
+  COURIER_UNSUSPEND_AUTH_PATCH,
+} from "./courierAdminActions.ts";
+import {
   canForceApprove,
   canStrictApprove,
   computeComplianceBlockers,
@@ -20,9 +24,7 @@ import {
   type CourierComplianceBlocker,
 } from "./complianceLogic.ts";
 import {
-  COURIER_DELETE_ROLES,
-  COURIER_WRITE_ROLES,
-  hasAnyCourierRole,
+  requireComplianceApprove,
   requireDelete,
   requireWrite,
 } from "./permissions.ts";
@@ -155,16 +157,16 @@ function buildComplianceRow(
 }
 
 export function registerCourierAdminRoutes(app: Hono) {
-  const admin = new Hono();
+  const couriers = new Hono();
 
-  admin.use("*", async (c, next) => {
+  // Auth only on /admin/couriers/* — do not mount a catch-all /admin app
+  // (that would intercept /admin/audit, /admin/identities, etc.).
+  couriers.use("*", async (c, next) => {
     const result = await requireProductAdmin(c, "courier");
     if (result instanceof Response) return result;
     c.set("adminUser", result);
     await next();
   });
-
-  const couriers = new Hono();
 
   couriers.get("/stats", async (c) => {
     const db = getDb();
@@ -284,11 +286,12 @@ export function registerCourierAdminRoutes(app: Hono) {
 
   couriers.patch("/compliance/:userId", async (c) => {
     const adminUser = c.get("adminUser") as ProductAdminUser;
-    const denied = requireWrite(adminUser);
+    const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
+    const isApprove = body.background_check === "approved" || body.approve === true;
+    const denied = isApprove ? requireComplianceApprove(adminUser) : requireWrite(adminUser);
     if (denied) return denied;
 
     const userId = c.req.param("userId");
-    const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
     const db = getDb();
 
     const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
@@ -676,8 +679,8 @@ export function registerCourierAdminRoutes(app: Hono) {
         },
       },
       permissions: {
-        can_write: hasAnyCourierRole(adminUser.roles, COURIER_WRITE_ROLES),
-        can_delete: hasAnyCourierRole(adminUser.roles, COURIER_DELETE_ROLES),
+        can_write: requireWrite(adminUser) === null,
+        can_delete: requireDelete(adminUser) === null,
         can_see_reset_link: isPlatformRole(adminUser.role),
       },
     });
@@ -775,7 +778,19 @@ export function registerCourierAdminRoutes(app: Hono) {
     if (!reason) {
       return c.json({ error: "reason_required", message: "Suspension reason is required" }, 400);
     }
+    const confirmCrossPersona = body.confirmCrossPersona === true;
     const db = getDb();
+    const { data: customerPersona } = await db.from("customers")
+      .select("id, account_status, email")
+      .eq("user_id", userId)
+      .maybeSingle();
+    const crossWarning = buildCourierSuspendCrossPersonaWarning(
+      customerPersona as { id: string; account_status: string; email?: string | null } | null,
+      confirmCrossPersona,
+    );
+    if (crossWarning) {
+      return c.json(crossWarning, 409);
+    }
     const now = new Date().toISOString();
     const { error } = await db.from("courier_profiles").update({
       status: "suspended",
@@ -785,8 +800,6 @@ export function registerCourierAdminRoutes(app: Hono) {
       updated_at: now,
     }).eq("user_id", userId);
     if (error) return c.json({ error: error.message }, 500);
-    const auth = serviceAuth();
-    await auth.auth.admin.updateUserById(userId, { ban_duration: "8760h" });
     await courierAudit(adminUser.id, "admin_courier_suspend", { courier_user_id: userId, reason }, userId);
     return c.json({ ok: true, status: "suspended" });
   });
@@ -807,7 +820,7 @@ export function registerCourierAdminRoutes(app: Hono) {
     }).eq("user_id", userId);
     if (error) return c.json({ error: error.message }, 500);
     const auth = serviceAuth();
-    await auth.auth.admin.updateUserById(userId, { ban_duration: "none" });
+    await auth.auth.admin.updateUserById(userId, { ...COURIER_UNSUSPEND_AUTH_PATCH });
     await courierAudit(adminUser.id, "admin_courier_unsuspend", { courier_user_id: userId }, userId);
     return c.json({ ok: true, status: "active" });
   });
@@ -832,8 +845,6 @@ export function registerCourierAdminRoutes(app: Hono) {
       updated_at: now,
     }).eq("user_id", userId);
     if (error) return c.json({ error: error.message }, 500);
-    const auth = serviceAuth();
-    await auth.auth.admin.updateUserById(userId, { ban_duration: "876000h" });
     await courierAudit(adminUser.id, "admin_courier_deactivate", { courier_user_id: userId, reason }, userId);
     return c.json({ ok: true, status: "deactivated" });
   });
@@ -857,7 +868,7 @@ export function registerCourierAdminRoutes(app: Hono) {
     }).eq("user_id", userId);
     if (error) return c.json({ error: error.message }, 500);
     const auth = serviceAuth();
-    await auth.auth.admin.updateUserById(userId, { ban_duration: "none" });
+    await auth.auth.admin.updateUserById(userId, { ...COURIER_UNSUSPEND_AUTH_PATCH });
     await courierAudit(adminUser.id, "admin_courier_reactivate", { courier_user_id: userId }, userId);
     return c.json({ ok: true, status: "active" });
   });
@@ -925,15 +936,21 @@ export function registerCourierAdminRoutes(app: Hono) {
     });
   });
 
-  admin.route("/couriers", couriers);
+  app.route("/admin/couriers", couriers);
 
-  registerDashPlayStoreLaunchRoutes(admin, {
+  const play = new Hono();
+  play.use("*", async (c, next) => {
+    const result = await requireProductAdmin(c, "courier");
+    if (result instanceof Response) return result;
+    c.set("adminUser", result);
+    await next();
+  });
+  registerDashPlayStoreLaunchRoutes(play, {
     basePath: "/courier-play-store",
     launchTable: "dash_courier_play_store_launch",
     releasesTable: "dash_courier_play_store_releases",
-    writeRoles: new Set(["courier_admin", "platform_owner", "superadmin"]),
-    forbiddenMessage: "courier_admin role required",
+    writeRoles: new Set(["courier_admin", "platform_owner", "superadmin", "dash_admin"]),
+    forbiddenMessage: "courier_admin or dash_admin role required",
   });
-
-  app.route("/admin", admin);
+  app.route("/admin", play);
 }

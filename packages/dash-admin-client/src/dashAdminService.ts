@@ -379,12 +379,26 @@ export function patchMerchantOps(
   });
 }
 
-export function backfillMerchantMarkets(accessToken: string) {
-  return deliveryFetch<{ assigned: number; skipped: number; total: number }>(
+export function backfillMerchantMarkets(accessToken: string, includeLocked = false) {
+  const qs = includeLocked ? '?include_locked=true' : '';
+  return deliveryFetch<{
+    assigned: number;
+    skipped: number;
+    total: number;
+    updated_locked?: number;
+  }>(
     accessToken,
-    '/admin/markets/backfill-merchant-markets',
+    `/admin/markets/backfill-merchant-markets${qs}`,
     { method: 'POST', body: '{}' },
   );
+}
+
+export function recomputeMerchantMarket(accessToken: string, merchantId: string) {
+  return deliveryFetch<{
+    merchant: DashMerchant;
+    previous_market_id: string | null;
+    suggested_market_id: string | null;
+  }>(accessToken, `/admin/merchants/${merchantId}/recompute-market`, { method: 'POST', body: '{}' });
 }
 
 export function assignMerchant(accessToken: string, id: string, assignedTo: string | null) {
@@ -656,7 +670,8 @@ export interface DashParishRow {
   name: string;
   slug: string;
   sort_order?: number;
-  /** Ops parish foundation outline — not used for customer delivery. */
+  coverage_mode?: 'town_zones' | 'parish_boundary';
+  /** Parish outline — outer gate (town_zones) or live delivery area (parish_boundary). */
   foundation_polygon?: DashZoneVertex[] | null;
   foundation_updated_at?: string | null;
   towns?: DashMarketRow[];
@@ -713,7 +728,7 @@ export function createParish(accessToken: string, payload: { name: string; sort_
 export function updateParish(
   accessToken: string,
   parishId: string,
-  payload: { name?: string; sort_order?: number },
+  payload: { name?: string; sort_order?: number; coverage_mode?: 'town_zones' | 'parish_boundary' },
 ) {
   return deliveryFetch<{ parish: DashParishRow }>(
     accessToken,
@@ -865,12 +880,13 @@ export type MerchantMarketRecompute = {
   skippedLocked: number;
   skippedNoPin: number;
   unchanged: number;
+  updatedLocked: number;
 };
 
 export function publishMarketCoverage(
   accessToken: string,
   marketId: string,
-  payload: { label?: string; notes?: string } = {},
+  payload: { label?: string; notes?: string; recompute_locked?: boolean } = {},
 ) {
   return deliveryFetch<{
     market: DashMarketRow;
@@ -887,22 +903,24 @@ export function restoreCoverageVersion(
   marketId: string,
   versionId: string,
   republish = true,
+  recomputeLocked = false,
 ) {
   return deliveryFetch<{
     market: DashMarketRow;
     merchant_recompute?: MerchantMarketRecompute | null;
   }>(accessToken, `/admin/markets/${marketId}/versions/${versionId}/restore`, {
     method: 'POST',
-    body: JSON.stringify({ republish }),
+    body: JSON.stringify({ republish, recompute_locked: recomputeLocked }),
   });
 }
 
 function formatMerchantRecomputeToast(r?: MerchantMarketRecompute | null): string {
   if (!r) return '';
   const moved = r.updated + r.cleared;
-  if (moved === 0 && r.skippedLocked === 0) return '';
+  if (moved === 0 && r.skippedLocked === 0 && r.updatedLocked === 0) return '';
   const parts = [`${r.updated} reassigned`];
   if (r.cleared) parts.push(`${r.cleared} cleared`);
+  if (r.updatedLocked) parts.push(`${r.updatedLocked} locked updated`);
   if (r.skippedLocked) parts.push(`${r.skippedLocked} locked skipped`);
   return ` · ${parts.join(', ')}`;
 }

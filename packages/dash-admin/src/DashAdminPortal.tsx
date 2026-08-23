@@ -13,6 +13,7 @@ import { Toaster } from 'sonner';
 import { AdminShell } from '@roam/admin-core';
 import { AdminLoginForm } from './components/AdminLoginForm';
 import { AdminConfirmProvider } from './contexts/AdminConfirmContext';
+import { DashAdminAccessProvider } from './hooks/useDashAdminAccess';
 import {
   DASH_ADMIN_CONFIG,
   filterConfigForRole,
@@ -34,6 +35,8 @@ import { OrderDetailPage } from './pages/orders/OrderDetailPage';
 import { SupportToolsPage } from './pages/SupportToolsPage';
 import { PlatformSettingsPage } from './pages/PlatformSettingsPage';
 import { DashTeamPage } from './pages/users/DashTeamPage';
+import { IdentityDirectoryPage } from './pages/users/IdentityDirectoryPage';
+import { IdentityDetailPage } from './pages/users/IdentityDetailPage';
 import { CustomersListPage } from './pages/customers/CustomersListPage';
 import { CustomerDetailPage } from './pages/customers/CustomerDetailPage';
 import { CouriersListPage } from './pages/couriers/CouriersListPage';
@@ -107,6 +110,7 @@ function AdminLayoutShell({ session }: { session: Session }) {
 export function DashAdminPortal() {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
+  const [mfaBlocked, setMfaBlocked] = useState(false);
   const { hasPermission, loading: permsLoading } = usePermissions({ supabase });
 
   useEffect(() => {
@@ -117,6 +121,19 @@ export function DashAdminPortal() {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, s) => setSession(s));
     return () => subscription.unsubscribe();
   }, []);
+
+  useEffect(() => {
+    if (!session) {
+      setMfaBlocked(false);
+      return;
+    }
+    const role = jwtPrimaryRole(session.user);
+    const privileged = ['platform_owner', 'dash_admin', 'courier_admin', 'identity_admin', 'superadmin'].includes(role);
+    if (!privileged) return;
+    void supabase.auth.mfa.getAuthenticatorAssuranceLevel().then(({ data }) => {
+      setMfaBlocked(data?.currentLevel !== 'aal2');
+    }).catch(() => setMfaBlocked(false));
+  }, [session]);
 
   const hasJwtAccess =
     !!session &&
@@ -148,10 +165,31 @@ export function DashAdminPortal() {
     );
   }
 
+  if (mfaBlocked) {
+    return (
+      <div className="dash-admin-portal min-h-screen flex items-center justify-center bg-slate-950 p-6">
+        <div className="max-w-md text-center space-y-3">
+          <h2 className="text-lg font-semibold text-white">Multi-factor authentication required</h2>
+          <p className="text-sm text-slate-400">
+            Admin accounts at your privilege level must enroll MFA before using the Ops Console.
+          </p>
+          <button
+            type="button"
+            onClick={() => void supabase.auth.signOut()}
+            className="px-4 py-2 rounded-lg bg-amber-600 text-white text-sm"
+          >
+            Sign out
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="dash-admin-portal">
       <Toaster position="top-right" theme="dark" richColors />
       <AdminConfirmProvider>
+        <DashAdminAccessProvider session={session}>
         <Routes>
           <Route element={<AdminLayoutShell session={session} />}>
             <Route index element={<DashAdminDashboard />} />
@@ -180,8 +218,11 @@ export function DashAdminPortal() {
                 </Suspense>
               }
             />
+            <Route path="users" element={<IdentityDirectoryPage />} />
+            <Route path="users/operators" element={<DashTeamPage />} />
+            <Route path="users/audit" element={<ActivityLogPage />} />
+            <Route path="users/:userId" element={<IdentityDetailPage />} />
             <Route path="team" element={<DashTeamPage />} />
-            <Route path="users" element={<DashTeamPage />} />
             <Route path="activity" element={<ActivityLogPage />} />
             <Route path="customers" element={<CustomersListPage />} />
             <Route path="customers/:id" element={<CustomerDetailPage />} />
@@ -214,6 +255,7 @@ export function DashAdminPortal() {
             <Route path="settings" element={<PlatformSettingsPage session={session} />} />
           </Route>
         </Routes>
+        </DashAdminAccessProvider>
       </AdminConfirmProvider>
     </div>
   );

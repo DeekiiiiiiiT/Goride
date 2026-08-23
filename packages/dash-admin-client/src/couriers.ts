@@ -1,4 +1,4 @@
-import { dashAdminFetch } from './fetch';
+import { dashAdminFetch, dashAdminFetchRaw, parseDashAdminJson } from './fetch';
 import type {
   CourierApproveResult,
   CourierAdminPermissions,
@@ -116,15 +116,37 @@ export async function approveCourier(
   });
 }
 
+export type CourierCrossPersonaWarning = {
+  error: 'cross_persona_warning';
+  message: string;
+  customer: { id: string; account_status: string; email?: string | null };
+};
+
 export async function suspendCourier(
   accessToken: string,
   userId: string,
   reason: string,
+  opts?: { confirmCrossPersona?: boolean },
 ): Promise<{ ok: boolean; status: string }> {
-  return dashAdminFetch(accessToken, `/couriers/${encodeURIComponent(userId)}/suspend`, {
-    method: 'POST',
-    body: JSON.stringify({ reason }),
-  });
+  const res = await dashAdminFetchRaw(
+    accessToken,
+    `/couriers/${encodeURIComponent(userId)}/suspend`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ reason, confirmCrossPersona: opts?.confirmCrossPersona === true }),
+    },
+  );
+  if (res.status === 409) {
+    const body = await res.json().catch(() => ({})) as CourierCrossPersonaWarning;
+    if (body.error === 'cross_persona_warning') {
+      const err = new Error(body.message || 'Cross-persona warning') as Error & {
+        crossPersona?: CourierCrossPersonaWarning;
+      };
+      err.crossPersona = body;
+      throw err;
+    }
+  }
+  return parseDashAdminJson<{ ok: boolean; status: string }>(res);
 }
 
 export async function unsuspendCourier(
