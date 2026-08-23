@@ -27,7 +27,7 @@ Include **scheme + host + port + path** where your apps handle the post-auth lan
 | Dash customer (native app) | — | `co.roamenterprise.rush://login` |
 | Dash courier | `http://localhost:5176/` | `https://courier.roamrush.app/` |
 | Dash courier (native app) | — | `co.roamenterprise.courier://login` |
-| Dash courier admin | `http://localhost:5176/admin` | `https://courier.roamrush.app/admin` |
+| Dash / Rush Ops Console | `http://localhost:5174/admin` | `https://roamrush.app/admin` |
 | Dash merchant | `http://localhost:5175/` | `https://partner.roamrush.app/` (if used) |
 | Dash merchant (Android / iOS app) | — | `co.roamenterprise.partner://login` |
 | Rides passenger | `http://localhost:5180/login` | `https://roam-s.co/login` |

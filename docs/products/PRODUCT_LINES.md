@@ -72,7 +72,7 @@ One Supabase project. Platform settings are stored per segment:
 | Driver | `platform:settings:driver` | roamdriver.co/admin |
 | Haul | `platform:settings:haul` | roamhaul.co/admin |
 | Dash | `platform:settings:dash` | roamrush.app/admin |
-| Courier | `platform:settings:courier` | courier.roamrush.app/admin |
+| Courier | `platform:settings:courier` | roamrush.app/admin |
 
 Legacy key `platform:settings` is read-only (dual-read fallback for fleet/enterprise migration).
 

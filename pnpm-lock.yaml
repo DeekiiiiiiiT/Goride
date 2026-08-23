@@ -264,9 +264,6 @@ importers:
       '@capacitor/status-bar':
         specifier: ^7.0.6
         version: 7.0.6(@capacitor/core@7.6.5)
-      '@roam/admin-core':
-        specifier: workspace:*
-        version: link:../../packages/admin-core
       '@roam/api-client':
         specifier: workspace:*
         version: link:../../packages/api-client
@@ -276,9 +273,6 @@ importers:
       '@roam/business-config':
         specifier: workspace:*
         version: link:../../packages/business-config
-      '@roam/play-store-launch':
-        specifier: workspace:*
-        version: link:../../packages/play-store-launch
       '@roam/rush-chat':
         specifier: workspace:*
         version: link:../../packages/rush-chat
@@ -321,9 +315,6 @@ importers:
       react-dom:
         specifier: ^18.3.1
         version: 18.3.1(react@18.3.1)
-      react-router-dom:
-        specifier: ^7.6.0
-        version: 7.15.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       sonner:
         specifier: ^2.0.3
         version: 2.0.7(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
@@ -391,9 +382,6 @@ importers:
       '@capacitor/status-bar':
         specifier: ^7.0.6
         version: 7.0.6(@capacitor/core@7.6.5)
-      '@roam/admin-core':
-        specifier: workspace:*
-        version: link:../../packages/admin-core
       '@roam/api-client':
         specifier: workspace:*
         version: link:../../packages/api-client
@@ -403,6 +391,12 @@ importers:
       '@roam/business-config':
         specifier: workspace:*
         version: link:../../packages/business-config
+      '@roam/dash-admin':
+        specifier: workspace:*
+        version: link:../../packages/dash-admin
+      '@roam/dash-admin-client':
+        specifier: workspace:*
+        version: link:../../packages/dash-admin-client
       '@roam/location':
         specifier: workspace:*
         version: link:../../packages/location
@@ -1774,6 +1768,85 @@ importers:
 
   packages/business-config:
     dependencies:
+      '@roam/types':
+        specifier: workspace:*
+        version: link:../types
+
+  packages/dash-admin:
+    dependencies:
+      '@roam/admin-core':
+        specifier: workspace:*
+        version: link:../admin-core
+      '@roam/api-client':
+        specifier: workspace:*
+        version: link:../api-client
+      '@roam/auth-client':
+        specifier: workspace:*
+        version: link:../auth-client
+      '@roam/dash-admin-client':
+        specifier: workspace:*
+        version: link:../dash-admin-client
+      '@roam/location':
+        specifier: workspace:*
+        version: link:../location
+      '@roam/play-store-launch':
+        specifier: workspace:*
+        version: link:../play-store-launch
+      '@roam/types':
+        specifier: workspace:*
+        version: link:../types
+      '@roam/vertical-config':
+        specifier: workspace:*
+        version: link:../vertical-config
+      '@supabase/supabase-js':
+        specifier: ^2
+        version: 2.105.4
+      leaflet:
+        specifier: ^1.9.4
+        version: 1.9.4
+      lucide-react:
+        specifier: ^0.487.0
+        version: 0.487.0(react@18.3.1)
+      react:
+        specifier: ^18.3.1
+        version: 18.3.1
+      react-dom:
+        specifier: ^18.3.1
+        version: 18.3.1(react@18.3.1)
+      react-router-dom:
+        specifier: ^7.6.0
+        version: 7.15.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      recharts:
+        specifier: ^3.8.1
+        version: 3.8.1(@types/react@18.3.28)(react-dom@18.3.1(react@18.3.1))(react-is@16.13.1)(react@18.3.1)(redux@5.0.1)
+      sonner:
+        specifier: ^2.0.3
+        version: 2.0.7(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+    devDependencies:
+      '@types/leaflet':
+        specifier: ^1.9.21
+        version: 1.9.21
+      '@types/react':
+        specifier: ^18.3.0
+        version: 18.3.28
+      '@types/react-dom':
+        specifier: ^18.3.0
+        version: 18.3.7(@types/react@18.3.28)
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+
+  packages/dash-admin-client:
+    dependencies:
+      '@roam/api-client':
+        specifier: workspace:*
+        version: link:../api-client
+      '@roam/auth-client':
+        specifier: workspace:*
+        version: link:../auth-client
+      '@roam/play-store-launch':
+        specifier: workspace:*
+        version: link:../play-store-launch
       '@roam/types':
         specifier: workspace:*
         version: link:../types

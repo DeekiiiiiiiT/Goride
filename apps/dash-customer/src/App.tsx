@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { Suspense, useState, useEffect, useCallback, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { BrowserRouter } from 'react-router-dom';
 import { AuthRecoveryGate } from '@roam/auth-client';
-import { DashAdminPortal } from '@dash-admin/DashAdminPortal';
+import { Loader2 } from 'lucide-react';
 import { Session } from '@supabase/supabase-js';
 import { toast } from 'sonner';
 import HomePage from './pages/HomePage';
@@ -123,6 +123,18 @@ const IMMERSIVE_STACK_PAGES: StackPage[] = [
   'payment-callback-paypal',
 ];
 
+const DashAdminPortal = React.lazy(() =>
+  import('@roam/dash-admin').then((m) => ({ default: m.DashAdminPortal })),
+);
+
+function AdminPortalFallback() {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-slate-950">
+      <Loader2 className="w-8 h-8 animate-spin text-amber-400" />
+    </div>
+  );
+}
+
 /** Customer ordering app (roamrush.app). Rush Ops Console: roamrush.app/admin */
 export default function App() {
   const isAdmin = window.location.pathname.startsWith('/admin');
@@ -135,7 +147,9 @@ export default function App() {
     >
       {isAdmin ? (
         <BrowserRouter basename="/admin">
-          <DashAdminPortal />
+          <Suspense fallback={<AdminPortalFallback />}>
+            <DashAdminPortal />
+          </Suspense>
         </BrowserRouter>
       ) : (
         <DashCustomerApp />

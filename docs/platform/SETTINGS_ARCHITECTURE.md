@@ -13,7 +13,7 @@ Enterprise multi-segment settings are stored in Supabase KV with one key per bus
 | Driver | `platform:settings:driver` | roamdriver.co/admin | Platform staff, `driver_admin` |
 | Haul | `platform:settings:haul` | roamhaul.co/admin | Platform staff, `haul_admin` |
 | Dash | `platform:settings:dash` | roamrush.app/admin | Platform staff, `dash_admin` |
-| Courier | `platform:settings:courier` | courier.roamrush.app/admin | Platform staff, `courier_admin` |
+| Courier | `platform:settings:courier` | roamrush.app/admin (Courier tab) | Platform staff, `courier_admin` |
 
 Legacy key `platform:settings` is **read-only** (dual-read fallback for fleet/enterprise). All writes go to segment keys.
 
@@ -55,7 +55,7 @@ Host hints: `roamdominion` → global, `roamfleet` → fleet, `roamenterprise` �
 | roamdriver.co/admin settings | Reads/writes driver segment |
 | roamhaul.co/admin settings | Reads/writes haul segment |
 | roamrush.app/admin settings | Reads/writes dash segment |
-| courier.roamrush.app/admin settings | Reads/writes courier segment |
+| roamrush.app/admin settings (Courier tab) | Reads/writes courier segment |
 | Legacy `platform:settings` exists, segment empty | Fleet/enterprise GET merges legacy into response |
 | Consumer segment empty KV | Fail-open defaults from `@roam/platform-settings` |
 

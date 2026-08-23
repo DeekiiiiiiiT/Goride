@@ -1,25 +1,22 @@
 import React from 'react';
-import { BrowserRouter } from 'react-router-dom';
 import { AuthRecoveryGate } from '@roam/auth-client';
 import { CourierConsumerApp } from '@/CourierConsumerApp';
-import { CourierAdminPortal } from '@/admin/CourierAdminPortal';
+import CourierAdminRemovedPage from './pages/CourierAdminRemovedPage';
 
 export default function App() {
   const isAdmin = window.location.pathname.startsWith('/admin');
 
+  if (isAdmin) {
+    return <CourierAdminRemovedPage />;
+  }
+
   return (
     <AuthRecoveryGate
       title="Reset password"
-      subtitle={isAdmin ? 'Roam Rush Courier Admin' : 'Roam Rush Courier'}
-      signInHref={isAdmin ? '/admin' : '/'}
+      subtitle="Roam Rush Courier"
+      signInHref="/"
     >
-      {isAdmin ? (
-        <BrowserRouter basename="/admin">
-          <CourierAdminPortal />
-        </BrowserRouter>
-      ) : (
-        <CourierConsumerApp />
-      )}
+      <CourierConsumerApp />
     </AuthRecoveryGate>
   );
 }

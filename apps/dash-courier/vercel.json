@@ -36,8 +36,33 @@
       ]
     }
   ],
+  "redirects": [
+    {
+      "source": "/admin",
+      "has": [{ "type": "host", "value": "courier.roamrush.app" }],
+      "destination": "/404",
+      "statusCode": 404
+    },
+    {
+      "source": "/admin/:path*",
+      "has": [{ "type": "host", "value": "courier.roamrush.app" }],
+      "destination": "/404",
+      "statusCode": 404
+    },
+    {
+      "source": "/admin",
+      "has": [{ "type": "host", "value": "www.courier.roamrush.app" }],
+      "destination": "/404",
+      "statusCode": 404
+    },
+    {
+      "source": "/admin/:path*",
+      "has": [{ "type": "host", "value": "www.courier.roamrush.app" }],
+      "destination": "/404",
+      "statusCode": 404
+    }
+  ],
   "rewrites": [
-    { "source": "/admin/(.*)", "destination": "/" },
     { "source": "/(.*)", "destination": "/" }
   ]
 }

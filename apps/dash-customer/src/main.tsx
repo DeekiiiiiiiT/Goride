@@ -7,7 +7,6 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from 'sonner';
 import App from './App';
 import { initRushNative } from './capacitor-native';
-import './dash-admin-tailwind';
 import './index.css';
 
 const queryClient = new QueryClient({

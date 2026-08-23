@@ -51,4 +51,11 @@
 
 ## API reference
 
+| Method | Path | Scope | Description |
+|--------|------|-------|-------------|
+| GET | `/admin/dashboard/stats` | dash or courier | Role-aware dashboard: `{ scope: 'platform', platform: {...} }` or `{ scope: 'courier', courier: {...} }` |
+| GET | `/admin/merchants` | dash | List merchants |
+| GET | `/admin/couriers/stats` | courier | Courier-only stats (legacy; prefer unified dashboard) |
+| GET | `/admin/pricing/overview` | dash | Pricing hub overview |
+
 See `supabase/functions/delivery/README.md` for full route list.

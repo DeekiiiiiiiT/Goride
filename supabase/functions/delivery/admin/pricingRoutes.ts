@@ -5,10 +5,8 @@ import { Hono } from "https://deno.land/x/hono@v4.3.11/mod.ts";
 import { requireProductAdmin, type ProductAdminUser } from "../../_shared/productAdmin.ts";
 import { requireDashWrite } from "./dashPermissions.ts";
 import { getDb, writeKvAudit } from "./merchantAdminShared.ts";
+// Import from repo packages/ (4 levels up from admin/), NOT supabase/packages/.
 import {
-  parsePricingRules,
-  serializePricingRules,
-} from "../../../../packages/dash-pricing/src/index.ts";
 import { resolveDashOrderPricing } from "../pricingResolver.ts";
 import { recordCashSettlement } from "../courierCashLedger.ts";
 

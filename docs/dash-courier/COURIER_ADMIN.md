@@ -1,6 +1,15 @@
-# Courier admin — user management (ops playbook)
+# Courier admin — ops playbook
 
-Super Admin → **User Management** (`/admin/users`) for courier accounts on courier.roamrush.app/admin.
+Courier operations live in the **Roam Rush Ops Console**: **https://roamrush.app/admin**
+
+- **Courier directory:** `/admin/couriers`
+- **Compliance:** `/admin/couriers/compliance`
+- **Presence:** `/admin/couriers/presence`
+- **Delivery ledger:** `/admin/couriers/ledger`
+- **Courier platform settings:** Platform Settings → **Courier** tab
+- **Courier Play Store:** Play Store → **Courier app** tab
+
+`courier.roamrush.app/admin` is removed. The courier driver app (`courier.roamrush.app`) is consumer-only.
 
 ## Metrics
 
@@ -13,12 +22,12 @@ Super Admin → **User Management** (`/admin/users`) for courier accounts on cou
 
 ## Roles
 
-| Role | List / detail | Write actions |
-|------|---------------|---------------|
-| courier_ops | Yes | None |
-| courier_admin | Yes | Suspend, approve, compliance updates |
-| platform_owner, platform_support, superadmin | Yes | All write actions; force-approve |
-| platform_owner, superadmin | Yes | Delete courier profile |
+| Role | Nav scope | Write actions |
+|------|-----------|---------------|
+| courier_ops | Dashboard, couriers, orders, live ops, support, settings (courier), Play Store (courier) | Read-only on courier actions |
+| courier_admin | Same as courier_ops | Suspend, approve, compliance updates |
+| platform_owner, platform_support, superadmin | Full Ops Console | All write actions; force-approve |
+| platform_owner, superadmin | Full Ops Console | Delete courier profile |
 
 ## Compliance workflow
 
@@ -45,13 +54,6 @@ Super Admin → **User Management** (`/admin/users`) for courier accounts on cou
 
 Requires `Authorization: Bearer <jwt>` and `apikey` header. Caller must have `courier_admin`, `courier_ops`, or platform admin role.
 
-## Deploy order
-
-1. Apply migration `20260620120000_courier_profiles.sql`.
-2. Deploy the `delivery` Edge function (courier admin routes).
-3. Ship `@roam/dash-courier` with `/admin` portal.
-4. Smoke test compliance approve flow on staging.
-
 ## Manual QA checklist
 
 | # | Scenario | Expected |
@@ -62,10 +64,10 @@ Requires `Authorization: Bearer <jwt>` and `apikey` header. Caller must have `co
 | 4 | Strict approve | `status → active` |
 | 5 | Force approve without reason | 400 `force_reason_required` |
 | 6 | Presence map | Online couriers with fresh GPS appear on map |
-| 7 | Support order lookup | Order detail + cancel/complete for write roles |
+| 7 | Support order lookup | Order detail + cancel/refund for write roles |
 
 ## Local dev
 
-- Consumer app: `pnpm --filter @roam/dash-courier dev` → http://localhost:5176
-- Admin portal: http://localhost:5176/admin
+- Ops console (courier + platform): `pnpm --filter @roam/dash-customer dev` → http://localhost:5174/admin
+- Courier driver app: `pnpm --filter @roam/dash-courier dev` → http://localhost:5176
 - Assign `courier_admin` in Supabase `app_metadata.role` for test admin user.

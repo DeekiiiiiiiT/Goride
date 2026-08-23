@@ -2387,6 +2387,7 @@ app.post("/merchant/notifications/:id/read", async (c) => {
 import { registerMerchantApplicationRoutes } from "./merchant_application_routes.ts";
 import { registerMerchantAssetsRoutes } from "./merchantAssetsUpload.ts";
 import { registerPartnerBusinessTypeRoutes } from "./admin/onboardingConfigRoutes.ts";
+import { registerDashboardAdminRoutes } from "./admin/dashboardRoutes.ts";
 import { registerCourierAdminRoutes } from "./admin/courierRoutes.ts";
 import { registerMerchantAdminRoutes } from "./admin/merchantRoutes.ts";
 import { registerOrderAdminRoutes } from "./admin/orderRoutes.ts";
@@ -2414,6 +2415,7 @@ registerMerchantVenueOpsRoutes(app, { getSupabase, getServiceSupabase });
 registerMerchantRestaurantRoutes(app);
 registerMerchantInventoryRoutes(app);
 registerPartnerBusinessTypeRoutes(app);
+registerDashboardAdminRoutes(app);
 registerMerchantAdminRoutes(app);
 registerOrderAdminRoutes(app);
 registerCustomerAdminRoutes(app);

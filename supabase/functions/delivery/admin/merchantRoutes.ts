@@ -152,66 +152,6 @@ export function registerMerchantAdminRoutes(app: Hono) {
     await next();
   });
 
-  admin.get("/dashboard/stats", async (c) => {
-    const sb = getDb();
-    const now = new Date();
-    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
-    const slaCutoff = new Date(now.getTime() - SLA_HOURS * 60 * 60 * 1000).toISOString();
-
-    const [
-      { data: merchants },
-      { data: ordersToday },
-      { data: liveOrders },
-      { data: slaPending },
-    ] = await Promise.all([
-      sb.from("merchants").select("verification_status, operational_status, onboarding_status"),
-      sb.from("orders").select("id, total").gte("placed_at", todayStart),
-      sb.from("orders").select("id").in("status", [
-        "placed", "accepted", "preparing", "ready", "picked_up", "in_transit",
-      ]),
-      sb.from("merchants").select("id")
-        .eq("onboarding_status", "submitted")
-        .in("verification_status", ["pending", "in_review", "docs_requested"])
-        .lt("submitted_at", slaCutoff),
-    ]);
-
-    const verificationCounts: Record<string, number> = {
-      pending: 0, in_review: 0, docs_requested: 0, approved: 0, rejected: 0,
-    };
-    const operationalCounts: Record<string, number> = {
-      active: 0, suspended: 0, deactivated: 0,
-    };
-    for (const m of merchants ?? []) {
-      const row = m as Record<string, unknown>;
-      if (row.onboarding_status === "draft") continue;
-      const vs = row.verification_status as string;
-      const os = row.operational_status as string;
-      if (vs && vs in verificationCounts) verificationCounts[vs]++;
-      if (os && os in operationalCounts) operationalCounts[os]++;
-    }
-
-    const todayGmv = (ordersToday ?? []).reduce(
-      (sum, o) => sum + Number((o as Record<string, unknown>).total ?? 0),
-      0,
-    );
-
-    return c.json({
-      merchants: {
-        total: (merchants ?? []).filter((m) => (m as Record<string, unknown>).onboarding_status !== "draft").length,
-        verification: verificationCounts,
-        operational: operationalCounts,
-      },
-      orders: {
-        todayCount: (ordersToday ?? []).length,
-        todayGmv,
-        liveCount: (liveOrders ?? []).length,
-      },
-      sla: {
-        staleVerifications: (slaPending ?? []).length,
-      },
-    });
-  });
-
   admin.get("/merchants/stats", async (c) => {
     const sb = getDb();
     const { data, error } = await sb.from("merchants").select("verification_status, operational_status, onboarding_status");

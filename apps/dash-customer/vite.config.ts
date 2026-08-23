@@ -9,8 +9,10 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
-      '@dash-admin': path.resolve(__dirname, '../dash-merchant/src/admin'),
       '@roam/admin-core': path.resolve(__dirname, '../../packages/admin-core/src'),
+      '@roam/dash-admin': path.resolve(__dirname, '../../packages/dash-admin/src'),
+      '@roam/dash-admin-client': path.resolve(__dirname, '../../packages/dash-admin-client/src'),
+      '@roam/location': path.resolve(__dirname, '../../packages/location/src'),
     },
   },
   server: {
@@ -21,5 +23,28 @@ export default defineConfig({
   },
   build: {
     outDir: 'dist',
+    chunkSizeWarningLimit: 600,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes('packages/dash-admin/') || id.includes('packages\\dash-admin\\')) {
+            return 'admin';
+          }
+          if (id.includes('node_modules/leaflet') || id.includes('node_modules\\leaflet')) {
+            return 'admin-maps';
+          }
+          if (
+            id.includes('node_modules/react/') ||
+            id.includes('node_modules/react-dom/') ||
+            id.includes('node_modules/react-router')
+          ) {
+            return 'vendor-react';
+          }
+          if (id.includes('node_modules/@tanstack/react-query')) {
+            return 'vendor-query';
+          }
+        },
+      },
+    },
   },
 });
