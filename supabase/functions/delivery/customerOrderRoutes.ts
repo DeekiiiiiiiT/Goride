@@ -17,7 +17,7 @@ import {
   resolveDashPlatformFeeRate,
 } from "./platformFeeRate.ts";
 import { resolveMinOrderSubtotal } from "../_shared/dashPricing.ts";
-import { resolveDashOrderPricing } from "./pricingResolver.ts";
+import { assertSameMarketCoverage, resolveDashOrderPricing } from "./pricingResolver.ts";
 import { resolveMerchantFoodGctRate } from "../_shared/gctRate.ts";
 import { assertMerchantAcceptingOrders } from "./merchantOpenCheck.ts";
 import { ORDER_CUSTOMER_EMBED_WITH_USER } from "./orderSelectEmbeds.ts";
@@ -225,6 +225,24 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
     const dropoffLng = asCoord(body.deliveryLng) ?? asCoord(customerRow.default_lng);
     const hasDropoffPin = dropoffLat != null && dropoffLng != null && !(dropoffLat === 0 && dropoffLng === 0);
 
+    const { data: merchantMarketRow } = await serviceSb
+      .from("merchants")
+      .select("market_id, min_order_amount")
+      .eq("id", body.merchantId)
+      .maybeSingle();
+    const merchantMarketId = merchantMarketRow?.market_id != null
+      ? String(merchantMarketRow.market_id)
+      : null;
+
+    const coverageGate = await assertSameMarketCoverage(serviceSb, {
+      dropoffLat,
+      dropoffLng,
+      merchantMarketId,
+    });
+    if (!coverageGate.ok) {
+      return c.json({ error: coverageGate.error, code: coverageGate.code }, 400);
+    }
+
     const gct = await resolveMerchantFoodGctRate(serviceSb, body.merchantId);
 
     const pricing = calculateOrderPricing({
@@ -237,13 +255,8 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
     const paymentMethod = body.paymentMethod || "wipay";
     const discountedSubtotal = Math.round(Math.max(0, pricing.subtotal - discount) * 100) / 100;
 
-    const { data: merchantMinRow } = await serviceSb
-      .from("merchants")
-      .select("min_order_amount")
-      .eq("id", body.merchantId)
-      .maybeSingle();
-    const merchantMinOrder = merchantMinRow?.min_order_amount != null
-      ? Number(merchantMinRow.min_order_amount)
+    const merchantMinOrder = merchantMarketRow?.min_order_amount != null
+      ? Number(merchantMarketRow.min_order_amount)
       : null;
 
     if (paymentMethod === "cash" && Deno.env.get("DASH_ALLOW_CASH_ORDERS") !== "true") {
@@ -253,7 +266,7 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
       }, 400);
     }
 
-    // Model B pricing when market profile has pricing_v2_enabled
+    // Model B pricing — market already validated via same-town gate
     const v2Pricing = await resolveDashOrderPricing(serviceSb, {
       merchantId: body.merchantId,
       subtotal: pricing.subtotal,
@@ -263,6 +276,8 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
       dropoffLng,
       customerId: customer.id,
       paymentMethod: paymentMethod === "cash" ? "cash" : paymentMethod === "paypal" ? "paypal" : "wipay",
+      marketIdOverride: coverageGate.marketId,
+      requireCoverage: false,
     });
 
     let deliveryFee: number;

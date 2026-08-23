@@ -66,6 +66,10 @@ export interface DashMerchant {
   capabilities?: string[];
   gct_registered?: boolean;
   tax_id?: string | null;
+  /** Assigned delivery town; required for discovery/orders */
+  market_id?: string | null;
+  /** Ops lock — publish recompute will not overwrite market_id */
+  market_id_locked?: boolean;
 }
 
 export interface MerchantHours {
@@ -365,12 +369,22 @@ export function patchMerchantOps(
     payout_ready?: boolean;
     is_test_merchant?: boolean;
     gct_registered?: boolean;
+    market_id?: string | null;
+    market_id_locked?: boolean;
   },
 ) {
   return deliveryFetch(accessToken, `/admin/merchants/${id}/ops`, {
     method: 'PATCH',
     body: JSON.stringify(payload),
   });
+}
+
+export function backfillMerchantMarkets(accessToken: string) {
+  return deliveryFetch<{ assigned: number; skipped: number; total: number }>(
+    accessToken,
+    '/admin/markets/backfill-merchant-markets',
+    { method: 'POST', body: '{}' },
+  );
 }
 
 export function assignMerchant(accessToken: string, id: string, assignedTo: string | null) {
@@ -845,16 +859,27 @@ export function listCoverageVersions(accessToken: string, marketId: string) {
   );
 }
 
+export type MerchantMarketRecompute = {
+  updated: number;
+  cleared: number;
+  skippedLocked: number;
+  skippedNoPin: number;
+  unchanged: number;
+};
+
 export function publishMarketCoverage(
   accessToken: string,
   marketId: string,
   payload: { label?: string; notes?: string } = {},
 ) {
-  return deliveryFetch<{ market: DashMarketRow; version: CoverageVersionRow }>(
-    accessToken,
-    `/admin/markets/${marketId}/publish`,
-    { method: 'POST', body: JSON.stringify(payload) },
-  );
+  return deliveryFetch<{
+    market: DashMarketRow;
+    version: CoverageVersionRow;
+    merchant_recompute?: MerchantMarketRecompute;
+  }>(accessToken, `/admin/markets/${marketId}/publish`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
 }
 
 export function restoreCoverageVersion(
@@ -863,12 +888,26 @@ export function restoreCoverageVersion(
   versionId: string,
   republish = true,
 ) {
-  return deliveryFetch<{ market: DashMarketRow }>(
-    accessToken,
-    `/admin/markets/${marketId}/versions/${versionId}/restore`,
-    { method: 'POST', body: JSON.stringify({ republish }) },
-  );
+  return deliveryFetch<{
+    market: DashMarketRow;
+    merchant_recompute?: MerchantMarketRecompute | null;
+  }>(accessToken, `/admin/markets/${marketId}/versions/${versionId}/restore`, {
+    method: 'POST',
+    body: JSON.stringify({ republish }),
+  });
 }
+
+function formatMerchantRecomputeToast(r?: MerchantMarketRecompute | null): string {
+  if (!r) return '';
+  const moved = r.updated + r.cleared;
+  if (moved === 0 && r.skippedLocked === 0) return '';
+  const parts = [`${r.updated} reassigned`];
+  if (r.cleared) parts.push(`${r.cleared} cleared`);
+  if (r.skippedLocked) parts.push(`${r.skippedLocked} locked skipped`);
+  return ` · ${parts.join(', ')}`;
+}
+
+export { formatMerchantRecomputeToast };
 
 export function importMarketGeoJson(
   accessToken: string,
@@ -1291,11 +1330,26 @@ export function previewPricing(
     dropoff_lng?: number;
     tip?: number;
     customer_order_count?: number;
+    /** Force / suppress launch free-delivery promo in simulator */
+    free_delivery?: boolean;
     payment_method?: 'wipay' | 'paypal' | 'cash';
     market_id?: string;
   },
 ) {
-  return deliveryFetch(accessToken, '/admin/pricing/preview', {
+  return deliveryFetch<{
+    breakdown: Record<string, unknown>;
+    pricing_v2_enabled?: boolean;
+    market_id?: string | null;
+    resolved_market_id?: string | null;
+    covered?: boolean | null;
+    coverage?: {
+      inZone: boolean;
+      reason?: string;
+      matchedInclude?: { id: string; name: string; market_id?: string } | null;
+      matchedExclude?: { id: string; name: string; market_id?: string } | null;
+    } | null;
+    market_override_applied?: boolean;
+  }>(accessToken, '/admin/pricing/preview', {
     method: 'POST',
     body: JSON.stringify(payload),
   });

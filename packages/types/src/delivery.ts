@@ -161,6 +161,8 @@ export interface Merchant {
   address: string;
   lat?: number;
   lng?: number;
+  /** Assigned delivery town (service_markets.id) */
+  marketId?: string | null;
   phone?: string;
   email?: string;
   cuisineType?: string;

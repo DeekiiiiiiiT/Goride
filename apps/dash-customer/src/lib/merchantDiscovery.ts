@@ -99,12 +99,28 @@ function mockMerchants(vertical?: VerticalType): DiscoverMerchant[] {
 
 export async function fetchDiscoverMerchants(
   vertical?: VerticalType,
-  options?: { limit?: number; offset?: number },
-): Promise<{ merchants: DiscoverMerchant[]; hasMore: boolean }> {
+  options?: { limit?: number; offset?: number; lat?: number; lng?: number },
+): Promise<{ merchants: DiscoverMerchant[]; hasMore: boolean; outOfCoverage?: boolean }> {
   const params = new URLSearchParams();
   if (vertical) params.set('vertical', vertical);
   if (options?.limit != null) params.set('limit', String(options.limit));
   if (options?.offset != null) params.set('offset', String(options.offset));
+
+  let lat = options?.lat;
+  let lng = options?.lng;
+  if (lat == null || lng == null) {
+    try {
+      const { getCheckoutLocation } = await import('./addressStorage');
+      const pin = getCheckoutLocation();
+      lat = pin.lat;
+      lng = pin.lng;
+    } catch {
+      /* ignore */
+    }
+  }
+  if (lat != null && Number.isFinite(lat)) params.set('lat', String(lat));
+  if (lng != null && Number.isFinite(lng)) params.set('lng', String(lng));
+
   const qs = params.toString() ? `?${params.toString()}` : '';
 
   const res = await fetch(`${API_ENDPOINTS.delivery}/merchants${qs}`, {
@@ -114,14 +130,20 @@ export async function fetchDiscoverMerchants(
   const data = (await res.json()) as {
     merchants?: Record<string, unknown>[];
     hasMore?: boolean;
+    out_of_coverage?: boolean;
   };
   const rows = data.merchants ?? [];
   if (!rows.length) {
-    if (allowMocks()) {
+    // Never fall back to Kingston mocks when geo-filtering is in play
+    if (allowMocks() && lat == null && lng == null) {
       const mocked = mockMerchants(vertical);
       return { merchants: mocked, hasMore: false };
     }
-    return { merchants: [], hasMore: false };
+    return {
+      merchants: [],
+      hasMore: false,
+      outOfCoverage: Boolean(data.out_of_coverage),
+    };
   }
   return {
     merchants: rows.map(mapApiMerchant),

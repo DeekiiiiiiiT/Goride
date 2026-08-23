@@ -44,6 +44,13 @@ export type ZoneMapOverlay = {
   radius_m?: number | null;
 };
 
+export type ZoneMapContextTown = {
+  id: string;
+  name: string;
+  polygon: DashZoneVertex[];
+  isActive: boolean;
+};
+
 export type ZoneMapEditorProps = {
   zones: ZoneMapOverlay[];
   uiMode: ZoneMapUiMode;
@@ -51,6 +58,13 @@ export type ZoneMapEditorProps = {
   editingZoneId?: string | null;
   /** Town delivery polygons used to filter Places results. */
   townIncludePolygons: GeoVertex[][];
+  /**
+   * Neighbor / parish sibling towns — reference only (never editable).
+   * Drawn separately from `zones` so they never look like live coverage.
+   */
+  contextTownPolygons?: ZoneMapContextTown[];
+  /** Hide context layer toggle (parish map always shows context). */
+  showNeighborToggle?: boolean;
   onSave: (payload: {
     polygon: DashZoneVertex[];
     source?: 'manual' | 'radius';
@@ -79,22 +93,54 @@ function styleForKind(kind: DashZoneKind, zoneId?: string): google.maps.PolygonO
       fillOpacity: 0.28,
       strokeWeight: 2,
       strokeOpacity: 0.9,
+      zIndex: 40,
+      clickable: false,
     };
   }
   if (zoneId === 'parish-foundation') {
+    // Ops-only parish outline — slate, not emerald live coverage
     return {
-      strokeColor: '#38bdf8',
-      fillColor: '#0ea5e9',
-      fillOpacity: 0.16,
-      strokeWeight: 2.5,
+      strokeColor: '#94a3b8',
+      fillColor: '#64748b',
+      fillOpacity: 0.05,
+      strokeWeight: 3,
       strokeOpacity: 0.95,
+      zIndex: 20,
+      clickable: false,
     };
   }
+  // Active town include (live customer delivery)
   return {
     strokeColor: '#34d399',
     fillColor: '#10b981',
     fillOpacity: 0.22,
-    strokeWeight: 2,
+    strokeWeight: 2.5,
+    strokeOpacity: 1,
+    zIndex: 30,
+    clickable: false,
+  };
+}
+
+function styleForContextTown(isActive: boolean): google.maps.PolygonOptions {
+  if (isActive) {
+    return {
+      strokeColor: '#64748b',
+      fillColor: '#94a3b8',
+      fillOpacity: 0.05,
+      strokeWeight: 1.75,
+      strokeOpacity: 0.8,
+      clickable: false,
+      zIndex: 10,
+    };
+  }
+  return {
+    strokeColor: '#475569',
+    fillColor: '#334155',
+    fillOpacity: 0.02,
+    strokeWeight: 1.25,
+    strokeOpacity: 0.5,
+    clickable: false,
+    zIndex: 5,
   };
 }
 
@@ -131,6 +177,8 @@ export function ZoneMapEditor({
   initialPolygon = [],
   editingZoneId = null,
   townIncludePolygons,
+  contextTownPolygons = [],
+  showNeighborToggle = true,
   onSave,
   onCancel,
   saving,
@@ -145,6 +193,7 @@ export function ZoneMapEditor({
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<google.maps.Map | null>(null);
   const overlayPolysRef = useRef<google.maps.Polygon[]>([]);
+  const contextPolysRef = useRef<google.maps.Polygon[]>([]);
   const editPolyRef = useRef<google.maps.Polygon | null>(null);
   const clickListenerRef = useRef<google.maps.MapsEventListener | null>(null);
   const searchMarkerRef = useRef<google.maps.Marker | null>(null);
@@ -157,6 +206,7 @@ export function ZoneMapEditor({
   const freehandActiveRef = useRef(false);
   const lastSampleRef = useRef<DashZoneVertex | null>(null);
   const mapListenersRef = useRef<google.maps.MapsEventListener[]>([]);
+  const [showNeighbors, setShowNeighbors] = useState(true);
 
   const [ready, setReady] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -205,6 +255,29 @@ export function ZoneMapEditor({
   const clearOverlays = () => {
     for (const p of overlayPolysRef.current) p.setMap(null);
     overlayPolysRef.current = [];
+    for (const p of contextPolysRef.current) p.setMap(null);
+    contextPolysRef.current = [];
+  };
+
+  const syncContextOverlays = () => {
+    const map = mapRef.current;
+    if (!map) return;
+    for (const p of contextPolysRef.current) p.setMap(null);
+    contextPolysRef.current = [];
+    const showContext = foundationScope === 'parish' || (showNeighborToggle && showNeighbors);
+    if (!showContext) return;
+    for (const town of contextTownPolygons) {
+      if (town.polygon.length < 3) continue;
+      const path = town.polygon.map((v) => ({ lat: v.lat, lng: v.lng }));
+      const poly = new google.maps.Polygon({
+        paths: path,
+        map,
+        editable: false,
+        draggable: false,
+        ...styleForContextTown(town.isActive),
+      });
+      contextPolysRef.current.push(poly);
+    }
   };
 
   const clearEditPoly = () => {
@@ -258,6 +331,7 @@ export function ZoneMapEditor({
     const map = mapRef.current;
     if (!map) return;
     clearOverlays();
+    syncContextOverlays();
     const bounds = new google.maps.LatLngBounds();
     let hasBounds = false;
     for (const z of zones) {
@@ -558,7 +632,12 @@ export function ZoneMapEditor({
     if (!mapRef.current) return;
     syncOverlays();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [zones.map((z) => `${z.id}:${z.polygon.length}`).join('|')]);
+  }, [
+    zones.map((z) => `${z.id}:${z.polygon.length}`).join('|'),
+    contextTownPolygons.map((t) => `${t.id}:${t.polygon.length}:${t.isActive}`).join('|'),
+    showNeighbors,
+    foundationScope,
+  ]);
 
   useEffect(() => {
     syncRadiusPreview();
@@ -740,8 +819,8 @@ export function ZoneMapEditor({
             ? 'Click corners to trace · turn on Freehand for denser edges · drag handles to fine-tune · Undo / Clear as needed'
             : `Drag the handles to reshape. Turn on “Trace” to click or freehand new points along the ${foundationTitle}.`
         : foundationScope === 'parish'
-          ? 'Blue/green outline = parish foundation. Town borders shown for context. Customer delivery still uses town borders.'
-          : 'Green = town border (foundation). Red = no delivery. Search inside the town or use Test pin.';
+          ? 'Slate outline = parish foundation (ops only). Gray towns = reference. Customer coverage uses each town’s green border after publish.'
+          : 'Green = this town’s live delivery border. Red = no delivery. Neighbor towns (gray) are reference only.';
 
   if (loadError) {
     return (
@@ -843,20 +922,45 @@ export function ZoneMapEditor({
 
       {uiMode === 'view' && (
         <div className="flex flex-wrap items-center gap-3 text-[11px] text-slate-400 px-0.5">
-          <span className="inline-flex items-center gap-1.5">
-            <span className="w-2.5 h-2.5 rounded-sm bg-emerald-500/70 border border-emerald-400/50" />
-            {foundationScope === 'parish' ? 'Parish border (foundation)' : 'Town border (foundation)'}
-          </span>
-          {foundationScope === 'town' ? (
-            <span className="inline-flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-sm bg-red-500/70 border border-red-400/50" />
-              Non-delivery zone
-            </span>
+          {foundationScope === 'parish' ? (
+            <>
+              <span className="inline-flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-sm bg-slate-400/80 border border-slate-300/50" />
+                Parish foundation (ops)
+              </span>
+              <span className="inline-flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-sm bg-slate-600/60 border border-slate-500/40" />
+                Towns (context)
+              </span>
+            </>
           ) : (
-            <span className="inline-flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-sm bg-sky-500/50 border border-sky-400/40" />
-              Town borders (context)
-            </span>
+            <>
+              <span className="inline-flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-sm bg-emerald-500/70 border border-emerald-400/50" />
+                Active delivery border
+              </span>
+              <span className="inline-flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-sm bg-red-500/70 border border-red-400/50" />
+                No-delivery cutout
+              </span>
+              {contextTownPolygons.length > 0 && (
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-sm bg-slate-600/50 border border-slate-500/40" />
+                  Other towns (context)
+                </span>
+              )}
+            </>
+          )}
+          {foundationScope === 'town' && showNeighborToggle && contextTownPolygons.length > 0 && (
+            <label className="inline-flex items-center gap-1.5 ml-auto cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={showNeighbors}
+                onChange={(e) => setShowNeighbors(e.target.checked)}
+                className="rounded border-slate-600"
+              />
+              Show neighboring towns
+            </label>
           )}
         </div>
       )}
@@ -960,8 +1064,8 @@ export function ZoneMapEditor({
             : uiMode === 'radius'
               ? `Radius non-delivery · ${radiusM}m`
               : foundationScope === 'parish'
-                ? `${zones.some((z) => z.id === 'parish-foundation' && z.polygon.length >= 3) ? 'Parish border shown' : 'No parish border yet'} · towns as context`
-                : `${zones.filter((z) => z.kind === 'include').length ? 'Town border shown' : 'No town border'} · ${
+                ? `${zones.some((z) => z.id === 'parish-foundation' && z.polygon.length >= 3) ? 'Parish foundation shown' : 'No parish border yet'} · towns as context only`
+                : `${zones.filter((z) => z.kind === 'include').length ? 'Town delivery border shown' : 'No town border'} · ${
                     zones.filter((z) => z.kind === 'exclude').length
                   } non-delivery zone${zones.filter((z) => z.kind === 'exclude').length === 1 ? '' : 's'}`}
         </p>

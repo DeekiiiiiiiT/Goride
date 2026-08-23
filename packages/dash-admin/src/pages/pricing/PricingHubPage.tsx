@@ -18,18 +18,21 @@ import {
   type MerchantTierRow,
   type PricingRulesPayload,
 } from '@roam/dash-admin-client';
+import { getPlaceDetails, searchAddresses, type AddressSuggestion } from '@roam/location';
 import { canWriteDashAdmin } from '../../utils/dashAdminRoles';
 import type { AdminOutletContext } from '../../DashAdminPortal';
 import {
   AUDIT_SIM_SCENARIOS,
+  expectedFromMarketRules,
   nearExpected,
   pickBreakdown,
   type SimBreakdown,
   type SimScenario,
+  type SimScenarioExpected,
 } from './simScenarios';
 
 const SIM_MERCHANT_STORAGE_KEY = 'dash-admin-sim-merchant-id';
-const DEFAULT_DROPOFF = { lat: '18.015', lng: '-76.955' };
+const DEFAULT_DROPOFF = { lat: '18.015', lng: '-76.955', label: 'Spanish Town (default pin)' };
 const DASH_ADMIN_BASENAME = '/admin';
 
 type TabId = 'overview' | 'market' | 'tiers' | 'simulator' | 'cod' | 'audit';
@@ -58,22 +61,41 @@ export function PricingHubPage() {
   const [marketRules, setMarketRules] = useState<PricingRulesPayload>({});
   const [saving, setSaving] = useState(false);
 
-  // Simulator
+  // Simulator — all quote fields are always visible (manual ops workflow)
   const [simMerchantId, setSimMerchantId] = useState('');
-  const [simSubtotal, setSimSubtotal] = useState('2500');
-  const [simLat, setSimLat] = useState('18.015');
-  const [simLng, setSimLng] = useState('-76.955');
+  const [simSubtotal, setSimSubtotal] = useState('1200');
+  const [simLat, setSimLat] = useState(DEFAULT_DROPOFF.lat);
+  const [simLng, setSimLng] = useState(DEFAULT_DROPOFF.lng);
+  const [simAddress, setSimAddress] = useState(DEFAULT_DROPOFF.label);
+  const [simAddressQuery, setSimAddressQuery] = useState('');
+  const [simAddressSuggestions, setSimAddressSuggestions] = useState<AddressSuggestion[]>([]);
+  const [simAddressBusy, setSimAddressBusy] = useState(false);
   const [simPayment, setSimPayment] = useState<'wipay' | 'cash'>('wipay');
   const [simTip, setSimTip] = useState('0');
+  /** Off by default so delivery fee is visible; on = treat as new customer (order count 0) */
+  const [simApplyFreeDeliveryPromo, setSimApplyFreeDeliveryPromo] = useState(false);
   const [simResult, setSimResult] = useState<Record<string, unknown> | null>(null);
+  const [simExpected, setSimExpected] = useState<SimScenarioExpected | null>(null);
   const [simActiveScenario, setSimActiveScenario] = useState<string | null>(null);
   const [simBatchResults, setSimBatchResults] = useState<
-    Array<{ scenario: SimScenario; breakdown: SimBreakdown | null; error?: string }>
+    Array<{
+      scenario: SimScenario;
+      breakdown: SimBreakdown | null;
+      expected?: SimScenarioExpected | null;
+      error?: string;
+    }>
   >([]);
   const [simRunning, setSimRunning] = useState(false);
   const [simMerchants, setSimMerchants] = useState<DashMerchant[]>([]);
   const [simMerchantsLoading, setSimMerchantsLoading] = useState(false);
-  const [simShowCustom, setSimShowCustom] = useState(false);
+  /** auto = resolve market from dropoff pin; manual = force Market Rules dropdown */
+  const [simMarketMode, setSimMarketMode] = useState<'auto' | 'manual'>('auto');
+  const [simCoverage, setSimCoverage] = useState<{
+    covered: boolean | null;
+    resolvedMarketId: string | null;
+    reason?: string;
+    overrideApplied: boolean;
+  } | null>(null);
 
   // COD
   const [codBalances, setCodBalances] = useState<Array<Record<string, unknown>>>([]);
@@ -167,11 +189,64 @@ export function PricingHubPage() {
     setSimMerchantId(merchantId);
     localStorage.setItem(SIM_MERCHANT_STORAGE_KEY, merchantId);
     setSimResult(null);
+    setSimExpected(null);
     setSimBatchResults([]);
     setSimActiveScenario(null);
   };
 
   const selectedSimMerchant = simMerchants.find((m) => m.id === simMerchantId);
+
+  // Address autocomplete for dropoff (biased toward selected restaurant)
+  useEffect(() => {
+    if (tab !== 'simulator') return;
+    const q = simAddressQuery.trim();
+    if (q.length < 3) {
+      setSimAddressSuggestions([]);
+      return;
+    }
+    let cancelled = false;
+    const t = window.setTimeout(() => {
+      void (async () => {
+        setSimAddressBusy(true);
+        try {
+          const biasLat = selectedSimMerchant?.lat ?? Number(DEFAULT_DROPOFF.lat);
+          const biasLng = selectedSimMerchant?.lng ?? Number(DEFAULT_DROPOFF.lng);
+          const raw = await searchAddresses(q, {
+            locationBias:
+              Number.isFinite(biasLat) && Number.isFinite(biasLng)
+                ? { lat: biasLat, lng: biasLng, radiusMeters: 15_000 }
+                : undefined,
+          });
+          if (!cancelled) setSimAddressSuggestions(raw.slice(0, 6));
+        } catch {
+          if (!cancelled) setSimAddressSuggestions([]);
+        } finally {
+          if (!cancelled) setSimAddressBusy(false);
+        }
+      })();
+    }, 280);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(t);
+    };
+  }, [tab, simAddressQuery, selectedSimMerchant?.lat, selectedSimMerchant?.lng]);
+
+  const handleSelectSimAddress = async (s: AddressSuggestion) => {
+    setSimAddressBusy(true);
+    try {
+      const details = await getPlaceDetails(s.placeId);
+      setSimLat(String(details.lat));
+      setSimLng(String(details.lng));
+      setSimAddress(details.formattedAddress || s.description);
+      setSimAddressQuery('');
+      setSimAddressSuggestions([]);
+      setSimActiveScenario(null);
+    } catch {
+      toast.error('Could not resolve that address — try another search or enter lat/lng');
+    } finally {
+      setSimAddressBusy(false);
+    }
+  };
 
   const handleSaveMarketRules = async () => {
     if (!selectedMarketId || !canWrite) return;
@@ -213,10 +288,10 @@ export function PricingHubPage() {
     tip: number;
     payment: 'wipay' | 'cash';
     scenarioId?: string | null;
-  }): Promise<SimBreakdown | null> => {
+  }): Promise<{ breakdown: SimBreakdown | null; expected: SimScenarioExpected | null }> => {
     if (!simMerchantId.trim()) {
       toast.error('Pick a restaurant first');
-      return null;
+      return { breakdown: null, expected: null };
     }
     const res = await previewPricing(session.access_token, {
       merchant_id: simMerchantId.trim(),
@@ -225,24 +300,59 @@ export function PricingHubPage() {
       dropoff_lat: Number(simLat),
       dropoff_lng: Number(simLng),
       payment_method: opts.payment,
-      market_id: selectedMarketId || undefined,
+      // Auto: omit market_id so geo resolves; Manual: force selected rules
+      market_id: simMarketMode === 'manual' ? selectedMarketId || undefined : undefined,
+      customer_order_count: simApplyFreeDeliveryPromo ? 0 : 999,
+      free_delivery: simApplyFreeDeliveryPromo ? true : false,
     });
-    const breakdown = (res as { breakdown?: Record<string, unknown> }).breakdown ?? null;
-    setSimResult(breakdown);
+
+    const resolvedId = res.resolved_market_id ?? null;
+    setSimCoverage({
+      covered: res.covered ?? null,
+      resolvedMarketId: resolvedId,
+      reason: res.coverage?.reason,
+      overrideApplied: Boolean(res.market_override_applied),
+    });
+
+    // Keep Market Rules panel in sync when auto-resolving from pin
+    if (simMarketMode === 'auto' && resolvedId && resolvedId !== selectedMarketId) {
+      setSelectedMarketId(resolvedId);
+    }
+
+    const raw = res.breakdown ?? null;
+    const breakdown = pickBreakdown(raw);
+    const rulesForExpected =
+      simMarketMode === 'auto' && resolvedId && resolvedId !== selectedMarketId
+        ? marketRules
+        : marketRules;
+    const expected = breakdown
+      ? expectedFromMarketRules(rulesForExpected, {
+          subtotal: opts.subtotal,
+          tip: opts.tip,
+          payment: opts.payment,
+          deliveryFee: breakdown.deliveryFee ?? 0,
+          tax: breakdown.tax ?? 0,
+        })
+      : null;
+    setSimResult(raw);
+    setSimExpected(expected);
     setSimActiveScenario(opts.scenarioId ?? null);
-    return pickBreakdown(breakdown);
+    return { breakdown, expected };
   };
 
   const handleSimulate = async () => {
+    setSimRunning(true);
     try {
       await runSimulate({
-        subtotal: Number(simSubtotal) || 1000,
+        subtotal: Number(simSubtotal) || 0,
         tip: Number(simTip) || 0,
         payment: simPayment,
         scenarioId: null,
       });
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Simulation failed');
+    } finally {
+      setSimRunning(false);
     }
   };
 
@@ -268,26 +378,32 @@ export function PricingHubPage() {
 
   const handleRunAllScenarios = async () => {
     if (!simMerchantId.trim()) {
-      toast.error('Enter a merchant ID');
+      toast.error('Pick a restaurant first');
       return;
     }
     setSimRunning(true);
     setSimBatchResults([]);
-    const results: Array<{ scenario: SimScenario; breakdown: SimBreakdown | null; error?: string }> = [];
+    const results: Array<{
+      scenario: SimScenario;
+      breakdown: SimBreakdown | null;
+      expected?: SimScenarioExpected | null;
+      error?: string;
+    }> = [];
     for (const scenario of AUDIT_SIM_SCENARIOS) {
       if (!scenario.runnable) continue;
       try {
-        const breakdown = await runSimulate({
+        const { breakdown, expected } = await runSimulate({
           subtotal: scenario.subtotal,
           tip: scenario.tip,
           payment: scenario.payment,
           scenarioId: scenario.id,
         });
-        results.push({ scenario, breakdown });
+        results.push({ scenario, breakdown, expected });
       } catch (e) {
         results.push({
           scenario,
           breakdown: null,
+          expected: null,
           error: e instanceof Error ? e.message : 'Failed',
         });
       }
@@ -624,13 +740,13 @@ export function PricingHubPage() {
           <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-4 space-y-3">
             <h3 className="text-sm font-semibold text-white">How to use the simulator</h3>
             <ol className="text-sm text-slate-300 space-y-1.5 list-decimal list-inside">
-              <li>Pick a restaurant and market (auto-filled when possible).</li>
-              <li>Click a scenario card (A–I) or use custom amounts below.</li>
-              <li>Check the breakdown — green means it matched the audit example; amber means your Market Rules differ.</li>
+              <li>Pick a restaurant and market.</li>
+              <li>Enter food amount, tip, and customer dropoff address (or lat/lng).</li>
+              <li>Run quote — or click a scenario card to fill food/tip/payment and run.</li>
             </ol>
             <p className="text-xs text-slate-500">
-              Tip: For audit example numbers, set Market Rules → threshold 50, min fee 1.50, max 25, min order 8, processing 4.5%.
-              GCT on food is set in Dominion Global Settings (not per-market).
+              Restaurant sets store pin, tier, and GCT — not the food total. Food and tip are always
+              manual. Green = matches your current Market Rules; amber = mismatch.
             </p>
           </div>
 
@@ -638,7 +754,7 @@ export function PricingHubPage() {
             <div className="grid gap-3 md:grid-cols-2">
               <LabeledSelect
                 label="Restaurant"
-                hint="Used for menu tier, delivery distance, and fee rules."
+                hint="Used for store pin, tier, and GCT — not menu prices."
                 value={simMerchantId}
                 disabled={simMerchantsLoading || simMerchants.length === 0}
                 onChange={handleSimMerchantChange}
@@ -652,8 +768,12 @@ export function PricingHubPage() {
                 }
               />
               <LabeledSelect
-                label="Market (pricing rules)"
-                hint="Min order and fee brackets come from this market."
+                label={simMarketMode === 'auto' ? 'Market (auto from dropoff)' : 'Market (manual override)'}
+                hint={
+                  simMarketMode === 'auto'
+                    ? 'Resolved from customer pin against published town borders.'
+                    : 'Forces these pricing rules regardless of dropoff geography.'
+                }
                 value={selectedMarketId}
                 onChange={setSelectedMarketId}
                 options={markets.map((m) => ({
@@ -662,23 +782,204 @@ export function PricingHubPage() {
                 }))}
               />
             </div>
+            <div className="flex flex-wrap items-center gap-2 mt-2">
+              <button
+                type="button"
+                onClick={() => setSimMarketMode('auto')}
+                className={`px-2.5 py-1 text-xs rounded-lg border ${
+                  simMarketMode === 'auto'
+                    ? 'border-amber-500 text-amber-200 bg-amber-950/40'
+                    : 'border-slate-700 text-slate-400'
+                }`}
+              >
+                Auto from dropoff
+              </button>
+              <button
+                type="button"
+                onClick={() => setSimMarketMode('manual')}
+                className={`px-2.5 py-1 text-xs rounded-lg border ${
+                  simMarketMode === 'manual'
+                    ? 'border-amber-500 text-amber-200 bg-amber-950/40'
+                    : 'border-slate-700 text-slate-400'
+                }`}
+              >
+                Manual override
+              </button>
+              {simCoverage && (
+                <span
+                  className={`text-xs px-2 py-0.5 rounded-full ${
+                    simCoverage.covered
+                      ? 'bg-emerald-500/15 text-emerald-300'
+                      : 'bg-rose-500/15 text-rose-300'
+                  }`}
+                >
+                  {simCoverage.covered
+                    ? `In zone → ${
+                        markets.find((m) => m.market.id === simCoverage.resolvedMarketId)?.market
+                          .name ?? 'town'
+                      }`
+                    : simCoverage.reason || 'Outside active delivery zones'}
+                  {simCoverage.overrideApplied && simMarketMode === 'manual'
+                    ? ' · using manual rules'
+                    : ''}
+                </span>
+              )}
+            </div>
             {selectedSimMerchant && (
               <p className="text-xs text-slate-500 font-mono mt-2">
                 ID: {selectedSimMerchant.id}
                 {selectedSimMerchant.lat != null && selectedSimMerchant.lng != null
                   ? ` · Store at ${selectedSimMerchant.lat}, ${selectedSimMerchant.lng}`
-                  : ''}
+                  : ' · Store pin missing — delivery falls back to base fee'}
+                {selectedSimMerchant.market_id
+                  ? ` · Town: ${
+                      markets.find((m) => m.market.id === selectedSimMerchant.market_id)?.market
+                        .name ?? selectedSimMerchant.market_id
+                    }`
+                  : ' · Town unassigned'}
               </p>
             )}
           </SimStep>
 
-          <SimStep n={2} title="Run a test scenario">
+          <SimStep n={2} title="Quote inputs (always editable)">
+            <div className="grid gap-3 md:grid-cols-2">
+              <Field
+                label="Food subtotal (JMD)"
+                value={Number(simSubtotal) || 0}
+                onChange={(v) => {
+                  setSimSubtotal(String(v));
+                  setSimActiveScenario(null);
+                }}
+              />
+              <Field
+                label="Courier tip (JMD)"
+                value={Number(simTip) || 0}
+                onChange={(v) => {
+                  setSimTip(String(v));
+                  setSimActiveScenario(null);
+                }}
+              />
+            </div>
+
+            <div className="mt-3 space-y-2 relative">
+              <label className="block text-xs text-slate-400">Customer dropoff address</label>
+              <input
+                type="text"
+                value={simAddressQuery}
+                onChange={(e) => setSimAddressQuery(e.target.value)}
+                placeholder="Search street / area in Jamaica…"
+                className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-700 text-white text-sm"
+              />
+              {simAddressBusy && (
+                <p className="text-xs text-slate-500 flex items-center gap-1">
+                  <Loader2 className="w-3 h-3 animate-spin" /> Searching…
+                </p>
+              )}
+              {simAddressSuggestions.length > 0 && (
+                <ul className="absolute z-20 left-0 right-0 mt-1 max-h-48 overflow-auto rounded-lg border border-slate-700 bg-slate-950 shadow-lg">
+                  {simAddressSuggestions.map((s) => (
+                    <li key={s.placeId}>
+                      <button
+                        type="button"
+                        className="w-full text-left px-3 py-2 text-sm text-slate-200 hover:bg-slate-800"
+                        onClick={() => void handleSelectSimAddress(s)}
+                      >
+                        <span className="block text-white">{s.mainText}</span>
+                        {s.secondaryText ? (
+                          <span className="block text-xs text-slate-500">{s.secondaryText}</span>
+                        ) : null}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {simAddress && (
+                <p className="text-xs text-emerald-400/90">
+                  Selected: {simAddress}
+                </p>
+              )}
+            </div>
+
+            <div className="grid gap-3 md:grid-cols-2 mt-3">
+              <Field
+                label="Dropoff latitude"
+                value={Number(simLat) || 0}
+                step="any"
+                onChange={(v) => {
+                  setSimLat(String(v));
+                  setSimAddress('Manual lat/lng');
+                  setSimActiveScenario(null);
+                }}
+              />
+              <Field
+                label="Dropoff longitude"
+                value={Number(simLng) || 0}
+                step="any"
+                onChange={(v) => {
+                  setSimLng(String(v));
+                  setSimAddress('Manual lat/lng');
+                  setSimActiveScenario(null);
+                }}
+              />
+            </div>
+            <p className="text-xs text-slate-500 mt-1">
+              Delivery fee = distance from restaurant pin to this dropoff. Default pin:{' '}
+              {DEFAULT_DROPOFF.label} ({DEFAULT_DROPOFF.lat}, {DEFAULT_DROPOFF.lng}).
+            </p>
+
+            <div className="flex flex-wrap gap-3 items-center mt-4">
+              <span className="text-xs text-slate-500">Payment:</span>
+              <button
+                type="button"
+                onClick={() => {
+                  setSimPayment('wipay');
+                  setSimActiveScenario(null);
+                }}
+                className={`px-3 py-1.5 text-sm rounded-lg ${
+                  simPayment === 'wipay' ? 'bg-amber-600 text-white' : 'bg-slate-800 text-slate-400'
+                }`}
+              >
+                Card
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setSimPayment('cash');
+                  setSimActiveScenario(null);
+                }}
+                className={`px-3 py-1.5 text-sm rounded-lg ${
+                  simPayment === 'cash' ? 'bg-amber-600 text-white' : 'bg-slate-800 text-slate-400'
+                }`}
+              >
+                COD
+              </button>
+              <label className="flex items-center gap-2 text-xs text-slate-300 ml-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={simApplyFreeDeliveryPromo}
+                  onChange={(e) => setSimApplyFreeDeliveryPromo(e.target.checked)}
+                  className="rounded border-slate-600"
+                />
+                Apply launch free-delivery promo
+              </label>
+              <button
+                type="button"
+                disabled={simRunning || !simMerchantId}
+                onClick={() => void handleSimulate()}
+                className="ml-auto px-4 py-2 rounded-lg bg-amber-600 text-white text-sm disabled:opacity-50"
+              >
+                {simRunning ? 'Running…' : 'Run quote'}
+              </button>
+            </div>
+          </SimStep>
+
+          <SimStep n={3} title="Preset scenarios (fills food / tip / payment)">
             <div className="flex flex-wrap gap-2 mb-3">
               <button
                 type="button"
                 disabled={simRunning || !simMerchantId}
                 onClick={() => void handleRunAllScenarios()}
-                className="px-4 py-2 rounded-lg bg-amber-600 text-white text-sm disabled:opacity-50"
+                className="px-4 py-2 rounded-lg border border-slate-600 text-slate-200 text-sm disabled:opacity-50"
               >
                 {simRunning ? 'Running all…' : 'Run all scenarios (A–I)'}
               </button>
@@ -697,85 +998,6 @@ export function PricingHubPage() {
             </div>
           </SimStep>
 
-          <SimStep n={3} title="Custom quote (optional)">
-            <button
-              type="button"
-              onClick={() => setSimShowCustom((v) => !v)}
-              className="text-sm text-amber-400 hover:underline"
-            >
-              {simShowCustom ? 'Hide custom fields' : 'Show custom food amount & dropoff pin'}
-            </button>
-            {simShowCustom && (
-              <div className="mt-3 space-y-3">
-                <div className="grid gap-3 md:grid-cols-2">
-                  <Field
-                    label="Food subtotal (JMD)"
-                    value={Number(simSubtotal) || 0}
-                    onChange={(v) => {
-                      setSimSubtotal(String(v));
-                      setSimActiveScenario(null);
-                    }}
-                  />
-                  <Field
-                    label="Courier tip (JMD)"
-                    value={Number(simTip) || 0}
-                    onChange={(v) => {
-                      setSimTip(String(v));
-                      setSimActiveScenario(null);
-                    }}
-                  />
-                  <Field
-                    label="Customer dropoff latitude"
-                    value={Number(simLat) || 0}
-                    onChange={(v) => setSimLat(String(v))}
-                  />
-                  <Field
-                    label="Customer dropoff longitude"
-                    value={Number(simLng) || 0}
-                    onChange={(v) => setSimLng(String(v))}
-                  />
-                </div>
-                <p className="text-xs text-slate-500">
-                  Dropoff pin = where the customer receives food. Delivery fee uses distance from the restaurant to this point.
-                  Default is Spanish Town ({DEFAULT_DROPOFF.lat}, {DEFAULT_DROPOFF.lng}).
-                </p>
-                <div className="flex flex-wrap gap-2 items-center">
-                  <span className="text-xs text-slate-500 mr-1">Payment:</span>
-                  <button
-                    type="button"
-                    onClick={() => setSimPayment('wipay')}
-                    className={`px-3 py-1.5 text-sm rounded-lg ${
-                      simPayment === 'wipay'
-                        ? 'bg-amber-600 text-white'
-                        : 'bg-slate-800 text-slate-400'
-                    }`}
-                  >
-                    Card
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setSimPayment('cash')}
-                    className={`px-3 py-1.5 text-sm rounded-lg ${
-                      simPayment === 'cash'
-                        ? 'bg-amber-600 text-white'
-                        : 'bg-slate-800 text-slate-400'
-                    }`}
-                  >
-                    COD
-                  </button>
-                  <button
-                    type="button"
-                    disabled={simRunning || !simMerchantId}
-                    onClick={() => void handleSimulate()}
-                    className="px-4 py-2 rounded-lg border border-slate-600 text-slate-200 text-sm disabled:opacity-50"
-                  >
-                    Run custom quote
-                  </button>
-                </div>
-              </div>
-            )}
-          </SimStep>
-
           {simResult && (
             <SimBreakdownPanel
               title={
@@ -784,18 +1006,17 @@ export function PricingHubPage() {
                   : 'Custom quote — result'
               }
               breakdown={pickBreakdown(simResult)!}
-              expected={
-                AUDIT_SIM_SCENARIOS.find((s) => s.id === simActiveScenario)?.expected
-              }
+              expected={simExpected ?? undefined}
               minOrderJmd={marketRules.min_order_subtotal_jmd ?? 800}
               subtotal={Number(simSubtotal) || 0}
+              dropoffLabel={simAddress}
             />
           )}
 
           {simBatchResults.length > 0 && (
             <div className="rounded-xl border border-slate-800 overflow-hidden">
               <div className="bg-slate-900 px-4 py-2 text-sm font-medium text-white">
-                All scenarios — live vs expected
+                All scenarios — live vs Market Rules expected
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-xs">
@@ -803,6 +1024,7 @@ export function PricingHubPage() {
                     <tr>
                       <th className="text-left p-2">#</th>
                       <th className="text-right p-2">Service</th>
+                      <th className="text-right p-2">Delivery</th>
                       <th className="text-right p-2">GCT</th>
                       <th className="text-right p-2">Order</th>
                       <th className="text-right p-2">Card</th>
@@ -811,30 +1033,42 @@ export function PricingHubPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {simBatchResults.map(({ scenario, breakdown, error }) => (
+                    {simBatchResults.map(({ scenario, breakdown, expected, error }) => (
                       <tr key={scenario.id} className="border-b border-slate-800/80">
                         <td className="p-2 text-slate-300">{scenario.id}</td>
                         {error || !breakdown ? (
-                          <td colSpan={6} className="p-2 text-red-400">{error ?? 'No data'}</td>
+                          <td colSpan={7} className="p-2 text-red-400">{error ?? 'No data'}</td>
                         ) : (
                           <>
                             <td className="p-2 text-right text-white">
-                              <SimCompare actual={breakdown.serviceFee ?? 0} expected={scenario.expected?.serviceFee} />
+                              <SimCompare actual={breakdown.serviceFee ?? 0} expected={expected?.serviceFee} />
                             </td>
                             <td className="p-2 text-right text-white">
-                              <SimCompare actual={breakdown.tax ?? 0} expected={scenario.expected?.tax} />
+                              {formatJmd(breakdown.deliveryFee ?? 0)}
+                              {breakdown.freeDeliveryApplied ? (
+                                <span className="block text-slate-500">promo</span>
+                              ) : null}
                             </td>
                             <td className="p-2 text-right text-white">
-                              <SimCompare actual={breakdown.orderTotal ?? 0} expected={scenario.expected?.orderTotal} />
+                              <SimCompare actual={breakdown.tax ?? 0} expected={expected?.tax} />
                             </td>
                             <td className="p-2 text-right text-white">
-                              <SimCompare actual={breakdown.processingFee ?? 0} expected={scenario.expected?.processingFee} />
+                              <SimCompare actual={breakdown.orderTotal ?? 0} expected={expected?.orderTotal} />
                             </td>
                             <td className="p-2 text-right text-white">
-                              <SimCompare actual={breakdown.customerTotal ?? 0} expected={scenario.expected?.customerTotal} />
+                              <SimCompare
+                                actual={breakdown.processingFee ?? 0}
+                                expected={expected?.processingFee}
+                              />
+                            </td>
+                            <td className="p-2 text-right text-white">
+                              <SimCompare
+                                actual={breakdown.customerTotal ?? 0}
+                                expected={expected?.customerTotal}
+                              />
                             </td>
                             <td className="p-2 text-slate-400">
-                              {scenario.expected?.blocked &&
+                              {expected?.blocked &&
                               scenario.subtotal < (marketRules.min_order_subtotal_jmd ?? 800)
                                 ? 'Would block checkout'
                                 : scenario.expected?.note ?? '—'}
@@ -961,17 +1195,20 @@ function Field({
   value,
   onChange,
   disabled,
+  step,
 }: {
   label: string;
   value: number;
   onChange: (v: number) => void;
   disabled?: boolean;
+  step?: string | number;
 }) {
   return (
     <div>
       <label className="block text-xs text-slate-500 mb-1">{label}</label>
       <input
         type="number"
+        step={step ?? '1'}
         value={value}
         disabled={disabled}
         onChange={(e) => onChange(Number(e.target.value))}
@@ -1160,18 +1397,35 @@ function SimBreakdownPanel({
   expected,
   minOrderJmd,
   subtotal,
+  dropoffLabel,
 }: {
   title: string;
   breakdown: SimBreakdown;
-  expected?: SimScenario['expected'];
+  expected?: SimScenarioExpected;
   minOrderJmd: number;
   subtotal: number;
+  dropoffLabel?: string;
 }) {
-  const wouldBlock = expected?.blocked && subtotal < minOrderJmd;
+  const wouldBlock = Boolean(expected?.blocked) && subtotal < minOrderJmd;
 
   return (
     <div className="rounded-xl border border-slate-800 bg-slate-950 p-4 space-y-2 text-sm">
       <p className="text-white font-medium">{title}</p>
+      {dropoffLabel && (
+        <p className="text-xs text-slate-500">Dropoff: {dropoffLabel}</p>
+      )}
+      {breakdown.distanceKm != null && (
+        <p className="text-xs text-slate-400">
+          Distance: {breakdown.distanceKm.toFixed(2)} km
+          {breakdown.freeDeliveryApplied ? ' · launch free-delivery applied' : ''}
+        </p>
+      )}
+      {breakdown.distanceKm == null && (
+        <p className="text-xs text-amber-400/90">
+          Distance unknown (missing store or dropoff pin) — base delivery fee used unless promo zeroed it.
+          {breakdown.freeDeliveryApplied ? ' Launch free-delivery applied.' : ''}
+        </p>
+      )}
       {wouldBlock && (
         <p className="text-amber-400 text-xs rounded-lg bg-amber-950/30 p-2">
           Checkout would be blocked — food subtotal J${subtotal} is below min order J${minOrderJmd}.
@@ -1182,7 +1436,7 @@ function SimBreakdownPanel({
       )}
       <SimLine label="Food subtotal" value={breakdown.discountedSubtotal ?? breakdown.subtotal ?? 0} />
       <SimLine label="Service fee" value={breakdown.serviceFee ?? 0} expected={expected?.serviceFee} />
-      <SimLine label="Delivery fee" value={breakdown.deliveryFee ?? 0} />
+      <SimLine label="Delivery fee" value={breakdown.deliveryFee ?? 0} expected={expected?.deliveryFee} />
       <SimLine label="GCT" value={breakdown.tax ?? 0} expected={expected?.tax} />
       <SimLine label="Tip" value={breakdown.tip ?? 0} />
       <SimLine label="Order total" value={breakdown.orderTotal ?? 0} expected={expected?.orderTotal} bold />

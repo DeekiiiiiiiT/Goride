@@ -26,6 +26,8 @@ import {
   type MerchantVerificationStatus,
   fetchPricingTiers,
   type MerchantTierRow,
+  listMarkets,
+  type DashMarketRow,
 } from '@roam/dash-admin-client';
 import type { AdminOutletContext } from '../../DashAdminPortal';
 
@@ -70,6 +72,9 @@ export function MerchantDetailPage() {
   const [commissionOverridePercent, setCommissionOverridePercent] = useState('');
   const [deliveryRadiusKm, setDeliveryRadiusKm] = useState('5');
   const [radiusSaving, setRadiusSaving] = useState(false);
+  const [markets, setMarkets] = useState<DashMarketRow[]>([]);
+  const [selectedMarketId, setSelectedMarketId] = useState('');
+  const [marketSaving, setMarketSaving] = useState(false);
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -96,14 +101,19 @@ export function MerchantDetailPage() {
         ),
       );
       setSelectedTierId(res.merchant.pricing_tier_id ?? '');
+      setSelectedMarketId(res.merchant.market_id ?? '');
       const commOverride = res.merchant.merchant_commission_rate;
       setCommissionOverridePercent(
         commOverride != null && Number.isFinite(Number(commOverride))
           ? String(Math.round(Number(commOverride) * 10000) / 100)
           : '',
       );
-      const tiersRes = await fetchPricingTiers(token);
+      const [tiersRes, marketsRes] = await Promise.all([
+        fetchPricingTiers(token),
+        listMarkets(token),
+      ]);
       setPricingTiers(tiersRes.tiers ?? []);
+      setMarkets(marketsRes.markets ?? []);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed to load merchant');
     } finally {
@@ -328,6 +338,37 @@ export function MerchantDetailPage() {
       toast.error(e instanceof Error ? e.message : 'Failed to save delivery radius');
     } finally {
       setRadiusSaving(false);
+    }
+  };
+
+  const saveMarketAssignment = async () => {
+    if (!merchant || !canWrite) return;
+    setMarketSaving(true);
+    try {
+      await patchMerchantOps(token, merchant.id, {
+        market_id: selectedMarketId.trim() ? selectedMarketId.trim() : null,
+        market_id_locked: Boolean(selectedMarketId.trim()),
+      });
+      toast.success(selectedMarketId.trim() ? 'Delivery town saved (locked)' : 'Town unassigned');
+      void load();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to save delivery town');
+    } finally {
+      setMarketSaving(false);
+    }
+  };
+
+  const unlockMarketAssignment = async () => {
+    if (!merchant || !canWrite) return;
+    setMarketSaving(true);
+    try {
+      await patchMerchantOps(token, merchant.id, { market_id_locked: false });
+      toast.success('Town unlocked — publish can auto-update from store pin');
+      void load();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to unlock town');
+    } finally {
+      setMarketSaving(false);
     }
   };
 
@@ -615,6 +656,73 @@ export function MerchantDetailPage() {
           </div>
         ) : (
           <p className="text-sm text-slate-300">{merchant.delivery_radius_km ?? 5} km</p>
+        )}
+      </section>
+
+      <section className="rounded-xl border border-slate-800 bg-slate-900/50 p-4 space-y-3">
+        <h3 className="text-sm font-medium text-white">Delivery town</h3>
+        <p className="text-sm text-slate-400">
+          Customers can only order when their pin and this store share the same active town.
+        </p>
+        <div className="flex flex-wrap items-center gap-2">
+          <span
+            className={`text-xs px-2 py-0.5 rounded-full ${
+              merchant.market_id
+                ? 'bg-emerald-500/15 text-emerald-300'
+                : 'bg-amber-500/15 text-amber-300'
+            }`}
+          >
+            {merchant.market_id
+              ? markets.find((m) => m.id === merchant.market_id)?.name ?? 'Assigned'
+              : 'Unassigned'}
+          </span>
+          <span
+            className={`text-xs px-2 py-0.5 rounded-full ${
+              merchant.market_id_locked
+                ? 'bg-sky-500/15 text-sky-300'
+                : 'bg-slate-800 text-slate-400'
+            }`}
+          >
+            {merchant.market_id_locked ? 'Locked' : 'Auto'}
+          </span>
+        </div>
+        {canWrite && (
+          <div className="flex flex-wrap items-end gap-2">
+            <div>
+              <label className="block text-xs text-slate-500 mb-1">Town</label>
+              <select
+                value={selectedMarketId}
+                onChange={(e) => setSelectedMarketId(e.target.value)}
+                className="px-3 py-1.5 text-sm rounded-lg bg-slate-950 border border-slate-700 text-white min-w-[12rem]"
+              >
+                <option value="">— Unassigned —</option>
+                {markets.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.name}
+                    {m.is_active ? '' : ' (inactive)'}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <button
+              type="button"
+              disabled={marketSaving}
+              onClick={() => void saveMarketAssignment()}
+              className="px-3 py-1.5 text-sm rounded-lg bg-amber-600 text-white disabled:opacity-50"
+            >
+              Save town
+            </button>
+            {merchant.market_id_locked && (
+              <button
+                type="button"
+                disabled={marketSaving}
+                onClick={() => void unlockMarketAssignment()}
+                className="px-3 py-1.5 text-sm rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800 disabled:opacity-50"
+              >
+                Allow auto town from pin
+              </button>
+            )}
+          </div>
         )}
       </section>
 

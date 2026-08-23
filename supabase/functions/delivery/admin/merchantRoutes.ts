@@ -655,6 +655,18 @@ export function registerMerchantAdminRoutes(app: Hono) {
     if (Object.prototype.hasOwnProperty.call(body, "gct_registered")) {
       updates.gct_registered = Boolean(body.gct_registered);
     }
+    if (Object.prototype.hasOwnProperty.call(body, "market_id")) {
+      updates.market_id = body.market_id === null || body.market_id === ""
+        ? null
+        : String(body.market_id);
+      // Ops explicit town assignment locks against publish recompute
+      if (!Object.prototype.hasOwnProperty.call(body, "market_id_locked")) {
+        updates.market_id_locked = updates.market_id != null;
+      }
+    }
+    if (Object.prototype.hasOwnProperty.call(body, "market_id_locked")) {
+      updates.market_id_locked = Boolean(body.market_id_locked);
+    }
 
     if (body.is_accepting_orders != null && Boolean(body.is_accepting_orders)) {
       const gate = assertCanEnableAcceptingOrders(

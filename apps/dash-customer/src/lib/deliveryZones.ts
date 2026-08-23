@@ -1,3 +1,11 @@
+import {
+  evaluateCoverage,
+  pointInPolygon,
+  type CoverageZone,
+} from '@roam/dash-coverage';
+
+export { pointInPolygon };
+
 export type DeliveryZoneResult = {
   inZone: boolean;
   reason?: string;
@@ -20,6 +28,7 @@ export type ActiveCoverageZone = {
   name?: string;
   kind: ZoneKind;
   polygon: LatLng[];
+  market_id?: string;
 };
 
 /** Bump when zone payload shape / fallback policy changes so stale caches drop. */
@@ -240,24 +249,7 @@ function normalizeAddress(address: DeliveryAddressInput): string {
   return [address.line1, address.line2, address.city].filter(Boolean).join(' ').toLowerCase();
 }
 
-/** Ray-cast point-in-polygon (lat/lng). Ring may or may not repeat the first vertex. */
-export function pointInPolygon(lat: number, lng: number, polygon: LatLng[]): boolean {
-  if (!polygon || polygon.length < 3) return false;
-
-  let inside = false;
-  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
-    const yi = polygon[i].lat;
-    const xi = polygon[i].lng;
-    const yj = polygon[j].lat;
-    const xj = polygon[j].lng;
-    const intersect =
-      yi > lat !== yj > lat && lng < ((xj - xi) * (lat - yi)) / (yj - yi + 0.0) + xi;
-    if (intersect) inside = !inside;
-  }
-  return inside;
-}
-
-/** include wins only if no exclude covers the point. */
+/** include wins only if no exclude covers the point — shared @roam/dash-coverage. */
 export function evaluateActiveCoverage(lat: number, lng: number): DeliveryZoneResult {
   if (activeZones.length === 0) {
     return {
@@ -266,21 +258,16 @@ export function evaluateActiveCoverage(lat: number, lng: number): DeliveryZoneRe
     };
   }
 
-  let inInclude = false;
-  let hitExclude = false;
+  const zones: CoverageZone[] = activeZones.map((z, i) => ({
+    id: z.id ?? `zone-${i}`,
+    name: z.name ?? `Zone ${i + 1}`,
+    kind: z.kind,
+    market_id: z.market_id,
+    polygon: z.polygon,
+  }));
 
-  for (const zone of activeZones) {
-    if (zone.polygon.length < 3) continue;
-    if (!pointInPolygon(lat, lng, zone.polygon)) continue;
-    if (zone.kind === 'exclude') hitExclude = true;
-    else inInclude = true;
-  }
-
-  if (hitExclude) {
-    return { inZone: false, reason: 'This address is outside our current delivery area.' };
-  }
-  if (inInclude) return { inZone: true };
-
+  const result = evaluateCoverage(lat, lng, zones);
+  if (result.inZone) return { inZone: true };
   return {
     inZone: false,
     reason: 'This address is outside our current delivery area.',

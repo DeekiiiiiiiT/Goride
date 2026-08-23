@@ -28,6 +28,7 @@
     "@capacitor/status-bar": "^7.0.6",
     "@roam/dash-admin": "workspace:*",
     "@roam/dash-admin-client": "workspace:*",
+    "@roam/dash-coverage": "workspace:*",
     "@roam/api-client": "workspace:*",
     "@roam/auth-client": "workspace:*",
     "@roam/business-config": "workspace:*",

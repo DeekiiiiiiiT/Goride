@@ -27,6 +27,11 @@ import {
   polygonSummary,
   zoneSnapshotPayload,
 } from "./coveragePlatform.ts";
+import {
+  asCoverageZones,
+  loadPublishedZonesForMarket,
+  recomputeUnlockedMerchantMarkets,
+} from "./coverageZones.ts";
 
 type Vertex = CoverageVertex;
 
@@ -153,41 +158,8 @@ function slugify(value: string): string {
   return value.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
 }
 
-function asCoverageZones(rows: Record<string, unknown>[]): CoverageZone[] {
-  return rows.map((z) => ({
-    id: String(z.id),
-    name: String(z.name ?? ""),
-    market_id: z.market_id != null ? String(z.market_id) : undefined,
-    kind: normalizeKind(z.kind),
-    polygon: Array.isArray(z.polygon) ? (z.polygon as Vertex[]) : [],
-  }));
-}
-
 async function markDraftDirty(db: ReturnType<typeof getDb>, marketId: string) {
   await db.from("service_markets").update({ draft_dirty: true }).eq("id", marketId);
-}
-
-async function loadPublishedZonesForMarket(
-  db: ReturnType<typeof getDb>,
-  market: Record<string, unknown>,
-): Promise<Record<string, unknown>[]> {
-  const pubId = market.published_version_id != null ? String(market.published_version_id) : null;
-  if (pubId) {
-    const { data: ver } = await db
-      .from("service_coverage_versions")
-      .select("zones_json")
-      .eq("id", pubId)
-      .maybeSingle();
-    if (ver && Array.isArray(ver.zones_json)) {
-      return ver.zones_json as Record<string, unknown>[];
-    }
-  }
-  const { data: zones } = await db
-    .from("service_zone_polygons")
-    .select("*")
-    .eq("market_id", String(market.id))
-    .order("priority", { ascending: false });
-  return (zones ?? []) as Record<string, unknown>[];
 }
 
 export function registerMarketAdminRoutes(app: Hono) {
@@ -446,6 +418,34 @@ export function registerMarketAdminRoutes(app: Hono) {
     return c.json(evaluateCoverage(lat, lng, allZones));
   });
 
+  /** Recompute unlocked merchant towns from published coverage. */
+  admin.post("/backfill-merchant-markets", async (c) => {
+    const writeGate = requireDashWrite(c.get("adminUser") as ProductAdminUser);
+    if (writeGate) return writeGate;
+
+    const db = getDb();
+    const result = await recomputeUnlockedMerchantMarkets(db);
+
+    await writeKvAudit(
+      c.get("adminUser") as ProductAdminUser,
+      "roam_dash.merchant_markets_backfill",
+      "",
+      "",
+      JSON.stringify(result),
+    );
+    return c.json({
+      assigned: result.updated,
+      cleared: result.cleared,
+      skipped: result.skippedLocked + result.skippedNoPin,
+      skipped_locked: result.skippedLocked,
+      skipped_no_pin: result.skippedNoPin,
+      unchanged: result.unchanged,
+      total: result.updated + result.cleared + result.skippedLocked + result.skippedNoPin +
+        result.unchanged,
+      ...result,
+    });
+  });
+
   admin.get("/waitlist/entries", async (c) => {
     const marketId = c.req.query("market_id");
     const page = Math.max(parseInt(c.req.query("page") || "1", 10) || 1, 1);
@@ -478,7 +478,8 @@ export function registerMarketAdminRoutes(app: Hono) {
       const { count: mc } = await db
         .from("merchants")
         .select("id", { count: "exact", head: true })
-        .eq("verification_status", "approved");
+        .eq("verification_status", "approved")
+        .eq("market_id", marketId);
       merchantCount = mc ?? 0;
     } catch {
       merchantCount = 0;
@@ -580,7 +581,8 @@ export function registerMarketAdminRoutes(app: Hono) {
         zone_count: zonesJson.length,
       }),
     );
-    return c.json({ market: updated, version: ver });
+    const merchantRecompute = await recomputeUnlockedMerchantMarkets(db);
+    return c.json({ market: updated, version: ver, merchant_recompute: merchantRecompute });
   });
 
   admin.post("/:id/versions/:versionId/restore", async (c) => {
@@ -664,13 +666,20 @@ export function registerMarketAdminRoutes(app: Hono) {
       await markDraftDirty(db, marketId);
     }
 
+    const merchantRecompute = republish
+      ? await recomputeUnlockedMerchantMarkets(db)
+      : null;
+
     const { data: market } = await db.from("service_markets").select("*").eq("id", marketId).single();
     const { data: zones } = await db
       .from("service_zone_polygons")
       .select("*")
       .eq("market_id", marketId)
       .order("priority", { ascending: false });
-    return c.json({ market: { ...market, zones: zones ?? [] } });
+    return c.json({
+      market: { ...market, zones: zones ?? [] },
+      merchant_recompute: merchantRecompute,
+    });
   });
 
   admin.post("/:id/import-geojson", async (c) => {

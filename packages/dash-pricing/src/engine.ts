@@ -165,7 +165,8 @@ export function shouldApplyFreeDelivery(
   customerOrderCount: number,
   freeDeliveryFlag?: boolean,
 ): boolean {
-  if (freeDeliveryFlag) return true;
+  if (freeDeliveryFlag === true) return true;
+  if (freeDeliveryFlag === false) return false;
   const n = rules.launchPromos?.freeDeliveryFirstNOrders ?? 0;
   return n > 0 && customerOrderCount < n;
 }

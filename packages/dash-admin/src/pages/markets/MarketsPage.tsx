@@ -33,6 +33,7 @@ import {
   listMarkets,
   publishMarketCoverage,
   restoreCoverageVersion,
+  formatMerchantRecomputeToast,
   updateMarket,
   updateParishOutline,
   updateZone,
@@ -267,6 +268,8 @@ function TownCard({
 
 type MapOverlayProps = {
   town: DashMarketRow;
+  /** Other towns in the same parish — shown as muted context on the map. */
+  siblingTowns: DashMarketRow[];
   canWrite: boolean;
   saving: boolean;
   editor: EditorTarget | null;
@@ -297,6 +300,7 @@ type MapOverlayProps = {
 
 function TownMapOverlay({
   town,
+  siblingTowns,
   canWrite,
   saving,
   editor,
@@ -649,7 +653,8 @@ function TownMapOverlay({
         >
           {!mapExpanded && showTip && (
             <p className="text-xs text-emerald-200/90 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2">
-              Green is the town border (foundation). Red zones are where you don’t deliver. Use{' '}
+              Green is this town’s live delivery border. Red zones are where you don’t deliver.
+              Neighbor towns (gray) are reference only. Use{' '}
               <span className="text-amber-200 font-medium">Manage zones</span> →{' '}
               <span className="text-amber-200 font-medium">Edit on map</span> to redraw the green
               border.
@@ -700,6 +705,14 @@ function TownMapOverlay({
                 center_lng: z.center_lng,
                 radius_m: z.radius_m,
               }))}
+              contextTownPolygons={siblingTowns.flatMap((t) =>
+                includeZones(t).map((z) => ({
+                  id: `${t.id}-${z.id}`,
+                  name: t.name,
+                  polygon: z.polygon,
+                  isActive: Boolean(t.is_active),
+                })),
+              )}
               uiMode={uiMode}
               initialPolygon={initialPolygon}
               editingZoneId={editingZoneId}
@@ -851,13 +864,13 @@ function ParishMapOverlay({
   onRequestEditFoundation,
 }: ParishMapOverlayProps) {
   const foundation = parishFoundationVerts(parish);
-  const townOverlays =
+  const contextTownPolygons =
     parish.towns?.flatMap((t) =>
       includeZones(t).map((z) => ({
-        id: z.id,
-        kind: 'include' as const,
-        polygon: z.polygon,
+        id: `${t.id}-${z.id}`,
         name: t.name,
+        polygon: z.polygon,
+        isActive: Boolean(t.is_active),
       })),
     ) ?? [];
 
@@ -868,7 +881,6 @@ function ParishMapOverlay({
       polygon: foundation,
       name: `${parish.name} parish`,
     },
-    ...townOverlays,
   ];
 
   useEffect(() => {
@@ -924,27 +936,31 @@ function ParishMapOverlay({
         </div>
 
         <div className="flex-1 overflow-y-auto p-4 space-y-3">
-          <p className="text-xs text-sky-200/90 rounded-lg border border-sky-500/30 bg-sky-500/10 px-3 py-2">
-            This is the parish foundation outline. Town borders (green) show for context. Customer
-            delivery still uses each town’s border and non-delivery zones.
+          <p className="text-xs text-slate-200/90 rounded-lg border border-slate-500/40 bg-slate-500/10 px-3 py-2">
+            Editing parish outline. Town borders are reference only — they do not change customer
+            coverage.
           </p>
 
           <ZoneMapEditor
             key={`${parish.id}-${editing ? 'edit' : 'view'}`}
             zones={zones}
+            contextTownPolygons={contextTownPolygons}
+            showNeighborToggle={false}
             uiMode={editing ? 'adjust' : 'view'}
             initialPolygon={foundation}
             editingZoneId={editing ? 'parish-foundation' : null}
             townIncludePolygons={
               foundation.length >= 3
                 ? [foundation]
-                : townOverlays.map((z) => z.polygon).filter((p) => p.length >= 3)
+                : contextTownPolygons.map((t) => t.polygon).filter((p) => p.length >= 3)
             }
-            saving={saving}
             foundationScope="parish"
-            mapHeight={Math.min(560, typeof window !== 'undefined' ? window.innerHeight - 240 : 560)}
+            mapHeight={520}
+            saving={saving}
             onCancel={() => onSetEditing(false)}
-            onSave={(payload) => onSaveOutline(payload.polygon)}
+            onSave={async ({ polygon }) => {
+              await onSaveOutline(polygon);
+            }}
           />
         </div>
       </div>
@@ -1445,6 +1461,13 @@ export function MarketsPage() {
       {mapTown && (
         <TownMapOverlay
           town={mapTown}
+          siblingTowns={markets.filter(
+            (m) =>
+              m.id !== mapTown.id &&
+              m.parish_id != null &&
+              mapTown.parish_id != null &&
+              m.parish_id === mapTown.parish_id,
+          )}
           canWrite={canWrite}
           saving={saving}
           editor={editor}
@@ -1496,8 +1519,10 @@ export function MarketsPage() {
             void (async () => {
               setSaving(true);
               try {
-                await publishMarketCoverage(session.access_token, mapTown.id);
-                toast.success('Coverage published');
+                const published = await publishMarketCoverage(session.access_token, mapTown.id);
+                toast.success(
+                  `Coverage published${formatMerchantRecomputeToast(published.merchant_recompute)}`,
+                );
                 await load();
                 await refreshOverlayMeta();
               } catch (e) {
@@ -1512,8 +1537,15 @@ export function MarketsPage() {
               if (!window.confirm('Restore this version into draft and re-publish?')) return;
               setSaving(true);
               try {
-                await restoreCoverageVersion(session.access_token, mapTown.id, versionId, true);
-                toast.success('Version restored and published');
+                const restored = await restoreCoverageVersion(
+                  session.access_token,
+                  mapTown.id,
+                  versionId,
+                  true,
+                );
+                toast.success(
+                  `Version restored and published${formatMerchantRecomputeToast(restored.merchant_recompute)}`,
+                );
                 await load();
                 await refreshOverlayMeta();
               } catch (e) {

@@ -13,7 +13,11 @@ import {
   type PricingBreakdown,
   type PricingRules,
 } from "../_shared/dashPricing.ts";
-import { evaluateCoverage, type CoverageZone } from "./admin/coverageEval.ts";
+import type { CoverageEvalResult } from "./admin/coverageEval.ts";
+import {
+  resolveMarketForPoint,
+  type MarketPointResolve,
+} from "./admin/coverageZones.ts";
 import { resolveMerchantFoodGctRate } from "../_shared/gctRate.ts";
 
 export type PricingResolverInput = {
@@ -29,6 +33,13 @@ export type PricingResolverInput = {
   serviceFeeWaived?: boolean;
   /** Admin simulator: force a market instead of geo-resolving from dropoff */
   marketIdOverride?: string | null;
+  /** Admin simulator: override order count (skip DB lookup) for launch free-delivery promo */
+  customerOrderCount?: number | null;
+  /**
+   * When true (default for customer paths), refuse to invent a market if dropoff is uncovered.
+   * Admin preview with override can still price without coverage.
+   */
+  requireCoverage?: boolean;
 };
 
 export type ResolvedPricing = PricingBreakdown & {
@@ -38,6 +49,11 @@ export type ResolvedPricing = PricingBreakdown & {
   pricingV2Enabled: boolean;
   taxRatePercent?: number;
   gctRegistered?: boolean;
+  /** Geo resolution from dropoff (independent of marketIdOverride) */
+  resolvedMarketId?: string | null;
+  covered?: boolean;
+  coverage?: CoverageEvalResult | null;
+  marketOverrideApplied?: boolean;
 };
 
 // deno-lint-ignore no-explicit-any
@@ -60,42 +76,6 @@ async function loadCustomerOrderCount(
     .eq("customer_id", customerId)
     .not("status", "in", '("cancelled")');
   return count ?? 0;
-}
-
-async function resolveMarketForPoint(
-  sb: ServiceSb,
-  lat: number,
-  lng: number,
-): Promise<{ marketId: string | null; zones: CoverageZone[] }> {
-  const { data: markets } = await sb
-    .from("service_markets")
-    .select("id, slug, is_active")
-    .eq("is_active", true);
-
-  if (!markets?.length) return { marketId: null, zones: [] };
-
-  const marketIds = markets.map((m: { id: string }) => m.id);
-  const { data: zoneRows } = await sb
-    .from("service_zone_polygons")
-    .select("id, name, market_id, kind, polygon")
-    .in("market_id", marketIds);
-
-  const zones: CoverageZone[] = (zoneRows ?? []).map((z: Record<string, unknown>) => ({
-    id: String(z.id),
-    name: String(z.name),
-    market_id: z.market_id ? String(z.market_id) : undefined,
-    kind: z.kind ? String(z.kind) : "include",
-    polygon: Array.isArray(z.polygon) ? z.polygon as { lat: number; lng: number }[] : [],
-  }));
-
-  const evalResult = evaluateCoverage(lat, lng, zones);
-  if (evalResult.inZone && evalResult.matchedInclude?.market_id) {
-    return { marketId: evalResult.matchedInclude.market_id, zones };
-  }
-
-  // Fallback: first active market (soft launch)
-  const first = markets[0] as { id: string };
-  return { marketId: first.id, zones };
 }
 
 async function loadActiveProfile(
@@ -209,6 +189,8 @@ async function loadMerchantPricingContext(
   };
 }
 
+export { resolveMarketForPoint, assertSameMarketCoverage } from "./admin/coverageZones.ts";
+
 /** Resolve full pricing for a merchant order quote or placement. */
 export async function resolveDashOrderPricing(
   sb: ServiceSb,
@@ -224,28 +206,47 @@ export async function resolveDashOrderPricing(
   const dropLat = asCoord(input.dropoffLat);
   const dropLng = asCoord(input.dropoffLng);
 
-  let marketId: string | null =
-    input.marketIdOverride && String(input.marketIdOverride).trim()
-      ? String(input.marketIdOverride).trim()
-      : null;
+  const overrideRaw = input.marketIdOverride && String(input.marketIdOverride).trim()
+    ? String(input.marketIdOverride).trim()
+    : null;
+  const marketOverrideApplied = Boolean(overrideRaw);
+
+  let geo: MarketPointResolve | null = null;
+  if (dropLat != null && dropLng != null) {
+    geo = await resolveMarketForPoint(sb, dropLat, dropLng);
+  }
+
+  const resolvedMarketId = geo?.covered ? geo.marketId : null;
+  const covered = geo?.covered === true;
+  const coverage = geo?.eval ?? null;
+
+  // Pricing market: override (admin) wins; else geo only — never invent first active market
+  let marketId: string | null = overrideRaw ?? resolvedMarketId;
+
+  const requireCoverage = input.requireCoverage !== false && !overrideRaw;
+  if (requireCoverage && dropLat != null && dropLng != null && !covered) {
+    return {
+      ...buildOrderPricing({
+        subtotal: input.subtotal,
+        discount: input.discount,
+        tip: input.tip,
+        distanceKm: null,
+        rules: parsePricingRules(null),
+        paymentMethod: input.paymentMethod,
+      }),
+      pricingProfileVersion: 0,
+      marketId: null,
+      rules: parsePricingRules(null),
+      pricingV2Enabled: false,
+      resolvedMarketId: null,
+      covered: false,
+      coverage,
+      marketOverrideApplied,
+    };
+  }
+
   let rules = parsePricingRules(null);
   let version = 1;
-
-  if (!marketId && dropLat != null && dropLng != null) {
-    const market = await resolveMarketForPoint(sb, dropLat, dropLng);
-    marketId = market.marketId;
-  }
-
-  if (!marketId) {
-    const { data: fallbackMarket } = await sb
-      .from("service_markets")
-      .select("id")
-      .eq("is_active", true)
-      .order("created_at", { ascending: true })
-      .limit(1)
-      .maybeSingle();
-    marketId = fallbackMarket?.id ? String(fallbackMarket.id) : null;
-  }
 
   if (marketId) {
     const profile = await loadActiveProfile(sb, marketId);
@@ -260,7 +261,10 @@ export async function resolveDashOrderPricing(
     distanceKm = roundDistanceKm(haversineKm(ctx.lat, ctx.lng, dropLat, dropLng));
   }
 
-  const customerOrderCount = await loadCustomerOrderCount(sb, input.customerId);
+  const customerOrderCount = input.customerOrderCount != null &&
+      Number.isFinite(Number(input.customerOrderCount))
+    ? Math.max(0, Math.floor(Number(input.customerOrderCount)))
+    : await loadCustomerOrderCount(sb, input.customerId);
 
   const gct = await resolveMerchantFoodGctRate(sb, input.merchantId);
 
@@ -288,6 +292,10 @@ export async function resolveDashOrderPricing(
     marketId,
     rules,
     pricingV2Enabled: rules.pricingV2Enabled === true,
+    resolvedMarketId,
+    covered,
+    coverage,
+    marketOverrideApplied,
   };
 }
 

@@ -130,37 +130,54 @@ app.get("/health", (c) => c.json({ service: "delivery", status: "ok", timestamp:
 // Merchants
 // ============================================================================
 
-// List active merchants (public)
+// List active merchants (public) — filtered to customer's active delivery town
 app.get("/merchants", async (c) => {
   const supabase = getServiceSupabase();
   const { cuisine, lat, lng, radius, vertical, limit: limitRaw, offset: offsetRaw } = c.req.query();
   const limit = Math.min(Math.max(Number.parseInt(String(limitRaw ?? "50"), 10) || 50, 1), 100);
   const offset = Math.max(Number.parseInt(String(offsetRaw ?? "0"), 10) || 0, 0);
-  
+
+  const { resolveActiveMarketIdFromPin } = await import("./discoveryMarketFilter.ts");
+  const pin = await resolveActiveMarketIdFromPin(supabase, lat, lng);
+  if (pin.missingPin || !pin.covered || !pin.marketId) {
+    return c.json({
+      merchants: [],
+      limit,
+      offset,
+      hasMore: false,
+      out_of_coverage: !pin.missingPin,
+      missing_pin: pin.missingPin,
+    });
+  }
+
   let query = supabase
     .from("merchants")
     .select("*")
     .eq("onboarding_status", "submitted")
     .eq("is_active", true)
-    .eq("is_accepting_orders", true);
-  
+    .eq("is_accepting_orders", true)
+    .eq("market_id", pin.marketId);
+
   if (cuisine) {
     query = query.eq("cuisine_type", cuisine);
   }
   if (vertical) {
     query = query.eq("vertical_type", vertical);
   }
-  
+  // radius reserved for future distance sort; market filter is authoritative
+  void radius;
+
   const { data, error } = await query
     .order("rating", { ascending: false })
     .range(offset, offset + limit - 1);
-  
+
   if (error) return c.json({ error: error.message }, 500);
   return c.json({
     merchants: data,
     limit,
     offset,
     hasMore: (data?.length ?? 0) === limit,
+    market_id: pin.marketId,
   });
 });
 
@@ -232,21 +249,43 @@ app.get("/merchants", async (c) => {
     const tipQ = c.req.query("tip") ? Number(c.req.query("tip")) : 0;
 
     let merchantId: string | null = null;
+    let merchantMarketId: string | null = null;
     let deliveryFee = 0;
-    const byId = await supabase.from("merchants").select("id, delivery_fee").eq("id", id).maybeSingle();
+    const byId = await supabase
+      .from("merchants")
+      .select("id, delivery_fee, market_id")
+      .eq("id", id)
+      .maybeSingle();
     if (byId.data) {
       merchantId = String(byId.data.id);
       deliveryFee = Math.max(0, Number(byId.data.delivery_fee ?? 0));
+      merchantMarketId = byId.data.market_id != null ? String(byId.data.market_id) : null;
     } else {
-      const bySlug = await supabase.from("merchants").select("id, delivery_fee").eq("slug", id).maybeSingle();
+      const bySlug = await supabase
+        .from("merchants")
+        .select("id, delivery_fee, market_id")
+        .eq("slug", id)
+        .maybeSingle();
       if (bySlug.data) {
         merchantId = String(bySlug.data.id);
         deliveryFee = Math.max(0, Number(bySlug.data.delivery_fee ?? 0));
+        merchantMarketId = bySlug.data.market_id != null ? String(bySlug.data.market_id) : null;
       }
     }
     if (!merchantId) return c.json({ error: "Merchant not found" }, 404);
 
-    const { resolveDashOrderPricing } = await import("./pricingResolver.ts");
+    const { assertSameMarketCoverage, resolveDashOrderPricing } = await import("./pricingResolver.ts");
+    if (dropoffLat != null && dropoffLng != null && Number.isFinite(dropoffLat) && Number.isFinite(dropoffLng)) {
+      const coverageGate = await assertSameMarketCoverage(supabase, {
+        dropoffLat,
+        dropoffLng,
+        merchantMarketId,
+      });
+      if (!coverageGate.ok) {
+        return c.json({ error: coverageGate.error, code: coverageGate.code }, 400);
+      }
+    }
+
     const v2 = await resolveDashOrderPricing(supabase, {
       merchantId,
       subtotal: subtotalQ > 0 ? subtotalQ : 1000,
@@ -254,7 +293,15 @@ app.get("/merchants", async (c) => {
       dropoffLng,
       paymentMethod,
       tip: tipQ > 0 ? tipQ : undefined,
+      requireCoverage: true,
     });
+
+    if (v2 && dropoffLat != null && dropoffLng != null && v2.covered === false) {
+      return c.json({
+        error: "We don’t deliver to this address yet",
+        code: "out_of_coverage",
+      }, 400);
+    }
 
     if (v2?.pricingV2Enabled) {
       return c.json({

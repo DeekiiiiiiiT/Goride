@@ -21,6 +21,7 @@ import { calculateOrderTotals, fetchMerchantCheckoutPricing, GCT_RATE_FALLBACK_P
 import { formatJmd } from '@/lib/restaurantContent';
 import { toast } from 'sonner';
 import { fetchCustomerProfile } from '@/lib/customerApi';
+import { checkDeliveryZoneAsync } from '@/lib/deliveryZones';
 import PharmacyNoticeSheet, {
   isPharmacyNoticeAcknowledged,
 } from '@/components/checkout/PharmacyNoticeSheet';
@@ -205,6 +206,30 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
       return;
     }
 
+    // Re-validate coverage at checkout (address may have gone stale after zone publish)
+    const checkoutLocation = getCheckoutLocation();
+    const zoneLat = checkoutLocation.lat ?? savedAddress?.lat;
+    const zoneLng = checkoutLocation.lng ?? savedAddress?.lng;
+    if (zoneLat != null && zoneLng != null) {
+      try {
+        const zone = await checkDeliveryZoneAsync({
+          line1: deliveryAddress,
+          lat: zoneLat,
+          lng: zoneLng,
+        });
+        if (!zone.inZone) {
+          toast.error("We don’t deliver to this address yet");
+          onNavigate('out-of-delivery', {
+            returnTo: 'checkout',
+            attemptedAddress: deliveryAddress,
+          });
+          return;
+        }
+      } catch {
+        /* server still enforces on POST /orders */
+      }
+    }
+
     // Synchronous lock so double-taps can't trigger another request before React re-renders.
     if (submitLockRef.current) return;
     submitLockRef.current = true;
@@ -212,7 +237,6 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
 
     setIsPlacingOrder(true);
     const paymentMethod = getApiPaymentMethod(getCheckoutPreferences().paymentMethodId);
-    const checkoutLocation = getCheckoutLocation();
 
     try {
       const res = await fetch(`${API_ENDPOINTS.delivery}/orders`, {
@@ -253,6 +277,15 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
         const error = await res.json();
         if (error.code === 'min_order_not_met') {
           throw new Error(error.error || 'Order does not meet the minimum amount');
+        }
+        if (error.code === 'out_of_coverage') {
+          throw new Error(error.error || "We don’t deliver to this address yet");
+        }
+        if (error.code === 'merchant_out_of_market') {
+          throw new Error(error.error || "This store doesn’t deliver to your area");
+        }
+        if (error.code === 'dropoff_required') {
+          throw new Error(error.error || 'Add a delivery pin before placing your order');
         }
         throw new Error(error.error || 'Failed to place order');
       }

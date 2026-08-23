@@ -268,6 +268,14 @@ export function registerPricingAdminRoutes(app: Hono) {
       : null;
     const paymentRaw = String(body.payment_method ?? body.paymentMethod ?? "wipay");
     const paymentMethod = paymentRaw === "cash" ? "cash" : paymentRaw === "paypal" ? "paypal" : "wipay";
+    const customerOrderCount = body.customer_order_count != null || body.customerOrderCount != null
+      ? Number(body.customer_order_count ?? body.customerOrderCount)
+      : null;
+    const freeDelivery = body.free_delivery === true || body.freeDelivery === true
+      ? true
+      : body.free_delivery === false || body.freeDelivery === false
+      ? false
+      : undefined;
 
     if (!merchantId) return c.json({ error: "merchant_id required" }, 400);
 
@@ -281,6 +289,11 @@ export function registerPricingAdminRoutes(app: Hono) {
         dropoffLng,
         paymentMethod,
         marketIdOverride,
+        customerOrderCount: Number.isFinite(customerOrderCount as number)
+          ? (customerOrderCount as number)
+          : null,
+        freeDelivery,
+        requireCoverage: false,
       });
 
       if (!resolved) {
@@ -293,6 +306,11 @@ export function registerPricingAdminRoutes(app: Hono) {
       return c.json({
         breakdown: resolved,
         pricing_v2_enabled: resolved.pricingV2Enabled,
+        market_id: resolved.marketId,
+        resolved_market_id: resolved.resolvedMarketId ?? null,
+        covered: resolved.covered ?? null,
+        coverage: resolved.coverage ?? null,
+        market_override_applied: resolved.marketOverrideApplied ?? false,
       });
     } catch (e) {
       console.error("[pricing/preview]", e);

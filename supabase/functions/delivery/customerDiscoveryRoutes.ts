@@ -166,7 +166,7 @@ export function registerCustomerDiscoveryRoutes(app: Hono, deps: CustomerDiscove
     });
   });
 
-  // Merchant + menu item search (ilike)
+  // Merchant + menu item search (ilike) — same-town filter when pin provided
   app.get("/search", async (c) => {
     const q = String(c.req.query("q") || "").trim();
     if (q.length < 2) {
@@ -175,19 +175,33 @@ export function registerCustomerDiscoveryRoutes(app: Hono, deps: CustomerDiscove
 
     const pattern = `%${q.replace(/[%_]/g, "")}%`;
     const serviceSb = getServiceSupabase();
+    const lat = c.req.query("lat");
+    const lng = c.req.query("lng");
+    const { resolveActiveMarketIdFromPin } = await import("./discoveryMarketFilter.ts");
+    const pin = await resolveActiveMarketIdFromPin(serviceSb, lat, lng);
+    if (pin.missingPin || !pin.covered || !pin.marketId) {
+      return c.json({
+        merchants: [],
+        items: [],
+        query: q,
+        out_of_coverage: !pin.missingPin,
+        missing_pin: pin.missingPin,
+      });
+    }
 
     const [merchantsRes, itemsRes] = await Promise.all([
       serviceSb
         .from("merchants")
-        .select("id, name, logo_url, cover_image_url, cuisine_type, rating, avg_prep_time_mins, delivery_fee, min_order_amount")
+        .select("id, name, logo_url, cover_image_url, cuisine_type, rating, avg_prep_time_mins, delivery_fee, min_order_amount, market_id")
         .eq("is_active", true)
         .eq("is_accepting_orders", true)
+        .eq("market_id", pin.marketId)
         .or(`name.ilike."${pattern}",cuisine_type.ilike."${pattern}"`)
         .limit(20),
       serviceSb
         .from("menu_items")
         .select(
-          "id, name, description, price, image_url, merchant_id, merchant:merchants!inner(id, name, logo_url, is_active, is_accepting_orders)",
+          "id, name, description, price, image_url, merchant_id, merchant:merchants!inner(id, name, logo_url, is_active, is_accepting_orders, market_id)",
         )
         .eq("is_available", true)
         .ilike("name", pattern)
@@ -212,7 +226,8 @@ export function registerCustomerDiscoveryRoutes(app: Hono, deps: CustomerDiscove
     const items = (itemsRes.data || [])
       .filter((row: Record<string, unknown>) => {
         const merchant = row.merchant as Record<string, unknown> | null;
-        return merchant?.is_active && merchant?.is_accepting_orders;
+        return merchant?.is_active && merchant?.is_accepting_orders &&
+          String(merchant?.market_id ?? "") === pin.marketId;
       })
       .map((row: Record<string, unknown>) => {
         const merchant = (row.merchant as Record<string, unknown>) || {};
@@ -228,7 +243,7 @@ export function registerCustomerDiscoveryRoutes(app: Hono, deps: CustomerDiscove
         };
       });
 
-    return c.json({ merchants, items, query: q });
+    return c.json({ merchants, items, query: q, market_id: pin.marketId });
   });
 
   // Public merchant reviews from completed customer ratings (no fake names)

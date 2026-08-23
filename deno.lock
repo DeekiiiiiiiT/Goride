@@ -692,6 +692,13 @@
           ]
         }
       },
+      "packages/dash-coverage": {
+        "packageJson": {
+          "dependencies": [
+            "npm:vitest@^3.2.4"
+          ]
+        }
+      },
       "packages/dash-pricing": {
         "packageJson": {
           "dependencies": [

@@ -28,6 +28,7 @@ import { resolveMerchantAccess, requireResolvedMerchantWithPermission } from "./
 import { findPendingInviteForEmail } from "./merchantTeam.ts";
 import { seedVenueOpsFromBusinessType } from "./merchantVenueOps.ts";
 import { assertCanEnableAcceptingOrders } from "./merchantPayoutGate.ts";
+import { suggestMarketIdForMerchantPin } from "./admin/coverageZones.ts";
 
 type SupabaseClient = ReturnType<typeof createDeliveryClient>;
 
@@ -346,7 +347,16 @@ export function registerMerchantApplicationRoutes(app: Hono) {
       ? rowToBusinessTypeMetadata(typeRow as unknown as Record<string, unknown>)
       : rowToBusinessTypeMetadata(null);
     const verticalSnapshot = verticalSnapshotFromMetadata(typeMeta);
-    const payload = merchantPayloadFromBody({ ...body, name }, user.id, verticalSnapshot);
+    const payload = merchantPayloadFromBody({ ...body, name }, user.id, verticalSnapshot) as Record<
+      string,
+      unknown
+    >;
+    const pinLat = Number(payload.lat);
+    const pinLng = Number(payload.lng);
+    if (Number.isFinite(pinLat) && Number.isFinite(pinLng)) {
+      const suggested = await suggestMarketIdForMerchantPin(getServiceSupabase(), pinLat, pinLng);
+      if (suggested) payload.market_id = suggested;
+    }
     const sb = getServiceSupabase();
 
     let merchant: Record<string, unknown>;
@@ -476,6 +486,17 @@ export function registerMerchantApplicationRoutes(app: Hono) {
         nextAccepting,
       );
       if (!gate.ok) return c.json(gate.body, gate.status);
+    }
+
+    // Re-suggest town when partner moves the store pin (skip if ops locked)
+    const nextLat = update.lat != null ? Number(update.lat) : Number(current.lat);
+    const nextLng = update.lng != null ? Number(update.lng) : Number(current.lng);
+    const pinMoved = (update.lat != null || update.lng != null) &&
+      Number.isFinite(nextLat) &&
+      Number.isFinite(nextLng);
+    if (pinMoved && current.market_id_locked !== true) {
+      const suggested = await suggestMarketIdForMerchantPin(getServiceSupabase(), nextLat, nextLng);
+      update.market_id = suggested;
     }
 
     const { data, error } = await supabase
