@@ -30,6 +30,7 @@ export type OrderHistoryEntry = {
   subtotal?: number;
   deliveryFee?: number;
   serviceFee?: number;
+  processingFee?: number;
   tax?: number;
   tip?: number;
 };
@@ -210,7 +211,8 @@ export function mapApiOrderToDetails(order: Record<string, unknown>): OrderHisto
     deliveryAddress: order.delivery_address ? String(order.delivery_address) : undefined,
     subtotal: Number(order.subtotal ?? 0),
     deliveryFee: Number(order.delivery_fee ?? 0),
-    serviceFee: Number(order.platform_fee ?? 0),
+    serviceFee: Number(order.service_fee ?? order.platform_fee ?? 0),
+    processingFee: Number(order.processing_fee ?? 0),
     tax: Number(order.tax ?? 0),
     tip: Number(order.tip ?? 0),
   };

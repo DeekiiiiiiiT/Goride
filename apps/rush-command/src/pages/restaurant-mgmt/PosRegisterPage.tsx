@@ -20,6 +20,7 @@ interface PosRegisterPageProps {
   merchant: Merchant;
   useApi: boolean;
   taxRatePercent?: number;
+  gctRegistered?: boolean;
   onBack?: () => void;
   storeName?: string;
   staffName?: string;
@@ -35,17 +36,19 @@ export default function PosRegisterPage({
   merchant,
   useApi,
   taxRatePercent: taxRateProp,
+  gctRegistered: gctRegisteredProp = true,
   storeName,
   staffName,
   onUnpair,
   onEndShift,
 }: PosRegisterPageProps) {
-  const taxRate =
-    taxRateProp ??
-    Number(
-      JSON.parse(localStorage.getItem(`roam_restaurant_mgmt_setup_${merchant.id}`) || 'null')
-        ?.taxRatePercent ?? FIXTURE_SETUP_DRAFT.taxRatePercent,
-    );
+  const taxRate = useApi
+    ? (taxRateProp ?? 0)
+    : Number(
+        JSON.parse(localStorage.getItem(`roam_restaurant_mgmt_setup_${merchant.id}`) || 'null')
+          ?.taxRatePercent ?? FIXTURE_SETUP_DRAFT.taxRatePercent,
+      );
+  const gctRegistered = useApi ? (gctRegisteredProp ?? true) : true;
 
   const menuQuery = useMerchantMenu(useApi ? merchant.id : '');
   const categories = useApi
@@ -79,7 +82,7 @@ export default function PosRegisterPage({
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [printJobCreated, setPrintJobCreated] = useState<boolean | null>(null);
 
-  const cart = usePosCart(taxRate);
+  const cart = usePosCart(taxRate, gctRegistered);
   const displayStoreName = storeName ?? merchant.name;
   const showHeader = Boolean(staffName || storeName);
 
@@ -235,6 +238,7 @@ export default function PosRegisterPage({
           tax={cart.pricing.tax}
           total={cart.pricing.total}
           taxRate={taxRate}
+          gctRegistered={gctRegistered}
           submitting={submitting}
           fulfillmentType={fulfillmentType}
           guestName={guestName}

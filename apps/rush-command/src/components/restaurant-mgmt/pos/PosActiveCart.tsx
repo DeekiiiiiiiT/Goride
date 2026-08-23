@@ -12,6 +12,7 @@ interface PosActiveCartProps {
   tax: number;
   total: number;
   taxRate: number;
+  gctRegistered?: boolean;
   submitting: boolean;
   fulfillmentType: InStoreFulfillmentType;
   guestName: string;
@@ -102,6 +103,7 @@ export default function PosActiveCart({
   tax,
   total,
   taxRate,
+  gctRegistered = true,
   submitting,
   fulfillmentType,
   guestName,
@@ -231,7 +233,7 @@ export default function PosActiveCart({
                 <span>{formatJmd(subtotal)}</span>
               </div>
               <div className="flex items-center justify-between text-body-lg text-on-surface-variant">
-                <span>Tax ({taxRate}%)</span>
+                <span>{gctRegistered === false ? 'Tax (exempt)' : `Tax (GCT ${taxRate}%)`}</span>
                 <span>{formatJmd(tax)}</span>
               </div>
               <div className="my-2 h-px w-full bg-surface-variant" />

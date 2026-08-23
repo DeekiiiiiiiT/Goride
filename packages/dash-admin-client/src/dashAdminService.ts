@@ -64,6 +64,8 @@ export interface DashMerchant {
   go_live_rule?: string | null;
   business_type_id?: string | null;
   capabilities?: string[];
+  gct_registered?: boolean;
+  tax_id?: string | null;
 }
 
 export interface MerchantHours {
@@ -362,6 +364,7 @@ export function patchMerchantOps(
     capabilities?: string[];
     payout_ready?: boolean;
     is_test_merchant?: boolean;
+    gct_registered?: boolean;
   },
 ) {
   return deliveryFetch(accessToken, `/admin/merchants/${id}/ops`, {
@@ -1221,16 +1224,21 @@ export type PricingRulesPayload = {
     max_fee_jmd?: number;
   };
   service_fee?: {
-    mode?: 'flat' | 'percent';
+    mode?: 'flat' | 'percent' | 'marginal';
     flat_jmd?: number;
     percent?: number;
     min_jmd?: number;
     max_jmd?: number;
+    avg_rate?: number;
+    override_rate?: number;
+    override_threshold_jmd?: number;
   };
   courier_delivery_share?: number;
   cod?: { pause_threshold_jmd?: number };
   launch_promos?: { free_delivery_first_n_orders?: number };
   tax_rate_percent?: number;
+  min_order_subtotal_jmd?: number;
+  card_processing_fee_percent?: number;
 };
 
 export function fetchPricingOverview(accessToken: string) {
@@ -1283,6 +1291,7 @@ export function previewPricing(
     dropoff_lng?: number;
     tip?: number;
     customer_order_count?: number;
+    payment_method?: 'wipay' | 'paypal' | 'cash';
   },
 ) {
   return deliveryFetch(accessToken, '/admin/pricing/preview', {

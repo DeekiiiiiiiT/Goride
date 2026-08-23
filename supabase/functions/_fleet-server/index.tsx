@@ -16526,6 +16526,20 @@ app.put("/make-server-37f42386/admin/platform-settings", async (c) => {
       }
       settings.platformFeeRate = rate;
     }
+    if (segment === "global" && settings.tax != null && typeof settings.tax === "object") {
+      const tax = settings.tax as Record<string, unknown>;
+      if (tax.gctStandardRatePercent != null) {
+        const gctRate = Number(tax.gctStandardRatePercent);
+        if (!Number.isFinite(gctRate) || gctRate < 0 || gctRate > 100) {
+          return c.json({ error: "tax.gctStandardRatePercent must be between 0 and 100" }, 400);
+        }
+        tax.gctStandardRatePercent = gctRate;
+      }
+      if (tax.gctEnabled != null) {
+        tax.gctEnabled = Boolean(tax.gctEnabled);
+      }
+      settings.tax = tax;
+    }
     settings.updatedAt = new Date().toISOString();
     // Writes go to segment keys only — LEGACY_PLATFORM_SETTINGS_KEY is read-only (dual-read fallback).
     await kv.set(settingsKey, settings);

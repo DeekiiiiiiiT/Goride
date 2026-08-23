@@ -9,6 +9,7 @@ import {
   AlertTriangle,
   Globe,
   Megaphone,
+  Receipt,
 } from 'lucide-react';
 import { withSettingsSegmentHeaders } from '@roam/api-client';
 import {
@@ -203,6 +204,61 @@ export function GlobalPlatformSettingsPage({
               <p className="text-xs text-slate-500">Backend</p>
               <p className="text-slate-900 dark:text-white">Supabase Edge Functions + KV</p>
             </div>
+          </div>
+        </SettingsPanel>
+      )}
+
+      {activeTab === 'general' && (
+        <SettingsPanel
+          icon={<Receipt className="w-4 h-4 text-violet-400" />}
+          title="General Consumption Tax (GCT)"
+          description="Jamaica statutory rate — single source of truth for all Roam products."
+        >
+          <div className="space-y-4">
+            <label className="flex items-center gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={settings.tax?.gctEnabled ?? true}
+                onChange={(e) => {
+                  setSettings((s) => ({
+                    ...s,
+                    tax: {
+                      ...(s.tax ?? DEFAULT_GLOBAL_SETTINGS.tax!),
+                      gctEnabled: e.target.checked,
+                    },
+                  }));
+                  setDirty(true);
+                }}
+                className="rounded border-slate-300"
+              />
+              <span className="text-sm text-slate-900 dark:text-white">GCT collection enabled</span>
+            </label>
+            <label className="block">
+              <span className="text-xs text-slate-500">Standard GCT rate (%)</span>
+              <input
+                type="number"
+                min={0}
+                max={100}
+                step={0.1}
+                value={settings.tax?.gctStandardRatePercent ?? 16.5}
+                onChange={(e) => {
+                  const rate = Number(e.target.value);
+                  setSettings((s) => ({
+                    ...s,
+                    tax: {
+                      ...(s.tax ?? DEFAULT_GLOBAL_SETTINGS.tax!),
+                      gctStandardRatePercent: Number.isFinite(rate) ? rate : 16.5,
+                    },
+                  }));
+                  setDirty(true);
+                }}
+                className="mt-1 w-full max-w-xs px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm dark:bg-slate-800 dark:border-slate-700 dark:text-white"
+              />
+            </label>
+            <p className="text-xs text-slate-500">
+              Merchant food GCT uses this rate when the merchant is GCT-registered. Service fee
+              taxation is pending accountant review.
+            </p>
           </div>
         </SettingsPanel>
       )}

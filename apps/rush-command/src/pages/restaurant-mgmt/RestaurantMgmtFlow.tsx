@@ -58,6 +58,7 @@ export default function RestaurantMgmtFlow({
     printerId: FIXTURE_SETUP_DRAFT.printerName as string | null,
     receiptFooter: FIXTURE_SETUP_DRAFT.receiptFooter,
     taxRatePercent: FIXTURE_SETUP_DRAFT.taxRatePercent,
+    gctRegistered: true,
     showInStoreOnCounter: false,
     showInStoreOnKitchen: false,
   });
@@ -102,6 +103,7 @@ export default function RestaurantMgmtFlow({
         printerId: sett.printerId,
         receiptFooter: sett.receiptFooter,
         taxRatePercent: sett.taxRatePercent,
+        gctRegistered: sett.gctRegistered,
         showInStoreOnCounter: sett.showInStoreOnCounter,
         showInStoreOnKitchen: sett.showInStoreOnKitchen,
       });
@@ -173,6 +175,7 @@ export default function RestaurantMgmtFlow({
           merchant={merchant}
           useApi={useApi}
           taxRatePercent={settings.taxRatePercent}
+          gctRegistered={settings.gctRegistered}
         />
       )}
       {activeModule === 'reports' && (

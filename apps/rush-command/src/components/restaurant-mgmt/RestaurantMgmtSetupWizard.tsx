@@ -1,9 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { MaterialIcon } from '../../signup/components/MaterialIcon';
 import type { RestaurantMgmtSetupDraft } from '../../types/restaurant-mgmt';
 import { FIXTURE_SETUP_DRAFT } from '../../lib/restaurant-mgmt-fixtures';
-import { patchSettings } from '../../lib/restaurant-mgmt-api';
+import { fetchSettings, patchSettings } from '../../lib/restaurant-mgmt-api';
 
 const STEPS = [
   { id: 1, label: 'Tax', icon: 'percent' as const },
@@ -26,7 +26,22 @@ export default function RestaurantMgmtSetupWizard({
 }: RestaurantMgmtSetupWizardProps) {
   const [step, setStep] = useState(1);
   const [saving, setSaving] = useState(false);
+  const [gctRegistered, setGctRegistered] = useState(true);
   const [draft, setDraft] = useState<RestaurantMgmtSetupDraft>({ ...FIXTURE_SETUP_DRAFT });
+
+  useEffect(() => {
+    if (!useApi) return;
+    void fetchSettings()
+      .then((s) => {
+        setGctRegistered(s.gctRegistered);
+        if (s.taxRatePercent > 0) {
+          setDraft((d) => ({ ...d, taxRatePercent: s.taxRatePercent }));
+        }
+      })
+      .catch(() => {
+        /* keep defaults */
+      });
+  }, [useApi]);
 
   const persistSetup = async () => {
     if (useApi) {
@@ -109,23 +124,35 @@ export default function RestaurantMgmtSetupWizard({
         {step === 1 && (
           <section className="space-y-inset-sm">
             <h2 className="text-title-lg font-semibold">Sales tax rate</h2>
-            <p className="text-body-sm text-on-surface-variant">
-              Applied to in-store orders at checkout.
-            </p>
-            <label className="block">
-              <span className="text-label-md text-on-surface-variant">Tax rate (%)</span>
-              <input
-                type="number"
-                min={0}
-                max={100}
-                step={0.5}
-                value={draft.taxRatePercent}
-                onChange={(e) =>
-                  setDraft((d) => ({ ...d, taxRatePercent: Number(e.target.value) || 0 }))
-                }
-                className="mt-1 w-full rounded-lg border border-outline-variant bg-surface-container-lowest px-3 py-3 text-body-lg"
-              />
-            </label>
+            {!gctRegistered ? (
+              <div className="rounded-lg border border-outline-variant bg-surface-container-low p-inset-md">
+                <p className="text-body-sm text-on-surface-variant">
+                  This store is not GCT-registered. In-store orders will not collect GCT until Roam
+                  ops verifies your registration and enables it in the partner portal.
+                </p>
+              </div>
+            ) : (
+              <>
+                <p className="text-body-sm text-on-surface-variant">
+                  Applied to in-store orders at checkout. Default rate comes from Roam Dominion
+                  settings (currently 16.5% GCT).
+                </p>
+                <label className="block">
+                  <span className="text-label-md text-on-surface-variant">Tax rate (%)</span>
+                  <input
+                    type="number"
+                    min={0}
+                    max={100}
+                    step={0.5}
+                    value={draft.taxRatePercent}
+                    onChange={(e) =>
+                      setDraft((d) => ({ ...d, taxRatePercent: Number(e.target.value) || 0 }))
+                    }
+                    className="mt-1 w-full rounded-lg border border-outline-variant bg-surface-container-lowest px-3 py-3 text-body-lg"
+                  />
+                </label>
+              </>
+            )}
           </section>
         )}
 

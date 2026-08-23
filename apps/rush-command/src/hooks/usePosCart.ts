@@ -6,13 +6,13 @@ function lineKey(menuItemId: string) {
   return `line-${menuItemId}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 }
 
-export function usePosCart(taxRatePercent = 0) {
+export function usePosCart(taxRatePercent: number, gctRegistered = true) {
   const [lines, setLines] = useState<PosCartLine[]>([]);
   const [discount, setDiscount] = useState(0);
 
   const pricing = useMemo(
-    () => calculateOrderPricing({ lines, taxRatePercent, discount }),
-    [lines, taxRatePercent, discount],
+    () => calculateOrderPricing({ lines, taxRatePercent, gctRegistered, discount }),
+    [lines, taxRatePercent, gctRegistered, discount],
   );
 
   const addItem = useCallback(

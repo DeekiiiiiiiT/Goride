@@ -1,6 +1,7 @@
 import type {
   DeliveryFeeRules,
   MerchantTier,
+  PaymentMethod,
   PricingBreakdown,
   PricingInput,
   PricingRules,
@@ -14,6 +15,10 @@ function roundMoney(value: number): number {
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
+}
+
+function isCardPayment(method: PaymentMethod | undefined): boolean {
+  return method === 'wipay' || method === 'paypal';
 }
 
 /** Resolve merchant commission rate from tier + optional override. */
@@ -41,10 +46,32 @@ export function resolveMerchantCommission(
   return { rate, amount };
 }
 
-/** Resolve customer-facing service fee. */
-export function resolveServiceFee(
+/** Marginal (bracketed) service fee — audit Option B. */
+export function resolveMarginalServiceFee(
   rules: ServiceFeeRules,
-  subtotal: number,
+  discountedSubtotal: number,
+): number {
+  const subtotal = Math.max(0, discountedSubtotal);
+  const avgRate = rules.avgRate ?? 0.15;
+  const overrideRate = rules.overrideRate ?? 0.09;
+  const threshold = Math.max(0, rules.overrideThresholdJmd ?? 0);
+  const min = rules.minJmd ?? 0;
+  const max = rules.maxJmd ?? 99999;
+
+  let raw = 0;
+  if (subtotal <= threshold) {
+    raw = subtotal * avgRate;
+  } else {
+    raw = threshold * avgRate + (subtotal - threshold) * overrideRate;
+  }
+
+  return roundMoney(clamp(raw, min, max));
+}
+
+/** Legacy flat/percent service fee (merchant override path). */
+function resolveLegacyServiceFee(
+  rules: ServiceFeeRules,
+  discountedSubtotal: number,
   override?: ServiceFeeOverride | null,
 ): number {
   const effective: ServiceFeeRules = override
@@ -62,12 +89,44 @@ export function resolveServiceFee(
     fee = effective.flatJmd ?? 0;
   } else {
     const pct = effective.percent ?? 0.05;
-    fee = subtotal * pct;
+    fee = discountedSubtotal * pct;
   }
 
   const min = effective.minJmd ?? 0;
   const max = effective.maxJmd ?? 99999;
   return roundMoney(clamp(fee, min, max));
+}
+
+/** Resolve customer-facing service fee. */
+export function resolveServiceFee(
+  rules: ServiceFeeRules,
+  discountedSubtotal: number,
+  override?: ServiceFeeOverride | null,
+  waived?: boolean,
+): number {
+  if (waived) return 0;
+
+  if (override) {
+    return resolveLegacyServiceFee(rules, discountedSubtotal, override);
+  }
+
+  if (rules.mode === 'marginal') {
+    return resolveMarginalServiceFee(rules, discountedSubtotal);
+  }
+
+  return resolveLegacyServiceFee(rules, discountedSubtotal, null);
+}
+
+/** Card processing fee on pre-processing order total. */
+export function resolveProcessingFee(
+  orderTotal: number,
+  cardProcessingFeePercent: number | undefined,
+  paymentMethod: PaymentMethod | undefined,
+): number {
+  if (!isCardPayment(paymentMethod)) return 0;
+  const rate = cardProcessingFeePercent ?? 0;
+  if (rate <= 0) return 0;
+  return roundMoney(Math.max(0, orderTotal) * rate);
 }
 
 /** Distance-based delivery fee. */
@@ -116,7 +175,11 @@ export function buildOrderPricing(input: PricingInput): PricingBreakdown {
   const subtotal = Math.max(0, input.subtotal);
   const discount = Math.max(0, input.discount ?? 0);
   const discountedSubtotal = roundMoney(Math.max(0, subtotal - discount));
-  const taxRate = (input.taxRatePercent ?? input.rules.taxRatePercent ?? 16.5) / 100;
+  const taxRatePercent = input.taxRatePercent;
+  if (taxRatePercent == null || !Number.isFinite(taxRatePercent)) {
+    throw new Error('buildOrderPricing requires taxRatePercent from GCT resolver');
+  }
+  const taxRate = taxRatePercent / 100;
   const tip = Math.max(0, input.tip ?? 0);
 
   const { rate: merchantCommissionRate, amount: merchantCommissionAmount } =
@@ -128,8 +191,9 @@ export function buildOrderPricing(input: PricingInput): PricingBreakdown {
 
   const serviceFee = resolveServiceFee(
     input.rules.serviceFee,
-    subtotal,
+    discountedSubtotal,
     input.serviceFeeOverride,
+    input.serviceFeeWaived,
   );
 
   const distanceKm =
@@ -151,9 +215,15 @@ export function buildOrderPricing(input: PricingInput): PricingBreakdown {
     resolveDeliverySplit(deliveryFee, input.rules.courierDeliveryShare);
 
   const tax = roundMoney(discountedSubtotal * taxRate);
-  const total = roundMoney(
+  const orderTotal = roundMoney(
     discountedSubtotal + serviceFee + deliveryFee + tax + tip,
   );
+  const processingFee = resolveProcessingFee(
+    orderTotal,
+    input.rules.cardProcessingFeePercent,
+    input.paymentMethod,
+  );
+  const customerTotal = roundMoney(orderTotal + processingFee);
 
   return {
     subtotal,
@@ -168,7 +238,10 @@ export function buildOrderPricing(input: PricingInput): PricingBreakdown {
     distanceKm,
     tax,
     tip,
-    total,
+    orderTotal,
+    processingFee,
+    customerTotal,
+    total: customerTotal,
     tierSlug: input.tier?.slug,
     freeDeliveryApplied,
     pricingModel: 'v2',
@@ -185,6 +258,12 @@ export function parsePricingRules(raw: Record<string, unknown> | null | undefine
   const launchPromos = (raw.launch_promos ?? {}) as Record<string, unknown>;
   const cod = (raw.cod ?? {}) as Record<string, unknown>;
 
+  const modeRaw = serviceFee.mode;
+  const mode: ServiceFeeRules['mode'] =
+    modeRaw === 'marginal' ? 'marginal'
+    : modeRaw === 'percent' ? 'percent'
+    : 'flat';
+
   return {
     pricingV2Enabled: Boolean(raw.pricing_v2_enabled),
     delivery: {
@@ -194,11 +273,16 @@ export function parsePricingRules(raw: Record<string, unknown> | null | undefine
       maxFeeJmd: delivery.max_fee_jmd != null ? Number(delivery.max_fee_jmd) : undefined,
     },
     serviceFee: {
-      mode: (serviceFee.mode === 'percent' ? 'percent' : 'flat') as 'flat' | 'percent',
+      mode,
       flatJmd: serviceFee.flat_jmd != null ? Number(serviceFee.flat_jmd) : 120,
       percent: serviceFee.percent != null ? Number(serviceFee.percent) : 0.05,
       minJmd: serviceFee.min_jmd != null ? Number(serviceFee.min_jmd) : 100,
       maxJmd: serviceFee.max_jmd != null ? Number(serviceFee.max_jmd) : 200,
+      avgRate: serviceFee.avg_rate != null ? Number(serviceFee.avg_rate) : undefined,
+      overrideRate: serviceFee.override_rate != null ? Number(serviceFee.override_rate) : undefined,
+      overrideThresholdJmd: serviceFee.override_threshold_jmd != null
+        ? Number(serviceFee.override_threshold_jmd)
+        : undefined,
     },
     courierDeliveryShare: Number(raw.courier_delivery_share ?? 0.8),
     launchPromos: {
@@ -208,11 +292,18 @@ export function parsePricingRules(raw: Record<string, unknown> | null | undefine
       pauseThresholdJmd: Number(cod.pause_threshold_jmd ?? 10000),
     },
     taxRatePercent: Number(raw.tax_rate_percent ?? 16.5),
+    minOrderSubtotalJmd: raw.min_order_subtotal_jmd != null
+      ? Number(raw.min_order_subtotal_jmd)
+      : undefined,
+    cardProcessingFeePercent: raw.card_processing_fee_percent != null
+      ? Number(raw.card_processing_fee_percent)
+      : undefined,
   };
 }
 
 /** Serialize PricingRules to DB JSON (snake_case). */
 export function serializePricingRules(rules: PricingRules): Record<string, unknown> {
+  const sf = rules.serviceFee;
   return {
     pricing_v2_enabled: rules.pricingV2Enabled ?? false,
     delivery: {
@@ -222,11 +313,14 @@ export function serializePricingRules(rules: PricingRules): Record<string, unkno
       max_fee_jmd: rules.delivery.maxFeeJmd,
     },
     service_fee: {
-      mode: rules.serviceFee.mode,
-      flat_jmd: rules.serviceFee.flatJmd,
-      percent: rules.serviceFee.percent,
-      min_jmd: rules.serviceFee.minJmd,
-      max_jmd: rules.serviceFee.maxJmd,
+      mode: sf.mode,
+      flat_jmd: sf.flatJmd,
+      percent: sf.percent,
+      min_jmd: sf.minJmd,
+      max_jmd: sf.maxJmd,
+      avg_rate: sf.avgRate,
+      override_rate: sf.overrideRate,
+      override_threshold_jmd: sf.overrideThresholdJmd,
     },
     courier_delivery_share: rules.courierDeliveryShare,
     launch_promos: {
@@ -236,6 +330,8 @@ export function serializePricingRules(rules: PricingRules): Record<string, unkno
       pause_threshold_jmd: rules.cod?.pauseThresholdJmd ?? 10000,
     },
     tax_rate_percent: rules.taxRatePercent ?? 16.5,
+    min_order_subtotal_jmd: rules.minOrderSubtotalJmd,
+    card_processing_fee_percent: rules.cardProcessingFeePercent,
   };
 }
 
@@ -259,6 +355,8 @@ export function defaultPricingRules(): PricingRules {
     launchPromos: { freeDeliveryFirstNOrders: 3 },
     cod: { pauseThresholdJmd: 10000 },
     taxRatePercent: 16.5,
+    minOrderSubtotalJmd: 800,
+    cardProcessingFeePercent: 0.045,
   };
 }
 
@@ -275,4 +373,14 @@ export function parseServiceFeeOverride(
     min: raw.min != null ? Number(raw.min) : undefined,
     max: raw.max != null ? Number(raw.max) : undefined,
   };
+}
+
+/** Minimum order gate — max of market and merchant floors. */
+export function resolveMinOrderSubtotal(
+  marketMinJmd: number | undefined,
+  merchantMinJmd: number | null | undefined,
+): number {
+  const market = Math.max(0, marketMinJmd ?? 0);
+  const merchant = Math.max(0, merchantMinJmd ?? 0);
+  return Math.max(market, merchant);
 }

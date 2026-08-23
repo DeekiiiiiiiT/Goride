@@ -227,6 +227,9 @@ app.get("/merchants", async (c) => {
     const dropoffLat = c.req.query("dropoff_lat") ? Number(c.req.query("dropoff_lat")) : null;
     const dropoffLng = c.req.query("dropoff_lng") ? Number(c.req.query("dropoff_lng")) : null;
     const subtotalQ = c.req.query("subtotal") ? Number(c.req.query("subtotal")) : 0;
+    const paymentRaw = c.req.query("payment_method") ?? "wipay";
+    const paymentMethod = paymentRaw === "cash" ? "cash" : paymentRaw === "paypal" ? "paypal" : "wipay";
+    const tipQ = c.req.query("tip") ? Number(c.req.query("tip")) : 0;
 
     let merchantId: string | null = null;
     let deliveryFee = 0;
@@ -249,6 +252,8 @@ app.get("/merchants", async (c) => {
       subtotal: subtotalQ > 0 ? subtotalQ : 1000,
       dropoffLat,
       dropoffLng,
+      paymentMethod,
+      tip: tipQ > 0 ? tipQ : undefined,
     });
 
     if (v2?.pricingV2Enabled) {
@@ -258,16 +263,22 @@ app.get("/merchants", async (c) => {
         platform_fee_rate: null,
         delivery_fee: v2.deliveryFee,
         service_fee: v2.serviceFee,
+        processing_fee: v2.processingFee,
+        order_total: v2.orderTotal,
         merchant_commission_rate: v2.merchantCommissionRate,
         merchant_commission_amount: v2.merchantCommissionAmount,
         delivery_fee_courier_amount: v2.deliveryFeeCourierAmount,
         delivery_fee_platform_amount: v2.deliveryFeePlatformAmount,
         distance_km: v2.distanceKm,
         tax: v2.tax,
-        total: v2.total,
+        tax_rate_percent: v2.taxRatePercent ?? 0,
+        gct_registered: v2.gctRegistered ?? false,
+        total: v2.customerTotal,
         pricing_profile_version: v2.pricingProfileVersion,
         tier: v2.tierSlug,
         free_delivery_applied: v2.freeDeliveryApplied,
+        min_order_subtotal_jmd: v2.rules.minOrderSubtotalJmd ?? 0,
+        card_processing_fee_percent: v2.rules.cardProcessingFeePercent ?? 0,
         has_override: false,
       });
     }

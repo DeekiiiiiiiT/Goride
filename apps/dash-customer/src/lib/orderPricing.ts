@@ -1,8 +1,9 @@
 /** Client totals must match server formula in customerOrderRoutes.ts */
 
-export const TAX_RATE_PERCENT = 16.5;
 /** Fallback only — prefer resolved rate from merchant pricing API. */
 export const PLATFORM_FEE_RATE = 0.05;
+/** Last-resort GCT label when pricing API unavailable (matches Dominion default). */
+export const GCT_RATE_FALLBACK_PERCENT = 16.5;
 
 export type PromoCode = {
   code: string;
@@ -29,6 +30,8 @@ export type OrderTotals = {
   serviceFee: number;
   tax: number;
   tip: number;
+  orderTotal: number;
+  processingFee: number;
   total: number;
 };
 
@@ -38,10 +41,15 @@ export type CheckoutPricing = {
   deliveryFee: number;
   serviceFee: number;
   tax: number;
+  taxRatePercent: number;
+  orderTotal: number;
+  processingFee: number;
   total: number;
   distanceKm?: number | null;
   tier?: string;
   freeDeliveryApplied?: boolean;
+  minOrderSubtotalJmd?: number;
+  cardProcessingFeePercent?: number;
 };
 
 function roundMoney(value: number) {
@@ -77,6 +85,18 @@ function clampFeeRate(rate: number | null | undefined): number {
   return n;
 }
 
+function isCardPayment(method?: string | null): boolean {
+  return method === 'wipay' || method === 'paypal';
+}
+
+export type CalculateOrderTotalsOptions = {
+  v2Quote?: CheckoutPricing | null;
+  paymentMethod?: string | null;
+  tip?: number;
+  /** Used for legacy path when v2 quote unavailable */
+  taxRatePercent?: number;
+};
+
 /**
  * Mirrors server: tax on (subtotal - discount), platform fee on subtotal,
  * delivery fee from merchant (passed in — never trust a hardcoded client constant).
@@ -88,17 +108,47 @@ export function calculateOrderTotals(
   deliveryFee = 0,
   platformFeeRate: number = PLATFORM_FEE_RATE,
   serviceFeeFlat?: number,
+  options?: CalculateOrderTotalsOptions,
 ): OrderTotals {
   const discount = computeDiscount(subtotal, appliedPromo);
   const discountedSubtotal = roundMoney(Math.max(0, subtotal - discount));
+  const safeTip = Math.max(0, options?.tip ?? tip);
   const safeDeliveryFee = Math.max(0, deliveryFee);
+
+  if (options?.v2Quote?.pricingModel === 'v2') {
+    const q = options.v2Quote;
+    const serviceFee = roundMoney(Math.max(0, q.serviceFee));
+    const tax = roundMoney(Math.max(0, q.tax));
+    const orderTotal = roundMoney(
+      discountedSubtotal + serviceFee + safeDeliveryFee + tax + safeTip,
+    );
+    const procRate = q.cardProcessingFeePercent ?? 0;
+    const processingFee = isCardPayment(options.paymentMethod)
+      ? roundMoney(orderTotal * procRate)
+      : 0;
+    const total = roundMoney(orderTotal + processingFee);
+    return {
+      discount,
+      discountedSubtotal,
+      deliveryFee: safeDeliveryFee,
+      serviceFee,
+      tax,
+      tip: safeTip,
+      orderTotal,
+      processingFee,
+      total,
+    };
+  }
+
   const serviceFee =
     serviceFeeFlat != null && Number.isFinite(serviceFeeFlat)
       ? roundMoney(Math.max(0, serviceFeeFlat))
       : roundMoney(subtotal * clampFeeRate(platformFeeRate));
-  const tax = roundMoney(discountedSubtotal * (TAX_RATE_PERCENT / 100));
-  const safeTip = Math.max(0, tip);
-  const total = roundMoney(discountedSubtotal + safeDeliveryFee + serviceFee + tax + safeTip);
+  const gctRate = options?.taxRatePercent ?? GCT_RATE_FALLBACK_PERCENT;
+  const tax = roundMoney(discountedSubtotal * (gctRate / 100));
+  const orderTotal = roundMoney(discountedSubtotal + safeDeliveryFee + serviceFee + tax + safeTip);
+  const processingFee = 0;
+  const total = orderTotal;
 
   return {
     discount,
@@ -107,6 +157,8 @@ export function calculateOrderTotals(
     serviceFee,
     tax,
     tip: safeTip,
+    orderTotal,
+    processingFee,
     total,
   };
 }
@@ -117,6 +169,8 @@ export type FetchPricingOptions = {
   subtotal?: number;
   dropoffLat?: number | null;
   dropoffLng?: number | null;
+  paymentMethod?: 'wipay' | 'paypal' | 'cash';
+  tip?: number;
 };
 
 /** Live merchant fee + delivery for cart/checkout display. */
@@ -142,6 +196,12 @@ export async function fetchMerchantCheckoutPricing(
     params.set('dropoff_lat', String(opts.dropoffLat));
     params.set('dropoff_lng', String(opts.dropoffLng));
   }
+  if (opts.paymentMethod) {
+    params.set('payment_method', opts.paymentMethod);
+  }
+  if (opts.tip != null && opts.tip > 0) {
+    params.set('tip', String(opts.tip));
+  }
 
   const qs = params.toString();
   const url = `${API_ENDPOINTS.delivery}/merchants/${opts.merchantId}/pricing${qs ? `?${qs}` : ''}`;
@@ -153,17 +213,25 @@ export async function fetchMerchantCheckoutPricing(
     platform_fee_rate?: number | null;
     delivery_fee?: number;
     service_fee?: number;
+    processing_fee?: number;
+    order_total?: number;
     tax?: number;
+    tax_rate_percent?: number;
     total?: number;
     distance_km?: number | null;
     tier?: string;
     free_delivery_applied?: boolean;
+    min_order_subtotal_jmd?: number;
+    card_processing_fee_percent?: number;
   };
 
   if (data.pricing_model === 'v2') {
     const deliveryFee = Math.max(0, Number(data.delivery_fee ?? 0));
     const serviceFee = Math.max(0, Number(data.service_fee ?? 0));
     const tax = Math.max(0, Number(data.tax ?? 0));
+    const taxRatePercent = Math.max(0, Number(data.tax_rate_percent ?? GCT_RATE_FALLBACK_PERCENT));
+    const orderTotal = Math.max(0, Number(data.order_total ?? 0));
+    const processingFee = Math.max(0, Number(data.processing_fee ?? 0));
     const total = Math.max(0, Number(data.total ?? 0));
     return {
       pricingModel: 'v2',
@@ -171,10 +239,15 @@ export async function fetchMerchantCheckoutPricing(
       deliveryFee,
       serviceFee,
       tax,
+      taxRatePercent,
+      orderTotal,
+      processingFee,
       total,
       distanceKm: data.distance_km,
       tier: data.tier,
       freeDeliveryApplied: data.free_delivery_applied,
+      minOrderSubtotalJmd: data.min_order_subtotal_jmd,
+      cardProcessingFeePercent: data.card_processing_fee_percent,
     };
   }
 
@@ -191,6 +264,9 @@ export async function fetchMerchantCheckoutPricing(
     deliveryFee,
     serviceFee: 0,
     tax: 0,
+    taxRatePercent: GCT_RATE_FALLBACK_PERCENT,
+    orderTotal: 0,
+    processingFee: 0,
     total: 0,
   };
 }

@@ -9,10 +9,12 @@ import {
   parseServiceFeeOverride,
   roundDistanceKm,
   type MerchantTier,
+  type PaymentMethod,
   type PricingBreakdown,
   type PricingRules,
 } from "../_shared/dashPricing.ts";
 import { evaluateCoverage, type CoverageZone } from "./admin/coverageEval.ts";
+import { resolveMerchantFoodGctRate } from "../_shared/gctRate.ts";
 
 export type PricingResolverInput = {
   merchantId: string;
@@ -23,6 +25,8 @@ export type PricingResolverInput = {
   dropoffLng?: number | null;
   customerId?: string | null;
   freeDelivery?: boolean;
+  paymentMethod?: PaymentMethod;
+  serviceFeeWaived?: boolean;
 };
 
 export type ResolvedPricing = PricingBreakdown & {
@@ -30,6 +34,8 @@ export type ResolvedPricing = PricingBreakdown & {
   marketId: string | null;
   rules: PricingRules;
   pricingV2Enabled: boolean;
+  taxRatePercent?: number;
+  gctRegistered?: boolean;
 };
 
 // deno-lint-ignore no-explicit-any
@@ -211,6 +217,8 @@ export async function resolveDashOrderPricing(
 
   const customerOrderCount = await loadCustomerOrderCount(sb, input.customerId);
 
+  const gct = await resolveMerchantFoodGctRate(sb, input.merchantId);
+
   const breakdown = buildOrderPricing({
     subtotal: input.subtotal,
     discount: input.discount,
@@ -222,10 +230,15 @@ export async function resolveDashOrderPricing(
     serviceFeeOverride: ctx.serviceFeeOverride,
     customerOrderCount,
     freeDelivery: input.freeDelivery,
+    paymentMethod: input.paymentMethod,
+    serviceFeeWaived: input.serviceFeeWaived,
+    taxRatePercent: gct.ratePercent,
   });
 
   return {
     ...breakdown,
+    taxRatePercent: gct.ratePercent,
+    gctRegistered: gct.gctRegistered,
     pricingProfileVersion: version,
     marketId,
     rules,

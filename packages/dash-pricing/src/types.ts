@@ -10,11 +10,17 @@ export type MerchantTier = {
 
 /** Service fee configuration */
 export type ServiceFeeRules = {
-  mode: 'flat' | 'percent';
+  mode: 'flat' | 'percent' | 'marginal';
   flatJmd?: number;
   percent?: number;
   minJmd?: number;
   maxJmd?: number;
+  /** Marginal bracket: rate on first slice of order */
+  avgRate?: number;
+  /** Marginal bracket: rate on amount above threshold */
+  overrideRate?: number;
+  /** Marginal bracket: subtotal breakpoint (JMD) */
+  overrideThresholdJmd?: number;
 };
 
 /** Distance-based delivery fee rules */
@@ -42,6 +48,10 @@ export type PricingRules = {
   launchPromos?: LaunchPromoRules;
   cod?: CodRules;
   taxRatePercent?: number;
+  /** Checkout gate — minimum food subtotal before order can proceed */
+  minOrderSubtotalJmd?: number;
+  /** Card/wallet processing fee rate applied to order total (e.g. 0.045) */
+  cardProcessingFeePercent?: number;
 };
 
 export type ServiceFeeOverride = {
@@ -50,6 +60,8 @@ export type ServiceFeeOverride = {
   min?: number;
   max?: number;
 };
+
+export type PaymentMethod = 'wipay' | 'paypal' | 'cash';
 
 export type PricingInput = {
   subtotal: number;
@@ -65,6 +77,9 @@ export type PricingInput = {
   customerOrderCount?: number;
   /** Force free delivery (promo applied) */
   freeDelivery?: boolean;
+  paymentMethod?: PaymentMethod;
+  /** Skip service fee entirely (promo/loyalty waiver) */
+  serviceFeeWaived?: boolean;
 };
 
 export type PricingBreakdown = {
@@ -80,6 +95,12 @@ export type PricingBreakdown = {
   distanceKm: number | null;
   tax: number;
   tip: number;
+  /** Pre-processing order total */
+  orderTotal: number;
+  processingFee: number;
+  /** Final amount customer pays */
+  customerTotal: number;
+  /** Alias for customerTotal (backward compat) */
   total: number;
   pricingProfileVersion?: number;
   tierSlug?: string;

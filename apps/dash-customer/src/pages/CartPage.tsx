@@ -13,7 +13,7 @@ import {
   getCheckoutPreferences,
   saveCheckoutPreferences,
 } from '@/lib/checkoutStorage';
-import { cacheValidatedPromo, calculateOrderTotals, fetchMerchantCheckoutPricing } from '@/lib/orderPricing';
+import { cacheValidatedPromo, calculateOrderTotals, fetchMerchantCheckoutPricing, GCT_RATE_FALLBACK_PERCENT, type CheckoutPricing } from '@/lib/orderPricing';
 import { formatJmd, getRestaurantProfile } from '@/lib/restaurantContent';
 import { toast } from '@/lib/toast';
 
@@ -34,7 +34,7 @@ export default function CartPage({ onNavigate, session }: Props) {
   const [appliedPromo, setAppliedPromo] = useState(getAppliedPromo());
   const [platformFeeRate, setPlatformFeeRate] = useState(0.05);
   const [merchantDeliveryFee, setMerchantDeliveryFee] = useState(0);
-  const [serviceFeeFlat, setServiceFeeFlat] = useState<number | undefined>(undefined);
+  const [checkoutPricing, setCheckoutPricing] = useState<CheckoutPricing | null>(null);
 
   const editingCartItem = items.find((i) => i.id === editingCartItemId);
   const editingMenuItem = editingCartItem && merchantId
@@ -66,11 +66,12 @@ export default function CartPage({ onNavigate, session }: Props) {
           subtotal,
           dropoffLat: savedAddress?.lat,
           dropoffLng: savedAddress?.lng,
+          paymentMethod: 'wipay',
         });
         if (cancelled || !pricing) return;
+        setCheckoutPricing(pricing);
         setPlatformFeeRate(pricing.platformFeeRate);
         setMerchantDeliveryFee(pricing.deliveryFee);
-        setServiceFeeFlat(pricing.pricingModel === 'v2' ? pricing.serviceFee : undefined);
       } catch {
         /* keep fallback */
       }
@@ -80,14 +81,17 @@ export default function CartPage({ onNavigate, session }: Props) {
     };
   }, [merchantId, session?.access_token, subtotal, savedAddress?.lat, savedAddress?.lng]);
 
-  const { discount, deliveryFee, serviceFee, tax, total } = calculateOrderTotals(
+  const { discount, deliveryFee, serviceFee, tax, processingFee, total } = calculateOrderTotals(
     subtotal,
     appliedPromo,
     0,
     merchantDeliveryFee,
     platformFeeRate,
-    serviceFeeFlat,
+    checkoutPricing?.pricingModel === 'v2' ? checkoutPricing.serviceFee : undefined,
+    { v2Quote: checkoutPricing, paymentMethod: 'wipay', taxRatePercent: checkoutPricing?.taxRatePercent },
   );
+
+  const taxRateLabel = checkoutPricing?.taxRatePercent ?? GCT_RATE_FALLBACK_PERCENT;
 
   const handleApplyPromo = async () => {
     const code = promoInput.trim().toUpperCase();
@@ -340,9 +344,15 @@ export default function CartPage({ onNavigate, session }: Props) {
               <span>{formatJmd(serviceFee)}</span>
             </div>
             <div className="flex justify-between text-body-md text-on-surface-variant">
-              <span>Tax (GCT 16.5%)</span>
+              <span>Tax (GCT {taxRateLabel}%)</span>
               <span>{formatJmd(tax)}</span>
             </div>
+            {processingFee > 0 && (
+              <div className="flex justify-between text-body-md text-on-surface-variant">
+                <span>Card processing</span>
+                <span>{formatJmd(processingFee)}</span>
+              </div>
+            )}
             <div className="h-px w-full bg-surface-variant my-2" />
             <div className="flex justify-between text-headline-md font-semibold text-on-surface">
               <span>Total</span>

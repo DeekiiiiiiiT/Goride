@@ -652,6 +652,9 @@ export function registerMerchantAdminRoutes(app: Hono) {
     if (Object.prototype.hasOwnProperty.call(body, "is_test_merchant")) {
       updates.is_test_merchant = Boolean(body.is_test_merchant);
     }
+    if (Object.prototype.hasOwnProperty.call(body, "gct_registered")) {
+      updates.gct_registered = Boolean(body.gct_registered);
+    }
 
     if (body.is_accepting_orders != null && Boolean(body.is_accepting_orders)) {
       const gate = assertCanEnableAcceptingOrders(

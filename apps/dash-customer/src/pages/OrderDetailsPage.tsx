@@ -264,15 +264,21 @@ export default function OrderDetailsPage({ orderId, onNavigate }: Props) {
                 <span>{formatJmd(order.deliveryFee)}</span>
               </div>
             )}
-            {order.serviceFee != null && (
+            {order.serviceFee != null && order.serviceFee > 0 && (
               <div className="flex justify-between">
                 <span>Service</span>
                 <span>{formatJmd(order.serviceFee)}</span>
               </div>
             )}
+            {(order.processingFee ?? 0) > 0 && (
+              <div className="flex justify-between">
+                <span>Card processing</span>
+                <span>{formatJmd(order.processingFee!)}</span>
+              </div>
+            )}
             {order.tax != null && (
               <div className="flex justify-between">
-                <span>Tax</span>
+                <span>Tax (GCT)</span>
                 <span>{formatJmd(order.tax)}</span>
               </div>
             )}

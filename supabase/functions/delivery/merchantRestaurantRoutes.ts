@@ -1,6 +1,7 @@
 import type { Context } from "https://deno.land/x/hono@v4.3.11/mod.ts";
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { calculateOrderPricing } from "../_shared/orderPricing.ts";
+import { resolvePosGctRate } from "../_shared/gctRate.ts";
 import type { ResolvedMerchantAccess } from "./merchantAuth.ts";
 import { requireResolvedMerchantWithPermission } from "./merchantAuth.ts";
 import {
@@ -58,13 +59,18 @@ function nextOrderNumber() {
   return `${Math.floor(1000 + Math.random() * 9000)}`;
 }
 
-function receiptPayload(order: Record<string, unknown>, merchant: Record<string, unknown>) {
+function receiptPayload(
+  order: Record<string, unknown>,
+  merchant: Record<string, unknown>,
+  taxRatePercent: number,
+) {
   return {
     merchantName: merchant.name,
     orderNumber: order.order_number,
     items: order.items,
     subtotal: order.subtotal,
     tax: order.tax,
+    taxRatePercent,
     total: order.total,
     paymentMethod: order.payment_method,
     printedAt: new Date().toISOString(),
@@ -118,10 +124,13 @@ export function registerMerchantRestaurantRoutes(app: {
     }
 
     const m = resolved.access.merchant;
+    const sb = getServiceDb();
+    const taxRatePercent = await resolvePosGctRate(sb, m);
     return c.json({
       settings: {
         capabilities: merchantCapabilities(m),
-        taxRatePercent: Number(m.pos_tax_rate_percent ?? 0),
+        taxRatePercent,
+        gctRegistered: Boolean(m.gct_registered),
         printerId: m.pos_printer_id ?? null,
         receiptFooter: m.pos_receipt_footer ?? "",
         showInStoreOnCounter: Boolean(m.pos_show_in_store_on_counter),
@@ -170,7 +179,9 @@ export function registerMerchantRestaurantRoutes(app: {
     const body = await c.req.json();
     const merchant = resolved.access.merchant;
     const merchantId = String(merchant.id);
-    const taxRatePercent = Number(merchant.pos_tax_rate_percent ?? 0);
+    const sb = getServiceDb();
+    const taxRatePercent = await resolvePosGctRate(sb, merchant);
+    const gctRegistered = Boolean(merchant.gct_registered);
 
     const pricing = calculateOrderPricing({
       lines: (body.lines ?? []).map((line: Record<string, unknown>) => ({
@@ -181,10 +192,9 @@ export function registerMerchantRestaurantRoutes(app: {
         modifiers: line.modifiers as Array<{ name: string; priceAdjustment: number }> | undefined,
       })),
       taxRatePercent,
+      gctRegistered,
       discount: Number(body.discount ?? 0),
     });
-
-    const sb = getServiceDb();
     const status = body.markPaid ? "paid" : "draft";
     const paymentStatus = body.markPaid ? "paid" : "pending";
 
@@ -248,7 +258,7 @@ export function registerMerchantRestaurantRoutes(app: {
           merchant_id: merchantId,
           order_id: order.id,
           job_type: "customer_receipt",
-          payload: receiptPayload(order as Record<string, unknown>, merchant),
+          payload: receiptPayload(order as Record<string, unknown>, merchant, taxRatePercent),
           status: "queued",
           printer_id: merchant.pos_printer_id,
         });
@@ -438,11 +448,12 @@ export function registerMerchantRestaurantRoutes(app: {
 
     let printJobCreated = false;
     if (merchant.pos_printer_id) {
+      const payTaxRate = await resolvePosGctRate(sb, merchant);
       const { error: printError } = await sb.from("print_jobs").insert({
         merchant_id: merchantId,
         order_id: id,
         job_type: "customer_receipt",
-        payload: receiptPayload(updated as Record<string, unknown>, merchant),
+        payload: receiptPayload(updated as Record<string, unknown>, merchant, payTaxRate),
         status: "queued",
         printer_id: merchant.pos_printer_id,
       });

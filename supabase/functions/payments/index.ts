@@ -481,7 +481,7 @@ async function createWiPayIntent(order: any, returnBase: string, customerEmail: 
         data: JSON.stringify({ orderId: order.id, returnBase }),
         email: customerEmail || "customer@roamrush.app",
         environment: isSandboxWipay() ? "sandbox" : "live",
-        fee_structure: "customer_pay",
+        fee_structure: "merchant_pay",
         method: "credit_card_co",
         order_id: orderRef || "order",
         origin: "RoamRush",

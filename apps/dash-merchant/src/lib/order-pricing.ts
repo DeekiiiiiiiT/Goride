@@ -2,8 +2,9 @@ import type { PosCartLine, PosPricingResult } from '../types/restaurant-mgmt';
 
 export interface PricingInput {
   lines: PosCartLine[];
-  taxRatePercent?: number;
+  taxRatePercent: number;
   discount?: number;
+  gctRegistered?: boolean;
 }
 
 function roundMoney(value: number) {
@@ -13,7 +14,10 @@ function roundMoney(value: number) {
 /** Client-side cart pricing — mirrors supabase/functions/_shared/orderPricing.ts */
 export function calculateOrderPricing(input: PricingInput): PosPricingResult {
   const discount = input.discount ?? 0;
-  const taxRate = (input.taxRatePercent ?? 0) / 100;
+  const taxRate =
+    input.gctRegistered === false
+      ? 0
+      : Math.max(0, Number(input.taxRatePercent)) / 100;
 
   const subtotal = roundMoney(
     input.lines.reduce((sum, line) => {

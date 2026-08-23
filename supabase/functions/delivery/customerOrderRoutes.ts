@@ -16,7 +16,9 @@ import {
   loadDashGlobalPlatformFeeRate,
   resolveDashPlatformFeeRate,
 } from "./platformFeeRate.ts";
+import { resolveMinOrderSubtotal } from "../_shared/dashPricing.ts";
 import { resolveDashOrderPricing } from "./pricingResolver.ts";
+import { resolveMerchantFoodGctRate } from "../_shared/gctRate.ts";
 import { assertMerchantAcceptingOrders } from "./merchantOpenCheck.ts";
 import { ORDER_CUSTOMER_EMBED_WITH_USER } from "./orderSelectEmbeds.ts";
 
@@ -223,13 +225,26 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
     const dropoffLng = asCoord(body.deliveryLng) ?? asCoord(customerRow.default_lng);
     const hasDropoffPin = dropoffLat != null && dropoffLng != null && !(dropoffLat === 0 && dropoffLng === 0);
 
+    const gct = await resolveMerchantFoodGctRate(serviceSb, body.merchantId);
+
     const pricing = calculateOrderPricing({
       lines: pricedLines,
-      taxRatePercent: 16.5,
+      taxRatePercent: gct.ratePercent,
+      gctRegistered: gct.gctRegistered,
       discount,
     });
     const tip = Math.max(0, Number(body.tip) || 0);
     const paymentMethod = body.paymentMethod || "wipay";
+    const discountedSubtotal = Math.round(Math.max(0, pricing.subtotal - discount) * 100) / 100;
+
+    const { data: merchantMinRow } = await serviceSb
+      .from("merchants")
+      .select("min_order_amount")
+      .eq("id", body.merchantId)
+      .maybeSingle();
+    const merchantMinOrder = merchantMinRow?.min_order_amount != null
+      ? Number(merchantMinRow.min_order_amount)
+      : null;
 
     if (paymentMethod === "cash" && Deno.env.get("DASH_ALLOW_CASH_ORDERS") !== "true") {
       return c.json({
@@ -247,11 +262,13 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
       dropoffLat,
       dropoffLng,
       customerId: customer.id,
+      paymentMethod: paymentMethod === "cash" ? "cash" : paymentMethod === "paypal" ? "paypal" : "wipay",
     });
 
     let deliveryFee: number;
     let platformFee: number;
     let total: number;
+    let processingFee = 0;
     let pricingModel = "legacy";
     let serviceFee = 0;
     let merchantCommissionAmount = 0;
@@ -262,6 +279,18 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
     let pricingSnapshot: Record<string, unknown> | null = null;
 
     if (v2Pricing?.pricingV2Enabled) {
+      const minRequired = resolveMinOrderSubtotal(
+        v2Pricing.rules.minOrderSubtotalJmd,
+        merchantMinOrder,
+      );
+      if (minRequired > 0 && discountedSubtotal < minRequired) {
+        return c.json({
+          error: `Minimum food order J$${minRequired.toFixed(0)} required`,
+          code: "min_order_not_met",
+          min_order_jmd: minRequired,
+        }, 400);
+      }
+
       pricingModel = "v2";
       deliveryFee = v2Pricing.deliveryFee;
       serviceFee = v2Pricing.serviceFee;
@@ -271,13 +300,17 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
       deliveryFeeCourierAmount = v2Pricing.deliveryFeeCourierAmount;
       distanceKm = v2Pricing.distanceKm;
       pricingProfileVersion = v2Pricing.pricingProfileVersion;
+      processingFee = v2Pricing.processingFee;
       pricingSnapshot = {
         rules: v2Pricing.rules,
         tier_slug: v2Pricing.tierSlug,
         merchant_commission_rate: v2Pricing.merchantCommissionRate,
         free_delivery_applied: v2Pricing.freeDeliveryApplied,
+        order_total: v2Pricing.orderTotal,
+        processing_fee: v2Pricing.processingFee,
+        customer_total: v2Pricing.customerTotal,
       };
-      total = v2Pricing.total;
+      total = v2Pricing.customerTotal;
       // Override tax from v2 engine (uses market tax rate)
       pricing.tax = v2Pricing.tax;
     } else {
@@ -299,6 +332,14 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
       total = Math.round(
         (pricing.subtotal - discount + platformFee + deliveryFee + pricing.tax + tip) * 100,
       ) / 100;
+
+      if (merchantMinOrder != null && merchantMinOrder > 0 && discountedSubtotal < merchantMinOrder) {
+        return c.json({
+          error: `Minimum food order J$${merchantMinOrder.toFixed(0)} required`,
+          code: "min_order_not_met",
+          min_order_jmd: merchantMinOrder,
+        }, 400);
+      }
     }
 
     async function waitForOrderById(orderId: string) {
@@ -381,6 +422,7 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
       delivery_fee: deliveryFee,
       platform_fee: platformFee,
       service_fee: serviceFee,
+      processing_fee: processingFee,
       merchant_commission_amount: merchantCommissionAmount,
       delivery_fee_platform_amount: deliveryFeePlatformAmount,
       delivery_fee_courier_amount: deliveryFeeCourierAmount,

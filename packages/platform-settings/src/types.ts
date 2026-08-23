@@ -102,12 +102,21 @@ export interface FleetProductSettings {
   updatedAt?: string;
 }
 
+/** Jamaica GCT — Dominion Global Settings (statutory rate, cross-vertical). */
+export interface TaxSettings {
+  /** Standard GCT rate on taxable supplies (Jamaica s.4(1)(a) default 16.5%). */
+  gctStandardRatePercent: number;
+  /** Kill switch — when false, food GCT computes to zero platform-wide. */
+  gctEnabled: boolean;
+}
+
 /** Dominion global emergency / cross-product controls. */
 export interface GlobalPlatformSettings {
   maintenanceMode?: boolean;
   maintenanceMessage?: string;
   securityPolicies?: Partial<SecurityPolicies>;
   announcement?: Partial<AnnouncementSettings>;
+  tax?: TaxSettings;
   updatedAt?: string;
 }
 

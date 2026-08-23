@@ -17,7 +17,7 @@ import {
   getPaymentLabel,
   saveCheckoutPreferences,
 } from '@/lib/checkoutStorage';
-import { calculateOrderTotals, fetchMerchantCheckoutPricing } from '@/lib/orderPricing';
+import { calculateOrderTotals, fetchMerchantCheckoutPricing, GCT_RATE_FALLBACK_PERCENT, type CheckoutPricing } from '@/lib/orderPricing';
 import { formatJmd } from '@/lib/restaurantContent';
 import { toast } from 'sonner';
 import { fetchCustomerProfile } from '@/lib/customerApi';
@@ -55,7 +55,7 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
   const [showPharmacyNotice, setShowPharmacyNotice] = useState(false);
   const [platformFeeRate, setPlatformFeeRate] = useState(0.05);
   const [merchantDeliveryFee, setMerchantDeliveryFee] = useState(0);
-  const [serviceFeeFlat, setServiceFeeFlat] = useState<number | undefined>(undefined);
+  const [checkoutPricing, setCheckoutPricing] = useState<CheckoutPricing | null>(null);
   const [accountSuspended, setAccountSuspended] = useState(false);
   const [instructionsOpen, setInstructionsOpen] = useState(false);
 
@@ -68,6 +68,8 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
   }, [resolvedAddress.instructions]);
 
   const appliedPromo = getAppliedPromo();
+  const paymentMethodId = getCheckoutPreferences().paymentMethodId;
+  const apiPaymentMethod = getApiPaymentMethod(paymentMethodId);
   const totals = useMemo(
     () =>
       calculateOrderTotals(
@@ -76,11 +78,18 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
         tip,
         merchantDeliveryFee,
         platformFeeRate,
-        serviceFeeFlat,
+        checkoutPricing?.pricingModel === 'v2' ? checkoutPricing.serviceFee : undefined,
+        {
+          v2Quote: checkoutPricing,
+          paymentMethod: apiPaymentMethod,
+          tip,
+          taxRatePercent: checkoutPricing?.taxRatePercent,
+        },
       ),
-    [subtotal, appliedPromo, tip, merchantDeliveryFee, platformFeeRate, serviceFeeFlat],
+    [subtotal, appliedPromo, tip, merchantDeliveryFee, platformFeeRate, checkoutPricing, apiPaymentMethod],
   );
-  const paymentLabel = getPaymentLabel(getCheckoutPreferences().paymentMethodId);
+  const taxRateLabel = checkoutPricing?.taxRatePercent ?? GCT_RATE_FALLBACK_PERCENT;
+  const paymentLabel = getPaymentLabel(paymentMethodId);
 
   useEffect(() => {
     if (items.length === 0) {
@@ -103,11 +112,13 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
           subtotal,
           dropoffLat: pinLat,
           dropoffLng: pinLng,
+          paymentMethod: apiPaymentMethod,
+          tip,
         });
         if (cancelled || !pricing) return;
+        setCheckoutPricing(pricing);
         setPlatformFeeRate(pricing.platformFeeRate);
         setMerchantDeliveryFee(pricing.deliveryFee);
-        setServiceFeeFlat(pricing.pricingModel === 'v2' ? pricing.serviceFee : undefined);
       } catch {
         /* keep fallback */
       }
@@ -115,7 +126,7 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [merchantId, session?.access_token, subtotal, pinLat, pinLng]);
+  }, [merchantId, session?.access_token, subtotal, pinLat, pinLng, apiPaymentMethod, tip]);
 
   useEffect(() => {
     const vertical = sessionStorage.getItem('roam_cart_vertical');
@@ -240,6 +251,9 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
 
       if (!res.ok) {
         const error = await res.json();
+        if (error.code === 'min_order_not_met') {
+          throw new Error(error.error || 'Order does not meet the minimum amount');
+        }
         throw new Error(error.error || 'Failed to place order');
       }
 
@@ -538,9 +552,15 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
                   <span>{formatJmd(totals.serviceFee)}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span>Tax</span>
+                  <span>Tax (GCT {taxRateLabel}%)</span>
                   <span>{formatJmd(totals.tax)}</span>
                 </div>
+                {totals.processingFee > 0 && (
+                  <div className="flex justify-between">
+                    <span>Card processing</span>
+                    <span>{formatJmd(totals.processingFee)}</span>
+                  </div>
+                )}
                 <div className="flex justify-between">
                   <span>Courier Tip</span>
                   <span>{formatJmd(totals.tip)}</span>

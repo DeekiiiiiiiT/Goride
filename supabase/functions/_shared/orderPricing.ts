@@ -10,6 +10,8 @@ export interface PricingInput {
   lines: PricingLineInput[];
   taxRatePercent?: number;
   discount?: number;
+  /** When false, GCT is zero regardless of taxRatePercent. */
+  gctRegistered?: boolean;
 }
 
 export interface PricingResult {
@@ -30,14 +32,27 @@ export interface PricingResult {
   }>;
 }
 
+export const GCT_STANDARD_RATE_FALLBACK = 16.5;
+
 function roundMoney(value: number) {
   return Math.round(value * 100) / 100;
+}
+
+/** Resolve tax rate — never silently defaults to 0% for registered merchants. */
+export function resolveTaxRatePercent(input: PricingInput): number {
+  if (input.gctRegistered === false) return 0;
+  if (input.taxRatePercent != null && Number.isFinite(Number(input.taxRatePercent))) {
+    return Math.max(0, Number(input.taxRatePercent));
+  }
+  throw new Error(
+    'taxRatePercent is required for GCT pricing — resolve from Dominion global settings before calling calculateOrderPricing',
+  );
 }
 
 /** Shared cart pricing for Roam checkout and in-store POS. */
 export function calculateOrderPricing(input: PricingInput): PricingResult {
   const discount = input.discount ?? 0;
-  const taxRate = (input.taxRatePercent ?? 0) / 100;
+  const taxRate = resolveTaxRatePercent(input) / 100;
 
   const lineItems = input.lines.map((line) => {
     const modifierTotal =

@@ -8,12 +8,31 @@ import { getDb, writeKvAudit } from "./merchantAdminShared.ts";
 import {
   parsePricingRules,
   serializePricingRules,
+  type PricingRules,
 } from "../../_shared/dashPricing.ts";
 import { resolveDashOrderPricing } from "../pricingResolver.ts";
 import { recordCashSettlement } from "../courierCashLedger.ts";
 
 function adminFromCtx(c: { get: (k: string) => unknown }): ProductAdminUser {
   return c.get("adminUser") as ProductAdminUser;
+}
+
+function validatePricingRules(rules: PricingRules): string | null {
+  const sf = rules.serviceFee;
+  if (sf.mode === "marginal") {
+    const avg = sf.avgRate ?? 0;
+    const override = sf.overrideRate ?? 0;
+    if (avg < 0 || avg > 1) return "avg_rate must be between 0 and 1";
+    if (override < 0 || override > 1) return "override_rate must be between 0 and 1";
+    if ((sf.overrideThresholdJmd ?? 0) < 0) return "override_threshold_jmd must be >= 0";
+  }
+  const min = sf.minJmd ?? 0;
+  const max = sf.maxJmd ?? 99999;
+  if (min > max) return "min_jmd cannot exceed max_jmd";
+  if ((rules.minOrderSubtotalJmd ?? 0) < 0) return "min_order_subtotal_jmd must be >= 0";
+  const proc = rules.cardProcessingFeePercent ?? 0;
+  if (proc < 0 || proc > 0.15) return "card_processing_fee_percent must be between 0 and 0.15";
+  return null;
 }
 
 export function registerPricingAdminRoutes(app: Hono) {
@@ -81,8 +100,8 @@ export function registerPricingAdminRoutes(app: Hono) {
       market,
       profile: profile ?? null,
       rules: profile
-        ? parsePricingRules(profile.rules as Record<string, unknown>)
-        : parsePricingRules(null),
+        ? serializePricingRules(parsePricingRules(profile.rules as Record<string, unknown>))
+        : serializePricingRules(parsePricingRules(null)),
     });
   });
 
@@ -113,6 +132,8 @@ export function registerPricingAdminRoutes(app: Hono) {
 
     const incomingRules = (body.rules ?? body) as Record<string, unknown>;
     const parsed = parsePricingRules(incomingRules);
+    const validationError = validatePricingRules(parsed);
+    if (validationError) return c.json({ error: validationError }, 400);
     const serialized = serializePricingRules(parsed);
     const nextVersion = current ? Number(current.version ?? 0) + 1 : 1;
 
@@ -243,6 +264,8 @@ export function registerPricingAdminRoutes(app: Hono) {
     const dropoffLng = body.dropoff_lng != null ? Number(body.dropoff_lng) : null;
     const tip = Number(body.tip ?? 0);
     const customerOrderCount = Number(body.customer_order_count ?? 0);
+    const paymentRaw = String(body.payment_method ?? body.paymentMethod ?? "wipay");
+    const paymentMethod = paymentRaw === "cash" ? "cash" : paymentRaw === "paypal" ? "paypal" : "wipay";
 
     if (!merchantId) return c.json({ error: "merchant_id required" }, 400);
 
@@ -254,6 +277,7 @@ export function registerPricingAdminRoutes(app: Hono) {
       dropoffLat,
       dropoffLng,
       customerOrderCount,
+      paymentMethod,
     });
 
     if (!resolved) return c.json({ error: "Could not resolve pricing for merchant" }, 404);

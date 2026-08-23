@@ -331,6 +331,21 @@ export function MerchantDetailPage() {
     }
   };
 
+  const runGctRegisteredToggle = async () => {
+    if (!merchant) return;
+    const next = !merchant.gct_registered;
+    if (next && !merchant.tax_id?.trim()) {
+      toast.warning('No TRN on file — verify tax ID before enabling GCT collection');
+    }
+    try {
+      await patchMerchantOps(token, merchant.id, { gct_registered: next });
+      toast.success(next ? 'Merchant marked GCT registered' : 'GCT collection disabled for merchant');
+      void load();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to update GCT status');
+    }
+  };
+
   const runDelete = async () => {
     if (!merchant || !canDelete || !id) return;
     const displayName = merchant.name?.trim() || id;
@@ -601,6 +616,40 @@ export function MerchantDetailPage() {
         ) : (
           <p className="text-sm text-slate-300">{merchant.delivery_radius_km ?? 5} km</p>
         )}
+      </section>
+
+      <section className="rounded-xl border border-slate-800 bg-slate-900/50 p-4 space-y-3">
+        <h3 className="text-sm font-medium text-white">GCT registration</h3>
+        <p className="text-sm text-slate-400">
+          Only GCT-registered merchants may charge General Consumption Tax on food sales. Rate is set
+          in Dominion Global Settings.
+        </p>
+        {merchant.tax_id && (
+          <p className="text-xs text-slate-500">TRN on file: {merchant.tax_id}</p>
+        )}
+        {!merchant.tax_id?.trim() && merchant.gct_registered && (
+          <p className="text-xs text-amber-400">Warning: GCT registered but no TRN on file.</p>
+        )}
+        <div className="flex items-center gap-3">
+          <span
+            className={`text-xs px-2 py-0.5 rounded-full ${
+              merchant.gct_registered
+                ? 'bg-emerald-500/15 text-emerald-300'
+                : 'bg-slate-800 text-slate-400'
+            }`}
+          >
+            {merchant.gct_registered ? 'GCT registered' : 'Not registered'}
+          </span>
+          {canWrite && (
+            <button
+              type="button"
+              onClick={() => void runGctRegisteredToggle()}
+              className="px-3 py-1.5 text-sm rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800"
+            >
+              {merchant.gct_registered ? 'Revoke GCT registration' : 'Mark GCT registered'}
+            </button>
+          )}
+        </div>
       </section>
 
       <section className="rounded-xl border border-slate-800 bg-slate-900/50 p-4 space-y-3">

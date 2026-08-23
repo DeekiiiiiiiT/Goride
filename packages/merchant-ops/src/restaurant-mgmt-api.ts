@@ -10,6 +10,7 @@ import type {
 export interface RestaurantSettings {
   capabilities: string[];
   taxRatePercent: number;
+  gctRegistered: boolean;
   printerId: string | null;
   receiptFooter: string;
   showInStoreOnCounter: boolean;
@@ -40,6 +41,7 @@ export async function fetchSettings(): Promise<RestaurantSettings> {
   return {
     capabilities: (s.capabilities as string[]) ?? [],
     taxRatePercent: Number(s.taxRatePercent ?? 0),
+    gctRegistered: Boolean(s.gctRegistered),
     printerId: s.printerId ? String(s.printerId) : null,
     receiptFooter: String(s.receiptFooter ?? ''),
     showInStoreOnCounter: Boolean(s.showInStoreOnCounter),
@@ -62,6 +64,7 @@ export async function patchSettings(
   return {
     capabilities: [],
     taxRatePercent: Number(row.pos_tax_rate_percent ?? patch.taxRatePercent ?? 0),
+    gctRegistered: Boolean(row.gct_registered ?? false),
     printerId: row.pos_printer_id ? String(row.pos_printer_id) : null,
     receiptFooter: String(row.pos_receipt_footer ?? patch.receiptFooter ?? ''),
     showInStoreOnCounter: Boolean(

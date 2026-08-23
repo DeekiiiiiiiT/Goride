@@ -7,6 +7,7 @@ function roundMoney(value: number): number {
 export type DashOrderFeeFields = {
   platform_fee?: number | null;
   service_fee?: number | null;
+  processing_fee?: number | null;
   delivery_fee?: number | null;
   delivery_fee_platform_amount?: number | null;
   delivery_fee_courier_amount?: number | null;
@@ -46,6 +47,7 @@ export function computeDashCaptureSplit(
 
   if (isModelB(order)) {
     const serviceFee = Math.max(0, Number(order.service_fee ?? order.platform_fee ?? 0));
+    const processingFee = Math.max(0, Number(order.processing_fee ?? 0));
     const merchantCommission = Math.max(0, Number(order.merchant_commission_amount ?? 0));
     const deliveryPlatform = Math.max(
       0,
@@ -55,7 +57,7 @@ export function computeDashCaptureSplit(
       0,
       Number(order.delivery_fee_courier_amount ?? order.delivery_fee ?? 0),
     );
-    const platformFee = roundMoney(serviceFee + merchantCommission + deliveryPlatform);
+    const platformFee = roundMoney(serviceFee + processingFee + merchantCommission + deliveryPlatform);
     const courierPayable = roundMoney(deliveryCourier + tip + peakPay);
     const merchantReceivable = roundMoney(Math.max(0, gross - platformFee - courierPayable));
     return {
