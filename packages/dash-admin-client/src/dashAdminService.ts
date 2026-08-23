@@ -278,8 +278,42 @@ export function getMerchantStats(
   return deliveryFetch(accessToken, '/admin/merchants/stats');
 }
 
-export function getDashboardStats(accessToken: string): Promise<DashboardStatsResponse> {
-  return deliveryFetch(accessToken, '/admin/dashboard/stats');
+function normalizeDashboardStats(raw: unknown): DashboardStatsResponse {
+  const body = raw as Record<string, unknown>;
+
+  if (body.scope === 'courier' && body.courier) {
+    return body as DashboardStatsResponse;
+  }
+
+  if (body.scope === 'platform' && body.platform) {
+    const platform = body.platform as DashboardStats;
+    return {
+      scope: 'platform',
+      platform: {
+        ...platform,
+        sla: platform.sla ?? { staleVerifications: 0 },
+      },
+    };
+  }
+
+  // Legacy flat payload from pre-scope `/admin/dashboard/stats` (undeployed edge).
+  if (body.merchants && body.orders) {
+    return {
+      scope: 'platform',
+      platform: {
+        merchants: body.merchants as DashboardStats['merchants'],
+        orders: body.orders as DashboardStats['orders'],
+        sla: (body.sla as DashboardStats['sla']) ?? { staleVerifications: 0 },
+      },
+    };
+  }
+
+  throw new Error('Invalid dashboard stats response');
+}
+
+export async function getDashboardStats(accessToken: string): Promise<DashboardStatsResponse> {
+  const raw = await deliveryFetch<unknown>(accessToken, '/admin/dashboard/stats');
+  return normalizeDashboardStats(raw);
 }
 
 export function suspendMerchant(accessToken: string, id: string, reason: string) {

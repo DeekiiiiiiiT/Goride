@@ -123,9 +123,59 @@ const IMMERSIVE_STACK_PAGES: StackPage[] = [
   'payment-callback-paypal',
 ];
 
-const DashAdminPortal = React.lazy(() =>
-  import('@roam/dash-admin').then((m) => ({ default: m.DashAdminPortal })),
-);
+const DashAdminPortal = React.lazy(async () => {
+  let lastErr: unknown;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const m = await import('@roam/dash-admin');
+      return { default: m.DashAdminPortal };
+    } catch (err) {
+      lastErr = err;
+      await new Promise((r) => setTimeout(r, 200 * (attempt + 1)));
+    }
+  }
+  throw lastErr;
+});
+
+function AdminPortalError({ error }: { error: Error }) {
+  const isViteChunk =
+    /Failed to fetch dynamically imported module/i.test(error.message) &&
+    /localhost|127\.0\.0\.1/i.test(error.message);
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-slate-950 p-6">
+      <div className="max-w-md rounded-xl border border-red-500/30 bg-slate-900 p-6 text-slate-200">
+        <h1 className="text-lg font-semibold text-white">Admin failed to load</h1>
+        <p className="mt-2 text-sm text-slate-400">
+          {isViteChunk
+            ? 'The dev server lost track of the admin bundle. This is a local Vite glitch, not a deploy issue.'
+            : 'The admin console hit a startup error in your browser.'}
+        </p>
+        <p className="mt-3 text-xs text-red-300 font-mono break-all">{error.message}</p>
+        <p className="mt-4 text-sm text-slate-400">
+          Stop the dev server, run <code className="text-amber-300">npx vite --port 5174 --strictPort --force</code>,
+          then hard-refresh this page.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+class AdminPortalErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  { error: Error | null }
+> {
+  state = { error: null as Error | null };
+
+  static getDerivedStateFromError(error: Error) {
+    return { error };
+  }
+
+  render() {
+    if (this.state.error) return <AdminPortalError error={this.state.error} />;
+    return this.props.children;
+  }
+}
 
 function AdminPortalFallback() {
   return (
@@ -147,9 +197,11 @@ export default function App() {
     >
       {isAdmin ? (
         <BrowserRouter basename="/admin">
-          <Suspense fallback={<AdminPortalFallback />}>
-            <DashAdminPortal />
-          </Suspense>
+          <AdminPortalErrorBoundary>
+            <Suspense fallback={<AdminPortalFallback />}>
+              <DashAdminPortal />
+            </Suspense>
+          </AdminPortalErrorBoundary>
         </BrowserRouter>
       ) : (
         <DashCustomerApp />

@@ -11,7 +11,7 @@ import {
   type MerchantTier,
   type PricingBreakdown,
   type PricingRules,
-} from "../../../packages/dash-pricing/src/index.ts";
+} from "../_shared/dashPricing.ts";
 import { evaluateCoverage, type CoverageZone } from "./admin/coverageEval.ts";
 
 export type PricingResolverInput = {

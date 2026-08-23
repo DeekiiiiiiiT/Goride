@@ -8,7 +8,7 @@ import { getDb, writeKvAudit } from "./merchantAdminShared.ts";
 import {
   parsePricingRules,
   serializePricingRules,
-} from "../../../packages/dash-pricing/src/index.ts";
+} from "../../_shared/dashPricing.ts";
 import { resolveDashOrderPricing } from "../pricingResolver.ts";
 import { recordCashSettlement } from "../courierCashLedger.ts";
 

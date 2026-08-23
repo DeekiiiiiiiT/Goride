@@ -102,7 +102,12 @@ export function DashAdminDashboard() {
     );
   }
 
+  if (stats.scope !== 'platform' || !stats.platform) {
+    return <p className="text-slate-400">Failed to load dashboard stats.</p>;
+  }
+
   const platform = stats.platform;
+  const staleVerifications = platform.sla?.staleVerifications ?? 0;
 
   return (
     <div className="space-y-6">
@@ -111,10 +116,10 @@ export function DashAdminDashboard() {
         <p className="text-sm text-slate-400 mt-1">Platform health at a glance</p>
       </div>
 
-      {platform.sla.staleVerifications > 0 && (
+      {staleVerifications > 0 && (
         <div className="flex items-center gap-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-amber-200 text-sm">
           <AlertTriangle className="w-4 h-4 shrink-0" />
-          {platform.sla.staleVerifications} verification{platform.sla.staleVerifications === 1 ? '' : 's'} pending over 48 hours
+          {staleVerifications} verification{staleVerifications === 1 ? '' : 's'} pending over 48 hours
         </div>
       )}
 
@@ -131,7 +136,7 @@ export function DashAdminDashboard() {
           value={platform.merchants.verification.pending}
           icon={<Store className="w-5 h-5" />}
           href="/merchants"
-          alert={platform.sla.staleVerifications > 0}
+          alert={staleVerifications > 0}
         />
         <StatCard title="Suspended" value={platform.merchants.operational.suspended ?? 0} icon={<Store className="w-5 h-5" />} href="/merchants" />
         <StatCard title="Approved & active" value={platform.merchants.operational.active ?? 0} icon={<Store className="w-5 h-5" />} />
