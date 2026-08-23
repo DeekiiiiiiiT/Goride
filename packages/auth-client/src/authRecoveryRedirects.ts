@@ -4,7 +4,7 @@ export const AUTH_RECOVERY_REDIRECTS = {
   driver: 'https://roamdriver.co/reset-password',
   rides: 'https://roam-s.co/reset-password',
   courier: 'https://courier.roamrush.app/reset-password',
-  dash: 'https://ops.roamrush.app/reset-password',
+  dash: 'https://roamrush.app/reset-password',
   partner: 'https://partner.roamrush.app/reset-password',
   haul: 'https://roamhaul.co/reset-password',
   fleet: 'https://roamfleet.co/reset-password',

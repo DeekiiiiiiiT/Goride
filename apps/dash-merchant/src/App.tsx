@@ -1,6 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { redirectPartnerTabletToCommand } from '@roam/merchant-ops';
-import { BrowserRouter } from 'react-router-dom';
 import { supabase, ensureValidPartnerSession, migrateLegacyPartnerSession } from './lib/partner-supabase';
 import { AuthRecoveryGate } from '@roam/auth-client';
 import { Session } from '@supabase/supabase-js';
@@ -41,13 +40,8 @@ import {
   persistTeamInviteToken,
   readTeamInviteToken,
 } from './lib/teamInviteSession';
-import { DashAdminPortal } from './admin/DashAdminPortal';
 import PartnerAdminRemovedPage from './pages/PartnerAdminRemovedPage';
-import {
-  isOpsAdminSurface,
-  isPartnerAdminPathBlocked,
-  opsAdminBasename,
-} from './lib/ops-origin';
+import { isPartnerAdminPathBlocked } from './lib/ops-origin';
 import { isPwaInstallAllowed } from './pwa/pwaMeta';
 import {
   clearPartnerOAuthUrl,
@@ -78,21 +72,13 @@ export default function App() {
     return <PartnerAdminRemovedPage />;
   }
 
-  const isAdmin = isOpsAdminSurface();
-
   return (
     <AuthRecoveryGate
       title="Reset password"
-      subtitle={isAdmin ? 'Roam Rush Admin' : 'Roam Rush Partner'}
-      signInHref={isAdmin ? opsAdminBasename() || '/' : '/'}
+      subtitle="Roam Rush Partner"
+      signInHref="/"
     >
-      {isAdmin ? (
-        <BrowserRouter basename={opsAdminBasename()}>
-          <DashAdminPortal />
-        </BrowserRouter>
-      ) : (
-        <DashMerchantApp />
-      )}
+      <DashMerchantApp />
     </AuthRecoveryGate>
   );
 }

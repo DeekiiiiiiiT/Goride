@@ -43,7 +43,7 @@ export function DashOverviewCard({ onOpenAdmin }: DashOverviewCardProps) {
     if (onOpenAdmin) {
       onOpenAdmin();
     } else {
-      window.open('https://ops.roamrush.app', '_blank');
+      window.open('https://roamrush.app/admin', '_blank');
     }
   };
 
@@ -56,7 +56,7 @@ export function DashOverviewCard({ onOpenAdmin }: DashOverviewCardProps) {
             Roam Rush Overview
           </h2>
           <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
-            Read-only summary. Full merchant management at ops.roamrush.app.
+            Read-only summary. Full merchant management at roamrush.app/admin.
           </p>
         </div>
         <button

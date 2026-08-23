@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { BrowserRouter } from 'react-router-dom';
 import { AuthRecoveryGate } from '@roam/auth-client';
+import { DashAdminPortal } from '@dash-admin/DashAdminPortal';
 import { Session } from '@supabase/supabase-js';
 import { toast } from 'sonner';
 import HomePage from './pages/HomePage';
@@ -121,22 +123,23 @@ const IMMERSIVE_STACK_PAGES: StackPage[] = [
   'payment-callback-paypal',
 ];
 
-/** Customer ordering app (roamrush.app). Rush Ops Console: ops.roamrush.app */
+/** Customer ordering app (roamrush.app). Rush Ops Console: roamrush.app/admin */
 export default function App() {
   const isAdmin = window.location.pathname.startsWith('/admin');
-
-  if (isAdmin) {
-    window.location.replace('https://ops.roamrush.app');
-    return null;
-  }
 
   return (
     <AuthRecoveryGate
       title="Reset password"
-      subtitle="Roam Rush"
-      signInHref="/"
+      subtitle={isAdmin ? 'Roam Rush Admin' : 'Roam Rush'}
+      signInHref={isAdmin ? '/admin' : '/'}
     >
-      <DashCustomerApp />
+      {isAdmin ? (
+        <BrowserRouter basename="/admin">
+          <DashAdminPortal />
+        </BrowserRouter>
+      ) : (
+        <DashCustomerApp />
+      )}
     </AuthRecoveryGate>
   );
 }

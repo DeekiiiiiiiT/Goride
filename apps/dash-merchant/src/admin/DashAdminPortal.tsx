@@ -47,7 +47,7 @@ import { DeliveryLedgerPage } from './pages/couriers/DeliveryLedgerPage';
 import { LiveOpsPage } from './pages/liveops/LiveOpsPage';
 import { MarketsPage } from './pages/markets/MarketsPage';
 import { ActivityLogPage } from './pages/activity/ActivityLogPage';
-import { opsAdminBasename } from '../lib/ops-origin';
+import { dashAdminBasename } from '../lib/ops-origin';
 import { PricingHubPage } from './pages/pricing/PricingHubPage';
 
 export type AdminOutletContext = { session: Session };
@@ -61,7 +61,7 @@ function AdminLayoutShell({ session }: { session: Session }) {
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
-    window.location.href = opsAdminBasename() === '/' ? '/' : '/admin';
+    window.location.href = dashAdminBasename();
   };
 
   const userName = session.user.email?.split('@')[0] || 'Admin';
