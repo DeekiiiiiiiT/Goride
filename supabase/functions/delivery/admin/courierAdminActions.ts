@@ -14,7 +14,7 @@ export function isActiveCustomerPersona(
   return row.account_status === "active" || row.account_status === "suspended";
 }
 
-/** Returns a cross-persona warning payload when suspend would auth-ban a shared customer account. */
+/** Informational cross-persona notice — courier suspend no longer auth-bans the customer app. */
 export function buildCourierSuspendCrossPersonaWarning(
   customer: ActiveCustomerPersona,
   confirmCrossPersona: boolean,
@@ -24,7 +24,7 @@ export function buildCourierSuspendCrossPersonaWarning(
   return {
     error: "cross_persona_warning",
     message:
-      "This courier also has a Rush customer account. Suspending will lock them out of ordering food until unsuspended.",
+      "This courier also has a Rush customer account. Suspending blocks courier work only — they can still order food. Courier sessions will be revoked and they cannot accept deliveries.",
     customer: {
       id: customer.id,
       account_status: customer.account_status,

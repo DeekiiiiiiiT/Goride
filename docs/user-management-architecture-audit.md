@@ -1,8 +1,22 @@
 # User Management Architecture Audit — Roam Rush Admin
 
-**Date:** 2026-08-23
+**Date:** 2026-08-23 · **Revised:** 2026-08-23 (Update 2 — post-implementation review)
 **Scope:** `roamrush.app/admin` (the Rush Ops Console, `packages/dash-admin`) and every identity surface behind the three apps — **Roam Rush** (customer), **Roam Rush Courier**, **Roam Rush Partner** (merchant).
 **Type:** Audit + target architecture. **No code was changed.**
+
+> ### 📌 Update 2 — read this first
+>
+> A substantial implementation landed after the original audit. **The backend is roughly 60% of the way to the target architecture and is genuinely good work.** The frontend is about 15% — and that gap is exactly what you're seeing.
+>
+> **You are not missing the controls. They mostly do not exist in the UI yet, and some do not exist at all.**
+>
+> `IdentityDetailPage.tsx` is 165 lines and contains **zero buttons** — no suspend, no sign-out, no ban, no password reset. It is a read-only viewer with five tabs. Meanwhile the backend already ships working `ban`, `revoke-all-sessions`, and `revoke-merchant-staff` endpoints that **nothing in the UI ever calls**, and the client SDK only wires up 3 of them.
+>
+> **The single most urgent problem: you can ban a person but there is no way to un-ban them.** No endpoint, no UI. Ban is currently a one-way door.
+>
+> **Second most urgent: `platform.identities` is populated by a one-time backfill with no ongoing sync.** Every user who signs up from now on will be invisible in your Users directory.
+>
+> Full review in **[Part I](#part-i--implementation-review-update-2)**. Original findings status table in **[I1](#i1--status-of-the-original-13-findings)**. What to build next, in order, in **[I5](#i5--the-work-remaining-ordered)**.
 
 ---
 
@@ -537,6 +551,232 @@ These are product calls, not engineering ones. They change the design.
 
 ---
 
+# PART I — Implementation review (Update 2)
+
+Audited against what actually shipped: 76 files changed, +5,424 / −846 lines since the original audit.
+
+## I1 — Status of the original 13 findings
+
+| # | Finding | Status | Evidence |
+|---|---|---|---|
+| 1 | Invited members can read but not write | ✅ **Fixed** | `custom-access-token/index.ts:56-63` now merges DB roles into the JWT; `productAdmin.ts:71` uses `resolveEffectiveRoleNames` instead of `getJwtRoles` |
+| 2 | Two RBAC systems | ✅ **Fixed** | `dashPermissions.ts` and `permissions.ts` rewritten to permission-key checks; `ProductAdminUser.permissions` added (`productAdmin.ts:38`); hardcoded role `Set`s gone |
+| 3a | Suspended customers keep session | ⚠️ **Partial** | Still no session revocation on customer suspend |
+| 3b | Courier suspend bans all apps | ✅ **Fixed** — but see **Finding 16** | `ban_duration` removed from courier suspend; cross-persona warning added (`courierAdminActions.ts:18-34`) |
+| 3c | Unsuspend may not clear ban | ✅ **Fixed** | `COURIER_UNSUSPEND_AUTH_PATCH = { ban_duration: "none" }` applied at `courierRoutes.ts:824` |
+| 4 | No unified person view | ✅ **Built** | `platform.identities` + `identity_personas` view; `/users` directory + detail page |
+| 5 | Merchant staff invisible | 🟡 **Half** | Visible on the person detail Merchant tab; revoke endpoint exists but **no UI button** |
+| 6 | Four audit sinks | 🟡 **Half** | `writeAdminAudit` blocking writer added; `/admin/audit/events` reads `permission_audit_log` first — but KV + `admin_audit_events` writes still live at `merchantAdminShared.ts:250,282`, and see **Finding 19** |
+| 7 | No MFA | ✅ **Built** | `AdminMfaGate.tsx`, `adminMfa.ts`, AAL2 gate at `DashAdminPortal.tsx:125-135` (⚠️ uncommitted) |
+| 8 | No session policy | ❌ **Open** | No TTL, no idle timeout, no session listing |
+| 9 | Platform roles have no UI | ❌ **Open** | Still SQL-script-only |
+| 10 | Team page manages 4 of 18 roles | ❌ **Open** | `MANAGED_ROLE_NAMES` unchanged |
+| 11 | Invite flow side effects | 🟡 **Partial** | `pending_invites` migration added; `createUser` fallback still present |
+| 12 | No separation of duties | ✅ **Mostly** | `dash.compliance.approve` now gates force-approve; `identity_admin` / `support_agent` roles seeded; `platform_support` blanket write stripped (`20260823130000:63-68`) |
+| 13 | Client/server role duplication | ✅ **Fixed** | `useDashAdminAccess.tsx` + rewritten `dashAdminRoles.ts` |
+
+**Score: 6 fixed, 4 partial, 3 open.** The hard architectural work — RBAC unification, identity spine, permission catalog — is done and done well. What's missing is the layer you actually touch.
+
+## I2 — What shipped, precisely
+
+**Backend (strong):**
+- `platform.identities` table + `identity_personas` view (`20260823120000_platform_identities.sql`)
+- Scope columns `scope_type` / `scope_id` on `user_roles`, 15 new permission keys, `identity_admin` + `support_agent` roles (`20260823130000_rbac_unification.sql`)
+- `pending_invites` table (`20260823140000`)
+- `identityRoutes.ts` — 6 endpoints
+- `adminAuditWriter.ts` — blocking unified audit writer
+- Permission-key gating across dash + courier routes
+
+**Frontend (thin):**
+- `IdentityDirectoryPage.tsx` — 100 lines: search box, 5 persona filter chips, 5-column table
+- `IdentityDetailPage.tsx` — 165 lines: 5 tabs, all read-only
+- Nav section "Users" with Directory / Operators / Audit (`dashAdminNav.ts:85-95`)
+- `identities.ts` client SDK — **3 functions only**
+
+## I3 — Why it feels old-fashioned: the UI gap, quantified
+
+**Backend endpoints vs. UI buttons:**
+
+| Endpoint | Exists | In SDK | Button in UI |
+|---|:-:|:-:|:-:|
+| `GET /identities` | ✅ | ✅ | ✅ |
+| `GET /identities/:userId` | ✅ | ✅ | ✅ |
+| `POST /identities/:userId/ban` | ✅ | ❌ | ❌ |
+| `POST /identities/:userId/sessions/revoke-all` | ✅ | ❌ | ❌ |
+| `DELETE /identities/merchant-staff/:memberId` | ✅ | ✅ | ❌ |
+| `GET /identities/audit/events` | ✅ | ❌ | ❌ (dead — see F19) |
+
+**Three working destructive/corrective actions are shipped server-side and unreachable from the console.**
+
+**Actions that exist elsewhere in the admin but are absent from the person view** — every one of these is already implemented and permission-gated, just not surfaced where you'd look for it:
+
+| Action | Lives at | Missing from person view |
+|---|---|---|
+| Suspend / unsuspend customer | `customerRoutes.ts:222,247` | ✅ missing |
+| Force sign-out customer | `customerRoutes.ts:269` | ✅ missing |
+| Delete customer | `customerRoutes.ts:302` | ✅ missing |
+| Suspend / unsuspend courier | `courierRoutes.ts:771,806` | ✅ missing |
+| Deactivate / reactivate courier | `courierRoutes.ts:815,841` | ✅ missing |
+| Courier sign-out | `courierRoutes.ts:865` | ✅ missing |
+| Courier reset password | `courierRoutes.ts:877` | ✅ missing |
+| Approve courier | `courierRoutes.ts:703` | ✅ missing |
+| Merchant suspend / deactivate | `merchantRoutes.ts:768,783` | ✅ missing |
+| Reset merchant owner password | `merchantRoutes.ts:856` | ✅ missing |
+| Grant / change console role | `dashTeamRoutes.ts:119` | ✅ missing |
+
+The person detail page's Customer and Courier tabs currently render *one status line and a link that sends you somewhere else* (`IdentityDetailPage.tsx:107-123`). That is the definition of old-fashioned: it's an index card that points at four other screens rather than a place where work gets done.
+
+**Also missing from the directory** (`IdentityDirectoryPage.tsx`): pagination (backend supports it, UI ignores it — you will only ever see the first 50 people), sort, column selection, saved views, bulk selection, row-level quick actions, status/risk badges, "joined" or "last active" columns, empty state, error state, result count, CSV export, and keyboard navigation. The status column renders a bare lowercase string (`line 91`) rather than a badge.
+
+## I4 — New findings from the implementation
+
+---
+
+### 🔴 Finding 14 — Ban is a one-way door: there is no unban
+
+`POST /identities/:userId/ban` sets `global_status = 'banned'` and applies `ban_duration: "876000h"` — **100 years** (`identityRoutes.ts:203`). There is no unban endpoint anywhere in the codebase, and no UI to reach one.
+
+If this ships and someone fat-fingers a ban, the only remedy is a manual `auth.admin.updateUserById` against production plus a hand-written UPDATE to `platform.identities`. **Do not expose the ban button until unban exists.** Every restrictive action needs its inverse built in the same commit.
+
+---
+
+### 🔴 Finding 15 — `platform.identities` has no ongoing sync; the directory goes stale immediately
+
+`20260823120000_platform_identities.sql:56-78` backfills the table once at migration time. There is **no trigger, no scheduled job, and no application-level write** on customer signup, courier signup, or merchant creation. Grep confirms `platform.identities` is written in exactly one other place: the ban handler.
+
+Consequences, starting the moment the migration ran:
+- Every new customer, courier, and merchant owner is **absent from `/users`** — they simply don't appear
+- Email/phone/name changes never propagate; the directory shows stale contact details forever
+- `GET /identities/:userId` degrades to a synthetic stub (`identityRoutes.ts:146-151`) for anyone missing, so the detail page half-works with blank fields rather than failing loudly
+
+This is the highest-impact defect in the build. The directory is the entry point to the whole section, and it is quietly wrong.
+
+> Fix: `AFTER INSERT OR UPDATE` triggers on `delivery.customers`, `delivery.courier_profiles`, `delivery.merchants`, `delivery.merchant_team_members` that upsert into `platform.identities` — plus a trigger on `auth.users` for email changes. Add a reconciliation job as a backstop.
+
+---
+
+### 🔴 Finding 16 — Courier suspension now enforces nothing (regression)
+
+The Finding 3b fix removed `ban_duration` from courier suspend (`courierRoutes.ts:793-802`) — correct, because it was nuking the person's customer account. But **no replacement enforcement was added.**
+
+`courier_profiles.status` is set to `'suspended'`, and grep across `courierConsumerRoutes.ts` finds **no status check anywhere**. A suspended courier keeps their session, stays online, keeps receiving and accepting dispatches. Before the fix, suspension was too blunt; now it is decorative.
+
+Compounding it, the cross-persona warning text is now **factually wrong**. `courierAdminActions.ts:26-27` tells the operator *"Suspending will lock them out of ordering food until unsuspended"* — which stopped being true when the auth ban was removed. The dialog now warns about a consequence that no longer happens, while the real consequence (nothing) goes unmentioned.
+
+> Fix: gate courier dispatch/presence/acceptance on `courier_profiles.status = 'active'`, revoke sessions on suspend, and rewrite the warning to describe what suspension actually does.
+
+---
+
+### 🟠 Finding 17 — No persona-level restrict; the three-layer status model is only one-third built
+
+The identity layer shipped (`global_status` with `active|restricted|suspended|banned|deleted`) and the `identity.status.restrict` permission was seeded (`20260823130000:13`) — but **nothing consumes it.** There is no persona-restrict endpoint.
+
+So the operator's only identity-level tool is the 100-year global ban. The graduated response the architecture calls for — restrict one persona, leave the others intact — has a permission key, a status enum value, and no implementation. The `restricted` and `suspended` values of `global_status` are currently unreachable.
+
+---
+
+### 🟠 Finding 18 — `dash_admin` cannot perform any identity action
+
+`20260823130000_rbac_unification.sql:70-79` grants `identity.*`, `sessions.*`, `roles.grant`, and `merchant.staff.*` to `platform_owner`, `superadmin`, and `identity_admin` only. `dash_admin` gets none of them.
+
+Combined with Finding 9 (no UI to grant platform-tier roles) and the fact that `identity_admin` can only be assigned by hand-run SQL, this means: **in practice only your `platform_owner` account can use the Users section's actions**, and there is no way to delegate that through the console. Per the Part F matrix, `dash_admin` should hold `sessions.revoke` and persona-level restrict at minimum.
+
+---
+
+### 🟠 Finding 19 — Audit filters are silently ignored, and a duplicate audit endpoint is dead code
+
+Two problems in `supportRoutes.ts:101-138`:
+
+**19a — Filters silently dropped.** The `action` and `actor_id` query params are read at lines 131-132 and applied **only to the legacy `admin_audit_events` branch**. The primary `permission_audit_log` query (lines 111-115) ignores them entirely. Filter the audit log in the UI and you get unfiltered results back, with no error — the filter appears to work and doesn't.
+
+**19b — Fallback triggers on empty pages.** Line 116 falls back to the legacy table whenever the platform query returns zero rows. Page past the end of the platform log and you silently start reading a completely different data source, interleaved into the same list.
+
+**19c — Dead duplicate.** `identityRoutes.ts:98-113` implements `/admin/identities/audit/events`, a second audit reader with a different permission check (`audit.read`). Nothing calls it — the SDK points at `/admin/audit/events` (`dashAdminService.ts:1013`). Two implementations, divergent auth, one unused.
+
+---
+
+### 🟡 Finding 20 — The Audit nav item points at the old page
+
+`DashAdminPortal.tsx:222` maps `users/audit` to the pre-existing `ActivityLogPage`, which renders a flat event list with no actor resolution (raw UUIDs, not names), no target links, no reason column, no date-range picker, and no export. The unified audit log is the compliance artifact from Part C7 — it needs to be a real screen, not the old one re-pointed.
+
+---
+
+### 🟡 Finding 21 — No PII masking despite the permission existing
+
+`identity.pii.read` was seeded (`20260823130000:16`). Nothing enforces it. `IdentityDirectoryPage.tsx:86-87` renders full email and phone for every person to any admin who can reach the page, and `GET /identities` returns them unmasked to any `dash` admin. The permission is decorative.
+
+---
+
+### 🟡 Finding 22 — Directory search has an injection-shaped seam and no pagination UI
+
+`identityRoutes.ts:53-55` interpolates raw user input into a PostgREST `.or()` filter string. PostgREST's `or` grammar is comma/parenthesis-delimited; a query containing `,`, `)`, or `.` can break out of the intended predicate. At minimum it produces confusing 500s on ordinary input (an email search containing a dot already alters parsing); at worst it widens the filter. Sanitise or parameterise.
+
+Separately, the endpoint supports `page`/`limit` (lines 43-44) and returns `total` (line 95), but `IdentityDirectoryPage.tsx` requests neither and renders no pager — **you can only ever see the 50 most recently updated people.**
+
+---
+
+### ⚪ Finding 23 — MFA gate work is uncommitted and coarse
+
+`AdminMfaGate.tsx` and `adminMfa.ts` are untracked (`git status`), so this isn't on any branch yet. The gate itself (`DashAdminPortal.tsx:125-135`) keys off `jwtPrimaryRole` — a single role string — rather than resolved role level, so a user whose primary role is `dash_ops` but who also holds `dash_admin` slips past. It also fails **open** on error (`.catch(() => setMfaBlocked(false))`), and there is no enrollment path: a privileged user without MFA is shown a wall whose only button is "Sign out."
+
+---
+
+## I5 — The work remaining, ordered
+
+### Now — before the Users section is used in anger
+
+1. **Build unban** (F14). Endpoint + UI. Do not ship the ban button without it.
+2. **Add identity sync triggers** (F15). Without this the directory is wrong and gets wronger daily.
+3. **Restore courier suspension enforcement** (F16) and fix the misleading warning text.
+4. **Grant `dash_admin` the identity permissions it needs** (F18), or you cannot delegate any of this.
+
+### Next — make it a working console, not a viewer
+
+5. **Build the action layer.** Wire every endpoint in the I3 tables into the person detail page. Spec in I6.
+6. **Extend the client SDK** — it has 3 functions and needs roughly 15.
+7. **Persona-level restrict** (F17) so there's a response between "nothing" and "100-year ban."
+8. **Directory pagination, sort, badges, bulk select** (F22).
+
+### Then — the modern layer
+
+9. Sessions tab: list devices, revoke individually (needs `sessions.read` backing).
+10. Real audit screen with actor names, filters that work, date range, export (F19, F20).
+11. PII masking with reveal-on-permission, itself audited (F21).
+12. Operators screen: all 18 roles, scope, expiry, pending invites (F9, F10, F11).
+13. Retire KV audit writes once backfilled (F6).
+14. Commit and harden the MFA gate (F23).
+
+## I6 — Spec: what "modern" means here
+
+You said it feels old-fashioned. Concretely, this is the difference.
+
+**The person detail page should open with a header card**, not a text heading: avatar, name, global status as a coloured badge, persona chips (`Customer` `Courier` `Merchant Owner`), risk score, MFA state, member-since, last-active — and a **primary action bar** pinned to that header:
+
+```
+[ Message ]  [ Reset password ]  [ Sign out everywhere ]  [ ⋯ More ]
+                                                            ├ Restrict persona ▸
+                                                            ├ Suspend account
+                                                            ├ Ban identity (all apps)
+                                                            ├ Export data
+                                                            └ Delete identity
+```
+
+Rules that make it feel modern rather than dangerous:
+
+- **Every action is permission-gated in the UI** — hidden, not disabled-with-no-explanation, except where a tooltip explaining "requires `identity.status.ban`" is more useful
+- **Every destructive action opens a typed confirm** with a mandatory reason field — `AdminConfirmContext` already provides exactly this (`DashTeamPage.tsx:109-130` shows the pattern with `matchValue` typed confirmation)
+- **Cross-persona impact is shown inline in the dialog**, not discovered afterward: *"Also active as: Customer (40 orders), Merchant Owner (Island Grill). Banning locks all three."* The backend already computes this (`courierAdminActions.ts`) — surface it
+- **Optimistic update + toast + undo window** where the action is reversible
+- **Every action appends to the person's own audit timeline in-place**, so the operator sees the consequence without navigating away
+
+**Each persona tab should be operable, not a link.** The Courier tab shows compliance docs with approve/reject inline, current status with suspend/reactivate inline, recent deliveries, presence. The Customer tab shows orders, addresses, disputes, and refund/credit actions. Today both render one line and a link out.
+
+**The directory should be a data grid**: pagination, sortable columns, status badges, persona chips, last-active, risk indicator, saved filter views ("Suspended couriers", "Merchant owners in Spanish Town", "High risk"), multi-select with bulk actions, and inline row actions on hover.
+
+**Add the Sessions tab** — device, IP, location, last seen, revoke button per row plus revoke-all. This is table stakes for a modern user admin and the single most common support request after password reset.
+
+---
+
 ## Appendix — Key file reference
 
 | Concern | File |
@@ -558,3 +798,20 @@ These are product calls, not engineering ones. They change the design.
 | Merchant staff API | `supabase/functions/delivery/merchantTeam.ts` |
 | Audit writer | `supabase/functions/delivery/admin/merchantAdminShared.ts:238-270` |
 | Identity tables | `supabase/migrations/20260511140000_delivery_schema.sql:66` · `20260620120000_courier_profiles.sql:3` · `20260629120100_merchant_team.sql:3` |
+
+### Added by the Update 2 implementation
+
+| Concern | File |
+|---|---|
+| Identity spine + personas view | `supabase/migrations/20260823120000_platform_identities.sql` |
+| RBAC unification, scopes, new roles | `supabase/migrations/20260823130000_rbac_unification.sql` |
+| Pending invites | `supabase/migrations/20260823140000_pending_invites.sql` |
+| Identity admin API (6 endpoints) | `supabase/functions/delivery/admin/identityRoutes.ts` |
+| Unified blocking audit writer | `supabase/functions/delivery/admin/adminAuditWriter.ts` |
+| Cross-persona suspend warning | `supabase/functions/delivery/admin/courierAdminActions.ts` |
+| Audit read endpoint | `supabase/functions/delivery/admin/supportRoutes.ts:101-142` |
+| Directory page | `packages/dash-admin/src/pages/users/IdentityDirectoryPage.tsx` |
+| Person detail page | `packages/dash-admin/src/pages/users/IdentityDetailPage.tsx` |
+| Identity client SDK | `packages/dash-admin-client/src/identities.ts` |
+| Permission-aware access hook | `packages/dash-admin/src/hooks/useDashAdminAccess.tsx` |
+| MFA gate (⚠️ uncommitted) | `packages/dash-admin/src/components/AdminMfaGate.tsx` · `src/utils/adminMfa.ts` |

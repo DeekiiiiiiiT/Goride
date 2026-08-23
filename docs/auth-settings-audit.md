@@ -18,7 +18,7 @@ Auth is enabled; anonymous sign-ins are off. Several local-template defaults are
 | `max_frequency = "1s"` on email | Medium | **Tighten** | Prefer ≥60s to reduce abuse |
 | `enable_refresh_token_rotation = true` | OK | Done | Keep |
 | `enable_anonymous_sign_ins = false` | OK | Done | Keep |
-| MFA TOTP available in config | Info | Optional | Enable for platform_owner accounts when ready |
+| MFA TOTP enroll + verify | High | **Done 2026-08-23** | Enabled on hosted project `csfllzzastacofsvcdsc` for Ops Console gate. Dash admin enrolls via QR on `/admin` MFA screen. |
 
 ## Remediation
 

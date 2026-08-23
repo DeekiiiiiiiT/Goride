@@ -89,16 +89,9 @@ export const DASH_ADMIN_CONFIG: AdminConfig = {
       children: [
         { id: 'users-directory', label: 'Directory', icon: Users },
         { id: 'users-operators', label: 'Operators', icon: ShieldCheck },
+        { id: 'users-merchant-staff', label: 'Merchant staff', icon: Store },
+        { id: 'users-compliance', label: 'Compliance', icon: ShieldCheck },
         { id: 'users-audit', label: 'Audit', icon: Activity },
-      ],
-    },
-    {
-      id: 'team',
-      label: 'Team',
-      icon: Users,
-      children: [
-        { id: 'team', label: 'Team Members', icon: Users },
-        { id: 'activity', label: 'Activity Log', icon: Activity },
       ],
     },
   ],
@@ -106,7 +99,7 @@ export const DASH_ADMIN_CONFIG: AdminConfig = {
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'live-ops', label: 'Live Ops', icon: Radio },
     { id: 'orders', label: 'Orders', icon: ClipboardList },
-    { id: 'customers', label: 'Customers', icon: UserCircle },
+    { id: 'users-directory', label: 'Users', icon: UserCircle },
     { id: 'finance', label: 'Finance', icon: Wallet },
     { id: 'pricing', label: 'Pricing', icon: DollarSign },
     { id: 'reviews', label: 'Reviews', icon: Star },
@@ -155,12 +148,13 @@ export function pathnameToNavId(pathname: string): string {
   if (pathname.startsWith('/couriers/presence')) return 'couriers-presence';
   if (pathname.startsWith('/couriers/ledger')) return 'couriers-ledger';
   if (pathname.startsWith('/couriers')) return 'couriers';
-  if (pathname.startsWith('/customers')) return 'customers';
+  if (pathname.startsWith('/customers')) return 'users-directory';
   if (pathname.startsWith('/markets')) return 'markets';
+  if (pathname.startsWith('/users/compliance')) return 'users-compliance';
+  if (pathname.startsWith('/users/merchant-staff')) return 'users-merchant-staff';
   if (pathname.startsWith('/users/operators') || pathname.startsWith('/team')) return 'users-operators';
-  if (pathname.startsWith('/users/audit')) return 'users-audit';
+  if (pathname.startsWith('/users/audit') || pathname.startsWith('/activity')) return 'users-audit';
   if (pathname.startsWith('/users')) return 'users-directory';
-  if (pathname.startsWith('/activity')) return 'users-audit';
   if (pathname.startsWith('/finance') || pathname.startsWith('/disputes')) return 'finance';
   if (pathname.startsWith('/pricing')) return 'pricing';
   if (pathname.startsWith('/reviews')) return 'reviews';
@@ -199,12 +193,14 @@ export function navIdToPath(navId: string): string {
       return '/users';
     case 'users-operators':
       return '/users/operators';
+    case 'users-merchant-staff':
+      return '/users/merchant-staff';
+    case 'users-compliance':
+      return '/users/compliance';
     case 'users-audit':
       return '/users/audit';
-    case 'team':
-      return '/users/operators';
-    case 'activity':
-      return '/users/audit';
+    case 'customers':
+      return '/users?persona=customer';
     case 'finance':
       return '/finance';
     case 'pricing':

@@ -237,6 +237,11 @@ export function registerCustomerAdminRoutes(app: Hono) {
       suspended_by: adminUser.id,
     }).eq("id", c.req.param("id")).select().single();
     if (error) return c.json({ error: error.message }, 500);
+    if (data?.user_id) {
+      try {
+        await getAuthAdmin().auth.admin.signOut(String(data.user_id), "global");
+      } catch { /* best-effort session revoke */ }
+    }
     await writeKvAudit(
       adminUser,
       "roam_dash.customer_suspended",

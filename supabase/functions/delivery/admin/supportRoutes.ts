@@ -99,44 +99,54 @@ export function registerSupportAdminRoutes(app: Hono) {
   });
 
   audit.get("/events", async (c) => {
-    const adminUser = c.get("adminUser") as ProductAdminUser;
     const page = Math.max(parseInt(c.req.query("page") || "1", 10) || 1, 1);
     const limit = Math.min(parseInt(c.req.query("limit") || "50", 10) || 50, 100);
     const offset = (page - 1) * limit;
+    const action = c.req.query("action")?.trim();
+    const actorId = c.req.query("actor_id")?.trim();
+    const targetUserId = c.req.query("target_user_id")?.trim();
+    const dateFrom = c.req.query("date_from")?.trim();
+    const dateTo = c.req.query("date_to")?.trim();
+
     const pdb = (await import("https://esm.sh/@supabase/supabase-js@2")).createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
       { db: { schema: "platform" } },
     );
-    const { data: platformEvents, error: pErr, count: pCount } = await pdb
-      .from("permission_audit_log")
+
+    let query = pdb.from("permission_audit_log")
       .select("*", { count: "exact" })
-      .order("created_at", { ascending: false })
-      .range(offset, offset + limit - 1);
-    if (!pErr && (platformEvents?.length ?? 0) > 0) {
-      return c.json({
-        events: (platformEvents ?? []).map((e) => ({
-          id: String(e.id),
-          actor_id: e.actor_user_id,
-          action: e.action,
-          target_id: e.target_user_id ?? e.resource_id,
-          details: JSON.stringify(e.metadata ?? {}),
-          created_at: e.created_at,
-        })),
-        total: pCount ?? 0,
-        page,
-        limit,
-      });
-    }
-    const db = getDb();
-    const action = c.req.query("action");
-    const actorId = c.req.query("actor_id");
-    let query = db.from("admin_audit_events").select("*", { count: "exact" }).order("created_at", { ascending: false });
+      .order("created_at", { ascending: false });
+
     if (action) query = query.eq("action", action);
-    if (actorId) query = query.eq("actor_id", actorId);
-    const { data, error, count } = await query.range(offset, offset + limit - 1);
-    if (error) return c.json({ error: error.message }, 500);
-    return c.json({ events: data ?? [], total: count ?? 0, page, limit });
+    if (actorId) query = query.eq("actor_user_id", actorId);
+    if (targetUserId) query = query.eq("target_user_id", targetUserId);
+    if (dateFrom) query = query.gte("created_at", dateFrom);
+    if (dateTo) query = query.lte("created_at", dateTo);
+
+    const { data: platformEvents, error: pErr, count: pCount } = await query
+      .range(offset, offset + limit - 1);
+
+    if (pErr) return c.json({ error: pErr.message }, 500);
+
+    return c.json({
+      events: (platformEvents ?? []).map((e) => ({
+        id: String(e.id),
+        actor_id: e.actor_user_id,
+        actor_user_id: e.actor_user_id,
+        action: e.action,
+        target_id: e.target_user_id ?? e.resource_id,
+        target_user_id: e.target_user_id,
+        permission_key: e.permission_key,
+        reason: (e.metadata as { reason?: string } | null)?.reason ?? null,
+        details: JSON.stringify(e.metadata ?? {}),
+        metadata: e.metadata,
+        created_at: e.created_at,
+      })),
+      total: pCount ?? 0,
+      page,
+      limit,
+    });
   });
 
   app.route("/admin/audit", audit);

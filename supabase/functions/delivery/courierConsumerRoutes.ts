@@ -210,9 +210,23 @@ async function dispatchOffersForOrder(
     .eq("is_online", true)
     .limit(80);
 
+  const onlineIds = (online ?? []).map((r) => String(r.driver_id));
+  const activeCourierIds = new Set<string>();
+  if (onlineIds.length > 0) {
+    const { data: activeProfiles } = await serviceSb
+      .from("courier_profiles")
+      .select("user_id")
+      .in("user_id", onlineIds)
+      .eq("status", "active");
+    for (const p of activeProfiles ?? []) {
+      activeCourierIds.add(String(p.user_id));
+    }
+  }
+
   type Ranked = { driver_id: string; km: number };
   const ranked: Ranked[] = [];
   for (const row of online || []) {
+    if (!activeCourierIds.has(String(row.driver_id))) continue;
     const hasCapacity = await courierHasStackCapacity(serviceSb, String(row.driver_id));
     if (!hasCapacity) continue;
     const lat = Number(row.current_lat);
@@ -378,6 +392,8 @@ export function registerCourierConsumerRoutes(app: Hono, deps: Deps) {
     const auth = await requireCourierUser(c.req.header("Authorization"), getSupabase);
     if (auth instanceof Response) return auth;
     const serviceSb = getServiceSupabase();
+    const gate = await requireActiveCourier(serviceSb, auth.userId);
+    if (!gate.ok) return c.json({ error: gate.error }, gate.status);
 
     // Expire stale
     await serviceSb

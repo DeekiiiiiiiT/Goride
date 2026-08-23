@@ -54,7 +54,39 @@ Deno.serve(async (req) => {
     claims.user_metadata = userMeta;
 
     const userId = event.user_id ?? (claims.sub as string | undefined);
+    const email = (claims.email as string | undefined)?.toLowerCase();
     if (userId) {
+      const dbUrl = Deno.env.get("SUPABASE_URL")!;
+      const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+      const pdb = (await import("https://esm.sh/@supabase/supabase-js@2")).createClient(
+        dbUrl,
+        serviceKey,
+        { db: { schema: "platform" } },
+      );
+
+      if (email) {
+        const { data: pending } = await pdb.from("pending_invites")
+          .select("id, role_id, scope_type, scope_id")
+          .eq("email", email)
+          .is("accepted_at", null)
+          .is("revoked_at", null)
+          .gt("expires_at", new Date().toISOString())
+          .limit(1)
+          .maybeSingle();
+        if (pending) {
+          await pdb.from("user_roles").upsert({
+            user_id: userId,
+            role_id: pending.role_id,
+            scope_type: pending.scope_type ?? "global",
+            scope_id: pending.scope_id,
+          }, { onConflict: "user_id,role_id" });
+          await pdb.from("pending_invites").update({
+            accepted_at: new Date().toISOString(),
+            accepted_user_id: userId,
+          }).eq("id", pending.id);
+        }
+      }
+
       const dbRoles = await fetchUserRoleNames(userId);
       if (dbRoles.length > 0) {
         appMeta.roles = dbRoles;

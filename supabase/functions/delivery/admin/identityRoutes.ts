@@ -1,14 +1,19 @@
 /**
- * Unified person directory — read-only Phase 1.
+ * Unified person directory and identity lifecycle actions.
  */
 import { Hono } from "https://deno.land/x/hono@v4.3.11/mod.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { requireProductAdmin, type ProductAdminUser } from "../../_shared/productAdmin.ts";
 import { fetchUserRoleNames } from "../../_shared/rbacQuery.ts";
-import { requireDashWrite } from "./dashPermissions.ts";
-import { buildCourierSuspendCrossPersonaWarning } from "./courierAdminActions.ts";
 import { writeAdminAudit } from "./adminAuditWriter.ts";
 import { getAuthAdmin, getDb } from "./merchantAdminShared.ts";
+import {
+  applyIdentityBan,
+  applyIdentityUnban,
+  applyIdentityGlobalRestrict,
+  clearIdentityGlobalRestrict,
+} from "./identityState.ts";
+import { normalizeJmPhone } from "./identityPhone.ts";
 
 function platformDb() {
   return createClient(
@@ -18,14 +23,81 @@ function platformDb() {
   );
 }
 
-import { normalizeJmPhone } from "./identityPhone.ts";
-
 type PersonaRow = {
   persona: string;
   ref_id: string;
   status: string;
   market_id: string | null;
 };
+
+function hasPermission(admin: ProductAdminUser, key: string): boolean {
+  return admin.permissions.includes(key) || admin.permissions.includes("system.config");
+}
+
+function maskEmail(email: string | null | undefined): string {
+  if (!email) return "";
+  const [local, domain] = email.split("@");
+  if (!domain) return "***";
+  if (local.length <= 2) return `***@${domain}`;
+  return `${local.slice(0, 2)}***@${domain}`;
+}
+
+function maskPhone(phone: string | null | undefined): string {
+  if (!phone) return "";
+  const digits = phone.replace(/\D/g, "");
+  if (digits.length < 4) return "***";
+  return `***${digits.slice(-4)}`;
+}
+
+function sanitizeSearchToken(raw: string): string {
+  return raw.replace(/[%_,().]/g, "").trim();
+}
+
+function maskIdentityRow(
+  row: Record<string, unknown>,
+  canViewPii: boolean,
+): Record<string, unknown> {
+  if (canViewPii) return row;
+  return {
+    ...row,
+    primary_email: maskEmail(row.primary_email as string),
+    primary_phone: maskPhone(row.primary_phone as string),
+  };
+}
+
+async function applyPersonaRestrict(
+  persona: string,
+  userId: string,
+  action: "restrict" | "unrestrict",
+  reason: string,
+): Promise<Response | null> {
+  const db = getDb();
+  if (persona === "customer") {
+    const { data: customer } = await db.from("customers").select("id").eq("user_id", userId).maybeSingle();
+    if (!customer) return new Response(JSON.stringify({ error: "persona_not_found" }), { status: 404 });
+    const patch = action === "restrict"
+      ? { account_status: "suspended", suspended_reason: reason }
+      : { account_status: "active", suspended_reason: null, suspended_at: null, suspended_by: null };
+    const { error } = await db.from("customers").update(patch).eq("user_id", userId);
+    if (error) return new Response(JSON.stringify({ error: error.message }), { status: 500 });
+    return null;
+  }
+  if (persona === "courier") {
+    const { data: courier } = await db.from("courier_profiles").select("user_id").eq("user_id", userId).maybeSingle();
+    if (!courier) return new Response(JSON.stringify({ error: "persona_not_found" }), { status: 404 });
+    const patch = action === "restrict"
+      ? { status: "suspended", suspended_reason: reason }
+      : { status: "active", suspended_reason: null, suspended_at: null, suspended_by: null };
+    const { error } = await db.from("courier_profiles").update(patch).eq("user_id", userId);
+    if (error) return new Response(JSON.stringify({ error: error.message }), { status: 500 });
+    if (action === "restrict") {
+      await db.from("courier_availability").update({ is_online: false }).eq("driver_id", userId);
+      await getAuthAdmin().auth.admin.signOut(userId, "global");
+    }
+    return null;
+  }
+  return new Response(JSON.stringify({ error: "unsupported_persona" }), { status: 400 });
+}
 
 export function registerIdentityAdminRoutes(app: Hono) {
   const admin = new Hono();
@@ -38,25 +110,38 @@ export function registerIdentityAdminRoutes(app: Hono) {
   });
 
   admin.get("/", async (c) => {
-    const q = c.req.query("q")?.trim().toLowerCase();
+    const adminUser = c.get("adminUser") as ProductAdminUser;
+    const qRaw = c.req.query("q")?.trim();
     const persona = c.req.query("persona")?.trim();
     const page = Math.max(parseInt(c.req.query("page") || "1", 10) || 1, 1);
     const limit = Math.min(parseInt(c.req.query("limit") || "50", 10) || 50, 100);
+    const sort = c.req.query("sort")?.trim() || "updated_at";
+    const order = c.req.query("order") === "asc" ? "asc" : "desc";
     const offset = (page - 1) * limit;
+    const canViewPii = hasPermission(adminUser, "identity.pii.read");
 
     const pdb = platformDb();
     let query = pdb.from("identities").select("*", { count: "exact" })
-      .order("updated_at", { ascending: false });
+      .order(sort === "display_name" ? "display_name" : "updated_at", { ascending: order === "asc" });
 
-    if (q) {
-      const phoneNorm = normalizeJmPhone(q);
-      query = query.or(
-        `primary_email.ilike.%${q}%,primary_phone.ilike.%${q}%,display_name.ilike.%${q}%,primary_phone.ilike.%${phoneNorm.replace('+', '')}%`,
-      );
+    if (qRaw) {
+      const q = sanitizeSearchToken(qRaw.toLowerCase());
+      if (q) {
+        const phoneNorm = normalizeJmPhone(q);
+        const phoneDigits = phoneNorm.replace(/\D/g, "");
+        const filters = [
+          `primary_email.ilike.%${q}%`,
+          `display_name.ilike.%${q}%`,
+        ];
+        if (phoneDigits.length >= 4) {
+          filters.push(`primary_phone.ilike.%${phoneDigits}%`);
+        }
+        query = query.or(filters.join(","));
+      }
       const delivery = getDb();
       const { data: orderMatch } = await delivery.from("orders")
         .select("customer_id, customers(user_id)")
-        .eq("order_number", q.toUpperCase())
+        .eq("order_number", qRaw.toUpperCase())
         .maybeSingle();
       const orderUserId = (orderMatch as { customers?: { user_id?: string } } | null)?.customers?.user_id;
       if (orderUserId) {
@@ -83,8 +168,12 @@ export function registerIdentityAdminRoutes(app: Hono) {
     let rows = (identities ?? []).map((row) => {
       const userId = String((row as { user_id: string }).user_id);
       const ps = personasByUser.get(userId) ?? [];
-      return { ...row, personas: ps.map(({ persona, ref_id, status, market_id }) =>
-        ({ persona, ref_id, status, market_id })) };
+      const masked = maskIdentityRow(row as Record<string, unknown>, canViewPii);
+      return {
+        ...masked,
+        personas: ps.map(({ persona, ref_id, status, market_id }) =>
+          ({ persona, ref_id, status, market_id })),
+      };
     });
 
     if (persona) {
@@ -95,25 +184,10 @@ export function registerIdentityAdminRoutes(app: Hono) {
     return c.json({ identities: rows, total: count ?? rows.length, page, limit });
   });
 
-  admin.get("/audit/events", async (c) => {
-    const adminUser = c.get("adminUser") as ProductAdminUser;
-    if (!adminUser.permissions.includes("audit.read") && !adminUser.permissions.includes("system.config")) {
-      return c.json({ error: "forbidden" }, 403);
-    }
-    const page = Math.max(parseInt(c.req.query("page") || "1", 10) || 1, 1);
-    const limit = Math.min(parseInt(c.req.query("limit") || "50", 10) || 50, 100);
-    const offset = (page - 1) * limit;
-    const pdb = platformDb();
-    const { data, error, count } = await pdb.from("permission_audit_log")
-      .select("*", { count: "exact" })
-      .order("created_at", { ascending: false })
-      .range(offset, offset + limit - 1);
-    if (error) return c.json({ error: error.message }, 500);
-    return c.json({ events: data ?? [], total: count ?? 0, page, limit });
-  });
-
   admin.get("/:userId", async (c) => {
+    const adminUser = c.get("adminUser") as ProductAdminUser;
     const userId = c.req.param("userId");
+    const canViewPii = hasPermission(adminUser, "identity.pii.read");
     const pdb = platformDb();
     const delivery = getDb();
 
@@ -142,26 +216,54 @@ export function registerIdentityAdminRoutes(app: Hono) {
 
     const consoleRoles = await fetchUserRoleNames(userId);
 
+    const identityRow = identity ?? {
+      user_id: userId,
+      primary_email: authEmail,
+      global_status: "active",
+    };
+
     return c.json({
-      identity: identity ?? {
-        user_id: userId,
-        primary_email: authEmail,
-        global_status: "active",
-        personas: personas ?? [],
-      },
-      authEmail,
+      identity: maskIdentityRow(identityRow as Record<string, unknown>, canViewPii),
+      authEmail: canViewPii ? authEmail : maskEmail(authEmail),
       personas: personas ?? [],
       customer,
       courier,
       ownedMerchants: ownedMerchants ?? [],
       staffMemberships: staffMemberships ?? [],
       consoleRoles,
+      permissions: {
+        can_ban: hasPermission(adminUser, "identity.status.ban") || hasPermission(adminUser, "users.ban"),
+        can_unban: hasPermission(adminUser, "identity.status.ban") || hasPermission(adminUser, "users.ban"),
+        can_revoke_sessions: hasPermission(adminUser, "sessions.revoke"),
+        can_restrict: hasPermission(adminUser, "identity.status.restrict"),
+        can_revoke_staff: hasPermission(adminUser, "merchant.staff.revoke"),
+        can_view_pii: canViewPii,
+        can_export: hasPermission(adminUser, "identity.export"),
+        can_delete: hasPermission(adminUser, "identity.delete"),
+      },
     });
   });
 
-  function hasPermission(admin: ProductAdminUser, key: string): boolean {
-    return admin.permissions.includes(key) || admin.permissions.includes("system.config");
-  }
+  admin.get("/:userId/sessions", async (c) => {
+    const adminUser = c.get("adminUser") as ProductAdminUser;
+    if (!hasPermission(adminUser, "sessions.read")) {
+      return c.json({ error: "forbidden" }, 403);
+    }
+    const userId = c.req.param("userId");
+    // Supabase does not expose per-session listing via admin API; return auth metadata snapshot.
+    const { data: u, error } = await getAuthAdmin().auth.admin.getUserById(userId);
+    if (error || !u?.user) return c.json({ error: "not_found" }, 404);
+    const user = u.user;
+    return c.json({
+      sessions: [{
+        id: "current",
+        device: "auth.users",
+        last_seen: user.last_sign_in_at ?? user.updated_at,
+        created_at: user.created_at,
+      }],
+      note: "Per-device session listing requires Supabase session management API",
+    });
+  });
 
   admin.post("/:userId/sessions/revoke-all", async (c) => {
     const adminUser = c.get("adminUser") as ProductAdminUser;
@@ -192,15 +294,7 @@ export function registerIdentityAdminRoutes(app: Hono) {
     const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
     const reason = String(body.reason ?? "").trim();
     if (!reason) return c.json({ error: "reason_required" }, 400);
-    const pdb = platformDb();
-    await pdb.from("identities").upsert({
-      user_id: userId,
-      global_status: "banned",
-      status_reason: reason,
-      status_changed_at: new Date().toISOString(),
-      status_changed_by: adminUser.id,
-    }, { onConflict: "user_id" });
-    await getAuthAdmin().auth.admin.updateUserById(userId, { ban_duration: "876000h" });
+    await applyIdentityBan(userId, reason, adminUser.id);
     await writeAdminAudit({
       actorUserId: adminUser.id,
       targetUserId: userId,
@@ -209,6 +303,205 @@ export function registerIdentityAdminRoutes(app: Hono) {
       reason,
     });
     return c.json({ ok: true, global_status: "banned" });
+  });
+
+  admin.post("/:userId/unban", async (c) => {
+    const adminUser = c.get("adminUser") as ProductAdminUser;
+    if (!hasPermission(adminUser, "identity.status.ban") && !hasPermission(adminUser, "users.ban")) {
+      return c.json({ error: "forbidden" }, 403);
+    }
+    const userId = c.req.param("userId");
+    const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
+    const reason = String(body.reason ?? "").trim();
+    if (!reason) return c.json({ error: "reason_required" }, 400);
+    await applyIdentityUnban(userId, reason, adminUser.id);
+    await writeAdminAudit({
+      actorUserId: adminUser.id,
+      targetUserId: userId,
+      action: "identity.unban",
+      permissionKey: "identity.status.ban",
+      reason,
+    });
+    return c.json({ ok: true, global_status: "active" });
+  });
+
+  admin.post("/:userId/restrict", async (c) => {
+    const adminUser = c.get("adminUser") as ProductAdminUser;
+    if (!hasPermission(adminUser, "identity.status.restrict")) {
+      return c.json({ error: "forbidden" }, 403);
+    }
+    const userId = c.req.param("userId");
+    const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
+    const reason = String(body.reason ?? "").trim();
+    const status = body.status === "suspended" ? "suspended" : "restricted";
+    if (!reason) return c.json({ error: "reason_required" }, 400);
+    await applyIdentityGlobalRestrict(userId, status, reason, adminUser.id);
+    await writeAdminAudit({
+      actorUserId: adminUser.id,
+      targetUserId: userId,
+      action: "identity.restrict",
+      permissionKey: "identity.status.restrict",
+      reason,
+      metadata: { global_status: status },
+    });
+    return c.json({ ok: true, global_status: status });
+  });
+
+  admin.post("/:userId/unrestrict", async (c) => {
+    const adminUser = c.get("adminUser") as ProductAdminUser;
+    if (!hasPermission(adminUser, "identity.status.restrict")) {
+      return c.json({ error: "forbidden" }, 403);
+    }
+    const userId = c.req.param("userId");
+    const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
+    const reason = String(body.reason ?? "").trim();
+    if (!reason) return c.json({ error: "reason_required" }, 400);
+    await clearIdentityGlobalRestrict(userId, reason, adminUser.id);
+    await writeAdminAudit({
+      actorUserId: adminUser.id,
+      targetUserId: userId,
+      action: "identity.unrestrict",
+      permissionKey: "identity.status.restrict",
+      reason,
+    });
+    return c.json({ ok: true, global_status: "active" });
+  });
+
+  admin.post("/:userId/personas/:persona/restrict", async (c) => {
+    const adminUser = c.get("adminUser") as ProductAdminUser;
+    if (!hasPermission(adminUser, "identity.status.restrict")) {
+      return c.json({ error: "forbidden" }, 403);
+    }
+    const userId = c.req.param("userId");
+    const persona = c.req.param("persona");
+    const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
+    const reason = String(body.reason ?? "").trim();
+    if (!reason) return c.json({ error: "reason_required" }, 400);
+    const err = await applyPersonaRestrict(persona, userId, "restrict", reason);
+    if (err) return err;
+    await writeAdminAudit({
+      actorUserId: adminUser.id,
+      targetUserId: userId,
+      action: "identity.persona.restrict",
+      permissionKey: "identity.status.restrict",
+      reason,
+      metadata: { persona },
+    });
+    return c.json({ ok: true, persona, status: "restricted" });
+  });
+
+  admin.post("/:userId/personas/:persona/unrestrict", async (c) => {
+    const adminUser = c.get("adminUser") as ProductAdminUser;
+    if (!hasPermission(adminUser, "identity.status.restrict")) {
+      return c.json({ error: "forbidden" }, 403);
+    }
+    const userId = c.req.param("userId");
+    const persona = c.req.param("persona");
+    const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
+    const reason = String(body.reason ?? "").trim();
+    if (!reason) return c.json({ error: "reason_required" }, 400);
+    const err = await applyPersonaRestrict(persona, userId, "unrestrict", reason);
+    if (err) return err;
+    await writeAdminAudit({
+      actorUserId: adminUser.id,
+      targetUserId: userId,
+      action: "identity.persona.unrestrict",
+      permissionKey: "identity.status.restrict",
+      reason,
+      metadata: { persona },
+    });
+    return c.json({ ok: true, persona, status: "active" });
+  });
+
+  admin.post("/:userId/export", async (c) => {
+    const adminUser = c.get("adminUser") as ProductAdminUser;
+    if (!hasPermission(adminUser, "identity.export")) {
+      return c.json({ error: "forbidden" }, 403);
+    }
+    const userId = c.req.param("userId");
+    const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
+    const reason = String(body.reason ?? "").trim();
+    if (!reason) return c.json({ error: "reason_required" }, 400);
+    const pdb = platformDb();
+    const delivery = getDb();
+    const { data: identity } = await pdb.from("identities").select("*").eq("user_id", userId).maybeSingle();
+    const { data: personas } = await pdb.from("identity_personas").select("*").eq("user_id", userId);
+    const { data: customer } = await delivery.from("customers").select("id").eq("user_id", userId).maybeSingle();
+    const { data: orders } = customer?.id
+      ? await delivery.from("orders").select("id, order_number, status, total, placed_at")
+        .eq("customer_id", customer.id).limit(500)
+      : { data: [] };
+    await writeAdminAudit({
+      actorUserId: adminUser.id,
+      targetUserId: userId,
+      action: "identity.export",
+      permissionKey: "identity.export",
+      reason,
+    });
+    return c.json({
+      exported_at: new Date().toISOString(),
+      user_id: userId,
+      identity,
+      personas,
+      orders: orders ?? [],
+    });
+  });
+
+  admin.post("/:userId/merge", async (c) => {
+    const adminUser = c.get("adminUser") as ProductAdminUser;
+    if (!hasPermission(adminUser, "identity.merge")) {
+      return c.json({ error: "forbidden" }, 403);
+    }
+    const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
+    const sourceUserId = String(body.source_user_id ?? "").trim();
+    const targetUserId = c.req.param("userId");
+    const reason = String(body.reason ?? "").trim();
+    if (!sourceUserId || !reason) return c.json({ error: "source_user_id and reason required" }, 400);
+    if (sourceUserId === targetUserId) return c.json({ error: "cannot_merge_self" }, 400);
+    await writeAdminAudit({
+      actorUserId: adminUser.id,
+      targetUserId: targetUserId,
+      action: "identity.merge.requested",
+      permissionKey: "identity.merge",
+      reason,
+      metadata: { source_user_id: sourceUserId },
+    });
+    return c.json({
+      ok: true,
+      status: "pending_manual_review",
+      message: "Merge recorded for manual data reconciliation",
+      source_user_id: sourceUserId,
+      target_user_id: targetUserId,
+    });
+  });
+
+  admin.post("/:userId/impersonate", async (c) => {
+    const adminUser = c.get("adminUser") as ProductAdminUser;
+    if (!hasPermission(adminUser, "system.config")) {
+      return c.json({ error: "forbidden" }, 403);
+    }
+    const userId = c.req.param("userId");
+    const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
+    const reason = String(body.reason ?? "").trim();
+    const durationMinutes = Math.min(Number(body.duration_minutes) || 15, 60);
+    if (!reason) return c.json({ error: "reason_required" }, 400);
+    const expiresAt = new Date(Date.now() + durationMinutes * 60 * 1000).toISOString();
+    await writeAdminAudit({
+      actorUserId: adminUser.id,
+      targetUserId: userId,
+      action: "identity.impersonate.start",
+      permissionKey: "system.config",
+      reason,
+      metadata: { expires_at: expiresAt, duration_minutes: durationMinutes },
+    });
+    return c.json({
+      ok: true,
+      impersonation: {
+        target_user_id: userId,
+        expires_at: expiresAt,
+        banner: 'Support view-as session — actions are audited',
+      },
+    });
   });
 
   admin.delete("/merchant-staff/:memberId", async (c) => {
@@ -238,4 +531,36 @@ export function registerIdentityAdminRoutes(app: Hono) {
   });
 
   app.route("/admin/identities", admin);
+
+  const staffList = new Hono();
+  staffList.use("*", async (c, next) => {
+    const result = await requireProductAdmin(c, "dash");
+    if (result instanceof Response) return result;
+    c.set("adminUser", result);
+    await next();
+  });
+  staffList.get("/", async (c) => {
+    const adminUser = c.get("adminUser") as ProductAdminUser;
+    if (!hasPermission(adminUser, "merchant.staff.read") && !hasPermission(adminUser, "system.config")) {
+      return c.json({ error: "forbidden" }, 403);
+    }
+    const db = getDb();
+    const pdb = platformDb();
+    const { data: members, error } = await db.from("merchant_team_members")
+      .select("id, user_id, merchant_id, role, merchants(name)")
+      .order("created_at", { ascending: false })
+      .limit(500);
+    if (error) return c.json({ error: error.message }, 500);
+    const userIds = [...new Set((members ?? []).map((m) => String((m as { user_id: string }).user_id)))];
+    const { data: identities } = userIds.length > 0
+      ? await pdb.from("identities").select("user_id, display_name, primary_email").in("user_id", userIds)
+      : { data: [] };
+    const byUser = new Map((identities ?? []).map((i) => [String((i as { user_id: string }).user_id), i]));
+    const staff = (members ?? []).map((m) => ({
+      ...m,
+      identities: byUser.get(String((m as { user_id: string }).user_id)) ?? null,
+    }));
+    return c.json({ staff });
+  });
+  app.route("/admin/merchant-staff", staffList);
 }

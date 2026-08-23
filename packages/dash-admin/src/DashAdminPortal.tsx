@@ -1,5 +1,5 @@
 import React, { Suspense, useEffect, useState } from 'react';
-import { Routes, Route, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { Routes, Route, Outlet, useLocation, useNavigate, Navigate } from 'react-router-dom';
 import {
   supabaseDashAdmin as supabase,
   hasProductAdminRole,
@@ -12,6 +12,8 @@ import { Loader2 } from 'lucide-react';
 import { Toaster } from 'sonner';
 import { AdminShell } from '@roam/admin-core';
 import { AdminLoginForm } from './components/AdminLoginForm';
+import { AdminMfaGate } from './components/AdminMfaGate';
+import { requiresAdminMfaFromRoles } from './utils/adminMfa';
 import { AdminConfirmProvider } from './contexts/AdminConfirmContext';
 import { DashAdminAccessProvider } from './hooks/useDashAdminAccess';
 import {
@@ -37,15 +39,15 @@ import { PlatformSettingsPage } from './pages/PlatformSettingsPage';
 import { DashTeamPage } from './pages/users/DashTeamPage';
 import { IdentityDirectoryPage } from './pages/users/IdentityDirectoryPage';
 import { IdentityDetailPage } from './pages/users/IdentityDetailPage';
-import { CustomersListPage } from './pages/customers/CustomersListPage';
 import { CustomerDetailPage } from './pages/customers/CustomerDetailPage';
-import { CouriersListPage } from './pages/couriers/CouriersListPage';
 import { CourierDetailPage } from './pages/couriers/CourierDetailPage';
 import { ComplianceManager } from './pages/couriers/ComplianceManager';
 import { CourierPresenceManager } from './pages/couriers/CourierPresenceManager';
 import { DeliveryLedgerPage } from './pages/couriers/DeliveryLedgerPage';
 import { LiveOpsPage } from './pages/liveops/LiveOpsPage';
-import { ActivityLogPage } from './pages/activity/ActivityLogPage';
+import { UsersAuditPage } from './pages/users/UsersAuditPage';
+import { MerchantStaffDirectoryPage } from './pages/users/MerchantStaffDirectoryPage';
+import { useAdminSessionPolicy } from './hooks/useAdminSessionPolicy';
 import { ReviewsPage } from './pages/reviews/ReviewsPage';
 
 const DASH_ADMIN_BASENAME = '/admin';
@@ -112,6 +114,7 @@ export function DashAdminPortal() {
   const [loading, setLoading] = useState(true);
   const [mfaBlocked, setMfaBlocked] = useState(false);
   const { hasPermission, loading: permsLoading } = usePermissions({ supabase });
+  useAdminSessionPolicy();
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session: s } }) => {
@@ -127,12 +130,12 @@ export function DashAdminPortal() {
       setMfaBlocked(false);
       return;
     }
-    const role = jwtPrimaryRole(session.user);
-    const privileged = ['platform_owner', 'dash_admin', 'courier_admin', 'identity_admin', 'superadmin'].includes(role);
-    if (!privileged) return;
+    const meta = session.user.app_metadata as { roles?: string[]; role?: string };
+    const roles = Array.isArray(meta.roles) ? meta.roles : [meta.role ?? jwtPrimaryRole(session.user)].filter(Boolean);
+    if (!requiresAdminMfaFromRoles(roles)) return;
     void supabase.auth.mfa.getAuthenticatorAssuranceLevel().then(({ data }) => {
       setMfaBlocked(data?.currentLevel !== 'aal2');
-    }).catch(() => setMfaBlocked(false));
+    }).catch(() => setMfaBlocked(true));
   }, [session]);
 
   const hasJwtAccess =
@@ -167,21 +170,10 @@ export function DashAdminPortal() {
 
   if (mfaBlocked) {
     return (
-      <div className="dash-admin-portal min-h-screen flex items-center justify-center bg-slate-950 p-6">
-        <div className="max-w-md text-center space-y-3">
-          <h2 className="text-lg font-semibold text-white">Multi-factor authentication required</h2>
-          <p className="text-sm text-slate-400">
-            Admin accounts at your privilege level must enroll MFA before using the Ops Console.
-          </p>
-          <button
-            type="button"
-            onClick={() => void supabase.auth.signOut()}
-            className="px-4 py-2 rounded-lg bg-amber-600 text-white text-sm"
-          >
-            Sign out
-          </button>
-        </div>
-      </div>
+      <AdminMfaGate
+        onComplete={() => setMfaBlocked(false)}
+        onSignOut={() => void supabase.auth.signOut()}
+      />
     );
   }
 
@@ -205,8 +197,8 @@ export function DashAdminPortal() {
             <Route path="live-ops" element={<LiveOpsPage />} />
             <Route path="orders" element={<OrdersListPage />} />
             <Route path="orders/:id" element={<OrderDetailPage />} />
-            <Route path="couriers" element={<CouriersListPage />} />
-            <Route path="couriers/compliance" element={<ComplianceManager />} />
+            <Route path="couriers" element={<Navigate to="/users?persona=courier" replace />} />
+            <Route path="couriers/compliance" element={<Navigate to="/users/compliance" replace />} />
             <Route path="couriers/presence" element={<CourierPresenceManager />} />
             <Route path="couriers/ledger" element={<DeliveryLedgerPage />} />
             <Route path="couriers/:userId" element={<CourierDetailPage />} />
@@ -220,11 +212,13 @@ export function DashAdminPortal() {
             />
             <Route path="users" element={<IdentityDirectoryPage />} />
             <Route path="users/operators" element={<DashTeamPage />} />
-            <Route path="users/audit" element={<ActivityLogPage />} />
+            <Route path="users/audit" element={<UsersAuditPage />} />
+            <Route path="users/merchant-staff" element={<MerchantStaffDirectoryPage />} />
+            <Route path="users/compliance" element={<ComplianceManager />} />
             <Route path="users/:userId" element={<IdentityDetailPage />} />
-            <Route path="team" element={<DashTeamPage />} />
-            <Route path="activity" element={<ActivityLogPage />} />
-            <Route path="customers" element={<CustomersListPage />} />
+            <Route path="team" element={<Navigate to="/users/operators" replace />} />
+            <Route path="activity" element={<Navigate to="/users/audit" replace />} />
+            <Route path="customers" element={<Navigate to="/users?persona=customer" replace />} />
             <Route path="customers/:id" element={<CustomerDetailPage />} />
             <Route
               path="finance"

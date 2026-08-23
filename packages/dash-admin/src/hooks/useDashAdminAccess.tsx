@@ -12,6 +12,7 @@ type DashAdminAccess = {
   canDelete: boolean;
   canForceApprove: boolean;
   hasPermission: (key: string) => boolean;
+  canIdentityAction: (key: string) => boolean;
 };
 
 const DashAdminAccessContext = createContext<DashAdminAccess | null>(null);
@@ -26,6 +27,7 @@ export function DashAdminAccessProvider({
   const { hasPermission, permissions } = usePermissions({ supabase });
   const value: DashAdminAccess = {
     hasPermission,
+    canIdentityAction: (key: string) => hasPermission(key) || hasPermission('system.config'),
     canWrite: canWriteDashAdmin(session.user, permissions),
     canDelete: canDeleteDashAdmin(session.user, permissions),
     canForceApprove: canForceApproveMerchant(session.user, permissions),
@@ -43,6 +45,7 @@ export function useDashAdminAccess(): DashAdminAccess {
       canDelete: false,
       canForceApprove: false,
       hasPermission: () => false,
+      canIdentityAction: () => false,
     };
   }
   return ctx;

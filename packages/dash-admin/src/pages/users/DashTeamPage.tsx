@@ -24,6 +24,8 @@ const ROLE_OPTIONS: { value: DashTeamRole; label: string }[] = [
   { value: 'dash_ops', label: 'Dash Ops' },
   { value: 'courier_admin', label: 'Courier Admin' },
   { value: 'courier_ops', label: 'Courier Ops' },
+  { value: 'support_agent', label: 'Support Agent' },
+  { value: 'identity_admin', label: 'Identity Admin' },
 ];
 
 function roleLabel(role: string) {

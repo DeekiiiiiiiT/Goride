@@ -1,4 +1,4 @@
-import { pointInPolygon, type CoverageVertex, type CoverageZone } from './index';
+import { pointInPolygon, type CoverageVertex, type CoverageZone } from './index.ts';
 
 export type ParishCoverageMode = 'town_zones' | 'parish_boundary';
 

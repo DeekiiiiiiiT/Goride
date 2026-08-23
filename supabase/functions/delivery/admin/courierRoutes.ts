@@ -800,6 +800,12 @@ export function registerCourierAdminRoutes(app: Hono) {
       updated_at: now,
     }).eq("user_id", userId);
     if (error) return c.json({ error: error.message }, 500);
+    await db.from("courier_availability").update({
+      is_online: false,
+      last_location_update: now,
+    }).eq("driver_id", userId);
+    const auth = serviceAuth();
+    await auth.auth.admin.signOut(userId, "global");
     await courierAudit(adminUser.id, "admin_courier_suspend", { courier_user_id: userId, reason }, userId);
     return c.json({ ok: true, status: "suspended" });
   });

@@ -593,7 +593,13 @@ export function removeDashTeamMember(
 }
 
 /** Assignable dash / courier admin roles from the Rush Ops console */
-export type DashTeamRole = 'dash_admin' | 'dash_ops' | 'courier_admin' | 'courier_ops';
+export type DashTeamRole =
+  | 'dash_admin'
+  | 'dash_ops'
+  | 'courier_admin'
+  | 'courier_ops'
+  | 'support_agent'
+  | 'identity_admin';
 
 export interface DashTeamInvite {
   id: string;
