@@ -1292,6 +1292,7 @@ export function previewPricing(
     tip?: number;
     customer_order_count?: number;
     payment_method?: 'wipay' | 'paypal' | 'cash';
+    market_id?: string;
   },
 ) {
   return deliveryFetch(accessToken, '/admin/pricing/preview', {

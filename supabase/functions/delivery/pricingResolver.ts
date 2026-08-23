@@ -27,6 +27,8 @@ export type PricingResolverInput = {
   freeDelivery?: boolean;
   paymentMethod?: PaymentMethod;
   serviceFeeWaived?: boolean;
+  /** Admin simulator: force a market instead of geo-resolving from dropoff */
+  marketIdOverride?: string | null;
 };
 
 export type ResolvedPricing = PricingBreakdown & {
@@ -42,7 +44,7 @@ export type ResolvedPricing = PricingBreakdown & {
 type ServiceSb = { from: (t: string) => any };
 
 function asCoord(v: unknown): number | null {
-  if (v == null) return null;
+  if (v == null || v === "") return null;
   const n = Number(v);
   return Number.isFinite(n) ? n : null;
 }
@@ -120,54 +122,90 @@ async function loadMerchantPricingContext(
   sb: ServiceSb,
   merchantId: string,
 ): Promise<{
+  found: boolean;
   lat: number | null;
   lng: number | null;
   tier: MerchantTier | null;
   merchantCommissionRateOverride: number | null;
   serviceFeeOverride: ReturnType<typeof parseServiceFeeOverride>;
+  error?: string;
 }> {
-  const { data: merchant } = await sb
+  // Minimal select first — optional Model B columns may be missing on older DBs
+  const { data: merchant, error } = await sb
     .from("merchants")
-    .select(`
-      lat, lng,
-      merchant_commission_rate,
-      service_fee_override,
-      pricing_tier_id,
-      tier:merchant_tiers(slug, name, commission_rate)
-    `)
+    .select("id, lat, lng")
     .eq("id", merchantId)
     .maybeSingle();
 
-  if (!merchant) {
+  if (error) {
+    console.error("[pricingResolver] merchant load failed:", error.message);
     return {
+      found: false,
       lat: null,
       lng: null,
       tier: null,
       merchantCommissionRateOverride: null,
       serviceFeeOverride: null,
+      error: error.message,
     };
   }
 
-  const row = merchant as Record<string, unknown>;
-  const tierRow = row.tier as Record<string, unknown> | null;
-  const tier: MerchantTier | null = tierRow
-    ? {
-        slug: String(tierRow.slug),
-        name: String(tierRow.name),
-        commissionRate: Number(tierRow.commission_rate),
+  if (!merchant) {
+    return {
+      found: false,
+      lat: null,
+      lng: null,
+      tier: null,
+      merchantCommissionRateOverride: null,
+      serviceFeeOverride: null,
+      error: "Merchant not found",
+    };
+  }
+
+  const base = merchant as Record<string, unknown>;
+  let tier: MerchantTier | null = null;
+  let merchantCommissionRateOverride: number | null = null;
+  let serviceFeeOverride: ReturnType<typeof parseServiceFeeOverride> = null;
+
+  const { data: extras } = await sb
+    .from("merchants")
+    .select("merchant_commission_rate, service_fee_override, pricing_tier_id")
+    .eq("id", merchantId)
+    .maybeSingle();
+
+  if (extras) {
+    const row = extras as Record<string, unknown>;
+    merchantCommissionRateOverride = row.merchant_commission_rate != null
+      ? Number(row.merchant_commission_rate)
+      : null;
+    serviceFeeOverride = parseServiceFeeOverride(
+      row.service_fee_override as Record<string, unknown> | null,
+    );
+    const tierId = row.pricing_tier_id ? String(row.pricing_tier_id) : null;
+    if (tierId) {
+      const { data: tierRow } = await sb
+        .from("merchant_tiers")
+        .select("slug, name, commission_rate")
+        .eq("id", tierId)
+        .maybeSingle();
+      if (tierRow) {
+        const t = tierRow as Record<string, unknown>;
+        tier = {
+          slug: String(t.slug),
+          name: String(t.name),
+          commissionRate: Number(t.commission_rate),
+        };
       }
-    : null;
+    }
+  }
 
   return {
-    lat: asCoord(row.lat),
-    lng: asCoord(row.lng),
+    found: true,
+    lat: asCoord(base.lat),
+    lng: asCoord(base.lng),
     tier,
-    merchantCommissionRateOverride: row.merchant_commission_rate != null
-      ? Number(row.merchant_commission_rate)
-      : null,
-    serviceFeeOverride: parseServiceFeeOverride(
-      row.service_fee_override as Record<string, unknown> | null,
-    ),
+    merchantCommissionRateOverride,
+    serviceFeeOverride,
   };
 }
 
@@ -177,16 +215,23 @@ export async function resolveDashOrderPricing(
   input: PricingResolverInput,
 ): Promise<ResolvedPricing | null> {
   const ctx = await loadMerchantPricingContext(sb, input.merchantId);
-  if (ctx.lat == null || ctx.lng == null) return null;
+  if (!ctx.found) {
+    console.error("[pricingResolver] cannot resolve:", ctx.error, input.merchantId);
+    return null;
+  }
 
+  // Missing store pin → still quote (base delivery fee); distance stays null
   const dropLat = asCoord(input.dropoffLat);
   const dropLng = asCoord(input.dropoffLng);
 
-  let marketId: string | null = null;
+  let marketId: string | null =
+    input.marketIdOverride && String(input.marketIdOverride).trim()
+      ? String(input.marketIdOverride).trim()
+      : null;
   let rules = parsePricingRules(null);
   let version = 1;
 
-  if (dropLat != null && dropLng != null) {
+  if (!marketId && dropLat != null && dropLng != null) {
     const market = await resolveMarketForPoint(sb, dropLat, dropLng);
     marketId = market.marketId;
   }

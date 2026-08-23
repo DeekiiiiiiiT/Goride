@@ -263,29 +263,44 @@ export function registerPricingAdminRoutes(app: Hono) {
     const dropoffLat = body.dropoff_lat != null ? Number(body.dropoff_lat) : null;
     const dropoffLng = body.dropoff_lng != null ? Number(body.dropoff_lng) : null;
     const tip = Number(body.tip ?? 0);
-    const customerOrderCount = Number(body.customer_order_count ?? 0);
+    const marketIdOverride = body.market_id != null || body.marketId != null
+      ? String(body.market_id ?? body.marketId)
+      : null;
     const paymentRaw = String(body.payment_method ?? body.paymentMethod ?? "wipay");
     const paymentMethod = paymentRaw === "cash" ? "cash" : paymentRaw === "paypal" ? "paypal" : "wipay";
 
     if (!merchantId) return c.json({ error: "merchant_id required" }, 400);
 
-    const db = getDb();
-    const resolved = await resolveDashOrderPricing(db, {
-      merchantId,
-      subtotal,
-      tip,
-      dropoffLat,
-      dropoffLng,
-      customerOrderCount,
-      paymentMethod,
-    });
+    try {
+      const db = getDb();
+      const resolved = await resolveDashOrderPricing(db, {
+        merchantId,
+        subtotal,
+        tip,
+        dropoffLat,
+        dropoffLng,
+        paymentMethod,
+        marketIdOverride,
+      });
 
-    if (!resolved) return c.json({ error: "Could not resolve pricing for merchant" }, 404);
+      if (!resolved) {
+        return c.json({
+          error: "Restaurant not found or could not load pricing. Pick another restaurant and try again.",
+          code: "pricing_unresolved",
+        }, 404);
+      }
 
-    return c.json({
-      breakdown: resolved,
-      pricing_v2_enabled: resolved.pricingV2Enabled,
-    });
+      return c.json({
+        breakdown: resolved,
+        pricing_v2_enabled: resolved.pricingV2Enabled,
+      });
+    } catch (e) {
+      console.error("[pricing/preview]", e);
+      return c.json({
+        error: e instanceof Error ? e.message : "Pricing preview failed",
+        code: "pricing_preview_error",
+      }, 500);
+    }
   });
 
   admin.get("/pricing/audit", async (c) => {

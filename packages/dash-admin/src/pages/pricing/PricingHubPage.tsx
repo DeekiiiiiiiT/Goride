@@ -215,7 +215,7 @@ export function PricingHubPage() {
     scenarioId?: string | null;
   }): Promise<SimBreakdown | null> => {
     if (!simMerchantId.trim()) {
-      toast.error('Enter a merchant ID');
+      toast.error('Pick a restaurant first');
       return null;
     }
     const res = await previewPricing(session.access_token, {
@@ -225,6 +225,7 @@ export function PricingHubPage() {
       dropoff_lat: Number(simLat),
       dropoff_lng: Number(simLng),
       payment_method: opts.payment,
+      market_id: selectedMarketId || undefined,
     });
     const breakdown = (res as { breakdown?: Record<string, unknown> }).breakdown ?? null;
     setSimResult(breakdown);
