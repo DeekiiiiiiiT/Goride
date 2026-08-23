@@ -8,6 +8,7 @@ import { requireDashWrite } from "./dashPermissions.ts";
 import { requireWrite as requireCourierWrite } from "./permissions.ts";
 import { getDb } from "./merchantAdminShared.ts";
 import { orchestrateOrderRefund } from "./orderRefund.ts";
+import { ORDER_CUSTOMER_EMBED } from "../orderSelectEmbeds.ts";
 
 async function requireDashOrCourierAdmin(c: { req: { header: (n: string) => string | undefined } }) {
   const dash = await requireProductAdmin(c, "dash");
@@ -77,7 +78,7 @@ export function registerOrderAdminRoutes(app: Hono) {
     const pdb = getPaymentsDb();
 
     const { data: order, error } = await db.from("orders")
-      .select(`*, merchant:merchants(id, name, phone, address), customer:customers(id, name, phone)`)
+      .select(`*, merchant:merchants(id, name, phone, address), ${ORDER_CUSTOMER_EMBED}`)
       .eq("id", orderId)
       .maybeSingle();
 

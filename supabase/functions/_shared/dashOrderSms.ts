@@ -2,6 +2,8 @@
  * Transactional Dash order SMS — Digicel/Flow when configured; stub-log otherwise.
  * Push fanout (additive) goes through notifications/customer-order-status.
  */
+import { ORDER_CUSTOMER_EMBED_WITH_USER } from "../delivery/orderSelectEmbeds.ts";
+
 export async function sendDashOrderStatusSms(input: {
   to: string;
   orderNumber: string;
@@ -122,7 +124,7 @@ export async function notifyCustomerOrderStatus(
   try {
     const { data: order } = await serviceSb
       .from("orders")
-      .select("id, order_number, customer_id, merchant_id, merchant:merchants(name), customer:customers(phone, name, user_id, notification_prefs)")
+      .select(`id, order_number, customer_id, merchant_id, merchant:merchants(name), ${ORDER_CUSTOMER_EMBED_WITH_USER}`)
       .eq("id", orderId)
       .single();
 

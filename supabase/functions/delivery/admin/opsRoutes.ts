@@ -7,6 +7,7 @@ import { requireDashWrite } from "./dashPermissions.ts";
 import { getAuthAdmin, getDb, writeKvAudit } from "./merchantAdminShared.ts";
 import { dispatchOffersForOrder } from "../courierConsumerRoutes.ts";
 import { insertCourierReassignedSystemMessages } from "../orderChat.ts";
+import { ORDER_CUSTOMER_EMBED } from "../orderSelectEmbeds.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 /** Orders considered "in flight" for the live ops board. */
@@ -43,7 +44,7 @@ export function registerOpsAdminRoutes(app: Hono) {
         delivery_address, delivery_lat, delivery_lng, courier_lat, courier_lng,
         courier_location_updated_at,
         merchant:merchants(id, name, address, lat, lng, phone),
-        customer:customers(id, name, phone)
+        ${ORDER_CUSTOMER_EMBED}
       `)
       .in("status", statuses)
       .order("placed_at", { ascending: true })
