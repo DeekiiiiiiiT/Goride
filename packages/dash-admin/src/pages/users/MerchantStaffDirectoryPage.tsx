@@ -10,11 +10,13 @@ import { useDashAdminAccess } from '../../hooks/useDashAdminAccess';
 
 type StaffRow = {
   id: string;
-  user_id: string;
+  user_id: string | null;
   merchant_id: string;
   role: string;
+  name?: string | null;
+  email?: string | null;
   merchants?: { name?: string };
-  identities?: { display_name?: string; primary_email?: string };
+  identities?: { display_name?: string; primary_email?: string } | null;
 };
 
 export function MerchantStaffDirectoryPage() {
@@ -42,11 +44,18 @@ export function MerchantStaffDirectoryPage() {
     const term = q.toLowerCase();
     return (
       String(r.merchants?.name ?? '').toLowerCase().includes(term)
-      || String(r.identities?.primary_email ?? '').toLowerCase().includes(term)
-      || String(r.identities?.display_name ?? '').toLowerCase().includes(term)
+      || String(r.identities?.primary_email ?? r.email ?? '').toLowerCase().includes(term)
+      || String(r.identities?.display_name ?? r.name ?? '').toLowerCase().includes(term)
       || String(r.role).toLowerCase().includes(term)
     );
   });
+
+  const personLabel = (r: StaffRow) =>
+    r.identities?.display_name
+    || r.name
+    || r.identities?.primary_email
+    || r.email
+    || (r.user_id ? r.user_id.slice(0, 8) : 'Pending invite');
 
   const handleRevoke = async (memberId: string) => {
     const values = await prompt({
@@ -93,9 +102,13 @@ export function MerchantStaffDirectoryPage() {
               {filtered.map((r) => (
                 <tr key={r.id}>
                   <td className="px-4 py-3">
-                    <Link to={`/users/${r.user_id}`} className="text-emerald-400 hover:underline">
-                      {r.identities?.display_name || r.identities?.primary_email || r.user_id.slice(0, 8)}
-                    </Link>
+                    {r.user_id ? (
+                      <Link to={`/users/${r.user_id}`} className="text-emerald-400 hover:underline">
+                        {personLabel(r)}
+                      </Link>
+                    ) : (
+                      <span className="text-slate-300">{personLabel(r)}</span>
+                    )}
                   </td>
                   <td className="px-4 py-3 text-slate-300">
                     <Link to={`/merchants/${r.merchant_id}`} className="hover:underline">

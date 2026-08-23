@@ -547,11 +547,15 @@ export function registerIdentityAdminRoutes(app: Hono) {
     const db = getDb();
     const pdb = platformDb();
     const { data: members, error } = await db.from("merchant_team_members")
-      .select("id, user_id, merchant_id, role, merchants(name)")
+      .select("id, user_id, merchant_id, role, name, email, merchants(name)")
       .order("created_at", { ascending: false })
       .limit(500);
     if (error) return c.json({ error: error.message }, 500);
-    const userIds = [...new Set((members ?? []).map((m) => String((m as { user_id: string }).user_id)))];
+    const userIds = [...new Set(
+      (members ?? [])
+        .map((m) => (m as { user_id: string | null }).user_id)
+        .filter((id): id is string => Boolean(id)),
+    )];
     const { data: identities } = userIds.length > 0
       ? await pdb.from("identities").select("user_id, display_name, primary_email").in("user_id", userIds)
       : { data: [] };
