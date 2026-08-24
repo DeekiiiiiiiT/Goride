@@ -13,6 +13,7 @@ type ManageZonesOverlayProps = {
   onClose: () => void;
   onEditTownOnMap: () => void;
   onEditTownCoordinates: () => void;
+  onDeleteTownBorder: (zone: DashZoneRow) => void;
   onEditExcludeOnMap: (zone: DashZoneRow) => void;
   onEditExcludeCoordinates: (zone: DashZoneRow) => void;
   onDeleteExclude: (zone: DashZoneRow) => void;
@@ -26,6 +27,7 @@ export function ManageZonesOverlay({
   onClose,
   onEditTownOnMap,
   onEditTownCoordinates,
+  onDeleteTownBorder,
   onEditExcludeOnMap,
   onEditExcludeCoordinates,
   onDeleteExclude,
@@ -52,8 +54,7 @@ export function ManageZonesOverlay({
               Manage zones · {townName}
             </h2>
             <p className="text-xs text-slate-400 mt-0.5">
-              Edit the green town border on the map, or type coordinates. Non-delivery zones are
-              listed below.
+              Edit or delete the green town border. Non-delivery zones are listed below.
             </p>
           </div>
           <button
@@ -70,33 +71,46 @@ export function ManageZonesOverlay({
             <p className="text-[10px] uppercase tracking-wide text-slate-500 font-medium">
               Town border (foundation)
             </p>
-            <div className="flex flex-wrap items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2.5">
+            <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2.5 space-y-2">
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-emerald-100 truncate">
                   {delivery?.name ?? 'Town border'}
                 </p>
                 <p className="text-[11px] text-emerald-200/70">
-                  {delivery ? `${delivery.polygon.length} points` : 'Missing — reload to restore'}
+                  {delivery
+                    ? `${delivery.polygon.length} points`
+                    : 'No border set — import GeoJSON or draw one on the map'}
                 </p>
               </div>
-              <button
-                type="button"
-                disabled={!delivery}
-                onClick={onEditTownOnMap}
-                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-emerald-500 text-slate-950 text-xs font-semibold disabled:opacity-40"
-              >
-                <MapIcon className="w-3.5 h-3.5" />
-                Edit on map
-              </button>
-              <button
-                type="button"
-                disabled={!delivery}
-                onClick={onEditTownCoordinates}
-                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-emerald-500/40 text-emerald-100 text-xs font-semibold disabled:opacity-40"
-              >
-                <MapPin className="w-3.5 h-3.5" />
-                Coordinates
-              </button>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  disabled={!delivery}
+                  onClick={onEditTownOnMap}
+                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-emerald-500 text-slate-950 text-xs font-semibold disabled:opacity-40"
+                >
+                  <MapIcon className="w-3.5 h-3.5" />
+                  Edit on map
+                </button>
+                <button
+                  type="button"
+                  disabled={!delivery}
+                  onClick={onEditTownCoordinates}
+                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-emerald-500/40 text-emerald-100 text-xs font-semibold disabled:opacity-40"
+                >
+                  <MapPin className="w-3.5 h-3.5" />
+                  Coordinates
+                </button>
+                <button
+                  type="button"
+                  disabled={!delivery}
+                  onClick={() => delivery && onDeleteTownBorder(delivery)}
+                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-red-500/40 text-red-200 text-xs font-semibold disabled:opacity-40"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  Delete border
+                </button>
+              </div>
             </div>
           </section>
 

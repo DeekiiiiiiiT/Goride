@@ -42,7 +42,10 @@ export async function parseDashAdminJson<T>(res: Response): Promise<T> {
   try {
     body = JSON.parse(trimmed);
   } catch {
-    throw new Error('Invalid JSON response from server');
+    const snippet = trimmed.slice(0, 160).replace(/\s+/g, ' ');
+    throw new Error(
+      `Invalid JSON response from server (HTTP ${res.status})${snippet ? `: ${snippet}` : ''}`,
+    );
   }
   if (!res.ok) {
     const err = body as { error?: string; message?: string };

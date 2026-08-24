@@ -690,6 +690,13 @@ export interface DashMarketRow {
   created_at?: string;
 }
 
+export interface DashParishTownPin {
+  name: string;
+  lat: number;
+  lng: number;
+  properties?: Record<string, unknown>;
+}
+
 export interface DashParishRow {
   id: string;
   name: string;
@@ -699,6 +706,9 @@ export interface DashParishRow {
   /** Parish outline — outer gate (town_zones) or live delivery area (parish_boundary). */
   foundation_polygon?: DashZoneVertex[] | null;
   foundation_updated_at?: string | null;
+  /** Reference town/city pin locations (ops geography). */
+  town_pins?: DashParishTownPin[] | null;
+  town_pins_updated_at?: string | null;
   towns?: DashMarketRow[];
   created_at?: string;
 }
@@ -795,6 +805,19 @@ export function updateParishOutline(
   return deliveryFetch<{ parish: DashParishRow; promoted_template?: boolean }>(
     accessToken,
     `/admin/markets/parishes/${parishId}/outline`,
+    { method: 'PUT', body: JSON.stringify(payload) },
+  );
+}
+
+/** Import reference town/city Point pins for a parish (GeoJSON FeatureCollection). */
+export function updateParishTownPins(
+  accessToken: string,
+  parishId: string,
+  payload: { pins?: DashParishTownPin[]; geojson?: unknown },
+) {
+  return deliveryFetch<{ parish: DashParishRow; pin_count: number }>(
+    accessToken,
+    `/admin/markets/parishes/${parishId}/town-pins`,
     { method: 'PUT', body: JSON.stringify(payload) },
   );
 }

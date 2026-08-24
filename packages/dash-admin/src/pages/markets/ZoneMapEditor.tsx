@@ -81,6 +81,8 @@ export type ZoneMapEditorProps = {
   onRequestRadiusMode?: () => void;
   /** Which foundation layer is being edited (copy + save labels). */
   foundationScope?: 'town' | 'parish';
+  /** Reference town/city pins on parish map (Point GeoJSON import). */
+  referenceTownPins?: Array<{ id: string; name: string; lat: number; lng: number }>;
   /** Open the lat/lng coordinate overlay immediately (e.g. from Edit coordinates). */
   autoOpenCoordinates?: boolean;
 };
@@ -98,13 +100,13 @@ function styleForKind(kind: DashZoneKind, zoneId?: string): google.maps.PolygonO
     };
   }
   if (zoneId === 'parish-foundation') {
-    // Ops-only parish outline — slate, not emerald live coverage
+    // Ops-only parish outline — violet so it reads clearly vs green towns / gray context
     return {
-      strokeColor: '#94a3b8',
-      fillColor: '#64748b',
-      fillOpacity: 0.05,
-      strokeWeight: 3,
-      strokeOpacity: 0.95,
+      strokeColor: '#c084fc',
+      fillColor: '#9333ea',
+      fillOpacity: 0.1,
+      strokeWeight: 3.5,
+      strokeOpacity: 1,
       zIndex: 20,
       clickable: false,
     };
@@ -122,23 +124,24 @@ function styleForKind(kind: DashZoneKind, zoneId?: string): google.maps.PolygonO
 }
 
 function styleForContextTown(isActive: boolean): google.maps.PolygonOptions {
+  // Amber reference towns — readable on terrain vs violet parish outline
   if (isActive) {
     return {
-      strokeColor: '#64748b',
-      fillColor: '#94a3b8',
-      fillOpacity: 0.05,
-      strokeWeight: 1.75,
-      strokeOpacity: 0.8,
+      strokeColor: '#fbbf24',
+      fillColor: '#f59e0b',
+      fillOpacity: 0.12,
+      strokeWeight: 2.5,
+      strokeOpacity: 1,
       clickable: false,
       zIndex: 10,
     };
   }
   return {
-    strokeColor: '#475569',
-    fillColor: '#334155',
-    fillOpacity: 0.02,
-    strokeWeight: 1.25,
-    strokeOpacity: 0.5,
+    strokeColor: '#d97706',
+    fillColor: '#b45309',
+    fillOpacity: 0.06,
+    strokeWeight: 2,
+    strokeOpacity: 0.9,
     clickable: false,
     zIndex: 5,
   };
@@ -186,6 +189,7 @@ export function ZoneMapEditor({
   onTestPoint,
   mapHeight = 520,
   foundationScope = 'town',
+  referenceTownPins = [],
   autoOpenCoordinates = false,
 }: ZoneMapEditorProps) {
   const foundationNoun = foundationScope === 'parish' ? 'parish' : 'town';
@@ -196,6 +200,7 @@ export function ZoneMapEditor({
   const overlayPolysRef = useRef<google.maps.Polygon[]>([]);
   const contextPolysRef = useRef<google.maps.Polygon[]>([]);
   const customerPreviewPolysRef = useRef<google.maps.Polygon[]>([]);
+  const townPinMarkersRef = useRef<google.maps.Marker[]>([]);
   const editPolyRef = useRef<google.maps.Polygon | null>(null);
   const clickListenerRef = useRef<google.maps.MapsEventListener | null>(null);
   const searchMarkerRef = useRef<google.maps.Marker | null>(null);
@@ -264,6 +269,38 @@ export function ZoneMapEditor({
   };
 
   const customerPreviewPolygons = zonesToMapPolygons(publishedZones, { kind: 'include' });
+
+  const syncTownPinMarkers = () => {
+    const map = mapRef.current;
+    if (!map) return;
+    for (const m of townPinMarkersRef.current) m.setMap(null);
+    townPinMarkersRef.current = [];
+    if (foundationScope !== 'parish' || referenceTownPins.length === 0) return;
+    for (const pin of referenceTownPins) {
+      if (!Number.isFinite(pin.lat) || !Number.isFinite(pin.lng)) continue;
+      const marker = new google.maps.Marker({
+        map,
+        position: { lat: pin.lat, lng: pin.lng },
+        title: pin.name,
+        label: {
+          text: pin.name.length > 14 ? `${pin.name.slice(0, 13)}…` : pin.name,
+          color: '#0c4a6e',
+          fontSize: '11px',
+          fontWeight: '600',
+        },
+        icon: {
+          path: google.maps.SymbolPath.CIRCLE,
+          scale: 7,
+          fillColor: '#38bdf8',
+          fillOpacity: 1,
+          strokeColor: '#0c4a6e',
+          strokeWeight: 1.5,
+        },
+        zIndex: 50,
+      });
+      townPinMarkersRef.current.push(marker);
+    }
+  };
 
   const syncCustomerPreviewOverlays = () => {
     const map = mapRef.current;
@@ -364,6 +401,7 @@ export function ZoneMapEditor({
     clearOverlays();
     syncContextOverlays();
     syncCustomerPreviewOverlays();
+    syncTownPinMarkers();
     const bounds = new google.maps.LatLngBounds();
     let hasBounds = false;
     for (const z of zones) {
@@ -671,6 +709,7 @@ export function ZoneMapEditor({
     publishedZones.map((z) => `${z.id ?? ''}:${z.polygon.length}`).join('|'),
     showNeighbors,
     foundationScope,
+    referenceTownPins.map((p) => `${p.id}:${p.lat}:${p.lng}:${p.name}`).join('|'),
   ]);
 
   useEffect(() => {
@@ -853,8 +892,8 @@ export function ZoneMapEditor({
             ? 'Click corners to trace · turn on Freehand for denser edges · drag handles to fine-tune · Undo / Clear as needed'
             : `Drag the handles to reshape. Turn on “Trace” to click or freehand new points along the ${foundationTitle}.`
         : foundationScope === 'parish'
-          ? 'Slate outline = parish foundation (ops only). Gray towns = reference. Customer coverage uses each town’s green border after publish.'
-          : 'Green = this town’s live delivery border. Red = no delivery. Neighbor towns (gray) are reference only.';
+          ? 'Violet outline = parish foundation (ops only). Sky pins = town/city reference. Amber polygons = town delivery borders (if set).'
+          : 'Green = this town’s live delivery border. Red = no delivery. Neighbor towns (amber) are reference only.';
 
   if (loadError) {
     return (
@@ -959,12 +998,16 @@ export function ZoneMapEditor({
           {foundationScope === 'parish' ? (
             <>
               <span className="inline-flex items-center gap-1.5">
-                <span className="w-2.5 h-2.5 rounded-sm bg-slate-400/80 border border-slate-300/50" />
+                <span className="w-2.5 h-2.5 rounded-sm bg-violet-400/90 border border-violet-300/70" />
                 Parish foundation (ops)
               </span>
               <span className="inline-flex items-center gap-1.5">
-                <span className="w-2.5 h-2.5 rounded-sm bg-slate-600/60 border border-slate-500/40" />
-                Towns (context)
+                <span className="w-2.5 h-2.5 rounded-full bg-sky-400 border border-sky-900/60" />
+                Town pins (reference)
+              </span>
+              <span className="inline-flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-sm bg-amber-400/90 border border-amber-300/70" />
+                Town borders (if set)
               </span>
               {customerPreviewPolygons.length > 0 && (
                 <span className="inline-flex items-center gap-1.5">
@@ -985,7 +1028,7 @@ export function ZoneMapEditor({
               </span>
               {contextTownPolygons.length > 0 && (
                 <span className="inline-flex items-center gap-1.5">
-                  <span className="w-2.5 h-2.5 rounded-sm bg-slate-600/50 border border-slate-500/40" />
+                  <span className="w-2.5 h-2.5 rounded-sm bg-amber-400/80 border border-amber-300/60" />
                   Other towns (context)
                 </span>
               )}

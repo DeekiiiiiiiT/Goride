@@ -18,8 +18,6 @@ import {
 } from "./coverageEval.ts";
 import {
   deliveryAreaName,
-  resolveTownOutline,
-  type OutlineVertex,
 } from "./townOutlines.ts";
 import {
   buildReadinessChecks,
@@ -41,53 +39,6 @@ import {
 
 type Vertex = CoverageVertex;
 
-async function resolveParishSlug(
-  db: ReturnType<typeof getDb>,
-  parishId: string | null,
-): Promise<string | null> {
-  if (!parishId) return null;
-  const { data } = await db.from("service_parishes").select("slug").eq("id", parishId).maybeSingle();
-  return data?.slug != null ? String(data.slug) : null;
-}
-
-async function insertAutoDeliveryArea(
-  db: ReturnType<typeof getDb>,
-  market: { id: string; name: string; slug: string; parish_id?: string | null },
-): Promise<Record<string, unknown> | null> {
-  // Prefer promoted outline template when present
-  const { data: tmpl } = await db
-    .from("town_outline_templates")
-    .select("polygon")
-    .eq("slug", String(market.slug))
-    .maybeSingle();
-  let polygon: OutlineVertex[];
-  if (tmpl && Array.isArray(tmpl.polygon) && (tmpl.polygon as OutlineVertex[]).length >= 3) {
-    polygon = tmpl.polygon as OutlineVertex[];
-  } else {
-    const parishSlug = await resolveParishSlug(
-      db,
-      market.parish_id != null ? String(market.parish_id) : null,
-    );
-    polygon = resolveTownOutline({
-      townSlug: String(market.slug),
-      parishSlug,
-    });
-  }
-  const { data, error } = await db.from("service_zone_polygons").insert({
-    market_id: market.id,
-    name: deliveryAreaName(String(market.name)),
-    polygon,
-    kind: "include",
-    priority: 10,
-    source: "auto_outline",
-  }).select().single();
-  if (error) {
-    console.error("auto delivery area insert failed", error.message);
-    return null;
-  }
-  return data as Record<string, unknown>;
-}
-
 function normalizePolygon(input: unknown): Vertex[] | null {
   if (!Array.isArray(input)) return null;
   const vertices: Vertex[] = [];
@@ -101,6 +52,95 @@ function normalizePolygon(input: unknown): Vertex[] | null {
   }
   if (vertices.length < 3) return null;
   return vertices;
+}
+
+type TownPin = { name: string; lat: number; lng: number; properties?: Record<string, unknown> };
+
+function pinNameFromProps(props: Record<string, unknown> | undefined): string {
+  if (!props) return "Unnamed";
+  for (const key of ["city", "name", "town", "locality", "label"]) {
+    const v = props[key];
+    if (typeof v === "string" && v.trim()) return v.trim();
+  }
+  return "Unnamed";
+}
+
+function pointFromCoords(coords: unknown): { lat: number; lng: number } | null {
+  if (!Array.isArray(coords) || coords.length < 2) return null;
+  const lng = Number(coords[0]);
+  const lat = Number(coords[1]);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return null;
+  return { lat, lng };
+}
+
+function normalizeTownPins(input: unknown): TownPin[] | null {
+  if (!input) return null;
+
+  if (Array.isArray(input)) {
+    const pins: TownPin[] = [];
+    for (const raw of input) {
+      if (!raw || typeof raw !== "object") continue;
+      const row = raw as Record<string, unknown>;
+      const lat = Number(row.lat);
+      const lng = Number(row.lng);
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
+      if (lat < -90 || lat > 90 || lng < -180 || lng > 180) continue;
+      const name = typeof row.name === "string" && row.name.trim() ? row.name.trim() : "Unnamed";
+      const properties = row.properties && typeof row.properties === "object"
+        ? (row.properties as Record<string, unknown>)
+        : undefined;
+      pins.push({ name, lat, lng, properties });
+    }
+    return pins.length > 0 ? pins : null;
+  }
+
+  if (typeof input !== "object") return null;
+  const g = input as Record<string, unknown>;
+  const pins: TownPin[] = [];
+
+  const pushPoint = (geometry: Record<string, unknown>, props?: Record<string, unknown>) => {
+    if (geometry.type !== "Point" || !Array.isArray(geometry.coordinates)) return;
+    const pt = pointFromCoords(geometry.coordinates);
+    if (!pt) return;
+    pins.push({ name: pinNameFromProps(props), lat: pt.lat, lng: pt.lng, properties: props });
+  };
+
+  if (g.type === "FeatureCollection" && Array.isArray(g.features)) {
+    for (const f of g.features) {
+      if (!f || typeof f !== "object") continue;
+      const feat = f as Record<string, unknown>;
+      const geom = feat.geometry && typeof feat.geometry === "object"
+        ? (feat.geometry as Record<string, unknown>)
+        : null;
+      const props = feat.properties && typeof feat.properties === "object"
+        ? (feat.properties as Record<string, unknown>)
+        : undefined;
+      if (geom) pushPoint(geom, props);
+    }
+  } else if (g.type === "Feature" && g.geometry && typeof g.geometry === "object") {
+    pushPoint(
+      g.geometry as Record<string, unknown>,
+      g.properties && typeof g.properties === "object"
+        ? (g.properties as Record<string, unknown>)
+        : undefined,
+    );
+  } else if (g.type === "Point" && Array.isArray(g.coordinates)) {
+    const pt = pointFromCoords(g.coordinates);
+    if (pt) {
+      pins.push({
+        name: pinNameFromProps(
+          g.properties && typeof g.properties === "object"
+            ? (g.properties as Record<string, unknown>)
+            : undefined,
+        ),
+        lat: pt.lat,
+        lng: pt.lng,
+      });
+    }
+  }
+
+  return pins.length > 0 ? pins : null;
 }
 
 /** Accept FeatureCollection / Feature / Polygon / MultiPolygon from geojson.io etc. */
@@ -214,20 +254,8 @@ export function registerMarketAdminRoutes(app: Hono) {
     for (const m of markets ?? []) {
       const market = m as Record<string, unknown>;
       const id = String(market.id);
-      let zones = zonesByMarket.get(id) ?? [];
-      if (!hasValidInclude(zones)) {
-        const inserted = await insertAutoDeliveryArea(db, {
-          id,
-          name: String(market.name ?? ""),
-          slug: String(market.slug ?? ""),
-          parish_id: market.parish_id != null ? String(market.parish_id) : null,
-        });
-        if (inserted) {
-          zones = [inserted, ...zones];
-          zonesByMarket.set(id, zones);
-          await markDraftDirty(db, id);
-        }
-      }
+      const zones = zonesByMarket.get(id) ?? [];
+      // Do not auto-seed demo circle fences — towns stay empty until ops draws/imports a border.
       enrichedMarkets.push({ ...market, zones });
     }
 
@@ -393,6 +421,43 @@ export function registerMarketAdminRoutes(app: Hono) {
       }),
     );
     return c.json({ parish: data, promoted_template: promote });
+  });
+
+  /** Import reference town/city Point pins for ops parish map context. */
+  admin.put("/parishes/:parishId/town-pins", async (c) => {
+    const adminUser = c.get("adminUser") as ProductAdminUser;
+    const denied = requireDashWrite(adminUser);
+    if (denied) return denied;
+    const body = await c.req.json().catch(() => ({}));
+    let pins = Array.isArray(body.pins) ? normalizeTownPins(body.pins) : null;
+    if (!pins && body.geojson) pins = normalizeTownPins(body.geojson);
+    if (!pins) {
+      return c.json({ error: "Need pins[] or GeoJSON FeatureCollection of Point features" }, 400);
+    }
+
+    const parishId = c.req.param("parishId");
+    const db = getDb();
+    const now = new Date().toISOString();
+    const { data, error } = await db
+      .from("service_parishes")
+      .update({
+        town_pins: pins,
+        town_pins_updated_at: now,
+      })
+      .eq("id", parishId)
+      .select()
+      .single();
+    if (error) return c.json({ error: error.message }, 500);
+    if (!data) return c.json({ error: "Parish not found" }, 404);
+
+    await writeKvAudit(
+      adminUser,
+      "roam_dash.parish_town_pins_updated",
+      parishId,
+      "",
+      JSON.stringify({ pin_count: pins.length, names: pins.map((p) => p.name).slice(0, 20) }),
+    );
+    return c.json({ parish: data, pin_count: pins.length });
   });
 
   admin.delete("/parishes/:parishId", async (c) => {
@@ -846,16 +911,9 @@ export function registerMarketAdminRoutes(app: Hono) {
     }).select().single();
     if (error) return c.json({ error: error.message }, 500);
 
-    const autoZone = await insertAutoDeliveryArea(db, {
-      id: String(data.id),
-      name: String(data.name),
-      slug: String(data.slug),
-      parish_id: parishId,
-    });
-    const zones = autoZone ? [autoZone] : [];
-
+    // Town starts with no delivery border — ops must draw or import one before publish.
     await writeKvAudit(adminUser, "roam_dash.market_created", String(data.id), "", `Town ${name} (${slug})`);
-    return c.json({ market: { ...data, zones } }, 201);
+    return c.json({ market: { ...data, zones: [] } }, 201);
   });
 
   admin.patch("/:id", async (c) => {
@@ -1107,34 +1165,22 @@ export function registerMarketAdminRoutes(app: Hono) {
     const targetKind = normalizeKind((target as Record<string, unknown>).kind);
     const others = (existing ?? []).filter((z) => String((z as Record<string, unknown>).id) !== zoneId);
     if (targetKind === "include" && !hasValidInclude(others)) {
-      const { data: market } = await db
-        .from("service_markets")
-        .select("id, name, slug, parish_id")
-        .eq("id", marketId)
-        .maybeSingle();
-      if (!market) return c.json({ error: "Market not found" }, 404);
-
+      // Allow deleting the last include — do not re-seed a demo circle fence.
       const { error: delErr } = await db.from("service_zone_polygons")
         .delete()
         .eq("id", zoneId)
         .eq("market_id", marketId);
       if (delErr) return c.json({ error: delErr.message }, 500);
 
-      const restored = await insertAutoDeliveryArea(db, {
-        id: String(market.id),
-        name: String(market.name),
-        slug: String(market.slug),
-        parish_id: market.parish_id != null ? String(market.parish_id) : null,
-      });
       await markDraftDirty(db, marketId);
       await writeKvAudit(
         adminUser,
         "roam_dash.zone_deleted",
         zoneId,
         "",
-        JSON.stringify({ reset: true, before: polygonSummary((target as Record<string, unknown>).polygon) }),
+        JSON.stringify({ reset: false, before: polygonSummary((target as Record<string, unknown>).polygon) }),
       );
-      return c.json({ ok: true, restored_zone: restored });
+      return c.json({ ok: true });
     }
 
     const { error } = await db.from("service_zone_polygons")

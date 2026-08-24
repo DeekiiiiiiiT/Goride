@@ -242,10 +242,12 @@ export async function writeKvAudit(
   targetEmail: string,
   details: string,
 ) {
-  const { writeAdminAudit } = await import("./adminAuditWriter.ts");
-  await writeAdminAudit({
+  // Best-effort: never fail the primary mutation because audit logging failed.
+  // targetId is often a parish/market/merchant id — not an auth user — so do not
+  // set target_user_id (FK/409 on permission_audit_log broke parish outline saves).
+  const { writeAdminAuditBestEffort } = await import("./adminAuditWriter.ts");
+  await writeAdminAuditBestEffort({
     actorUserId: admin.id,
-    targetUserId: targetId || undefined,
     action,
     reason: details,
     metadata: { targetEmail, details },
