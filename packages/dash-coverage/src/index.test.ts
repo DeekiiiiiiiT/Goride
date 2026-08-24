@@ -3,11 +3,14 @@ import {
   createZoneCache,
   DELIVERY_ZONES_CACHE_KEY,
   DELIVERY_ZONES_CACHE_TTL_MS,
+  draftZonesDifferFromPublished,
   evaluateCoverage,
   isInsideParishFoundation,
+  normalizeDraftZonesFromAdmin,
   parseAllZonesPayload,
   pointInPolygon,
   sanitizeVertices,
+  zonesToMapPolygons,
   type ActiveCoverageZone,
   type CoverageZone,
 } from './index';
@@ -124,5 +127,50 @@ describe('createZoneCache', () => {
 describe('isInsideParishFoundation', () => {
   it('allows any point when foundation missing', () => {
     expect(isInsideParishFoundation(18.0, -76.8, null)).toBe(true);
+  });
+});
+
+describe('normalizeDraftZonesFromAdmin', () => {
+  it('maps draft rows to ActiveCoverageZone', () => {
+    const zones = normalizeDraftZonesFromAdmin(
+      [{ id: 'z1', name: 'ST', kind: 'include', polygon: ST_INCLUDE.polygon, market_id: ST_MARKET }],
+      ST_MARKET,
+    );
+    expect(zones).toHaveLength(1);
+    expect(zones[0].kind).toBe('include');
+    expect(zones[0].market_id).toBe(ST_MARKET);
+  });
+
+  it('skips invalid polygons', () => {
+    expect(normalizeDraftZonesFromAdmin([{ id: 'z1', kind: 'include', polygon: [{ lat: 1, lng: 2 }] }])).toHaveLength(0);
+  });
+});
+
+describe('zonesToMapPolygons', () => {
+  it('filters by kind and market', () => {
+    const zones: ActiveCoverageZone[] = [
+      { id: 'a', kind: 'include', polygon: ST_INCLUDE.polygon, market_id: ST_MARKET },
+      { id: 'b', kind: 'exclude', polygon: CUTOUT.polygon, market_id: ST_MARKET },
+    ];
+    expect(zonesToMapPolygons(zones, { kind: 'include', marketId: ST_MARKET })).toHaveLength(1);
+  });
+});
+
+describe('draftZonesDifferFromPublished', () => {
+  it('detects polygon mismatch', () => {
+    const draft: ActiveCoverageZone[] = [
+      { kind: 'include', polygon: ST_INCLUDE.polygon, market_id: ST_MARKET },
+    ];
+    const published: ActiveCoverageZone[] = [
+      { kind: 'include', polygon: [{ lat: 18.1, lng: -76.95 }, { lat: 18.1, lng: -76.94 }, { lat: 18.11, lng: -76.94 }], market_id: ST_MARKET },
+    ];
+    expect(draftZonesDifferFromPublished(draft, published, ST_MARKET)).toBe(true);
+  });
+
+  it('returns false when includes match', () => {
+    const zones: ActiveCoverageZone[] = [
+      { kind: 'include', polygon: ST_INCLUDE.polygon, market_id: ST_MARKET },
+    ];
+    expect(draftZonesDifferFromPublished(zones, zones, ST_MARKET)).toBe(false);
   });
 });

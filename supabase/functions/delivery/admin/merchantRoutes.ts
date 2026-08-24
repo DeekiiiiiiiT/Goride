@@ -662,11 +662,15 @@ export function registerMerchantAdminRoutes(app: Hono) {
         : String(body.market_id);
       // Ops explicit town assignment locks against publish recompute
       if (!Object.prototype.hasOwnProperty.call(body, "market_id_locked")) {
-        updates.market_id_locked = updates.market_id != null;
+        const hasTown = updates.market_id != null;
+        updates.market_id_locked = hasTown;
+        updates.market_id_lock_source = hasTown ? "manual" : null;
       }
     }
     if (Object.prototype.hasOwnProperty.call(body, "market_id_locked")) {
-      updates.market_id_locked = Boolean(body.market_id_locked);
+      const locked = Boolean(body.market_id_locked);
+      updates.market_id_locked = locked;
+      updates.market_id_lock_source = locked ? "manual" : null;
     }
 
     if (body.is_accepting_orders != null && Boolean(body.is_accepting_orders)) {
@@ -721,7 +725,7 @@ export function registerMerchantAdminRoutes(app: Hono) {
     const sb = getDb();
     const { data: merchant, error: loadErr } = await sb
       .from("merchants")
-      .select("id, lat, lng, market_id, market_id_locked, email")
+      .select("id, lat, lng, market_id, market_id_locked, market_id_lock_source, email")
       .eq("id", id)
       .maybeSingle();
     if (loadErr) return c.json({ error: loadErr.message }, 500);
@@ -738,9 +742,13 @@ export function registerMerchantAdminRoutes(app: Hono) {
       ? String((merchant as Record<string, unknown>).market_id)
       : null;
 
-    const wasLocked = (merchant as Record<string, unknown>).market_id_locked === true;
+    const wasLocked = (merchant as Record<string, unknown>).market_id_locked === true ||
+      (merchant as Record<string, unknown>).market_id_lock_source != null;
     const updates: Record<string, unknown> = { market_id: suggested };
-    if (body.unlock_after === true) updates.market_id_locked = false;
+    if (body.unlock_after === true) {
+      updates.market_id_locked = false;
+      updates.market_id_lock_source = null;
+    }
 
     const { data: updated, error: upErr } = await sb
       .from("merchants")

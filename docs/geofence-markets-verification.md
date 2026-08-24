@@ -35,15 +35,38 @@ Run after deploying migration `20260827120000_parish_coverage_mode.sql` and edge
 
 ## Locked merchant recompute
 
+| `market_id_lock_source` | Publish recompute | Partner pin move | Force + unlock_after |
+|-------------------------|-------------------|------------------|----------------------|
+| `null` (Auto) | Updates town | Updates town | N/A |
+| `manual` | Skipped | Skipped | Clears lock |
+| `pin` | Skipped | Updates town | Clears lock |
+
 | Case | Expect |
 |------|--------|
-| Publish with **Include locked merchants** unchecked | Locked merchants unchanged |
-| Publish with checkbox checked | Locked merchants updated; lock stays |
-| Publish with **Include locked** + **Also unlock for auto updates** | Locked merchants updated; `market_id_locked` cleared |
-| Merchant detail → **Reassign from store pin** (locked) | Town updates from pin; lock stays |
+| Publish with **Include locked merchants** unchecked | Manual + pin locked merchants unchanged |
+| Publish with checkbox checked | Locked merchants updated; lock source stays |
+| Publish with **Include locked** + **Also unlock for auto updates** | Locked merchants updated; `market_id_lock_source` cleared |
+| Merchant detail badge | **Auto** / **Locked (manual)** / **Locked (pin)** |
+| Merchant detail → **Reassign from store pin** (locked) | Town updates from pin; lock source stays |
 | Reassign with **Unlock for auto updates after reassignment** | Town updates; lock cleared |
 | `POST /admin/markets/backfill-merchant-markets?include_locked=true&unlock_after=true` | Same as publish unlock flow |
 | `POST /admin/merchants/:id/recompute-market` body `{ unlock_after: true }` | Same as reassign unlock |
+
+## Admin map — unified zone loader
+
+| Case | Expect |
+|------|--------|
+| Town map legend | **Draft (editing)** green vs **Live (customers)** cyan dashed |
+| **Show customer coverage** on + draft edits unpublished | **Draft differs from live** badge |
+| Draft vs published workflow | Still separate — publish required for customer impact |
+
+## Admin map — customer coverage preview
+
+| Case | Expect |
+|------|--------|
+| Town map → **Show customer coverage** off (default) | Draft zones only (green) |
+| Toggle **Show customer coverage** on | Loads published zones via shared `@roam/dash-coverage` loader + `/geo/delivery-zones` |
+| Parish mode `parish_boundary` + preview on | Synthetic parish zones included in overlay |
 
 ## Parish mode suggestion (publish / restore)
 
@@ -60,14 +83,6 @@ After a successful publish or restore-with-republish, the API may return `parish
 | Click **Apply** on toast | `updateParish` sets `coverage_mode` to suggested value |
 | Publish body `apply_parish_mode` matching suggestion | Server applies mode + audit `roam_dash.parish_mode_applied` |
 | Publish body `apply_parish_mode` not matching suggestion | `400` with clear error |
-
-## Admin map — customer coverage preview
-
-| Case | Expect |
-|------|--------|
-| Town map → **Show customer coverage** off (default) | Draft zones only (green) |
-| Toggle **Show customer coverage** on | Loads published zones via `/geo/delivery-zones` (same path as customer app); cyan dashed overlay |
-| Parish mode `parish_boundary` + preview on | Synthetic parish zones included in overlay |
 
 ## Admin check-point parity
 

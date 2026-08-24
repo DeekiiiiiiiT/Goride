@@ -103,3 +103,15 @@ export {
 } from './parishCoverage.ts';
 export { sanitizeVertices } from './sanitizeVertices.ts';
 export { createMemoryZoneCache } from './memoryZoneCache.ts';
+export {
+  normalizeDraftZonesFromAdmin,
+  zonesToMapPolygons,
+  draftZonesDifferFromPublished,
+  type AdminDraftZoneInput,
+  type ZonesToMapPolygonsFilter,
+} from './adminZones.ts';
+export {
+  createAdminCoverageLayers,
+  ADMIN_PUBLISHED_CACHE_KEY,
+  type AdminCoverageLayers,
+} from './adminCoverageLayers.ts';

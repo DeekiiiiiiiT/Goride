@@ -355,6 +355,7 @@ Deno.test("recomputeMerchantMarkets — unlockAfter clears lock on forced update
                 lng: -76.955,
                 market_id: "old-town",
                 market_id_locked: true,
+                market_id_lock_source: 'manual',
               }],
             });
           },
@@ -441,4 +442,101 @@ Deno.test("recomputeMerchantMarkets — unlockAfter clears lock on forced update
   });
   assertEquals(result.unlocked, 1);
   assertEquals(updates[0]?.market_id_locked, false);
+  assertEquals(updates[0]?.market_id_lock_source, null);
+});
+
+Deno.test("recomputeMerchantMarkets — pin lock skipped unless includeLocked", async () => {
+  const updates: Array<Record<string, unknown>> = [];
+  const sb = {
+    from(table: string) {
+      if (table === "merchants") {
+        return {
+          select() {
+            return Promise.resolve({
+              data: [{
+                id: "m-pin",
+                lat: 18.015,
+                lng: -76.955,
+                market_id: "old-town",
+                market_id_locked: true,
+                market_id_lock_source: "pin",
+              }],
+            });
+          },
+          update(payload: Record<string, unknown>) {
+            updates.push(payload);
+            return {
+              eq() {
+                return Promise.resolve({ error: null });
+              },
+            };
+          },
+        };
+      }
+      if (table === "service_markets") {
+        return {
+          select(_cols?: string) {
+            return {
+              eq(col: string, val: unknown) {
+                if (col === "is_active") {
+                  return Promise.resolve({
+                    data: [{
+                      id: ST_MARKET,
+                      slug: "spanish-town",
+                      is_active: true,
+                      published_version_id: null,
+                      parish_id: null,
+                    }],
+                  });
+                }
+                return { maybeSingle: () => Promise.resolve({ data: null }) };
+              },
+              then(resolve: (v: unknown) => unknown) {
+                return Promise.resolve({
+                  data: [{
+                    id: ST_MARKET,
+                    slug: "spanish-town",
+                    parish_id: null,
+                    published_version_id: null,
+                  }],
+                }).then(resolve);
+              },
+            };
+          },
+        };
+      }
+      if (table === "service_parishes") {
+        return { select: () => Promise.resolve({ data: [] }) };
+      }
+      if (table === "service_zone_polygons") {
+        return {
+          select() {
+            return {
+              eq(_col: string, marketId: string) {
+                return {
+                  order() {
+                    return Promise.resolve({
+                      data: [{
+                        id: "z-st",
+                        name: "Spanish Town",
+                        market_id: marketId,
+                        kind: "include",
+                        polygon: ST_INCLUDE.polygon,
+                      }],
+                    });
+                  },
+                };
+              },
+            };
+          },
+        };
+      }
+      throw new Error(`unexpected ${table}`);
+    },
+  };
+
+  const { recomputeMerchantMarkets } = await import("./coverageZones.ts");
+  const result = await recomputeMerchantMarkets(sb, { includeLocked: false });
+  assertEquals(result.skippedLocked, 1);
+  assertEquals(updates.length, 0);
 });

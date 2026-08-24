@@ -4,7 +4,7 @@
 
 import { dashAdminFetch } from './fetch';
 import { API_ENDPOINTS, supabaseAnonFunctionHeaders } from '@roam/api-client';
-import { parseAllZonesPayload, type ActiveCoverageZone } from '@roam/dash-coverage';
+import { parseAllZonesPayload, normalizeDraftZonesFromAdmin, type ActiveCoverageZone } from '@roam/dash-coverage';
 import type {
   MerchantOperationalStatus,
   MerchantOnboardingStatus,
@@ -72,6 +72,8 @@ export interface DashMerchant {
   market_id?: string | null;
   /** Ops lock — publish recompute will not overwrite market_id */
   market_id_locked?: boolean;
+  /** manual = ops locked; pin = follows store pin but resists publish recompute; null = auto */
+  market_id_lock_source?: 'manual' | 'pin' | null;
 }
 
 export interface MerchantHours {
@@ -908,6 +910,26 @@ export async function fetchCustomerDeliveryZones(): Promise<ActiveCoverageZone[]
   }
   const body = (await res.json()) as unknown;
   return parseAllZonesPayload(body);
+}
+
+/** Normalize draft zones from admin market rows via shared @roam/dash-coverage parser. */
+export function parseDraftZonesFromMarkets(
+  markets: Array<{ id: string; zones?: DashZoneRow[] }>,
+  marketId?: string,
+): ActiveCoverageZone[] {
+  const rows = marketId
+    ? (markets.find((m) => m.id === marketId)?.zones ?? [])
+    : markets.flatMap((m) => m.zones ?? []);
+  return normalizeDraftZonesFromAdmin(
+    rows.map((z) => ({
+      id: z.id,
+      market_id: z.market_id,
+      name: z.name,
+      kind: z.kind,
+      polygon: z.polygon,
+    })),
+    marketId,
+  );
 }
 
 export function getMarketReadiness(accessToken: string, marketId: string) {

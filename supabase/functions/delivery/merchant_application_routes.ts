@@ -494,9 +494,21 @@ export function registerMerchantApplicationRoutes(app: Hono) {
     const pinMoved = (update.lat != null || update.lng != null) &&
       Number.isFinite(nextLat) &&
       Number.isFinite(nextLng);
-    if (pinMoved && current.market_id_locked !== true) {
-      const suggested = await suggestMarketIdForMerchantPin(getServiceSupabase(), nextLat, nextLng);
-      update.market_id = suggested;
+    if (pinMoved) {
+      const lockSource = current.market_id_lock_source;
+      const manualLocked = lockSource === "manual" ||
+        (lockSource == null && current.market_id_locked === true);
+      if (!manualLocked) {
+        const suggested = await suggestMarketIdForMerchantPin(getServiceSupabase(), nextLat, nextLng);
+        update.market_id = suggested;
+        if (lockSource === "pin") {
+          update.market_id_lock_source = "pin";
+          update.market_id_locked = true;
+        } else {
+          update.market_id_lock_source = null;
+          update.market_id_locked = false;
+        }
+      }
     }
 
     const { data, error } = await supabase

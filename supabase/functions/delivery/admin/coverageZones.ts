@@ -16,6 +16,20 @@ import { normalizeKind } from "./coveragePlatform.ts";
 // deno-lint-ignore no-explicit-any
 type ServiceSb = { from: (t: string) => any };
 
+export type MerchantMarketLockSource = "manual" | "pin" | null;
+
+export function resolveMarketLockSource(row: Record<string, unknown>): MerchantMarketLockSource {
+  const src = row.market_id_lock_source;
+  if (src === "manual" || src === "pin") return src;
+  if (row.market_id_locked === true) return "manual";
+  return null;
+}
+
+export function isMerchantMarketLockedForRecompute(row: Record<string, unknown>): boolean {
+  const src = resolveMarketLockSource(row);
+  return src === "manual" || src === "pin";
+}
+
 export type ParishContext = {
   id: string;
   name: string;
@@ -425,12 +439,13 @@ export async function recomputeMerchantMarkets(
 
   const { data: merchants, error } = await sb
     .from("merchants")
-    .select("id, lat, lng, market_id, market_id_locked");
+    .select("id, lat, lng, market_id, market_id_locked, market_id_lock_source");
   if (error || !merchants?.length) return result;
 
   for (const row of merchants) {
     const m = row as Record<string, unknown>;
-    const wasLocked = m.market_id_locked === true;
+    const lockSource = resolveMarketLockSource(m);
+    const wasLocked = lockSource != null;
     if (wasLocked && !includeLocked) {
       result.skippedLocked += 1;
       continue;
@@ -449,14 +464,16 @@ export async function recomputeMerchantMarkets(
       continue;
     }
 
-    let updateQuery = sb.from("merchants").update({
-      market_id: suggested,
-      ...(unlockAfter && wasLocked ? { market_id_locked: false } : {}),
-    }).eq("id", String(m.id));
-    if (!includeLocked) {
-      updateQuery = updateQuery.eq("market_id_locked", false);
+    const updatePayload: Record<string, unknown> = { market_id: suggested };
+    if (unlockAfter && wasLocked) {
+      updatePayload.market_id_locked = false;
+      updatePayload.market_id_lock_source = null;
     }
-    const { error: upErr } = await updateQuery;
+
+    const { error: upErr } = await sb
+      .from("merchants")
+      .update(updatePayload)
+      .eq("id", String(m.id));
     if (upErr) continue;
 
     if (wasLocked) result.updatedLocked += 1;

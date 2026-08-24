@@ -19,6 +19,7 @@ import {
 import { getPlaceDetails, loadPartnerMapsApi, searchAddresses } from '@roam/location';
 import type { AddressSuggestion } from '@roam/location';
 import type { CoverageCheckResult, DashZoneKind, DashZoneVertex } from '@roam/dash-admin-client';
+import { zonesToMapPolygons, type ActiveCoverageZone } from '@roam/dash-coverage';
 import {
   circleToPolygon,
   pointInPolygon,
@@ -60,8 +61,8 @@ export type ZoneMapEditorProps = {
   townIncludePolygons: GeoVertex[][];
   /** Neighbor / parish sibling towns — reference only (never editable). */
   contextTownPolygons?: ZoneMapContextTown[];
-  /** Published customer-facing include polygons (dashed preview). */
-  customerPreviewPolygons?: GeoVertex[][];
+  /** Published customer-facing zones (dashed live preview). */
+  publishedZones?: ActiveCoverageZone[];
   /** Hide context layer toggle (parish map always shows context). */
   showNeighborToggle?: boolean;
   onSave: (payload: {
@@ -177,7 +178,7 @@ export function ZoneMapEditor({
   editingZoneId = null,
   townIncludePolygons,
   contextTownPolygons = [],
-  customerPreviewPolygons = [],
+  publishedZones = [],
   showNeighborToggle = true,
   onSave,
   onCancel,
@@ -261,6 +262,8 @@ export function ZoneMapEditor({
     for (const p of customerPreviewPolysRef.current) p.setMap(null);
     customerPreviewPolysRef.current = [];
   };
+
+  const customerPreviewPolygons = zonesToMapPolygons(publishedZones, { kind: 'include' });
 
   const syncCustomerPreviewOverlays = () => {
     const map = mapRef.current;
@@ -665,6 +668,7 @@ export function ZoneMapEditor({
     zones.map((z) => `${z.id}:${z.polygon.length}`).join('|'),
     contextTownPolygons.map((t) => `${t.id}:${t.polygon.length}:${t.isActive}`).join('|'),
     customerPreviewPolygons.map((p, i) => `${i}:${p.length}`).join('|'),
+    publishedZones.map((z) => `${z.id ?? ''}:${z.polygon.length}`).join('|'),
     showNeighbors,
     foundationScope,
   ]);
@@ -965,7 +969,7 @@ export function ZoneMapEditor({
               {customerPreviewPolygons.length > 0 && (
                 <span className="inline-flex items-center gap-1.5">
                   <span className="w-2.5 h-2.5 rounded-sm bg-cyan-400/50 border border-cyan-300/60 border-dashed" />
-                  Customer coverage (published)
+                  Live (customers)
                 </span>
               )}
             </>
@@ -973,7 +977,7 @@ export function ZoneMapEditor({
             <>
               <span className="inline-flex items-center gap-1.5">
                 <span className="w-2.5 h-2.5 rounded-sm bg-emerald-500/70 border border-emerald-400/50" />
-                Active delivery border
+                Draft (editing)
               </span>
               <span className="inline-flex items-center gap-1.5">
                 <span className="w-2.5 h-2.5 rounded-sm bg-red-500/70 border border-red-400/50" />
@@ -988,7 +992,7 @@ export function ZoneMapEditor({
               {customerPreviewPolygons.length > 0 && (
                 <span className="inline-flex items-center gap-1.5">
                   <span className="w-2.5 h-2.5 rounded-sm bg-cyan-400/50 border border-cyan-300/60 border-dashed" />
-                  Customer coverage (published)
+                  Live (customers)
                 </span>
               )}
             </>

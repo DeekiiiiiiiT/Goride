@@ -1,5 +1,5 @@
 /**
- * Overlay to upload or paste GeoJSON / CSV for the town foundation border.
+ * Overlay to upload or paste GeoJSON / CSV for a town or parish foundation border.
  */
 import React, { useEffect, useRef, useState } from 'react';
 import { FileUp, Upload, X } from 'lucide-react';
@@ -8,7 +8,10 @@ import { toast } from 'sonner';
 type ImportTownBorderOverlayProps = {
   open: boolean;
   kind: 'geojson' | 'csv';
+  /** Place name shown in copy (town or parish). */
   townName: string;
+  /** Defaults to town — parish uses the same upload UI with different labels. */
+  scope?: 'town' | 'parish';
   text: string;
   promoteTemplate: boolean;
   saving?: boolean;
@@ -22,6 +25,7 @@ export function ImportTownBorderOverlay({
   open,
   kind,
   townName,
+  scope = 'town',
   text,
   promoteTemplate,
   saving,
@@ -32,6 +36,7 @@ export function ImportTownBorderOverlay({
 }: ImportTownBorderOverlayProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [fileName, setFileName] = useState<string | null>(null);
+  const noun = scope === 'parish' ? 'parish' : 'town';
 
   useEffect(() => {
     if (!open) setFileName(null);
@@ -69,17 +74,17 @@ export function ImportTownBorderOverlay({
       <div
         role="dialog"
         aria-modal="true"
-        aria-labelledby="import-town-border-title"
+        aria-labelledby="import-border-title"
         className="relative w-full max-w-xl max-h-[88vh] overflow-hidden rounded-xl border border-slate-700 bg-slate-900 shadow-2xl flex flex-col"
       >
         <div className="flex items-start justify-between gap-3 border-b border-slate-800 px-4 py-3">
           <div>
-            <h2 id="import-town-border-title" className="text-base font-semibold text-white">
-              Import town border · {kind === 'csv' ? 'CSV' : 'GeoJSON'}
+            <h2 id="import-border-title" className="text-base font-semibold text-white">
+              Import {noun} border · {kind === 'csv' ? 'CSV' : 'GeoJSON'}
             </h2>
             <p className="text-xs text-slate-400 mt-0.5">
-              Upload a file or paste the outline for {townName}. This replaces the green foundation
-              border.
+              Upload a file or paste the outline for {townName}. This replaces the{' '}
+              {scope === 'parish' ? 'parish foundation' : 'green foundation'} border.
             </p>
           </div>
           <button
@@ -137,7 +142,7 @@ export function ImportTownBorderOverlay({
               checked={promoteTemplate}
               onChange={(e) => onPromoteChange(e.target.checked)}
             />
-            Save as default outline template for this town slug
+            Save as default outline template for this {noun}
           </label>
         </div>
 
@@ -156,7 +161,7 @@ export function ImportTownBorderOverlay({
             className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-amber-500 text-slate-950 text-xs font-semibold disabled:opacity-50"
           >
             <Upload className="w-3.5 h-3.5" />
-            {saving ? 'Importing…' : 'Import as town border'}
+            {saving ? 'Importing…' : `Import as ${noun} border`}
           </button>
         </div>
       </div>

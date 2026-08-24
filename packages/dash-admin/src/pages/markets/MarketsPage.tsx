@@ -14,6 +14,7 @@ import {
   Trash2,
   Scissors,
   Download,
+  FileUp,
   X,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -49,7 +50,7 @@ import {
   type ParishModeSuggestion,
   type ReadinessCheck,
 } from '@roam/dash-admin-client';
-import { sanitizeVertices } from '@roam/dash-coverage';
+import { sanitizeVertices, createAdminCoverageLayers, type ActiveCoverageZone } from '@roam/dash-coverage';
 import type { AdminOutletContext } from '../../DashAdminPortal';
 import { ZoneMapEditor, type ZoneMapUiMode } from './ZoneMapEditor';
 import { detectCoverageConflicts } from './coverageGeo';
@@ -64,6 +65,10 @@ import {
   slugFilename,
   zonesToCsv,
 } from './coverageIo';
+
+const adminCoverageLayers = createAdminCoverageLayers({
+  fetchPublishedZones: fetchCustomerDeliveryZones,
+});
 
 function normalizeZone(z: DashZoneRow): DashZoneRow {
   return {
@@ -371,23 +376,26 @@ function TownMapOverlay({
   const [showManageZones, setShowManageZones] = useState(false);
   const [showIoMenu, setShowIoMenu] = useState(false);
   const [showCustomerCoverage, setShowCustomerCoverage] = useState(false);
-  const [customerPreviewPolygons, setCustomerPreviewPolygons] = useState<DashZoneVertex[][]>([]);
+  const [publishedZones, setPublishedZones] = useState<ActiveCoverageZone[]>([]);
+  const [draftDiffersFromLive, setDraftDiffersFromLive] = useState(false);
   /** Near-fullscreen map workspace for tracing borders. */
   const [mapExpanded, setMapExpanded] = useState(false);
   const ioMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!showCustomerCoverage) {
-      setCustomerPreviewPolygons([]);
+      setPublishedZones([]);
+      setDraftDiffersFromLive(false);
       return;
     }
     let cancelled = false;
     void (async () => {
       try {
-        const zones = await fetchCustomerDeliveryZones();
+        const live = await adminCoverageLayers.loadPublished();
         if (cancelled) return;
-        setCustomerPreviewPolygons(
-          zones.filter((z) => z.kind === 'include' && z.polygon.length >= 3).map((z) => z.polygon),
+        setPublishedZones(live);
+        setDraftDiffersFromLive(
+          adminCoverageLayers.draftDiffersFromPublished(zones, town.id),
         );
       } catch (e) {
         if (!cancelled) {
@@ -399,7 +407,7 @@ function TownMapOverlay({
     return () => {
       cancelled = true;
     };
-  }, [showCustomerCoverage]);
+  }, [showCustomerCoverage, town.id, zones]);
 
   const editingThis =
     editor &&
@@ -694,6 +702,9 @@ function TownMapOverlay({
                 />
                 Show customer coverage
               </label>
+              {showCustomerCoverage && draftDiffersFromLive && (
+                <span className="text-[11px] text-amber-300 mr-1">Draft differs from live</span>
+              )}
               <button
                 type="button"
                 disabled={saving || !town.draft_dirty}
@@ -815,7 +826,7 @@ function TownMapOverlay({
               initialPolygon={initialPolygon}
               editingZoneId={editingZoneId}
               townIncludePolygons={includeZones(town).map((z) => z.polygon)}
-              customerPreviewPolygons={showCustomerCoverage ? customerPreviewPolygons : []}
+              publishedZones={showCustomerCoverage ? publishedZones : []}
               saving={saving}
               autoOpenCoordinates={autoOpenCoordinates}
               mapHeight={mapHeight}
@@ -948,8 +959,10 @@ type ParishMapOverlayProps = {
   editing: boolean;
   onClose: () => void;
   onSetEditing: (v: boolean) => void;
-  onSaveOutline: (polygon: DashZoneVertex[]) => void;
+  onSaveOutline: (polygon: DashZoneVertex[], promoteTemplate?: boolean) => void;
   onRequestEditFoundation: () => void;
+  /** Confirm foundation edit; returns true if import may proceed. */
+  onRequestImportGeoJson: () => Promise<boolean>;
 };
 
 function ParishMapOverlay({
@@ -961,6 +974,7 @@ function ParishMapOverlay({
   onSetEditing,
   onSaveOutline,
   onRequestEditFoundation,
+  onRequestImportGeoJson,
 }: ParishMapOverlayProps) {
   const foundation = parishFoundationVerts(parish);
   const contextTownPolygons =
@@ -982,6 +996,10 @@ function ParishMapOverlay({
     },
   ];
 
+  const [showImport, setShowImport] = useState(false);
+  const [importText, setImportText] = useState('');
+  const [promoteTemplate, setPromoteTemplate] = useState(true);
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
@@ -989,6 +1007,14 @@ function ParishMapOverlay({
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
+
+  const openImport = () => {
+    void (async () => {
+      const ok = await onRequestImportGeoJson();
+      if (!ok) return;
+      setShowImport(true);
+    })();
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6">
@@ -1015,13 +1041,33 @@ function ParishMapOverlay({
             </p>
           </div>
           {canWrite && !editing && (
+            <>
+              <button
+                type="button"
+                onClick={openImport}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-amber-500/40 text-xs text-amber-200"
+              >
+                <FileUp className="w-3.5 h-3.5" />
+                Import GeoJSON…
+              </button>
+              <button
+                type="button"
+                onClick={onRequestEditFoundation}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-sky-500/40 text-xs text-sky-300"
+              >
+                <Pencil className="w-3.5 h-3.5" />
+                Edit parish border…
+              </button>
+            </>
+          )}
+          {canWrite && editing && (
             <button
               type="button"
-              onClick={onRequestEditFoundation}
-              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-sky-500/40 text-xs text-sky-300"
+              onClick={() => setShowImport(true)}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-amber-500/40 text-xs text-amber-200"
             >
-              <Pencil className="w-3.5 h-3.5" />
-              Edit parish border…
+              <FileUp className="w-3.5 h-3.5" />
+              Import GeoJSON…
             </button>
           )}
           <button
@@ -1065,6 +1111,43 @@ function ParishMapOverlay({
           />
         </div>
       </div>
+
+      <ImportTownBorderOverlay
+        open={showImport}
+        kind="geojson"
+        scope="parish"
+        townName={parish.name}
+        text={importText}
+        promoteTemplate={promoteTemplate}
+        saving={saving}
+        onTextChange={setImportText}
+        onPromoteChange={setPromoteTemplate}
+        onClose={() => {
+          setShowImport(false);
+          setImportText('');
+        }}
+        onImport={() => {
+          const text = importText.trim();
+          if (!text) return;
+          let parsed: unknown;
+          try {
+            parsed = JSON.parse(text);
+          } catch {
+            toast.error('Invalid JSON');
+            return;
+          }
+          const ring = Array.isArray(parsed)
+            ? (parsed as DashZoneVertex[])
+            : polygonFromGeoJson(parsed);
+          if (!ring || ring.length < 3) {
+            toast.error('Need a Polygon (or FeatureCollection with one)');
+            return;
+          }
+          setShowImport(false);
+          setImportText('');
+          onSaveOutline(sanitizeVertices(ring) as DashZoneVertex[], promoteTemplate);
+        }}
+      />
     </div>
   );
 }
@@ -1153,14 +1236,14 @@ export function MarketsPage() {
     setParishEditing(false);
   };
 
-  const saveParishOutline = async (polygon: DashZoneVertex[]) => {
+  const saveParishOutline = async (polygon: DashZoneVertex[], promoteTemplate = true) => {
     if (!mapParishId || !canWrite) return;
     setSaving(true);
     try {
       const res = await updateParishOutline(session.access_token, mapParishId, {
         polygon,
         confirm_foundation_edit: true,
-        promote_template: true,
+        promote_template: promoteTemplate,
       });
       const name = res.parish?.name ?? mapParish?.name ?? 'this parish';
       toast.success(
@@ -1799,7 +1882,7 @@ export function MarketsPage() {
           editing={parishEditing}
           onClose={closeParishMap}
           onSetEditing={setParishEditing}
-          onSaveOutline={(polygon) => void saveParishOutline(polygon)}
+          onSaveOutline={(polygon, promote) => void saveParishOutline(polygon, promote)}
           onRequestEditFoundation={() => {
             void (async () => {
               const ok = await confirm({
@@ -1811,6 +1894,15 @@ export function MarketsPage() {
               if (!ok) return;
               setParishEditing(true);
             })();
+          }}
+          onRequestImportGeoJson={async () => {
+            const ok = await confirm({
+              title: 'Import parish foundation border?',
+              description:
+                'This replaces the parish base outline with your GeoJSON file. Town delivery borders are unchanged.',
+              confirmLabel: 'Import GeoJSON',
+            });
+            return ok;
           }}
         />
       )}

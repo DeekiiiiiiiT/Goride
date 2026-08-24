@@ -34,6 +34,33 @@ import {
 } from '@roam/dash-admin-client';
 import type { AdminOutletContext } from '../../DashAdminPortal';
 
+function marketLockDisplay(merchant: DashMerchant): {
+  label: string;
+  locked: boolean;
+  hint: string;
+} {
+  const src = merchant.market_id_lock_source;
+  if (src === 'manual' || (src == null && merchant.market_id_locked)) {
+    return {
+      label: 'Locked (manual)',
+      locked: true,
+      hint: "Won't change until you unlock.",
+    };
+  }
+  if (src === 'pin') {
+    return {
+      label: 'Locked (pin)',
+      locked: true,
+      hint: "Follows store pin; publish recompute won't override.",
+    };
+  }
+  return {
+    label: 'Auto',
+    locked: false,
+    hint: 'Town updates from publish recompute and store pin.',
+  };
+}
+
 const CHECKLIST_KEYS = [
   { key: 'id_verified', label: 'ID verified' },
   { key: 'business_proof_verified', label: 'Business proof verified' },
@@ -371,7 +398,7 @@ export function MerchantDetailPage() {
     setMarketSaving(true);
     try {
       await patchMerchantOps(token, merchant.id, { market_id_locked: false });
-      toast.success('Town unlocked — publish can auto-update from store pin');
+      toast.success('Town unlocked — publish and pin can auto-update again');
       void load();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed to unlock town');
@@ -713,14 +740,16 @@ export function MerchantDetailPage() {
           </span>
           <span
             className={`text-xs px-2 py-0.5 rounded-full ${
-              merchant.market_id_locked
+              marketLockDisplay(merchant).locked
                 ? 'bg-sky-500/15 text-sky-300'
                 : 'bg-slate-800 text-slate-400'
             }`}
+            title={marketLockDisplay(merchant).hint}
           >
-            {merchant.market_id_locked ? 'Locked' : 'Auto'}
+            {marketLockDisplay(merchant).label}
           </span>
         </div>
+        <p className="text-xs text-slate-500">{marketLockDisplay(merchant).hint}</p>
         {canWrite && (
           <div className="flex flex-wrap items-end gap-2">
             <div>
@@ -747,7 +776,7 @@ export function MerchantDetailPage() {
             >
               Save town
             </button>
-            {merchant.market_id_locked && (
+            {marketLockDisplay(merchant).locked && (
               <>
                 <label className="inline-flex items-center gap-1.5 text-xs text-slate-400">
                   <input
