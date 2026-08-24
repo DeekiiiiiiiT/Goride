@@ -1,11 +1,14 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate, useOutletContext } from 'react-router-dom';
+import { useOutletContext, useSearchParams } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, Loader2, Search, Download } from 'lucide-react';
 import { toast } from 'sonner';
 import { listIdentities, type IdentityListRow } from '@roam/dash-admin-client';
 import type { AdminOutletContext } from '../../DashAdminPortal';
 import { IdentityStatusBadge, PersonaChip } from './components/IdentityStatusBadge';
+import { IdentityActionBar } from './components/IdentityActionBar';
+import { IdentityDetailOverlay } from './components/IdentityDetailOverlay';
 import { useDashAdminAccess } from '../../hooks/useDashAdminAccess';
+import type { IdentityActionScope } from './components/identityActions';
 
 const PERSONA_FILTERS = [
   { id: 'all', label: 'All' },
@@ -15,19 +18,33 @@ const PERSONA_FILTERS = [
   { id: 'merchant_staff', label: 'Merchant staff' },
 ] as const;
 
+function directoryActionScope(persona: string): IdentityActionScope {
+  if (
+    persona === 'customer'
+    || persona === 'courier'
+    || persona === 'merchant_owner'
+    || persona === 'merchant_staff'
+  ) {
+    return persona;
+  }
+  return 'all';
+}
+
 const PAGE_SIZE = 50;
 
 export function IdentityDirectoryPage() {
   const { session } = useOutletContext<AdminOutletContext>();
-  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { hasPermission } = useDashAdminAccess();
   const [q, setQ] = useState('');
-  const [persona, setPersona] = useState<string>('all');
+  const [persona, setPersona] = useState<string>(() => searchParams.get('persona') || 'all');
   const [rows, setRows] = useState<IdentityListRow[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+  const [listKey, setListKey] = useState(0);
 
   useEffect(() => {
     const t = setTimeout(() => {
@@ -53,9 +70,11 @@ export function IdentityDirectoryPage() {
         .finally(() => setLoading(false));
     }, 300);
     return () => clearTimeout(t);
-  }, [session.access_token, q, persona, page]);
+  }, [session.access_token, q, persona, page, listKey]);
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+
+  const refreshList = () => setListKey((k) => k + 1);
 
   const exportCsv = () => {
     const headers = ['user_id', 'display_name', 'email', 'phone', 'global_status', 'personas'];
@@ -103,7 +122,16 @@ export function IdentityDirectoryPage() {
           <button
             key={p.id}
             type="button"
-            onClick={() => { setPersona(p.id); setPage(1); }}
+            onClick={() => {
+              setPersona(p.id);
+              setPage(1);
+              if (p.id === 'all') {
+                searchParams.delete('persona');
+              } else {
+                searchParams.set('persona', p.id);
+              }
+              setSearchParams(searchParams, { replace: true });
+            }}
             className={`px-3 py-1.5 rounded-lg text-sm ${
               persona === p.id ? 'bg-amber-600 text-white' : 'bg-slate-800 text-slate-400'
             }`}
@@ -140,7 +168,7 @@ export function IdentityDirectoryPage() {
           No people match your search.
         </div>
       ) : (
-        <div className="rounded-xl border border-slate-800 overflow-hidden">
+        <div className="rounded-xl border border-slate-800 overflow-visible">
           <table className="w-full text-sm">
             <thead className="bg-slate-900/80 text-slate-400 text-left">
               <tr>
@@ -149,13 +177,14 @@ export function IdentityDirectoryPage() {
                 <th className="px-4 py-3">Phone</th>
                 <th className="px-4 py-3">Personas</th>
                 <th className="px-4 py-3">Global</th>
+                <th className="px-4 py-3 text-right w-[1%] whitespace-nowrap">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800">
               {rows.map((row) => (
                 <tr
                   key={row.user_id}
-                  onClick={() => navigate(`/users/${row.user_id}`)}
+                  onClick={() => setSelectedUserId(row.user_id)}
                   className="hover:bg-slate-800/50 cursor-pointer"
                 >
                   <td className="px-4 py-3 text-white">{row.display_name || '—'}</td>
@@ -170,6 +199,17 @@ export function IdentityDirectoryPage() {
                   </td>
                   <td className="px-4 py-3">
                     <IdentityStatusBadge status={row.global_status || 'active'} />
+                  </td>
+                  <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
+                    <div className="inline-flex justify-end">
+                      <IdentityActionBar
+                        userId={row.user_id}
+                        accessToken={session.access_token}
+                        variant="menu"
+                        actionScope={directoryActionScope(persona)}
+                        onReload={refreshList}
+                      />
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -199,6 +239,14 @@ export function IdentityDirectoryPage() {
           </button>
         </div>
       )}
+
+      <IdentityDetailOverlay
+        open={!!selectedUserId}
+        userId={selectedUserId}
+        accessToken={session.access_token}
+        onClose={() => setSelectedUserId(null)}
+        onChanged={refreshList}
+      />
     </div>
   );
 }

@@ -945,7 +945,7 @@ export function registerMerchantAdminRoutes(app: Hono) {
     const ownerId = (merchant as Record<string, unknown>).owner_id as string;
     const ownerEmail = await fetchOwnerEmail(ownerId);
     if (!ownerEmail) return c.json({ error: "Owner email not found" }, 404);
-    const redirectTo = recoveryRedirectForProduct("dash");
+    const redirectTo = recoveryRedirectForProduct("partner");
     const { data, error } = await generateRecoveryLink(getAuthAdmin(), ownerEmail, redirectTo);
     if (error) return c.json({ error: String(error) }, 500);
     return c.json({ ok: true, recovery: data });

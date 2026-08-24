@@ -337,6 +337,15 @@ export function unsuspendMerchant(accessToken: string, id: string) {
   return deliveryFetch(accessToken, `/admin/merchants/${id}/unsuspend`, { method: 'POST' });
 }
 
+/** Sends owner a Partner-app password recovery link. */
+export function resetMerchantOwnerPassword(accessToken: string, id: string) {
+  return deliveryFetch<{ ok: boolean; recovery?: unknown }>(
+    accessToken,
+    `/admin/merchants/${id}/reset-owner-password`,
+    { method: 'POST' },
+  );
+}
+
 export function deactivateMerchant(accessToken: string, id: string, reason: string) {
   return deliveryFetch(accessToken, `/admin/merchants/${id}/deactivate`, {
     method: 'POST',

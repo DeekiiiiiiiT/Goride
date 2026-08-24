@@ -34,6 +34,7 @@ export type RecoveryProductKey =
   | 'rides'
   | 'courier'
   | 'dash'
+  | 'partner'
   | 'haul'
   | 'fleet'
   | 'enterprise';
@@ -44,6 +45,7 @@ export function recoveryRedirectForProduct(productKey: RecoveryProductKey): stri
     rides: AUTH_RECOVERY_REDIRECTS.rides,
     courier: AUTH_RECOVERY_REDIRECTS.courier,
     dash: AUTH_RECOVERY_REDIRECTS.dash,
+    partner: AUTH_RECOVERY_REDIRECTS.partner,
     haul: AUTH_RECOVERY_REDIRECTS.haul,
     fleet: AUTH_RECOVERY_REDIRECTS.fleet,
     enterprise: AUTH_RECOVERY_REDIRECTS.enterprise,
