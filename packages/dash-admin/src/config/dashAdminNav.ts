@@ -99,7 +99,6 @@ export const DASH_ADMIN_CONFIG: AdminConfig = {
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'live-ops', label: 'Live Ops', icon: Radio },
     { id: 'orders', label: 'Orders', icon: ClipboardList },
-    { id: 'users-directory', label: 'Users', icon: UserCircle },
     { id: 'finance', label: 'Finance', icon: Wallet },
     { id: 'pricing', label: 'Pricing', icon: DollarSign },
     { id: 'reviews', label: 'Reviews', icon: Star },
@@ -112,7 +111,6 @@ export const DASH_ADMIN_CONFIG: AdminConfig = {
   backToAppUrl: '/',
   backToAppLabel: 'Back to Roam Rush',
 };
-
 
 /** Top nav ids a courier-only role may see */
 const COURIER_ALLOWED_TOP_NAV = new Set(['dashboard', 'live-ops', 'orders', 'support', 'settings', 'play-store']);
@@ -178,9 +176,9 @@ export function navIdToPath(navId: string): string {
     case 'orders':
       return '/orders';
     case 'couriers':
-      return '/couriers';
+      return '/users?persona=courier';
     case 'couriers-compliance':
-      return '/couriers/compliance';
+      return '/users/compliance';
     case 'couriers-presence':
       return '/couriers/presence';
     case 'couriers-ledger':

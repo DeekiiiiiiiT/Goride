@@ -3,6 +3,8 @@
  */
 
 import { dashAdminFetch } from './fetch';
+import { API_ENDPOINTS, supabaseAnonFunctionHeaders } from '@roam/api-client';
+import { parseAllZonesPayload, type ActiveCoverageZone } from '@roam/dash-coverage';
 import type {
   MerchantOperationalStatus,
   MerchantOnboardingStatus,
@@ -379,13 +381,20 @@ export function patchMerchantOps(
   });
 }
 
-export function backfillMerchantMarkets(accessToken: string, includeLocked = false) {
-  const qs = includeLocked ? '?include_locked=true' : '';
+export function backfillMerchantMarkets(
+  accessToken: string,
+  opts: { includeLocked?: boolean; unlockAfter?: boolean } = {},
+) {
+  const params = new URLSearchParams();
+  if (opts.includeLocked) params.set('include_locked', 'true');
+  if (opts.unlockAfter) params.set('unlock_after', 'true');
+  const qs = params.toString() ? `?${params.toString()}` : '';
   return deliveryFetch<{
     assigned: number;
     skipped: number;
     total: number;
     updated_locked?: number;
+    unlocked?: number;
   }>(
     accessToken,
     `/admin/markets/backfill-merchant-markets${qs}`,
@@ -393,12 +402,20 @@ export function backfillMerchantMarkets(accessToken: string, includeLocked = fal
   );
 }
 
-export function recomputeMerchantMarket(accessToken: string, merchantId: string) {
+export function recomputeMerchantMarket(
+  accessToken: string,
+  merchantId: string,
+  opts: { unlockAfter?: boolean } = {},
+) {
   return deliveryFetch<{
     merchant: DashMerchant;
     previous_market_id: string | null;
     suggested_market_id: string | null;
-  }>(accessToken, `/admin/merchants/${merchantId}/recompute-market`, { method: 'POST', body: '{}' });
+    unlocked?: boolean;
+  }>(accessToken, `/admin/merchants/${merchantId}/recompute-market`, {
+    method: 'POST',
+    body: JSON.stringify({ unlock_after: opts.unlockAfter === true }),
+  });
 }
 
 export function assignMerchant(accessToken: string, id: string, assignedTo: string | null) {
@@ -687,8 +704,20 @@ export interface DashParishRow {
 export interface CoverageCheckResult {
   inZone: boolean;
   reason?: string;
+  marketId?: string | null;
+  parishId?: string | null;
+  parishBoundaryMode?: boolean;
+  outsideParish?: boolean;
   matchedInclude?: { id: string; name: string; market_id?: string } | null;
   matchedExclude?: { id: string; name: string; market_id?: string } | null;
+}
+
+export interface ParishModeSuggestion {
+  parish_id: string;
+  parish_name: string;
+  current: 'town_zones' | 'parish_boundary';
+  suggested: 'town_zones' | 'parish_boundary';
+  reason: string;
 }
 
 export interface CoverageVersionRow {
@@ -869,6 +898,18 @@ export function checkCoveragePoint(accessToken: string, lat: number, lng: number
   });
 }
 
+/** Published customer-facing zones (same payload as dash-customer). */
+export async function fetchCustomerDeliveryZones(): Promise<ActiveCoverageZone[]> {
+  const res = await fetch(`${API_ENDPOINTS.delivery}/geo/delivery-zones`, {
+    headers: supabaseAnonFunctionHeaders(),
+  });
+  if (!res.ok) {
+    throw new Error(`delivery-zones HTTP ${res.status}`);
+  }
+  const body = (await res.json()) as unknown;
+  return parseAllZonesPayload(body);
+}
+
 export function getMarketReadiness(accessToken: string, marketId: string) {
   return deliveryFetch<MarketReadiness>(accessToken, `/admin/markets/${marketId}/readiness`);
 }
@@ -887,17 +928,26 @@ export type MerchantMarketRecompute = {
   skippedNoPin: number;
   unchanged: number;
   updatedLocked: number;
+  unlocked: number;
 };
 
 export function publishMarketCoverage(
   accessToken: string,
   marketId: string,
-  payload: { label?: string; notes?: string; recompute_locked?: boolean } = {},
+  payload: {
+    label?: string;
+    notes?: string;
+    recompute_locked?: boolean;
+    unlock_after?: boolean;
+    apply_parish_mode?: 'town_zones' | 'parish_boundary';
+  } = {},
 ) {
   return deliveryFetch<{
     market: DashMarketRow;
     version: CoverageVersionRow;
     merchant_recompute?: MerchantMarketRecompute;
+    parish_mode_suggestion?: ParishModeSuggestion | null;
+    parish_mode_applied?: string | null;
   }>(accessToken, `/admin/markets/${marketId}/publish`, {
     method: 'POST',
     body: JSON.stringify(payload),
@@ -909,24 +959,31 @@ export function restoreCoverageVersion(
   marketId: string,
   versionId: string,
   republish = true,
-  recomputeLocked = false,
+  opts: { recomputeLocked?: boolean; unlockAfter?: boolean } = {},
 ) {
   return deliveryFetch<{
     market: DashMarketRow;
     merchant_recompute?: MerchantMarketRecompute | null;
+    parish_mode_suggestion?: ParishModeSuggestion | null;
+    parish_mode_applied?: string | null;
   }>(accessToken, `/admin/markets/${marketId}/versions/${versionId}/restore`, {
     method: 'POST',
-    body: JSON.stringify({ republish, recompute_locked: recomputeLocked }),
+    body: JSON.stringify({
+      republish,
+      recompute_locked: opts.recomputeLocked === true,
+      unlock_after: opts.unlockAfter === true,
+    }),
   });
 }
 
 function formatMerchantRecomputeToast(r?: MerchantMarketRecompute | null): string {
   if (!r) return '';
   const moved = r.updated + r.cleared;
-  if (moved === 0 && r.skippedLocked === 0 && r.updatedLocked === 0) return '';
+  if (moved === 0 && r.skippedLocked === 0 && r.updatedLocked === 0 && r.unlocked === 0) return '';
   const parts = [`${r.updated} reassigned`];
   if (r.cleared) parts.push(`${r.cleared} cleared`);
   if (r.updatedLocked) parts.push(`${r.updatedLocked} locked updated`);
+  if (r.unlocked) parts.push(`${r.unlocked} unlocked`);
   if (r.skippedLocked) parts.push(`${r.skippedLocked} locked skipped`);
   return ` · ${parts.join(', ')}`;
 }

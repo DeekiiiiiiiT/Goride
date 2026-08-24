@@ -717,6 +717,7 @@ export function registerMerchantAdminRoutes(app: Hono) {
     const denied = requireDashWrite(admin);
     if (denied) return denied;
     const id = c.req.param("id");
+    const body = await c.req.json().catch(() => ({}));
     const sb = getDb();
     const { data: merchant, error: loadErr } = await sb
       .from("merchants")
@@ -737,9 +738,13 @@ export function registerMerchantAdminRoutes(app: Hono) {
       ? String((merchant as Record<string, unknown>).market_id)
       : null;
 
+    const wasLocked = (merchant as Record<string, unknown>).market_id_locked === true;
+    const updates: Record<string, unknown> = { market_id: suggested };
+    if (body.unlock_after === true) updates.market_id_locked = false;
+
     const { data: updated, error: upErr } = await sb
       .from("merchants")
-      .update({ market_id: suggested })
+      .update(updates)
       .eq("id", id)
       .select()
       .single();
@@ -750,20 +755,26 @@ export function registerMerchantAdminRoutes(app: Hono) {
       actor_id: admin.id,
       actor_email: admin.email,
       action: "market_recomputed_from_pin",
-      notes: JSON.stringify({ previous, suggested, locked: (merchant as Record<string, unknown>).market_id_locked === true }),
+      notes: JSON.stringify({
+        previous,
+        suggested,
+        locked: wasLocked,
+        unlock_after: body.unlock_after === true,
+      }),
     });
     await writeKvAudit(
       admin,
       "roam_dash.merchant_market_recomputed",
       id,
       String((merchant as Record<string, unknown>).email ?? ""),
-      JSON.stringify({ previous, suggested }),
+      JSON.stringify({ previous, suggested, unlock_after: body.unlock_after === true }),
     );
 
     return c.json({
       merchant: updated,
       previous_market_id: previous,
       suggested_market_id: suggested,
+      unlocked: body.unlock_after === true && wasLocked,
     });
   });
 

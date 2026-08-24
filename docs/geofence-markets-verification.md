@@ -39,8 +39,45 @@ Run after deploying migration `20260827120000_parish_coverage_mode.sql` and edge
 |------|--------|
 | Publish with **Include locked merchants** unchecked | Locked merchants unchanged |
 | Publish with checkbox checked | Locked merchants updated; lock stays |
+| Publish with **Include locked** + **Also unlock for auto updates** | Locked merchants updated; `market_id_locked` cleared |
 | Merchant detail → **Reassign from store pin** (locked) | Town updates from pin; lock stays |
-| `POST /admin/merchants/:id/recompute-market` | Same as reassign button |
+| Reassign with **Unlock for auto updates after reassignment** | Town updates; lock cleared |
+| `POST /admin/markets/backfill-merchant-markets?include_locked=true&unlock_after=true` | Same as publish unlock flow |
+| `POST /admin/merchants/:id/recompute-market` body `{ unlock_after: true }` | Same as reassign unlock |
+
+## Parish mode suggestion (publish / restore)
+
+After a successful publish or restore-with-republish, the API may return `parish_mode_suggestion` when heuristics match:
+
+| Heuristic | Suggested mode |
+|-----------|----------------|
+| Parish has foundation polygon + exactly **1** active town with a valid include zone | `parish_boundary` (when current is `town_zones`) |
+| **2+** active towns each have valid include zones | `town_zones` (when current is `parish_boundary`) |
+
+| Case | Expect |
+|------|--------|
+| Publish returns suggestion | Admin toast with **Apply** / dismiss; mode is **not** auto-applied |
+| Click **Apply** on toast | `updateParish` sets `coverage_mode` to suggested value |
+| Publish body `apply_parish_mode` matching suggestion | Server applies mode + audit `roam_dash.parish_mode_applied` |
+| Publish body `apply_parish_mode` not matching suggestion | `400` with clear error |
+
+## Admin map — customer coverage preview
+
+| Case | Expect |
+|------|--------|
+| Town map → **Show customer coverage** off (default) | Draft zones only (green) |
+| Toggle **Show customer coverage** on | Loads published zones via `/geo/delivery-zones` (same path as customer app); cyan dashed overlay |
+| Parish mode `parish_boundary` + preview on | Synthetic parish zones included in overlay |
+
+## Admin check-point parity
+
+`POST /admin/markets/check-point` uses `resolveMarketForPoint` (same rules as customer checkout).
+
+| Case | Expect |
+|------|--------|
+| Pin inside town zone | `inZone: true`, `marketId` set |
+| Pin inside parish foundation but outside town (parish_boundary mode) | `inZone: true`, `parishBoundaryMode: true` |
+| Pin outside parish foundation | `outsideParish: true`, `inZone: false` |
 
 ## Pricing / checkout
 

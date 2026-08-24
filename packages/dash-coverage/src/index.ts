@@ -101,3 +101,5 @@ export {
   parseFoundationPolygon,
   type ParishCoverageMode,
 } from './parishCoverage.ts';
+export { sanitizeVertices } from './sanitizeVertices.ts';
+export { createMemoryZoneCache } from './memoryZoneCache.ts';

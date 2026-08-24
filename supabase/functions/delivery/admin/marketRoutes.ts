@@ -32,7 +32,12 @@ import {
   asCoverageZones,
   loadPublishedZonesForMarket,
   recomputeMerchantMarkets,
+  resolveMarketForPoint,
 } from "./coverageZones.ts";
+import {
+  applyParishCoverageModeIfRequested,
+  suggestParishCoverageMode,
+} from "./parishModeSuggest.ts";
 
 type Vertex = CoverageVertex;
 
@@ -410,20 +415,17 @@ export function registerMarketAdminRoutes(app: Hono) {
     }
 
     const db = getDb();
-    const { data: markets, error } = await db
-      .from("service_markets")
-      .select("id, published_version_id")
-      .eq("is_active", true);
-    if (error) return c.json({ error: error.message }, 500);
-
-    const allZones: CoverageZone[] = [];
-    for (const m of markets ?? []) {
-      const market = m as Record<string, unknown>;
-      const published = await loadPublishedZonesForMarket(db, market);
-      allZones.push(...asCoverageZones(published));
-    }
-
-    return c.json(evaluateCoverage(lat, lng, allZones));
+    const resolved = await resolveMarketForPoint(db, lat, lng);
+    return c.json({
+      inZone: resolved.covered,
+      reason: resolved.eval.reason,
+      marketId: resolved.marketId,
+      parishId: resolved.parishId,
+      parishBoundaryMode: resolved.parishBoundaryMode,
+      outsideParish: resolved.outsideParish,
+      matchedInclude: resolved.eval.matchedInclude,
+      matchedExclude: resolved.eval.matchedExclude,
+    });
   });
 
   /** Recompute unlocked merchant towns from published coverage. */
@@ -433,7 +435,8 @@ export function registerMarketAdminRoutes(app: Hono) {
 
     const db = getDb();
     const includeLocked = c.req.query("include_locked") === "true";
-    const result = await recomputeMerchantMarkets(db, { includeLocked });
+    const unlockAfter = c.req.query("unlock_after") === "true";
+    const result = await recomputeMerchantMarkets(db, { includeLocked, unlockAfter });
 
     await writeKvAudit(
       c.get("adminUser") as ProductAdminUser,
@@ -449,6 +452,7 @@ export function registerMarketAdminRoutes(app: Hono) {
       skipped_locked: result.skippedLocked,
       skipped_no_pin: result.skippedNoPin,
       updated_locked: result.updatedLocked,
+      unlocked: result.unlocked,
       unchanged: result.unchanged,
       total: result.updated + result.cleared + result.skippedLocked + result.skippedNoPin +
         result.unchanged,
@@ -593,8 +597,34 @@ export function registerMarketAdminRoutes(app: Hono) {
     );
     const merchantRecompute = await recomputeMerchantMarkets(db, {
       includeLocked: body.recompute_locked === true,
+      unlockAfter: body.unlock_after === true,
     });
-    return c.json({ market: updated, version: ver, merchant_recompute: merchantRecompute });
+
+    const parishId = (market as Record<string, unknown>).parish_id != null
+      ? String((market as Record<string, unknown>).parish_id)
+      : null;
+    const parishModeSuggestion = parishId
+      ? await suggestParishCoverageMode(db, parishId)
+      : null;
+    if (body.apply_parish_mode && parishId) {
+      const applied = await applyParishCoverageModeIfRequested(
+        db,
+        adminUser,
+        parishId,
+        String(body.apply_parish_mode),
+        parishModeSuggestion,
+        writeKvAudit,
+      );
+      if (applied.error) return c.json({ error: applied.error }, 400);
+    }
+
+    return c.json({
+      market: updated,
+      version: ver,
+      merchant_recompute: merchantRecompute,
+      parish_mode_suggestion: parishModeSuggestion,
+      parish_mode_applied: body.apply_parish_mode ?? null,
+    });
   });
 
   admin.post("/:id/versions/:versionId/restore", async (c) => {
@@ -679,10 +709,29 @@ export function registerMarketAdminRoutes(app: Hono) {
     }
 
     const merchantRecompute = republish
-      ? await recomputeMerchantMarkets(db, { includeLocked: body.recompute_locked === true })
+      ? await recomputeMerchantMarkets(db, {
+        includeLocked: body.recompute_locked === true,
+        unlockAfter: body.unlock_after === true,
+      })
       : null;
 
     const { data: market } = await db.from("service_markets").select("*").eq("id", marketId).single();
+    const parishId = market?.parish_id != null ? String(market.parish_id) : null;
+    const parishModeSuggestion = republish && parishId
+      ? await suggestParishCoverageMode(db, parishId)
+      : null;
+    if (republish && body.apply_parish_mode && parishId) {
+      const applied = await applyParishCoverageModeIfRequested(
+        db,
+        adminUser,
+        parishId,
+        String(body.apply_parish_mode),
+        parishModeSuggestion,
+        writeKvAudit,
+      );
+      if (applied.error) return c.json({ error: applied.error }, 400);
+    }
+
     const { data: zones } = await db
       .from("service_zone_polygons")
       .select("*")
@@ -691,6 +740,8 @@ export function registerMarketAdminRoutes(app: Hono) {
     return c.json({
       market: { ...market, zones: zones ?? [] },
       merchant_recompute: merchantRecompute,
+      parish_mode_suggestion: parishModeSuggestion,
+      parish_mode_applied: body.apply_parish_mode ?? null,
     });
   });
 

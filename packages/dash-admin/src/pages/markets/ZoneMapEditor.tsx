@@ -58,11 +58,10 @@ export type ZoneMapEditorProps = {
   editingZoneId?: string | null;
   /** Town delivery polygons used to filter Places results. */
   townIncludePolygons: GeoVertex[][];
-  /**
-   * Neighbor / parish sibling towns — reference only (never editable).
-   * Drawn separately from `zones` so they never look like live coverage.
-   */
+  /** Neighbor / parish sibling towns — reference only (never editable). */
   contextTownPolygons?: ZoneMapContextTown[];
+  /** Published customer-facing include polygons (dashed preview). */
+  customerPreviewPolygons?: GeoVertex[][];
   /** Hide context layer toggle (parish map always shows context). */
   showNeighborToggle?: boolean;
   onSave: (payload: {
@@ -178,6 +177,7 @@ export function ZoneMapEditor({
   editingZoneId = null,
   townIncludePolygons,
   contextTownPolygons = [],
+  customerPreviewPolygons = [],
   showNeighborToggle = true,
   onSave,
   onCancel,
@@ -194,6 +194,7 @@ export function ZoneMapEditor({
   const mapRef = useRef<google.maps.Map | null>(null);
   const overlayPolysRef = useRef<google.maps.Polygon[]>([]);
   const contextPolysRef = useRef<google.maps.Polygon[]>([]);
+  const customerPreviewPolysRef = useRef<google.maps.Polygon[]>([]);
   const editPolyRef = useRef<google.maps.Polygon | null>(null);
   const clickListenerRef = useRef<google.maps.MapsEventListener | null>(null);
   const searchMarkerRef = useRef<google.maps.Marker | null>(null);
@@ -257,6 +258,33 @@ export function ZoneMapEditor({
     overlayPolysRef.current = [];
     for (const p of contextPolysRef.current) p.setMap(null);
     contextPolysRef.current = [];
+    for (const p of customerPreviewPolysRef.current) p.setMap(null);
+    customerPreviewPolysRef.current = [];
+  };
+
+  const syncCustomerPreviewOverlays = () => {
+    const map = mapRef.current;
+    if (!map) return;
+    for (const p of customerPreviewPolysRef.current) p.setMap(null);
+    customerPreviewPolysRef.current = [];
+    for (const ring of customerPreviewPolygons) {
+      if (ring.length < 3) continue;
+      const path = ring.map((v) => ({ lat: v.lat, lng: v.lng }));
+      const poly = new google.maps.Polygon({
+        paths: path,
+        map,
+        editable: false,
+        draggable: false,
+        strokeColor: '#22d3ee',
+        strokeOpacity: 0.95,
+        strokeWeight: 2,
+        fillColor: '#22d3ee',
+        fillOpacity: 0.06,
+        clickable: false,
+        zIndex: 2,
+      });
+      customerPreviewPolysRef.current.push(poly);
+    }
   };
 
   const syncContextOverlays = () => {
@@ -332,6 +360,7 @@ export function ZoneMapEditor({
     if (!map) return;
     clearOverlays();
     syncContextOverlays();
+    syncCustomerPreviewOverlays();
     const bounds = new google.maps.LatLngBounds();
     let hasBounds = false;
     for (const z of zones) {
@@ -635,6 +664,7 @@ export function ZoneMapEditor({
   }, [
     zones.map((z) => `${z.id}:${z.polygon.length}`).join('|'),
     contextTownPolygons.map((t) => `${t.id}:${t.polygon.length}:${t.isActive}`).join('|'),
+    customerPreviewPolygons.map((p, i) => `${i}:${p.length}`).join('|'),
     showNeighbors,
     foundationScope,
   ]);
@@ -932,6 +962,12 @@ export function ZoneMapEditor({
                 <span className="w-2.5 h-2.5 rounded-sm bg-slate-600/60 border border-slate-500/40" />
                 Towns (context)
               </span>
+              {customerPreviewPolygons.length > 0 && (
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-sm bg-cyan-400/50 border border-cyan-300/60 border-dashed" />
+                  Customer coverage (published)
+                </span>
+              )}
             </>
           ) : (
             <>
@@ -947,6 +983,12 @@ export function ZoneMapEditor({
                 <span className="inline-flex items-center gap-1.5">
                   <span className="w-2.5 h-2.5 rounded-sm bg-slate-600/50 border border-slate-500/40" />
                   Other towns (context)
+                </span>
+              )}
+              {customerPreviewPolygons.length > 0 && (
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-sm bg-cyan-400/50 border border-cyan-300/60 border-dashed" />
+                  Customer coverage (published)
                 </span>
               )}
             </>

@@ -26,6 +26,7 @@ import {
   createZone,
   deleteParish,
   deleteZone,
+  fetchCustomerDeliveryZones,
   getMarketReadiness,
   importMarketGeoJson,
   listActivityLog,
@@ -45,8 +46,10 @@ import {
   type DashZoneRow,
   type DashZoneVertex,
   type MarketReadiness,
+  type ParishModeSuggestion,
   type ReadinessCheck,
 } from '@roam/dash-admin-client';
+import { sanitizeVertices } from '@roam/dash-coverage';
 import type { AdminOutletContext } from '../../DashAdminPortal';
 import { ZoneMapEditor, type ZoneMapUiMode } from './ZoneMapEditor';
 import { detectCoverageConflicts } from './coverageGeo';
@@ -63,15 +66,38 @@ import {
 } from './coverageIo';
 
 function normalizeZone(z: DashZoneRow): DashZoneRow {
-  const poly = Array.isArray(z.polygon) ? z.polygon : [];
   return {
     ...z,
     kind: z.kind === 'exclude' ? 'exclude' : 'include',
-    polygon: poly.filter(
-      (p) => p && Number.isFinite(p.lat) && Number.isFinite(p.lng),
-    ) as DashZoneVertex[],
+    polygon: sanitizeVertices(z.polygon) as DashZoneVertex[],
     priority: Number.isFinite(z.priority) ? z.priority : 0,
   };
+}
+
+function offerParishModeSuggestion(
+  token: string,
+  suggestion: ParishModeSuggestion | null | undefined,
+  onReload: () => Promise<void>,
+) {
+  if (!suggestion) return;
+  const modeLabel = suggestion.suggested === 'parish_boundary' ? 'Parish border' : 'Town zones';
+  toast(suggestion.reason, {
+    duration: 15000,
+    action: {
+      label: `Apply ${modeLabel}`,
+      onClick: () => {
+        void (async () => {
+          try {
+            await updateParish(token, suggestion.parish_id, { coverage_mode: suggestion.suggested });
+            toast.success(`${suggestion.parish_name} set to ${modeLabel}`);
+            await onReload();
+          } catch (e) {
+            toast.error(e instanceof Error ? e.message : 'Failed to update parish mode');
+          }
+        })();
+      },
+    },
+  });
 }
 
 function normalizeTown(m: DashMarketRow): DashMarketRow {
@@ -79,12 +105,9 @@ function normalizeTown(m: DashMarketRow): DashMarketRow {
 }
 
 function normalizeParish(p: DashParishRow): DashParishRow {
-  const poly = Array.isArray(p.foundation_polygon) ? p.foundation_polygon : [];
   return {
     ...p,
-    foundation_polygon: poly.filter(
-      (v) => v && Number.isFinite(v.lat) && Number.isFinite(v.lng),
-    ) as DashZoneVertex[],
+    foundation_polygon: sanitizeVertices(p.foundation_polygon) as DashZoneVertex[],
     towns: (p.towns ?? []).map(normalizeTown),
   };
 }
@@ -300,6 +323,8 @@ type MapOverlayProps = {
   onRestore: (versionId: string) => void;
   recomputeLocked: boolean;
   onRecomputeLockedChange: (value: boolean) => void;
+  unlockAfter: boolean;
+  onUnlockAfterChange: (value: boolean) => void;
   onImportGeoJson: (text: string, promote: boolean) => void;
   onImportCsv: (text: string, promote: boolean) => void;
   onRefreshReadiness: () => void;
@@ -326,6 +351,8 @@ function TownMapOverlay({
   onRestore,
   recomputeLocked,
   onRecomputeLockedChange,
+  unlockAfter,
+  onUnlockAfterChange,
   onImportGeoJson,
   onImportCsv,
   onRefreshReadiness,
@@ -343,9 +370,36 @@ function TownMapOverlay({
   const [promoteTemplate, setPromoteTemplate] = useState(true);
   const [showManageZones, setShowManageZones] = useState(false);
   const [showIoMenu, setShowIoMenu] = useState(false);
+  const [showCustomerCoverage, setShowCustomerCoverage] = useState(false);
+  const [customerPreviewPolygons, setCustomerPreviewPolygons] = useState<DashZoneVertex[][]>([]);
   /** Near-fullscreen map workspace for tracing borders. */
   const [mapExpanded, setMapExpanded] = useState(false);
   const ioMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!showCustomerCoverage) {
+      setCustomerPreviewPolygons([]);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const zones = await fetchCustomerDeliveryZones();
+        if (cancelled) return;
+        setCustomerPreviewPolygons(
+          zones.filter((z) => z.kind === 'include' && z.polygon.length >= 3).map((z) => z.polygon),
+        );
+      } catch (e) {
+        if (!cancelled) {
+          toast.error(e instanceof Error ? e.message : 'Failed to load customer coverage');
+          setShowCustomerCoverage(false);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [showCustomerCoverage]);
 
   const editingThis =
     editor &&
@@ -617,6 +671,29 @@ function TownMapOverlay({
                 />
                 Include locked merchants
               </label>
+              <label
+                className={`inline-flex items-center gap-1.5 text-[11px] mr-1 ${
+                  recomputeLocked ? 'text-slate-400' : 'text-slate-600'
+                }`}
+              >
+                <input
+                  type="checkbox"
+                  checked={unlockAfter}
+                  disabled={!recomputeLocked}
+                  onChange={(e) => onUnlockAfterChange(e.target.checked)}
+                  className="rounded border-slate-600"
+                />
+                Also unlock for auto updates
+              </label>
+              <label className="inline-flex items-center gap-1.5 text-[11px] text-slate-400 mr-1">
+                <input
+                  type="checkbox"
+                  checked={showCustomerCoverage}
+                  onChange={(e) => setShowCustomerCoverage(e.target.checked)}
+                  className="rounded border-slate-600"
+                />
+                Show customer coverage
+              </label>
               <button
                 type="button"
                 disabled={saving || !town.draft_dirty}
@@ -738,6 +815,7 @@ function TownMapOverlay({
               initialPolygon={initialPolygon}
               editingZoneId={editingZoneId}
               townIncludePolygons={includeZones(town).map((z) => z.polygon)}
+              customerPreviewPolygons={showCustomerCoverage ? customerPreviewPolygons : []}
               saving={saving}
               autoOpenCoordinates={autoOpenCoordinates}
               mapHeight={mapHeight}
@@ -1012,6 +1090,7 @@ export function MarketsPage() {
   const [mapParishId, setMapParishId] = useState<string | null>(null);
   const [parishEditing, setParishEditing] = useState(false);
   const [recomputeLockedOnPublish, setRecomputeLockedOnPublish] = useState(false);
+  const [unlockAfterOnPublish, setUnlockAfterOnPublish] = useState(false);
   const [tipTownId, setTipTownId] = useState<string | null>(null);
   const [readiness, setReadiness] = useState<MarketReadiness | null>(null);
   const [versions, setVersions] = useState<CoverageVersionRow[]>([]);
@@ -1550,6 +1629,8 @@ export function MarketsPage() {
           onSaveEditor={(payload) => void saveEditor(payload)}
           recomputeLocked={recomputeLockedOnPublish}
           onRecomputeLockedChange={setRecomputeLockedOnPublish}
+          unlockAfter={unlockAfterOnPublish}
+          onUnlockAfterChange={setUnlockAfterOnPublish}
           onRefreshReadiness={() => void refreshOverlayMeta()}
           onRequestEditFoundationOnMap={() => {
             const delivery = primaryDeliveryArea(mapTown);
@@ -1592,9 +1673,15 @@ export function MarketsPage() {
               try {
                 const published = await publishMarketCoverage(session.access_token, mapTown.id, {
                   recompute_locked: recomputeLockedOnPublish,
+                  unlock_after: unlockAfterOnPublish,
                 });
                 toast.success(
                   `Coverage published${formatMerchantRecomputeToast(published.merchant_recompute)}`,
+                );
+                offerParishModeSuggestion(
+                  session.access_token,
+                  published.parish_mode_suggestion,
+                  load,
                 );
                 await load();
                 await refreshOverlayMeta();
@@ -1615,10 +1702,18 @@ export function MarketsPage() {
                   mapTown.id,
                   versionId,
                   true,
-                  recomputeLockedOnPublish,
+                  {
+                    recomputeLocked: recomputeLockedOnPublish,
+                    unlockAfter: unlockAfterOnPublish,
+                  },
                 );
                 toast.success(
                   `Version restored and published${formatMerchantRecomputeToast(restored.merchant_recompute)}`,
+                );
+                offerParishModeSuggestion(
+                  session.access_token,
+                  restored.parish_mode_suggestion,
+                  load,
                 );
                 await load();
                 await refreshOverlayMeta();

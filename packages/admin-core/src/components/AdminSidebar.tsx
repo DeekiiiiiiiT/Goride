@@ -232,8 +232,22 @@ export function AdminSidebar({
   const topItems = config.topNavItems ?? [];
   const pinAfterId = config.pinSectionsAfter;
   const pinIndex = pinAfterId ? topItems.findIndex((item) => item.id === pinAfterId) : -1;
-  const topBeforeSections = pinIndex >= 0 ? topItems.slice(0, pinIndex + 1) : [];
-  const topAfterSections = pinIndex >= 0 ? topItems.slice(pinIndex + 1) : topItems;
+
+  // Hide top-nav entries that duplicate a section child id (e.g. Users directory).
+  const sectionNavIds = new Set<string>();
+  for (const section of config.sections) {
+    for (const child of section.children) sectionNavIds.add(child.id);
+    for (const group of section.groups ?? []) {
+      for (const child of group.children) sectionNavIds.add(child.id);
+    }
+  }
+  const withoutSectionDupes = (items: AdminNavItem[]) =>
+    items.filter((item) => !sectionNavIds.has(item.id));
+
+  const topBeforeSections =
+    pinIndex >= 0 ? withoutSectionDupes(topItems.slice(0, pinIndex + 1)) : [];
+  const topAfterSections =
+    pinIndex >= 0 ? withoutSectionDupes(topItems.slice(pinIndex + 1)) : withoutSectionDupes(topItems);
 
   const renderTopNavItem = (item: AdminNavItem) =>
     canViewPage(item.id) ? (

@@ -7,6 +7,7 @@ import {
   isInsideParishFoundation,
   parseAllZonesPayload,
   pointInPolygon,
+  sanitizeVertices,
   type ActiveCoverageZone,
   type CoverageZone,
 } from './index';
@@ -90,6 +91,14 @@ describe('parseAllZonesPayload', () => {
       zones: [{ is_active: false, kind: 'include', polygon: ST_INCLUDE.polygon }],
     });
     expect(zones).toHaveLength(0);
+  });
+});
+
+describe('sanitizeVertices', () => {
+  it('keeps valid lat/lng only', () => {
+    expect(sanitizeVertices([{ lat: 18, lng: -77 }, { lat: NaN, lng: 1 }, null])).toEqual([
+      { lat: 18, lng: -77 },
+    ]);
   });
 });
 

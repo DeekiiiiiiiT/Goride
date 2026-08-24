@@ -80,6 +80,7 @@ export function MerchantDetailPage() {
   const [pendingInvites, setPendingInvites] = useState<Array<Record<string, unknown>>>([]);
   const [selectedMarketId, setSelectedMarketId] = useState('');
   const [marketSaving, setMarketSaving] = useState(false);
+  const [unlockAfterReassign, setUnlockAfterReassign] = useState(false);
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -390,7 +391,9 @@ export function MerchantDetailPage() {
     if (!ok) return;
     setMarketSaving(true);
     try {
-      const res = await recomputeMerchantMarket(token, merchant.id);
+      const res = await recomputeMerchantMarket(token, merchant.id, {
+        unlockAfter: unlockAfterReassign,
+      });
       toast.success(
         res.suggested_market_id
           ? 'Delivery town reassigned from store pin'
@@ -746,6 +749,15 @@ export function MerchantDetailPage() {
             </button>
             {merchant.market_id_locked && (
               <>
+                <label className="inline-flex items-center gap-1.5 text-xs text-slate-400">
+                  <input
+                    type="checkbox"
+                    checked={unlockAfterReassign}
+                    onChange={(e) => setUnlockAfterReassign(e.target.checked)}
+                    className="rounded border-slate-600"
+                  />
+                  Unlock for auto updates after reassignment
+                </label>
                 <button
                   type="button"
                   disabled={marketSaving}

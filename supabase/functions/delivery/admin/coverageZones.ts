@@ -395,10 +395,12 @@ export type MerchantMarketRecomputeResult = {
   skippedNoPin: number;
   unchanged: number;
   updatedLocked: number;
+  unlocked: number;
 };
 
 export type RecomputeMerchantMarketsOpts = {
   includeLocked?: boolean;
+  unlockAfter?: boolean;
 };
 
 /**
@@ -410,6 +412,7 @@ export async function recomputeMerchantMarkets(
   opts: RecomputeMerchantMarketsOpts = {},
 ): Promise<MerchantMarketRecomputeResult> {
   const includeLocked = opts.includeLocked === true;
+  const unlockAfter = opts.unlockAfter === true;
   const result: MerchantMarketRecomputeResult = {
     updated: 0,
     cleared: 0,
@@ -417,6 +420,7 @@ export async function recomputeMerchantMarkets(
     skippedNoPin: 0,
     unchanged: 0,
     updatedLocked: 0,
+    unlocked: 0,
   };
 
   const { data: merchants, error } = await sb
@@ -445,7 +449,10 @@ export async function recomputeMerchantMarkets(
       continue;
     }
 
-    let updateQuery = sb.from("merchants").update({ market_id: suggested }).eq("id", String(m.id));
+    let updateQuery = sb.from("merchants").update({
+      market_id: suggested,
+      ...(unlockAfter && wasLocked ? { market_id_locked: false } : {}),
+    }).eq("id", String(m.id));
     if (!includeLocked) {
       updateQuery = updateQuery.eq("market_id_locked", false);
     }
@@ -453,6 +460,7 @@ export async function recomputeMerchantMarkets(
     if (upErr) continue;
 
     if (wasLocked) result.updatedLocked += 1;
+    if (unlockAfter && wasLocked) result.unlocked += 1;
     if (suggested == null) result.cleared += 1;
     else result.updated += 1;
   }

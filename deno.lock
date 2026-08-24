@@ -683,6 +683,7 @@
             "npm:@types/react@^18.3.0",
             "npm:leaflet@^1.9.4",
             "npm:lucide-react@0.487",
+            "npm:qrcode.react@^4.2.0",
             "npm:react-dom@^18.3.1",
             "npm:react-router-dom@^7.6.0",
             "npm:react@^18.3.1",

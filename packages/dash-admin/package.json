@@ -14,6 +14,7 @@
     "@roam/api-client": "workspace:*",
     "@roam/auth-client": "workspace:*",
     "@roam/dash-admin-client": "workspace:*",
+    "@roam/dash-coverage": "workspace:*",
     "@roam/location": "workspace:*",
     "@roam/play-store-launch": "workspace:*",
     "@roam/types": "workspace:*",

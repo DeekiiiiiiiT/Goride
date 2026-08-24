@@ -340,3 +340,105 @@ Deno.test("assertSameMarketCoverage — parish_boundary different parish fails",
   assertEquals(fail.ok, false);
   if (!fail.ok) assertEquals(fail.code, "merchant_out_of_parish");
 });
+
+Deno.test("recomputeMerchantMarkets — unlockAfter clears lock on forced update", async () => {
+  const updates: Array<Record<string, unknown>> = [];
+  const sb = {
+    from(table: string) {
+      if (table === "merchants") {
+        return {
+          select() {
+            return Promise.resolve({
+              data: [{
+                id: "m1",
+                lat: 18.015,
+                lng: -76.955,
+                market_id: "old-town",
+                market_id_locked: true,
+              }],
+            });
+          },
+          update(payload: Record<string, unknown>) {
+            updates.push(payload);
+            return {
+              eq() {
+                return {
+                  eq() {
+                    return Promise.resolve({ error: null });
+                  },
+                };
+              },
+            };
+          },
+        };
+      }
+      if (table === "service_markets") {
+        return {
+          select(_cols?: string) {
+            return {
+              eq(col: string, val: unknown) {
+                if (col === "is_active") {
+                  return Promise.resolve({
+                    data: [{
+                      id: ST_MARKET,
+                      slug: "spanish-town",
+                      is_active: true,
+                      published_version_id: null,
+                      parish_id: null,
+                    }],
+                  });
+                }
+                return { maybeSingle: () => Promise.resolve({ data: null }) };
+              },
+              then(resolve: (v: unknown) => unknown) {
+                return Promise.resolve({
+                  data: [{
+                    id: ST_MARKET,
+                    slug: "spanish-town",
+                    parish_id: null,
+                    published_version_id: null,
+                  }],
+                }).then(resolve);
+              },
+            };
+          },
+        };
+      }
+      if (table === "service_parishes") {
+        return { select: () => Promise.resolve({ data: [] }) };
+      }
+      if (table === "service_zone_polygons") {
+        return {
+          select() {
+            return {
+              eq(_col: string, marketId: string) {
+                return {
+                  order() {
+                    return Promise.resolve({
+                      data: [{
+                        id: "z-st",
+                        name: "Spanish Town",
+                        market_id: marketId,
+                        kind: "include",
+                        polygon: ST_INCLUDE.polygon,
+                      }],
+                    });
+                  },
+                };
+              },
+            };
+          },
+        };
+      }
+      throw new Error(`unexpected ${table}`);
+    },
+  };
+
+  const { recomputeMerchantMarkets } = await import("./coverageZones.ts");
+  const result = await recomputeMerchantMarkets(sb, {
+    includeLocked: true,
+    unlockAfter: true,
+  });
+  assertEquals(result.unlocked, 1);
+  assertEquals(updates[0]?.market_id_locked, false);
+});
