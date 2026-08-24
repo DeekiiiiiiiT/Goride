@@ -1,69 +1,34 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { FuelEntry, FuelCycle } from '../types/fuel';
 import { calculateFuelCycles } from '../utils/fuelCycleEngine';
 import { Vehicle } from '../types/vehicle';
-import { api } from '../services/api';
 
 export type UseFuelCyclesOptions = {
   weekStart?: string;
   weekEnd?: string;
-  /** Force client-side engine (VITE_FUEL_CYCLE_LEGACY_CLIENT=1 or explicit) */
+  /** Kept for callers; client engine is the Full Tanks source of truth. */
   legacyClient?: boolean;
 };
 
 /**
- * Reads server cycle snapshots when available; falls back to local engine for legacy rows.
+ * Builds Full Tanks cycles from loaded entries (full lookback on the page).
+ * Week filter keeps only cycles that overlap the selected period after tank math runs.
  */
 export function useFuelCycles(
   entries: FuelEntry[],
   vehicles: Vehicle[] = [],
   opts: UseFuelCyclesOptions = {},
 ): FuelCycle[] {
-  const legacyEnv = import.meta.env.VITE_FUEL_CYCLE_LEGACY_CLIENT === '1';
-  const useLegacy = opts.legacyClient ?? legacyEnv;
-
-  const clientCycles = useMemo(() => {
+  return useMemo(() => {
     if (!entries?.length) return [];
-    return calculateFuelCycles(entries, vehicles);
-  }, [entries, vehicles]);
-
-  const vehicleIds = useMemo(
-    () => [...new Set(entries.map((e) => e.vehicleId).filter(Boolean))] as string[],
-    [entries],
-  );
-
-  const [serverCycles, setServerCycles] = useState<FuelCycle[] | null>(null);
-
-  useEffect(() => {
-    if (useLegacy || vehicleIds.length === 0) {
-      setServerCycles(null);
-      return;
-    }
-
-    let cancelled = false;
-    (async () => {
-      try {
-        const batches = await Promise.all(
-          vehicleIds.map((vid) =>
-            api.getFuelCycles({
-              vehicleId: vid,
-              weekStart: opts.weekStart,
-              weekEnd: opts.weekEnd,
-            }),
-          ),
-        );
-        if (cancelled) return;
-        const merged = batches.flatMap((b) => b.cycles || []);
-        setServerCycles(merged.length ? merged : null);
-      } catch {
-        if (!cancelled) setServerCycles(null);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [vehicleIds.join(','), opts.weekStart, opts.weekEnd, useLegacy]);
-
-  return serverCycles ?? clientCycles;
+    const all = calculateFuelCycles(entries, vehicles);
+    if (!opts.weekStart && !opts.weekEnd) return all;
+    return all.filter((c) => {
+      const start = String(c.startDate || '').split('T')[0];
+      const end = String(c.endDate || '').split('T')[0];
+      if (opts.weekEnd && start && start > opts.weekEnd) return false;
+      if (opts.weekStart && end && end < opts.weekStart) return false;
+      return true;
+    });
+  }, [entries, vehicles, opts.weekStart, opts.weekEnd]);
 }

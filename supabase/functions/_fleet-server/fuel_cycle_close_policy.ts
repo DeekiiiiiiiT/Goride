@@ -47,6 +47,7 @@ export function evaluateCycleClose(params: {
   tankCapacity: number;
   entryType?: string | null;
   paymentSource?: string | null;
+  entryMode?: string | null;
   adminConfirmedFullTank?: boolean;
 }): CloseDecision {
   const volume = Math.max(0, Number(params.volume) || 0);

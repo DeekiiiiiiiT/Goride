@@ -73,6 +73,16 @@ export interface MerchantProfileResponse {
   pendingTeamInvite?: PendingTeamInviteSummary;
 }
 
+export const OWNER_ACCOUNT_SUSPENDED = 'owner_account_suspended';
+
+export class OwnerAccountSuspendedError extends Error {
+  readonly code = OWNER_ACCOUNT_SUSPENDED;
+  constructor() {
+    super('Owner account suspended');
+    this.name = 'OwnerAccountSuspendedError';
+  }
+}
+
 export function useMerchant(session: Session | null) {
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['my-merchant', session?.user?.id],
@@ -99,6 +109,14 @@ export function useMerchant(session: Session | null) {
         res = await fetchProfile(validated.access_token);
       }
 
+      if (res.status === 403) {
+        const body = await res.json().catch(() => ({})) as { code?: string };
+        if (body.code === OWNER_ACCOUNT_SUSPENDED) {
+          throw new OwnerAccountSuspendedError();
+        }
+        throw new Error('Failed to fetch merchant');
+      }
+
       if (res.status === 404) {
         const body = await res.json().catch(() => ({}));
         if (body.pendingTeamInvite) {
@@ -116,7 +134,8 @@ export function useMerchant(session: Session | null) {
       return profile;
     },
     enabled: !!session,
-    retry: 1,
+    retry: (failureCount, err) =>
+      !(err instanceof OwnerAccountSuspendedError) && failureCount < 1,
   });
 
   return {
@@ -125,6 +144,9 @@ export function useMerchant(session: Session | null) {
     pendingTeamInvite: data?.pendingTeamInvite,
     isLoading,
     error,
+    ownerSuspended:
+      error instanceof OwnerAccountSuspendedError
+      || (error instanceof Error && error.message === 'Owner account suspended'),
     refetch,
   };
 }

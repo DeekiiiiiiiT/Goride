@@ -211,6 +211,22 @@ export const fuelService = {
     return response.json();
   },
 
+  /**
+   * Fuel list API defaults to the *current* week when dates are omitted.
+   * JAA CSV match must look back across statement weeks or Gas Card logs stay "Awaiting".
+   */
+  async getFuelEntriesForJaaMatch(limit = 5000): Promise<FuelEntry[]> {
+    const end = new Date();
+    const start = new Date();
+    start.setDate(start.getDate() - 90);
+    const ymd = (d: Date) => d.toISOString().slice(0, 10);
+    return this.getFuelEntries({
+      limit,
+      startDate: ymd(start),
+      endDate: ymd(end),
+    });
+  },
+
   async saveFuelEntry(entry: FuelEntry): Promise<FuelEntry> {
     // Phase 2: Staged Reconciliation - Default to Pending for new or legacy logs
     if (!entry.reconciliationStatus) {

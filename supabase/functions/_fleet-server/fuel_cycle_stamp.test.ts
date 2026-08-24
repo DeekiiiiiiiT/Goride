@@ -15,7 +15,30 @@ Deno.test("isCycleVolumeEligible excludes JAA statement ledger rows", () => {
   assertEquals(isCycleVolumeEligible(row), false);
 });
 
-Deno.test("isCycleVolumeEligible excludes linked gas-card admin anchor", () => {
+Deno.test("isCycleVolumeEligible excludes awaiting gas-card admin anchor", () => {
+  const row = {
+    id: "a1",
+    type: "Manual_Entry",
+    paymentSource: "Gas_Card",
+    liters: 0,
+    metadata: { awaitingCardStatement: true, entryMode: "Anchor" },
+  };
+  assertEquals(isCycleVolumeEligible(row), false);
+});
+
+Deno.test("isCycleVolumeEligible includes linked gas-card admin anchor with liters", () => {
+  const row = {
+    id: "a1",
+    type: "Manual_Entry",
+    paymentSource: "Gas_Card",
+    entryMode: "Anchor",
+    liters: 21.84,
+    metadata: { jaaMatchedStatementId: "s1", entryMode: "Anchor" },
+  };
+  assertEquals(isCycleVolumeEligible(row), true);
+});
+
+Deno.test("isCycleVolumeEligible excludes linked gas-card admin anchor without liters", () => {
   const row = {
     id: "a1",
     type: "Manual_Entry",

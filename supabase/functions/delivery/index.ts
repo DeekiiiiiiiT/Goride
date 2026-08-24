@@ -13,7 +13,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { applyCors } from "../_shared/corsAllowlist.ts";
 import { jwtPrimaryRole } from "../_shared/authEdge.ts";
 import { requireProductAdmin } from "../_shared/productAdmin.ts";
-import { resolveMerchantAccess, requireResolvedMerchantWithPermission, requireMerchantPermission, type TeamPermission } from "./merchantAuth.ts";
+import { resolveMerchantAccess, requireResolvedMerchantWithPermission, requireMerchantPermission, type TeamPermission, isMerchantOwnerSuspended, OWNER_ACCOUNT_SUSPENDED } from "./merchantAuth.ts";
 import {
   registerMerchantTeamRoutes,
   getPendingTeamInviteForProfile,
@@ -355,6 +355,13 @@ app.get("/merchant/profile", async (c) => {
   const supabase = getSupabase(authHeader);
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return c.json({ error: "Unauthorized" }, 401);
+
+  if (await isMerchantOwnerSuspended(user.id)) {
+    return c.json({
+      error: "Owner account suspended",
+      code: OWNER_ACCOUNT_SUSPENDED,
+    }, 403);
+  }
 
   const resolved = await resolveMerchantAccess(user.id, user.email);
   if (!resolved) {

@@ -13,12 +13,14 @@ Single source of truth for tank integrity vs km attribution vs stop-to-stop diag
 ## Three lanes (locked)
 
 ```
-Cash lane liters  ──► tank cycle volume (partials OK, rideshare close)
+Cash lane liters  ──► tank cycle volume (partials OK; cumulative_98 stacks to ~tank size)
 Card statement    ──► Card Inventory only (jaa_raw / approved_fuel) — never tank volume
-Card admin anchor ──► odometer only when linked to statement; liters live on statement row
+Card ops log      ──► after CSV match: liters count on the Gas Card ops row (statement stays inventory-only)
 ```
 
-**Matched pairs** (`jaaMatchedStatementId` ↔ `jaaMatchedDriverEntryId`) count as **one** swipe for frequency; frequency flags suppressed.
+**Matched pairs** (`jaaMatchedStatementId` ↔ `jaaMatchedDriverEntryId`) count as **one** swipe for frequency; frequency flags suppressed. Awaiting (pre-match) Gas Card anchors contribute **0** liters until statement liters land.
+
+**5179KZ / fleets that expect “every full tank ≈ tank capacity liters”:** set `vehicle.fuelSettings.cycleCloseMode = cumulative_98` (default org-wide is still `rideshare`).
 
 ## Close modes
 

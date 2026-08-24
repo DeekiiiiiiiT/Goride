@@ -2041,11 +2041,20 @@ app.get(`${BASE_PATH}/cycles`, requirePermission("fuel.view"), async (c) => {
     if (!vehicleId) return c.json({ error: "vehicleId required" }, 400);
 
     const { queryFleet } = await import("./repos/baseRepo.ts");
+    // Look back so cumulative_98 carryover / SPLIT math is intact; clip cycles to week after build
+    const weekStartYmd = weekStart ? String(weekStart).slice(0, 10) : undefined;
+    const weekEndYmd = weekEnd ? String(weekEnd).slice(0, 10) : undefined;
+    let dateFrom = weekStartYmd;
+    if (weekStartYmd) {
+      const d = new Date(`${weekStartYmd}T12:00:00Z`);
+      d.setUTCDate(d.getUTCDate() - 60);
+      dateFrom = d.toISOString().slice(0, 10);
+    }
     const res = await queryFleet("fuel_entries", {
       legacyPrefix: "fuel_entry:",
       filters: [{ op: "eq", col: "vehicle_id", value: vehicleId }],
-      dateFrom: weekStart ? String(weekStart).slice(0, 10) : undefined,
-      dateTo: weekEnd ? String(weekEnd).slice(0, 10) : undefined,
+      dateFrom,
+      dateTo: weekEndYmd,
       order: { col: "date", ascending: true },
       limit: 5000,
     });
@@ -2057,8 +2066,8 @@ app.get(`${BASE_PATH}/cycles`, requirePermission("fuel.view"), async (c) => {
     const vehicle = await kv.get(`vehicle:${vehicleId}`);
     const cycles = buildFleetCycleSnapshot(entries, { [vehicleId]: vehicle as Record<string, unknown> }, {
       vehicleId,
-      weekStart: weekStart ? String(weekStart).slice(0, 10) : undefined,
-      weekEnd: weekEnd ? String(weekEnd).slice(0, 10) : undefined,
+      weekStart: weekStartYmd,
+      weekEnd: weekEndYmd,
     });
 
     return c.json({ vehicleId, weekStart, weekEnd, cycles });

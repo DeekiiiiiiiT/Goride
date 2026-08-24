@@ -118,7 +118,7 @@ export function AdminJaaGasCardsPage() {
   const [savingCard, setSavingCard] = useState(false);
 
   const refreshMatched = useCallback(async (inventory: FuelCard[]) => {
-    const entries = await fuelService.getFuelEntries({ limit: 5000 });
+    const entries = await fuelService.getFuelEntriesForJaaMatch(5000);
     const byCard = new Map<string, MatchedCardSummary>();
     for (const e of entries) {
       if (!isJaaStatementLedgerRow(e)) continue;
@@ -301,7 +301,7 @@ export function AdminJaaGasCardsPage() {
       }
 
       const inventory = await fuelService.getFuelCards();
-      const existing = await fuelService.getFuelEntries({ limit: 5000 });
+      const existing = await fuelService.getFuelEntriesForJaaMatch(5000);
       // Only statement ledger receipts block re-import — matched driver logs keep
       // jaaReceiptNumber but must not hide Card Inventory rows after CSV delete.
       const receiptSet = collectJaaStatementReceiptNumbers(existing);
@@ -410,7 +410,8 @@ export function AdminJaaGasCardsPage() {
         unmatchedDriver: 0,
       };
       try {
-        matchResult = await runJaaGasCardMatch();
+        // Pass saved statement rows so match does not depend on week-scoped re-fetch alone
+        matchResult = await runJaaGasCardMatch(savedEntries);
       } catch (matchErr) {
         console.error('[JAA Import] match step failed', matchErr);
         toast.error(matchErr instanceof Error ? matchErr.message : 'Statement saved, but log matching failed');
@@ -458,7 +459,8 @@ export function AdminJaaGasCardsPage() {
   /** Enrich driver Gas Card logs from unlinked statement ledger rows. */
   const runJaaGasCardMatch = async (statementScope?: FuelEntry[]) => {
     const [all, inventory] = await Promise.all([
-      fuelService.getFuelEntries({ limit: 5000 }),
+      // Must span past weeks — API defaults to current week when dates omitted
+      fuelService.getFuelEntriesForJaaMatch(5000),
       fuelService.getFuelCards().catch(() => [] as FuelCard[]),
     ]);
     const statements =
@@ -527,7 +529,7 @@ export function AdminJaaGasCardsPage() {
         return;
       }
       const inventory = await fuelService.getFuelCards();
-      const existing = await fuelService.getFuelEntries({ limit: 5000 });
+      const existing = await fuelService.getFuelEntriesForJaaMatch(5000);
       const receiptSet = collectJaaStatementReceiptNumbers(existing);
 
       const syntheticRows: ParsedRow[] = open.map((r) => ({

@@ -55,11 +55,16 @@ export function isCycleVolumeEligible(entry: Record<string, unknown>): boolean {
   if (isDeclinedOrFeeRow(entry)) return false;
 
   const m = (entry.metadata || {}) as Record<string, unknown>;
-  if (isGasCardAdminAnchor(entry) && isLinkedGasCardPair(entry)) {
-    return false;
-  }
+  // Still waiting on CSV — no trusted pump liters yet
   if (m.awaitingCardStatement === true && isGasCardAdminAnchor(entry)) {
     return false;
+  }
+
+  // Matched Gas Card ops log: liters were copied from statement onto this row.
+  // Statement stays Card Inventory only; the ops log must count or Full Tanks never closes.
+  if (isGasCardAdminAnchor(entry) && isLinkedGasCardPair(entry)) {
+    const liters = Math.max(0, Number(entry.liters) || Number(m.fuelVolume) || 0);
+    return liters > 0;
   }
 
   const pay = String(entry.paymentSource || m.paymentSource || "");
@@ -261,6 +266,7 @@ export async function stampEntryCycleMetadata(
         tankCapacity,
         entryType: String(entry.type || ""),
         paymentSource: String(entry.paymentSource || m.paymentSource || ""),
+        entryMode: String(entry.entryMode || m.entryMode || ""),
         adminConfirmedFullTank: adminConfirmed,
       });
 
@@ -512,6 +518,7 @@ export async function recalculateVehicleFuelEntries(
       tankCapacity,
       entryType: String(entry.type || ""),
       paymentSource: String(entry.paymentSource || m.paymentSource || ""),
+      entryMode: String(entry.entryMode || m.entryMode || ""),
       adminConfirmedFullTank: m.adminConfirmedFullTank === true,
     });
 

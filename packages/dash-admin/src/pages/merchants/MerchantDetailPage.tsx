@@ -81,7 +81,7 @@ export function MerchantDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { session } = useOutletContext<AdminOutletContext>();
   const navigate = useNavigate();
-  const { prompt } = useAdminConfirm();
+  const { prompt, confirm } = useAdminConfirm();
   const token = session.access_token;
   const canWrite = canWriteDashAdmin(session.user);
   const canDelete = canDeleteDashAdmin(session.user);
@@ -214,6 +214,50 @@ export function MerchantDetailPage() {
       void load();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Suspend failed');
+    }
+  };
+
+  const runDeactivate = async () => {
+    if (!merchant || !canWrite) return;
+    const values = await prompt({
+      title: 'Deactivate store',
+      description: 'Deactivates this store. You can reactivate later. Delete remains a separate danger-zone action.',
+      confirmLabel: 'Deactivate',
+      variant: 'danger',
+      fields: [
+        {
+          key: 'reason',
+          label: 'Reason',
+          placeholder: 'Why is this store being deactivated?',
+          required: true,
+          multiline: true,
+        },
+      ],
+    });
+    if (!values?.reason) return;
+    try {
+      await deactivateMerchant(token, merchant.id, values.reason);
+      toast.success('Store deactivated');
+      void load();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Deactivate failed');
+    }
+  };
+
+  const runReactivate = async () => {
+    if (!merchant || !canWrite) return;
+    const ok = await confirm({
+      title: 'Reactivate store',
+      description: 'Restore this store to active operational status.',
+      confirmLabel: 'Reactivate',
+    });
+    if (!ok) return;
+    try {
+      await reactivateMerchant(token, merchant.id);
+      toast.success('Store reactivated');
+      void load();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Reactivate failed');
     }
   };
 
@@ -614,6 +658,16 @@ export function MerchantDetailPage() {
             {opStatus === 'suspended' && (
               <button type="button" onClick={async () => { await unsuspendMerchant(token, merchant.id); void load(); }} className="px-3 py-1.5 text-sm rounded-lg bg-emerald-600/20 text-emerald-300 border border-emerald-500/30">
                 Unsuspend
+              </button>
+            )}
+            {(opStatus === 'active' || opStatus === 'suspended') && merchant.verification_status === 'approved' && (
+              <button type="button" onClick={() => void runDeactivate()} className="px-3 py-1.5 text-sm rounded-lg bg-orange-600/20 text-orange-300 border border-orange-500/30">
+                Deactivate
+              </button>
+            )}
+            {opStatus === 'deactivated' && (
+              <button type="button" onClick={() => void runReactivate()} className="px-3 py-1.5 text-sm rounded-lg bg-emerald-600/20 text-emerald-300 border border-emerald-500/30">
+                Reactivate
               </button>
             )}
           </div>

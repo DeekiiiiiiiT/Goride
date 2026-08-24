@@ -742,7 +742,8 @@ export const api = {
       headers: await requireAuthHeaders(null),
     });
     if (!response.ok) throw new Error('Failed to fetch fuel cycles');
-    return response.json() as Promise<{ cycles: import('../types/fuel').FuelCycle[] }>;
+    // Server returns SlimFuelCycle (transactionIds); useFuelCycles hydrates transactions.
+    return response.json() as Promise<{ cycles: import('../types/fuel').SlimFuelCycle[] }>;
   },
 
   async recalculateFuelCycles(vehicleId?: string) {

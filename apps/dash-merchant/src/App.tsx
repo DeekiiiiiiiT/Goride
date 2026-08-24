@@ -193,7 +193,7 @@ function DashMerchantApp() {
   const [merchantWaitExpired, setMerchantWaitExpired] = useState(false);
   const bootstrappedUserRef = useRef<string | null>(null);
 
-  const { merchant, membership, pendingTeamInvite, isLoading: merchantLoading, error: merchantError, refetch } =
+  const { merchant, membership, pendingTeamInvite, isLoading: merchantLoading, error: merchantError, ownerSuspended, refetch } =
     useMerchant(session);
   const { isOnline, wasOffline, clearWasOffline } = useNetworkStatus();
   // Must run every render — calling this after splash/auth early-returns crashes React (ROAM-DASH-MERCHANT-5).
@@ -312,6 +312,27 @@ function DashMerchantApp() {
 
   if (showSplash) {
     return <SplashPage />;
+  }
+
+  if (ownerSuspended) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-surface p-inset-lg">
+        <div className="flex max-w-md flex-col items-center gap-4 text-center">
+          <h1 className="text-title-lg font-semibold text-on-surface">Account suspended</h1>
+          <p className="text-body-md text-on-surface-variant">
+            Your Partner owner account has been suspended. Your store listing is unchanged, but you
+            cannot use Partner until an admin restores access. Contact Roam support if you need help.
+          </p>
+          <button
+            type="button"
+            onClick={() => void handleSignOut()}
+            className="text-label-md font-semibold text-primary underline-offset-2 hover:underline"
+          >
+            Sign out
+          </button>
+        </div>
+      </div>
+    );
   }
 
   if (waitingForMerchant) {

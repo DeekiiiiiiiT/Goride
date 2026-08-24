@@ -9,6 +9,9 @@
     ".": "./src/index.ts",
     "./styles.css": "./src/styles.css"
   },
+  "scripts": {
+    "test": "vitest run"
+  },
   "dependencies": {
     "@roam/admin-core": "workspace:*",
     "@roam/api-client": "workspace:*",
@@ -33,6 +36,7 @@
     "@types/leaflet": "^1.9.21",
     "@types/react": "^18.3.0",
     "@types/react-dom": "^18.3.0",
-    "typescript": "^5.4.0"
+    "typescript": "^5.4.0",
+    "vitest": "^3.2.4"
   }
 }

@@ -89,16 +89,11 @@ export function buildVehicleCycleSnapshot(
   const closeMode = resolveCycleCloseMode(vehicle, null);
   const tankCapacity = fuelLogic.resolveTankCapacity(vehicle);
 
+  // Build from full lookback history; clip to week only AFTER cycles are formed.
+  // Week-filtering entries first truncates open tanks mid-cycle (e.g. 21.9L "CAPACITY FULL").
   const filtered = entries
     .filter((e) => e.vehicleId === vehicleId)
     .filter((e) => !isJaaStatementLedgerRow(e))
-    .filter((e) => {
-      if (!opts.weekStart && !opts.weekEnd) return true;
-      const d = String(e.date || "").split("T")[0];
-      if (opts.weekStart && d < opts.weekStart) return false;
-      if (opts.weekEnd && d > opts.weekEnd) return false;
-      return true;
-    })
     .sort((a, b) => {
       const da = entrySortKey(a);
       const db = entrySortKey(b);
@@ -113,8 +108,11 @@ export function buildVehicleCycleSnapshot(
   let carryover = 0;
 
   const flushCycle = (closingEntry: CycleSnapshotEntry, isClosed: boolean) => {
-    if (current.length === 0) return;
+    if (current.length === 0 && !isClosed) return;
+    // Closing fill is appended here once — caller must NOT push it into `current` first
+    // (prior bug double-counted volumeContributed and duplicated SPLIT rows).
     const allEntries = isClosed ? [...current, closingEntry] : [...current];
+    if (allEntries.length === 0) return;
     const endEntry = isClosed ? closingEntry : allEntries[allEntries.length - 1];
     const endOdo = Number(endEntry.odometer) || 0;
     const distance =
@@ -191,14 +189,17 @@ export function buildVehicleCycleSnapshot(
       continue;
     }
 
-    if (isAnchor && current.length >= 0) {
+    if (isAnchor) {
       if (lastAnchorOdo == null && hasValidOdo) {
+        // Seed anchor chain — first close stamp opens the tank window, does not flush yet
         lastAnchorOdo = Number(entry.odometer);
         lastAnchorDate = String(entry.date);
-      }
-      current.push(entry);
-      if (distanceReady(lastAnchorOdo, entry) || !hasValidOdo) {
+        current.push(entry);
+      } else if (distanceReady(lastAnchorOdo, entry) || !hasValidOdo) {
+        // flushCycle appends closingEntry — do not push into current first
         flushCycle(entry, true);
+      } else {
+        current.push(entry);
       }
     } else {
       current.push(entry);
@@ -210,7 +211,23 @@ export function buildVehicleCycleSnapshot(
     flushCycle(last, false);
   }
 
+  // Week view: keep full-tank math, only hide cycles that do not touch the selected week
+  if (opts.weekStart || opts.weekEnd) {
+    return cycles.filter((c) => cycleOverlapsWeek(c, opts.weekStart, opts.weekEnd));
+  }
   return cycles;
+}
+
+function cycleOverlapsWeek(
+  cycle: SlimCycleSnapshot,
+  weekStart?: string,
+  weekEnd?: string,
+): boolean {
+  const start = String(cycle.startDate || "").split("T")[0];
+  const end = String(cycle.endDate || "").split("T")[0];
+  if (weekEnd && start && start > weekEnd) return false;
+  if (weekStart && end && end < weekStart) return false;
+  return true;
 }
 
 function distanceReady(lastAnchorOdo: number | undefined, entry: CycleSnapshotEntry): boolean {

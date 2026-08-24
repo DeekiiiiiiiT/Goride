@@ -81,10 +81,13 @@ export function calculateFuelCycles(entries: FuelEntry[], vehicles: Vehicle[] = 
                     (meta.isAnchor === true && meta.isSoftAnchor !== true);
                 isSoft = meta.isSoftAnchor === true && !isHard;
 
-                if (typeof meta.volumeContributed === 'number' && meta.volumeContributed >= 0) {
+                if (typeof meta.volumeContributed === 'number' && meta.volumeContributed > 0) {
                     volumeContributed = meta.volumeContributed;
                     excessVolume = Number(meta.excessVolume) || Math.max(0, entryVolume - volumeContributed);
                     isCapped = isSoft || excessVolume > 0;
+                } else if (typeof meta.volumeContributed === 'number' && meta.volumeContributed === 0 && entryVolume > 0) {
+                    // Stale zero stamp after CSV match — use real liters
+                    volumeContributed = entryVolume;
                 } else if (isSoft) {
                     const local = classifyAnchor({
                         isFullTank: meta.isFullTank === true,
@@ -201,17 +204,11 @@ export function calculateFuelCycles(entries: FuelEntry[], vehicles: Vehicle[] = 
                             signalTier: cycleSignalTier,
                         });
 
+                        // Carry spillover as a number only — do NOT also insert a synthetic
+                        // duplicate of this fill (that double-counted liters + fake SPLIT rows).
                         carryoverVolume = excessVolume;
                         startingPercentage = tankCapacity > 0 ? (carryoverVolume / tankCapacity) * 100 : 0;
-
                         currentCycleEntries = [];
-                        if (excessVolume > 0) {
-                            currentCycleEntries.push({
-                                ...entry,
-                                volumeContributed: excessVolume,
-                                isCarryover: true,
-                            });
-                        }
                     } else {
                         currentCycleEntries.push({ ...entry, volumeContributed: entryVolume });
                     }

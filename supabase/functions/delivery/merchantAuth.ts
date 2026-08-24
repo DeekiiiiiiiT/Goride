@@ -24,6 +24,8 @@ export type ResolvedMerchantAccess = {
   membership: MerchantMembership;
 };
 
+export const OWNER_ACCOUNT_SUSPENDED = "owner_account_suspended";
+
 function getServiceDb() {
   return createClient(
     Deno.env.get("SUPABASE_URL")!,
@@ -32,11 +34,27 @@ function getServiceDb() {
   );
 }
 
+/** True when this user has a suspended merchant-owner person profile. */
+export async function isMerchantOwnerSuspended(userId: string): Promise<boolean> {
+  const sb = getServiceDb();
+  const { data } = await sb
+    .from("merchant_owner_profiles")
+    .select("account_status")
+    .eq("user_id", userId)
+    .maybeSingle();
+  return String((data as { account_status?: string } | null)?.account_status) === "suspended";
+}
+
 export async function resolveMerchantAccess(
   userId: string,
   userEmail?: string | null,
 ): Promise<ResolvedMerchantAccess | null> {
   const sb = getServiceDb();
+
+  // Block Partner for suspended owners (person-level; stores stay unchanged)
+  if (await isMerchantOwnerSuspended(userId)) {
+    return null;
+  }
 
   const { data: owned } = await sb
     .from("merchants")
@@ -97,6 +115,9 @@ export async function requireResolvedMerchantWithPermission(
   | { ok: true; resolved: ResolvedMerchantAccess }
   | { ok: false; status: number; message: string }
 > {
+  if (await isMerchantOwnerSuspended(userId)) {
+    return { ok: false, status: 403, message: OWNER_ACCOUNT_SUSPENDED };
+  }
   const resolved = await resolveMerchantAccess(userId, userEmail);
   if (!resolved) {
     return { ok: false, status: 403, message: "Not a merchant" };

@@ -70,6 +70,8 @@ export function evaluateCycleClose(params: {
   prevCumulative: number;
   volume: number;
   tankCapacity: number;
+  paymentSource?: string | null;
+  entryMode?: string | null;
   adminConfirmedFullTank?: boolean;
 }): CloseDecision {
   const volume = Math.max(0, Number(params.volume) || 0);
@@ -164,14 +166,4 @@ export function closeOpenCycleAtWeekBoundary(
     totalVolumeInCycle: total,
     percentOfTank: tankCapacity > 0 ? (total / tankCapacity) * 100 : 0,
   };
-}
-
-export type FuelSignalTier = "observe" | "review" | "exception";
-
-export function isExceptionTier(tier?: FuelSignalTier | null): boolean {
-  return tier === "exception";
-}
-
-export function isReviewOrException(tier?: FuelSignalTier | null): boolean {
-  return tier === "review" || tier === "exception";
 }

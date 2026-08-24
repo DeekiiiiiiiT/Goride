@@ -993,7 +993,7 @@ export function FuelLogTable({
                                 const vehicle = vehicles.find(v => v.id === cycle.vehicleId);
                                 const tankCap = Number(vehicle?.specifications?.tankCapacity) || vehicle?.fuelSettings?.tankCapacity || 40;
                                 const calculatedEndPct = Math.min(100, (cycle.startingPercentage || 0) + (cycle.totalLiters / tankCap) * 100);
-                                
+
                                 return (
                                 <AccordionItem key={cycle.id} value={cycle.id} className="border rounded-xl px-4 py-1 hover:bg-slate-50/50 transition-colors">
                                     <AccordionTrigger className="hover:no-underline py-3">
@@ -1096,7 +1096,7 @@ export function FuelLogTable({
                                         <Table>
                                             <TableHeader className="bg-slate-50/50"><TableRow><TableHead className="h-8 text-[10px]">Date</TableHead><TableHead className="h-8 text-[10px]">Type</TableHead><TableHead className="h-8 text-[10px]">Contrib. Volume</TableHead><TableHead className="h-8 text-[10px]">Contrib. Cost</TableHead><TableHead className="h-8 text-[10px]">Odo</TableHead><TableHead className="h-8 text-[10px] text-right">Action</TableHead></TableRow></TableHeader>
                                             <TableBody>
-                                                {cycle.transactions.map((tx, txIdx) => (
+                                                {(cycle.transactions ?? []).map((tx, txIdx) => (
                                                     <TableRow key={`${tx.id}-${txIdx}`} className={cn("group hover:bg-slate-50", tx.isCarryover && "bg-blue-50/30")}>
                                                         <TableCell className="py-2 text-xs">
                                                             <div className="flex flex-col">
@@ -1104,7 +1104,7 @@ export function FuelLogTable({
                                                                 {tx.isCarryover && <span className="text-[9px] text-blue-600 font-bold uppercase flex items-center gap-0.5"><RotateCcw className="h-2 w-2" /> Balance from Prev.</span>}
                                                             </div>
                                                         </TableCell>
-                                                        <TableCell className="py-2 text-xs"><div className="flex items-center gap-1">{getTypeIcon(tx.type)}{tx.type.replace('_', ' ')}</div></TableCell>
+                                                        <TableCell className="py-2 text-xs"><div className="flex items-center gap-1">{getTypeIcon(String(tx.type || ''))}{String(tx.type || 'Fuel').replace(/_/g, ' ')}</div></TableCell>
                                                         <TableCell className="py-2 text-xs font-medium">
                                                             <div className="flex items-center gap-1.5">
                                                                 {tx.volumeContributed?.toFixed(1) || tx.liters?.toFixed(1)} L

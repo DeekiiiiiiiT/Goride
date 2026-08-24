@@ -35,6 +35,8 @@ export type IdentityDetail = {
   personas: IdentityPersona[];
   customer: Record<string, unknown> | null;
   courier: Record<string, unknown> | null;
+  /** Partner person-level status; independent of store operational_status */
+  merchantOwner?: Record<string, unknown> | null;
   ownedMerchants: Array<Record<string, unknown>>;
   staffMemberships: Array<Record<string, unknown>>;
   consoleRoles: string[];

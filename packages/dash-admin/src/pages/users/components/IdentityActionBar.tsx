@@ -18,8 +18,12 @@ import {
   getIdentityDetail,
   suspendMerchant,
   unsuspendMerchant,
+  deactivateMerchant,
+  reactivateMerchant,
   resetMerchantOwnerPassword,
   revokeMerchantStaff,
+  restrictPersona,
+  unrestrictPersona,
   type IdentityDetail,
   type CourierCrossPersonaWarning,
 } from '@roam/dash-admin-client';
@@ -244,7 +248,42 @@ export function useIdentityActions(
     }
   }
 
-  // --- Merchant app (per store / membership) ---
+  // --- Merchant app (owner person + per store / membership) ---
+  const isMerchantOwner =
+    (detail.ownedMerchants?.length ?? 0) > 0 || !!detail.merchantOwner;
+  const ownerAccountStatus = String(detail.merchantOwner?.account_status || 'active');
+
+  if (isMerchantOwner && canRestrict && ownerAccountStatus !== 'suspended') {
+    buckets.merchant.push({
+      id: 'suspend-merchant-owner',
+      label: 'Suspend merchant owner (Partner access)',
+      tone: 'warning',
+      description: 'Blocks Partner login for this person. Store operational status is unchanged.',
+      run: () => void runWithReason(
+        'Suspend merchant owner (Partner access)',
+        'Blocks this person from Partner. Owned stores keep their operational status.',
+        async (reason) => {
+          await restrictPersona(accessToken, userId, 'merchant_owner', reason);
+        },
+      ),
+    });
+  }
+
+  if (isMerchantOwner && canRestrict && ownerAccountStatus === 'suspended') {
+    buckets.merchant.push({
+      id: 'unsuspend-merchant-owner',
+      label: 'Unsuspend merchant owner (Partner access)',
+      tone: 'success',
+      run: () => void runWithReason(
+        'Unsuspend merchant owner (Partner access)',
+        'Restores Partner access for this person. Store operational status is unchanged.',
+        async (reason) => {
+          await unrestrictPersona(accessToken, userId, 'merchant_owner', reason);
+        },
+      ),
+    });
+  }
+
   for (const m of detail.ownedMerchants ?? []) {
     const mid = String(m.id ?? '');
     if (!mid) continue;
@@ -254,7 +293,7 @@ export function useIdentityActions(
     if (canMerchantWrite && opStatus === 'active') {
       buckets.merchant.push({
         id: `suspend-merchant-${mid}`,
-        label: `Suspend ${name}`,
+        label: `Suspend store · ${name}`,
         tone: 'warning',
         run: () => void runWithReason(
           `Suspend store · ${name}`,
@@ -267,12 +306,48 @@ export function useIdentityActions(
     if (canMerchantWrite && opStatus === 'suspended') {
       buckets.merchant.push({
         id: `unsuspend-merchant-${mid}`,
-        label: `Unsuspend ${name}`,
+        label: `Unsuspend store · ${name}`,
         tone: 'success',
         run: () => void unsuspendMerchant(accessToken, mid).then(() => {
           toast.success('Store unsuspended');
           reload();
         }),
+      });
+    }
+
+    if (canMerchantWrite && (opStatus === 'active' || opStatus === 'suspended')) {
+      buckets.merchant.push({
+        id: `deactivate-merchant-${mid}`,
+        label: `Deactivate store · ${name}`,
+        tone: 'danger',
+        run: () => void runWithReason(
+          `Deactivate store · ${name}`,
+          'Deactivates this store. Reactivate later from Actions or Merchant Detail. Delete remains on Merchant Detail only.',
+          async (reason) => { await deactivateMerchant(accessToken, mid, reason); },
+        ),
+      });
+    }
+
+    if (canMerchantWrite && opStatus === 'deactivated') {
+      buckets.merchant.push({
+        id: `reactivate-merchant-${mid}`,
+        label: `Reactivate store · ${name}`,
+        tone: 'success',
+        run: async () => {
+          const ok = await confirm({
+            title: `Reactivate store · ${name}`,
+            description: 'Restore this store to active operational status.',
+            confirmLabel: 'Reactivate',
+          });
+          if (!ok) return;
+          try {
+            await reactivateMerchant(accessToken, mid);
+            toast.success('Store reactivated');
+            reload();
+          } catch (e) {
+            toast.error(e instanceof Error ? e.message : 'Reactivate failed');
+          }
+        },
       });
     }
 

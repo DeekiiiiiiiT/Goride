@@ -96,6 +96,37 @@ async function applyPersonaRestrict(
     }
     return null;
   }
+  if (persona === "merchant_owner" || persona === "merchant") {
+    const { data: owned } = await db.from("merchants").select("id").eq("owner_id", userId).limit(1).maybeSingle();
+    if (!owned) {
+      return new Response(JSON.stringify({ error: "persona_not_found" }), { status: 404 });
+    }
+    const now = new Date().toISOString();
+    const patch = action === "restrict"
+      ? {
+        account_status: "suspended",
+        suspended_reason: reason,
+        suspended_at: now,
+        updated_at: now,
+      }
+      : {
+        account_status: "active",
+        suspended_reason: null,
+        suspended_at: null,
+        suspended_by: null,
+        updated_at: now,
+      };
+    const { error: upsertErr } = await db.from("merchant_owner_profiles").upsert(
+      { user_id: userId, ...patch },
+      { onConflict: "user_id" },
+    );
+    if (upsertErr) return new Response(JSON.stringify({ error: upsertErr.message }), { status: 500 });
+    // Person-level only — do not touch merchants.operational_status
+    if (action === "restrict") {
+      await getAuthAdmin().auth.admin.signOut(userId, "global");
+    }
+    return null;
+  }
   return new Response(JSON.stringify({ error: "unsupported_persona" }), { status: 400 });
 }
 
@@ -213,6 +244,8 @@ export function registerIdentityAdminRoutes(app: Hono) {
     const { data: staffMemberships } = await delivery.from("merchant_team_members")
       .select("id, merchant_id, role, is_owner, merchants(name)")
       .eq("user_id", userId);
+    const { data: merchantOwner } = await delivery.from("merchant_owner_profiles").select("*")
+      .eq("user_id", userId).maybeSingle();
 
     const consoleRoles = await fetchUserRoleNames(userId);
 
@@ -228,6 +261,7 @@ export function registerIdentityAdminRoutes(app: Hono) {
       personas: personas ?? [],
       customer,
       courier,
+      merchantOwner: merchantOwner ?? null,
       ownedMerchants: ownedMerchants ?? [],
       staffMemberships: staffMemberships ?? [],
       consoleRoles,

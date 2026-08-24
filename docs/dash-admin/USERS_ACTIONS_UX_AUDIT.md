@@ -193,7 +193,6 @@ Enterprise redesign shipped as specified:
 - Per staff membership: Revoke staff · {store}
 - Client: `resetMerchantOwnerPassword` in `dashAdminService.ts`
 - Edge: owner recovery redirect uses Partner (`recoveryRedirectForProduct("partner")`)
-- Intentionally **not** in this menu: deactivate / delete / reactivate (Merchant Detail danger zone)
 
 ### Files
 - `packages/dash-admin/src/pages/users/components/identityActions/*`
@@ -214,3 +213,28 @@ Enterprise redesign shipped as specified:
 7. No-write admin — permission empty copy
 8. Menu and bar both show groups
 9. Owner password reset email lands on Partner after edge deploy
+
+## Follow-up implemented (2026-08-24)
+
+Previously out-of-scope items shipped:
+
+### Merchant-owner person status (option B)
+- Table: `delivery.merchant_owner_profiles.account_status` (`active` | `suspended`)
+- Migration: `supabase/migrations/20260829120000_merchant_owner_profiles.sql`
+- `platform.identity_personas` merchant_owner status now uses owner profile, not store `operational_status`
+- `applyPersonaRestrict` supports `merchant_owner` / `merchant` without touching store ops
+- Identity detail returns `merchantOwner`
+- Partner: `403` + `code: owner_account_suspended` on `/merchant/profile`; suspended screen in `apps/dash-merchant`
+- Actions: **Suspend / Unsuspend merchant owner (Partner access)**
+
+### Store lifecycle in Actions (Delete stays on Detail)
+- Per store: **Deactivate** / **Reactivate** in Users Actions
+- Same buttons on Merchant Detail (were imported but unused)
+- **Delete** remains Merchant Detail only (type-to-confirm)
+
+### Vitest
+- `pnpm --filter @roam/dash-admin test`
+- `buildIdentityActionGroups.test.ts`
+
+### Notion
+- Architecture Docs → [Users Identity Actions UX](https://app.notion.com/p/3c62ac0f7598816e9d50d4c03309a743)
