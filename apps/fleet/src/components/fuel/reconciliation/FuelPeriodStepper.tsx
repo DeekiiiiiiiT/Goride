@@ -37,13 +37,13 @@ export function FuelPeriodStepper({
             }`}
           >
             <span
-              className={`flex h-11 w-11 items-center justify-center rounded-full border-2 text-sm sm:h-10 sm:w-10 ${
+              className={`flex h-11 w-11 items-center justify-center rounded-full border-2 text-sm ${
                 step.locked
                   ? 'border-slate-200 bg-slate-50 text-slate-400'
                   : step.complete
-                    ? 'border-emerald-500 bg-emerald-50 text-emerald-600'
+                    ? 'border-emerald-500 bg-emerald-50 text-emerald-700'
                     : isActive
-                      ? 'border-indigo-600 bg-indigo-50 text-indigo-700'
+                      ? 'border-[#3525cd] bg-[#f0ecf9] text-[#3525cd]'
                       : 'border-amber-400 bg-amber-50 text-amber-700'
               }`}
             >
@@ -59,7 +59,7 @@ export function FuelPeriodStepper({
             </span>
             <span
               className={`max-w-[88px] text-center text-[10px] font-medium leading-tight ${
-                isActive ? 'text-indigo-700' : 'text-slate-600'
+                isActive ? 'text-[#3525cd]' : 'text-slate-600'
               }`}
             >
               {labels[step.id]}
