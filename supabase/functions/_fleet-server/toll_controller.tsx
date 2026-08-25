@@ -115,6 +115,8 @@ import {
 } from "../../../apps/fleet/src/types/tollFinancialEvent.ts";
 import {
   buildTollContentFingerprint,
+  ensureTollContentFingerprint,
+  findDuplicateTollLedgerEntry,
   fingerprintFromTollLike,
   resolveTollPlazaSSot,
   matchesSyntheticCashTollSignature,
@@ -1270,6 +1272,7 @@ function tollLedgerToTxShape(entry: TollLedgerRecord): any {
     vehiclePlate: entry.vehiclePlate,
     driverId: entry.driverId,
     driverName: entry.driverName,
+    referenceNumber: entry.referenceNumber || entry.metadata?.referenceNumber || null,
     paymentMethod: entry.paymentMethod === "cash" ? "Cash" :
                    entry.paymentMethod === "card" ? "Card" :
                    entry.paymentMethod === "fleet_account" ? "Fleet Account" : "Tag Balance",
@@ -2783,8 +2786,9 @@ const TOLL_LEDGER_PREFIX = "toll_ledger:";
  * Save a toll ledger entry to KV store.
  * Always mirrors usage/refund into the Business Finance canonical ledger
  * (idempotent). Callers must not skip this — that was the silent P&L miss.
+ * @returns false when skipped as duplicate import; true when persisted.
  */
-async function saveTollLedgerEntry(entry: TollLedgerRecord, c?: Context): Promise<void> {
+async function saveTollLedgerEntry(entry: TollLedgerRecord, c?: Context): Promise<boolean> {
   // Validate required fields
   if (!entry.id) throw new Error("TollLedgerRecord.id is required");
   if (!entry.date) throw new Error("TollLedgerRecord.date is required");
@@ -2813,6 +2817,16 @@ async function saveTollLedgerEntry(entry: TollLedgerRecord, c?: Context): Promis
     } catch (e: any) {
       console.warn(`[TollLedgerStorage] plazaId enrich skipped: ${e?.message}`);
     }
+  }
+
+  ensureTollContentFingerprint(entry);
+
+  const duplicate = findDuplicateTollLedgerEntry(entry, await getAllTollLedgerEntries());
+  if (duplicate) {
+    console.log(
+      `[TollLedgerStorage] Skip duplicate (${duplicate.reason}) for ${entry.id}; existing ${duplicate.existingId}`,
+    );
+    return false;
   }
 
   // Always persist via kv.set — fleet cutover writes fleet.toll_ledger in afterUpsert
@@ -2903,6 +2917,8 @@ async function saveTollLedgerEntry(entry: TollLedgerRecord, c?: Context): Promis
   } catch (e) {
     console.error("[TollLedgerStorage] financial event post failed:", e);
   }
+
+  return true;
 }
 
 /**
@@ -3745,6 +3761,7 @@ function transactionToTollLedgerServer(tx: any): TollLedgerRecord {
     date: dateOnly,
     amount: tx.amount,
     plaza: plazaSsot.plaza,
+    referenceNumber: tx.referenceNumber || tx.metadata?.referenceNumber || null,
     metadata: plazaSsot.metadata,
   });
   const metadata = {

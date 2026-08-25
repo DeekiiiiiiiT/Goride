@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildTollContentFingerprint,
+  findDuplicateTollLedgerEntry,
   isSuspiciousVineyardsCashRate,
   isTollIncludedInSpend,
   isTollQuarantined,
@@ -25,6 +26,85 @@ describe('tollLedgerIntegrity', () => {
       metadata: { lane: 'W03', collector: '12' },
     });
     expect(a).toBe(b);
+  });
+
+  it('treats metadata.laneId as alias for lane in fingerprints', () => {
+    const withLane = buildTollContentFingerprint({
+      vehicleId: 'v1',
+      date: '2026-08-17',
+      amount: -850,
+      lane: 'W03',
+      collector: '12',
+    });
+    const withLaneId = buildTollContentFingerprint({
+      vehicleId: 'v1',
+      date: '2026-08-17',
+      amount: 850,
+      metadata: { laneId: 'W03', collector: '12' },
+    });
+    expect(withLane).toBe(withLaneId);
+  });
+
+  it('includes referenceNumber in fingerprint so vendor spelling drift does not split identity', () => {
+    const a = buildTollContentFingerprint({
+      vehicleId: 'v1',
+      date: '2026-08-17',
+      amount: -850,
+      plaza: 'Transjam Highways',
+      referenceNumber: '00700049',
+    });
+    const b = buildTollContentFingerprint({
+      vehicleId: 'v1',
+      date: '2026-08-17',
+      amount: 850,
+      plaza: 'TransJamaican Highways',
+      referenceNumber: '00700049',
+    });
+    expect(a).toBe(b);
+  });
+
+  it('findDuplicateTollLedgerEntry matches by reference number first', () => {
+    const existing = [
+      {
+        id: 'keep-me',
+        date: '2026-08-17',
+        amount: -850,
+        referenceNumber: '00700049',
+        driverId: 'd1',
+        vehicleId: 'v1',
+        status: 'pending',
+      },
+    ];
+    const candidate = {
+      id: 'new-import',
+      date: '2026-08-17',
+      amount: -850,
+      referenceNumber: '00700049',
+      driverId: 'd1',
+      vehicleId: 'v1',
+    };
+    const dup = findDuplicateTollLedgerEntry(candidate, existing);
+    expect(dup?.existingId).toBe('keep-me');
+    expect(dup?.reason).toBe('reference_number');
+  });
+
+  it('findDuplicateTollLedgerEntry skips voided rows', () => {
+    const existing = [
+      {
+        id: 'voided-row',
+        date: '2026-08-17',
+        amount: -850,
+        referenceNumber: '00700049',
+        status: 'voided',
+      },
+    ];
+    const candidate = {
+      id: 'new-import',
+      date: '2026-08-17',
+      amount: -850,
+      referenceNumber: '00700049',
+    };
+    expect(findDuplicateTollLedgerEntry(candidate, existing)).toBeNull();
   });
 
   it('prefers OCR plaza over highway merchant for SSOT', () => {

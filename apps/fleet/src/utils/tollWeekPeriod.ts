@@ -4,6 +4,16 @@ import { fleetTzDateKey, normalizeWallClockTime, ymdToLocalDate } from './timezo
 import { VARIANCE_THRESHOLD } from './tollReconciliation';
 import { dateWeekKey } from './fleetMondayWeekKey';
 
+export {
+  isDisputeRefundMatched,
+  isTollCoveredByDisputeRefund,
+  isVisiblePartialShortfallClaim,
+  isActionablePartialShortfall,
+  hasMatchedDisputeRefund,
+  isDisputeRefundInWizardPeriod,
+  disputeRefundPeriodWeekKey,
+} from './tollPeriodDisputeHelpers';
+
 /** Edge-safe Monday week key (shared with unlinked shortfall scoring). */
 export { dateWeekKey };
 
@@ -195,29 +205,10 @@ export function getDisputeRefundWeekDate(r: DisputeRefund): Date {
   return !isNaN(d.getTime()) ? d : new Date(0);
 }
 
-/** Monday-start week key for a dispute refund (`refund.date` in fleet tz). */
-export function disputeRefundPeriodWeekKey(
-  refund: Pick<DisputeRefund, 'date'>,
-  fleetTz?: string,
-): string {
-  return weekBucketForDate(getDisputeRefundWeekDate(refund as DisputeRefund), fleetTz).key;
-}
-
 /**
  * Period visibility for dispute refunds — mirrors period_reset inventory:
  * toll-first when matched to a period toll, else refund-date week key.
  */
-export function isDisputeRefundInWizardPeriod(
-  refund: Pick<DisputeRefund, 'date' | 'matchedTollId' | 'matchedClaimId'>,
-  periodWeekKey: string,
-  fleetTz: string,
-  periodTollIds?: ReadonlySet<string>,
-  periodClaimIds?: ReadonlySet<string>,
-): boolean {
-  if (refund.matchedTollId && periodTollIds?.has(refund.matchedTollId)) return true;
-  if (refund.matchedClaimId && periodClaimIds?.has(refund.matchedClaimId)) return true;
-  return disputeRefundPeriodWeekKey(refund, fleetTz) === periodWeekKey;
-}
 
 export interface DisputeRefundWeekGroup {
   key: string;
@@ -261,9 +252,6 @@ export function groupDisputeRefundsByWeek(refunds: DisputeRefund[], timezone?: s
  * re-implementation, so the counting rule can never silently drift between
  * views the way the toll-reconciliation counts already have.
  */
-export function isDisputeRefundMatched(r: Pick<DisputeRefund, 'status'>): boolean {
-  return r.status === 'matched' || r.status === 'auto_resolved';
-}
 
 /**
  * Matched/unmatched dispute-refund counts for a single period, bucketed by
@@ -536,92 +524,19 @@ export function isOpenPartialClaim(
  * Partial shortfall still owed — Open claims OR wrongly auto-Resolved after
  * unlinked apply left amount > 0 (logs: f1bc030a toll, Resolved, paid 275, amt 10).
  */
-export function isActionablePartialShortfall(
-  claim: Pick<
-    Claim,
-    | 'status'
-    | 'paidAmount'
-    | 'amount'
-    | 'resolutionReason'
-    | 'unlinkedTripId'
-    | 'resolutionTransactionId'
-  > | null | undefined,
-  toll?: Pick<FinancialTransaction, 'unlinkedSourceTripId'> | null,
-): boolean {
-  if (!claim) return false;
-  const paid = Math.abs(Number(claim.paidAmount) || 0);
-  const remaining = Math.abs(Number(claim.amount) || 0);
-  if (remaining <= VARIANCE_THRESHOLD || paid <= VARIANCE_THRESHOLD) return false;
-  if (claim.status === 'Open') return true;
-  if (claim.status !== 'Resolved') return false;
-
-  const hasUnlinkedApply = !!(claim.unlinkedTripId || toll?.unlinkedSourceTripId);
-  if (claim.resolutionReason === 'Reimbursed' && hasUnlinkedApply) return true;
-
-  // Partial unlinked apply closed as Charge Driver without posting a driver debit.
-  return (
-    claim.resolutionReason === 'Charge Driver' &&
-    !claim.resolutionTransactionId
-  );
-}
 
 /** True when a matched dispute refund is linked to this claim's toll. */
-export function hasMatchedDisputeRefund(
-  claim: Pick<Claim, 'id' | 'transactionId'>,
-  disputeRefunds: DisputeRefund[],
-): boolean {
-  if (!claim.transactionId && !claim.id) return false;
-  return disputeRefunds.some(
-    (r) =>
-      isDisputeRefundMatched(r) &&
-      (r.matchedClaimId === claim.id || r.matchedTollId === claim.transactionId),
-  );
-}
 
 /**
  * True when a matched dispute has settled this toll — no shortfall left to act on.
  * A partial dispute credit (Open claim still has amount remaining) is NOT covered.
  */
-export function isTollCoveredByDisputeRefund(
-  claim: Pick<Claim, 'id' | 'transactionId' | 'status' | 'amount'>,
-  disputeRefunds: DisputeRefund[],
-): boolean {
-  if (!hasMatchedDisputeRefund(claim, disputeRefunds)) return false;
-  // Open shortfall after a partial dispute credit must stay actionable (Expenses + landing).
-  if (claim.status === 'Open' && Math.abs(Number(claim.amount) || 0) > VARIANCE_THRESHOLD) {
-    return false;
-  }
-  return true;
-}
 
 /**
  * Partial shortfall rows visible in Underpaid → Partially Covered.
  * Excludes tolls already closed by a matched dispute refund.
  * Open claims always list here (fleet still decides) unless a dispute covers them.
  */
-export function isVisiblePartialShortfallClaim(
-  claim: Pick<
-    Claim,
-    | 'id'
-    | 'status'
-    | 'paidAmount'
-    | 'amount'
-    | 'resolutionReason'
-    | 'unlinkedTripId'
-    | 'resolutionTransactionId'
-    | 'transactionId'
-    | 'disputeRefundId'
-  > | null | undefined,
-  toll: Pick<FinancialTransaction, 'unlinkedSourceTripId'> | null | undefined,
-  disputeRefunds: DisputeRefund[],
-): boolean {
-  if (!claim) return false;
-  if (isTollCoveredByDisputeRefund(claim, disputeRefunds)) return false;
-  if (claim.status === 'Resolved' && claim.disputeRefundId) return false;
-  // Open always surfaces on Partially Covered (even before paidAmount is set).
-  if (claim.status === 'Open') return true;
-  return isActionablePartialShortfall(claim, toll);
-}
 
 /** True when a claim's toll-first anchor week matches the wizard period week key. */
 export function isClaimInPeriod(

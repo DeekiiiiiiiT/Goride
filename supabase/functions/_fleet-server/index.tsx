@@ -186,10 +186,6 @@ import tollApp, {
   invalidateStaleTollMatchesForTrip,
   voidTollLedgerEntryHandler,
 } from "./toll_controller.tsx";
-import {
-  buildTollContentFingerprint,
-  fingerprintFromTollLike,
-} from "../../../apps/fleet/src/utils/tollLedgerIntegrity.ts";
 import { resolveDriverFromFleetRecords } from "./driver_identity.ts";
 import disputeRefundApp from "./dispute_refund_controller.tsx";
 import tollPeriodApp from "./toll_period_controller.tsx";
@@ -506,35 +502,9 @@ async function writeTollToLedger(transaction: any, c: Context): Promise<void> {
   }
 
   const tollRecord = stampOrg(transactionToTollLedgerServer(transaction), c);
-  const fp =
-    (typeof tollRecord.metadata?.contentFingerprint === "string" &&
-      tollRecord.metadata.contentFingerprint) ||
-    fingerprintFromTollLike(tollRecord) ||
-    buildTollContentFingerprint({
-      vehicleId: tollRecord.vehicleId,
-      date: tollRecord.date,
-      amount: tollRecord.amount,
-      plaza: tollRecord.plaza,
-      metadata: tollRecord.metadata,
-    });
+  const saved = await saveTollLedgerEntry(tollRecord, c);
+  if (!saved) return;
 
-  // Content dedup: skip if another ledger row already has this physical crossing.
-  if (fp) {
-    const existing = await getAllTollLedgerEntries();
-    const duplicate = existing.some((e) => {
-      if (e.id === tollRecord.id) return false;
-      const efp =
-        (typeof e.metadata?.contentFingerprint === "string" && e.metadata.contentFingerprint) ||
-        fingerprintFromTollLike(e);
-      return Boolean(efp && efp === fp);
-    });
-    if (duplicate) {
-      console.log(`[TollLedger] Skip duplicate content fingerprint for ${tollRecord.id}: ${fp}`);
-      return;
-    }
-  }
-
-  await saveTollLedgerEntry(tollRecord, c);
   console.log(`[TollLedger] Saved toll_ledger:${tollRecord.id}`);
   // Canonical append is inside saveTollLedgerEntry (idempotent).
   // MOI-3: compute+persist a match-on-ingest suggestion (no-ops unless the

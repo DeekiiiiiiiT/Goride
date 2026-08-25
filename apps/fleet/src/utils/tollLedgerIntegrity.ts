@@ -6,9 +6,12 @@
 export type TollIntegrityLike = {
   id?: string | null;
   vehicleId?: string | null;
+  driverId?: string | null;
   date?: string | null;
   amount?: number | null;
   paymentMethod?: string | null;
+  referenceNumber?: string | null;
+  status?: string | null;
   /** Ledger / API plaza name (may be missing on tx shape — use vendor). */
   plaza?: string | null;
   /** API tx shape: tollLedgerToTxShape puts ledger plaza here. */
@@ -19,6 +22,32 @@ export type TollIntegrityLike = {
   metadata?: Record<string, unknown> | null;
   auditTrail?: Array<{ metadata?: Record<string, unknown> | null }> | null;
 };
+
+export type TollDuplicateMatchReason = 'reference_number' | 'content_fingerprint';
+
+export type TollDuplicateMatch = {
+  existingId: string;
+  reason: TollDuplicateMatchReason;
+};
+
+/** Normalize receipt / transaction id for dedup comparisons. */
+export function normalizeTollReferenceNumber(ref: string | null | undefined): string {
+  return String(ref ?? '').trim().toUpperCase();
+}
+
+export function resolveTollReferenceNumber(t: TollIntegrityLike): string | null {
+  const raw =
+    t.referenceNumber ??
+    (typeof t.metadata?.referenceNumber === 'string' ? t.metadata.referenceNumber : null);
+  const normalized = normalizeTollReferenceNumber(raw);
+  return normalized || null;
+}
+
+export function isTollLedgerVoided(t: TollIntegrityLike): boolean {
+  if (String(t.status || '').toLowerCase() === 'voided') return true;
+  if (t.metadata?.voided === true) return true;
+  return false;
+}
 
 /** Normalize amount for fingerprint (usage debits compare as abs). */
 export function tollFingerprintAmount(amount: number | null | undefined): string {
@@ -43,19 +72,31 @@ export function buildTollContentFingerprint(input: {
   lane?: string | null;
   collector?: string | null;
   plaza?: string | null;
+  referenceNumber?: string | null;
   metadata?: Record<string, unknown> | null;
 }): string {
   const day = tollFingerprintDay(input.date);
   const amt = tollFingerprintAmount(input.amount);
   const vehicle = String(input.vehicleId || '').trim().toLowerCase() || 'novid';
   const meta = input.metadata || {};
-  const lane = String(input.lane ?? meta.lane ?? '').trim().toLowerCase();
+  const lane = String(
+    input.lane ?? meta.lane ?? meta.laneId ?? '',
+  )
+    .trim()
+    .toLowerCase();
   const collector = String(input.collector ?? meta.collector ?? '').trim().toLowerCase();
   const plaza = String(
     input.plaza ?? meta.plaza ?? meta.tollPlaza ?? '',
   )
     .trim()
     .toLowerCase();
+  const ref = normalizeTollReferenceNumber(
+    input.referenceNumber ??
+      (typeof meta.referenceNumber === 'string' ? meta.referenceNumber : null),
+  );
+  if (ref) {
+    return `${vehicle}|${day}|${amt}|ref:${ref}`;
+  }
   const detail =
     lane || collector
       ? `lane:${lane}|collector:${collector}`
@@ -64,13 +105,68 @@ export function buildTollContentFingerprint(input: {
 }
 
 export function fingerprintFromTollLike(t: TollIntegrityLike): string {
+  const stored =
+    typeof t.metadata?.contentFingerprint === 'string'
+      ? t.metadata.contentFingerprint.trim()
+      : '';
+  if (stored) return stored;
   return buildTollContentFingerprint({
     vehicleId: t.vehicleId,
     date: t.date,
     amount: t.amount,
+    referenceNumber: resolveTollReferenceNumber(t),
     metadata: t.metadata || undefined,
     plaza: t.plaza ?? t.vendor,
   });
+}
+
+/** Stamp metadata.contentFingerprint when missing (call before persist). */
+export function ensureTollContentFingerprint<T extends TollIntegrityLike>(entry: T): T {
+  const fp = fingerprintFromTollLike(entry);
+  entry.metadata = { ...(entry.metadata || {}), contentFingerprint: fp };
+  return entry;
+}
+
+function refDedupKeysMatch(a: TollIntegrityLike, b: TollIntegrityLike): boolean {
+  const refA = resolveTollReferenceNumber(a);
+  const refB = resolveTollReferenceNumber(b);
+  if (!refA || refB !== refA) return false;
+  if (tollFingerprintDay(a.date) !== tollFingerprintDay(b.date)) return false;
+  if (tollFingerprintAmount(a.amount) !== tollFingerprintAmount(b.amount)) return false;
+  const driverA = String(a.driverId || '').trim();
+  const driverB = String(b.driverId || '').trim();
+  if (driverA && driverB && driverA !== driverB) return false;
+  const vehicleA = String(a.vehicleId || '').trim();
+  const vehicleB = String(b.vehicleId || '').trim();
+  if (vehicleA && vehicleB && vehicleA !== vehicleB) return false;
+  return true;
+}
+
+/**
+ * Find an existing non-voided toll matching candidate (ref first, fingerprint fallback).
+ */
+export function findDuplicateTollLedgerEntry(
+  candidate: TollIntegrityLike,
+  existing: readonly TollIntegrityLike[],
+): TollDuplicateMatch | null {
+  const candidateId = candidate.id != null ? String(candidate.id) : '';
+  for (const row of existing) {
+    if (!row) continue;
+    const rowId = row.id != null ? String(row.id) : '';
+    if (candidateId && rowId === candidateId) continue;
+    if (isTollLedgerVoided(row)) continue;
+
+    if (refDedupKeysMatch(candidate, row)) {
+      return { existingId: rowId, reason: 'reference_number' };
+    }
+
+    const candidateFp = fingerprintFromTollLike(candidate);
+    const rowFp = fingerprintFromTollLike(row);
+    if (candidateFp && rowFp && candidateFp === rowFp) {
+      return { existingId: rowId, reason: 'content_fingerprint' };
+    }
+  }
+  return null;
 }
 
 /**

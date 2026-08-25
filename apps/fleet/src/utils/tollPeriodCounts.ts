@@ -16,7 +16,7 @@ import {
   isDisputeRefundMatched,
   isTollCoveredByDisputeRefund,
   isVisiblePartialShortfallClaim,
-} from './tollWeekPeriod.ts';
+} from './tollPeriodDisputeHelpers.ts';
 import { isUnlinkedRefundActionableNow } from './unlinkedShortfallEligibility.ts';
 
 export type { StepCounts, StepId };
