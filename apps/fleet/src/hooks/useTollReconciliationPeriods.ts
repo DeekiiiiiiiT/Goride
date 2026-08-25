@@ -1,4 +1,5 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useCallback } from 'react';
 import { api } from '../services/api';
 import type { StepId } from '../utils/tollPeriodGating';
 
@@ -101,4 +102,19 @@ export function useTollReconciliationPeriods(driverId?: string) {
       await query.refetch();
     },
   };
+}
+
+export function useInvalidateTollReconciliationPeriods() {
+  const queryClient = useQueryClient();
+  return useCallback(
+    (scopedDriverId?: string) => {
+      if (scopedDriverId) {
+        void queryClient.invalidateQueries({
+          queryKey: [TOLL_RECONCILIATION_PERIODS_KEY, scopedDriverId],
+        });
+      }
+      void queryClient.invalidateQueries({ queryKey: [TOLL_RECONCILIATION_PERIODS_KEY] });
+    },
+    [queryClient],
+  );
 }

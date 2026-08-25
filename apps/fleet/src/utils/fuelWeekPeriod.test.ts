@@ -259,6 +259,26 @@ describe('enterprise fill attribution', () => {
     expect(sumGasCardSpendForReport(entries, report, [vehicle])).toBe(34998.8);
   });
 
+  it('does not double-count JAA statement ledger rows with ops gas-card fills', () => {
+    const entries = [
+      baseEntry({
+        id: 'ops',
+        amount: 5000,
+        type: 'Manual_Entry',
+        paymentSource: 'Gas_Card',
+        metadata: { paymentSource: 'company_card', countsInFuelSpend: true },
+      }),
+      baseEntry({
+        id: 'stmt',
+        amount: 5000,
+        type: 'Card_Transaction',
+        paymentSource: 'Gas_Card',
+        metadata: { importSource: 'jaa_raw', countsInFuelSpend: true },
+      }),
+    ];
+    expect(sumGasCardSpendForReport(entries, report, [vehicle])).toBe(5000);
+  });
+
   it('still counts RideShare cash Manual_Entry as Paid by Driver', () => {
     const entries = [
       baseEntry({

@@ -16,6 +16,7 @@ import { resolveDeadheadHintForBrain, DEFAULT_INDUSTRY_FALLBACK_PCT } from '../u
 import { sumTripRideshareKm } from '../utils/tripRideshareKm';
 import { mapPool } from './fuelMapPool';
 import { buildPersonalAllowanceReconContext } from './buildPersonalAllowanceReconContext';
+import { isEntryInInclusiveYmdRange } from './fuelWeekPeriod';
 import {
   evaluateFuelFinalizeGating,
   type FuelFinalizeGateResult,
@@ -59,6 +60,24 @@ export async function fetchTripsForFuelWeek(weekStartYmd: string, weekEndYmd: st
   return Array.isArray(response?.data) ? (response.data as Trip[]) : [];
 }
 
+/** Soft deadline so wizard open never hangs on one slow dependency. */
+async function withSoftTimeout<T>(promise: Promise<T>, ms: number, fallback: T, label: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((resolve) => {
+        timer = setTimeout(() => {
+          console.warn(`[buildFuelWeekReports] ${label} timed out after ${ms}ms — continuing`);
+          resolve(fallback);
+        }, ms);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 export async function fetchDeadheadMap(
   weekStartYmd: string,
   weekEndYmd: string,
@@ -93,6 +112,7 @@ export async function buildBrainMap(opts: {
   weekEndYmd: string;
 }): Promise<Map<string, FuelBrainClassificationInput> | undefined> {
   if (!FLEET_USE_FUEL_BRAIN && !FUEL_BRAIN_SHADOW_COMPARE) return undefined;
+  // Prefer vehicles that actually appear in this week's work — skip idle fleet units.
   const targets = opts.vehicles.filter((v) => v.currentDriverId);
   const pairs = await mapPool(targets, 3, async (v) => {
     const driverId = String(v.currentDriverId || '');
@@ -158,13 +178,45 @@ export async function buildFuelWeekReportsForFinalize(
   const weekEnd = parseISO(`${weekEndYmd}T12:00:00`);
 
   // [] from a parent still loading must not skip fetch — that zeros ride-share and dumps km into personal/deadhead.
-  const trips =
-    input.trips && input.trips.length > 0
-      ? input.trips
-      : await fetchTripsForFuelWeek(weekStartYmd, weekEndYmd);
-  const deadheadMap = await fetchDeadheadMap(weekStartYmd, weekEndYmd);
+  const needTripFetch = !(input.trips && input.trips.length > 0);
+  const needPa = !input.personalAllowance;
+
+  // Trips + deadhead + PA in parallel (were sequential — main wizard open cost).
+  const [trips, deadheadMap, personalAllowance] = await Promise.all([
+    needTripFetch
+      ? withSoftTimeout(fetchTripsForFuelWeek(weekStartYmd, weekEndYmd), 20_000, [], 'trips')
+      : Promise.resolve(input.trips as Trip[]),
+    withSoftTimeout(fetchDeadheadMap(weekStartYmd, weekEndYmd), 15_000, new Map(), 'deadhead'),
+    needPa
+      ? withSoftTimeout(
+          buildPersonalAllowanceReconContext({
+            weekStartYmd,
+            weekEndYmd,
+            drivers: input.drivers,
+            seedIfMissing: input.seedPersonalAllowance !== false,
+          }).then((pa) => pa.context as PersonalAllowanceReconContext | undefined),
+          20_000,
+          undefined as PersonalAllowanceReconContext | undefined,
+          'personalAllowance',
+        ).catch((e) => {
+          console.warn('[buildFuelWeekReports] PA context failed — continuing without', e);
+          return undefined as PersonalAllowanceReconContext | undefined;
+        })
+      : Promise.resolve(input.personalAllowance),
+  ]);
+
+  const weekVehicleIds = new Set(
+    input.fuelEntries
+      .filter((e) => e.vehicleId && isEntryInInclusiveYmdRange(e.date, weekStartYmd, weekEndYmd))
+      .map((e) => e.vehicleId as string),
+  );
+  const brainVehicles =
+    weekVehicleIds.size > 0
+      ? input.vehicles.filter((v) => weekVehicleIds.has(v.id))
+      : input.vehicles;
+
   const brainByDriverVehicle = await buildBrainMap({
-    vehicles: input.vehicles,
+    vehicles: brainVehicles,
     trips,
     adjustments: input.adjustments,
     deadheadMap,
@@ -177,21 +229,6 @@ export async function buildFuelWeekReportsForFinalize(
     fuelScenarioId: d.fuelScenarioId,
     name: d.name,
   })).filter((d) => d.id);
-
-  let personalAllowance = input.personalAllowance;
-  if (!personalAllowance) {
-    try {
-      const pa = await buildPersonalAllowanceReconContext({
-        weekStartYmd,
-        weekEndYmd,
-        drivers: input.drivers,
-        seedIfMissing: input.seedPersonalAllowance !== false,
-      });
-      personalAllowance = pa.context;
-    } catch (e) {
-      console.warn('[buildFuelWeekReports] PA context failed — continuing without', e);
-    }
-  }
 
   const reports = FuelCalculationService.generateDriverFleetReport(
     input.vehicles,

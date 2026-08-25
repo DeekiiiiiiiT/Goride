@@ -287,6 +287,12 @@ async function run() {
     const ledger = await kvGet(`toll_ledger:${ns}_perfect`);
     assert.equal(ledger.status, 'reconciled', 'perfect toll should be reconciled');
     assert.equal(ledger.tripId, `${ns}_perfect`, 'perfect toll should link its trip');
+    const perfectTrip = await kvGet(`trip:${ns}_perfect`);
+    assert.equal(perfectTrip.tollRefundResolution?.status, 'expense_logged', 'auto-match syncs trip credit via reconcile');
+    assert.ok(
+      String(perfectTrip.tollRefundResolution?.source || '').startsWith('system:toll_reconcile_sync:'),
+      'trip resolution stamped with reconcile-sync provenance',
+    );
   });
 
   await step('2. refund suggestions (cash_wash + phantom)', async () => {
@@ -592,6 +598,28 @@ async function run() {
     const statusAfter = await callApi('GET', '/toll-pnl-offset-backfill/orphans-status');
     const stillFound = (statusAfter.sample || []).find((o) => o.sourceId === `${ns}_orphan`);
     assert.ok(!stillFound, 'repaired orphan no longer appears in orphans-status');
+  });
+
+  await step('14. POST /reconcile syncs trip credit + periods landing reflects linked state', async () => {
+    await kvSet(`trip:${ns}_reconlink`, trip('reconlink', { tollCharges: 2.5 }));
+    await kvSet(`toll_ledger:${ns}_reconlink`, tollLedger('reconlink', { amount: -2.5 }));
+
+    await callApi('POST', '/reconcile', {
+      body: { transactionId: `${ns}_reconlink`, tripId: `${ns}_reconlink` },
+    });
+
+    const linkedTrip = await kvGet(`trip:${ns}_reconlink`);
+    assert.equal(linkedTrip.tollRefundResolution?.status, 'expense_logged', 'manual reconcile closes trip credit');
+    assert.equal(linkedTrip.tollRefundResolution?.linkedTollLedgerId, `${ns}_reconlink`, 'reuses matched toll ledger row');
+
+    const unclaimed = await callApi('GET', '/unclaimed-refunds', { query: { driverId, limit: '100' } });
+    const uids = new Set((unclaimed.data || []).map((t) => t.id));
+    assert.ok(!uids.has(`${ns}_reconlink`), 'linked trip not in Unlinked Refunds');
+
+    const periods = await callApi('GET', '/periods', { query: { driverId } });
+    const week = (periods.periods || []).find((p) => p.startDate === '2026-06-09');
+    assert.ok(week, 'period landing includes the test week');
+    assert.equal(week.counts?.['unlinked-refunds']?.actionable ?? 0, 0, 'no ghost unlinked count for linked trip week');
   });
 }
 

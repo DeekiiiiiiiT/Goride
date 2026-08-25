@@ -28,13 +28,17 @@ export function useFuelWeekReports(
     },
     enabled: enabled && !!input?.weekStartYmd && !!input?.weekEndYmd,
     staleTime: 30_000,
+    // Don't leave the wizard stuck on "Loading…" if one dependency call hangs.
+    networkMode: 'always',
   });
 
   return {
     reports: query.data?.reports ?? [],
     trips: query.data?.trips ?? input?.trips ?? [],
     gateResult: query.data?.gateResult,
-    loading: query.isLoading || query.isFetching,
+    // Initial open only — background refetch must not blank the step UI.
+    loading: query.isLoading && !query.data,
+    updating: query.isFetching && !!query.data,
     error: query.error,
     refresh: query.refetch,
   };

@@ -25,7 +25,7 @@ import {
   TollBucket,
 } from "../../../utils/tollBucket";
 import { StepId, StepCounts, STEP_ORDER, computeStepCounts } from "../../../utils/tollPeriodGating";
-import { buildPeriodTollIdSet, isClaimVisibleInPeriod, isTollInWizardPeriod, tollWeekKey, filterTollsToWizardPeriod, assertTollInWizardPeriod } from "../../../utils/tollWeekPeriod";
+import { buildPeriodTollIdSet, isClaimVisibleInPeriod, isDisputeRefundInWizardPeriod, isTollInWizardPeriod, tollWeekKey, filterTollsToWizardPeriod, assertTollInWizardPeriod } from "../../../utils/tollWeekPeriod";
 import { mergeReconciledTollsForUnderpaid, buildClaimByTollId } from "../../../utils/claimByToll";
 import { computeUnderpaidPipelineCounts } from "../../../utils/underpaidPipelineCounts";
 import { listFullyCoveredPendingUnderpaid, listPeriodUnderpaidShortfallsForDispute } from "../../../utils/pendingUnderpaidListable";
@@ -42,7 +42,11 @@ import { RematchCandidatesQueue } from "./RematchCandidatesQueue";
 import { PeriodResetDialog } from "./PeriodResetDialog";
 import { TollReconBusyProvider, useTollReconBusy } from "./tollReconBusyLock";
 import { StepAdvancePrompt } from "./StepAdvancePrompt";
-import { ReconciliationPeriod } from "../../../hooks/useTollReconciliationPeriods";
+import {
+  TOLL_RECONCILIATION_PERIODS_KEY,
+  useInvalidateTollReconciliationPeriods,
+  type ReconciliationPeriod,
+} from '../../../hooks/useTollReconciliationPeriods';
 import { useFleetTimezone } from "../../../utils/timezoneDisplay";
 import {
   collectTripsForReimbursedCard,
@@ -152,9 +156,12 @@ function ReconciliationWizardInner({ period, driverId, drivers, onExit }: Reconc
 
   const { claims, loading: claimsLoading, refresh: refreshClaims, createClaim, updateClaim, deleteClaim } = useClaims();
   const queryClient = useQueryClient();
+  const invalidateTollPeriods = useInvalidateTollReconciliationPeriods();
   // Expenses Toll Status reads a cached weekly snapshot — rebuild it whenever
   // After mutations, refresh Expenses weeks in the background (leave-safe toast job).
   const invalidateSharedPeriods = useCallback(() => {
+    invalidateTollPeriods(driverId);
+    void queryClient.invalidateQueries({ queryKey: [TOLL_RECONCILIATION_PERIODS_KEY] });
     void queryClient.invalidateQueries({ queryKey: [DRIVER_FINANCIAL_PERIODS_KEY] });
     const ids = new Set<string>();
     if (driverId) ids.add(driverId);
@@ -181,6 +188,7 @@ function ReconciliationWizardInner({ period, driverId, drivers, onExit }: Reconc
     );
   }, [
     queryClient,
+    invalidateTollPeriods,
     driverId,
     period.startDate,
     fleetTz,
@@ -823,6 +831,19 @@ function ReconciliationWizardInner({ period, driverId, drivers, onExit }: Reconc
     unlinkedRecommendedShortfallTripIds,
   ]);
 
+  const informationalWaitingTotal = useMemo(
+    () => STEP_ORDER.reduce((sum, id) => sum + (stepCounts[id]?.informational || 0), 0),
+    [stepCounts],
+  );
+
+  const periodScopedDisputeRefunds = useMemo(
+    () =>
+      (disputeRefunds || []).filter((r) =>
+        isDisputeRefundInWizardPeriod(r, period.startDate, fleetTz, periodTollIds, periodClaimIds),
+      ),
+    [disputeRefunds, period.startDate, fleetTz, periodTollIds, periodClaimIds],
+  );
+
   const gatedStates: GatedStepState[] = useMemo(
     () => computeGatedStepStates(stepCounts, STEP_ORDER),
     [stepCounts],
@@ -1175,7 +1196,7 @@ function ReconciliationWizardInner({ period, driverId, drivers, onExit }: Reconc
     setActiveStepId(STEP_ORDER[Math.min(idx + 1, STEP_ORDER.length - 1)]);
   };
 
-  const handleFinish = () => {
+  const handleFinish = async () => {
     const allPlatformActionable = STEP_ORDER.reduce((sum, id) => sum + (stepCounts[id]?.actionable || 0), 0);
     if (allPlatformActionable > 0) {
       toast.error('Still open items on other platforms', {
@@ -1183,6 +1204,7 @@ function ReconciliationWizardInner({ period, driverId, drivers, onExit }: Reconc
       });
       return;
     }
+    await queryClient.invalidateQueries({ queryKey: [TOLL_RECONCILIATION_PERIODS_KEY] });
     invalidateSharedPeriods();
     toast.success(`Period ${period.label} fully reconciled`);
     onExit();
@@ -1194,6 +1216,7 @@ function ReconciliationWizardInner({ period, driverId, drivers, onExit }: Reconc
       nextStepLabel={nextStepLabel}
       isLastStep={isLastStep}
       onAdvance={isLastStep ? handleFinish : handleNext}
+      informationalWaitingCount={isLastStep ? informationalWaitingTotal : 0}
       compact={compact}
     />
   );
@@ -1235,7 +1258,8 @@ function ReconciliationWizardInner({ period, driverId, drivers, onExit }: Reconc
       targets: opts?.targets,
       acknowledgedPlatformMismatch: opts?.acknowledgedPlatformMismatch,
     });
-    await refreshClaims();
+    await Promise.all([refresh(), refreshClaims()]);
+    invalidateSharedPeriods();
   };
 
   /** One action at a time — blocks the whole wizard UI while money/match work runs. */
@@ -1308,6 +1332,7 @@ function ReconciliationWizardInner({ period, driverId, drivers, onExit }: Reconc
       applyDisputeUnmatch(event.refundId);
     }
     await Promise.all([refresh(), refreshClaims()]);
+    invalidateSharedPeriods();
   });
 
   return (
@@ -1495,7 +1520,7 @@ function ReconciliationWizardInner({ period, driverId, drivers, onExit }: Reconc
           )}
           {activeStepId === 'dispute-refunds' && (
             <DisputeRefundsList
-              refunds={disputeRefunds}
+              refunds={periodScopedDisputeRefunds}
               onMatchComplete={lockedRefundMatch}
               activePeriodStart={period.startDate}
               activePeriodEnd={period.endDate}

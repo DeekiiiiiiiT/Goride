@@ -2006,6 +2006,13 @@ app.get(`${BASE}/unreconciled`, async (c) => {
           "system-auto"
         );
 
+        await syncTripRefundOnTollLink({
+          transactionId: txId,
+          tripId,
+          auto: true,
+          source: "system:toll_reconcile_sync:auto_match",
+        });
+
         // Update local tx object for response (not persisted to transaction:*)
         tx.tripId = tripId;
         tx.isReconciled = true;
@@ -5803,6 +5810,12 @@ app.post(`${BASE}/reconcile`, requirePermission('toll.manage'), async (c) => {
     );
     await recomputeAndPersistWorkflowStage(transactionId);
     await safeSyncPlazaTollPnlOffset(reconciledRow, c, "reconcile");
+    await syncTripRefundOnTollLink({
+      transactionId,
+      tripId,
+      auto: false,
+      source: "system:toll_reconcile_sync:reconcile",
+    });
 
     // Update local tx object for response (not persisted to transaction:*)
     tx.tripId = tripId;
@@ -5921,6 +5934,21 @@ app.post(`${BASE}/unreconcile`, requirePermission('toll.manage'), async (c) => {
       `[TollReconciliation] Unreconciled tx ${transactionId} (was linked to trip ${previousTripId})`,
     );
 
+    if (previousTrip?.tollRefundResolution?.source?.startsWith("system:toll_reconcile_sync:")) {
+      try {
+        await applyRefundResolution({
+          tripId: String(previousTripId),
+          resolution: "pending",
+          auto: false,
+          source: "admin",
+        });
+      } catch (err: any) {
+        console.log(
+          `[TollReconciliation] Trip resolution revert failed for ${previousTripId}: ${err.message}`,
+        );
+      }
+    }
+
     return c.json({
       success: true,
       data: {
@@ -5930,6 +5958,71 @@ app.post(`${BASE}/unreconcile`, requirePermission('toll.manage'), async (c) => {
     });
   } catch (e: any) {
     console.log(`[TollReconciliation] POST /unreconcile error: ${e.message}`);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+// ─── POST /backfill-linked-trip-resolutions ─────────────────────────────
+// One-time repair: toll linked + settled but trip credit still null/pending.
+
+app.post(`${BASE}/backfill-linked-trip-resolutions`, requirePermission("data.backfill"), async (c) => {
+  try {
+    const body = await c.req.json().catch(() => ({}));
+    const dryRun = body?.dryRun !== false;
+    const { tollTx, trips } = await loadAllTollLedgerWithTrips();
+    const tripById = new Map<string, any>();
+    for (const t of trips) {
+      if (t?.id) tripById.set(String(t.id), t);
+    }
+
+    const candidates: Array<{ tollId: string; tripId: string; tollCharges: number }> = [];
+    for (const tx of tollTx) {
+      const tripId = tx.tripId ?? tx.metadata?.tripId;
+      if (!tripId) continue;
+      const settled =
+        tx.isReconciled ||
+        tx.status === "reconciled" ||
+        String(tx.workflowStage || "").includes("resolved");
+      if (!settled) continue;
+      const trip = tripById.get(String(tripId));
+      if (!trip) continue;
+      if (!(Number(trip.tollCharges) > 0)) continue;
+      const res = trip.tollRefundResolution;
+      if (res?.status && res.status !== "pending") continue;
+      candidates.push({
+        tollId: String(tx.id),
+        tripId: String(tripId),
+        tollCharges: Math.abs(Number(trip.tollCharges) || 0),
+      });
+    }
+
+    const repaired: typeof candidates = [];
+    if (!dryRun) {
+      for (const row of candidates) {
+        try {
+          await applyRefundResolution({
+            tripId: row.tripId,
+            resolution: "expense_logged",
+            existingLedgerId: row.tollId,
+            auto: true,
+            source: "system:backfill:toll_link_sync",
+          });
+          repaired.push(row);
+        } catch (err: any) {
+          console.log(`[TollReconciliation] backfill skip trip ${row.tripId}: ${err.message}`);
+        }
+      }
+    }
+
+    return c.json({
+      dryRun,
+      candidateCount: candidates.length,
+      repairedCount: repaired.length,
+      candidates,
+      repaired,
+    });
+  } catch (e: any) {
+    console.log(`[TollReconciliation] POST /backfill-linked-trip-resolutions error: ${e.message}`);
     return c.json({ error: e.message }, 500);
   }
 });
@@ -6300,10 +6393,19 @@ app.post(`${BASE}/bulk-reconcile`, requirePermission('toll.manage'), async (c) =
       }
 
       // Phase 6: Update toll_ledger entries (primary store)
-      for (const { id, updates } of tollLedgerUpdates) {
+      for (const { id, updates, trip } of tollLedgerUpdates) {
         const row = await updateTollLedgerEntry(id, updates, "reconciled", "admin_bulk");
         await recomputeAndPersistWorkflowStage(id);
         await safeSyncPlazaTollPnlOffset(row, c, "bulk-reconcile");
+        const tripId = updates.tripId ?? trip?.id;
+        if (tripId) {
+          await syncTripRefundOnTollLink({
+            transactionId: id,
+            tripId: String(tripId),
+            auto: false,
+            source: "system:toll_reconcile_sync:bulk_reconcile",
+          });
+        }
       }
     }
 
@@ -7252,6 +7354,27 @@ async function liveTollShortfallAfterMatch(
 }
 
 // ── Core: apply a resolution to a trip (shared by single + bulk) ─────────
+
+/** Close trip platform credit when a toll is reconciled with a confirmed trip link. */
+async function syncTripRefundOnTollLink(params: {
+  transactionId: string;
+  tripId: string;
+  auto: boolean;
+  source?: string;
+}): Promise<void> {
+  const trip = await kv.get(`trip:${params.tripId}`);
+  if (!trip) return;
+  const linkedTripIds = new Set([String(params.tripId)]);
+  if (!isUnresolvedRefund(trip, linkedTripIds)) return;
+  await applyRefundResolution({
+    tripId: params.tripId,
+    resolution: "expense_logged",
+    existingLedgerId: params.transactionId,
+    auto: params.auto,
+    source: params.source ?? "system:toll_reconcile_sync:reconcile",
+  });
+}
+
 async function applyRefundResolution(params: {
   tripId: string;
   resolution: RefundResolutionStatus;
@@ -9464,6 +9587,13 @@ async function reconcileTollForDisputeMatch(transactionId: string, tripId: strin
       "dispute-refund-match",
     );
     await recomputeAndPersistWorkflowStage(transactionId);
+
+    await syncTripRefundOnTollLink({
+      transactionId,
+      tripId,
+      auto: true,
+      source: "system:toll_reconcile_sync:dispute_match",
+    });
 
     await writeTollLedgerEntry({
       eventType: "toll_reconciled",

@@ -1,7 +1,6 @@
 import type { Claim, DisputeRefund, FinancialTransaction, Trip } from '../types/data';
 import type { TollBucket } from './tollBucket';
-import { isDisputeRefundMatched, isDisputeRefundInWizardPeriod } from './tollWeekPeriod';
-import { isUnlinkedRefundActionableNow } from './unlinkedShortfallEligibility';
+import { computePeriodCounts } from './tollPeriodCounts';
 
 /**
  * The 6 steps of the period-gated reconciliation wizard, in their fixed,
@@ -124,59 +123,5 @@ export function computeStepCounts(input: {
   unlinkedSuggestionStatusByTripId?: ReadonlyMap<string, string>;
   unlinkedRecommendedShortfallTripIds?: ReadonlySet<string>;
 }): Record<StepId, StepCounts> {
-  const {
-    classified,
-    underpaidClaims,
-    disputeRefunds,
-    unclaimedRefundTrips,
-    underpaidPipeline,
-    periodWeekKey,
-    fleetTz,
-    periodTollIds,
-    periodClaimIds,
-    unlinkedSuggestionStatusByTripId,
-    unlinkedRecommendedShortfallTripIds,
-  } = input;
-
-  const scopedDisputeRefunds =
-    periodWeekKey && fleetTz
-      ? disputeRefunds.filter((r) =>
-          isDisputeRefundInWizardPeriod(r, periodWeekKey, fleetTz, periodTollIds, periodClaimIds),
-        )
-      : disputeRefunds;
-
-  const actionableClaims = underpaidClaims.filter(isClaimActionableNow).length;
-  const informationalClaims = underpaidClaims.filter(isClaimInformationalOnly).length;
-
-  const unmatchedDisputeRefunds = scopedDisputeRefunds.filter((r) => !isDisputeRefundMatched(r)).length;
-  const matchedDisputeRefunds = scopedDisputeRefunds.filter(isDisputeRefundMatched).length;
-
-  let actionableUnlinked = 0;
-  let informationalUnlinked = 0;
-  for (const t of unclaimedRefundTrips) {
-    const actionable = isUnlinkedRefundActionableNow(t, {
-      suggestionStatus: unlinkedSuggestionStatusByTripId?.get(t.id) ?? null,
-      hasRecommendedShortfall: unlinkedRecommendedShortfallTripIds?.has(t.id) ?? false,
-    });
-    if (actionable) actionableUnlinked++;
-    else informationalUnlinked++;
-  }
-
-  const underpaidActionable =
-    underpaidPipeline?.actionable ??
-    classified['underpaid'].length + actionableClaims;
-  const underpaidInformational =
-    underpaidPipeline?.informational ?? informationalClaims;
-
-  return {
-    'needs-review': { actionable: classified['needs-review'].length, informational: 0 },
-    'personal-use': { actionable: classified['personal-use'].length, informational: 0 },
-    'deadhead': { actionable: classified['deadhead'].length, informational: 0 },
-    'underpaid-claims': {
-      actionable: underpaidActionable,
-      informational: underpaidInformational,
-    },
-    'dispute-refunds': { actionable: unmatchedDisputeRefunds, informational: matchedDisputeRefunds },
-    'unlinked-refunds': { actionable: actionableUnlinked, informational: informationalUnlinked },
-  };
+  return computePeriodCounts(input);
 }

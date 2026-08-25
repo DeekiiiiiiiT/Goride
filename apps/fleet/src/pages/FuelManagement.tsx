@@ -1042,7 +1042,7 @@ function FuelManagementInner({ defaultTab = 'logs', onViewDriverLedger, onTabCha
 
   if (activeTab === 'reconciliation') {
       pageTitle = "Consumption Reconciliation";
-      pageDescription = "Compare actual gas card charges against estimated operating costs.";
+      pageDescription = "Close each Monday–Sunday week, step by step.";
   } else if (activeTab === 'reimbursements') {
       pageTitle = "Review Queue";
       pageDescription = "Open work only — posted fill-ups are in Transaction Logs.";

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { isDisputeRefundMatched, tollWeekKey } from './tollWeekPeriod';
+import { isDisputeRefundMatched, tollWeekKey, isVisiblePartialShortfallClaim, isTollCoveredByDisputeRefund } from './tollWeekPeriod';
 import { classifyPeriodUnderpaidClaim } from './tollPeriodGating';
+import { incrementUnderpaidClaimCount } from './tollPeriodCounts';
 import type { Claim, DisputeRefund } from '../types/data';
 
 /**
@@ -99,5 +100,43 @@ describe('classifyPeriodUnderpaidClaim / applyUnderpaidClaimCounts mirror (toll_
         }),
       ).toBe(row.bucket);
     }
+  });
+});
+
+describe('partial shortfall + dispute cover (shared tollPeriodCounts)', () => {
+  it('Open claim covered by matched dispute is not actionable', () => {
+    const claimRow: Pick<Claim, 'id' | 'status' | 'amount' | 'transactionId'> = {
+      id: 'c1',
+      status: 'Open',
+      amount: 0,
+      transactionId: 'toll-1',
+    };
+    const disputeRefunds: DisputeRefund[] = [
+      { id: 'dr1', status: 'matched', matchedTollId: 'toll-1', amount: 10 } as DisputeRefund,
+    ];
+    expect(isTollCoveredByDisputeRefund(claimRow, disputeRefunds)).toBe(true);
+    const counts = {
+      'needs-review': { actionable: 0, informational: 0 },
+      'personal-use': { actionable: 0, informational: 0 },
+      deadhead: { actionable: 0, informational: 0 },
+      'underpaid-claims': { actionable: 0, informational: 0 },
+      'dispute-refunds': { actionable: 0, informational: 0 },
+      'unlinked-refunds': { actionable: 0, informational: 0 },
+    };
+    incrementUnderpaidClaimCount(counts, claimRow as Claim, undefined, disputeRefunds);
+    expect(counts['underpaid-claims'].actionable).toBe(0);
+  });
+
+  it('Resolved Charge Driver with resolutionTransactionId is not visible partial', () => {
+    const claimRow = {
+      id: 'c2',
+      status: 'Resolved' as const,
+      amount: 10,
+      paidAmount: 360,
+      resolutionReason: 'Charge Driver',
+      resolutionTransactionId: 'rt-1',
+      transactionId: 'toll-2',
+    };
+    expect(isVisiblePartialShortfallClaim(claimRow, null, [])).toBe(false);
   });
 });

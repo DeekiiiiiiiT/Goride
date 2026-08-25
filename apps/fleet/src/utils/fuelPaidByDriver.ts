@@ -12,6 +12,7 @@ import {
   isCashStyleFuelPaymentSource,
   resolveFuelPaymentSource,
 } from './fuelPaymentSource';
+import { isJaaStatementLedgerRow } from './jaaFuelStatementMatcher';
 
 const OUT_OF_POCKET_TYPES = new Set(['Reimbursement', 'Manual_Entry', 'Fuel_Manual_Entry']);
 
@@ -135,7 +136,11 @@ export function sumPaidByDriverForReport(
     .reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
 }
 
-/** Company gas-card charge total for fills belonging to this driver-week report. */
+/**
+ * Company gas-card charge total for fills belonging to this driver-week report.
+ * Ops fills only — JAA/CSV statement ledger rows live in Card Inventory and must
+ * not double Transaction Logs / Consumption Reconciliation (matched pair).
+ */
 export function sumGasCardSpendForReport(
   entries: FuelEntry[],
   report: Pick<WeeklyFuelReport, 'weekStart' | 'weekEnd' | 'driverId' | 'vehicleId' | 'vehicleIds'>,
@@ -144,7 +149,7 @@ export function sumGasCardSpendForReport(
 ): number {
   const attribution: DriverWeekAttributionContext = ctx || { vehicles };
   return entriesBelongingToDriverWeekReport(entries, report, attribution)
-    .filter(countsInGasCardSpend)
+    .filter((e) => countsInGasCardSpend(e) && !isJaaStatementLedgerRow(e))
     .reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
 }
 

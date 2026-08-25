@@ -6,7 +6,6 @@ import {
   ClipboardList,
   Droplets,
   Flag,
-  RefreshCw,
   RotateCcw,
   Scale,
   Shield,
@@ -213,7 +212,6 @@ function FuelPeriodWizardInner({
   fuelCards = [],
   finalizedReports,
   dateRange,
-  isRefreshing,
   onBack,
   onRefresh,
   onFinalize,
@@ -245,6 +243,9 @@ function FuelPeriodWizardInner({
     fuelCards,
     disputes,
     finalizedReports,
+    // Reuse parent week trips — avoids a second 1500-row trip fetch on every open.
+    trips,
+    seedPersonalAllowance: false,
   });
   const liveReports = weekReports.reports;
   const weekTrips = weekReports.trips.length ? weekReports.trips : trips;
@@ -628,13 +629,19 @@ function FuelPeriodWizardInner({
     <div className="space-y-4 pb-20">
       {weekReports.loading && (
         <div
-          className="rounded-lg border border-slate-200 bg-white px-4 py-10 text-center"
+          className="rounded-lg border border-slate-200 bg-white px-4 py-6 text-center"
           role="status"
           aria-live="polite"
         >
           <div className="mx-auto mb-3 h-10 w-10 animate-spin rounded-full border-4 border-slate-200 border-t-[#3525cd]" />
           <p className="text-sm text-slate-500">Loading week data…</p>
         </div>
+      )}
+
+      {weekReports.updating && !weekReports.loading && (
+        <p className="text-xs text-slate-500" role="status" aria-live="polite">
+          Updating week figures…
+        </p>
       )}
 
       {!!weekReports.error && !weekReports.loading && (
@@ -695,17 +702,6 @@ function FuelPeriodWizardInner({
               Reopen week
             </Button>
           )}
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="min-h-11 sm:min-h-11"
-            onClick={onRefresh}
-            disabled={isRefreshing}
-          >
-            <RefreshCw className={`mr-1 h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
-            Refresh Data
-          </Button>
         </div>
       </div>
 

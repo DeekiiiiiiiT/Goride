@@ -162,6 +162,42 @@ export function buildVehicleFuelStats(
   });
 }
 
+export type VehicleWeekFuelKpis = {
+  distanceKm: number;
+  liters: number;
+  cost: number;
+  efficiencyKmL: number | null;
+  refuelCount: number;
+};
+
+/**
+ * Week vehicle KPIs (Fuel Analytics SSOT for recon stop-to-stop header cards).
+ * Efficiency = (max odo − min odo among ops fills with odo in week) ÷ (sum of ops litres in week).
+ * Cost/litres use ops fills only (excludes JAA statement ledger).
+ */
+export function getVehicleWeekFuelKpis(
+  entries: FuelEntry[],
+  vehicle: Vehicle,
+  weekStartYmd: string,
+  weekEndYmd: string,
+): VehicleWeekFuelKpis {
+  const period = { preset: 'custom' as const, startYmd: weekStartYmd, endYmd: weekEndYmd };
+  const weekOps = filterOpsEntriesInPeriod(entries, period).filter(
+    (e) => e.vehicleId === vehicle.id,
+  );
+  const row = buildVehicleFuelStats(weekOps, [vehicle]).find((s) => s.vehicleId === vehicle.id);
+  if (!row) {
+    return { distanceKm: 0, liters: 0, cost: 0, efficiencyKmL: null, refuelCount: 0 };
+  }
+  return {
+    distanceKm: row.distanceKm,
+    liters: row.totalLiters,
+    cost: row.totalCost,
+    efficiencyKmL: row.efficiencyKmL,
+    refuelCount: row.refuelCount,
+  };
+}
+
 export type DailyConsumptionPoint = {
   date: string;
   label: string;

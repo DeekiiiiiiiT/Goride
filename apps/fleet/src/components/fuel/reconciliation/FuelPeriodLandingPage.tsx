@@ -134,12 +134,7 @@ export function FuelPeriodLandingPage({
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h2 className="text-2xl font-bold tracking-tight text-slate-900">Consumption Reconciliation</h2>
-          <p className="text-slate-500">Close each Monday–Sunday week, step by step.</p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-center justify-end gap-2">
           {onBulkFinalize && (
             <Button
               type="button"
@@ -163,7 +158,6 @@ export function FuelPeriodLandingPage({
               Finalized archive
             </Button>
           )}
-        </div>
       </div>
 
       {isEmpty ? (

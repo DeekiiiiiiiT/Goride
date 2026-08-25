@@ -7,6 +7,8 @@ interface StepAdvancePromptProps {
   nextStepLabel?: string;
   isLastStep: boolean;
   onAdvance: () => void;
+  /** Items still waiting on driver/Uber — do not block finish. */
+  informationalWaitingCount?: number;
   /** Tighter layout for empty-state center placement. */
   compact?: boolean;
 }
@@ -17,10 +19,15 @@ export function StepAdvancePrompt({
   nextStepLabel,
   isLastStep,
   onAdvance,
+  informationalWaitingCount = 0,
   compact = false,
 }: StepAdvancePromptProps) {
   const finishLabel = 'Reconciliation complete';
   const continueLabel = nextStepLabel ? `Continue to ${nextStepLabel}` : 'Continue';
+  const waitingNote =
+    isLastStep && informationalWaitingCount > 0
+      ? `Your work is done — ${informationalWaitingCount} item${informationalWaitingCount === 1 ? '' : 's'} still waiting on driver or Uber.`
+      : null;
 
   if (compact) {
     return (
@@ -30,9 +37,10 @@ export function StepAdvancePrompt({
         </div>
         <p className="text-base font-bold text-slate-900 mb-1">{currentStepLabel} complete!</p>
         <p className="text-sm text-slate-600 mb-5">
-          {isLastStep
-            ? 'Every step is done for this period.'
-            : `You're ready for the next step${nextStepLabel ? `: ${nextStepLabel}` : ''}.`}
+          {waitingNote ??
+            (isLastStep
+              ? 'Every step is done for this period.'
+              : `You're ready for the next step${nextStepLabel ? `: ${nextStepLabel}` : ''}.`)}
         </p>
         <Button
           size="lg"
@@ -65,9 +73,10 @@ export function StepAdvancePrompt({
               {currentStepLabel} is done
             </h3>
             <p className="text-sm sm:text-base text-slate-600 mt-1 max-w-lg">
-              {isLastStep
-                ? 'All reconciliation steps are finished for this period.'
-                : `Nothing left here — move on to ${nextStepLabel ?? 'the next step'}.`}
+              {waitingNote ??
+                (isLastStep
+                  ? 'All reconciliation steps are finished for this period.'
+                  : `Nothing left here — move on to ${nextStepLabel ?? 'the next step'}.`)}
             </p>
           </div>
         </div>

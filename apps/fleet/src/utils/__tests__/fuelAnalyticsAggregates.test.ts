@@ -6,6 +6,7 @@ import {
   isAnomalyEntry,
   normalizeFuelTypeLabel,
   buildDailyConsumption,
+  getVehicleWeekFuelKpis,
 } from '../fuelAnalyticsAggregates';
 import {
   countsInFuelLogSpend,
@@ -171,5 +172,81 @@ describe('fuelAnalyticsAggregates', () => {
     });
     const weekCost = daily.reduce((s, d) => s + d.cost, 0);
     expect(weekCost).toBe(6500);
+  });
+
+  it('getVehicleWeekFuelKpis matches buildVehicleFuelStats week efficiency formula', () => {
+    const entries = [
+      entry({
+        id: 'a',
+        vehicleId: 'v1',
+        liters: 40,
+        amount: 8000,
+        odometer: 1000,
+        date: '2026-08-17',
+        entrySource: 'driver-portal',
+        type: 'Manual_Entry',
+        paymentSource: 'Gas_Card',
+      }),
+      entry({
+        id: 'b',
+        vehicleId: 'v1',
+        liters: 40,
+        amount: 8000,
+        odometer: 1500,
+        date: '2026-08-20',
+        entrySource: 'driver-portal',
+        type: 'Manual_Entry',
+        paymentSource: 'RideShare_Cash',
+      }),
+      entry({
+        id: 'outside',
+        vehicleId: 'v1',
+        liters: 99,
+        amount: 9999,
+        odometer: 2000,
+        date: '2026-08-24',
+        entrySource: 'driver-portal',
+        type: 'Manual_Entry',
+        paymentSource: 'Gas_Card',
+      }),
+    ];
+    const kpis = getVehicleWeekFuelKpis(entries, vehicles[0], '2026-08-17', '2026-08-23');
+    expect(kpis.distanceKm).toBe(500);
+    expect(kpis.liters).toBe(80);
+    expect(kpis.cost).toBe(16000);
+    expect(kpis.efficiencyKmL).toBeCloseTo(6.25);
+    expect(kpis.refuelCount).toBe(2);
+
+    const stats = buildVehicleFuelStats(
+      entries.filter((e) => e.date >= '2026-08-17' && e.date <= '2026-08-23'),
+      vehicles,
+    ).find((s) => s.vehicleId === 'v1')!;
+    expect(kpis.efficiencyKmL).toBe(stats.efficiencyKmL);
+    expect(kpis.liters).toBe(stats.totalLiters);
+  });
+
+  it('getVehicleWeekFuelKpis uses all ops litres — not bucket closing-fill undercount', () => {
+    // 10 fills, all with litres; a bucket-style KPI that only summed 3 closing fills would undercount.
+    const days = ['17', '18', '19', '20', '21', '22', '23', '17', '18', '19'];
+    const entries = Array.from({ length: 10 }, (_, i) =>
+      entry({
+        id: `f${i}`,
+        vehicleId: 'v1',
+        liters: 16,
+        amount: 3000,
+        odometer: 1000 + i * 200,
+        date: `2026-08-${days[i]}`,
+        entrySource: 'driver-portal',
+        type: 'Manual_Entry',
+        paymentSource: i % 3 === 0 ? 'Gas_Card' : 'RideShare_Cash',
+      }),
+    );
+    const kpis = getVehicleWeekFuelKpis(entries, vehicles[0], '2026-08-17', '2026-08-23');
+    expect(kpis.liters).toBe(160);
+    expect(kpis.refuelCount).toBe(10);
+    expect(kpis.distanceKm).toBe(1800); // 1000..2800
+    expect(kpis.efficiencyKmL).toBeCloseTo(1800 / 160);
+    // Bucket undercount of only 3×16 L would yield a fake ~37.5 km/L — helper must not.
+    expect(kpis.efficiencyKmL!).toBeLessThan(15);
   });
 });

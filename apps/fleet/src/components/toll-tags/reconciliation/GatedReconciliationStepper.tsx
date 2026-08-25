@@ -1,4 +1,4 @@
-import { Check, Lock, type LucideIcon } from 'lucide-react';
+import { Check, Lock, Clock, type LucideIcon } from 'lucide-react';
 import type { StepId, StepCounts } from '../../../utils/tollPeriodGating';
 
 export interface GatedStepState {
@@ -62,6 +62,7 @@ interface GatedReconciliationStepperProps {
  */
 export function GatedReconciliationStepper({ states, activeStepId, onSelect, labels, icons }: GatedReconciliationStepperProps) {
   return (
+    <div className="space-y-2">
     <div className="flex items-start justify-between relative w-full overflow-x-auto pb-1">
       <div className="absolute left-6 right-6 top-[22px] h-0.5 bg-slate-200 z-0" />
       {states.map((step) => {
@@ -96,14 +97,22 @@ export function GatedReconciliationStepper({ states, activeStepId, onSelect, lab
               ) : (
                 <Icon className="h-5 w-5" />
               )}
-              {!step.complete && !step.locked && (
-                <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-amber-500 text-white text-[10px] font-bold flex items-center justify-center">
+              {!step.complete && !step.locked && step.actionable > 0 && (
+                <span
+                  className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-amber-500 text-white text-[10px] font-bold flex items-center justify-center"
+                  title={`${step.actionable} need your action`}
+                  aria-label={`${step.actionable} need your action`}
+                >
                   {step.actionable > 99 ? '99+' : step.actionable}
                 </span>
               )}
-              {step.informational > 0 && (
-                <span className="absolute -bottom-1.5 -right-1.5 min-w-[16px] h-[16px] px-1 rounded-full bg-slate-400 text-white text-[9px] font-bold flex items-center justify-center">
-                  {step.informational > 99 ? '99+' : step.informational}
+              {step.informational > 0 && step.actionable === 0 && !step.complete && (
+                <span
+                  className="absolute -bottom-1.5 -right-1.5 min-w-[16px] h-[16px] px-1 rounded-full bg-slate-400 text-white text-[9px] font-bold flex items-center justify-center"
+                  title={`${step.informational} waiting on driver or Uber`}
+                  aria-label={`${step.informational} waiting on driver or Uber`}
+                >
+                  <Clock className="h-2.5 w-2.5" />
                 </span>
               )}
             </div>
@@ -117,6 +126,10 @@ export function GatedReconciliationStepper({ states, activeStepId, onSelect, lab
           </button>
         );
       })}
+    </div>
+    <p className="text-center text-[10px] text-slate-500 px-2">
+      Amber = needs your action · Gray clock = waiting on driver or Uber
+    </p>
     </div>
   );
 }

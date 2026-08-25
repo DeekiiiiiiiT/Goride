@@ -52,6 +52,12 @@ export function rowToKvValue(row: Record<string, unknown>): Record<string, unkno
   if (payload.isAnomaly == null && row.is_anomaly != null) payload.isAnomaly = row.is_anomaly;
   if (payload.isHard == null && row.is_hard != null) payload.isHard = row.is_hard;
   if (!payload.transactionId && row.transaction_id) payload.transactionId = row.transaction_id;
+  if (!payload.tripId && row.trip_id) payload.tripId = row.trip_id;
+  if (payload.isReconciled == null && row.is_reconciled != null) {
+    payload.isReconciled = row.is_reconciled;
+  }
+  if (!payload.resolution && row.resolution) payload.resolution = row.resolution;
+  if (!payload.paymentMethod && row.payment_method) payload.paymentMethod = row.payment_method;
   return payload;
 }
 

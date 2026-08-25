@@ -57,6 +57,17 @@ import {
 import { resolvePeriodBucket } from "./toll_period_bucket.ts";
 import { safeErrorResponse } from "./safe_error.ts";
 import { classifyTollReconPeriodStatus } from "../../../apps/fleet/src/utils/tollReconPeriodStatus.ts";
+import {
+  incrementDisputeRefundCount,
+  incrementLandingUnclaimedTollCount,
+  incrementUnderpaidClaimCount,
+  incrementUnlinkedRefundCount,
+} from "../../../apps/fleet/src/utils/tollPeriodCounts.ts";
+import {
+  isDisputeRefundMatched,
+  isTollCoveredByDisputeRefund,
+  isVisiblePartialShortfallClaim,
+} from "../../../apps/fleet/src/utils/tollWeekPeriod.ts";
 
 const app = new Hono();
 
@@ -97,59 +108,7 @@ function zeroCounts(): Record<StepId, StepCounts> {
   return counts;
 }
 
-/** Mirrors isDisputeRefundMatched in apps/fleet/src/utils/tollWeekPeriod.ts. */
-function isDisputeRefundMatched(r: any): boolean {
-  return r?.status === "matched" || r?.status === "auto_resolved";
-}
-
-const VARIANCE_THRESHOLD = 0.05;
-
-/** Mirrors isActionablePartialShortfall in apps/fleet/src/utils/tollWeekPeriod.ts. */
-function isActionablePartialShortfallServer(claim: any, toll?: any): boolean {
-  if (!claim) return false;
-  const paid = Math.abs(Number(claim.paidAmount) || 0);
-  const remaining = Math.abs(Number(claim.amount) || 0);
-  if (remaining <= VARIANCE_THRESHOLD || paid <= VARIANCE_THRESHOLD) return false;
-  if (claim.status === "Open") return true;
-  if (claim.status !== "Resolved") return false;
-  const hasUnlinkedApply = !!(claim.unlinkedTripId || toll?.unlinkedSourceTripId);
-  if (claim.resolutionReason === "Reimbursed" && hasUnlinkedApply) return true;
-  return claim.resolutionReason === "Charge Driver" && !claim.resolutionTransactionId;
-}
-
-/** Mirrors hasMatchedDisputeRefund / isTollCoveredByDisputeRefund in tollWeekPeriod.ts. */
-function hasMatchedDisputeRefundServer(claim: any, disputeRefunds: any[]): boolean {
-  if (!claim?.transactionId && !claim?.id) return false;
-  return disputeRefunds.some(
-    (r) =>
-      isDisputeRefundMatched(r) &&
-      (r.matchedClaimId === claim.id || r.matchedTollId === claim.transactionId),
-  );
-}
-
-/** Settled by dispute only when no Open shortfall remains (partial credits stay actionable). */
-function isTollCoveredByDisputeRefundServer(claim: any, disputeRefunds: any[]): boolean {
-  if (!hasMatchedDisputeRefundServer(claim, disputeRefunds)) return false;
-  if (claim.status === "Open" && Math.abs(Number(claim.amount) || 0) > VARIANCE_THRESHOLD) {
-    return false;
-  }
-  return true;
-}
-
-/** Mirrors isVisiblePartialShortfallClaim in apps/fleet/src/utils/tollWeekPeriod.ts. */
-function isVisiblePartialShortfallClaimServer(claim: any, toll: any, disputeRefunds: any[]): boolean {
-  if (!claim) return false;
-  if (isTollCoveredByDisputeRefundServer(claim, disputeRefunds)) return false;
-  if (claim.status === "Resolved" && claim.disputeRefundId) return false;
-  if (claim.status === "Open") return true;
-  if (!isActionablePartialShortfallServer(claim, toll)) return false;
-  return true;
-}
-
-/**
- * Period week for a dispute refund — toll-first, then matched claim, else refund date.
- * Mirrors isDisputeRefundInWizardPeriod in apps/fleet/src/utils/tollWeekPeriod.ts.
- */
+/** Period week for a dispute refund — toll-first, then matched claim, else refund date. */
 function disputeRefundPeriodKey(
   r: any,
   tollDateById: Map<string, string>,
@@ -167,41 +126,6 @@ function disputeRefundPeriodKey(
   }
   if (r?.date) return weekKeyFor(r.date, timezone).key;
   return null;
-}
-
-/**
- * Mirrors isClaimActionableNow / UnderpaidClaimsStep period gating
- * (apps/fleet/src/utils/tollPeriodGating.ts). Open + Rejected block Completed;
- * waiting-on-Uber/driver stay informational; incomplete Resolved partials still actionable.
- */
-function applyUnderpaidClaimCounts(
-  acc: PeriodAccumulator,
-  claim: any,
-  toll: any,
-  disputeRefunds: any[],
-): void {
-  if (claim.status === "Sent_to_Driver") {
-    acc.counts["underpaid-claims"].informational++;
-    return;
-  }
-  if (claim.status === "Submitted_to_Uber") {
-    acc.counts["underpaid-claims"].informational++;
-    return;
-  }
-  if (claim.status === "Rejected") {
-    acc.counts["underpaid-claims"].actionable++;
-    return;
-  }
-  if (claim.status === "Open") {
-    // Matched dispute refund already covers this toll — do not block the period.
-    if (isTollCoveredByDisputeRefundServer(claim, disputeRefunds)) return;
-    acc.counts["underpaid-claims"].actionable++;
-    return;
-  }
-  // Resolved (or other): only leftover partial shortfalls still need a decision.
-  if (isVisiblePartialShortfallClaimServer(claim, toll, disputeRefunds)) {
-    acc.counts["underpaid-claims"].actionable++;
-  }
 }
 
 /** Mirrors getClaimPeriodAnchorDate in apps/fleet/src/utils/tollWeekPeriod.ts — toll date first, never createdAt. */
@@ -320,13 +244,11 @@ function ymdInRange(dateStr: string | null | undefined, fromYmd: string, toYmd: 
 
 /** Underpaid claim still needs a decision (mirrors applyUnderpaidClaimCounts blockers). */
 function isClaimStillActionable(claim: any, toll: any, disputeRefunds: any[]): boolean {
-  if (claim.status === "Rejected" || claim.status === "Open") {
-    if (claim.status === "Open" && isTollCoveredByDisputeRefundServer(claim, disputeRefunds)) {
-      return false;
-    }
-    return claim.status === "Rejected" || claim.status === "Open";
+  if (claim.status === "Rejected") return true;
+  if (claim.status === "Open") {
+    return !isTollCoveredByDisputeRefund(claim, disputeRefunds);
   }
-  return isVisiblePartialShortfallClaimServer(claim, toll, disputeRefunds);
+  return isVisiblePartialShortfallClaim(claim, toll, disputeRefunds);
 }
 
 /**
@@ -496,16 +418,15 @@ app.get(`${BASE}/periods`, requirePermission('toll.view'), async (c) => {
       if (tx.tripId) continue;
       if (!tx.workflowStage) anyMissingWorkflowStage = true;
       const bucket = resolvePeriodBucket(tx);
-      if (!bucket) continue;
-      getOrCreatePeriod(tx.date).counts[bucket].actionable++;
+      incrementLandingUnclaimedTollCount(getOrCreatePeriod(tx.date).counts, tx, bucket);
     }
 
-    // Claims → underpaid-claims (mirror UnderpaidClaimsStep tab rules).
+    // Claims → underpaid-claims (shared incrementUnderpaidClaimCount).
     for (const claim of claims) {
       const dateStr = resolveClaimDate(claim, tollDateById);
       if (!dateStr) continue;
       const toll = claim.transactionId ? tollById.get(String(claim.transactionId)) : undefined;
-      applyUnderpaidClaimCounts(getOrCreatePeriod(dateStr), claim, toll, disputeRefunds);
+      incrementUnderpaidClaimCount(getOrCreatePeriod(dateStr).counts, claim, toll, disputeRefunds);
     }
 
     // Dispute refunds → dispute-refunds, scoped to matched toll/claim week when linked.
@@ -520,25 +441,17 @@ app.get(`${BASE}/periods`, requirePermission('toll.view'), async (c) => {
         if (!anchorDate) continue;
         acc = getOrCreatePeriod(anchorDate);
       }
-      if (isDisputeRefundMatched(r)) acc.counts["dispute-refunds"].informational++;
-      else acc.counts["dispute-refunds"].actionable++;
+      incrementDisputeRefundCount(acc.counts, r);
     }
 
     // Unclaimed refund trips → unlinked-refunds.
-    // Mirror client isUnlinkedRefundActionableNow: pending-hold alone is
-    // informational; pending + cash_wash/phantom Accept suggestion stays actionable.
     const unlinkedSuggestionByTripId = await buildUnresolvedRefundSuggestionStatuses(unclaimedRefundTrips);
     for (const t of unclaimedRefundTrips) {
       if (!t?.date) continue;
       const acc = getOrCreatePeriod(t.date);
-      const suggestionStatus = unlinkedSuggestionByTripId.get(String(t.id)) ?? null;
-      const hasAcceptSuggestion = !!(suggestionStatus && suggestionStatus !== "pending");
-      const isPendingOnly = t.tollRefundResolution?.status === "pending";
-      if (isPendingOnly && !hasAcceptSuggestion) {
-        acc.counts["unlinked-refunds"].informational++;
-      } else {
-        acc.counts["unlinked-refunds"].actionable++;
-      }
+      incrementUnlinkedRefundCount(acc.counts, t, {
+        suggestionStatus: unlinkedSuggestionByTripId.get(String(t.id)) ?? null,
+      });
     }
 
     // ── Per-period financials (same rule as wizard cards) ──────────────────

@@ -59,7 +59,7 @@ function periodDateBadge(startDate: string) {
 
 function StepChip({ stepId, counts }: { stepId: StepId; counts: ReconciliationPeriod['counts'] }) {
   const Icon = STEP_ICONS[stepId];
-  const { actionable } = counts[stepId];
+  const { actionable, informational } = counts[stepId];
   const isClear = actionable === 0;
   return (
     <span
@@ -71,6 +71,11 @@ function StepChip({ stepId, counts }: { stepId: StepId; counts: ReconciliationPe
     >
       {isClear ? <Check className="h-3.5 w-3.5" aria-hidden /> : <Icon className="h-3.5 w-3.5" aria-hidden />}
       {!isClear && <span className="tabular-nums">{actionable}</span>}
+      {isClear && informational > 0 && (
+        <span className="tabular-nums text-slate-500" title="Waiting on driver or Uber">
+          · {informational}
+        </span>
+      )}
     </span>
   );
 }

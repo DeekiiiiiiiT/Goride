@@ -46,6 +46,7 @@ import { odometerService } from '../../services/odometerService';
 import { MasterLogTimeline } from '../vehicles/odometer/MasterLogTimeline';
 import { bucketClosesInFuelWeek, toEntryYmd } from '../../utils/fuelWeekPeriod';
 import { ymdToLocalDate } from '../../utils/timezoneDisplay';
+import { getVehicleWeekFuelKpis } from '../../utils/fuelAnalyticsAggregates';
 
 /** Calendar day label without UTC date-only shift (yyyy-MM-dd must not parse as UTC midnight). */
 function formatBucketDay(value: string): string {
@@ -188,17 +189,27 @@ export function BucketReconciliationView({
     }, [buckets, periodYmd]);
 
     const periodStats = useMemo(() => {
-        const distanceKm = filteredBuckets.reduce(
-            (sum, b) => sum + (b.endOdometer - b.startOdometer),
-            0,
+        if (!periodYmd) {
+            return {
+                distanceKm: 0,
+                liters: 0,
+                cost: 0,
+                kmL: 0,
+                l100km: 0,
+                source: 'default' as const,
+                fillCount: 0,
+            };
+        }
+        const kpis = getVehicleWeekFuelKpis(
+            fuelEntries,
+            vehicle,
+            periodYmd.from,
+            periodYmd.to,
         );
-        const liters = filteredBuckets.reduce((sum, b) => sum + b.actualFuelLiters, 0);
-        const cost = filteredBuckets.reduce((sum, b) => sum + b.actualFuelCost, 0);
-
         let kmL = 0;
         let source: 'period' | 'configured' | 'default' = 'default';
-        if (liters > 0 && distanceKm > 0) {
-            kmL = distanceKm / liters;
+        if (kpis.efficiencyKmL != null && kpis.efficiencyKmL > 0) {
+            kmL = kpis.efficiencyKmL;
             source = 'period';
         } else {
             const cityEff = vehicle.fuelSettings?.efficiencyCity;
@@ -210,17 +221,16 @@ export function BucketReconciliationView({
                 source = 'default';
             }
         }
-
         return {
-            distanceKm,
-            liters,
-            cost,
+            distanceKm: kpis.distanceKm,
+            liters: kpis.liters,
+            cost: kpis.cost,
             kmL: Number(kmL.toFixed(2)),
             l100km: kmL > 0 ? Number((100 / kmL).toFixed(1)) : 0,
             source,
-            fillCount: filteredBuckets.length,
+            fillCount: kpis.refuelCount,
         };
-    }, [filteredBuckets, vehicle]);
+    }, [fuelEntries, vehicle, periodYmd]);
 
     const handlePostDeduction = async (bucket: OdometerBucket) => {
         setIsPosting(bucket.id);
@@ -302,15 +312,15 @@ export function BucketReconciliationView({
                         </p>
                         <p className="text-xs mt-1">
                             {periodStats.source === 'period' ? (
-                                <span className="text-emerald-600 font-medium">● From {periodStats.fillCount} fill{periodStats.fillCount !== 1 ? 's' : ''} in this week</span>
+                                <span className="text-emerald-600 font-medium">● From {periodStats.fillCount} ops fill{periodStats.fillCount !== 1 ? 's' : ''} in this week</span>
                             ) : periodStats.source === 'configured' ? (
-                                <span className="text-amber-600 font-medium">● Vehicle baseline (no fills closed this week)</span>
+                                <span className="text-amber-600 font-medium">● Vehicle baseline (no ops fills this week)</span>
                             ) : (
                                 <span className="text-red-600 font-medium">● System default (no config or fills this week)</span>
                             )}
                         </p>
                         <p className="text-xs text-slate-500 mt-0.5">
-                            Distance and litres from this week’s fills only.
+                            Same as Fuel Analytics: odo span ÷ all ops litres this week.
                         </p>
                     </CardContent>
                 </Card>
@@ -325,7 +335,7 @@ export function BucketReconciliationView({
                             {periodStats.distanceKm.toLocaleString()} <span className="text-sm font-normal text-slate-500">km</span>
                         </p>
                         <p className="text-xs text-slate-500 mt-1">
-                            {periodStats.fillCount} fill{periodStats.fillCount !== 1 ? 's' : ''} that closed this week
+                            Odo span from ops fills in this week
                         </p>
                     </CardContent>
                 </Card>
@@ -340,7 +350,7 @@ export function BucketReconciliationView({
                             {periodStats.liters.toFixed(1)} <span className="text-sm font-normal text-slate-500">L</span>
                         </p>
                         <p className="text-xs text-slate-500 mt-1">
-                            Cost: {formatCurrency(periodStats.cost)} — fills that closed this week
+                            Cost: {formatCurrency(periodStats.cost)} — all ops fills this week
                         </p>
                     </CardContent>
                 </Card>
