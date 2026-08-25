@@ -1,0 +1,554 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Fuel Week Wizard - Data Quality</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              "colors": {
+                      "outline": "#777587",
+                      "inverse-surface": "#302f39",
+                      "background": "#fcf8ff",
+                      "tertiary-fixed": "#ffddb8",
+                      "surface-container": "#f0ecf9",
+                      "primary-container": "#4f46e5",
+                      "error": "#ba1a1a",
+                      "inverse-on-surface": "#f3effc",
+                      "on-primary": "#ffffff",
+                      "outline-variant": "#c7c4d8",
+                      "surface-tint": "#4d44e3",
+                      "tertiary-container": "#885500",
+                      "surface-container-highest": "#e4e1ee",
+                      "on-tertiary": "#ffffff",
+                      "on-primary-fixed": "#0f0069",
+                      "tertiary": "#684000",
+                      "error-container": "#ffdad6",
+                      "secondary-fixed-dim": "#4edea3",
+                      "surface-container-low": "#f5f2ff",
+                      "on-primary-fixed-variant": "#3323cc",
+                      "surface-container-high": "#eae6f4",
+                      "primary-fixed-dim": "#c3c0ff",
+                      "surface-variant": "#e4e1ee",
+                      "on-tertiary-fixed": "#2a1700",
+                      "on-surface": "#1b1b24",
+                      "on-error-container": "#93000a",
+                      "on-background": "#1b1b24",
+                      "primary": "#3525cd",
+                      "surface": "#fcf8ff",
+                      "on-primary-container": "#dad7ff",
+                      "on-secondary-container": "#00714d",
+                      "on-secondary": "#ffffff",
+                      "surface-dim": "#dcd8e5",
+                      "on-tertiary-fixed-variant": "#653e00",
+                      "inverse-primary": "#c3c0ff",
+                      "secondary-container": "#6cf8bb",
+                      "on-error": "#ffffff",
+                      "secondary": "#006c49",
+                      "surface-bright": "#fcf8ff",
+                      "tertiary-fixed-dim": "#ffb95f",
+                      "surface-container-lowest": "#ffffff",
+                      "on-tertiary-container": "#ffd4a4",
+                      "on-secondary-fixed": "#002113",
+                      "on-surface-variant": "#464555",
+                      "secondary-fixed": "#6ffbbe",
+                      "primary-fixed": "#e2dfff",
+                      "on-secondary-fixed-variant": "#005236"
+              },
+              "borderRadius": {
+                      "DEFAULT": "0.125rem",
+                      "lg": "0.25rem",
+                      "xl": "0.5rem",
+                      "full": "0.75rem"
+              },
+              "spacing": {
+                      "unit": "4px",
+                      "density-high": "4px",
+                      "component-gap": "8px",
+                      "gutter": "16px",
+                      "density-medium": "12px",
+                      "container-padding": "24px"
+              },
+              "fontFamily": {
+                      "headline-lg": [
+                              "Inter"
+                      ],
+                      "display": [
+                              "Inter"
+                      ],
+                      "body-sm": [
+                              "Inter"
+                      ],
+                      "label-md": [
+                              "Inter"
+                      ],
+                      "body-md": [
+                              "Inter"
+                      ],
+                      "body-lg": [
+                              "Inter"
+                      ],
+                      "label-sm": [
+                              "Inter"
+                      ],
+                      "headline-md": [
+                              "Inter"
+                      ]
+              },
+              "fontSize": {
+                      "headline-lg": [
+                              "24px",
+                              {
+                                      "lineHeight": "32px",
+                                      "letterSpacing": "-0.01em",
+                                      "fontWeight": "600"
+                              }
+                      ],
+                      "display": [
+                              "36px",
+                              {
+                                      "lineHeight": "44px",
+                                      "letterSpacing": "-0.02em",
+                                      "fontWeight": "700"
+                              }
+                      ],
+                      "body-sm": [
+                              "13px",
+                              {
+                                      "lineHeight": "18px",
+                                      "fontWeight": "400"
+                              }
+                      ],
+                      "label-md": [
+                              "12px",
+                              {
+                                      "lineHeight": "16px",
+                                      "letterSpacing": "0.05em",
+                                      "fontWeight": "600"
+                              }
+                      ],
+                      "body-md": [
+                              "14px",
+                              {
+                                      "lineHeight": "20px",
+                                      "fontWeight": "400"
+                              }
+                      ],
+                      "body-lg": [
+                              "16px",
+                              {
+                                      "lineHeight": "24px",
+                                      "fontWeight": "400"
+                              }
+                      ],
+                      "label-sm": [
+                              "11px",
+                              {
+                                      "lineHeight": "14px",
+                                      "fontWeight": "500"
+                              }
+                      ],
+                      "headline-md": [
+                              "20px",
+                              {
+                                      "lineHeight": "28px",
+                                      "fontWeight": "600"
+                              }
+                      ]
+              }
+      },
+          },
+        }
+      </script>
+</head>
+<body class="bg-background text-on-background font-body-md antialiased min-h-screen flex text-body-md overflow-x-hidden">
+<!-- SideNavBar (Shared Component) -->
+<nav aria-label="Sidebar Navigation" class="hidden md:flex flex-col py-gutter space-y-unit bg-surface-container-low dark:bg-inverse-surface border-r border-outline-variant dark:border-outline fixed left-0 top-16 h-screen w-64 z-40 shadow-sm">
+<div class="px-gutter mb-6 pt-4">
+<h1 class="font-headline-md text-headline-md font-black text-on-surface dark:text-inverse-on-surface tracking-tight">Wizard Console</h1>
+<p class="font-label-md text-label-md text-on-surface-variant dark:text-surface-variant mt-1 uppercase tracking-wider">Reconciliation Active</p>
+</div>
+<div class="px-gutter mb-6">
+<div class="flex items-center space-x-3 mb-4">
+<img alt="Fleet Admin" class="w-10 h-10 rounded-full object-cover border border-outline-variant" data-alt="A professional headshot of a fleet administrator in a brightly lit modern office setting, wearing corporate casual attire. High-quality professional portrait style with shallow depth of field. Soft, diffused lighting." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCSwezm1TiT2-5s9W0bsOi-rcETlT1_jJRbYKh3EBmCBt4dmTR8HFMydyAADPRIbnu2TrgqyO6leGpHoj_7IA-uUeRunNVqtszV1BGVllETWB_MewpyKJX_AnHdoNPrbB4GZZ3v6s9WXNdUbVslia8tguLf2nVO4oAZrp-0OjegoIUpSRxXcqCXZYT7yfPxlbOKOWtApuluRrASbaS0EZxvB9aUh9Eg7_vu1w2Z8oDyFhFdxcNWhhGt3UCW8toOsTO53kGKEnZRapU"/>
+<div>
+<p class="font-label-md text-label-md text-on-surface font-semibold">Fleet Admin</p>
+</div>
+</div>
+<button class="w-full bg-surface text-on-surface border border-outline-variant hover:bg-surface-container-highest transition-colors h-9 rounded-DEFAULT font-label-md text-label-md flex items-center justify-center space-x-2">
+<span class="material-symbols-outlined text-[18px]">export_notes</span>
+<span>Export Draft</span>
+</button>
+</div>
+<ul class="flex-1 space-y-1 px-2">
+<li>
+<a class="flex items-center space-x-3 px-3 py-2 rounded-lg text-on-surface-variant dark:text-surface-variant hover:bg-surface-container dark:hover:bg-surface-container-highest transition-colors font-label-md text-label-md group" href="#">
+<span class="material-symbols-outlined text-[20px] group-hover:text-primary transition-colors">calendar_today</span>
+<span>Step 1: Period</span>
+</a>
+</li>
+<li>
+<a class="flex items-center space-x-3 px-3 py-2 rounded-lg text-on-surface-variant dark:text-surface-variant hover:bg-surface-container dark:hover:bg-surface-container-highest transition-colors font-label-md text-label-md group" href="#">
+<span class="material-symbols-outlined text-[20px] group-hover:text-primary transition-colors">account_balance</span>
+<span>Step 2: Sourcing</span>
+</a>
+</li>
+<li>
+<a class="flex items-center space-x-3 px-3 py-2 rounded-lg bg-surface-container-high dark:bg-surface-variant text-primary dark:text-inverse-primary border-l-4 border-primary dark:border-inverse-primary font-label-md text-label-md Active: scale-95 transition-transform duration-150" href="#">
+<span class="material-symbols-outlined text-[20px]">local_shipping</span>
+<span>Step 3: Usage</span>
+</a>
+</li>
+<li>
+<a class="flex items-center space-x-3 px-3 py-2 rounded-lg text-on-surface-variant dark:text-surface-variant hover:bg-surface-container dark:hover:bg-surface-container-highest transition-colors font-label-md text-label-md group" href="#">
+<span class="material-symbols-outlined text-[20px] group-hover:text-primary transition-colors">report_problem</span>
+<span>Step 4: Exceptions</span>
+</a>
+</li>
+<li>
+<a class="flex items-center space-x-3 px-3 py-2 rounded-lg text-on-surface-variant dark:text-surface-variant hover:bg-surface-container dark:hover:bg-surface-container-highest transition-colors font-label-md text-label-md group" href="#">
+<span class="material-symbols-outlined text-[20px] group-hover:text-primary transition-colors">check_circle</span>
+<span>Step 5: Validation</span>
+</a>
+</li>
+<li>
+<a class="flex items-center space-x-3 px-3 py-2 rounded-lg text-on-surface-variant dark:text-surface-variant hover:bg-surface-container dark:hover:bg-surface-container-highest transition-colors font-label-md text-label-md group" href="#">
+<span class="material-symbols-outlined text-[20px] group-hover:text-primary transition-colors">send</span>
+<span>Step 6: Finalize</span>
+</a>
+</li>
+</ul>
+<div class="mt-auto px-2 border-t border-outline-variant pt-4 pb-4">
+<ul class="space-y-1">
+<li>
+<a class="flex items-center space-x-3 px-3 py-2 rounded-lg text-on-surface-variant dark:text-surface-variant hover:bg-surface-container dark:hover:bg-surface-container-highest transition-colors font-label-md text-label-md group" href="#">
+<span class="material-symbols-outlined text-[20px] group-hover:text-primary transition-colors">support_agent</span>
+<span>Support</span>
+</a>
+</li>
+<li>
+<a class="flex items-center space-x-3 px-3 py-2 rounded-lg text-on-surface-variant dark:text-surface-variant hover:bg-surface-container dark:hover:bg-surface-container-highest transition-colors font-label-md text-label-md group" href="#">
+<span class="material-symbols-outlined text-[20px] group-hover:text-primary transition-colors">history</span>
+<span>Archive</span>
+</a>
+</li>
+</ul>
+</div>
+</nav>
+<!-- TopNavBar (Shared Component) -->
+<header class="fixed top-0 left-0 w-full z-50 flex justify-between items-center px-container-padding h-16 bg-surface dark:bg-inverse-surface border-b border-outline-variant dark:border-outline shadow-sm md:ml-64 transition-all duration-300">
+<div class="flex items-center">
+<span class="font-headline-md text-headline-md font-bold text-primary dark:text-inverse-primary mr-8 truncate hidden md:block">Fuel Reconciliation</span>
+<nav aria-label="Top Navigation" class="hidden md:flex space-x-1">
+<a class="px-4 py-2 text-on-surface-variant dark:text-surface-variant font-body-md text-body-md hover:text-primary dark:hover:text-inverse-primary transition-colors rounded-DEFAULT hover:bg-surface-container-lowest" href="#">Dashboard</a>
+<a class="px-4 py-2 text-on-surface-variant dark:text-surface-variant font-body-md text-body-md hover:text-primary dark:hover:text-inverse-primary transition-colors rounded-DEFAULT hover:bg-surface-container-lowest" href="#">Inventory</a>
+<a class="px-4 py-2 text-on-surface-variant dark:text-surface-variant font-body-md text-body-md hover:text-primary dark:hover:text-inverse-primary transition-colors rounded-DEFAULT hover:bg-surface-container-lowest" href="#">Transactions</a>
+<a class="px-4 py-2 text-on-surface-variant dark:text-surface-variant font-body-md text-body-md hover:text-primary dark:hover:text-inverse-primary transition-colors rounded-DEFAULT hover:bg-surface-container-lowest" href="#">Settings</a>
+</nav>
+</div>
+<div class="flex items-center space-x-4">
+<div class="hidden lg:flex relative items-center">
+<span class="material-symbols-outlined absolute left-3 text-outline-variant text-[20px]">search</span>
+<input class="pl-10 pr-4 py-2 h-9 w-64 bg-surface-container-low border border-outline-variant rounded-full text-body-sm focus:border-primary focus:ring-1 focus:ring-primary transition-shadow outline-none text-on-surface placeholder-outline" placeholder="Search..." type="text"/>
+</div>
+<div class="flex items-center space-x-2 text-on-surface-variant">
+<button aria-label="notifications" class="w-10 h-10 rounded-full hover:bg-surface-container flex items-center justify-center transition-colors">
+<span class="material-symbols-outlined" data-icon="notifications">notifications</span>
+</button>
+<button aria-label="help_outline" class="w-10 h-10 rounded-full hover:bg-surface-container flex items-center justify-center transition-colors">
+<span class="material-symbols-outlined" data-icon="help_outline">help_outline</span>
+</button>
+</div>
+<button class="hidden sm:flex h-9 px-4 bg-primary text-on-primary font-label-md text-label-md rounded-DEFAULT items-center justify-center hover:bg-primary-fixed-variant transition-colors shadow-sm whitespace-nowrap">
+                Submit Report
+            </button>
+<div class="md:hidden">
+<button aria-label="Menu" class="w-10 h-10 rounded-full hover:bg-surface-container flex items-center justify-center transition-colors text-on-surface-variant">
+<span class="material-symbols-outlined">menu</span>
+</button>
+</div>
+</div>
+</header>
+<!-- Main Content Canvas -->
+<main class="flex-1 pt-16 md:ml-64 bg-background min-h-screen flex flex-col pb-24">
+<!-- Page Header Area -->
+<div class="px-container-padding py-6 lg:py-8 max-w-6xl mx-auto w-full">
+<div class="flex flex-col sm:flex-row sm:items-start justify-between mb-6 gap-4">
+<div>
+<a class="flex items-center text-outline text-body-sm font-medium hover:text-primary transition-colors mb-2 group" href="#">
+<span class="material-symbols-outlined text-[16px] mr-1 group-hover:-translate-x-1 transition-transform">arrow_back</span>
+                        Back to Periods
+                    </a>
+<div class="flex items-center flex-wrap gap-3">
+<h2 class="font-display text-display text-on-surface">Jun 29 – Jul 5, 2026</h2>
+<span class="px-2.5 py-0.5 rounded-full bg-surface-container-high text-on-surface-variant font-label-sm text-label-sm uppercase tracking-wider border border-outline-variant font-semibold shadow-sm">Draft</span>
+</div>
+</div>
+<div class="shrink-0 mt-2 sm:mt-0">
+<button class="h-9 px-4 bg-surface text-on-surface border border-outline-variant hover:bg-surface-container-highest transition-colors rounded-DEFAULT font-label-md text-label-md flex items-center justify-center space-x-2 shadow-sm">
+<span class="material-symbols-outlined text-[18px]">refresh</span>
+<span>Refresh Data</span>
+</button>
+</div>
+</div>
+<!-- Financial Summary Bento Grid -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+<!-- Sources Card -->
+<div class="bg-surface border border-outline-variant rounded-xl p-5 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden group">
+<div class="absolute inset-0 bg-gradient-to-br from-surface-container-low to-transparent opacity-50 z-0"></div>
+<div class="relative z-10">
+<h3 class="font-label-md text-label-md text-outline font-semibold tracking-wider uppercase mb-4 flex items-center">
+<span class="material-symbols-outlined text-[18px] mr-2 text-outline">account_balance_wallet</span>
+                            Where the money came from
+                        </h3>
+<div class="space-y-3 mb-4">
+<div class="flex justify-between items-center">
+<span class="text-body-md text-on-surface-variant">Gas card <span class="text-body-sm text-outline">(company paid)</span></span>
+<span class="text-body-md font-medium text-on-surface">$18,800.00</span>
+</div>
+<div class="flex justify-between items-center">
+<span class="text-body-md text-on-surface-variant">Cash from earnings <span class="text-body-sm text-outline">(credit)</span></span>
+<span class="text-body-md font-medium text-on-surface">$6,200.00</span>
+</div>
+</div>
+<div class="pt-4 border-t border-outline-variant flex justify-between items-center">
+<span class="font-body-lg text-body-lg text-on-surface font-semibold">Total fuel bought</span>
+<span class="font-headline-md text-headline-md text-primary font-bold tracking-tight">$25,000.00</span>
+</div>
+</div>
+</div>
+<!-- Destinations Card -->
+<div class="bg-surface border border-outline-variant rounded-xl p-5 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden">
+<div class="relative z-10">
+<h3 class="font-label-md text-label-md text-outline font-semibold tracking-wider uppercase mb-4 flex items-center">
+<span class="material-symbols-outlined text-[18px] mr-2 text-outline">receipt_long</span>
+                            Who ends up paying
+                        </h3>
+<div class="space-y-3 mb-4">
+<div class="flex justify-between items-center">
+<span class="text-body-md text-on-surface-variant">Company keeps</span>
+<span class="text-body-md font-medium text-on-surface">$17,890.00</span>
+</div>
+<div class="flex justify-between items-center">
+<span class="text-body-md text-on-surface-variant">Driver's fuel share <span class="text-body-sm text-outline">(charge)</span></span>
+<span class="text-body-md font-medium text-on-surface">$6,190.00</span>
+</div>
+</div>
+<div class="pt-4 border-t border-outline-variant flex justify-between items-center bg-tertiary-fixed-dim/10 -mx-5 px-5 -mb-5 pb-5 mt-2 rounded-b-xl border-t-tertiary-fixed">
+<span class="font-body-lg text-body-lg text-tertiary font-semibold flex items-center">
+<span class="material-symbols-outlined text-[20px] mr-2 text-tertiary">warning</span>
+                                Unexplained fuel
+                             </span>
+<span class="font-headline-md text-headline-md text-tertiary font-bold tracking-tight">$920.00</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Progressive Stepper -->
+<div class="mb-8 w-full overflow-x-auto pb-2 scrollbar-hide">
+<ol class="flex items-center w-full min-w-[700px]">
+<li class="flex w-full items-center text-primary after:content-[''] after:w-full after:h-1 after:border-b-2 after:border-primary after:border-solid after:inline-block">
+<span class="flex items-center justify-center w-8 h-8 bg-primary-container text-on-primary rounded-full lg:h-10 lg:w-10 shrink-0 font-label-md shadow-sm ring-4 ring-primary-fixed">
+                            1
+                        </span>
+<span class="hidden sm:inline-block ml-3 font-label-md font-bold mr-4 whitespace-nowrap">Data Quality</span>
+</li>
+<li class="flex w-full items-center text-outline-variant after:content-[''] after:w-full after:h-1 after:border-b-2 after:border-outline-variant after:border-solid after:inline-block">
+<span class="flex items-center justify-center w-8 h-8 bg-surface-container-high border-2 border-outline-variant text-outline rounded-full lg:h-10 lg:w-10 shrink-0 font-label-md">
+                            2
+                        </span>
+<span class="hidden sm:inline-block ml-3 font-label-md mr-4 whitespace-nowrap text-outline">Disputes</span>
+</li>
+<li class="flex w-full items-center text-outline-variant after:content-[''] after:w-full after:h-1 after:border-b-2 after:border-outline-variant after:border-solid after:inline-block">
+<span class="flex items-center justify-center w-8 h-8 bg-surface-container-high border-2 border-outline-variant text-outline rounded-full lg:h-10 lg:w-10 shrink-0 font-label-md">
+                            3
+                        </span>
+<span class="hidden lg:inline-block ml-3 font-label-md mr-4 whitespace-nowrap text-outline">Policy Check</span>
+</li>
+<li class="flex w-full items-center text-outline-variant after:content-[''] after:w-full after:h-1 after:border-b-2 after:border-outline-variant after:border-solid after:inline-block">
+<span class="flex items-center justify-center w-8 h-8 bg-surface-container-high border-2 border-outline-variant text-outline rounded-full lg:h-10 lg:w-10 shrink-0 font-label-md">
+                            4
+                        </span>
+<span class="hidden xl:inline-block ml-3 font-label-md mr-4 whitespace-nowrap text-outline">Unexplained Fuel</span>
+</li>
+<li class="flex w-full items-center text-outline-variant after:content-[''] after:w-full after:h-1 after:border-b-2 after:border-outline-variant after:border-solid after:inline-block">
+<span class="flex items-center justify-center w-8 h-8 bg-surface-container-high border-2 border-outline-variant text-outline rounded-full lg:h-10 lg:w-10 shrink-0 font-label-md">
+                            5
+                        </span>
+<span class="hidden xl:inline-block ml-3 font-label-md mr-4 whitespace-nowrap text-outline">Settlement</span>
+</li>
+<li class="flex items-center">
+<span class="flex items-center justify-center w-8 h-8 bg-surface-container-high border-2 border-outline-variant text-outline rounded-full lg:h-10 lg:w-10 shrink-0 font-label-md">
+                            6
+                        </span>
+<span class="hidden sm:inline-block ml-3 font-label-md whitespace-nowrap text-outline">Finalize</span>
+</li>
+</ol>
+</div>
+<!-- Step Hero -->
+<div class="bg-surface border-l-4 border-l-primary border border-outline-variant rounded-r-xl p-6 shadow-sm mb-4 relative overflow-hidden">
+<!-- Optional light decoration -->
+<div class="absolute -right-20 -top-20 w-64 h-64 bg-primary-fixed-dim rounded-full mix-blend-multiply filter blur-3xl opacity-20 pointer-events-none"></div>
+<div class="flex flex-col md:flex-row md:items-start justify-between gap-6 relative z-10">
+<div class="max-w-2xl">
+<h2 class="font-headline-lg text-headline-lg text-on-surface mb-2 font-semibold tracking-tight">Review flagged vehicles</h2>
+<p class="font-body-md text-body-md text-on-surface-variant leading-relaxed">
+                            Amber/Red indicators identify tank-cycle or gap issues. Pending logs will post upon finalization. Please review the highlighted exceptions below before proceeding.
+                        </p>
+</div>
+<div class="shrink-0 pt-1">
+<button class="h-11 px-6 bg-primary text-on-primary font-label-md text-label-md rounded-DEFAULT items-center justify-center hover:bg-primary-fixed-variant transition-colors shadow-md flex space-x-2 w-full md:w-auto focus:ring-2 focus:ring-offset-2 focus:ring-primary">
+<span>Continue to Disputes</span>
+<span class="material-symbols-outlined text-[18px]">arrow_forward</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Help Strip -->
+<div class="flex items-center p-3 mb-8 bg-surface-container-low border border-outline-variant rounded-lg text-body-sm text-on-surface-variant">
+<span class="material-symbols-outlined text-[18px] mr-2 text-outline">info</span>
+<p>Estimates use trip km + odometer; unexplained = total − estimated categories.</p>
+</div>
+<!-- Data Table / Exception List (Bento-ish List) -->
+<div class="mb-6 flex justify-between items-end">
+<h3 class="font-headline-md text-headline-md font-semibold text-on-surface">Exceptions (2)</h3>
+<!-- Filter/Search tools could go here in future -->
+</div>
+<div class="space-y-4 mb-8">
+<!-- Row 1: Red Issue -->
+<div class="bg-surface border border-outline-variant rounded-lg p-4 shadow-sm hover:border-outline transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+<div class="flex items-center gap-4 flex-1">
+<div class="w-12 h-12 rounded-full bg-error-container text-on-error-container flex items-center justify-center shrink-0 border border-error/20">
+<span class="material-symbols-outlined">local_shipping</span>
+</div>
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4 w-full">
+<div>
+<p class="text-label-sm text-outline uppercase tracking-wider mb-0.5">Plate</p>
+<p class="font-label-md text-body-lg text-on-surface font-semibold font-mono">5179KZ</p>
+</div>
+<div>
+<p class="text-label-sm text-outline uppercase tracking-wider mb-0.5">Driver</p>
+<p class="font-body-md text-on-surface font-medium truncate">James Carter</p>
+</div>
+<div class="col-span-2 md:col-span-2 flex items-center gap-2">
+<span class="inline-flex items-center px-2 py-1 rounded-DEFAULT text-xs font-medium bg-error-container text-on-error-container border border-error/20">
+<span class="w-2 h-2 rounded-full bg-error mr-1.5"></span>
+                                    Critical Gap
+                                </span>
+<span class="inline-flex items-center px-2 py-1 rounded-DEFAULT text-xs font-medium bg-surface-container-high text-on-surface-variant border border-outline-variant">
+                                    3 Pending
+                                </span>
+</div>
+</div>
+</div>
+<div class="flex items-center justify-between sm:justify-end gap-6 sm:min-w-[300px]">
+<div class="text-right hidden md:block">
+<p class="text-label-sm text-outline uppercase tracking-wider mb-0.5">Total Bought</p>
+<p class="font-body-md text-on-surface">$850.00</p>
+</div>
+<div class="text-right border-l border-outline-variant pl-4 hidden md:block">
+<p class="text-label-sm text-tertiary uppercase tracking-wider mb-0.5 font-semibold">Unexplained</p>
+<p class="font-body-md text-error font-bold">$75.00</p>
+</div>
+<button class="h-8 px-3 bg-surface text-on-surface border border-outline-variant hover:bg-surface-container-highest transition-colors rounded-DEFAULT font-label-sm text-label-sm flex items-center justify-center whitespace-nowrap ml-auto">
+                            Add Adjustment
+                        </button>
+</div>
+</div>
+<!-- Row 2: Amber Issue -->
+<div class="bg-surface border border-outline-variant rounded-lg p-4 shadow-sm hover:border-outline transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+<div class="flex items-center gap-4 flex-1">
+<div class="w-12 h-12 rounded-full bg-tertiary-fixed text-on-tertiary-fixed flex items-center justify-center shrink-0 border border-tertiary/20">
+<span class="material-symbols-outlined">directions_car</span>
+</div>
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4 w-full">
+<div>
+<p class="text-label-sm text-outline uppercase tracking-wider mb-0.5">Plate</p>
+<p class="font-label-md text-body-lg text-on-surface font-semibold font-mono">9921XB</p>
+</div>
+<div>
+<p class="text-label-sm text-outline uppercase tracking-wider mb-0.5">Driver</p>
+<p class="font-body-md text-on-surface font-medium truncate">Sarah Jenkins</p>
+</div>
+<div class="col-span-2 md:col-span-2 flex items-center gap-2">
+<span class="inline-flex items-center px-2 py-1 rounded-DEFAULT text-xs font-medium bg-tertiary-fixed text-on-tertiary-fixed border border-tertiary/20">
+<span class="w-2 h-2 rounded-full bg-tertiary mr-1.5"></span>
+                                    Cycle Issue
+                                </span>
+<span class="inline-flex items-center px-2 py-1 rounded-DEFAULT text-xs font-medium bg-surface-container-high text-on-surface-variant border border-outline-variant">
+                                    1 Pending
+                                </span>
+</div>
+</div>
+</div>
+<div class="flex items-center justify-between sm:justify-end gap-6 sm:min-w-[300px]">
+<div class="text-right hidden md:block">
+<p class="text-label-sm text-outline uppercase tracking-wider mb-0.5">Total Bought</p>
+<p class="font-body-md text-on-surface">$620.00</p>
+</div>
+<div class="text-right border-l border-outline-variant pl-4 hidden md:block">
+<p class="text-label-sm text-tertiary uppercase tracking-wider mb-0.5 font-semibold">Unexplained</p>
+<p class="font-body-md text-tertiary font-bold">$25.00</p>
+</div>
+<button class="h-8 px-3 bg-surface text-on-surface border border-outline-variant hover:bg-surface-container-highest transition-colors rounded-DEFAULT font-label-sm text-label-sm flex items-center justify-center whitespace-nowrap ml-auto">
+                            Add Adjustment
+                        </button>
+</div>
+</div>
+</div>
+<!-- Collapsible Panel -->
+<div class="border border-outline-variant rounded-lg bg-surface overflow-hidden mb-12">
+<button class="w-full px-5 py-4 flex items-center justify-between bg-surface-container-lowest hover:bg-surface-container-low transition-colors text-left focus:outline-none">
+<span class="font-label-md text-body-md font-semibold text-on-surface">Show full cost breakdown</span>
+<span class="material-symbols-outlined text-outline-variant">expand_more</span>
+</button>
+<!-- Content would be here, initially hidden via Alpine or Vanilla JS -->
+<div class="hidden border-t border-outline-variant p-5 bg-surface-container-low text-body-sm text-on-surface-variant">
+                    Detailed line items would appear here...
+                </div>
+</div>
+<!-- State Previews (Requested by user) -->
+<div class="pt-8 border-t border-outline-variant border-dashed">
+<h4 class="font-label-sm text-outline uppercase tracking-wider mb-4">UI State Previews</h4>
+<div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+<!-- Empty State -->
+<div class="bg-surface border border-outline-variant rounded-lg p-6 flex flex-col items-center justify-center text-center h-48">
+<div class="w-12 h-12 rounded-full bg-secondary-container text-on-secondary-container flex items-center justify-center mb-3">
+<span class="material-symbols-outlined text-[24px]">check</span>
+</div>
+<p class="font-label-md text-on-surface font-semibold">All vehicles look healthy</p>
+<p class="text-body-sm text-on-surface-variant mt-1">You can safely continue to the next step.</p>
+</div>
+<!-- Loading State -->
+<div class="bg-surface border border-outline-variant rounded-lg p-6 flex flex-col items-center justify-center text-center h-48">
+<div class="w-10 h-10 border-4 border-outline-variant border-t-primary rounded-full animate-spin mb-4"></div>
+<p class="text-body-sm text-on-surface-variant">Analyzing telematics data...</p>
+</div>
+<!-- Error State -->
+<div class="bg-surface border border-error/30 bg-error-container/10 rounded-lg p-6 flex flex-col items-center justify-center text-center h-48">
+<span class="material-symbols-outlined text-error text-[28px] mb-2">cloud_off</span>
+<p class="font-label-md text-on-surface font-semibold text-error">Sync Failed</p>
+<p class="text-body-sm text-on-surface-variant mt-1 mb-3">Unable to reach provider API.</p>
+<button class="text-label-sm text-primary font-semibold hover:underline">Retry Connection</button>
+</div>
+</div>
+</div>
+</div>
+</main>
+<!-- Sticky Footer (Action Bar) -->
+<div class="fixed bottom-0 left-0 w-full md:left-64 md:w-[calc(100%-256px)] bg-surface border-t border-outline-variant shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] z-40 px-container-padding py-4 flex justify-between items-center transition-all duration-300">
+<button class="h-10 px-5 bg-surface text-on-surface border border-outline-variant hover:bg-surface-container-highest transition-colors rounded-DEFAULT font-label-md text-label-md flex items-center justify-center shadow-sm">
+            Back
+        </button>
+<button class="h-10 px-6 bg-primary text-on-primary font-label-md text-label-md rounded-DEFAULT flex items-center justify-center hover:bg-primary-fixed-variant transition-colors shadow-md focus:ring-2 focus:ring-offset-2 focus:ring-primary">
+            Continue to Disputes
+        </button>
+</div>
+</body></html>

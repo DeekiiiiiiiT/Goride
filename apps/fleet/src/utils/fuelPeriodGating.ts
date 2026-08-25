@@ -22,10 +22,10 @@ export const FUEL_STEP_ORDER: FuelStepId[] = [
 
 export const FUEL_STEP_LABELS: Record<FuelStepId, string> = {
   'data-quality': 'Data quality',
-  'adjustments-disputes': 'Adjustments & disputes',
+  'adjustments-disputes': 'Disputes',
   'policy-check': 'Policy check',
-  'leakage-gap': 'Leakage & gap',
-  'settlement-preview': 'Settlement preview',
+  'leakage-gap': 'Unexplained fuel',
+  'settlement-preview': 'Settlement',
   finalize: 'Finalize',
 };
 
