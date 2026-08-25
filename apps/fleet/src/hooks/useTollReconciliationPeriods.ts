@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { api } from '../services/api';
 import type { StepId } from '../utils/tollPeriodGating';
 
@@ -48,45 +48,37 @@ const EMPTY_TOTALS: ReconciliationTotals = {
   resolvedRefundsAmount: 0,
 };
 
+export const TOLL_RECONCILIATION_PERIODS_KEY = 'toll-reconciliation-periods';
+
+type PeriodsPayload = {
+  periods: ReconciliationPeriod[];
+  totals: ReconciliationTotals;
+  workflowStageBackfillComplete: boolean;
+};
+
 /**
  * Period-first landing data for Toll Reconciliation (Phase F3) — backed by
- * the new GET /toll-reconciliation/periods aggregation endpoint, which scans
- * full history server-side so period counts stay correct regardless of how
- * many years of tolls/claims/trips a fleet has (unlike the ~1000-row-capped
- * client hooks used once a period is actually opened).
+ * GET /toll-reconciliation/periods. Wave 2 Dev D: React Query (QueryClientProvider
+ * is wired in App.tsx).
  */
 export function useTollReconciliationPeriods(driverId?: string) {
-  const [periods, setPeriods] = useState<ReconciliationPeriod[]>([]);
-  const [totals, setTotals] = useState<ReconciliationTotals>(EMPTY_TOTALS);
-  const [workflowStageBackfillComplete, setWorkflowStageBackfillComplete] = useState(true);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  // Only blank the UI on first load — action refreshes stay silent
-  const isInitialLoad = useRef(true);
+  const queryKey = [TOLL_RECONCILIATION_PERIODS_KEY, driverId ?? null] as const;
 
-  const fetchPeriods = useCallback(async () => {
-    const blockUi = isInitialLoad.current;
-    if (blockUi) setLoading(true);
-    try {
+  const query = useQuery({
+    queryKey,
+    queryFn: async (): Promise<PeriodsPayload> => {
       const res = await api.getTollReconciliationPeriods({ driverId });
-      setPeriods(res.periods || []);
-      setTotals(res.totals || EMPTY_TOTALS);
-      setWorkflowStageBackfillComplete(res.workflowStageBackfillComplete !== false);
-      setLoadError(null);
-    } catch (error) {
-      console.error('Failed to fetch reconciliation periods', error);
-      setLoadError(error instanceof Error ? error.message : 'Could not load tolls');
-    } finally {
-      isInitialLoad.current = false;
-      if (blockUi) setLoading(false);
-    }
-  }, [driverId]);
+      return {
+        periods: res.periods || [],
+        totals: res.totals || EMPTY_TOTALS,
+        workflowStageBackfillComplete: res.workflowStageBackfillComplete !== false,
+      };
+    },
+  });
 
-  useEffect(() => {
-    isInitialLoad.current = true;
-    setLoading(true);
-    fetchPeriods();
-  }, [fetchPeriods]);
+  const periods = query.data?.periods ?? [];
+  const totals = query.data?.totals ?? EMPTY_TOTALS;
+  const workflowStageBackfillComplete = query.data?.workflowStageBackfillComplete ?? true;
 
   const outstanding = periods.filter((p) => p.status === 'outstanding');
   const inProgress = periods.filter((p) => p.status === 'in_progress');
@@ -99,8 +91,14 @@ export function useTollReconciliationPeriods(driverId?: string) {
     reconciled,
     totals,
     workflowStageBackfillComplete,
-    loading,
-    loadError,
-    refresh: fetchPeriods,
+    loading: query.isLoading,
+    loadError: query.error
+      ? query.error instanceof Error
+        ? query.error.message
+        : 'Could not load tolls'
+      : null,
+    refresh: async () => {
+      await query.refetch();
+    },
   };
 }

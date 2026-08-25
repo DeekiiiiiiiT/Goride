@@ -113,6 +113,15 @@ import {
   type TollFinancialEvent,
   type TollUnifiedEventsMeta,
 } from "../../../apps/fleet/src/types/tollFinancialEvent.ts";
+import {
+  buildTollContentFingerprint,
+  fingerprintFromTollLike,
+  resolveTollPlazaSSot,
+  matchesSyntheticCashTollSignature,
+  quarantineReasonFor,
+  isSuspiciousVineyardsCashRate,
+  isTollQuarantined,
+} from "../../../apps/fleet/src/utils/tollLedgerIntegrity.ts";
 
 const app = new Hono();
 
@@ -3707,6 +3716,24 @@ function transactionToTollLedgerServer(tx: any): TollLedgerRecord {
     else if (r.includes("refund")) resolution = "refunded";
   }
 
+  // Plaza SSOT: OCR plaza/tollPlaza over vendor highway name; fingerprint uses OCR plaza.
+  const plazaSsot = resolveTollPlazaSSot({
+    vendor: tx.vendor,
+    plaza: tx.plaza ?? null,
+    metadata: (tx.metadata || {}) as Record<string, unknown>,
+  });
+  const contentFingerprint = buildTollContentFingerprint({
+    vehicleId: tx.vehicleId,
+    date: dateOnly,
+    amount: tx.amount,
+    plaza: plazaSsot.plaza,
+    metadata: plazaSsot.metadata,
+  });
+  const metadata = {
+    ...plazaSsot.metadata,
+    contentFingerprint,
+  };
+
   return {
     id: tx.id,
     createdAt: tx.metadata?.createdAt || now,
@@ -3721,10 +3748,10 @@ function transactionToTollLedgerServer(tx: any): TollLedgerRecord {
     tollTagId: tx.metadata?.tollTagUuid || tx.metadata?.tollTagId || null,
     tagNumber: tx.metadata?.tagNumber || null,
 
-    plaza: tx.vendor || tx.metadata?.tollPlaza || null,
+    plaza: plazaSsot.plaza,
     plazaId: tx.metadata?.plazaId || tx.plazaId || null,
-    highway: tx.metadata?.highway || null,
-    location: tx.vendor || tx.description || null,
+    highway: plazaSsot.highway,
+    location: plazaSsot.plaza || tx.vendor || tx.description || null,
 
     // Canonical: store date-only (YYYY-MM-DD) to avoid timezone/day-shift issues
     date: dateOnly,
@@ -3758,7 +3785,7 @@ function transactionToTollLedgerServer(tx: any): TollLedgerRecord {
       metadata: { source: "migration", originalCategory: tx.category },
     }],
 
-    metadata: tx.metadata || {},
+    metadata,
 
     _legacyTransactionId: tx.id,
   };
@@ -4309,9 +4336,17 @@ app.post(`${BASE}/toll-ledger/backfill`, async (c) => {
 
     console.log(`[TollLedgerBackfill] Found ${tollTransactions.length} toll transactions to process`);
 
-    // Load existing toll ledger entries to check for duplicates
+    // Load existing toll ledger entries to check for duplicates (id + content fingerprint)
     const existingLedger = await getAllTollLedgerEntries();
     const existingIds = new Set(existingLedger.map(e => e.id));
+    const existingFingerprints = new Set(
+      existingLedger
+        .map((e) =>
+          (typeof e.metadata?.contentFingerprint === "string" && e.metadata.contentFingerprint) ||
+          fingerprintFromTollLike(e),
+        )
+        .filter(Boolean),
+    );
 
     const results = {
       processed: 0,
@@ -4329,7 +4364,7 @@ app.post(`${BASE}/toll-ledger/backfill`, async (c) => {
         results.processed++;
 
         try {
-          // Check if already exists
+          // Check if already exists by id
           if (skipExisting && existingIds.has(tx.id)) {
             results.skipped++;
             continue;
@@ -4337,6 +4372,16 @@ app.post(`${BASE}/toll-ledger/backfill`, async (c) => {
 
           // Convert to toll ledger format
           const tollRecord = transactionToTollLedgerServer(tx);
+
+          // Also skip content-duplicate crossings (different UUID, same physical toll)
+          const fp =
+            (typeof tollRecord.metadata?.contentFingerprint === "string" &&
+              tollRecord.metadata.contentFingerprint) ||
+            fingerprintFromTollLike(tollRecord);
+          if (skipExisting && fp && existingFingerprints.has(fp)) {
+            results.skipped++;
+            continue;
+          }
           
           // Add backfill audit entry
           const auditEntry: TollAuditEntry = {
@@ -4370,6 +4415,7 @@ app.post(`${BASE}/toll-ledger/backfill`, async (c) => {
           if (!dryRun) {
             await saveTollLedgerEntry(tollRecord);
             existingIds.add(tollRecord.id); // Track to avoid re-processing in same run
+            if (fp) existingFingerprints.add(fp);
           }
           
           results.created++;
@@ -4462,6 +4508,78 @@ app.get(`${BASE}/toll-ledger/backfill/status`, async (c) => {
     });
   } catch (e: any) {
     console.log(`[TollLedgerBackfill] GET /status error: ${e.message}`);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+// ─── GET /toll-ledger/quarantine-report ──────────────────────────────────
+// Dry-run list of synthetic cash rows matching audit 1.1 signature.
+// Optional ?stamp=1 flags matching rows (quarantined / excludeFromSpend).
+
+app.get(`${BASE}/toll-ledger/quarantine-report`, async (c) => {
+  try {
+    const stamp = c.req.query("stamp") === "1";
+    const entries = await getAllTollLedgerEntries();
+    const rows: Array<{
+      id: string;
+      date: string | null;
+      amount: number;
+      plaza: string | null;
+      paymentMethod: string;
+      tripId: string | null;
+      batchId: string | null;
+      reason: string;
+      suspiciousVineyards: boolean;
+      alreadyQuarantined: boolean;
+    }> = [];
+    let stamped = 0;
+    let totalImpactAbs = 0;
+
+    for (const entry of entries) {
+      if (!matchesSyntheticCashTollSignature(entry)) continue;
+      const reason = quarantineReasonFor(entry);
+      const suspiciousVineyards = isSuspiciousVineyardsCashRate(entry);
+      const alreadyQuarantined = isTollQuarantined(entry);
+      totalImpactAbs += Math.abs(Number(entry.amount) || 0);
+      rows.push({
+        id: entry.id,
+        date: entry.date ?? null,
+        amount: Number(entry.amount) || 0,
+        plaza: entry.plaza ?? null,
+        paymentMethod: entry.paymentMethod,
+        tripId: entry.tripId ?? null,
+        batchId: entry.batchId ?? null,
+        reason,
+        suspiciousVineyards,
+        alreadyQuarantined,
+      });
+
+      if (stamp) {
+        const meta = { ...(entry.metadata || {}) };
+        meta.quarantined = true;
+        meta.tollQuarantined = true;
+        meta.excludeFromSpend = true;
+        meta.quarantineReason = reason;
+        meta.quarantinedAt = new Date().toISOString();
+        entry.metadata = meta;
+        await saveTollLedgerEntry(entry);
+        stamped++;
+      }
+    }
+
+    return c.json({
+      success: true,
+      dryRun: !stamp,
+      count: rows.length,
+      totalImpactAbs,
+      stamped,
+      rows,
+      message: stamp
+        ? `Stamped ${stamped} synthetic cash toll(s) as quarantined.`
+        : `Dry-run: ${rows.length} synthetic cash toll(s) match quarantine signature. Re-run with stamp=1 to flag.`,
+    });
+  } catch (e: any) {
+    console.log(`[TollLedgerQuarantine] GET /quarantine-report error: ${e.message}`);
     return c.json({ error: e.message }, 500);
   }
 });
@@ -9490,6 +9608,7 @@ export default app;
 export {
   saveTollLedgerEntry,
   getTollLedgerEntry,
+  getAllTollLedgerEntries,
   updateTollLedgerEntry,
   deleteTollLedgerEntry,
   transactionToTollLedgerServer,
@@ -9502,6 +9621,7 @@ export {
   isUnresolvedRefund,
   collectLinkedTripIds,
   loadAllTollLedgerWithTrips,
+  loadTollLedgerWithTrips,
   getRefundAutomationSettings,
   buildUnresolvedRefundSuggestionStatuses,
 };

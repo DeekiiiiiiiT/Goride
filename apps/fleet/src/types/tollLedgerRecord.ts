@@ -6,6 +6,10 @@
 // ════════════════════════════════════════════════════════════════════════════
 
 import type { FinancialTransaction } from './data';
+import {
+  buildTollContentFingerprint,
+  resolveTollPlazaSSot,
+} from '../utils/tollLedgerIntegrity';
 
 // ── Enums ────────────────────────────────────────────────────────────────────
 
@@ -198,6 +202,28 @@ export function transactionToTollLedger(tx: FinancialTransaction): TollLedgerRec
     else if (r.includes('refund')) resolution = 'refunded';
   }
 
+  // Plaza SSOT + content fingerprint (mirrors transactionToTollLedgerServer).
+  const dateOnly =
+    typeof tx.date === 'string' && tx.date.includes('T')
+      ? tx.date.slice(0, 10)
+      : tx.date;
+  const plazaSsot = resolveTollPlazaSSot({
+    vendor: tx.vendor,
+    plaza: (tx as { plaza?: string | null }).plaza ?? null,
+    metadata: (tx.metadata || {}) as Record<string, unknown>,
+  });
+  const contentFingerprint = buildTollContentFingerprint({
+    vehicleId: tx.vehicleId,
+    date: dateOnly,
+    amount: tx.amount,
+    plaza: plazaSsot.plaza,
+    metadata: plazaSsot.metadata,
+  });
+  const metadata = {
+    ...plazaSsot.metadata,
+    contentFingerprint,
+  };
+
   return {
     id: tx.id,
     createdAt: tx.metadata?.createdAt as string || now,
@@ -212,11 +238,11 @@ export function transactionToTollLedger(tx: FinancialTransaction): TollLedgerRec
     tollTagId: tx.metadata?.tollTagUuid as string || tx.metadata?.tollTagId as string || null,
     tagNumber: tx.metadata?.tagNumber as string || null,
 
-    plaza: tx.vendor || tx.metadata?.tollPlaza as string || null,
-    highway: tx.metadata?.highway as string || null,
-    location: tx.vendor || tx.description || null,
+    plaza: plazaSsot.plaza,
+    highway: plazaSsot.highway,
+    location: plazaSsot.plaza || tx.vendor || tx.description || null,
 
-    date: tx.date,
+    date: dateOnly,
     time: tx.time || null,
     type,
     amount: tx.amount,
@@ -247,7 +273,7 @@ export function transactionToTollLedger(tx: FinancialTransaction): TollLedgerRec
       metadata: { source: 'migration', originalCategory: tx.category },
     }],
 
-    metadata: tx.metadata || {},
+    metadata,
 
     _legacyTransactionId: tx.id,
   };

@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { api, fetchFleetTimezone } from '../services/api';
 import { FinancialTransaction, Trip, DisputeRefund } from '../types/data';
-import { findTollMatches, MatchResult } from '../utils/tollReconciliation';
+import { MatchResult } from '../utils/tollReconciliation';
 import { collectReadyToLinkPairs, partitionSuggestions } from '../utils/suggestionPartition';
 import { demoteSpuriousDeadheadMatch } from '../utils/deadheadMatchGuard';
 import { fleetCalendarDay, ymdToLocalDate } from '../utils/timezoneDisplay';
+import { TOLL_RECON_CAPS, type TollReconTruncation } from '../utils/tollReconCaps';
 import { toast } from 'sonner@2.0.3';
 
 /** Shift yyyy-MM-dd by N days (local calendar). */
@@ -29,6 +30,11 @@ function paddedPeriodDateParams(period: { startDate: string; endDate: string }) 
   };
 }
 
+/**
+ * Fetch trim: fleet calendar day within [startDate, endDate] (inclusive).
+ * Wizard display membership / Toll Spend use week-key via isTollInWizardPeriod
+ * (tollWeekPeriod) — do not treat this range trim as the spend row set.
+ */
 function inPeriodFleetDay(
   dateStr: string | undefined,
   startDate: string,
@@ -55,14 +61,21 @@ function inPeriodFleetDay(
  * so zero UI component changes are needed.
  */
 
+/** Safety cap so a runaway total cannot loop forever; hasMore=true if we stop early. */
+const MAX_FETCH_PAGES = TOLL_RECON_CAPS.maxFetchPages;
+
 /**
  * Period trips for ManualMatch + local rematch — not the whole fleet history.
  */
-async function fetchTripsInRange(startDate: string, endDate: string): Promise<Trip[]> {
-  const PAGE_SIZE = 500;
+async function fetchTripsInRange(
+  startDate: string,
+  endDate: string,
+): Promise<{ data: Trip[]; hasMore: boolean }> {
+  const PAGE_SIZE = TOLL_RECON_CAPS.tripsPageSize;
   let offset = 0;
   const all: Trip[] = [];
-  while (true) {
+  let hasMore = false;
+  for (let page = 0; page < MAX_FETCH_PAGES; page++) {
     const res = await api.getTripsFiltered({
       startDate,
       endDate,
@@ -72,24 +85,35 @@ async function fetchTripsInRange(startDate: string, endDate: string): Promise<Tr
     const batch = res.data || [];
     all.push(...batch);
     const total = res.total ?? all.length;
-    if (batch.length < PAGE_SIZE || all.length >= total) break;
+    if (batch.length < PAGE_SIZE || all.length >= total) {
+      hasMore = false;
+      break;
+    }
+    hasMore = true;
     offset += PAGE_SIZE;
   }
-  return all;
+  return { data: all, hasMore };
 }
 
-/** Paginate through all unreconciled tolls (server caps each page at 100). */
+/** Paginate through all unreconciled tolls (larger pages = fewer round trips). */
 async function fetchAllUnreconciled(
   params: { driverId?: string; autoMatch?: boolean; from?: string; to?: string },
-): Promise<{ data: FinancialTransaction[]; suggestions: Record<string, any[]>; autoReconciled: number; total: number }> {
-  const PAGE_SIZE = 100;
+): Promise<{
+  data: FinancialTransaction[];
+  suggestions: Record<string, any[]>;
+  autoReconciled: number;
+  total: number;
+  hasMore: boolean;
+}> {
+  const PAGE_SIZE = TOLL_RECON_CAPS.unreconciledPageSize;
   let offset = 0;
   const all: FinancialTransaction[] = [];
   const suggestions: Record<string, any[]> = {};
   let autoReconciled = 0;
   let total = 0;
+  let hasMore = false;
 
-  while (true) {
+  for (let page = 0; page < MAX_FETCH_PAGES; page++) {
     const res = await api.getTollUnreconciled({
       ...params,
       limit: PAGE_SIZE,
@@ -102,11 +126,15 @@ async function fetchAllUnreconciled(
     }
     autoReconciled += res.autoReconciled || 0;
     total = res.total ?? all.length;
-    if (batch.length < PAGE_SIZE || all.length >= total) break;
+    if (batch.length < PAGE_SIZE || all.length >= total) {
+      hasMore = false;
+      break;
+    }
+    hasMore = true;
     offset += PAGE_SIZE;
   }
 
-  return { data: all, suggestions, autoReconciled, total };
+  return { data: all, suggestions, autoReconciled, total, hasMore };
 }
 
 /**
@@ -225,6 +253,8 @@ export function useTollReconciliation(driverId?: string, period?: Reconciliation
   const [autoReconciledCount, setAutoReconciledCount] = useState(0);
   // Phase 6 (Dispute Refunds): Imported Support Adjustment refunds
   const [disputeRefunds, setDisputeRefunds] = useState<DisputeRefund[]>([]);
+  /** True when a paginated fetch hit MAX_FETCH_PAGES with more rows remaining. */
+  const [truncation, setTruncation] = useState({ unreconciledHasMore: false, tripsHasMore: false });
   // Only blank the UI on first load (or driver filter change) — action refreshes stay silent
   const isInitialLoad = useRef(true);
 
@@ -248,13 +278,23 @@ export function useTollReconciliation(driverId?: string, period?: Reconciliation
       const tripRange = period
         ? { startDate: shiftYmd(period.startDate, -2), endDate: shiftYmd(period.endDate, 2) }
         : null;
-      const fleetTz = await fetchFleetTimezone();
 
-      const [unreconciledRes, reconciledRes, refundsRes, periodTrips, drRes, sugRes, resolvedRes, shortRes] = await Promise.all([
+      const [fleetTz, unreconciledRes, reconciledRes, refundsRes, tripsRes, drRes, sugRes, resolvedRes, shortRes] = await Promise.all([
+        fetchFleetTimezone(),
         fetchAllUnreconciled(filterParams),
-        api.getTollReconciled({ limit: 1000, ...(driverId ? { driverId } : {}), ...dateParams }),
-        api.getTollUnclaimedRefunds({ limit: 1000, ...(driverId ? { driverId } : {}), ...dateParams }),
-        tripRange ? fetchTripsInRange(tripRange.startDate, tripRange.endDate) : Promise.resolve([] as Trip[]),
+        api.getTollReconciled({
+          limit: TOLL_RECON_CAPS.reconciledLimit,
+          ...(driverId ? { driverId } : {}),
+          ...dateParams,
+        }),
+        api.getTollUnclaimedRefunds({
+          limit: TOLL_RECON_CAPS.unclaimedRefundsLimit,
+          ...(driverId ? { driverId } : {}),
+          ...dateParams,
+        }),
+        tripRange
+          ? fetchTripsInRange(tripRange.startDate, tripRange.endDate)
+          : Promise.resolve({ data: [] as Trip[], hasMore: false }),
         api.getDisputeRefunds(
           period ? { dateFrom: period.startDate, dateTo: period.endDate } : undefined,
         ).catch((drErr) => {
@@ -302,7 +342,15 @@ export function useTollReconciliation(driverId?: string, period?: Reconciliation
       setReconciledTolls(reconciled);
       setAllReconciledTolls(reconciled);
       setUnclaimedRefunds(refunds);
-      setTrips(periodTrips);
+      setTrips(tripsRes.data);
+      const reconciledTotal = Number((reconciledRes as { total?: number }).total ?? reconciled.length);
+      const unclaimedTotal = Number((refundsRes as { total?: number }).total ?? refunds.length);
+      setTruncation({
+        unreconciledHasMore: unreconciledRes.hasMore,
+        tripsHasMore: tripsRes.hasMore,
+        reconciledCapped: reconciledTotal > TOLL_RECON_CAPS.reconciledLimit,
+        unclaimedRefundsCapped: unclaimedTotal > TOLL_RECON_CAPS.unclaimedRefundsLimit,
+      } satisfies TollReconTruncation);
       setDisputeRefunds(drRes.data || []);
 
       // Convert server suggestions to client MatchResult format
@@ -410,15 +458,14 @@ export function useTollReconciliation(driverId?: string, period?: Reconciliation
               return next.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
           });
 
-          // Re-generate suggestions for this one toll using client-side matching
-          // (trips array is available for ManualMatchModal anyway)
-          const matches = findTollMatches(updatedTx, trips);
+          // Do not seed thin client findTollMatches — wait for fetchData()
+          // convertServerSuggestions so confidence/reason stay server-grade.
           setSuggestions(prev => {
               const next = new Map(prev);
-              if (matches.length > 0) next.set(updatedTx.id, matches);
+              next.delete(updatedTx.id);
               return next;
           });
-          
+
           // Refresh to ensure consistency (unclaimed refunds may change)
           fetchData();
 
@@ -659,6 +706,7 @@ export function useTollReconciliation(driverId?: string, period?: Reconciliation
     disputeRefunds,
     trips,
     suggestions,
+    truncation,
     reconcile,
     unreconcile,
     approve,

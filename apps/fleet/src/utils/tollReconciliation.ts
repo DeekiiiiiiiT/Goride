@@ -78,7 +78,7 @@ function getTransactionDateTime(tx: FinancialTransaction): Date | null {
  * @deprecated Server-side matching is now the primary engine (Phase 2 toll_controller.tsx).
  * This function is retained only for:
  *  - ManualMatchModal's client-side search fallback
- *  - unreconcile() in useTollReconciliation.ts (re-generate suggestions locally)
+ *  - ManualMatchModal / rematch (client-side trip search)
  * Do not use for new features — use the server endpoints instead.
  */
 export function findTollMatches(

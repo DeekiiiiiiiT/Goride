@@ -42,22 +42,23 @@ import { RematchCandidatesQueue } from "./RematchCandidatesQueue";
 import { PeriodResetDialog } from "./PeriodResetDialog";
 import { TollReconBusyProvider, useTollReconBusy } from "./tollReconBusyLock";
 import { StepAdvancePrompt } from "./StepAdvancePrompt";
-import { normalizePlatform } from "../../../utils/normalizePlatform";
 import { ReconciliationPeriod } from "../../../hooks/useTollReconciliationPeriods";
 import { useFleetTimezone } from "../../../utils/timezoneDisplay";
 import {
   collectTripsForReimbursedCard,
   computeReimbursedTotals,
   computeGrossTollSpendByPlatform,
+  normPlatformBucket,
   resolveTollPlatformBucket,
   type PlatformBucket,
   type TollWithLinkedTrip,
 } from "../../../utils/tollFinancialOverview";
-import { computeTollFleetLossNetting } from "../../../utils/tollFleetLossNetting";
+import { isTollIncludedInSpend } from "../../../utils/tollLedgerIntegrity";
+import { tollReconTruncationMessage } from "../../../utils/tollReconCaps";
 import { collectReadyToLinkPairs, partitionSuggestions } from "../../../utils/suggestionPartition";
 
-type PlatformFilter = 'all' | 'Uber' | 'InDrive' | 'Roam';
-const PLATFORM_OPTIONS: PlatformFilter[] = ['all', 'Uber', 'InDrive', 'Roam'];
+type PlatformFilter = 'all' | PlatformBucket;
+const PLATFORM_OPTIONS: PlatformFilter[] = ['all', 'Uber', 'InDrive', 'Roam', 'Unlinked'];
 
 const STEP_LABELS: Record<StepId, string> = {
   'needs-review': 'Needs Review',
@@ -105,6 +106,7 @@ export function ReconciliationWizard(props: ReconciliationWizardProps) {
 function ReconciliationWizardInner({ period, driverId, drivers, onExit }: ReconciliationWizardProps) {
   const { runExclusive, busy: actionBusy } = useTollReconBusy();
   const handleRunTest = () => {
+    if (!import.meta.env.DEV) return;
     const result = runScenarioTest();
     console.log(result);
     alert(result);
@@ -113,38 +115,8 @@ function ReconciliationWizardInner({ period, driverId, drivers, onExit }: Reconc
   const [platformFilter, setPlatformFilter] = useState<PlatformFilter>('all');
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
   const fleetTz = useFleetTimezone();
-  // Net Toll Loss = plaza spend minus Uber trip reimbursement (same canonical netting as P&L).
-  const [fleetLossNet, setFleetLossNet] = useState<number | null>(period.financials?.netTollLoss ?? null);
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const all: Record<string, unknown>[] = [];
-        let offset = 0;
-        for (let i = 0; i < 40; i++) {
-          const page = await api.getCanonicalLedgerEvents({
-            startDate: period.startDate,
-            endDate: period.endDate,
-            eventTypes: 'toll_charge,toll_refund,toll_charge_offset',
-            driverId: driverId || undefined,
-            limit: 500,
-            offset,
-          });
-          const chunk = page.data || [];
-          all.push(...chunk);
-          if (!page.hasMore || chunk.length === 0) break;
-          offset += 500;
-        }
-        if (!cancelled) setFleetLossNet(computeTollFleetLossNetting(all).net);
-      } catch {
-        if (!cancelled) setFleetLossNet(period.financials?.netTollLoss ?? null);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [period.startDate, period.endDate, period.financials?.netTollLoss, driverId]);
+  // Net Toll Loss from period landing financials (Wave 2 Dev D — no client re-fetch / recompute).
+  const [fleetLossNet] = useState<number | null>(period.financials?.netTollLoss ?? null);
 
   const {
     loading: tollsLoading,
@@ -158,6 +130,7 @@ function ReconciliationWizardInner({ period, driverId, drivers, onExit }: Reconc
     disputeRefunds,
     trips,
     suggestions,
+    truncation,
     reconcile,
     unreconcile,
     approve,
@@ -174,6 +147,8 @@ function ReconciliationWizardInner({ period, driverId, drivers, onExit }: Reconc
     applyDisputeUnmatch,
     refresh
   } = useTollReconciliation(driverId, { startDate: period.startDate, endDate: period.endDate });
+
+  const truncationMessage = tollReconTruncationMessage(truncation || {});
 
   const { claims, loading: claimsLoading, refresh: refreshClaims, createClaim, updateClaim, deleteClaim } = useClaims();
   const queryClient = useQueryClient();
@@ -521,16 +496,18 @@ function ReconciliationWizardInner({ period, driverId, drivers, onExit }: Reconc
       }
   };
 
-  // ── Platform scoping (Uber / InDrive / Roam) ─────────────────────────────
-  const normPlat = (p?: string | null) => normalizePlatform(p || undefined);
+  // ── Platform scoping (Uber / InDrive / Roam / Unlinked) ──────────────────
   const platformOfToll = (tx: FinancialTransaction): PlatformBucket =>
     resolveTollPlatformBucket(tx as TollWithLinkedTrip, tripMap, {
       suggestedPlatform: suggestions.get(tx.id)?.[0]?.trip?.platform,
     });
-  const tripInPlatform = (t: TripType) => platformFilter === 'all' || normPlat(t.platform) === platformFilter;
+  const tripInPlatform = (t: TripType) =>
+    platformFilter === 'all' || normPlatformBucket(t.platform) === platformFilter;
   const tollInPlatform = (tx: FinancialTransaction) =>
     platformFilter === 'all' || platformOfToll(tx) === platformFilter;
-  const claimInPlatform = (c: any) => platformFilter === 'all' || normPlat(tripMap.get(c.tripId || '')?.platform) === platformFilter;
+  const claimInPlatform = (c: any) =>
+    platformFilter === 'all' ||
+    normPlatformBucket(tripMap.get(c.tripId || '')?.platform) === platformFilter;
 
   const pTrips = platformFilter === 'all' ? trips : trips.filter(tripInPlatform);
   const pReconciled = platformFilter === 'all' ? reconciledTolls : reconciledTolls.filter(tollInPlatform);
@@ -877,7 +854,14 @@ function ReconciliationWizardInner({ period, driverId, drivers, onExit }: Reconc
   }, [undoApplyToUnderpaid, refreshClaims]);
 
   // Auto-repair split state: trip pending in Unlinked but claim still Reimbursed.
+  // TODO(Wave 3 / Dev E): harden the integrity/ready gate — keep this effect callable;
+  // Dev E owns the full gate. Current early-return is a light signal only.
   useEffect(() => {
+    const unlinked = period.counts?.['unlinked-refunds'];
+    const hasUnlinkedSignal =
+      (unlinked?.actionable ?? 0) > 0 || (unlinked?.informational ?? 0) > 0;
+    if (unclaimedRefunds.length === 0 || !hasUnlinkedSignal) return;
+
     let cancelled = false;
     (async () => {
       try {
@@ -896,7 +880,16 @@ function ReconciliationWizardInner({ period, driverId, drivers, onExit }: Reconc
     return () => {
       cancelled = true;
     };
-  }, [driverId, period.startDate, period.endDate, repairUnlinkedApplySplits, refresh, refreshClaims]);
+  }, [
+    driverId,
+    period.startDate,
+    period.endDate,
+    period.counts,
+    unclaimedRefunds.length,
+    repairUnlinkedApplySplits,
+    refresh,
+    refreshClaims,
+  ]);
 
   useEffect(() => {
     if (isLoading) return;
@@ -1002,7 +995,12 @@ function ReconciliationWizardInner({ period, driverId, drivers, onExit }: Reconc
     .reduce((sum, r) => sum + (r.amount || 0), 0);
   const totalRecovered = recoveredAmount + matchedDisputeRefundAmount;
 
-  const periodTolls = [...pUnreconciled, ...pReconciled] as TollWithLinkedTrip[];
+  // Same week-key membership as pReconciledInPeriod / underpaid — not raw calendar trim.
+  const periodTolls = filterTollsToWizardPeriod(
+    [...pUnreconciled, ...pReconciled] as TollWithLinkedTrip[],
+    period.startDate,
+    fleetTz,
+  ).filter(isTollIncludedInSpend);
   // Toll Spend = plaza ledger debits. Unmatched trip tolls stay on Reimbursed only.
   const {
     total: tollSpend,
@@ -1034,7 +1032,7 @@ function ReconciliationWizardInner({ period, driverId, drivers, onExit }: Reconc
   const chargedToDrivers = pPeriodClaims
     .filter(c => c.status === 'Resolved' && c.resolutionReason === 'Charge Driver')
     .reduce((sum, c) => sum + Math.abs(c.amount || 0), 0);
-  // Prefer live canonical netting; fall back to period API (same formula) while loading.
+  // Seeded from period.financials.netTollLoss (no wizard-side ledger recompute).
   const netTollLoss = fleetLossNet != null
     ? fleetLossNet
     : (period.financials?.netTollLoss ?? 0);
@@ -1315,6 +1313,11 @@ function ReconciliationWizardInner({ period, driverId, drivers, onExit }: Reconc
   return (
     <TooltipProvider>
     <div className={`space-y-6 ${actionBusy ? 'select-none' : ''}`}>
+      {truncationMessage && (
+        <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          {truncationMessage}
+        </div>
+      )}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
             <Button variant="ghost" size="sm" onClick={onExit} disabled={actionBusy} className="-ml-2 mb-1 text-slate-500 hover:text-slate-700">
@@ -1340,9 +1343,11 @@ function ReconciliationWizardInner({ period, driverId, drivers, onExit }: Reconc
                     </button>
                 ))}
             </div>
+            {import.meta.env.DEV && (
             <Button variant="ghost" size="sm" onClick={handleRunTest} className="text-slate-400 hover:text-slate-600">
                 Test
             </Button>
+            )}
             {highConfidenceCount > 0 && (
                 <Button variant="default" size="sm" onClick={() => void lockedAutoMatch()} disabled={actionBusy} className="bg-indigo-600 hover:bg-indigo-700">
                     <Wand2 className="h-4 w-4 mr-2" />
@@ -1407,7 +1412,7 @@ function ReconciliationWizardInner({ period, driverId, drivers, onExit }: Reconc
 
       {/* MOI-5: already-resolved tolls flagged for a second look — cuts across
           steps, so it stays a banner above the stepper rather than a step. */}
-      <RematchCandidatesQueue driverId={driverId} />
+      <RematchCandidatesQueue driverId={driverId} enabled={!isLoading} />
 
       <div className="space-y-4">
         <GatedReconciliationStepper

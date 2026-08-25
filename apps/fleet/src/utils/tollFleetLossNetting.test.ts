@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   computeTollFleetLossNetting,
   computeTollFleetLossForPeriod,
+  computeTollFleetLossFromEvents,
   tollRecoveredWashedMemo,
 } from './tollFleetLossNetting';
 import { buildPnLFromCanonicalEvents, sumExpenseRowsFromEvents } from '../components/business-finance/businessFinancePnL';
@@ -47,6 +48,7 @@ describe('computeTollFleetLossNetting', () => {
     expect(netting.net).toBe(1045);
     expect(-(pnl.lines.find((l) => l.id === 'tolls')!.amount ?? 0)).toBe(netting.net);
     expect(computeTollFleetLossForPeriod(events, '2026-02-01', '2026-02-28').net).toBe(1045);
+    expect(computeTollFleetLossFromEvents(events).net).toBe(1045);
   });
 
   it('fully washed period nets to $0 but keeps recovered memo', () => {

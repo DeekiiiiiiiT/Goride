@@ -18,9 +18,16 @@ import { toast } from 'sonner@2.0.3';
  * (relinking, reversing a charge) is done through the existing Edit
  * Transaction / Claim flows elsewhere in this dashboard, not here.
  */
-export function RematchCandidatesQueue({ driverId }: { driverId?: string }) {
+export function RematchCandidatesQueue({
+  driverId,
+  enabled = false,
+}: {
+  driverId?: string;
+  /** Wave 2 Dev D: defer fetch until wizard main data is ready. */
+  enabled?: boolean;
+}) {
   const [candidates, setCandidates] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [dismissingId, setDismissingId] = useState<string | null>(null);
 
   const load = () => {
@@ -33,11 +40,12 @@ export function RematchCandidatesQueue({ driverId }: { driverId?: string }) {
   };
 
   useEffect(() => {
+    if (!enabled) return;
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [driverId]);
+  }, [driverId, enabled]);
 
-  if (loading || candidates.length === 0) return null;
+  if (!enabled || loading || candidates.length === 0) return null;
 
   const handleDismiss = async (tollId: string) => {
     setDismissingId(tollId);

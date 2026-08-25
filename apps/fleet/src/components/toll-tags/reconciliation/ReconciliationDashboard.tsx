@@ -71,6 +71,7 @@ export function ReconciliationDashboard({
         totals={periodData.totals}
         loading={periodData.loading}
         loadError={periodData.loadError}
+        onRetry={() => void periodData.refresh()}
       />
     </div>
   );

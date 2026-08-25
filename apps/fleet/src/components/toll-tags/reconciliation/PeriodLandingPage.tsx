@@ -9,6 +9,7 @@ import {
   Unlink as UnlinkIcon,
   Check,
   RotateCcw,
+  RefreshCw,
   ClipboardList,
   ChevronRight,
   Filter,
@@ -44,6 +45,7 @@ interface PeriodLandingPageProps {
   totals: ReconciliationTotals;
   loading: boolean;
   loadError?: string | null;
+  onRetry?: () => void;
 }
 
 function periodDateBadge(startDate: string) {
@@ -173,6 +175,7 @@ export function PeriodLandingPage({
   totals,
   loading,
   loadError,
+  onRetry,
 }: PeriodLandingPageProps) {
   const [bulkResetOpen, setBulkResetOpen] = useState(false);
   const allPeriods = useMemo(
@@ -249,9 +252,14 @@ export function PeriodLandingPage({
       </div>
 
       {loadError ? (
-        <div className="rounded-2xl border border-rose-200 bg-rose-50 py-16 text-center text-rose-800">
+        <div className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-rose-200 bg-rose-50 py-16 text-rose-800">
           <p className="text-sm font-medium">Could not load tolls — the fleet server is down.</p>
-          <p className="mt-1 text-xs text-rose-600">Your data is still there. Refresh this page in a moment.</p>
+          <p className="text-xs text-rose-600">Your data is still there. Try again in a moment.</p>
+          {onRetry && (
+            <Button variant="outline" size="sm" onClick={onRetry} className="mt-1 border-rose-200 text-rose-700 hover:bg-rose-100">
+              <RefreshCw className="h-4 w-4 mr-2" aria-hidden /> Retry
+            </Button>
+          )}
         </div>
       ) : (
       <>

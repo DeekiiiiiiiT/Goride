@@ -14,7 +14,9 @@ import { toast } from "sonner@2.0.3";
  * (dry-run preview → apply). All server-side; this is a thin control surface.
  */
 export function TollAutomationSettings({ onChanged }: { onChanged?: () => void }) {
-  const [loading, setLoading] = useState(true);
+  const [open, setOpen] = useState(false);
+  // Wave 2 Dev D: defer GET until popover opens (lazy).
+  const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [enabled, setEnabled] = useState(false);
   const [minConfidence, setMinConfidence] = useState(85);
@@ -85,7 +87,9 @@ export function TollAutomationSettings({ onChanged }: { onChanged?: () => void }
   };
 
   useEffect(() => {
+    if (!open) return;
     let active = true;
+    setLoading(true);
     api
       .getTollAutomationSettings()
       .then((res) => {
@@ -98,7 +102,7 @@ export function TollAutomationSettings({ onChanged }: { onChanged?: () => void }
     return () => {
       active = false;
     };
-  }, []);
+  }, [open]);
 
   const save = async (next: {
     refundAutomationEnabled?: boolean;
@@ -275,7 +279,13 @@ export function TollAutomationSettings({ onChanged }: { onChanged?: () => void }
   };
 
   return (
-    <Popover>
+    <Popover
+      open={open}
+      onOpenChange={(next) => {
+        if (next) setLoading(true);
+        setOpen(next);
+      }}
+    >
       <PopoverTrigger asChild>
         <Button variant="outline" size="sm">
           <Settings2 className="h-4 w-4 mr-2" />

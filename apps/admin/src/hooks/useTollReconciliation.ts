@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { api } from '../services/api';
 import { FinancialTransaction, Trip, DisputeRefund } from '../types/data';
-import { findTollMatches, MatchResult } from '../utils/tollReconciliation';
+import { MatchResult } from '../utils/tollReconciliation';
 import { toast } from 'sonner@2.0.3';
 
 /**
@@ -23,7 +23,6 @@ import { toast } from 'sonner@2.0.3';
  * @internal Paginate through ALL trips.
  * Still needed for:
  *  - ManualMatchModal (client-side trip search)
- *  - unreconcile() fallback (re-generate suggestions locally via findTollMatches)
  * Phase 8 note: This is the only remaining full-data-dump call.
  * If ManualMatchModal is ever given a server search endpoint, this can be removed.
  */
@@ -225,15 +224,14 @@ export function useTollReconciliation(driverId?: string) {
               return next.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
           });
 
-          // Re-generate suggestions for this one toll using client-side matching
-          // (trips array is available for ManualMatchModal anyway)
-          const matches = findTollMatches(updatedTx, trips);
+          // Do not seed thin client findTollMatches — wait for fetchData()
+          // convertServerSuggestions so confidence/reason stay server-grade.
           setSuggestions(prev => {
               const next = new Map(prev);
-              if (matches.length > 0) next.set(updatedTx.id, matches);
+              next.delete(updatedTx.id);
               return next;
           });
-          
+
           // Refresh to ensure consistency (unclaimed refunds may change)
           fetchData();
 

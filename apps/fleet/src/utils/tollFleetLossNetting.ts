@@ -164,6 +164,17 @@ export function computeTollFleetLossForPeriod(
   return computeTollFleetLossNetting(filterTollEventsInDateRange(events, startYmd, endYmd));
 }
 
+/**
+ * Netting for events already scoped to one period (no date filter).
+ * Prefer this after pre-bucketing by week so callers avoid O(P×E) re-filters.
+ */
+export function computeTollFleetLossFromEvents(
+  eventsAlreadyInPeriod: TollLedgerLikeEvent[] | undefined | null,
+): TollFleetLossNetting {
+  const scoped = (eventsAlreadyInPeriod || []).filter(isTollFleetLossEvent);
+  return computeTollFleetLossNetting(scoped);
+}
+
 /** Memo amount already removed from the Tolls expense line (not a subset of net). */
 export function tollRecoveredWashedMemo(netting: TollFleetLossNetting): number | undefined {
   const memo = round2(netting.recovered - netting.reinstated);

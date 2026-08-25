@@ -1,6 +1,7 @@
 import type { DisputeRefund, FinancialTransaction, Trip } from '../types/data';
 import { fleetCalendarDay, fleetTzDateKey } from './timezoneDisplay';
 import { normalizePlatform } from './normalizePlatform';
+import { isTollIncludedInSpend } from './tollLedgerIntegrity';
 
 export type RidesharePlatform = 'Uber' | 'InDrive' | 'Roam';
 export type PlatformBucket = RidesharePlatform | 'Unlinked';
@@ -74,6 +75,7 @@ export function computeTollSpendByPlatform(
   const byPlatform = emptyPlatformBreakdown();
   let total = 0;
   for (const tx of tolls) {
+    if (!isTollIncludedInSpend(tx)) continue;
     const amount = tx.amount < 0 ? Math.abs(tx.amount) : 0;
     if (amount <= 0) continue;
     total += amount;

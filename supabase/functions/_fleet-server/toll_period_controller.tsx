@@ -1,11 +1,13 @@
 /**
  * Toll Reconciliation — Period Aggregation Controller (Phase F2)
  *
- * One read-only endpoint that scans FULL toll/trip/claim/dispute-refund
- * history once and buckets everything into Monday–Sunday weeks (fleet
- * timezone), returning per-period actionable/informational counts for the
- * period-first landing page (apps/fleet/src/components/toll-tags/
- * reconciliation/PeriodLandingPage.tsx).
+ * One read-only endpoint that loads lookback-bounded toll/trip/claim/
+ * dispute-refund history (default last 26 weeks) and buckets into
+ * Monday–Sunday weeks (fleet timezone), returning per-period
+ * actionable/informational counts for the period-first landing page
+ * (apps/fleet/src/components/toll-tags/reconciliation/PeriodLandingPage.tsx).
+ * Periods already in the computed set that still have actionable work are
+ * kept even if their week start falls outside the lookback window.
  *
  * Why a new endpoint instead of the existing client hooks: `useTollReconciliation`
  * fetches `reconciled`/`unclaimed-refunds` capped at ~1000 rows (see that
@@ -34,9 +36,16 @@ import { startOfWeek, endOfWeek, format } from "npm:date-fns";
 import { getFleetTimezone } from "./timezone_helper.tsx";
 import { requireAuth, requirePermission, type RbacUser } from "./rbac_middleware.ts";
 import { getServiceClient } from "./service_client.ts";
-import { computeTollFleetLossForPeriod } from "../../../apps/fleet/src/utils/tollFleetLossNetting.ts";
 import {
-  loadAllTollLedgerWithTrips,
+  computeTollFleetLossFromEvents,
+  filterTollEventsInDateRange,
+  isTollFleetLossEvent,
+  tollEventDate,
+  type TollLedgerLikeEvent,
+} from "../../../apps/fleet/src/utils/tollFleetLossNetting.ts";
+import { isTollIncludedInSpend } from "../../../apps/fleet/src/utils/tollLedgerIntegrity.ts";
+import {
+  loadTollLedgerWithTrips,
   isUnresolvedRefund,
   collectLinkedTripIds,
   loadDisputeRefundRecords,
@@ -55,6 +64,9 @@ const app = new Hono();
 app.use("*", requireAuth({ strict: true }));
 
 const BASE = "/make-server-37f42386/toll-reconciliation";
+
+/** Default landing lookback — last N Monday–Sunday weeks including the current week. */
+const PERIODS_LOOKBACK_WEEKS = 26;
 
 // ─── Step ids (mirrors StepId in apps/fleet/src/utils/tollPeriodGating.ts) ──
 type StepId =
@@ -288,12 +300,73 @@ function zeroFinancials(): PeriodFinancials {
   };
 }
 
+/** Monday of the oldest lookback week → Sunday of the current week (fleet tz). */
+function periodsLookbackRange(timezone: string): { fromYmd: string; toYmd: string } {
+  const todayYmd = fleetTzDay(new Date().toISOString(), timezone);
+  const { weekStart, weekEnd } = weekKeyFor(todayYmd, timezone);
+  const from = new Date(weekStart);
+  from.setDate(from.getDate() - (PERIODS_LOOKBACK_WEEKS - 1) * 7);
+  return {
+    fromYmd: format(from, "yyyy-MM-dd"),
+    toYmd: format(weekEnd, "yyyy-MM-dd"),
+  };
+}
+
+function ymdInRange(dateStr: string | null | undefined, fromYmd: string, toYmd: string): boolean {
+  if (!dateStr) return false;
+  const d = String(dateStr).slice(0, 10);
+  return d >= fromYmd && d <= toYmd;
+}
+
+/** Underpaid claim still needs a decision (mirrors applyUnderpaidClaimCounts blockers). */
+function isClaimStillActionable(claim: any, toll: any, disputeRefunds: any[]): boolean {
+  if (claim.status === "Rejected" || claim.status === "Open") {
+    if (claim.status === "Open" && isTollCoveredByDisputeRefundServer(claim, disputeRefunds)) {
+      return false;
+    }
+    return claim.status === "Rejected" || claim.status === "Open";
+  }
+  return isVisiblePartialShortfallClaimServer(claim, toll, disputeRefunds);
+}
+
+/**
+ * Pre-bucket fleet-loss events by Monday week key once (O(E)).
+ * Uses the same date membership as filterTollEventsInDateRange via tollEventDate /
+ * isTollFleetLossEvent; week key matches weekKeyFor used for period ids.
+ */
+function bucketFleetLossEventsByWeek(
+  events: TollLedgerLikeEvent[],
+  timezone: string,
+): Map<string, TollLedgerLikeEvent[]> {
+  const buckets = new Map<string, TollLedgerLikeEvent[]>();
+  for (const e of events) {
+    if (!isTollFleetLossEvent(e)) continue;
+    const d = tollEventDate(e);
+    if (!d) continue;
+    const { key } = weekKeyFor(d, timezone);
+    let arr = buckets.get(key);
+    if (!arr) {
+      arr = [];
+      buckets.set(key, arr);
+    }
+    arr.push(e);
+  }
+  return buckets;
+}
+
 /** Load canonical events that drive Business Finance P&L Tolls / Net Toll Loss. */
-async function loadTollFleetLossLedgerEvents(): Promise<Record<string, unknown>[]> {
+async function loadTollFleetLossLedgerEvents(opts?: {
+  driverId?: string;
+  from?: string;
+  to?: string;
+}): Promise<Record<string, unknown>[]> {
   const { listAllUnifiedCanonicalEvents } = await import("../_shared/unifiedLedger/queries.ts");
   return await listAllUnifiedCanonicalEvents({
     products: ["roam_driver", "roam_fleet"],
     entryTypes: ["toll_charge", "toll_refund", "toll_charge_offset"],
+    driverId: opts?.driverId,
+    from: opts?.from,
+    to: opts?.to,
     maxRows: 100_000,
   });
 }
@@ -303,29 +376,82 @@ app.get(`${BASE}/periods`, requirePermission('toll.view'), async (c) => {
   try {
     const driverId = c.req.query("driverId") || undefined;
     const timezone = await getFleetTimezone();
+    const { fromYmd, toYmd } = periodsLookbackRange(timezone);
 
     const [{ tollTx, trips }, fleetLossEvents] = await Promise.all([
-      loadAllTollLedgerWithTrips(),
-      loadTollFleetLossLedgerEvents(),
+      loadTollLedgerWithTrips(fromYmd, toYmd),
+      loadTollFleetLossLedgerEvents({ driverId, from: fromYmd, to: toYmd }),
     ]);
-    const scopedFleetLossEvents = driverId
-      ? fleetLossEvents.filter((e) => String(e.driverId || "") === String(driverId))
-      : fleetLossEvents;
+    // Quarantined synthetic cash rows must not inflate spend or net loss.
+    const quarantinedTollIds = new Set(
+      (tollTx || [])
+        .filter((tx: any) => tx && !isTollIncludedInSpend(tx))
+        .map((tx: any) => String(tx.id))
+        .filter(Boolean),
+    );
+    const scopedFleetLossEvents = (fleetLossEvents || []).filter((e) => {
+      const sid = String(e.sourceId || "");
+      return !sid || !quarantinedTollIds.has(sid);
+    });
+    const fleetLossByWeek = bucketFleetLossEventsByWeek(scopedFleetLossEvents, timezone);
     const canonicalChargeSourceIds = new Set(
       scopedFleetLossEvents
         .filter((e) => String(e.eventType || "") === "toll_charge" && String(e.sourceType || "") === "transaction")
         .map((e) => String(e.sourceId || ""))
         .filter(Boolean),
     );
-    // Tag credits (top-ups/refunds/adjustments) must not spawn periods or counts.
-    const scopedTollTx = filterByDriver(tollTx, driverId).filter(isReconcilableTollExpense);
-    const scopedTrips = filterByDriver(trips, driverId);
 
     const allClaims = (await loadAllByPrefix("claim:")) as any[];
-    const claims = filterByDriver(allClaims, driverId);
+    const claimsAllDrivers = filterByDriver(allClaims, driverId);
 
     const allDisputeRefunds = await loadDisputeRefundRecords();
-    const disputeRefunds = filterByDriver(allDisputeRefunds, driverId);
+    const disputeRefundsAll = filterByDriver(allDisputeRefunds, driverId);
+
+    // Tag credits (top-ups/refunds/adjustments) must not spawn periods or counts.
+    // Toll ledger loader is still unbounded; clip to lookback (trips already ranged).
+    // Exclude quarantined rows from period Toll Spend / counts.
+    const tollTxDriver = filterByDriver(tollTx, driverId)
+      .filter(isReconcilableTollExpense)
+      .filter(isTollIncludedInSpend);
+    const tripsDriver = filterByDriver(trips, driverId);
+
+    const tollByIdAll = new Map<string, any>();
+    const tollDateByIdAll = new Map<string, string>();
+    for (const tx of tollTxDriver) {
+      if (tx?.id) tollByIdAll.set(String(tx.id), tx);
+      if (tx?.id && tx?.date) tollDateByIdAll.set(String(tx.id), tx.date);
+    }
+
+    // Keep lookback rows + older rows that still drive actionable period work.
+    const claims = claimsAllDrivers.filter((claim: any) => {
+      const toll = claim.transactionId ? tollByIdAll.get(String(claim.transactionId)) : undefined;
+      const dateStr = resolveClaimDate(claim, tollDateByIdAll);
+      if (ymdInRange(dateStr, fromYmd, toYmd)) return true;
+      return isClaimStillActionable(claim, toll, disputeRefundsAll);
+    });
+
+    const claimTxIds = new Set(
+      claims.filter((cl: any) => cl.transactionId).map((cl: any) => String(cl.transactionId)),
+    );
+    const allClaimedTxIds = new Set(
+      claimsAllDrivers.filter((cl: any) => cl.transactionId).map((cl: any) => String(cl.transactionId)),
+    );
+
+    const disputeRefunds = disputeRefundsAll.filter((r: any) => {
+      if (ymdInRange(r?.date, fromYmd, toYmd)) return true;
+      if (!isDisputeRefundMatched(r)) return true; // unmatched = still actionable
+      return false;
+    });
+
+    const scopedTollTx = tollTxDriver.filter((tx: any) => {
+      if (ymdInRange(tx?.date, fromYmd, toYmd)) return true;
+      // Keep tolls linked to kept claims (anchors for older actionable periods).
+      if (tx?.id && claimTxIds.has(String(tx.id))) return true;
+      // Truly unclaimed + unlinked tolls outside lookback still spawn actionable periods.
+      if (tx?.id && !allClaimedTxIds.has(String(tx.id)) && !tx?.tripId) return true;
+      return false;
+    });
+    const scopedTrips = tripsDriver;
 
     const tollDateById = new Map<string, string>();
     for (const tx of scopedTollTx) {
@@ -477,10 +603,16 @@ app.get(`${BASE}/periods`, requirePermission('toll.view'), async (c) => {
         const actionableTotal = STEP_IDS.reduce((sum, stepId) => sum + acc.counts[stepId].actionable, 0);
         const f = acc.financials;
         const reimbursedByPlatform = f.reimbursedFromTrips + f.matchedDisputeRefundAmount;
+        const startDate = format(acc.weekStart, "yyyy-MM-dd");
+        const endDate = format(acc.weekEnd, "yyyy-MM-dd");
+        // Prefer O(1) week bucket; fall back to shared range filter if missing.
+        const weekEvents =
+          fleetLossByWeek.get(id) ??
+          filterTollEventsInDateRange(scopedFleetLossEvents, startDate, endDate);
         return {
           id,
-          startDate: format(acc.weekStart, "yyyy-MM-dd"),
-          endDate: format(acc.weekEnd, "yyyy-MM-dd"),
+          startDate,
+          endDate,
           label: formatWeekPeriodLabel(acc.weekStart, acc.weekEnd),
           status: classifyTollReconPeriodStatus(acc.counts, actionableTotal),
           actionableTotal,
@@ -491,15 +623,13 @@ app.get(`${BASE}/periods`, requirePermission('toll.view'), async (c) => {
             matchedDisputeRefundAmount: round2(f.matchedDisputeRefundAmount),
             chargedToDrivers: round2(f.chargedToDrivers),
             // Same formula as Business Finance P&L Tolls (canonical ledger netting).
-            netTollLoss: computeTollFleetLossForPeriod(
-              scopedFleetLossEvents,
-              format(acc.weekStart, "yyyy-MM-dd"),
-              format(acc.weekEnd, "yyyy-MM-dd"),
-            ).net,
+            netTollLoss: computeTollFleetLossFromEvents(weekEvents).net,
             resolvedRefundsAmount: round2(f.resolvedRefundsAmount),
           },
         };
       })
+      // Lookback window + any computed period that still has actionable work.
+      .filter((p) => p.startDate >= fromYmd || p.actionableTotal > 0)
       .sort((a, b) => (a.startDate < b.startDate ? 1 : a.startDate > b.startDate ? -1 : 0));
 
     // Fleet-wide cards = sum of per-period financials (same sources / same rule).
