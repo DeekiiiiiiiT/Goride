@@ -1305,6 +1305,9 @@ function tollLedgerToTxShape(entry: TollLedgerRecord): any {
     unlinkedAppliedAt: entry.unlinkedAppliedAt ?? null,
     unlinkedAppliedBy: entry.unlinkedAppliedBy ?? null,
     preUnlinkedTripId: entry.preUnlinkedTripId ?? null,
+    // Surface ledger plaza for quarantine (vendor alone is easy to miss).
+    plaza: entry.plaza,
+    batchId: entry.batchId,
     metadata: {
       tollTagId: entry.tollTagId,
       tagNumber: entry.tagNumber,
@@ -1319,15 +1322,23 @@ function tollLedgerToTxShape(entry: TollLedgerRecord): any {
       matchedBy: entry.matchedBy,
       resolution: entry.resolution,
       auditTrail: entry.auditTrail,
-      // Preserve auto-match override flag
       autoMatchOverridden: entry.metadata?.autoMatchOverridden,
       unlinkedSourceTripId: entry.unlinkedSourceTripId,
       unlinkedSourcePlatform: entry.unlinkedSourcePlatform,
       unlinkedAppliedAt: entry.unlinkedAppliedAt,
       unlinkedAppliedBy: entry.unlinkedAppliedBy,
       preUnlinkedTripId: entry.preUnlinkedTripId,
-      // Include any other metadata
+      // OCR metadata may overwrite `plaza` — keep highway-as-plaza signals after spread.
       ...entry.metadata,
+      ledgerPlaza: entry.plaza,
+      batchId: entry.batchId ?? entry.metadata?.batchId ?? null,
+      auditTrail: entry.auditTrail ?? entry.metadata?.auditTrail,
+      merchantHighway:
+        entry.highway ||
+        entry.metadata?.merchantHighway ||
+        (entry.plaza && /trans\s*jam|jamaican\s*highways/i.test(String(entry.plaza))
+          ? entry.plaza
+          : entry.metadata?.merchantHighway),
     },
   };
 }

@@ -9,7 +9,10 @@ export type TollIntegrityLike = {
   date?: string | null;
   amount?: number | null;
   paymentMethod?: string | null;
+  /** Ledger / API plaza name (may be missing on tx shape — use vendor). */
   plaza?: string | null;
+  /** API tx shape: tollLedgerToTxShape puts ledger plaza here. */
+  vendor?: string | null;
   batchId?: string | null;
   tripId?: string | null;
   quarantined?: boolean | null;
@@ -66,7 +69,7 @@ export function fingerprintFromTollLike(t: TollIntegrityLike): string {
     date: t.date,
     amount: t.amount,
     metadata: t.metadata || undefined,
-    plaza: t.plaza,
+    plaza: t.plaza ?? t.vendor,
   });
 }
 
@@ -110,7 +113,11 @@ export function hasFabricatedManualTripId(tripId: string | null | undefined): bo
 }
 
 export function hasMigrationAuditSource(t: TollIntegrityLike): boolean {
-  const trail = t.auditTrail || [];
+  const trail =
+    t.auditTrail ||
+    (Array.isArray(t.metadata?.auditTrail)
+      ? (t.metadata!.auditTrail as Array<{ metadata?: Record<string, unknown> | null }>)
+      : []);
   for (const e of trail) {
     const src = e?.metadata?.source;
     if (src === 'migration' || src === 'backfill') return true;
@@ -118,31 +125,67 @@ export function hasMigrationAuditSource(t: TollIntegrityLike): boolean {
   return false;
 }
 
+/** Batch id on ledger row or API tx metadata (tollLedgerToTxShape). */
+export function resolveTollBatchId(t: TollIntegrityLike): string | null {
+  if (t.batchId) return String(t.batchId);
+  const metaBatch = t.metadata?.batchId;
+  if (metaBatch != null && String(metaBatch).trim()) return String(metaBatch);
+  return null;
+}
+
+/**
+ * Names that may carry the fake highway (API shape hides ledger plaza in vendor /
+ * ledgerPlaza after OCR metadata.plaza overwrites metadata.plaza).
+ */
+function highwayNameCandidates(t: TollIntegrityLike): string[] {
+  const meta = t.metadata || {};
+  return [
+    t.plaza,
+    t.vendor,
+    meta.ledgerPlaza,
+    meta.highway,
+    meta.merchantHighway,
+    meta.plaza,
+    meta.tollPlaza,
+  ]
+    .map((v) => (v == null ? '' : String(v).trim()))
+    .filter(Boolean);
+}
+
+function ocrPlazaName(t: TollIntegrityLike): string {
+  const meta = t.metadata || {};
+  const ocr = String(meta.plaza || meta.tollPlaza || '').trim();
+  if (ocr && !looksLikeTransjamHighwayName(ocr)) return ocr;
+  return '';
+}
+
 /**
  * Audit 1.1 signature: cash, no batch, highway-as-plaza (Transjam spelling soup)
  * and/or fabricated manual_* trip ids — exclude from spend until deleted.
+ * Must work on both ledger rows and tollLedgerToTxShape API rows.
  */
 export function matchesSyntheticCashTollSignature(t: TollIntegrityLike): boolean {
   const pm = String(t.paymentMethod || '').toLowerCase();
   if (!pm.includes('cash')) return false;
-  if (t.batchId) return false;
+  if (resolveTollBatchId(t)) return false;
   if (t.metadata?.quarantined === false) return false;
   if (t.metadata?.source === 'refund_resolution') return false;
 
-  const plaza = String(t.plaza || '');
-  const metaPlaza = String(t.metadata?.plaza || t.metadata?.tollPlaza || '');
-  const highwayLike = looksLikeTransjamHighwayName(plaza) || looksLikeTransjamHighwayName(metaPlaza);
+  const candidates = highwayNameCandidates(t);
+  const highwayLike = candidates.some((n) => looksLikeTransjamHighwayName(n));
+  const displayHighway = String(t.vendor || t.plaza || t.metadata?.ledgerPlaza || '').trim();
+  const ocr = ocrPlazaName(t);
   const plazaMismatch =
-    Boolean(plaza) &&
-    Boolean(metaPlaza) &&
-    plaza.toLowerCase() !== metaPlaza.toLowerCase() &&
-    looksLikeTransjamHighwayName(plaza);
+    Boolean(displayHighway) &&
+    Boolean(ocr) &&
+    displayHighway.toLowerCase() !== ocr.toLowerCase() &&
+    looksLikeTransjamHighwayName(displayHighway);
 
   return (
     highwayLike ||
     plazaMismatch ||
     hasFabricatedManualTripId(t.tripId) ||
-    (hasMigrationAuditSource(t) && !t.batchId && highwayLike)
+    (hasMigrationAuditSource(t) && highwayLike)
   );
 }
 
@@ -159,13 +202,12 @@ export function quarantineReasonFor(t: TollIntegrityLike): string {
     return t.metadata.quarantineReason;
   }
   if (hasFabricatedManualTripId(t.tripId)) return 'fabricated_manual_trip_id';
-  if (looksLikeTransjamHighwayName(t.plaza)) return 'transjam_highway_as_plaza';
-  const metaPlaza = String(t.metadata?.plaza || '');
-  if (
-    t.plaza &&
-    metaPlaza &&
-    String(t.plaza).toLowerCase() !== metaPlaza.toLowerCase()
-  ) {
+  if (highwayNameCandidates(t).some((n) => looksLikeTransjamHighwayName(n))) {
+    return 'transjam_highway_as_plaza';
+  }
+  const displayHighway = String(t.vendor || t.plaza || '').trim();
+  const ocr = ocrPlazaName(t);
+  if (displayHighway && ocr && displayHighway.toLowerCase() !== ocr.toLowerCase()) {
     return 'plaza_vs_metadata_plaza_mismatch';
   }
   return 'synthetic_cash_no_batch';
@@ -178,8 +220,6 @@ export function isTollIncludedInSpend(t: TollIntegrityLike): boolean {
 
 /**
  * Vineyards East rate check (audit 3.4): tag statement ~$780 vs OCR cash ~$850.
- * Documented for ops; cash rows at 850 with Vineyards plaza are suspicious when
- * paired with Transjam/migration signature but not auto-quarantined alone.
  */
 export const VINEYARDS_EAST_TAG_RATE_JMD = 780;
 export const VINEYARDS_EAST_CASH_OCR_RATE_JMD = 850;
@@ -187,7 +227,7 @@ export const VINEYARDS_EAST_CASH_OCR_RATE_JMD = 850;
 export function isSuspiciousVineyardsCashRate(t: TollIntegrityLike): boolean {
   const pm = String(t.paymentMethod || '').toLowerCase();
   if (!pm.includes('cash')) return false;
-  const plaza = `${t.plaza || ''} ${t.metadata?.plaza || ''}`.toLowerCase();
+  const plaza = `${t.plaza || ''} ${t.vendor || ''} ${t.metadata?.plaza || ''}`.toLowerCase();
   if (!plaza.includes('vineyard')) return false;
   const abs = Math.abs(Number(t.amount) || 0);
   return Math.abs(abs - VINEYARDS_EAST_CASH_OCR_RATE_JMD) < 0.01;

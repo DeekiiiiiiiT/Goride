@@ -49,6 +49,32 @@ describe('tollLedgerIntegrity', () => {
     expect(isTollIncludedInSpend(row)).toBe(false);
   });
 
+  it('quarantines API tx shape where OCR plaza overwrote metadata.plaza', () => {
+    const apiRow = {
+      paymentMethod: 'Cash',
+      vendor: 'TransJam Highways',
+      plaza: 'TransJam Highways',
+      batchId: null,
+      tripId: null,
+      metadata: {
+        plaza: 'Vineyards East',
+        ledgerPlaza: 'TransJam Highways',
+        batchId: null,
+      },
+    };
+    expect(matchesSyntheticCashTollSignature(apiRow)).toBe(true);
+    expect(isTollIncludedInSpend(apiRow)).toBe(false);
+  });
+
+  it('quarantines API row using vendor alone when plaza field missing', () => {
+    const apiRow = {
+      paymentMethod: 'Cash',
+      vendor: 'TRANSJAMAICA HIGHWAYS',
+      metadata: { plaza: 'Vineyards West' },
+    };
+    expect(matchesSyntheticCashTollSignature(apiRow)).toBe(true);
+  });
+
   it('does not quarantine tag-batch imports', () => {
     const row = {
       paymentMethod: 'tag_balance',
@@ -59,6 +85,15 @@ describe('tollLedgerIntegrity', () => {
     };
     expect(isTollQuarantined(row)).toBe(false);
     expect(isTollIncludedInSpend(row)).toBe(true);
+  });
+
+  it('does not quarantine tag import when batchId only on metadata', () => {
+    const row = {
+      paymentMethod: 'Tag Balance',
+      vendor: 'Vineyards East',
+      metadata: { batchId: 'be49c887', plaza: 'Vineyards East' },
+    };
+    expect(isTollQuarantined(row)).toBe(false);
   });
 
   it('flags Vineyards cash OCR $850 vs tag $780', () => {

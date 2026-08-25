@@ -114,6 +114,23 @@ describe('computeTollFleetLossNetting', () => {
     expect(computeTollFleetLossNetting([charge({ netAmount: 370, grossAmount: 370 })]).net).toBe(370);
   });
 
+  it('Aug-style week: plaza spend minus trip coverage yields Net < Spend', () => {
+    // Mirrors wizard cards: Toll Spend ≈ plaza; Reimbursed ≈ trip; Net = plaza - coverage.
+    const events = [
+      charge({ sourceId: 'tag-a', netAmount: 10180, grossAmount: 10180 }),
+      charge({
+        sourceType: 'trip',
+        sourceId: 'uber-1',
+        netAmount: 5440,
+        grossAmount: 5440,
+      }),
+    ];
+    const netting = computeTollFleetLossFromEvents(events);
+    expect(netting.gross).toBe(10180);
+    expect(netting.recovered).toBe(5440);
+    expect(netting.net).toBe(4740);
+  });
+
   it('matched plaza with platform_reimbursed offset is not a fleet loss', () => {
     const events = [
       charge({ sourceId: 'tag-1', netAmount: 4620, grossAmount: 4620 }),

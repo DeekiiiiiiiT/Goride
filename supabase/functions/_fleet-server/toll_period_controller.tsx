@@ -363,7 +363,7 @@ async function loadTollFleetLossLedgerEvents(opts?: {
   const { listAllUnifiedCanonicalEvents } = await import("../_shared/unifiedLedger/queries.ts");
   return await listAllUnifiedCanonicalEvents({
     products: ["roam_driver", "roam_fleet"],
-    entryTypes: ["toll_charge", "toll_refund", "toll_charge_offset"],
+    entryTypes: ["toll_charge", "toll_refund", "toll_charge_offset", "toll_reimbursement"],
     driverId: opts?.driverId,
     from: opts?.from,
     to: opts?.to,
