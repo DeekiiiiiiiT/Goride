@@ -16,11 +16,11 @@ import { Button } from '../../ui/button';
 import { Card, CardContent } from '../../ui/card';
 import { Badge } from '../../ui/badge';
 import { DateRange } from 'react-day-picker';
-import { ReconciliationTable } from '../ReconciliationTable';
-import { ScenarioSplitDashboard } from '../ScenarioSplitDashboard';
 import { BucketReconciliationView } from '../BucketReconciliationView';
 import { FuelCoverageMatrix } from '../FuelCoverageMatrix';
 import { FuelPeriodStepper } from './FuelPeriodStepper';
+import { FuelWeekMoneyStrip } from './FuelWeekMoneyStrip';
+import { FuelDataQualityStep, type FuelQualityRow } from './FuelDataQualityStep';
 import { useFuelWeekReports } from '../../../hooks/useFuelWeekReports';
 import { evaluateFuelFinalizeGating } from '../../../utils/fuelFinalizeGating';
 import { FUEL_SPEND_EPS } from '../../../utils/fuelMoneyEpsilon';
@@ -35,7 +35,7 @@ import {
 } from '../../../utils/fuelPeriodGating';
 import { buildFuelStepCounts, type FuelReconciliationPeriod } from '../../../utils/fuelPeriodStatus';
 import { isEntryInInclusiveYmdRange, reportWeekYmdBounds, isSameFuelStatement } from '../../../utils/fuelWeekPeriod';
-import { sumPaidByDriverForReport } from '../../../utils/fuelPaidByDriver';
+import { sumGasCardSpendForReport, sumPaidByDriverForReport } from '../../../utils/fuelPaidByDriver';
 import { fuelOpsSpendAmount } from '../../../utils/fuelOpsEligibility';
 
 /**
@@ -50,6 +50,7 @@ import type {
   MileageAdjustment,
   WeeklyFuelReport,
 } from '../../../types/fuel';
+import { UNASSIGNED_FUEL_DRIVER_ID } from '../../../types/fuel';
 import type { Trip } from '../../../types/data';
 import type { Vehicle } from '../../../types/vehicle';
 import { pickScenarioForDriverMembership, resolveDriverVersionForWeek } from '../../../utils/fuelPolicyVersion';
@@ -67,6 +68,24 @@ function formatMoney(n: number) {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(n || 0);
 }
 
+function resolveDriverDisplayName(
+  report: WeeklyFuelReport | undefined,
+  vehicle: Vehicle | undefined,
+  drivers: any[],
+): string {
+  if (report?.driverId === UNASSIGNED_FUEL_DRIVER_ID) return 'Unassigned fills';
+  const driverId = report?.driverId;
+  const reportDriver = driverId
+    ? drivers.find((d: any) => d.id === driverId || d.driverId === driverId)
+    : null;
+  return (
+    reportDriver?.name ||
+    [reportDriver?.firstName, reportDriver?.lastName].filter(Boolean).join(' ') ||
+    vehicle?.currentDriverName ||
+    'Unknown driver'
+  );
+}
+
 /** Stitch-style instruction hero — one job per step. */
 function StepHero({
   title,
@@ -82,7 +101,7 @@ function StepHero({
   actionDisabled?: boolean;
 }) {
   return (
-    <div className="flex flex-col gap-4 rounded-lg border border-slate-200 border-l-4 border-l-indigo-600 bg-white p-4 sm:flex-row sm:items-center sm:justify-between">
+    <div className="flex flex-col gap-4 rounded-lg border border-slate-200 border-l-4 border-l-[#3525cd] bg-white p-4 sm:flex-row sm:items-center sm:justify-between">
       <div className="min-w-0 space-y-1">
         <h3 className="text-base font-semibold text-slate-900">{title}</h3>
         <p className="text-sm text-slate-600">{body}</p>
@@ -90,7 +109,7 @@ function StepHero({
       {actionLabel && onAction && (
         <Button
           type="button"
-          className="min-h-11 shrink-0 sm:min-h-9"
+          className="min-h-11 shrink-0 bg-[#3525cd] text-white hover:bg-[#2a1ea4] sm:min-h-11"
           disabled={actionDisabled}
           onClick={onAction}
         >
@@ -104,7 +123,14 @@ function StepHero({
 function CompactVehicleList({
   rows,
 }: {
-  rows: { id: string; title: string; subtitle?: string; right?: string; badge?: string }[];
+  rows: {
+    id: string;
+    title: string;
+    subtitle?: string;
+    right?: string;
+    badge?: string;
+    warn?: boolean;
+  }[];
 }) {
   if (rows.length === 0) {
     return (
@@ -124,11 +150,26 @@ function CompactVehicleList({
           </div>
           <div className="flex shrink-0 items-center gap-2">
             {r.badge && (
-              <Badge variant="outline" className="text-[10px]">
+              <Badge
+                variant="outline"
+                className={`text-[10px] ${
+                  r.warn
+                    ? 'border-[#684000]/30 bg-[#ffddb8] text-[#684000]'
+                    : ''
+                }`}
+              >
                 {r.badge}
               </Badge>
             )}
-            {r.right && <span className="text-sm font-semibold text-slate-800">{r.right}</span>}
+            {r.right && (
+              <span
+                className={`text-sm font-semibold ${
+                  r.warn ? 'text-[#684000]' : 'text-slate-800'
+                }`}
+              >
+                {r.right}
+              </span>
+            )}
           </div>
         </li>
       ))}
@@ -184,6 +225,7 @@ function FuelPeriodWizardInner({
 }: FuelPeriodWizardProps) {
   const [leakageReviewed, setLeakageReviewed] = useState(false);
   const [showGapDetail, setShowGapDetail] = useState(false);
+  const [showCostBreakdown, setShowCostBreakdown] = useState(false);
   const [bucketVehicleId, setBucketVehicleId] = useState<string | null>(null);
   const [activeStepId, setActiveStepId] = useState<FuelStepId>('data-quality');
   const [progressIndex, setProgressIndex] = useState(0);
@@ -253,17 +295,18 @@ function FuelPeriodWizardInner({
         driverSpend,
         netPay: driverSpend - (report?.driverShare ?? 0),
         odometerIncomplete: !!report?.dataQuality?.odometerIncomplete,
+        report,
       };
     });
   }, [vehicles, liveReports, fuelEntries, disputes, finalizedReports, period, scenarios, weekTrips, fuelCards]);
 
-  // Enrich settlement columns from live reports (driver-week Paid by Driver)
+  // Enrich settlement columns from live reports (cash from earnings vs driver share)
   const settlementRows = useMemo(() => {
     return liveReports
       .filter((r) => r.totalGasCardCost > FUEL_SPEND_EPS)
       .map((r) => {
         const v = vehicles.find((x) => x.id === r.vehicleId);
-        const driverSpend = sumPaidByDriverForReport(fuelEntries, r, vehicles, {
+        const cashFromEarnings = sumPaidByDriverForReport(fuelEntries, r, vehicles, {
           vehicles,
           fuelCards,
           trips: weekTrips,
@@ -271,9 +314,9 @@ function FuelPeriodWizardInner({
         return {
           id: r.driverId || r.vehicleId,
           plate: v?.licensePlate || r.vehicleId,
-          paidByDriver: driverSpend,
-          deduction: r.driverShare,
-          netPay: driverSpend - r.driverShare,
+          cashFromEarnings,
+          driverShare: r.driverShare,
+          netPay: cashFromEarnings - r.driverShare,
           pending: r.pendingCount || 0,
           status: periodLocked ? 'Locked' : (r.pendingCount || 0) > 0 ? 'Pending' : 'Draft',
         };
@@ -297,6 +340,7 @@ function FuelPeriodWizardInner({
   useEffect(() => {
     setLeakageReviewed(false);
     setShowGapDetail(false);
+    setShowCostBreakdown(false);
     setBucketVehicleId(null);
     if (sessionKey > 0 || periodLocked) {
       // Reset → always restart at Data quality; locked weeks open at Finalize
@@ -335,33 +379,59 @@ function FuelPeriodWizardInner({
 
   const strip = useMemo(() => {
     const active = vehicleSnaps.filter((v) => v.totalSpend > FUEL_SPEND_EPS || v.isFinalized);
+    const paidByDriverCtx = { vehicles, fuelCards, trips: weekTrips };
+    let gasCard = 0;
+    let cashFromEarnings = 0;
+    for (const r of liveReports) {
+      gasCard += sumGasCardSpendForReport(fuelEntries, r, vehicles, paidByDriverCtx);
+      cashFromEarnings += sumPaidByDriverForReport(fuelEntries, r, vehicles, paidByDriverCtx);
+    }
     return {
       totalSpend: active.reduce((s, v) => s + v.totalSpend, 0),
+      gasCard,
+      cashFromEarnings,
       company: active.reduce((s, v) => s + v.companyShare, 0),
       driver: active.reduce((s, v) => s + v.driverShare, 0),
       leakage: active.reduce((s, v) => s + v.misc, 0),
     };
-  }, [vehicleSnaps]);
+  }, [vehicleSnaps, liveReports, fuelEntries, vehicles, fuelCards, weekTrips]);
 
-  const qualityRows = vehicleSnaps
+  const toQualityRow = (v: (typeof vehicleSnaps)[number]): FuelQualityRow => {
+    const vehicle = vehicles.find((x) => x.id === v.vehicleId);
+    return {
+      id: v.vehicleId,
+      plate: v.plate,
+      driverName: resolveDriverDisplayName(v.report, vehicle, drivers),
+      healthStatus: v.healthStatus,
+      pendingCount: v.pendingCount,
+      totalSpend: v.totalSpend,
+      companyShare: v.companyShare,
+      driverShare: v.driverShare,
+      cashFromEarnings: v.driverSpend,
+      netPay: v.netPay,
+      misc: v.misc,
+      subtitle: [
+        v.healthStatus && v.healthStatus !== 'Emerald' ? v.healthStatus : null,
+        v.pendingCount > 0 ? `${v.pendingCount} pending log(s)` : null,
+        v.odometerIncomplete ? 'Incomplete odometer data — unexplained fuel may be inflated' : null,
+      ]
+        .filter(Boolean)
+        .join(' · '),
+    };
+  };
+
+  const qualityRows: FuelQualityRow[] = vehicleSnaps
     .filter(
       (v) =>
         v.pendingCount > 0 ||
         (v.healthStatus && v.healthStatus !== 'Emerald') ||
         v.odometerIncomplete,
     )
-    .map((v) => ({
-      id: v.vehicleId,
-      title: v.plate,
-      subtitle: [
-        v.healthStatus && v.healthStatus !== 'Emerald' ? v.healthStatus : null,
-        v.pendingCount > 0 ? `${v.pendingCount} pending log(s)` : null,
-        v.odometerIncomplete ? 'Incomplete odometer data — Misc / Leakage may be inflated' : null,
-      ]
-        .filter(Boolean)
-        .join(' · '),
-      badge: v.healthStatus && v.healthStatus !== 'Emerald' ? String(v.healthStatus) : undefined,
-    }));
+    .map(toQualityRow);
+
+  const breakdownRows: FuelQualityRow[] = vehicleSnaps
+    .filter((v) => v.totalSpend > FUEL_SPEND_EPS)
+    .map(toQualityRow);
 
   const openDisputes = disputes.filter(
     (d) =>
@@ -375,12 +445,13 @@ function FuelPeriodWizardInner({
       id: v.vehicleId,
       title: v.plate,
       subtitle: v.odometerIncomplete
-        ? 'Incomplete odometer data — Misc / Leakage may be inflated'
+        ? 'Incomplete odometer data — unexplained fuel may be inflated'
         : v.healthStatus && v.healthStatus !== 'Emerald'
           ? String(v.healthStatus)
-          : 'Misc / Leakage',
+          : 'Unexplained fuel',
       right: formatMoney(v.misc),
-      badge: 'Leakage',
+      badge: 'Unexplained',
+      warn: true,
     }));
 
   const policyRows = useMemo(() => {
@@ -408,6 +479,11 @@ function FuelPeriodWizardInner({
   const canContinue = canAdvanceFuelStep(activeStepId, counts);
   const stepIndex = FUEL_STEP_ORDER.indexOf(activeStepId);
   const isLast = stepIndex === FUEL_STEP_ORDER.length - 1;
+  const weekIsEmpty =
+    !weekReports.loading &&
+    !weekReports.error &&
+    liveReports.length === 0 &&
+    vehicleSnaps.every((v) => v.totalSpend <= FUEL_SPEND_EPS);
 
   const handleContinue = () => {
     if (!canContinue || isLast) return;
@@ -453,6 +529,11 @@ function FuelPeriodWizardInner({
     }
   };
 
+  const handleRetryWeek = () => {
+    void weekReports.refresh();
+    onRefresh();
+  };
+
   const bucketVehicle =
     vehicles.find((v) => v.id === bucketVehicleId) ||
     vehicles.find((v) => leakageRows.some((r) => r.id === v.id)) ||
@@ -496,23 +577,23 @@ function FuelPeriodWizardInner({
       case 'leakage-gap':
         return strip.leakage > FUEL_SPEND_EPS && !leakageReviewed
           ? {
-              title: 'Review unaccounted fuel',
-              body: `Unassigned spend ${formatMoney(strip.leakage)} — charge stop-to-stop gaps if needed, or accept and continue.`,
+              title: 'Review unexplained fuel',
+              body: `Unexplained fuel ${formatMoney(strip.leakage)} — charge stop-to-stop gaps if needed, or accept and continue.`,
               actionLabel: 'Mark reviewed & continue',
               onAction: handleMarkLeakageReviewed,
             }
           : {
-              title: 'Leakage reviewed',
+              title: 'Unexplained fuel reviewed',
               body: strip.leakage > FUEL_SPEND_EPS
-                ? `Unassigned spend ${formatMoney(strip.leakage)} marked reviewed for this week.`
-                : 'No unassigned spend this week.',
+                ? `Unexplained fuel ${formatMoney(strip.leakage)} marked reviewed for this week.`
+                : 'No unexplained fuel this week.',
               actionLabel: 'Continue',
               onAction: handleContinue,
             };
       case 'settlement-preview':
         return {
-          title: 'Confirm company vs driver split',
-          body: 'One summary of how this week’s spend splits. Next step locks and posts pending amounts.',
+          title: 'Confirm settle-up for this week',
+          body: 'Cash from earnings is a credit; driver’s fuel share is a charge. Net this week is what settles on pay.',
           actionLabel: 'Continue to Finalize',
           onAction: handleContinue,
         };
@@ -540,21 +621,63 @@ function FuelPeriodWizardInner({
     }
   })();
 
+  const continueLabel =
+    activeStepId === 'leakage-gap' ? 'Continue to Settlement' : 'Continue';
+
   return (
     <div className="space-y-4 pb-20">
       {weekReports.loading && (
-        <p className="text-sm text-slate-500">Loading week data…</p>
+        <div
+          className="rounded-lg border border-slate-200 bg-white px-4 py-10 text-center"
+          role="status"
+          aria-live="polite"
+        >
+          <div className="mx-auto mb-3 h-10 w-10 animate-spin rounded-full border-4 border-slate-200 border-t-[#3525cd]" />
+          <p className="text-sm text-slate-500">Loading week data…</p>
+        </div>
       )}
 
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-2">
-          <Button type="button" variant="ghost" size="sm" className="min-h-11 sm:min-h-9" onClick={onBack}>
-            <ArrowLeft className="mr-1 h-4 w-4" />
-            Periods
+      {!!weekReports.error && !weekReports.loading && (
+        <div
+          className="flex flex-col gap-3 rounded-lg border border-rose-200 bg-rose-50 px-4 py-4 sm:flex-row sm:items-center sm:justify-between"
+          role="alert"
+        >
+          <p className="text-sm text-rose-800">
+            Couldn’t load this week’s reconciliation. Check your connection and try again.
+          </p>
+          <Button
+            type="button"
+            variant="outline"
+            className="min-h-11 border-rose-200 bg-white text-rose-800 hover:bg-rose-50"
+            onClick={handleRetryWeek}
+          >
+            Retry
           </Button>
-          <div>
+        </div>
+      )}
+
+      {weekIsEmpty && (
+        <div className="rounded-lg border border-dashed border-slate-200 bg-white px-4 py-10 text-center text-sm text-slate-500">
+          No fuel spend for this week yet. Refresh after new fills post, or pick another period.
+        </div>
+      )}
+
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <button
+            type="button"
+            onClick={onBack}
+            className="mb-2 flex min-h-11 items-center text-sm font-medium text-slate-500 transition-colors hover:text-[#3525cd]"
+          >
+            <ArrowLeft className="mr-1 h-4 w-4" />
+            Back to Periods
+          </button>
+          <div className="flex flex-wrap items-center gap-3">
             <h2 className="text-lg font-bold text-slate-900">{period.label}</h2>
-            <Badge variant={periodLocked ? 'secondary' : 'outline'}>
+            <Badge
+              variant={periodLocked ? 'secondary' : 'outline'}
+              className="uppercase tracking-wider"
+            >
               {periodLocked ? 'Locked' : 'Draft'}
             </Badge>
           </div>
@@ -565,7 +688,7 @@ function FuelPeriodWizardInner({
               type="button"
               variant="outline"
               size="sm"
-              className="min-h-11 border-rose-200 text-rose-700 hover:bg-rose-50 sm:min-h-9"
+              className="min-h-11 border-rose-200 text-rose-700 hover:bg-rose-50 sm:min-h-11"
               onClick={onResetPeriod}
             >
               <RotateCcw className="mr-1 h-4 w-4" />
@@ -576,34 +699,24 @@ function FuelPeriodWizardInner({
             type="button"
             variant="outline"
             size="sm"
-            className="min-h-11 sm:min-h-9"
+            className="min-h-11 sm:min-h-11"
             onClick={onRefresh}
             disabled={isRefreshing}
           >
             <RefreshCw className={`mr-1 h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
-            Refresh
+            Refresh Data
           </Button>
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
-        {[
-          { label: 'Total Spend', value: strip.totalSpend },
-          { label: 'Company share', value: strip.company },
-          { label: 'Driver deduction', value: strip.driver },
-          { label: 'Unassigned spend', value: strip.leakage, warn: strip.leakage > 0 },
-        ].map((c) => (
-          <div
-            key={c.label}
-            className="rounded-md border border-slate-200 bg-white px-3 py-2"
-          >
-            <div className="text-[10px] font-medium uppercase tracking-wide text-slate-500">{c.label}</div>
-            <div className={`text-base font-semibold ${c.warn ? 'text-rose-600' : 'text-slate-900'}`}>
-              {formatMoney(c.value)}
-            </div>
-          </div>
-        ))}
-      </div>
+      <FuelWeekMoneyStrip
+        gasCard={strip.gasCard}
+        cashFromEarnings={strip.cashFromEarnings}
+        totalSpend={strip.totalSpend}
+        company={strip.company}
+        driver={strip.driver}
+        leakage={strip.leakage}
+      />
 
       <FuelPeriodStepper
         states={stepperStates}
@@ -630,28 +743,15 @@ function FuelPeriodWizardInner({
 
       <div className="space-y-3">
         {activeStepId === 'data-quality' && (
-          <div className="space-y-3">
-            <CompactVehicleList rows={qualityRows} />
-            <ReconciliationTable
-              vehicles={vehicles}
-              trips={weekTrips}
-              fuelEntries={fuelEntries}
-              adjustments={adjustments}
-              disputes={disputes}
-              dateRange={dateRange}
-              scenarios={scenarios}
-              drivers={drivers}
-              fuelCards={fuelCards}
-              finalizedReports={finalizedReports}
-              reportsOverride={liveReports}
-              loading={weekReports.loading}
-              periodLocked={periodLocked}
-              hideFinalize
-              hideDashboard
-              onAddAdjustment={onAddAdjustment}
-              onResolveDispute={onResolveDispute}
-            />
-          </div>
+          <FuelDataQualityStep
+            rows={qualityRows}
+            breakdownRows={breakdownRows}
+            periodLocked={periodLocked}
+            weekLabel={period.label}
+            showBreakdown={showCostBreakdown}
+            onToggleBreakdown={() => setShowCostBreakdown((v) => !v)}
+            onAddAdjustment={onAddAdjustment}
+          />
         )}
 
         {activeStepId === 'adjustments-disputes' && (
@@ -661,14 +761,19 @@ function FuelPeriodWizardInner({
             ) : (
               <ul className="space-y-2">
                 {openDisputes.map((d) => (
-                  <Card key={d.id}>
+                  <Card key={d.id} className="rounded border border-slate-200">
                     <CardContent className="flex items-center justify-between gap-3 p-3">
                       <div>
                         <div className="font-medium text-slate-900">{String(d.reason || 'Dispute')}</div>
                         <div className="text-xs text-slate-500">Vehicle {d.vehicleId}</div>
                       </div>
                       {!periodLocked && (
-                        <Button type="button" size="sm" onClick={() => onResolveDispute(d)}>
+                        <Button
+                          type="button"
+                          size="sm"
+                          className="min-h-11 bg-[#3525cd] text-white hover:bg-[#2a1ea4]"
+                          onClick={() => onResolveDispute(d)}
+                        >
                           Resolve
                         </Button>
                       )}
@@ -678,7 +783,12 @@ function FuelPeriodWizardInner({
               </ul>
             )}
             {!periodLocked && openDisputes.length === 0 && (
-              <Button type="button" variant="outline" size="sm" onClick={onAddAdjustment}>
+              <Button
+                type="button"
+                variant="outline"
+                className="min-h-11"
+                onClick={onAddAdjustment}
+              >
                 Add Adjustment
               </Button>
             )}
@@ -691,7 +801,7 @@ function FuelPeriodWizardInner({
               <CompactVehicleList rows={[]} />
             ) : (
               policyRows.map(({ vehicle, scenario, fuelRule, effectiveFrom }) => (
-                <Card key={vehicle.id}>
+                <Card key={vehicle.id} className="rounded border border-slate-200">
                   <CardContent className="space-y-2 p-4">
                     <div className="font-semibold text-slate-900">
                       {vehicle.licensePlate || vehicle.id}
@@ -712,19 +822,22 @@ function FuelPeriodWizardInner({
 
         {activeStepId === 'leakage-gap' && (
           <div className="space-y-3">
+            <h3 className="px-1 text-[12px] font-semibold uppercase tracking-wide text-slate-500">
+              Vehicles with gaps
+            </h3>
             <CompactVehicleList rows={leakageRows} />
             {leakageRows.length > 0 && (
               <Button
                 type="button"
                 variant="outline"
-                size="sm"
+                className="min-h-11"
                 onClick={() => setShowGapDetail((v) => !v)}
               >
                 {showGapDetail ? 'Hide' : 'Show'} stop-to-stop gap detail
               </Button>
             )}
             {showGapDetail && bucketVehicle && (
-              <Card>
+              <Card className="rounded border border-slate-200">
                 <CardContent className="space-y-2 p-4">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <h3 className="font-semibold text-slate-900">
@@ -732,7 +845,7 @@ function FuelPeriodWizardInner({
                     </h3>
                     {!periodLocked && (
                       <select
-                        className="rounded border border-slate-200 px-2 py-1 text-sm"
+                        className="min-h-11 rounded border border-slate-200 px-2 py-1 text-sm"
                         value={bucketVehicle.id}
                         onChange={(e) => setBucketVehicleId(e.target.value)}
                       >
@@ -761,36 +874,28 @@ function FuelPeriodWizardInner({
 
         {activeStepId === 'settlement-preview' && (
           <div className="space-y-4">
-            {liveReports.length > 0 && (
-              <ScenarioSplitDashboard
-                reports={liveReports.filter((r) => r.totalGasCardCost > FUEL_SPEND_EPS)}
-                scenarios={scenarios}
-                vehicles={vehicles}
-                trips={weekTrips}
-              />
-            )}
-            <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+            <div className="overflow-x-auto rounded border border-slate-200 bg-white">
               <table className="w-full text-sm">
-                <thead className="border-b border-slate-100 bg-slate-50 text-left text-xs text-slate-500">
+                <thead className="border-b border-slate-100 bg-[#f5f2ff] text-left text-xs text-slate-500">
                   <tr>
-                    <th className="px-3 py-2 font-medium">Vehicle</th>
-                    <th className="px-3 py-2 font-medium text-right">Paid by driver</th>
-                    <th className="px-3 py-2 font-medium text-right">Deduction</th>
-                    <th className="px-3 py-2 font-medium text-right">Net pay</th>
+                    <th className="px-3 py-3 font-medium">Vehicle</th>
+                    <th className="px-3 py-3 font-medium text-right">Cash from earnings (credit)</th>
+                    <th className="px-3 py-3 font-medium text-right">Driver’s fuel share (charge)</th>
+                    <th className="px-3 py-3 font-medium text-right">Net this week</th>
                   </tr>
                 </thead>
                 <tbody>
                   {settlementRows.map((r) => (
                     <tr key={r.id} className="border-b border-slate-50">
-                      <td className="px-3 py-2 font-medium text-slate-900">{r.plate}</td>
-                      <td className="px-3 py-2 text-right">{formatMoney(r.paidByDriver)}</td>
-                      <td className="px-3 py-2 text-right text-amber-700">{formatMoney(r.deduction)}</td>
-                      <td className="px-3 py-2 text-right">{formatMoney(r.netPay)}</td>
+                      <td className="px-3 py-3 font-medium text-slate-900">{r.plate}</td>
+                      <td className="px-3 py-3 text-right tabular-nums">{formatMoney(r.cashFromEarnings)}</td>
+                      <td className="px-3 py-3 text-right tabular-nums text-amber-700">{formatMoney(r.driverShare)}</td>
+                      <td className="px-3 py-3 text-right tabular-nums font-semibold">{formatMoney(r.netPay)}</td>
                     </tr>
                   ))}
                   {settlementRows.length === 0 && (
                     <tr>
-                      <td colSpan={4} className="px-3 py-8 text-center text-slate-500">
+                      <td colSpan={4} className="px-3 py-10 text-center text-slate-500">
                         No spend this week.
                       </td>
                     </tr>
@@ -818,41 +923,41 @@ function FuelPeriodWizardInner({
                 I reviewed data-quality and re-finalize warnings for this week.
               </label>
             )}
-            <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
-            <table className="w-full text-sm">
-              <thead className="border-b border-slate-100 bg-slate-50 text-left text-xs text-slate-500">
-                <tr>
-                  <th className="px-3 py-2 font-medium">Vehicle</th>
-                  <th className="px-3 py-2 font-medium text-right">Paid by driver</th>
-                  <th className="px-3 py-2 font-medium text-right">Deduction</th>
-                  <th className="px-3 py-2 font-medium text-right">Net pay</th>
-                  <th className="px-3 py-2 font-medium">Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {settlementRows.map((r) => (
-                  <tr key={r.id} className="border-b border-slate-50">
-                    <td className="px-3 py-2 font-medium text-slate-900">{r.plate}</td>
-                    <td className="px-3 py-2 text-right">{formatMoney(r.paidByDriver)}</td>
-                    <td className="px-3 py-2 text-right text-amber-700">{formatMoney(r.deduction)}</td>
-                    <td className="px-3 py-2 text-right">{formatMoney(r.netPay)}</td>
-                    <td className="px-3 py-2">
-                      <Badge variant="outline" className="text-[10px]">
-                        {r.status}
-                      </Badge>
-                    </td>
-                  </tr>
-                ))}
-                {settlementRows.length === 0 && (
+            <div className="overflow-x-auto rounded border border-slate-200 bg-white">
+              <table className="w-full text-sm">
+                <thead className="border-b border-slate-100 bg-[#f5f2ff] text-left text-xs text-slate-500">
                   <tr>
-                    <td colSpan={5} className="px-3 py-8 text-center text-slate-500">
-                      No vehicles with spend to finalize.
-                    </td>
+                    <th className="px-3 py-3 font-medium">Vehicle</th>
+                    <th className="px-3 py-3 font-medium text-right">Cash from earnings (credit)</th>
+                    <th className="px-3 py-3 font-medium text-right">Driver’s fuel share (charge)</th>
+                    <th className="px-3 py-3 font-medium text-right">Net this week</th>
+                    <th className="px-3 py-3 font-medium">Status</th>
                   </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {settlementRows.map((r) => (
+                    <tr key={r.id} className="border-b border-slate-50">
+                      <td className="px-3 py-3 font-medium text-slate-900">{r.plate}</td>
+                      <td className="px-3 py-3 text-right tabular-nums">{formatMoney(r.cashFromEarnings)}</td>
+                      <td className="px-3 py-3 text-right tabular-nums text-amber-700">{formatMoney(r.driverShare)}</td>
+                      <td className="px-3 py-3 text-right tabular-nums font-semibold">{formatMoney(r.netPay)}</td>
+                      <td className="px-3 py-3">
+                        <Badge variant="outline" className="text-[10px]">
+                          {r.status}
+                        </Badge>
+                      </td>
+                    </tr>
+                  ))}
+                  {settlementRows.length === 0 && (
+                    <tr>
+                      <td colSpan={5} className="px-3 py-10 text-center text-slate-500">
+                        No vehicles with spend to finalize.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
       </div>
@@ -873,10 +978,10 @@ function FuelPeriodWizardInner({
             <Button
               type="button"
               disabled={!canContinue}
-              className="min-h-11 sm:min-h-9"
+              className="min-h-11 bg-[#3525cd] text-white hover:bg-[#2a1ea4] disabled:bg-slate-300 sm:min-h-11"
               onClick={handleContinue}
             >
-              Continue
+              {continueLabel}
             </Button>
           </div>
         </div>
