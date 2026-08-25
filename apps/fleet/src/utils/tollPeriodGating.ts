@@ -2,18 +2,19 @@ import type { Claim, DisputeRefund, FinancialTransaction, Trip } from '../types/
 import type { TollBucket } from './tollBucket';
 import { computePeriodCounts } from './tollPeriodCounts';
 
+export type { StepId, StepCounts } from './tollPeriodStepTypes';
+export {
+  isClaimActionableNow,
+  isClaimInformationalOnly,
+  countUnclaimedUnderpaidAsPeriodActionable,
+} from './tollPeriodStepTypes';
+import type { StepCounts, StepId } from './tollPeriodStepTypes';
+
 /**
  * The 6 steps of the period-gated reconciliation wizard, in their fixed,
  * hard-gated order. `underpaid-claims` folds in both underpaid tolls and
  * their downstream claims (formerly the separate "Claimable Loss" surface).
  */
-export type StepId =
-  | 'needs-review'
-  | 'personal-use'
-  | 'deadhead'
-  | 'underpaid-claims'
-  | 'dispute-refunds'
-  | 'unlinked-refunds';
 
 /**
  * Platform payments before Underpaid & Claims (correct settlement order):
@@ -30,31 +31,6 @@ export const STEP_ORDER: StepId[] = [
   'dispute-refunds',
   'underpaid-claims',
 ];
-
-/**
- * A claim is "actionable now" if the fleet manager can do something about it
- * today — vs "informational" if it's just waiting on an external party
- * (Uber, the driver). Only actionable items may block period completion;
- * the user explicitly does not want the wizard to gate on things outside
- * their control. `Resolved` is neither — it's done.
- */
-export function isClaimActionableNow(claim: Pick<Claim, 'status'>): boolean {
-  switch (claim.status) {
-    case 'Sent_to_Driver':
-    case 'Submitted_to_Uber':
-      return false;
-    case 'Resolved':
-      return false;
-    case 'Rejected':
-    case 'Open':
-    default:
-      return true;
-  }
-}
-
-export function isClaimInformationalOnly(claim: Pick<Claim, 'status'>): boolean {
-  return claim.status === 'Sent_to_Driver' || claim.status === 'Submitted_to_Uber';
-}
 
 /**
  * Period-landing underpaid claim classification — mirrored in
@@ -76,26 +52,6 @@ export function classifyPeriodUnderpaidClaim(
   }
   if (opts?.isVisiblePartialShortfall) return 'actionable';
   return 'done';
-}
-
-/**
- * Claimless tolls in the underpaid wizard bucket must count as actionable on
- * GET /periods only while still unlinked. Trip-linked AMOUNT_VARIANCE leftovers
- * stay on the wizard (financial shortfall gate) and must not keep the period
- * Outstanding after Finish.
- */
-export function countUnclaimedUnderpaidAsPeriodActionable(
-  bucket: 'needs-review' | 'underpaid-claims' | 'deadhead' | 'personal-use' | null,
-  opts?: { isReconciled?: boolean; hasTripId?: boolean },
-): boolean {
-  if (bucket !== 'underpaid-claims') return false;
-  if (opts?.isReconciled && opts?.hasTripId) return false;
-  return true;
-}
-
-export interface StepCounts {
-  actionable: number;
-  informational: number;
 }
 
 /**

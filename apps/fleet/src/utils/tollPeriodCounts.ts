@@ -3,21 +3,21 @@
  * edge can import alongside tollReconPeriodStatus.ts.
  */
 import type { Claim, DisputeRefund, FinancialTransaction, Trip } from '../types/data';
-import type { PeriodBucket } from './tollPeriodBucket';
+import type { PeriodBucket } from './tollPeriodBucket.ts';
 import {
   isClaimActionableNow,
   isClaimInformationalOnly,
+  countUnclaimedUnderpaidAsPeriodActionable,
   type StepCounts,
   type StepId,
-} from './tollPeriodGating';
+} from './tollPeriodStepTypes.ts';
 import {
   isDisputeRefundInWizardPeriod,
   isDisputeRefundMatched,
   isTollCoveredByDisputeRefund,
   isVisiblePartialShortfallClaim,
-} from './tollWeekPeriod';
-import { isUnlinkedRefundActionableNow } from './unlinkedShortfallEligibility';
-import { countUnclaimedUnderpaidAsPeriodActionable } from './tollPeriodGating';
+} from './tollWeekPeriod.ts';
+import { isUnlinkedRefundActionableNow } from './unlinkedShortfallEligibility.ts';
 
 export type { StepCounts, StepId };
 
