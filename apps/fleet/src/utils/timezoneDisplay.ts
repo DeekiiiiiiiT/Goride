@@ -9,8 +9,11 @@
  */
 
 import { useState, useEffect } from 'react';
+import { ymdToLocalDate, normalizeWallClockTime } from '@roam/toll-core';
 import { fetchFleetTimezone } from '../services/api';
 import { hasTzSuffix, resolveFleetInstantBrowser } from '../services/import-validator';
+
+export { ymdToLocalDate, normalizeWallClockTime };
 
 // ── formatInFleetTz ──────────────────────────────────────────────────────────
 
@@ -113,9 +116,6 @@ export function fleetCalendarDay(dateStr: string, timezone: string): string {
     return s.slice(0, 10);
   }
 }
-
-/** Pure wall-clock helpers live in @roam/toll-core (fleet-canonical). */
-export { ymdToLocalDate, normalizeWallClockTime } from '@roam/toll-core';
 
 /** Date-only or naive datetime stored without a TZ suffix (toll ledger `date` field). */
 export function isNaiveStoredDate(s: string): boolean {

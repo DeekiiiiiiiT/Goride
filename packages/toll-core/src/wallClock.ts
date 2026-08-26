@@ -2,7 +2,9 @@
 export function ymdToLocalDate(ymd: string): Date {
   const [y, m, d] = ymd.split('-').map(Number);
   if (!y || !m || !d) return new Date(NaN);
-  return new Date(y, m - 1, d);
+  // Noon local — survives America/Jamaica (UTC−5) re-projection on UTC CI hosts.
+  // Midnight UTC → prior calendar day in Jamaica → wrong prior Monday week key.
+  return new Date(y, m - 1, d, 12, 0, 0);
 }
 
 /**

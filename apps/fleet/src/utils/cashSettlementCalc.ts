@@ -16,6 +16,7 @@ import {
 } from './driverCashPayment';
 import { isDriverTollChargeRow, netDriverTollCharges } from './netDriverTollCharges';
 import { weekBucketForDate } from './tollWeekPeriod';
+import { ymdToLocalDate } from './timezoneDisplay';
 import { buildWeeklyCashRisk } from './buildWeeklyCashRisk';
 import {
     sumLedgerBankSettledForWeek,
@@ -102,21 +103,20 @@ export function computeWeeklyCashSettlement(input: CashSettlementInput): CashWee
     // If we have CSV metrics but no trips, we should still show something
     if (safeTrips.length === 0 && safeCsvMetrics.length === 0) return [];
 
-    // 1. Determine Range
-    const dates = [
-        ...safeTrips.map(t => new Date(t.date)),
-        ...safeCsvMetrics.map(m => new Date(m.periodStart)),
+    // 1. Determine Range — prefer bare yyyy-MM-dd seeds so UTC CI does not
+    // shift calendar days via `new Date('yyyy-MM-dd')` (UTC midnight → prior day in Jamaica).
+    const dateSeeds: Array<Date | string> = [
+        ...safeTrips.map(t => t.date),
+        ...safeCsvMetrics.map(m => m.periodStart),
+        new Date(),
     ];
-
-    if (dates.length === 0) return [];
 
     const fleetTz = input.timezone;
     let weekIntervals: Date[];
     if (fleetTz) {
       const byKey = new Map<string, Date>();
-      const seedDates = [...dates, new Date()];
-      for (const d of seedDates) {
-        if (isNaN(d.getTime())) continue;
+      for (const d of dateSeeds) {
+        if (d == null || d === '') continue;
         const { key, weekStart } = weekBucketForDate(d, fleetTz);
         if (!byKey.has(key)) byKey.set(key, weekStart);
       }
@@ -124,7 +124,16 @@ export function computeWeeklyCashSettlement(input: CashSettlementInput): CashWee
         .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
         .map(([, weekStart]) => weekStart);
     } else {
-      const minDate = new Date(Math.min(...dates.map(d => d.getTime())));
+      const parsed = dateSeeds
+        .filter((d): d is string | Date => d != null && d !== '')
+        .map((d) => {
+          if (d instanceof Date) return d;
+          const s = String(d);
+          return /^\d{4}-\d{2}-\d{2}/.test(s) ? ymdToLocalDate(s.slice(0, 10)) : new Date(s);
+        })
+        .filter((d) => !isNaN(d.getTime()));
+      if (parsed.length === 0) return [];
+      const minDate = new Date(Math.min(...parsed.map((d) => d.getTime())));
       const maxDate = new Date();
       const start = startOfWeek(minDate, { weekStartsOn: 1 });
       const end = endOfWeek(maxDate, { weekStartsOn: 1 });
@@ -133,12 +142,15 @@ export function computeWeeklyCashSettlement(input: CashSettlementInput): CashWee
 
     // Phase 1: Calculate Basics (Owed, Allocated Payments, Expenses)
     const weeksData = weekIntervals.map(weekStart => {
-        const weekEnd = fleetTz
-            ? weekBucketForDate(weekStart, fleetTz).weekEnd
-            : endOfWeek(weekStart, { weekStartsOn: 1 });
+        // weekStart is already the fleet Monday from the seed pass. Do NOT re-run
+        // weekBucketForDate(weekStart, fleetTz) — Monday 00:00Z is still Sunday in
+        // America/Jamaica, which flips endOfWeek to the prior Sunday (end < start).
+        const weekEnd = endOfWeek(weekStart, { weekStartsOn: 1 });
 
+        const weekKey = format(weekStart, 'yyyy-MM-dd');
         const weekTrips = safeTrips.filter(t => {
             if (!t || !t.date) return false;
+            if (fleetTz) return weekBucketForDate(t.date, fleetTz).key === weekKey;
             return isWithinInterval(new Date(t.date), { start: weekStart, end: weekEnd });
         });
 
@@ -146,6 +158,9 @@ export function computeWeeklyCashSettlement(input: CashSettlementInput): CashWee
         const weeklyFloat = safeTransactions
             .filter(t => {
                 if (!t || !t.date) return false;
+                if (fleetTz) {
+                  return t.category === 'Float Issue' && weekBucketForDate(t.date, fleetTz).key === weekKey;
+                }
                 const tDate = new Date(t.date);
                 return t.category === 'Float Issue' && isWithinInterval(tDate, { start: weekStart, end: weekEnd });
             })

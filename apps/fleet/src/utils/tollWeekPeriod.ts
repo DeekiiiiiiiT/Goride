@@ -27,14 +27,20 @@ export { dateWeekKey };
  * browser-local week (legacy behavior).
  */
 export function weekBucketForDate(
-  d: Date,
+  d: Date | string,
   timezone?: string,
 ): { key: string; weekStart: Date; weekEnd: Date } {
-  let dayDate = d;
-  if (timezone) {
+  // Bare yyyy-MM-dd is already a fleet calendar day (matches server fleetTzDay).
+  // Never UTC-parse or re-project through Intl — UTC midnight shifts Mon→Sun in Jamaica.
+  let dayDate: Date;
+  if (typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d)) {
+    dayDate = ymdToLocalDate(d);
+  } else if (timezone) {
     const ymd = fleetTzDateKey(d, timezone);
-    const parsed = ymd ? ymdToLocalDate(ymd) : d;
-    dayDate = isNaN(parsed.getTime()) ? d : parsed;
+    const parsed = ymd ? ymdToLocalDate(ymd) : d instanceof Date ? d : new Date(d);
+    dayDate = isNaN(parsed.getTime()) ? (d instanceof Date ? d : new Date(d)) : parsed;
+  } else {
+    dayDate = d instanceof Date ? d : new Date(d);
   }
   const weekStart = startOfWeek(dayDate, { weekStartsOn: 1 });
   const weekEnd = endOfWeek(dayDate, { weekStartsOn: 1 });
@@ -333,7 +339,8 @@ export function tollWeekKey(
   // Avoids AM/PM parse failures + UTC midnight shifting Mon → prior Sunday week.
   const dateStr = String(tx.date || '');
   if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
-    return weekBucketForDate(ymdToLocalDate(dateStr), timezone).key;
+    // Pass the bare day string — weekBucketForDate skips fleet re-projection (server parity).
+    return weekBucketForDate(dateStr, timezone).key;
   }
   const d = getTollTransactionDate(tx as FinancialTransaction);
   return weekBucketForDate(d, timezone).key;
