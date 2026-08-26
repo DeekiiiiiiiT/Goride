@@ -49,6 +49,7 @@ export default defineConfig({
       { find: '@roam/toll-ui', replacement: path.resolve(repoRoot, 'packages/toll-ui/src/index.ts') },
       { find: '@roam/roam-shared', replacement: path.resolve(repoRoot, 'packages/roam-shared/src/index.ts') },
       { find: '@roam/finance-core', replacement: path.resolve(repoRoot, 'packages/finance-core/src/index.ts') },
+      { find: '@roam/fuel-core', replacement: path.resolve(repoRoot, 'packages/fuel-core/src/index.ts') },
       {
         find: '@roam/roam-shared/fuel',
         replacement: path.resolve(repoRoot, 'packages/roam-shared/src/fuel/jaaFuelStatementMatcher.ts'),
@@ -84,6 +85,11 @@ export default defineConfig({
   },
   test: {
     environment: 'node',
+    // Same as fleet: api-client throws at import without Supabase placeholders.
+    env: {
+      VITE_SUPABASE_URL: 'https://ci-placeholder.supabase.co',
+      VITE_SUPABASE_ANON_KEY: 'ci-placeholder-anon-key',
+    },
     include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
     exclude: [
       /** Deno edge-function tests (Deno.test + https: imports) run via `deno test`, not Vitest. */

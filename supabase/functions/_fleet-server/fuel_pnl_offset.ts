@@ -243,17 +243,40 @@ export async function isFuelPnlOffsetEnabled(): Promise<boolean> {
 export type FuelReconciliationSettings = {
   /** @deprecated Always true — offsets are automatic. */
   fuelPnlOffsetEnabled: boolean;
+  /** Server kill switch for Fuel Brain category km in recon (default on). */
+  fuelBrainEnabled: boolean;
+  /** Shadow-compare brain vs legacy without requiring consumer off. */
+  fuelBrainShadowCompare: boolean;
 };
 
+const SETTINGS_KEY = "fuel_reconciliation_settings";
+
 export async function getFuelReconciliationSettings(): Promise<FuelReconciliationSettings> {
-  return { fuelPnlOffsetEnabled: true };
+  const raw = (await kv.get(SETTINGS_KEY)) as Partial<FuelReconciliationSettings> | null;
+  return {
+    fuelPnlOffsetEnabled: true,
+    fuelBrainEnabled: raw?.fuelBrainEnabled !== false,
+    fuelBrainShadowCompare: raw?.fuelBrainShadowCompare === true,
+  };
 }
 
 export async function updateFuelReconciliationSettings(
-  _patch: Partial<FuelReconciliationSettings>,
+  patch: Partial<FuelReconciliationSettings>,
 ): Promise<FuelReconciliationSettings> {
-  // No-op write path kept for older clients; flag is permanently on.
-  return { fuelPnlOffsetEnabled: true };
+  const current = await getFuelReconciliationSettings();
+  const next: FuelReconciliationSettings = {
+    fuelPnlOffsetEnabled: true,
+    fuelBrainEnabled:
+      typeof patch.fuelBrainEnabled === "boolean"
+        ? patch.fuelBrainEnabled
+        : current.fuelBrainEnabled,
+    fuelBrainShadowCompare:
+      typeof patch.fuelBrainShadowCompare === "boolean"
+        ? patch.fuelBrainShadowCompare
+        : current.fuelBrainShadowCompare,
+  };
+  await kv.set(SETTINGS_KEY, next);
+  return next;
 }
 
 function round2(n: number): number {

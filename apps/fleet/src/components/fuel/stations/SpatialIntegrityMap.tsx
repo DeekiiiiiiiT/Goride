@@ -1,5 +1,9 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
+import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png';
+import markerIcon from 'leaflet/dist/images/marker-icon.png';
+import markerShadow from 'leaflet/dist/images/marker-shadow.png';
 import { useSpatialAudit } from '../../../hooks/useSpatialAudit';
 import { MAP_TILES } from '../../../utils/spatialNormalization';
 import { Button } from '../../ui/button';
@@ -10,15 +14,15 @@ import { ForensicExportButton } from './ForensicExportButton';
 import { ForensicSummaryPanel } from './ForensicSummaryPanel';
 import { Tooltip, TooltipTrigger, TooltipContent } from '../../ui/tooltip';
 
-// Fix for Leaflet default marker icons
+// Single Leaflet version — icons from the same package (no CDN mix)
 const fixLeafletIcon = () => {
   if (typeof window === 'undefined') return;
   // @ts-ignore
   delete L.Icon.Default.prototype._getIconUrl;
   L.Icon.Default.mergeOptions({
-    iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
-    iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
-    shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+    iconRetinaUrl: markerIcon2x,
+    iconUrl: markerIcon,
+    shadowUrl: markerShadow,
   });
 };
 
@@ -27,6 +31,7 @@ fixLeafletIcon();
 export function SpatialIntegrityMap() {
   const { features, loading, error, refresh, recentFueling } = useSpatialAudit();
   const mapContainerRef = useRef<HTMLDivElement>(null);
+  const mapShellRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
   const layerGroupRef = useRef<L.LayerGroup | null>(null);
   const tileLayerRef = useRef<L.TileLayer | null>(null);
@@ -43,39 +48,34 @@ export function SpatialIntegrityMap() {
   const [showClearSnapshots, setShowClearSnapshots] = useState(true);
   const [showFlaggedSnapshots, setShowFlaggedSnapshots] = useState(true);
   const [showTransactionConfirmed, setShowTransactionConfirmed] = useState(true);
-  /** Pixel height for the map pane — derived from viewport so Leaflet never mounts into a 0px flex box. */
+  /** Pixel height from container, not a magic viewport offset. */
   const [mapPaneHeightPx, setMapPaneHeightPx] = useState(600);
 
   useLayoutEffect(() => {
+    const el = mapShellRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') {
+      setMapPaneHeightPx(Math.max(500, Math.min(860, window.innerHeight - 200)));
+      return;
+    }
     const compute = () => {
-      if (typeof window === 'undefined') return;
-      const h = window.innerHeight;
-      // Reserve: app header, main padding, Station Database tabs, spatial toolbar (~340px)
-      const reserved = 340;
-      setMapPaneHeightPx(Math.max(500, Math.min(860, Math.round(h - reserved))));
+      const rect = el.getBoundingClientRect();
+      const available = window.innerHeight - rect.top - 24;
+      setMapPaneHeightPx(Math.max(420, Math.min(860, Math.round(available))));
     };
     compute();
+    const ro = new ResizeObserver(compute);
+    ro.observe(el);
     window.addEventListener('resize', compute);
-    return () => window.removeEventListener('resize', compute);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener('resize', compute);
+    };
   }, []);
 
   useEffect(() => {
-    // Inject Leaflet CSS
-    const link = document.createElement('link');
-    link.rel = 'stylesheet';
-    link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
-    link.integrity = 'sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=';
-    link.crossOrigin = '';
-    document.head.appendChild(link);
-
-    // Inject Leaflet Heat Plugin
-    const script = document.createElement('script');
-    script.src = 'https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js';
-    script.async = true;
-    document.head.appendChild(script);
-
-    // Inject custom CSS for transaction-confirmed pulsing ring
+    // Custom CSS only — Leaflet CSS imported from package; heat loaded as npm module when needed
     const style = document.createElement('style');
+    style.setAttribute('data-spatial-integrity-map', '1');
     style.textContent = `
       @keyframes txConfirmedPulse {
         0% { transform: scale(1); opacity: 0.7; }
@@ -88,12 +88,14 @@ export function SpatialIntegrityMap() {
     `;
     document.head.appendChild(style);
 
-    // Detect theme
     const isDark = document.documentElement.classList.contains('dark') || 
                    window.matchMedia('(prefers-color-scheme: dark)').matches;
     setTheme(isDark ? 'dark' : 'light');
 
     setIsMounted(true);
+    return () => {
+      style.remove();
+    };
   }, []);
 
   // Initialize Map
@@ -188,23 +190,28 @@ export function SpatialIntegrityMap() {
 
     group.clearLayers();
 
-    // 1. Heatmap Layer (Phases 12)
-    if (showHeatmap && (window as any).L && (window as any).L.heatLayer) {
-      const heatPoints = features
-        .filter(f => f.type === 'fueling')
-        .map(f => {
-          const [lat, lng] = f.geometry.coordinates as [number, number];
-          return [lat, lng, 0.5]; // lat, lng, intensity
-        });
-      
-      if (heatPoints.length > 0) {
-        (window as any).L.heatLayer(heatPoints, {
-          radius: 25,
-          blur: 15,
-          maxZoom: 17,
-          gradient: { 0.4: 'blue', 0.65: 'lime', 1: 'red' }
-        }).addTo(group);
-      }
+    // 1. Heatmap Layer — bundled leaflet.heat (no CDN script)
+    if (showHeatmap) {
+      void import('leaflet.heat').then(() => {
+        const heatFactory = (L as any).heatLayer;
+        if (!heatFactory || !mapInstanceRef.current || !layerGroupRef.current) return;
+        const heatPoints = features
+          .filter(f => f.type === 'fueling')
+          .map(f => {
+            const [lat, lng] = f.geometry.coordinates as [number, number];
+            return [lat, lng, 0.5];
+          });
+        if (heatPoints.length > 0) {
+          heatFactory(heatPoints, {
+            radius: 25,
+            blur: 15,
+            maxZoom: 17,
+            gradient: { 0.4: 'blue', 0.65: 'lime', 1: 'red' }
+          }).addTo(layerGroupRef.current!);
+        }
+      }).catch(() => {
+        /* heat optional */
+      });
     }
 
     if (features.length === 0) return;
@@ -574,8 +581,9 @@ export function SpatialIntegrityMap() {
         </div>
       </CardHeader>
       <CardContent
+        ref={mapShellRef}
         className="relative isolate mt-2 box-border w-full overflow-hidden rounded-b-xl border border-slate-300 bg-[#d4d4d4] p-0 shadow-inner dark:border-slate-600 dark:bg-neutral-950"
-        style={{ height: mapPaneHeightPx, minHeight: 500 }}
+        style={{ height: mapPaneHeightPx, minHeight: 420 }}
       >
         <div
           ref={mapContainerRef}

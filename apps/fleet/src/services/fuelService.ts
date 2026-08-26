@@ -93,7 +93,13 @@ export const fuelService = {
       headers: await requireAuthHeaders(null)
     });
     if (!response.ok) throw new Error("Failed to fetch fuel entries");
-    return response.json();
+    const totalHeader = response.headers.get('X-Total-Count');
+    const totalCount = totalHeader ? Number(totalHeader) : undefined;
+    const data = await response.json();
+    if (Array.isArray(data) && totalCount != null && Number.isFinite(totalCount)) {
+      (data as any).totalCount = totalCount;
+    }
+    return data;
   },
 
   async getFuelEntry(id: string): Promise<FuelEntry | null> {
@@ -352,6 +358,27 @@ export const fuelService = {
     });
     if (!response.ok) throw new Error("Failed to run station status migration");
     return response.json();
+  },
+
+  async getMigrationFlag(key: string): Promise<{ done: boolean }> {
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.fuel}/migrations/${encodeURIComponent(key)}`,
+      { headers: await requireAuthHeaders(null) },
+    );
+    if (!response.ok) return { done: false };
+    return response.json();
+  },
+
+  async setMigrationFlag(key: string): Promise<void> {
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.fuel}/migrations/${encodeURIComponent(key)}`,
+      {
+        method: 'POST',
+        headers: await requireAuthHeaders(),
+        body: JSON.stringify({ done: true }),
+      },
+    );
+    if (!response.ok) throw new Error('Failed to set migration flag');
   },
 
   async getParentCompanies(): Promise<any[]> {

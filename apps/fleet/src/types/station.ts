@@ -94,6 +94,7 @@ export interface StationOverride {
   };
   status?: LocationStatus;
   operationalStatus?: 'active' | 'inactive' | 'review';
+  isPreferred?: boolean;
   
   // Optional: Initial Stats from Import
   initialStats?: {

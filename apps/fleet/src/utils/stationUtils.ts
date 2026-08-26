@@ -1,7 +1,24 @@
 import { FuelEntry } from '../types/fuel';
 import { StationProfile, StationStats } from '../types/station';
-import { subDays, isAfter } from 'date-fns';
 import { encodePlusCode } from './plusCode';
+
+/** Parse YYYY-MM-DD as local calendar day (never UTC midnight). */
+function parseYmdLocal(ymd: string): Date {
+  const [y, m, d] = String(ymd).split('T')[0].split('-').map(Number);
+  return new Date(y, (m || 1) - 1, d || 1);
+}
+
+/** Monday–Sunday fleet calendar week containing `ref` (local). */
+function fleetWeekBounds(ref = new Date()): { start: Date; end: Date } {
+  const day = ref.getDay(); // 0 Sun .. 6 Sat
+  const mondayOffset = day === 0 ? -6 : 1 - day;
+  const start = new Date(ref.getFullYear(), ref.getMonth(), ref.getDate() + mondayOffset);
+  start.setHours(0, 0, 0, 0);
+  const end = new Date(start);
+  end.setDate(start.getDate() + 6);
+  end.setHours(23, 59, 59, 999);
+  return { start, end };
+}
 
 // Helper to generate a simple hash for ID
 export const generateStationId = (name: string, address: string): string => {
@@ -169,16 +186,21 @@ export const calculateRegionalStats = (stations: StationProfile[]) => {
 };
 
 export const calculateDashboardKPIs = (logs: FuelEntry[], regionalMinPrice: number) => {
-  const now = new Date();
-  const oneWeekAgo = subDays(now, 7);
-  const twoWeeksAgo = subDays(now, 14);
+  const { start: thisWeekStart, end: thisWeekEnd } = fleetWeekBounds();
+  const lastWeekEnd = new Date(thisWeekStart);
+  lastWeekEnd.setDate(lastWeekEnd.getDate() - 1);
+  lastWeekEnd.setHours(23, 59, 59, 999);
+  const lastWeekStart = new Date(lastWeekEnd);
+  lastWeekStart.setDate(lastWeekStart.getDate() - 6);
+  lastWeekStart.setHours(0, 0, 0, 0);
 
-  // Filter logs for periods
-  const thisWeekLogs = logs.filter(l => isAfter(new Date(l.date), oneWeekAgo));
-  const lastWeekLogs = logs.filter(l => {
-    const d = new Date(l.date);
-    return isAfter(d, twoWeeksAgo) && !isAfter(d, oneWeekAgo);
-  });
+  const inRange = (ymd: string, start: Date, end: Date) => {
+    const d = parseYmdLocal(ymd);
+    return d >= start && d <= end;
+  };
+
+  const thisWeekLogs = logs.filter((l) => inRange(l.date, thisWeekStart, thisWeekEnd));
+  const lastWeekLogs = logs.filter((l) => inRange(l.date, lastWeekStart, lastWeekEnd));
 
   // Calculate Weighted Average Price (This Week)
   let totalVolumeThisWeek = 0;

@@ -3,8 +3,8 @@
   "compilerOptions": {
     "jsx": "react"
   },
-  "//nodeModulesDir": "A root package.json puts Deno in node_modules mode, where npm deps pulled in transitively by JSR packages (supabase-js -> realtime-js) are not present in the pnpm store layout. Let Deno manage its own.",
-  "nodeModulesDir": "auto",
+  "//nodeModulesDir": "A root package.json puts Deno in node_modules mode, where npm deps pulled in transitively by JSR packages (supabase-js -> realtime-js) are not present in the pnpm store layout. Let Deno manage its own. Deno 1.x requires a boolean (Deno 2 accepts \"auto\"); CI pins setup-deno@v1 / v1.x.",
+  "nodeModulesDir": true,
   "//testExclude": "QUARANTINE. These suites were never executed by CI (the workflow was workflow_dispatch + continue-on-error), so they drifted from the code they cover. Each is a real pre-existing failure in a non-toll domain and needs its owning team; they are listed here rather than silently disabled so the rest of the edge suite can gate PRs.",
   "test": {
     "exclude": [

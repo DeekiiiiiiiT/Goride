@@ -234,4 +234,52 @@ app.post("/admin/sync", async (c) => {
   });
 });
 
+/** Weekly cron / CI: sync latest page using service role or CRON_SECRET. */
+app.post("/cron/sync-latest", async (c) => {
+  const authHeader = c.req.header("Authorization") || "";
+  const cronSecret = Deno.env.get("CRON_SECRET") || "";
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+  const token = authHeader.replace(/^Bearer\s+/i, "").trim();
+  const ok =
+    (cronSecret && token === cronSecret) ||
+    (serviceKey && token === serviceKey);
+  if (!ok) {
+    return c.json({ error: "unauthorized" }, 401);
+  }
+
+  let fetched: PetrojamFetchResult;
+  try {
+    fetched = await fetchPetrojamPrices({ mode: "latest" });
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "Scrape failed";
+    logLine({ event: "cron_scrape_failed", error: message });
+    return c.json({ error: "scrape_failed", message }, 502);
+  }
+
+  const scrapedAt = new Date().toISOString();
+  try {
+    const { inserted, updated } = await upsertScraped(fetched.rows, scrapedAt);
+    const dates = fetched.rows.map((r) => r.priceDate).sort();
+    logLine({
+      event: "cron_sync_ok",
+      inserted,
+      updated,
+      latestDate: dates.at(-1) ?? null,
+      rowCount: fetched.rows.length,
+    });
+    return c.json({
+      ok: true,
+      mode: "latest",
+      inserted,
+      updated,
+      latestDate: dates.at(-1) ?? null,
+      rowCount: fetched.rows.length,
+      scrapedAt,
+    });
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "Upsert failed";
+    return c.json({ error: "sync_failed", message }, 500);
+  }
+});
+
 Deno.serve(app.fetch);

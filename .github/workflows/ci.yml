@@ -29,11 +29,17 @@ jobs:
       - name: Check toll-core parity
         run: node scripts/check-toll-core-parity.mjs
 
+      - name: Check fuel-core parity
+        run: node scripts/check-fuel-core-parity.mjs
+
       - name: Check toll org-scope
         run: node scripts/check-toll-org-scope.mjs
 
       - name: Test toll-core
         run: pnpm --filter @roam/toll-core test
+
+      - name: Test fuel-core
+        run: pnpm --filter @roam/fuel-core test
 
       - name: Test dash-customer
         run: pnpm --filter @roam/dash-customer test
@@ -45,9 +51,15 @@ jobs:
         run: pnpm --filter @roam/dash-merchant test
 
       - name: Test fleet
+        env:
+          VITE_SUPABASE_URL: https://ci-placeholder.supabase.co
+          VITE_SUPABASE_ANON_KEY: ci-placeholder-anon-key
         run: pnpm --filter @roam/fleet test
 
       - name: Test admin
+        env:
+          VITE_SUPABASE_URL: https://ci-placeholder.supabase.co
+          VITE_SUPABASE_ANON_KEY: ci-placeholder-anon-key
         run: pnpm --filter @roam/admin test
 
       - name: Typecheck rush-command

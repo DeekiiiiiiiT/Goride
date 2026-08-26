@@ -452,3 +452,14 @@ Stations are arguably shared reference data and may be intentionally global — 
 ---
 
 *Audit only — no files were modified. Every finding is anchored to a specific file and line. Items 1–3 in §I are the ones I would verify against production before anything else; item 1 in particular is a silent, ongoing money error rather than a display bug.*
+
+---
+
+## Remediation status (2026-08-26)
+
+Implementation landed in-repo per Fuel System Remediation Plan:
+- Phase 0–1: fail-loud JMD price via `@roam/fuel-core`, permission gates, org-scoped finalized-reports, fuel-core parity CI, Fuel Brain server settings.
+- Phase 2–3: station price stats, preferred on server, truncation banner, Spatial map Leaflet cleanup, stations pagination.
+- Phase 4–5: Petrojam weekly workflow + retail markup migration, Dominion Fuel Cost Analytics + Station Analytics rename, Fleet Stations route, Dominion read-only money pages.
+
+Stations / learnt / parent-companies remain **intentionally platform-global** (§G3).

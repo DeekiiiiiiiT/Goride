@@ -40,40 +40,15 @@ export const settlementService = {
                                scenarios.find(s => s.isDefault) || 
                                scenarios[0];
 
-        // Helper for coverage (duplicated from FuelCalculationService to ensure consistency)
-        const getCoverage = (category: 'rideShare' | 'companyUsage' | 'deadhead' | 'personal' | 'misc', amount: number) => {
-            if (!activeScenario) return { company: amount, driver: 0 };
-            
-            const rule = activeScenario.rules.find(r => r.category === 'Fuel');
-            if (!rule) return { company: amount, driver: 0 };
-
-            let coveragePercent = rule.coverageValue;
-            if (category === 'rideShare' && rule.rideShareCoverage !== undefined) coveragePercent = rule.rideShareCoverage;
-            if (category === 'companyUsage' && rule.companyUsageCoverage !== undefined) coveragePercent = rule.companyUsageCoverage;
-            if (category === 'deadhead' && rule.deadheadCoverage !== undefined) coveragePercent = rule.deadheadCoverage;
-            else if (category === 'deadhead' && rule.companyUsageCoverage !== undefined) coveragePercent = rule.companyUsageCoverage;
-            if (category === 'personal' && rule.personalCoverage !== undefined) coveragePercent = rule.personalCoverage;
-            if (category === 'misc' && rule.miscCoverage !== undefined) coveragePercent = rule.miscCoverage;
-
-            if (rule.coverageType === 'Full') {
-                return { company: amount, driver: 0 };
-            } else if (rule.coverageType === 'Percentage') {
-                const companyPay = amount * (coveragePercent / 100);
-                return { company: companyPay, driver: amount - companyPay };
-            } else if (rule.coverageType === 'Fixed_Amount') {
-                const companyPay = Math.min(amount, rule.coverageValue);
-                return { company: companyPay, driver: amount - companyPay };
-            }
-            return { company: amount, driver: 0 };
-        };
+        const fuelRule = activeScenario?.rules.find(r => r.category === 'Fuel');
 
         // 3. Process each entry
         for (const entry of entries) {
             // Skip already reconciled
             if (entry.reconciliationStatus === 'Verified' || entry.reconciliationStatus === 'Archived') continue;
 
-            // Apply the 'rideShare' rule as the primary split for the entry
-            const split = getCoverage('rideShare', entry.amount); 
+            // Category-weighted coverage via canonical engine (no local fork)
+            const split = FuelCalculationService.getCategoryCoverageSplit('rideShare', entry.amount, fuelRule); 
             
             let walletPayment: Partial<FinancialTransaction> | null = null;
             let payoutDeduction: Partial<FinancialTransaction> | null = null;

@@ -25,6 +25,7 @@ import { UserManagementPage } from './components/users/UserManagementPage';
 import { EarningsPolicyConfiguration } from './components/earnings-policy';
 import { FuelManagement } from './pages/FuelManagement';
 import { FuelAnalytics } from './components/fuel/analytics/FuelAnalytics';
+import { StationDatabaseView } from './components/fuel/stations/StationDatabaseView';
 import { TollLogsPage } from './pages/TollLogs';
 import { TollAnalytics } from './components/toll/TollAnalytics';
 import { TollRateDriftPage } from './pages/TollRateDriftPage';
@@ -586,6 +587,14 @@ function AppContent() {
         {currentPage === 'fuel-analytics' && (
           <PermissionGate permission="nav.fuel_reports" onNavigate={setCurrentPage}>
             <FuelAnalytics onNavigate={setCurrentPage} />
+          </PermissionGate>
+        )}
+
+        {currentPage === 'fuel-stations' && (
+          <PermissionGate permission="nav.fuel_logs" onNavigate={setCurrentPage}>
+            <div className="min-h-[600px] rounded-xl bg-white shadow-sm overflow-x-auto overflow-y-visible dark:bg-card">
+              <StationDatabaseView />
+            </div>
           </PermissionGate>
         )}
 

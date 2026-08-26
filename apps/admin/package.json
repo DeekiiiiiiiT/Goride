@@ -43,6 +43,7 @@
     "@roam/auth-client": "workspace:*",
     "@roam/business-config": "workspace:*",
     "@roam/finance-core": "workspace:*",
+    "@roam/fuel-core": "workspace:*",
     "@roam/toll-core": "workspace:*",
     "@roam/platform-settings": "workspace:*",
     "@roam/roam-shared": "workspace:*",

@@ -260,3 +260,23 @@ describe('recon Total Spend ignores Card Inventory statement ledger', () => {
     expect(r?.totalGasCardCost).toBe(6000);
   });
 });
+
+describe('price fail-loud (no 1.50 invent)', () => {
+  it('resolvePricePerLiter marks cash-only weeks unavailable', async () => {
+    const { resolvePricePerLiter } = await import('@roam/fuel-core');
+    const r = resolvePricePerLiter({ totalLiters: 0, totalGasCardCost: 0 });
+    expect(r.priceUnavailable).toBe(true);
+    expect(r.pricePerLiter).toBe(0);
+  });
+
+  it('org default is used when observed price missing', async () => {
+    const { resolvePricePerLiter } = await import('@roam/fuel-core');
+    const r = resolvePricePerLiter({
+      totalLiters: 0,
+      totalGasCardCost: 0,
+      defaultPricePerLiterJmd: 200,
+    });
+    expect(r.pricePerLiter).toBe(200);
+    expect(r.priceUnavailable).toBe(false);
+  });
+});

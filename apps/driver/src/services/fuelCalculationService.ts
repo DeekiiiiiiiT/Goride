@@ -5,6 +5,7 @@
 import { FuelEntry, MileageAdjustment, WeeklyFuelReport, FuelScenario, OdometerBucket } from '../types/fuel';
 import { Vehicle } from '../types/vehicle';
 import { Trip } from '../types/data';
+import { resolvePricePerLiter } from '@roam/fuel-core';
 
 /** Per-vehicle deadhead attribution passed in from the API (Phase 2) */
 export interface VehicleDeadheadInput {
@@ -200,14 +201,10 @@ export const FuelCalculationService = {
             }
         }
 
-        // 3c. Compute actual price per liter from fuel entries in the period
-        let actualPricePerLiter = 0;
-        if (totalLiters > 0 && totalGasCardCost > 0) {
-            actualPricePerLiter = totalGasCardCost / totalLiters;
-        }
-        if (actualPricePerLiter <= 0) {
-            actualPricePerLiter = 1.50; // Fallback if no fuel entries exist
-        }
+        // 3c. JMD/L — observed, else unavailable (never invent 1.50)
+        const priceResolved = resolvePricePerLiter({ totalLiters, totalGasCardCost });
+        const actualPricePerLiter = priceResolved.pricePerLiter;
+        const priceUnavailable = priceResolved.priceUnavailable;
         
         // 4. Aggregate Distances
         const totalTripDistance = vehicleTrips.reduce(
@@ -237,11 +234,11 @@ export const FuelCalculationService = {
             personalDistance = Math.max(0, rawResidual - deadheadDistance);
         }
 
-        // 5. Calculate Costs using observed efficiency and actual fuel price
-        const rideShareCost = (totalTripDistance / observedEfficiency) * actualPricePerLiter;
-        const companyUsageCost = (companyMiscDistance / observedEfficiency) * actualPricePerLiter;
-        const deadheadCost = (deadheadDistance / observedEfficiency) * actualPricePerLiter;
-        const personalUsageCost = (personalDistance / observedEfficiency) * actualPricePerLiter;
+        // 5. Costs need a real JMD/L — when unavailable, keep km but charge $0
+        const rideShareCost = priceUnavailable ? 0 : (totalTripDistance / observedEfficiency) * actualPricePerLiter;
+        const companyUsageCost = priceUnavailable ? 0 : (companyMiscDistance / observedEfficiency) * actualPricePerLiter;
+        const deadheadCost = priceUnavailable ? 0 : (deadheadDistance / observedEfficiency) * actualPricePerLiter;
+        const personalUsageCost = priceUnavailable ? 0 : (personalDistance / observedEfficiency) * actualPricePerLiter;
 
         // 6. Calculate Leakage (Miscellaneous) — deadheadCost is now subtracted as an explained category
         const miscellaneousCost = totalGasCardCost - (rideShareCost + companyUsageCost + deadheadCost + personalUsageCost);
@@ -314,7 +311,8 @@ export const FuelCalculationService = {
                     actualPricePerLiter: Number(actualPricePerLiter.toFixed(3)),
                     efficiencySource: entriesWithOdo.length >= 3 ? 'odometer' : 
                                       (vehicle.fuelSettings?.efficiencyCity ? 'vehicle_settings' : 'default_fallback'),
-                    priceSource: (totalLiters > 0 && totalGasCardCost > 0) ? 'fuel_entries' : 'default_fallback',
+                    priceSource: priceResolved.priceSource,
+                    priceUnavailable,
                     totalLitersInPeriod: Number(totalLiters.toFixed(2)),
                     tripsIncluded: vehicleTrips.length,
                     completedTrips: vehicleTrips.filter(t => t.status === 'Completed').length,

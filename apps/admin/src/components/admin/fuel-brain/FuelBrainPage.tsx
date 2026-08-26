@@ -6,6 +6,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { projectId } from '../../../utils/supabase/info';
 import { useAuth } from '../../auth/AuthContext';
+import { fetchWithRetry } from '../../../services/api';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../ui/card';
 import { Badge } from '../../ui/badge';
 import { Alert, AlertDescription, AlertTitle } from '../../ui/alert';
@@ -55,6 +56,7 @@ export function FuelBrainPage() {
   const [success, setSuccess] = useState<string | null>(null);
   const [health, setHealth] = useState<BrainHealth | null>(null);
   const [policy, setPolicy] = useState<BrainPolicy | null>(null);
+  const [policies, setPolicies] = useState<BrainPolicy[]>([]);
 
   // Shared projectId falls back to the default project when VITE_* env is unset (local dev)
   const baseUrl = `https://${projectId}.supabase.co`;
@@ -75,14 +77,20 @@ export function FuelBrainPage() {
     setError(null);
     try {
       const [hRes, pRes] = await Promise.all([
-        fetch(`${baseUrl}/functions/v1/fuel-brain/health`, { headers: headers() }),
-        fetch(`${baseUrl}/functions/v1/fuel-brain/admin/policies`, { headers: headers() }),
+        fetchWithRetry(`${baseUrl}/functions/v1/fuel-brain/health`, { headers: headers() }),
+        fetchWithRetry(`${baseUrl}/functions/v1/fuel-brain/admin/policies`, { headers: headers() }),
       ]);
       if (hRes.ok) setHealth(await hRes.json());
       if (pRes.ok) {
         const data = await pRes.json();
         const list = (data.policies || []) as BrainPolicy[];
-        setPolicy(list.find((p) => p.isDefault) || list[0] || null);
+        setPolicies(list);
+        setPolicy((prev) => {
+          if (prev && list.some((p) => p.id === prev.id)) {
+            return list.find((p) => p.id === prev.id) || list[0] || null;
+          }
+          return list.find((p) => p.isDefault) || list[0] || null;
+        });
       } else if (pRes.status === 401 || pRes.status === 403) {
         setError('Platform admin access required for Fuel Brain policies.');
       }
@@ -101,7 +109,7 @@ export function FuelBrainPage() {
     if (!policy || !session) return;
     setSuccess(null);
     setError(null);
-    const res = await fetch(`${baseUrl}/functions/v1/fuel-brain/admin/policies`, {
+    const res = await fetchWithRetry(`${baseUrl}/functions/v1/fuel-brain/admin/policies`, {
       method: 'PUT',
       headers: headers(),
       body: JSON.stringify(policy),
@@ -113,6 +121,11 @@ export function FuelBrainPage() {
     }
     const data = await res.json();
     setPolicy(data.policy);
+    setPolicies((prev) => {
+      const next = prev.map((p) => (p.id === data.policy?.id ? data.policy : p));
+      if (data.policy && !next.some((p) => p.id === data.policy.id)) next.push(data.policy);
+      return next;
+    });
     setSuccess('Deadhead rules saved');
     setTimeout(() => setSuccess(null), 2500);
   };
@@ -159,6 +172,26 @@ export function FuelBrainPage() {
           <AlertTitle>Saved</AlertTitle>
           <AlertDescription>{success}</AlertDescription>
         </Alert>
+      )}
+
+      {policies.length > 1 && (
+        <div className="flex flex-wrap items-center gap-2">
+          <Label className="text-sm">Policy</Label>
+          <select
+            className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm dark:border-slate-700 dark:bg-slate-900"
+            value={policy?.id || ''}
+            onChange={(e) => {
+              const next = policies.find((p) => p.id === e.target.value) || null;
+              setPolicy(next);
+            }}
+          >
+            {policies.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}{p.isDefault ? ' (default)' : ''}
+              </option>
+            ))}
+          </select>
+        </div>
       )}
 
       <Card>

@@ -42,6 +42,8 @@ import { GlobalIdentitySearch } from './platform/GlobalIdentitySearch';
 import { MatchingBrainPage } from './matching-brain/MatchingBrainPage';
 import { FuelBrainPage } from './fuel-brain/FuelBrainPage';
 import { FuelPricesPage } from './fuel-prices/FuelPricesPage';
+import { FuelCostAnalyticsPage } from './fuel-cost-analytics/FuelCostAnalyticsPage';
+import { FuelMoneyReadOnlyPage } from './fuel-money-readonly/FuelMoneyReadOnlyPage';
 import { EvidenceBridgeAnalytics } from './fuel-evidence-bridge/EvidenceBridgeAnalytics';
 import { AdminJaaGasCardsPage } from './fuel/AdminJaaGasCardsPage';
 import { TollBrainPage } from './toll-brain/TollBrainPage';
@@ -261,6 +263,21 @@ export function AdminPortal() {
       {currentPage === 'fuel-analytics' && (
         <div className="bg-white rounded-xl shadow-sm overflow-hidden min-h-[600px]">
           <GasStationAnalytics logs={fuelLogs} loading={fuelLoading} onRequestRefresh={loadFuelLogs} />
+        </div>
+      )}
+      {currentPage === 'fuel-cost-analytics' && (
+        <div className="rounded-xl border border-slate-200 bg-white overflow-hidden min-h-[560px] p-6 dark:border-slate-800 dark:bg-slate-900/40">
+          <FuelCostAnalyticsPage />
+        </div>
+      )}
+      {currentPage === 'fuel-reconciliation-overview' && (
+        <div className="rounded-xl border border-slate-200 bg-white overflow-hidden min-h-[560px] p-6 dark:border-slate-800 dark:bg-slate-900/40">
+          <FuelMoneyReadOnlyPage mode="reconciliation" logs={fuelLogs} loading={fuelLoading} />
+        </div>
+      )}
+      {currentPage === 'fuel-transaction-logs' && (
+        <div className="rounded-xl border border-slate-200 bg-white overflow-hidden min-h-[560px] p-6 dark:border-slate-800 dark:bg-slate-900/40">
+          <FuelMoneyReadOnlyPage mode="logs" logs={fuelLogs} loading={fuelLoading} />
         </div>
       )}
       {currentPage === 'fuel-evidence-bridge' && (

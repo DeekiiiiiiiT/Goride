@@ -110,21 +110,6 @@ export function StationDatabaseView({
   const fetchData = useCallback(async () => {
     setIsBackendLoading(true);
     try {
-      // 0. Run one-time migration to patch any stations with missing/incorrect status
-      const migrationKey = 'station_status_migration_v1';
-      if (!localStorage.getItem(migrationKey)) {
-        try {
-          const result = await fuelService.migrateStationStatuses();
-          if (result.patchedCount > 0) {
-            console.log(`[Migration] Patched ${result.patchedCount}/${result.totalStations} stations to 'unverified' status.`);
-            toast.success(`Station Migration: ${result.patchedCount} stations patched to 'unverified'.`);
-          }
-          localStorage.setItem(migrationKey, new Date().toISOString());
-        } catch (migErr) {
-          console.error('[Migration] Station status migration failed:', migErr);
-        }
-      }
-
       // 1. Fetch from backend
       const backendStations = await fuelService.getStations();
       const overrides: Record<string, StationOverride> = {};
@@ -132,7 +117,27 @@ export function StationDatabaseView({
         overrides[s.id] = s;
       });
 
-      // 2. Check for legacy localStorage data
+      // Preferred from server field (source of truth)
+      setPreferredStationIds(
+        new Set(backendStations.filter((s) => s.isPreferred).map((s) => s.id)),
+      );
+
+      // One-time status migration — completion is server-flagged, not localStorage
+      try {
+        const migFlag = await fuelService.getMigrationFlag('station_status_v1');
+        if (!migFlag.done) {
+          const result = await fuelService.migrateStationStatuses();
+          if (result.patchedCount > 0) {
+            console.log(`[Migration] Patched ${result.patchedCount}/${result.totalStations} stations to 'unverified' status.`);
+            toast.success(`Station Migration: ${result.patchedCount} stations patched to 'unverified'.`);
+          }
+          await fuelService.setMigrationFlag('station_status_v1');
+        }
+      } catch (migErr) {
+        console.error('[Migration] Station status migration failed:', migErr);
+      }
+
+      // Legacy localStorage overrides — migrate once then clear
       const storedOverrides = localStorage.getItem('station_overrides');
       if (storedOverrides) {
         try {
@@ -142,7 +147,6 @@ export function StationDatabaseView({
           if (legacyKeys.length > 0) {
             console.log(`[Migration] Found ${legacyKeys.length} legacy stations. Migrating to Cloud...`);
             
-            // Only migrate if not already in backend
             for (const key of legacyKeys) {
               if (!overrides[key]) {
                 const station = legacyData[key];
@@ -151,23 +155,17 @@ export function StationDatabaseView({
                 overrides[key] = station;
               }
             }
-            
-            // Clear legacy data once migrated
             localStorage.removeItem('station_overrides');
-            toast.success("Station database migrated to Cloud successfully.");
+            toast.success(`Migrated ${legacyKeys.length} stations to cloud.`);
+          } else {
+            localStorage.removeItem('station_overrides');
           }
         } catch (e) {
-          console.error("Migration failed", e);
+          console.error('Failed to migrate legacy station overrides', e);
         }
       }
 
       setStationOverrides(overrides);
-
-      // Load preferred stations
-      const storedPreferred = localStorage.getItem('preferred_stations');
-      if (storedPreferred) {
-        setPreferredStationIds(new Set(JSON.parse(storedPreferred)));
-      }
     } catch (e) {
       console.error('Failed to load station data from cloud', e);
       toast.error("Could not sync with cloud station database.");
@@ -181,40 +179,54 @@ export function StationDatabaseView({
     fetchData();
   }, [fetchData]);
 
-  // Save Preferred Stations
-  const togglePreferred = (id: string) => {
+  // Preferred is server-backed via StationProfile.isPreferred
+  const togglePreferred = async (id: string) => {
+    const currentlyPreferred = preferredStationIds.has(id);
+    const nextPreferred = !currentlyPreferred;
     setPreferredStationIds(prev => {
       const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
-      }
-      localStorage.setItem('preferred_stations', JSON.stringify(Array.from(next)));
+      if (nextPreferred) next.add(id);
+      else next.delete(id);
       return next;
     });
+    try {
+      await updateStationDetails(id, { isPreferred: nextPreferred });
+    } catch (e) {
+      console.error('Failed to persist preferred station', e);
+      toast.error('Could not save preferred station');
+      setPreferredStationIds(prev => {
+        const next = new Set(prev);
+        if (currentlyPreferred) next.add(id);
+        else next.delete(id);
+        return next;
+      });
+    }
   };
 
   // Save Station Overrides (Cloud Persisted)
   const updateStationDetails = async (id: string, details: Partial<StationProfile>) => {
     const current = stationOverrides[id] || {};
+    // Empty string clears; undefined keeps previous (??). Falsy || blocked clearing addresses/brands.
+    const pickStr = (next: string | undefined, prev: string | undefined) =>
+      next !== undefined ? next : prev;
     const updated: StationOverride = {
       ...current,
-      id, // Ensure ID is present
-      name: details.name || current.name,
-      address: details.address || current.address,
-      brand: details.brand || current.brand,
-      city: details.city || current.city,
-      parish: details.parish || current.parish,
-      country: details.country || current.country,
-      plusCode: details.plusCode || current.plusCode,
+      id,
+      name: pickStr(details.name, current.name),
+      address: pickStr(details.address, current.address),
+      brand: pickStr(details.brand, current.brand),
+      city: pickStr(details.city, current.city),
+      parish: pickStr(details.parish, current.parish),
+      country: pickStr(details.country, current.country),
+      plusCode: pickStr(details.plusCode, current.plusCode),
       geofenceRadius: details.geofenceRadius ?? current.geofenceRadius,
-      location: details.location || current.location,
-      amenities: details.amenities || current.amenities,
-      contactInfo: details.contactInfo || current.contactInfo,
+      location: details.location ?? current.location,
+      amenities: details.amenities ?? current.amenities,
+      contactInfo: details.contactInfo ?? current.contactInfo,
       status: details.status || current.status,
       operationalStatus: details.operationalStatus || current.operationalStatus,
-      dataSource: details.dataSource || current.dataSource || 'manual' 
+      dataSource: details.dataSource || current.dataSource || 'manual',
+      isPreferred: details.isPreferred ?? (current as StationProfile).isPreferred,
     };
     
     // Clean up undefined values

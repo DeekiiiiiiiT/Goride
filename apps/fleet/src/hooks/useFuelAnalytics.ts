@@ -93,6 +93,11 @@ export function useFuelAnalytics() {
     staleTime: 2 * 60 * 1000,
     refetchOnWindowFocus: false,
   });
+  const entriesTotalCount =
+    Array.isArray(rawEntries) && typeof (rawEntries as any).totalCount === 'number'
+      ? ((rawEntries as any).totalCount as number)
+      : rawEntries.length;
+  const entriesTruncated = entriesTotalCount > rawEntries.length;
 
   const { data: vehicles = [], isLoading: vehiclesLoading, refetch: refetchVehicles } = useQuery<Vehicle[]>({
     queryKey: ['vehicles'],
@@ -349,6 +354,9 @@ export function useFuelAnalytics() {
   return {
     loading,
     hasData: rawEntries.length > 0 || vehicles.length > 0,
+    entriesTruncated,
+    entriesTotalCount,
+    entriesReturned: rawEntries.length,
     period,
     preset,
     setPreset,

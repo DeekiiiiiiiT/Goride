@@ -1,0 +1,28 @@
+name: Petrojam weekly sync
+
+on:
+  schedule:
+    # Mondays 14:00 UTC — Petrojam typically publishes weekly
+    - cron: '0 14 * * 1'
+  workflow_dispatch:
+
+jobs:
+  sync-latest:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Sync Petrojam latest prices
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          set -euo pipefail
+          TOKEN="${CRON_SECRET:-$SUPABASE_SERVICE_ROLE_KEY}"
+          if [ -z "${SUPABASE_URL:-}" ] || [ -z "${TOKEN:-}" ]; then
+            echo "Missing SUPABASE_URL or auth token secrets"
+            exit 1
+          fi
+          curl -fsS -X POST \
+            "${SUPABASE_URL}/functions/v1/petrojam-prices/cron/sync-latest" \
+            -H "Authorization: Bearer ${TOKEN}" \
+            -H "Content-Type: application/json"

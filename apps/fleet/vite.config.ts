@@ -197,6 +197,12 @@ export default defineConfig({
   },
   test: {
     environment: 'node',
+    // Pure utils import @roam/roam-shared which re-exports ErrorBoundary → api-client,
+    // and that module throws at import time without these. CI has no .env file.
+    env: {
+      VITE_SUPABASE_URL: 'https://ci-placeholder.supabase.co',
+      VITE_SUPABASE_ANON_KEY: 'ci-placeholder-anon-key',
+    },
     include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
     exclude: [
       /** Deno edge-function tests (Deno.test + https: imports) run via `deno test`, not Vitest. */

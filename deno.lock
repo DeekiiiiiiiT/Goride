@@ -81,7 +81,9 @@
     "npm:i18next@^26.3.1": "26.4.0_typescript@5.9.3",
     "npm:input-otp@^1.4.2": "1.5.0_react@18.3.1_react-dom@18.3.1__react@18.3.1",
     "npm:jszip@*": "3.10.1",
+    "npm:leaflet.heat@0.2.0": "0.2.0",
     "npm:leaflet@*": "1.9.4",
+    "npm:leaflet@1.9.4": "1.9.4",
     "npm:leaflet@^1.9.4": "1.9.4",
     "npm:lucide-react@0.487": "0.487.0_react@18.3.1",
     "npm:motion@*": "13.1.1_react@18.3.1_react-dom@18.3.1__react@18.3.1",
@@ -4330,6 +4332,9 @@
     "kleur@4.1.5": {
       "integrity": "sha512-o+NO+8WrRiQEE4/7nwRJhN1HWpVmJm511pBHUxPLtp0BUISzlBplORYSmTclCnJvQq2tKu/sgl3xVpkc7ZWuQQ=="
     },
+    "leaflet.heat@0.2.0": {
+      "integrity": "sha512-Cd5PbAA/rX3X3XKxfDoUGi9qp78FyhWYurFg3nsfhntcM/MCNK08pRkf4iEenO1KNqwVPKCmkyktjW3UD+h9bQ=="
+    },
     "leaflet@1.9.4": {
       "integrity": "sha512-nxS1ynzJOmOlHp+iL3FyWqK89GtNL8U8rvlMOsQdTTssxZwCXh8N2NB3GDQOL+YR3XnWyZAxwQixURb+FA74PA=="
     },
@@ -6431,7 +6436,8 @@
             "npm:hono@*",
             "npm:input-otp@^1.4.2",
             "npm:jszip@*",
-            "npm:leaflet@*",
+            "npm:leaflet.heat@0.2.0",
+            "npm:leaflet@1.9.4",
             "npm:lucide-react@0.487",
             "npm:motion@*",
             "npm:next-themes@~0.4.6",
@@ -6621,6 +6627,13 @@
         }
       },
       "packages/finance-core": {
+        "packageJson": {
+          "dependencies": [
+            "npm:vitest@^3.2.4"
+          ]
+        }
+      },
+      "packages/fuel-core": {
         "packageJson": {
           "dependencies": [
             "npm:vitest@^3.2.4"

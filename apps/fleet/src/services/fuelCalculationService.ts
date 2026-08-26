@@ -35,15 +35,25 @@ import {
   fuelOpsLiters,
   fuelOpsSpendAmount,
 } from '../utils/fuelOpsEligibility';
+import {
+  FALLBACK_EFFICIENCY_KM_L,
+  GAP_ANOMALY_PCT,
+  SEVERE_GAP_PCT,
+  TANK_OVERFLOW_MULT,
+  UNACCOUNTED_DISTANCE_DEDUCTION_KM,
+  resolvePricePerLiter,
+} from '@roam/fuel-core';
+
+export {
+  FALLBACK_EFFICIENCY_KM_L,
+  GAP_ANOMALY_PCT,
+  SEVERE_GAP_PCT,
+  TANK_OVERFLOW_MULT,
+  UNACCOUNTED_DISTANCE_DEDUCTION_KM,
+};
 
 /** Soft-cycle efficiency band vs week observed km/L before Amber (cycle-health mode). */
 const SOFT_CYCLE_EFFICIENCY_BAND = 0.30;
-export const FALLBACK_EFFICIENCY_KM_L = 10;
-export const FALLBACK_PRICE_PER_LITER = 1.50;
-export const GAP_ANOMALY_PCT = 0.10;
-export const SEVERE_GAP_PCT = 0.30;
-export const TANK_OVERFLOW_MULT = 1.05;
-export const UNACCOUNTED_DISTANCE_DEDUCTION_KM = 10;
 
 export type { FuelCoverageCategory };
 
@@ -214,6 +224,8 @@ export const FuelCalculationService = {
             /** Skip allowance (multi-vehicle slices apply once after merge). */
             skipPersonalAllowance?: boolean;
             personalAllowance?: PersonalAllowanceReconContext;
+            /** Org-configured JMD/L when gas-card observed price cannot be computed. */
+            defaultPricePerLiterJmd?: number | null;
         }
     ): WeeklyFuelReport => {
         const startStr = FuelCalculationService.toLocalDateStr(weekStart);
@@ -288,14 +300,14 @@ export const FuelCalculationService = {
             }
         }
 
-        // 3c. Compute actual price per liter from fuel entries in the period
-        let actualPricePerLiter = 0;
-        if (totalLiters > 0 && totalGasCardCost > 0) {
-            actualPricePerLiter = totalGasCardCost / totalLiters;
-        }
-        if (actualPricePerLiter <= 0) {
-            actualPricePerLiter = FALLBACK_PRICE_PER_LITER;
-        }
+        // 3c. JMD/L — observed, else org default, else fail-loud (never invent 1.50)
+        const priceResolved = resolvePricePerLiter({
+            totalLiters,
+            totalGasCardCost,
+            defaultPricePerLiterJmd: options?.defaultPricePerLiterJmd,
+        });
+        const actualPricePerLiter = priceResolved.pricePerLiter;
+        const priceUnavailable = priceResolved.priceUnavailable;
         
         // 4. Aggregate Distances
         const totalTripDistance = vehicleTrips.reduce(
@@ -341,11 +353,19 @@ export const FuelCalculationService = {
             personalDistance = Math.max(0, rawResidual - deadheadDistance);
         }
 
-        // 5. Calculate Costs using observed efficiency and actual fuel price
-        const rideShareCost = (totalTripDistance / observedEfficiency) * actualPricePerLiter;
-        const companyUsageCost = (companyMiscDistance / observedEfficiency) * actualPricePerLiter;
-        const deadheadCost = (deadheadDistance / observedEfficiency) * actualPricePerLiter;
-        const personalUsageCost = (personalDistance / observedEfficiency) * actualPricePerLiter;
+        // 5. Costs need a real JMD/L — when unavailable, keep km but charge $0 (fail loud)
+        const rideShareCost = priceUnavailable
+            ? 0
+            : (totalTripDistance / observedEfficiency) * actualPricePerLiter;
+        const companyUsageCost = priceUnavailable
+            ? 0
+            : (companyMiscDistance / observedEfficiency) * actualPricePerLiter;
+        const deadheadCost = priceUnavailable
+            ? 0
+            : (deadheadDistance / observedEfficiency) * actualPricePerLiter;
+        const personalUsageCost = priceUnavailable
+            ? 0
+            : (personalDistance / observedEfficiency) * actualPricePerLiter;
 
         // 6. Misc = Spend − (all four category $) — cash leakage, not a km type
         const miscellaneousCost = totalGasCardCost - (rideShareCost + companyUsageCost + deadheadCost + personalUsageCost);
@@ -357,6 +377,7 @@ export const FuelCalculationService = {
         const paCtx = options?.personalAllowance;
         if (
             !options?.skipPersonalAllowance &&
+            !priceUnavailable &&
             paCtx?.config?.enabled
         ) {
             const earnTrips = paCtx.driverWeekTrips ?? vehicleTrips;
@@ -408,8 +429,7 @@ export const FuelCalculationService = {
             entriesWithOdo.length >= 3
               ? 'odometer'
               : (vehicle.fuelSettings?.efficiencyCity ? 'vehicle_settings' : 'default_fallback');
-        const priceSource: 'fuel_entries' | 'default_fallback' =
-            (totalLiters > 0 && totalGasCardCost > 0) ? 'fuel_entries' : 'default_fallback';
+        const priceSource = priceResolved.priceSource;
 
         const fuelCycles = calculateFuelCycles(vehicleEntries, [vehicle]);
         const closedCycles = fuelCycles.filter((c) => c.status === 'Complete' || c.status === 'Anomaly');
@@ -530,6 +550,7 @@ export const FuelCalculationService = {
                     actualPricePerLiter: Number(actualPricePerLiter.toFixed(3)),
                     efficiencySource,
                     priceSource,
+                    priceUnavailable,
                     totalLitersInPeriod: Number(totalLiters.toFixed(2)),
                     tripsIncluded: vehicleTrips.length,
                     completedTrips: vehicleTrips.filter(t => t.status === 'Completed').length,
@@ -855,29 +876,31 @@ export const FuelCalculationService = {
                 if (paEnabled) {
                 const activeScenario = pickScenarioForDriverMembership(scenarios, driverId, startStr);
                 const fuelRule = activeScenario?.rules.find((r) => r.category === 'Fuel');
+                // Never invent USD-era 1.50 — only use observed/org price already on the report
                 const priceGuess =
                     Number(merged.metadata?.rideShareCalc?.actualPricePerLiter) > 0
                         ? Number(merged.metadata.rideShareCalc.actualPricePerLiter)
-                        : FALLBACK_PRICE_PER_LITER;
+                        : 0;
                 const knownEff = Number(merged.metadata?.rideShareCalc?.observedEfficiency);
                 let effGuess =
-                    merged.personalDistance > 0 && merged.personalUsageCost > 0
+                    priceGuess > 0 && merged.personalDistance > 0 && merged.personalUsageCost > 0
                         ? (merged.personalDistance * priceGuess) / merged.personalUsageCost
                         : knownEff;
-                if (!(effGuess > 0) && merged.personalDistance > 0) {
+                if (!(effGuess > 0) && priceGuess > 0 && merged.personalDistance > 0) {
                     const attributed =
                         (merged.rideShareCost || 0) +
                         (merged.companyUsageCost || 0) +
                         (merged.deadheadCost || 0) +
                         (merged.miscellaneousCost || 0);
                     const residualCost = Math.max(0, (merged.totalGasCardCost || 0) - attributed);
-                    if (residualCost > 0 && priceGuess > 0) {
+                    if (residualCost > 0) {
                         effGuess = (merged.personalDistance * priceGuess) / residualCost;
                     }
                 }
                 if (!(effGuess > 0)) {
                     effGuess = knownEff > 0 ? knownEff : FALLBACK_EFFICIENCY_KM_L;
                 }
+                if (priceGuess > 0) {
                 merged.metadata = {
                     ...merged.metadata,
                     rideShareCalc: {
@@ -892,6 +915,7 @@ export const FuelCalculationService = {
                     personalAllowance,
                     expandedTrips,
                 );
+                }
                 }
             }
             reports.push(merged);

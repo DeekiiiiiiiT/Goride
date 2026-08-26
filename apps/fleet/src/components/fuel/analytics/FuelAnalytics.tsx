@@ -15,6 +15,9 @@ export function FuelAnalytics({ onNavigate }: { onNavigate?: (page: string) => v
   const {
     loading,
     hasData,
+    entriesTruncated,
+    entriesTotalCount,
+    entriesReturned,
     period,
     setPreset,
     setCustomStart,
@@ -74,6 +77,11 @@ export function FuelAnalytics({ onNavigate }: { onNavigate?: (page: string) => v
 
   return (
     <div className="space-y-4 md:space-y-6">
+      {entriesTruncated && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-800 px-4 py-3 text-sm text-amber-900 dark:text-amber-100">
+          Showing {entriesReturned.toLocaleString()} of {entriesTotalCount.toLocaleString()} entries — narrow the period for complete KPIs.
+        </div>
+      )}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div className="flex items-center gap-3">
           <div className="p-2 bg-indigo-100 dark:bg-indigo-900/30 rounded-lg">

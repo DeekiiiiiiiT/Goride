@@ -84,6 +84,34 @@ function stampFuelRecord<T extends Record<string, unknown>>(record: T, c: Contex
   return fleetStamped;
 }
 
+/** Bump visit + price stats on a station from a fuel entry (writes lastUpdated, not lastVisited). */
+function bumpStationPriceStats(
+  station: Record<string, any>,
+  entry: { date?: string; amount?: number; liters?: number },
+): void {
+  if (!station.stats) station.stats = {};
+  const stats = station.stats;
+  stats.totalVisits = (Number(stats.totalVisits) || 0) + 1;
+  const nowIso = entry.date || new Date().toISOString();
+  stats.lastUpdated = nowIso;
+  const liters = Number(entry.liters) || 0;
+  const amount = Number(entry.amount) || 0;
+  if (liters > 0 && amount > 0) {
+    const price = amount / liters;
+    const prev = Number(stats.lastPrice) || 0;
+    stats.lastPrice = price;
+    const visits = Number(stats.totalVisits) || 1;
+    const prevAvg = Number(stats.avgPrice) || 0;
+    stats.avgPrice = prevAvg > 0 ? (prevAvg * (visits - 1) + price) / visits : price;
+    if (prev > 0) {
+      const delta = (price - prev) / prev;
+      stats.priceTrend = delta > 0.02 ? "Up" : delta < -0.02 ? "Down" : "Stable";
+    } else {
+      stats.priceTrend = "Stable";
+    }
+  }
+}
+
 /** After org-scope filter, platform can narrow to one customer via query. */
 function narrowPlatformOrg<T extends Record<string, unknown>>(records: T[], c: Context): T[] {
   if (!isPlatformCaller(c)) return records;
@@ -286,7 +314,7 @@ app.get(`${BASE_PATH}/jaa-programs`, async (c) => {
   }
 });
 
-app.post(`${BASE_PATH}/jaa-programs`, async (c) => {
+app.post(`${BASE_PATH}/jaa-programs`, requirePlatformStaff(), async (c) => {
   try {
     const body = await c.req.json();
     const companyCode = String(body.companyCode || "").replace(/\D/g, "");
@@ -729,7 +757,7 @@ app.post(`${BASE_PATH}/admin/backfill-fuel-org`, requirePlatformStaff(), async (
 });
 
 // --- FINALIZED REPORTS ---
-app.get(`${BASE_PATH}/finalized-reports`, async (c) => {
+app.get(`${BASE_PATH}/finalized-reports`, requirePermission('transactions.view'), async (c) => {
   try {
     // Optional scope: vehicleId(s) and/or driverId(s). Driver-week keys are primary;
     // vehicle filter still matches snapshot.vehicleId for Financials + legacy keys.
@@ -748,8 +776,9 @@ app.get(`${BASE_PATH}/finalized-reports`, async (c) => {
     const uniqueVehicleIds = Array.from(new Set(vehicleIds));
     const uniqueDriverIds = Array.from(new Set(driverIds));
 
+    let all: any[] = [];
+
     if (uniqueDriverIds.length > 0 || uniqueVehicleIds.length > 0) {
-      const all: any[] = [];
       const seenKeys = new Set<string>();
 
       const pushPages = async (filterCol: string, filterVal: string) => {
@@ -781,11 +810,13 @@ app.get(`${BASE_PATH}/finalized-reports`, async (c) => {
       for (const vehicleId of uniqueVehicleIds) {
         await pushPages("value->>vehicleId", vehicleId);
       }
-      return c.json(all);
+    } else {
+      all = (await kv.getByPrefix("finalized_report:")) || [];
     }
 
-    const reports = await kv.getByPrefix("finalized_report:");
-    return c.json(reports || []);
+    let scoped = filterByOrg(all as Record<string, unknown>[], c, { endpoint: "/finalized-reports" });
+    scoped = narrowPlatformOrg(scoped, c);
+    return c.json(scoped);
   } catch (e: any) {
     console.log(`[FinalizedReports] GET error: ${e.message}`);
     return c.json({ error: e.message }, 500);
@@ -927,7 +958,7 @@ function parseFuelReportId(reportId: string): { identityId: string; weekKey: str
 }
 
 /** One-time: copy vehicle-keyed snapshots ? driver-keyed when driverId is present. */
-app.post(`${BASE_PATH}/finalized-reports/migrate-driver-keys`, async (c) => {
+app.post(`${BASE_PATH}/finalized-reports/migrate-driver-keys`, requirePermission('transactions.edit'), async (c) => {
   try {
     const body = await c.req.json().catch(() => ({}));
     const dryRun = !!body.dryRun;
@@ -988,7 +1019,7 @@ app.post(`${BASE_PATH}/finalized-reports/migrate-driver-keys`, async (c) => {
  * One-time / maintenance: remove Enterprise fuel settlement rows that no longer have a
  * matching `finalized_report:*` snapshot (e.g. deleted before cascade-delete existed).
  */
-app.post(`${BASE_PATH}/finalized-reports/cleanup-orphaned-settlements`, async (c) => {
+app.post(`${BASE_PATH}/finalized-reports/cleanup-orphaned-settlements`, requirePermission('transactions.edit'), async (c) => {
   try {
     const body = await c.req.json().catch(() => ({}));
     const dryRun = !!body.dryRun;
@@ -1143,7 +1174,7 @@ app.post(`${BASE_PATH}/finalized-reports/cleanup-orphaned-settlements`, async (c
   }
 });
 
-app.delete(`${BASE_PATH}/finalized-reports/:weekStart/:identityId`, async (c) => {
+app.delete(`${BASE_PATH}/finalized-reports/:weekStart/:identityId`, requirePermission('transactions.edit'), async (c) => {
   try {
     // identityId = driverId (preferred) or legacy vehicleId; try both KV keys
     const weekStartRaw = decodeURIComponent(c.req.param("weekStart"));
@@ -1158,9 +1189,14 @@ app.delete(`${BASE_PATH}/finalized-reports/:weekStart/:identityId`, async (c) =>
       snapshot = await kv.get(legacyVehicleKey);
       snapshotKey = legacyVehicleKey;
     }
-    // Also resolve when callers pass vehicleId but snapshot is driver-keyed
+    // Org-scoped fallback only — never scan all tenants
     if (!snapshot && identityId) {
-      const byPrefix = ((await kv.getByPrefix("finalized_report:")) || []).filter(
+      const orgScoped = filterByOrg(
+        ((await kv.getByPrefix("finalized_report:")) || []) as Record<string, unknown>[],
+        c,
+        { endpoint: "/finalized-reports/delete" },
+      );
+      const byPrefix = orgScoped.filter(
         (s: any) =>
           s?.weekStart &&
           String(s.weekStart).split("T")[0] === weekKey &&
@@ -1172,6 +1208,10 @@ app.delete(`${BASE_PATH}/finalized-reports/:weekStart/:identityId`, async (c) =>
           ? finalizedReportKey(weekKey, snapshot.driverId)
           : `finalized_report:${weekKey}:${snapshot.vehicleId}`;
       }
+    }
+
+    if (snapshot && !belongsToOrg(snapshot as Record<string, unknown>, c) && !isPlatformCaller(c)) {
+      return c.json({ error: "Forbidden" }, 403);
     }
 
     const reportIdCandidates = new Set<string>();
@@ -1816,12 +1856,16 @@ app.get(`${BASE_PATH}/fuel-reconciliation/settings`, async (c) => {
   }
 });
 
-app.patch(`${BASE_PATH}/fuel-reconciliation/settings`, async (c) => {
+app.patch(`${BASE_PATH}/fuel-reconciliation/settings`, requirePermission("fuel.edit_entry"), async (c) => {
   try {
     const body = await c.req.json().catch(() => ({}));
     const settings = await updateFuelReconciliationSettings({
       fuelPnlOffsetEnabled:
         typeof body?.fuelPnlOffsetEnabled === "boolean" ? body.fuelPnlOffsetEnabled : undefined,
+      fuelBrainEnabled:
+        typeof body?.fuelBrainEnabled === "boolean" ? body.fuelBrainEnabled : undefined,
+      fuelBrainShadowCompare:
+        typeof body?.fuelBrainShadowCompare === "boolean" ? body.fuelBrainShadowCompare : undefined,
     });
     return c.json({ success: true, ...settings });
   } catch (e: any) {
@@ -1981,7 +2025,7 @@ app.get(`${BASE_PATH}/fuel-pnl-offset-backfill/status`, async (c) => {
   }
 });
 
-app.post(`${BASE_PATH}/fuel-pnl-offset-backfill/backfill`, async (c) => {
+app.post(`${BASE_PATH}/fuel-pnl-offset-backfill/backfill`, requirePlatformStaff(), async (c) => {
   try {
     const body = await c.req.json().catch(() => ({}));
     const dryRun = body?.dryRun !== false; // default true
@@ -2076,7 +2120,7 @@ app.get(`${BASE_PATH}/cycles`, requirePermission("fuel.view"), async (c) => {
   }
 });
 
-app.post(`${BASE_PATH}/cycles/recalculate`, requirePermission("fuel.edit"), async (c) => {
+app.post(`${BASE_PATH}/cycles/recalculate`, requirePermission("fuel.edit_entry"), async (c) => {
   try {
     const body = await c.req.json().catch(() => ({}));
     const vehicleId = String(body.vehicleId || c.req.query("vehicleId") || "");
@@ -2120,7 +2164,7 @@ app.post(`${BASE_PATH}/cycles/recalculate`, requirePermission("fuel.edit"), asyn
   }
 });
 
-app.post(`${BASE_PATH}/cycles/close-week`, requirePermission("fuel.edit"), async (c) => {
+app.post(`${BASE_PATH}/cycles/close-week`, requirePermission("fuel.edit_entry"), async (c) => {
   try {
     const body = await c.req.json();
     const vehicleId = String(body.vehicleId || "");
@@ -2135,7 +2179,7 @@ app.post(`${BASE_PATH}/cycles/close-week`, requirePermission("fuel.edit"), async
   }
 });
 
-app.post(`${BASE_PATH}/jaa/apply-matches`, requirePermission("fuel.edit"), async (c) => {
+app.post(`${BASE_PATH}/jaa/apply-matches`, requirePermission("fuel.edit_entry"), async (c) => {
   try {
     const body = await c.req.json();
     const pairs = Array.isArray(body.pairs) ? body.pairs : body.pair ? [body.pair] : [];
@@ -2242,7 +2286,7 @@ app.get(`${BASE_PATH}/fuel-entries`, async (c) => {
 });
 
 // Phase 8 Step 3: Chaos Seeder Endpoint
-app.post(`${BASE_PATH}/admin/chaos-seeder`, async (c) => {
+app.post(`${BASE_PATH}/admin/chaos-seeder`, requirePlatformStaff(), async (c) => {
     try {
         const { count = 500, vehicleId } = await c.req.json();
         console.log(`[Chaos] Generating ${count} synthetic entries...`);
@@ -2299,7 +2343,7 @@ app.post(`${BASE_PATH}/admin/chaos-seeder`, async (c) => {
 });
 
 // Phase 8 Cleanup: Purge Synthetic Data
-app.post(`${BASE_PATH}/admin/purge-synthetic`, async (c) => {
+app.post(`${BASE_PATH}/admin/purge-synthetic`, requirePlatformStaff(), async (c) => {
     try {
         console.log("[Purge] Removing all synthetic test data...");
         
@@ -2929,7 +2973,7 @@ function mapDuplicateStationPayload(result: { station: any; matchType: 'pluscode
 // --- PHASE 6: MASTER LEDGER & INTEGRITY GAP ---
 
 // 1. Add Alias to Station
-app.patch(`${BASE_PATH}/stations/:id/alias`, async (c) => {
+app.patch(`${BASE_PATH}/stations/:id/alias`, requirePermission("fuel.edit_entry"), async (c) => {
     try {
         const id = c.req.param("id");
         const { lat, lng, label } = await c.req.json();
@@ -2958,7 +3002,7 @@ app.patch(`${BASE_PATH}/stations/:id/alias`, async (c) => {
 });
 
 // 2. Sync Master Pin (Promote high-integrity coordinate to primary)
-app.patch(`${BASE_PATH}/stations/:id/sync-master-pin`, async (c) => {
+app.patch(`${BASE_PATH}/stations/:id/sync-master-pin`, requirePermission("fuel.edit_entry"), async (c) => {
     try {
         const id = c.req.param("id");
         const { lat, lng, transactionId } = await c.req.json();
@@ -2994,7 +3038,7 @@ app.patch(`${BASE_PATH}/stations/:id/sync-master-pin`, async (c) => {
 });
 
 // 3. Promote Learnt Location to Verified Master Ledger
-app.post(`${BASE_PATH}/stations/promote-learnt`, async (c) => {
+app.post(`${BASE_PATH}/stations/promote-learnt`, requirePermission("fuel.edit_entry"), async (c) => {
     try {
         const { learntId, action, targetStationId, stationData } = await c.req.json();
         
@@ -3206,7 +3250,7 @@ async function linkOrphanEntriesToStation(
 }
 
 /** Evidence Inbox ? merge gate-held transaction into a station (same behavior as promote-learnt merge). */
-app.post(`${BASE_PATH}/admin/evidence-inbox/merge-to-station`, async (c) => {
+app.post(`${BASE_PATH}/admin/evidence-inbox/merge-to-station`, requirePlatformStaff(), async (c) => {
     try {
         const { transactionId, targetStationId } = await c.req.json();
         if (!transactionId || !targetStationId) {
@@ -3270,7 +3314,7 @@ app.post(`${BASE_PATH}/admin/evidence-inbox/merge-to-station`, async (c) => {
     }
 });
 
-app.post(`${BASE_PATH}/admin/evidence-inbox/ensure-learnt`, async (c) => {
+app.post(`${BASE_PATH}/admin/evidence-inbox/ensure-learnt`, requirePlatformStaff(), async (c) => {
     try {
         const { transactionId } = await c.req.json();
         if (!transactionId) return c.json({ error: "transactionId is required" }, 400);
@@ -3291,7 +3335,7 @@ app.post(`${BASE_PATH}/admin/evidence-inbox/ensure-learnt`, async (c) => {
 });
 
 /** Evidence Inbox ? delete gate-held transaction directly (works with or without GPS / learnt staging). */
-app.delete(`${BASE_PATH}/admin/evidence-inbox/gate-held/:transactionId`, async (c) => {
+app.delete(`${BASE_PATH}/admin/evidence-inbox/gate-held/:transactionId`, requirePlatformStaff(), async (c) => {
     try {
         const transactionId = c.req.param("transactionId");
         if (!transactionId) return c.json({ error: "transactionId is required" }, 400);
@@ -3479,7 +3523,7 @@ app.get(`${BASE_PATH}/analytics/integrity-metrics`, requirePlatformStaff(), asyn
     }
 });
 
-app.post(`${BASE_PATH}/fuel-entries`, async (c: Context) => {
+app.post(`${BASE_PATH}/fuel-entries`, requirePermission("fuel.create_entry"), async (c: Context) => {
   try {
     const entry = await c.req.json();
     if (!entry.id) entry.id = crypto.randomUUID();
@@ -3703,9 +3747,7 @@ app.post(`${BASE_PATH}/fuel-entries`, async (c: Context) => {
         const manualStation = await kv.get(`station:${entry.matchedStationId}`);
         if (manualStation && manualStation.status === 'verified') {
             skipGpsMatching = true;
-            if (!manualStation.stats) manualStation.stats = { totalVisits: 0 };
-            manualStation.stats.totalVisits = (Number(manualStation.stats.totalVisits) || 0) + 1;
-            manualStation.stats.lastVisited = entry.date || new Date().toISOString();
+            bumpStationPriceStats(manualStation, entry);
             await kv.set(`station:${manualStation.id}`, manualStation);
 
             entry.vendor = manualStation.name;
@@ -3744,9 +3786,7 @@ app.post(`${BASE_PATH}/fuel-entries`, async (c: Context) => {
             // --- Confident match: proceed with full handshake (same as before) ---
             const matchedStation = smartResult.station as any;
 
-            if (!matchedStation.stats) matchedStation.stats = { totalVisits: 0 };
-            matchedStation.stats.totalVisits = (Number(matchedStation.stats.totalVisits) || 0) + 1;
-            matchedStation.stats.lastVisited = entry.date || new Date().toISOString();
+            bumpStationPriceStats(matchedStation, entry);
             
             const isVerified = matchedStation.status === 'verified';
             await kv.set(`station:${matchedStation.id}`, matchedStation);
@@ -4015,7 +4055,7 @@ app.post(`${BASE_PATH}/fuel-entries`, async (c: Context) => {
 });
 
     // --- PHASE 8: BACKFILL INTEGRITY JOB (Optimized) ---
-    app.post(`${BASE_PATH}/admin/backfill-fuel-integrity`, async (c) => {
+    app.post(`${BASE_PATH}/admin/backfill-fuel-integrity`, requirePlatformStaff(), async (c) => {
         // Stub retired ? real cycle/capacity re-score is recalculate-all
         return c.json({
             success: false,
@@ -4025,7 +4065,7 @@ app.post(`${BASE_PATH}/fuel-entries`, async (c: Context) => {
     });
 
     // --- PAYMENT SOURCE BACKFILL (Phase 6) ---
-    app.post(`${BASE_PATH}/admin/backfill-payment-sources`, async (c) => {
+    app.post(`${BASE_PATH}/admin/backfill-payment-sources`, requirePlatformStaff(), async (c) => {
         try {
             console.log(`[PaymentBackfill] Starting payment source backfill...`);
             const allEntries = await kv.getByPrefix("fuel_entry:");
@@ -4078,7 +4118,7 @@ app.post(`${BASE_PATH}/fuel-entries`, async (c: Context) => {
     });
 
 // --- PHASE 2: HISTORICAL INTEGRITY BACKFILL ---
-app.post(`${BASE_PATH}/admin/reconcile-ledger-orphans`, async (c) => {
+app.post(`${BASE_PATH}/admin/reconcile-ledger-orphans`, requirePlatformStaff(), async (c) => {
     try {
         console.log("[Reconcile] Starting Orphan Reconciliation (Evidence Bridge Backfill)...");
         
@@ -4173,12 +4213,20 @@ app.post(`${BASE_PATH}/admin/reconcile-ledger-orphans`, async (c) => {
                 // Queue Station Update
                 const stats = stationUpdateMap.get(matchedStation.id) || { 
                     visits: Number(matchedStation.stats?.totalVisits) || 0, 
-                    lastVisited: matchedStation.stats?.lastVisited 
+                    lastUpdated: matchedStation.stats?.lastUpdated,
+                    priceSum: 0,
+                    priceCount: 0,
                 };
                 
                 stats.visits += 1;
-                if (!stats.lastVisited || new Date(entry.date) > new Date(stats.lastVisited)) {
-                    stats.lastVisited = entry.date;
+                if (!stats.lastUpdated || new Date(entry.date) > new Date(stats.lastUpdated)) {
+                    stats.lastUpdated = entry.date;
+                }
+                const liters = Number(entry.liters) || 0;
+                const amount = Number(entry.amount) || 0;
+                if (liters > 0 && amount > 0) {
+                    stats.priceSum += amount / liters;
+                    stats.priceCount += 1;
                 }
                 stationUpdateMap.set(matchedStation.id, stats);
             } else if (smartResult.confidence === 'ambiguous') {
@@ -4199,11 +4247,19 @@ app.post(`${BASE_PATH}/admin/reconcile-ledger-orphans`, async (c) => {
         for (const [stationId, stats] of stationUpdateMap.entries()) {
             const station = await kv.get(`station:${stationId}`);
             if (station) {
+                const lastPrice = stats.priceCount > 0 ? stats.priceSum / stats.priceCount : station.stats?.lastPrice;
                 station.stats = {
                     ...station.stats,
                     totalVisits: stats.visits,
-                    lastVisited: stats.lastVisited,
-                    lastReconciledAt: new Date().toISOString()
+                    lastUpdated: stats.lastUpdated || station.stats?.lastUpdated,
+                    lastReconciledAt: new Date().toISOString(),
+                    ...(lastPrice > 0
+                      ? {
+                          lastPrice,
+                          avgPrice: lastPrice,
+                          priceTrend: station.stats?.priceTrend || "Stable",
+                        }
+                      : {}),
                 };
                 
                 // Do NOT auto-promote ? station status must be changed by admin only.
@@ -4313,7 +4369,7 @@ app.get(`${BASE_PATH}/admin/spatial-review-queue`, async (c) => {
  * Permanently delete a row that appears in Spatial review (gps_ambiguous only).
  * Validates state so random IDs cannot be purged. Cleans linked learnt_location rows.
  */
-app.post(`${BASE_PATH}/admin/spatial-review/delete`, async (c) => {
+app.post(`${BASE_PATH}/admin/spatial-review/delete`, requirePlatformStaff(), async (c) => {
     try {
         let body: any;
         try {
@@ -4416,7 +4472,7 @@ app.post(`${BASE_PATH}/admin/spatial-review/delete`, async (c) => {
 });
 
 // --- BULK ASSIGN STATION (Manual Orphan Resolution) ---
-app.post(`${BASE_PATH}/admin/bulk-assign-station`, async (c) => {
+app.post(`${BASE_PATH}/admin/bulk-assign-station`, requirePlatformStaff(), async (c) => {
     try {
         // Step 1: Parse request body
         let body: any;
@@ -4546,8 +4602,8 @@ app.post(`${BASE_PATH}/admin/bulk-assign-station`, async (c) => {
             station.stats = {
                 ...station.stats,
                 totalVisits: newTotalVisits,
-                ...(latestDate && (!station.stats?.lastVisited || new Date(latestDate) > new Date(station.stats.lastVisited))
-                    ? { lastVisited: latestDate }
+                ...(latestDate && (!station.stats?.lastUpdated || new Date(latestDate) > new Date(station.stats.lastUpdated))
+                    ? { lastUpdated: latestDate }
                     : {}),
                 lastBulkAssignAt: new Date().toISOString()
             };
@@ -4658,8 +4714,11 @@ app.get(`${BASE_PATH}/fuel-audit/summary`, async (c) => {
                 .like("key", "fuel_entry:%");
             entries = (data || []).map((d: any) => d.value);
         }
+
+        let scoped = filterByOrg(entries as Record<string, unknown>[], c, { endpoint: "/fuel-audit/summary" });
+        scoped = narrowPlatformOrg(scoped, c);
         
-        const summary = fuelLogic.generateAuditSummary(entries, vehicleId);
+        const summary = fuelLogic.generateAuditSummary(scoped, vehicleId);
         return c.json(summary);
     } catch (e: any) {
         return c.json({ error: e.message }, 500);
@@ -4674,8 +4733,16 @@ app.get(`${BASE_PATH}/fuel-audit/fleet-stats`, async (c) => {
             fromKvStore().select("value").like("key", "vehicle:%")
         ]);
         
-        const allEntries = (entriesResult.data || []).map((d: any) => d.value);
-        const vehicles = (vehiclesResult.data || []).map((d: any) => d.value);
+        let allEntries = (entriesResult.data || []).map((d: any) => d.value);
+        let vehicles = (vehiclesResult.data || []).map((d: any) => d.value);
+        allEntries = narrowPlatformOrg(
+          filterByOrg(allEntries as Record<string, unknown>[], c, { endpoint: "/fuel-audit/fleet-stats" }),
+          c,
+        );
+        vehicles = narrowPlatformOrg(
+          filterByOrg(vehicles as Record<string, unknown>[], c, { endpoint: "/fuel-audit/fleet-stats" }),
+          c,
+        );
         
         const vehicleSummaries = vehicles.map((v: any) => {
             return fuelLogic.generateAuditSummary(allEntries, v.id);
@@ -4745,31 +4812,72 @@ app.delete(`${BASE_PATH}/fuel-entries/:id`, requirePermission("fuel.delete_entry
 app.get(`${BASE_PATH}/mileage-adjustments`, async (c) => {
   try {
     const adjustments = await kv.getByPrefix("fuel_adjustment:");
-    if (adjustments && Array.isArray(adjustments)) {
-        adjustments.sort((a: any, b: any) => (b.week || "").localeCompare(a.week || ""));
+    let scoped = filterByOrg(
+      (adjustments || []) as Record<string, unknown>[],
+      c,
+      { endpoint: "/mileage-adjustments" },
+    );
+    scoped = narrowPlatformOrg(scoped, c);
+    if (Array.isArray(scoped)) {
+        scoped.sort((a: any, b: any) => (b.week || "").localeCompare(a.week || ""));
     }
-    return c.json(adjustments || []);
+    return c.json(scoped);
   } catch (e: any) {
     return c.json({ error: e.message }, 500);
   }
 });
 
-app.post(`${BASE_PATH}/mileage-adjustments`, async (c) => {
+app.post(`${BASE_PATH}/mileage-adjustments`, requirePermission("fuel.edit_entry"), async (c) => {
   try {
     const adj = await c.req.json();
     if (!adj.id) adj.id = crypto.randomUUID();
-    await kv.set(`fuel_adjustment:${adj.id}`, adj);
-    return c.json({ success: true, data: adj });
+    const stamped = stampFuelRecord(adj, c);
+    await kv.set(`fuel_adjustment:${stamped.id}`, stamped);
+    return c.json({ success: true, data: stamped });
   } catch (e: any) {
     return c.json({ error: e.message }, 500);
   }
 });
 
 // --- GAS STATIONS ---
+// Platform-global station catalogue (intentional — not org-scoped). See FUEL_SYSTEM_AUDIT §G3.
 app.get(`${BASE_PATH}/stations`, async (c) => {
     try {
-        const stations = await kv.getByPrefix("station:");
-        return c.json(stations || []);
+        const stations = (await kv.getByPrefix("station:")) || [];
+        const limitRaw = parseInt(c.req.query("limit") || "0", 10);
+        const offsetRaw = parseInt(c.req.query("offset") || "0", 10);
+        const fields = (c.req.query("fields") || "").trim(); // e.g. list = id,name,brand,stats,location,status,isPreferred
+        const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? Math.min(limitRaw, 5000) : 0;
+        const offset = Number.isFinite(offsetRaw) && offsetRaw > 0 ? offsetRaw : 0;
+
+        let page = stations;
+        if (limit > 0) {
+          page = stations.slice(offset, offset + limit);
+          c.header("X-Total-Count", String(stations.length));
+        }
+
+        if (fields === "list") {
+          page = page.map((s: any) => ({
+            id: s.id,
+            name: s.name,
+            brand: s.brand,
+            address: s.address,
+            status: s.status,
+            isPreferred: !!s.isPreferred,
+            location: s.location,
+            stats: s.stats
+              ? {
+                  totalVisits: s.stats.totalVisits,
+                  lastPrice: s.stats.lastPrice,
+                  avgPrice: s.stats.avgPrice,
+                  priceTrend: s.stats.priceTrend,
+                  lastUpdated: s.stats.lastUpdated,
+                }
+              : undefined,
+          }));
+        }
+
+        return c.json(page);
     } catch (e: any) {
         return c.json({ error: e.message }, 500);
     }
@@ -4807,7 +4915,7 @@ app.get(`${BASE_PATH}/stations/check-duplicate`, async (c) => {
 // Admin-only: Demotes a verified station back to unverified, unlinks all fuel entries
 // that referenced it, and creates a learnt location so the entries flow back into the
 // admin's normal Learnt ? Verify workflow.
-app.post(`${BASE_PATH}/stations/demote`, async (c) => {
+app.post(`${BASE_PATH}/stations/demote`, requirePermission("fuel.delete_entry"), async (c) => {
     try {
         const { stationId } = await c.req.json();
         if (!stationId) return c.json({ error: 'stationId is required' }, 400);
@@ -4898,7 +5006,7 @@ app.post(`${BASE_PATH}/stations/demote`, async (c) => {
     }
 });
 
-app.post(`${BASE_PATH}/stations`, async (c) => {
+app.post(`${BASE_PATH}/stations`, requirePermission("fuel.edit_entry"), async (c) => {
     try {
         const station = await c.req.json();
         if (!station.id) station.id = crypto.randomUUID();
@@ -5226,7 +5334,7 @@ app.get(`${BASE_PATH}/stations/duplicate-audit`, async (c) => {
     }
 });
 
-app.delete(`${BASE_PATH}/stations/:id`, async (c) => {
+app.delete(`${BASE_PATH}/stations/:id`, requirePermission("fuel.delete_entry"), async (c) => {
     const id = c.req.param("id");
     try {
         await kv.del(`station:${id}`);
@@ -5633,7 +5741,7 @@ app.post(`${BASE_PATH}/admin/backfill-hmac-signatures`, requirePlatformStaff(), 
     }
 });
 
-app.post(`${BASE_PATH}/stations/migrate-status`, async (c) => {
+app.post(`${BASE_PATH}/stations/migrate-status`, requirePlatformStaff(), async (c) => {
     try {
         const stations = await kv.getByPrefix("station:");
         let patchedCount = 0;
@@ -5650,6 +5758,8 @@ app.post(`${BASE_PATH}/stations/migrate-status`, async (c) => {
             }
         }
 
+        await kv.set(`migration:station_status_v1`, { done: true, at: new Date().toISOString() });
+
         return c.json({ 
             success: true, 
             message: `Migration complete. Patched ${patchedCount} stations to status 'unverified'.`,
@@ -5661,7 +5771,29 @@ app.post(`${BASE_PATH}/stations/migrate-status`, async (c) => {
     }
 });
 
+/** Server-side migration completion flags (not browser localStorage). */
+app.get(`${BASE_PATH}/migrations/:key`, async (c) => {
+  try {
+    const key = c.req.param("key");
+    const flag = await kv.get(`migration:${key}`);
+    return c.json({ done: !!(flag && (flag as any).done) });
+  } catch (e: any) {
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+app.post(`${BASE_PATH}/migrations/:key`, requirePlatformStaff(), async (c) => {
+  try {
+    const key = c.req.param("key");
+    await kv.set(`migration:${key}`, { done: true, at: new Date().toISOString() });
+    return c.json({ success: true, done: true });
+  } catch (e: any) {
+    return c.json({ error: e.message }, 500);
+  }
+});
+
 // --- LEARNT LOCATIONS (Phase 3 + Phase 7 nearby enrichment) ---
+// Platform-global learnt locations (intentional — not org-scoped). See FUEL_SYSTEM_AUDIT §G3.
 app.get(`${BASE_PATH}/learnt-locations`, async (c) => {
     try {
         const locations: any[] = (await kv.getByPrefix("learnt_location:")) || [];
@@ -5737,7 +5869,7 @@ app.get(`${BASE_PATH}/learnt-locations`, async (c) => {
     }
 });
 
-app.post(`${BASE_PATH}/learnt-locations/rescan`, async (c) => {
+app.post(`${BASE_PATH}/learnt-locations/rescan`, requirePermission("fuel.edit_entry"), async (c) => {
     try {
         const { radius = 150 } = await c.req.json().catch(() => ({}));
         console.log(`[Rescan] Analyzing matches with base radius ${radius}m...`);
@@ -5816,7 +5948,7 @@ app.post(`${BASE_PATH}/learnt-locations/rescan`, async (c) => {
     }
 });
 
-app.post(`${BASE_PATH}/learnt-locations/promote`, async (c) => {
+app.post(`${BASE_PATH}/learnt-locations/promote`, requirePermission("fuel.edit_entry"), async (c) => {
     try {
         const { id, stationDetails } = await c.req.json();
         const learnt = await kv.get(`learnt_location:${id}`);
@@ -5901,7 +6033,7 @@ app.post(`${BASE_PATH}/learnt-locations/promote`, async (c) => {
     }
 });
 
-app.post(`${BASE_PATH}/learnt-locations/:id/reject`, async (c) => {
+app.post(`${BASE_PATH}/learnt-locations/:id/reject`, requirePermission("fuel.edit_entry"), async (c) => {
     try {
         const id = c.req.param("id");
         const { reason } = await c.req.json();
@@ -5925,7 +6057,7 @@ app.post(`${BASE_PATH}/learnt-locations/:id/reject`, async (c) => {
 });
 
 // DELETE learnt location ? full purge (no anomaly copy), also deletes linked held transaction
-app.delete(`${BASE_PATH}/learnt-locations/:id`, async (c) => {
+app.delete(`${BASE_PATH}/learnt-locations/:id`, requirePermission("fuel.delete_entry"), async (c) => {
     try {
         const id = c.req.param("id");
         const learnt = await kv.get(`learnt_location:${id}`);
@@ -5960,7 +6092,7 @@ app.delete(`${BASE_PATH}/learnt-locations/:id`, async (c) => {
     }
 });
 
-app.post(`${BASE_PATH}/learnt-locations/merge`, async (c) => {
+app.post(`${BASE_PATH}/learnt-locations/merge`, requirePermission("fuel.edit_entry"), async (c) => {
     try {
         const { id, targetStationId, updateMasterPin = false } = await c.req.json();
         console.log(`[Merge] Phase 8.2 audit ? Merge request: learnt ${id} ? station ${targetStationId}, updateMasterPin: ${updateMasterPin}`);
@@ -6024,6 +6156,7 @@ app.post(`${BASE_PATH}/learnt-locations/merge`, async (c) => {
 });
 
 // --- PARENT COMPANIES ---
+// Platform-global parent companies (intentional — not org-scoped). See FUEL_SYSTEM_AUDIT §G3.
 app.get(`${BASE_PATH}/parent-companies`, async (c) => {
   try {
     const cacheKey = "parent_companies";
@@ -6050,7 +6183,7 @@ app.get(`${BASE_PATH}/parent-companies`, async (c) => {
   }
 });
 
-app.post(`${BASE_PATH}/parent-companies`, async (c) => {
+app.post(`${BASE_PATH}/parent-companies`, requirePermission("fuel.edit_entry"), async (c) => {
   try {
     const companies = await c.req.json();
     await cache.withRetry(() => kv.set("parent_companies", companies));
