@@ -22,7 +22,12 @@ jobs:
             echo "Missing SUPABASE_URL or auth token secrets"
             exit 1
           fi
+          # Strip accidental whitespace/newlines from pasted secrets
+          SUPABASE_URL="${SUPABASE_URL%"${SUPABASE_URL##*[![:space:]]}"}"
+          TOKEN="${TOKEN%"${TOKEN##*[![:space:]]}"}"
+          TOKEN="${TOKEN#"${TOKEN%%[![:space:]]*}"}"
           curl -fsS -X POST \
             "${SUPABASE_URL}/functions/v1/petrojam-prices/cron/sync-latest" \
             -H "Authorization: Bearer ${TOKEN}" \
+            -H "apikey: ${TOKEN}" \
             -H "Content-Type: application/json"

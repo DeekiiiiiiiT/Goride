@@ -237,13 +237,15 @@ app.post("/admin/sync", async (c) => {
 /** Weekly cron / CI: sync latest page using service role or CRON_SECRET. */
 app.post("/cron/sync-latest", async (c) => {
   const authHeader = c.req.header("Authorization") || "";
-  const cronSecret = Deno.env.get("CRON_SECRET") || "";
-  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+  const cronSecret = (Deno.env.get("CRON_SECRET") || Deno.env.get("FLEET_CRON_SECRET") || "").trim();
+  const serviceKey = (Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "").trim();
   const token = authHeader.replace(/^Bearer\s+/i, "").trim();
+  const headerCron = (c.req.header("x-fleet-cron-secret") || c.req.header("x-cron-secret") || "").trim();
   const ok =
-    (cronSecret && token === cronSecret) ||
-    (serviceKey && token === serviceKey);
+    (!!token && !!serviceKey && token === serviceKey) ||
+    (!!cronSecret && (token === cronSecret || headerCron === cronSecret));
   if (!ok) {
+    logLine({ event: "cron_unauthorized", hasToken: !!token, hasServiceKey: !!serviceKey, hasCronSecret: !!cronSecret });
     return c.json({ error: "unauthorized" }, 401);
   }
 
