@@ -47,7 +47,6 @@ const FUEL_PAGE_IDS = [
   'fuel-reconciliation',
   'fuel-cards',
   'fuel-logs',
-  'fuel-stations',
   'fuel-configuration',
   'fuel-reimbursements',
 ];
@@ -88,7 +87,6 @@ export function AppSidebar({
       canView('fuel-reconciliation') ||
       canView('fuel-cards') ||
       canView('fuel-logs') ||
-      canView('fuel-stations') ||
       canView('fuel-configuration'));
   const canSeeTollDesk =
     isModuleEnabled('tollManagement') &&
@@ -174,10 +172,6 @@ export function AppSidebar({
     },
     canView('fuel-cards') && { id: 'fuel-cards', label: 'Fuel Cards' },
     canView('fuel-logs') && { id: 'fuel-logs', label: 'Transaction Logs' },
-    (canView('fuel-logs') || canView('fuel-analytics')) && {
-      id: 'fuel-stations',
-      label: 'Stations',
-    },
     canView('fuel-configuration') && {
       id: 'fuel-configuration',
       label: 'Configuration',

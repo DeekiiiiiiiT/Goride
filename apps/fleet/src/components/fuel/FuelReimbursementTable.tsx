@@ -32,9 +32,6 @@ import { api } from '../../services/api';
 import { StationProfile } from '../../types/station';
 import type { StationGateEvidenceRow } from './stations/EvidenceInboxTab';
 
-const RESOLUTION_QUEUE_ADMIN_URL =
-  'https://roamdominion.co/?page=fuel-stations&tab=resolution-queue';
-
 function gateEvidenceToTransaction(row: StationGateEvidenceRow): FinancialTransaction {
     return {
         id: row.id,
@@ -173,11 +170,11 @@ function buildStationHoldDiagnostics(tx: FinancialTransaction): string[] {
     if (learntId) {
         const short = learntId.length > 14 ? `${learntId.slice(0, 8)}…${learntId.slice(-4)}` : learntId;
         lines.push(
-            `Staging reference: ${short} — resolve in Super Admin → Station Database → Resolution Queue → Unresolved stops.`
+            `Staging reference: ${short} — Roam ops will match this to a verified station.`
         );
     } else {
         lines.push(
-            'No staging record is attached yet — Roam resolves these in Station Database → Resolution Queue.'
+            'No staging record is attached yet — Roam ops will resolve the station match.'
         );
     }
 
@@ -1101,24 +1098,14 @@ export function FuelReimbursementTable({
                             )}
                         </TabsContent>
                         <TabsContent value="station-hold" className="mt-4 space-y-3 focus-visible:outline-none">
-                            <div className="rounded-lg border border-sky-100 bg-sky-50/60 px-4 py-3 text-sm text-sky-900 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+                            <div className="rounded-lg border border-sky-100 bg-sky-50/60 px-4 py-3 text-sm text-sky-900">
                                 <div className="flex gap-2 items-start">
                                     <MapPin className="h-4 w-4 shrink-0 mt-0.5 text-sky-700" />
                                     <p className="leading-snug">
-                                        These submissions are paused until a verified station exists in the master station database.
-                                        Approve and reject stay disabled here. Roam resolves stops in{' '}
-                                        <span className="font-medium">Station Database → Resolution Queue</span>.
+                                        These submissions are paused until Roam matches them to a verified station.
+                                        Approve and reject stay disabled here — no action needed on your side.
                                     </p>
                                 </div>
-                                <Button
-                                    type="button"
-                                    variant="outline"
-                                    size="sm"
-                                    className="shrink-0 border-sky-200 bg-white text-sky-800 hover:bg-sky-100"
-                                    onClick={() => window.open(RESOLUTION_QUEUE_ADMIN_URL, '_blank', 'noopener,noreferrer')}
-                                >
-                                    Open Resolution Queue
-                                </Button>
                             </div>
                             {gateHeldLoading && pendingStationHold.length === 0 ? (
                                 <div className="rounded-md border border-slate-200 bg-white p-8 text-center text-slate-500 flex items-center justify-center gap-2">
@@ -1129,8 +1116,7 @@ export function FuelReimbursementTable({
                                 <div className="rounded-md border border-slate-200 bg-white p-8 text-center space-y-2">
                                     <p className="text-sm text-slate-600">No transactions awaiting station verification.</p>
                                     <p className="text-xs text-slate-400 max-w-md mx-auto">
-                                        When GPS does not match a verified station, entries appear here until resolved in{' '}
-                                        <span className="font-medium text-slate-500">Resolution Queue → Unresolved stops</span>.
+                                        When GPS does not match a verified station, entries appear here until Roam ops resolves them.
                                     </p>
                                 </div>
                             ) : (

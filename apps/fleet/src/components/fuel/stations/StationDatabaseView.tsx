@@ -26,7 +26,8 @@ import { toast } from 'sonner@2.0.3';
 import { AddStationModal } from './AddStationModal';
 
 interface StationDatabaseViewProps {
-  logs: FuelEntry[];
+  /** Optional — when omitted (standalone Stations nav), this view loads fuel entries itself. */
+  logs?: FuelEntry[];
   loading?: boolean;
   /** Top-level Station Database tab to open on load (e.g. resolution-queue for deep links). */
   defaultTab?: string;
@@ -34,7 +35,7 @@ interface StationDatabaseViewProps {
 }
 
 export function StationDatabaseView({
-  logs,
+  logs: logsFromParent,
   loading = false,
   defaultTab = 'spatial-audit',
   defaultResolutionSubTab = 'unresolved-stops',
@@ -42,7 +43,10 @@ export function StationDatabaseView({
   const [selectedStation, setSelectedStation] = useState<StationProfile | null>(null);
   const [preferredStationIds, setPreferredStationIds] = useState<Set<string>>(new Set());
   const [stationOverrides, setStationOverrides] = useState<Record<string, StationOverride>>({});
+  const [internalLogs, setInternalLogs] = useState<FuelEntry[]>([]);
   const [isBackendLoading, setIsBackendLoading] = useState(false);
+  // Parent-supplied logs win; otherwise use self-fetched entries for the standalone page.
+  const logs = logsFromParent ?? internalLogs;
   const [showPreferredOnly, setShowPreferredOnly] = useState(false);
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [isNonFuelImportOpen, setIsNonFuelImportOpen] = useState(false);
@@ -110,8 +114,20 @@ export function StationDatabaseView({
   const fetchData = useCallback(async () => {
     setIsBackendLoading(true);
     try {
-      // 1. Fetch from backend
-      const backendStations = await fuelService.getStations();
+      // 1. Stations + (when standalone) fuel entries for visit/stats aggregation
+      const [backendStations, fuelEntries] = await Promise.all([
+        fuelService.getStations(),
+        logsFromParent === undefined
+          ? fuelService.getFuelEntries({ limit: 1500 }).catch((err) => {
+              console.error('[Stations] Failed to load fuel entries for station stats', err);
+              return [] as FuelEntry[];
+            })
+          : Promise.resolve(null),
+      ]);
+      if (fuelEntries) {
+        setInternalLogs(Array.isArray(fuelEntries) ? fuelEntries : []);
+      }
+
       const overrides: Record<string, StationOverride> = {};
       backendStations.forEach(s => {
         overrides[s.id] = s;
@@ -172,7 +188,7 @@ export function StationDatabaseView({
     } finally {
       setIsBackendLoading(false);
     }
-  }, []);
+  }, [logsFromParent]);
 
   // Phase 9: Persistent Storage Migration
   useEffect(() => {

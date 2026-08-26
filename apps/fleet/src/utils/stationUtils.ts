@@ -58,7 +58,7 @@ export const inferBrandFromName = (name: string): string => {
   return 'Independent';
 };
 
-export const aggregateStations = (logs: FuelEntry[]): StationProfile[] => {
+export const aggregateStations = (logs: FuelEntry[] | null | undefined): StationProfile[] => {
   const stationMap = new Map<string, {
     name: string;
     address: string;
@@ -66,6 +66,9 @@ export const aggregateStations = (logs: FuelEntry[]): StationProfile[] => {
     entries: FuelEntry[];
     isVerifiedStation: boolean;
   }>();
+
+  // Standalone Stations page may mount before fuel entries load — never iterate undefined.
+  if (!Array.isArray(logs) || logs.length === 0) return [];
 
   // 1. Group logs by station identity
   // Priority: matchedStationId (verified link) > bridgedStationId > vendor name hash

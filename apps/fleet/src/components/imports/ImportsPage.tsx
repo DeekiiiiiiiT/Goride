@@ -1658,7 +1658,6 @@ function ImportsPageInner({ onNavigate }: ImportsPageProps) {
           ],
           'fuel': [
             { id: 'Fuel', icon: <Fuel className="h-6 w-6" />, color: 'bg-amber-500 text-white', description: 'Upload fuel card statements with amounts, dates, and station info' },
-            { id: 'Station Import', icon: <Fuel className="h-6 w-6" />, color: 'bg-lime-600 text-white', subtext: 'Simple CSV', description: 'Import gas station database with brands and coordinates', action: () => setBulkImportType('station') },
           ],
           'toll': [
             { id: 'Toll Top-up', icon: <CreditCard className="h-6 w-6" />, color: 'bg-emerald-600 text-white', description: 'Import toll account top-up and recharge transactions from CSV', action: () => setTollImportMode('topup') },
@@ -1685,7 +1684,7 @@ function ImportsPageInner({ onNavigate }: ImportsPageProps) {
           { id: 'trips', title: 'Trips & Earnings', description: 'Re-import trip records — all platforms or filter by Uber, InDrive, or Roam', icon: <MapPin className="h-5 w-5" />, iconColor: 'bg-violet-50 text-violet-600', itemCount: allImportCards['trips'].length },
           { id: 'drivers', title: 'Drivers & Staff', description: 'Bulk import driver profiles from CSV', icon: <Users className="h-5 w-5" />, iconColor: 'bg-teal-50 text-teal-600', itemCount: allImportCards['drivers'].length },
           { id: 'vehicles', title: 'Fleet & Vehicles', description: 'Bulk import vehicle records from CSV', icon: <Car className="h-5 w-5" />, iconColor: 'bg-sky-50 text-sky-600', itemCount: allImportCards['vehicles'].length },
-          { id: 'fuel', title: 'Fuel & Stations', description: 'Import fuel card statements and gas station databases', icon: <Fuel className="h-5 w-5" />, iconColor: 'bg-amber-50 text-amber-600', itemCount: allImportCards['fuel'].length },
+          { id: 'fuel', title: 'Fuel', description: 'Import fuel card statements', icon: <Fuel className="h-5 w-5" />, iconColor: 'bg-amber-50 text-amber-600', itemCount: allImportCards['fuel'].length },
           { id: 'toll', title: 'Toll Management', description: 'Import toll top-ups, usage records, tags, and plaza databases', icon: <CreditCard className="h-5 w-5" />, iconColor: 'bg-emerald-50 text-emerald-600', itemCount: allImportCards['toll'].length },
           { id: 'finance', title: 'Finance & Assets', description: 'Import transactions, equipment, inventory, and claims', icon: <DollarSign className="h-5 w-5" />, iconColor: 'bg-amber-50 text-amber-700', itemCount: allImportCards['finance'].length },
           { id: 'system', title: 'System & Backup', description: 'Export data backups or restore from a previous backup file', icon: <HardDrive className="h-5 w-5" />, iconColor: 'bg-slate-100 text-slate-600', itemCount: allImportCards['system'].length },

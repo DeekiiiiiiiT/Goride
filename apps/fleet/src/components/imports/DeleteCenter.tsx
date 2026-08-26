@@ -87,7 +87,7 @@ const DELETE_GROUP_CARDS: Record<string, string[]> = {
   'trips': ['trips', 'tripsUber', 'tripsInDrive', 'tripsRoam'],
   'drivers': ['drivers', 'driverMetrics'],
   'vehicles': ['vehicles', 'vehicleMetrics'],
-  'fuel': ['fuel', 'fuelCards', 'stations', 'learntLocations'],
+  'fuel': ['fuel', 'fuelCards'],
   'toll': ['tollTags', 'tollPlazas', 'tollTransactions'],
   'finance': ['transactions', 'claims', 'equipment', 'inventory'],
   'maintenance': ['service', 'odometer', 'checkins'],
@@ -985,7 +985,7 @@ function DeleteCenterInner() {
     { id: 'trips', title: 'Trips & Earnings', description: 'Delete trip records — all platforms or filter by Uber, InDrive, or Roam', icon: <MapPin className="h-5 w-5" />, iconColor: 'bg-rose-50 text-rose-600', itemCount: 4 },
     { id: 'drivers', title: 'Drivers & Staff', description: 'Delete driver profiles and performance scorecards', icon: <Users className="h-5 w-5" />, iconColor: 'bg-rose-50 text-rose-600', itemCount: 2 },
     { id: 'vehicles', title: 'Fleet & Vehicles', description: 'Delete vehicle records and performance metrics', icon: <Car className="h-5 w-5" />, iconColor: 'bg-rose-50 text-rose-600', itemCount: 2 },
-    { id: 'fuel', title: 'Fuel & Stations', description: 'Delete fuel logs, fuel cards, stations, and learnt locations', icon: <Fuel className="h-5 w-5" />, iconColor: 'bg-rose-50 text-rose-600', itemCount: 4 },
+    { id: 'fuel', title: 'Fuel', description: 'Delete fuel logs and fuel cards', icon: <Fuel className="h-5 w-5" />, iconColor: 'bg-rose-50 text-rose-600', itemCount: 2 },
     { id: 'toll', title: 'Toll Management', description: 'Delete toll tags, plazas, and toll transactions', icon: <CreditCard className="h-5 w-5" />, iconColor: 'bg-rose-50 text-rose-600', itemCount: 3 },
     { id: 'finance', title: 'Finance & Assets', description: 'Delete transactions, claims, equipment, and inventory', icon: <DollarSign className="h-5 w-5" />, iconColor: 'bg-rose-50 text-rose-600', itemCount: 4 },
     { id: 'maintenance', title: 'Maintenance & Ops', description: 'Delete service logs, odometer readings, and weekly check-ins', icon: <Wrench className="h-5 w-5" />, iconColor: 'bg-rose-50 text-rose-600', itemCount: 3 },
@@ -1077,8 +1077,6 @@ function DeleteCenterInner() {
       return renderCardGrid([
         { key: 'fuel', title: 'Fuel Logs', description: 'Delete fuel purchase records and receipts', icon: <Fuel className="h-5 w-5" />, recordCount: counts.fuel, modalId: 'deleteFuelLogs' },
         { key: 'fuelCards', title: 'Fuel Cards', description: 'Delete fuel card assignments and provider records', icon: <CreditCard className="h-5 w-5" />, recordCount: counts.fuelCards, modalId: 'deleteFuelCards' },
-        { key: 'stations', title: 'Gas Stations', description: 'Delete verified gas station database entries', icon: <Building2 className="h-5 w-5" />, recordCount: counts.stations, modalId: 'deleteStations' },
-        { key: 'learntLocations', title: 'Learnt Locations', description: 'Delete unverified/learnt station locations', icon: <MapPin className="h-5 w-5" />, recordCount: counts.learntLocations, modalId: 'deleteLearntLocations' },
       ]);
     }
 
@@ -1626,15 +1624,6 @@ function DeleteCenterInner() {
       <DeleteFlowModal isOpen={activeModal === 'deleteFuelCards'} onClose={() => setActiveModal(null)} onSuccess={handleDeleteSuccess}
         title="Delete Fuel Cards" entityLabel="fuel cards" fetchItems={fetchFuelCards} deleteItems={(keys) => genericBulkDelete(keys)}
         columns={FUEL_CARD_COLUMNS} showDateFilter={false} dangerThreshold={10} />
-
-      <DeleteFlowModal isOpen={activeModal === 'deleteStations'} onClose={() => setActiveModal(null)} onSuccess={handleDeleteSuccess}
-        title="Delete Gas Stations" entityLabel="gas stations" fetchItems={fetchStations} deleteItems={(keys) => genericBulkDelete(keys)}
-        columns={STATION_COLUMNS} showDateFilter={false} dangerThreshold={20}
-        configNote="Deleting verified stations may cause future fuel log entries to fail GPS matching." />
-
-      <DeleteFlowModal isOpen={activeModal === 'deleteLearntLocations'} onClose={() => setActiveModal(null)} onSuccess={handleDeleteSuccess}
-        title="Delete Learnt Locations" entityLabel="learnt locations" fetchItems={fetchLearntLocations} deleteItems={(keys) => genericBulkDelete(keys)}
-        columns={LEARNT_LOCATION_COLUMNS} showDateFilter={false} dangerThreshold={20} />
 
       {/* ═══════════════════════════════════════════════════════════════════ */}
       {/* DELETE FLOW MODALS — Toll Management (Phase 6)                    */}

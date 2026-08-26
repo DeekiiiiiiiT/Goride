@@ -98,7 +98,7 @@ const EXPORT_GROUP_CARDS: Record<string, string[]> = {
   'trips': ['trips', 'tripsUber', 'tripsInDrive', 'tripsRoam'],
   'drivers': ['drivers', 'driverMetrics'],
   'vehicles': ['vehicles', 'vehicleMetrics'],
-  'fuel': ['fuel', 'stations'],
+  'fuel': ['fuel'],
   'toll': ['tollTags', 'tollPlazas', 'tollTransactions'],
   'finance': ['transactions', 'claims', 'equipment', 'inventory'],
   'maintenance': ['service', 'odometer', 'checkins'],
@@ -263,7 +263,7 @@ export function ExportCenter() {
     safeCount('transactions', () => api.getTransactions());
     safeCount('tollTags', () => api.getTollTags());
     safeCount('tollPlazas', () => api.getTollPlazas());
-    safeCount('stations', () => api.getStations());
+    // Gas station master DB is Super Admin only — not exported from fleet customer app
     safeCount('claims', () => api.getClaims());
     safeCount('equipment', async () => {
       const { equipmentService } = await import('../../services/equipmentService');
@@ -409,7 +409,6 @@ export function ExportCenter() {
           { label: 'check-ins', fn: () => handleGenericExport('check-ins', exportFetchAllCheckIns, CHECKIN_CSV_COLUMNS, 'checkins', undefined, 'csv', { nested: true }) },
           { label: 'toll tags', fn: () => handleGenericExport('toll tags', fetchAllTollTags, TOLL_TAG_CSV_COLUMNS, 'toll_tags', undefined, 'csv', { nested: true }) },
           { label: 'toll plazas', fn: () => handleGenericExport('toll plazas', fetchAllTollPlazas, TOLL_PLAZA_CSV_COLUMNS, 'toll_plazas', undefined, 'csv', { nested: true }) },
-          { label: 'stations', fn: () => handleGenericExport('gas stations', fetchAllStations, STATION_CSV_COLUMNS, 'stations', undefined, 'csv', { nested: true }) },
           { label: 'claims', fn: () => handleGenericExport('claims', fetchAllClaims, CLAIM_CSV_COLUMNS, 'claims', undefined, 'csv', { nested: true }) },
           { label: 'equipment', fn: () => handleGenericExport('equipment', fetchAllEquipment, EQUIPMENT_CSV_COLUMNS, 'equipment', undefined, 'csv', { nested: true }) },
           { label: 'inventory', fn: () => handleGenericExport('inventory', fetchAllInventory, INVENTORY_CSV_COLUMNS, 'inventory', undefined, 'csv', { nested: true }) },
@@ -458,7 +457,7 @@ export function ExportCenter() {
     { id: 'trips', title: 'Trips & Earnings', description: 'Export trip records with earnings, distances, and fare breakdowns', icon: <MapPin className="h-5 w-5" />, iconColor: 'bg-violet-50 text-violet-600', itemCount: 4 },
     { id: 'drivers', title: 'Drivers & Staff', description: 'Export driver profiles and performance scorecards', icon: <Users className="h-5 w-5" />, iconColor: 'bg-teal-50 text-teal-600', itemCount: 2 },
     { id: 'vehicles', title: 'Fleet & Vehicles', description: 'Export vehicle profiles and performance metrics', icon: <Car className="h-5 w-5" />, iconColor: 'bg-sky-50 text-sky-600', itemCount: 2 },
-    { id: 'fuel', title: 'Fuel & Stations', description: 'Export fuel logs and gas station databases', icon: <Fuel className="h-5 w-5" />, iconColor: 'bg-amber-50 text-amber-600', itemCount: 2 },
+    { id: 'fuel', title: 'Fuel', description: 'Export fuel logs', icon: <Fuel className="h-5 w-5" />, iconColor: 'bg-amber-50 text-amber-600', itemCount: 1 },
     { id: 'toll', title: 'Toll Management', description: 'Export toll tags, plazas, and transaction reconciliation data', icon: <CreditCard className="h-5 w-5" />, iconColor: 'bg-emerald-50 text-emerald-600', itemCount: 3 },
     { id: 'finance', title: 'Finance & Assets', description: 'Export transactions, claims, equipment, and inventory', icon: <DollarSign className="h-5 w-5" />, iconColor: 'bg-amber-50 text-amber-700', itemCount: 4 },
     { id: 'maintenance', title: 'Maintenance & Ops', description: 'Export service logs, odometer history, and weekly check-ins', icon: <Wrench className="h-5 w-5" />, iconColor: 'bg-orange-50 text-orange-600', itemCount: 3 },
@@ -770,18 +769,7 @@ export function ExportCenter() {
             />
             )}
 
-            {/* ═══ 13. GAS STATIONS ═══ */}
-            {isInActiveGroup('stations') && matchesSearch(CATEGORY_SEARCH_TERMS.stations) && (
-            <ExportCategoryCard
-              title="Gas Stations"
-              description="Verified gas station database with brands, coordinates, and Plus Codes."
-              icon={<Building2 className="h-5 w-5" />}
-              recordCount={counts.stations}
-              badge="Database"
-              onExport={exportStations}
-              showFormatToggle
-            />
-            )}
+            {/* Gas station master DB export removed — Super Admin only */}
 
             {/* ═══ 14. CLAIMS & DISPUTES ═══ */}
             {isInActiveGroup('claims') && matchesSearch(CATEGORY_SEARCH_TERMS.claims) && (
