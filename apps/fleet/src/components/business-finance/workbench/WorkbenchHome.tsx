@@ -94,7 +94,6 @@ export function WorkbenchHome({
         <span className="font-medium text-slate-600 dark:text-slate-400">Quick links</span>
         {[
           { page: 'fleet-financials', label: 'Bank Deposits' },
-          { page: 'cash-retag', label: 'Cash Retag' },
           { page: 'indrive-wallet', label: 'InDrive Wallet' },
           { page: 'transaction-list', label: 'Transaction List' },
         ].map((d, i) => (

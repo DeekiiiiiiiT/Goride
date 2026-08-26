@@ -104,7 +104,6 @@ export function AppSidebar({
     canView('fleet-financials') ||
     canView('driver-settlements') ||
     canView('driver-payouts') ||
-    canView('cash-retag') ||
     canView('indrive-wallet') ||
     canView('transaction-list');
   const canSeeFleetOps = canSeeFuelDesk || canSeeTollDesk;
@@ -211,7 +210,6 @@ export function AppSidebar({
         id: 'earnings-policy',
         label: 'Earnings Policy Configuration',
       },
-    canView('drivers') && { id: 'driver-ledger', label: 'Driver Ledger' },
   ].filter(Boolean) as NavLeaf[];
 
   const vehicleItems: NavLeaf[] = [
@@ -238,7 +236,6 @@ export function AppSidebar({
       id: 'driver-settlements',
       label: 'Driver Settlements',
     },
-    canView('cash-retag') && { id: 'cash-retag', label: 'Cash Retag' },
     canView('indrive-wallet') && {
       id: 'indrive-wallet',
       label: 'InDrive Wallet',

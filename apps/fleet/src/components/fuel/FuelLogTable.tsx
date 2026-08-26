@@ -628,10 +628,6 @@ export function FuelLogTable({
                         />
                     )}
                 </div>
-                <div className="text-xs text-slate-500">
-                  Showing {activeView === 'transactions' ? filteredEntries.length : filteredCycles.length} records
-                  {activeView === 'transactions' ? ' · Δ Fuel = pump-to-pump only (not Odometer History / Live Status)' : ''}
-                </div>
                 <TooltipProvider>
                     <Tooltip>
                         <TooltipTrigger asChild>

@@ -31,9 +31,7 @@ import { TollRateDriftPage } from './pages/TollRateDriftPage';
 import { TollLowBalancePage } from './pages/TollLowBalancePage';
 import { VehicleAnalytics } from './components/vehicles/VehicleAnalytics';
 import { DriverAnalytics } from './components/drivers/analytics/DriverAnalytics';
-import { DriverLedgerPage } from './components/drivers/DriverLedgerPage';
 import { FleetFinancialsPage } from './components/fleet-financials/FleetFinancialsPage';
-import { CashRetagPage } from './components/fleet-financials/CashRetagPage';
 import { DriverSettlementsPage } from './components/fleet-financials/DriverSettlementsPage';
 import { IndriveWalletCenterPage } from './components/fleet-financials/IndriveWalletCenterPage';
 import { BusinessFinancePage } from './components/business-finance/BusinessFinancePage';
@@ -553,11 +551,6 @@ function AppContent() {
             <EarningsPolicyConfiguration />
           </PermissionGate>
         )}
-        {currentPage === 'driver-ledger' && (
-          <PermissionGate permission="nav.drivers" onNavigate={setCurrentPage}>
-            <DriverLedgerPage />
-          </PermissionGate>
-        )}
         {currentPage === 'fleet-financials' && (
           <PermissionGate permission="nav.financial_analytics" onNavigate={setCurrentPage}>
             <FleetFinancialsPage
@@ -577,11 +570,6 @@ function AppContent() {
                 setCurrentPage('drivers');
               }}
             />
-          </PermissionGate>
-        )}
-        {currentPage === 'cash-retag' && (
-          <PermissionGate permission="nav.financial_analytics" onNavigate={setCurrentPage}>
-            <CashRetagPage onBackToBusinessFinance={() => handleNavigate('business-finance')} />
           </PermissionGate>
         )}
         {currentPage === 'indrive-wallet' && (

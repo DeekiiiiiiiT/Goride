@@ -78,7 +78,7 @@ export function BusinessFinancePage({
   };
 
   const navigateWithPeriod = (page: string) => {
-    const seedPeriod = ['fleet-financials', 'indrive-wallet', 'cash-retag'].includes(page);
+    const seedPeriod = ['fleet-financials', 'indrive-wallet'].includes(page);
     onNavigate?.(page, seedPeriod ? { startYmd: period.startYmd, endYmd: period.endYmd } : undefined);
   };
 
@@ -193,7 +193,6 @@ export function BusinessFinancePage({
                 cashBank={data.cashBank}
                 onOpenBankDeposits={() => navigateWithPeriod('fleet-financials')}
                 onOpenWallet={() => navigateWithPeriod('indrive-wallet')}
-                onOpenCashRetag={() => navigateWithPeriod('cash-retag')}
                 onOpenDriver={openDriver}
               />
             </TabsContent>

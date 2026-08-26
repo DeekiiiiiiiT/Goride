@@ -404,7 +404,6 @@ export const PAGE_PERMISSION_MAP: Record<string, Permission> = {
   'fleet-financials':   'nav.financial_analytics',
   'driver-settlements': 'nav.financial_analytics',
   'driver-payouts':     'nav.financial_analytics', // alias → Driver Settlements
-  'cash-retag':         'nav.financial_analytics',
   'indrive-wallet':     'nav.financial_analytics',
 
   // Driver Operations
@@ -414,7 +413,6 @@ export const PAGE_PERMISSION_MAP: Record<string, Permission> = {
   // Bookmarks redirect to earnings-policy; map old id so permission checks don't flinch
   'tier-config':        'nav.tier_config',
   'tier-config-legacy': 'nav.tier_config',
-  'driver-ledger':      'nav.drivers',
 
   // Vehicles / Fleet
   'vehicles':           'nav.vehicles',

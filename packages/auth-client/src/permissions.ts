@@ -520,8 +520,6 @@ export const PAGE_PERMISSION_MAP: Record<string, Permission> = {
   'drivers':            'nav.drivers',
   'performance':        'nav.performance',
   'tier-config':        'nav.tier_config',
-  'driver-ledger':      'nav.drivers',
-
   // Vehicles / Fleet
   'vehicles':           'nav.vehicles',
   'maintenance-hub':    'nav.maintenance',

@@ -1200,7 +1200,6 @@ function ImportsPageInner({ onNavigate }: ImportsPageProps) {
           queryClient.invalidateQueries({ queryKey: ['driverMetrics'] });
           queryClient.invalidateQueries({ queryKey: ['trips'] });
           queryClient.invalidateQueries({ queryKey: ['ledgerDriversSummary'] });
-          queryClient.invalidateQueries({ queryKey: ['driver-ledger'] });
           queryClient.invalidateQueries({ queryKey: ['batches'] });
 
           const verifyPassed =

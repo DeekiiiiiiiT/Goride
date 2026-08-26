@@ -49,7 +49,7 @@ export function ExpenseHubPage({
   };
 
   const navigateWithPeriod = (page: string) => {
-    const seedPeriod = ['fleet-financials', 'indrive-wallet', 'cash-retag'].includes(page);
+    const seedPeriod = ['fleet-financials', 'indrive-wallet'].includes(page);
     onNavigate?.(
       page,
       seedPeriod ? { startYmd: period.startYmd, endYmd: period.endYmd } : undefined,

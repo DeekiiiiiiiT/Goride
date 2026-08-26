@@ -9,13 +9,11 @@ export function CashBankTab({
   cashBank,
   onOpenBankDeposits,
   onOpenWallet,
-  onOpenCashRetag,
   onOpenDriver,
 }: {
   cashBank: CashBankSnapshot;
   onOpenBankDeposits: () => void;
   onOpenWallet?: () => void;
-  onOpenCashRetag?: () => void;
   onOpenDriver?: (driverId: string) => void;
 }) {
   const { platformBank, driverCash, walletLoads, businessPayments } = cashBank;
@@ -85,9 +83,6 @@ export function CashBankTab({
               ))}
             </ul>
           )}
-          <Button type="button" size="sm" variant="outline" className="w-full mt-2" onClick={onOpenCashRetag}>
-            Open Cash Retag
-          </Button>
         </CardContent>
       </Card>
 
