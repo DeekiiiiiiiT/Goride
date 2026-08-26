@@ -387,6 +387,26 @@ export function ReconciliationTable({
                 </div>
             </div>
 
+            {hasExceptionBlockers && gate.exceptionBlockers.length > 0 && (
+              <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-900">
+                <p className="font-semibold">
+                  Finalize blocked — {gate.exceptionBlockers.length} exception fill
+                  {gate.exceptionBlockers.length === 1 ? '' : 's'} must be reviewed
+                </p>
+                <ul className="mt-1 list-disc space-y-0.5 pl-5 text-rose-800">
+                  {gate.exceptionBlockers.slice(0, 5).map((b) => (
+                    <li key={b.id}>
+                      {b.dateYmd} · ${b.amount.toFixed(2)} · {b.paymentLabel} · {b.location}
+                      {b.reason ? ` — ${b.reason}` : ''}
+                    </li>
+                  ))}
+                  {gate.exceptionBlockers.length > 5 && (
+                    <li>+{gate.exceptionBlockers.length - 5} more</li>
+                  )}
+                </ul>
+              </div>
+            )}
+
             {/* Main Table */}
             <Card>
                 <CardContent className="p-0">

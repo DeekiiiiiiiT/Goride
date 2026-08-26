@@ -49,6 +49,16 @@ export function mapIntegrityToSignalTier(
   return "observe";
 }
 
+/** Recon Accept must stick across re-stamps (boolean or string JSON). */
+export function isReconExceptionAcknowledged(
+  meta: Record<string, unknown> | null | undefined,
+): boolean {
+  if (!meta) return false;
+  if (meta.exceptionResolvedAt) return true;
+  const ack = meta.reconExceptionAck;
+  return ack === true || ack === "true" || ack === 1 || ack === "1";
+}
+
 /** Whether this entry's liters participate in cash-lane tank cycle math. */
 export function isCycleVolumeEligible(entry: Record<string, unknown>): boolean {
   if (isJaaStatementLedgerRow(entry)) return false;
@@ -348,11 +358,15 @@ export async function stampEntryCycleMetadata(
       recentTxCount >= frequencyThreshold - 1;
   }
 
-  const signalTier = mapIntegrityToSignalTier(integrityStatus, {
+  const signalTierRaw = mapIntegrityToSignalTier(integrityStatus, {
     suppressedFrequency,
     isHighFrequency,
     odoCritical: integrityStatus === "critical" && !suppressedFrequency,
   });
+  // Recon ack must stick — do not re-block Finalize after ops accepted the flag.
+  const signalTier: FuelSignalTier = isReconExceptionAcknowledged(m)
+    ? "observe"
+    : signalTierRaw;
 
   let actualKmPerLiter = 0;
   let efficiencyVariance = 0;
@@ -554,11 +568,14 @@ export async function recalculateVehicleFuelEntries(
       !suppressedFrequency &&
       isCardTransaction &&
       recentTxCount >= frequencyThreshold - 1;
-    const signalTier = mapIntegrityToSignalTier(integrityStatus, {
+    const signalTierRaw = mapIntegrityToSignalTier(integrityStatus, {
       suppressedFrequency,
       isHighFrequency,
       odoCritical: integrityStatus === "critical" && !suppressedFrequency,
     });
+    const signalTier: FuelSignalTier = isReconExceptionAcknowledged(m)
+      ? "observe"
+      : signalTierRaw;
 
     const cycleId = openCycleEntries.length
       ? fuelLogic.resolveCycleIdForOpenCycle(openCycleEntries.map((e) => ({ metadata: e.metadata })))

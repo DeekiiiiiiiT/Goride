@@ -706,23 +706,6 @@ export function DriversPage({ initialDriverId }: { initialDriverId?: string | nu
     }
   };
 
-  // Calculate Fleet Averages
-  const fleetStats = useMemo(() => {
-    if (drivers.length === 0) return undefined;
-    
-    const totalEarnings = drivers.reduce((sum, d) => sum + asNumber(d.totalEarnings), 0);
-    const totalTrips = drivers.reduce((sum, d) => sum + asNumber(d.totalTrips), 0);
-    const avgAcceptance = drivers.reduce((sum, d) => sum + asNumber(d.acceptanceRate, 100), 0) / drivers.length;
-    
-    // Simplistic calculation for demo purposes
-    return {
-        avgEarningsPerTrip: totalTrips > 0 ? totalEarnings / totalTrips : 0,
-        avgAcceptanceRate: Math.round(avgAcceptance),
-        avgRating: 4.8, // Hardcoded for now as we don't have rating in DriverProfile yet
-        avgWeeklyEarnings: totalEarnings / drivers.length // Assuming totalEarnings is lifetime, this is a rough proxy for "average driver earnings"
-    };
-  }, [drivers]);
-
   // Pagination Logic
   const totalPages = Math.ceil(filteredDrivers.length / rowsPerPage);
   const paginatedDrivers = filteredDrivers.slice(
@@ -777,7 +760,6 @@ export function DriversPage({ initialDriverId }: { initialDriverId?: string | nu
         metrics={driverMetrics}
         vehicleMetrics={vehicleMetrics}
         onBack={() => setSelectedDriverId(null)}
-        fleetStats={fleetStats}
       />
     );
   }

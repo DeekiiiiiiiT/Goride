@@ -107,6 +107,19 @@ describe('tollLedgerIntegrity', () => {
     expect(findDuplicateTollLedgerEntry(candidate, existing)).toBeNull();
   });
 
+  it('excludes voided rows from spend / period counts', () => {
+    expect(
+      isTollIncludedInSpend({
+        paymentMethod: 'cash',
+        status: 'voided',
+        amount: 0,
+        metadata: { voided: true, originalAmount: -850 },
+        plaza: 'Vineyards West',
+        batchId: 'batch-1',
+      }),
+    ).toBe(false);
+  });
+
   it('prefers OCR plaza over highway merchant for SSOT', () => {
     const r = resolveTollPlazaSSot({
       vendor: 'Transjam Highways',

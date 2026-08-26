@@ -1,18 +1,14 @@
 import { useIndriveWallet, type IndriveWalletDateRange } from '../../hooks/useIndriveWallet';
 import { useDriverFinancialPeriods } from '../../hooks/useDriverFinancialPeriods';
-import { usePermissions } from '../../hooks/usePermissions';
 import { api } from '../../services/api';
-import { buildIndriveWalletLoadTransaction } from '../../utils/indriveWalletLoad';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   DollarSign,
   Navigation,
   Loader2,
-  Fuel,
   Info,
   ChevronRight,
   ChevronDown,
-  Wallet,
   Banknote,
   Ticket,
 } from 'lucide-react';
@@ -22,21 +18,14 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '../ui/dialog';
 import { Separator } from '../ui/separator';
-import { Button } from '../ui/button';
-import { Input } from '../ui/input';
-import { Label } from '../ui/label';
-import { format } from 'date-fns';
-import { toast } from 'sonner@2.0.3';
 import {
   Tooltip,
   PieChart as RawPieChart,
   Pie,
-  Cell
 } from 'recharts';
 import { SafeResponsiveContainer as ResponsiveContainer } from '../ui/SafeResponsiveContainer';
 import { cn } from '../ui/utils';
@@ -282,7 +271,6 @@ interface OverviewMetricsGridProps {
   walletRange?: IndriveWalletDateRange | null;
   /** When false, driver-overview may omit platforms — InDrive wallet GET uses all InDrive rows for the same dates. */
   platformFilterAllPlatforms?: boolean;
-  onWalletLoadSuccess?: () => void | Promise<void>;
 }
 
 // ── The Grid Component ──
@@ -295,20 +283,13 @@ export function OverviewMetricsGrid({
   driverId,
   walletRange,
   platformFilterAllPlatforms = true,
-  onWalletLoadSuccess,
 }: OverviewMetricsGridProps) {
-  const { can } = usePermissions();
   const [periodEarningsOpen, setPeriodEarningsOpen] = useState(false);
   const [cashCollectedOpen, setCashCollectedOpen] = useState(false);
   const [platformFeesExpanded, setPlatformFeesExpanded] = useState(false);
-  const [logLoadOpen, setLogLoadOpen] = useState(false);
-  const [loadAmount, setLoadAmount] = useState('');
-  const [loadDate, setLoadDate] = useState(() => format(new Date(), 'yyyy-MM-dd'));
-  const [loadNote, setLoadNote] = useState('');
-  const [loadSubmitting, setLoadSubmitting] = useState(false);
 
   const rangeReady = !!(driverId && walletRange?.startDate && walletRange?.endDate);
-  const { data: walletData, loading: walletLoading, error: walletError, refetch: refetchWallet } =
+  const { data: walletData, loading: walletLoading, error: walletError } =
     useIndriveWallet(driverId, rangeReady ? walletRange : null);
   const periodsQuery = useDriverFinancialPeriods(driverId || '');
   const weekPeriod = useMemo(() => {
@@ -338,14 +319,6 @@ export function OverviewMetricsGrid({
       active = false;
     };
   }, [driverId, walletRange?.startDate, walletRange?.endDate]);
-
-  useEffect(() => {
-    if (logLoadOpen) {
-      setLoadAmount('');
-      setLoadDate(format(new Date(), 'yyyy-MM-dd'));
-      setLoadNote('');
-    }
-  }, [logLoadOpen]);
 
   // Platform breakdowns computed from resolvedFinancials (ledger-preferred)
   const earningsBreakdown = useMemo(() =>
@@ -511,47 +484,6 @@ export function OverviewMetricsGrid({
       );
     });
   }, [resolvedFinancials.platformStats]);
-
-  const walletAllZero =
-    rangeReady &&
-    !!walletData &&
-    walletData.periodLoads === 0 &&
-    walletData.periodFees === 0 &&
-    (walletData.estimatedBalance ?? 0) === 0;
-
-  const handleSubmitLogLoad = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!driverId || !rangeReady) {
-      toast.error('Driver and date range are required.');
-      return;
-    }
-    const amt = parseFloat(loadAmount.replace(/,/g, ''));
-    if (!Number.isFinite(amt) || amt <= 0) {
-      toast.error('Enter an amount greater than zero.');
-      return;
-    }
-    const desc = loadNote.trim();
-    setLoadSubmitting(true);
-    try {
-      const payload = buildIndriveWalletLoadTransaction({
-        driverId,
-        date: loadDate,
-        amount: amt,
-        description: desc,
-      });
-      await api.saveTransaction(payload);
-      toast.success('InDrive wallet load recorded');
-      setLogLoadOpen(false);
-      await refetchWallet();
-      await onWalletLoadSuccess?.();
-    } catch (err) {
-      console.error('[OverviewMetricsGrid] Log load failed', err);
-      const msg = err instanceof Error ? err.message : 'Failed to save load';
-      toast.error(msg);
-    } finally {
-      setLoadSubmitting(false);
-    }
-  };
 
   return (
     <>
@@ -1185,71 +1117,8 @@ export function OverviewMetricsGrid({
         </DialogContent>
       </Dialog>
 
-      <Dialog open={logLoadOpen} onOpenChange={setLogLoadOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Log InDrive wallet load</DialogTitle>
-            <DialogDescription>
-              Record a fleet top-up to this driver&apos;s InDrive digital wallet. Amount must be positive.
-            </DialogDescription>
-          </DialogHeader>
-          <form onSubmit={handleSubmitLogLoad} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="indrive-load-amount">Amount</Label>
-              <Input
-                id="indrive-load-amount"
-                type="number"
-                inputMode="decimal"
-                min={0}
-                step="0.01"
-                placeholder="0.00"
-                value={loadAmount}
-                onChange={(ev) => setLoadAmount(ev.target.value)}
-                autoComplete="off"
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="indrive-load-date">Date</Label>
-              <Input
-                id="indrive-load-date"
-                type="date"
-                value={loadDate}
-                onChange={(ev) => setLoadDate(ev.target.value)}
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="indrive-load-note">Note or reference (optional)</Label>
-              <Input
-                id="indrive-load-note"
-                type="text"
-                placeholder="e.g. bank ref, batch id"
-                value={loadNote}
-                onChange={(ev) => setLoadNote(ev.target.value)}
-                autoComplete="off"
-              />
-            </div>
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setLogLoadOpen(false)} disabled={loadSubmitting}>
-                Cancel
-              </Button>
-              <Button type="submit" disabled={loadSubmitting}>
-                {loadSubmitting ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Saving…
-                  </>
-                ) : (
-                  'Save load'
-                )}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
 
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 [&>:nth-child(1)]:order-1 [&>:nth-child(2)]:order-2 [&>:nth-child(3)]:order-3 [&>:nth-child(4)]:order-4 [&>:nth-child(5)]:order-5 [&>:nth-child(6)]:order-6 [&>:nth-child(7)]:hidden [&>:nth-child(8)]:order-7">
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
       {/* Card 1: Period Earnings — date-range trip/overview roll-up (≠ week Ledger Gross) */}
       <MetricCard
         title={isToday ? "Today's Earnings" : "Period Earnings"}
@@ -1301,57 +1170,6 @@ export function OverviewMetricsGrid({
           }))}
       />
 
-      <div className="flex flex-col gap-1.5">
-        <MetricCard
-          title="InDrive wallet"
-          subtext={
-            !rangeReady
-              ? 'Pick a date range to see InDrive wallet totals.'
-              : walletError
-                ? walletError
-                : walletAllZero
-                  ? 'No InDrive fee lines, wallet loads in this period, or estimated balance — zeros below are expected.'
-                  : 'Fees are platform charges for this range; the headline is fleet top-ups you log.'
-          }
-          tooltip="Headline: est. balance (fleet model). Breakdown: period fees, period top ups. Est. balance = lifetime top ups minus lifetime InDrive fees (same ledger rule as period fees, all-time). Estimate only — not InDrive’s official balance. Not Roam cash or other platforms."
-          value={
-            !rangeReady || (rangeReady && walletError)
-              ? '—'
-              : `$${fmtMoney(walletData?.estimatedBalance ?? 0)}`
-          }
-          icon={<Wallet className="h-4 w-4 text-emerald-600" />}
-          loading={rangeReady && walletLoading}
-          breakdown={
-            !rangeReady || walletError || !walletData
-              ? []
-              : [
-                  { label: 'Period fees', value: `$${fmtMoney(walletData.periodFees)}`, color: '#94a3b8' },
-                  { label: 'Period top ups', value: `$${fmtMoney(walletData.periodLoads)}`, color: PLATFORM_COLORS.InDrive },
-                ]
-          }
-          action={
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="w-full"
-              disabled={!rangeReady || loadSubmitting || !can('transactions.edit')}
-              title={!can('transactions.edit') ? 'Requires permission to edit transactions' : undefined}
-              onClick={(e) => {
-                e.stopPropagation();
-                setLogLoadOpen(true);
-              }}
-            >
-              Log load
-            </Button>
-          }
-        />
-        {rangeReady && !walletError && walletData && (
-          <p className="px-1 text-[10px] leading-snug text-slate-400 dark:text-slate-500">
-            Est. balance is a fleet model only — not InDrive&apos;s official balance. Not Roam cash or Uber.
-          </p>
-        )}
-      </div>
 
       {/* Card 4: Time Metrics Donut */}
       <Card>
@@ -1481,299 +1299,6 @@ export function OverviewMetricsGrid({
         breakdown={showFinancialValues ? tollsBreakdown : []}
       />
 
-      {/* Card 6: Distance Metrics Donut */}
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-medium text-slate-500">Distance Metrics</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {metrics.distanceMetrics ? (
-            <>
-              <div className="h-[180px] w-full relative">
-                {localLoading && (
-                  <div className="absolute inset-0 bg-white/50 dark:bg-slate-900/50 flex items-center justify-center z-10 backdrop-blur-[1px]">
-                    <Loader2 className="h-6 w-6 animate-spin text-indigo-600" />
-                  </div>
-                )}
-                <ResponsiveContainer width="100%" height="100%">
-                  <RawPieChart>
-                    <Pie
-                      key="pie-dist"
-                      data={[
-                        { name: 'Open Dist', value: metrics.distanceMetrics.open, fill: '#1e3a8a' },
-                        { name: 'Enroute Dist', value: metrics.distanceMetrics.enroute, fill: '#fbbf24' },
-                        { name: 'On Trip Dist', value: metrics.distanceMetrics.onTrip, fill: '#10b981' },
-                        { name: 'Unavailable Dist', value: metrics.distanceMetrics.unavailable, fill: '#94a3b8' },
-                        { name: 'Rider Cancelled', value: metrics.distanceMetrics.riderCancelled || 0, fill: '#f97316' },
-                        { name: 'Driver Cancelled', value: metrics.distanceMetrics.driverCancelled || 0, fill: '#ef4444' },
-                        { name: 'Delivery Failed', value: metrics.distanceMetrics.deliveryFailed || 0, fill: '#475569' },
-                      ].filter(d => d.value > 0)}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={55}
-                      outerRadius={75}
-                      paddingAngle={0}
-                      dataKey="value"
-                      startAngle={90}
-                      endAngle={-270}
-                      stroke="none"
-                    >
-                      {[
-                        { name: 'Open Dist', value: metrics.distanceMetrics.open, fill: '#1e3a8a' },
-                        { name: 'Enroute Dist', value: metrics.distanceMetrics.enroute, fill: '#fbbf24' },
-                        { name: 'On Trip Dist', value: metrics.distanceMetrics.onTrip, fill: '#10b981' },
-                        { name: 'Unavailable Dist', value: metrics.distanceMetrics.unavailable, fill: '#94a3b8' },
-                        { name: 'Rider Cancelled', value: metrics.distanceMetrics.riderCancelled || 0, fill: '#f97316' },
-                        { name: 'Driver Cancelled', value: metrics.distanceMetrics.driverCancelled || 0, fill: '#ef4444' },
-                        { name: 'Delivery Failed', value: metrics.distanceMetrics.deliveryFailed || 0, fill: '#475569' }
-                      ].filter(d => d.value > 0).map((d, i) => (
-                        <Cell key={`di-${i}`} fill={d.fill} />
-                      ))}
-                    </Pie>
-                    <Tooltip key="tt-dist" formatter={(value: number) => [value.toFixed(2) + ' km', 'Distance']} contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} itemStyle={{ color: '#64748b' }} />
-                  </RawPieChart>
-                </ResponsiveContainer>
-                <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-center pointer-events-none">
-                  <div className="text-2xl font-bold text-slate-900">{metrics.distanceMetrics.total.toFixed(2)}</div>
-                  <div className="text-[10px] text-slate-500 font-medium uppercase tracking-wide">Total KM</div>
-                </div>
-              </div>
-              <div className="mt-4 grid grid-cols-4 gap-2 px-2 text-center">
-                <TooltipProvider>
-                  <UiTooltip>
-                    <TooltipTrigger asChild>
-                      <div className="flex flex-col items-center gap-1 cursor-help">
-                        <span className="text-sm font-bold text-slate-900">{metrics.distanceMetrics.open.toFixed(2)}</span>
-                        <div className="flex items-center gap-1.5 justify-center w-full">
-                          <div className="w-2 h-2 rounded-full bg-[#1e3a8a] shrink-0"></div>
-                          <span className="text-xs font-medium text-slate-500 truncate">Open</span>
-                        </div>
-                      </div>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p className="max-w-xs">Distance traveled while the driver was online and waiting for a request.</p>
-                    </TooltipContent>
-                  </UiTooltip>
-
-                  <UiTooltip>
-                    <TooltipTrigger asChild>
-                      <div className="flex flex-col items-center gap-1 cursor-help">
-                        <span className="text-sm font-bold text-slate-900">{metrics.distanceMetrics.enroute.toFixed(2)}</span>
-                        <div className="flex items-center gap-1.5 justify-center w-full">
-                          <div className="w-2 h-2 rounded-full bg-[#fbbf24] shrink-0"></div>
-                          <span className="text-xs font-medium text-slate-500 truncate">Enroute</span>
-                        </div>
-                      </div>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p className="max-w-xs">Distance traveled while the driver was heading to the pickup location.</p>
-                    </TooltipContent>
-                  </UiTooltip>
-
-                  <UiTooltip>
-                    <TooltipTrigger asChild>
-                      <div className="flex flex-col items-center gap-1 cursor-help">
-                        <span className="text-sm font-bold text-slate-900">{metrics.distanceMetrics.onTrip.toFixed(2)}</span>
-                        <div className="flex items-center gap-1.5 justify-center w-full">
-                          <div className="w-2 h-2 rounded-full bg-[#10b981] shrink-0"></div>
-                          <span className="text-xs font-medium text-slate-500 truncate">On Trip</span>
-                        </div>
-                      </div>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p className="max-w-xs">Distance traveled during the actual trip (from pickup to destination).</p>
-                    </TooltipContent>
-                  </UiTooltip>
-
-                  <UiTooltip>
-                    <TooltipTrigger asChild>
-                      <div className="flex flex-col items-center gap-1 cursor-help">
-                        <span className="text-sm font-bold text-slate-900">{metrics.distanceMetrics.unavailable.toFixed(2)}</span>
-                        <div className="flex items-center gap-1.5 justify-center w-full">
-                          <div className="w-2 h-2 rounded-full bg-[#94a3b8] shrink-0"></div>
-                          <span className="text-xs font-medium text-slate-500 truncate">Unavail</span>
-                        </div>
-                      </div>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p className="max-w-xs">Distance traveled while the driver was in an unavailable or offline-equivalent state.</p>
-                    </TooltipContent>
-                  </UiTooltip>
-
-                  {/* Cancellation stats */}
-                  <UiTooltip>
-                    <TooltipTrigger asChild>
-                      <div className="flex flex-col items-center gap-1 cursor-help">
-                        <span className="text-sm font-bold text-slate-900">{(metrics.distanceMetrics.riderCancelled || 0).toFixed(2)}</span>
-                        <div className="flex items-center gap-1.5 justify-center w-full">
-                          <div className="w-2 h-2 rounded-full bg-[#f97316] shrink-0"></div>
-                          <span className="text-xs font-medium text-slate-500 truncate">Rider Cx</span>
-                        </div>
-                      </div>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p className="max-w-xs">Distance traveled on trips cancelled by the rider.</p>
-                    </TooltipContent>
-                  </UiTooltip>
-
-                  <UiTooltip>
-                    <TooltipTrigger asChild>
-                      <div className="flex flex-col items-center gap-1 cursor-help">
-                        <span className="text-sm font-bold text-slate-900">{(metrics.distanceMetrics.driverCancelled || 0).toFixed(2)}</span>
-                        <div className="flex items-center gap-1.5 justify-center w-full">
-                          <div className="w-2 h-2 rounded-full bg-[#ef4444] shrink-0"></div>
-                          <span className="text-xs font-medium text-slate-500 truncate">Driver Cx</span>
-                        </div>
-                      </div>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p className="max-w-xs">Distance traveled on trips cancelled by the driver.</p>
-                    </TooltipContent>
-                  </UiTooltip>
-
-                  <UiTooltip>
-                    <TooltipTrigger asChild>
-                      <div className="flex flex-col items-center gap-1 cursor-help">
-                        <span className="text-sm font-bold text-slate-900">{(metrics.distanceMetrics.deliveryFailed || 0).toFixed(2)}</span>
-                        <div className="flex items-center gap-1.5 justify-center w-full">
-                          <div className="w-2 h-2 rounded-full bg-[#475569] shrink-0"></div>
-                          <span className="text-xs font-medium text-slate-500 truncate">Failed</span>
-                        </div>
-                      </div>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p className="max-w-xs">Distance traveled on failed deliveries.</p>
-                    </TooltipContent>
-                  </UiTooltip>
-                </TooltipProvider>
-              </div>
-            </>
-          ) : (
-            <div className="h-[250px] flex flex-col items-center justify-center text-slate-400">
-              <Navigation className="h-10 w-10 mb-2 opacity-20" />
-              <p className="text-sm">No distance breakdown</p>
-              <p className="text-xs mt-1">Upload "Time & Distance" Report</p>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Card 7: Fuel Usage Split Donut */}
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-medium text-slate-500">Fuel Usage Split</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {metrics.fuelMetrics ? (
-            <>
-              <div className="h-[180px] w-full relative">
-                {localLoading && (
-                  <div className="absolute inset-0 bg-white/50 dark:bg-slate-900/50 flex items-center justify-center z-10 backdrop-blur-[1px]">
-                    <Loader2 className="h-6 w-6 animate-spin text-indigo-600" />
-                  </div>
-                )}
-                <ResponsiveContainer width="100%" height="100%">
-                  <RawPieChart>
-                    <Pie
-                      key="pie-fuel"
-                      data={[
-                        { name: 'Ride Share', value: metrics.fuelMetrics.rideShare, fill: '#10b981' },
-                        { name: 'Company Ops', value: metrics.fuelMetrics.companyOps, fill: '#fbbf24' },
-                        { name: 'Personal', value: metrics.fuelMetrics.personal, fill: '#ef4444' },
-                        { name: 'Misc/Leakage', value: metrics.fuelMetrics.misc, fill: '#94a3b8' }
-                      ]}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={55}
-                      outerRadius={75}
-                      paddingAngle={0}
-                      dataKey="value"
-                      startAngle={90}
-                      endAngle={-270}
-                      stroke="none"
-                    >
-                    </Pie>
-                    <Tooltip key="tt-fuel" formatter={(value: number) => [value.toFixed(1) + ' L', 'Fuel']} contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} itemStyle={{ color: '#64748b' }} />
-                  </RawPieChart>
-                </ResponsiveContainer>
-                <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-center pointer-events-none">
-                  <div className="text-2xl font-bold text-slate-900">{metrics.fuelMetrics.total.toFixed(0)}</div>
-                  <div className="text-[10px] text-slate-500 font-medium uppercase tracking-wide">Total L</div>
-                </div>
-              </div>
-              <div className="mt-4 grid grid-cols-4 gap-1 text-center px-2">
-                <TooltipProvider>
-                  <UiTooltip>
-                    <TooltipTrigger asChild>
-                      <div className="flex flex-col items-center gap-1 cursor-help">
-                        <span className="text-sm font-bold text-slate-900">{metrics.fuelMetrics.rideShare.toFixed(2)}</span>
-                        <div className="flex items-center gap-1.5 justify-center w-full">
-                          <div className="w-2 h-2 rounded-full bg-[#10b981] shrink-0"></div>
-                          <span className="text-xs font-medium text-slate-500 truncate">RideShare</span>
-                        </div>
-                      </div>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p className="max-w-xs">Fuel consumed during revenue-generating trips.</p>
-                    </TooltipContent>
-                  </UiTooltip>
-
-                  <UiTooltip>
-                    <TooltipTrigger asChild>
-                      <div className="flex flex-col items-center gap-1 cursor-help">
-                        <span className="text-sm font-bold text-slate-900">{metrics.fuelMetrics.companyOps.toFixed(2)}</span>
-                        <div className="flex items-center gap-1.5 justify-center w-full">
-                          <div className="w-2 h-2 rounded-full bg-[#fbbf24] shrink-0"></div>
-                          <span className="text-xs font-medium text-slate-500 truncate">Com. Ops</span>
-                        </div>
-                      </div>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p className="max-w-xs">Fuel consumed for company operations.</p>
-                    </TooltipContent>
-                  </UiTooltip>
-
-                  <UiTooltip>
-                    <TooltipTrigger asChild>
-                      <div className="flex flex-col items-center gap-1 cursor-help">
-                        <span className="text-sm font-bold text-slate-900">{metrics.fuelMetrics.personal.toFixed(2)}</span>
-                        <div className="flex items-center gap-1.5 justify-center w-full">
-                          <div className="w-2 h-2 rounded-full bg-[#ef4444] shrink-0"></div>
-                          <span className="text-xs font-medium text-slate-500 truncate">Personal</span>
-                        </div>
-                      </div>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p className="max-w-xs">Fuel consumed for personal use.</p>
-                    </TooltipContent>
-                  </UiTooltip>
-
-                  <UiTooltip>
-                    <TooltipTrigger asChild>
-                      <div className="flex flex-col items-center gap-1 cursor-help">
-                        <span className="text-sm font-bold text-slate-900">{metrics.fuelMetrics.misc.toFixed(2)}</span>
-                        <div className="flex items-center gap-1.5 justify-center w-full">
-                          <div className="w-2 h-2 rounded-full bg-[#94a3b8] shrink-0"></div>
-                          <span className="text-xs font-medium text-slate-500 truncate">Leakage</span>
-                        </div>
-                      </div>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p className="max-w-xs">Unaccounted fuel consumption or leakage.</p>
-                    </TooltipContent>
-                  </UiTooltip>
-                </TooltipProvider>
-              </div>
-            </>
-          ) : (
-            <div className="h-[250px] flex flex-col items-center justify-center text-slate-400">
-              <Fuel className="h-10 w-10 mb-2 opacity-20" />
-              <p className="text-sm">No fuel data</p>
-              <p className="text-xs mt-1">Requires Time & Distance</p>
-            </div>
-          )}
-        </CardContent>
-      </Card>
     </div>
     </>
   );

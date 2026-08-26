@@ -26,6 +26,7 @@ type View = { kind: 'landing' } | { kind: 'wizard'; period: FuelReconciliationPe
 
 export function FuelReconciliationDashboard({
   outstanding,
+  inProgress,
   completed,
   loading,
   vehicles,
@@ -44,8 +45,12 @@ export function FuelReconciliationDashboard({
   onResolveDispute,
   onOpenConfiguration,
   onSelectPeriodWeek,
+  onOpenTransactionLogs,
+  onAcceptFuelException,
+  onEditFuelEntry,
 }: {
   outstanding: FuelReconciliationPeriod[];
+  inProgress: FuelReconciliationPeriod[];
   completed: FuelReconciliationPeriod[];
   loading: boolean;
   vehicles: Vehicle[];
@@ -64,6 +69,16 @@ export function FuelReconciliationDashboard({
   onResolveDispute: (dispute: FuelDispute) => void;
   onOpenConfiguration?: () => void;
   onSelectPeriodWeek?: (period: FuelReconciliationPeriod) => void;
+  onOpenTransactionLogs?: (opts: {
+    fuelEntryId?: string;
+    date?: string;
+    vehicleId?: string;
+  }) => void;
+  onAcceptFuelException?: (
+    entryId: string,
+    note: string,
+  ) => Promise<boolean | void> | boolean | void;
+  onEditFuelEntry?: (entryId: string) => void;
 }) {
   const [view, setView] = useState<View>({ kind: 'landing' });
   const [resetPeriod, setResetPeriod] = useState<FuelReconciliationPeriod | null>(null);
@@ -122,6 +137,9 @@ export function FuelReconciliationDashboard({
           onAddAdjustment={onAddAdjustment}
           onResolveDispute={onResolveDispute}
           onOpenConfiguration={onOpenConfiguration}
+          onOpenTransactionLogs={onOpenTransactionLogs}
+          onAcceptFuelException={onAcceptFuelException}
+          onEditFuelEntry={onEditFuelEntry}
           onResetPeriod={period.locked ? () => setResetPeriod(period) : undefined}
         />
         {resetPeriod && (
@@ -146,6 +164,7 @@ export function FuelReconciliationDashboard({
     <>
       <FuelPeriodLandingPage
         outstanding={outstanding}
+        inProgress={inProgress}
         completed={completed}
         loading={loading}
         onSelectPeriod={openPeriod}
@@ -156,7 +175,7 @@ export function FuelReconciliationDashboard({
       <FuelBulkFinalizeDialog
         open={bulkFinalizeOpen}
         onOpenChange={setBulkFinalizeOpen}
-        periods={outstanding}
+        periods={[...outstanding, ...inProgress]}
         vehicles={vehicles}
         drivers={drivers}
         fuelEntries={fuelEntries}

@@ -48,7 +48,7 @@ export function FuelBulkFinalizeDialog({
   onComplete,
 }: FuelBulkFinalizeDialogProps) {
   const queryClient = useQueryClient();
-  const outstanding = periods.filter((p) => p.status === 'outstanding' && !p.locked);
+  const outstanding = periods.filter((p) => !p.locked && (p.status === 'outstanding' || p.status === 'in_progress'));
 
   return (
     <BulkWeekActionDialog
@@ -111,11 +111,19 @@ export function FuelBulkFinalizeDialog({
             }
 
             if (gateResult.hasExceptionBlockers) {
+              const first = gateResult.exceptionBlockers[0];
+              const extra =
+                gateResult.exceptionBlockers.length > 1
+                  ? ` (+${gateResult.exceptionBlockers.length - 1} more)`
+                  : '';
+              const detail = first
+                ? `${first.dateYmd} ${first.paymentLabel} $${first.amount.toFixed(2)} @ ${first.location}${extra}`
+                : 'exception fills';
               weekResults.push({
                 id: period.id,
                 label,
                 status: 'failed',
-                message: 'Blocked — exception-tier fills must be resolved first',
+                message: `Blocked — resolve exception fill(s): ${detail}`,
               });
               continue;
             }

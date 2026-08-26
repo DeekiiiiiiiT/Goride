@@ -26,6 +26,7 @@ import { foldPayoutCashByWeek } from "../../../packages/finance-core/src/payoutC
 import { periodKeyFor } from "../../../packages/finance-core/src/periodKey.ts";
 import { getServiceClientWithSchema } from "./service_client.ts";
 import { isPlatformReimbursedPlazaToll } from "./toll_platform_reimbursed.ts";
+import { isTollLedgerVoided } from "../../../apps/fleet/src/utils/tollLedgerIntegrity.ts";
 
 function sb() {
   return createClient(
@@ -49,6 +50,8 @@ function isTerminalStage(stage: string | null | undefined): boolean {
 }
 
 function isHandledToll(tx: any): boolean {
+  // Voided duplicates must not keep Expenses / Settlement "Unmatched".
+  if (isTollLedgerVoided(tx)) return true;
   if (isTerminalStage(tx?.workflowStage)) return true;
   const status = String(tx?.status || "").toLowerCase();
   return !!(
@@ -251,8 +254,10 @@ async function loadRebuildContext(driverId: string): Promise<RebuildContext> {
     kv.getByPrefix("earnings_policy:"),
   ]);
 
+  // Voided soft-deletes stay in toll_ledger for audit but drop out of Expenses.
   const scopedTolls = filterByDriver(tollTx, driverId).filter(
-    (tx: any) => isReconcilableTollExpense(tx) && !isTopUpLike(tx),
+    (tx: any) =>
+      isReconcilableTollExpense(tx) && !isTopUpLike(tx) && !isTollLedgerVoided(tx),
   );
   const scopedTrips = filterByDriver(trips, driverId);
   const driverTxAll = (allTx || []).filter(

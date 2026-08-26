@@ -66,3 +66,17 @@ export function isCashStyleFuelPaymentSource(
   const e = normalizeFuelPaymentSourceEnum(source ?? undefined);
   return e === 'RideShare_Cash' || e === 'Personal' || e === 'Petty_Cash';
 }
+
+const ENUM_TO_LABEL: Record<FuelPaymentSourceEnum, string> = {
+  RideShare_Cash: 'RideShare Cash',
+  Gas_Card: 'Gas Card',
+  Personal: 'Personal Cash',
+  Petty_Cash: 'Petty Cash',
+};
+
+/** Human label for UI tables / exception blockers. */
+export function fuelPaymentSourceDisplayLabel(
+  raw: string | null | undefined,
+): string {
+  return ENUM_TO_LABEL[normalizeFuelPaymentSourceEnum(raw)] || 'RideShare Cash';
+}

@@ -117,13 +117,22 @@ function FuelManagementInner({ defaultTab = 'logs', onViewDriverLedger, onTabCha
 
   const fuelFetchWindow = useMemo(() => {
     const week = currentFuelWeekRange(fleetTz || undefined);
-    const weekStart = reconciliationDateRange?.from
+    const selectedStart = reconciliationDateRange?.from
       ? toEntryYmd(reconciliationDateRange.from)
       : toEntryYmd(week.from);
-    const weekEnd = reconciliationDateRange?.to
+    const selectedEnd = reconciliationDateRange?.to
       ? toEntryYmd(reconciliationDateRange.to)
       : toEntryYmd(week.to);
-    const base = fuelListWindow({ startYmd: weekStart, endYmd: weekEnd });
+    const currentEnd = toEntryYmd(week.to);
+
+    // Landing needs the full activity span — week-only fetch made reopened older
+    // weeks vanish (no entries in memory → filtered off Outstanding).
+    const activityStart = activityMinDate && activityMinDate < selectedStart
+      ? activityMinDate
+      : selectedStart;
+    const endDate = selectedEnd > currentEnd ? selectedEnd : currentEnd;
+    const base = fuelListWindow({ startYmd: activityStart, endYmd: endDate });
+
     if (logCustomOverride && logDateRangeOverride?.from) {
       const customStart = toEntryYmd(logDateRangeOverride.from);
       const customEnd = toEntryYmd(logDateRangeOverride.to || logDateRangeOverride.from);
@@ -133,7 +142,7 @@ function FuelManagementInner({ defaultTab = 'logs', onViewDriverLedger, onTabCha
       };
     }
     return base;
-  }, [reconciliationDateRange, logCustomOverride, logDateRangeOverride, fleetTz]);
+  }, [reconciliationDateRange, logCustomOverride, logDateRangeOverride, fleetTz, activityMinDate]);
 
   const setLogDateRange = (range: DateRange | undefined) => {
     const activeStart = activeFuelWeek?.from ? toEntryYmd(activeFuelWeek.from) : '';
@@ -261,6 +270,10 @@ function FuelManagementInner({ defaultTab = 'logs', onViewDriverLedger, onTabCha
     () => fuelReconPeriods.filter((p) => p.status === 'outstanding' && !p.locked),
     [fuelReconPeriods],
   );
+  const inProgressFuelPeriods = useMemo(
+    () => fuelReconPeriods.filter((p) => p.status === 'in_progress' && !p.locked),
+    [fuelReconPeriods],
+  );
   const completedFuelPeriods = useMemo(
     () => fuelReconPeriods.filter((p) => p.status === 'completed' || p.locked),
     [fuelReconPeriods],
@@ -307,12 +320,12 @@ function FuelManagementInner({ defaultTab = 'logs', onViewDriverLedger, onTabCha
     const { startDate, endDate } = fuelFetchWindow;
     try {
       const [logsData, txData] = await Promise.all([
-        fuelService.getFuelEntries({ startDate, endDate, limit: 500 }).catch((err) => {
+        fuelService.getFuelEntries({ startDate, endDate, limit: 1500 }).catch((err) => {
           console.error('[FuelManagement] getFuelEntries failed', err);
           toast.error('Could not load fuel entries — try logging out and back in.');
           return [] as FuelEntry[];
         }),
-        api.getTransactions(undefined, { startDate, endDate, limit: 500 }).catch((err) => {
+        api.getTransactions(undefined, { startDate, endDate, limit: 1500 }).catch((err) => {
           console.error('[FuelManagement] getTransactions failed', err);
           return [] as FinancialTransaction[];
         }),
@@ -1125,6 +1138,7 @@ function FuelManagementInner({ defaultTab = 'logs', onViewDriverLedger, onTabCha
       {activeTab === 'reconciliation' && (
         <FuelReconciliationDashboard
           outstanding={outstandingFuelPeriods}
+          inProgress={inProgressFuelPeriods}
           completed={completedFuelPeriods}
           loading={isRefreshing && fuelReconPeriods.length === 0}
           vehicles={vehicles}
@@ -1142,6 +1156,76 @@ function FuelManagementInner({ defaultTab = 'logs', onViewDriverLedger, onTabCha
           onAddAdjustment={() => { setAdjustmentDefaults({}); setIsAdjustmentModalOpen(true); }}
           onResolveDispute={(dispute) => { setSelectedDispute(dispute); setIsResolutionModalOpen(true); }}
           onOpenConfiguration={() => { setActiveTab('configuration'); onTabChange?.('configuration'); }}
+          onOpenTransactionLogs={({ fuelEntryId, date, vehicleId }) => {
+            setActiveTab('logs');
+            onTabChange?.('logs');
+            if (fuelEntryId) {
+              sessionStorage.setItem('fuel_logs_focus_entry', fuelEntryId);
+            } else if (date || vehicleId) {
+              sessionStorage.setItem(
+                'fuel_logs_focus_entry',
+                JSON.stringify({ date, vehicleId }),
+              );
+            }
+            void loadData(true);
+            toast.info('Opening Transaction Logs…');
+          }}
+          onAcceptFuelException={async (entryId, note) => {
+            const entry = logs.find((l) => l.id === entryId);
+            if (!entry) {
+              toast.error('Could not find that fill to resolve.');
+              return false;
+            }
+            const priorTier = entry.metadata?.signalTier;
+            const updated: FuelEntry = {
+              ...entry,
+              bypassSignatureCheck: true,
+              metadata: {
+                ...entry.metadata,
+                priorSignalTier: priorTier,
+                signalTier: 'observe',
+                reconExceptionAck: true,
+                exceptionResolvedAt: new Date().toISOString(),
+                exceptionResolveAction: 'accepted',
+                exceptionResolveNote: note || undefined,
+                auditStatus: 'Clear',
+              },
+            };
+            try {
+              const saved = await fuelService.saveFuelEntry(updated);
+              // Keep ack locally even if remote stamp rewrites signalTier until edge redeploy.
+              const merged: FuelEntry = {
+                ...updated,
+                ...(saved && typeof saved === 'object' ? saved : {}),
+                metadata: {
+                  ...(saved?.metadata || updated.metadata),
+                  reconExceptionAck: true,
+                  exceptionResolvedAt:
+                    saved?.metadata?.exceptionResolvedAt ||
+                    updated.metadata?.exceptionResolvedAt,
+                  exceptionResolveAction: 'accepted',
+                  exceptionResolveNote: note || undefined,
+                  signalTier: 'observe',
+                },
+              };
+              setLogs((prev) => prev.map((l) => (l.id === entryId ? merged : l)));
+              toast.success('Exception accepted — Finalize is unlocked for this fill.');
+              return true;
+            } catch (e: any) {
+              console.error('[FuelManagement] accept exception failed', e);
+              toast.error(e?.message || 'Failed to accept exception');
+              return false;
+            }
+          }}
+          onEditFuelEntry={(entryId) => {
+            const entry = logs.find((l) => l.id === entryId);
+            if (!entry) {
+              toast.error('Could not find that fill to edit.');
+              return;
+            }
+            setEditingLog(entry);
+            setIsLogModalOpen(true);
+          }}
           onSelectPeriodWeek={(period) => {
             handleReconciliationPeriodSelect({
               startDate: period.startDate,

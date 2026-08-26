@@ -309,8 +309,9 @@ export function quarantineReasonFor(t: TollIntegrityLike): string {
   return 'synthetic_cash_no_batch';
 }
 
-/** Spend / period counts must ignore quarantined rows. */
+/** Spend / period counts must ignore quarantined + voided rows. */
 export function isTollIncludedInSpend(t: TollIntegrityLike): boolean {
+  if (isTollLedgerVoided(t)) return false;
   return !isTollQuarantined(t);
 }
 

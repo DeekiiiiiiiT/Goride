@@ -47,6 +47,22 @@ function PeriodCard({
   onReset?: () => void;
 }) {
   const isOutstanding = period.status === 'outstanding';
+  const isInProgress = period.status === 'in_progress';
+  const ctaClass = isOutstanding
+    ? 'bg-amber-500 text-white'
+    : isInProgress
+      ? 'bg-sky-600 text-white'
+      : 'border border-emerald-200 bg-emerald-50 text-emerald-700';
+  const ctaLabel = isOutstanding
+    ? period.actionableTotal > 0
+      ? `${period.actionableTotal} to review`
+      : 'Open week'
+    : isInProgress
+      ? period.actionableTotal > 0
+        ? `${period.actionableTotal} left`
+        : 'Continue'
+      : 'Completed';
+
   return (
     <Card className="transition-colors hover:border-indigo-300 hover:shadow-sm">
       <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
@@ -58,6 +74,11 @@ function PeriodCard({
             <span className={period.netLeakage > 0 ? 'text-rose-600' : ''}>
               Unexplained {formatMoney(period.netLeakage)}
             </span>
+            {period.exceptionCount > 0 && (
+              <span className="font-medium text-rose-700">
+                {period.exceptionCount} exception{period.exceptionCount === 1 ? '' : 's'}
+              </span>
+            )}
           </div>
           <div className="mt-1.5 flex flex-wrap gap-1">
             {FUEL_STEP_ORDER.map((stepId) => (
@@ -66,7 +87,7 @@ function PeriodCard({
           </div>
         </button>
         <div className="flex shrink-0 items-center gap-2">
-          {!isOutstanding && onReset && (
+          {period.status === 'completed' && onReset && (
             <Button
               type="button"
               variant="outline"
@@ -83,17 +104,9 @@ function PeriodCard({
           <button
             type="button"
             onClick={onSelect}
-            className={`min-h-11 rounded-full px-2.5 py-1 text-xs font-bold sm:min-h-0 ${
-              isOutstanding
-                ? 'bg-amber-500 text-white'
-                : 'border border-emerald-200 bg-emerald-50 text-emerald-700'
-            }`}
+            className={`min-h-11 rounded-full px-2.5 py-1 text-xs font-bold sm:min-h-0 ${ctaClass}`}
           >
-            {isOutstanding
-              ? period.actionableTotal > 0
-                ? `${period.actionableTotal} to review`
-                : 'Open week'
-              : 'Completed'}
+            {ctaLabel}
           </button>
         </div>
       </CardContent>
@@ -101,8 +114,45 @@ function PeriodCard({
   );
 }
 
+function PeriodList({
+  periods,
+  emptyLabel,
+  onSelectPeriod,
+  onResetPeriod,
+}: {
+  periods: FuelReconciliationPeriod[];
+  emptyLabel: string;
+  onSelectPeriod: (period: FuelReconciliationPeriod) => void;
+  onResetPeriod?: (period: FuelReconciliationPeriod) => void;
+}) {
+  if (periods.length === 0) {
+    return (
+      <div className="rounded-md border border-dashed border-slate-200 py-12 text-center text-slate-500">
+        {emptyLabel}
+      </div>
+    );
+  }
+  return (
+    <div className="space-y-2">
+      {periods.map((p) => (
+        <PeriodCard
+          key={p.id}
+          period={p}
+          onSelect={() => onSelectPeriod(p)}
+          onReset={
+            p.status === 'completed' && onResetPeriod
+              ? () => onResetPeriod(p)
+              : undefined
+          }
+        />
+      ))}
+    </div>
+  );
+}
+
 interface FuelPeriodLandingPageProps {
   outstanding: FuelReconciliationPeriod[];
+  inProgress: FuelReconciliationPeriod[];
   completed: FuelReconciliationPeriod[];
   loading: boolean;
   onSelectPeriod: (period: FuelReconciliationPeriod) => void;
@@ -113,6 +163,7 @@ interface FuelPeriodLandingPageProps {
 
 export function FuelPeriodLandingPage({
   outstanding,
+  inProgress,
   completed,
   loading,
   onSelectPeriod,
@@ -129,8 +180,14 @@ export function FuelPeriodLandingPage({
     );
   }
 
-  const isEmpty = outstanding.length === 0 && completed.length === 0;
-  const defaultTab = outstanding.length > 0 ? 'outstanding' : 'completed';
+  const openWorkCount = outstanding.length + inProgress.length;
+  const isEmpty = openWorkCount === 0 && completed.length === 0;
+  const defaultTab =
+    outstanding.length > 0
+      ? 'outstanding'
+      : inProgress.length > 0
+        ? 'in_progress'
+        : 'completed';
 
   return (
     <div className="space-y-6">
@@ -141,14 +198,14 @@ export function FuelPeriodLandingPage({
               variant="outline"
               size="sm"
               className="self-start min-h-10 gap-1.5"
-              disabled={outstanding.length === 0}
+              disabled={openWorkCount === 0}
               onClick={onBulkFinalize}
             >
               <Flag className="h-4 w-4" />
               Finalize weeks
-              {outstanding.length > 0 && (
+              {openWorkCount > 0 && (
                 <Badge variant="secondary" className="ml-0.5 h-5 min-w-5 px-1.5 text-xs">
-                  {outstanding.length}
+                  {openWorkCount}
                 </Badge>
               )}
             </Button>
@@ -166,12 +223,20 @@ export function FuelPeriodLandingPage({
         </div>
       ) : (
         <Tabs defaultValue={defaultTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-2 sm:max-w-md">
+          <TabsList className="grid w-full grid-cols-3 sm:max-w-lg">
             <TabsTrigger value="outstanding" className="gap-1.5 min-h-11 sm:min-h-9">
               Outstanding
               {outstanding.length > 0 && (
                 <span className="rounded-full bg-amber-500 px-1.5 py-0.5 text-[10px] font-bold text-white leading-none">
                   {outstanding.length}
+                </span>
+              )}
+            </TabsTrigger>
+            <TabsTrigger value="in_progress" className="gap-1.5 min-h-11 sm:min-h-9">
+              In Progress
+              {inProgress.length > 0 && (
+                <span className="rounded-full bg-sky-600 px-1.5 py-0.5 text-[10px] font-bold text-white leading-none">
+                  {inProgress.length}
                 </span>
               )}
             </TabsTrigger>
@@ -185,33 +250,29 @@ export function FuelPeriodLandingPage({
             </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="outstanding" className="mt-4 space-y-2">
-            {outstanding.length === 0 ? (
-              <div className="rounded-md border border-dashed border-slate-200 py-12 text-center text-slate-500">
-                No outstanding periods — everything is caught up.
-              </div>
-            ) : (
-              outstanding.map((p) => (
-                <PeriodCard key={p.id} period={p} onSelect={() => onSelectPeriod(p)} />
-              ))
-            )}
+          <TabsContent value="outstanding" className="mt-4">
+            <PeriodList
+              periods={outstanding}
+              emptyLabel="No outstanding periods — check In Progress or Completed."
+              onSelectPeriod={onSelectPeriod}
+            />
           </TabsContent>
 
-          <TabsContent value="completed" className="mt-4 space-y-2">
-            {completed.length === 0 ? (
-              <div className="rounded-md border border-dashed border-slate-200 py-12 text-center text-slate-500">
-                No completed periods yet.
-              </div>
-            ) : (
-              completed.map((p) => (
-                <PeriodCard
-                  key={p.id}
-                  period={p}
-                  onSelect={() => onSelectPeriod(p)}
-                  onReset={onResetPeriod ? () => onResetPeriod(p) : undefined}
-                />
-              ))
-            )}
+          <TabsContent value="in_progress" className="mt-4">
+            <PeriodList
+              periods={inProgress}
+              emptyLabel="No weeks in progress."
+              onSelectPeriod={onSelectPeriod}
+            />
+          </TabsContent>
+
+          <TabsContent value="completed" className="mt-4">
+            <PeriodList
+              periods={completed}
+              emptyLabel="No completed periods yet."
+              onSelectPeriod={onSelectPeriod}
+              onResetPeriod={onResetPeriod}
+            />
           </TabsContent>
         </Tabs>
       )}

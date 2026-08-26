@@ -86,6 +86,29 @@ describe('deriveTollTxIsReconciled', () => {
       }),
     ).toBe(false);
   });
+
+  it('treats voided status as handled (duplicate soft-delete)', () => {
+    expect(
+      deriveTollTxIsReconciled({
+        isReconciled: false,
+        status: 'voided',
+        tripId: null,
+        workflowStage: 'underpaid_pending',
+      }),
+    ).toBe(true);
+  });
+
+  it('treats metadata.voided as handled even if status still pending', () => {
+    expect(
+      deriveTollTxIsReconciled({
+        isReconciled: false,
+        status: 'pending',
+        tripId: null,
+        workflowStage: 'underpaid_pending',
+        metadata: { voided: true },
+      }),
+    ).toBe(true);
+  });
 });
 
 describe('top-level resolution + classifyTollLedgerEntry', () => {

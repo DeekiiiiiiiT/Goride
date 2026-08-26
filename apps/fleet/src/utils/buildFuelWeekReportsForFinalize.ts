@@ -215,14 +215,19 @@ export async function buildFuelWeekReportsForFinalize(
       ? input.vehicles.filter((v) => weekVehicleIds.has(v.id))
       : input.vehicles;
 
-  const brainByDriverVehicle = await buildBrainMap({
-    vehicles: brainVehicles,
-    trips,
-    adjustments: input.adjustments,
-    deadheadMap,
-    weekStartYmd,
-    weekEndYmd,
-  });
+  const brainByDriverVehicle = await withSoftTimeout(
+    buildBrainMap({
+      vehicles: brainVehicles,
+      trips,
+      adjustments: input.adjustments,
+      deadheadMap,
+      weekStartYmd,
+      weekEndYmd,
+    }).then((m) => m),
+    25_000,
+    undefined as Map<string, FuelBrainClassificationInput> | undefined,
+    'fuelBrain',
+  );
 
   const drivers = input.drivers.map((d) => ({
     id: String(d.id || d.driverId || ''),

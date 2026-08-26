@@ -30,6 +30,8 @@ export function useFuelWeekReports(
     staleTime: 30_000,
     // Don't leave the wizard stuck on "Loading…" if one dependency call hangs.
     networkMode: 'always',
+    // Soft-timeouts inside the builder; this is a hard backstop for the UI.
+    gcTime: 60_000,
   });
 
   return {

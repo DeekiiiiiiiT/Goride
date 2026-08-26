@@ -104,7 +104,7 @@ export function TimeFilterDropdown({ value, onChange, inactive }: TimeFilterDrop
             isActive && !inactive && "border-indigo-300 bg-indigo-50 text-indigo-700 hover:bg-indigo-100",
             inactive && "opacity-50"
           )}
-          title={inactive ? "Time filter only applies to Overview & Trip History" : undefined}
+          title={inactive ? "Time filter only applies to Overview" : undefined}
         >
           <Clock className="h-4 w-4" />
           <span className="hidden sm:inline">{getDisplayLabel(value)}</span>

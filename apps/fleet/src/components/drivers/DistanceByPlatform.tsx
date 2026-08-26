@@ -1,5 +1,5 @@
 import React from 'react';
-import { PieChart, Pie, Cell, Tooltip } from 'recharts';
+import { Bar, BarChart, Cell, Tooltip, XAxis, YAxis } from 'recharts';
 import { SafeResponsiveContainer as ResponsiveContainer } from '../ui/SafeResponsiveContainer';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import {
@@ -8,7 +8,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '../ui/tooltip';
-import { Loader2, Navigation, PieChart as PieChartIcon } from 'lucide-react';
+import { BarChart3, Loader2, Navigation } from 'lucide-react';
 
 // --- Types ---
 
@@ -31,9 +31,9 @@ interface DistanceByPlatformProps {
 // --- Constants ---
 
 const PLATFORMS = [
-  { key: 'Roam', label: 'Roam', brandColor: '#6366f1' },     // Indigo
-  { key: 'Uber', label: 'Uber', brandColor: '#3b82f6' },      // Blue
-  { key: 'InDrive', label: 'InDrive', brandColor: '#10b981' }, // Emerald
+  { key: 'Roam', label: 'Roam', brandColor: '#6366f1' },
+  { key: 'Uber', label: 'Uber', brandColor: '#3b82f6' },
+  { key: 'InDrive', label: 'InDrive', brandColor: '#10b981' },
 ] as const;
 
 const SEGMENT_COLORS = {
@@ -45,16 +45,6 @@ const SEGMENT_COLORS = {
   driverCancelled: '#ef4444',
   deliveryFailed: '#475569',
 } as const;
-
-const SEGMENTS = [
-  { key: 'open' as const, label: 'Open Dist', color: SEGMENT_COLORS.open },
-  { key: 'enroute' as const, label: 'Enroute Dist', color: SEGMENT_COLORS.enroute },
-  { key: 'onTrip' as const, label: 'On Trip Dist', color: SEGMENT_COLORS.onTrip },
-  { key: 'unavailable' as const, label: 'Unavailable Dist', color: SEGMENT_COLORS.unavailable },
-  { key: 'riderCancelled' as const, label: 'Rider Cancelled', color: SEGMENT_COLORS.riderCancelled },
-  { key: 'driverCancelled' as const, label: 'Driver Cancelled', color: SEGMENT_COLORS.driverCancelled },
-  { key: 'deliveryFailed' as const, label: 'Delivery Failed', color: SEGMENT_COLORS.deliveryFailed },
-];
 
 const LEGEND_ITEMS = [
   { key: 'open' as const, label: 'Open', color: SEGMENT_COLORS.open, tooltip: 'Distance traveled while online and waiting for a request.' },
@@ -68,7 +58,7 @@ const LEGEND_ITEMS = [
 
 // --- Sub-components ---
 
-function PlatformDonut({
+function PlatformBars({
   platform,
   data,
   loading,
@@ -79,112 +69,113 @@ function PlatformDonut({
 }) {
   const hasData = data && data.total > 0;
 
-  // Build pie data from segments
-  const pieData = hasData
-    ? SEGMENTS.map(seg => ({
-        name: seg.label,
-        value: data[seg.key],
-        fill: seg.color,
-      })).filter(d => d.value > 0)
-    : [];
+  const barData = !data
+    ? []
+    : LEGEND_ITEMS.map((item) => ({
+        label: item.label,
+        km: Number(data[item.key]) || 0,
+        fill: item.color,
+        tooltip: item.tooltip,
+      }));
 
   return (
-    <div className="flex flex-col items-center">
-      {/* Platform label with brand color accent */}
-      <div className="flex items-center gap-2 mb-3">
-        <div
-          className="w-3 h-3 rounded-full shrink-0"
-          style={{ backgroundColor: platform.brandColor }}
-        />
-        <span className="text-sm font-semibold text-slate-700">{platform.label}</span>
+    <div className="flex flex-col min-w-0">
+      <div className="flex items-center justify-between gap-2 mb-2">
+        <div className="flex items-center gap-2 min-w-0">
+          <div
+            className="w-3 h-3 rounded-full shrink-0"
+            style={{ backgroundColor: platform.brandColor }}
+          />
+          <span className="text-sm font-semibold text-slate-700 truncate">{platform.label}</span>
+        </div>
+        {hasData && (
+          <span className="text-xs font-medium text-slate-500 tabular-nums shrink-0">
+            {data.total.toFixed(1)} km
+          </span>
+        )}
       </div>
 
       {hasData ? (
-        <>
-          {/* Donut chart */}
-          <div className="h-[170px] w-full relative">
-            {loading && (
-              <div className="absolute inset-0 bg-white/50 dark:bg-slate-900/50 flex items-center justify-center z-10 backdrop-blur-[1px]">
-                <Loader2 className="h-6 w-6 animate-spin text-indigo-600" />
-              </div>
-            )}
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={pieData}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={50}
-                  outerRadius={68}
-                  paddingAngle={0}
-                  dataKey="value"
-                  startAngle={90}
-                  endAngle={-270}
-                  stroke="none"
-                >
-                  {pieData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.fill} />
-                  ))}
-                </Pie>
-                <Tooltip
-                  formatter={(value: number) => [value.toFixed(2) + ' km', 'Distance']}
-                  contentStyle={{
-                    borderRadius: '8px',
-                    border: 'none',
-                    boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)',
-                  }}
-                  itemStyle={{ color: '#64748b' }}
-                />
-              </PieChart>
-            </ResponsiveContainer>
-            {/* Center label */}
-            <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-center pointer-events-none">
-              <div className="text-base md:text-xl font-bold text-slate-900">{data.total.toFixed(2)}</div>
-              <div className="text-[9px] text-slate-500 font-medium uppercase tracking-wide">Total KM</div>
+        <div className="h-[220px] w-full relative">
+          {loading && (
+            <div className="absolute inset-0 bg-white/50 dark:bg-slate-900/50 flex items-center justify-center z-10 backdrop-blur-[1px]">
+              <Loader2 className="h-6 w-6 animate-spin text-indigo-600" />
             </div>
-          </div>
-
-          {/* Full legend — all 7 segments in two rows */}
-          <div className="mt-3 grid grid-cols-4 gap-x-2 gap-y-2 px-1 text-center w-full">
-            <TooltipProvider>
-              {LEGEND_ITEMS.map(item => (
-                <UiTooltip key={item.key}>
-                  <TooltipTrigger asChild>
-                    <div className="flex flex-col items-center gap-1 cursor-help">
-                      <span className="text-xs font-bold text-slate-900">
-                        {(data[item.key] || 0).toFixed(2)}
-                      </span>
-                      <div className="flex items-center gap-1 justify-center w-full">
-                        <div
-                          className="w-2 h-2 rounded-full shrink-0"
-                          style={{ backgroundColor: item.color }}
-                        />
-                        <span className="text-[10px] font-medium text-slate-500 truncate">
-                          {item.label}
-                        </span>
-                      </div>
-                    </div>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p className="max-w-xs">{item.tooltip}</p>
-                  </TooltipContent>
-                </UiTooltip>
-              ))}
-            </TooltipProvider>
-          </div>
-        </>
+          )}
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart
+              layout="vertical"
+              data={barData}
+              margin={{ top: 4, right: 12, left: 4, bottom: 4 }}
+            >
+              <XAxis
+                type="number"
+                axisLine={false}
+                tickLine={false}
+                tick={{ fontSize: 10, fill: '#64748b' }}
+                tickFormatter={(v: number) => (v >= 100 ? v.toFixed(0) : v.toFixed(1))}
+              />
+              <YAxis
+                type="category"
+                dataKey="label"
+                width={64}
+                axisLine={false}
+                tickLine={false}
+                tick={{ fontSize: 11, fill: '#475569' }}
+              />
+              <Tooltip
+                cursor={{ fill: '#f1f5f9' }}
+                formatter={(value: number) => [`${Number(value).toFixed(2)} km`, 'Distance']}
+                labelFormatter={(label) => String(label)}
+                contentStyle={{
+                  borderRadius: '8px',
+                  border: 'none',
+                  boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)',
+                }}
+                itemStyle={{ color: '#64748b' }}
+              />
+              <Bar dataKey="km" radius={[0, 4, 4, 0]} barSize={14}>
+                {barData.map((entry) => (
+                  <Cell key={entry.label} fill={entry.fill} />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
       ) : (
-        /* Empty state */
-        <div className="h-[170px] w-full flex flex-col items-center justify-center text-slate-400">
+        <div className="h-[220px] w-full flex flex-col items-center justify-center text-slate-400">
           {loading ? (
             <Loader2 className="h-6 w-6 animate-spin text-indigo-400" />
           ) : (
             <>
-              <PieChartIcon className="h-10 w-10 mb-2 text-slate-300" />
+              <BarChart3 className="h-10 w-10 mb-2 text-slate-300" />
               <span className="text-sm font-medium">No distance data</span>
               <span className="text-xs text-slate-400 mt-0.5">No trips for this platform</span>
             </>
           )}
+        </div>
+      )}
+
+      {hasData && (
+        <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 px-1">
+          <TooltipProvider>
+            {LEGEND_ITEMS.map((item) => (
+              <UiTooltip key={item.key}>
+                <TooltipTrigger asChild>
+                  <div className="flex items-center gap-1.5 cursor-help">
+                    <div
+                      className="w-2 h-2 rounded-full shrink-0"
+                      style={{ backgroundColor: item.color }}
+                    />
+                    <span className="text-[10px] font-medium text-slate-500">{item.label}</span>
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p className="max-w-xs">{item.tooltip}</p>
+                </TooltipContent>
+              </UiTooltip>
+            ))}
+          </TooltipProvider>
         </div>
       )}
     </div>
@@ -206,8 +197,8 @@ export function DistanceByPlatform({ perPlatformDistance, loading }: DistanceByP
       </CardHeader>
       <CardContent>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {PLATFORMS.map(platform => (
-            <PlatformDonut
+          {PLATFORMS.map((platform) => (
+            <PlatformBars
               key={platform.key}
               platform={platform}
               data={perPlatformDistance?.[platform.key]}

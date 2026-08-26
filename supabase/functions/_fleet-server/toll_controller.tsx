@@ -1280,7 +1280,10 @@ function tollLedgerToTxShape(entry: TollLedgerRecord): any {
     // Mirror apps/fleet/src/utils/tollHandledDisplay.ts deriveTollTxIsReconciled —
     // honor ledger isReconciled so Expenses Toll Status matches toll_ledger SSOT
     // (e.g. rejected/claim_filed rows already marked reconciled without tripId).
+    // Voided soft-deletes are handled so Expenses does not keep "1 Unmatched".
     isReconciled: !!(
+      entry.status === "voided" ||
+      entry.metadata?.voided === true ||
       entry.isReconciled ||
       entry.status === "reconciled" ||
       entry.status === "resolved" ||
@@ -4111,6 +4114,21 @@ export async function voidTollLedgerEntryHandler(c: Context) {
     if (!entry) return c.json({ error: "Toll ledger entry not found" }, 404);
 
     if (entry.status === "voided" || entry.metadata?.voided === true) {
+      // Idempotent refresh — Expenses may still show Unmatched from a pre-fix void.
+      try {
+        const driverId = entry.driverId ? String(entry.driverId) : "";
+        const dateStr = entry.date ? String(entry.date).slice(0, 10) : "";
+        if (driverId && /^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+          const { getFleetTimezone } = await import("./timezone_helper.tsx");
+          const { periodAnchorFor } = await import("./financial_ledger.ts");
+          const { rebuildPeriodsForAnchors } = await import("./driver_financial_periods.ts");
+          const tz = await getFleetTimezone();
+          const anchor = await periodAnchorFor(dateStr, tz);
+          if (anchor) await rebuildPeriodsForAnchors(driverId, [anchor], true);
+        }
+      } catch (rebuildErr) {
+        console.error(`[voidToll] already-voided period rebuild failed:`, rebuildErr);
+      }
       return c.json({ success: true, data: entry, alreadyVoided: true });
     }
 
@@ -4165,6 +4183,29 @@ export async function voidTollLedgerEntryHandler(c: Context) {
     };
 
     await saveTollLedgerEntry(updated, c);
+
+    // Expenses / Settlement read driver_financial_periods — refresh so voided
+    // duplicates do not stay as "1 Unmatched" until a manual rebuild.
+    const driverId = updated.driverId ? String(updated.driverId) : "";
+    const dateStr = updated.date ? String(updated.date).slice(0, 10) : "";
+    if (driverId && /^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+      try {
+        const { getFleetTimezone } = await import("./timezone_helper.tsx");
+        const { periodAnchorFor } = await import("./financial_ledger.ts");
+        const { rebuildPeriodsForAnchors } = await import("./driver_financial_periods.ts");
+        const tz = await getFleetTimezone();
+        const anchor = await periodAnchorFor(dateStr, tz);
+        if (anchor) {
+          await rebuildPeriodsForAnchors(driverId, [anchor], true);
+        }
+      } catch (rebuildErr) {
+        console.error(
+          `[voidToll] period rebuild failed for ${driverId} ${dateStr}:`,
+          rebuildErr,
+        );
+      }
+    }
+
     return c.json({ success: true, data: updated });
   } catch (e: any) {
     return c.json({ error: e.message }, 500);

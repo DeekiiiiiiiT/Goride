@@ -20,8 +20,12 @@ import { FuelCoverageMatrix } from '../FuelCoverageMatrix';
 import { FuelPeriodStepper } from './FuelPeriodStepper';
 import { FuelWeekMoneyStrip } from './FuelWeekMoneyStrip';
 import { FuelDataQualityStep, type FuelQualityRow } from './FuelDataQualityStep';
+import { FuelExceptionBlockersPanel } from './FuelExceptionBlockersPanel';
 import { useFuelWeekReports } from '../../../hooks/useFuelWeekReports';
-import { evaluateFuelFinalizeGating } from '../../../utils/fuelFinalizeGating';
+import {
+  evaluateFuelFinalizeGating,
+  type FuelExceptionBlocker,
+} from '../../../utils/fuelFinalizeGating';
 import { FUEL_SPEND_EPS } from '../../../utils/fuelMoneyEpsilon';
 import { Checkbox } from '../../ui/checkbox';
 import {
@@ -196,6 +200,19 @@ interface FuelPeriodWizardProps {
   onResolveDispute: (dispute: FuelDispute) => void;
   onOpenConfiguration?: () => void;
   onResetPeriod?: () => void;
+  /** Jump to Transaction Logs and highlight a fill (optional). */
+  onOpenTransactionLogs?: (opts: {
+    fuelEntryId?: string;
+    date?: string;
+    vehicleId?: string;
+  }) => void;
+  /** Accept exception in-place so Finalize can unlock without leaving recon. */
+  onAcceptFuelException?: (
+    entryId: string,
+    note: string,
+  ) => Promise<boolean | void> | boolean | void;
+  /** Open edit fill overlay while staying on Fuel Management. */
+  onEditFuelEntry?: (entryId: string) => void;
   /** Bumps on Reopen week — remounts wizard walkthrough from step 1. */
   sessionKey?: number;
 }
@@ -217,6 +234,9 @@ function FuelPeriodWizardInner({
   onFinalize,
   onAddAdjustment,
   onResolveDispute,
+  onOpenTransactionLogs,
+  onAcceptFuelException,
+  onEditFuelEntry,
   onOpenConfiguration,
   onResetPeriod,
   sessionKey = 0,
@@ -229,8 +249,18 @@ function FuelPeriodWizardInner({
   const [progressIndex, setProgressIndex] = useState(0);
   const [finalizing, setFinalizing] = useState(false);
   const [financeWarningAcknowledged, setFinanceWarningAcknowledged] = useState(false);
+  const [exceptionBusyId, setExceptionBusyId] = useState<string | null>(null);
 
   const periodLocked = period.locked;
+
+  // Parent trips are for the selected recon week — only reuse when they overlap this period.
+  const tripsOverlapThisWeek = useMemo(
+    () =>
+      (trips || []).some((t) =>
+        isEntryInInclusiveYmdRange(t.date, period.startDate, period.endDate),
+      ),
+    [trips, period.startDate, period.endDate],
+  );
 
   const weekReports = useFuelWeekReports({
     weekStartYmd: period.startDate,
@@ -243,8 +273,8 @@ function FuelPeriodWizardInner({
     fuelCards,
     disputes,
     finalizedReports,
-    // Reuse parent week trips — avoids a second 1500-row trip fetch on every open.
-    trips,
+    // Wrong-week parent trips zero ride-share math and can stall brain work.
+    trips: tripsOverlapThisWeek ? trips : undefined,
     seedPersonalAllowance: false,
   });
   const liveReports = weekReports.reports;
@@ -503,9 +533,10 @@ function FuelPeriodWizardInner({
     setActiveStepId('settlement-preview');
   };
 
-  const handleFinalizeClick = async () => {
-    if (periodLocked || liveReports.length === 0) return;
-    const gate = weekReports.gateResult || evaluateFuelFinalizeGating({
+  // Always re-gate from live fuelEntries. Preferring weekReports.gateResult left
+  // exception blockers stuck after Accept (query cache / same entry count key).
+  const gateResult = useMemo(() => {
+    return evaluateFuelFinalizeGating({
       reports: liveReports,
       disputes,
       fuelEntries,
@@ -513,6 +544,50 @@ function FuelPeriodWizardInner({
       weekStartYmd: period.startDate,
       weekEndYmd: period.endDate,
     });
+  }, [
+    liveReports,
+    disputes,
+    fuelEntries,
+    finalizedReports,
+    period.startDate,
+    period.endDate,
+  ]);
+
+  const exceptionBlockers: FuelExceptionBlocker[] = gateResult.exceptionBlockers || [];
+
+  const plateByVehicleId = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const v of vehicles) {
+      map[v.id] = v.licensePlate || v.id;
+    }
+    return map;
+  }, [vehicles]);
+
+  const openExceptionInLogs = (blocker: FuelExceptionBlocker) => {
+    onOpenTransactionLogs?.({
+      fuelEntryId: blocker.id,
+      date: blocker.dateYmd,
+      vehicleId: blocker.vehicleId,
+    });
+  };
+
+  const handleAcceptException = async (blocker: FuelExceptionBlocker, note: string) => {
+    if (!onAcceptFuelException) return;
+    setExceptionBusyId(blocker.id);
+    try {
+      const ok = await onAcceptFuelException(blocker.id, note);
+      if (ok === false) return;
+      // Live fuelEntries + re-gate clear blockers; refresh reports in background.
+      onRefresh();
+      void weekReports.refresh();
+    } finally {
+      setExceptionBusyId(null);
+    }
+  };
+
+  const handleFinalizeClick = async () => {
+    if (periodLocked || liveReports.length === 0) return;
+    const gate = gateResult;
     if (gate.hasExceptionBlockers) {
       return;
     }
@@ -543,7 +618,14 @@ function FuelPeriodWizardInner({
   const stepHero = (() => {
     switch (activeStepId) {
       case 'data-quality':
-        return qualityRows.length === 0
+        return exceptionBlockers.length > 0
+          ? {
+              title: 'Exception fills must be cleared',
+              body: `${exceptionBlockers.length} fill(s) are marked Exception and will block Finalize. Resolve them here — accept if OK, or edit the numbers.`,
+              actionLabel: 'Continue',
+              onAction: handleContinue,
+            }
+          : qualityRows.length === 0
           ? {
               title: 'Data looks clear',
               body: 'No Amber/Red flags or pending issues blocking this week. Continue to the next step.',
@@ -606,17 +688,23 @@ function FuelPeriodWizardInner({
               actionLabel: onResetPeriod ? 'Reopen week' : undefined,
               onAction: onResetPeriod,
             }
-          : {
-              title: 'Ready to lock this week',
-              body: 'Finalize posts pending fuel to settlements and freezes this week. You can reopen later if needed.',
-              actionLabel: finalizing ? 'Finalizing…' : 'Finalize week',
-              onAction: handleFinalizeClick,
-              actionDisabled:
-                finalizing ||
-                liveReports.length === 0 ||
-                !!weekReports.gateResult?.hasExceptionBlockers ||
-                (!!weekReports.gateResult?.hasBlockingWarnings && !financeWarningAcknowledged),
-            };
+          : exceptionBlockers.length > 0
+            ? {
+                title: 'Can’t finalize yet',
+                body: `Resolve the ${exceptionBlockers.length} exception fill(s) listed below in this week — then Finalize.`,
+                actionLabel: undefined,
+              }
+            : {
+                title: 'Ready to lock this week',
+                body: 'Finalize posts pending fuel to settlements and freezes this week. You can reopen later if needed.',
+                actionLabel: finalizing ? 'Finalizing…' : 'Finalize week',
+                onAction: handleFinalizeClick,
+                actionDisabled:
+                  finalizing ||
+                  liveReports.length === 0 ||
+                  !!gateResult.hasExceptionBlockers ||
+                  (!!gateResult.hasBlockingWarnings && !financeWarningAcknowledged),
+              };
       default:
         return { title: '', body: '' };
     }
@@ -739,15 +827,34 @@ function FuelPeriodWizardInner({
 
       <div className="space-y-3">
         {activeStepId === 'data-quality' && (
-          <FuelDataQualityStep
-            rows={qualityRows}
-            breakdownRows={breakdownRows}
-            periodLocked={periodLocked}
-            weekLabel={period.label}
-            showBreakdown={showCostBreakdown}
-            onToggleBreakdown={() => setShowCostBreakdown((v) => !v)}
-            onAddAdjustment={onAddAdjustment}
-          />
+          <div className="space-y-4">
+            <FuelExceptionBlockersPanel
+              blockers={exceptionBlockers}
+              plateByVehicleId={plateByVehicleId}
+              busyId={exceptionBusyId}
+              onAcceptException={
+                onAcceptFuelException
+                  ? handleAcceptException
+                  : async () => undefined
+              }
+              onEditFill={
+                onEditFuelEntry
+                  ? (b) => onEditFuelEntry(b.id)
+                  : onOpenTransactionLogs
+                    ? openExceptionInLogs
+                    : undefined
+              }
+            />
+            <FuelDataQualityStep
+              rows={qualityRows}
+              breakdownRows={breakdownRows}
+              periodLocked={periodLocked}
+              weekLabel={period.label}
+              showBreakdown={showCostBreakdown}
+              onToggleBreakdown={() => setShowCostBreakdown((v) => !v)}
+              onAddAdjustment={onAddAdjustment}
+            />
+          </div>
         )}
 
         {activeStepId === 'adjustments-disputes' && (
@@ -904,12 +1011,24 @@ function FuelPeriodWizardInner({
 
         {activeStepId === 'finalize' && (
           <div className="space-y-3">
-            {weekReports.gateResult?.hasExceptionBlockers && (
-              <p className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
-                Exception-tier fills must be resolved before this week can be finalized.
-              </p>
-            )}
-            {weekReports.gateResult?.hasBlockingWarnings && !weekReports.gateResult.hasExceptionBlockers && (
+            <FuelExceptionBlockersPanel
+              blockers={exceptionBlockers}
+              plateByVehicleId={plateByVehicleId}
+              busyId={exceptionBusyId}
+              onAcceptException={
+                onAcceptFuelException
+                  ? handleAcceptException
+                  : async () => undefined
+              }
+              onEditFill={
+                onEditFuelEntry
+                  ? (b) => onEditFuelEntry(b.id)
+                  : onOpenTransactionLogs
+                    ? openExceptionInLogs
+                    : undefined
+              }
+            />
+            {gateResult.hasBlockingWarnings && !gateResult.hasExceptionBlockers && (
               <label className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
                 <Checkbox
                   checked={financeWarningAcknowledged}

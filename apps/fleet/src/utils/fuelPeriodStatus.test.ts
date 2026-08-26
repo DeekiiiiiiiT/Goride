@@ -32,9 +32,33 @@ describe('fuelPeriodStatus', () => {
       finalizedReports: [],
       scenarios: [],
     });
-    expect(periods[0].status).toBe('outstanding');
+    // No early blockers → ready to close → In Progress
+    expect(periods[0].status).toBe('in_progress');
     expect(periods[0].counts.finalize.actionable).toBe(1);
     expect(periods[0].counts['data-quality'].informational).toBeGreaterThan(0);
+  });
+
+  it('marks week outstanding when exception-tier fills remain', () => {
+    const periods = deriveFuelReconciliationPeriods({
+      weekOptions,
+      vehicles: [{ id: 'v1', fuelScenarioId: 's1' } as any],
+      fuelEntries: [
+        {
+          id: 'e1',
+          vehicleId: 'v1',
+          date: '2026-07-07',
+          amount: 50,
+          reconciliationStatus: 'Pending',
+          metadata: { signalTier: 'exception', anomalyReason: 'Extreme Mid-Cycle Drift' },
+        } as FuelEntry,
+      ],
+      disputes: [],
+      finalizedReports: [],
+      scenarios: [],
+    });
+    expect(periods[0].status).toBe('outstanding');
+    expect(periods[0].exceptionCount).toBe(1);
+    expect(periods[0].counts['data-quality'].actionable).toBeGreaterThan(0);
   });
 
   it('marks week completed when finalized and clear', () => {
