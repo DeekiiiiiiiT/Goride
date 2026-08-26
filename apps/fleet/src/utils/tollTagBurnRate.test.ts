@@ -37,7 +37,10 @@ describe('computeTagBurnRate', () => {
       start: new Date('2026-01-01T00:00:00'),
       end: new Date('2026-12-31T23:59:59'),
     });
-    expect(spanDays).toBeCloseTo(14.5, 1);
+    // Date-only rows anchor at local noon; start bumps to first row → Jan 1 noon
+    // through "today" noon = 14 days (not ~365 through Dec 31).
+    expect(Math.round(spanDays)).toBe(14);
+    expect(spanDays).toBeLessThan(20);
   });
 
   it('honours an explicit period start that is later than the first row', () => {
