@@ -174,7 +174,7 @@ export function AnalyticsUtilizationSection({
             <div>
               <CardTitle className="text-lg">Period activity board</CardTitle>
               <CardDescription>
-                Drove vs idle based on trips in the selected period. Maintenance / Decommissioned keep stored status.
+                Drove vs idle from trips in the selected period — not live GPS. Maintenance / Decommissioned keep stored status.
               </CardDescription>
             </div>
             <div className="flex gap-1.5 flex-wrap justify-end">

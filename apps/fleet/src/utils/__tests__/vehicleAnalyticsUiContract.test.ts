@@ -49,9 +49,10 @@ describe('Vehicle Analytics UI contract', () => {
     expect(src.includes('<button')).toBe(true);
   });
 
-  it('labels status board as recorded, not live GPS', () => {
+  it('labels status board as period activity, not live GPS', () => {
     const src = read('analytics/AnalyticsUtilizationSection.tsx');
-    expect(src.includes('Recorded Vehicle Status')).toBe(true);
+    expect(src.includes('Period activity board')).toBe(true);
+    expect(src.includes('Drove this period')).toBe(true);
     expect(src.toLowerCase().includes('live gps')).toBe(true); // in description clarifying it is NOT
   });
 

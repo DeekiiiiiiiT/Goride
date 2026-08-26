@@ -1,0 +1,36 @@
+{
+  "project_id": "csfllzzastacofsvcdsc",
+  "name": "petrojam-prices",
+  "entrypoint_path": "functions/petrojam-prices/index.ts",
+  "verify_jwt": false,
+  "files": [
+    {
+      "name": "functions/petrojam-prices/index.ts",
+      "bytes": 12598
+    },
+    {
+      "name": "functions/_shared/platformAdmin.ts",
+      "bytes": 1979
+    },
+    {
+      "name": "functions/_shared/authEdge.ts",
+      "bytes": 4282
+    },
+    {
+      "name": "functions/_shared/rbacQuery.ts",
+      "bytes": 6248
+    },
+    {
+      "name": "functions/_shared/productAdmin.ts",
+      "bytes": 6924
+    },
+    {
+      "name": "functions/_shared/platformPermissions.ts",
+      "bytes": 1775
+    },
+    {
+      "name": "functions/petrojam-prices/scrape.ts",
+      "bytes": 12151
+    }
+  ]
+}

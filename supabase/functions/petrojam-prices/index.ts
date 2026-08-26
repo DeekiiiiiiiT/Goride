@@ -234,37 +234,59 @@ app.post("/admin/sync", async (c) => {
   });
 });
 
-/** Weekly cron / CI: sync latest page using service role or CRON_SECRET. */
+/**
+ * Weekly cron / CI: sync latest page using service role or CRON_SECRET.
+ * Note: Edge injects new-format sb_secret keys; GitHub often still has legacy eyJ service_role JWT.
+ * Accept exact env key match, cron secret, OR a verified legacy service_role JWT.
+ */
 app.post("/cron/sync-latest", async (c) => {
   const authHeader = c.req.header("Authorization") || "";
   const cronSecret = (Deno.env.get("CRON_SECRET") || Deno.env.get("FLEET_CRON_SECRET") || "").trim();
   const serviceKey = (Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "").trim();
   const token = authHeader.replace(/^Bearer\s+/i, "").trim();
   const headerCron = (c.req.header("x-fleet-cron-secret") || c.req.header("x-cron-secret") || "").trim();
+
+  const decodeRole = (jwt: string): string => {
+    try {
+      const part = jwt.split(".")[1];
+      if (!part) return "";
+      const json = atob(part.replace(/-/g, "+").replace(/_/g, "/"));
+      const payload = JSON.parse(json) as { role?: string };
+      return typeof payload.role === "string" ? payload.role : "";
+    } catch {
+      return "";
+    }
+  };
+
+  /** Prove Bearer is a real service_role JWT (env may be sb_* while CI still uses legacy eyJ). */
+  const verifyLegacyServiceRoleJwt = async (jwt: string): Promise<boolean> => {
+    if (decodeRole(jwt) !== "service_role") return false;
+    const url = (Deno.env.get("SUPABASE_URL") || "").trim();
+    if (!url) return false;
+    try {
+      const client = createClient(url, jwt, {
+        auth: { persistSession: false, autoRefreshToken: false },
+      });
+      const { error } = await client.auth.admin.listUsers({ page: 1, perPage: 1 });
+      return !error;
+    } catch {
+      return false;
+    }
+  };
+
   const serviceMatch = !!token && !!serviceKey && token === serviceKey;
   const cronMatch = !!cronSecret && (token === cronSecret || headerCron === cronSecret);
-  const ok = serviceMatch || cronMatch;
-  // #region agent log
-  logLine({
-    event: "cron_auth_debug",
-    hypothesisId: "D",
-    sessionId: "560a25",
-    hasToken: !!token,
-    tokenLen: token.length,
-    tokenPrefix3: token.slice(0, 3),
-    tokenStartsEyJ: token.startsWith("eyJ"),
-    hasServiceKey: !!serviceKey,
-    serviceKeyLen: serviceKey.length,
-    serviceKeyPrefix3: serviceKey.slice(0, 3),
-    hasCronSecret: !!cronSecret,
-    hasHeaderCron: !!headerCron,
-    serviceMatch,
-    cronMatch,
-  });
-  // #endregion
+  let legacyJwtOk = false;
+  if (!serviceMatch && !cronMatch && token.startsWith("eyJ") && decodeRole(token) === "service_role") {
+    legacyJwtOk = await verifyLegacyServiceRoleJwt(token);
+  }
+  const ok = serviceMatch || cronMatch || legacyJwtOk;
   if (!serviceKey && !cronSecret) {
-    logLine({ event: "cron_misconfigured", hypothesisId: "F" });
-    return c.json({ error: "server_misconfigured", message: "No SUPABASE_SERVICE_ROLE_KEY or CRON_SECRET in function env" }, 500);
+    logLine({ event: "cron_misconfigured" });
+    return c.json({
+      error: "server_misconfigured",
+      message: "No SUPABASE_SERVICE_ROLE_KEY or CRON_SECRET in function env",
+    }, 500);
   }
   if (!ok) {
     logLine({ event: "cron_unauthorized", hasToken: !!token, hasServiceKey: !!serviceKey, hasCronSecret: !!cronSecret });
