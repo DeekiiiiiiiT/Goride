@@ -29,8 +29,10 @@ import {
   CalendarDays,
   Loader2,
 } from 'lucide-react';
-import { format, parseISO, isValid } from 'date-fns';
+import { format, isValid } from 'date-fns';
 import { TollLogEntry } from '../../types/tollLog';
+import { parseTollDate } from '../../utils/tollWeekPeriod';
+import { formatJMD } from '../../utils/formatJMD';
 import { Trip } from '../../types/data';
 import { api } from '../../services/api';
 import { TollSourceBadge, deriveTollSource } from '../toll-tags/reconciliation/TollSourceBadge';
@@ -105,7 +107,7 @@ function DetailRow({
 function fmtDate(iso: string | null | undefined): string {
   if (!iso) return '—';
   try {
-    const d = parseISO(iso);
+    const d = parseTollDate(iso);
     return isValid(d) ? format(d, 'dd MMM yyyy') : iso;
   } catch {
     return iso;
@@ -115,7 +117,7 @@ function fmtDate(iso: string | null | undefined): string {
 function fmtDateTime(iso: string | null | undefined, time: string | null | undefined): string {
   if (!iso) return '—';
   try {
-    const d = parseISO(iso);
+    const d = parseTollDate(iso, time);
     const datePart = isValid(d) ? format(d, 'dd MMM yyyy') : iso;
     const timePart = time ? time.slice(0, 5) : '';
     return timePart ? `${datePart} at ${timePart}` : datePart;
@@ -125,12 +127,7 @@ function fmtDateTime(iso: string | null | undefined, time: string | null | undef
 }
 
 function fmtJMD(value: number): string {
-  return value.toLocaleString('en-JM', {
-    style: 'currency',
-    currency: 'JMD',
-    minimumFractionDigits: value % 1 === 0 ? 0 : 2,
-    maximumFractionDigits: 2,
-  });
+  return formatJMD(value, value % 1 === 0 ? 0 : 2);
 }
 
 function statusBadge(status: string) {
@@ -272,7 +269,7 @@ export function TollLogDetailPanel({
             <DetailRow label="Date & Time" value={
               <span className="flex items-center gap-2">
                 {fmtDateTime(log.date, log.time)}
-                {new Date(log.date) > new Date() && (
+                {parseTollDate(log.date, log.time) > new Date() && (
                   <span className="text-[10px] font-medium text-red-500 bg-red-50 dark:bg-red-900/20 px-1 py-0.5 rounded">Future Date</span>
                 )}
               </span>

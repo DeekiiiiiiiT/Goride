@@ -60,6 +60,11 @@ import {
 import { toast } from 'sonner@2.0.3';
 import { api } from '../../services/api';
 import { TollPlaza } from '../../types/toll';
+import { isoToDisplayDate, pricingFingerprint, toIsoDateKey } from '../../utils/officialTollRate';
+import { diffRateVersions } from '../../utils/tollRateVersionDiff';
+import type { RateImpactPreview } from '../../utils/tollRateImpact';
+import { TollRateHistoryDialog } from './TollRateHistoryDialog';
+import { TollRatePublishPreviewDialog } from './TollRatePublishPreviewDialog';
 
 // ── Icon Mapping ──────────────────────────────────────────────────────
 
@@ -143,6 +148,7 @@ interface RouteRateGroup {
 
 interface TollRateSchedule {
   effectiveDate: string; // DD/MM/YYYY
+  effectiveFrom?: string; // ISO YYYY-MM-DD, the canonical key the server orders versions by
   operator: string;
   currency: string;
   plazas: PlazaRates[];
@@ -326,8 +332,6 @@ const PAYMENT_METHODS = [
   { name: 'Fleet Account', description: 'Post-paid corporate account billed monthly.', recommended: true },
 ];
 
-const KV_KEY = 'toll_rate_schedule';
-
 // ── Migration: convert old class1/class2/class3 format to rates map ──
 
 function migrateSchedule(raw: any): TollRateSchedule {
@@ -438,6 +442,14 @@ export function TollInfoPage() {
   const [activeTab, setActiveTab] = useState('rates');
   const [expandedPlazas, setExpandedPlazas] = useState<Set<string>>(new Set());
 
+  // ── Rate history + pre-publish preview ──────────────────────────────
+  const [showHistory, setShowHistory] = useState(false);
+  const [showPublishPreview, setShowPublishPreview] = useState(false);
+  const [pendingEffectiveFrom, setPendingEffectiveFrom] = useState('');
+  const [impact, setImpact] = useState<RateImpactPreview | null>(null);
+  const [impactLoading, setImpactLoading] = useState(false);
+  const [impactError, setImpactError] = useState<string | null>(null);
+
   // ── Toll Database Plaza State ───────────────────────────────────────
   const [dbPlazas, setDbPlazas] = useState<TollPlaza[]>([]);
   const [dbPlazasLoading, setDbPlazasLoading] = useState(false);
@@ -481,6 +493,29 @@ export function TollInfoPage() {
     return editMode ? editSchedule.vehicleClasses : schedule.vehicleClasses;
   }, [editMode, editSchedule.vehicleClasses, schedule.vehicleClasses]);
 
+  /**
+   * A new card may not start before the one already in force — back-dating
+   * re-prices tolls that were settled correctly. Mirrors the server guard so the
+   * picker cannot even offer an invalid day.
+   */
+  const earliestPublishableDate = useMemo(() => {
+    const dates = rateVersions
+      .map(v => toIsoDateKey(v?.effectiveFrom || v?.effectiveDate))
+      .filter(Boolean)
+      .sort();
+    return dates.length ? dates[dates.length - 1] : undefined;
+  }, [rateVersions]);
+
+  const unlinkedPlazaNames = useMemo(
+    () => editSchedule.plazas.filter(p => !p.plazaId?.trim()).map(p => p.plazaName || '(unnamed)'),
+    [editSchedule.plazas],
+  );
+
+  const pendingDiff = useMemo(
+    () => (showPublishPreview ? diffRateVersions(schedule as any, editSchedule as any) : null),
+    [showPublishPreview, schedule, editSchedule],
+  );
+
   // ── Load Database Plazas ────────────────────────────────────────────
   const loadDbPlazas = useCallback(async () => {
     setDbPlazasLoading(true);
@@ -523,7 +558,41 @@ export function TollInfoPage() {
 
   // ── Save to KV Store ─────────────────────────────────────────────────
 
+  /**
+   * Validate the draft, then show what publishing it would cost before writing
+   * anything. The write itself is `handlePublish`.
+   */
   const handleSave = async () => {
+    // ── Rate cards feed reconciliation and driver charges, so the publish rules
+    //    are enforced on the server. These mirror them for a faster answer.
+    //    Order matters: an unchanged card is never published, so it is never
+    //    worth complaining about its date or its plaza links. ──
+    const nothingChanged = pricingFingerprint(editSchedule) === pricingFingerprint(schedule);
+    if (nothingChanged) {
+      setEditMode(false);
+      toast.info('No rate changes to publish.');
+      return;
+    }
+    if (unlinkedPlazaNames.length > 0) {
+      toast.error(
+        `Link ${unlinkedPlazaNames.join(', ')} to a toll plaza record before publishing — geofence pricing needs the link.`,
+      );
+      return;
+    }
+    const effectiveFromIso = toIsoDateKey(editSchedule.effectiveFrom || editSchedule.effectiveDate);
+    if (!effectiveFromIso) {
+      toast.error('Pick an effective date for these rates.');
+      return;
+    }
+    if (earliestPublishableDate && effectiveFromIso < earliestPublishableDate) {
+      toast.error(`Rates cannot start before ${isoToDisplayDate(earliestPublishableDate)}, the card already in force.`);
+      return;
+    }
+    if (rateVersions.some(v => toIsoDateKey(v?.effectiveFrom || v?.effectiveDate) === effectiveFromIso)) {
+      toast.error(`A rate card already starts on ${isoToDisplayDate(effectiveFromIso)}. Pick a later date.`);
+      return;
+    }
+
     // ── Validate route-based rate groups before saving ──
     for (const group of editSchedule.routeRateGroups) {
       if (!group.operator.trim()) {
@@ -550,20 +619,43 @@ export function TollInfoPage() {
         }
       }
     }
+    setPendingEffectiveFrom(effectiveFromIso);
+    setImpact(null);
+    setImpactError(null);
+    setShowPublishPreview(true);
+    setImpactLoading(true);
+    try {
+      const result = await api.previewTollRateImpact({ ...editSchedule, effectiveFrom: effectiveFromIso });
+      setImpact(result?.impact ?? null);
+    } catch (err) {
+      // A preview failure must not block a legitimate price change; the dialog
+      // says the impact is unknown and still allows the publish.
+      setImpactError(err instanceof Error ? err.message : 'unknown error');
+    } finally {
+      setImpactLoading(false);
+    }
+  };
+
+  const handlePublish = async () => {
     setSaving(true);
     try {
       // Publishes a NEW date-locked version — past effective dates keep prior rates.
-      const result = await api.saveTollInfo(editSchedule);
+      const result = await api.saveTollInfo({ ...editSchedule, effectiveFrom: pendingEffectiveFrom });
       setSchedule(editSchedule);
       if (result?.versions) setRateVersions(result.versions);
       else if (result?.store?.versions) setRateVersions(result.store.versions);
+      setShowPublishPreview(false);
       setEditMode(false);
-      toast.success(
-        `Toll rates locked from ${editSchedule.effectiveDate} forward. Earlier dates keep previous rates.`,
-      );
+      if (result?.published === false) {
+        toast.info('No rate changes to publish — the card already in force is identical.');
+      } else {
+        toast.success(
+          `Toll rates locked from ${editSchedule.effectiveDate} forward. Earlier dates keep previous rates.`,
+        );
+      }
     } catch (err) {
       console.error('[TollInfo] Save failed:', err);
-      toast.error('Failed to save toll rates');
+      toast.error(err instanceof Error ? err.message : 'Failed to save toll rates');
     } finally {
       setSaving(false);
     }
@@ -1126,11 +1218,14 @@ export function TollInfoPage() {
                 )}
                 <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700" onClick={handleSave} disabled={saving}>
                   {saving ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Save className="h-4 w-4 mr-1" />}
-                  Save Changes
+                  Review & Publish
                 </Button>
               </>
             ) : (
               <>
+                <Button variant="outline" size="sm" onClick={() => setShowHistory(true)}>
+                  <History className="h-4 w-4 mr-1" /> Rate History
+                </Button>
                 <Button variant="outline" size="sm" onClick={handleExport}>
                   <Download className="h-4 w-4 mr-1" /> Export CSV
                 </Button>
@@ -1160,10 +1255,19 @@ export function TollInfoPage() {
                 <div className="flex items-center gap-2">
                   <Label className="text-sm font-medium">Effective Date:</Label>
                   <Input
-                    value={editSchedule.effectiveDate}
-                    onChange={e => setEditSchedule(prev => ({ ...prev, effectiveDate: e.target.value }))}
-                    placeholder="DD/MM/YYYY"
-                    className="w-[140px] h-8 text-sm"
+                    type="date"
+                    value={toIsoDateKey(editSchedule.effectiveDate)}
+                    min={earliestPublishableDate}
+                    onChange={e => {
+                      const iso = e.target.value;
+                      if (!iso) return;
+                      setEditSchedule(prev => ({
+                        ...prev,
+                        effectiveDate: isoToDisplayDate(iso),
+                        effectiveFrom: iso,
+                      }));
+                    }}
+                    className="w-[160px] h-8 text-sm"
                   />
                 </div>
               ) : (
@@ -1173,9 +1277,12 @@ export function TollInfoPage() {
               )}
             </div>
             {rateVersions.length > 1 && (
-              <Badge variant="outline" className="text-xs text-slate-600">
-                {rateVersions.length} rate versions (date-locked)
-              </Badge>
+              <button type="button" onClick={() => setShowHistory(true)}>
+                <Badge variant="outline" className="text-xs text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer">
+                  <History className="h-3 w-3 mr-1" />
+                  {rateVersions.length} rate versions (date-locked)
+                </Badge>
+              </button>
             )}
             <Badge variant="outline" className="text-xs">
               <DollarSign className="h-3 w-3 mr-1" />
@@ -1199,10 +1306,17 @@ export function TollInfoPage() {
                 {linkStatus.linked}/{linkStatus.total} Linked
               </Badge>
             )}
-            {linkStatus.unlinked > 0 && linkStatus.linked > 0 && (
-              <Badge className="bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700 text-xs">
-                {linkStatus.unlinked} Unlinked
-              </Badge>
+            {linkStatus.unlinked > 0 && (
+              editMode ? (
+                <Badge className="bg-rose-100 dark:bg-rose-900/30 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800 text-xs">
+                  <Unlink className="h-3 w-3 mr-1" />
+                  {linkStatus.unlinked} unlinked — link before publishing
+                </Badge>
+              ) : linkStatus.linked > 0 ? (
+                <Badge className="bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700 text-xs">
+                  {linkStatus.unlinked} Unlinked
+                </Badge>
+              ) : null
             )}
             {!editMode && (
               <Badge className="bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-300 border-amber-200 dark:border-amber-800 text-xs">
@@ -2461,6 +2575,25 @@ export function TollInfoPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <TollRateHistoryDialog
+        open={showHistory}
+        onOpenChange={setShowHistory}
+        versions={rateVersions}
+        currentVersionId={rateVersions[rateVersions.length - 1]?.id}
+      />
+
+      <TollRatePublishPreviewDialog
+        open={showPublishPreview}
+        onOpenChange={setShowPublishPreview}
+        effectiveFrom={pendingEffectiveFrom}
+        diff={pendingDiff}
+        impact={impact}
+        loading={impactLoading}
+        error={impactError}
+        publishing={saving}
+        onConfirm={handlePublish}
+      />
     </div>
   );
 }

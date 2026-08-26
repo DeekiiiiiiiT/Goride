@@ -1,24 +1,19 @@
 # Runs the Deno-native test suites under supabase/functions/** (Deno.test + https: imports).
 # These do NOT run via Vitest/pnpm build (apps/fleet/vite.config.ts explicitly excludes
-# supabase/functions/** from its test include) and were never wired into any CI workflow
-# before this file — ci.yml only runs `pnpm build`, and deploy-supabase-edge.yml only deploys.
-#
-# Non-blocking for now (continue-on-error): this is a new safety net, not a gate. Once this
-# has run green for a while, drop continue-on-error to make it a required check.
-# Mirrors ci.yml's convention of keeping automatic push/PR triggers commented out until the
-# team is ready — uncomment the `pull_request`/`push` block below when ready to gate PRs.
+# supabase/functions/** from its test include), so this workflow is the only gate on
+# edge-function logic — including the toll controller, geofence core, and rate schedule.
 name: Test Supabase Functions
 
-# on:
-#   pull_request:
-#     paths:
-#       - 'supabase/functions/**'
-on: workflow_dispatch
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
 
 jobs:
   deno-test:
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -29,6 +24,12 @@ jobs:
           deno-version: v1.x
 
       - name: Run Deno test suites
+        # Several modules build a Supabase client at import time, so the client
+        # constructor needs a URL and key present before the graph is evaluated.
+        env:
+          SUPABASE_URL: http://localhost:54321
+          SUPABASE_SERVICE_ROLE_KEY: test-service-role-key
+          SUPABASE_ANON_KEY: test-anon-key
         run: |
           set -euo pipefail
           deno test --no-check --allow-env --allow-net --allow-read supabase/functions/

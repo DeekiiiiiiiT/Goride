@@ -12,6 +12,7 @@ import { toast } from "sonner@2.0.3";
 import Papa from 'papaparse';
 import { FleetBusyProvider, useFleetBusy } from '../shared/FleetBusyLock';
 import { useLockedDialog } from '../shared/useLockedDialog';
+import { parseTollDate } from '../../utils/tollDate';
 
 /** Wall-clock YYYY-MM-DD + HH:MM:SS from a parsed CSV Date (no browser TZ bake). */
 function wallClockStorageFromDate(d: Date): { date: string; time: string } {
@@ -848,7 +849,7 @@ function BulkImportTollTransactionsModalInner({
                    const aiTagId = normalizeCsvTagId(tx.tagId || '');
                    const match = matchVehicle(aiTagId || undefined);
                    
-                   const dateObj = parseCsvDateTime(String(tx.date || '')) || new Date(tx.date);
+                   const dateObj = parseCsvDateTime(String(tx.date || '')) || parseTollDate(tx.date);
                    const isDateValid = !isNaN(dateObj.getTime());
                    
                    const isValid = !!match.matchedVehicleId && 

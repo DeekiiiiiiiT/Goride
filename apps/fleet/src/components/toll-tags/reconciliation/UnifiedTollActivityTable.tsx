@@ -4,10 +4,10 @@ import { cn } from "../../ui/utils";
 import { useTollUnifiedEvents } from "../../../hooks/useTollUnifiedEvents";
 import type { TollEventWorkflowState, TollFinancialEvent } from "../../../types/tollFinancialEvent";
 
+import { formatJMD } from "../../../utils/formatJMD";
+
 function formatMoney(n: number): string {
-  const abs = Math.abs(n);
-  const sign = n < 0 ? "−" : "";
-  return `${sign}$${abs.toFixed(2)}`;
+  return formatJMD(n, 2);
 }
 
 const WORKFLOW_STATE_META: Record<TollEventWorkflowState, { label: string; className: string }> = {

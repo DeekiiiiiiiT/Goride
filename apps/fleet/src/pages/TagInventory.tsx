@@ -170,6 +170,9 @@ function TagInventoryInner({
               <TollTagDetail 
                   tag={selectedTag} 
                   onBack={() => setSelectedTag(null)}
+                  onRequestAssign={() => {
+                    setAssignModalState({ isOpen: true, tag: selectedTag });
+                  }}
                   onNavigateToReconciliation={onNavigate ? async (vehicleId: string) => {
                       try {
                         const vehicles = await api.getVehicles();
@@ -193,6 +196,17 @@ function TagInventoryInner({
                       }
                   } : undefined}
               />
+              {assignModalState.tag && (
+                <AssignTagModal
+                  isOpen={assignModalState.isOpen}
+                  onClose={() => setAssignModalState({ isOpen: false, tag: null })}
+                  tag={assignModalState.tag}
+                  onAssign={() => {
+                    handleAssignComplete();
+                    setSelectedTag(null);
+                  }}
+                />
+              )}
           </div>
       );
   }

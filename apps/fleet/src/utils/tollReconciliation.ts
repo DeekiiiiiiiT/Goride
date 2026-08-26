@@ -6,6 +6,7 @@ import {
   findCashReceiptTripCreditHits,
   isCashOrPassageReceiptToll,
 } from './cashReceiptTripMatch';
+import { parseTollDate } from './tollDate';
 
 /**
  * Toll Reconciliation Engine - "Idea 1" Implementation
@@ -63,15 +64,8 @@ export function isAmountMatch(a: number, b: number): boolean {
  * Helper to parse the transaction date
  */
 function getTransactionDateTime(tx: FinancialTransaction): Date | null {
-  try {
-    if (tx.date.includes('T')) return new Date(tx.date);
-    const timeStr = tx.time || '00:00:00';
-    const date = new Date(`${tx.date}T${timeStr}`);
-    if (isNaN(date.getTime())) return new Date(`${tx.date} ${timeStr}`); // Fallback
-    return date;
-  } catch (e) {
-    return null;
-  }
+  const d = parseTollDate(tx.date, tx.time);
+  return isNaN(d.getTime()) ? null : d;
 }
 
 /**
@@ -558,8 +552,8 @@ export function allocateTripRefundAcrossTolls(
     for (const [tripId, list] of byTrip) {
         let remaining = tripRefundById.get(tripId) ?? 0;
         const sorted = [...list].sort((a, b) => {
-            const ta = new Date(`${a.date}T${a.time || '00:00:00'}`).getTime();
-            const tb = new Date(`${b.date}T${b.time || '00:00:00'}`).getTime();
+            const ta = parseTollDate(a.date, a.time || '00:00:00').getTime();
+            const tb = parseTollDate(b.date, b.time || '00:00:00').getTime();
             return ta - tb;
         });
         for (const t of sorted) {

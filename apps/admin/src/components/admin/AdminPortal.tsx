@@ -45,6 +45,10 @@ import { FuelPricesPage } from './fuel-prices/FuelPricesPage';
 import { EvidenceBridgeAnalytics } from './fuel-evidence-bridge/EvidenceBridgeAnalytics';
 import { AdminJaaGasCardsPage } from './fuel/AdminJaaGasCardsPage';
 import { TollBrainPage } from './toll-brain/TollBrainPage';
+import { TollAnalytics } from '../toll/TollAnalytics';
+import { TollLogsPage } from '../../pages/TollLogsPage';
+import { TagInventory } from '../../pages/TagInventoryPage';
+import { TollReconciliation } from '../../pages/TollReconciliationPage';
 import { DriverUsersPage } from './product-users/DriverUsersPage';
 import { DriverUserDetailPage } from './product-users/DriverUserDetailPage';
 import { RiderUsersPage } from './product-users/RiderUsersPage';
@@ -277,6 +281,26 @@ export function AdminPortal() {
       {currentPage === 'toll-info' && (
         <div className="bg-white rounded-xl shadow-sm overflow-hidden min-h-[600px] dark:bg-card">
           <TollInfoPage />
+        </div>
+      )}
+      {currentPage === 'toll-analytics' && (
+        <div className="bg-white rounded-xl shadow-sm overflow-hidden min-h-[600px] dark:bg-card">
+          <TollAnalytics />
+        </div>
+      )}
+      {currentPage === 'toll-logs' && (
+        <div className="bg-white rounded-xl shadow-sm overflow-hidden min-h-[600px] dark:bg-card">
+          <TollLogsPage />
+        </div>
+      )}
+      {currentPage === 'tag-inventory' && (
+        <div className="bg-white rounded-xl shadow-sm overflow-hidden min-h-[600px] dark:bg-card">
+          <TagInventory />
+        </div>
+      )}
+      {currentPage === 'toll-tags' && (
+        <div className="bg-white rounded-xl shadow-sm overflow-hidden min-h-[600px] dark:bg-card">
+          <TollReconciliation />
         </div>
       )}
       {currentPage === 'toll-settings' && (

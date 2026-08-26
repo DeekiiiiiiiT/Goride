@@ -3,15 +3,9 @@ import { Badge } from '../../ui/badge';
 import { Card, CardContent } from '../../ui/card';
 import { CarFront, Gauge, Route, Wallet } from 'lucide-react';
 import type { AnalyticsKpis } from '../../../hooks/useVehicleAnalytics';
+import { formatJMD } from '../../../utils/formatJMD';
 
-export function formatJMD(value: number, decimals = 0): string {
-  return new Intl.NumberFormat('en-JM', {
-    style: 'currency',
-    currency: 'JMD',
-    minimumFractionDigits: decimals,
-    maximumFractionDigits: decimals,
-  }).format(value);
-}
+export { formatJMD };
 
 export function Sparkline({ values, stroke }: { values: number[]; stroke: string }) {
   if (values.length < 2 || values.every((v) => v === 0)) return null;

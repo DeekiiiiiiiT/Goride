@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { HelpCircle, DollarSign, TrendingUp, Wallet, TrendingDown, AlertTriangle, CheckCircle2, UserSearch, Banknote } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../../ui/tooltip";
 import { platformBreakdownLines, type PlatformAmountBreakdown } from "../../../utils/tollFinancialOverview";
+import { formatJMD } from "../../../utils/formatJMD";
 
 export interface TollFinancialOverviewCardsProps {
   tollSpend: number;
@@ -36,7 +37,7 @@ function PlatformSplit({ breakdown, className }: { breakdown?: PlatformAmountBre
       {lines.map(({ label, amount }) => (
         <div key={label} className="flex items-center justify-between gap-2 text-[11px] text-slate-500">
           <span>{label}</span>
-          <span className="font-medium text-slate-700 tabular-nums">${amount.toFixed(2)}</span>
+          <span className="font-medium text-slate-700 tabular-nums">{formatJMD(amount, 2)}</span>
         </div>
       ))}
     </div>
@@ -100,7 +101,7 @@ export function TollFinancialOverviewCards({
               </TooltipContent>
             </Tooltip>
           </div>
-          <h4 className="mt-1 text-2xl font-bold tracking-tight text-slate-900 tabular-nums">${tollSpend.toFixed(2)}</h4>
+          <h4 className="mt-1 text-2xl font-bold tracking-tight text-slate-900 tabular-nums">{formatJMD(tollSpend, 2)}</h4>
           <p className="mt-2 text-[11px] font-medium text-slate-500">Gross expenditure this period</p>
           <PlatformSplit breakdown={tollSpendByPlatform} />
         </GlassStatCard>
@@ -127,10 +128,10 @@ export function TollFinancialOverviewCards({
               </TooltipContent>
             </Tooltip>
           </div>
-          <h4 className="mt-1 text-2xl font-bold tracking-tight text-slate-900 tabular-nums">${reimbursedAmount.toFixed(2)}</h4>
+          <h4 className="mt-1 text-2xl font-bold tracking-tight text-slate-900 tabular-nums">{formatJMD(reimbursedAmount, 2)}</h4>
           <p className="mt-2 text-[11px] font-medium text-slate-500">
             {scopedDisputeRefund > 0
-              ? `Incl. $${scopedDisputeRefund.toFixed(2)} from dispute refunds`
+              ? `Incl. ${formatJMD(scopedDisputeRefund, 2)} from dispute refunds`
               : 'Paid back on trips'}
           </p>
           <PlatformSplit breakdown={reimbursedByPlatform} />
@@ -156,7 +157,7 @@ export function TollFinancialOverviewCards({
               </TooltipContent>
             </Tooltip>
           </div>
-          <h4 className="mt-1 text-2xl font-bold tracking-tight text-slate-900 tabular-nums">${chargedToDrivers.toFixed(2)}</h4>
+          <h4 className="mt-1 text-2xl font-bold tracking-tight text-slate-900 tabular-nums">{formatJMD(chargedToDrivers, 2)}</h4>
           <p className="mt-2 text-[11px] font-medium text-slate-500">Successfully recovered assets</p>
         </GlassStatCard>
 
@@ -185,7 +186,7 @@ export function TollFinancialOverviewCards({
               </TooltipContent>
             </Tooltip>
           </div>
-          <h4 className="mt-1 text-2xl font-bold tracking-tight text-rose-600 tabular-nums">${netTollLoss.toFixed(2)}</h4>
+          <h4 className="mt-1 text-2xl font-bold tracking-tight text-rose-600 tabular-nums">{formatJMD(netTollLoss, 2)}</h4>
           <p className="mt-2 text-[11px] font-medium text-slate-500">Same as Business Finance P&amp;L</p>
         </GlassStatCard>
 
@@ -213,7 +214,7 @@ export function TollFinancialOverviewCards({
               {tollsNeedingReviewCount} tolls · {refundsNeedingReviewCount} refunds
               {resolvedRefundsAmount > 0 && (
                 <span className="mt-0.5 block text-emerald-600">
-                  ${resolvedRefundsAmount.toFixed(2)} resolved
+                  {formatJMD(resolvedRefundsAmount, 2)} resolved
                 </span>
               )}
             </p>

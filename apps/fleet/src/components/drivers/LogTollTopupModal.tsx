@@ -13,6 +13,7 @@ import { Label } from "../ui/label";
 import { Textarea } from "../ui/textarea";
 import { toast } from "sonner@2.0.3";
 import { Loader2, DollarSign, CreditCard } from "lucide-react";
+import { parseTollDate } from '../../utils/tollDate';
 
 interface LogTollTopupModalProps {
   isOpen: boolean;
@@ -37,7 +38,7 @@ export function LogTollTopupModal({ isOpen, onClose, onSave }: LogTollTopupModal
     try {
       await onSave({
         amount: parseFloat(amount),
-        date: new Date(date).toISOString(),
+        date: parseTollDate(date).toISOString(),
         notes
       });
       toast.success("Top-up recorded successfully");

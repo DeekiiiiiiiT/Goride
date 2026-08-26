@@ -12,6 +12,7 @@ import { Button } from "../ui/button";
 import { Trash2, Link as LinkIcon, AlertCircle, History, Pencil, AlertTriangle } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 import { TollTag } from "../../types/vehicle";
+import { formatJMD } from "../../utils/formatJMD";
 
 interface TollTagListProps {
   tags: TollTag[];
@@ -74,11 +75,11 @@ export function TollTagList({ tags, isLoading, onDelete, onAssign, onUnassign, o
                     <Tooltip>
                       <TooltipTrigger>
                         <span className="inline-flex h-4 items-center rounded bg-slate-100 px-1 text-[10px] font-normal text-slate-500">
-                          ${tag.providerBalance.toLocaleString()}
+                          {formatJMD(tag.providerBalance)}
                         </span>
                       </TooltipTrigger>
                       <TooltipContent>
-                        <p>Provider balance: ${tag.providerBalance.toFixed(2)}</p>
+                        <p>Provider balance: {formatJMD(tag.providerBalance, 2)}</p>
                         {tag.providerBalanceDate && (
                           <p className="text-xs text-slate-400">Last checked: {new Date(tag.providerBalanceDate).toLocaleDateString()}</p>
                         )}
@@ -101,7 +102,7 @@ export function TollTagList({ tags, isLoading, onDelete, onAssign, onUnassign, o
                         </Badge>
                       </TooltipTrigger>
                       <TooltipContent>
-                        <p>Balance: ${tag.lastCalculatedBalance.toFixed(2)} (below ${(tag.lowBalanceThreshold ?? 500).toLocaleString()} threshold)</p>
+                        <p>Balance: {formatJMD(tag.lastCalculatedBalance, 2)} (below {formatJMD(tag.lowBalanceThreshold ?? 500)} threshold)</p>
                       </TooltipContent>
                     </Tooltip>
                   )}

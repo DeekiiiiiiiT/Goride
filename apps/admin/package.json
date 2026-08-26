@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@radix-ui/react-accordion": "^1.2.3",
@@ -41,6 +43,7 @@
     "@roam/auth-client": "workspace:*",
     "@roam/business-config": "workspace:*",
     "@roam/finance-core": "workspace:*",
+    "@roam/toll-core": "workspace:*",
     "@roam/platform-settings": "workspace:*",
     "@roam/roam-shared": "workspace:*",
     "@roam/rush-chat": "workspace:*",
@@ -81,6 +84,7 @@
     "@types/papaparse": "*",
     "@vitejs/plugin-react": "^4.7.0",
     "tailwindcss": "4.1.12",
-    "vite": "6.3.5"
+    "vite": "6.3.5",
+    "vitest": "^3.2.4"
   }
 }

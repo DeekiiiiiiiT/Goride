@@ -1,9 +1,17 @@
 /**
  * Toll geofence evaluation for real-time toll detection during trips.
+ * Matching logic lives in `_shared/tollGeofenceCore` (segment + direction + verified).
  */
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { distanceMeters } from "../../_shared/geo.ts";
+import {
+  evaluateLiveFixAgainstPlazas,
+  ROUND_TRIP_COOLDOWN_MS,
+  type TollPlazaGeo,
+} from "../../_shared/tollGeofenceCore.ts";
+import type { LatLng } from "../../_shared/geo.ts";
 import { loadTollPlazas, type LoadedTollPlaza } from "./tollPlazaLoader.ts";
+
+export { ROUND_TRIP_COOLDOWN_MS };
 
 export interface TollCrossingRecord {
   toll_plaza_id: string;
@@ -23,9 +31,6 @@ export interface TollCrossingState {
   crossedTolls: Set<string>;
 }
 
-/** Default cooldown before the SAME plaza can be re-counted (enables round trips). */
-export const ROUND_TRIP_COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes
-
 export interface EvaluateTollOptions {
   /**
    * Last crossing time (epoch ms) per plaza id. When provided, a plaza is
@@ -34,9 +39,31 @@ export interface EvaluateTollOptions {
    * When omitted, the legacy once-per-ride `alreadyCrossed` set is used.
    */
   recentByPlaza?: Map<string, number>;
+  /** Override round-trip cooldown (default ROUND_TRIP_COOLDOWN_MS / Toll Brain policy). */
   cooldownMs?: number;
   /** Current time (epoch ms). Passed in for testability. */
   nowMs?: number;
+  /**
+   * Previous GPS fix — enables segment-to-circle matching so highway-speed
+   * vehicles cannot skip a geofence between pings. When omitted, falls back
+   * to point-in-circle on the current fix only.
+   */
+  prevLatLng?: LatLng | null;
+  /** Fleet org for plaza catalogue scoping (legacy filterByOrg semantics). */
+  organizationId?: string | null;
+}
+
+function toPlazaGeo(p: LoadedTollPlaza): TollPlazaGeo {
+  return {
+    id: p.id,
+    name: p.name,
+    location: p.location,
+    geofenceRadius: p.geofenceRadius,
+    defaultRateMinor: p.defaultRateMinor,
+    currency: p.currency,
+    direction: p.direction,
+    verificationStatus: p.verificationStatus,
+  };
 }
 
 /**
@@ -51,54 +78,34 @@ export async function evaluateTollCrossings(
   alreadyCrossed: Set<string>,
   options?: EvaluateTollOptions,
 ): Promise<TollEvaluationResult> {
-  const plazas = await loadTollPlazas(db);
-  const tollsCrossed: TollCrossingRecord[] = [];
-  let totalTollsMinor = 0;
-
-  const cooldownMode = !!options?.recentByPlaza;
+  const plazas = await loadTollPlazas(db, {
+    organizationId: options?.organizationId,
+  });
+  const geoPlazas = plazas.map(toPlazaGeo);
   const cooldownMs = options?.cooldownMs ?? ROUND_TRIP_COOLDOWN_MS;
   const nowMs = options?.nowMs ?? Date.now();
+  const curr = { lat: driverLat, lng: driverLng };
+  const prev = options?.prevLatLng ?? null;
 
-  for (const plaza of plazas) {
-    // Skip misconfigured plazas with no rate — recording a $0 crossing is noise.
-    if (!(plaza.defaultRateMinor > 0)) {
-      console.warn(
-        `[tollGeofence] Skipping plaza ${plaza.id} (${plaza.name}) — no positive rate configured`,
-      );
-      continue;
-    }
+  const hits = evaluateLiveFixAgainstPlazas(prev, curr, geoPlazas, {
+    fallbackRadiusM: geofenceRadiusM,
+    requireVerified: true,
+    enforceDirection: true,
+    recentByPlaza: options?.recentByPlaza,
+    cooldownMs,
+    nowMs,
+    alreadyCrossed,
+  });
 
-    // De-dup: cooldown mode allows re-crossing after leaving; legacy mode is
-    // once-per-ride via the alreadyCrossed set.
-    if (cooldownMode) {
-      const last = options!.recentByPlaza!.get(plaza.id);
-      if (last !== undefined && nowMs - last < cooldownMs) continue;
-    } else if (alreadyCrossed.has(plaza.id)) {
-      continue;
-    }
-
-    const dist = distanceMeters(
-      { lat: driverLat, lng: driverLng },
-      plaza.location,
-    );
-
-    // Prefer the plaza's own radius when set; fall back to the global radius.
-    // (Previously Math.max inflated the radius and caused false positives on
-    // highways running parallel to a toll road.)
-    const effectiveRadius = plaza.geofenceRadius > 0 ? plaza.geofenceRadius : geofenceRadiusM;
-
-    if (dist <= effectiveRadius) {
-      tollsCrossed.push({
-        toll_plaza_id: plaza.id,
-        toll_plaza_name: plaza.name,
-        toll_amount_minor: plaza.defaultRateMinor,
-        currency: plaza.currency,
-        driver_lat: driverLat,
-        driver_lng: driverLng,
-      });
-      totalTollsMinor += plaza.defaultRateMinor;
-    }
-  }
+  const tollsCrossed: TollCrossingRecord[] = hits.map((h) => ({
+    toll_plaza_id: h.plazaId,
+    toll_plaza_name: h.plazaName,
+    toll_amount_minor: h.tollAmountMinor,
+    currency: h.currency,
+    driver_lat: h.lat,
+    driver_lng: h.lng,
+  }));
+  const totalTollsMinor = tollsCrossed.reduce((s, c) => s + c.toll_amount_minor, 0);
 
   return { tollsCrossed, totalTollsMinor };
 }

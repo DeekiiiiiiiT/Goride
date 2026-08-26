@@ -39,7 +39,9 @@ export function getRawServiceClient(): SupabaseClient {
  * Returns a service-role client scoped to a specific schema.
  * NOT cached — use sparingly for schema-specific queries (e.g., rides schema).
  */
-export function getServiceClientWithSchema(schema: string): SupabaseClient {
+export function getServiceClientWithSchema(
+  schema: string,
+): SupabaseClient<any, any, any> {
   const url = Deno.env.get("SUPABASE_URL");
   const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
   if (!url || !key) {

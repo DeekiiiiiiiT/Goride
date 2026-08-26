@@ -1,54 +1,44 @@
 /**
  * Toll Brain detect helpers (plaza proximity).
- * Uses shared geo + KV plaza catalog.
+ * Uses shared segment matcher + shared plaza loader.
  */
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { distanceMeters } from "../_shared/geo.ts";
-import { isPointNearPlaza, routeCrossesPlaza, type TollPlazaGeo } from "../_shared/tollGeofenceCore.ts";
+import { distanceMeters, type LatLng } from "../_shared/geo.ts";
+import {
+  evaluateLiveFixAgainstPlazas,
+  ROUND_TRIP_COOLDOWN_MS,
+  routeCrossesPlaza,
+  type TollPlazaGeo,
+} from "../_shared/tollGeofenceCore.ts";
+import {
+  invalidatePlazaCache,
+  loadPlazas as loadSharedPlazas,
+  type LoadedTollPlaza,
+  type LoadTollPlazasOptions,
+} from "../_shared/tollPlazaLoader.ts";
 
-export interface LoadedPlaza extends TollPlazaGeo {
-  currency: string;
+export type LoadedPlaza = LoadedTollPlaza;
+
+export { invalidatePlazaCache };
+
+export async function loadPlazas(
+  db: SupabaseClient,
+  options?: LoadTollPlazasOptions,
+): Promise<LoadedPlaza[]> {
+  return loadSharedPlazas(db, options);
 }
 
-let cache: { plazas: LoadedPlaza[]; at: number } | null = null;
-const TTL = 5 * 60 * 1000;
-
-export function invalidatePlazaCache() {
-  cache = null;
-}
-
-export async function loadPlazas(db: SupabaseClient): Promise<LoadedPlaza[]> {
-  if (cache && Date.now() - cache.at < TTL) return cache.plazas;
-  const { data, error } = await db
-    .from("kv_store_37f42386")
-    .select("key, value")
-    .like("key", "toll_plaza:%")
-    .limit(500);
-  if (error) {
-    console.error("[toll-brain] plaza load failed", error.message);
-    return cache?.plazas || [];
-  }
-  const plazas: LoadedPlaza[] = [];
-  for (const row of data || []) {
-    const v = row.value as Record<string, unknown>;
-    if (!v || typeof v !== "object") continue;
-    if (v.operationalStatus === "inactive" || v.status === "inactive") continue;
-    const loc = v.location as { lat?: number; lng?: number } | undefined;
-    if (!loc?.lat || !loc?.lng) continue;
-    const rates = Array.isArray(v.rates) ? v.rates as Record<string, unknown>[] : [];
-    const rate = rates.find((r) => r.vehicleClass === "Class 1") || rates[0];
-    const amount = Number(rate?.amount ?? rate?.rate ?? 0);
-    plazas.push({
-      id: String(row.key).replace("toll_plaza:", ""),
-      name: String(v.name ?? "Unknown Toll"),
-      location: { lat: Number(loc.lat), lng: Number(loc.lng) },
-      geofenceRadius: Number(v.geofenceRadius ?? 100),
-      defaultRateMinor: Math.round(amount * 100),
-      currency: String(rate?.currency ?? "JMD"),
-    });
-  }
-  cache = { plazas, at: Date.now() };
-  return plazas;
+function toPlazaGeo(p: LoadedPlaza): TollPlazaGeo {
+  return {
+    id: p.id,
+    name: p.name,
+    location: p.location,
+    geofenceRadius: p.geofenceRadius,
+    defaultRateMinor: p.defaultRateMinor,
+    currency: p.currency,
+    direction: p.direction,
+    verificationStatus: p.verificationStatus,
+  };
 }
 
 export function evaluatePoint(input: {
@@ -60,6 +50,9 @@ export function evaluatePoint(input: {
   recentByPlaza?: Record<string, number>;
   cooldownMs?: number;
   nowMs?: number;
+  /** Previous fix for segment-to-circle matching. */
+  prevLat?: number | null;
+  prevLng?: number | null;
 }): {
   tollsCrossed: Array<{
     tollPlazaId: string;
@@ -72,39 +65,38 @@ export function evaluatePoint(input: {
   totalTollsMinor: number;
 } {
   const already = new Set(input.alreadyCrossedPlazaIds || []);
-  const cooldownMode = !!input.recentByPlaza;
-  const cooldownMs = input.cooldownMs ?? 5 * 60 * 1000;
+  const cooldownMs = input.cooldownMs ?? ROUND_TRIP_COOLDOWN_MS;
   const nowMs = input.nowMs ?? Date.now();
-  const point = { lat: input.lat, lng: input.lng };
-  const tollsCrossed: Array<{
-    tollPlazaId: string;
-    tollPlazaName: string;
-    tollAmountMinor: number;
-    currency: string;
-    driverLat: number;
-    driverLng: number;
-  }> = [];
-  let totalTollsMinor = 0;
+  const curr = { lat: input.lat, lng: input.lng };
+  const prev: LatLng | null =
+    input.prevLat != null && input.prevLng != null &&
+      Number.isFinite(input.prevLat) && Number.isFinite(input.prevLng)
+      ? { lat: Number(input.prevLat), lng: Number(input.prevLng) }
+      : null;
 
-  for (const plaza of input.plazas) {
-    if (!(plaza.defaultRateMinor > 0)) continue;
-    if (cooldownMode) {
-      const last = input.recentByPlaza![plaza.id];
-      if (last !== undefined && nowMs - last < cooldownMs) continue;
-    } else if (already.has(plaza.id)) {
-      continue;
-    }
-    if (!isPointNearPlaza(point, plaza, input.geofenceRadiusM)) continue;
-    tollsCrossed.push({
-      tollPlazaId: plaza.id,
-      tollPlazaName: plaza.name,
-      tollAmountMinor: plaza.defaultRateMinor,
-      currency: plaza.currency,
-      driverLat: input.lat,
-      driverLng: input.lng,
-    });
-    totalTollsMinor += plaza.defaultRateMinor;
-  }
+  const recentByPlaza = input.recentByPlaza
+    ? new Map(Object.entries(input.recentByPlaza).map(([k, v]) => [k, Number(v)]))
+    : undefined;
+
+  const hits = evaluateLiveFixAgainstPlazas(prev, curr, input.plazas.map(toPlazaGeo), {
+    fallbackRadiusM: input.geofenceRadiusM,
+    requireVerified: true,
+    enforceDirection: true,
+    recentByPlaza,
+    cooldownMs,
+    nowMs,
+    alreadyCrossed: already,
+  });
+
+  const tollsCrossed = hits.map((h) => ({
+    tollPlazaId: h.plazaId,
+    tollPlazaName: h.plazaName,
+    tollAmountMinor: h.tollAmountMinor,
+    currency: h.currency,
+    driverLat: h.lat,
+    driverLng: h.lng,
+  }));
+  const totalTollsMinor = tollsCrossed.reduce((s, c) => s + c.tollAmountMinor, 0);
   return { tollsCrossed, totalTollsMinor };
 }
 
@@ -115,7 +107,7 @@ export function estimateRoute(input: {
 }): { plazaIds: string[]; totalTollsMinor: number; currency: string } {
   const hit: LoadedPlaza[] = [];
   for (const plaza of input.plazas) {
-    if (routeCrossesPlaza(input.points, plaza, input.geofenceRadiusM)) {
+    if (routeCrossesPlaza(input.points, toPlazaGeo(plaza), input.geofenceRadiusM)) {
       hit.push(plaza);
     }
   }
@@ -128,3 +120,4 @@ export function estimateRoute(input: {
 }
 
 export { distanceMeters };
+export type { TollPlazaGeo };

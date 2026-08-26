@@ -48,6 +48,8 @@ export interface TollLogEntry {
   status: string;                     // Original status value
   statusDisplay: string;              // Human-readable
   isReconciled: boolean;
+  /** Soft-voided: still listed, but excluded from every spend/analytics total. */
+  isVoided: boolean;
 
   // --- Reference / Audit ---
   referenceNumber: string | null;

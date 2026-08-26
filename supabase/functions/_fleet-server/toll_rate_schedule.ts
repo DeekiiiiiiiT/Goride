@@ -5,23 +5,33 @@ import * as kv from "./kv_store.tsx";
 import {
   migrateToVersionedStore,
   publishScheduleVersion,
+  publishScheduleVersionChecked,
   resolveOfficialTollRate,
   selectScheduleVersion,
   toIsoDateKey,
-} from "../../../apps/fleet/src/utils/officialTollRate.ts";
+  TollRatePublishError,
+} from "../../../packages/toll-core/src/officialTollRate.ts";
 import type {
   TollPaymentMethodRate,
   TollRateScheduleStore,
   TollRateScheduleVersion,
-} from "../../../apps/fleet/src/types/tollRateSchedule.ts";
-import { KV_TOLL_RATE_SCHEDULE } from "../../../apps/fleet/src/types/tollRateSchedule.ts";
+} from "../../../packages/toll-core/src/tollRateSchedule.ts";
+import { KV_TOLL_RATE_SCHEDULE } from "../../../packages/toll-core/src/tollRateSchedule.ts";
+import {
+  previewRateImpact,
+  type ImpactTollRow,
+  type RateImpactPreview,
+} from "../../../apps/fleet/src/utils/tollRateImpact.ts";
+import { readRateStamp } from "./toll_rate_provenance.ts";
 
 export {
   migrateToVersionedStore,
   publishScheduleVersion,
+  publishScheduleVersionChecked,
   resolveOfficialTollRate,
   selectScheduleVersion,
   toIsoDateKey,
+  TollRatePublishError,
 };
 
 export async function loadTollRateStore(): Promise<TollRateScheduleStore> {
@@ -50,9 +60,9 @@ export async function publishTollRates(
     currency?: string;
     createdBy?: string;
   },
-): Promise<TollRateScheduleStore> {
+): Promise<{ store: TollRateScheduleStore; published: boolean }> {
   const store = await loadTollRateStore();
-  const next = publishScheduleVersion(store, {
+  const result = publishScheduleVersionChecked(store, {
     effectiveDate: draft.effectiveDate || store.current.effectiveDate,
     effectiveFrom: draft.effectiveFrom || draft.effectiveDate,
     operator: draft.operator || store.current.operator,
@@ -62,8 +72,53 @@ export async function publishTollRates(
     routeRateGroups: draft.routeRateGroups,
     createdBy: draft.createdBy,
   });
-  await saveTollRateStore(next);
-  return next;
+  // An unchanged card is not worth a new version, and writing one would make
+  // every save look like a price change in the history.
+  if (result.published) await saveTollRateStore(result.store);
+  return result;
+}
+
+/**
+ * What publishing this draft would do to tolls that are not yet settled.
+ *
+ * Reads the vehicle class per row the same way reconciliation does, because a
+ * class-2 vehicle at the same plaza is a different price and a preview that
+ * assumed class 1 everywhere would understate the change.
+ */
+export async function previewTollRateImpact(
+  draft: TollRateScheduleVersion,
+): Promise<RateImpactPreview> {
+  const store = await loadTollRateStore();
+  const ledger = (await kv.getByPrefix("toll_ledger:")) as any[];
+
+  const vehicleClassById = new Map<string, string>();
+  for (const v of ((await kv.getByPrefix("vehicle:")) as any[]) || []) {
+    if (v?.id && v?.tollClassId) vehicleClassById.set(String(v.id), String(v.tollClassId));
+  }
+
+  const rows: ImpactTollRow[] = [];
+  for (const entry of ledger || []) {
+    if (!entry) continue;
+    if (entry.status === "voided" || entry.metadata?.voided === true) continue;
+    // A stamp is the only thing that truly freezes a row. A reconciled but
+    // unstamped row predates provenance and is still reachable by a new card,
+    // so it stays in the preview rather than being quietly written off.
+    const stamped = readRateStamp(entry) !== null;
+    rows.push({
+      id: String(entry.id),
+      date: String(entry.date || entry.createdAt || ""),
+      plazaId: entry.plazaId ?? null,
+      plazaName: entry.plaza ?? entry.location ?? null,
+      classId: (entry.vehicleId && vehicleClassById.get(String(entry.vehicleId))) || "class1",
+      paymentMethod: String(entry.paymentMethod || "").toLowerCase() === "cash"
+        ? "withoutTag"
+        : "withTag",
+      tagAmount: Math.abs(Number(entry.amount) || 0),
+      stamped,
+    });
+  }
+
+  return previewRateImpact(rows, store.current, draft);
 }
 
 export async function lookupOfficialRate(params: {

@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Receipt, Loader2, RefreshCw, TrendingDown, TrendingUp, CreditCard, Calculator, Users, Zap, MapPin, ShieldCheck } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
 import { Badge } from '../ui/badge';
@@ -12,19 +12,16 @@ import {
   PieChart, Pie, Legend,
 } from 'recharts';
 import { SafeResponsiveContainer as ResponsiveContainer } from '../ui/SafeResponsiveContainer';
-import { format, parseISO, startOfMonth, endOfMonth, eachMonthOfInterval } from 'date-fns';
+import { generatePeriodWeekOptions } from '../../utils/periodWeekOptions';
+import { resolvePeriod, inPeriod, formatPeriodLabel, previousPeriod } from '../business-finance/periodRange';
 import type { PeriodPreset } from '../business-finance/types';
-import { resolvePeriod, inPeriod, formatPeriodLabel } from '../business-finance/periodRange';
-
-/** Format a number as Jamaican Dollar currency */
-function formatJMD(value: number, decimals = 0): string {
-  return new Intl.NumberFormat('en-JM', {
-    style: 'currency',
-    currency: 'JMD',
-    minimumFractionDigits: decimals,
-    maximumFractionDigits: decimals,
-  }).format(value);
-}
+import { formatJMD, formatJMDDelta } from '../../utils/formatJMD';
+import { excludeVoided } from '../../utils/tollLogStatus';
+import { buildTollTrendBuckets } from '../../utils/tollAnalyticsTrend';
+import { computeETagMetrics, type PlazaRateCard } from '../../utils/tollETagMetrics';
+import { tollLogKindFromTx } from '../../utils/tollCategoryHelper';
+import { api } from '../../services/api';
+import { useFleetTimezone } from '../../utils/timezoneDisplay';
 
 /** Colour palette for bar chart cells */
 const PLAZA_COLORS = ['#6366f1', '#10b981', '#ec4899', '#f59e0b', '#38bdf8', '#8b5cf6', '#ef4444', '#14b8a6'];
@@ -39,94 +36,153 @@ const PAYMENT_COLORS: Record<string, string> = {
 };
 const PAYMENT_FALLBACK_COLOR = '#cbd5e1';
 
-/** Assumed discount rate when switching from Cash to E-Tag */
-const TAG_DISCOUNT_RATE = 0.10;
-
 /** Colour map for reconciliation status donut */
 const STATUS_COLORS: Record<string, string> = {
   Completed: '#10b981',
   Pending: '#f59e0b',
   Flagged: '#ef4444',
   Reconciled: '#3b82f6',
-  Void: '#94a3b8',
+  Voided: '#94a3b8',
   Disputed: '#8b5cf6',
   Unknown: '#cbd5e1',
 };
 
+function currentWeekBounds(timezone?: string): { start: string; end: string } {
+  const [week] = generatePeriodWeekOptions(1, timezone);
+  return { start: week?.startDate || '', end: week?.endDate || '' };
+}
+
 export function TollAnalytics() {
   const { logs, loading, vehicles, drivers, plazas, refresh } = useTollLogs();
+  const fleetTz = useFleetTimezone();
 
-  // Same period control as Fuel Analytics (Mon–Sun weeks + custom range).
-  const [preset, setPreset] = useState<PeriodPreset>('last_90_days');
-  const [customStart, setCustomStart] = useState('');
-  const [customEnd, setCustomEnd] = useState('');
+  // Default to the current Mon–Sun week so the period control and the chart
+  // always agree on the same window (last_90_days was invisible to the week picker).
+  const initialWeek = useMemo(() => currentWeekBounds(fleetTz), [fleetTz]);
+  const [preset, setPreset] = useState<PeriodPreset>('custom');
+  const [customStart, setCustomStart] = useState(initialWeek.start);
+  const [customEnd, setCustomEnd] = useState(initialWeek.end);
+  const [rateCard, setRateCard] = useState<PlazaRateCard[]>([]);
+  const [drillPlaza, setDrillPlaza] = useState<string | null>(null);
+
+  useEffect(() => {
+    const week = currentWeekBounds(fleetTz);
+    setCustomStart((prev) => prev || week.start);
+    setCustomEnd((prev) => prev || week.end);
+  }, [fleetTz]);
+
+  useEffect(() => {
+    let cancelled = false;
+    api.getTollInfo()
+      .then((res: any) => {
+        if (cancelled) return;
+        const plazas = res?.current?.plazas || res?.store?.current?.plazas || [];
+        setRateCard(
+          (plazas as any[]).map((p) => ({
+            plazaId: p.plazaId || p.id || null,
+            plazaName: p.plazaName || p.name || null,
+            rates: p.rates || {},
+          })),
+        );
+      })
+      .catch(() => {
+        if (!cancelled) setRateCard([]);
+      });
+    return () => { cancelled = true; };
+  }, []);
+
   const period = useMemo(
     () => resolvePeriod(preset, customStart, customEnd),
     [preset, customStart, customEnd],
   );
+  const priorPeriod = useMemo(() => previousPeriod(period), [period]);
   const periodLabel = useMemo(() => formatPeriodLabel(period), [period]);
+  const priorPeriodLabel = useMemo(() => formatPeriodLabel(priorPeriod), [priorPeriod]);
 
-  const periodLogs = useMemo(
+  /** Every row in the period, voided included — the status donut must still show them. */
+  const periodLogsAll = useMemo(
     () => logs.filter((l) => inPeriod(String(l.date || '').slice(0, 10), period)),
     [logs, period],
   );
 
+  /** A voided row was reversed, so it never counts toward spend, top-ups or averages. */
+  const periodLogs = useMemo(() => excludeVoided(periodLogsAll), [periodLogsAll]);
+  const voidedCount = periodLogsAll.length - periodLogs.length;
+
+  const priorSpend = useMemo(() => {
+    const priorLogs = excludeVoided(
+      logs.filter((l) => l.isUsage && inPeriod(String(l.date || '').slice(0, 10), priorPeriod)),
+    );
+    return priorLogs.reduce((sum, l) => sum + l.absAmount, 0);
+  }, [logs, priorPeriod]);
+
+  useEffect(() => {
+    setDrillPlaza(null);
+  }, [period.startYmd, period.endYmd]);
+
   // ── Step 2.1 — Summary statistics ──────────────────────────────────────
   const summaryStats = useMemo(() => {
     const usageLogs = periodLogs.filter(l => l.isUsage);
-    const topupLogs = periodLogs.filter(l => !l.isUsage);
+    const topupLogs = periodLogs.filter(l => {
+      if (l.isUsage) return false;
+      const kind = tollLogKindFromTx(l._raw || l);
+      return kind === 'top-up' || kind === 'adjustment';
+    });
+    const refundLogs = periodLogs.filter(l => {
+      if (l.isUsage) return false;
+      return tollLogKindFromTx(l._raw || l) === 'refund';
+    });
 
     const totalSpend = usageLogs.reduce((sum, l) => sum + l.absAmount, 0);
     const totalTopups = topupLogs.reduce((sum, l) => sum + l.absAmount, 0);
+    const totalRefunds = refundLogs.reduce((sum, l) => sum + l.absAmount, 0);
     const usageCount = usageLogs.length;
     const avgCostPerPassage = usageCount > 0 ? totalSpend / usageCount : 0;
 
-    const eTagCount = usageLogs.filter(l => l.paymentMethodDisplay === 'E-Tag').length;
-    const eTagRate = usageCount > 0 ? (eTagCount / usageCount) * 100 : 0;
+    const etag = computeETagMetrics(
+      usageLogs.map((l) => ({
+        plazaId: l.plazaId,
+        plazaName: l.plazaName,
+        paymentMethodDisplay: l.paymentMethodDisplay,
+        hasTag: !!(l.tollTagId || l.tollTagUuid),
+        absAmount: l.absAmount,
+      })),
+      rateCard,
+    );
 
-    const netPosition = totalTopups - totalSpend;
+    const netPosition = totalTopups + totalRefunds - totalSpend;
 
     return {
       totalSpend,
       totalTopups,
+      totalRefunds,
       totalTransactions: periodLogs.length,
       usageCount,
       avgCostPerPassage,
-      eTagCount,
-      eTagRate,
+      eTagCount: etag.taggedPassages,
+      eTagRate: etag.adoptionRate,
+      potentialSavings: etag.potentialSavings,
       netPosition,
     };
-  }, [periodLogs]);
+  }, [periodLogs, rateCard]);
 
-  // ── Step 3.1 — Monthly spend trend (months covered by selected period) ─
-  const monthlyTrendData = useMemo(() => {
-    const rangeStart = startOfMonth(parseISO(period.startYmd));
-    const rangeEnd = endOfMonth(parseISO(period.endYmd));
-    const months =
-      rangeStart <= rangeEnd
-        ? eachMonthOfInterval({ start: rangeStart, end: rangeEnd })
-        : [rangeStart];
-
-    return months.map(month => {
-      const mStart = startOfMonth(month);
-      const mEnd = endOfMonth(month);
-      const inMonth = periodLogs.filter(l => {
-        const d = parseISO(String(l.date || '').slice(0, 10));
-        return d >= mStart && d <= mEnd;
-      });
-
-      const spend = inMonth.filter(l => l.isUsage).reduce((s, l) => s + l.absAmount, 0);
-      const topups = inMonth.filter(l => !l.isUsage).reduce((s, l) => s + l.absAmount, 0);
-      const passages = inMonth.filter(l => l.isUsage).length;
-
-      return {
-        name: format(month, 'MMM yyyy'),
-        spend: Number(spend.toFixed(2)),
-        topups: Number(topups.toFixed(2)),
-        passages,
-      };
-    });
-  }, [periodLogs, period.startYmd, period.endYmd]);
+  // ── Step 3.1 — Trend (daily ≤45 days, otherwise monthly) ───────────────
+  const trend = useMemo(
+    () =>
+      buildTollTrendBuckets(
+        periodLogs.map((l) => ({
+          date: l.date,
+          time: l.time,
+          isUsage: l.isUsage,
+          absAmount: l.absAmount,
+          creditKind: tollLogKindFromTx(l._raw || l),
+        })),
+        period.startYmd,
+        period.endYmd,
+      ),
+    [periodLogs, period.startYmd, period.endYmd],
+  );
+  const trendData = trend.buckets;
 
   // ── Step 3.2 — Spend by plaza (top 8) ─────────────────────────────────
   const plazaSpendData = useMemo(() => {
@@ -217,14 +273,25 @@ export function TollAnalytics() {
       .slice(0, 3);
 
     // --- Cash overpay candidates (vehicles with >30% cash toll passages) ---
-    const vehPayMap: Record<string, { name: string; total: number; cashCount: number; cashSpend: number }> = {};
+    const vehPayMap: Record<string, { name: string; total: number; cashCount: number; cashSpend: number; potentialSavings: number }> = {};
     usageLogs.forEach(l => {
       const key = l.vehicleId || 'unknown';
-      if (!vehPayMap[key]) vehPayMap[key] = { name: l.vehicleName || 'Unknown Vehicle', total: 0, cashCount: 0, cashSpend: 0 };
+      if (!vehPayMap[key]) vehPayMap[key] = { name: l.vehicleName || 'Unknown Vehicle', total: 0, cashCount: 0, cashSpend: 0, potentialSavings: 0 };
       vehPayMap[key].total += 1;
       if (l.paymentMethodDisplay === 'Cash') {
         vehPayMap[key].cashCount += 1;
         vehPayMap[key].cashSpend += l.absAmount;
+        const vehicleSavings = computeETagMetrics(
+          [{
+            plazaId: l.plazaId,
+            plazaName: l.plazaName,
+            paymentMethodDisplay: 'Cash',
+            hasTag: false,
+            absAmount: l.absAmount,
+          }],
+          rateCard,
+        ).potentialSavings;
+        vehPayMap[key].potentialSavings += vehicleSavings;
       }
     });
     const cashCandidates = Object.values(vehPayMap)
@@ -233,7 +300,7 @@ export function TollAnalytics() {
         name: v.name,
         cashRate: Math.round((v.cashCount / v.total) * 100),
         cashSpend: v.cashSpend,
-        estimatedSavings: Number((v.cashSpend * TAG_DISCOUNT_RATE).toFixed(2)),
+        estimatedSavings: Number(v.potentialSavings.toFixed(2)),
       }))
       .sort((a, b) => b.estimatedSavings - a.estimatedSavings)
       .slice(0, 5);
@@ -247,19 +314,19 @@ export function TollAnalytics() {
     const totalFlagged = Object.values(flaggedByPlaza).reduce((s, c) => s + c, 0);
 
     return { topVehicles, cashCandidates, flaggedByPlaza, totalFlagged };
-  }, [periodLogs]);
+  }, [periodLogs, rateCard]);
 
   // ── Step 7 — Reconciliation Overview + Parish Spend ───────────
   const reconStatusData = useMemo(() => {
     const map: Record<string, number> = {};
-    periodLogs.forEach(l => {
+    periodLogsAll.forEach(l => {
       const key = l.statusDisplay || 'Unknown';
       map[key] = (map[key] || 0) + 1;
     });
     return Object.entries(map)
       .map(([name, value]) => ({ name, value, color: STATUS_COLORS[name] || '#cbd5e1' }))
       .sort((a, b) => b.value - a.value);
-  }, [periodLogs]);
+  }, [periodLogsAll]);
 
   const parishSpendData = useMemo(() => {
     const map: Record<string, { parish: string; spend: number; count: number }> = {};
@@ -287,6 +354,7 @@ export function TollAnalytics() {
         placeholder="Select week period"
         allowCustomRange
         weekCount={26}
+        timezone={fleetTz}
         buttonClassName="h-11 min-h-11 text-sm"
         onSelect={(week) => {
           setCustomStart(week.startDate);
@@ -357,7 +425,7 @@ export function TollAnalytics() {
         </div>
       </div>
 
-      {periodLogs.length === 0 ? (
+      {periodLogsAll.length === 0 ? (
         <div className="flex flex-col items-center justify-center min-h-[280px] gap-3 rounded-xl border border-dashed border-slate-200 bg-slate-50/80 text-center px-4">
           <Receipt className="h-8 w-8 text-slate-400" />
           <div className="space-y-1">
@@ -386,6 +454,15 @@ export function TollAnalytics() {
             <p className="text-xs text-slate-500 mt-2">
               {summaryStats.usageCount.toLocaleString()} passage{summaryStats.usageCount !== 1 ? 's' : ''}
             </p>
+            {priorSpend > 0 || summaryStats.totalSpend > 0 ? (
+              <p className="text-xs text-slate-400 mt-1">
+                vs prior period ({priorPeriodLabel}):{' '}
+                <span className={summaryStats.totalSpend - priorSpend > 0 ? 'text-rose-300' : summaryStats.totalSpend - priorSpend < 0 ? 'text-emerald-300' : 'text-slate-300'}>
+                  {formatJMDDelta(summaryStats.totalSpend - priorSpend)}
+                </span>
+                {' · '}was {formatJMD(priorSpend)}
+              </p>
+            ) : null}
           </CardContent>
         </Card>
 
@@ -424,7 +501,10 @@ export function TollAnalytics() {
               />
             </div>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">
-              {summaryStats.eTagCount} of {summaryStats.usageCount} passages via E-Tag
+              {summaryStats.eTagCount} of {summaryStats.usageCount} passages used a transponder
+              {summaryStats.potentialSavings > 0 && (
+                <> · {formatJMD(summaryStats.potentialSavings)} cash→tag savings available</>
+              )}
             </p>
           </CardContent>
         </Card>
@@ -441,7 +521,9 @@ export function TollAnalytics() {
               }`}>
                 {summaryStats.netPosition >= 0 ? '+' : ''}{formatJMD(summaryStats.netPosition)}
               </h3>
-              <p className="text-xs text-slate-500 dark:text-slate-400">Top-ups minus spend</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Top-ups{summaryStats.totalRefunds > 0 ? ' + refunds' : ''} minus spend
+              </p>
             </div>
             <div className={`p-3 rounded-xl ${
               summaryStats.netPosition >= 0
@@ -460,16 +542,20 @@ export function TollAnalytics() {
       {/* ── Step 3.3 — Trend & Plaza Charts ──────────────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
-        {/* Chart 1 — Monthly Spend Trend */}
+        {/* Chart 1 — Spend Trend (daily or monthly) */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-lg">Monthly Toll Spend</CardTitle>
-            <CardDescription>Spend vs top-ups for {periodLabel}.</CardDescription>
+            <CardTitle className="text-lg">
+              {trend.granularity === 'daily' ? 'Daily Toll Spend' : 'Monthly Toll Spend'}
+            </CardTitle>
+            <CardDescription>
+              Spend vs top-ups{summaryStats.totalRefunds > 0 ? ' and refunds' : ''} for {periodLabel}.
+            </CardDescription>
           </CardHeader>
           <CardContent className="min-h-[300px] w-full relative">
             <div className="w-full">
               <ResponsiveContainer width="100%" height={300}>
-                <AreaChart data={monthlyTrendData}>
+                <AreaChart data={trendData}>
                   <defs>
                     <linearGradient id="tollSpendGrad" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="5%" stopColor="#6366f1" stopOpacity={0.3} />
@@ -478,6 +564,10 @@ export function TollAnalytics() {
                     <linearGradient id="tollTopupGrad" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
                       <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                    </linearGradient>
+                    <linearGradient id="tollRefundGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.3} />
+                      <stop offset="95%" stopColor="#f59e0b" stopOpacity={0} />
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
@@ -489,6 +579,7 @@ export function TollAnalytics() {
                   />
                   <Area type="monotone" dataKey="spend" stroke="#6366f1" strokeWidth={2} fillOpacity={1} fill="url(#tollSpendGrad)" name="Toll Spend" />
                   <Area type="monotone" dataKey="topups" stroke="#10b981" strokeWidth={2} fillOpacity={1} fill="url(#tollTopupGrad)" name="Top-ups" />
+                  <Area type="monotone" dataKey="refunds" stroke="#f59e0b" strokeWidth={2} fillOpacity={1} fill="url(#tollRefundGrad)" name="Refunds" />
                 </AreaChart>
               </ResponsiveContainer>
             </div>
@@ -499,12 +590,35 @@ export function TollAnalytics() {
         <Card>
           <CardHeader>
             <CardTitle className="text-lg">Spend by Plaza</CardTitle>
-            <CardDescription>Top toll plazas ranked by total spend.</CardDescription>
+            <CardDescription>
+              Top toll plazas ranked by total spend.
+              {drillPlaza ? (
+                <button
+                  type="button"
+                  className="ml-2 text-indigo-600 hover:underline"
+                  onClick={() => setDrillPlaza(null)}
+                >
+                  Clear filter ({drillPlaza})
+                </button>
+              ) : (
+                <span className="text-slate-400"> · click a bar to filter passages</span>
+              )}
+            </CardDescription>
           </CardHeader>
           <CardContent className="min-h-[300px] w-full relative">
             <div className="w-full">
               <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={plazaSpendData} layout="vertical" margin={{ left: 40 }}>
+                <BarChart
+                  data={plazaSpendData}
+                  layout="vertical"
+                  margin={{ left: 40 }}
+                  onClick={(state: any) => {
+                    const name = state?.activeLabel || state?.activePayload?.[0]?.payload?.name;
+                    if (typeof name === 'string' && name) {
+                      setDrillPlaza((prev) => (prev === name ? null : name));
+                    }
+                  }}
+                >
                   <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
                   <XAxis type="number" hide />
                   <YAxis
@@ -520,14 +634,46 @@ export function TollAnalytics() {
                     contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
                     formatter={(value: number, name: string) => [formatJMD(value), name]}
                   />
-                  <Bar dataKey="spend" radius={[0, 4, 4, 0]} barSize={20} name="Spend">
-                    {plazaSpendData.map((_, index) => (
-                      <Cell key={`plaza-cell-${index}`} fill={PLAZA_COLORS[index % PLAZA_COLORS.length]} />
+                  <Bar dataKey="spend" radius={[0, 4, 4, 0]} barSize={20} name="Spend" className="cursor-pointer">
+                    {plazaSpendData.map((row, index) => (
+                      <Cell
+                        key={`plaza-cell-${index}`}
+                        fill={
+                          drillPlaza && drillPlaza !== row.name
+                            ? '#cbd5e1'
+                            : PLAZA_COLORS[index % PLAZA_COLORS.length]
+                        }
+                      />
                     ))}
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
             </div>
+            {drillPlaza && (
+              <div className="mt-4 rounded-lg border border-slate-200 overflow-hidden">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Date</TableHead>
+                      <TableHead>Vehicle</TableHead>
+                      <TableHead className="text-right">Amount</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {periodLogs
+                      .filter((l) => l.isUsage && (l.plazaName || 'Unknown Plaza') === drillPlaza)
+                      .slice(0, 25)
+                      .map((l) => (
+                        <TableRow key={l.id}>
+                          <TableCell className="text-xs">{String(l.date).slice(0, 10)}</TableCell>
+                          <TableCell className="text-sm">{l.vehicleName}</TableCell>
+                          <TableCell className="text-right tabular-nums text-sm">{formatJMD(l.absAmount, 2)}</TableCell>
+                        </TableRow>
+                      ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -811,7 +957,7 @@ export function TollAnalytics() {
                       label={({ cx, cy }) => (
                         <text x={cx} y={cy} textAnchor="middle" dominantBaseline="central" className="fill-slate-900 dark:fill-slate-100">
                           <tspan x={cx} dy="-0.4em" fontSize="24" fontWeight="bold">
-                            {periodLogs.length}
+                            {periodLogsAll.length}
                           </tspan>
                           <tspan x={cx} dy="1.4em" fontSize="11" fill="#64748b">
                             transactions
@@ -891,13 +1037,19 @@ export function TollAnalytics() {
       {/* Summary footer */}
       <div className="p-6 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700 text-center">
         <p className="text-sm text-slate-500 dark:text-slate-400">
-          {periodLogs.length} toll transaction{periodLogs.length !== 1 ? 's' : ''} in {periodLabel}
+          {periodLogsAll.length} toll transaction{periodLogsAll.length !== 1 ? 's' : ''} in {periodLabel}
           {' · '}
           {plazas.length} plaza{plazas.length !== 1 ? 's' : ''}
           {' · '}
           {vehicles.length} vehicle{vehicles.length !== 1 ? 's' : ''}
           {' · '}
           {drivers.length} driver{drivers.length !== 1 ? 's' : ''}
+          {voidedCount > 0 && (
+            <>
+              {' · '}
+              <span className="text-slate-400">{voidedCount} voided (excluded from totals)</span>
+            </>
+          )}
           {insights.totalFlagged > 0 && (
             <>
               {' · '}

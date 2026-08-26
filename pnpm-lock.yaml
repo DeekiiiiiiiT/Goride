@@ -125,6 +125,9 @@ importers:
       '@roam/rush-chat':
         specifier: workspace:*
         version: link:../../packages/rush-chat
+      '@roam/toll-core':
+        specifier: workspace:*
+        version: link:../../packages/toll-core
       '@roam/toll-ui':
         specifier: workspace:*
         version: link:../../packages/toll-ui
@@ -234,6 +237,9 @@ importers:
       vite:
         specifier: 6.3.5
         version: 6.3.5(@types/node@20.19.40)(jiti@2.7.0)(lightningcss@1.30.1)(terser@5.49.0)
+      vitest:
+        specifier: ^3.2.4
+        version: 3.2.4(@types/node@20.19.40)(jiti@2.7.0)(lightningcss@1.30.1)(terser@5.49.0)
 
   apps/dash-courier:
     dependencies:
@@ -768,6 +774,9 @@ importers:
       '@roam/ride-chat':
         specifier: workspace:*
         version: link:../../packages/ride-chat
+      '@roam/toll-core':
+        specifier: workspace:*
+        version: link:../../packages/toll-core
       '@roam/toll-ui':
         specifier: workspace:*
         version: link:../../packages/toll-ui
@@ -1211,6 +1220,9 @@ importers:
       '@roam/roam-shared':
         specifier: workspace:*
         version: link:../../packages/roam-shared
+      '@roam/toll-core':
+        specifier: workspace:*
+        version: link:../../packages/toll-core
       '@roam/toll-ui':
         specifier: workspace:*
         version: link:../../packages/toll-ui
@@ -2025,6 +2037,12 @@ importers:
         specifier: ^2.0.3
         version: 2.0.7(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
 
+  packages/toll-core:
+    devDependencies:
+      vitest:
+        specifier: ^3.2.4
+        version: 3.2.4(@types/node@20.19.40)(jiti@2.7.0)(lightningcss@1.30.1)(terser@5.49.0)
+
   packages/toll-ui:
     dependencies:
       '@roam/types':
@@ -2051,6 +2069,9 @@ importers:
       '@capacitor/geolocation':
         specifier: ^7.1.8
         version: 7.1.8(@capacitor/core@7.6.5)
+      '@roam/toll-core':
+        specifier: workspace:*
+        version: link:../toll-core
 
   packages/ui:
     dependencies:

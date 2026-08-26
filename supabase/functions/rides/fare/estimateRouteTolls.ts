@@ -27,6 +27,8 @@ function toPlazaGeo(p: LoadedTollPlaza): TollPlazaGeo {
     geofenceRadius: p.geofenceRadius,
     defaultRateMinor: p.defaultRateMinor,
     currency: p.currency,
+    direction: p.direction,
+    verificationStatus: p.verificationStatus,
   };
 }
 
@@ -70,7 +72,11 @@ export async function estimateRouteTolls(
 
   for (const plaza of plazas) {
     const geo = toPlazaGeo(plaza);
-    if (!routeCrossesPlaza(routePoints, geo, fallbackGeofenceRadiusM)) continue;
+    // Quotes use the same verified gate as live charging so unverified plazas
+    // cannot inflate fares. Direction is enforced when plaza.direction is set.
+    if (!routeCrossesPlaza(routePoints, geo, fallbackGeofenceRadiusM, {
+      requireVerified: true,
+    })) continue;
     matched.push({
       toll_plaza_id: plaza.id,
       toll_plaza_name: plaza.name,

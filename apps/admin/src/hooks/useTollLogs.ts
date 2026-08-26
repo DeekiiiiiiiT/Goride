@@ -4,7 +4,14 @@ import { FinancialTransaction } from '../types/data';
 import { Vehicle } from '../types/vehicle';
 import { TollPlaza } from '../types/toll';
 import { TollLogEntry } from '../types/tollLog';
-import { tollLogKindFromCategory } from '../utils/tollCategoryHelper';
+import { tollLogKindFromTx } from '../utils/tollCategoryHelper';
+
+/**
+ * Admin fork of fleet useTollLogs.
+ * Cannot thin-reexport fleet's hook: fleet depends on fleet-only
+ * resolveTollPlaza / isVoidedTx / resolveTollStatusDisplay modules.
+ * Category kind + voided status display stay aligned with fleet semantics below.
+ */
 
 // Simple driver shape returned by api.getDrivers()
 interface DriverRecord {
@@ -31,13 +38,20 @@ function resolvePaymentDisplay(tx: FinancialTransaction): string {
 /**
  * Resolve a human-readable status label.
  */
-function resolveStatusDisplay(status: string): string {
+function isVoidedTx(tx: any): boolean {
+  return (tx?.status || '').toLowerCase() === 'voided' || tx?.metadata?.voided === true;
+}
+
+/** A soft-voided row keeps its prior status, so the void has to win the label. */
+function resolveStatusDisplay(tx: any): string {
+  if (isVoidedTx(tx)) return 'Voided';
+  const status = tx?.status || '';
   switch (status) {
     case 'Completed': return 'Completed';
     case 'Pending': return 'Pending';
     case 'Failed': return 'Failed';
     case 'Reconciled': return 'Reconciled';
-    case 'Void': return 'Void';
+    case 'Void': return 'Voided';
     case 'Verified': return 'Verified';
     case 'Approved': return 'Approved';
     case 'Rejected': return 'Rejected';
@@ -162,16 +176,10 @@ export function useTollLogs() {
       // Note: server already filters to toll categories and sorts by date desc,
       // so we skip client-side filtering/deduplication/sorting.
       const enriched: TollLogEntry[] = tollTransactions.map((tx: any) => {
-        const kind = tollLogKindFromCategory(tx.category);
+        const kind = tollLogKindFromTx(tx);
         const isUsage = kind === 'usage';
-        const typeLabel =
-          kind === 'top-up'
-            ? 'Top-up'
-            : kind === 'refund'
-              ? 'Refund'
-              : kind === 'adjustment'
-                ? 'Adjustment'
-                : 'Usage';
+        // TollLogEntry.typeLabel is Usage | Top-up; credits/refunds share Top-up lane (fleet)
+        const typeLabel: 'Usage' | 'Top-up' = isUsage ? 'Usage' : 'Top-up';
 
         // Resolve vehicle
         const vehicle = tx.vehicleId ? vehicleMap.get(tx.vehicleId) : undefined;
@@ -214,8 +222,9 @@ export function useTollLogs() {
           tollTagId,
           tollTagUuid,
           status: tx.status || 'Unknown',
-          statusDisplay: resolveStatusDisplay(tx.status || ''),
+          statusDisplay: resolveStatusDisplay(tx),
           isReconciled: tx.isReconciled || false,
+          isVoided: isVoidedTx(tx),
           referenceNumber: tx.referenceNumber || null,
           description: tx.description || '',
           tripId: tx.tripId || null,

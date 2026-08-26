@@ -1,158 +1,148 @@
-
-import { findTollMatches, MatchResult } from './tollReconciliation';
+import { describe, expect, it } from 'vitest';
+import { findTollMatches } from './tollReconciliation';
 import { FinancialTransaction, Trip } from '../types/data';
 
-// --- Simple Test Runner ---
-function assert(condition: boolean, message: string) {
-    if (!condition) {
-        console.error(`❌ FAILED: ${message}`);
-        throw new Error(message);
-    } else {
-        console.log(`✅ PASSED: ${message}`);
-    }
-}
-
-function assertEquals(actual: any, expected: any, message: string) {
-    if (actual !== expected) {
-        console.error(`❌ FAILED: ${message}. Expected ${expected}, got ${actual}`);
-        throw new Error(`${message}. Expected ${expected}, got ${actual}`);
-    } else {
-        console.log(`✅ PASSED: ${message}`);
-    }
-}
-
-// --- Test Data Helpers ---
-const createTx = (id: string, date: string, time: string, amount: number, vehicleId: string = 'V1'): FinancialTransaction => ({
+/**
+ * Trip and transaction timestamps must be built in the same clock. `findTollMatches`
+ * parses a toll's `date` + `time` as local, so trip fixtures use naive (no-Z) ISO
+ * strings — a `Z` suffix here silently shifts every window by the runner's offset.
+ */
+const createTx = (
+  id: string,
+  date: string,
+  time: string,
+  amount: number,
+  vehicleId: string = 'V1',
+): FinancialTransaction =>
+  ({
     id,
-    date, // YYYY-MM-DD
-    time, // HH:mm:ss
-    amount, // Negative for expense usually
+    date,
+    time,
+    amount, // negative: an expense
     vehicleId,
     description: 'Toll',
     type: 'Expense',
     category: 'Tolls',
     paymentMethod: 'Credit Card',
     status: 'Completed',
-    isReconciled: false
-} as FinancialTransaction);
+    isReconciled: false,
+  }) as FinancialTransaction;
 
-const createTrip = (id: string, date: string, time: string, tollAmount: number, vehicleId: string = 'V1'): Trip => ({
+const addMinutes = (date: string, time: string, minutes: number): string => {
+  const [h, m, s] = time.split(':').map(Number);
+  const d = new Date(`${date}T${time}`);
+  d.setHours(h, m + minutes, s);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${date}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+};
+
+const createTrip = (
+  id: string,
+  date: string,
+  startTime: string,
+  tollAmount: number,
+  vehicleId: string = 'V1',
+): Trip => {
+  const start = `${date}T${startTime}`;
+  return {
     id,
-    date: `${date}T${time}Z`, // ISO
-    requestTime: `${date}T${time}Z`,
-    dropoffTime: `${date}T${time.replace(/:(\d\d):/, (_, m) => `:${parseInt(m)+20}:`)}Z`, // +20 mins roughly
+    date: start,
+    requestTime: start,
+    dropoffTime: addMinutes(date, startTime, 20),
     amount: 50,
     tollCharges: tollAmount,
     vehicleId,
     platform: 'Uber',
     status: 'Completed',
-    driverId: 'D1'
-} as Trip);
+    driverId: 'D1',
+  } as Trip;
+};
 
-// --- Tests ---
+/**
+ * With no `startTime` or `duration`, pickup falls back to request time, so for a trip
+ * requested at 10:00 and dropped at 10:20 the windows are:
+ *   active   10:00 - 10:20
+ *   approach 09:15 - 10:00
+ *   search   09:15 - 10:35
+ */
+describe('findTollMatches', () => {
+  it('flags a toll inside the active window with a matching amount as reimbursed', () => {
+    const tx = createTx('tx1', '2023-10-10', '10:10:00', -5.0);
+    const trip = createTrip('trip1', '2023-10-10', '10:00:00', 5.0);
 
-function testPerfectMatch() {
-    console.log('\n--- Test: Perfect Match ---');
-    const tx = createTx('tx1', '2023-10-10', '10:10:00', -5.00);
-    // Trip starts 10:00, ends ~10:20. Tx at 10:10 is inside.
-    const trip = createTrip('trip1', '2023-10-10', '10:00:00', 5.00); 
-    
     const matches = findTollMatches(tx, [trip]);
-    
-    assert(matches.length === 1, 'Should find 1 match');
-    assertEquals(matches[0].matchType, 'PERFECT_MATCH', 'Should be PERFECT_MATCH');
-    assertEquals(matches[0].confidence, 'high', 'Should be high confidence');
-}
 
-function testAmountVariance() {
-    console.log('\n--- Test: Amount Variance ---');
-    const tx = createTx('tx1', '2023-10-10', '10:10:00', -4.50); // Tx is 4.50
-    const trip = createTrip('trip1', '2023-10-10', '10:00:00', 5.00); // Trip says 5.00
-    
+    expect(matches).toHaveLength(1);
+    expect(matches[0].matchType).toBe('PERFECT_MATCH');
+    expect(matches[0].confidence).toBe('high');
+  });
+
+  it('raises a claim when the platform reimbursed less than the toll cost', () => {
+    const tx = createTx('tx1', '2023-10-10', '10:10:00', -4.5);
+    const trip = createTrip('trip1', '2023-10-10', '10:00:00', 5.0);
+
     const matches = findTollMatches(tx, [trip]);
-    
-    assert(matches.length === 1, 'Should find 1 match');
-    assertEquals(matches[0].matchType, 'AMOUNT_VARIANCE', 'Should be AMOUNT_VARIANCE');
-    assertEquals(matches[0].confidence, 'high', 'Should be high confidence');
-    // Variance = Trip(5.00) - Tx(4.50) = 0.50
-    assert(Math.abs(matches[0].varianceAmount! - 0.50) < 0.001, 'Variance should be 0.50');
-}
 
-function testDeadheadMatch() {
-    console.log('\n--- Test: Deadhead Match ---');
-    // Trip starts 10:00. Deadhead window is 09:15 - 10:00.
-    // Tx at 09:30 is inside deadhead.
-    const tx = createTx('tx1', '2023-10-10', '09:30:00', -5.00);
-    const trip = createTrip('trip1', '2023-10-10', '10:00:00', 5.00);
-    
+    expect(matches).toHaveLength(1);
+    expect(matches[0].matchType).toBe('AMOUNT_VARIANCE');
+    expect(matches[0].confidence).toBe('high');
+    expect(matches[0].varianceAmount).toBeCloseTo(0.5, 3);
+  });
+
+  it('treats a reimbursed approach toll as covered by the platform', () => {
+    const tx = createTx('tx1', '2023-10-10', '09:30:00', -5.0);
+    const trip = createTrip('trip1', '2023-10-10', '10:00:00', 5.0);
+
     const matches = findTollMatches(tx, [trip]);
-    
-    assert(matches.length === 1, 'Should find 1 match');
-    assertEquals(matches[0].matchType, 'DEADHEAD_MATCH', 'Should be DEADHEAD_MATCH');
-    assertEquals(matches[0].confidence, 'medium', 'Should be medium confidence');
-}
 
-function testAmbiguousDeadhead() {
-    console.log('\n--- Test: Ambiguous Deadhead (Low Priority) ---');
-    // Trip starts 10:00. Deadhead window is 09:15 - 10:00.
-    // Tx at 09:30 is inside deadhead.
-    // Amount mismatch: Tx 4.50, Trip 5.00.
-    const tx = createTx('tx1', '2023-10-10', '09:30:00', -4.50);
-    const trip = createTrip('trip1', '2023-10-10', '10:00:00', 5.00);
-    
+    expect(matches).toHaveLength(1);
+    expect(matches[0].matchType).toBe('PERFECT_MATCH');
+    expect(matches[0].reason).toBe('Approach phase - Reimbursed by Uber');
+  });
+
+  it('charges an unreimbursed approach toll to the driver', () => {
+    const tx = createTx('tx1', '2023-10-10', '09:30:00', -4.5);
+    const trip = createTrip('trip1', '2023-10-10', '10:00:00', 5.0);
+
     const matches = findTollMatches(tx, [trip]);
-    
-    assert(matches.length === 1, 'Should find 1 match');
-    assertEquals(matches[0].matchType, 'POSSIBLE_MATCH', 'Should be POSSIBLE_MATCH');
-    assertEquals(matches[0].confidence, 'low', 'Should be low confidence');
-}
 
-function testNoMatchOutsideWindow() {
-    console.log('\n--- Test: No Match (Outside Window) ---');
-    // Trip starts 10:00. Deadhead start 09:15. End ~10:20 + 15m = 10:35.
-    // Tx at 09:00 is too early.
-    const tx = createTx('tx1', '2023-10-10', '09:00:00', -5.00);
-    const trip = createTrip('trip1', '2023-10-10', '10:00:00', 5.00);
-    
+    expect(matches).toHaveLength(1);
+    expect(matches[0].matchType).toBe('PERSONAL_MATCH');
+    expect(matches[0].reason).toBe('Unreimbursed Approach - Driver Liability');
+  });
+
+  it('treats a toll after dropoff but inside the buffer as likely personal', () => {
+    const tx = createTx('tx1', '2023-10-10', '10:30:00', -5.0);
+    const trip = createTrip('trip1', '2023-10-10', '10:00:00', 5.0);
+
     const matches = findTollMatches(tx, [trip]);
-    
-    assertEquals(matches.length, 0, 'Should find 0 matches');
-}
 
-function testPrioritySorting() {
-    console.log('\n--- Test: Priority Sorting ---');
-    // Tx at 10:10 (Strict window for Trip A)
-    // Tx at 10:10 (Deadhead window for Trip B - Starts at 10:45)
-    
-    const tx = createTx('tx1', '2023-10-10', '10:10:00', -5.00);
-    
-    // Trip A: 10:00 - 10:20. Tx is inside strict window.
-    const tripA = createTrip('tripA', '2023-10-10', '10:00:00', 5.00);
-    
-    // Trip B: 10:45 - 11:05. Deadhead: 10:00 - 10:45. Tx is inside deadhead.
-    const tripB = createTrip('tripB', '2023-10-10', '10:45:00', 5.00);
-    
+    expect(matches).toHaveLength(1);
+    expect(matches[0].matchType).toBe('PERSONAL_MATCH');
+    expect(matches[0].confidence).toBe('low');
+  });
+
+  it('returns nothing when the toll falls outside every window', () => {
+    // Search starts 09:15, so 09:00 is too early to belong to this trip.
+    const tx = createTx('tx1', '2023-10-10', '09:00:00', -5.0);
+    const trip = createTrip('trip1', '2023-10-10', '10:00:00', 5.0);
+
+    expect(findTollMatches(tx, [trip])).toHaveLength(0);
+  });
+
+  it('ranks the trip that was actually underway above a later candidate', () => {
+    const tx = createTx('tx1', '2023-10-10', '10:10:00', -5.0);
+    // Trip A is underway at 10:10.
+    const tripA = createTrip('tripA', '2023-10-10', '10:00:00', 5.0);
+    // Trip B has not started yet, so 10:10 only lands in its approach window.
+    const tripB = createTrip('tripB', '2023-10-10', '10:45:00', 5.0);
+
     const matches = findTollMatches(tx, [tripA, tripB]);
-    
-    assert(matches.length === 2, 'Should find 2 matches');
-    
-    // Should prioritize Perfect Match (Trip A) over Deadhead Match (Trip B)
-    assertEquals(matches[0].trip.id, 'tripA', 'First match should be Trip A (Perfect)');
-    assertEquals(matches[0].matchType, 'PERFECT_MATCH', 'Trip A should be PERFECT_MATCH');
-    
-    assertEquals(matches[1].trip.id, 'tripB', 'Second match should be Trip B (Deadhead)');
-    assertEquals(matches[1].matchType, 'DEADHEAD_MATCH', 'Trip B should be DEADHEAD_MATCH');
-}
 
-// Run All
-try {
-    testPerfectMatch();
-    testAmountVariance();
-    testDeadheadMatch();
-    testAmbiguousDeadhead();
-    testNoMatchOutsideWindow();
-    testPrioritySorting();
-    console.log('\n✅ ALL TESTS PASSED');
-} catch (e) {
-    console.error('\n❌ SOME TESTS FAILED');
-}
+    expect(matches).toHaveLength(2);
+    expect(matches[0].trip.id).toBe('tripA');
+    expect(matches[0].timeDifferenceMinutes).toBe(0);
+    expect(matches[1].trip.id).toBe('tripB');
+    expect(matches[1].timeDifferenceMinutes).toBeGreaterThan(0);
+  });
+});

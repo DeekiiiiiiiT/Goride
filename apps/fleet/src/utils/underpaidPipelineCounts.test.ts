@@ -57,17 +57,17 @@ describe('computeUnderpaidPipelineCounts', () => {
     expect(counts.disputeLost).toBe(1);
   });
 
-  it('does not count Open claim when a dispute refund already covers the toll', () => {
-    const periodClaims = [
+  const openClaimWithRefund = (outstanding: number) => ({
+    periodClaims: [
       {
         id: 'c-open',
         status: 'Open',
-        amount: 10,
+        amount: outstanding,
         paidAmount: 370,
         transactionId: 'toll-covered',
       } as Claim,
-    ];
-    const disputeRefunds = [
+    ],
+    disputeRefunds: [
       {
         id: 'dr-1',
         status: 'matched',
@@ -75,7 +75,11 @@ describe('computeUnderpaidPipelineCounts', () => {
         matchedClaimId: null,
         amount: 10,
       } as DisputeRefund,
-    ];
+    ],
+  });
+
+  it('stops counting an Open claim once the dispute refund has settled the balance', () => {
+    const { periodClaims, disputeRefunds } = openClaimWithRefund(0);
     const counts = computeUnderpaidPipelineCounts({
       reconciledTolls: [],
       periodClaims,
@@ -87,5 +91,21 @@ describe('computeUnderpaidPipelineCounts', () => {
     });
     expect(counts.partialShortfalls).toBe(0);
     expect(counts.actionable).toBe(0);
+  });
+
+  it('keeps an Open claim actionable while money is still outstanding on it', () => {
+    // A matched refund row alone does not close the claim — the remaining balance rules.
+    const { periodClaims, disputeRefunds } = openClaimWithRefund(10);
+    const counts = computeUnderpaidPipelineCounts({
+      reconciledTolls: [],
+      periodClaims,
+      allClaims: periodClaims,
+      trips: [],
+      disputeRefunds,
+      periodWeekKey,
+      fleetTz,
+    });
+    expect(counts.partialShortfalls).toBe(1);
+    expect(counts.actionable).toBe(1);
   });
 });

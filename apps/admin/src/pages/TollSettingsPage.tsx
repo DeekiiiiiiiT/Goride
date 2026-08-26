@@ -149,6 +149,13 @@ export function TollSettingsPage() {
             label="Toll geofence radius (meters)"
             tooltip={TOOLTIPS.toll_geofence_radius_m}
           />
+          {/*
+            DEAD CONTROL (audit C5) until a UX pass wires this global fallback
+            correctly: matching prefers each plaza's own geofenceRadius (Add
+            Plaza always writes one, default 200m). This value only applies when
+            a plaza has geofenceRadius unset/0. Do not remove the dial without
+            replacing it with per-plaza radius editing in Toll Database.
+          */}
           <input
             type="number"
             min={50}
@@ -160,6 +167,10 @@ export function TollSettingsPage() {
             }
             className={settingsInputClass}
           />
+          <p className="text-xs text-slate-500">
+            Fallback only when a plaza has no radius set. Prefer editing each plaza&apos;s
+            geofence in Toll Database.
+          </p>
         </label>
 
         <label className={`${toggleRowClass} mt-4 ${disabled || !formData.toll_detection_enabled ? 'cursor-default' : 'cursor-pointer'}`}>

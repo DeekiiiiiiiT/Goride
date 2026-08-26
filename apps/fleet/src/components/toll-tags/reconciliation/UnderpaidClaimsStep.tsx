@@ -19,7 +19,7 @@ import { FinancialTransaction, Trip, Claim, DisputeRefund } from "../../../types
 import { MatchResult, calculateTollFinancials, buildTollFinancialsContext, buildTripRefundAllocation, spentUnlinkedCreditsByTripId } from "../../../utils/tollReconciliation";
 import { hasBlockingUnlinkedRefund } from "../../../utils/unlinkedShortfallEligibility";
 import { buildClaimByTollId, dedupeClaimsForDisplay, collectDuplicateClaimIds } from "../../../utils/claimByToll";
-import { isVisiblePartialShortfallClaim, isTollCoveredByDisputeRefund, isTollInWizardPeriod, assertTollInWizardPeriod } from "../../../utils/tollWeekPeriod";
+import { isVisiblePartialShortfallClaim, isTollCoveredByDisputeRefund, isTollInWizardPeriod, assertTollInWizardPeriod, getTollTransactionDate } from "../../../utils/tollWeekPeriod";
 import {
   evaluateListableUnderpaidShortfall,
   resolvePendingUnderpaidTrip,
@@ -286,7 +286,9 @@ export function UnderpaidClaimsStep({
     }
 
     return items.sort(
-      (a, b) => new Date(b.transaction.date).getTime() - new Date(a.transaction.date).getTime(),
+      (a, b) =>
+        getTollTransactionDate(b.transaction).getTime() -
+        getTollTransactionDate(a.transaction).getTime(),
     );
   }, [
     reconciledTolls,

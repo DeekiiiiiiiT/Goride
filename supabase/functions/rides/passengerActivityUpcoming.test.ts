@@ -48,7 +48,20 @@ Deno.test("buildActivityPipelineItems loads scheduled rows when enabled", async 
             }),
           }),
         }) as never,
-      pubSvc: () => ({ from: () => ({ select: () => ({ eq: () => ({ eq: () => ({ order: () => ({ limit: async () => ({ data: [], error: null }) }) }) }) }) }) }) }) as never,
+      pubSvc: () =>
+        ({
+          from: () => ({
+            select: () => ({
+              eq: () => ({
+                eq: () => ({
+                  order: () => ({
+                    limit: async () => ({ data: [], error: null }),
+                  }),
+                }),
+              }),
+            }),
+          }),
+        }) as never,
       requireUser: async () => ({ user: { id: "u1" } }),
     },
     "u1",

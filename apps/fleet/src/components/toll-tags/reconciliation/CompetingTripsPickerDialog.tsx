@@ -10,6 +10,7 @@ import { FinancialTransaction, Trip } from '../../../types/data';
 import { MatchResult } from '../../../utils/tollReconciliation';
 import { MatchAlternatesPanel } from './MatchAlternatesPanel';
 import { formatInFleetTz, useFleetTimezone } from '../../../utils/timezoneDisplay';
+import { getTollTransactionDate } from '../../../utils/tollWeekPeriod';
 
 interface CompetingTripsPickerDialogProps {
   isOpen: boolean;
@@ -33,11 +34,7 @@ export function CompetingTripsPickerDialog({
 
   const tollWhen = (() => {
     try {
-      const timeStr = transaction.time || '12:00:00';
-      const cleanTime = timeStr.length >= 5 ? timeStr : '12:00:00';
-      const localDate = new Date(`${transaction.date}T${cleanTime}`);
-      const d = !isNaN(localDate.getTime()) ? localDate : new Date(transaction.date);
-      return formatInFleetTz(d, fleetTz, {
+      return formatInFleetTz(getTollTransactionDate(transaction), fleetTz, {
         month: 'short',
         day: 'numeric',
         hour: 'numeric',

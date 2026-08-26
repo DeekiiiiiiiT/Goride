@@ -65,9 +65,11 @@ interface DisputeRefundDetailDialogProps {
   unmatching?: boolean;
 }
 
+import { formatJMD } from '../../../utils/formatJMD';
+
 function fmtMoney(n?: number | null): string {
   if (typeof n !== 'number' || !Number.isFinite(n)) return '—';
-  return `$${Math.abs(n).toFixed(2)}`;
+  return formatJMD(Math.abs(n), 2);
 }
 
 function resolvedByLabel(resolvedBy: string | null | undefined): string {

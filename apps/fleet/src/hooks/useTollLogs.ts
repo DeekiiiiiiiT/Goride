@@ -5,6 +5,9 @@ import { Vehicle } from '../types/vehicle';
 import { TollPlaza } from '../types/toll';
 import { TollLogEntry } from '../types/tollLog';
 import { tollLogKindFromTx } from '../utils/tollCategoryHelper';
+import { resolveTollPlaza } from '../utils/tollPlazaResolution';
+import { isVoidedTx } from '../utils/tollTagLedger';
+import { resolveTollStatusDisplay } from '../utils/tollLogStatus';
 
 // Simple driver shape returned by api.getDrivers()
 interface DriverRecord {
@@ -26,88 +29,6 @@ function resolvePaymentDisplay(tx: FinancialTransaction): string {
   if (method === 'other' && tx.metadata?.tollTagId) return 'E-Tag';
   if (method) return tx.paymentMethod; // Return original if we can't classify
   return 'Unknown';
-}
-
-/**
- * Resolve a human-readable status label.
- */
-function resolveStatusDisplay(status: string): string {
-  switch (status) {
-    case 'Completed': return 'Completed';
-    case 'Pending': return 'Pending';
-    case 'Failed': return 'Failed';
-    case 'Reconciled': return 'Reconciled';
-    case 'Void': return 'Void';
-    case 'Verified': return 'Verified';
-    case 'Approved': return 'Approved';
-    case 'Rejected': return 'Rejected';
-    case 'Flagged': return 'Flagged';
-    default: return status || 'Unknown';
-  }
-}
-
-/**
- * Try to match a transaction to a toll plaza by comparing the vendor / description
- * text against known plaza names. Falls back to GPS proximity if coordinates exist.
- */
-function matchPlaza(
-  tx: FinancialTransaction,
-  plazas: TollPlaza[]
-): TollPlaza | null {
-  if (!plazas.length) return null;
-
-  const vendor = (tx.vendor || '').toLowerCase().trim();
-  const desc = (tx.description || '').toLowerCase().trim();
-  const searchText = `${vendor} ${desc}`;
-
-  // 1. Exact name match (case-insensitive)
-  for (const plaza of plazas) {
-    const plazaNameLower = plaza.name.toLowerCase();
-    if (vendor === plazaNameLower || desc.includes(plazaNameLower) || searchText.includes(plazaNameLower)) {
-      return plaza;
-    }
-  }
-
-  // 2. Partial match — check if any significant word from plaza name appears
-  for (const plaza of plazas) {
-    const words = plaza.name.toLowerCase().split(/\s+/).filter(w => w.length > 3);
-    const matchCount = words.filter(w => searchText.includes(w)).length;
-    if (words.length > 0 && matchCount >= Math.ceil(words.length * 0.6)) {
-      return plaza;
-    }
-  }
-
-  // 3. GPS proximity match (if transaction has lat/lng in metadata)
-  const txLat = tx.metadata?.lat ?? tx.metadata?.latitude;
-  const txLng = tx.metadata?.lng ?? tx.metadata?.longitude;
-  if (txLat != null && txLng != null) {
-    let closest: TollPlaza | null = null;
-    let closestDist = Infinity;
-    for (const plaza of plazas) {
-      if (!plaza.location?.lat || !plaza.location?.lng) continue;
-      const dist = haversineKm(txLat, txLng, plaza.location.lat, plaza.location.lng);
-      const radiusKm = (plaza.geofenceRadius || 500) / 1000;
-      if (dist < radiusKm && dist < closestDist) {
-        closestDist = dist;
-        closest = plaza;
-      }
-    }
-    if (closest) return closest;
-  }
-
-  return null;
-}
-
-/** Simple haversine distance in km */
-function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
-  const R = 6371;
-  const dLat = (lat2 - lat1) * Math.PI / 180;
-  const dLon = (lon2 - lon1) * Math.PI / 180;
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-    Math.sin(dLon / 2) * Math.sin(dLon / 2);
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
 /**
@@ -178,8 +99,10 @@ export function useTollLogs() {
           ? (driverMap.get(tx.driverId) || tx.driverName || 'Unknown Driver')
           : (tx.driverName || 'Unassigned');
 
-        // Match plaza
-        const plaza = matchPlaza(tx, allPlazas || []);
+        // Attribute to a plaza — by the ledger's plazaId first, text only as fallback.
+        const { plaza, source: plazaSource } = resolveTollPlaza(tx, allPlazas || []);
+
+        const voided = isVoidedTx(tx);
 
         // Tag info
         const tollTagId = tx.metadata?.tollTagId || tx.metadata?.tagNumber || null;
@@ -199,6 +122,7 @@ export function useTollLogs() {
           driverDisplayName: driverName,
           plazaId: plaza?.id || null,
           plazaName: plaza?.name || null,
+          plazaSource,
           highway: plaza?.highway || null,
           direction: plaza?.direction || null,
           parish: plaza?.parish || null,
@@ -208,8 +132,9 @@ export function useTollLogs() {
           tollTagId,
           tollTagUuid,
           status: tx.status || 'Unknown',
-          statusDisplay: resolveStatusDisplay(tx.status || ''),
+          statusDisplay: resolveTollStatusDisplay(tx),
           isReconciled: tx.isReconciled || false,
+          isVoided: voided,
           referenceNumber: tx.referenceNumber || null,
           description: tx.description || '',
           tripId: tx.tripId || null,

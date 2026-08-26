@@ -61,6 +61,7 @@
     "build:command": "pnpm --filter @roam/rush-command build",
     "build:courier": "pnpm --filter @roam/dash-courier build",
     "test": "pnpm -r test",
+    "check:toll-core-parity": "node scripts/check-toll-core-parity.mjs",
     "lint": "pnpm -r lint",
     "deploy:edge": "node scripts/check-fleet-edge-duplicates.mjs && npx supabase functions deploy make-server-37f42386 --use-api --project-ref csfllzzastacofsvcdsc && node scripts/smoke-fleet-health.mjs",
     "deploy:delivery": "npx supabase functions deploy delivery --use-api --project-ref csfllzzastacofsvcdsc",

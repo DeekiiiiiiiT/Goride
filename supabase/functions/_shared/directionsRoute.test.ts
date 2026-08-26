@@ -1,5 +1,5 @@
 import { assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
-import { fetchGoogleDirectionsRouteWithTurn } from "../directionsRoute.ts";
+import { fetchGoogleDirectionsRouteWithTurn } from "./directionsRoute.ts";
 
 Deno.test("fetchGoogleDirectionsRouteWithTurn parses next turn and polyline", async () => {
   const mockFetch: typeof fetch = async () =>

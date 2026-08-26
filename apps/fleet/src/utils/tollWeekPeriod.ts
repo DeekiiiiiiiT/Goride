@@ -1,6 +1,7 @@
 import { startOfWeek, endOfWeek, format, parseISO } from 'date-fns';
 import type { Claim, DisputeRefund, FinancialTransaction, Trip } from '../types/data';
-import { fleetTzDateKey, normalizeWallClockTime, ymdToLocalDate } from './timezoneDisplay';
+import { fleetTzDateKey, ymdToLocalDate } from './timezoneDisplay';
+import { getTollTransactionDate } from './tollDate';
 import { VARIANCE_THRESHOLD } from './tollReconciliation';
 import { dateWeekKey } from './fleetMondayWeekKey';
 
@@ -40,36 +41,8 @@ export function weekBucketForDate(
   return { key: format(weekStart, 'yyyy-MM-dd'), weekStart, weekEnd };
 }
 
-/** Parse toll charge date/time (same rules as reconciliation tables). */
-export function getTollTransactionDate(tx: FinancialTransaction): Date {
-  try {
-    // If date already includes a time component, parse as ISO directly.
-    if (tx.date && tx.date.includes('T')) {
-      const d = parseISO(tx.date);
-      return !isNaN(d.getTime()) ? d : new Date(tx.date);
-    }
-    // Bare yyyy-MM-dd: local calendar midnight (never UTC — shifts prior day in US/JM).
-    if (tx.date && /^\d{4}-\d{2}-\d{2}$/.test(tx.date) && !tx.time) {
-      return ymdToLocalDate(tx.date);
-    }
-    const timeStr = tx.time || '12:00:00';
-    // Tag imports store "11:47:00 AM" — must convert before Date parse or it is Invalid.
-    const cleanTime = normalizeWallClockTime(timeStr.length >= 5 ? timeStr : '12:00:00');
-    if (tx.date && /^\d{4}-\d{2}-\d{2}$/.test(tx.date)) {
-      const [y, m, d] = tx.date.split('-').map(Number);
-      const [hh, mm, ss] = cleanTime.split(':').map(Number);
-      const local = new Date(y, m - 1, d, hh || 0, mm || 0, ss || 0);
-      if (!isNaN(local.getTime())) return local;
-      return ymdToLocalDate(tx.date);
-    }
-    const localDate = new Date(`${tx.date}T${cleanTime}`);
-    return !isNaN(localDate.getTime()) ? localDate : new Date(tx.date);
-  } catch {
-    return tx.date && /^\d{4}-\d{2}-\d{2}$/.test(tx.date)
-      ? ymdToLocalDate(tx.date)
-      : new Date(tx.date);
-  }
-}
+/** The single entry point for toll date parsing (see `./tollDate`). */
+export { parseTollDate, getTollTransactionDate } from './tollDate';
 
 /** Monday 00:00 – Sunday end for the calendar week containing `d` (week starts Monday). */
 export function getMondaySundayForDate(d: Date): { start: Date; end: Date } {

@@ -48,6 +48,8 @@ import {
   isLegacyOrgPlaceholder,
   type FilterStats,
 } from "./org_scope.ts";
+import { loadTollPlazaStats, attachPlazaStats } from "./toll_plaza_stats.ts";
+import { assertExpectedUpdatedAt, stripConcurrencyToken } from "./optimistic_concurrency.ts";
 import {
   resolveProductLine,
   inferProductLineFromUser,
@@ -186,6 +188,7 @@ import tollApp, {
   invalidateStaleTollMatchesForTrip,
   voidTollLedgerEntryHandler,
 } from "./toll_controller.tsx";
+import { replayFleetTripsWithRoutes } from "./fleet_trip_toll_replay.ts";
 import { resolveDriverFromFleetRecords } from "./driver_identity.ts";
 import disputeRefundApp from "./dispute_refund_controller.tsx";
 import tollPeriodApp from "./toll_period_controller.tsx";
@@ -2332,6 +2335,33 @@ app.post(
       await appendCanonicalTripFaresIfEligible(processedTrips as Record<string, unknown>[], c);
     } catch (canonErr) {
       console.error("[CanonicalOps] trip fare append after trip save failed:", canonErr);
+    }
+
+    // Phase 4 fleet detection: post-trip replay of saved Trip.route through
+    // the shared segment geofence matcher (no live GPS stream for fleet).
+    try {
+      const replay = await replayFleetTripsWithRoutes({
+        db: supabase,
+        trips: processedTrips.map((t: any) => ({
+          id: String(t.id || ""),
+          driverId: t.driverId ?? null,
+          driverName: t.driverName ?? null,
+          vehicleId: t.vehicleId ?? null,
+          vehiclePlate: t.vehiclePlate ?? null,
+          route: t.route,
+          organizationId: t.organizationId ?? writeOrgId,
+          date: t.date ?? t.completed_at ?? null,
+          isLiveRecorded: t.isLiveRecorded === true,
+        })),
+        saveTollUsage: async (entry) => saveTollLedgerEntry(entry as any),
+      });
+      if (replay.tripsScanned > 0) {
+        console.log(
+          `[FleetTollReplay] POST /trips: tripsScanned=${replay.tripsScanned} crossingsWritten=${replay.crossingsWritten}`,
+        );
+      }
+    } catch (replayErr) {
+      console.warn("[FleetTollReplay] POST /trips failed (non-fatal):", replayErr);
     }
 
     // MOI-4: reverse re-match — finds tolls uploaded before this trip existed
@@ -5232,7 +5262,7 @@ app.post("/make-server-37f42386/ledger/toll-ledger-repair-dates", requireAuth(),
 
 // Debug endpoint (helps confirm the deployed bundle includes the route).
 // Call: GET /functions/v1/make-server-37f42386/toll-reconciliation/reset-for-reconciliation-debug
-app.get("/make-server-37f42386/toll-reconciliation/reset-for-reconciliation-debug", async (c) => {
+app.get("/make-server-37f42386/toll-reconciliation/reset-for-reconciliation-debug", requireAuth(), async (c) => {
   return c.json({
     ok: true,
     route: "reset-for-reconciliation-debug",
@@ -5242,7 +5272,7 @@ app.get("/make-server-37f42386/toll-reconciliation/reset-for-reconciliation-debu
 
 // Toll reset for reconciliation — registered on main router (same URL as toll_controller)
 // so production always matches; nested app.route("/", tollApp) was returning 404 for some deploys.
-app.post("/make-server-37f42386/toll-reconciliation/reset-for-reconciliation", async (c) => {
+app.post("/make-server-37f42386/toll-reconciliation/reset-for-reconciliation", requireAuth({ strict: true }), requirePermission('toll.manage'), async (c) => {
   try {
     const body = await c.req.json().catch(() => ({}));
     const result = await executeTollResetForReconciliation(body.transactionId);
@@ -7685,10 +7715,23 @@ app.post(
     if (!tag.createdAt) {
         tag.createdAt = new Date().toISOString();
     }
-    
+
+    const existing = tag.id ? await kv.get(`toll_tag:${tag.id}`) as Record<string, unknown> | null : null;
+    try {
+      assertExpectedUpdatedAt(existing, tag.expectedUpdatedAt);
+    } catch (e: any) {
+      if (e?.name === 'StaleWriteError') {
+        return c.json({ error: e.message, reason: 'stale_write', current: existing }, 409);
+      }
+      throw e;
+    }
+
+    const toSave = stripConcurrencyToken(tag as Record<string, unknown>);
+    toSave.updatedAt = new Date().toISOString();
+
     // Key structure: toll_tag:{id}
-    await kv.set(`toll_tag:${tag.id}`, stampOrg(tag, c));
-    return c.json({ success: true, data: tag });
+    await kv.set(`toll_tag:${toSave.id}`, stampOrg(toSave, c));
+    return c.json({ success: true, data: toSave });
   } catch (e: any) {
     return c.json({ error: e.message }, 500);
   }
@@ -7865,8 +7908,10 @@ app.get("/make-server-37f42386/toll-plazas", requireAuth(), async (c) => {
     if (error) throw error;
     const plazas = data?.map((d: any) => d.value) || [];
     const scoped = filterByOrg(plazas, c);
-    console.log(`[TollPlaza] GET /toll-plazas — returning ${scoped.length} plazas`);
-    return c.json(scoped);
+    const stats = await loadTollPlazaStats(getOrgId(c));
+    const withStats = attachPlazaStats(scoped, stats);
+    console.log(`[TollPlaza] GET /toll-plazas — returning ${withStats.length} plazas (${stats.size} with traffic)`);
+    return c.json(withStats);
   } catch (e: any) {
     console.log(`[TollPlaza] ERROR GET /toll-plazas: ${e.message}`);
     return c.json({ error: e.message }, 500);
@@ -7885,8 +7930,10 @@ app.get("/make-server-37f42386/toll-plazas/:id", requireAuth(), async (c) => {
     if (!belongsToOrg(plaza, c)) {
       return c.json({ error: "Toll plaza not found" }, 404);
     }
+    const stats = await loadTollPlazaStats(getOrgId(c));
+    const [withStats] = attachPlazaStats([plaza as any], stats);
     console.log(`[TollPlaza] GET /toll-plazas/${id} — found: ${(plaza as any).name}`);
-    return c.json(plaza);
+    return c.json(withStats);
   } catch (e: any) {
     console.log(`[TollPlaza] ERROR GET /toll-plazas/${id}: ${e.message}`);
     return c.json({ error: e.message }, 500);
@@ -7906,19 +7953,15 @@ app.post("/make-server-37f42386/toll-plazas", requireAuth(), requirePermission('
     }
     plaza.updatedAt = new Date().toISOString();
 
-    if (!plaza.stats) {
-      plaza.stats = {
-        totalTransactions: 0,
-        totalSpend: 0,
-        lastTransactionDate: '',
-        avgAmount: 0,
-        lastUpdated: new Date().toISOString(),
-      };
-    }
+    // Stats are derived from fleet.v_toll_plaza_stats at read time — never stored.
+    delete plaza.stats;
 
     await kv.set(`toll_plaza:${plaza.id}`, stampOrg(plaza, c));
+
+    const stats = await loadTollPlazaStats(getOrgId(c));
+    const [saved] = attachPlazaStats([plaza], stats);
     console.log(`[TollPlaza] POST /toll-plazas — saved plaza "${plaza.name}" (${plaza.id})`);
-    return c.json({ success: true, data: plaza });
+    return c.json({ success: true, data: saved });
   } catch (e: any) {
     console.log(`[TollPlaza] ERROR POST /toll-plazas: ${e.message}`);
     return c.json({ error: e.message }, 500);
@@ -9088,7 +9131,10 @@ app.post("/make-server-37f42386/settings/preferences", requireAuth(), requirePer
 });
 
 // ── Toll Info Endpoints (date-versioned rate card) ───────────────────────
-app.get("/make-server-37f42386/toll-info", async (c) => {
+// The rate card drives reconciliation expected cost, driver charges and Rides
+// fares, so reads are authenticated and writes need `toll.manage` — the same
+// gate /toll-plazas uses.
+app.get("/make-server-37f42386/toll-info", requireAuth(), async (c) => {
   try {
     const { loadTollRateStore } = await import("./toll_rate_schedule.ts");
     const store = await loadTollRateStore();
@@ -9105,11 +9151,14 @@ app.get("/make-server-37f42386/toll-info", async (c) => {
   }
 });
 
-app.post("/make-server-37f42386/toll-info", async (c) => {
+app.post("/make-server-37f42386/toll-info", requireAuth(), requirePermission('toll.manage'), async (c) => {
   try {
     const { publishTollRates, loadTollRateStore, saveTollRateStore, migrateToVersionedStore } =
       await import("./toll_rate_schedule.ts");
     const body = await c.req.json();
+    /** Attribution comes from the session, never the body — a forgeable publisher makes the version history worthless. */
+    const rbacUser = c.get('rbacUser') as { userId: string; email: string } | undefined;
+    const publisher = rbacUser?.email || rbacUser?.userId || 'unknown';
     // Explicit republish of a full store (rare)
     if (body?.current && Array.isArray(body?.versions) && body?.__replaceStore === true) {
       const store = migrateToVersionedStore(body);
@@ -9117,7 +9166,7 @@ app.post("/make-server-37f42386/toll-info", async (c) => {
       return c.json({ success: true, store });
     }
     // Default: Edit Rates → new immutable version effective from date forward
-    const store = await publishTollRates({
+    const { store, published } = await publishTollRates({
       effectiveDate: body.effectiveDate,
       effectiveFrom: body.effectiveFrom || body.effectiveDate,
       operator: body.operator,
@@ -9125,17 +9174,65 @@ app.post("/make-server-37f42386/toll-info", async (c) => {
       plazas: body.plazas || [],
       vehicleClasses: body.vehicleClasses || [],
       routeRateGroups: body.routeRateGroups || [],
-      createdBy: body.createdBy,
+      createdBy: publisher,
     });
-    return c.json({ success: true, store, current: store.current, versions: store.versions });
+    return c.json({
+      success: true,
+      published,
+      store,
+      current: store.current,
+      versions: store.versions,
+    });
   } catch (e: any) {
+    // A rejected publish is the caller's mistake, not a server fault — say which.
+    if (e?.name === 'TollRatePublishError') {
+      console.log(`[toll-info POST] Rejected (${e.reason}): ${e.message}`);
+      return c.json({ error: e.message, reason: e.reason }, 400);
+    }
     console.log(`[toll-info POST] Error: ${e.message}`);
     return c.json({ error: e.message }, 500);
   }
 });
 
+/**
+ * Dry-run a rate card against unsettled tolls.
+ *
+ * POST because the draft card is the payload, but it writes nothing — the whole
+ * point is to answer "how much money does this move" before the publish that
+ * cannot be undone.
+ */
+app.post(
+  "/make-server-37f42386/toll-info/impact-preview",
+  requireAuth(),
+  requirePermission('toll.manage'),
+  async (c) => {
+    try {
+      const { previewTollRateImpact, loadTollRateStore, toIsoDateKey } =
+        await import("./toll_rate_schedule.ts");
+      const body = await c.req.json();
+      const store = await loadTollRateStore();
+      const effectiveFrom = toIsoDateKey(body.effectiveFrom || body.effectiveDate);
+      const impact = await previewTollRateImpact({
+        ...store.current,
+        id: 'draft',
+        effectiveFrom,
+        effectiveDate: body.effectiveDate || store.current.effectiveDate,
+        operator: body.operator ?? store.current.operator,
+        currency: body.currency ?? store.current.currency,
+        plazas: body.plazas || [],
+        vehicleClasses: body.vehicleClasses || store.current.vehicleClasses,
+        routeRateGroups: body.routeRateGroups || [],
+      });
+      return c.json({ success: true, impact, effectiveFrom });
+    } catch (e: any) {
+      console.log(`[toll-info impact-preview] Error: ${e.message}`);
+      return c.json({ error: e.message }, 500);
+    }
+  },
+);
+
 /** Resolve official rate for plaza + class + date (reconciliation / rides). */
-app.get("/make-server-37f42386/toll-info/rate", async (c) => {
+app.get("/make-server-37f42386/toll-info/rate", requireAuth(), async (c) => {
   try {
     const { lookupOfficialRate } = await import("./toll_rate_schedule.ts");
     const plazaId = c.req.query("plazaId") || undefined;
@@ -9161,7 +9258,7 @@ app.get("/make-server-37f42386/toll-info/rate", async (c) => {
   }
 });
 
-app.get("/make-server-37f42386/toll-info/versions", async (c) => {
+app.get("/make-server-37f42386/toll-info/versions", requireAuth(), async (c) => {
   try {
     const { loadTollRateStore } = await import("./toll_rate_schedule.ts");
     const store = await loadTollRateStore();
@@ -16301,7 +16398,9 @@ app.get("/make-server-37f42386/admin/toll-stations", async (c) => {
     if (auth instanceof Response) return auth;
 
     const plazas = await kv.getByPrefix("toll_plaza:");
-    return c.json({ plazas: plazas || [] });
+    // Superadmin sees every org, so load stats unscoped.
+    const stats = await loadTollPlazaStats(null);
+    return c.json({ plazas: attachPlazaStats((plazas || []) as any[], stats) });
   } catch (e: any) {
     console.log(`admin/toll-stations GET error: ${e.message}`);
     return c.json({ error: e.message }, 500);
@@ -16324,18 +16423,16 @@ app.post("/make-server-37f42386/admin/toll-stations", async (c) => {
     plaza.operator = plaza.operator || "";
     plaza.location = plaza.location || { lat: 0, lng: 0 };
     plaza.dataSource = plaza.dataSource || "manual";
-    plaza.stats = plaza.stats || {
-      totalTransactions: 0,
-      totalSpend: 0,
-      lastTransactionDate: "",
-      avgAmount: 0,
-      lastUpdated: new Date().toISOString(),
-    };
+    // Stats are derived from fleet.v_toll_plaza_stats at read time — never stored.
+    delete plaza.stats;
     plaza.createdAt = plaza.createdAt || new Date().toISOString();
     plaza.updatedAt = new Date().toISOString();
 
     await kv.set(`toll_plaza:${plaza.id}`, stampOrg(plaza, c));
-    return c.json({ success: true, data: plaza });
+
+    const stats = await loadTollPlazaStats(getOrgId(c));
+    const [saved] = attachPlazaStats([plaza], stats);
+    return c.json({ success: true, data: saved });
   } catch (e: any) {
     console.log(`admin/toll-stations POST error: ${e.message}`);
     return c.json({ error: e.message }, 500);

@@ -7,6 +7,7 @@
 
 import { FinancialTransaction } from './data';
 import { CsvColumn } from '../utils/csv-helper';
+import type { PlazaMatchSource } from '../utils/tollPlazaResolution';
 
 export interface TollLogEntry {
   // --- Identity ---
@@ -31,6 +32,8 @@ export interface TollLogEntry {
   // --- Plaza / Location ---
   plazaId: string | null;             // Matched TollPlaza.id, or null
   plazaName: string | null;           // Matched TollPlaza.name, or null
+  /** How the plaza was found — 'id' is a real join, anything else is a guess. */
+  plazaSource: PlazaMatchSource;
   highway: string | null;             // From matched plaza
   direction: string | null;           // From matched plaza
   parish: string | null;              // From matched plaza
@@ -48,6 +51,8 @@ export interface TollLogEntry {
   status: string;                     // Original status value
   statusDisplay: string;              // Human-readable
   isReconciled: boolean;
+  /** Soft-voided: still listed, but excluded from every spend/analytics total. */
+  isVoided: boolean;
 
   // --- Reference / Audit ---
   referenceNumber: string | null;
@@ -93,7 +98,7 @@ export interface TollLogFiltersState {
   plazaId: string;     // 'all' or specific ID
   highway: string;     // 'all' or specific highway name
   paymentMethod: string; // 'all' | 'Cash' | 'Tag' | 'Card'
-  status: string;      // 'all' | 'Completed' | 'Pending' | 'Flagged' | 'Reconciled' | 'Void'
+  status: string;      // 'all' | 'Completed' | 'Pending' | 'Flagged' | 'Reconciled' | 'Voided'
   type: string;        // 'all' | 'usage' | 'topup'
 }
 

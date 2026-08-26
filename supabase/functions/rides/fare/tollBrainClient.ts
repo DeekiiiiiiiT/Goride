@@ -1,6 +1,7 @@
 /**
  * Rides → Toll Brain Edge client (detect / record / estimate).
- * Falls back to local geofence when RIDES_USE_TOLL_BRAIN is off or Edge fails.
+ * Falls back to local geofence when RIDES_USE_TOLL_BRAIN is off, Edge fails,
+ * or a successful brain response is empty (inconclusive — e.g. brain missing rate overlay).
  */
 
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -42,6 +43,29 @@ export function isRidesTollBrainEnabled(): boolean {
   return brainEnabled() && !!secret();
 }
 
+/**
+ * Empty successful responses are inconclusive (brain may lack rate overlay /
+ * org scope). Callers must fall through to local evaluateTollCrossings.
+ * Explicit detectionDisabled is treated as a conclusive empty result.
+ */
+export function isInconclusiveBrainPointResult(data: {
+  tollsCrossed?: unknown[];
+  totalTollsMinor?: number;
+  detectionDisabled?: boolean;
+}): boolean {
+  if (data.detectionDisabled === true) return false;
+  const crossed = Array.isArray(data.tollsCrossed) ? data.tollsCrossed : [];
+  return crossed.length === 0 && !(Number(data.totalTollsMinor || 0) > 0);
+}
+
+export function isInconclusiveBrainEstimateResult(data: {
+  plazaIds?: unknown[];
+  totalTollsMinor?: number;
+}): boolean {
+  const ids = Array.isArray(data.plazaIds) ? data.plazaIds : [];
+  return ids.length === 0 && !(Number(data.totalTollsMinor || 0) > 0);
+}
+
 /** Evaluate GPS via Toll Brain; null → caller uses local evaluateTollCrossings. */
 export async function brainEvaluatePoint(input: {
   lat: number;
@@ -50,10 +74,15 @@ export async function brainEvaluatePoint(input: {
   alreadyCrossedPlazaIds: string[];
   recentByPlaza: Record<string, number>;
   cooldownMs?: number;
+  organizationId?: string | null;
+  /** Previous GPS fix for segment-to-circle matching. */
+  prevLat?: number | null;
+  prevLng?: number | null;
 }): Promise<{ tollsCrossed: TollCrossingRecord[]; totalTollsMinor: number } | null> {
   const res = await brainPost("/v1/internal/evaluate-point", input);
   if (!res?.ok) return null;
   const data = await res.json();
+  if (isInconclusiveBrainPointResult(data)) return null;
   const crossed = (data.tollsCrossed || []).map((x: Record<string, unknown>) => ({
     toll_plaza_id: String(x.tollPlazaId || x.toll_plaza_id),
     toll_plaza_name: String(x.tollPlazaName || x.toll_plaza_name),
@@ -101,10 +130,12 @@ export async function brainRecordCrossings(input: {
 export async function brainEstimateRoute(input: {
   points: Array<{ lat: number; lng: number }>;
   geofenceRadiusM?: number;
+  organizationId?: string | null;
 }): Promise<{ estimatedTollsMinor: number; plazaIds: string[] } | null> {
   const res = await brainPost("/v1/internal/estimate-route", input);
   if (!res?.ok) return null;
   const data = await res.json();
+  if (isInconclusiveBrainEstimateResult(data)) return null;
   return {
     estimatedTollsMinor: Number(data.totalTollsMinor || 0),
     plazaIds: Array.isArray(data.plazaIds) ? data.plazaIds.map(String) : [],

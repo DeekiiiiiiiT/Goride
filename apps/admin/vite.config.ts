@@ -1,4 +1,5 @@
-import { defineConfig, normalizePath, type Plugin } from 'vite';
+import { defineConfig } from 'vitest/config';
+import { normalizePath, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import path from 'path';
@@ -80,5 +81,13 @@ export default defineConfig({
     host: 'localhost',
     strictPort: true,
     open: true,
+  },
+  test: {
+    environment: 'node',
+    include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
+    exclude: [
+      /** Deno edge-function tests (Deno.test + https: imports) run via `deno test`, not Vitest. */
+      '**/supabase/functions/**',
+    ],
   },
 });

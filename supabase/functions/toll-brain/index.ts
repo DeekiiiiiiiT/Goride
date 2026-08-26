@@ -191,7 +191,11 @@ app.post("/v1/internal/evaluate-point", async (c) => {
   if (!policy.detectionEnabled) {
     return c.json({ tollsCrossed: [], totalTollsMinor: 0, method: "toll_brain_v1", detectionDisabled: true });
   }
-  const plazas = await loadPlazas(db);
+  const organizationId =
+    body.organizationId != null && String(body.organizationId).trim()
+      ? String(body.organizationId)
+      : null;
+  const plazas = await loadPlazas(db, { organizationId });
   const result = evaluatePoint({
     lat: Number(body.lat),
     lng: Number(body.lng),
@@ -200,6 +204,8 @@ app.post("/v1/internal/evaluate-point", async (c) => {
     alreadyCrossedPlazaIds: body.alreadyCrossedPlazaIds,
     recentByPlaza: body.recentByPlaza,
     cooldownMs: Number(body.cooldownMs ?? policy.roundTripCooldownMs),
+    prevLat: body.prevLat != null ? Number(body.prevLat) : null,
+    prevLng: body.prevLng != null ? Number(body.prevLng) : null,
   });
   return c.json({ ...result, method: "toll_brain_v1" });
 });
@@ -213,7 +219,11 @@ app.post("/v1/internal/estimate-route", async (c) => {
   const body = await c.req.json().catch(() => ({}));
   const db = svc();
   const policy = await loadDefaultPolicy(db);
-  const plazas = await loadPlazas(db);
+  const organizationId =
+    body.organizationId != null && String(body.organizationId).trim()
+      ? String(body.organizationId)
+      : null;
+  const plazas = await loadPlazas(db, { organizationId });
   const points = Array.isArray(body.points) ? body.points : [];
   const result = estimateRoute({
     points,

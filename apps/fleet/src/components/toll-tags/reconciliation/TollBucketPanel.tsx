@@ -51,7 +51,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "../../ui/tooltip";
-import { groupTollsByWeek } from "../../../utils/tollWeekPeriod";
+import { groupTollsByWeek, parseTollDate, getTollTransactionDate } from "../../../utils/tollWeekPeriod";
 import { resolveTollDisplayDriverName } from "@roam/types/driverIdentity";
 
 function needsTripPick(tx: FinancialTransaction, match?: MatchResult): boolean {
@@ -253,7 +253,7 @@ export function TollBucketPanel({
         const trips = tripsByVehicle.get(plate);
         if (!trips || trips.length === 0) return null;
 
-        const tollTime = new Date(dateStr).getTime();
+        const tollTime = parseTollDate(dateStr).getTime();
         let closestDriver = null;
         let minDiff = Infinity;
 
@@ -580,10 +580,7 @@ export function TollBucketPanel({
                     <div className="flex flex-col">
                         {(() => {
                             try {
-                                const timeStr = tx.time || '12:00:00';
-                                const cleanTime = timeStr.length >= 5 ? timeStr : '12:00:00';
-                                const localDate = new Date(`${tx.date}T${cleanTime}`);
-                                const validDate = !isNaN(localDate.getTime()) ? localDate : new Date(tx.date);
+                                const validDate = getTollTransactionDate(tx);
                                 const isFutureDate = validDate > new Date();
                                 return (
                                     <>

@@ -4,6 +4,7 @@ import { Badge } from '../ui/badge';
 import { Input } from '../ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
 import { cn } from '../ui/utils';
+import { parseTollDate } from '../../utils/tollDate';
 import {
   Loader2,
   MapPin,
@@ -327,7 +328,7 @@ export function LearntTollPlazasTab({
                         <div className="flex items-center gap-1.5 font-medium text-slate-700">
                           <Clock className="h-3 w-3 text-slate-400" />
                           {loc.stats?.lastTransactionDate
-                            ? new Date(loc.stats.lastTransactionDate).toLocaleDateString()
+                            ? parseTollDate(loc.stats.lastTransactionDate).toLocaleDateString()
                             : loc.updatedAt
                               ? new Date(loc.updatedAt).toLocaleDateString()
                               : '—'}

@@ -210,8 +210,7 @@ export function mapDisputeRefundToEvent(r: any): TollFinancialEvent | null {
   const workflowState: TollEventWorkflowState =
     st === "matched" || st === "auto_resolved" ? "dispute_matched" : "dispute_unmatched";
 
-  const d = r.date ? new Date(r.date) : new Date(0);
-  const occurredAt = isNaN(d.getTime()) ? new Date(0).toISOString() : d.toISOString();
+  const occurredAt = isoFromTxDate(r);
 
   return {
     schemaVersion: TOLL_FINANCIAL_EVENT_SCHEMA_VERSION,

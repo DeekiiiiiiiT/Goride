@@ -19,9 +19,17 @@
 import { Hono, type Context } from "npm:hono";
 import * as kv from "./kv_store.tsx";
 import { requireAuth, requirePermission, type RbacUser } from "./rbac_middleware.ts";
+import { stampOrg, filterByOrg, belongsToOrg } from "./org_scope.ts";
+import {
+  runWithTollContext,
+  getTollContext,
+  resolveTollOrgId,
+  tollOrgSqlFilters,
+} from "./toll_org_context.ts";
 import { getServiceClient } from "./service_client.ts";
 import { fromKvStore } from "./fleet_sql_bridge.ts";
 import { checkRateLimit, recordFailedAttempt, getClientIp } from "./rate_limiter.ts";
+import { readRateStamp, shouldStampRate } from "./toll_rate_provenance.ts";
 import { isPlazaUsageTollRow, isTollCategory } from "./toll_category_flags.ts";
 import { classifyOrphanToll } from "./orphanTollClassifier.ts";
 import { emitDriverTollCharge, isUnifiedTollSettlementEnabled } from "./driver_toll_charge.ts";
@@ -129,6 +137,10 @@ const app = new Hono();
 
 // Auth gate: every route in this controller requires a valid user JWT (Wave 1B).
 app.use("*", requireAuth({ strict: true }));
+// Bind rbac Context for shared loaders so organization_id hits SQL predicates.
+app.use("*", async (c, next) => {
+  await runWithTollContext(c, () => next());
+});
 
 // Wave 5: Use shared service client
 const supabase = getServiceClient();
@@ -610,8 +622,28 @@ async function resolveTollExpectedCost(tx: any): Promise<{
   usedOfficialRate: boolean;
   rateDrift: boolean;
   officialAmount: number | null;
+  rateScheduleVersionId: string | null;
+  officialEffectiveFrom: string | null;
+  /** True when the answer came from the row's frozen stamp rather than today's card. */
+  fromStamp: boolean;
 }> {
   const tagAmount = Math.abs(Number(tx?.amount) || 0);
+
+  // A stamped row is settled history: honor what it was priced at, never re-resolve.
+  const stamp = readRateStamp(tx);
+  if (stamp) {
+    return {
+      expectedCost: stamp.officialAmount,
+      tagAmount,
+      usedOfficialRate: true,
+      rateDrift: Math.abs(tagAmount - stamp.officialAmount) > VARIANCE_THRESHOLD,
+      officialAmount: stamp.officialAmount,
+      rateScheduleVersionId: stamp.rateScheduleVersionId,
+      officialEffectiveFrom: stamp.officialEffectiveFrom,
+      fromStamp: true,
+    };
+  }
+
   try {
     const { loadTollRateStore, resolveOfficialTollRate } = await import("./toll_rate_schedule.ts");
     const store = await loadTollRateStore();
@@ -638,6 +670,9 @@ async function resolveTollExpectedCost(tx: any): Promise<{
         usedOfficialRate: true,
         rateDrift: Math.abs(tagAmount - official.amount) > VARIANCE_THRESHOLD,
         officialAmount: official.amount,
+        rateScheduleVersionId: official.scheduleVersionId ?? null,
+        officialEffectiveFrom: official.effectiveFrom ?? null,
+        fromStamp: false,
       };
     }
   } catch (e: any) {
@@ -649,7 +684,34 @@ async function resolveTollExpectedCost(tx: any): Promise<{
     usedOfficialRate: false,
     rateDrift: false,
     officialAmount: null,
+    rateScheduleVersionId: null,
+    officialEffectiveFrom: null,
+    fromStamp: false,
   };
+}
+
+/**
+ * Freeze the rate card a toll was priced against, once, at reconciliation.
+ *
+ * Mutates `entry` in place so the caller persists it in the same write. A row
+ * that resolves to no official rate is left unstamped rather than stamped with
+ * the tag amount, so it stays visibly "never had an official rate" instead of
+ * masquerading as priced.
+ */
+async function stampTollRateProvenance(entry: TollLedgerRecord): Promise<void> {
+  if (!shouldStampRate(entry)) return;
+
+  try {
+    const cost = await resolveTollExpectedCost(entry);
+    if (!cost.usedOfficialRate || !cost.rateScheduleVersionId) return;
+    entry.rateScheduleVersionId = cost.rateScheduleVersionId;
+    entry.officialAmount = cost.officialAmount;
+    entry.officialEffectiveFrom = cost.officialEffectiveFrom;
+    entry.rateStampedAt = new Date().toISOString();
+  } catch (e: any) {
+    // Never block the reconciliation write; the row simply keeps re-resolving.
+    console.warn(`[TollRateStamp] skipped for ${entry.id}: ${e?.message}`);
+  }
 }
 
 function getTransactionDateTime(tx: any, timezone: string): Date | null {
@@ -1164,6 +1226,36 @@ function buildPersistedTripMatchSuggestion(
  * Ordered by key so pages are stable; deduped so overlaps can't double rows.
  */
 async function loadAllByPrefix(prefix: string): Promise<any[]> {
+  const ctx = getTollContext();
+  const orgId = resolveTollOrgId(ctx);
+  const orgFilters = tollOrgSqlFilters(orgId);
+
+  // Prefer native fleet SQL with organization_id in the predicate (no full-table then filter).
+  try {
+    const { domainForPrefix, iterateFleet } = await import("./repos/baseRepo.ts");
+    const def = domainForPrefix(prefix);
+    if (def) {
+      const legacyPrefix = prefix.endsWith(":") ? prefix : `${prefix}:`;
+      const out: any[] = [];
+      for await (const row of iterateFleet(def.domain, {
+        legacyPrefix,
+        order: { col: "legacy_kv_id", ascending: true },
+        filters: orgFilters.length ? orgFilters : undefined,
+      })) {
+        out.push(row);
+      }
+      return ctx
+        ? (filterByOrg(out as Record<string, unknown>[], ctx, {
+            endpoint: `loadAllByPrefix:${prefix}`,
+          }) as any[])
+        : out;
+    }
+  } catch (e: any) {
+    console.warn(
+      `[TollOrg] loadAllByPrefix SQL path failed for ${prefix}, falling back: ${e?.message || e}`,
+    );
+  }
+
   const PAGE_SIZE = 1000;
   const allValues: any[] = [];
   const seenKeys = new Set<string>();
@@ -1196,7 +1288,11 @@ async function loadAllByPrefix(prefix: string): Promise<any[]> {
     offset += PAGE_SIZE;
   }
 
-  return allValues;
+  return ctx
+    ? (filterByOrg(allValues as Record<string, unknown>[], ctx, {
+        endpoint: `loadAllByPrefix:${prefix}`,
+      }) as any[])
+    : allValues;
 }
 
 async function loadAllTransactions(): Promise<any[]> {
@@ -1313,6 +1409,15 @@ function tollLedgerToTxShape(entry: TollLedgerRecord): any {
     preUnlinkedTripId: entry.preUnlinkedTripId ?? null,
     // Surface ledger plaza for quarantine (vendor alone is easy to miss).
     plaza: entry.plaza,
+    // The plaza the toll is actually attributed to. Without this on the wire the
+    // client had only the free-text name to work with and fell back to fuzzy
+    // matching, which is why three quarters of the ledger charted as "Unknown Plaza".
+    plazaId: entry.plazaId ?? null,
+    // Frozen pricing provenance — lets the UI show which rate card a settled
+    // toll was priced against instead of implying it tracks the current one.
+    rateScheduleVersionId: entry.rateScheduleVersionId ?? null,
+    officialAmount: entry.officialAmount ?? null,
+    officialEffectiveFrom: entry.officialEffectiveFrom ?? null,
     batchId: entry.batchId,
     metadata: {
       tollTagId: entry.tollTagId,
@@ -1354,10 +1459,12 @@ function tollLedgerToTxShape(entry: TollLedgerRecord): any {
  * category that are not yet in the ledger (same `id` → ledger wins).
  * Fixes empty Toll Logs / Ledger when data never migrated off `transaction:*`.
  */
-async function loadMergedTollTxArray(): Promise<any[]> {
+async function loadMergedTollTxArray(c?: Context): Promise<any[]> {
+  const ctx = c ?? getTollContext();
   const [ledgerEntries, rawTx] = await Promise.all([
-    getAllTollLedgerEntries(),
-    kv.getByPrefix("transaction:"),
+    getAllTollLedgerEntries(ctx),
+    // Org-scoped via loadAllByPrefix SQL predicate when Context is bound.
+    loadAllByPrefix("transaction:"),
   ]);
   const byId = new Map<string, any>();
   for (const e of ledgerEntries) {
@@ -1405,7 +1512,13 @@ async function loadMergedTollTxArray(): Promise<any[]> {
         (linkBackfilled > 0 ? `; backfilled ${linkBackfilled} legacy trip link(s)` : ""),
     );
   }
-  return Array.from(byId.values());
+  const merged = Array.from(byId.values());
+  // Defense in depth — SQL already org-scoped; keep filterByOrg on the merge result.
+  return ctx
+    ? (filterByOrg(merged as Record<string, unknown>[], ctx, {
+        endpoint: "loadMergedTollTxArray",
+      }) as any[])
+    : merged;
 }
 
 /**
@@ -2763,6 +2876,16 @@ interface TollLedgerRecord {
   unlinkedAppliedAt?: string | null;
   unlinkedAppliedBy?: string | null;
   preUnlinkedTripId?: string | null;
+  /**
+   * Pricing provenance, frozen when the toll is reconciled. Without this the
+   * expected cost is re-derived from whichever rate card is current at read
+   * time, so publishing a back-dated card silently rewrites settled history.
+   * Absent on rows reconciled before the stamp existed — those still re-resolve.
+   */
+  rateScheduleVersionId?: string | null;
+  officialAmount?: number | null;
+  officialEffectiveFrom?: string | null;
+  rateStampedAt?: string | null;
 }
 
 interface TollLedgerFilters {
@@ -2797,6 +2920,12 @@ async function saveTollLedgerEntry(entry: TollLedgerRecord, c?: Context): Promis
   if (!entry.date) throw new Error("TollLedgerRecord.date is required");
   if (typeof entry.amount !== "number") throw new Error("TollLedgerRecord.amount must be a number");
 
+  // Stamp organizationId from rbacUser (service_role still enforces org from context).
+  const ctx = c ?? getTollContext();
+  if (ctx) {
+    entry = stampOrg(entry as unknown as Record<string, unknown>, ctx) as TollLedgerRecord;
+  }
+
   // Ensure timestamps
   const now = new Date().toISOString();
   if (!entry.createdAt) entry.createdAt = now;
@@ -2822,9 +2951,15 @@ async function saveTollLedgerEntry(entry: TollLedgerRecord, c?: Context): Promis
     }
   }
 
+  // Runs after plazaId enrichment so the rate lookup can match on id, not just
+  // the free-text plaza name. Every write funnels through here, which is what
+  // makes it the one place that can guarantee a settled toll keeps the price it
+  // was settled at.
+  await stampTollRateProvenance(entry);
+
   ensureTollContentFingerprint(entry);
 
-  const duplicate = findDuplicateTollLedgerEntry(entry, await getAllTollLedgerEntries());
+  const duplicate = findDuplicateTollLedgerEntry(entry, await getAllTollLedgerEntries(ctx));
   if (duplicate) {
     console.log(
       `[TollLedgerStorage] Skip duplicate (${duplicate.reason}) for ${entry.id}; existing ${duplicate.existingId}`,
@@ -2930,7 +3065,11 @@ async function saveTollLedgerEntry(entry: TollLedgerRecord, c?: Context): Promis
  */
 async function getTollLedgerEntry(id: string): Promise<TollLedgerRecord | null> {
   const entry = await kv.get(`${TOLL_LEDGER_PREFIX}${id}`);
-  if (entry) return entry as TollLedgerRecord | null;
+  if (entry) {
+    const ctx = getTollContext();
+    if (ctx && !belongsToOrg(entry as Record<string, unknown>, ctx)) return null;
+    return entry as TollLedgerRecord;
+  }
 
   try {
     const { unifiedLedgerClient } = await import("../_shared/unifiedLedger/postEntry.ts");
@@ -2952,10 +3091,11 @@ async function getTollLedgerEntry(id: string): Promise<TollLedgerRecord | null> 
     const typ = String(meta.toll_type ?? "usage") as TollType;
     const amtMajor = Number(e.amount_minor ?? 0) / 100;
     const now = new Date().toISOString();
-    return {
+    const hydrated = {
       id,
       createdAt: now,
       updatedAt: now,
+      organizationId: e.organization_id != null ? String(e.organization_id) : null,
       vehicleId: meta.vehicle_id != null ? String(meta.vehicle_id) : null,
       vehiclePlate: null,
       driverId: meta.driver_id != null ? String(meta.driver_id) : null,
@@ -2987,7 +3127,10 @@ async function getTollLedgerEntry(id: string): Promise<TollLedgerRecord | null> 
       notes: null,
       auditTrail: [],
       metadata: { ...meta, source: "ledger.entries" },
-    };
+    } as TollLedgerRecord;
+    const ctx = getTollContext();
+    if (ctx && !belongsToOrg(hydrated as unknown as Record<string, unknown>, ctx)) return null;
+    return hydrated;
   } catch (err) {
     console.error("[TollLedgerStorage] unified hydrate failed:", err);
     return null;
@@ -3031,6 +3174,8 @@ async function updateTollLedgerEntry(
 ): Promise<TollLedgerRecord | null> {
   const existing = await getTollLedgerEntry(id);
   if (!existing) return null;
+  const ctx = getTollContext();
+  if (ctx && !belongsToOrg(existing as unknown as Record<string, unknown>, ctx)) return null;
 
   const now = new Date().toISOString();
 
@@ -3063,7 +3208,7 @@ async function updateTollLedgerEntry(
     ];
   }
 
-  await saveTollLedgerEntry(updated);
+  await saveTollLedgerEntry(updated, ctx);
   return updated;
 }
 
@@ -3548,6 +3693,8 @@ export async function invalidateStaleTollMatchesForTrip(
 async function deleteTollLedgerEntry(id: string): Promise<boolean> {
   const existing = await getTollLedgerEntry(id);
   if (!existing) return false;
+  const ctx = getTollContext();
+  if (ctx && !belongsToOrg(existing as unknown as Record<string, unknown>, ctx)) return false;
   await kv.del(`${TOLL_LEDGER_PREFIX}${id}`);
   try {
     await deleteCanonicalLedgerBySource("transaction", [id]);
@@ -3561,9 +3708,39 @@ async function deleteTollLedgerEntry(id: string): Promise<boolean> {
 /**
  * Get all toll ledger entries.
  */
-async function getAllTollLedgerEntries(): Promise<TollLedgerRecord[]> {
+async function getAllTollLedgerEntries(c?: Context): Promise<TollLedgerRecord[]> {
+  const ctx = c ?? getTollContext();
+  const orgId = resolveTollOrgId(ctx);
+  const orgFilters = tollOrgSqlFilters(orgId);
+
+  // Push organization_id into the SQL predicate (iterateFleet / orOrg) — no full-table scan then filter.
+  try {
+    const { iterateFleet } = await import("./repos/baseRepo.ts");
+    const out: TollLedgerRecord[] = [];
+    for await (const row of iterateFleet("toll_ledger", {
+      order: { col: "legacy_kv_id", ascending: true },
+      filters: orgFilters.length ? orgFilters : undefined,
+    })) {
+      out.push(row as TollLedgerRecord);
+    }
+    return ctx
+      ? (filterByOrg(out as unknown as Record<string, unknown>[], ctx, {
+          endpoint: "getAllTollLedgerEntries",
+        }) as TollLedgerRecord[])
+      : out;
+  } catch (e: any) {
+    console.warn(
+      `[TollOrg] getAllTollLedgerEntries SQL path failed, falling back: ${e?.message || e}`,
+    );
+  }
+
   const entries = await kv.getByPrefix(TOLL_LEDGER_PREFIX);
-  return (entries || []).filter(Boolean) as TollLedgerRecord[];
+  const all = (entries || []).filter(Boolean) as TollLedgerRecord[];
+  return ctx
+    ? (filterByOrg(all as unknown as Record<string, unknown>[], ctx, {
+        endpoint: "getAllTollLedgerEntries",
+      }) as TollLedgerRecord[])
+    : all;
 }
 
 /**
@@ -4769,6 +4946,130 @@ async function computeTagBackfillPlan(force: boolean) {
   }
   return plan;
 }
+
+// ═══════════════════════════════════════════════════════════════════════
+// Plaza attribution backfill
+// ═══════════════════════════════════════════════════════════════════════
+// Historical rows were written without plaza_id, so charts grouped them all
+// under "Unknown Plaza". The plan is computed from statement text and is
+// deliberately conservative — see toll_plaza_backfill.ts.
+
+async function computePlazaBackfillPlan() {
+  const { planPlazaBackfill } = await import("./toll_plaza_backfill.ts");
+  const [entries, plazaRecords] = await Promise.all([
+    loadAllByPrefix(TOLL_LEDGER_PREFIX) as Promise<TollLedgerRecord[]>,
+    kv.getByPrefix("toll_plaza:") as Promise<any[]>,
+  ]);
+  const plazas = (plazaRecords || [])
+    .filter((p: any) => p?.id && p?.name)
+    .map((p: any) => ({ id: String(p.id), name: String(p.name), aliases: p.aliases ?? null }));
+  const rows = (entries || [])
+    .filter((e: any) => e && typeof e === "object" && e.id)
+    .map((e: any) => ({
+      id: String(e.id),
+      plazaId: e.plazaId ?? null,
+      plaza: e.plaza ?? null,
+      location: e.location ?? null,
+      description: e.description ?? null,
+      vendor: e.metadata?.vendor ?? null,
+    }));
+  return { plan: planPlazaBackfill(rows, plazas), plazaCount: plazas.length };
+}
+
+// ─── GET /toll-ledger/plaza-backfill/status ─── read-only attribution report ──
+app.get(`${BASE}/toll-ledger/plaza-backfill/status`, async (c) => {
+  try {
+    const { plan, plazaCount } = await computePlazaBackfillPlan();
+    return c.json({
+      success: true,
+      summary: {
+        totalLedger: plan.total,
+        knownPlazas: plazaCount,
+        alreadyAttributed: plan.alreadyAttributed,
+        willAttribute: plan.toStamp.length,
+        ambiguous: plan.ambiguous.length,
+        unresolved: plan.unresolved.length,
+      },
+      ambiguousSample: plan.ambiguous.slice(0, 50),
+      unresolvedSample: plan.unresolved.slice(0, 50),
+      message:
+        `${plan.toStamp.length} toll(s) can be attributed to a plaza; ` +
+        `${plan.ambiguous.length} match more than one plaza and need a human; ` +
+        `${plan.unresolved.length} have no usable plaza text.`,
+    });
+  } catch (e: any) {
+    console.log(`[PlazaBackfill] status error: ${e.message}`);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+// ─── POST /toll-ledger/plaza-backfill ─── apply (dry-run by default) ──────
+app.post(`${BASE}/toll-ledger/plaza-backfill`, async (c) => {
+  try {
+    const body = await c.req.json().catch(() => ({}));
+    const dryRun = body.dryRun !== false;
+    const { plan } = await computePlazaBackfillPlan();
+
+    if (dryRun) {
+      return c.json({
+        success: true,
+        dryRun: true,
+        summary: {
+          totalLedger: plan.total,
+          alreadyAttributed: plan.alreadyAttributed,
+          willAttribute: plan.toStamp.length,
+          ambiguous: plan.ambiguous.length,
+          unresolved: plan.unresolved.length,
+        },
+        sample: plan.toStamp.slice(0, 50),
+        message:
+          `Dry run: ${plan.toStamp.length} toll(s) would be attributed. ` +
+          `Re-run with dryRun=false to apply.`,
+      });
+    }
+
+    let attributed = 0;
+    const errors: string[] = [];
+    const touchedIds: string[] = [];
+    for (const item of plan.toStamp) {
+      try {
+        await updateTollLedgerEntry(
+          item.id,
+          { plazaId: item.plazaId },
+          "updated",
+          "system",
+          `Plaza Backfill (matched "${item.matchedOn}")`,
+        );
+        touchedIds.push(item.id);
+        attributed++;
+      } catch (err: any) {
+        errors.push(`${item.id}: ${err.message}`);
+        if (errors.length > 50) break;
+      }
+    }
+
+    // These rows feed settled reconciliations, so a bad run needs a concrete undo path.
+    const manifestKey = `toll_backfill_run:plaza:${new Date().toISOString()}`;
+    await kv.set(manifestKey, { touchedIds, at: new Date().toISOString(), errors });
+
+    console.log(`[PlazaBackfill] attributed=${attributed} errors=${errors.length} manifest=${manifestKey}`);
+    return c.json({
+      success: true,
+      dryRun: false,
+      summary: {
+        attributed,
+        ambiguous: plan.ambiguous.length,
+        unresolved: plan.unresolved.length,
+      },
+      errors: errors.slice(0, 50),
+      manifestKey,
+      message: `Attributed ${attributed} toll(s) to a plaza. ${plan.ambiguous.length} still need a human decision.`,
+    });
+  } catch (e: any) {
+    console.log(`[PlazaBackfill] error: ${e.message}`);
+    return c.json({ error: e.message }, 500);
+  }
+});
 
 // ─── GET /toll-ledger/tag-backfill/status ─── read-only integrity report ──
 app.get(`${BASE}/toll-ledger/tag-backfill/status`, async (c) => {
@@ -9244,16 +9545,40 @@ async function bridgeRideTollCrossings(opts: { dryRun: boolean; limit: number })
     const ride = rideCtx.get(x.ride_request_id);
     const amountMajor = Number(x.toll_amount_minor || 0) / 100;
     const ledgerId = crypto.randomUUID();
+
+    // Resolve fleet attribution when possible (audit C8) — do not leave
+    // bridged geofence tolls as Unknown Vehicle forever.
+    let vehicleId: string | null = null;
+    let vehiclePlate: string | null = null;
+    let driverId: string | null = null;
+    let driverName: string | null = null;
+    const tripId = x.ride_request_id ? String(x.ride_request_id) : null;
+    const ridesDriverUserId = ride?.assigned_driver_user_id
+      ? String(ride.assigned_driver_user_id)
+      : null;
+    if (ridesDriverUserId) {
+      try {
+        const { getFleetDriverContext } = await import("../_shared/fleetDriverContext.ts");
+        const ctx = await getFleetDriverContext(ridesDriverUserId);
+        driverId = ridesDriverUserId;
+        vehicleId = ctx.assignedVehicleId;
+        vehiclePlate = ctx.assignedVehiclePlate;
+        const driverKv = await kv.get(`driver:${ridesDriverUserId}`);
+        if (driverKv?.name) driverName = String(driverKv.name);
+        else if (driverKv?.driverName) driverName = String(driverKv.driverName);
+      } catch (attrErr: any) {
+        console.warn(`[TollBridge] attribution resolve failed: ${attrErr?.message}`);
+      }
+    }
+
     const entry: TollLedgerRecord = {
       id: ledgerId,
       createdAt: now,
       updatedAt: now,
-      vehicleId: null,
-      vehiclePlate: null,
-      // Do NOT fabricate a fleet driver identity — keep the rides-side id in
-      // metadata and leave driverId unassigned for admin/matcher to resolve.
-      driverId: null,
-      driverName: null,
+      vehicleId,
+      vehiclePlate,
+      driverId,
+      driverName,
       tollTagId: null,
       tagNumber: null,
       plaza: x.toll_plaza_name || null,
@@ -9267,7 +9592,7 @@ async function bridgeRideTollCrossings(opts: { dryRun: boolean; limit: number })
       status: "pending",
       resolution: null,
       isReconciled: false,
-      tripId: null,
+      tripId,
       matchConfidence: null,
       matchedAt: null,
       matchedBy: null,
@@ -9289,7 +9614,7 @@ async function bridgeRideTollCrossings(opts: { dryRun: boolean; limit: number })
         driverLat: x.driver_lat,
         driverLng: x.driver_lng,
         crossedAt: x.crossed_at,
-        driverUserId: ride?.assigned_driver_user_id || null,
+        driverUserId: ridesDriverUserId,
         rideStatus: ride?.status || null,
       },
     };

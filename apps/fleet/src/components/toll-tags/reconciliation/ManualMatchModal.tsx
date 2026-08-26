@@ -9,6 +9,8 @@ import { Trip, FinancialTransaction } from "../../../types/data";
 import { normalizePlatform } from '../../../utils/normalizePlatform';
 import { Search, Loader2, MapPin, User, Car } from "lucide-react";
 import { formatInFleetTz, useFleetTimezone } from '../../../utils/timezoneDisplay';
+import { getTollTransactionDate } from '../../../utils/tollWeekPeriod';
+import { formatJMD } from '../../../utils/formatJMD';
 
 interface ManualMatchModalProps {
   isOpen: boolean;
@@ -55,10 +57,10 @@ export function ManualMatchModal({ isOpen, onClose, transaction, allTrips, onCon
 
         // Sort by date closest to transaction if possible
         if (transaction) {
-            const txTime = new Date(transaction.date).getTime();
-            results.sort((a, b) => {
-                const diffA = Math.abs(new Date(a.date).getTime() - txTime);
-                const diffB = Math.abs(new Date(b.date).getTime() - txTime);
+            const txTime = getTollTransactionDate(transaction).getTime();
+            results.sort((tripA, tripB) => {
+                const diffA = Math.abs(new Date(tripA.date).getTime() - txTime);
+                const diffB = Math.abs(new Date(tripB.date).getTime() - txTime);
                 return diffA - diffB;
             });
         }
@@ -81,7 +83,7 @@ export function ManualMatchModal({ isOpen, onClose, transaction, allTrips, onCon
         <DialogHeader className="px-6 py-4 border-b bg-white">
           <DialogTitle className="text-xl">Find Trip for Toll Transaction</DialogTitle>
           <DialogDescription className="mt-1">
-             Match the toll charge of <strong className="text-slate-900">${Math.abs(transaction.amount).toFixed(2)}</strong> on {formatInFleetTz(new Date(transaction.date), fleetTimezone, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })}
+             Match the toll charge of <strong className="text-slate-900">{formatJMD(Math.abs(transaction.amount), 2)}</strong> on {formatInFleetTz(getTollTransactionDate(transaction), fleetTimezone, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })}
           </DialogDescription>
         </DialogHeader>
 

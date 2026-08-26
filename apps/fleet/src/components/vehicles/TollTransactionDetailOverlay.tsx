@@ -17,6 +17,7 @@ import {
 import { FinancialTransaction, Trip, Claim } from "../../types/data";
 import { formatInFleetTz, useFleetTimezone } from '../../utils/timezoneDisplay';
 import { normalizePlatform } from '../../utils/normalizePlatform';
+import { getTollTransactionDate } from '../../utils/tollWeekPeriod';
 
 interface TollTransactionDetailOverlayProps {
   isOpen: boolean;
@@ -58,22 +59,13 @@ export function TollTransactionDetailOverlay({
   // --- Date formatting ---
   const formatTxDate = () => {
     try {
-      const timeStr = transaction.time || '12:00:00';
-      const cleanTime = timeStr.length >= 5 ? timeStr : '12:00:00';
-      const dateBase = transaction.date.includes('T') ? transaction.date.split('T')[0] : transaction.date;
-      const combined = `${dateBase}T${cleanTime}`;
-      const localDate = new Date(combined);
+      // Hand-built `${ymd}T${time}` broke on tag imports that store "11:47:00 AM",
+      // and the bare-date fallback read as UTC midnight — a day early in Jamaica.
+      const localDate = getTollTransactionDate(transaction);
       if (!isNaN(localDate.getTime())) {
         return {
           date: formatInFleetTz(localDate, fleetTz, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }),
           time: formatInFleetTz(localDate, fleetTz, { hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: true }),
-        };
-      }
-      const fallback = new Date(transaction.date);
-      if (!isNaN(fallback.getTime())) {
-        return {
-          date: formatInFleetTz(fallback, fleetTz, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }),
-          time: formatInFleetTz(fallback, fleetTz, { hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: true }),
         };
       }
       return { date: transaction.date, time: transaction.time || 'N/A' };

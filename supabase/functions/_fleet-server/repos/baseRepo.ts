@@ -43,6 +43,9 @@ export function rowToKvValue(row: Record<string, unknown>): Record<string, unkno
   if (payload.value == null && row.reading != null) payload.value = row.reading;
   if (payload.odometer == null && row.odometer != null) payload.odometer = row.odometer;
   if (!payload.driverId && row.driver_id) payload.driverId = row.driver_id;
+  // Toll rows carry attribution in the typed column; without mirroring it the
+  // payload looks unattributed and every consumer falls back to plaza-name text.
+  if (!payload.plazaId && row.plaza_id) payload.plazaId = row.plaza_id;
   if (!payload.weekStart && row.week_start) payload.weekStart = row.week_start;
   if (!payload.source && row.source) payload.source = row.source;
   if (!payload.referenceId && row.reference_id) payload.referenceId = row.reference_id;

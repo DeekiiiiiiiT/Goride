@@ -14,6 +14,7 @@ import { Textarea } from "../ui/textarea";
 import { toast } from "sonner@2.0.3";
 import { Loader2, DollarSign, CreditCard } from "lucide-react";
 import { api } from '../../services/api';
+import { parseTollDate } from '../../utils/tollDate';
 
 interface LogTollTopupModalProps {
   isOpen: boolean;
@@ -50,7 +51,7 @@ export function LogTollTopupModal({
     try {
       // Create the transaction
       await api.saveTransaction({
-        date: new Date(date).toISOString(),
+        date: parseTollDate(date).toISOString(),
         amount: -parseFloat(amount), // Expense is negative
         type: 'Expense',
         category: 'Toll Top-up',

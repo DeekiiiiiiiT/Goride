@@ -56,7 +56,89 @@ export function registerDashboardListRoutes(
         .order("created_at", { ascending: false })
         .limit(LIST_LIMIT);
       if (error) return c.json({ error: "list_failed", message: error.message }, 500);
-      return c.json({ rides: data ?? [] });
+
+      const rides = data ?? [];
+      const rideIds = rides.map((r: { id?: string }) => r.id).filter(Boolean) as string[];
+
+      // Real toll counts + last plaza from ride_toll_crossings (not a boolean on total).
+      const tollByRide = new Map<
+        string,
+        { tollCount: number; lastPlazaName: string | null; lastCrossedAt: string | null }
+      >();
+      if (rideIds.length > 0) {
+        try {
+          // Prefer the same admin client; fall back to rides schema (crossings are not public views).
+          let crossings: Array<{
+            ride_request_id?: string;
+            toll_plaza_name?: string | null;
+            crossed_at?: string | null;
+          }> | null = null;
+
+          const primary = await db
+            .from("ride_toll_crossings")
+            .select("ride_request_id, toll_plaza_name, crossed_at")
+            .in("ride_request_id", rideIds);
+          if (!primary.error) {
+            crossings = primary.data;
+          } else {
+            const { createClient } = await import(
+              "https://esm.sh/@supabase/supabase-js@2"
+            );
+            const ridesDb = createClient(
+              Deno.env.get("SUPABASE_URL") ?? "",
+              Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+              { db: { schema: "rides" } },
+            );
+            const fallback = await ridesDb
+              .from("ride_toll_crossings")
+              .select("ride_request_id, toll_plaza_name, crossed_at")
+              .in("ride_request_id", rideIds);
+            if (!fallback.error) crossings = fallback.data;
+            else {
+              console.error(
+                "[dashboard/list] ride_toll_crossings enrich failed:",
+                primary.error?.message || fallback.error?.message,
+              );
+            }
+          }
+
+          for (const row of crossings ?? []) {
+            const rid = String(row.ride_request_id || "");
+            if (!rid) continue;
+            const cur = tollByRide.get(rid) || {
+              tollCount: 0,
+              lastPlazaName: null as string | null,
+              lastCrossedAt: null as string | null,
+            };
+            cur.tollCount += 1;
+            const crossedAt = row.crossed_at ?? null;
+            const plaza = row.toll_plaza_name ?? null;
+            if (
+              plaza &&
+              (!cur.lastCrossedAt || (crossedAt && crossedAt > cur.lastCrossedAt))
+            ) {
+              cur.lastPlazaName = plaza;
+              cur.lastCrossedAt = crossedAt;
+            } else if (!cur.lastPlazaName && plaza) {
+              cur.lastPlazaName = plaza;
+            }
+            tollByRide.set(rid, cur);
+          }
+        } catch (e) {
+          console.error("[dashboard/list] ride_toll_crossings enrich failed:", e);
+        }
+      }
+
+      const enriched = rides.map((ride: { id: string }) => {
+        const summary = tollByRide.get(ride.id);
+        return {
+          ...ride,
+          toll_crossing_count: summary?.tollCount ?? 0,
+          last_plaza_name: summary?.lastPlazaName ?? null,
+        };
+      });
+
+      return c.json({ rides: enriched });
     }
 
     if (view === "riders_on_trip") {

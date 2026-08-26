@@ -1153,7 +1153,12 @@ export const api = {
         headers: await requireAuthHeaders(),
         body: JSON.stringify(schedule)
     });
-    if (!response.ok) throw new Error("Failed to save toll info");
+    if (!response.ok) {
+        // The server rejects back-dated, duplicate-date and unlinked-plaza publishes
+        // with an explanation the user can act on; a generic message would hide it.
+        const detail = await response.json().catch(() => null);
+        throw new Error(detail?.error || "Failed to save toll rates");
+    }
     return response.json();
   },
 
@@ -1180,6 +1185,20 @@ export const api = {
     );
     if (!response.ok) throw new Error("Failed to resolve official toll rate");
     return response.json() as Promise<{ success: boolean; rate: any | null }>;
+  },
+
+  /** Dry-run a draft rate card against unsettled tolls. Writes nothing. */
+  async previewTollRateImpact(draft: any) {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.admin}/toll-info/impact-preview`, {
+      method: 'POST',
+      headers: await requireAuthHeaders(),
+      body: JSON.stringify(draft),
+    });
+    if (!response.ok) {
+      const detail = await response.json().catch(() => null);
+      throw new Error(detail?.error || 'Failed to preview rate impact');
+    }
+    return response.json();
   },
 
   async getTollInfoVersions() {
@@ -1958,6 +1977,12 @@ export const api = {
         headers: await requireAuthHeaders(),
         body: JSON.stringify(tag)
     });
+    if (response.status === 409) {
+      const detail = await response.json().catch(() => null);
+      const err = new Error(detail?.error || 'Tag was updated in another tab') as Error & { name: string };
+      err.name = 'TollTagConflictError';
+      throw err;
+    }
     if (!response.ok) {
       await throwIfCatalogGateBlocked(response, "Cannot assign toll tag — vehicle is pending catalog approval");
       throw new Error("Failed to save toll tag");
@@ -2620,6 +2645,26 @@ export const api = {
       body: JSON.stringify({ dryRun })
     });
     if (!response.ok) throw new Error("Failed to sync tag history");
+    return response.json();
+  },
+
+  // Preview how many historical tolls can be attributed to a plaza (read-only).
+  async getTollPlazaBackfillStatus() {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/toll-reconciliation/toll-ledger/plaza-backfill/status`, {
+      headers: await requireAuthHeaders(null)
+    });
+    if (!response.ok) throw new Error("Failed to load plaza attribution status");
+    return response.json();
+  },
+
+  // Attribute historical tolls to their plaza. dryRun=true previews without writing.
+  async runTollPlazaBackfill(dryRun: boolean) {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/toll-reconciliation/toll-ledger/plaza-backfill`, {
+      method: 'POST',
+      headers: await requireAuthHeaders(),
+      body: JSON.stringify({ dryRun })
+    });
+    if (!response.ok) throw new Error("Failed to attribute tolls to plazas");
     return response.json();
   },
 

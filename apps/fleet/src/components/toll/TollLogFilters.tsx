@@ -236,7 +236,7 @@ export function TollLogFilters({
             <SelectItem value="Pending">Pending</SelectItem>
             <SelectItem value="Flagged">Flagged</SelectItem>
             <SelectItem value="Reconciled">Reconciled</SelectItem>
-            <SelectItem value="Void">Void</SelectItem>
+            <SelectItem value="Voided">Voided</SelectItem>
           </SelectContent>
         </Select>
 

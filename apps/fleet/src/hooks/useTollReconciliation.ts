@@ -6,6 +6,7 @@ import { collectReadyToLinkPairs, partitionSuggestions } from '../utils/suggesti
 import { demoteSpuriousDeadheadMatch } from '../utils/deadheadMatchGuard';
 import { fleetCalendarDay, ymdToLocalDate } from '../utils/timezoneDisplay';
 import { TOLL_RECON_CAPS, type TollReconTruncation } from '../utils/tollReconCaps';
+import { getTollTransactionDate } from '../utils/tollDate';
 import { toast } from 'sonner@2.0.3';
 
 /** Shift yyyy-MM-dd by N days (local calendar). */
@@ -455,7 +456,9 @@ export function useTollReconciliation(driverId?: string, period?: Reconciliation
           // Add back to unreconciled
           setUnreconciledTolls(prev => {
               const next = [...prev, updatedTx];
-              return next.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+              return next.sort(
+                (a, b) => getTollTransactionDate(b).getTime() - getTollTransactionDate(a).getTime(),
+              );
           });
 
           // Do not seed thin client findTollMatches — wait for fetchData()

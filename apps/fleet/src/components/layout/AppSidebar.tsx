@@ -50,7 +50,14 @@ const FUEL_PAGE_IDS = [
   'fuel-configuration',
   'fuel-reimbursements',
 ];
-const TOLL_PAGE_IDS = ['toll-logs', 'toll-tags', 'tag-inventory', 'toll-analytics'];
+const TOLL_PAGE_IDS = [
+  'toll-logs',
+  'toll-tags',
+  'tag-inventory',
+  'toll-analytics',
+  'toll-rate-drift',
+  'toll-low-balance',
+];
 
 function fleetOpsActive(page: string) {
   return [...FUEL_PAGE_IDS, ...TOLL_PAGE_IDS].includes(page);
@@ -87,7 +94,9 @@ export function AppSidebar({
     (canView('toll-logs') ||
       canView('toll-tags') ||
       canView('tag-inventory') ||
-      canView('toll-analytics'));
+      canView('toll-analytics') ||
+      canView('toll-rate-drift') ||
+      canView('toll-low-balance'));
   const canSeeBusinessFinanceHome =
     isModuleEnabled('businessFinance') && canView('business-finance');
   const canSeeBusinessFinanceNav =
@@ -173,6 +182,8 @@ export function AppSidebar({
     canView('toll-logs') && { id: 'toll-logs', label: 'Toll Logs' },
     canView('toll-tags') && { id: 'toll-tags', label: 'Toll Reconciliation' },
     canView('tag-inventory') && { id: 'tag-inventory', label: 'Tag Inventory' },
+    canView('toll-low-balance') && { id: 'toll-low-balance', label: 'Low Balance Queue' },
+    canView('toll-rate-drift') && { id: 'toll-rate-drift', label: 'Rate Drift' },
     canView('toll-analytics') && {
       id: 'toll-analytics',
       label: 'Toll Analytics',

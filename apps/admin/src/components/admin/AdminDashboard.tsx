@@ -199,9 +199,9 @@ export function AdminDashboard({ onNavigate }: AdminDashboardProps) {
         <DashboardCard
           icon={<MapPin className="w-5 h-5 text-purple-400" />}
           color="bg-purple-500/15"
-          label="Toll Stations"
+          label="Toll Database"
           value={stats.tollStationCount}
-          subtitle="Toll booth locations"
+          subtitle="Toll plaza catalogue"
           onClick={() => onNavigate('toll-stations')}
         />
         <DashboardCard

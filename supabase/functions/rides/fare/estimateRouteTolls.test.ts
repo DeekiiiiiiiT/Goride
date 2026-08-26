@@ -8,7 +8,12 @@ function mockDb(plazaRows: Array<{ key: string; value: unknown }>) {
   return {
     from: (_table: string) => ({
       select: (_cols: string) => ({
-        like: async (_col: string, _pat: string) => ({ data: plazaRows, error: null }),
+        like: (_col: string, _pat: string) => ({
+          limit: async (_n: number) => ({ data: plazaRows, error: null }),
+        }),
+        eq: () => ({
+          maybeSingle: async () => ({ data: null, error: null }),
+        }),
       }),
     }),
   } as unknown as import("https://esm.sh/@supabase/supabase-js@2").SupabaseClient;
@@ -22,7 +27,8 @@ function plaza(id: string, lat: number, lng: number, radius: number, amountJmd: 
       location: { lat, lng },
       geofenceRadius: radius,
       rates: [{ vehicleClass: "Class 1", rate: amountJmd, currency: "JMD" }],
-      status: "active",
+      status: "verified",
+      operationalStatus: "active",
     },
   };
 }
@@ -46,9 +52,13 @@ Deno.test("estimateRouteTolls counts plaza on route", async () => {
     geofenceRadius: 200,
     defaultRateMinor: 36000,
     currency: "JMD",
+    verificationStatus: "verified" as const,
   };
   const routePoints = [{ lat: 17.9505, lng: -76.8705 }];
-  assertEquals(routeCrossesPlaza(routePoints, geo, 100), true);
+  assertEquals(
+    routeCrossesPlaza(routePoints, geo, 100, { requireVerified: true }),
+    true,
+  );
 
   // Full estimate with mock that has plaza at route point
   invalidateTollPlazaCache();

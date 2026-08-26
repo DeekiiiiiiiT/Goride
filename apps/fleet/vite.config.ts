@@ -199,8 +199,6 @@ export default defineConfig({
     environment: 'node',
     include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
     exclude: [
-      /** Legacy file uses a manual runner (`node` / copy-paste), not Vitest `test()`. */
-      '**/tollReconciliation.test.ts',
       /** Deno edge-function tests (Deno.test + https: imports) run via `deno test`, not Vitest. */
       '**/supabase/functions/**',
     ],

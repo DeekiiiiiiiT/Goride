@@ -9,6 +9,7 @@ import { Badge } from "../../ui/badge";
 import { calculateTollFinancials, buildTollFinancialsContext, buildTripRefundAllocation } from "../../../utils/tollReconciliation";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../ui/tooltip";
 import { formatInFleetTz, useFleetTimezone } from '../../../utils/timezoneDisplay';
+import { getTollTransactionDate } from '../../../utils/tollWeekPeriod';
 import { MatchedTollDetailOverlay } from './MatchedTollDetailOverlay';
 import { PlatformSourceBadge } from './PlatformSourceBadge';
 
@@ -153,11 +154,7 @@ export function ReconciledTollsList({ tolls, trips, claims, disputeRefunds = [],
                                                                     <div className="flex flex-col">
                                                                         {(() => {
                                                                             try {
-                                                                                const timeStr = tx.time || '12:00:00';
-                                                                                const cleanTime = timeStr.length >= 5 ? timeStr : '12:00:00';
-                                                                                const localDate = new Date(`${tx.date}T${cleanTime}`);
-                                                                                const validDate = !isNaN(localDate.getTime()) ? localDate : new Date(tx.date);
-
+                                                                                const validDate = getTollTransactionDate(tx);
                                                                                 const isFutureDate = validDate > new Date();
                                                                                 return (
                                                                                     <>

@@ -9,6 +9,8 @@ import { api } from '../../services/api';
 import { FinancialTransaction, Claim } from '../../types/data';
 import { calculateTollFinancials, buildTollFinancialsContext, sumTagUsageFinancials } from '../../utils/tollReconciliation';
 import { isTagLedgerTx, isTagUsage, isTagCredit, isVoidedTx } from '../../utils/tollTagLedger';
+import { getTollTransactionDate } from '../../utils/tollWeekPeriod';
+import { formatStoredDateInFleetTz, useFleetTimezone } from '../../utils/timezoneDisplay';
 import { DisputeRefund } from '../../types/data';
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 import { toast } from "sonner@2.0.3";
@@ -89,6 +91,7 @@ export function TollTopupHistory({
   const [selectedTransaction, setSelectedTransaction] = useState<FinancialTransaction | null>(null);
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [localDisputes, setLocalDisputes] = useState<DisputeRefund[]>(disputeRefunds);
+  const fleetTz = useFleetTimezone();
 
   useEffect(() => {
     setLocalDisputes(disputeRefunds);
@@ -251,8 +254,11 @@ export function TollTopupHistory({
           return (
           <TableRow key={tx.id} className={`cursor-pointer hover:bg-slate-50/80 transition-colors ${voided ? 'opacity-60' : ''}`} onClick={() => setSelectedTransaction(tx)}>
             <TableCell className="font-medium text-slate-700">
-                {format(new Date(tx.date), 'MMM d, yyyy')}
-                <div className="text-xs text-slate-400">{format(new Date(tx.date), 'h:mm a')}</div>
+                {/* `new Date(tx.date)` read a bare yyyy-MM-dd as UTC midnight and
+                    showed the previous day in Jamaica, and it ignored tx.time
+                    entirely so every row read 12:00 AM. */}
+                {formatStoredDateInFleetTz(tx.date, fleetTz)}
+                <div className="text-xs text-slate-400">{format(getTollTransactionDate(tx), 'h:mm a')}</div>
             </TableCell>
             <TableCell>
                 <div className="flex flex-col gap-0.5">

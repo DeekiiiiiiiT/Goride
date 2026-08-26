@@ -18,7 +18,7 @@ import type { UnlinkedShortfallSuggestion } from "../../../hooks/useTollReconcil
 import { isRecommendedUnlinkedShortfall, isUnlinkedShortfallPlatformMismatch } from "../../../utils/unlinkedShortfallEligibility";
 import { PlatformMismatchWarning, platformsMismatch } from "./PlatformMismatchWarning";
 import { PlatformSourceBadge } from "./PlatformSourceBadge";
-import { getCrossPeriodCoverage } from "../../../utils/tollWeekPeriod";
+import { getCrossPeriodCoverage, parseTollDate } from "../../../utils/tollWeekPeriod";
 import { useFleetTimezone } from "../../../utils/timezoneDisplay";
 
 export interface RefundResolutionPayload {
@@ -57,14 +57,13 @@ function formatDate(iso: string): string {
   // Date-only strings parse as UTC midnight — render as a plain local date or
   // the row shifts to the previous evening (e.g. Jun 30 shown as "Jun 29, 19:00").
   if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) {
-    const [y, m, d] = iso.split("-").map(Number);
-    return new Date(y, m - 1, d).toLocaleDateString(undefined, {
+    return parseTollDate(iso).toLocaleDateString(undefined, {
       month: "short",
       day: "numeric",
       year: "numeric",
     });
   }
-  const d = new Date(iso);
+  const d = parseTollDate(iso);
   if (isNaN(d.getTime())) return iso;
   return d.toLocaleString(undefined, {
     month: "short",
@@ -220,7 +219,7 @@ export function RefundResolutionDrawer({
     );
     return rankedCandidates
       .filter((c) => ids.has(c.tollId))
-      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+      .sort((a, b) => parseTollDate(a.date).getTime() - parseTollDate(b.date).getTime());
   }, [rankedCandidates, multiMode]);
 
   const primaryCandidate = useMemo(

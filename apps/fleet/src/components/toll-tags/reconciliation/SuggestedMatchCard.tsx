@@ -10,6 +10,7 @@ import { format } from "date-fns";
 import { MatchResult } from "../../../utils/tollReconciliation";
 import { isTripLinkConfirmed, personalMatchReasonLabel } from "../../../utils/tollBucket";
 import { formatInFleetTz, useFleetTimezone } from '../../../utils/timezoneDisplay';
+import { getTollTransactionDate } from '../../../utils/tollWeekPeriod';
 
 interface SuggestedMatchCardProps {
   transaction: FinancialTransaction;
@@ -280,13 +281,7 @@ export function SuggestedMatchCard({
                     <span className="text-sm text-slate-500">
                         {(() => {
                             try {
-                                const timeStr = transaction.time || '12:00:00';
-                                const cleanTime = timeStr.length >= 5 ? timeStr : '12:00:00';
-                                const localDate = new Date(`${transaction.date}T${cleanTime}`);
-                                if (!isNaN(localDate.getTime())) {
-                                    return formatInFleetTz(localDate, fleetTz, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true });
-                                }
-                                return formatInFleetTz(new Date(transaction.date), fleetTz, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true });
+                                return formatInFleetTz(getTollTransactionDate(transaction), fleetTz, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true });
                             } catch (e) {
                                 return transaction.date;
                             }

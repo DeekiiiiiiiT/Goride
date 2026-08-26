@@ -439,6 +439,8 @@ export const PAGE_PERMISSION_MAP: Record<string, Permission> = {
   'tag-inventory':      'nav.toll_tag_inventory',
   'claimable-loss':     'nav.toll_claimable_loss',
   'toll-analytics':     'nav.toll_analytics',
+  'toll-rate-drift':    'nav.toll_analytics',
+  'toll-low-balance':   'nav.toll_tag_inventory',
 
   // Trips / Reports / Finance
   'trips':              'nav.trips',

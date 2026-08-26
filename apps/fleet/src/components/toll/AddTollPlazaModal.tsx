@@ -443,11 +443,11 @@ export function AddTollPlazaModal({ isOpen, onClose, onSaved, editingPlaza }: Ad
         notes: form.notes.trim() || undefined,
       };
 
-      // Preserve identity fields when editing
+      // Preserve identity fields when editing. Stats are derived server-side
+      // from the ledger, so they are never sent back.
       if (isEditMode && editingPlaza) {
         plaza.id = editingPlaza.id;
         plaza.createdAt = editingPlaza.createdAt;
-        plaza.stats = editingPlaza.stats;
       }
 
       await api.saveTollPlaza(plaza);

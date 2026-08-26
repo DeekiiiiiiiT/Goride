@@ -14,6 +14,7 @@ import { Textarea } from "../ui/textarea";
 import { toast } from "sonner@2.0.3";
 import { Loader2, DollarSign, MinusCircle } from "lucide-react";
 import { api } from '../../services/api';
+import { parseTollDate } from '../../utils/tollDate';
 
 interface LogTollUsageModalProps {
   isOpen: boolean;
@@ -61,7 +62,7 @@ export function LogTollUsageModal({
       // We will save it with 'Toll Usage' category.
       
       await api.saveTransaction({
-        date: new Date(date).toISOString(),
+        date: parseTollDate(date).toISOString(),
         amount: -parseFloat(amount), // Deduction is negative
         type: 'Usage', // Distinct from 'Expense'
         category: 'Toll Usage',

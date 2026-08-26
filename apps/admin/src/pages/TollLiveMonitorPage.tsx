@@ -11,6 +11,12 @@ import {
   listActiveRidesForTollMonitor,
 } from '../services/platform/ridesTollMonitorService';
 
+/** Active-ride row may carry list-query crossing enrichments. */
+type ActiveRideWithTollMeta = RideRequestRow & {
+  toll_crossing_count?: number;
+  last_plaza_name?: string | null;
+};
+
 function gpsAgeSec(iso: string | null | undefined): number | null {
   if (!iso) return null;
   const ms = Date.now() - Date.parse(iso);
@@ -18,15 +24,21 @@ function gpsAgeSec(iso: string | null | undefined): number | null {
   return Math.round(ms / 1000);
 }
 
-function toMonitorRow(ride: RideRequestRow): LiveTollTripRow {
+function toMonitorRow(ride: ActiveRideWithTollMeta): LiveTollTripRow {
   const tollTotalMinor = Number(ride.actual_tolls_minor ?? 0);
+  const listedCount = Number(ride.toll_crossing_count);
+  const tollCount = Number.isFinite(listedCount)
+    ? listedCount
+    : tollTotalMinor > 0
+      ? 1
+      : 0;
   return {
     rideId: ride.id,
     status: ride.status,
     lastGpsAgeSec: gpsAgeSec(ride.last_driver_location_at),
-    tollCount: tollTotalMinor > 0 ? 1 : 0,
+    tollCount,
     tollTotalMinor,
-    lastPlazaName: null,
+    lastPlazaName: ride.last_plaza_name ?? null,
     flagged: gpsAgeSec(ride.last_driver_location_at) != null && gpsAgeSec(ride.last_driver_location_at)! > 900,
   };
 }
@@ -34,7 +46,7 @@ function toMonitorRow(ride: RideRequestRow): LiveTollTripRow {
 export function TollLiveMonitorPage() {
   const { session } = useAuth();
   const token = session?.access_token;
-  const [rides, setRides] = useState<RideRequestRow[]>([]);
+  const [rides, setRides] = useState<ActiveRideWithTollMeta[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [filter, setFilter] = useState<'all' | 'has_tolls' | 'no_tolls'>('all');
@@ -47,7 +59,7 @@ export function TollLiveMonitorPage() {
     setRefreshing(true);
     try {
       const next = await listActiveRidesForTollMonitor(token);
-      setRides(next);
+      setRides(next as ActiveRideWithTollMeta[]);
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : 'Failed to load active rides');
     } finally {

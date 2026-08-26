@@ -1,0 +1,51 @@
+{
+  "capturedAt": "2026-08-26",
+  "note": "Pre-remediation snapshot. See README.md — several of these figures are the defects being fixed, not the target.",
+  "ledgerRows": 262,
+  "distinctOrgs": 1,
+  "nullOrg": 0,
+  "voidedRows": 2,
+  "rowsMissingPlazaId": 197,
+  "dateRange": { "min": "2025-11-12", "max": "2026-08-24" },
+  "totalAmount": -74450,
+  "byStatus": {
+    "pending": 142,
+    "reconciled": 87,
+    "rejected": 29,
+    "approved": 2,
+    "voided": 2
+  },
+  "byType": { "usage": 255, "top_up": 7 },
+  "plazaCount": 12,
+  "plazasWithRates": 0,
+  "verifiedPlazas": 0,
+  "byPlaza": [
+    { "plaza": "(unattributed)", "passages": 53, "spend": 21410 },
+    { "plaza": "Angels", "passages": 2, "spend": 1050 },
+    { "plaza": "Caymanas", "passages": 4, "spend": 2450 },
+    { "plaza": "Highway 2000", "passages": 6, "spend": 2280 },
+    { "plaza": "Portmore East", "passages": 13, "spend": 4810 },
+    { "plaza": "Portmore West", "passages": 13, "spend": 4810 },
+    { "plaza": "Spanish Town East", "passages": 3, "spend": 825 },
+    { "plaza": "Spanish Town West", "passages": 4, "spend": 1100 },
+    { "plaza": "TRANSJAM Highways", "passages": 6, "spend": 2215 },
+    { "plaza": "TRANSJAMAICA HIGHWAYS", "passages": 1, "spend": 285 },
+    { "plaza": "TransJAM Highways", "passages": 4, "spend": 1330 },
+    { "plaza": "TransJama", "passages": 1, "spend": 285 },
+    { "plaza": "TransJama Highways", "passages": 15, "spend": 5950 },
+    { "plaza": "TransJamaica Highways", "passages": 9, "spend": 3140 },
+    { "plaza": "TransJamaican Highway", "passages": 4, "spend": 1425 },
+    { "plaza": "TransJamaican Highways", "passages": 33, "spend": 11000 },
+    { "plaza": "TransJam Highway", "passages": 1, "spend": 280 },
+    { "plaza": "Transjam Highway", "passages": 2, "spend": 760 },
+    { "plaza": "Transjam Highways", "passages": 40, "spend": 15645 },
+    { "plaza": "Transjamaica Highways", "passages": 1, "spend": 0 },
+    { "plaza": "Transjamaican Highway", "passages": 2, "spend": 760 },
+    { "plaza": "Transjamaican Highways", "passages": 7, "spend": 2470 },
+    { "plaza": "Vineyards East", "passages": 1, "spend": 780 },
+    { "plaza": "Vineyards West", "passages": 1, "spend": 780 }
+  ],
+  "byDriver": [
+    { "driver": "73e5b1dc-01b4-45ee-a34a-25a3256b9841", "passages": 255, "spend": 96950 }
+  ]
+}

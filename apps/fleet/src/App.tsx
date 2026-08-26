@@ -27,6 +27,8 @@ import { FuelManagement } from './pages/FuelManagement';
 import { FuelAnalytics } from './components/fuel/analytics/FuelAnalytics';
 import { TollLogsPage } from './pages/TollLogs';
 import { TollAnalytics } from './components/toll/TollAnalytics';
+import { TollRateDriftPage } from './pages/TollRateDriftPage';
+import { TollLowBalancePage } from './pages/TollLowBalancePage';
 import { VehicleAnalytics } from './components/vehicles/VehicleAnalytics';
 import { DriverAnalytics } from './components/drivers/analytics/DriverAnalytics';
 import { DriverLedgerPage } from './components/drivers/DriverLedgerPage';
@@ -522,6 +524,16 @@ function AppContent() {
         {currentPage === 'toll-analytics' && (
           <PermissionGate permission="nav.toll_analytics" onNavigate={setCurrentPage}>
             <TollAnalytics />
+          </PermissionGate>
+        )}
+        {currentPage === 'toll-rate-drift' && (
+          <PermissionGate permission="nav.toll_analytics" onNavigate={setCurrentPage}>
+            <TollRateDriftPage />
+          </PermissionGate>
+        )}
+        {currentPage === 'toll-low-balance' && (
+          <PermissionGate permission="nav.toll_tag_inventory" onNavigate={setCurrentPage}>
+            <TollLowBalancePage onNavigate={handleNavigate} />
           </PermissionGate>
         )}
         {currentPage === 'earnings-policy' && (

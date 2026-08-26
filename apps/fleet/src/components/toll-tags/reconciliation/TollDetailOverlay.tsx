@@ -22,6 +22,7 @@ import type { GeofenceMatchStatus } from '@roam/types/tollCrossings';
 import { normalizePlatform } from '../../../utils/normalizePlatform';
 import { format } from "date-fns";
 import { formatInFleetTz, useFleetTimezone } from '../../../utils/timezoneDisplay';
+import { getTollTransactionDate } from '../../../utils/tollWeekPeriod';
 import { calculateTripTimes } from '../../../utils/timeUtils';
 
 interface TollDetailOverlayProps {
@@ -81,11 +82,7 @@ export function TollDetailOverlay({
   // --- Helpers ---
   const formatTxDate = () => {
     try {
-      const timeStr = transaction.time || '12:00:00';
-      const cleanTime = timeStr.length >= 5 ? timeStr : '12:00:00';
-      // Build a full ISO-ish string so formatInFleetTz can parse it
-      const combined = `${transaction.date}T${cleanTime}`;
-      const localDate = new Date(combined);
+      const localDate = getTollTransactionDate(transaction);
       if (!isNaN(localDate.getTime())) {
         return {
           date: formatInFleetTz(localDate, fleetTz, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }),

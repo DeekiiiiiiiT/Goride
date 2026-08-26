@@ -9,7 +9,8 @@ import {
   RefreshCw, 
   Database,
   Loader2,
-  BookOpen
+  BookOpen,
+  Link2
 } from 'lucide-react';
 import { api } from '../../services/api';
 import { TollPlaza } from '../../types/toll';
@@ -19,6 +20,7 @@ import { VerifiedTollPlazasTab } from './VerifiedTollPlazasTab';
 import { TollSpatialAuditMap } from './TollSpatialAuditMap';
 import { TollPlazaDetailPanel } from './TollPlazaDetailPanel';
 import { LearntTollPlazasTab } from './LearntTollPlazasTab';
+import { TollPlazaAttributionDialog } from './TollPlazaAttributionDialog';
 import { toast } from 'sonner@2.0.3';
 import { Plus } from 'lucide-react';
 
@@ -28,6 +30,7 @@ export function TollDatabaseView() {
   const [selectedPlaza, setSelectedPlaza] = useState<TollPlaza | null>(null);
   const [editingPlaza, setEditingPlaza] = useState<TollPlaza | null>(null);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isAttributionOpen, setIsAttributionOpen] = useState(false);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -178,6 +181,15 @@ export function TollDatabaseView() {
           <Button
             variant="outline"
             size="sm"
+            onClick={() => setIsAttributionOpen(true)}
+            className="gap-1.5"
+          >
+            <Link2 className="h-4 w-4" />
+            Fix Plaza Attribution
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
             onClick={fetchData}
             disabled={loading}
             className="gap-2"
@@ -303,6 +315,12 @@ export function TollDatabaseView() {
           </TabsContent>
         </Tabs>
       </div>
+
+      <TollPlazaAttributionDialog
+        open={isAttributionOpen}
+        onOpenChange={setIsAttributionOpen}
+        onApplied={fetchData}
+      />
 
       {/* Add / Edit Toll Plaza Modal */}
       <AddTollPlazaModal
