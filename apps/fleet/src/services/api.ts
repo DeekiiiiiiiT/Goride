@@ -2479,6 +2479,26 @@ export const api = {
     return response.json();
   },
 
+  /** Closed Settlement Weeks (settlement_status=settled) for Driver Settlements → Reconciled. */
+  async getReconciledPeriods(opts?: {
+    periodStart?: string;
+    periodEnd?: string;
+    minAmount?: number;
+    limit?: number;
+  }) {
+    const qs = new URLSearchParams();
+    if (opts?.periodStart) qs.set("periodStart", opts.periodStart);
+    if (opts?.periodEnd) qs.set("periodEnd", opts.periodEnd);
+    if (opts?.minAmount != null) qs.set("minAmount", String(opts.minAmount));
+    if (opts?.limit != null) qs.set("limit", String(opts.limit));
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.financial}/driver-financial-periods/reconciled?${qs.toString()}`,
+      { headers: await requireAuthHeaders(null) },
+    );
+    if (!response.ok) throw new Error("Failed to fetch reconciled periods");
+    return response.json();
+  },
+
   async getDriverFinancialPeriodDetail(driverId: string, periodAnchor: string) {
     const qs = new URLSearchParams({ driverId });
     const response = await fetchWithRetry(

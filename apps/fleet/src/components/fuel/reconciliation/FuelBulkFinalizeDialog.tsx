@@ -9,14 +9,23 @@ import {
   formatFuelBulkProgress,
 } from '../../../utils/buildFuelWeekReportsForFinalize';
 import type { FuelReconciliationPeriod } from '../../../utils/fuelPeriodStatus';
-import type { FuelCard, FuelEntry, FuelScenario, MileageAdjustment, FinalizedFuelReport } from '../../../types/fuel';
+import type { FuelCard, FuelEntry, FuelScenario, MileageAdjustment, FinalizedFuelReport, WeeklyFuelReport } from '../../../types/fuel';
+import type { Trip } from '../../../types/data';
 import type { Vehicle } from '../../../types/vehicle';
 import { toast } from 'sonner@2.0.3';
 import { BulkWeekActionDialog, type BulkWeekActionResult } from './BulkWeekActionDialog';
+import { useFuelSettlementReopenGate } from './useFuelSettlementReopenGate';
 
 function formatMoney(n: number) {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(n || 0);
 }
+
+type PreparedWeek = {
+  period: FuelReconciliationPeriod;
+  label: string;
+  reports: WeeklyFuelReport[];
+  trips: Trip[];
+};
 
 export type FuelBulkFinalizeDialogProps = {
   open: boolean;
@@ -48,9 +57,12 @@ export function FuelBulkFinalizeDialog({
   onComplete,
 }: FuelBulkFinalizeDialogProps) {
   const queryClient = useQueryClient();
+  const { confirmIfNeeded: confirmSettlementReopen, dialog: settlementReopenDialog } =
+    useFuelSettlementReopenGate();
   const outstanding = periods.filter((p) => !p.locked && (p.status === 'outstanding' || p.status === 'in_progress'));
 
   return (
+    <>
     <BulkWeekActionDialog
       open={open}
       onOpenChange={onOpenChange}
@@ -83,13 +95,15 @@ export function FuelBulkFinalizeDialog({
       execute={async (weeks, onProgress) => {
         const sorted = [...weeks].sort((a, b) => a.startDate.localeCompare(b.startDate));
         const weekResults: BulkWeekActionResult[] = [];
+        const prepared: PreparedWeek[] = [];
         onProgress('Loading prior finalized snapshots…');
         const priorReports = (await api.getFinalizedReports().catch(() => [])) as FinalizedFuelReport[];
 
+        // Pass 1 — build + gate; collect reports for one settlement-reopen confirm.
         for (let i = 0; i < sorted.length; i++) {
           const period = sorted[i];
           const label = period.label || period.startDate;
-          onProgress(formatFuelBulkProgress(i + 1, sorted.length, label));
+          onProgress(`${formatFuelBulkProgress(i + 1, sorted.length, label)} Preparing…`);
 
           try {
             const { reports, trips, gateResult } = await buildFuelWeekReportsWithGating({
@@ -128,13 +142,44 @@ export function FuelBulkFinalizeDialog({
               continue;
             }
 
+            prepared.push({ period, label, reports, trips });
+          } catch (e: any) {
+            console.error('[FuelBulkFinalize] prepare failed', period.id, e);
+            weekResults.push({ id: period.id, label, status: 'failed', message: e?.message || 'Failed' });
+          }
+        }
+
+        if (prepared.length > 0) {
+          onProgress('Checking settlement impact on paid weeks…');
+          const reopenOk = await confirmSettlementReopen(prepared.flatMap((p) => p.reports));
+          if (!reopenOk) {
+            toast.message('Bulk finalize cancelled — settlement left unchanged.');
+            for (const item of prepared) {
+              weekResults.push({
+                id: item.period.id,
+                label: item.label,
+                status: 'skipped',
+                message: 'Cancelled — settlement reopen not confirmed',
+              });
+            }
+            return weekResults;
+          }
+        }
+
+        // Pass 2 — finalize prepared weeks.
+        for (let i = 0; i < prepared.length; i++) {
+          const item = prepared[i];
+          const { period, label, reports, trips } = item;
+          onProgress(formatFuelBulkProgress(i + 1, prepared.length, label));
+
+          try {
             const result = await finalizeFuelWeekReports(
               reports,
               { vehicles, drivers, fuelCards, fuelEntries, scenarios, trips },
               {
                 priorReports,
                 skipCacheInvalidation: true,
-                onProgress: (msg) => onProgress(`${formatFuelBulkProgress(i + 1, sorted.length, label)} ${msg}`),
+                onProgress: (msg) => onProgress(`${formatFuelBulkProgress(i + 1, prepared.length, label)} ${msg}`),
               },
             );
 
@@ -183,5 +228,7 @@ export function FuelBulkFinalizeDialog({
         return weekResults;
       }}
     />
+    {settlementReopenDialog}
+    </>
   );
 }

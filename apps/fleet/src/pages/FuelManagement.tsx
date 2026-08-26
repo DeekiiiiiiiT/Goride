@@ -37,6 +37,7 @@ import { finalizeFuelWeekReports } from '../services/fuelFinalizeService';
 import { FuelDisputeService } from '../services/fuelDisputeService';
 import { api } from '../services/api';
 import { FuelReconciliationDashboard } from '../components/fuel/reconciliation/FuelReconciliationDashboard';
+import { useFuelSettlementReopenGate } from '../components/fuel/reconciliation/useFuelSettlementReopenGate';
 import { deriveFuelReconciliationPeriods } from '../utils/fuelPeriodStatus';
 import { mergeFuelCardWithAssignmentHistory } from '../utils/mergeFuelCardWithAssignmentHistory';
 import {
@@ -78,6 +79,8 @@ function FuelManagementInner({ defaultTab = 'logs', onViewDriverLedger, onTabCha
 }) {
   const queryClient = useQueryClient();
   const { runExclusive, setMessage } = useFuelReconBusy();
+  const { confirmIfNeeded: confirmSettlementReopen, dialog: settlementReopenDialog } =
+    useFuelSettlementReopenGate();
   const [activeTab, setActiveTab] = useState(defaultTab);
   const lastFuelDataLoadAtRef = useRef(0);
 
@@ -995,6 +998,19 @@ function FuelManagementInner({ defaultTab = 'logs', onViewDriverLedger, onTabCha
   }, [drivers]);
 
   const handleFinalize = async (reports: WeeklyFuelReport[]) => {
+      try {
+        setMessage('Checking settlement impact…');
+        const reopenOk = await confirmSettlementReopen(reports);
+        if (!reopenOk) {
+          toast.message('Finalize cancelled — settlement left unchanged.');
+          return false;
+        }
+      } catch (e: any) {
+        console.error(e);
+        toast.error(`Could not check settlement impact: ${e.message}`);
+        return false;
+      }
+
       const result = await runExclusive('Finalizing week…', async () => {
       try {
           setIsRefreshing(true);
@@ -1405,6 +1421,8 @@ function FuelManagementInner({ defaultTab = 'logs', onViewDriverLedger, onTabCha
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {settlementReopenDialog}
 
       <AlertDialog open={!!deleteLogConfirmationId} onOpenChange={(open) => !open && setDeleteLogConfirmationId(null)}>
         <AlertDialogContent>

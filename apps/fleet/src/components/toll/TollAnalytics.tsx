@@ -1,9 +1,10 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Receipt, Loader2, RefreshCw, TrendingDown, TrendingUp, CreditCard, Calculator, Users, Zap, MapPin, ShieldCheck } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
+import { PeriodWeekDropdown } from '../ui/PeriodWeekDropdown';
 import { useTollLogs } from '../../hooks/useTollLogs';
 import {
   AreaChart, Area, BarChart, Bar, XAxis, YAxis,
@@ -11,7 +12,9 @@ import {
   PieChart, Pie, Legend,
 } from 'recharts';
 import { SafeResponsiveContainer as ResponsiveContainer } from '../ui/SafeResponsiveContainer';
-import { format, subMonths, startOfMonth, endOfMonth, eachMonthOfInterval } from 'date-fns';
+import { format, parseISO, startOfMonth, endOfMonth, eachMonthOfInterval } from 'date-fns';
+import type { PeriodPreset } from '../business-finance/types';
+import { resolvePeriod, inPeriod, formatPeriodLabel } from '../business-finance/periodRange';
 
 /** Format a number as Jamaican Dollar currency */
 function formatJMD(value: number, decimals = 0): string {
@@ -53,10 +56,25 @@ const STATUS_COLORS: Record<string, string> = {
 export function TollAnalytics() {
   const { logs, loading, vehicles, drivers, plazas, refresh } = useTollLogs();
 
+  // Same period control as Fuel Analytics (Mon–Sun weeks + custom range).
+  const [preset, setPreset] = useState<PeriodPreset>('last_90_days');
+  const [customStart, setCustomStart] = useState('');
+  const [customEnd, setCustomEnd] = useState('');
+  const period = useMemo(
+    () => resolvePeriod(preset, customStart, customEnd),
+    [preset, customStart, customEnd],
+  );
+  const periodLabel = useMemo(() => formatPeriodLabel(period), [period]);
+
+  const periodLogs = useMemo(
+    () => logs.filter((l) => inPeriod(String(l.date || '').slice(0, 10), period)),
+    [logs, period],
+  );
+
   // ── Step 2.1 — Summary statistics ──────────────────────────────────────
   const summaryStats = useMemo(() => {
-    const usageLogs = logs.filter(l => l.isUsage);
-    const topupLogs = logs.filter(l => !l.isUsage);
+    const usageLogs = periodLogs.filter(l => l.isUsage);
+    const topupLogs = periodLogs.filter(l => !l.isUsage);
 
     const totalSpend = usageLogs.reduce((sum, l) => sum + l.absAmount, 0);
     const totalTopups = topupLogs.reduce((sum, l) => sum + l.absAmount, 0);
@@ -71,28 +89,29 @@ export function TollAnalytics() {
     return {
       totalSpend,
       totalTopups,
-      totalTransactions: logs.length,
+      totalTransactions: periodLogs.length,
       usageCount,
       avgCostPerPassage,
       eTagCount,
       eTagRate,
       netPosition,
     };
-  }, [logs]);
+  }, [periodLogs]);
 
-  // ── Step 3.1 — Monthly spend trend (last 6 months) ────────────────────
+  // ── Step 3.1 — Monthly spend trend (months covered by selected period) ─
   const monthlyTrendData = useMemo(() => {
-    const sixMonthsAgo = subMonths(new Date(), 6);
-    const months = eachMonthOfInterval({
-      start: startOfMonth(sixMonthsAgo),
-      end: endOfMonth(new Date()),
-    });
+    const rangeStart = startOfMonth(parseISO(period.startYmd));
+    const rangeEnd = endOfMonth(parseISO(period.endYmd));
+    const months =
+      rangeStart <= rangeEnd
+        ? eachMonthOfInterval({ start: rangeStart, end: rangeEnd })
+        : [rangeStart];
 
     return months.map(month => {
       const mStart = startOfMonth(month);
       const mEnd = endOfMonth(month);
-      const inMonth = logs.filter(l => {
-        const d = new Date(l.date);
+      const inMonth = periodLogs.filter(l => {
+        const d = parseISO(String(l.date || '').slice(0, 10));
         return d >= mStart && d <= mEnd;
       });
 
@@ -107,12 +126,12 @@ export function TollAnalytics() {
         passages,
       };
     });
-  }, [logs]);
+  }, [periodLogs, period.startYmd, period.endYmd]);
 
   // ── Step 3.2 — Spend by plaza (top 8) ─────────────────────────────────
   const plazaSpendData = useMemo(() => {
     const map: Record<string, { name: string; spend: number; count: number }> = {};
-    logs.filter(l => l.isUsage).forEach(l => {
+    periodLogs.filter(l => l.isUsage).forEach(l => {
       const key = l.plazaName || 'Unknown Plaza';
       if (!map[key]) map[key] = { name: key, spend: 0, count: 0 };
       map[key].spend += l.absAmount;
@@ -122,23 +141,23 @@ export function TollAnalytics() {
       .sort((a, b) => b.spend - a.spend)
       .slice(0, 8)
       .map(p => ({ ...p, spend: Number(p.spend.toFixed(2)) }));
-  }, [logs]);
+  }, [periodLogs]);
 
   // ── Step 3.3 — Payment method distribution ───────────────────────────
   const paymentMethodData = useMemo(() => {
     const map: Record<string, number> = {};
-    logs.filter(l => l.isUsage).forEach(l => {
+    periodLogs.filter(l => l.isUsage).forEach(l => {
       const key = l.paymentMethodDisplay || 'Other';
       if (!map[key]) map[key] = 0;
       map[key] += 1;
     });
     return Object.entries(map).map(([name, value]) => ({ name, value }));
-  }, [logs]);
+  }, [periodLogs]);
 
   // ── Step 4 — Vehicle Spend & Payment Method ───────────────────
   const vehicleSpendData = useMemo(() => {
     const map: Record<string, { name: string; spend: number; count: number }> = {};
-    logs.filter(l => l.isUsage).forEach(l => {
+    periodLogs.filter(l => l.isUsage).forEach(l => {
       const key = l.vehicleId || 'unknown';
       if (!map[key]) map[key] = { name: l.vehicleName || 'Unknown Vehicle', spend: 0, count: 0 };
       map[key].spend += l.absAmount;
@@ -148,12 +167,12 @@ export function TollAnalytics() {
       .sort((a, b) => b.spend - a.spend)
       .slice(0, 8)
       .map(v => ({ ...v, spend: Number(v.spend.toFixed(2)) }));
-  }, [logs]);
+  }, [periodLogs]);
 
   // ── Step 5.1 — Spend by highway corridor ──────────────────────────────
   const highwaySpendData = useMemo(() => {
     const map: Record<string, { name: string; spend: number; count: number }> = {};
-    logs.filter(l => l.isUsage).forEach(l => {
+    periodLogs.filter(l => l.isUsage).forEach(l => {
       const key = l.highway || 'Unknown Highway';
       if (!map[key]) map[key] = { name: key, spend: 0, count: 0 };
       map[key].spend += l.absAmount;
@@ -162,12 +181,12 @@ export function TollAnalytics() {
     return Object.values(map)
       .sort((a, b) => b.spend - a.spend)
       .map(h => ({ ...h, spend: Number(h.spend.toFixed(2)) }));
-  }, [logs]);
+  }, [periodLogs]);
 
   // ── Step 5.3 — Spend by driver (top 5) ────────────────────────────────
   const driverSpendData = useMemo(() => {
     const map: Record<string, { name: string; spend: number; flags: number; count: number }> = {};
-    logs.filter(l => l.isUsage).forEach(l => {
+    periodLogs.filter(l => l.isUsage).forEach(l => {
       const key = l.driverId || 'unassigned';
       if (!map[key]) map[key] = { name: l.driverDisplayName || 'Unassigned', spend: 0, flags: 0, count: 0 };
       map[key].spend += l.absAmount;
@@ -178,11 +197,11 @@ export function TollAnalytics() {
       .sort((a, b) => b.spend - a.spend)
       .slice(0, 5)
       .map(d => ({ ...d, spend: Number(d.spend.toFixed(2)) }));
-  }, [logs]);
+  }, [periodLogs]);
 
   // ── Step 6 — Toll Insights Panel ──────────────────────────────
   const insights = useMemo(() => {
-    const usageLogs = logs.filter(l => l.isUsage);
+    const usageLogs = periodLogs.filter(l => l.isUsage);
 
     // --- Highest-cost vehicles (top 3) with flag counts ---
     const vehMap: Record<string, { name: string; spend: number; flags: number; count: number }> = {};
@@ -228,23 +247,23 @@ export function TollAnalytics() {
     const totalFlagged = Object.values(flaggedByPlaza).reduce((s, c) => s + c, 0);
 
     return { topVehicles, cashCandidates, flaggedByPlaza, totalFlagged };
-  }, [logs]);
+  }, [periodLogs]);
 
   // ── Step 7 — Reconciliation Overview + Parish Spend ───────────
   const reconStatusData = useMemo(() => {
     const map: Record<string, number> = {};
-    logs.forEach(l => {
+    periodLogs.forEach(l => {
       const key = l.statusDisplay || 'Unknown';
       map[key] = (map[key] || 0) + 1;
     });
     return Object.entries(map)
       .map(([name, value]) => ({ name, value, color: STATUS_COLORS[name] || '#cbd5e1' }))
       .sort((a, b) => b.value - a.value);
-  }, [logs]);
+  }, [periodLogs]);
 
   const parishSpendData = useMemo(() => {
     const map: Record<string, { parish: string; spend: number; count: number }> = {};
-    logs.filter(l => l.isUsage).forEach(l => {
+    periodLogs.filter(l => l.isUsage).forEach(l => {
       const key = l.parish || 'Unknown';
       if (!map[key]) map[key] = { parish: key, spend: 0, count: 0 };
       map[key].spend += l.absAmount;
@@ -257,7 +276,26 @@ export function TollAnalytics() {
         spend: Number(p.spend.toFixed(2)),
         avg: p.count > 0 ? Number((p.spend / p.count).toFixed(2)) : 0,
       }));
-  }, [logs]);
+  }, [periodLogs]);
+
+  const periodFilterControl = (
+    <div className="space-y-0.5">
+      <label className="text-[11px] text-slate-500">Period</label>
+      <PeriodWeekDropdown
+        selectedStart={period.startYmd}
+        selectedEnd={period.endYmd}
+        placeholder="Select week period"
+        allowCustomRange
+        weekCount={26}
+        buttonClassName="h-11 min-h-11 text-sm"
+        onSelect={(week) => {
+          setCustomStart(week.startDate);
+          setCustomEnd(week.endDate);
+          setPreset('custom');
+        }}
+      />
+    </div>
+  );
 
   // ── Loading state ──────────────────────────────────────────────────────
   if (loading) {
@@ -296,7 +334,7 @@ export function TollAnalytics() {
   return (
     <div className="space-y-6">
       {/* Page header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
           <div className="p-2 bg-indigo-100 dark:bg-indigo-900/30 rounded-lg">
             <Receipt className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
@@ -306,16 +344,31 @@ export function TollAnalytics() {
               Toll Analytics
             </h1>
             <p className="text-sm text-slate-500 dark:text-slate-400">
-              Comprehensive analysis of your fleet's toll expenditure
+              Comprehensive analysis of your fleet&apos;s toll expenditure
             </p>
           </div>
         </div>
-        <Button variant="outline" size="sm" onClick={refresh}>
-          <RefreshCw className="h-4 w-4 mr-2" />
-          Refresh
-        </Button>
+        <div className="flex flex-wrap items-end gap-3">
+          {periodFilterControl}
+          <Button variant="outline" className="min-h-11" onClick={refresh}>
+            <RefreshCw className="h-4 w-4 mr-2" />
+            Refresh
+          </Button>
+        </div>
       </div>
 
+      {periodLogs.length === 0 ? (
+        <div className="flex flex-col items-center justify-center min-h-[280px] gap-3 rounded-xl border border-dashed border-slate-200 bg-slate-50/80 text-center px-4">
+          <Receipt className="h-8 w-8 text-slate-400" />
+          <div className="space-y-1">
+            <h3 className="text-base font-semibold text-slate-900">No tolls in this period</h3>
+            <p className="text-sm text-slate-500 max-w-md">
+              Nothing matches {periodLabel}. Pick another week or custom range above.
+            </p>
+          </div>
+        </div>
+      ) : (
+      <>
       {/* ── Step 2.6 — KPI Summary Cards ──────────────────────────────── */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
 
@@ -411,7 +464,7 @@ export function TollAnalytics() {
         <Card>
           <CardHeader>
             <CardTitle className="text-lg">Monthly Toll Spend</CardTitle>
-            <CardDescription>Spend vs top-ups over the last 6 months.</CardDescription>
+            <CardDescription>Spend vs top-ups for {periodLabel}.</CardDescription>
           </CardHeader>
           <CardContent className="min-h-[300px] w-full relative">
             <div className="w-full">
@@ -735,7 +788,7 @@ export function TollAnalytics() {
               <ShieldCheck className="w-5 h-5 text-blue-500" />
               Reconciliation Overview
             </CardTitle>
-            <CardDescription>Transaction status distribution across all toll records.</CardDescription>
+            <CardDescription>Transaction status distribution for {periodLabel}.</CardDescription>
           </CardHeader>
           <CardContent className="min-h-[300px] w-full relative">
             {reconStatusData.length === 0 ? (
@@ -758,7 +811,7 @@ export function TollAnalytics() {
                       label={({ cx, cy }) => (
                         <text x={cx} y={cy} textAnchor="middle" dominantBaseline="central" className="fill-slate-900 dark:fill-slate-100">
                           <tspan x={cx} dy="-0.4em" fontSize="24" fontWeight="bold">
-                            {logs.length}
+                            {periodLogs.length}
                           </tspan>
                           <tspan x={cx} dy="1.4em" fontSize="11" fill="#64748b">
                             transactions
@@ -838,7 +891,7 @@ export function TollAnalytics() {
       {/* Summary footer */}
       <div className="p-6 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700 text-center">
         <p className="text-sm text-slate-500 dark:text-slate-400">
-          {logs.length} toll transaction{logs.length !== 1 ? 's' : ''} loaded
+          {periodLogs.length} toll transaction{periodLogs.length !== 1 ? 's' : ''} in {periodLabel}
           {' · '}
           {plazas.length} plaza{plazas.length !== 1 ? 's' : ''}
           {' · '}
@@ -853,6 +906,8 @@ export function TollAnalytics() {
           )}
         </p>
       </div>
+      </>
+      )}
     </div>
   );
 }

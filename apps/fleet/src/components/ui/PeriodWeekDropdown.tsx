@@ -116,6 +116,8 @@ export function PeriodWeekDropdown({
     setPanel('weeks');
   };
 
+  const goToWeeks = () => setPanel('weeks');
+
   const openCustomPanel = () => {
     setDraftRange({
       from: ymdToDate(selectedStart),
@@ -149,8 +151,8 @@ export function PeriodWeekDropdown({
             close();
             return;
           }
-          // Re-open on custom panel when current filter is a non-week range
-          setPanel(isCustomSelected ? 'custom' : 'weeks');
+          // Always land on week list first — custom calendar is opt-in via “Custom range…”.
+          setPanel('weeks');
           setOpen(true);
         }}
         className={cn(
@@ -230,26 +232,28 @@ export function PeriodWeekDropdown({
                       )}
                     >
                       <CalendarIcon className="h-3.5 w-3.5 shrink-0" />
-                      Custom range…
+                      <span className="min-w-0 flex-1 truncate">
+                        {isCustomSelected && selectedStart && selectedEnd
+                          ? `Custom: ${fmtYmd(selectedStart, 'MMM d')} – ${fmtYmd(selectedEnd, 'MMM d, yyyy')}`
+                          : 'Custom range…'}
+                      </span>
                     </button>
                   </div>
                 )}
               </>
             ) : (
               <div className="p-3 space-y-3 min-w-[280px]">
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setPanel('weeks')}
-                    className="inline-flex items-center gap-1 text-xs font-medium text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
-                  >
-                    <ChevronLeft className="h-3.5 w-3.5" />
-                    Weeks
-                  </button>
-                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                    Custom range
-                  </p>
-                </div>
+                <button
+                  type="button"
+                  onClick={goToWeeks}
+                  className="flex w-full items-center gap-1.5 rounded-md border border-slate-200 bg-slate-50 px-2.5 py-2 text-left text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-100 dark:border-slate-600 dark:bg-slate-700/40 dark:text-slate-200 dark:hover:bg-slate-700"
+                >
+                  <ChevronLeft className="h-3.5 w-3.5 shrink-0" />
+                  Back to week periods
+                </button>
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                  Pick a custom date range
+                </p>
                 <Calendar
                   mode="range"
                   numberOfMonths={1}
@@ -265,10 +269,10 @@ export function PeriodWeekDropdown({
                     disabled={!draftRange?.from}
                     onClick={applyCustomRange}
                   >
-                    Apply
+                    Apply range
                   </Button>
-                  <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => setPanel('weeks')}>
-                    Cancel
+                  <Button size="sm" variant="outline" className="h-8 text-xs" onClick={close}>
+                    Close
                   </Button>
                 </div>
               </div>

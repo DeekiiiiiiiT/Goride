@@ -7,6 +7,7 @@
  *   GET  /driver-financial-periods/driver-owes
  *   GET  /driver-financial-periods/cash-held
  *   GET  /driver-financial-periods/settlement-paid
+ *   GET  /driver-financial-periods/reconciled
  *   GET  /driver-financial-periods/:anchor?driverId=
  *   POST /driver-financial-periods/rebuild { driverId, periodAnchor? }
  *   POST /driver-financial-periods/process-outbox
@@ -28,6 +29,7 @@ import {
   listDriverOwesPeriods,
   listCashHeldPeriods,
   listRecentlyPaidSettlementPeriods,
+  listReconciledSettlementPeriods,
   type DriverFinancialPeriodRow,
 } from "./driver_financial_periods.ts";
 import {
@@ -323,6 +325,37 @@ app.get(`${BASE}/settlement-paid`, requirePermission('transactions.view'), async
     });
   } catch (e: any) {
     console.error("[DFP] settlement-paid error:", e.message);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+app.get(`${BASE}/reconciled`, requirePermission('transactions.view'), async (c) => {
+  try {
+    const opts = queueListQuery(c);
+    const rows = await listReconciledSettlementPeriods({
+      periodStart: opts.periodStart,
+      periodEnd: opts.periodEnd,
+      minAmount: opts.minAmount,
+      limit: opts.limit ?? 500,
+    });
+    const nameById = await loadDriverNameMap();
+    const data = rows.map((r) => ({
+      ...r,
+      driverName: nameById.get(r.driverId) || r.driverId,
+    }));
+    const totalGross = data.reduce((s, r) => s + (Number(r.earningsGross) || 0), 0);
+    const driverIds = new Set(data.map((r) => r.driverId));
+    return c.json({
+      success: true,
+      data,
+      summary: {
+        totalGross: Math.round(totalGross * 100) / 100,
+        rowCount: data.length,
+        driverCount: driverIds.size,
+      },
+    });
+  } catch (e: any) {
+    console.error("[DFP] reconciled error:", e.message);
     return c.json({ error: e.message }, 500);
   }
 });

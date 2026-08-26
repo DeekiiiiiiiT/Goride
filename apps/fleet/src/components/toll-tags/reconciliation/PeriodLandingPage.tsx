@@ -188,11 +188,30 @@ export function PeriodLandingPage({
     [outstanding, inProgress, reconciled],
   );
 
-  const pendingLoss = useMemo(() => {
-    const openWork = [...outstanding, ...inProgress];
-    const fromOpen = openWork.reduce((sum, p) => sum + (p.financials?.netTollLoss ?? 0), 0);
-    return fromOpen > 0 ? fromOpen : totals.netTollLoss;
-  }, [outstanding, inProgress, totals.netTollLoss]);
+  // Banner must follow open periods only — never all-time totals/net loss
+  // (linked-but-unclaimed ledger rows inflate API needsReviewCount after Finish).
+  const openWork = useMemo(
+    () => [...outstanding, ...inProgress],
+    [outstanding, inProgress],
+  );
+
+  const openActionable = useMemo(() => {
+    let tolls = 0;
+    let refunds = 0;
+    let pendingLoss = 0;
+    for (const p of openWork) {
+      tolls +=
+        (p.counts['needs-review']?.actionable || 0) +
+        (p.counts['personal-use']?.actionable || 0) +
+        (p.counts['deadhead']?.actionable || 0) +
+        (p.counts['underpaid-claims']?.actionable || 0);
+      refunds +=
+        (p.counts['dispute-refunds']?.actionable || 0) +
+        (p.counts['unlinked-refunds']?.actionable || 0);
+      pendingLoss += p.financials?.netTollLoss ?? 0;
+    }
+    return { tolls, refunds, pendingLoss, total: tolls + refunds };
+  }, [openWork]);
 
   if (loading) {
     return (
@@ -206,7 +225,7 @@ export function PeriodLandingPage({
   const isEmpty = !loadError && outstanding.length === 0 && inProgress.length === 0 && reconciled.length === 0;
   const defaultTab =
     outstanding.length > 0 ? 'outstanding' : inProgress.length > 0 ? 'in_progress' : 'completed';
-  const showActionBanner = totals.needsReviewCount > 0;
+  const showActionBanner = openWork.length > 0 && openActionable.total > 0;
 
   return (
     <TollReconBusyProvider>
@@ -281,16 +300,16 @@ export function PeriodLandingPage({
             <div>
               <h3 id="action-required-heading" className="text-xl font-semibold text-slate-900">Action Required</h3>
               <p className="mt-1 text-sm leading-5 text-slate-600">
-                <span className="font-bold text-indigo-700">{totals.tollsNeedingReviewCount} tolls</span>
+                <span className="font-bold text-indigo-700">{openActionable.tolls} tolls</span>
                 {' '}require manual review across{' '}
-                <span className="font-bold text-indigo-700">{totals.refundsNeedingReviewCount} refunds</span>
+                <span className="font-bold text-indigo-700">{openActionable.refunds} refunds</span>
                 . Reconcile these to unlock the next period.
               </p>
             </div>
           </div>
           <div className="text-left sm:text-right">
             <div className="text-3xl font-bold tracking-tight text-indigo-700 tabular-nums sm:text-4xl">
-              ${pendingLoss.toFixed(2)}
+              ${openActionable.pendingLoss.toFixed(2)}
             </div>
             <div className="mt-1 text-xs font-semibold uppercase tracking-widest text-slate-500">
               Pending Reconciliation
@@ -305,9 +324,9 @@ export function PeriodLandingPage({
         scopedDisputeRefund={totals.matchedDisputeRefundAmount}
         chargedToDrivers={totals.chargedToDrivers}
         netTollLoss={totals.netTollLoss}
-        needsReviewCount={totals.needsReviewCount}
-        tollsNeedingReviewCount={totals.tollsNeedingReviewCount}
-        refundsNeedingReviewCount={totals.refundsNeedingReviewCount}
+        needsReviewCount={openActionable.total}
+        tollsNeedingReviewCount={openActionable.tolls}
+        refundsNeedingReviewCount={openActionable.refunds}
         resolvedRefundsAmount={totals.resolvedRefundsAmount}
         showNeedsReviewCard={false}
       />

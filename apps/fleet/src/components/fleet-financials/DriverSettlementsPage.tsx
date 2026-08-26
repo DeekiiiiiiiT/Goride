@@ -18,6 +18,7 @@ import {
   RefreshCw,
   Search,
   Trash2,
+  CheckCircle2,
 } from 'lucide-react';
 import { toast } from 'sonner@2.0.3';
 import { api } from '../../services/api';
@@ -32,6 +33,7 @@ import {
   buildCashWriteOffTx,
   buildDriverPayoutTx,
 } from '../../utils/driverSettlementTx';
+import { payOutstandingAmount } from '../../utils/driverSettlementsPayAmount';
 import { DRIVER_FINANCIAL_PERIODS_KEY } from '../../hooks/useDriverFinancialPeriods';
 import { BusinessFinanceDeskChrome } from '../business-finance/BusinessFinanceDeskChrome';
 import {
@@ -43,6 +45,10 @@ import {
   CashWriteOffModal,
   type CashWriteOffSavePayload,
 } from '../drivers/CashWriteOffModal';
+import {
+  ReconciledPeriodOverlay,
+  type ReconciledPeriodDetail,
+} from './ReconciledPeriodOverlay';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
@@ -86,7 +92,7 @@ import { cn } from '../ui/utils';
 import type { FinancialTransaction } from '../../types/data';
 
 type MoneyDirection = 'collect' | 'pay';
-type DeskMode = MoneyDirection | 'log-cash';
+type DeskMode = MoneyDirection | 'log-cash' | 'reconciled';
 type DeskTab = 'outstanding' | 'awaiting' | 'done';
 
 type PeriodRow = {
@@ -105,6 +111,19 @@ type PeriodRow = {
   fuelFinalized?: boolean;
   /** collect queue source */
   collectKind?: 'driver_owes' | 'cash_held';
+};
+
+type ReconciledListRow = PeriodRow & {
+  earningsGross: number;
+  driverShare: number;
+  fleetShare: number;
+  driverSharePercent: number;
+  fuelDeduction: number;
+  fuelFleetShare: number;
+  tollChargedToDriver: number;
+  tollCashSpend: number;
+  cashWrittenOff: number;
+  payoutNet: number;
 };
 
 const MONEY = (n: number | null | undefined) => {
@@ -131,11 +150,6 @@ function rowKey(r: Pick<PeriodRow, 'driverId' | 'periodAnchor'>) {
 function collectAmount(r: PeriodRow) {
   const raw = r.amountOwed ?? Math.abs(r.settlementAmount || 0);
   return Math.max(0, Number(raw) || 0);
-}
-
-/** Pay residual after cleared Driver Payouts. */
-function payOutstandingAmount(r: PeriodRow) {
-  return Math.max(0, (Number(r.settlementAmount) || 0) - (Number(r.settlementPaid) || 0));
 }
 
 function ymdKey(value: unknown): string {
@@ -249,6 +263,14 @@ export function DriverSettlementsPage({
   const [txToReverse, setTxToReverse] = useState<FinancialTransaction | null>(null);
   const [reverseBusy, setReverseBusy] = useState(false);
   const [logCashDriverId, setLogCashDriverId] = useState('');
+  const [reconciledOverlay, setReconciledOverlay] = useState<{
+    open: boolean;
+    driverId: string;
+    driverName: string;
+    periodAnchor: string;
+  }>({ open: false, driverId: '', driverName: '', periodAnchor: '' });
+  const [reconciledDetail, setReconciledDetail] = useState<ReconciledPeriodDetail | null>(null);
+  const [reconciledDetailLoading, setReconciledDetailLoading] = useState(false);
 
   const rangeOpts = {
     periodStart: weekFrom,
@@ -298,6 +320,34 @@ export function DriverSettlementsPage({
           }),
         ),
         summary: res?.summary as { totalHeld?: number; rowCount?: number; driverCount?: number },
+      };
+    },
+  });
+
+  const reconciledQuery = useQuery({
+    queryKey: ['reconciledPeriods', weekFrom, weekTo, minAmount],
+    queryFn: async () => {
+      const res = await api.getReconciledPeriods(rangeOpts);
+      return {
+        rows: ((res?.data || []) as ReconciledListRow[]).map((r) => {
+          const base = normalizePeriodRow(r);
+          return {
+            ...base,
+            earningsGross: Number(r.earningsGross) || 0,
+            driverShare: Number(r.driverShare) || 0,
+            fleetShare: Number(r.fleetShare) || 0,
+            driverSharePercent: Number(r.driverSharePercent) || 0,
+            fuelDeduction: Number(r.fuelDeduction) || 0,
+            fuelFleetShare: Number(r.fuelFleetShare) || 0,
+            tollChargedToDriver: Number(r.tollChargedToDriver) || 0,
+            tollCashSpend: Number(r.tollCashSpend) || 0,
+            cashWrittenOff: Number(r.cashWrittenOff) || 0,
+            payoutNet: Number((r as any).payoutNet) || 0,
+            cashReturned: Number(r.cashReturned) || 0,
+            settlementPaid: Number(r.settlementPaid) || 0,
+          } as ReconciledListRow;
+        }),
+        summary: res?.summary as { totalGross?: number; rowCount?: number; driverCount?: number },
       };
     },
   });
@@ -475,6 +525,20 @@ export function DriverSettlementsPage({
       });
   }, [txsQuery.data, weekFrom, weekTo, search]);
 
+  const reconciledRows = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return (reconciledQuery.data?.rows || [])
+      .filter((r) => {
+        if (!q) return true;
+        return (
+          String(r.driverName || '').toLowerCase().includes(q) ||
+          String(r.driverId).toLowerCase().includes(q) ||
+          r.periodAnchor.includes(q)
+        );
+      })
+      .sort(compareBySettlementWeekDesc);
+  }, [reconciledQuery.data?.rows, search]);
+
   const settledOwesTotal = (driverOwesQuery.data?.rows || []).reduce(
     (s, r) => s + collectAmount(r),
     0,
@@ -572,9 +636,78 @@ export function DriverSettlementsPage({
     void qc.invalidateQueries({ queryKey: ['companyOwesPeriods'] });
     void qc.invalidateQueries({ queryKey: ['driverOwesPeriods'] });
     void qc.invalidateQueries({ queryKey: ['cashHeldPeriods'] });
+    void qc.invalidateQueries({ queryKey: ['reconciledPeriods'] });
     void qc.invalidateQueries({ queryKey: ['driverSettlementsTransactions'] });
     // Cash Wallet / Settlement tabs read the same period projection.
     void qc.invalidateQueries({ queryKey: [DRIVER_FINANCIAL_PERIODS_KEY] });
+  };
+
+  const openReconciledPeriod = async (row: ReconciledListRow) => {
+    setReconciledOverlay({
+      open: true,
+      driverId: row.driverId,
+      driverName: row.driverName || row.driverId,
+      periodAnchor: row.periodAnchor,
+    });
+    setReconciledDetailLoading(true);
+    setReconciledDetail(null);
+    try {
+      const res = await api.getDriverFinancialPeriodDetail(row.driverId, row.periodAnchor);
+      const d = (res?.data || res) as Record<string, unknown>;
+      setReconciledDetail({
+        driverId: String(d.driverId || row.driverId),
+        periodAnchor: String(d.periodAnchor || row.periodAnchor).slice(0, 10),
+        periodEnd: String(d.periodEnd || row.periodEnd).slice(0, 10),
+        earningsGross: Number(d.earningsGross) || row.earningsGross || 0,
+        driverShare: Number(d.driverShare) || row.driverShare || 0,
+        fleetShare: Number(d.fleetShare) || row.fleetShare || 0,
+        driverSharePercent: Number(d.driverSharePercent) || row.driverSharePercent || 0,
+        fuelDeduction: Number(d.fuelDeduction) || row.fuelDeduction || 0,
+        fuelFleetShare: Number(d.fuelFleetShare) || row.fuelFleetShare || 0,
+        tollChargedToDriver: Number(d.tollChargedToDriver) || row.tollChargedToDriver || 0,
+        tollCashSpend: Number(d.tollCashSpend) || row.tollCashSpend || 0,
+        cashCollected: Number(d.cashCollected) || row.cashCollected || 0,
+        cashReturned: Number(d.cashReturned) || row.cashReturned || 0,
+        cashWrittenOff: Number(d.cashWrittenOff) || row.cashWrittenOff || 0,
+        settlementPaid: Number(d.settlementPaid) || row.settlementPaid || 0,
+        cashStillHeld: Number(d.cashStillHeld) || row.cashStillHeld || 0,
+        payoutNet: Number(d.payoutNet) || row.payoutNet || 0,
+        settlementAmount: Number(d.settlementAmount) || row.settlementAmount || 0,
+        tripCount: Number(d.tripCount) || row.tripCount || 0,
+        fuelFinalized: !!(d.fuelFinalized ?? row.fuelFinalized),
+        settlementStatus: String(d.settlementStatus || row.settlementStatus || 'settled'),
+        tierName: (d.tierName as string | null | undefined) ?? null,
+      });
+    } catch (e: any) {
+      toast.error(e?.message || 'Could not load period detail');
+      // Fall back to list-row fields so the overlay still opens.
+      setReconciledDetail({
+        driverId: row.driverId,
+        periodAnchor: row.periodAnchor,
+        periodEnd: row.periodEnd,
+        earningsGross: row.earningsGross,
+        driverShare: row.driverShare,
+        fleetShare: row.fleetShare,
+        driverSharePercent: row.driverSharePercent,
+        fuelDeduction: row.fuelDeduction,
+        fuelFleetShare: row.fuelFleetShare,
+        tollChargedToDriver: row.tollChargedToDriver,
+        tollCashSpend: row.tollCashSpend,
+        cashCollected: row.cashCollected,
+        cashReturned: row.cashReturned || 0,
+        cashWrittenOff: row.cashWrittenOff,
+        settlementPaid: row.settlementPaid || 0,
+        cashStillHeld: row.cashStillHeld || 0,
+        payoutNet: row.payoutNet,
+        settlementAmount: row.settlementAmount,
+        tripCount: row.tripCount,
+        fuelFinalized: row.fuelFinalized,
+        settlementStatus: row.settlementStatus,
+        tierName: null,
+      });
+    } finally {
+      setReconciledDetailLoading(false);
+    }
   };
 
   const exportCsv = () => {
@@ -795,6 +928,7 @@ export function DriverSettlementsPage({
     owesQuery.isLoading ||
     driverOwesQuery.isLoading ||
     cashHeldQuery.isLoading ||
+    reconciledQuery.isLoading ||
     txsQuery.isLoading;
 
   const collectPeriodForModal = useMemo(() => {
@@ -904,6 +1038,16 @@ export function DriverSettlementsPage({
           <Plus className="h-4 w-4 mr-1.5" />
           Log cash
         </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant={deskMode === 'reconciled' ? 'default' : 'outline'}
+          className={cn('h-9', deskMode === 'reconciled' && 'bg-indigo-700 hover:bg-indigo-800')}
+          onClick={() => setDeskMode('reconciled')}
+        >
+          <CheckCircle2 className="h-4 w-4 mr-1.5" />
+          Reconciled
+        </Button>
       </div>
 
       {deskMode === 'log-cash' ? (
@@ -978,6 +1122,66 @@ export function DriverSettlementsPage({
               }
             />
           </div>
+        </div>
+      ) : deskMode === 'reconciled' ? (
+        <div className="space-y-4">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+            <div className="flex flex-wrap gap-3 items-end">
+              <div className="space-y-1">
+                <Label className="text-xs text-slate-500">Week from</Label>
+                <Input
+                  type="date"
+                  className="h-9 w-[150px]"
+                  value={weekFrom}
+                  onChange={(e) => setWeekFrom(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs text-slate-500">Week to</Label>
+                <Input
+                  type="date"
+                  className="h-9 w-[150px]"
+                  value={weekTo}
+                  onChange={(e) => setWeekTo(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs text-slate-500">Min amount</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  className="h-9 w-[110px]"
+                  placeholder="0"
+                  value={minAmount}
+                  onChange={(e) => setMinAmount(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs text-slate-500">Search</Label>
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+                  <Input
+                    className="h-9 w-[200px] pl-8"
+                    placeholder="Driver or week…"
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+          <div className="space-y-1">
+            <h3 className="text-sm font-semibold text-slate-900">Reconciled weeks</h3>
+            <p className="text-xs text-slate-500">
+              Closed Settlement Weeks — click a row for Fleet vs Driver breakdown.
+            </p>
+          </div>
+          <ReconciledTable
+            rows={reconciledRows}
+            loading={reconciledQuery.isLoading}
+            onOpenDriver={onOpenDriver}
+            onOpenPeriod={openReconciledPeriod}
+          />
         </div>
       ) : (
         <>
@@ -1145,6 +1349,18 @@ export function DriverSettlementsPage({
         maxAmount={writeOffModal.maxAmount}
         workPeriodStart={writeOffModal.workPeriodStart}
         workPeriodEnd={writeOffModal.workPeriodEnd}
+      />
+
+      <ReconciledPeriodOverlay
+        open={reconciledOverlay.open}
+        onOpenChange={(open) => {
+          setReconciledOverlay((s) => ({ ...s, open }));
+          if (!open) setReconciledDetail(null);
+        }}
+        driverName={reconciledOverlay.driverName}
+        detail={reconciledDetail}
+        loading={reconciledDetailLoading}
+        transactions={txsQuery.data || []}
       />
 
       <AlertDialog
@@ -1796,6 +2012,104 @@ function DoneCollectTable({
                 </React.Fragment>
               );
             })
+          )}
+        </TableBody>
+      </Table>
+    </div>
+  );
+}
+
+function ReconciledTable({
+  rows,
+  loading,
+  onOpenDriver,
+  onOpenPeriod,
+}: {
+  rows: ReconciledListRow[];
+  loading: boolean;
+  onOpenDriver?: (id: string) => void;
+  onOpenPeriod: (r: ReconciledListRow) => void;
+}) {
+  return (
+    <div className="rounded-lg border border-slate-200 overflow-hidden bg-white">
+      <Table>
+        <TableHeader>
+          <TableRow className="bg-slate-50">
+            <TableHead>Driver</TableHead>
+            <TableHead>Settlement Week</TableHead>
+            <TableHead className="text-right">Gross</TableHead>
+            <TableHead className="text-right">Fleet share</TableHead>
+            <TableHead className="text-right">Driver share</TableHead>
+            <TableHead className="text-right">Net payout</TableHead>
+            <TableHead className="text-right">Passenger cash</TableHead>
+            <TableHead className="text-right">Cash returned</TableHead>
+            <TableHead className="text-right">Trips</TableHead>
+            <TableHead>Status</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {loading ? (
+            <TableRow>
+              <TableCell colSpan={10} className="h-24 text-center text-slate-500">
+                <Loader2 className="h-4 w-4 animate-spin inline mr-2" />
+                Loading…
+              </TableCell>
+            </TableRow>
+          ) : rows.length === 0 ? (
+            <TableRow>
+              <TableCell colSpan={10} className="h-24 text-center text-slate-500">
+                No reconciled weeks in this range.
+              </TableCell>
+            </TableRow>
+          ) : (
+            rows.map((r) => (
+              <TableRow
+                key={rowKey(r)}
+                className="cursor-pointer hover:bg-slate-50/80"
+                onClick={() => onOpenPeriod(r)}
+              >
+                <TableCell>
+                  <button
+                    type="button"
+                    className="text-left font-medium text-slate-900 hover:underline"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onOpenDriver?.(r.driverId);
+                    }}
+                  >
+                    {r.driverName || r.driverId}
+                  </button>
+                </TableCell>
+                <TableCell className="text-slate-600 whitespace-nowrap">
+                  {weekLabel(r.periodAnchor, r.periodEnd)}
+                </TableCell>
+                <TableCell className="text-right tabular-nums">{MONEY(r.earningsGross)}</TableCell>
+                <TableCell className="text-right tabular-nums text-indigo-700">
+                  {MONEY(r.fleetShare)}
+                </TableCell>
+                <TableCell className="text-right tabular-nums text-emerald-700">
+                  {MONEY(r.driverShare)}
+                </TableCell>
+                <TableCell className="text-right tabular-nums font-medium">
+                  {MONEY(r.payoutNet)}
+                </TableCell>
+                <TableCell className="text-right tabular-nums">{MONEY(r.cashCollected)}</TableCell>
+                <TableCell className="text-right tabular-nums">
+                  {MONEY(r.cashReturned || 0)}
+                </TableCell>
+                <TableCell className="text-right tabular-nums text-slate-500">
+                  {r.tripCount}
+                </TableCell>
+                <TableCell>
+                  <Badge
+                    variant="secondary"
+                    className="font-normal bg-emerald-50 text-emerald-800 border border-emerald-100"
+                  >
+                    Reconciled
+                  </Badge>
+                </TableCell>
+              </TableRow>
+            ))
           )}
         </TableBody>
       </Table>

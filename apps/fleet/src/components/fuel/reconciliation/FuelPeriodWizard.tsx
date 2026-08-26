@@ -696,7 +696,7 @@ function FuelPeriodWizardInner({
               }
             : {
                 title: 'Ready to lock this week',
-                body: 'Finalize posts pending fuel to settlements and freezes this week. You can reopen later if needed.',
+                body: 'Finalize posts pending fuel to settlements and freezes this week. If driver payouts already exist and the leftover would change, you will confirm Reopen settlement first.',
                 actionLabel: finalizing ? 'Finalizing…' : 'Finalize week',
                 onAction: handleFinalizeClick,
                 actionDisabled:

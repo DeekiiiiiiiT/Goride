@@ -567,6 +567,21 @@ app.get(`${BASE}/periods`, requirePermission('toll.view'), async (c) => {
     );
     const netTollLoss = round2(totalsAcc.netTollLoss);
 
+    // Same actionable split as wizard / landing banner — NOT raw unclaimed*
+    // lengths (linked tripId rows stay "unclaimed" on the ledger after Finish).
+    let tollsNeedingReviewCount = 0;
+    let refundsNeedingReviewCount = 0;
+    for (const p of periodsOut) {
+      tollsNeedingReviewCount +=
+        p.counts["needs-review"].actionable +
+        p.counts["personal-use"].actionable +
+        p.counts["deadhead"].actionable +
+        p.counts["underpaid-claims"].actionable;
+      refundsNeedingReviewCount +=
+        p.counts["dispute-refunds"].actionable +
+        p.counts["unlinked-refunds"].actionable;
+    }
+
     // Tag usages with a driver that never got a Business Finance toll_charge.
     let missingCanonicalChargeCount = 0;
     for (const tx of scopedTollTx) {
@@ -589,9 +604,9 @@ app.get(`${BASE}/periods`, requirePermission('toll.view'), async (c) => {
         matchedDisputeRefundAmount: round2(totalsAcc.matchedDisputeRefundAmount),
         chargedToDrivers: round2(totalsAcc.chargedToDrivers),
         netTollLoss: round2(netTollLoss),
-        needsReviewCount: unclaimedTolls.length + unclaimedRefundTrips.length,
-        tollsNeedingReviewCount: unclaimedTolls.length,
-        refundsNeedingReviewCount: unclaimedRefundTrips.length,
+        needsReviewCount: tollsNeedingReviewCount + refundsNeedingReviewCount,
+        tollsNeedingReviewCount,
+        refundsNeedingReviewCount,
         resolvedRefundsAmount: round2(totalsAcc.resolvedRefundsAmount),
         missingCanonicalChargeCount,
       },

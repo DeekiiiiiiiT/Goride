@@ -1388,6 +1388,74 @@ export async function listRecentlyPaidSettlementPeriods(opts?: {
   }));
 }
 
+/** Closed weeks (residual ≈ 0) — Driver Settlements → Reconciled tab. */
+export type ReconciledPeriodRow = CompanyOwesPeriodRow & {
+  earningsGross: number;
+  driverShare: number;
+  fleetShare: number;
+  driverSharePercent: number;
+  fuelDeduction: number;
+  fuelFleetShare: number;
+  tollChargedToDriver: number;
+  tollCashSpend: number;
+  cashWrittenOff: number;
+};
+
+/**
+ * All settlement_status=settled weeks in range (includes $0 settlement_paid netting closes).
+ * Richer columns for Fleet vs Driver list + overlay.
+ */
+export async function listReconciledSettlementPeriods(opts?: {
+  periodStart?: string;
+  periodEnd?: string;
+  minAmount?: number;
+  limit?: number;
+  organizationId?: string | null;
+}): Promise<ReconciledPeriodRow[]> {
+  const limit = Math.min(Math.max(Number(opts?.limit) || 500, 1), 2000);
+  let q = sb()
+    .from("driver_financial_periods")
+    .select(
+      "driver_id, period_anchor, period_end, settlement_amount, settlement_paid, cash_collected, cash_returned, cash_still_held, cash_written_off, payout_net, settlement_status, fuel_finalized, trip_count, earnings_gross, driver_share, fleet_share, driver_share_percent, fuel_deduction, fuel_fleet_share, toll_charged_to_driver, toll_cash_spend",
+    )
+    .eq("settlement_status", "settled")
+    .order("period_anchor", { ascending: false })
+    .order("driver_id", { ascending: true })
+    .limit(limit);
+
+  if (opts?.organizationId) {
+    q = q.eq("organization_id", opts.organizationId);
+  }
+  if (opts?.periodStart && /^\d{4}-\d{2}-\d{2}$/.test(opts.periodStart)) {
+    q = q.gte("period_anchor", opts.periodStart);
+  }
+  if (opts?.periodEnd && /^\d{4}-\d{2}-\d{2}$/.test(opts.periodEnd)) {
+    q = q.lte("period_anchor", opts.periodEnd);
+  }
+  // Activity floor — residual is ~0 on reconciled weeks, so use gross earnings.
+  if (opts?.minAmount != null && Number(opts.minAmount) > 0) {
+    q = q.gte("earnings_gross", Number(opts.minAmount));
+  }
+
+  const { data, error } = await q;
+  if (error) {
+    console.error("[DriverFinancialPeriods] reconciled list:", error.message);
+    throw new Error(error.message);
+  }
+  return (data || []).map((r: any) => ({
+    ...mapPeriodListRow(r),
+    earningsGross: Number(r.earnings_gross) || 0,
+    driverShare: Number(r.driver_share) || 0,
+    fleetShare: Number(r.fleet_share) || 0,
+    driverSharePercent: Number(r.driver_share_percent) || 0,
+    fuelDeduction: Number(r.fuel_deduction) || 0,
+    fuelFleetShare: Number(r.fuel_fleet_share) || 0,
+    tollChargedToDriver: Number(r.toll_charged_to_driver) || 0,
+    tollCashSpend: Number(r.toll_cash_spend) || 0,
+    cashWrittenOff: Number(r.cash_written_off) || 0,
+  }));
+}
+
 export type DriverOwesPeriodRow = CompanyOwesPeriodRow & {
   /** Positive amount the driver owes the fleet (abs of negative settlement or cash held). */
   amountOwed: number;
