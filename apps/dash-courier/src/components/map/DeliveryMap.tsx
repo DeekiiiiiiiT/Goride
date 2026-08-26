@@ -80,26 +80,41 @@ export function DeliveryMap({
     }).addTo(map);
 
     mapInstanceRef.current = map;
+
+    const safeInvalidateSize = () => {
+      if (mapInstanceRef.current !== map) return;
+      try {
+        map.invalidateSize({ animate: false });
+      } catch {
+        /* map torn down mid-frame */
+      }
+    };
+
+    const el = mapContainerRef.current;
+    const ro = new ResizeObserver(() => {
+      requestAnimationFrame(safeInvalidateSize);
+    });
+    ro.observe(el);
+    requestAnimationFrame(safeInvalidateSize);
+
     return () => {
-      map.remove();
+      ro.disconnect();
       mapInstanceRef.current = null;
       courierMarkerRef.current = null;
       destMarkerRef.current = null;
       routeLayerRef.current = null;
+      try {
+        // Prevent _leaflet_pos crash from async resize/zoom callbacks after teardown.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (map as any)._animatingZoom = false;
+        map.stop();
+        map.off();
+        map.remove();
+      } catch {
+        /* ignore Leaflet teardown races */
+      }
     };
   }, [isMounted, interactive]);
-
-  useEffect(() => {
-    if (!isMounted || !mapContainerRef.current || !mapInstanceRef.current) return;
-    const map = mapInstanceRef.current;
-    const el = mapContainerRef.current;
-    const ro = new ResizeObserver(() => {
-      requestAnimationFrame(() => map.invalidateSize());
-    });
-    ro.observe(el);
-    requestAnimationFrame(() => map.invalidateSize());
-    return () => ro.disconnect();
-  }, [isMounted]);
 
   useEffect(() => {
     const map = mapInstanceRef.current;
@@ -165,7 +180,14 @@ export function DeliveryMap({
       map.setView(JAMAICA_CENTER, 12);
     }
 
-    requestAnimationFrame(() => map.invalidateSize());
+    requestAnimationFrame(() => {
+      if (mapInstanceRef.current !== map) return;
+      try {
+        map.invalidateSize({ animate: false });
+      } catch {
+        /* ignore */
+      }
+    });
   }, [
     courierLat,
     courierLng,
