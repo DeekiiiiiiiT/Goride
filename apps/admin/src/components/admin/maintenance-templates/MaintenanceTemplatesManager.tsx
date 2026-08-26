@@ -670,13 +670,24 @@ export function MaintenanceTemplatesManager() {
 
   const handleDelete = async (t: MaintenanceTaskTemplate) => {
     if (!token) return;
-    if (!window.confirm(`Delete package "${t.task_name}"?`)) return;
+    if (
+      !window.confirm(
+        `Archive package "${t.task_name}"?\n\nIf vehicle schedules still reference it, they keep working — the package is hidden from new checklists.`,
+      )
+    ) {
+      return;
+    }
     setError(null);
     try {
-      await deleteMaintenanceTemplate(token, t.id);
+      const result = await deleteMaintenanceTemplate(token, t.id);
+      if (result.usageCount > 0) {
+        window.alert(
+          `Archived. ${result.usageCount} vehicle schedule row(s) still reference this template.`,
+        );
+      }
       await loadTemplates();
     } catch (e: unknown) {
-      setError(formatCatchError(e, "Delete failed"));
+      setError(formatCatchError(e, "Archive failed"));
     }
   };
 

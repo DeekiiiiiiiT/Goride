@@ -110,8 +110,9 @@ function pageTitle(currentPage: string): string {
 }
 
 export function AdminLayout({ children, currentPage, onNavigate }: AdminLayoutProps) {
-  const { user, role, signOut } = useAuth();
+  const { user, role, signOut, session } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [pendingCatalogOpenCount, setPendingCatalogOpenCount] = useState(0);
 
   const resolved = role || 'platform_owner';
   const allowedPages = PLATFORM_ROLE_PAGES[resolved] || PLATFORM_ROLE_PAGES.platform_owner || [];
@@ -119,6 +120,26 @@ export function AdminLayout({ children, currentPage, onNavigate }: AdminLayoutPr
 
   const filterChildren = (items: NavChild[]) =>
     items.filter((c) => canViewPage(c.id) || !!c.href);
+
+  useEffect(() => {
+    const token = session?.access_token;
+    if (!token || !allowedPages.includes('pending-motor-vehicles')) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const { listPendingVehicleCatalogRequests } = await import(
+          '../../services/pendingVehicleCatalogService'
+        );
+        const res = await listPendingVehicleCatalogRequests(token, { status: 'open', limit: 1 });
+        if (!cancelled) setPendingCatalogOpenCount(res.total ?? 0);
+      } catch {
+        if (!cancelled) setPendingCatalogOpenCount(0);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [session?.access_token, resolved]);
 
   const visiblePlatform = filterChildren(PLATFORM_CHILDREN);
   const visibleEnterprise = filterChildren(ROAM_ENTERPRISE_CHILDREN);
@@ -129,7 +150,11 @@ export function AdminLayout({ children, currentPage, onNavigate }: AdminLayoutPr
   const visibleDriver = filterChildren(ROAM_DRIVER_CHILDREN);
   const visibleFuel = filterChildren(FUEL_MANAGEMENT_CHILDREN);
   const visibleToll = filterChildren(TOLL_MANAGEMENT_CHILDREN);
-  const visibleVehicleDb = filterChildren(VEHICLE_DATABASE_CHILDREN);
+  const visibleVehicleDb = filterChildren(VEHICLE_DATABASE_CHILDREN).map((c) =>
+    c.id === 'pending-motor-vehicles'
+      ? { ...c, badgeCount: pendingCatalogOpenCount }
+      : c,
+  );
   const visibleAccounting = filterChildren(ACCOUNTING_CHILDREN);
   const visibleGlobalSettings = filterChildren(GLOBAL_SETTINGS_CHILDREN);
   const visibleLegacySettings = filterChildren(SETTINGS_CHILDREN);

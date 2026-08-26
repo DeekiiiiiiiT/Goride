@@ -11,13 +11,14 @@ import { AddInventoryModal } from './AddInventoryModal';
 import { AddTemplateModal } from './AddTemplateModal';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
 import { Button } from "../ui/button";
-import { Plus, LayoutGrid, Settings, Database, AlertCircle } from "lucide-react";
+import { Plus, LayoutGrid, Settings, Database } from "lucide-react";
 import { toast } from "sonner@2.0.3";
 import { EquipmentItem } from '../../types/equipment';
 import { InventoryItem } from '../../types/fleet';
 import { seederService } from '../../services/seederService';
 import { getInventoryAlerts, getVehicleAlerts, FleetAlert } from '../../utils/alertHelpers';
 import { AlertsList } from './AlertsList';
+import { useAuth } from '../auth/AuthContext';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -26,15 +27,35 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "../ui/dropdown-menu";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "../ui/alert-dialog";
 
 export function FleetPage() {
+    const { resolvedRole, role } = useAuth();
+    const canSeed =
+      role === 'superadmin' ||
+      resolvedRole === 'platform_owner' ||
+      resolvedRole === 'platform_support';
+
     const { equipment, vehicles, loading: fleetLoading, refresh: refreshFleet } = useFleetExpenses();
     const { inventory, loading: inventoryLoading, refresh: refreshInventory } = useInventory();
     const [templates, setTemplates] = useState<EquipmentTemplate[]>([]);
     const [alerts, setAlerts] = useState<FleetAlert[]>([]);
-    
+    const [busy, setBusy] = useState(false);
+
     const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
     const [isAddInventoryOpen, setIsAddInventoryOpen] = useState(false);
+    const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
+    const [deleteTarget, setDeleteTarget] = useState<InventoryItem | null>(null);
+    const [seedConfirmOpen, setSeedConfirmOpen] = useState(false);
     const [isAddTemplateOpen, setIsAddTemplateOpen] = useState(false);
 
     useEffect(() => {
@@ -59,7 +80,7 @@ export function FleetPage() {
     };
 
     const handleSeedData = async () => {
-        if (!confirm("This will populate default inventory and templates. Continue?")) return;
+        setBusy(true);
         try {
             const result = await seederService.seedInitialData();
             toast.success(`Seeded ${result.inventoryCount} items and ${result.templatesCount} templates.`);
@@ -67,6 +88,9 @@ export function FleetPage() {
             loadTemplates();
         } catch (e: any) {
             toast.error("Failed to seed data: " + e.message);
+        } finally {
+            setBusy(false);
+            setSeedConfirmOpen(false);
         }
     };
 
@@ -75,7 +99,6 @@ export function FleetPage() {
             const itemsToAssign: EquipmentItem[] = [];
             const timestamp = new Date().toISOString();
 
-            // Prepare items based on source
             for (const vid of vehicleIds) {
                 if (sourceType === 'template') {
                     const template = templates.find(t => t.id === sourceId);
@@ -85,9 +108,11 @@ export function FleetPage() {
                                  ...item,
                                  id: crypto.randomUUID(),
                                  vehicleId: vid,
-                                 dateAssigned: timestamp,
-                                 status: 'Active'
-                             });
+                                 purchaseDate: timestamp.slice(0, 10),
+                                 status: 'New',
+                                 createdAt: timestamp,
+                                 updatedAt: timestamp,
+                             } as EquipmentItem);
                          });
                     }
                 } else {
@@ -96,21 +121,28 @@ export function FleetPage() {
                         itemsToAssign.push({
                             id: crypto.randomUUID(),
                             name: invItem.name,
-                            category: invItem.category,
-                            price: invItem.costPerUnit,
-                            dateAssigned: timestamp,
-                            status: 'Active',
-                            vehicleId: vid
+                            category: (invItem.category as EquipmentItem['category']) || 'Equipment',
+                            price: Number(invItem.costPerUnit) || 0,
+                            purchaseDate: timestamp.slice(0, 10),
+                            status: 'New',
+                            vehicleId: vid,
+                            inventoryId: invItem.id,
+                            createdAt: timestamp,
+                            updatedAt: timestamp,
                         });
-                        // Note: Backend handles inventory quantity decrement if implemented, 
-                        // or we need a separate call. Phase 1 didn't explicitly link them transactionally.
-                        // Ideally the backend 'bulk' endpoint should handle this logic if extended.
-                        // For now we just assign the item.
                     }
                 }
             }
 
             if (itemsToAssign.length > 0) {
+                if (sourceType === 'inventory') {
+                    const need = vehicleIds.length;
+                    const stock = inventory.find(i => i.id === sourceId);
+                    if (stock && (Number(stock.quantity) || 0) < need) {
+                        toast.error(`Insufficient stock: need ${need}, have ${stock.quantity}`);
+                        return;
+                    }
+                }
                 await equipmentService.bulkAssignEquipment(itemsToAssign);
                 toast.success(`Successfully assigned ${itemsToAssign.length} items to ${vehicleIds.length} vehicles.`);
                 refreshFleet();
@@ -121,13 +153,30 @@ export function FleetPage() {
         }
     };
 
-    const handleAddInventory = async (item: InventoryItem) => {
+    const handleSaveInventory = async (item: InventoryItem) => {
         try {
             await inventoryService.saveStock(item);
-            toast.success("Inventory item added successfully");
+            toast.success(editingItem ? "Inventory item updated" : "Inventory item added successfully");
+            refreshInventory();
+            setEditingItem(null);
+        } catch (e: any) {
+            toast.error("Failed to save item: " + e.message);
+            throw e;
+        }
+    };
+
+    const handleConfirmDelete = async () => {
+        if (!deleteTarget) return;
+        setBusy(true);
+        try {
+            await inventoryService.deleteStock(deleteTarget.id);
+            toast.success(`Removed "${deleteTarget.name}" from inventory`);
+            setDeleteTarget(null);
             refreshInventory();
         } catch (e: any) {
-            toast.error("Failed to add item: " + e.message);
+            toast.error("Failed to delete: " + e.message);
+        } finally {
+            setBusy(false);
         }
     };
 
@@ -149,6 +198,7 @@ export function FleetPage() {
             <div className="flex justify-between items-center">
                 <h1 className="text-3xl font-bold tracking-tight">Inventory & Asset Management</h1>
                 <div className="flex gap-2">
+                    {canSeed && (
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                             <Button variant="outline" size="icon">
@@ -158,11 +208,12 @@ export function FleetPage() {
                         <DropdownMenuContent align="end">
                             <DropdownMenuLabel>Fleet Tools</DropdownMenuLabel>
                             <DropdownMenuSeparator />
-                            <DropdownMenuItem onClick={handleSeedData}>
+                            <DropdownMenuItem onClick={() => setSeedConfirmOpen(true)}>
                                 <Database className="mr-2 h-4 w-4" /> Seed Default Data
                             </DropdownMenuItem>
                         </DropdownMenuContent>
                     </DropdownMenu>
+                    )}
                     <Button onClick={() => setIsBulkModalOpen(true)}>
                         <LayoutGrid className="mr-2 h-4 w-4" /> Bulk Assignment
                     </Button>
@@ -191,14 +242,15 @@ export function FleetPage() {
                 <TabsContent value="inventory" className="space-y-4">
                     <div className="flex justify-between">
                          <h2 className="text-xl font-semibold">Stock Inventory</h2>
-                         <Button variant="outline" size="sm" onClick={() => setIsAddInventoryOpen(true)}>
+                         <Button variant="outline" size="sm" onClick={() => { setEditingItem(null); setIsAddInventoryOpen(true); }}>
                              <Plus className="mr-2 h-4 w-4"/> Add Item
                          </Button>
                     </div>
-                    <InventoryTable 
-                        items={inventory} 
-                        onEdit={() => {}} 
-                        onDelete={() => {}} 
+                    <InventoryTable
+                        items={inventory}
+                        busy={busy}
+                        onEdit={(item) => { setEditingItem(item); setIsAddInventoryOpen(true); }}
+                        onDelete={(item) => setDeleteTarget(item)}
                     />
                 </TabsContent>
 
@@ -247,8 +299,9 @@ export function FleetPage() {
             
             <AddInventoryModal 
                 isOpen={isAddInventoryOpen}
-                onClose={() => setIsAddInventoryOpen(false)}
-                onSave={handleAddInventory}
+                onClose={() => { setIsAddInventoryOpen(false); setEditingItem(null); }}
+                onSave={handleSaveInventory}
+                initialItem={editingItem}
             />
             
             <AddTemplateModal 
@@ -256,6 +309,40 @@ export function FleetPage() {
                 onClose={() => setIsAddTemplateOpen(false)}
                 onSave={handleSaveTemplate}
             />
+
+            <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Remove from inventory?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            This permanently removes &quot;{deleteTarget?.name}&quot; from stock. Assigned equipment on vehicles is not changed.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel disabled={busy}>Cancel</AlertDialogCancel>
+                        <AlertDialogAction onClick={handleConfirmDelete} disabled={busy}>
+                            {busy ? "Removing…" : "Remove"}
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+
+            <AlertDialog open={seedConfirmOpen} onOpenChange={setSeedConfirmOpen}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Seed default inventory data?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            Writes fixture inventory and templates into the live store for this organisation. Use only for setup or demos — it can overwrite matching item ids.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel disabled={busy}>Cancel</AlertDialogCancel>
+                        <AlertDialogAction onClick={handleSeedData} disabled={busy}>
+                            {busy ? "Seeding…" : "Seed live data"}
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </div>
     );
 }

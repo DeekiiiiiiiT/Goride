@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "../ui/dialog";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
@@ -9,9 +9,12 @@ interface AddInventoryModalProps {
     isOpen: boolean;
     onClose: () => void;
     onSave: (item: InventoryItem) => Promise<void>;
+    /** When set, modal edits this row instead of creating a new one */
+    initialItem?: InventoryItem | null;
 }
 
-export function AddInventoryModal({ isOpen, onClose, onSave }: AddInventoryModalProps) {
+export function AddInventoryModal({ isOpen, onClose, onSave, initialItem }: AddInventoryModalProps) {
+    const isEdit = !!initialItem;
     const [loading, setLoading] = useState(false);
     const [formData, setFormData] = useState<Partial<InventoryItem>>({
         name: '',
@@ -23,24 +26,19 @@ export function AddInventoryModal({ isOpen, onClose, onSave }: AddInventoryModal
         description: ''
     });
 
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-        setLoading(true);
-        try {
-            const newItem: InventoryItem = {
-                id: crypto.randomUUID(),
-                name: formData.name || 'New Item',
-                category: formData.category || 'General',
-                quantity: Number(formData.quantity) || 0,
-                minQuantity: Number(formData.minQuantity) || 0,
-                costPerUnit: Number(formData.costPerUnit) || 0,
-                location: formData.location || '',
-                description: formData.description || '',
-                createdAt: new Date().toISOString(),
-                updatedAt: new Date().toISOString()
-            };
-            await onSave(newItem);
-            // Reset form
+    useEffect(() => {
+        if (!isOpen) return;
+        if (initialItem) {
+            setFormData({
+                name: initialItem.name,
+                category: initialItem.category,
+                quantity: initialItem.quantity,
+                minQuantity: initialItem.minQuantity,
+                costPerUnit: initialItem.costPerUnit,
+                location: initialItem.location || '',
+                description: initialItem.description || '',
+            });
+        } else {
             setFormData({
                 name: '',
                 category: '',
@@ -50,6 +48,27 @@ export function AddInventoryModal({ isOpen, onClose, onSave }: AddInventoryModal
                 location: '',
                 description: ''
             });
+        }
+    }, [isOpen, initialItem]);
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setLoading(true);
+        try {
+            const now = new Date().toISOString();
+            const item: InventoryItem = {
+                id: initialItem?.id || crypto.randomUUID(),
+                name: formData.name || 'New Item',
+                category: formData.category || 'General',
+                quantity: Number(formData.quantity) || 0,
+                minQuantity: Number(formData.minQuantity) || 0,
+                costPerUnit: Number(formData.costPerUnit) || 0,
+                location: formData.location || '',
+                description: formData.description || '',
+                createdAt: initialItem?.createdAt || now,
+                updatedAt: now,
+            };
+            await onSave(item);
             onClose();
         } catch (error) {
             console.error("Error saving inventory item:", error);
@@ -62,9 +81,11 @@ export function AddInventoryModal({ isOpen, onClose, onSave }: AddInventoryModal
         <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
             <DialogContent className="sm:max-w-[500px]">
                 <DialogHeader>
-                    <DialogTitle>Add Inventory Item</DialogTitle>
+                    <DialogTitle>{isEdit ? "Edit Inventory Item" : "Add Inventory Item"}</DialogTitle>
                     <DialogDescription>
-                        Enter the details of the new item to add to your inventory.
+                        {isEdit
+                          ? "Update stock details for this inventory item."
+                          : "Enter the details of the new item to add to your inventory."}
                     </DialogDescription>
                 </DialogHeader>
                 <form onSubmit={handleSubmit} className="space-y-4 py-4">
@@ -114,7 +135,7 @@ export function AddInventoryModal({ isOpen, onClose, onSave }: AddInventoryModal
                         />
                     </div>
                     <div className="grid grid-cols-4 items-center gap-4">
-                        <Label htmlFor="cost" className="text-right">Cost ($)</Label>
+                        <Label htmlFor="cost" className="text-right">Cost (JMD)</Label>
                         <Input 
                             id="cost" 
                             type="number"
@@ -141,7 +162,7 @@ export function AddInventoryModal({ isOpen, onClose, onSave }: AddInventoryModal
                             Cancel
                         </Button>
                         <Button type="submit" disabled={loading}>
-                            {loading ? "Saving..." : "Save Item"}
+                            {loading ? "Saving..." : isEdit ? "Save Changes" : "Save Item"}
                         </Button>
                     </DialogFooter>
                 </form>

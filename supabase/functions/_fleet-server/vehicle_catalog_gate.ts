@@ -63,7 +63,7 @@ type GateContext = {
   vehicleId: string;
   userId: string;
   organizationId: string | null;
-  reason: "missing_vehicle" | "not_matched" | "bypassed" | "warn_only";
+  reason: "missing_vehicle" | "not_matched" | "bypassed" | "warn_only" | "extractor_miss";
 };
 
 /**
@@ -84,6 +84,17 @@ async function recordGateEvent(ctx: GateContext): Promise<void> {
   } catch (_e) {
     /* never break the request because of audit failure */
   }
+}
+
+/** Recent gate audit rows for Dominion observability (newest first). */
+export async function listRecentCatalogGateEvents(limit = 50): Promise<Record<string, unknown>[]> {
+  const rows = (await kv.getByPrefix("audit:catalog-gate:")) || [];
+  const sorted = [...rows].sort((a, b) => {
+    const ta = String((a as { timestamp?: string }).timestamp || "");
+    const tb = String((b as { timestamp?: string }).timestamp || "");
+    return tb.localeCompare(ta);
+  });
+  return sorted.slice(0, Math.min(Math.max(limit, 1), 200)) as Record<string, unknown>[];
 }
 
 /**
@@ -135,12 +146,30 @@ export function requireCatalogMatched(options: CatalogGateOptions) {
       return c.json({ error: "Invalid request" }, 400);
     }
 
-    if (extracted == null) return await next();
+    if (extracted == null) {
+      await recordGateEvent({
+        route,
+        vehicleId: "_none",
+        userId: user?.userId ?? "_anon",
+        organizationId: user?.organizationId ?? null,
+        reason: "extractor_miss",
+      });
+      return await next();
+    }
 
     const ids = (Array.isArray(extracted) ? extracted : [extracted])
       .map((s) => String(s ?? "").trim())
       .filter(Boolean);
-    if (ids.length === 0) return await next();
+    if (ids.length === 0) {
+      await recordGateEvent({
+        route,
+        vehicleId: "_empty",
+        userId: user?.userId ?? "_anon",
+        organizationId: user?.organizationId ?? null,
+        reason: "extractor_miss",
+      });
+      return await next();
+    }
 
     const bypass = rbacUserCanBypassCatalogGate(user);
     const enforcement = isEnforcementEnabled();

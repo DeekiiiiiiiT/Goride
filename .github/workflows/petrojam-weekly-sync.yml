@@ -17,17 +17,44 @@ jobs:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
           set -euo pipefail
-          TOKEN="${CRON_SECRET:-$SUPABASE_SERVICE_ROLE_KEY}"
-          if [ -z "${SUPABASE_URL:-}" ] || [ -z "${TOKEN:-}" ]; then
-            echo "Missing SUPABASE_URL or auth token secrets"
+          if [ -z "${SUPABASE_URL:-}" ] || [ -z "${SUPABASE_SERVICE_ROLE_KEY:-}" ]; then
+            echo "Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY secrets"
             exit 1
           fi
-          # Strip accidental whitespace/newlines from pasted secrets
-          SUPABASE_URL="${SUPABASE_URL%"${SUPABASE_URL##*[![:space:]]}"}"
-          TOKEN="${TOKEN%"${TOKEN##*[![:space:]]}"}"
-          TOKEN="${TOKEN#"${TOKEN%%[![:space:]]*}"}"
-          curl -fsS -X POST \
-            "${SUPABASE_URL}/functions/v1/petrojam-prices/cron/sync-latest" \
-            -H "Authorization: Bearer ${TOKEN}" \
-            -H "apikey: ${TOKEN}" \
+          # Always auth with service_role JWT. Optional CRON_SECRET is a separate header only.
+          SUPABASE_URL="$(printf '%s' "$SUPABASE_URL" | tr -d '\r\n' | sed 's/[[:space:]]*$//;s/^[[:space:]]*//')"
+          SERVICE_KEY="$(printf '%s' "$SUPABASE_SERVICE_ROLE_KEY" | tr -d '\r\n' | sed 's/[[:space:]]*$//;s/^[[:space:]]*//')"
+          CRON_VAL="$(printf '%s' "${CRON_SECRET:-}" | tr -d '\r\n' | sed 's/[[:space:]]*$//;s/^[[:space:]]*//')"
+
+          # #region agent log
+          # Safe diagnostics only — never print secret values
+          PREFIX3="$(printf '%s' "$SERVICE_KEY" | cut -c1-3)"
+          echo "DEBUG hypothesisId=D tokenSource=SERVICE_ROLE_KEY len=${#SERVICE_KEY} prefix3=${PREFIX3} startsEyJ=$([[ "$SERVICE_KEY" == eyJ* ]] && echo yes || echo no) cronSecretSet=$([[ -n "$CRON_VAL" ]] && echo yes || echo no) urlHost=$(printf '%s' "$SUPABASE_URL" | sed 's#https://##' | cut -d/ -f1)"
+          # #endregion
+
+          CURL_ARGS=(
+            -sS -w "\nHTTP_CODE:%{http_code}\n"
+            -X POST
+            "${SUPABASE_URL}/functions/v1/petrojam-prices/cron/sync-latest"
+            -H "Authorization: Bearer ${SERVICE_KEY}"
+            -H "apikey: ${SERVICE_KEY}"
             -H "Content-Type: application/json"
+          )
+          if [ -n "$CRON_VAL" ]; then
+            CURL_ARGS+=(-H "x-fleet-cron-secret: ${CRON_VAL}")
+          fi
+
+          set +e
+          RESP="$(curl "${CURL_ARGS[@]}")"
+          CURL_EXIT=$?
+          set -e
+
+          # #region agent log
+          echo "DEBUG hypothesisId=D curlExit=${CURL_EXIT} responseTail=$(printf '%s' "$RESP" | tail -c 400)"
+          # #endregion
+
+          echo "$RESP" | grep -q 'HTTP_CODE:200' || {
+            echo "Sync failed (expected HTTP 200)"
+            exit 1
+          }
+          echo "Sync OK"

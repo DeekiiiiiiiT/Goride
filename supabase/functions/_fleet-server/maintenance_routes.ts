@@ -600,9 +600,31 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
       if (denied) return denied;
       const id = c.req.param("id");
       try {
-        const { error } = await supabase.from("maintenance_task_templates").delete().eq("id", id);
+        const { count, error: countErr } = await supabase
+          .from("vehicle_maintenance_schedule")
+          .select("id", { count: "exact", head: true })
+          .eq("template_id", id);
+        if (countErr) throw countErr;
+        const usageCount = count ?? 0;
+
+        const { data, error } = await supabase
+          .from("maintenance_task_templates")
+          .update({ archived_at: new Date().toISOString() })
+          .eq("id", id)
+          .is("archived_at", null)
+          .select("id, archived_at")
+          .maybeSingle();
         if (error) throw error;
-        return c.json({ success: true });
+        if (!data) return c.json({ error: "Not found or already archived" }, 404);
+        return c.json({
+          success: true,
+          archived: true,
+          usageCount,
+          message:
+            usageCount > 0
+              ? `Archived. ${usageCount} vehicle schedule row(s) still reference this template.`
+              : "Archived.",
+        });
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e);
         return c.json({ error: msg }, 500);
@@ -621,6 +643,7 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
           .from("maintenance_task_templates")
           .select("*")
           .eq("template_scope", "global")
+          .is("archived_at", null)
           .order("sort_order", { ascending: true })
           .order("task_name", { ascending: true });
         if (error) throw error;

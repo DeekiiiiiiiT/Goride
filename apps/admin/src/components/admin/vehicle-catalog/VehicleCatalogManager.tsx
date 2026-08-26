@@ -26,6 +26,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { useAuth } from "../../auth/AuthContext";
+import { CatalogGateObservabilityPanel } from "./CatalogGateObservabilityPanel";
 import {
   createVehicleCatalog,
   deleteVehicleCatalog,
@@ -864,6 +865,7 @@ export function VehicleCatalogManager() {
 
   return (
     <div className="flex flex-col gap-4 p-4 sm:p-6 text-slate-200">
+      <CatalogGateObservabilityPanel />
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Motor vehicles</h2>

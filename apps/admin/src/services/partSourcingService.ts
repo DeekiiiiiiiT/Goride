@@ -330,3 +330,42 @@ export async function previewPartsForCatalog(
   if (!res.ok) throw new Error(await parseError(res));
   return (await res.json()) as CompatiblePartsResponse;
 }
+
+export type PartsSourcingRequestRow = {
+  id: string;
+  organization_id: string;
+  vehicle_id: string;
+  need_text: string;
+  status: string;
+  created_at: string;
+  admin_note?: string | null;
+};
+
+export async function listPartsSourcingRequests(
+  accessToken: string,
+  status = "open",
+): Promise<PartsSourcingRequestRow[]> {
+  const res = await fetch(
+    `${API_ENDPOINTS.admin}/admin/parts-sourcing-requests?status=${encodeURIComponent(status)}`,
+    { headers: edgeHeaders(accessToken) },
+  );
+  if (!res.ok) throw new Error(await parseError(res));
+  const data = await res.json();
+  return (data.items || []) as PartsSourcingRequestRow[];
+}
+
+export async function updatePartsSourcingRequest(
+  accessToken: string,
+  id: string,
+  status: string,
+  adminNote?: string,
+): Promise<PartsSourcingRequestRow> {
+  const res = await fetch(`${API_ENDPOINTS.admin}/admin/parts-sourcing-requests/${id}`, {
+    method: "PATCH",
+    headers: edgeHeaders(accessToken, "application/json"),
+    body: JSON.stringify({ status, adminNote }),
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  const data = await res.json();
+  return data.item as PartsSourcingRequestRow;
+}

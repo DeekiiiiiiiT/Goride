@@ -786,12 +786,43 @@ export const api = {
     return response.json();
   },
 
-  async getVehicles() {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/vehicles`, {
+  async getVehiclesPage(opts?: { limit?: number; offset?: number }) {
+    const limit = opts?.limit ?? 500;
+    const offset = opts?.offset ?? 0;
+    const qs = new URLSearchParams({
+      limit: String(limit),
+      offset: String(offset),
+    });
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/vehicles?${qs}`, {
         headers: await getHeaders(null),
     });
     if (!response.ok) throw new Error("Failed to fetch vehicles");
     return response.json();
+  },
+
+  /**
+   * Fetch every org vehicle by paging past the server's default 500 cap.
+   * Caps at 40 pages (20_000) — same honesty pattern as trip period fetch.
+   */
+  async fetchAllVehicles(): Promise<{ vehicles: any[]; truncated: boolean }> {
+    const pageSize = 500;
+    const maxPages = 40;
+    const vehicles: any[] = [];
+    let truncated = false;
+    for (let i = 0; i < maxPages; i++) {
+      const page = await this.getVehiclesPage({ limit: pageSize, offset: i * pageSize });
+      const rows = Array.isArray(page) ? page : [];
+      vehicles.push(...rows);
+      if (rows.length < pageSize) return { vehicles, truncated: false };
+    }
+    truncated = true;
+    return { vehicles, truncated };
+  },
+
+  /** All vehicles for the org (paginated). Prefer this over a single capped page. */
+  async getVehicles() {
+    const { vehicles } = await this.fetchAllVehicles();
+    return vehicles;
   },
 
   async saveVehicle(vehicle: any) {
@@ -1943,6 +1974,19 @@ export const api = {
         throw new Error(err || "Failed to fetch compatible parts");
       }
       return response.json() as Promise<CompatiblePartsResponse>;
+  },
+
+  async requestPartsSourcing(vehicleId: string, needText: string) {
+      const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/parts-sourcing-requests`, {
+        method: "POST",
+        headers: await getHeaders(),
+        body: JSON.stringify({ vehicleId, needText }),
+      });
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        throw new Error((body as { error?: string }).error || "Failed to submit parts request");
+      }
+      return response.json();
   },
 
   async bootstrapMaintenanceFleet() {

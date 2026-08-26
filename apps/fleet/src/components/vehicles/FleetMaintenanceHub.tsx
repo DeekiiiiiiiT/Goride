@@ -121,6 +121,8 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
   const [partsVehicleId, setPartsVehicleId] = useState<string>("");
   const [partsLoading, setPartsLoading] = useState(false);
   const [partsData, setPartsData] = useState<CompatiblePartsResponse | null>(null);
+  const [partsNeedText, setPartsNeedText] = useState("");
+  const [partsRequestBusy, setPartsRequestBusy] = useState(false);
   const [hubTab, setHubTab] = useState<"by-vehicle" | "service-ledger">("by-vehicle");
 
   const loadRequests = useCallback(async () => {
@@ -284,6 +286,28 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
       setPartsLoading(false);
     }
   }, [partsVehicleId]);
+
+  const handleRequestMissingPart = useCallback(async () => {
+    if (!partsVehicleId) {
+      toast.error("Select a vehicle");
+      return;
+    }
+    const need = partsNeedText.trim();
+    if (!need) {
+      toast.error("Describe the part you need");
+      return;
+    }
+    setPartsRequestBusy(true);
+    try {
+      await api.requestPartsSourcing(partsVehicleId, need);
+      toast.success("Request sent to Dominion Parts Sourcing");
+      setPartsNeedText("");
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : "Failed to submit request");
+    } finally {
+      setPartsRequestBusy(false);
+    }
+  }, [partsVehicleId, partsNeedText]);
 
   return (
     <div className="space-y-4">
@@ -673,6 +697,27 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
                 {partsData.message ?? "This vehicle is not linked to the motor catalog yet."}
               </p>
             )}
+            {(partsData?.catalogMatched && !(partsData.items?.length > 0)) ||
+            (partsData && !partsData.catalogMatched) ? (
+              <div className="space-y-2 rounded-lg border border-slate-200 dark:border-slate-700 p-3">
+                <Label htmlFor="parts-need">Request a missing part from Dominion</Label>
+                <textarea
+                  id="parts-need"
+                  className="w-full min-h-[72px] rounded-md border border-slate-200 dark:border-slate-700 bg-transparent px-3 py-2 text-sm"
+                  placeholder="e.g. Front brake pads for 2019 Toyota Probox — OEM if possible"
+                  value={partsNeedText}
+                  onChange={(e) => setPartsNeedText(e.target.value)}
+                />
+                <Button
+                  type="button"
+                  size="sm"
+                  disabled={partsRequestBusy || !partsVehicleId}
+                  onClick={() => void handleRequestMissingPart()}
+                >
+                  {partsRequestBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : "Send request"}
+                </Button>
+              </div>
+            ) : null}
           </div>
           <div className="min-h-0 flex-1 overflow-auto rounded-lg border border-slate-200 dark:border-slate-700">
             <Table>

@@ -25,6 +25,12 @@ const STATUS_DOT: Record<string, string> = {
   Decommissioned: 'bg-slate-400',
 };
 
+function periodStatusLabel(status: string): string {
+  if (status === 'Active') return 'Drove this period';
+  if (status === 'Inactive') return 'Idle this period';
+  return status;
+}
+
 function StatusCard({
   v,
   onSelect,
@@ -52,7 +58,7 @@ function StatusCard({
       <div className="flex items-center gap-2 min-w-0">
         <CarFront className="h-4 w-4 text-slate-400 shrink-0" />
         <span className="text-xs text-slate-500 truncate">
-          {v.status}
+          {periodStatusLabel(v.status)}
           {v.driverName ? ` · ${v.driverName}` : v.modelLabel ? ` · ${v.modelLabel}` : ''}
         </span>
       </div>
@@ -166,12 +172,14 @@ export function AnalyticsUtilizationSection({
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 gap-2">
             <div>
-              <CardTitle className="text-lg">Recorded Vehicle Status</CardTitle>
-              <CardDescription>From trips and service records — not live GPS.</CardDescription>
+              <CardTitle className="text-lg">Period activity board</CardTitle>
+              <CardDescription>
+                Drove vs idle based on trips in the selected period. Maintenance / Decommissioned keep stored status.
+              </CardDescription>
             </div>
             <div className="flex gap-1.5 flex-wrap justify-end">
               <Badge className="bg-emerald-100 text-emerald-700 border-0 text-[10px] font-bold">
-                ACTIVE: {activeCount}
+                DROVE: {activeCount}
               </Badge>
               <Badge className="bg-amber-100 text-amber-700 border-0 text-[10px] font-bold">
                 IDLE: {idleCount}

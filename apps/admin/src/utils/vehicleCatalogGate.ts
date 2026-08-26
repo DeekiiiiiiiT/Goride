@@ -1,3 +1,13 @@
+/**
+ * Client-side catalog gate helpers for Dominion.
+ *
+ * CONTRACT: Behaviour must stay identical to
+ * `supabase/functions/_fleet-server/vehicle_catalog_gate.ts` and the fleet
+ * client mirror (`apps/fleet/src/utils/vehicleCatalogGate.ts`). The edge
+ * runtime cannot import app types — keep unions/status semantics in sync
+ * manually (or via shared tests). Do not widen VehicleStatus /
+ * VehicleCatalogStatus here without updating the edge gate.
+ */
 import type { Vehicle, VehicleCatalogStatus, VehicleStatus } from "../types/vehicle";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;

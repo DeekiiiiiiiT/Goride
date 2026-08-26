@@ -8,6 +8,7 @@ import { AnalyticsFinancialSection } from './analytics/AnalyticsFinancialSection
 import { AnalyticsUtilizationSection } from './analytics/AnalyticsUtilizationSection';
 import { AnalyticsVehicleHealthPanel } from './analytics/AnalyticsVehicleHealthPanel';
 import { AnalyticsMaintenanceSection } from './analytics/AnalyticsMaintenanceSection';
+import { VehicleTcoPanel } from './analytics/VehicleTcoPanel';
 
 export function VehicleAnalytics({ onNavigate }: { onNavigate?: (page: string) => void }) {
   const analytics = useVehicleAnalytics();
@@ -120,6 +121,12 @@ export function VehicleAnalytics({ onNavigate }: { onNavigate?: (page: string) =
         dailyCostBreakdown={dailyCostBreakdown}
         commissionRows={commissionRows}
         onSelectVehicle={setSelectedVehicleId}
+      />
+
+      <VehicleTcoPanel
+        costByVehicle={costByVehicle}
+        profitScatter={profitScatter}
+        fleetDistanceKm={kpis.fleetDistanceKm}
       />
 
       <AnalyticsUtilizationSection

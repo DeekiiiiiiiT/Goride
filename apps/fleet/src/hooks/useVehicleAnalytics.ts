@@ -143,14 +143,14 @@ export function useVehicleAnalytics() {
     refetchOnWindowFocus: false,
   });
 
-  const { data: priorTrips = [] } = useQuery({
+  const { data: priorTrips = [], refetch: refetchPriorTrips } = useQuery({
     queryKey: ['vehicleAnalyticsTripsPrior', prior.startYmd, prior.endYmd],
     queryFn: () => fetchAllPeriodTrips(prior.startYmd, prior.endYmd).catch(() => []),
     staleTime: 2 * 60 * 1000,
     refetchOnWindowFocus: false,
   });
 
-  const { data: tripStats } = useQuery({
+  const { data: tripStats, refetch: refetchTripStats } = useQuery({
     queryKey: ['vehicleAnalyticsTripStats', period.startYmd, period.endYmd],
     queryFn: () =>
       api
@@ -160,7 +160,7 @@ export function useVehicleAnalytics() {
     refetchOnWindowFocus: false,
   });
 
-  const { data: priorTripStats } = useQuery({
+  const { data: priorTripStats, refetch: refetchPriorTripStats } = useQuery({
     queryKey: ['vehicleAnalyticsTripStatsPrior', prior.startYmd, prior.endYmd],
     queryFn: () =>
       api
@@ -177,14 +177,14 @@ export function useVehicleAnalytics() {
     refetchOnWindowFocus: false,
   });
 
-  const { data: vehicleMetrics = [] } = useQuery<VehicleMetrics[]>({
+  const { data: vehicleMetrics = [], refetch: refetchVehicleMetrics } = useQuery<VehicleMetrics[]>({
     queryKey: ['vehicleMetrics'],
     queryFn: () => api.getVehicleMetrics().catch(() => []),
     staleTime: 5 * 60 * 1000,
     refetchOnWindowFocus: false,
   });
 
-  const { data: maintenanceSummary } = useQuery({
+  const { data: maintenanceSummary, refetch: refetchMaintenanceSummary } = useQuery({
     queryKey: ['maintenanceFleetSummary'],
     queryFn: () => api.getMaintenanceFleetSummary().catch(() => ({ items: [] })),
     staleTime: 5 * 60 * 1000,
@@ -198,14 +198,14 @@ export function useVehicleAnalytics() {
     refetchOnWindowFocus: false,
   });
 
-  const { data: priorLedgerEvents = [] } = useQuery({
+  const { data: priorLedgerEvents = [], refetch: refetchPriorLedger } = useQuery({
     queryKey: ['vehicleAnalyticsLedgerPrior', prior.startYmd, prior.endYmd],
     queryFn: () => fetchAllCanonicalEvents(prior.startYmd, prior.endYmd).catch(() => []),
     staleTime: 2 * 60 * 1000,
     refetchOnWindowFocus: false,
   });
 
-  const { data: maintenanceLogs = [] } = useQuery<MaintenanceLog[]>({
+  const { data: maintenanceLogs = [], refetch: refetchMaintenanceLogs } = useQuery<MaintenanceLog[]>({
     queryKey: ['allMaintenanceLogs'],
     queryFn: () => api.getAllMaintenanceLogs().catch(() => []),
     staleTime: 5 * 60 * 1000,
@@ -259,7 +259,8 @@ export function useVehicleAnalytics() {
     return map;
   }, [periodTrips]);
 
-  // Active = completed ≥1 trip in selected period
+  // Period activity: Active = drove (≥1 completed trip); Inactive = idle this period.
+  // Maintenance / Decommissioned keep stored operational status.
   const statusById = useMemo(() => {
     const map = new Map<string, Vehicle['status']>();
     rawVehicles.forEach((v) => {
@@ -286,6 +287,11 @@ export function useVehicleAnalytics() {
   const vehicleProfits = useMemo(
     () => profitByVehicle(periodTrips, ledgerAgg.byVehicle, rawVehicles, period),
     [periodTrips, ledgerAgg.byVehicle, rawVehicles, period],
+  );
+
+  const dailyCostBreakdown: DailyCostPoint[] = useMemo(
+    () => buildDailyCostBreakdown(periodTrips, ledgerEvents, period),
+    [periodTrips, ledgerEvents, period],
   );
 
   const kpis: AnalyticsKpis = useMemo(() => {
@@ -333,6 +339,11 @@ export function useVehicleAnalytics() {
         ? priorProfits.reduce((s, r) => s + r.profit, 0) / priorProfits.length
         : null;
 
+    // Net profit spark = daily revenue − attributed costs (same day keys as dailyCostBreakdown)
+    const sparkSlice =
+      dailyCostBreakdown.length > 14 ? dailyCostBreakdown.slice(-14) : dailyCostBreakdown;
+    const profitSpark = sparkSlice.map((d) => d.revenue - d.totalCost);
+
     return {
       grossRevenue,
       revenueDeltaPct: pctDelta(grossRevenue, priorRevenue),
@@ -357,7 +368,7 @@ export function useVehicleAnalytics() {
       costCoveragePct: ledgerAgg.coveragePct,
       unattributedCostTotal: ledgerAgg.unattributedTotal,
       revenueSpark: sparklineBuckets(periodTrips, period, getTripGrossRevenue),
-      profitSpark: sparklineBuckets(periodTrips, period, getTripGrossRevenue),
+      profitSpark,
       tripsSpark: sparklineBuckets(periodTrips, period, () => 1),
       distanceSpark: sparklineBuckets(periodTrips, period, (t) => t.distance || 0),
     };
@@ -375,6 +386,7 @@ export function useVehicleAnalytics() {
     ledgerAgg,
     ledgerEvents.length,
     period,
+    dailyCostBreakdown,
   ]);
 
   const leaderboard: LeaderboardRow[] = useMemo(() => {
@@ -422,11 +434,6 @@ export function useVehicleAnalytics() {
       .filter((r) => r.costs.total > 0)
       .sort((a, b) => b.costs.total - a.costs.total);
   }, [ledgerAgg.byVehicle, rawVehicles]);
-
-  const dailyCostBreakdown: DailyCostPoint[] = useMemo(
-    () => buildDailyCostBreakdown(periodTrips, ledgerEvents, period),
-    [periodTrips, ledgerEvents, period],
-  );
 
   const commissionRows: CommissionRow[] = useMemo(
     () => commissionByVehicle(ledgerEvents, period, rawVehicles),
@@ -549,21 +556,31 @@ export function useVehicleAnalytics() {
       (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime(),
     );
     const byDay = new Map<string, number>();
+    let droppedDeltas = 0;
     for (let i = 1; i < sorted.length; i++) {
       const prev = sorted[i - 1];
       const cur = sorted[i];
       const delta = Number(cur.value) - Number(prev.value);
-      if (delta <= 0 || delta > 2000) continue; // skip resets / absurd jumps
+      if (delta <= 0 || delta > 2000) {
+        droppedDeltas += 1;
+        continue; // skip resets / absurd jumps
+      }
       const key = String(cur.date).slice(0, 10);
       byDay.set(key, (byDay.get(key) || 0) + delta);
     }
+    void droppedDeltas; // available for future honesty badge
     return Array.from(byDay.entries())
       .sort(([a], [b]) => a.localeCompare(b))
-      .map(([dateYmd, km]) => ({
-        dateYmd,
-        name: format(new Date(dateYmd), 'MMM d'),
-        km: Number(km.toFixed(1)),
-      }));
+      .map(([dateYmd, km]) => {
+        // Local calendar label — avoid `new Date("YYYY-MM-DD")` UTC midnight shift
+        const [y, m, d] = dateYmd.split('-').map(Number);
+        const local = new Date(y, (m || 1) - 1, d || 1);
+        return {
+          dateYmd,
+          name: format(local, 'MMM d'),
+          km: Number(km.toFixed(1)),
+        };
+      });
   }, [selectedOdo]);
 
   const selectedServiceWarning = useMemo(() => {
@@ -574,8 +591,15 @@ export function useVehicleAnalytics() {
 
   const refresh = () => {
     refetchTrips();
+    refetchPriorTrips();
+    refetchTripStats();
+    refetchPriorTripStats();
     refetchVehicles();
+    refetchVehicleMetrics();
+    refetchMaintenanceSummary();
     refetchLedger();
+    refetchPriorLedger();
+    refetchMaintenanceLogs();
   };
 
   return {

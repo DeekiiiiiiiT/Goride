@@ -2658,13 +2658,17 @@ app.post("/make-server-37f42386/vehicles", requireAuth(), requirePermission('veh
     if (!vehicle.id) {
       return c.json({ error: "Vehicle ID (License Plate) is required" }, 400);
     }
+    const previous = await loadVehicleForGate(String(vehicle.id));
+    // Update path: refuse overwrite of another org's vehicle
+    if (previous && !belongsToOrg(previous as Record<string, unknown>, c)) {
+      return c.json({ error: "Forbidden" }, 403);
+    }
     vehicle = stampOrg(vehicle, c);
     const orgId = (vehicle as { organizationId?: string }).organizationId ?? null;
     const rbacUser = c.get('rbacUser') as RbacUser | undefined;
     const canBypass = rbacUserCanBypassCatalogGate(rbacUser);
 
     const catalogId = await resolveCatalogIdForKvVehicle(supabase, vehicle as Record<string, unknown>);
-    const previous = await loadVehicleForGate(String(vehicle.id));
 
     // Enforce the catalog gate on create / update: if no catalog match, force
     // the vehicle into Inactive + 'pending_catalog' and reject any payload
@@ -12866,13 +12870,58 @@ app.post(
         if (!Array.isArray(items)) {
             return c.json({ error: "Expected array of items" }, 400);
         }
-        
-        // Key format: equipment:{vehicleId}:{itemId}
-        // Ensure keys match this format
-        const keys = items.map((item: any) => `equipment:${item.vehicleId}:${item.id}`);
-        await kv.mset(keys, items);
-        
-        return c.json({ success: true, count: items.length });
+
+        // Count inventory draws per inventoryId (1 unit per assigned equipment row)
+        const drawByInventoryId = new Map<string, number>();
+        for (const item of items) {
+          if (!item || typeof item !== "object") continue;
+          const invId = (item as { inventoryId?: unknown }).inventoryId;
+          if (typeof invId === "string" && invId.trim()) {
+            const id = invId.trim();
+            drawByInventoryId.set(id, (drawByInventoryId.get(id) || 0) + 1);
+          }
+        }
+
+        const updatedInventory: Record<string, unknown>[] = [];
+        for (const [invId, draw] of drawByInventoryId) {
+          const stock = await kv.get(`inventory:${invId}`);
+          if (!stock || typeof stock !== "object") {
+            return c.json({ error: `Inventory item not found: ${invId}` }, 404);
+          }
+          if (!belongsToOrg(stock as Record<string, unknown>, c)) {
+            return c.json({ error: "Forbidden", inventoryId: invId }, 403);
+          }
+          const qty = Number((stock as { quantity?: unknown }).quantity) || 0;
+          if (qty < draw) {
+            const name = String((stock as { name?: unknown }).name || invId);
+            return c.json({
+              error: `Insufficient stock for "${name}": need ${draw}, have ${qty}`,
+              inventoryId: invId,
+              available: qty,
+              requested: draw,
+            }, 409);
+          }
+          const next = stampOrg({
+            ...(stock as Record<string, unknown>),
+            quantity: qty - draw,
+            updatedAt: new Date().toISOString(),
+          }, c);
+          await kv.set(`inventory:${invId}`, next);
+          updatedInventory.push(next);
+        }
+
+        const stampedItems = items.map((item: any) => stampOrg(
+          { ...item, id: item.id || crypto.randomUUID() },
+          c,
+        ));
+        const keys = stampedItems.map((item: any) => `equipment:${item.vehicleId}:${item.id}`);
+        await kv.mset(keys, stampedItems);
+
+        return c.json({
+          success: true,
+          count: stampedItems.length,
+          inventory: updatedInventory,
+        });
     } catch(e: any) {
         return c.json({ error: e.message }, 500);
     }
@@ -12893,25 +12942,76 @@ app.get("/make-server-37f42386/inventory", requireAuth(), async (c) => {
     }
 });
 
-app.post("/make-server-37f42386/inventory", async (c) => {
+app.post(
+  "/make-server-37f42386/inventory",
+  requireAuth(),
+  requirePermission("vehicles.edit"),
+  async (c) => {
     try {
         const item = await c.req.json();
         if (!item.id) item.id = crypto.randomUUID();
-        await kv.set(`inventory:${item.id}`, stampOrg(item, c));
-        return c.json({ success: true, data: item });
+        // Cross-tenant: refuse overwrite of another org's row
+        const existing = await kv.get(`inventory:${item.id}`);
+        if (existing && !belongsToOrg(existing as Record<string, unknown>, c)) {
+          return c.json({ error: "Forbidden" }, 403);
+        }
+        const stamped = stampOrg(item, c);
+        await kv.set(`inventory:${item.id}`, stamped);
+        return c.json({ success: true, data: stamped });
     } catch(e: any) {
         return c.json({ error: e.message }, 500);
     }
 });
 
-app.post("/make-server-37f42386/inventory/bulk", async (c) => {
+app.post(
+  "/make-server-37f42386/inventory/bulk",
+  requireAuth(),
+  requirePermission("vehicles.edit"),
+  async (c) => {
     try {
         const items = await c.req.json();
         if (!Array.isArray(items)) return c.json({ error: "Expected array" }, 400);
-        
-        const keys = items.map((i: any) => `inventory:${i.id}`);
-        await kv.mset(keys, items);
-        return c.json({ success: true, count: items.length });
+
+        const stampedItems: Record<string, unknown>[] = [];
+        const keys: string[] = [];
+        for (const raw of items) {
+          if (!raw || typeof raw !== "object") {
+            return c.json({ error: "Each item must be an object" }, 400);
+          }
+          const item = { ...(raw as Record<string, unknown>) };
+          if (!item.id || typeof item.id !== "string") {
+            item.id = crypto.randomUUID();
+          }
+          // Client-controlled keys: validate no other-org overwrite
+          const existing = await kv.get(`inventory:${item.id}`);
+          if (existing && !belongsToOrg(existing as Record<string, unknown>, c)) {
+            return c.json({ error: "Forbidden", id: item.id }, 403);
+          }
+          const stamped = stampOrg(item, c);
+          keys.push(`inventory:${stamped.id}`);
+          stampedItems.push(stamped);
+        }
+        await kv.mset(keys, stampedItems);
+        return c.json({ success: true, count: stampedItems.length, data: stampedItems });
+    } catch(e: any) {
+        return c.json({ error: e.message }, 500);
+    }
+});
+
+app.delete(
+  "/make-server-37f42386/inventory/:id",
+  requireAuth(),
+  requirePermission("vehicles.edit"),
+  async (c) => {
+    try {
+        const id = c.req.param("id");
+        const existing = await kv.get(`inventory:${id}`);
+        if (!existing) return c.json({ error: "Not found" }, 404);
+        if (!belongsToOrg(existing as Record<string, unknown>, c)) {
+          return c.json({ error: "Forbidden" }, 403);
+        }
+        await kv.del(`inventory:${id}`);
+        return c.json({ success: true });
     } catch(e: any) {
         return c.json({ error: e.message }, 500);
     }

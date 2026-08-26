@@ -1022,6 +1022,12 @@ export function LogMaintenanceServiceDialog({
                       <span className="text-sm font-medium text-slate-900 leading-tight">
                         {pkg.shortLabel}
                       </span>
+                      {pkg.dueKind ? (
+                        <span className="text-[10px] text-slate-500 uppercase tracking-wide">
+                          {pkg.dueKind.replace(/_/g, " ")}
+                          {pkg.templateId ? ` · tpl ${pkg.templateId.slice(0, 8)}` : ""}
+                        </span>
+                      ) : null}
                     </button>
                   ))}
                 </div>

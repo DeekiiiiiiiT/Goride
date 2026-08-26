@@ -378,6 +378,7 @@ export type VehicleProfitRow = {
   profit: number;
   marginPct: number;
   hasAttributedCosts: boolean;
+  distanceKm: number;
 };
 
 export function profitByVehicle(
@@ -388,15 +389,18 @@ export function profitByVehicle(
 ): VehicleProfitRow[] {
   const periodTrips = filterTripsInPeriod(trips, period);
   const revByVid = new Map<string, number>();
+  const distByVid = new Map<string, number>();
   for (const t of periodTrips) {
     if (!t.vehicleId || t.vehicleId === 'unknown') continue;
     revByVid.set(t.vehicleId, (revByVid.get(t.vehicleId) || 0) + getTripGrossRevenue(t));
+    distByVid.set(t.vehicleId, (distByVid.get(t.vehicleId) || 0) + (t.distance || 0));
   }
   const ids = new Set([...revByVid.keys(), ...costsByVehicle.keys()]);
   const rows: VehicleProfitRow[] = [];
   for (const id of ids) {
     const v = vehicles.find((x) => x.id === id);
     const revenue = revByVid.get(id) || 0;
+    const distanceKm = distByVid.get(id) || 0;
     const costs = costsByVehicle.get(id);
     const attributedCosts = costs?.total ?? 0;
     const hasAttributedCosts = !!costs && costs.total > 0.005;
@@ -410,6 +414,7 @@ export function profitByVehicle(
       profit,
       marginPct: revenue > 0 ? (profit / revenue) * 100 : 0,
       hasAttributedCosts,
+      distanceKm,
     });
   }
   return rows.sort((a, b) => b.revenue - a.revenue);

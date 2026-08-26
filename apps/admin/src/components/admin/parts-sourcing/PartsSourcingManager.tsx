@@ -18,7 +18,10 @@ import {
   listPartFitment,
   listPartMasters,
   listPartOffers,
+  listPartsSourcingRequests,
   listSuppliers,
+  updatePartsSourcingRequest,
+  type PartsSourcingRequestRow,
 } from "../../../services/partSourcingService";
 import type {
   PartCategoryRecord,
@@ -103,9 +106,19 @@ export function PartsSourcingManager() {
   const [offers, setOffers] = useState<SupplierPartOfferRecord[]>([]);
   const [fitments, setFitments] = useState<PartFitmentRecord[]>([]);
   const [catalog, setCatalog] = useState<VehicleCatalogRecord[]>([]);
+  const [fleetRequests, setFleetRequests] = useState<PartsSourcingRequestRow[]>([]);
 
   const [partsCategoryFilter, setPartsCategoryFilter] = useState<string>("");
   const [fitmentCatalogFilter, setFitmentCatalogFilter] = useState<string>("");
+
+  const reloadFleetRequests = useCallback(async () => {
+    if (!token) return;
+    try {
+      setFleetRequests(await listPartsSourcingRequests(token, "open"));
+    } catch {
+      setFleetRequests([]);
+    }
+  }, [token]);
 
   const reloadCategories = useCallback(async () => {
     if (!token) return;
@@ -168,7 +181,8 @@ export function PartsSourcingManager() {
     if (!token) return;
     void reloadCategories();
     void reloadCatalog();
-  }, [token, reloadCategories, reloadCatalog]);
+    void reloadFleetRequests();
+  }, [token, reloadCategories, reloadCatalog, reloadFleetRequests]);
 
   // --- Category dialog ---
   const [catOpen, setCatOpen] = useState(false);
@@ -397,6 +411,49 @@ export function PartsSourcingManager() {
           Refresh
         </Button>
       </div>
+
+      {fleetRequests.length > 0 && (
+        <div className="rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50/60 dark:bg-amber-950/20 p-4 space-y-3">
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="font-semibold text-sm">Fleet parts requests ({fleetRequests.length} open)</h2>
+            <Button type="button" size="sm" variant="ghost" onClick={() => void reloadFleetRequests()}>
+              Refresh queue
+            </Button>
+          </div>
+          <ul className="space-y-2">
+            {fleetRequests.map((r) => (
+              <li
+                key={r.id}
+                className="flex flex-col sm:flex-row sm:items-center gap-2 rounded-lg border border-amber-200/80 bg-white/70 dark:bg-slate-900/40 px-3 py-2 text-sm"
+              >
+                <div className="min-w-0 flex-1">
+                  <p className="font-medium truncate">{r.need_text}</p>
+                  <p className="text-xs text-slate-500 font-mono">
+                    {r.vehicle_id} · {r.organization_id} · {new Date(r.created_at).toLocaleString()}
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={async () => {
+                    if (!token) return;
+                    try {
+                      await updatePartsSourcingRequest(token, r.id, "resolved");
+                      toast.success("Marked resolved");
+                      await reloadFleetRequests();
+                    } catch (e: unknown) {
+                      toast.error(e instanceof Error ? e.message : "Failed");
+                    }
+                  }}
+                >
+                  Resolve
+                </Button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       <Tabs value={mainTab} onValueChange={(v) => setMainTab(v as MainTab)} className="w-full">
         <TabsList className="flex flex-wrap h-auto gap-1 bg-slate-100 dark:bg-slate-900/70 p-1 rounded-xl border border-slate-200 dark:border-slate-700">

@@ -45,6 +45,8 @@ export type NavChild = {
   label: string;
   icon: typeof LayoutDashboard;
   href?: string;
+  /** Optional live badge (e.g. open pending count). */
+  badgeCount?: number;
 };
 
 export const NAV_ITEMS = [{ id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard }];

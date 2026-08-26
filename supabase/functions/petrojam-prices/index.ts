@@ -241,9 +241,31 @@ app.post("/cron/sync-latest", async (c) => {
   const serviceKey = (Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "").trim();
   const token = authHeader.replace(/^Bearer\s+/i, "").trim();
   const headerCron = (c.req.header("x-fleet-cron-secret") || c.req.header("x-cron-secret") || "").trim();
-  const ok =
-    (!!token && !!serviceKey && token === serviceKey) ||
-    (!!cronSecret && (token === cronSecret || headerCron === cronSecret));
+  const serviceMatch = !!token && !!serviceKey && token === serviceKey;
+  const cronMatch = !!cronSecret && (token === cronSecret || headerCron === cronSecret);
+  const ok = serviceMatch || cronMatch;
+  // #region agent log
+  logLine({
+    event: "cron_auth_debug",
+    hypothesisId: "D",
+    sessionId: "560a25",
+    hasToken: !!token,
+    tokenLen: token.length,
+    tokenPrefix3: token.slice(0, 3),
+    tokenStartsEyJ: token.startsWith("eyJ"),
+    hasServiceKey: !!serviceKey,
+    serviceKeyLen: serviceKey.length,
+    serviceKeyPrefix3: serviceKey.slice(0, 3),
+    hasCronSecret: !!cronSecret,
+    hasHeaderCron: !!headerCron,
+    serviceMatch,
+    cronMatch,
+  });
+  // #endregion
+  if (!serviceKey && !cronSecret) {
+    logLine({ event: "cron_misconfigured", hypothesisId: "F" });
+    return c.json({ error: "server_misconfigured", message: "No SUPABASE_SERVICE_ROLE_KEY or CRON_SECRET in function env" }, 500);
+  }
   if (!ok) {
     logLine({ event: "cron_unauthorized", hasToken: !!token, hasServiceKey: !!serviceKey, hasCronSecret: !!cronSecret });
     return c.json({ error: "unauthorized" }, 401);

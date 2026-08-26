@@ -50,6 +50,24 @@ const STATUS_FILTER_OPTIONS = [
   { value: "superseded", label: "Superseded" },
 ] as const;
 
+function ageHours(iso: string): number {
+  const t = new Date(iso).getTime();
+  if (!Number.isFinite(t)) return 0;
+  return Math.max(0, (Date.now() - t) / 3_600_000);
+}
+
+function formatAge(hours: number): string {
+  if (hours < 1) return `${Math.round(hours * 60)}m`;
+  if (hours < 48) return `${Math.round(hours)}h`;
+  return `${Math.round(hours / 24)}d`;
+}
+
+function slaBadgeClass(hours: number): string {
+  if (hours >= 72) return "bg-rose-100 text-rose-900 border-rose-200";
+  if (hours >= 24) return "bg-amber-100 text-amber-900 border-amber-200";
+  return "bg-slate-100 text-slate-700 border-slate-200";
+}
+
 export function PendingVehicleCatalogManager() {
   const { session } = useAuth();
   const token = session?.access_token;
@@ -234,6 +252,7 @@ export function PendingVehicleCatalogManager() {
             <TableHeader>
               <TableRow>
                 <TableHead>Submitted</TableHead>
+                <TableHead>Age</TableHead>
                 <TableHead>Org</TableHead>
                 <TableHead>Fleet vehicle id</TableHead>
                 <TableHead>Proposed</TableHead>
@@ -244,15 +263,22 @@ export function PendingVehicleCatalogManager() {
             <TableBody>
               {items.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center text-slate-500 py-12">
+                  <TableCell colSpan={7} className="text-center text-slate-500 py-12">
                     No pending requests.
                   </TableCell>
                 </TableRow>
               ) : (
-                items.map((row) => (
+                items.map((row) => {
+                  const hours = ageHours(row.created_at);
+                  return (
                   <TableRow key={row.id}>
                     <TableCell className="text-sm whitespace-nowrap">
                       {new Date(row.created_at).toLocaleString()}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className={slaBadgeClass(hours)}>
+                        {formatAge(hours)}
+                      </Badge>
                     </TableCell>
                     <TableCell className="font-mono text-xs max-w-[120px] truncate" title={row.organization_id}>
                       {row.organization_id}
@@ -285,7 +311,8 @@ export function PendingVehicleCatalogManager() {
                       </Button>
                     </TableCell>
                   </TableRow>
-                ))
+                  );
+                })
               )}
             </TableBody>
           </Table>

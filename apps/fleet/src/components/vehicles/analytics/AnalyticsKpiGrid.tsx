@@ -1,7 +1,7 @@
 import React from 'react';
 import { Badge } from '../../ui/badge';
 import { Card, CardContent } from '../../ui/card';
-import { CarFront, Gauge, Route, Wallet } from 'lucide-react';
+import { CarFront, Gauge, Route } from 'lucide-react';
 import type { AnalyticsKpis } from '../../../hooks/useVehicleAnalytics';
 import { formatJMD } from '../../../utils/formatJMD';
 
@@ -85,9 +85,7 @@ export function AnalyticsKpiGrid({ kpis }: { kpis: AnalyticsKpis }) {
                     : 'Only vehicles with assigned ledger costs'}
                 </p>
               </div>
-              <div className="p-2 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 rounded-lg">
-                <Wallet className="w-4 h-4" />
-              </div>
+              <Sparkline values={kpis.profitSpark} stroke="#10b981" />
             </div>
           </CardContent>
         </Card>
@@ -95,7 +93,7 @@ export function AnalyticsKpiGrid({ kpis }: { kpis: AnalyticsKpis }) {
         <Card>
           <CardContent className="p-4 md:p-6 flex flex-col gap-3 min-h-[120px]">
             <div className="flex justify-between items-start gap-2">
-              <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Active Vehicles</span>
+              <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Drove this period</span>
               <Badge variant="secondary" className="text-[10px] font-bold">
                 {kpis.activeRatePct.toFixed(0)}%
               </Badge>
@@ -108,7 +106,7 @@ export function AnalyticsKpiGrid({ kpis }: { kpis: AnalyticsKpis }) {
                 <p className="text-[11px] text-slate-400">
                   {kpis.avgUtilizationPct != null
                     ? `Avg utilization ${kpis.avgUtilizationPct.toFixed(0)}% (imported hours)`
-                    : 'Completed ≥1 trip in period'}
+                    : 'Completed ≥1 trip in selected period'}
                 </p>
               </div>
               <CarFront className="w-5 h-5 text-slate-400" />

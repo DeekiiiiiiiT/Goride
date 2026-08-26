@@ -121,12 +121,23 @@ export async function updateMaintenanceTemplate(
   return data.item as MaintenanceTaskTemplate;
 }
 
-export async function deleteMaintenanceTemplate(accessToken: string, templateId: string): Promise<void> {
+export async function deleteMaintenanceTemplate(
+  accessToken: string,
+  templateId: string,
+): Promise<{ archived: boolean; usageCount: number }> {
   const res = await edgeFetch(`${base()}/admin/maintenance-templates/${templateId}`, {
     method: "DELETE",
     headers: edgeHeaders(accessToken),
   });
   if (!res.ok) throw new Error(String(await parseError(res)));
+  const data = (await res.json().catch(() => ({}))) as {
+    archived?: boolean;
+    usageCount?: number;
+  };
+  return {
+    archived: data.archived !== false,
+    usageCount: Number(data.usageCount) || 0,
+  };
 }
 
 export async function migrateMaintenanceFromKv(accessToken: string): Promise<{

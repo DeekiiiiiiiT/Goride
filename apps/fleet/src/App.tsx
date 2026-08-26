@@ -54,7 +54,7 @@ import { PermissionGate } from './components/auth/PermissionGate';
 import { PAGE_PERMISSION_MAP } from './utils/permissions';
 
 import { isPassengerOnlyMetadataRole } from '@roam/auth-client';
-import { MaintenancePage } from './components/MaintenancePage';
+import { PlatformMaintenanceSplash } from './components/PlatformMaintenanceSplash';
 import { FeatureFlagProvider } from './components/auth/FeatureFlagContext';
 import { WrongProductLineGate } from './components/auth/WrongProductLineGate';
 import { FleetProductAdminPortal } from './admin/FleetProductAdminPortal';
@@ -369,7 +369,7 @@ function AppContent() {
   const isPlatformUser = role === 'superadmin' || ['platform_owner', 'platform_support', 'platform_analyst'].includes(resolvedRole || '');
   if (maintenanceStatus.checked && maintenanceStatus.active && !isPlatformUser) {
     return (
-      <MaintenancePage
+      <PlatformMaintenanceSplash
         message={maintenanceStatus.message}
         platformName={maintenanceStatus.platformName}
       />

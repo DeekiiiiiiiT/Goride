@@ -46,6 +46,9 @@ export const equipmentService = {
       headers: await requireAuthHeaders(),
       body: JSON.stringify(items)
     });
-    if (!response.ok) throw new Error("Failed to bulk assign equipment");
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({}));
+      throw new Error((body as { error?: string }).error || "Failed to bulk assign equipment");
+    }
   }
 };

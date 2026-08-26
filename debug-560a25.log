@@ -1,0 +1,4 @@
+{"timestamp":1787766446239,"hypothesisId":"A","data":{"body":"{\"service\":\"petrojam-prices\",\"status\":\"ok\",\"source\":\"https://www.petrojam.com/price/\",\"syncModes\":[\"latest\",\"year\",\"month\",\"all\"]}","httpCode":"200"},"message":"health-no-auth","sessionId":"560a25","location":"live-probe"}
+{"timestamp":1787766446483,"hypothesisId":"A","data":{"body":"{\"error\":\"unauthorized\"}","httpCode":"401"},"message":"cron-no-auth","sessionId":"560a25","location":"live-probe"}
+{"timestamp":1787766446730,"hypothesisId":"C","data":{"body":"{\"error\":\"unauthorized\"}","httpCode":"401"},"message":"cron-bogus-jwt","sessionId":"560a25","location":"live-probe"}
+{"timestamp":1787766446808,"hypothesisId":"C","data":{"body":"{\"message\":\"Invalid API key\",\"hint\":\"Double check your API key.\"}","httpCode":"401"},"message":"cron-sb-secret-format","sessionId":"560a25","location":"live-probe"}

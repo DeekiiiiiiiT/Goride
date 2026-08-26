@@ -31,6 +31,8 @@ export interface TollTag {
   providerBalanceDate?: string;   // Phase 5: When the provider balance was last checked
   lowBalanceThreshold?: number;   // Phase 6: Alert when balance drops below this (default: 500)
   lastCalculatedBalance?: number; // Phase 6: Cached calculated balance for list-view badges
+  lastBalanceSyncedAt?: string;
+  /** @deprecated Tag view is now tag-only (Option A); tag-vs-cash utilization is no longer computed or shown. Retained for backward compat with stored records. */
   lastUtilizationPercent?: number; // Phase 7: Cached tag utilization % for list-view badges
   assignmentHistory?: Array<{     // Phase 8: Tag assignment audit trail
     vehicleId: string;
@@ -104,6 +106,22 @@ export interface Vehicle {
   status: VehicleStatus;
   currentDriverId?: string;
   currentDriverName?: string;
+
+  /** Uber Vehicles API id — set by Settings → Uber Fleet sync. */
+  uberVehicleId?: string;
+  uberOwnerId?: string;
+  uberComplianceStatus?: string;
+  uberAssignedDriverIds?: string[];
+  uberLastSyncedAt?: string;
+
+  /** Who had this vehicle over time — used to attribute fuel fills on shared cars. */
+  driverAssignmentHistory?: Array<{
+    driverId: string;
+    driverName: string;
+    assignedAt: string;
+    unassignedAt?: string;
+    assignedBy?: string;
+  }>;
   
   // Snapshot Metrics (Computed from daily metrics)
   metrics: {
@@ -135,6 +153,15 @@ export interface Vehicle {
   bodyType?: string;
   engineNumber?: string;
   ccRating?: string;
+  /**
+   * Jamaica fitness / permit classification (Expense Hub Fitness rules).
+   * Private | Motorcycle | Commercial | PPV | Trailer
+   */
+  usageCategory?: 'Private' | 'Motorcycle' | 'Commercial' | 'PPV' | 'Trailer';
+  /** Jamaica plate class colour: White (private), Green (commercial), Red (PPV). */
+  plateClass?: 'White' | 'Green' | 'Red';
+  /** True when commercial vehicle is on first registration (brand-new fitness tier). */
+  fitnessFirstRegistration?: boolean;
   
   // Registration Certificate
   registrationExpiry?: string;
@@ -158,15 +185,6 @@ export interface Vehicle {
   tollClassId?: string;
   /** True after backfill default until manager confirms. */
   tollClassNeedsReview?: boolean;
-
-  /** Who had this vehicle over time — used to attribute fuel fills on shared cars. */
-  driverAssignmentHistory?: Array<{
-    driverId: string;
-    driverName: string;
-    assignedAt: string;
-    unassignedAt?: string;
-    assignedBy?: string;
-  }>;
 
   // Fuel Configuration
   /** @deprecated Prefer Driver.fuelScenarioId — kept for dual-read cutover only. */

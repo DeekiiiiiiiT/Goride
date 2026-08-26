@@ -91,7 +91,9 @@ export function AnalyticsMaintenanceSection({
         <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 space-y-0">
           <div>
             <CardTitle className="text-lg">Maintenance Alerts</CardTitle>
-            <CardDescription>Overdue and upcoming service from fleet schedules.</CardDescription>
+            <CardDescription>
+              Fleet-wide (not period-filtered) — overdue and upcoming service from schedules.
+            </CardDescription>
           </div>
           {onNavigate && (
             <Button

@@ -1110,6 +1110,21 @@ export function VehicleDetail({ vehicle, trips, onBack, onAssignDriver, onUpdate
                 <span className="text-xs text-amber-800">
                   Status: <strong>{catalogStatusLabel(effectiveCatalogStatus)}</strong>
                   {catalogPendingRow?.id ? ` \u00B7 Request #${catalogPendingRow.id.slice(0, 8)}` : ''}
+                  {catalogPendingRow?.created_at
+                    ? (() => {
+                        const hours = Math.max(
+                          0,
+                          (Date.now() - new Date(catalogPendingRow.created_at).getTime()) / 3_600_000,
+                        );
+                        const age =
+                          hours < 1
+                            ? `${Math.round(hours * 60)}m`
+                            : hours < 48
+                              ? `${Math.round(hours)}h`
+                              : `${Math.round(hours / 24)}d`;
+                        return ` \u00B7 Waiting ${age} (Awaiting Dominion match)`;
+                      })()
+                    : ''}
                 </span>
               </div>
             </div>
@@ -1178,10 +1193,17 @@ export function VehicleDetail({ vehicle, trips, onBack, onAssignDriver, onUpdate
                                    {showCatalogVerifiedBadge && (
                                      <Badge
                                        className="border-0 bg-emerald-600 text-white hover:bg-emerald-600 gap-1 font-medium shadow-sm"
-                                       title="This vehicle is linked to a motor catalog row (verified)."
+                                       title={
+                                         linkedCatalog
+                                           ? `Linked to catalog ${linkedCatalog.make} ${linkedCatalog.model} (${vehicle.vehicle_catalog_id})`
+                                           : "This vehicle is linked to a motor catalog row (verified)."
+                                       }
                                      >
                                        <ShieldCheck className="h-3.5 w-3.5" aria-hidden />
                                        Catalog verified
+                                       {linkedCatalog
+                                         ? ` · ${linkedCatalog.make} ${linkedCatalog.model}`
+                                         : ""}
                                      </Badge>
                                    )}
                                    {showCatalogLinkBrokenBadge && (

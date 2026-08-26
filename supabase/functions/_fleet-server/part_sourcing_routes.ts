@@ -5,7 +5,7 @@ import type { Context } from "npm:hono";
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import * as kv from "./kv_store.tsx";
 import { requireAuth, requirePermission, assertPlatformStaffResponse } from "./rbac_middleware.ts";
-import { filterByOrg } from "./org_scope.ts";
+import { filterByOrg, getOrgId } from "./org_scope.ts";
 import { resolveCatalogIdForKvVehicle } from "./vehicle_catalog_resolve.ts";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -806,6 +806,104 @@ export function registerPartSourcingRoutes(
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e);
         return c.json({ error: msg }, 500);
+      }
+    },
+  );
+
+  // Fleet → Dominion: missing-part request queue
+  route.post(
+    "/make-server-37f42386/parts-sourcing-requests",
+    requireAuth(),
+    requirePermission("vehicles.edit"),
+    async (c: Context) => {
+      try {
+        const body = (await c.req.json()) as Record<string, unknown>;
+        const vehicleId = String(body.vehicleId ?? "").trim();
+        const needText = String(body.needText ?? "").trim();
+        if (!vehicleId || !needText) {
+          return c.json({ error: "vehicleId and needText are required" }, 400);
+        }
+        const vehicle = await getVehicleFromKv(c, vehicleId);
+        if (!vehicle) return c.json({ error: "Vehicle not found" }, 404);
+        const orgId = String(
+          (vehicle as { organizationId?: string }).organizationId || getOrgId(c) || "",
+        ).trim();
+        if (!orgId) return c.json({ error: "Organization required" }, 400);
+        const rbacUser = c.get("rbacUser") as { id?: string } | undefined;
+        const { data, error } = await supabase
+          .from("parts_sourcing_requests")
+          .insert({
+            organization_id: orgId,
+            vehicle_id: vehicleId,
+            need_text: needText.slice(0, 2000),
+            status: "open",
+            created_by: rbacUser?.id ?? null,
+          })
+          .select("*")
+          .single();
+        if (error) throw error;
+        return c.json({ item: data });
+      } catch (e: unknown) {
+        return c.json({ error: e instanceof Error ? e.message : String(e) }, 500);
+      }
+    },
+  );
+
+  route.get(
+    "/make-server-37f42386/admin/parts-sourcing-requests",
+    requireAuth(),
+    async (c: Context) => {
+      const denied = assertPartSourcingPlatformAccess(c);
+      if (denied) return denied;
+      try {
+        const status = (c.req.query("status") ?? "open").trim();
+        let q = supabase
+          .from("parts_sourcing_requests")
+          .select("*")
+          .order("created_at", { ascending: true })
+          .limit(100);
+        if (status !== "all") q = q.eq("status", status);
+        const { data, error } = await q;
+        if (error) throw error;
+        return c.json({ items: data || [] });
+      } catch (e: unknown) {
+        return c.json({ error: e instanceof Error ? e.message : String(e) }, 500);
+      }
+    },
+  );
+
+  route.patch(
+    "/make-server-37f42386/admin/parts-sourcing-requests/:id",
+    requireAuth(),
+    async (c: Context) => {
+      const denied = assertPartSourcingPlatformAccess(c);
+      if (denied) return denied;
+      try {
+        const id = c.req.param("id");
+        const body = (await c.req.json()) as Record<string, unknown>;
+        const status = String(body.status ?? "").trim();
+        if (!["open", "in_progress", "resolved", "rejected"].includes(status)) {
+          return c.json({ error: "Invalid status" }, 400);
+        }
+        const patch: Record<string, unknown> = {
+          status,
+          updated_at: new Date().toISOString(),
+          admin_note: body.adminNote != null ? String(body.adminNote).slice(0, 2000) : undefined,
+        };
+        if (status === "resolved" || status === "rejected") {
+          patch.resolved_at = new Date().toISOString();
+        }
+        const { data, error } = await supabase
+          .from("parts_sourcing_requests")
+          .update(patch)
+          .eq("id", id)
+          .select("*")
+          .maybeSingle();
+        if (error) throw error;
+        if (!data) return c.json({ error: "Not found" }, 404);
+        return c.json({ item: data });
+      } catch (e: unknown) {
+        return c.json({ error: e instanceof Error ? e.message : String(e) }, 500);
       }
     },
   );

@@ -20,6 +20,7 @@ import {
 } from "./vehicle_catalog_schema_fallback.ts";
 import { filterCatalogRowsByFleetMonth, type CatalogVariantRow } from "../../../apps/fleet/src/utils/vehicleCatalogResolution.ts";
 import { parseCatalogMonthFromUnknown } from "../../../apps/fleet/src/utils/catalogMonthParse.ts";
+import { isEnforcementEnabled, listRecentCatalogGateEvents } from "./vehicle_catalog_gate.ts";
 
 const KEYS = [
   "make", "model", "production_start_year", "production_end_year", "production_start_month", "production_end_month",
@@ -437,7 +438,9 @@ export function registerPendingVehicleCatalogRoutes(
         } else if (["pending", "needs_info", "approved", "rejected", "superseded"].includes(status)) {
           q = q.eq("status", status);
         }
-        q = q.order("created_at", { ascending: false }).range(offset, offset + limit - 1);
+        // Open queue: oldest first (SLA). Closed statuses: newest first.
+        const ascending = status === "open" || status === "pending" || status === "needs_info";
+        q = q.order("created_at", { ascending }).range(offset, offset + limit - 1);
         const { data, error, count } = await q;
         if (error) throw error;
         return c.json({ items: data || [], total: count ?? 0 });
@@ -810,6 +813,36 @@ export function registerPendingVehicleCatalogRoutes(
           catalogStatus: "matched",
           bootstrap: run,
         });
+      } catch (e: unknown) {
+        return c.json({ error: e instanceof Error ? e.message : String(e) }, 500);
+      }
+    },
+  );
+
+  route.get(
+    "/make-server-37f42386/admin/catalog-gate-status",
+    requireAuth(),
+    async (c) => {
+      const denied = assertPlatformVehicle(c);
+      if (denied) return denied;
+      const enforcing = isEnforcementEnabled();
+      return c.json({
+        enforcing,
+        env: Deno.env.get("ENFORCE_VEHICLE_CATALOG_GATE") ?? "true",
+      });
+    },
+  );
+
+  route.get(
+    "/make-server-37f42386/admin/catalog-gate-events",
+    requireAuth(),
+    async (c) => {
+      const denied = assertPlatformVehicle(c);
+      if (denied) return denied;
+      try {
+        const limit = Math.min(parseInt(c.req.query("limit") ?? "50", 10) || 50, 200);
+        const items = await listRecentCatalogGateEvents(limit);
+        return c.json({ items, enforcing: isEnforcementEnabled() });
       } catch (e: unknown) {
         return c.json({ error: e instanceof Error ? e.message : String(e) }, 500);
       }

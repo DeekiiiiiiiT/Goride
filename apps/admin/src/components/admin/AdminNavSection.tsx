@@ -85,7 +85,17 @@ export function AdminNavSection({
               >
                 <ChildIcon className="w-4 h-4 shrink-0" />
                 <span className="truncate">{child.label}</span>
-                {active && <ChevronRight className="w-3 h-3 ml-auto text-amber-500/60 dark:text-amber-400/60" />}
+                {typeof child.badgeCount === 'number' && child.badgeCount > 0 && (
+                  <span className="ml-auto mr-1 min-w-[1.25rem] rounded-full bg-amber-500 px-1.5 py-0.5 text-center text-[10px] font-bold text-white">
+                    {child.badgeCount > 99 ? '99+' : child.badgeCount}
+                  </span>
+                )}
+                {active && typeof child.badgeCount !== 'number' && (
+                  <ChevronRight className="w-3 h-3 ml-auto text-amber-500/60 dark:text-amber-400/60" />
+                )}
+                {active && typeof child.badgeCount === 'number' && child.badgeCount <= 0 && (
+                  <ChevronRight className="w-3 h-3 ml-auto text-amber-500/60 dark:text-amber-400/60" />
+                )}
               </button>
             );
           })}

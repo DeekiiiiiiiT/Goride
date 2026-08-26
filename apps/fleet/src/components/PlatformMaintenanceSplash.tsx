@@ -2,13 +2,18 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Wrench, RefreshCw, ShieldCheck } from 'lucide-react';
 import { API_ENDPOINTS } from '../services/apiConfig';
 
-interface MaintenancePageProps {
+interface PlatformMaintenanceSplashProps {
   message?: string;
   platformName?: string;
   onStatusChange?: () => void;
 }
 
-export function MaintenancePage({ message, platformName = 'Roam Fleet', onStatusChange }: MaintenancePageProps) {
+/** Platform-wide "Under Maintenance" takeover — not vehicle maintenance UI. */
+export function PlatformMaintenanceSplash({
+  message,
+  platformName = 'Roam Fleet',
+  onStatusChange,
+}: PlatformMaintenanceSplashProps) {
   const [checking, setChecking] = useState(false);
   const [countdown, setCountdown] = useState(30);
 
@@ -29,7 +34,6 @@ export function MaintenancePage({ message, platformName = 'Roam Fleet', onStatus
     }
   }, [onStatusChange]);
 
-  // Auto-retry every 30 seconds
   useEffect(() => {
     const timer = setInterval(() => {
       setCountdown(prev => {
@@ -45,7 +49,6 @@ export function MaintenancePage({ message, platformName = 'Roam Fleet', onStatus
 
   return (
     <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center px-4">
-      {/* Animated wrench icon */}
       <div className="relative mb-8">
         <div className="w-24 h-24 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center">
           <Wrench className="w-12 h-12 text-amber-400 animate-pulse" />
@@ -53,13 +56,11 @@ export function MaintenancePage({ message, platformName = 'Roam Fleet', onStatus
         <div className="absolute -top-1 -right-1 w-4 h-4 bg-amber-500 rounded-full animate-ping" />
       </div>
 
-      {/* Title */}
       <h1 className="text-3xl font-bold text-white mb-2 text-center">Under Maintenance</h1>
       <p className="text-slate-400 text-sm mb-6 text-center max-w-md">
         {message || "We're performing scheduled maintenance. Back soon!"}
       </p>
 
-      {/* Status card */}
       <div className="bg-slate-900 border border-slate-800 rounded-xl px-6 py-4 max-w-sm w-full mb-6">
         <div className="flex items-center gap-3 mb-3">
           <div className="w-2 h-2 bg-amber-500 rounded-full animate-pulse" />
@@ -71,7 +72,6 @@ export function MaintenancePage({ message, platformName = 'Roam Fleet', onStatus
         </p>
       </div>
 
-      {/* Retry button */}
       <button
         onClick={checkStatus}
         disabled={checking}
@@ -81,7 +81,6 @@ export function MaintenancePage({ message, platformName = 'Roam Fleet', onStatus
         {checking ? 'Checking...' : `Retry (auto in ${countdown}s)`}
       </button>
 
-      {/* Admin login link */}
       <div className="mt-10 flex items-center gap-2 text-xs text-slate-600">
         <ShieldCheck className="w-3.5 h-3.5" />
         <a
@@ -94,3 +93,6 @@ export function MaintenancePage({ message, platformName = 'Roam Fleet', onStatus
     </div>
   );
 }
+
+/** @deprecated Use PlatformMaintenanceSplash — name collided with vehicle maintenance. */
+export const MaintenancePage = PlatformMaintenanceSplash;

@@ -676,12 +676,36 @@ export const api = {
     return response.json();
   },
 
-  async getVehicles() {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/vehicles`, {
+  async getVehiclesPage(opts?: { limit?: number; offset?: number }) {
+    const limit = opts?.limit ?? 500;
+    const offset = opts?.offset ?? 0;
+    const qs = new URLSearchParams({
+      limit: String(limit),
+      offset: String(offset),
+    });
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/vehicles?${qs}`, {
         headers: await getHeaders(null),
     });
     if (!response.ok) throw new Error("Failed to fetch vehicles");
     return response.json();
+  },
+
+  async fetchAllVehicles(): Promise<{ vehicles: any[]; truncated: boolean }> {
+    const pageSize = 500;
+    const maxPages = 40;
+    const vehicles: any[] = [];
+    for (let i = 0; i < maxPages; i++) {
+      const page = await this.getVehiclesPage({ limit: pageSize, offset: i * pageSize });
+      const rows = Array.isArray(page) ? page : [];
+      vehicles.push(...rows);
+      if (rows.length < pageSize) return { vehicles, truncated: false };
+    }
+    return { vehicles, truncated: true };
+  },
+
+  async getVehicles() {
+    const { vehicles } = await this.fetchAllVehicles();
+    return vehicles;
   },
 
   async saveVehicle(vehicle: any) {

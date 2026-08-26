@@ -393,3 +393,22 @@ Neither inventory route carries `requirePermission`. `equipment` right next door
 ---
 
 *Audit only — no files were modified. Every finding is anchored to a specific file and line. Items 1 and 2 in §I are the ones I would act on today: one is an open write endpoint, the other is user-visible dead UI plus abandoned assistant scaffolding left in shipped source.*
+
+---
+
+## Remediation status (2026-08-26)
+
+Implementation landed in-repo per Vehicle System Remediation Program:
+
+| Phase | Status | What shipped |
+|---|---|---|
+| 0 Security | Done | `requireAuth` + `vehicles.edit` + `stampOrg` on inventory POST/bulk; DELETE `/inventory/:id`; `belongsToOrg` on vehicle update |
+| 1 Inventory product | Done | Edit/Delete wired; stock decrement on equipment bulk-assign; `formatJMD`; Seed gated to platform roles + confirm; `deleteStock` implemented |
+| 2 Ceilings + types | Done | `fetchAllVehicles` / paginated `getVehicles`; canonical `Vehicle` in `@roam/types`; pending/parts types re-exported |
+| 3 Analytics truth | Done | `profitSpark` from net daily profit; “Drove this period” labels; full refresh; local date labels; fleet-wide alert copy |
+| 4 Sync hygiene | Done | Dead fleet admin catalog/parts copies removed; checklist options unified; splash renamed to `PlatformMaintenanceSplash`; Dominion gate fork documented |
+| 5 Ops safety UX | Done | Template soft-archive + usage count; pending age/SLA + oldest-first + nav badge; `parts_sourcing_requests` queue Fleet→Dominion |
+| 6 Visibility | Done | `extractor_miss` gate events; Dominion Catalog Gate panel + enforcement-off banner; pending wait age on Fleet Vehicle Detail |
+| 7 Polish | Done | Catalog match label on Vehicle Detail; TCO cost-per-km panel; schedule package `dueKind`/template id transparency |
+
+**Ops follow-up:** apply migration `20260826140000_vehicle_remediation_templates_parts_requests.sql` (template `archived_at` + `parts_sourcing_requests`) and redeploy `make-server-37f42386`.
