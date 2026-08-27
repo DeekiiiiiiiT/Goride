@@ -122,8 +122,8 @@ export function DriverShell({ forcePassengerRides = false }: { forcePassengerRid
         driverRecord?.vehicleId ||
         driverRecord?.vehicle;
       if (!vehicleId || vehicleId === 'unknown') {
-        toast.error('No vehicle assigned — ask fleet to assign your vehicle before check-in');
-        return;
+        // Throw so the modal leaves SUBMITTING (silent return left an endless spinner)
+        throw new Error('No vehicle assigned — ask fleet to assign your vehicle before check-in');
       }
       await submitCheckIn(odometer, photo, vehicleId, method, reviewStatus, aiReading, manualReadingReason);
       setCheckInOpen(false);

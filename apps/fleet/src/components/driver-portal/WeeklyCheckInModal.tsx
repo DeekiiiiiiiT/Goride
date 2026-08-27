@@ -96,28 +96,44 @@ export function WeeklyCheckInModal({ isOpen, onClose, onSubmit, isLoading, isFor
         }
     };
 
-    const handleConfirmAI = async () => {
+    const runSubmit = async (
+        nextMethod: 'ai_verified' | 'manual_override',
+        nextReview: 'auto_approved' | 'pending_review',
+        reason?: string,
+        fallbackStep: CheckInStep = 'CONFIRM_AI',
+    ) => {
+        setErrorMsg(null);
         setStep('SUBMITTING');
-        await onSubmit(
-            parseFloat(odometer),
-            photo,
-            'ai_verified',
-            'auto_approved',
-            scanResult?.reading || null,
-            undefined
-        );
+        try {
+            await onSubmit(
+                parseFloat(odometer),
+                photo,
+                nextMethod,
+                nextReview,
+                scanResult?.reading || null,
+                reason,
+            );
+        } catch (err: any) {
+            const msg =
+                typeof err?.message === 'string' && err.message.trim()
+                    ? err.message
+                    : 'Failed to save check-in. Please try again.';
+            setErrorMsg(msg);
+            setStep(fallbackStep);
+        }
+    };
+
+    const handleConfirmAI = async () => {
+        await runSubmit('ai_verified', 'auto_approved', undefined, 'CONFIRM_AI');
     };
 
     const handleManualSubmit = async () => {
         if (!odometer) return;
-        setStep('SUBMITTING');
-        await onSubmit(
-            parseFloat(odometer),
-            photo,
+        await runSubmit(
             'manual_override',
             'pending_review',
-            scanResult?.reading || null,
-            manualReason || 'User manual override'
+            manualReason || 'User manual override',
+            'MANUAL_ENTRY',
         );
     };
 
@@ -248,11 +264,23 @@ export function WeeklyCheckInModal({ isOpen, onClose, onSubmit, isLoading, isFor
                             <p className="text-center text-sm text-slate-500">
                                 Please verify this matches the dashboard display exactly.
                             </p>
+                            {errorMsg && (
+                                <div className="flex items-center gap-3 p-4 bg-red-50 text-red-700 text-sm rounded-lg border border-red-100">
+                                    <AlertTriangle className="w-5 h-5 shrink-0" />
+                                    {errorMsg}
+                                </div>
+                            )}
                         </div>
                     )}
 
                     {step === 'MANUAL_ENTRY' && (
                         <div className="space-y-6 py-4">
+                            {errorMsg && (
+                                <div className="flex items-center gap-3 p-4 bg-red-50 text-red-700 text-sm rounded-lg border border-red-100">
+                                    <AlertTriangle className="w-5 h-5 shrink-0" />
+                                    {errorMsg}
+                                </div>
+                            )}
                             <div className="flex items-start gap-4 p-4 bg-amber-50 text-amber-900 text-sm rounded-xl border border-amber-200 shadow-sm">
                                 <div className="bg-amber-100 p-2 rounded-full shrink-0">
                                     <AlertTriangle className="w-5 h-5 text-amber-600" />

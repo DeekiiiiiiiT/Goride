@@ -56,7 +56,10 @@ export function DriverLayout({ children, currentPage, onNavigate, onLogout, isMe
           isForced={true}
           isLoading={checkInLoading}
           onSubmit={async (odo, photo, method, reviewStatus, aiReading, manualReason) => {
-              const vehicleId = driverRecord?.assignedVehicleId || driverRecord?.vehicleId || driverRecord?.vehicle || 'unknown';
+              const vehicleId = driverRecord?.assignedVehicleId || driverRecord?.vehicleId || driverRecord?.vehicle;
+              if (!vehicleId || vehicleId === 'unknown') {
+                throw new Error('No vehicle assigned — ask fleet to assign your vehicle before check-in');
+              }
               await submitCheckIn(odo, photo, vehicleId, method, reviewStatus, aiReading, manualReason);
           }}
       />
