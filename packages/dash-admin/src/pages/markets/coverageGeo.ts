@@ -48,9 +48,15 @@ export function polygonCentroid(polygon: GeoVertex[]): GeoVertex | null {
   return { lat: lat / polygon.length, lng: lng / polygon.length };
 }
 
-/** Sort ring clockwise around centroid so N→S→E→W entry order cannot bow-tie. */
+/**
+ * Sort ring clockwise around centroid so N→S→E→W entry order cannot bow-tie.
+ *
+ * MANUAL CORNERS ONLY — safe for a handful of typed extremes (CoordinateEntryOverlay).
+ * Never apply to imported / official boundaries: angular sort destroys non-star-shaped rings.
+ * Rings with more than 16 vertices are returned unchanged (never scramble imported geometry).
+ */
 export function orderRingClockwise<T extends GeoVertex>(points: T[]): T[] {
-  if (points.length < 3) return points;
+  if (points.length < 3 || points.length > 16) return points;
   const c = polygonCentroid(points);
   if (!c) return points;
   return [...points].sort((a, b) => {
@@ -59,6 +65,24 @@ export function orderRingClockwise<T extends GeoVertex>(points: T[]): T[] {
     const bb = Math.atan2(b.lng - c.lng, b.lat - c.lat);
     return aa - bb;
   });
+}
+
+/** Alias clarifying that orderRingClockwise is for manual corner entry only. */
+export const orderRingClockwiseForManualCorners = orderRingClockwise;
+
+/** Prefer official COD-AB center over vertex-average centroid. */
+export function preferCentroid(
+  official: { lat: number; lng: number } | null,
+  polygon: GeoVertex[],
+): GeoVertex | null {
+  if (
+    official &&
+    Number.isFinite(official.lat) &&
+    Number.isFinite(official.lng)
+  ) {
+    return { lat: official.lat, lng: official.lng };
+  }
+  return polygonCentroid(polygon);
 }
 
 /** Axis-aligned box from farthest N/S/E/W readings (good for “outer limits”). */

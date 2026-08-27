@@ -6,12 +6,18 @@ import {
   draftZonesDifferFromPublished,
   evaluateCoverage,
   isInsideParishFoundation,
+  MAX_EDITABLE_VERTICES,
   normalizeDraftZonesFromAdmin,
   parseAllZonesPayload,
+  parseFoundationGeometry,
+  pointInMultiPolygon,
   pointInPolygon,
+  sanitizeMultiPolygon,
+  sanitizeRing,
   sanitizeVertices,
   zonesToMapPolygons,
   type ActiveCoverageZone,
+  type CoverageMultiPolygon,
   type CoverageZone,
 } from './index';
 
@@ -43,10 +49,65 @@ const CUTOUT: CoverageZone = {
   ],
 };
 
+/** Two islands: west square + east square (simulates Kingston-style MultiPolygon). */
+const MULTI_ISLAND: CoverageMultiPolygon = [
+  {
+    outer: [
+      { lat: 18.0, lng: -77.1 },
+      { lat: 18.0, lng: -77.0 },
+      { lat: 18.1, lng: -77.0 },
+      { lat: 18.1, lng: -77.1 },
+    ],
+    holes: [],
+  },
+  {
+    outer: [
+      { lat: 18.0, lng: -76.9 },
+      { lat: 18.0, lng: -76.8 },
+      { lat: 18.1, lng: -76.8 },
+      { lat: 18.1, lng: -76.9 },
+    ],
+    holes: [],
+  },
+];
+
+/** Outer with a rectangular hole in the middle. */
+const WITH_HOLE: CoverageMultiPolygon = [
+  {
+    outer: [
+      { lat: 18.0, lng: -77.0 },
+      { lat: 18.0, lng: -76.9 },
+      { lat: 18.1, lng: -76.9 },
+      { lat: 18.1, lng: -77.0 },
+    ],
+    holes: [
+      [
+        { lat: 18.04, lng: -76.97 },
+        { lat: 18.04, lng: -76.93 },
+        { lat: 18.06, lng: -76.93 },
+        { lat: 18.06, lng: -76.97 },
+      ],
+    ],
+  },
+];
+
 describe('pointInPolygon', () => {
   it('detects interior and exterior', () => {
     expect(pointInPolygon(18.015, -76.955, ST_INCLUDE.polygon)).toBe(true);
     expect(pointInPolygon(18.0, -76.8, ST_INCLUDE.polygon)).toBe(false);
+  });
+});
+
+describe('pointInMultiPolygon', () => {
+  it('hits any outer part', () => {
+    expect(pointInMultiPolygon(18.05, -77.05, MULTI_ISLAND)).toBe(true);
+    expect(pointInMultiPolygon(18.05, -76.85, MULTI_ISLAND)).toBe(true);
+    expect(pointInMultiPolygon(18.05, -76.95, MULTI_ISLAND)).toBe(false);
+  });
+
+  it('excludes points inside holes', () => {
+    expect(pointInMultiPolygon(18.05, -76.95, WITH_HOLE)).toBe(false);
+    expect(pointInMultiPolygon(18.02, -76.95, WITH_HOLE)).toBe(true);
   });
 });
 
@@ -67,6 +128,31 @@ describe('evaluateCoverage', () => {
     const r = evaluateCoverage(18.0, -76.8, [ST_INCLUDE]);
     expect(r.inZone).toBe(false);
     expect(r.matchedInclude).toBeNull();
+  });
+
+  it('uses multiPolygon when present (second part)', () => {
+    const zone: CoverageZone = {
+      id: 'z-multi',
+      name: 'Islands',
+      market_id: ST_MARKET,
+      kind: 'include',
+      polygon: MULTI_ISLAND[0].outer,
+      multiPolygon: MULTI_ISLAND,
+    };
+    expect(evaluateCoverage(18.05, -76.85, [zone]).inZone).toBe(true);
+    expect(evaluateCoverage(18.05, -76.95, [zone]).inZone).toBe(false);
+  });
+
+  it('treats hole as outside include multiPolygon', () => {
+    const zone: CoverageZone = {
+      id: 'z-hole',
+      name: 'Donut',
+      kind: 'include',
+      polygon: WITH_HOLE[0].outer,
+      multiPolygon: WITH_HOLE,
+    };
+    expect(evaluateCoverage(18.05, -76.95, [zone]).inZone).toBe(false);
+    expect(evaluateCoverage(18.02, -76.95, [zone]).inZone).toBe(true);
   });
 });
 
@@ -105,6 +191,79 @@ describe('sanitizeVertices', () => {
   });
 });
 
+describe('sanitizeRing', () => {
+  it('drops closing duplicate and caps at MAX_EDITABLE_VERTICES by default', () => {
+    const closed = [
+      { lat: 1, lng: 1 },
+      { lat: 1, lng: 2 },
+      { lat: 2, lng: 2 },
+      { lat: 1, lng: 1 },
+    ];
+    expect(sanitizeRing(closed)).toEqual([
+      { lat: 1, lng: 1 },
+      { lat: 1, lng: 2 },
+      { lat: 2, lng: 2 },
+    ]);
+    expect(MAX_EDITABLE_VERTICES).toBe(500);
+    const many = Array.from({ length: 600 }, (_, i) => ({ lat: i * 0.001, lng: 0 }));
+    expect(sanitizeRing(many)).toHaveLength(500);
+  });
+});
+
+describe('sanitizeMultiPolygon', () => {
+  it('accepts legacy flat ring', () => {
+    const multi = sanitizeMultiPolygon(ST_INCLUDE.polygon);
+    expect(multi).toHaveLength(1);
+    expect(multi[0].holes).toEqual([]);
+    expect(multi[0].outer).toHaveLength(4);
+  });
+
+  it('accepts GeoJSON MultiPolygon with holes', () => {
+    const multi = sanitizeMultiPolygon({
+      type: 'MultiPolygon',
+      coordinates: [
+        [
+          [
+            [-77.0, 18.0],
+            [-76.9, 18.0],
+            [-76.9, 18.1],
+            [-77.0, 18.1],
+            [-77.0, 18.0],
+          ],
+          [
+            [-76.97, 18.04],
+            [-76.93, 18.04],
+            [-76.93, 18.06],
+            [-76.97, 18.06],
+            [-76.97, 18.04],
+          ],
+        ],
+        [
+          [
+            [-76.8, 18.0],
+            [-76.7, 18.0],
+            [-76.7, 18.1],
+            [-76.8, 18.1],
+            [-76.8, 18.0],
+          ],
+        ],
+      ],
+    });
+    expect(multi).toHaveLength(2);
+    expect(multi[0].holes).toHaveLength(1);
+    expect(multi[1].holes).toEqual([]);
+  });
+
+  it('rejects empty parts', () => {
+    expect(sanitizeMultiPolygon({ parts: [{ outer: [{ lat: 1, lng: 1 }], holes: [] }] })).toEqual([]);
+  });
+
+  it('accepts parts wrapper', () => {
+    const multi = sanitizeMultiPolygon({ parts: MULTI_ISLAND });
+    expect(multi).toHaveLength(2);
+  });
+});
+
 describe('createZoneCache', () => {
   it('reads and writes cache entries', () => {
     const storage = new Map<string, string>();
@@ -127,6 +286,18 @@ describe('createZoneCache', () => {
 describe('isInsideParishFoundation', () => {
   it('allows any point when foundation missing', () => {
     expect(isInsideParishFoundation(18.0, -76.8, null)).toBe(true);
+  });
+
+  it('accepts multi-part foundation with holes', () => {
+    expect(isInsideParishFoundation(18.05, -76.85, MULTI_ISLAND)).toBe(true);
+    expect(isInsideParishFoundation(18.05, -76.95, WITH_HOLE)).toBe(false);
+  });
+});
+
+describe('parseFoundationGeometry', () => {
+  it('parses multi-part shape', () => {
+    const g = parseFoundationGeometry({ parts: MULTI_ISLAND });
+    expect(g).toHaveLength(2);
   });
 });
 

@@ -1,6 +1,10 @@
-/** Parse / serialize town coverage outlines for Import · Export. */
+/** Parse / serialize town coverage outlines + full-fidelity COD-AB boundary import. */
 
 export type IoVertex = { lat: number; lng: number };
+
+export type IoRing = IoVertex[];
+export type IoPolygonPart = { outer: IoRing; holes: IoRing[] };
+export type IoMultiPolygon = IoPolygonPart[];
 
 export type ExportZoneRow = {
   kind: string;
@@ -12,6 +16,9 @@ export type ExportZoneRow = {
   center_lng?: number | null;
   polygon: IoVertex[];
 };
+
+export const LEGACY_IMPORT_BLOCKED_MESSAGE =
+  'Official multi-part / multi-feature GeoJSON is not supported on this import path. Use Import Boundaries.';
 
 function downloadBlob(filename: string, content: string, mime: string) {
   const blob = new Blob([content], { type: mime });
@@ -29,44 +36,18 @@ function escapeCsv(value: string | number | null | undefined): string {
   return s;
 }
 
-/** Pull outer ring from FeatureCollection / Feature / Polygon / MultiPolygon (geojson.io). */
-export function polygonFromGeoJson(geojson: unknown): IoVertex[] | null {
-  if (!geojson || typeof geojson !== 'object') return null;
-  const g = geojson as Record<string, unknown>;
+function dropClosing(ring: IoVertex[]): IoVertex[] {
+  if (ring.length < 2) return ring;
+  const a = ring[0];
+  const b = ring[ring.length - 1];
+  if (a.lat === b.lat && a.lng === b.lng) return ring.slice(0, -1);
+  return ring;
+}
 
-  let geometry: Record<string, unknown> | null = null;
-  if (g.type === 'FeatureCollection' && Array.isArray(g.features)) {
-    for (const f of g.features) {
-      if (!f || typeof f !== 'object') continue;
-      const feat = f as Record<string, unknown>;
-      const geom =
-        feat.geometry && typeof feat.geometry === 'object'
-          ? (feat.geometry as Record<string, unknown>)
-          : null;
-      if (geom && (geom.type === 'Polygon' || geom.type === 'MultiPolygon')) {
-        geometry = geom;
-        break;
-      }
-    }
-  } else if (g.type === 'Feature' && g.geometry && typeof g.geometry === 'object') {
-    geometry = g.geometry as Record<string, unknown>;
-  } else if (g.type === 'Polygon' || g.type === 'MultiPolygon') {
-    geometry = g;
-  }
-
-  if (!geometry) return null;
-
-  let ring: unknown = null;
-  if (geometry.type === 'Polygon' && Array.isArray(geometry.coordinates)) {
-    ring = (geometry.coordinates as unknown[])[0];
-  } else if (geometry.type === 'MultiPolygon' && Array.isArray(geometry.coordinates)) {
-    const firstPoly = (geometry.coordinates as unknown[])[0];
-    ring = Array.isArray(firstPoly) ? firstPoly[0] : null;
-  }
-  if (!Array.isArray(ring) || ring.length < 3) return null;
-
+function coordsToRing(coords: unknown): IoRing | null {
+  if (!Array.isArray(coords) || coords.length < 3) return null;
   const points: IoVertex[] = [];
-  for (const c of ring) {
+  for (const c of coords) {
     if (!Array.isArray(c) || c.length < 2) return null;
     const lng = Number(c[0]);
     const lat = Number(c[1]);
@@ -74,12 +55,350 @@ export function polygonFromGeoJson(geojson: unknown): IoVertex[] | null {
     if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return null;
     points.push({ lat, lng });
   }
-  if (points.length >= 4) {
-    const a = points[0];
-    const b = points[points.length - 1];
-    if (a.lat === b.lat && a.lng === b.lng) points.pop();
+  const ring = dropClosing(points);
+  return ring.length >= 3 ? ring : null;
+}
+
+function geometryToMulti(geometry: Record<string, unknown>): IoMultiPolygon | null {
+  if (geometry.type === 'Polygon' && Array.isArray(geometry.coordinates)) {
+    const rings: IoRing[] = [];
+    for (const r of geometry.coordinates as unknown[]) {
+      const ring = coordsToRing(r);
+      if (ring) rings.push(ring);
+    }
+    if (rings.length === 0) return null;
+    return [{ outer: rings[0], holes: rings.slice(1) }];
   }
-  return points.length >= 3 ? points : null;
+  if (geometry.type === 'MultiPolygon' && Array.isArray(geometry.coordinates)) {
+    const parts: IoMultiPolygon = [];
+    for (const poly of geometry.coordinates as unknown[]) {
+      if (!Array.isArray(poly)) continue;
+      const rings: IoRing[] = [];
+      for (const r of poly) {
+        const ring = coordsToRing(r);
+        if (ring) rings.push(ring);
+      }
+      if (rings.length > 0) parts.push({ outer: rings[0], holes: rings.slice(1) });
+    }
+    return parts.length > 0 ? parts : null;
+  }
+  return null;
+}
+
+/** Walk FeatureCollection / Feature / bare geometry — shared by pin + polygon parsers. */
+export function forEachGeoJsonFeature(
+  geojson: unknown,
+  visit: (hit: {
+    geometry: Record<string, unknown>;
+    properties: Record<string, unknown>;
+    featureIndex: number;
+  }) => void,
+): void {
+  if (!geojson || typeof geojson !== 'object') return;
+  const g = geojson as Record<string, unknown>;
+
+  if (g.type === 'FeatureCollection' && Array.isArray(g.features)) {
+    g.features.forEach((f, featureIndex) => {
+      if (!f || typeof f !== 'object') return;
+      const feat = f as Record<string, unknown>;
+      if (!feat.geometry || typeof feat.geometry !== 'object') return;
+      visit({
+        geometry: feat.geometry as Record<string, unknown>,
+        properties:
+          feat.properties && typeof feat.properties === 'object'
+            ? (feat.properties as Record<string, unknown>)
+            : {},
+        featureIndex,
+      });
+    });
+    return;
+  }
+
+  if (g.type === 'Feature' && g.geometry && typeof g.geometry === 'object') {
+    visit({
+      geometry: g.geometry as Record<string, unknown>,
+      properties:
+        g.properties && typeof g.properties === 'object'
+          ? (g.properties as Record<string, unknown>)
+          : {},
+      featureIndex: 0,
+    });
+    return;
+  }
+
+  if (
+    g.type === 'Polygon' ||
+    g.type === 'MultiPolygon' ||
+    g.type === 'Point' ||
+    g.type === 'MultiPoint'
+  ) {
+    visit({
+      geometry: g,
+      properties:
+        g.properties && typeof g.properties === 'object'
+          ? (g.properties as Record<string, unknown>)
+          : {},
+      featureIndex: 0,
+    });
+  }
+}
+
+/** Walk FeatureCollection / Feature / raw geometry → polygonal geometries. */
+export function walkPolygonalGeometries(
+  geojson: unknown,
+): Array<{ geometry: Record<string, unknown>; properties: Record<string, unknown> }> {
+  const out: Array<{ geometry: Record<string, unknown>; properties: Record<string, unknown> }> = [];
+  forEachGeoJsonFeature(geojson, ({ geometry, properties }) => {
+    if (geometry.type !== 'Polygon' && geometry.type !== 'MultiPolygon') return;
+    out.push({ geometry, properties });
+  });
+  return out;
+}
+
+export type GeoJsonComplexity = {
+  featureCount: number;
+  polygonalFeatureCount: number;
+  multiPolygonParts: number;
+  holeRingCount: number;
+  isUnsafeForLegacyImport: boolean;
+};
+
+export function inspectGeoJsonComplexity(geojson: unknown): GeoJsonComplexity {
+  const walked = walkPolygonalGeometries(geojson);
+  let multiPolygonParts = 0;
+  let holeRingCount = 0;
+  for (const { geometry } of walked) {
+    const multi = geometryToMulti(geometry);
+    if (!multi) continue;
+    multiPolygonParts += multi.length;
+    for (const part of multi) holeRingCount += part.holes.length;
+  }
+  const polygonalFeatureCount = walked.length;
+  const featureCount =
+    geojson &&
+    typeof geojson === 'object' &&
+    (geojson as { type?: string }).type === 'FeatureCollection' &&
+    Array.isArray((geojson as { features?: unknown[] }).features)
+      ? (geojson as { features: unknown[] }).features.length
+      : polygonalFeatureCount;
+  const isUnsafeForLegacyImport =
+    polygonalFeatureCount > 1 || multiPolygonParts > 1 || holeRingCount > 0;
+  return {
+    featureCount,
+    polygonalFeatureCount,
+    multiPolygonParts,
+    holeRingCount,
+    isUnsafeForLegacyImport,
+  };
+}
+
+/**
+ * Legacy single-ring import. Hard-blocks MultiPolygon (>1 part), multi-feature, and holes.
+ * Returns null when blocked or invalid.
+ */
+export function polygonFromGeoJson(geojson: unknown): IoVertex[] | null {
+  if (!geojson || typeof geojson !== 'object') return null;
+  const complexity = inspectGeoJsonComplexity(geojson);
+  if (complexity.isUnsafeForLegacyImport) return null;
+
+  const walked = walkPolygonalGeometries(geojson);
+  if (walked.length !== 1) return null;
+  const multi = geometryToMulti(walked[0].geometry);
+  if (!multi || multi.length !== 1 || multi[0].holes.length > 0) return null;
+  return multi[0].outer;
+}
+
+export function isLegacyGeoJsonBlocked(geojson: unknown): boolean {
+  return inspectGeoJsonComplexity(geojson).isUnsafeForLegacyImport;
+}
+
+function slugify(name: string): string {
+  return (
+    name
+      .toLowerCase()
+      .replace(/\bsaint\b/g, 'st')
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '') || 'unnamed'
+  );
+}
+
+function detectAdminLevel(props: Record<string, unknown>): 0 | 1 | 2 | 3 | null {
+  if (typeof props.adm3_pcode === 'string' && props.adm3_pcode) return 3;
+  if (typeof props.adm2_pcode === 'string' && props.adm2_pcode) return 2;
+  if (typeof props.adm1_pcode === 'string' && props.adm1_pcode) return 1;
+  if (typeof props.adm0_pcode === 'string' && props.adm0_pcode) return 0;
+  return null;
+}
+
+function nameForLevel(props: Record<string, unknown>, level: 0 | 1 | 2 | 3 | null): string {
+  const keys =
+    level === 3
+      ? ['adm3_name', 'name']
+      : level === 2
+        ? ['adm2_name', 'name']
+        : level === 1
+          ? ['adm1_name', 'name']
+          : level === 0
+            ? ['adm0_name', 'name']
+            : ['name', 'adm3_name', 'adm2_name', 'adm1_name', 'adm0_name'];
+  for (const k of keys) {
+    const v = props[k];
+    if (typeof v === 'string' && v.trim()) return v.trim();
+  }
+  return 'Unnamed';
+}
+
+function pcodeForLevel(props: Record<string, unknown>, level: 0 | 1 | 2 | 3 | null): string | null {
+  if (level === 3 && typeof props.adm3_pcode === 'string') return props.adm3_pcode;
+  if (level === 2 && typeof props.adm2_pcode === 'string') return props.adm2_pcode;
+  if (level === 1 && typeof props.adm1_pcode === 'string') return props.adm1_pcode;
+  if (level === 0 && typeof props.adm0_pcode === 'string') return props.adm0_pcode;
+  return null;
+}
+
+function parentPcodeForLevel(
+  props: Record<string, unknown>,
+  level: 0 | 1 | 2 | 3 | null,
+): string | null {
+  if (level === 3 && typeof props.adm2_pcode === 'string') return props.adm2_pcode;
+  if (level === 2 && typeof props.adm1_pcode === 'string') return props.adm1_pcode;
+  if (level === 1 && typeof props.adm0_pcode === 'string') return props.adm0_pcode;
+  return null;
+}
+
+export type ParsedBoundaryFeature = {
+  name: string;
+  slug: string;
+  pcode: string | null;
+  parentPcode: string | null;
+  adminLevel: 0 | 1 | 2 | 3 | null;
+  areaSqkm: number | null;
+  centerLat: number | null;
+  centerLng: number | null;
+  properties: Record<string, unknown>;
+  multiPolygon: IoMultiPolygon;
+  partCount: number;
+  holeCount: number;
+  vertexCount: number;
+};
+
+export type GeoJsonParseReport = {
+  features: ParsedBoundaryFeature[];
+  warnings: string[];
+  errors: string[];
+};
+
+/** Full-fidelity parse: all features, parts, and holes. Never silently truncates. */
+export function parseBoundariesFromGeoJson(geojson: unknown): GeoJsonParseReport {
+  const features: ParsedBoundaryFeature[] = [];
+  const warnings: string[] = [];
+  const errors: string[] = [];
+
+  if (!geojson || typeof geojson !== 'object') {
+    errors.push('Not a GeoJSON object');
+    return { features, warnings, errors };
+  }
+
+  const walked = walkPolygonalGeometries(geojson);
+  if (walked.length === 0) {
+    errors.push('No Polygon / MultiPolygon features found');
+    return { features, warnings, errors };
+  }
+
+  for (let i = 0; i < walked.length; i++) {
+    const { geometry, properties } = walked[i];
+    const multi = geometryToMulti(geometry);
+    if (!multi) {
+      errors.push(`Feature ${i + 1}: could not parse geometry`);
+      continue;
+    }
+    const level = detectAdminLevel(properties);
+    const name = nameForLevel(properties, level);
+    const pcode = pcodeForLevel(properties, level);
+    if (!pcode) {
+      warnings.push(`Feature “${name}”: missing pcode — will not upsert until keyed`);
+    }
+    let holeCount = 0;
+    let vertexCount = 0;
+    for (const part of multi) {
+      holeCount += part.holes.length;
+      vertexCount += part.outer.length;
+      for (const h of part.holes) vertexCount += h.length;
+    }
+    const areaRaw = properties.area_sqkm;
+    const areaSqkm =
+      typeof areaRaw === 'number'
+        ? areaRaw
+        : typeof areaRaw === 'string' && areaRaw
+          ? Number(areaRaw)
+          : null;
+    const centerLat =
+      typeof properties.center_lat === 'number'
+        ? properties.center_lat
+        : typeof properties.center_lat === 'string'
+          ? Number(properties.center_lat)
+          : null;
+    const centerLng =
+      typeof properties.center_lon === 'number'
+        ? properties.center_lon
+        : typeof properties.center_lng === 'number'
+          ? properties.center_lng
+          : typeof properties.center_lon === 'string'
+            ? Number(properties.center_lon)
+            : null;
+
+    features.push({
+      name,
+      slug: slugify(name),
+      pcode,
+      parentPcode: parentPcodeForLevel(properties, level),
+      adminLevel: level,
+      areaSqkm: Number.isFinite(areaSqkm as number) ? (areaSqkm as number) : null,
+      centerLat: Number.isFinite(centerLat as number) ? (centerLat as number) : null,
+      centerLng: Number.isFinite(centerLng as number) ? (centerLng as number) : null,
+      properties,
+      multiPolygon: multi,
+      partCount: multi.length,
+      holeCount,
+      vertexCount,
+    });
+  }
+
+  return { features, warnings, errors };
+}
+
+export function multiPolygonToFlatRing(multi: IoMultiPolygon): IoVertex[] {
+  return multi[0]?.outer ?? [];
+}
+
+export function multiPolygonToGeoJson(
+  multi: IoMultiPolygon,
+  properties: Record<string, unknown> = {},
+): string {
+  const coordinates = multi.map((part) => {
+    const rings: number[][][] = [];
+    const close = (ring: IoRing): number[][] => {
+      const coords = ring.map((p) => [p.lng, p.lat] as [number, number]);
+      if (coords.length > 0) {
+        const f = coords[0];
+        const l = coords[coords.length - 1];
+        if (f[0] !== l[0] || f[1] !== l[1]) coords.push([...f]);
+      }
+      return coords;
+    };
+    rings.push(close(part.outer));
+    for (const h of part.holes) rings.push(close(h));
+    return rings;
+  });
+  return `${JSON.stringify(
+    {
+      type: 'Feature',
+      properties,
+      geometry: { type: 'MultiPolygon', coordinates },
+    },
+    null,
+    2,
+  )}\n`;
 }
 
 export type IoTownPin = { name: string; lat: number; lng: number; properties?: Record<string, unknown> };
@@ -127,49 +446,35 @@ export function pinsFromGeoJson(geojson: unknown): IoTownPin[] | null {
   }
 
   if (typeof geojson !== 'object') return null;
-  const g = geojson as Record<string, unknown>;
   const pins: IoTownPin[] = [];
 
-  const pushPoint = (geometry: Record<string, unknown>, props?: Record<string, unknown>) => {
-    if (geometry.type !== 'Point' || !Array.isArray(geometry.coordinates)) return;
-    const pt = pointFromCoords(geometry.coordinates);
-    if (!pt) return;
-    pins.push({ name: pinNameFromProps(props), lat: pt.lat, lng: pt.lng, properties: props });
-  };
-
-  if (g.type === 'FeatureCollection' && Array.isArray(g.features)) {
-    for (const f of g.features) {
-      if (!f || typeof f !== 'object') continue;
-      const feat = f as Record<string, unknown>;
-      const geom = feat.geometry && typeof feat.geometry === 'object'
-        ? (feat.geometry as Record<string, unknown>)
-        : null;
-      const props = feat.properties && typeof feat.properties === 'object'
-        ? (feat.properties as Record<string, unknown>)
-        : undefined;
-      if (geom) pushPoint(geom, props);
+  forEachGeoJsonFeature(geojson, ({ geometry, properties }) => {
+    if (geometry.type === 'Point' && Array.isArray(geometry.coordinates)) {
+      const pt = pointFromCoords(geometry.coordinates);
+      if (pt) {
+        pins.push({
+          name: pinNameFromProps(properties),
+          lat: pt.lat,
+          lng: pt.lng,
+          properties: Object.keys(properties).length ? properties : undefined,
+        });
+      }
+      return;
     }
-  } else if (g.type === 'Feature' && g.geometry && typeof g.geometry === 'object') {
-    pushPoint(
-      g.geometry as Record<string, unknown>,
-      g.properties && typeof g.properties === 'object'
-        ? (g.properties as Record<string, unknown>)
-        : undefined,
-    );
-  } else if (g.type === 'Point' && Array.isArray(g.coordinates)) {
-    const pt = pointFromCoords(g.coordinates);
-    if (pt) {
-      pins.push({
-        name: pinNameFromProps(
-          g.properties && typeof g.properties === 'object'
-            ? (g.properties as Record<string, unknown>)
-            : undefined,
-        ),
-        lat: pt.lat,
-        lng: pt.lng,
-      });
+    if (geometry.type === 'MultiPoint' && Array.isArray(geometry.coordinates)) {
+      for (const c of geometry.coordinates as unknown[]) {
+        const pt = pointFromCoords(c);
+        if (pt) {
+          pins.push({
+            name: pinNameFromProps(properties),
+            lat: pt.lat,
+            lng: pt.lng,
+            properties: Object.keys(properties).length ? properties : undefined,
+          });
+        }
+      }
     }
-  }
+  });
 
   return pins.length > 0 ? pins : null;
 }
@@ -250,9 +555,8 @@ export function downloadTextFile(filename: string, content: string, mime: string
 }
 
 export function slugFilename(name: string, ext: string): string {
-  const base = name
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-|-$/g, '') || 'town';
+  const base = slugify(name);
   return `${base}.${ext}`;
 }
+
+export { slugify as slugifyBoundaryName };

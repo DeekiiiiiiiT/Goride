@@ -1,4 +1,26 @@
-export type CoverageVertex = { lat: number; lng: number };
+export type {
+  CoverageVertex,
+  CoverageRing,
+  CoveragePolygonPart,
+  CoverageMultiPolygon,
+} from './geometry.ts';
+export {
+  MAX_EDITABLE_VERTICES,
+  dropClosingVertex,
+  ringVertexCount,
+  pointInRing,
+  pointInMultiPolygon,
+  multiPolygonPrimaryRing,
+  multiPolygonToGeoJsonCoords,
+  multiPolygonToGeoJsonGeometry,
+  preferCentroid,
+} from './geometry.ts';
+
+import {
+  pointInMultiPolygon,
+  type CoverageMultiPolygon,
+  type CoverageVertex,
+} from './geometry.ts';
 
 export type CoverageZone = {
   id: string;
@@ -6,6 +28,8 @@ export type CoverageZone = {
   market_id?: string;
   kind?: string | null;
   polygon: CoverageVertex[];
+  /** When set, PIP uses multi-part + holes; polygon kept for legacy display/H3 fallback. */
+  multiPolygon?: CoverageMultiPolygon;
 };
 
 export type CoverageEvalResult = {
@@ -31,6 +55,14 @@ export function pointInPolygon(lat: number, lng: number, polygon: CoverageVertex
   return inside;
 }
 
+function zoneContains(lat: number, lng: number, zone: CoverageZone): boolean {
+  if (zone.multiPolygon && zone.multiPolygon.length > 0) {
+    return pointInMultiPolygon(lat, lng, zone.multiPolygon);
+  }
+  const ring = Array.isArray(zone.polygon) ? zone.polygon : [];
+  return ring.length >= 3 && pointInPolygon(lat, lng, ring);
+}
+
 function normalizeKind(kind: string | null | undefined): 'include' | 'exclude' {
   return kind === 'exclude' ? 'exclude' : 'include';
 }
@@ -51,9 +83,7 @@ export function evaluateCoverage(
   let matchedExclude: CoverageEvalResult['matchedExclude'] = null;
 
   for (const zone of zones) {
-    const ring = Array.isArray(zone.polygon) ? zone.polygon : [];
-    if (ring.length < 3) continue;
-    if (!pointInPolygon(lat, lng, ring)) continue;
+    if (!zoneContains(lat, lng, zone)) continue;
 
     const kind = normalizeKind(zone.kind);
     const hit = { id: zone.id, name: zone.name, market_id: zone.market_id };
@@ -99,9 +129,15 @@ export {
   buildParishSyntheticZone,
   isInsideParishFoundation,
   parseFoundationPolygon,
+  parseFoundationGeometry,
   type ParishCoverageMode,
 } from './parishCoverage.ts';
-export { sanitizeVertices } from './sanitizeVertices.ts';
+export {
+  sanitizeVertices,
+  sanitizeRing,
+  sanitizeMultiPolygon,
+  multiToLegacyRing,
+} from './sanitizeVertices.ts';
 export { createMemoryZoneCache } from './memoryZoneCache.ts';
 export {
   normalizeDraftZonesFromAdmin,

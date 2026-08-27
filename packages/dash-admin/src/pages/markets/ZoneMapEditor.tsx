@@ -5,6 +5,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   Check,
+  ChevronDown,
   Crosshair,
   Loader2,
   MapPin,
@@ -88,6 +89,14 @@ export type ZoneMapEditorProps = {
   autoOpenCoordinates?: boolean;
   /** Compiled H3 cells to overlay (include/exclude). */
   hexCells?: Array<{ h3_cell: string; kind: string }>;
+  /** Where to render Streets / Hex / Test pin controls (default next to search). */
+  mapToolsPlacement?: 'inline' | 'none';
+  mapType?: 'roadmap' | 'hybrid';
+  onMapTypeChange?: (next: 'roadmap' | 'hybrid') => void;
+  showHexOverlay?: boolean;
+  onShowHexOverlayChange?: (next: boolean) => void;
+  testActive?: boolean;
+  onTestActiveChange?: (next: boolean) => void;
 };
 
 function styleForKind(kind: DashZoneKind, zoneId?: string): google.maps.PolygonOptions {
@@ -195,6 +204,13 @@ export function ZoneMapEditor({
   referenceTownPins = [],
   autoOpenCoordinates = false,
   hexCells = [],
+  mapToolsPlacement = 'inline',
+  mapType: mapTypeProp,
+  onMapTypeChange,
+  showHexOverlay: showHexOverlayProp,
+  onShowHexOverlayChange,
+  testActive: testActiveProp,
+  onTestActiveChange,
 }: ZoneMapEditorProps) {
   const foundationNoun = foundationScope === 'parish' ? 'parish' : 'town';
   const foundationTitle =
@@ -221,10 +237,10 @@ export function ZoneMapEditor({
 
   const [ready, setReady] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [mapType, setMapType] = useState<'roadmap' | 'hybrid'>('roadmap');
+  const [mapTypeState, setMapTypeState] = useState<'roadmap' | 'hybrid'>('roadmap');
   const [vertexCount, setVertexCount] = useState(initialPolygon.length);
   const [editVertices, setEditVertices] = useState<DashZoneVertex[]>([...initialPolygon]);
-  const [testActive, setTestActive] = useState(false);
+  const [testActiveState, setTestActiveState] = useState(false);
   const [testResult, setTestResult] = useState<CoverageCheckResult | null>(null);
   const [testBusy, setTestBusy] = useState(false);
   const testActiveRef = useRef(false);
@@ -249,8 +265,28 @@ export function ZoneMapEditor({
   );
   const [namedPoints, setNamedPoints] = useState<NamedBorderPoint[]>([]);
   const [radiusM, setRadiusM] = useState(300);
-  const [showHexOverlay, setShowHexOverlay] = useState(false);
+  const [showHexOverlayState, setShowHexOverlayState] = useState(false);
+  const [showMapTools, setShowMapTools] = useState(false);
   const [mapInstance, setMapInstance] = useState<google.maps.Map | null>(null);
+  const mapToolsRef = useRef<HTMLDivElement>(null);
+
+  const mapType = mapTypeProp ?? mapTypeState;
+  const showHexOverlay = showHexOverlayProp ?? showHexOverlayState;
+  const testActive = testActiveProp ?? testActiveState;
+
+  const applyMapType = (next: 'roadmap' | 'hybrid') => {
+    if (onMapTypeChange) onMapTypeChange(next);
+    else setMapTypeState(next);
+  };
+  const applyShowHexOverlay = (next: boolean) => {
+    if (onShowHexOverlayChange) onShowHexOverlayChange(next);
+    else setShowHexOverlayState(next);
+  };
+  const applyTestActive = (next: boolean) => {
+    if (onTestActiveChange) onTestActiveChange(next);
+    else setTestActiveState(next);
+    if (!next) setTestResult(null);
+  };
 
 
   uiModeRef.current = uiMode;
@@ -259,6 +295,17 @@ export function ZoneMapEditor({
   testActiveRef.current = testActive;
   const drawing = uiMode === 'cutout' || uiMode === 'adjust';
   const editKind: DashZoneKind = uiMode === 'cutout' ? 'exclude' : 'include';
+
+  useEffect(() => {
+    if (!showMapTools) return;
+    const onDoc = (e: MouseEvent) => {
+      if (mapToolsRef.current && !mapToolsRef.current.contains(e.target as Node)) {
+        setShowMapTools(false);
+      }
+    };
+    document.addEventListener('mousedown', onDoc);
+    return () => document.removeEventListener('mousedown', onDoc);
+  }, [showMapTools]);
 
   const primaryInclude =
     townIncludePolygons.find((p) => p.length >= 3) ??
@@ -369,6 +416,7 @@ export function ZoneMapEditor({
 
   /** Push a corner without rebuilding the editable polygon (keeps drag handles intact). */
   const addVertexAt = (lat: number, lng: number, minGapM: number) => {
+    if (verticesRef.current.length > 500) return;
     const next = { lat, lng };
     if (editPolyRef.current) {
       const path = editPolyRef.current.getPath();
@@ -441,13 +489,17 @@ export function ZoneMapEditor({
     setVertexCount(verts.length);
     setEditVertices([...verts]);
     if (!drawing || verts.length < 2) return;
+    // PERF-1: official high-vertex outlines are read-only — Maps freezes with thousands of handles.
+    const editable = verts.length <= 500;
     const poly = new google.maps.Polygon({
       paths: verts.map((v) => ({ lat: v.lat, lng: v.lng })),
       map,
-      editable: true,
+      editable,
       draggable: false,
       ...styleForKind(editKind, editingZoneId ?? undefined),
     });
+    editPolyRef.current = poly;
+    if (!editable) return;
     const syncFromPath = () => {
       const path = poly.getPath();
       verticesRef.current = pathToVertices(path);
@@ -460,7 +512,6 @@ export function ZoneMapEditor({
     path.addListener('remove_at', syncFromPath);
     // Dragging vertices sometimes only settles on mouseup — keep ref in sync.
     poly.addListener('mouseup', syncFromPath);
-    editPolyRef.current = poly;
   };
 
   const addVertexAtRef = useRef(addVertexAt);
@@ -661,7 +712,7 @@ export function ZoneMapEditor({
     if (!mapRef.current) return;
     verticesRef.current = [...initialPolygon];
     setEditVertices([...initialPolygon]);
-    setTestActive(false);
+    applyTestActive(false);
     setTestResult(null);
     setShowCoordOverlay(false);
     setDrawTrace(uiMode === 'cutout' || initialPolygon.length < 3);
@@ -960,51 +1011,69 @@ export function ZoneMapEditor({
             </div>
           )}
         </div>
-        <button
-          type="button"
-          onClick={() => setMapType((t) => (t === 'roadmap' ? 'hybrid' : 'roadmap'))}
-          className={`inline-flex items-center gap-1 px-2.5 py-2 rounded-lg border text-xs ${
-            mapType === 'hybrid'
-              ? 'border-sky-500/50 bg-sky-500/15 text-sky-200'
-              : 'border-slate-700 text-slate-300'
-          }`}
-        >
-          <Satellite className="w-3.5 h-3.5" />
-          {mapType === 'hybrid' ? 'Satellite' : 'Streets'}
-        </button>
-        {hexCells.length > 0 && (
-          <button
-            type="button"
-            onClick={() => setShowHexOverlay((v) => !v)}
-            className={`inline-flex items-center gap-1 px-2.5 py-2 rounded-lg border text-xs ${
-              showHexOverlay
-                ? 'border-cyan-500/50 bg-cyan-500/15 text-cyan-200'
-                : 'border-slate-700 text-slate-300'
-            }`}
-          >
-            Hex overlay ({hexCells.length})
-          </button>
-        )}
-        {onTestPoint && (
-          <button
-            type="button"
-            onClick={() => {
-              setTestActive((v) => !v);
-              setTestResult(null);
-            }}
-            className={`inline-flex items-center gap-1 px-2.5 py-2 rounded-lg border text-xs ${
-              testActive
-                ? 'border-amber-500/50 bg-amber-500/15 text-amber-200'
-                : 'border-slate-700 text-slate-300'
-            }`}
-          >
-            <Crosshair className="w-3.5 h-3.5" />
-            {testActive ? 'Testing…' : 'Test pin'}
-          </button>
-        )}
+        {mapToolsPlacement === 'inline' ? (
+          <div className="relative" ref={mapToolsRef}>
+            <button
+              type="button"
+              onClick={() => setShowMapTools((v) => !v)}
+              className={`inline-flex items-center gap-1 px-2.5 py-2 rounded-lg border text-xs ${
+                showHexOverlay || testActive || mapType === 'hybrid'
+                  ? 'border-cyan-500/40 bg-cyan-500/10 text-cyan-100'
+                  : 'border-slate-600 text-slate-100'
+              }`}
+            >
+              Map tools
+              <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+            </button>
+            {showMapTools && (
+              <div className="absolute right-0 top-full mt-1 z-30 w-52 rounded-lg border border-slate-700 bg-slate-900 shadow-xl py-1">
+                <button
+                  type="button"
+                  className="w-full flex items-center gap-2 text-left px-3 py-2 text-xs text-slate-100 hover:bg-slate-800"
+                  onClick={() => applyMapType(mapType === 'roadmap' ? 'hybrid' : 'roadmap')}
+                >
+                  <Satellite className="w-3.5 h-3.5 shrink-0" />
+                  {mapType === 'hybrid' ? 'Satellite (on)' : 'Satellite'}
+                </button>
+                {hexCells.length > 0 ? (
+                  <button
+                    type="button"
+                    className={`w-full flex items-center gap-2 text-left px-3 py-2 text-xs hover:bg-slate-800 ${
+                      showHexOverlay ? 'text-cyan-200' : 'text-slate-100'
+                    }`}
+                    onClick={() => applyShowHexOverlay(!showHexOverlay)}
+                  >
+                    Hex overlay ({hexCells.length})
+                    {showHexOverlay ? <Check className="w-3.5 h-3.5 ml-auto" /> : null}
+                  </button>
+                ) : (
+                  <p
+                    className="px-3 py-2 text-xs text-slate-400"
+                    title="Publish coverage once to build the hex grid"
+                  >
+                    Hex overlay (not built)
+                  </p>
+                )}
+                {onTestPoint ? (
+                  <button
+                    type="button"
+                    className={`w-full flex items-center gap-2 text-left px-3 py-2 text-xs hover:bg-slate-800 ${
+                      testActive ? 'text-amber-200' : 'text-slate-100'
+                    }`}
+                    onClick={() => applyTestActive(!testActive)}
+                  >
+                    <Crosshair className="w-3.5 h-3.5 shrink-0" />
+                    {testActive ? 'Test pin (on)' : 'Test pin'}
+                    {testActive ? <Check className="w-3.5 h-3.5 ml-auto" /> : null}
+                  </button>
+                ) : null}
+              </div>
+            )}
+          </div>
+        ) : null}
       </div>
 
-      <p className="text-xs text-slate-400 flex items-center gap-1.5">
+      <p className="text-xs text-slate-200 flex items-center gap-1.5">
         {uiMode === 'cutout' || uiMode === 'radius' ? (
           <Scissors className="w-3.5 h-3.5 text-red-400" />
         ) : (
@@ -1014,7 +1083,7 @@ export function ZoneMapEditor({
       </p>
 
       {uiMode === 'view' && (
-        <div className="flex flex-wrap items-center gap-3 text-[11px] text-slate-400 px-0.5">
+        <div className="flex flex-wrap items-center gap-3 text-[11px] text-slate-200 px-0.5">
           {foundationScope === 'parish' ? (
             <>
               <span className="inline-flex items-center gap-1.5">
@@ -1074,13 +1143,25 @@ export function ZoneMapEditor({
         </div>
       )}
 
+      {drawing && vertexCount > 500 && (
+        <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">
+          Official outline is read-only — too many vertices to edit safely
+        </div>
+      )}
+
       {drawing && (
         <div className="sticky top-0 z-10 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2">
           <p className="text-xs text-amber-100">
             {uiMode === 'cutout'
               ? `Editing non-delivery zone · ${vertexCount} points`
               : `Editing ${foundationTitle} · ${vertexCount} points`}
-            {freehand ? ' · freehand' : drawTrace ? ' · click to add' : ' · drag handles'}
+            {vertexCount > 500
+              ? ' · view only'
+              : freehand
+                ? ' · freehand'
+                : drawTrace
+                  ? ' · click to add'
+                  : ' · drag handles'}
             {' — save or cancel when done'}
           </p>
           <div className="flex items-center gap-2">

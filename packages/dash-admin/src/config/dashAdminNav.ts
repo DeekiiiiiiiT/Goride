@@ -19,6 +19,7 @@ import {
   Activity,
   DollarSign,
   Tag,
+  Library,
 } from 'lucide-react';
 import type { AdminConfig } from '@roam/admin-core';
 import { isCourierOnlyRole } from '../utils/isCourierOnlyRole';
@@ -81,7 +82,11 @@ export const DASH_ADMIN_CONFIG: AdminConfig = {
       id: 'markets',
       label: 'Markets',
       icon: Map,
-      children: [{ id: 'markets', label: 'Delivery Markets', icon: Map }],
+      children: [
+        { id: 'markets', label: 'Delivery Markets', icon: Map },
+        { id: 'markets-boundaries', label: 'Boundary Library', icon: Library },
+        { id: 'markets-coverage-health', label: 'Coverage Health', icon: Activity },
+      ],
     },
     {
       id: 'users',
@@ -149,6 +154,8 @@ export function pathnameToNavId(pathname: string): string {
   if (pathname.startsWith('/couriers/ledger')) return 'couriers-ledger';
   if (pathname.startsWith('/couriers')) return 'couriers';
   if (pathname.startsWith('/customers')) return 'users-directory';
+  if (pathname.startsWith('/markets/boundaries')) return 'markets-boundaries';
+  if (pathname.startsWith('/markets/coverage-health')) return 'markets-coverage-health';
   if (pathname.startsWith('/markets')) return 'markets';
   if (pathname.startsWith('/users/compliance')) return 'users-compliance';
   if (pathname.startsWith('/users/merchant-staff')) return 'users-merchant-staff';
@@ -188,6 +195,10 @@ export function navIdToPath(navId: string): string {
       return '/couriers/ledger';
     case 'markets':
       return '/markets';
+    case 'markets-boundaries':
+      return '/markets/boundaries';
+    case 'markets-coverage-health':
+      return '/markets/coverage-health';
     case 'users-directory':
       return '/users';
     case 'users-operators':

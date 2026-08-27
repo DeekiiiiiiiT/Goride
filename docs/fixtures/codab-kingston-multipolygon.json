@@ -1,0 +1,47 @@
+/**
+ * Fixture COD-AB-shaped MultiPolygon for Kingston (2 parts) used to prove
+ * full-fidelity import + promote. Replace with official files via
+ * scripts/import-codab-boundaries.ts when Mapping/Jamaica is available.
+ */
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "adm1_name": "Kingston",
+        "adm1_pcode": "JM01K",
+        "adm0_name": "Jamaica",
+        "adm0_pcode": "JM",
+        "area_sqkm": 25,
+        "center_lat": 17.97,
+        "center_lon": -76.79,
+        "valid_on": "2024-08-02",
+        "version": "fixture-v01"
+      },
+      "geometry": {
+        "type": "MultiPolygon",
+        "coordinates": [
+          [
+            [
+              [-76.843, 17.962],
+              [-76.843, 17.994],
+              [-76.726, 17.994],
+              [-76.726, 17.962],
+              [-76.843, 17.962]
+            ]
+          ],
+          [
+            [
+              [-76.82, 17.93],
+              [-76.82, 17.95],
+              [-76.78, 17.95],
+              [-76.78, 17.93],
+              [-76.82, 17.93]
+            ]
+          ]
+        ]
+      }
+    }
+  ]
+}

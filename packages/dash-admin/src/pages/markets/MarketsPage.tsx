@@ -1,8 +1,10 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import {
+  Check,
   ChevronDown,
   ChevronRight,
+  Crosshair,
   History,
   Loader2,
   Map,
@@ -12,9 +14,11 @@ import {
   Plus,
   Pencil,
   Trash2,
+  Satellite,
   Scissors,
   Download,
   FileUp,
+  Upload,
   X,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -24,6 +28,7 @@ import {
   checkCoveragePoint,
   createMarket,
   createParish,
+  createTownFromBoundary,
   createZone,
   deleteParish,
   deleteZone,
@@ -31,6 +36,7 @@ import {
   getMarketReadiness,
   importMarketGeoJson,
   listActivityLog,
+  listAdminBoundaries,
   listCoverageVersions,
   listMarkets,
   publishMarketCoverage,
@@ -45,6 +51,7 @@ import {
   updateZone,
   type ActivityLogRow,
   type CoverageVersionRow,
+  type DashAdminBoundary,
   type DashMarketRow,
   type DashParishRow,
   type DashParishTownPin,
@@ -57,20 +64,41 @@ import {
 import { sanitizeVertices, createAdminCoverageLayers, type ActiveCoverageZone } from '@roam/dash-coverage';
 import type { AdminOutletContext } from '../../DashAdminPortal';
 import { ZoneMapEditor, type ZoneMapUiMode } from './ZoneMapEditor';
+import { JamaicaOverviewMap } from './JamaicaOverviewMap';
 import { detectCoverageConflicts } from './coverageGeo';
 import { ManageZonesOverlay } from './ManageZonesOverlay';
 import { ImportTownBorderOverlay } from './ImportTownBorderOverlay';
 import { ImportParishTownPinsOverlay } from './ImportParishTownPinsOverlay';
+import { ImportBoundariesWizard } from './ImportBoundariesWizard';
 import {
   downloadTextFile,
   parsePolygonCsv,
   pinsFromGeoJson,
   polygonFromGeoJson,
+  isLegacyGeoJsonBlocked,
+  LEGACY_IMPORT_BLOCKED_MESSAGE,
   polygonToCsv,
   polygonToGeoJson,
   slugFilename,
   zonesToCsv,
 } from './coverageIo';
+
+function ProvenanceBadge({
+  source,
+  validOn,
+}: {
+  source?: string | null;
+  validOn?: string | null;
+}) {
+  if (!source) return null;
+  const parts = ['Official', source];
+  if (validOn) parts.push(validOn);
+  return (
+    <span className="inline-flex items-center rounded-md border border-emerald-500/30 bg-emerald-500/10 px-1.5 py-0.5 text-[10px] text-emerald-200">
+      {parts.join(' · ')}
+    </span>
+  );
+}
 
 const adminCoverageLayers = createAdminCoverageLayers({
   fetchPublishedZones: fetchCustomerDeliveryZones,
@@ -92,8 +120,10 @@ function offerParishModeSuggestion(
 ) {
   if (!suggestion) return;
   const modeLabel = suggestion.suggested === 'parish_boundary' ? 'Parish border' : 'Town zones';
+  // Stable id so a second publish/reload cannot stack another copy of the same tip.
   toast(suggestion.reason, {
-    duration: 15000,
+    id: `parish-mode-${suggestion.parish_id}-${suggestion.suggested}`,
+    duration: 20000,
     action: {
       label: `Apply ${modeLabel}`,
       onClick: () => {
@@ -355,6 +385,7 @@ type MapOverlayProps = {
   onRequestEditFoundationOnMap: () => void;
   onRequestEditFoundationCoordinates: () => void;
   onRemoveZone: (zone: DashZoneRow) => void;
+  onRenameTown: (nextName: string) => void | Promise<void>;
 };
 
 function TownMapOverlay({
@@ -383,6 +414,7 @@ function TownMapOverlay({
   onRequestEditFoundationOnMap,
   onRequestEditFoundationCoordinates,
   onRemoveZone,
+  onRenameTown,
 }: MapOverlayProps) {
   const zones = town.zones ?? [];
   const excludes = zones.filter((z) => z.kind === 'exclude');
@@ -394,6 +426,14 @@ function TownMapOverlay({
   const [promoteTemplate, setPromoteTemplate] = useState(true);
   const [showManageZones, setShowManageZones] = useState(false);
   const [showIoMenu, setShowIoMenu] = useState(false);
+  const [showEditMenu, setShowEditMenu] = useState(false);
+  const [showOptsMenu, setShowOptsMenu] = useState(false);
+  const [showMapToolsMenu, setShowMapToolsMenu] = useState(false);
+  const [showRename, setShowRename] = useState(false);
+  const [renameValue, setRenameValue] = useState(town.name);
+  const [mapType, setMapType] = useState<'roadmap' | 'hybrid'>('roadmap');
+  const [showHexOverlay, setShowHexOverlay] = useState(false);
+  const [testActive, setTestActive] = useState(false);
   const [showCustomerCoverage, setShowCustomerCoverage] = useState(false);
   const [publishedZones, setPublishedZones] = useState<ActiveCoverageZone[]>([]);
   const [draftDiffersFromLive, setDraftDiffersFromLive] = useState(false);
@@ -401,6 +441,13 @@ function TownMapOverlay({
   /** Near-fullscreen map workspace for tracing borders. */
   const [mapExpanded, setMapExpanded] = useState(false);
   const ioMenuRef = useRef<HTMLDivElement>(null);
+  const editMenuRef = useRef<HTMLDivElement>(null);
+  const optsMenuRef = useRef<HTMLDivElement>(null);
+  const mapToolsMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setRenameValue(town.name);
+  }, [town.id, town.name]);
 
   useEffect(() => {
     let cancelled = false;
@@ -499,15 +546,25 @@ function TownMapOverlay({
   }, [town.id, town.draft_dirty, zones.length, onRefreshReadiness]);
 
   useEffect(() => {
-    if (!showIoMenu) return;
+    if (!showIoMenu && !showEditMenu && !showOptsMenu && !showMapToolsMenu) return;
     const onDoc = (e: MouseEvent) => {
-      if (ioMenuRef.current && !ioMenuRef.current.contains(e.target as Node)) {
+      const t = e.target as Node;
+      if (showIoMenu && ioMenuRef.current && !ioMenuRef.current.contains(t)) {
         setShowIoMenu(false);
+      }
+      if (showEditMenu && editMenuRef.current && !editMenuRef.current.contains(t)) {
+        setShowEditMenu(false);
+      }
+      if (showOptsMenu && optsMenuRef.current && !optsMenuRef.current.contains(t)) {
+        setShowOptsMenu(false);
+      }
+      if (showMapToolsMenu && mapToolsMenuRef.current && !mapToolsMenuRef.current.contains(t)) {
+        setShowMapToolsMenu(false);
       }
     };
     document.addEventListener('mousedown', onDoc);
     return () => document.removeEventListener('mousedown', onDoc);
-  }, [showIoMenu]);
+  }, [showIoMenu, showEditMenu, showOptsMenu, showMapToolsMenu]);
 
   const exportTownGeoJson = () => {
     if (!delivery || delivery.polygon.length < 3) {
@@ -594,47 +651,124 @@ function TownMapOverlay({
       >
         <div className="flex flex-wrap items-center gap-3 border-b border-slate-800 px-4 py-3 shrink-0">
           <div className="flex-1 min-w-0">
-            <h3 id="town-map-title" className="font-semibold text-white truncate">
-              {town.name} · map
-              {mapExpanded ? (
-                <span className="ml-2 text-xs font-normal text-sky-300">· expanded</span>
+            <h3 id="town-map-title" className="font-semibold text-white truncate flex items-center gap-2">
+              <span className="truncate">
+                {town.name} · map
+                {mapExpanded ? (
+                  <span className="ml-2 text-xs font-normal text-sky-300">· expanded</span>
+                ) : null}
+              </span>
+              {canWrite ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRenameValue(town.name);
+                    setShowRename(true);
+                  }}
+                  className="shrink-0 p-1 rounded-md border border-slate-600 text-slate-300 hover:bg-slate-800 hover:text-white"
+                  title="Rename town"
+                  aria-label="Rename town"
+                >
+                  <Pencil className="w-3.5 h-3.5" />
+                </button>
               ) : null}
             </h3>
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-slate-300">
               {town.is_active ? 'Active' : 'Inactive'}
               {town.draft_dirty ? ' · unpublished draft changes' : ' · published'}
+              {!town.draft_dirty && hexCells.length === 0
+                ? ' · hex grid not built yet — Publish once'
+                : null}
             </p>
           </div>
           {canWrite && uiMode === 'view' && (
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => setShowManageZones(true)}
-                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-slate-500 bg-slate-800 text-xs text-white font-medium"
-              >
-                <MapPin className="w-3.5 h-3.5 text-amber-300" />
-                Manage zones
-                {excludes.length > 0 ? ` (${excludes.length})` : ''}
-              </button>
-              <button
-                type="button"
-                onClick={() => onSetEditor({ mode: 'radius', marketId: town.id })}
-                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-red-500/40 text-xs text-red-300"
-              >
-                <Scissors className="w-3.5 h-3.5" />
-                Don’t deliver near here
-              </button>
-              <button
-                type="button"
-                onClick={() => onSetEditor({ mode: 'cutout', marketId: town.id })}
-                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-red-500/30 text-xs text-red-200"
-              >
-                Draw non-delivery zone
-              </button>
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="relative" ref={editMenuRef}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowEditMenu((v) => !v);
+                    setShowIoMenu(false);
+                    setShowOptsMenu(false);
+                    setShowMapToolsMenu(false);
+                  }}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-slate-500 bg-slate-800 text-xs text-white font-medium"
+                >
+                  <MapPin className="w-3.5 h-3.5 text-amber-300" />
+                  Edit zones
+                  {excludes.length > 0 ? ` (${excludes.length})` : ''}
+                  <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+                </button>
+                {showEditMenu && (
+                  <div className="absolute right-0 top-full mt-1 z-30 w-60 rounded-lg border border-slate-700 bg-slate-900 shadow-xl py-1">
+                    <button
+                      type="button"
+                      className="w-full text-left px-3 py-2 text-xs text-slate-100 hover:bg-slate-800"
+                      onClick={() => {
+                        setShowEditMenu(false);
+                        setRenameValue(town.name);
+                        setShowRename(true);
+                      }}
+                    >
+                      Rename town…
+                    </button>
+                    <button
+                      type="button"
+                      className="w-full text-left px-3 py-2 text-xs text-slate-100 hover:bg-slate-800"
+                      onClick={() => {
+                        setShowEditMenu(false);
+                        setShowManageZones(true);
+                      }}
+                    >
+                      Manage zones…
+                    </button>
+                    <button
+                      type="button"
+                      className="w-full text-left px-3 py-2 text-xs text-red-200 hover:bg-slate-800"
+                      onClick={() => {
+                        setShowEditMenu(false);
+                        onSetEditor({ mode: 'radius', marketId: town.id });
+                      }}
+                    >
+                      Don’t deliver near here
+                    </button>
+                    <button
+                      type="button"
+                      className="w-full text-left px-3 py-2 text-xs text-red-200 hover:bg-slate-800"
+                      onClick={() => {
+                        setShowEditMenu(false);
+                        onSetEditor({ mode: 'cutout', marketId: town.id });
+                      }}
+                    >
+                      Draw non-delivery zone
+                    </button>
+                    {delivery ? (
+                      <>
+                        <div className="my-1 border-t border-slate-800" />
+                        <button
+                          type="button"
+                          className="w-full text-left px-3 py-2 text-xs text-red-300 hover:bg-red-500/10"
+                          onClick={() => {
+                            setShowEditMenu(false);
+                            onRemoveZone(delivery);
+                          }}
+                        >
+                          Delete town border…
+                        </button>
+                      </>
+                    ) : null}
+                  </div>
+                )}
+              </div>
               <div className="relative" ref={ioMenuRef}>
                 <button
                   type="button"
-                  onClick={() => setShowIoMenu((v) => !v)}
+                  onClick={() => {
+                    setShowIoMenu((v) => !v);
+                    setShowEditMenu(false);
+                    setShowOptsMenu(false);
+                    setShowMapToolsMenu(false);
+                  }}
                   className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-slate-500 text-xs text-slate-100"
                 >
                   <Download className="w-3.5 h-3.5" />
@@ -642,8 +776,8 @@ function TownMapOverlay({
                   <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
                 </button>
                 {showIoMenu && (
-                  <div className="absolute right-0 top-full mt-1 z-20 w-56 rounded-lg border border-slate-700 bg-slate-900 shadow-xl py-1">
-                    <p className="px-3 py-1 text-[10px] uppercase tracking-wide text-slate-500">
+                  <div className="absolute right-0 top-full mt-1 z-30 w-56 rounded-lg border border-slate-700 bg-slate-900 shadow-xl py-1">
+                    <p className="px-3 py-1 text-[10px] uppercase tracking-wide text-slate-400">
                       Import town border
                     </p>
                     <button
@@ -669,7 +803,7 @@ function TownMapOverlay({
                       Import CSV…
                     </button>
                     <div className="my-1 border-t border-slate-800" />
-                    <p className="px-3 py-1 text-[10px] uppercase tracking-wide text-slate-500">
+                    <p className="px-3 py-1 text-[10px] uppercase tracking-wide text-slate-400">
                       Export
                     </p>
                     <button
@@ -705,89 +839,178 @@ function TownMapOverlay({
                   </div>
                 )}
               </div>
-              <label className="inline-flex items-center gap-1.5 text-[11px] text-slate-400 mr-1">
-                <input
-                  type="checkbox"
-                  checked={recomputeLocked}
-                  onChange={(e) => onRecomputeLockedChange(e.target.checked)}
-                  className="rounded border-slate-600"
-                />
-                Include locked merchants
-              </label>
-              <label
-                className={`inline-flex items-center gap-1.5 text-[11px] mr-1 ${
-                  recomputeLocked ? 'text-slate-400' : 'text-slate-600'
-                }`}
-              >
-                <input
-                  type="checkbox"
-                  checked={unlockAfter}
-                  disabled={!recomputeLocked}
-                  onChange={(e) => onUnlockAfterChange(e.target.checked)}
-                  className="rounded border-slate-600"
-                />
-                Also unlock for auto updates
-              </label>
-              <label className="inline-flex items-center gap-1.5 text-[11px] text-slate-400 mr-1">
-                <input
-                  type="checkbox"
-                  checked={showCustomerCoverage}
-                  onChange={(e) => setShowCustomerCoverage(e.target.checked)}
-                  className="rounded border-slate-600"
-                />
-                Show customer coverage
-              </label>
-              {showCustomerCoverage && draftDiffersFromLive && (
-                <span className="text-[11px] text-amber-300 mr-1">Draft differs from live</span>
-              )}
+              <div className="relative" ref={optsMenuRef}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowOptsMenu((v) => !v);
+                    setShowEditMenu(false);
+                    setShowIoMenu(false);
+                    setShowMapToolsMenu(false);
+                  }}
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs ${
+                    showCustomerCoverage || recomputeLocked
+                      ? 'border-sky-500/40 bg-sky-500/10 text-sky-100'
+                      : 'border-slate-500 text-slate-100'
+                  }`}
+                >
+                  Options
+                  <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+                </button>
+                {showOptsMenu && (
+                  <div className="absolute right-0 top-full mt-1 z-30 w-64 rounded-lg border border-slate-700 bg-slate-900 shadow-xl py-2 px-3 space-y-2.5">
+                    <label className="flex items-start gap-2 text-xs text-slate-100 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={showCustomerCoverage}
+                        onChange={(e) => setShowCustomerCoverage(e.target.checked)}
+                        className="mt-0.5 rounded border-slate-500"
+                      />
+                      <span>
+                        Show customer coverage
+                        {draftDiffersFromLive ? (
+                          <span className="block text-amber-300 mt-0.5">Draft differs from live</span>
+                        ) : null}
+                      </span>
+                    </label>
+                    <div className="border-t border-slate-800 pt-2 space-y-2">
+                      <p className="text-[10px] uppercase tracking-wide text-slate-400">On publish</p>
+                      <label className="flex items-start gap-2 text-xs text-slate-100 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={recomputeLocked}
+                          onChange={(e) => onRecomputeLockedChange(e.target.checked)}
+                          className="mt-0.5 rounded border-slate-500"
+                        />
+                        Include locked merchants
+                      </label>
+                      <label
+                        className={`flex items-start gap-2 text-xs cursor-pointer ${
+                          recomputeLocked ? 'text-slate-100' : 'text-slate-500'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={unlockAfter}
+                          disabled={!recomputeLocked}
+                          onChange={(e) => onUnlockAfterChange(e.target.checked)}
+                          className="mt-0.5 rounded border-slate-500"
+                        />
+                        Also unlock for auto updates
+                      </label>
+                    </div>
+                  </div>
+                )}
+              </div>
+              <div className="relative" ref={mapToolsMenuRef}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowMapToolsMenu((v) => !v);
+                    setShowEditMenu(false);
+                    setShowIoMenu(false);
+                    setShowOptsMenu(false);
+                  }}
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs ${
+                    showHexOverlay || testActive || mapType === 'hybrid'
+                      ? 'border-cyan-500/40 bg-cyan-500/10 text-cyan-100'
+                      : 'border-slate-500 text-slate-100'
+                  }`}
+                >
+                  Map tools
+                  <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+                </button>
+                {showMapToolsMenu && (
+                  <div className="absolute right-0 top-full mt-1 z-30 w-52 rounded-lg border border-slate-700 bg-slate-900 shadow-xl py-1">
+                    <button
+                      type="button"
+                      className="w-full flex items-center gap-2 text-left px-3 py-2 text-xs text-slate-100 hover:bg-slate-800"
+                      onClick={() => setMapType((t) => (t === 'roadmap' ? 'hybrid' : 'roadmap'))}
+                    >
+                      <Satellite className="w-3.5 h-3.5 shrink-0" />
+                      {mapType === 'hybrid' ? 'Satellite (on)' : 'Satellite'}
+                    </button>
+                    {hexCells.length > 0 ? (
+                      <button
+                        type="button"
+                        className={`w-full flex items-center gap-2 text-left px-3 py-2 text-xs hover:bg-slate-800 ${
+                          showHexOverlay ? 'text-cyan-200' : 'text-slate-100'
+                        }`}
+                        onClick={() => setShowHexOverlay((v) => !v)}
+                      >
+                        Hex overlay ({hexCells.length})
+                        {showHexOverlay ? <Check className="w-3.5 h-3.5 ml-auto" /> : null}
+                      </button>
+                    ) : (
+                      <p
+                        className="px-3 py-2 text-xs text-slate-400"
+                        title="Publish coverage once to build the hex grid"
+                      >
+                        Hex overlay (not built)
+                      </p>
+                    )}
+                    <button
+                      type="button"
+                      className={`w-full flex items-center gap-2 text-left px-3 py-2 text-xs hover:bg-slate-800 ${
+                        testActive ? 'text-amber-200' : 'text-slate-100'
+                      }`}
+                      onClick={() => setTestActive((v) => !v)}
+                    >
+                      <Crosshair className="w-3.5 h-3.5 shrink-0" />
+                      {testActive ? 'Test pin (on)' : 'Test pin'}
+                      {testActive ? <Check className="w-3.5 h-3.5 ml-auto" /> : null}
+                    </button>
+                  </div>
+                )}
+              </div>
               <button
                 type="button"
-                disabled={saving || !town.draft_dirty}
+                disabled={saving || (!town.draft_dirty && hexCells.length > 0)}
                 onClick={onPublish}
+                title={
+                  !town.draft_dirty && hexCells.length === 0
+                    ? 'Builds the H3 hex grid for this town (no border change needed)'
+                    : undefined
+                }
                 className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-amber-500 text-slate-950 text-xs font-semibold disabled:opacity-40"
               >
-                Publish coverage
+                {hexCells.length === 0 && !town.draft_dirty
+                  ? 'Publish & build hexes'
+                  : 'Publish coverage'}
               </button>
             </div>
           )}
-          <button
-            type="button"
-            onClick={() => setMapExpanded((v) => !v)}
-            className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs ${
-              mapExpanded
-                ? 'border-sky-500/50 bg-sky-500/15 text-sky-200'
-                : 'border-slate-700 text-slate-300 hover:bg-slate-900'
-            }`}
-            title={mapExpanded ? 'Shrink map back into panel' : 'Expand map to full screen'}
-          >
-            {mapExpanded ? (
-              <>
-                <Minimize2 className="w-3.5 h-3.5" />
-                Shrink
-              </>
-            ) : (
-              <>
-                <Maximize2 className="w-3.5 h-3.5" />
-                Expand map
-              </>
-            )}
-          </button>
-          <button
-            type="button"
-            onClick={() => setShowHistory((v) => !v)}
-            className="p-2 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-900"
-            title="Versions & activity"
-          >
-            <History className="w-4 h-4" />
-          </button>
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-2 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-900"
-            aria-label="Close"
-          >
-            <X className="w-4 h-4" />
-          </button>
+          <div className="flex items-center gap-1.5 shrink-0">
+            <button
+              type="button"
+              onClick={() => setMapExpanded((v) => !v)}
+              className={`p-2 rounded-lg border ${
+                mapExpanded
+                  ? 'border-sky-500/50 bg-sky-500/15 text-sky-200'
+                  : 'border-slate-700 text-slate-300 hover:bg-slate-900'
+              }`}
+              title={mapExpanded ? 'Shrink map' : 'Expand map'}
+              aria-label={mapExpanded ? 'Shrink map' : 'Expand map'}
+            >
+              {mapExpanded ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowHistory((v) => !v)}
+              className="p-2 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-900"
+              title="Versions & activity"
+            >
+              <History className="w-4 h-4" />
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="p-2 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-900"
+              aria-label="Close"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
         </div>
 
         <div
@@ -829,7 +1052,7 @@ function TownMapOverlay({
                     }`}
                   >
                     <span className="font-medium">{ch.ok ? '✓' : '✗'} {ch.label}</span>
-                    {ch.detail ? <span className="block text-[11px] opacity-80">{ch.detail}</span> : null}
+                    {ch.detail ? <span className="block text-[11px] mt-0.5 opacity-95">{ch.detail}</span> : null}
                   </li>
                 ))}
               </ul>
@@ -863,6 +1086,13 @@ function TownMapOverlay({
               townIncludePolygons={includeZones(town).map((z) => z.polygon)}
               publishedZones={showCustomerCoverage ? publishedZones : []}
               hexCells={hexCells}
+              mapToolsPlacement={canWrite && uiMode === 'view' ? 'none' : 'inline'}
+              mapType={mapType}
+              onMapTypeChange={setMapType}
+              showHexOverlay={showHexOverlay}
+              onShowHexOverlayChange={setShowHexOverlay}
+              testActive={testActive}
+              onTestActiveChange={setTestActive}
               saving={saving}
               autoOpenCoordinates={autoOpenCoordinates}
               mapHeight={mapHeight}
@@ -963,6 +1193,96 @@ function TownMapOverlay({
         }}
       />
 
+      {showRename ? (
+        <div className="fixed inset-0 z-[90] flex items-end sm:items-center justify-center p-3 sm:p-6">
+          <button
+            type="button"
+            aria-label="Close"
+            className="absolute inset-0 bg-slate-950/80 backdrop-blur-[2px]"
+            onClick={() => {
+              setShowRename(false);
+              setRenameValue(town.name);
+            }}
+          />
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="rename-town-title"
+            className="relative w-full max-w-md overflow-hidden rounded-xl border border-slate-700 bg-slate-900 shadow-2xl"
+          >
+            <div className="flex items-start justify-between gap-3 border-b border-slate-800 px-4 py-3">
+              <div>
+                <h2 id="rename-town-title" className="text-base font-semibold text-white">
+                  Rename town
+                </h2>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Updates the display name everywhere this town appears.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowRename(false);
+                  setRenameValue(town.name);
+                }}
+                className="p-1.5 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800"
+                aria-label="Close rename"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <form
+              className="p-4 space-y-4"
+              onSubmit={(e) => {
+                e.preventDefault();
+                const next = renameValue.trim();
+                if (!next || next === town.name) {
+                  setShowRename(false);
+                  return;
+                }
+                void (async () => {
+                  await onRenameTown(next);
+                  setShowRename(false);
+                })();
+              }}
+            >
+              <div>
+                <label htmlFor="rename-town-input" className="block text-xs text-slate-400 mb-1">
+                  Town name
+                </label>
+                <input
+                  id="rename-town-input"
+                  autoFocus
+                  value={renameValue}
+                  onChange={(e) => setRenameValue(e.target.value)}
+                  placeholder="e.g. Kingston"
+                  className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-700 text-sm text-white"
+                />
+              </div>
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowRename(false);
+                    setRenameValue(town.name);
+                  }}
+                  className="px-3 py-2 rounded-lg border border-slate-700 text-sm text-slate-300"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={saving || !renameValue.trim() || renameValue.trim() === town.name}
+                  className="px-3 py-2 rounded-lg bg-amber-500 text-slate-950 text-sm font-semibold disabled:opacity-50"
+                >
+                  Save name
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      ) : null}
+
       <ImportTownBorderOverlay
         open={showImport && uiMode === 'view'}
         kind={importKind}
@@ -994,12 +1314,13 @@ function TownMapOverlay({
 
 type ParishMapOverlayProps = {
   parish: DashParishRow;
+  accessToken: string;
   canWrite: boolean;
   saving: boolean;
   editing: boolean;
   onClose: () => void;
   onSetEditing: (v: boolean) => void;
-  onSaveOutline: (polygon: DashZoneVertex[], promoteTemplate?: boolean) => void;
+  onSaveOutline: (polygon: DashZoneVertex[], promoteTemplate?: boolean) => void | Promise<void>;
   onSaveTownPins: (pins: DashParishTownPin[]) => void;
   onRequestEditFoundation: () => void;
   /** Confirm foundation edit; returns true if import may proceed. */
@@ -1008,6 +1329,7 @@ type ParishMapOverlayProps = {
 
 function ParishMapOverlay({
   parish,
+  accessToken,
   canWrite,
   saving,
   editing,
@@ -1044,6 +1366,13 @@ function ParishMapOverlay({
   const [importText, setImportText] = useState('');
   const [pinImportText, setPinImportText] = useState('');
   const [promoteTemplate, setPromoteTemplate] = useState(true);
+  const [showParishTools, setShowParishTools] = useState(false);
+  const [showMapToolsMenu, setShowMapToolsMenu] = useState(false);
+  const [mapType, setMapType] = useState<'roadmap' | 'hybrid'>('roadmap');
+  const [showHexOverlay, setShowHexOverlay] = useState(false);
+  const [testActive, setTestActive] = useState(false);
+  const parishToolsRef = useRef<HTMLDivElement>(null);
+  const mapToolsMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -1052,6 +1381,21 @@ function ParishMapOverlay({
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
+
+  useEffect(() => {
+    if (!showParishTools && !showMapToolsMenu) return;
+    const onDoc = (e: MouseEvent) => {
+      const t = e.target as Node;
+      if (showParishTools && parishToolsRef.current && !parishToolsRef.current.contains(t)) {
+        setShowParishTools(false);
+      }
+      if (showMapToolsMenu && mapToolsMenuRef.current && !mapToolsMenuRef.current.contains(t)) {
+        setShowMapToolsMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', onDoc);
+    return () => document.removeEventListener('mousedown', onDoc);
+  }, [showParishTools, showMapToolsMenu]);
 
   const openImport = () => {
     void (async () => {
@@ -1080,60 +1424,109 @@ function ParishMapOverlay({
             <h3 id="parish-map-title" className="font-semibold text-white truncate">
               {parish.name} · parish map
             </h3>
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-slate-300">
               Parish foundation · {foundation.length >= 3 ? 'border set' : 'no border yet'} ·{' '}
               {townPins.length} pin{townPins.length === 1 ? '' : 's'} · {(parish.towns ?? []).length}{' '}
               town{(parish.towns ?? []).length === 1 ? '' : 's'}
+              {editing ? ' · editing border' : null}
             </p>
           </div>
-          {canWrite && !editing && (
-            <>
+          {canWrite && (
+            <div className="relative" ref={parishToolsRef}>
               <button
                 type="button"
-                onClick={() => setShowPinImport(true)}
-                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-sky-500/40 text-xs text-sky-200"
+                onClick={() => {
+                  setShowParishTools((v) => !v);
+                  setShowMapToolsMenu(false);
+                }}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-slate-500 bg-slate-800 text-xs text-white font-medium"
               >
-                <MapPin className="w-3.5 h-3.5" />
-                Import town pins…
+                <Pencil className="w-3.5 h-3.5 text-sky-300" />
+                Parish tools
+                <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
               </button>
-              <button
-                type="button"
-                onClick={openImport}
-                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-amber-500/40 text-xs text-amber-200"
-              >
-                <FileUp className="w-3.5 h-3.5" />
-                Import parish border…
-              </button>
-              <button
-                type="button"
-                onClick={onRequestEditFoundation}
-                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-sky-500/40 text-xs text-sky-300"
-              >
-                <Pencil className="w-3.5 h-3.5" />
-                Edit parish border…
-              </button>
-            </>
+              {showParishTools && (
+                <div className="absolute right-0 top-full mt-1 z-30 w-56 rounded-lg border border-slate-700 bg-slate-900 shadow-xl py-1">
+                  <button
+                    type="button"
+                    className="w-full text-left px-3 py-2 text-xs text-sky-100 hover:bg-slate-800"
+                    onClick={() => {
+                      setShowParishTools(false);
+                      setShowPinImport(true);
+                    }}
+                  >
+                    Import town pins…
+                  </button>
+                  <button
+                    type="button"
+                    className="w-full text-left px-3 py-2 text-xs text-amber-100 hover:bg-slate-800"
+                    onClick={() => {
+                      setShowParishTools(false);
+                      if (editing) setShowImport(true);
+                      else openImport();
+                    }}
+                  >
+                    Import parish border…
+                  </button>
+                  {!editing ? (
+                    <button
+                      type="button"
+                      className="w-full text-left px-3 py-2 text-xs text-sky-100 hover:bg-slate-800"
+                      onClick={() => {
+                        setShowParishTools(false);
+                        onRequestEditFoundation();
+                      }}
+                    >
+                      Edit parish border…
+                    </button>
+                  ) : null}
+                </div>
+              )}
+            </div>
           )}
-          {canWrite && editing && (
-            <>
-              <button
-                type="button"
-                onClick={() => setShowPinImport(true)}
-                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-sky-500/40 text-xs text-sky-200"
-              >
-                <MapPin className="w-3.5 h-3.5" />
-                Import town pins…
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowImport(true)}
-                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-amber-500/40 text-xs text-amber-200"
-              >
-                <FileUp className="w-3.5 h-3.5" />
-                Import parish border…
-              </button>
-            </>
-          )}
+          <div className="relative" ref={mapToolsMenuRef}>
+            <button
+              type="button"
+              onClick={() => {
+                setShowMapToolsMenu((v) => !v);
+                setShowParishTools(false);
+              }}
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs ${
+                showHexOverlay || testActive || mapType === 'hybrid'
+                  ? 'border-cyan-500/40 bg-cyan-500/10 text-cyan-100'
+                  : 'border-slate-500 text-slate-100'
+              }`}
+            >
+              Map tools
+              <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+            </button>
+            {showMapToolsMenu && (
+              <div className="absolute right-0 top-full mt-1 z-30 w-52 rounded-lg border border-slate-700 bg-slate-900 shadow-xl py-1">
+                <button
+                  type="button"
+                  className="w-full flex items-center gap-2 text-left px-3 py-2 text-xs text-slate-100 hover:bg-slate-800"
+                  onClick={() => setMapType((t) => (t === 'roadmap' ? 'hybrid' : 'roadmap'))}
+                >
+                  <Satellite className="w-3.5 h-3.5 shrink-0" />
+                  {mapType === 'hybrid' ? 'Satellite (on)' : 'Satellite'}
+                </button>
+                <p className="px-3 py-2 text-xs text-slate-400" title="Hex overlay is for town maps after publish">
+                  Hex overlay (town maps only)
+                </p>
+                <button
+                  type="button"
+                  className={`w-full flex items-center gap-2 text-left px-3 py-2 text-xs hover:bg-slate-800 ${
+                    testActive ? 'text-amber-200' : 'text-slate-100'
+                  }`}
+                  onClick={() => setTestActive((v) => !v)}
+                >
+                  <Crosshair className="w-3.5 h-3.5 shrink-0" />
+                  {testActive ? 'Test pin (on)' : 'Test pin'}
+                  {testActive ? <Check className="w-3.5 h-3.5 ml-auto" /> : null}
+                </button>
+              </div>
+            )}
+          </div>
           <button
             type="button"
             onClick={onClose}
@@ -1174,10 +1567,18 @@ function ParishMapOverlay({
             }))}
             mapHeight={520}
             saving={saving}
+            mapToolsPlacement="none"
+            mapType={mapType}
+            onMapTypeChange={setMapType}
+            showHexOverlay={showHexOverlay}
+            onShowHexOverlayChange={setShowHexOverlay}
+            testActive={testActive}
+            onTestActiveChange={setTestActive}
+            onTestPoint={(lat, lng) => checkCoveragePoint(accessToken, lat, lng)}
             onCancel={() => onSetEditing(false)}
-            onSave={async ({ polygon }) => {
-              await onSaveOutline(polygon);
-            }}
+          onSaveOutline={async (polygon, promote) => {
+            await onSaveOutline(polygon, promote);
+          }}
           />
         </div>
       </div>
@@ -1206,16 +1607,24 @@ function ParishMapOverlay({
             toast.error('Invalid JSON');
             return;
           }
+          if (!Array.isArray(parsed) && isLegacyGeoJsonBlocked(parsed)) {
+            toast.error(LEGACY_IMPORT_BLOCKED_MESSAGE);
+            return;
+          }
           const ring = Array.isArray(parsed)
             ? (parsed as DashZoneVertex[])
             : polygonFromGeoJson(parsed);
           if (!ring || ring.length < 3) {
-            toast.error('Need a Polygon (or FeatureCollection with one)');
+            toast.error(
+              isLegacyGeoJsonBlocked(parsed)
+                ? LEGACY_IMPORT_BLOCKED_MESSAGE
+                : 'Need a single-ring Polygon (or Feature with one). Use Import Boundaries for official files.',
+            );
             return;
           }
           setShowImport(false);
           setImportText('');
-          onSaveOutline(sanitizeVertices(ring) as DashZoneVertex[], promoteTemplate);
+          await onSaveOutline(sanitizeVertices(ring) as DashZoneVertex[], promoteTemplate);
         }}
       />
 
@@ -1264,9 +1673,14 @@ export function MarketsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [showCreateParish, setShowCreateParish] = useState(false);
+  const [showJamaicaOverview, setShowJamaicaOverview] = useState(false);
   const [newParishName, setNewParishName] = useState('');
   const [addTownParishId, setAddTownParishId] = useState<string | null>(null);
   const [newTownName, setNewTownName] = useState('');
+  const [catalogTowns, setCatalogTowns] = useState<DashAdminBoundary[]>([]);
+  const [catalogPcode, setCatalogPcode] = useState('');
+  const [showImportBoundaries, setShowImportBoundaries] = useState(false);
+  const [listSearch, setListSearch] = useState('');
   const [editor, setEditor] = useState<EditorTarget | null>(null);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [townExpanded, setTownExpanded] = useState<Record<string, boolean>>({});
@@ -1438,6 +1852,7 @@ export function MarketsPage() {
       toast.success('Town created with foundation border');
       setAddTownParishId(null);
       setNewTownName('');
+      setCatalogPcode('');
       if (parishId) setCollapsed((c) => ({ ...c, [parishId]: false }));
       const createdId = res.market?.id;
       if (createdId) {
@@ -1448,6 +1863,29 @@ export function MarketsPage() {
       await load();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Create failed');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const submitTownFromCatalog = async (parishId: string) => {
+    if (!canWrite || !catalogPcode) return;
+    setSaving(true);
+    try {
+      const res = await createTownFromBoundary(session.access_token, parishId, catalogPcode);
+      toast.success(`Town created from catalog (${res.market.name})`);
+      setAddTownParishId(null);
+      setCatalogPcode('');
+      setNewTownName('');
+      setCollapsed((c) => ({ ...c, [parishId]: false }));
+      if (res.market?.id) {
+        setTipTownId(res.market.id);
+        setTownExpanded((t) => ({ ...t, [res.market.id]: true }));
+        setMapTownId(res.market.id);
+      }
+      await load();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Create from catalog failed');
     } finally {
       setSaving(false);
     }
@@ -1584,11 +2022,15 @@ export function MarketsPage() {
             {isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
           </button>
           <div className="flex-1 min-w-0">
-            <h3 className="font-semibold text-white">{p.name}</h3>
+            <div className="flex flex-wrap items-center gap-2">
+              <h3 className="font-semibold text-white">{p.name}</h3>
+              <ProvenanceBadge source={p.boundary_source} validOn={p.boundary_valid_on} />
+            </div>
             <p className="text-xs text-slate-500">
               Parish · {hasParishBorder ? 'border set' : 'no border yet'} · {towns.length} town
               {towns.length === 1 ? '' : 's'}
               {parishBoundaryMode ? ' · parish border delivery' : ' · town zones + parish gate'}
+              {p.pcode ? ` · ${p.pcode}` : ''}
             </p>
           </div>
           {canWrite && (
@@ -1644,6 +2086,16 @@ export function MarketsPage() {
                   setCollapsed((c) => ({ ...c, [p.id]: false }));
                   setAddTownParishId(p.id);
                   setNewTownName('');
+                  setCatalogPcode('');
+                  setCatalogTowns([]);
+                  if (p.pcode) {
+                    void listAdminBoundaries(session.access_token, {
+                      admin_level: 2,
+                      parent_pcode: p.pcode,
+                    })
+                      .then((r) => setCatalogTowns(r.boundaries))
+                      .catch(() => setCatalogTowns([]));
+                  }
                 }}
                 className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-700 text-xs text-slate-200"
               >
@@ -1665,31 +2117,68 @@ export function MarketsPage() {
         {!isCollapsed && (
           <div className="p-4 space-y-3">
             {addTownParishId === p.id && (
-              <div className="flex flex-wrap items-end gap-2 rounded-lg border border-slate-700 bg-slate-950/60 p-3">
-                <div className="flex-1 min-w-[160px]">
-                  <label className="block text-xs text-slate-400 mb-1">Town name</label>
-                  <input
-                    value={newTownName}
-                    onChange={(e) => setNewTownName(e.target.value)}
-                    placeholder="e.g. Portmore"
-                    className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-700 text-sm text-white"
-                  />
+              <div className="space-y-2 rounded-lg border border-slate-700 bg-slate-950/60 p-3">
+                {p.pcode ? (
+                  <div className="flex flex-wrap items-end gap-2">
+                    <div className="flex-1 min-w-[200px]">
+                      <label className="block text-xs text-slate-400 mb-1">
+                        Official town (admin2 · pcode)
+                      </label>
+                      <select
+                        value={catalogPcode}
+                        onChange={(e) => setCatalogPcode(e.target.value)}
+                        className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-700 text-sm text-white"
+                      >
+                        <option value="">
+                          {catalogTowns.length === 0
+                            ? 'No catalog towns (import boundaries first)…'
+                            : 'Select catalog town…'}
+                        </option>
+                        {catalogTowns.map((b) => (
+                          <option key={b.pcode} value={b.pcode}>
+                            {b.name} ({b.pcode})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={saving || !catalogPcode}
+                      onClick={() => void submitTownFromCatalog(p.id)}
+                      className="px-3 py-2 rounded-lg bg-amber-500 text-slate-950 text-sm font-semibold disabled:opacity-50"
+                    >
+                      Create from catalog
+                    </button>
+                  </div>
+                ) : null}
+                <div className="flex flex-wrap items-end gap-2">
+                  <div className="flex-1 min-w-[160px]">
+                    <label className="block text-xs text-slate-400 mb-1">
+                      {p.pcode ? 'Custom (legacy)' : 'Town name'}
+                    </label>
+                    <input
+                      value={newTownName}
+                      onChange={(e) => setNewTownName(e.target.value)}
+                      placeholder="e.g. Portmore"
+                      className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-700 text-sm text-white"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    disabled={saving || !newTownName.trim()}
+                    onClick={() => void submitTown(p.id)}
+                    className="px-3 py-2 rounded-lg border border-slate-600 text-sm text-slate-200 disabled:opacity-50"
+                  >
+                    Create custom
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAddTownParishId(null)}
+                    className="px-3 py-2 rounded-lg border border-slate-700 text-sm text-slate-300"
+                  >
+                    Cancel
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  disabled={saving || !newTownName.trim()}
-                  onClick={() => void submitTown(p.id)}
-                  className="px-3 py-2 rounded-lg bg-amber-500 text-slate-950 text-sm font-semibold disabled:opacity-50"
-                >
-                  Create town
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setAddTownParishId(null)}
-                  className="px-3 py-2 rounded-lg border border-slate-700 text-sm text-slate-300"
-                >
-                  Cancel
-                </button>
               </div>
             )}
 
@@ -1712,6 +2201,18 @@ export function MarketsPage() {
 
   const parishesWithTowns = parishes.filter((p) => (p.towns ?? []).length > 0);
   const emptyParishes = parishes.filter((p) => (p.towns ?? []).length === 0);
+  const searchQ = listSearch.trim().toLowerCase();
+  const matchesSearch = (p: DashParishRow) => {
+    if (!searchQ) return true;
+    if (p.name.toLowerCase().includes(searchQ) || p.slug.toLowerCase().includes(searchQ)) return true;
+    return (p.towns ?? []).some(
+      (t) =>
+        t.name.toLowerCase().includes(searchQ) ||
+        String(t.slug ?? '').toLowerCase().includes(searchQ),
+    );
+  };
+  const filteredWithTowns = parishesWithTowns.filter(matchesSearch);
+  const filteredEmpty = emptyParishes.filter(matchesSearch);
 
   return (
     <div className="space-y-6 text-slate-200">
@@ -1726,16 +2227,42 @@ export function MarketsPage() {
             parish uses town zones mode.
           </p>
         </div>
-        {canWrite && (
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            value={listSearch}
+            onChange={(e) => setListSearch(e.target.value)}
+            placeholder="Search parishes / towns…"
+            className="px-3 py-2 rounded-lg bg-slate-950 border border-slate-700 text-sm text-white min-w-[180px]"
+          />
           <button
             type="button"
-            onClick={() => setShowCreateParish((v) => !v)}
-            className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-700 text-sm"
+            onClick={() => setShowJamaicaOverview(true)}
+            className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-emerald-500/40 bg-emerald-500/10 text-sm text-emerald-100"
           >
-            <Plus className="w-4 h-4" />
-            New parish
+            <Map className="w-4 h-4" />
+            Jamaica overview
           </button>
-        )}
+          {canWrite && (
+            <button
+              type="button"
+              onClick={() => setShowImportBoundaries(true)}
+              className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-amber-500/40 bg-amber-500/10 text-sm text-amber-100"
+            >
+              <Upload className="w-4 h-4" />
+              Import boundaries
+            </button>
+          )}
+          {canWrite && (
+            <button
+              type="button"
+              onClick={() => setShowCreateParish((v) => !v)}
+              className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-700 text-sm"
+            >
+              <Plus className="w-4 h-4" />
+              New parish
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-100">
@@ -1774,7 +2301,7 @@ export function MarketsPage() {
         </div>
       ) : (
         <div className="space-y-4">
-          {parishesWithTowns.map(renderParishBlock)}
+          {filteredWithTowns.map(renderParishBlock)}
 
           {unassigned.length > 0 && (
             <div className="rounded-xl border border-slate-800 bg-slate-900/40 overflow-hidden">
@@ -1795,7 +2322,7 @@ export function MarketsPage() {
               <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">
                 Parishes without towns
               </p>
-              {emptyParishes.map(renderParishBlock)}
+              {filteredEmpty.map(renderParishBlock)}
             </div>
           )}
 
@@ -1868,6 +2395,18 @@ export function MarketsPage() {
             });
           }}
           onRemoveZone={(zone) => void removeZone(mapTown.id, zone)}
+          onRenameTown={async (nextName) => {
+            setSaving(true);
+            try {
+              await updateMarket(session.access_token, mapTown.id, { name: nextName });
+              toast.success(`Town renamed to ${nextName}`);
+              await load();
+            } catch (e) {
+              toast.error(e instanceof Error ? e.message : 'Rename failed');
+            } finally {
+              setSaving(false);
+            }
+          }}
           onPublish={() => {
             void (async () => {
               setSaving(true);
@@ -1954,13 +2493,21 @@ export function MarketsPage() {
                   const parsed = JSON.parse(text) as unknown;
                   if (Array.isArray(parsed)) {
                     payload.polygon = parsed as DashZoneVertex[];
+                  } else if (isLegacyGeoJsonBlocked(parsed)) {
+                    toast.error(LEGACY_IMPORT_BLOCKED_MESSAGE);
+                    setSaving(false);
+                    return;
                   } else {
                     // geojson.io exports FeatureCollection — unwrap to lat/lng ring
                     const ring = polygonFromGeoJson(parsed);
                     if (ring) {
                       payload.polygon = ring;
                     } else {
-                      payload.geojson = parsed;
+                      toast.error(
+                        'Need a single-ring Polygon. Use Import Boundaries for official multi-part files.',
+                      );
+                      setSaving(false);
+                      return;
                     }
                   }
                 } catch {
@@ -1969,7 +2516,7 @@ export function MarketsPage() {
                   return;
                 }
                 if (!payload.polygon && !payload.geojson) {
-                  toast.error('Need a Polygon (or FeatureCollection with one)');
+                  toast.error('Need a single-ring Polygon');
                   setSaving(false);
                   return;
                 }
@@ -2010,15 +2557,23 @@ export function MarketsPage() {
         />
       )}
 
+      {showJamaicaOverview && (
+        <JamaicaOverviewMap
+          parishes={parishes}
+          onClose={() => setShowJamaicaOverview(false)}
+        />
+      )}
+
       {mapParish && (
         <ParishMapOverlay
           parish={mapParish}
+          accessToken={session.access_token}
           canWrite={canWrite}
           saving={saving}
           editing={parishEditing}
           onClose={closeParishMap}
           onSetEditing={setParishEditing}
-          onSaveOutline={(polygon, promote) => void saveParishOutline(polygon, promote)}
+          onSaveOutline={(polygon, promote) => saveParishOutline(polygon, promote)}
           onSaveTownPins={(pins) => void saveParishTownPins(pins)}
           onRequestEditFoundation={() => {
             void (async () => {
@@ -2043,6 +2598,13 @@ export function MarketsPage() {
           }}
         />
       )}
+
+      <ImportBoundariesWizard
+        open={showImportBoundaries}
+        accessToken={session.access_token}
+        onClose={() => setShowImportBoundaries(false)}
+        onImported={() => void load()}
+      />
     </div>
   );
 }

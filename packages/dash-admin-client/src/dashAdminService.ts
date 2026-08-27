@@ -691,6 +691,9 @@ export interface DashMarketRow {
   is_active: boolean;
   waitlist_enabled?: boolean;
   parish_id?: string | null;
+  pcode?: string | null;
+  parent_pcode?: string | null;
+  boundary_source?: string | null;
   zones?: DashZoneRow[];
   draft_dirty?: boolean;
   published_version_id?: string | null;
@@ -715,11 +718,63 @@ export interface DashParishRow {
   /** Parish outline — outer gate (town_zones) or live delivery area (parish_boundary). */
   foundation_polygon?: DashZoneVertex[] | null;
   foundation_updated_at?: string | null;
+  foundation_boundary_pcode?: string | null;
+  pcode?: string | null;
+  parent_pcode?: string | null;
+  admin_level?: number | null;
+  boundary_source?: string | null;
+  boundary_source_version?: string | null;
+  boundary_valid_on?: string | null;
+  center_lat?: number | null;
+  center_lng?: number | null;
   /** Reference town/city pin locations (ops geography). */
   town_pins?: DashParishTownPin[] | null;
   town_pins_updated_at?: string | null;
   towns?: DashMarketRow[];
   created_at?: string;
+}
+
+export interface DashAdminBoundary {
+  id: string;
+  admin_level: number;
+  pcode: string;
+  parent_pcode?: string | null;
+  name: string;
+  slug: string;
+  area_sqkm?: number | null;
+  center_lat?: number | null;
+  center_lng?: number | null;
+  source?: string | null;
+  source_version?: string | null;
+  valid_on?: string | null;
+  properties?: Record<string, unknown>;
+  updated_at?: string;
+}
+
+export interface DashCoverageHealthParish {
+  parish_id: string;
+  slug: string;
+  name: string;
+  coverage_mode: string;
+  pcode?: string | null;
+  boundary_source?: string | null;
+  boundary_valid_on?: string | null;
+  has_foundation_geom: boolean;
+  has_foundation_jsonb: boolean;
+  foundation_vertex_count: number;
+  town_count: number;
+  towns_with_pcode: number;
+  catalog_admin2_count: number;
+}
+
+export interface DashBoundaryImportReport {
+  created: number;
+  updated: number;
+  skipped: number;
+  linked_parishes: number;
+  errors: string[];
+  warnings: string[];
+  dry_run: boolean;
 }
 
 export interface CoverageCheckResult {
@@ -828,6 +883,113 @@ export function updateParishTownPins(
     accessToken,
     `/admin/markets/parishes/${parishId}/town-pins`,
     { method: 'PUT', body: JSON.stringify(payload) },
+  );
+}
+
+export function listAdminBoundaries(
+  accessToken: string,
+  opts?: { admin_level?: number; parent_pcode?: string; q?: string },
+) {
+  const sp = new URLSearchParams();
+  if (opts?.admin_level != null) sp.set('admin_level', String(opts.admin_level));
+  if (opts?.parent_pcode) sp.set('parent_pcode', opts.parent_pcode);
+  if (opts?.q) sp.set('q', opts.q);
+  const qs = sp.toString();
+  return deliveryFetch<{ boundaries: DashAdminBoundary[]; count: number }>(
+    accessToken,
+    `/admin/markets/boundaries${qs ? `?${qs}` : ''}`,
+  );
+}
+
+export function importAdminBoundaries(
+  accessToken: string,
+  payload: {
+    features: unknown[];
+    dry_run?: boolean;
+    link_parishes?: boolean;
+  },
+) {
+  return deliveryFetch<{ report: DashBoundaryImportReport }>(
+    accessToken,
+    '/admin/markets/boundaries/import',
+    { method: 'POST', body: JSON.stringify(payload) },
+  );
+}
+
+export function listCoverageHealth(accessToken: string) {
+  return deliveryFetch<{
+    parishes: DashCoverageHealthParish[];
+    catalog_boundary_count: number;
+  }>(accessToken, '/admin/markets/coverage-health');
+}
+
+export function promoteParishBoundary(accessToken: string, parishId: string, pcode: string) {
+  return deliveryFetch<{ parish: DashParishRow }>(
+    accessToken,
+    `/admin/markets/parishes/${parishId}/promote-boundary`,
+    { method: 'POST', body: JSON.stringify({ pcode }) },
+  );
+}
+
+export function promoteMarketBoundary(
+  accessToken: string,
+  marketId: string,
+  pcode: string,
+  name?: string,
+) {
+  return deliveryFetch<{ ok: boolean; result: unknown }>(
+    accessToken,
+    `/admin/markets/markets/${marketId}/promote-boundary`,
+    { method: 'POST', body: JSON.stringify({ pcode, name }) },
+  );
+}
+
+export function createTownFromBoundary(accessToken: string, parishId: string, pcode: string) {
+  return deliveryFetch<{ market: DashMarketRow; zone?: unknown; warning?: string }>(
+    accessToken,
+    `/admin/markets/parishes/${parishId}/towns-from-boundary`,
+    { method: 'POST', body: JSON.stringify({ pcode }) },
+  );
+}
+
+export function unionCommunitiesToMarket(
+  accessToken: string,
+  marketId: string,
+  pcodes: string[],
+  name?: string,
+) {
+  return deliveryFetch<{ zone_id: string }>(
+    accessToken,
+    `/admin/markets/markets/${marketId}/union-communities`,
+    { method: 'POST', body: JSON.stringify({ pcodes, name }) },
+  );
+}
+
+export function listParishOutlineVersions(accessToken: string, parishId: string) {
+  return deliveryFetch<{
+    versions: Array<{
+      id: string;
+      parish_id: string;
+      version: number;
+      label?: string | null;
+      notes?: string | null;
+      foundation_boundary_pcode?: string | null;
+      boundary_source?: string | null;
+      created_at?: string;
+      created_by?: string | null;
+    }>;
+  }>(accessToken, `/admin/markets/parishes/${parishId}/outline-versions`);
+}
+
+export function restoreParishOutlineVersion(
+  accessToken: string,
+  parishId: string,
+  versionId: string,
+) {
+  return deliveryFetch<{ parish: DashParishRow }>(
+    accessToken,
+    `/admin/markets/parishes/${parishId}/outline-versions/${versionId}/restore`,
+    { method: 'POST', body: '{}' },
   );
 }
 

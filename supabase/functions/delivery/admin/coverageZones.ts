@@ -35,6 +35,8 @@ export type ParishContext = {
   name: string;
   coverage_mode: ParishCoverageMode;
   foundation_polygon: CoverageVertex[] | null;
+  /** When true, prefer PostGIS ST_Covers via point_covers_geom RPC. */
+  has_foundation_geom?: boolean;
 };
 
 export async function loadPublishedZonesForMarket(
@@ -76,7 +78,7 @@ export function asCoverageZones(rows: Record<string, unknown>[]): CoverageZone[]
 async function loadParishMap(sb: ServiceSb): Promise<Map<string, ParishContext>> {
   const { data: parishes } = await sb
     .from("service_parishes")
-    .select("id, name, coverage_mode, foundation_polygon");
+    .select("id, name, coverage_mode, foundation_polygon, foundation_geom");
   const map = new Map<string, ParishContext>();
   for (const row of parishes ?? []) {
     const p = row as Record<string, unknown>;
@@ -86,9 +88,29 @@ async function loadParishMap(sb: ServiceSb): Promise<Map<string, ParishContext>>
       name: String(p.name ?? "Parish"),
       coverage_mode: mode,
       foundation_polygon: parseFoundationPolygon(p.foundation_polygon),
+      has_foundation_geom: p.foundation_geom != null,
     });
   }
   return map;
+}
+
+/** PostGIS PIP when geom present; falls back to JS ray-cast on jsonb ring. */
+export async function isInsideParishFoundationResolved(
+  sb: ServiceSb,
+  lat: number,
+  lng: number,
+  parish: ParishContext | null | undefined,
+): Promise<boolean> {
+  if (!parish) return true;
+  if (parish.has_foundation_geom) {
+    const { data, error } = await sb.rpc("point_in_parish_foundation", {
+      p_parish_id: parish.id,
+      p_lat: lat,
+      p_lng: lng,
+    });
+    if (!error && typeof data === "boolean") return data;
+  }
+  return isInsideParishFoundation(lat, lng, parish.foundation_polygon);
 }
 
 export async function loadParishCoverageContext(
@@ -225,12 +247,12 @@ export async function resolveMarketForPoint(
   const parish = matchedMarket?.parish_id ? parishMap.get(matchedMarket.parish_id) : null;
   const parishBoundaryMode = parish?.coverage_mode === "parish_boundary";
 
-  if (!parishBoundaryMode && parish?.foundation_polygon) {
-    if (!isInsideParishFoundation(lat, lng, parish.foundation_polygon)) {
+  if (!parishBoundaryMode && (parish?.foundation_polygon || parish?.has_foundation_geom)) {
+    if (!(await isInsideParishFoundationResolved(sb, lat, lng, parish))) {
       return {
         covered: false,
         marketId: null,
-        parishId: parish.id,
+        parishId: parish!.id,
         parishBoundaryMode: false,
         marketIds: [],
         outsideParish: true,
@@ -388,8 +410,11 @@ export async function suggestMarketIdForMerchantPin(
   const matched = rows.find((m) => m.id === matchedId);
   const parish = matched?.parish_id ? parishMap.get(matched.parish_id) : null;
 
-  if (parish?.coverage_mode === "town_zones" && parish.foundation_polygon) {
-    if (!isInsideParishFoundation(lat, lng, parish.foundation_polygon)) return null;
+  if (
+    parish?.coverage_mode === "town_zones" &&
+    (parish.foundation_polygon || parish.has_foundation_geom)
+  ) {
+    if (!(await isInsideParishFoundationResolved(sb, lat, lng, parish))) return null;
   }
 
   if (parish?.coverage_mode === "parish_boundary" && matched?.parish_id) {

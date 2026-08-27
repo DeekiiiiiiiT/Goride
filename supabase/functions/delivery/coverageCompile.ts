@@ -21,6 +21,20 @@ type ZoneRow = {
 
 function parsePolygon(raw: unknown): LatLng[] {
   if (!Array.isArray(raw)) return [];
+  // MultiPolygon parts form: [{ outer, holes }]
+  if (raw.length > 0 && raw[0] && typeof raw[0] === "object" && "outer" in (raw[0] as object)) {
+    const out: LatLng[] = [];
+    for (const part of raw as Array<{ outer?: unknown; holes?: unknown }>) {
+      if (!Array.isArray(part.outer)) continue;
+      for (const v of part.outer) {
+        if (!v || typeof v !== "object") continue;
+        const lat = Number((v as { lat?: unknown }).lat);
+        const lng = Number((v as { lng?: unknown }).lng);
+        if (Number.isFinite(lat) && Number.isFinite(lng)) out.push({ lat, lng });
+      }
+    }
+    return out;
+  }
   const out: LatLng[] = [];
   for (const v of raw) {
     if (!v || typeof v !== "object") continue;
@@ -29,6 +43,21 @@ function parsePolygon(raw: unknown): LatLng[] {
     if (Number.isFinite(lat) && Number.isFinite(lng)) out.push({ lat, lng });
   }
   return out;
+}
+
+/** Compile each polygon part separately so MultiPolygon islands get H3 coverage. */
+function polygonsForCompile(raw: unknown): LatLng[][] {
+  if (!Array.isArray(raw)) return [];
+  if (raw.length > 0 && raw[0] && typeof raw[0] === "object" && "outer" in (raw[0] as object)) {
+    const parts: LatLng[][] = [];
+    for (const part of raw as Array<{ outer?: unknown }>) {
+      const ring = parsePolygon(Array.isArray(part.outer) ? part.outer : []);
+      if (ring.length >= 3) parts.push(ring);
+    }
+    return parts;
+  }
+  const ring = parsePolygon(raw);
+  return ring.length >= 3 ? [ring] : [];
 }
 
 export async function compileMarketCoverageCells(
@@ -45,12 +74,13 @@ export async function compileMarketCoverageCells(
   for (const res of COMPILE_H3_RESOLUTIONS) {
     for (const z of zones) {
       const kind = z.kind === "exclude" ? "exclude" : "include";
-      const poly = parsePolygon(z.polygon);
-      const cells = polygonToH3Cells(poly, res, kind);
-      for (const cell of cells) {
-        rows.push({ market_id: marketId, h3_cell: cell, h3_res: res, kind });
-        if (kind === "exclude") exclude += 1;
-        else include += 1;
+      for (const poly of polygonsForCompile(z.polygon)) {
+        const cells = polygonToH3Cells(poly, res, kind);
+        for (const cell of cells) {
+          rows.push({ market_id: marketId, h3_cell: cell, h3_res: res, kind });
+          if (kind === "exclude") exclude += 1;
+          else include += 1;
+        }
       }
     }
   }
@@ -157,11 +187,13 @@ export async function previewCoverageDiff(
   let exclude = 0;
   for (const z of zones) {
     const kind = z.kind === "exclude" ? "exclude" : "include";
-    const cells = polygonToH3Cells(parsePolygon(z.polygon), DEFAULT_H3_RESOLUTION, kind);
-    for (const cell of cells) {
-      after.add(`${kind}:${cell}`);
-      if (kind === "exclude") exclude += 1;
-      else include += 1;
+    for (const poly of polygonsForCompile(z.polygon)) {
+      const cells = polygonToH3Cells(poly, DEFAULT_H3_RESOLUTION, kind);
+      for (const cell of cells) {
+        after.add(`${kind}:${cell}`);
+        if (kind === "exclude") exclude += 1;
+        else include += 1;
+      }
     }
   }
 

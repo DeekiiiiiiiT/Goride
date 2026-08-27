@@ -21,6 +21,9 @@ const queryClient = new QueryClient({
 });
 
 void initRushNative().finally(() => {
+  // Admin portal mounts its own Sonner <Toaster>; skip here so /admin toasts aren't doubled.
+  const isAdminShell = window.location.pathname.startsWith('/admin');
+
   ReactDOM.createRoot(document.getElementById('root')!).render(
     <React.StrictMode>
       <Sentry.ErrorBoundary
@@ -35,7 +38,9 @@ void initRushNative().finally(() => {
       >
         <QueryClientProvider client={queryClient}>
           <App />
-          <Toaster position="top-center" richColors offset="max(12px, env(safe-area-inset-top))" />
+          {!isAdminShell ? (
+            <Toaster position="top-center" richColors offset="max(12px, env(safe-area-inset-top))" />
+          ) : null}
         </QueryClientProvider>
       </Sentry.ErrorBoundary>
     </React.StrictMode>,
