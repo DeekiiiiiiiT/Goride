@@ -20,6 +20,7 @@
     "@roam/dash-coverage": "workspace:*",
     "@roam/location": "workspace:*",
     "@roam/play-store-launch": "workspace:*",
+    "@roam/spatial": "workspace:*",
     "@roam/types": "workspace:*",
     "@roam/vertical-config": "workspace:*",
     "@supabase/supabase-js": "^2",

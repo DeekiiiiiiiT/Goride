@@ -8,10 +8,25 @@ import {
   resolveProcessingFee,
   resolveServiceFee,
   defaultPricingRules,
+  mergePricingRuleLayers,
 } from './engine.ts';
 import type { PricingRules } from './types.ts';
 
 const SPANISH_TOWN_RULES = defaultPricingRules();
+
+describe('mergePricingRuleLayers', () => {
+  it('lets town win over parish over default', () => {
+    const merged = mergePricingRuleLayers(
+      { delivery: { base_fee_jmd: 400, included_km: 2 }, pricing_v2_enabled: false },
+      { delivery: { base_fee_jmd: 450 } },
+      { delivery: { per_extra_km_jmd: 70 }, pricing_v2_enabled: true },
+    );
+    expect(merged).toEqual({
+      delivery: { base_fee_jmd: 450, included_km: 2, per_extra_km_jmd: 70 },
+      pricing_v2_enabled: true,
+    });
+  });
+});
 
 const MARGINAL_RULES: PricingRules = {
   ...defaultPricingRules(),

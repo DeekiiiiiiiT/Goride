@@ -1,11 +1,20 @@
 import React, { useEffect, useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
-import { Loader2 } from 'lucide-react';
+import { ChevronRight, Loader2, X } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   fetchPricingOverview,
+  fetchDefaultPricing,
+  updateDefaultPricing,
+  fetchParishPricing,
+  updateParishPricing,
+  clearParishPricing,
   fetchMarketPricing,
   updateMarketPricing,
+  clearMarketPricing,
+  clearMarketPricingBulk,
+  setParishOverrideEnabled,
+  setMarketOverrideEnabled,
   fetchPricingTiers,
   updatePricingTier,
   previewPricing,
@@ -15,6 +24,7 @@ import {
   listMerchants,
   type DashMerchant,
   type PricingMarketSummary,
+  type PricingParishSummary,
   type MerchantTierRow,
   type PricingRulesPayload,
 } from '@roam/dash-admin-client';
@@ -36,6 +46,7 @@ const DEFAULT_DROPOFF = { lat: '18.015', lng: '-76.955', label: 'Spanish Town (d
 const DASH_ADMIN_BASENAME = '/admin';
 
 type TabId = 'overview' | 'market' | 'tiers' | 'simulator' | 'cod' | 'audit';
+type RulesScope = 'global' | 'parish' | 'market';
 
 const TABS: { id: TabId; label: string }[] = [
   { id: 'overview', label: 'Overview' },
@@ -46,8 +57,55 @@ const TABS: { id: TabId; label: string }[] = [
   { id: 'audit', label: 'Audit Log' },
 ];
 
+const RULES_SCOPES: { id: RulesScope; label: string; hint: string }[] = [
+  { id: 'global', label: 'Default', hint: 'Applies to every area unless overridden' },
+  { id: 'parish', label: 'Parish', hint: 'Overrides Default for all towns in that parish' },
+  { id: 'market', label: 'Town / City', hint: 'Overrides Default + Parish for one town' },
+];
+
 function formatJmd(n: number) {
   return `J$${Math.round(n).toLocaleString()}`;
+}
+
+/** Parish rows for Pricing Overview — parish sort_order, then town name. */
+function groupMarketsByParish(markets: PricingMarketSummary[]) {
+  const byKey = new Map<
+    string,
+    {
+      key: string;
+      name: string;
+      sortOrder: number;
+      markets: PricingMarketSummary[];
+      activeMarkets: PricingMarketSummary[];
+    }
+  >();
+
+  for (const m of markets) {
+    const key = m.parish?.id ?? m.market.parish_id ?? '__unassigned__';
+    const name = m.parish?.name ?? 'Unassigned parish';
+    const sortOrder = m.parish?.sort_order ?? Number.MAX_SAFE_INTEGER;
+    const bucket = byKey.get(key) ?? {
+      key,
+      name,
+      sortOrder,
+      markets: [],
+      activeMarkets: [],
+    };
+    bucket.markets.push(m);
+    if (m.market.is_active) bucket.activeMarkets.push(m);
+    byKey.set(key, bucket);
+  }
+
+  const byName = (a: PricingMarketSummary, b: PricingMarketSummary) =>
+    a.market.name.localeCompare(b.market.name, undefined, { sensitivity: 'base' });
+
+  return [...byKey.values()]
+    .map((g) => ({
+      ...g,
+      markets: [...g.markets].sort(byName),
+      activeMarkets: [...g.activeMarkets].sort(byName),
+    }))
+    .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name));
 }
 
 export function PricingHubPage() {
@@ -56,9 +114,18 @@ export function PricingHubPage() {
   const [tab, setTab] = useState<TabId>('overview');
   const [loading, setLoading] = useState(true);
   const [markets, setMarkets] = useState<PricingMarketSummary[]>([]);
+  const [parishes, setParishes] = useState<PricingParishSummary[]>([]);
   const [tiers, setTiers] = useState<MerchantTierRow[]>([]);
+  const [rulesScope, setRulesScope] = useState<RulesScope>('global');
+  const [rulesPanel, setRulesPanel] = useState<'list' | 'view' | 'edit'>('list');
+  const [selectedParishId, setSelectedParishId] = useState('');
   const [selectedMarketId, setSelectedMarketId] = useState('');
   const [marketRules, setMarketRules] = useState<PricingRulesPayload>({});
+  const [defaultRules, setDefaultRules] = useState<PricingRulesPayload>({});
+  const [rulesStack, setRulesStack] = useState<string[]>(['Default']);
+  const [hasLayerOverride, setHasLayerOverride] = useState(false);
+  const [layerOverrideEnabled, setLayerOverrideEnabled] = useState(true);
+  const [rulesLoading, setRulesLoading] = useState(false);
   const [saving, setSaving] = useState(false);
 
   // Simulator — all quote fields are always visible (manual ops workflow)
@@ -105,13 +172,24 @@ export function PricingHubPage() {
 
   // Audit
   const [auditEntries, setAuditEntries] = useState<Array<Record<string, unknown>>>([]);
+  /** Pricing Overview — parish overlay (active towns only). */
+  const [overviewParishKey, setOverviewParishKey] = useState<string | null>(null);
+  /** Town rules tab — parish drill-down for active town overrides. */
+  const [townRulesParishKey, setTownRulesParishKey] = useState<string | null>(null);
+  const [selectedTownOverrideIds, setSelectedTownOverrideIds] = useState<string[]>([]);
+  const [bulkClearing, setBulkClearing] = useState(false);
 
   const refresh = async () => {
     const overview = await fetchPricingOverview(session.access_token);
     setMarkets(overview.markets ?? []);
+    setParishes(overview.parishes ?? []);
     setTiers(overview.tiers ?? []);
+    if (!selectedParishId && overview.parishes?.[0]) {
+      setSelectedParishId(overview.parishes[0].id);
+    }
     if (!selectedMarketId && overview.markets?.[0]) {
-      setSelectedMarketId(overview.markets[0].market.id);
+      const active = overview.markets.find((m) => m.market.is_active);
+      setSelectedMarketId((active ?? overview.markets[0]).market.id);
     }
   };
 
@@ -122,11 +200,55 @@ export function PricingHubPage() {
   }, [session.access_token]);
 
   useEffect(() => {
-    if (!selectedMarketId) return;
-    void fetchMarketPricing(session.access_token, selectedMarketId)
-      .then((res) => setMarketRules(res.rules ?? {}))
+    // Always keep Default card summary fresh
+    void fetchDefaultPricing(session.access_token)
+      .then((res) => setDefaultRules(res.rules ?? {}))
       .catch(console.error);
-  }, [selectedMarketId, session.access_token]);
+  }, [session.access_token]);
+
+  useEffect(() => {
+    if (rulesPanel === 'list' && rulesScope !== 'global') return;
+    let cancelled = false;
+    void (async () => {
+      setRulesLoading(true);
+      try {
+        if (rulesScope === 'global') {
+          const res = await fetchDefaultPricing(session.access_token);
+          if (cancelled) return;
+          setMarketRules(res.rules ?? {});
+          setDefaultRules(res.rules ?? {});
+          setRulesStack(res.stack ?? ['Default']);
+          setHasLayerOverride(Boolean(res.has_override));
+          setLayerOverrideEnabled(true);
+          return;
+        }
+        if (rulesScope === 'parish') {
+          if (!selectedParishId) return;
+          const res = await fetchParishPricing(session.access_token, selectedParishId);
+          if (cancelled) return;
+          setMarketRules(res.rules ?? {});
+          setRulesStack(res.stack ?? ['Default']);
+          setHasLayerOverride(Boolean(res.has_override));
+          setLayerOverrideEnabled(res.override_enabled !== false);
+          return;
+        }
+        if (!selectedMarketId) return;
+        const res = await fetchMarketPricing(session.access_token, selectedMarketId);
+        if (cancelled) return;
+        setMarketRules(res.rules ?? {});
+        setRulesStack(res.stack ?? ['Default']);
+        setHasLayerOverride(Boolean(res.has_override));
+        setLayerOverrideEnabled(res.override_enabled !== false);
+      } catch (e) {
+        console.error(e);
+      } finally {
+        if (!cancelled) setRulesLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [rulesScope, rulesPanel, selectedParishId, selectedMarketId, session.access_token]);
 
   useEffect(() => {
     if (tab === 'cod') {
@@ -249,7 +371,9 @@ export function PricingHubPage() {
   };
 
   const handleSaveMarketRules = async () => {
-    if (!selectedMarketId || !canWrite) return;
+    if (!canWrite) return;
+    if (rulesScope === 'parish' && !selectedParishId) return;
+    if (rulesScope === 'market' && !selectedMarketId) return;
     setSaving(true);
     try {
       const payload: PricingRulesPayload = {
@@ -259,13 +383,139 @@ export function PricingHubPage() {
           mode: 'marginal',
         },
       };
-      await updateMarketPricing(session.access_token, selectedMarketId, payload);
-      toast.success('Market pricing saved');
+      if (rulesScope === 'global') {
+        await updateDefaultPricing(session.access_token, payload);
+        setDefaultRules(payload);
+        toast.success('Default pricing saved');
+      } else if (rulesScope === 'parish') {
+        await updateParishPricing(session.access_token, selectedParishId, payload);
+        toast.success('Parish pricing override saved');
+      } else {
+        await updateMarketPricing(session.access_token, selectedMarketId, payload);
+        toast.success('Town pricing override saved');
+      }
+      setHasLayerOverride(true);
       await refresh();
+      setRulesPanel('list');
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Save failed');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleClearLayerOverride = async () => {
+    if (!canWrite || rulesScope === 'global') return;
+    setSaving(true);
+    try {
+      if (rulesScope === 'parish') {
+        await clearParishPricing(session.access_token, selectedParishId);
+        toast.success('Parish override removed — using Default');
+      } else {
+        await clearMarketPricing(session.access_token, selectedMarketId);
+        toast.success('Town override removed — using Default / Parish');
+      }
+      await refresh();
+      setRulesPanel('list');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not clear override');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const openRulesView = (scope: RulesScope, id?: string) => {
+    setRulesScope(scope);
+    if (scope === 'parish' && id) setSelectedParishId(id);
+    if (scope === 'market' && id) setSelectedMarketId(id);
+    setRulesPanel('view');
+  };
+
+  const openRulesEdit = (scope: RulesScope, id?: string) => {
+    setRulesScope(scope);
+    if (scope === 'parish' && id) setSelectedParishId(id);
+    if (scope === 'market' && id) setSelectedMarketId(id);
+    setRulesPanel('edit');
+  };
+
+  const parishOverrideCards = parishes.filter((p) => p.has_override);
+  const activeTowns = markets.filter((m) => m.market.is_active);
+  const activeTownOverrides = activeTowns.filter((m) => m.has_town_override);
+  const inactiveTownOverrides = markets.filter(
+    (m) => !m.market.is_active && m.has_town_override,
+  );
+  const parishChoicesForAdd = parishes.filter((p) => !p.has_override);
+  const townChoicesForAdd = activeTowns.filter((m) => !m.has_town_override);
+  const townParishGroups = groupMarketsByParish(activeTowns);
+  const townRulesParish = townRulesParishKey
+    ? townParishGroups.find((p) => p.key === townRulesParishKey) ?? null
+    : null;
+  const townRulesParishOverrides = (townRulesParish?.markets ?? []).filter(
+    (m) => m.has_town_override,
+  );
+  const activeRulesTitle =
+    rulesScope === 'global'
+      ? 'Platform default'
+      : rulesScope === 'parish'
+        ? parishes.find((p) => p.id === selectedParishId)?.name ?? 'Parish'
+        : markets.find((m) => m.market.id === selectedMarketId)?.market.name ?? 'Town';
+
+  const handleBulkClearTownOverrides = async (ids: string[]) => {
+    if (!canWrite || ids.length === 0) return;
+    setBulkClearing(true);
+    try {
+      const res = await clearMarketPricingBulk(session.access_token, { market_ids: ids });
+      toast.success(`Removed ${res.cleared} town override${res.cleared === 1 ? '' : 's'}`);
+      setSelectedTownOverrideIds([]);
+      await refresh();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Bulk delete failed');
+    } finally {
+      setBulkClearing(false);
+    }
+  };
+
+  const handleClearInactiveTownOverrides = async () => {
+    if (!canWrite) return;
+    if (
+      !window.confirm(
+        `Remove pricing overrides for ${inactiveTownOverrides.length} inactive town${inactiveTownOverrides.length === 1 ? '' : 's'}? They will inherit Default / Parish again.`,
+      )
+    ) {
+      return;
+    }
+    setBulkClearing(true);
+    try {
+      const res = await clearMarketPricingBulk(session.access_token, { inactive_only: true });
+      toast.success(`Cleared ${res.cleared} inactive town override${res.cleared === 1 ? '' : 's'}`);
+      setSelectedTownOverrideIds([]);
+      await refresh();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Cleanup failed');
+    } finally {
+      setBulkClearing(false);
+    }
+  };
+
+  const handleToggleParishOverride = async (parishId: string, enabled: boolean) => {
+    if (!canWrite) return;
+    try {
+      await setParishOverrideEnabled(session.access_token, parishId, enabled);
+      toast.success(enabled ? 'Parish override on' : 'Parish override off — using Default');
+      await refresh();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not update override');
+    }
+  };
+
+  const handleToggleTownOverride = async (marketId: string, enabled: boolean) => {
+    if (!canWrite) return;
+    try {
+      await setMarketOverrideEnabled(session.access_token, marketId, enabled);
+      toast.success(enabled ? 'Town override on' : 'Town override off — using Default / Parish');
+      await refresh();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not update override');
     }
   };
 
@@ -435,6 +685,11 @@ export function PricingHubPage() {
     }
   };
 
+  const parishGroups = groupMarketsByParish(markets);
+  const overviewParish = overviewParishKey
+    ? parishGroups.find((p) => p.key === overviewParishKey) ?? null
+    : null;
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
@@ -475,39 +730,28 @@ export function PricingHubPage() {
       </div>
 
       {tab === 'overview' && (
-        <div className="grid gap-4 md:grid-cols-2">
-          {markets.map((m) => (
-            <div
-              key={m.market.id}
-              className="rounded-xl border border-slate-800 bg-slate-900/50 p-4"
-            >
-              <div className="flex items-center justify-between">
-                <h3 className="font-medium text-white">{m.market.name}</h3>
-                <span
-                  className={`text-xs px-2 py-0.5 rounded-full ${
-                    m.pricing_v2_enabled
-                      ? 'bg-emerald-900/50 text-emerald-300'
-                      : 'bg-slate-800 text-slate-400'
-                  }`}
-                >
-                  {m.pricing_v2_enabled ? 'Model B active' : 'Legacy Model A'}
-                </span>
-              </div>
-              <p className="text-sm text-slate-400 mt-2">
-                Profile v{(m.profile as { version?: number })?.version ?? '—'}
-              </p>
+        <div className="space-y-6">
+          <div className="space-y-2">
+            {parishGroups.map((parish) => (
               <button
+                key={parish.key}
                 type="button"
-                className="mt-3 text-sm text-amber-400 hover:underline"
-                onClick={() => {
-                  setSelectedMarketId(m.market.id);
-                  setTab('market');
-                }}
+                onClick={() => setOverviewParishKey(parish.key)}
+                className="w-full flex items-center justify-between gap-3 rounded-xl border border-slate-800 bg-slate-900/50 px-4 py-3 text-left hover:border-slate-600 hover:bg-slate-900 transition-colors"
               >
-                Edit rules →
+                <div className="min-w-0">
+                  <p className="font-medium text-white truncate">{parish.name}</p>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    {parish.activeMarkets.length} active
+                    {parish.markets.length !== parish.activeMarkets.length
+                      ? ` · ${parish.markets.length} total towns`
+                      : ''}
+                  </p>
+                </div>
+                <ChevronRight className="w-4 h-4 text-slate-500 shrink-0" />
               </button>
-            </div>
-          ))}
+            ))}
+          </div>
           <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4">
             <h3 className="font-medium text-white mb-3">Merchant Tiers</h3>
             <ul className="space-y-2">
@@ -519,205 +763,594 @@ export function PricingHubPage() {
               ))}
             </ul>
           </div>
+
+          {overviewParish && (
+            <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-3 sm:p-6">
+              <button
+                type="button"
+                aria-label="Close"
+                className="absolute inset-0 bg-slate-950/80 backdrop-blur-[2px]"
+                onClick={() => setOverviewParishKey(null)}
+              />
+              <div
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="pricing-parish-overlay-title"
+                className="relative w-full max-w-2xl max-h-[88vh] overflow-hidden rounded-xl border border-slate-700 bg-slate-900 shadow-2xl flex flex-col"
+              >
+                <div className="flex items-start justify-between gap-3 border-b border-slate-800 px-4 py-3">
+                  <div>
+                    <h2
+                      id="pricing-parish-overlay-title"
+                      className="text-base font-semibold text-white"
+                    >
+                      {overviewParish.name}
+                    </h2>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      Active delivery towns only — same as the green toggle on Markets.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setOverviewParishKey(null)}
+                    className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-800 hover:text-white"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+                <div className="overflow-y-auto flex-1 p-4">
+                  {overviewParish.activeMarkets.length === 0 ? (
+                    <p className="text-sm text-slate-400 py-8 text-center">
+                      No active towns in this parish yet. Activate a town under Markets first.
+                    </p>
+                  ) : (
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      {overviewParish.activeMarkets.map((m) => (
+                        <div
+                          key={m.market.id}
+                          className="rounded-xl border border-slate-800 bg-slate-950/60 p-4"
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <h3 className="font-medium text-white">{m.market.name}</h3>
+                            <span
+                              className={`text-xs px-2 py-0.5 rounded-full shrink-0 ${
+                                m.pricing_v2_enabled
+                                  ? 'bg-emerald-900/50 text-emerald-300'
+                                  : 'bg-slate-800 text-slate-400'
+                              }`}
+                            >
+                              {m.pricing_v2_enabled ? 'Model B active' : 'Legacy Model A'}
+                            </span>
+                          </div>
+                          <p className="text-sm text-slate-400 mt-2">
+                            Profile v{(m.profile as { version?: number })?.version ?? '—'}
+                          </p>
+                          <button
+                            type="button"
+                            className="mt-3 text-sm text-amber-400 hover:underline"
+                            onClick={() => {
+                              openRulesView('market', m.market.id);
+                              setOverviewParishKey(null);
+                              setTab('market');
+                            }}
+                          >
+                            Edit rules →
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
       {tab === 'market' && (
-        <div className="space-y-4 max-w-2xl">
-          <div>
-            <label className="block text-xs text-slate-500 mb-1">Market</label>
-            <select
-              value={selectedMarketId}
-              onChange={(e) => setSelectedMarketId(e.target.value)}
-              className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-700 text-white"
-            >
-              {markets.map((m) => (
-                <option key={m.market.id} value={m.market.id}>
-                  {m.market.name}
-                </option>
-              ))}
-            </select>
+        <div className="space-y-4 max-w-3xl">
+          <div className="flex flex-wrap gap-2">
+            {RULES_SCOPES.map((s) => (
+              <button
+                key={s.id}
+                type="button"
+                onClick={() => {
+                  setRulesScope(s.id);
+                  setRulesPanel('list');
+                }}
+                className={`px-3 py-1.5 text-sm rounded-lg ${
+                  rulesScope === s.id
+                    ? 'bg-amber-600 text-white'
+                    : 'text-slate-400 hover:bg-slate-800'
+                }`}
+              >
+                {s.label}
+              </button>
+            ))}
           </div>
+          <p className="text-xs text-slate-500">
+            {RULES_SCOPES.find((s) => s.id === rulesScope)?.hint}. Hierarchy:{' '}
+            <span className="text-slate-300">Default → Parish → Town</span> (lower wins).
+          </p>
 
-          <label className="flex items-center gap-2 text-sm text-slate-300">
-            <input
-              type="checkbox"
-              checked={Boolean(marketRules.pricing_v2_enabled)}
-              onChange={(e) =>
-                setMarketRules((r) => ({ ...r, pricing_v2_enabled: e.target.checked }))
-              }
-              disabled={!canWrite}
-            />
-            Enable Model B pricing for this market
-          </label>
-
-          <div className="grid grid-cols-2 gap-3">
-            <Field
-              label="Base delivery (JMD)"
-              value={marketRules.delivery?.base_fee_jmd ?? 400}
-              onChange={(v) =>
-                setMarketRules((r) => ({
-                  ...r,
-                  delivery: { ...r.delivery, base_fee_jmd: v },
-                }))
-              }
-              disabled={!canWrite}
-            />
-            <Field
-              label="Included km"
-              value={marketRules.delivery?.included_km ?? 2}
-              onChange={(v) =>
-                setMarketRules((r) => ({
-                  ...r,
-                  delivery: { ...r.delivery, included_km: v },
-                }))
-              }
-              disabled={!canWrite}
-            />
-            <Field
-              label="Per extra km (JMD)"
-              value={marketRules.delivery?.per_extra_km_jmd ?? 60}
-              onChange={(v) =>
-                setMarketRules((r) => ({
-                  ...r,
-                  delivery: { ...r.delivery, per_extra_km_jmd: v },
-                }))
-              }
-              disabled={!canWrite}
-            />
-          </div>
-
-          <div className="rounded-xl border border-slate-800 bg-slate-900/30 p-4 space-y-3">
-            <h3 className="text-sm font-medium text-white">Service fee (bracketed)</h3>
-            <div className="grid grid-cols-2 gap-3">
-              <PctField
-                label="Average rate (%)"
-                value={Math.round((marketRules.service_fee?.avg_rate ?? 0.15) * 1000) / 10}
-                onChange={(v) =>
-                  setMarketRules((r) => ({
-                    ...r,
-                    service_fee: {
-                      ...r.service_fee,
-                      mode: 'marginal',
-                      avg_rate: v / 100,
-                    },
-                  }))
-                }
-                disabled={!canWrite}
-              />
-              <PctField
-                label="Override rate (%)"
-                value={Math.round((marketRules.service_fee?.override_rate ?? 0.09) * 1000) / 10}
-                onChange={(v) =>
-                  setMarketRules((r) => ({
-                    ...r,
-                    service_fee: {
-                      ...r.service_fee,
-                      mode: 'marginal',
-                      override_rate: v / 100,
-                    },
-                  }))
-                }
-                disabled={!canWrite}
-              />
-              <Field
-                label="Override threshold (JMD)"
-                value={marketRules.service_fee?.override_threshold_jmd ?? 5000}
-                onChange={(v) =>
-                  setMarketRules((r) => ({
-                    ...r,
-                    service_fee: {
-                      ...r.service_fee,
-                      mode: 'marginal',
-                      override_threshold_jmd: v,
-                    },
-                  }))
-                }
-                disabled={!canWrite}
-              />
-              <Field
-                label="Minimum fee (JMD)"
-                value={marketRules.service_fee?.min_jmd ?? 150}
-                onChange={(v) =>
-                  setMarketRules((r) => ({
-                    ...r,
-                    service_fee: { ...r.service_fee, mode: 'marginal', min_jmd: v },
-                  }))
-                }
-                disabled={!canWrite}
-              />
-              <Field
-                label="Maximum fee (JMD)"
-                value={marketRules.service_fee?.max_jmd ?? 2500}
-                onChange={(v) =>
-                  setMarketRules((r) => ({
-                    ...r,
-                    service_fee: { ...r.service_fee, mode: 'marginal', max_jmd: v },
-                  }))
-                }
-                disabled={!canWrite}
-              />
-              <Field
-                label="Minimum order subtotal (JMD)"
-                value={marketRules.min_order_subtotal_jmd ?? 800}
-                onChange={(v) =>
-                  setMarketRules((r) => ({ ...r, min_order_subtotal_jmd: v }))
-                }
-                disabled={!canWrite}
-              />
-              <PctField
-                label="Card processing fee (%)"
-                value={Math.round((marketRules.card_processing_fee_percent ?? 0.045) * 1000) / 10}
-                onChange={(v) =>
-                  setMarketRules((r) => ({ ...r, card_processing_fee_percent: v / 100 }))
-                }
-                disabled={!canWrite}
-              />
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <p className="text-sm text-slate-400">
+              {rulesScope === 'global'
+                ? 'Platform-wide base rules'
+                : rulesScope === 'parish'
+                  ? `${parishOverrideCards.length} parish override${parishOverrideCards.length === 1 ? '' : 's'}`
+                  : `${activeTownOverrides.length} active town override${activeTownOverrides.length === 1 ? '' : 's'}`}
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {canWrite && rulesScope === 'market' && inactiveTownOverrides.length > 0 && (
+                <button
+                  type="button"
+                  disabled={bulkClearing}
+                  onClick={() => void handleClearInactiveTownOverrides()}
+                  className="px-3 py-1.5 rounded-lg border border-slate-700 text-slate-300 text-sm hover:bg-slate-800 disabled:opacity-50"
+                >
+                  {bulkClearing
+                    ? 'Clearing…'
+                    : `Clear ${inactiveTownOverrides.length} inactive override${inactiveTownOverrides.length === 1 ? '' : 's'}`}
+                </button>
+              )}
+              {canWrite && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (rulesScope === 'global') {
+                      openRulesEdit('global');
+                      return;
+                    }
+                    if (rulesScope === 'parish') {
+                      const next = parishChoicesForAdd[0] ?? parishes[0];
+                      if (!next) {
+                        toast.error('No parishes available');
+                        return;
+                      }
+                      openRulesEdit('parish', next.id);
+                      return;
+                    }
+                    const next = townChoicesForAdd[0];
+                    if (!next) {
+                      toast.error('Every active town already has an override (or none are active)');
+                      return;
+                    }
+                    openRulesEdit('market', next.market.id);
+                  }}
+                  className="px-3 py-1.5 rounded-lg bg-amber-600 text-white text-sm"
+                >
+                  {rulesScope === 'global' ? 'Edit default rules' : 'Add rule'}
+                </button>
+              )}
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <Field
-              label="Courier delivery share (%)"
-              value={Math.round((marketRules.courier_delivery_share ?? 0.8) * 100)}
-              onChange={(v) =>
-                setMarketRules((r) => ({ ...r, courier_delivery_share: v / 100 }))
-              }
-              disabled={!canWrite}
-            />
-            <Field
-              label="COD pause threshold (JMD)"
-              value={marketRules.cod?.pause_threshold_jmd ?? 10000}
-              onChange={(v) =>
-                setMarketRules((r) => ({
-                  ...r,
-                  cod: { ...r.cod, pause_threshold_jmd: v },
-                }))
-              }
-              disabled={!canWrite}
-            />
-            <Field
-              label="Free delivery first N orders"
-              value={marketRules.launch_promos?.free_delivery_first_n_orders ?? 3}
-              onChange={(v) =>
-                setMarketRules((r) => ({
-                  ...r,
-                  launch_promos: { free_delivery_first_n_orders: v },
-                }))
-              }
-              disabled={!canWrite}
-            />
-          </div>
-
-          {canWrite && (
+          {rulesScope === 'global' && (
             <button
               type="button"
-              disabled={saving}
-              onClick={() => void handleSaveMarketRules()}
-              className="px-4 py-2 rounded-lg bg-amber-600 text-white text-sm disabled:opacity-50"
+              onClick={() => openRulesView('global')}
+              className="w-full text-left rounded-xl border border-slate-800 bg-slate-900/50 p-4 hover:border-slate-600 transition-colors"
             >
-              {saving ? 'Saving…' : 'Save market rules'}
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="font-medium text-white">Platform default</p>
+                  <p className="text-xs text-slate-500 mt-1">Applies unless a parish or town overrides it</p>
+                </div>
+                <ChevronRight className="w-4 h-4 text-slate-500 shrink-0 mt-1" />
+              </div>
+              <RulesCardPreview rules={defaultRules} />
             </button>
+          )}
+
+          {rulesScope === 'parish' && (
+            <div className="space-y-2">
+              {parishOverrideCards.length === 0 ? (
+                <p className="text-sm text-slate-500 py-8 text-center rounded-xl border border-dashed border-slate-800">
+                  No parish overrides yet. Click Add rule to create one.
+                </p>
+              ) : (
+                parishOverrideCards.map((p) => (
+                  <div
+                    key={p.id}
+                    className="flex items-stretch gap-2 rounded-xl border border-slate-800 bg-slate-900/50"
+                  >
+                    <button
+                      type="button"
+                      onClick={() => openRulesView('parish', p.id)}
+                      className="flex-1 text-left px-4 py-3 hover:border-slate-600 transition-colors"
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <p className="font-medium text-white">{p.name}</p>
+                          <p className="text-xs text-slate-500 mt-0.5">
+                            Parish override · {p.override_enabled ? 'Active' : 'Inactive'}
+                            {' · '}Default → {p.name}
+                          </p>
+                        </div>
+                        <ChevronRight className="w-4 h-4 text-slate-500 shrink-0" />
+                      </div>
+                    </button>
+                    {canWrite && (
+                      <div className="flex items-center px-3 border-l border-slate-800">
+                        <OverrideEnabledToggle
+                          enabled={Boolean(p.override_enabled)}
+                          onToggle={(next) => void handleToggleParishOverride(p.id, next)}
+                          label={`${p.name} override`}
+                        />
+                      </div>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+          )}
+
+          {rulesScope === 'market' && (
+            <div className="space-y-2">
+              {townParishGroups.length === 0 ? (
+                <p className="text-sm text-slate-500 py-8 text-center rounded-xl border border-dashed border-slate-800">
+                  No active towns yet. Activate a town under Markets first.
+                </p>
+              ) : (
+                townParishGroups.map((parish) => {
+                  const overrideCount = parish.markets.filter((m) => m.has_town_override).length;
+                  return (
+                    <button
+                      key={parish.key}
+                      type="button"
+                      onClick={() => {
+                        setSelectedTownOverrideIds([]);
+                        setTownRulesParishKey(parish.key);
+                      }}
+                      className="w-full text-left rounded-xl border border-slate-800 bg-slate-900/50 p-4 hover:border-slate-600 transition-colors"
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <p className="font-medium text-white">{parish.name}</p>
+                          <p className="text-xs text-slate-500 mt-0.5">
+                            {overrideCount} active town override{overrideCount === 1 ? '' : 's'}
+                            {' · '}
+                            {parish.markets.length} active town{parish.markets.length === 1 ? '' : 's'}
+                          </p>
+                        </div>
+                        <ChevronRight className="w-4 h-4 text-slate-500 shrink-0" />
+                      </div>
+                    </button>
+                  );
+                })
+              )}
+
+              {townRulesParish && (
+                <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-3 sm:p-6">
+                  <button
+                    type="button"
+                    aria-label="Close"
+                    className="absolute inset-0 bg-slate-950/80 backdrop-blur-[2px]"
+                    onClick={() => {
+                      setTownRulesParishKey(null);
+                      setSelectedTownOverrideIds([]);
+                    }}
+                  />
+                  <div
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="town-rules-parish-title"
+                    className="relative w-full max-w-2xl max-h-[88vh] overflow-hidden rounded-xl border border-slate-700 bg-slate-900 shadow-2xl flex flex-col"
+                  >
+                    <div className="flex items-start justify-between gap-3 border-b border-slate-800 px-4 py-3">
+                      <div>
+                        <h2
+                          id="town-rules-parish-title"
+                          className="text-base font-semibold text-white"
+                        >
+                          {townRulesParish.name} · town rules
+                        </h2>
+                        <p className="text-xs text-slate-400 mt-0.5">
+                          Active towns only. Select overrides to delete, or open one to review.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setTownRulesParishKey(null);
+                          setSelectedTownOverrideIds([]);
+                        }}
+                        className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-800 hover:text-white"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+
+                    <div className="overflow-y-auto flex-1 p-4 space-y-3">
+                      {townRulesParishOverrides.length === 0 ? (
+                        <p className="text-sm text-slate-500 py-8 text-center">
+                          No active town overrides in this parish. Use Add rule to create one.
+                        </p>
+                      ) : (
+                        <>
+                          {canWrite && (
+                            <div className="flex flex-wrap items-center gap-2 pb-1">
+                              <label className="flex items-center gap-2 text-xs text-slate-400">
+                                <input
+                                  type="checkbox"
+                                  checked={
+                                    townRulesParishOverrides.length > 0 &&
+                                    townRulesParishOverrides.every((m) =>
+                                      selectedTownOverrideIds.includes(m.market.id),
+                                    )
+                                  }
+                                  onChange={(e) => {
+                                    setSelectedTownOverrideIds(
+                                      e.target.checked
+                                        ? townRulesParishOverrides.map((m) => m.market.id)
+                                        : [],
+                                    );
+                                  }}
+                                />
+                                Select all
+                              </label>
+                              <button
+                                type="button"
+                                disabled={bulkClearing || selectedTownOverrideIds.length === 0}
+                                onClick={() =>
+                                  void handleBulkClearTownOverrides(selectedTownOverrideIds)
+                                }
+                                className="px-3 py-1.5 rounded-lg border border-slate-700 text-slate-300 text-xs hover:bg-slate-800 disabled:opacity-50"
+                              >
+                                {bulkClearing
+                                  ? 'Deleting…'
+                                  : `Delete selected (${selectedTownOverrideIds.length})`}
+                              </button>
+                            </div>
+                          )}
+                          {townRulesParishOverrides.map((m) => (
+                            <div
+                              key={m.market.id}
+                              className="flex items-stretch gap-2 rounded-xl border border-slate-800 bg-slate-950/60"
+                            >
+                              {canWrite && (
+                                <label className="flex items-center px-3 border-r border-slate-800">
+                                  <input
+                                    type="checkbox"
+                                    checked={selectedTownOverrideIds.includes(m.market.id)}
+                                    onChange={(e) => {
+                                      setSelectedTownOverrideIds((prev) =>
+                                        e.target.checked
+                                          ? [...prev, m.market.id]
+                                          : prev.filter((id) => id !== m.market.id),
+                                      );
+                                    }}
+                                  />
+                                </label>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setTownRulesParishKey(null);
+                                  openRulesView('market', m.market.id);
+                                }}
+                                className="flex-1 text-left px-4 py-3 hover:bg-slate-900/80"
+                              >
+                                <div className="flex items-center justify-between gap-3">
+                                  <div>
+                                    <p className="font-medium text-white">{m.market.name}</p>
+                                    <p className="text-xs text-slate-500 mt-0.5">
+                                      Town override ·{' '}
+                                      {m.town_override_enabled ? 'Active' : 'Inactive'}
+                                    </p>
+                                  </div>
+                                  <ChevronRight className="w-4 h-4 text-slate-500 shrink-0" />
+                                </div>
+                              </button>
+                              {canWrite && (
+                                <div className="flex items-center px-3 border-l border-slate-800">
+                                  <OverrideEnabledToggle
+                                    enabled={Boolean(m.town_override_enabled)}
+                                    onToggle={(next) =>
+                                      void handleToggleTownOverride(m.market.id, next)
+                                    }
+                                    label={`${m.market.name} override`}
+                                  />
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {(rulesPanel === 'view' || rulesPanel === 'edit') && (
+            <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-3 sm:p-6">
+              <button
+                type="button"
+                aria-label="Close"
+                className="absolute inset-0 bg-slate-950/80 backdrop-blur-[2px]"
+                onClick={() => setRulesPanel('list')}
+              />
+              <div
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="pricing-rules-overlay-title"
+                className="relative w-full max-w-2xl max-h-[88vh] overflow-hidden rounded-xl border border-slate-700 bg-slate-900 shadow-2xl flex flex-col"
+              >
+                <div className="flex items-start justify-between gap-3 border-b border-slate-800 px-4 py-3">
+                  <div>
+                    <h2
+                      id="pricing-rules-overlay-title"
+                      className="text-base font-semibold text-white"
+                    >
+                      {rulesPanel === 'edit' ? 'Edit rules' : 'Rules overview'} · {activeRulesTitle}
+                    </h2>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      Effective stack: {rulesStack.join(' → ')}
+                      {rulesScope !== 'global' &&
+                        (hasLayerOverride
+                          ? layerOverrideEnabled
+                            ? ' · custom override on'
+                            : ' · override saved but off'
+                          : ' · inheriting (saving creates an override)')}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setRulesPanel('list')}
+                    className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-800 hover:text-white"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+
+                <div className="overflow-y-auto flex-1 p-4 space-y-4">
+                  {rulesLoading ? (
+                    <div className="flex justify-center py-12">
+                      <Loader2 className="w-6 h-6 animate-spin text-amber-400" />
+                    </div>
+                  ) : rulesPanel === 'view' ? (
+                    <>
+                      <RulesReadonlyBody rules={marketRules} />
+                      <div className="flex flex-wrap gap-2 pt-2 items-center">
+                        {canWrite && hasLayerOverride && rulesScope !== 'global' && (
+                          <div className="flex items-center gap-2 mr-2 text-xs text-slate-400">
+                            <span>Override</span>
+                            <OverrideEnabledToggle
+                              enabled={layerOverrideEnabled}
+                              onToggle={(next) => {
+                                if (rulesScope === 'parish') {
+                                  void handleToggleParishOverride(selectedParishId, next).then(
+                                    () => setLayerOverrideEnabled(next),
+                                  );
+                                } else {
+                                  void handleToggleTownOverride(selectedMarketId, next).then(
+                                    () => setLayerOverrideEnabled(next),
+                                  );
+                                }
+                              }}
+                              label="This override"
+                            />
+                          </div>
+                        )}
+                        {canWrite && (
+                          <button
+                            type="button"
+                            onClick={() => setRulesPanel('edit')}
+                            className="px-4 py-2 rounded-lg bg-amber-600 text-white text-sm"
+                          >
+                            Edit rules
+                          </button>
+                        )}
+                        {canWrite && rulesScope !== 'global' && hasLayerOverride && (
+                          <button
+                            type="button"
+                            disabled={saving}
+                            onClick={() => void handleClearLayerOverride()}
+                            className="px-4 py-2 rounded-lg border border-slate-700 text-slate-300 text-sm hover:bg-slate-800 disabled:opacity-50"
+                          >
+                            Remove override
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => setRulesPanel('list')}
+                          className="px-4 py-2 rounded-lg border border-slate-700 text-slate-300 text-sm hover:bg-slate-800"
+                        >
+                          Close
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      {rulesScope === 'parish' && (
+                        <div>
+                          <label className="block text-xs text-slate-500 mb-1">Parish</label>
+                          <select
+                            value={selectedParishId}
+                            onChange={(e) => setSelectedParishId(e.target.value)}
+                            className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-700 text-white"
+                          >
+                            {(hasLayerOverride ? parishes : parishChoicesForAdd.length ? parishChoicesForAdd : parishes).map(
+                              (p) => (
+                                <option key={p.id} value={p.id}>
+                                  {p.name}
+                                  {p.has_override ? ' · has override' : ''}
+                                </option>
+                              ),
+                            )}
+                          </select>
+                        </div>
+                      )}
+                      {rulesScope === 'market' && (
+                        <div>
+                          <label className="block text-xs text-slate-500 mb-1">Town / City</label>
+                          <select
+                            value={selectedMarketId}
+                            onChange={(e) => setSelectedMarketId(e.target.value)}
+                            className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-700 text-white"
+                          >
+                            {groupMarketsByParish(
+                              hasLayerOverride
+                                ? activeTowns
+                                : townChoicesForAdd.length
+                                  ? townChoicesForAdd
+                                  : activeTowns,
+                            ).map((parish) => (
+                              <optgroup key={parish.key} label={parish.name}>
+                                {parish.markets.map((m) => (
+                                  <option key={m.market.id} value={m.market.id}>
+                                    {m.market.name}
+                                    {m.has_town_override ? ' · has override' : ''}
+                                  </option>
+                                ))}
+                              </optgroup>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+                      <RulesEditForm
+                        rules={marketRules}
+                        setRules={setMarketRules}
+                        canWrite={canWrite}
+                        scopeLabel={
+                          rulesScope === 'global'
+                            ? 'default'
+                            : rulesScope === 'parish'
+                              ? 'parish'
+                              : 'town'
+                        }
+                      />
+                      <div className="flex flex-wrap gap-2 pt-2">
+                        {canWrite && (
+                          <button
+                            type="button"
+                            disabled={saving}
+                            onClick={() => void handleSaveMarketRules()}
+                            className="px-4 py-2 rounded-lg bg-amber-600 text-white text-sm disabled:opacity-50"
+                          >
+                            {saving
+                              ? 'Saving…'
+                              : rulesScope === 'global'
+                                ? 'Save default rules'
+                                : 'Save override'}
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => setRulesPanel(hasLayerOverride || rulesScope === 'global' ? 'view' : 'list')}
+                          className="px-4 py-2 rounded-lg border border-slate-700 text-slate-300 text-sm hover:bg-slate-800"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
           )}
         </div>
       )}
@@ -1186,6 +1819,278 @@ export function PricingHubPage() {
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+function OverrideEnabledToggle({
+  enabled,
+  onToggle,
+  label,
+}: {
+  enabled: boolean;
+  onToggle: (next: boolean) => void;
+  label: string;
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={enabled}
+      aria-label={`${label} ${enabled ? 'active' : 'inactive'}`}
+      onClick={(e) => {
+        e.stopPropagation();
+        onToggle(!enabled);
+      }}
+      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+        enabled ? 'bg-emerald-500' : 'bg-slate-700'
+      }`}
+      title={enabled ? 'Override active — click to turn off' : 'Override off — click to turn on'}
+    >
+      <span
+        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+          enabled ? 'translate-x-6' : 'translate-x-1'
+        }`}
+      />
+    </button>
+  );
+}
+
+function rulesPreviewBits(rules: PricingRulesPayload) {
+  return {
+    model: rules.pricing_v2_enabled ? 'Model B' : 'Legacy Model A',
+    base: rules.delivery?.base_fee_jmd ?? 400,
+    includedKm: rules.delivery?.included_km ?? 2,
+    perKm: rules.delivery?.per_extra_km_jmd ?? 60,
+    avgPct: Math.round((rules.service_fee?.avg_rate ?? 0.15) * 1000) / 10,
+    courierPct: Math.round((rules.courier_delivery_share ?? 0.8) * 100),
+    minOrder: rules.min_order_subtotal_jmd ?? 800,
+  };
+}
+
+function RulesCardPreview({ rules }: { rules: PricingRulesPayload }) {
+  const b = rulesPreviewBits(rules);
+  return (
+    <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+      <div className="rounded-lg bg-slate-950/70 px-2 py-1.5 text-slate-400">
+        <span className="block text-slate-500">Model</span>
+        <span className="text-slate-200">{b.model}</span>
+      </div>
+      <div className="rounded-lg bg-slate-950/70 px-2 py-1.5 text-slate-400">
+        <span className="block text-slate-500">Base delivery</span>
+        <span className="text-slate-200">{formatJmd(b.base)}</span>
+      </div>
+      <div className="rounded-lg bg-slate-950/70 px-2 py-1.5 text-slate-400">
+        <span className="block text-slate-500">Service avg</span>
+        <span className="text-slate-200">{b.avgPct}%</span>
+      </div>
+      <div className="rounded-lg bg-slate-950/70 px-2 py-1.5 text-slate-400">
+        <span className="block text-slate-500">Courier share</span>
+        <span className="text-slate-200">{b.courierPct}%</span>
+      </div>
+    </div>
+  );
+}
+
+function RulesReadonlyBody({ rules }: { rules: PricingRulesPayload }) {
+  const b = rulesPreviewBits(rules);
+  const rows: Array<{ label: string; value: string }> = [
+    { label: 'Pricing model', value: b.model },
+    { label: 'Base delivery', value: formatJmd(b.base) },
+    { label: 'Included km', value: String(b.includedKm) },
+    { label: 'Per extra km', value: formatJmd(b.perKm) },
+    { label: 'Service average rate', value: `${b.avgPct}%` },
+    {
+      label: 'Service override rate',
+      value: `${Math.round((rules.service_fee?.override_rate ?? 0.09) * 1000) / 10}%`,
+    },
+    {
+      label: 'Override threshold',
+      value: formatJmd(rules.service_fee?.override_threshold_jmd ?? 5000),
+    },
+    { label: 'Service min fee', value: formatJmd(rules.service_fee?.min_jmd ?? 150) },
+    { label: 'Service max fee', value: formatJmd(rules.service_fee?.max_jmd ?? 2500) },
+    { label: 'Minimum order', value: formatJmd(b.minOrder) },
+    {
+      label: 'Card processing fee',
+      value: `${Math.round((rules.card_processing_fee_percent ?? 0.045) * 1000) / 10}%`,
+    },
+    { label: 'Courier delivery share', value: `${b.courierPct}%` },
+    {
+      label: 'COD pause threshold',
+      value: formatJmd(rules.cod?.pause_threshold_jmd ?? 10000),
+    },
+    {
+      label: 'Free delivery first N orders',
+      value: String(rules.launch_promos?.free_delivery_first_n_orders ?? 3),
+    },
+  ];
+  return (
+    <dl className="rounded-xl border border-slate-800 divide-y divide-slate-800">
+      {rows.map((row) => (
+        <div key={row.label} className="flex items-center justify-between gap-3 px-3 py-2.5 text-sm">
+          <dt className="text-slate-500">{row.label}</dt>
+          <dd className="text-slate-200 font-medium text-right">{row.value}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+function RulesEditForm({
+  rules,
+  setRules,
+  canWrite,
+  scopeLabel,
+}: {
+  rules: PricingRulesPayload;
+  setRules: React.Dispatch<React.SetStateAction<PricingRulesPayload>>;
+  canWrite: boolean;
+  scopeLabel: string;
+}) {
+  return (
+    <div className="space-y-4">
+      <label className="flex items-center gap-2 text-sm text-slate-300">
+        <input
+          type="checkbox"
+          checked={Boolean(rules.pricing_v2_enabled)}
+          onChange={(e) => setRules((r) => ({ ...r, pricing_v2_enabled: e.target.checked }))}
+          disabled={!canWrite}
+        />
+        Enable Model B pricing for this {scopeLabel}
+      </label>
+
+      <div className="grid grid-cols-2 gap-3">
+        <Field
+          label="Base delivery (JMD)"
+          value={rules.delivery?.base_fee_jmd ?? 400}
+          onChange={(v) =>
+            setRules((r) => ({ ...r, delivery: { ...r.delivery, base_fee_jmd: v } }))
+          }
+          disabled={!canWrite}
+        />
+        <Field
+          label="Included km"
+          value={rules.delivery?.included_km ?? 2}
+          onChange={(v) =>
+            setRules((r) => ({ ...r, delivery: { ...r.delivery, included_km: v } }))
+          }
+          disabled={!canWrite}
+        />
+        <Field
+          label="Per extra km (JMD)"
+          value={rules.delivery?.per_extra_km_jmd ?? 60}
+          onChange={(v) =>
+            setRules((r) => ({ ...r, delivery: { ...r.delivery, per_extra_km_jmd: v } }))
+          }
+          disabled={!canWrite}
+        />
+      </div>
+
+      <div className="rounded-xl border border-slate-800 bg-slate-900/30 p-4 space-y-3">
+        <h3 className="text-sm font-medium text-white">Service fee (bracketed)</h3>
+        <div className="grid grid-cols-2 gap-3">
+          <PctField
+            label="Average rate (%)"
+            value={Math.round((rules.service_fee?.avg_rate ?? 0.15) * 1000) / 10}
+            onChange={(v) =>
+              setRules((r) => ({
+                ...r,
+                service_fee: { ...r.service_fee, mode: 'marginal', avg_rate: v / 100 },
+              }))
+            }
+            disabled={!canWrite}
+          />
+          <PctField
+            label="Override rate (%)"
+            value={Math.round((rules.service_fee?.override_rate ?? 0.09) * 1000) / 10}
+            onChange={(v) =>
+              setRules((r) => ({
+                ...r,
+                service_fee: { ...r.service_fee, mode: 'marginal', override_rate: v / 100 },
+              }))
+            }
+            disabled={!canWrite}
+          />
+          <Field
+            label="Override threshold (JMD)"
+            value={rules.service_fee?.override_threshold_jmd ?? 5000}
+            onChange={(v) =>
+              setRules((r) => ({
+                ...r,
+                service_fee: {
+                  ...r.service_fee,
+                  mode: 'marginal',
+                  override_threshold_jmd: v,
+                },
+              }))
+            }
+            disabled={!canWrite}
+          />
+          <Field
+            label="Minimum fee (JMD)"
+            value={rules.service_fee?.min_jmd ?? 150}
+            onChange={(v) =>
+              setRules((r) => ({
+                ...r,
+                service_fee: { ...r.service_fee, mode: 'marginal', min_jmd: v },
+              }))
+            }
+            disabled={!canWrite}
+          />
+          <Field
+            label="Maximum fee (JMD)"
+            value={rules.service_fee?.max_jmd ?? 2500}
+            onChange={(v) =>
+              setRules((r) => ({
+                ...r,
+                service_fee: { ...r.service_fee, mode: 'marginal', max_jmd: v },
+              }))
+            }
+            disabled={!canWrite}
+          />
+          <Field
+            label="Minimum order subtotal (JMD)"
+            value={rules.min_order_subtotal_jmd ?? 800}
+            onChange={(v) => setRules((r) => ({ ...r, min_order_subtotal_jmd: v }))}
+            disabled={!canWrite}
+          />
+          <PctField
+            label="Card processing fee (%)"
+            value={Math.round((rules.card_processing_fee_percent ?? 0.045) * 1000) / 10}
+            onChange={(v) => setRules((r) => ({ ...r, card_processing_fee_percent: v / 100 }))}
+            disabled={!canWrite}
+          />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        <Field
+          label="Courier delivery share (%)"
+          value={Math.round((rules.courier_delivery_share ?? 0.8) * 100)}
+          onChange={(v) => setRules((r) => ({ ...r, courier_delivery_share: v / 100 }))}
+          disabled={!canWrite}
+        />
+        <Field
+          label="COD pause threshold (JMD)"
+          value={rules.cod?.pause_threshold_jmd ?? 10000}
+          onChange={(v) =>
+            setRules((r) => ({ ...r, cod: { ...r.cod, pause_threshold_jmd: v } }))
+          }
+          disabled={!canWrite}
+        />
+        <Field
+          label="Free delivery first N orders"
+          value={rules.launch_promos?.free_delivery_first_n_orders ?? 3}
+          onChange={(v) =>
+            setRules((r) => ({
+              ...r,
+              launch_promos: { free_delivery_first_n_orders: v },
+            }))
+          }
+          disabled={!canWrite}
+        />
+      </div>
     </div>
   );
 }

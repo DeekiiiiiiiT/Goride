@@ -19,6 +19,7 @@ import {
   type MarketPointResolve,
 } from "./admin/coverageZones.ts";
 import { resolveMerchantFoodGctRate } from "../_shared/gctRate.ts";
+import { resolvePricingLayers } from "./pricingLayers.ts";
 
 export type PricingResolverInput = {
   merchantId: string;
@@ -76,26 +77,6 @@ async function loadCustomerOrderCount(
     .eq("customer_id", customerId)
     .not("status", "in", '("cancelled")');
   return count ?? 0;
-}
-
-async function loadActiveProfile(
-  sb: ServiceSb,
-  marketId: string,
-): Promise<{ rules: PricingRules; version: number } | null> {
-  const { data } = await sb
-    .from("market_pricing_profiles")
-    .select("version, rules")
-    .eq("market_id", marketId)
-    .eq("is_active", true)
-    .order("version", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (!data) return null;
-  return {
-    rules: parsePricingRules(data.rules as Record<string, unknown>),
-    version: Number(data.version ?? 1),
-  };
 }
 
 async function loadMerchantPricingContext(
@@ -248,13 +229,9 @@ export async function resolveDashOrderPricing(
   let rules = parsePricingRules(null);
   let version = 1;
 
-  if (marketId) {
-    const profile = await loadActiveProfile(sb, marketId);
-    if (profile) {
-      rules = profile.rules;
-      version = profile.version;
-    }
-  }
+  const layered = await resolvePricingLayers(sb, { marketId });
+  rules = layered.rules;
+  version = layered.version;
 
   let distanceKm: number | null = null;
   if (dropLat != null && dropLng != null && ctx.lat != null && ctx.lng != null) {
@@ -299,12 +276,12 @@ export async function resolveDashOrderPricing(
   };
 }
 
-/** Check if Model B pricing is enabled for a market. */
+/** Check if Model B pricing is enabled for a market (after Default→Parish→Town merge). */
 export async function isPricingV2EnabledForMarket(
   sb: ServiceSb,
   marketId: string | null,
 ): Promise<boolean> {
   if (!marketId) return false;
-  const profile = await loadActiveProfile(sb, marketId);
-  return profile?.rules.pricingV2Enabled === true;
+  const layered = await resolvePricingLayers(sb, { marketId });
+  return layered.rules.pricingV2Enabled === true;
 }

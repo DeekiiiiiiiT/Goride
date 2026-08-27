@@ -35,6 +35,7 @@
     "@roam/location": "workspace:*",
     "@roam/play-store-launch": "workspace:*",
     "@roam/rush-chat": "workspace:*",
+    "@roam/spatial": "workspace:*",
     "@roam/types": "workspace:*",
     "@roam/ui": "workspace:*",
     "@roam/vertical-config": "workspace:*",

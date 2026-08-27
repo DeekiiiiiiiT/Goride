@@ -34,6 +34,8 @@ import {
   listCoverageVersions,
   listMarkets,
   publishMarketCoverage,
+  previewMarketCoverageDiff,
+  fetchMarketCoverageCells,
   restoreCoverageVersion,
   formatMerchantRecomputeToast,
   updateMarket,
@@ -395,9 +397,25 @@ function TownMapOverlay({
   const [showCustomerCoverage, setShowCustomerCoverage] = useState(false);
   const [publishedZones, setPublishedZones] = useState<ActiveCoverageZone[]>([]);
   const [draftDiffersFromLive, setDraftDiffersFromLive] = useState(false);
+  const [hexCells, setHexCells] = useState<Array<{ h3_cell: string; kind: string }>>([]);
   /** Near-fullscreen map workspace for tracing borders. */
   const [mapExpanded, setMapExpanded] = useState(false);
   const ioMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetchMarketCoverageCells(accessToken, town.id, 7);
+        if (!cancelled) setHexCells(res.cells ?? []);
+      } catch {
+        if (!cancelled) setHexCells([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [accessToken, town.id, town.published_version_id, town.draft_dirty]);
 
   useEffect(() => {
     if (!showCustomerCoverage) {
@@ -844,6 +862,7 @@ function TownMapOverlay({
               editingZoneId={editingZoneId}
               townIncludePolygons={includeZones(town).map((z) => z.polygon)}
               publishedZones={showCustomerCoverage ? publishedZones : []}
+              hexCells={hexCells}
               saving={saving}
               autoOpenCoordinates={autoOpenCoordinates}
               mapHeight={mapHeight}
@@ -1853,12 +1872,30 @@ export function MarketsPage() {
             void (async () => {
               setSaving(true);
               try {
+                let diffMsg = '';
+                try {
+                  const preview = await previewMarketCoverageDiff(session.access_token, mapTown.id);
+                  diffMsg = preview.message;
+                } catch {
+                  /* preview optional */
+                }
+                const ok = await confirm({
+                  title: 'Publish coverage?',
+                  description: diffMsg
+                    ? `${diffMsg}. This updates live delivery zones and recompiles H3 hex cells.`
+                    : 'This updates live delivery zones and recompiles H3 hex cells.',
+                  confirmLabel: 'Publish',
+                });
+                if (!ok) return;
                 const published = await publishMarketCoverage(session.access_token, mapTown.id, {
                   recompute_locked: recomputeLockedOnPublish,
                   unlock_after: unlockAfterOnPublish,
                 });
+                const hex = published.hex_compile;
                 toast.success(
-                  `Coverage published${formatMerchantRecomputeToast(published.merchant_recompute)}`,
+                  `Coverage published${formatMerchantRecomputeToast(published.merchant_recompute)}${
+                    hex ? ` · hex +${hex.include} include / ${hex.exclude} exclude` : ''
+                  }`,
                 );
                 offerParishModeSuggestion(
                   session.access_token,

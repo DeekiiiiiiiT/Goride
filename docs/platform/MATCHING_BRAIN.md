@@ -178,7 +178,7 @@ The rides Edge function automatically delegates to matching brain when `RIDES_US
 
 ### Resolution
 
-Default resolution: 7 (~1.2km edge length)
+Default resolution: 7 (~1.2km edge length). **Changing resolution is a migration**, not a Matching Brain toggle (locked in admin UI).
 
 | Resolution | Edge Length | Use Case |
 |------------|-------------|----------|
@@ -189,26 +189,23 @@ Default resolution: 7 (~1.2km edge length)
 
 ### Wave K-Rings
 
-The `wave_h3_k_rings` array maps wave numbers to H3 k-ring values:
+K-rings are **derived** from `wave_radius_km` via `kRingForRadiusKmWithMargin` (edge × √3 + 1 ring). Do not hand-enter `[4,13,29]` — that formula omitted √3.
 
-```json
-{
-  "wave_radius_km": [5, 15, 35],
-  "wave_h3_k_rings": [4, 13, 29]
-}
-```
+### Feature flags
 
-Calibrate per market using actual driver data.
+| Flag | Purpose | Default |
+|------|---------|---------|
+| `MATCHING_H3_SUPPLY` | Wire matching waves to H3 supply RPC | `0` |
+| `MATCHING_H3_SURGE` | H3 surge dual-write | `0` |
+| `RUSH_H3_DISPATCH_ENABLED` | Rush courier dispatch via H3 | `0` |
+
+See also: [ADR 0013](../adr/0013-rush-coverage-precedence-h3.md), [H3_SPATIAL_INDEX_REVIEW.md](../H3_SPATIAL_INDEX_REVIEW.md).
 
 ### Jamaica Calibration
 
 Reference point: Kingston (17.9714, -76.7932)
 
-| Wave | Radius (km) | K-Ring |
-|------|-------------|--------|
-| 1 | 5 | 4 |
-| 2 | 15 | 13 |
-| 3 | 35 | 29 |
+Wave radii `[5, 15, 35]` km → derived k-rings approximately `[4, 9, 18]` at res 7 (with +1 margin).
 
 ## Serial Dispatch
 

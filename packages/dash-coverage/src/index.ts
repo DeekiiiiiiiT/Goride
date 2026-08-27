@@ -115,3 +115,9 @@ export {
   ADMIN_PUBLISHED_CACHE_KEY,
   type AdminCoverageLayers,
 } from './adminCoverageLayers.ts';
+export {
+  COVERAGE_CUSTOMER_COPY,
+  customerCopyForReason,
+  evaluateHexCoverage,
+  type CoverageReasonCode,
+} from './hexCoverage.ts';

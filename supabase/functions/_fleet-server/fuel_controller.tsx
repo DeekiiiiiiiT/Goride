@@ -1,6 +1,13 @@
 import { Hono } from "npm:hono";
 import type { Context } from "npm:hono";
-import { requireAuth, requirePermission, requirePlatformStaff, type RbacUser, PLATFORM_RESOLVED_ROLES } from "./rbac_middleware.ts";
+import {
+  requireAuth,
+  requirePermission,
+  requirePlatformStaff,
+  hasPermission,
+  type RbacUser,
+  PLATFORM_RESOLVED_ROLES,
+} from "./rbac_middleware.ts";
 import { appendCanonicalFuelExpenseIfEligible } from "./canonical_from_ops.ts";
 import { deleteCanonicalLedgerBySource, canonicalEventExistsByIdemKey } from "./ledger_canonical.ts";
 import {
@@ -3523,7 +3530,28 @@ app.get(`${BASE_PATH}/analytics/integrity-metrics`, requirePlatformStaff(), asyn
     }
 });
 
-app.post(`${BASE_PATH}/fuel-entries`, requirePermission("fuel.create_entry"), async (c: Context) => {
+app.post(`${BASE_PATH}/fuel-entries`, async (c: Context) => {
+  // Drivers submit Gas Card / cash fuel from the Driver app. ROLE_PERMISSIONS.driver is
+  // intentionally [] — they never use fleet RBAC. Aug 26 gate of fuel.create_entry broke
+  // Play Store fuel logging (upload 200 → POST fuel-entries 403 Forbidden).
+  const rbacUser = c.get("rbacUser") as RbacUser | undefined;
+  if (!rbacUser) {
+    return c.json({ error: "Unauthorized: No user context" }, 401);
+  }
+  const canFleetCreate = hasPermission(rbacUser.resolvedRole, "fuel.create_entry");
+  const isDriverSubmitter = rbacUser.resolvedRole === "driver";
+  if (!canFleetCreate && !isDriverSubmitter) {
+    return c.json(
+      {
+        error: "Forbidden",
+        message: 'You do not have the "fuel.create_entry" permission.',
+        required: "fuel.create_entry",
+        currentRole: rbacUser.resolvedRole,
+      },
+      403,
+    );
+  }
+
   try {
     const entry = await c.req.json();
     if (!entry.id) entry.id = crypto.randomUUID();

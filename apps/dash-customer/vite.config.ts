@@ -13,6 +13,7 @@ export default defineConfig({
       '@roam/dash-admin': path.resolve(__dirname, '../../packages/dash-admin/src'),
       '@roam/dash-admin-client': path.resolve(__dirname, '../../packages/dash-admin-client/src'),
       '@roam/location': path.resolve(__dirname, '../../packages/location/src'),
+      '@roam/spatial': path.resolve(__dirname, '../../packages/spatial/src/index.ts'),
     },
   },
   server: {

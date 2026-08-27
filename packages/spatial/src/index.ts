@@ -1,13 +1,27 @@
 /**
- * H3 Geo Index Helpers (Deno mirror of @roam/spatial).
- * Keep in sync with packages/spatial/src/index.ts — same API surface.
+ * @roam/spatial — shared H3 cell math for Rides + Rush.
+ * Keep Deno mirror in sync: supabase/functions/_shared/h3/geoIndex.ts
  */
 
-import * as h3 from "npm:h3-js@4.1.0";
+import {
+  cellToBoundary,
+  cellToLatLng,
+  gridDisk,
+  latLngToCell,
+  polygonToCells,
+} from 'h3-js';
+
+type DenoEnv = { env: { get(key: string): string | undefined } };
+const denoGlobal = (globalThis as { Deno?: DenoEnv }).Deno;
+
+function envFlag(key: string): string | undefined {
+  return denoGlobal?.env.get(key);
+}
 
 export const DEFAULT_H3_RESOLUTION = 7;
 export const COMPILE_H3_RESOLUTIONS = [7, 8] as const;
 
+/** Approximate edge length (km) by H3 resolution. */
 export const H3_EDGE_KM: Record<number, number> = {
   4: 22.6,
   5: 8.5,
@@ -20,12 +34,16 @@ export const H3_EDGE_KM: Record<number, number> = {
 
 export type LatLng = { lat: number; lng: number };
 
-export function latLngToH3(lat: number, lng: number, resolution = DEFAULT_H3_RESOLUTION): string {
-  return h3.latLngToCell(lat, lng, resolution);
+export function latLngToH3(
+  lat: number,
+  lng: number,
+  resolution = DEFAULT_H3_RESOLUTION,
+): string {
+  return latLngToCell(lat, lng, resolution);
 }
 
 export function h3ToLatLng(h3Index: string): LatLng {
-  const [lat, lng] = h3.cellToLatLng(h3Index);
+  const [lat, lng] = cellToLatLng(h3Index);
   return { lat, lng };
 }
 
@@ -35,27 +53,18 @@ export function h3Disk(
   k: number,
   resolution = DEFAULT_H3_RESOLUTION,
 ): string[] {
-  const centerCell = latLngToH3(lat, lng, resolution);
-  return h3.gridDisk(centerCell, Math.max(0, k));
+  const center = latLngToH3(lat, lng, resolution);
+  return gridDisk(center, Math.max(0, k));
 }
 
 export function h3DiskFromCell(h3Index: string, k: number): string[] {
-  return h3.gridDisk(h3Index, Math.max(0, k));
+  return gridDisk(h3Index, Math.max(0, k));
 }
 
-/** Deprecated unsafe ring — prefer h3Disk. Kept for callers; uses safe gridDisk hollow via disk diff. */
-export function h3Ring(
-  lat: number,
-  lng: number,
-  k: number,
-  resolution = DEFAULT_H3_RESOLUTION,
-): string[] {
-  if (k <= 0) return [latLngToH3(lat, lng, resolution)];
-  const outer = h3Disk(lat, lng, k, resolution);
-  const inner = new Set(h3Disk(lat, lng, k - 1, resolution));
-  return outer.filter((c) => !inner.has(c));
-}
-
+/**
+ * k such that a k-disk covers ~radiusKm (center spacing ≈ edge × √3).
+ * Callers should add +1 for over-fetch when filtering candidates.
+ */
 export function kRingForRadiusKm(
   radiusKm: number,
   resolution = DEFAULT_H3_RESOLUTION,
@@ -65,6 +74,7 @@ export function kRingForRadiusKm(
   return Math.max(0, Math.ceil(radiusKm / centerSpacingKm));
 }
 
+/** Candidate filter k: derived radius coverage + one ring over-fetch. */
 export function kRingForRadiusKmWithMargin(
   radiusKm: number,
   resolution = DEFAULT_H3_RESOLUTION,
@@ -73,6 +83,10 @@ export function kRingForRadiusKmWithMargin(
   return kRingForRadiusKm(radiusKm, resolution) + Math.max(0, marginRings);
 }
 
+/**
+ * Derive wave k-rings from radii. Optional policy override only when non-empty;
+ * empty/null means derive (preferred).
+ */
 export function getWaveKRings(
   waveRadiiKm: number[],
   policyKRings?: number[] | null,
@@ -98,62 +112,71 @@ export function getCellsForWave(
   return h3Disk(lat, lng, k, resolution);
 }
 
-export type CoverageKind = "include" | "exclude";
+export type CoverageKind = 'include' | 'exclude';
 
+/**
+ * ADR 0013 boundary policy:
+ * - include: keep all intersecting cells (generous)
+ * - exclude: keep all intersecting cells (conservative no-go)
+ * polygonToCells already fills cells whose centroid is inside; we also add
+ * cells that touch the boundary via a small buffer disk on ring vertices.
+ */
 export function polygonToH3Cells(
   polygon: LatLng[],
   resolution: number,
-  _kind: CoverageKind,
+  kind: CoverageKind,
 ): string[] {
   if (polygon.length < 3) return [];
   const ring: [number, number][] = polygon.map((p) => [p.lat, p.lng]);
+  // Close ring if needed
   const first = ring[0];
   const last = ring[ring.length - 1];
   if (first[0] !== last[0] || first[1] !== last[1]) {
     ring.push([first[0], first[1]]);
   }
-  const cells = new Set<string>(h3.polygonToCells(ring, resolution));
+
+  const cells = new Set<string>(polygonToCells(ring, resolution));
+
+  // Edge hexes: stamp vertices so boundary-straddling hexes are included
+  // for both include (generous) and exclude (conservative).
   for (const [lat, lng] of ring) {
     try {
       cells.add(latLngToH3(lat, lng, resolution));
     } catch {
-      /* skip */
+      /* skip invalid vertex */
     }
   }
+
+  void kind; // policy identical for fill set; callers interpret include vs exclude
   return [...cells];
 }
 
 export function cellBoundary(h3Index: string): LatLng[] {
-  return h3.cellToBoundary(h3Index).map(([lat, lng]: [number, number]) => ({ lat, lng }));
+  return cellToBoundary(h3Index).map(([lat, lng]) => ({ lat, lng }));
 }
 
-/** @deprecated Hand-tuned rings were wrong; use getWaveKRings(radii, null). */
-export const JAMAICA_CALIBRATION = {
-  resolution: 7,
+export const JAMAICA_REFERENCE = {
+  resolution: DEFAULT_H3_RESOLUTION,
   referencePoint: { lat: 17.9714, lng: -76.7932 },
-  waveRadiiKm: [5, 15, 35],
-  /** Derived via kRingForRadiusKmWithMargin — not radius/edge. */
-  calibratedKRings: [4, 9, 18] as number[],
+  waveRadiiKm: [5, 15, 35] as number[],
 };
 
-export function getCalibrationForMarket(_marketCode: string): typeof JAMAICA_CALIBRATION | null {
-  return JAMAICA_CALIBRATION;
-}
-
-export function isH3SupplyEnabled(policyEnabled: boolean): boolean {
-  if (Deno.env.get("MATCHING_H3_SUPPLY") !== "1") return false;
-  return policyEnabled;
+/** Derived k-rings for Jamaica wave radii (not hand-tuned). */
+export function jamaicaDerivedKRings(): number[] {
+  return getWaveKRings(JAMAICA_REFERENCE.waveRadiiKm, null, JAMAICA_REFERENCE.resolution);
 }
 
 export function isMatchingH3SupplyEnabled(policyEnabled: boolean): boolean {
-  return isH3SupplyEnabled(policyEnabled);
+  // On Deno edge, require MATCHING_H3_SUPPLY=1; in browser/Node honor policy only.
+  if (denoGlobal && envFlag('MATCHING_H3_SUPPLY') !== '1') return false;
+  return policyEnabled;
 }
 
 export function isMatchingH3SurgeEnabled(policyEnabled: boolean): boolean {
-  if (Deno.env.get("MATCHING_H3_SURGE") !== "1") return false;
+  if (denoGlobal && envFlag('MATCHING_H3_SURGE') !== '1') return false;
   return policyEnabled;
 }
 
 export function isRushH3DispatchEnabled(): boolean {
-  return Deno.env.get("RUSH_H3_DISPATCH_ENABLED") === "1";
+  return envFlag('RUSH_H3_DISPATCH_ENABLED') === '1';
 }

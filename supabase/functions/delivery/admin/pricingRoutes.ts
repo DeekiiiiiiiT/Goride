@@ -11,6 +11,7 @@ import {
   type PricingRules,
 } from "../../_shared/dashPricing.ts";
 import { resolveDashOrderPricing } from "../pricingResolver.ts";
+import { resolvePricingLayers } from "../pricingLayers.ts";
 import { recordCashSettlement } from "../courierCashLedger.ts";
 
 function adminFromCtx(c: { get: (k: string) => unknown }): ProductAdminUser {
@@ -35,6 +36,68 @@ function validatePricingRules(rules: PricingRules): string | null {
   return null;
 }
 
+async function writeVersionedProfile(opts: {
+  db: ReturnType<typeof getDb>;
+  table: "global_pricing_profiles" | "parish_pricing_profiles" | "market_pricing_profiles";
+  matchColumn?: "parish_id" | "market_id";
+  matchId?: string;
+  rules: Record<string, unknown>;
+  adminUser: ProductAdminUser;
+}) {
+  const { db, table, matchColumn, matchId, rules, adminUser } = opts;
+  let currentQuery = db.from(table).select("*").eq("is_active", true);
+  if (matchColumn && matchId) currentQuery = currentQuery.eq(matchColumn, matchId);
+  const { data: current } = await currentQuery
+    .order("version", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const nextVersion = current ? Number(current.version ?? 0) + 1 : 1;
+  if (current) {
+    await db
+      .from(table)
+      .update({ is_active: false, updated_at: new Date().toISOString() })
+      .eq("id", current.id);
+  }
+
+  const insertRow: Record<string, unknown> = {
+    version: nextVersion,
+    is_active: true,
+    rules,
+    created_by: adminUser.id,
+  };
+  if (table !== "global_pricing_profiles") {
+    insertRow.override_enabled = current?.override_enabled !== false;
+  }
+  if (matchColumn && matchId) insertRow[matchColumn] = matchId;
+
+  const { data: created, error } = await db.from(table).insert(insertRow).select().single();
+  return { current, created, error, nextVersion };
+}
+
+async function clearVersionedProfile(opts: {
+  db: ReturnType<typeof getDb>;
+  table: "parish_pricing_profiles" | "market_pricing_profiles";
+  matchColumn: "parish_id" | "market_id";
+  matchId: string;
+}) {
+  const { db, table, matchColumn, matchId } = opts;
+  const { data: current } = await db
+    .from(table)
+    .select("*")
+    .eq(matchColumn, matchId)
+    .eq("is_active", true)
+    .order("version", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (!current) return { current: null };
+  await db
+    .from(table)
+    .update({ is_active: false, updated_at: new Date().toISOString() })
+    .eq("id", current.id);
+  return { current };
+}
+
 export function registerPricingAdminRoutes(app: Hono) {
   const admin = new Hono();
 
@@ -47,16 +110,43 @@ export function registerPricingAdminRoutes(app: Hono) {
 
   admin.get("/pricing/overview", async (c) => {
     const db = getDb();
-    const [{ data: markets }, { data: tiers }, { data: profiles }] = await Promise.all([
-      db.from("service_markets").select("id, slug, name, is_active").order("name"),
+    const [
+      { data: markets },
+      { data: parishes },
+      { data: tiers },
+      { data: profiles },
+      { data: parishProfiles },
+      { data: globalProfiles },
+    ] = await Promise.all([
+      db.from("service_markets")
+        .select("id, slug, name, is_active, parish_id")
+        .order("name"),
+      db.from("service_parishes")
+        .select("id, name, sort_order")
+        .order("sort_order", { ascending: true })
+        .order("name", { ascending: true }),
       db.from("merchant_tiers").select("*").order("sort_order"),
       db.from("market_pricing_profiles")
-        .select("id, market_id, version, is_active, rules, effective_from, updated_at")
+        .select("id, market_id, version, is_active, override_enabled, rules, effective_from, updated_at")
         .eq("is_active", true),
+      db.from("parish_pricing_profiles")
+        .select("id, parish_id, version, is_active, override_enabled")
+        .eq("is_active", true),
+      db.from("global_pricing_profiles")
+        .select("id, version, is_active")
+        .eq("is_active", true)
+        .order("version", { ascending: false })
+        .limit(1),
     ]);
 
+    const parishById = new Map(
+      (parishes ?? []).map((p: Record<string, unknown>) => [String(p.id), p]),
+    );
     const profileByMarket = new Map(
       (profiles ?? []).map((p: Record<string, unknown>) => [String(p.market_id), p]),
+    );
+    const parishOverrideById = new Map(
+      (parishProfiles ?? []).map((p: Record<string, unknown>) => [String(p.parish_id), p]),
     );
 
     const marketSummaries = (markets ?? []).map((m: Record<string, unknown>) => {
@@ -64,17 +154,301 @@ export function registerPricingAdminRoutes(app: Hono) {
       const rules = profile
         ? parsePricingRules(profile.rules as Record<string, unknown>)
         : null;
+      const parishId = m.parish_id != null ? String(m.parish_id) : null;
+      const parish = parishId ? parishById.get(parishId) : null;
       return {
-        market: m,
+        market: {
+          id: m.id,
+          slug: m.slug,
+          name: m.name,
+          is_active: m.is_active,
+          parish_id: parishId,
+        },
+        parish: parish
+          ? {
+            id: String(parish.id),
+            name: String(parish.name),
+            sort_order: Number(parish.sort_order ?? 0),
+          }
+          : null,
         profile: profile ?? null,
+        has_town_override: Boolean(profile),
+        town_override_enabled: profile ? profile.override_enabled !== false : false,
         pricing_v2_enabled: rules?.pricingV2Enabled ?? false,
+      };
+    });
+
+    const parishSummaries = (parishes ?? []).map((p: Record<string, unknown>) => {
+      const override = parishOverrideById.get(String(p.id));
+      return {
+        id: String(p.id),
+        name: String(p.name),
+        sort_order: Number(p.sort_order ?? 0),
+        has_override: Boolean(override),
+        override_enabled: override ? override.override_enabled !== false : false,
       };
     });
 
     return c.json({
       markets: marketSummaries,
+      parishes: parishSummaries,
+      global: globalProfiles?.[0]
+        ? { id: globalProfiles[0].id, version: globalProfiles[0].version, has_override: true }
+        : null,
       tiers: tiers ?? [],
     });
+  });
+
+  admin.get("/pricing/defaults", async (c) => {
+    const db = getDb();
+    const layered = await resolvePricingLayers(db, {});
+    return c.json({
+      scope: "global",
+      profile: layered.layers.global,
+      rules: serializePricingRules(layered.rules),
+      has_override: Boolean(layered.layers.global),
+      stack: ["Default"],
+    });
+  });
+
+  admin.put("/pricing/defaults", async (c) => {
+    const adminUser = adminFromCtx(c);
+    const denied = requireDashWrite(adminUser);
+    if (denied) return denied;
+
+    const body = await c.req.json().catch(() => ({}));
+    const db = getDb();
+    const incomingRules = (body.rules ?? body) as Record<string, unknown>;
+    const parsed = parsePricingRules(incomingRules);
+    const validationError = validatePricingRules(parsed);
+    if (validationError) return c.json({ error: validationError }, 400);
+    const serialized = serializePricingRules(parsed);
+
+    const { current, created, error, nextVersion } = await writeVersionedProfile({
+      db,
+      table: "global_pricing_profiles",
+      rules: serialized,
+      adminUser,
+    });
+    if (error) return c.json({ error: error.message }, 500);
+
+    await db.from("pricing_change_log").insert({
+      scope: "global",
+      actor_id: adminUser.id,
+      actor_email: adminUser.email,
+      action: "global_pricing_updated",
+      before_state: current ? { version: current.version, rules: current.rules } : null,
+      after_state: { version: nextVersion, rules: serialized },
+    });
+    await writeKvAudit(
+      adminUser,
+      "roam_dash.pricing_defaults_updated",
+      String(created?.id ?? ""),
+      "",
+      JSON.stringify({ version: nextVersion }),
+    );
+    return c.json({ profile: created, rules: serializePricingRules(parsed) });
+  });
+
+  admin.get("/pricing/parishes/:parishId", async (c) => {
+    const { parishId } = c.req.param();
+    const db = getDb();
+    const { data: parish } = await db
+      .from("service_parishes")
+      .select("id, name, sort_order")
+      .eq("id", parishId)
+      .maybeSingle();
+    if (!parish) return c.json({ error: "Parish not found" }, 404);
+
+    const layered = await resolvePricingLayers(db, { parishId });
+    return c.json({
+      scope: "parish",
+      parish,
+      profile: layered.layers.parish,
+      rules: serializePricingRules(layered.rules),
+      has_override: layered.layers.parish?.hasOverride === true,
+      override_enabled: layered.layers.parish?.overrideEnabled === true,
+      stack: [
+        "Default",
+        layered.layers.parish?.hasOverride && layered.layers.parish.overrideEnabled
+          ? String(parish.name)
+          : null,
+      ].filter(Boolean),
+    });
+  });
+
+  admin.patch("/pricing/parishes/:parishId/override-enabled", async (c) => {
+    const adminUser = adminFromCtx(c);
+    const denied = requireDashWrite(adminUser);
+    if (denied) return denied;
+
+    const { parishId } = c.req.param();
+    const body = await c.req.json().catch(() => ({}));
+    const nextEnabled = Boolean(body.enabled ?? body.override_enabled);
+    const db = getDb();
+    const { data: current } = await db
+      .from("parish_pricing_profiles")
+      .select("id, override_enabled")
+      .eq("parish_id", parishId)
+      .eq("is_active", true)
+      .order("version", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (!current) return c.json({ error: "No parish override to toggle" }, 404);
+
+    const { error } = await db
+      .from("parish_pricing_profiles")
+      .update({
+        override_enabled: nextEnabled,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", current.id);
+    if (error) return c.json({ error: error.message }, 500);
+
+    await db.from("pricing_change_log").insert({
+      scope: "parish",
+      parish_id: parishId,
+      actor_id: adminUser.id,
+      actor_email: adminUser.email,
+      action: nextEnabled ? "parish_pricing_enabled" : "parish_pricing_disabled",
+      before_state: { override_enabled: current.override_enabled !== false },
+      after_state: { override_enabled: nextEnabled },
+    });
+
+    return c.json({ ok: true, override_enabled: nextEnabled });
+  });
+
+  admin.put("/pricing/parishes/:parishId", async (c) => {
+    const adminUser = adminFromCtx(c);
+    const denied = requireDashWrite(adminUser);
+    if (denied) return denied;
+
+    const { parishId } = c.req.param();
+    const body = await c.req.json().catch(() => ({}));
+    const db = getDb();
+    const { data: parish } = await db
+      .from("service_parishes")
+      .select("id, name")
+      .eq("id", parishId)
+      .maybeSingle();
+    if (!parish) return c.json({ error: "Parish not found" }, 404);
+
+    const incomingRules = (body.rules ?? body) as Record<string, unknown>;
+    const parsed = parsePricingRules(incomingRules);
+    const validationError = validatePricingRules(parsed);
+    if (validationError) return c.json({ error: validationError }, 400);
+    const serialized = serializePricingRules(parsed);
+
+    const { current, created, error, nextVersion } = await writeVersionedProfile({
+      db,
+      table: "parish_pricing_profiles",
+      matchColumn: "parish_id",
+      matchId: parishId,
+      rules: serialized,
+      adminUser,
+    });
+    if (error) return c.json({ error: error.message }, 500);
+
+    await db.from("pricing_change_log").insert({
+      scope: "parish",
+      parish_id: parishId,
+      actor_id: adminUser.id,
+      actor_email: adminUser.email,
+      action: "parish_pricing_updated",
+      before_state: current ? { version: current.version, rules: current.rules } : null,
+      after_state: { version: nextVersion, rules: serialized },
+    });
+    await writeKvAudit(
+      adminUser,
+      "roam_dash.pricing_parish_updated",
+      parishId,
+      "",
+      JSON.stringify({ version: nextVersion, parish: parish.name }),
+    );
+    return c.json({ profile: created, rules: serializePricingRules(parsed) });
+  });
+
+  admin.delete("/pricing/parishes/:parishId", async (c) => {
+    const adminUser = adminFromCtx(c);
+    const denied = requireDashWrite(adminUser);
+    if (denied) return denied;
+
+    const { parishId } = c.req.param();
+    const db = getDb();
+    const { current } = await clearVersionedProfile({
+      db,
+      table: "parish_pricing_profiles",
+      matchColumn: "parish_id",
+      matchId: parishId,
+    });
+    if (!current) return c.json({ ok: true, cleared: false });
+
+    await db.from("pricing_change_log").insert({
+      scope: "parish",
+      parish_id: parishId,
+      actor_id: adminUser.id,
+      actor_email: adminUser.email,
+      action: "parish_pricing_cleared",
+      before_state: { version: current.version, rules: current.rules },
+      after_state: null,
+    });
+    return c.json({ ok: true, cleared: true });
+  });
+
+  /** Bulk-clear town overrides — used to remove seeded/unused profiles. */
+  admin.post("/pricing/markets/clear-overrides", async (c) => {
+    const adminUser = adminFromCtx(c);
+    const denied = requireDashWrite(adminUser);
+    if (denied) return denied;
+
+    const body = await c.req.json().catch(() => ({}));
+    const db = getDb();
+    let marketIds = Array.isArray(body.market_ids)
+      ? body.market_ids.map((id: unknown) => String(id)).filter(Boolean)
+      : [];
+
+    if (body.inactive_only === true) {
+      const { data: inactive } = await db
+        .from("service_markets")
+        .select("id")
+        .eq("is_active", false);
+      marketIds = (inactive ?? []).map((m: { id: string }) => String(m.id));
+    }
+
+    if (marketIds.length === 0) {
+      return c.json({ ok: true, cleared: 0, market_ids: [] });
+    }
+
+    let cleared = 0;
+    for (const marketId of marketIds) {
+      const { current } = await clearVersionedProfile({
+        db,
+        table: "market_pricing_profiles",
+        matchColumn: "market_id",
+        matchId: marketId,
+      });
+      if (!current) continue;
+      cleared += 1;
+      await db.from("pricing_change_log").insert({
+        scope: "market",
+        market_id: marketId,
+        actor_id: adminUser.id,
+        actor_email: adminUser.email,
+        action: "market_pricing_cleared_bulk",
+        before_state: { version: current.version, rules: current.rules },
+        after_state: null,
+      });
+    }
+
+    await writeKvAudit(
+      adminUser,
+      "roam_dash.pricing_town_overrides_cleared",
+      "",
+      "",
+      JSON.stringify({ cleared, inactive_only: body.inactive_only === true }),
+    );
+
+    return c.json({ ok: true, cleared, market_ids: marketIds });
   });
 
   admin.get("/pricing/markets/:marketId", async (c) => {
@@ -82,27 +456,76 @@ export function registerPricingAdminRoutes(app: Hono) {
     const db = getDb();
     const { data: market } = await db
       .from("service_markets")
-      .select("id, slug, name, is_active")
+      .select("id, slug, name, is_active, parish_id")
       .eq("id", marketId)
       .maybeSingle();
     if (!market) return c.json({ error: "Market not found" }, 404);
 
-    const { data: profile } = await db
+    const layered = await resolvePricingLayers(db, { marketId });
+    const parishName = layered.parishId
+      ? (await db.from("service_parishes").select("name").eq("id", layered.parishId).maybeSingle())
+        .data?.name
+      : null;
+
+    return c.json({
+      scope: "market",
+      market,
+      profile: layered.layers.market,
+      rules: serializePricingRules(layered.rules),
+      has_override: layered.layers.market?.hasOverride === true,
+      override_enabled: layered.layers.market?.overrideEnabled === true,
+      has_parish_override: layered.layers.parish?.hasOverride === true,
+      stack: [
+        "Default",
+        layered.layers.parish?.hasOverride && layered.layers.parish.overrideEnabled
+          ? String(parishName ?? "Parish")
+          : null,
+        layered.layers.market?.hasOverride && layered.layers.market.overrideEnabled
+          ? String(market.name)
+          : null,
+      ].filter(Boolean),
+    });
+  });
+
+  admin.patch("/pricing/markets/:marketId/override-enabled", async (c) => {
+    const adminUser = adminFromCtx(c);
+    const denied = requireDashWrite(adminUser);
+    if (denied) return denied;
+
+    const { marketId } = c.req.param();
+    const body = await c.req.json().catch(() => ({}));
+    const nextEnabled = Boolean(body.enabled ?? body.override_enabled);
+    const db = getDb();
+    const { data: current } = await db
       .from("market_pricing_profiles")
-      .select("*")
+      .select("id, override_enabled")
       .eq("market_id", marketId)
       .eq("is_active", true)
       .order("version", { ascending: false })
       .limit(1)
       .maybeSingle();
+    if (!current) return c.json({ error: "No town override to toggle" }, 404);
 
-    return c.json({
-      market,
-      profile: profile ?? null,
-      rules: profile
-        ? serializePricingRules(parsePricingRules(profile.rules as Record<string, unknown>))
-        : serializePricingRules(parsePricingRules(null)),
+    const { error } = await db
+      .from("market_pricing_profiles")
+      .update({
+        override_enabled: nextEnabled,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", current.id);
+    if (error) return c.json({ error: error.message }, 500);
+
+    await db.from("pricing_change_log").insert({
+      scope: "market",
+      market_id: marketId,
+      actor_id: adminUser.id,
+      actor_email: adminUser.email,
+      action: nextEnabled ? "market_pricing_enabled" : "market_pricing_disabled",
+      before_state: { override_enabled: current.override_enabled !== false },
+      after_state: { override_enabled: nextEnabled },
     });
+
+    return c.json({ ok: true, override_enabled: nextEnabled });
   });
 
   admin.put("/pricing/markets/:marketId", async (c) => {
@@ -121,44 +544,24 @@ export function registerPricingAdminRoutes(app: Hono) {
       .maybeSingle();
     if (!market) return c.json({ error: "Market not found" }, 404);
 
-    const { data: current } = await db
-      .from("market_pricing_profiles")
-      .select("*")
-      .eq("market_id", marketId)
-      .eq("is_active", true)
-      .order("version", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
     const incomingRules = (body.rules ?? body) as Record<string, unknown>;
     const parsed = parsePricingRules(incomingRules);
     const validationError = validatePricingRules(parsed);
     if (validationError) return c.json({ error: validationError }, 400);
     const serialized = serializePricingRules(parsed);
-    const nextVersion = current ? Number(current.version ?? 0) + 1 : 1;
 
-    if (current) {
-      await db
-        .from("market_pricing_profiles")
-        .update({ is_active: false, updated_at: new Date().toISOString() })
-        .eq("id", current.id);
-    }
-
-    const { data: created, error } = await db
-      .from("market_pricing_profiles")
-      .insert({
-        market_id: marketId,
-        version: nextVersion,
-        is_active: true,
-        rules: serialized,
-        created_by: adminUser.id,
-      })
-      .select()
-      .single();
-
+    const { current, created, error, nextVersion } = await writeVersionedProfile({
+      db,
+      table: "market_pricing_profiles",
+      matchColumn: "market_id",
+      matchId: marketId,
+      rules: serialized,
+      adminUser,
+    });
     if (error) return c.json({ error: error.message }, 500);
 
     await db.from("pricing_change_log").insert({
+      scope: "market",
       market_id: marketId,
       actor_id: adminUser.id,
       actor_email: adminUser.email,
@@ -175,7 +578,34 @@ export function registerPricingAdminRoutes(app: Hono) {
       JSON.stringify({ version: nextVersion, market_slug: market.slug }),
     );
 
-    return c.json({ profile: created, rules: parsed });
+    return c.json({ profile: created, rules: serializePricingRules(parsed) });
+  });
+
+  admin.delete("/pricing/markets/:marketId", async (c) => {
+    const adminUser = adminFromCtx(c);
+    const denied = requireDashWrite(adminUser);
+    if (denied) return denied;
+
+    const { marketId } = c.req.param();
+    const db = getDb();
+    const { current } = await clearVersionedProfile({
+      db,
+      table: "market_pricing_profiles",
+      matchColumn: "market_id",
+      matchId: marketId,
+    });
+    if (!current) return c.json({ ok: true, cleared: false });
+
+    await db.from("pricing_change_log").insert({
+      scope: "market",
+      market_id: marketId,
+      actor_id: adminUser.id,
+      actor_email: adminUser.email,
+      action: "market_pricing_cleared",
+      before_state: { version: current.version, rules: current.rules },
+      after_state: null,
+    });
+    return c.json({ ok: true, cleared: true });
   });
 
   admin.get("/pricing/tiers", async (c) => {

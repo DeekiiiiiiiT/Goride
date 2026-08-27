@@ -11,7 +11,7 @@ import { getEligibleDriverUserIds } from "../../_shared/driverModeFilter.ts";
 import {
   DEFAULT_H3_RESOLUTION,
   h3Disk,
-  kRingForRadiusKm,
+  kRingForRadiusKmWithMargin,
 } from "../../_shared/h3/geoIndex.ts";
 
 /** Fallback when settings are not loaded. */
@@ -32,11 +32,17 @@ export type ResolvedPickupEta = {
   pickupEtaSource: PickupEtaSource;
 };
 
-async function loadNearbyDriverLocations(
+function logNoSupply(payload: Record<string, unknown>) {
+  console.log(JSON.stringify({
+    svc: "rides",
+    ts: new Date().toISOString(),
+    event: "no_supply",
+    ...payload,
+  }));
+}
+
+async function loadLegacyDriverLocations(
   db: SupabaseClient,
-  pickupLat: number,
-  pickupLng: number,
-  quoteRadiusKm: number,
   freshSince: string,
 ): Promise<Record<string, unknown>[]> {
   const locSelects = [
@@ -48,8 +54,42 @@ async function loadNearbyDriverLocations(
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
   );
 
-  // Prefer H3-bounded RPC (idx_driver_locations_h3_available) over nationwide scan
-  const k = kRingForRadiusKm(quoteRadiusKm, DEFAULT_H3_RESOLUTION);
+  for (const locSelect of locSelects) {
+    const { data: nativeLocs, error: nativeErr } = await db
+      .from("driver_locations")
+      .select(locSelect)
+      .gte("updated_at", freshSince)
+      .eq("available_for_rides", true)
+      .limit(500);
+    if (!nativeErr && nativeLocs) {
+      return nativeLocs as Record<string, unknown>[];
+    }
+    const { data: pubLocs, error: pubErr } = await pub
+      .from("rides_driver_locations")
+      .select(locSelect)
+      .gte("updated_at", freshSince)
+      .eq("available_for_rides", true)
+      .limit(500);
+    if (!pubErr && pubLocs) {
+      return pubLocs as Record<string, unknown>[];
+    }
+  }
+  return [];
+}
+
+async function loadNearbyDriverLocations(
+  db: SupabaseClient,
+  pickupLat: number,
+  pickupLng: number,
+  quoteRadiusKm: number,
+  freshSince: string,
+): Promise<Record<string, unknown>[]> {
+  const pub = createClient(
+    Deno.env.get("SUPABASE_URL") ?? "",
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+  );
+
+  const k = kRingForRadiusKmWithMargin(quoteRadiusKm, DEFAULT_H3_RESOLUTION);
   const cells = h3Disk(pickupLat, pickupLng, k, DEFAULT_H3_RESOLUTION);
   if (cells.length > 0) {
     const { data: rpcData, error: rpcError } = await pub.rpc("rides_drivers_in_h3_cells", {
@@ -57,32 +97,33 @@ async function loadNearbyDriverLocations(
       p_fresh_since: freshSince,
     });
     if (!rpcError && Array.isArray(rpcData)) {
+      if (rpcData.length === 0) {
+        // Empty success is ambiguous (true empty vs stale cells) — fall back once with telemetry
+        const legacy = await loadLegacyDriverLocations(db, freshSince);
+        logNoSupply({
+          cells_queried: cells.length,
+          h3_res: DEFAULT_H3_RESOLUTION,
+          rows_returned: 0,
+          fresh_since: freshSince,
+          fell_back: legacy.length > 0,
+          legacy_rows: legacy.length,
+          reason: legacy.length === 0 ? "empty_market_or_stale_index" : "h3_empty_legacy_hit",
+        });
+        return legacy;
+      }
       return rpcData as Record<string, unknown>[];
     }
+    logNoSupply({
+      cells_queried: cells.length,
+      h3_res: DEFAULT_H3_RESOLUTION,
+      rows_returned: null,
+      fresh_since: freshSince,
+      fell_back: true,
+      rpc_error: rpcError?.message ?? "unknown",
+    });
   }
 
-  // Legacy fallback if H3 cells empty or RPC unavailable
-  for (const locSelect of locSelects) {
-    const { data: nativeLocs, error: nativeErr } = await db
-      .from("driver_locations")
-      .select(locSelect)
-      .gte("updated_at", freshSince)
-      .eq("available_for_rides", true);
-    if (!nativeErr && nativeLocs?.length) {
-      return nativeLocs as Record<string, unknown>[];
-    }
-    const { data: pubLocs, error: pubErr } = await pub
-      .from("rides_driver_locations")
-      .select(locSelect)
-      .gte("updated_at", freshSince)
-      .eq("available_for_rides", true);
-    if (!pubErr && pubLocs?.length) {
-      return pubLocs as Record<string, unknown>[];
-    }
-    if (!nativeErr && nativeLocs) return nativeLocs as Record<string, unknown>[];
-    if (!pubErr && pubLocs) return pubLocs as Record<string, unknown>[];
-  }
-  return [];
+  return loadLegacyDriverLocations(db, freshSince);
 }
 
 export async function resolvePickupEta(
@@ -136,6 +177,15 @@ export async function resolvePickupEta(
   }
 
   if (nearby.length === 0) {
+    logNoSupply({
+      cells_queried: null,
+      h3_res: DEFAULT_H3_RESOLUTION,
+      rows_returned: locs.length,
+      nearby_after_filter: 0,
+      fresh_since: freshSince,
+      fell_back: false,
+      reason: "no_drivers_in_radius",
+    });
     return {
       pickupSeconds: null,
       driversAvailable: false,

@@ -57,7 +57,7 @@ Deno.test("DEFAULT_POLICY has expected values", () => {
   assertEquals(DEFAULT_POLICY.h3_resolution, 7);
   assertEquals(DEFAULT_POLICY.h3_supply_enabled, false);
   assertEquals(DEFAULT_POLICY.h3_surge_enabled, false);
-  assertEquals(DEFAULT_POLICY.wave_h3_k_rings, [0, 2, 6]);
+  assertEquals(DEFAULT_POLICY.wave_h3_k_rings, []);
 });
 
 Deno.test("DEFAULT_POLICY body type settings", () => {

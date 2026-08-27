@@ -1000,12 +1000,34 @@ export function publishMarketCoverage(
     market: DashMarketRow;
     version: CoverageVersionRow;
     merchant_recompute?: MerchantMarketRecompute;
+    hex_compile?: { include: number; exclude: number } | null;
     parish_mode_suggestion?: ParishModeSuggestion | null;
     parish_mode_applied?: string | null;
   }>(accessToken, `/admin/markets/${marketId}/publish`, {
     method: 'POST',
     body: JSON.stringify(payload),
   });
+}
+
+export function previewMarketCoverageDiff(accessToken: string, marketId: string) {
+  return deliveryFetch<{
+    diff: { added: number; removed: number; include_cells: number; exclude_cells: number };
+    message: string;
+  }>(accessToken, `/admin/markets/${marketId}/coverage-diff`, {
+    method: 'POST',
+    body: '{}',
+  });
+}
+
+export function fetchMarketCoverageCells(
+  accessToken: string,
+  marketId: string,
+  res = 7,
+) {
+  return deliveryFetch<{
+    cells: Array<{ h3_cell: string; h3_res: number; kind: string }>;
+    resolution: number;
+  }>(accessToken, `/admin/markets/${marketId}/coverage-cells?res=${res}`);
 }
 
 export function restoreCoverageVersion(
@@ -1427,9 +1449,26 @@ export type MerchantTierRow = {
 };
 
 export type PricingMarketSummary = {
-  market: { id: string; slug: string; name: string; is_active: boolean };
+  market: {
+    id: string;
+    slug: string;
+    name: string;
+    is_active: boolean;
+    parish_id?: string | null;
+  };
+  parish?: { id: string; name: string; sort_order: number } | null;
   profile: Record<string, unknown> | null;
+  has_town_override?: boolean;
+  town_override_enabled?: boolean;
   pricing_v2_enabled: boolean;
+};
+
+export type PricingParishSummary = {
+  id: string;
+  name: string;
+  sort_order: number;
+  has_override: boolean;
+  override_enabled?: boolean;
 };
 
 export type PricingRulesPayload = {
@@ -1458,19 +1497,67 @@ export type PricingRulesPayload = {
   card_processing_fee_percent?: number;
 };
 
+export type PricingLayerResponse = {
+  scope: 'global' | 'parish' | 'market';
+  rules: PricingRulesPayload;
+  has_override?: boolean;
+  override_enabled?: boolean;
+  has_parish_override?: boolean;
+  stack?: string[];
+  market?: Record<string, unknown>;
+  parish?: Record<string, unknown>;
+  profile?: Record<string, unknown> | null;
+};
+
 export function fetchPricingOverview(accessToken: string) {
-  return deliveryFetch<{ markets: PricingMarketSummary[]; tiers: MerchantTierRow[] }>(
+  return deliveryFetch<{
+    markets: PricingMarketSummary[];
+    parishes: PricingParishSummary[];
+    global: { id: string; version: number; has_override: boolean } | null;
+    tiers: MerchantTierRow[];
+  }>(accessToken, '/admin/pricing/overview');
+}
+
+export function fetchDefaultPricing(accessToken: string) {
+  return deliveryFetch<PricingLayerResponse>(accessToken, '/admin/pricing/defaults');
+}
+
+export function updateDefaultPricing(accessToken: string, rules: PricingRulesPayload) {
+  return deliveryFetch(accessToken, '/admin/pricing/defaults', {
+    method: 'PUT',
+    body: JSON.stringify({ rules }),
+  });
+}
+
+export function fetchParishPricing(accessToken: string, parishId: string) {
+  return deliveryFetch<PricingLayerResponse>(
     accessToken,
-    '/admin/pricing/overview',
+    `/admin/pricing/parishes/${parishId}`,
   );
 }
 
+export function updateParishPricing(
+  accessToken: string,
+  parishId: string,
+  rules: PricingRulesPayload,
+) {
+  return deliveryFetch(accessToken, `/admin/pricing/parishes/${parishId}`, {
+    method: 'PUT',
+    body: JSON.stringify({ rules }),
+  });
+}
+
+export function clearParishPricing(accessToken: string, parishId: string) {
+  return deliveryFetch(accessToken, `/admin/pricing/parishes/${parishId}`, {
+    method: 'DELETE',
+  });
+}
+
 export function fetchMarketPricing(accessToken: string, marketId: string) {
-  return deliveryFetch<{
-    market: Record<string, unknown>;
-    profile: Record<string, unknown> | null;
-    rules: PricingRulesPayload;
-  }>(accessToken, `/admin/pricing/markets/${marketId}`);
+  return deliveryFetch<PricingLayerResponse>(
+    accessToken,
+    `/admin/pricing/markets/${marketId}`,
+  );
 }
 
 export function updateMarketPricing(
@@ -1482,6 +1569,56 @@ export function updateMarketPricing(
     method: 'PUT',
     body: JSON.stringify({ rules }),
   });
+}
+
+export function clearMarketPricing(accessToken: string, marketId: string) {
+  return deliveryFetch(accessToken, `/admin/pricing/markets/${marketId}`, {
+    method: 'DELETE',
+  });
+}
+
+export function clearMarketPricingBulk(
+  accessToken: string,
+  payload: { market_ids?: string[]; inactive_only?: boolean },
+) {
+  return deliveryFetch<{ ok: boolean; cleared: number; market_ids: string[] }>(
+    accessToken,
+    '/admin/pricing/markets/clear-overrides',
+    {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export function setParishOverrideEnabled(
+  accessToken: string,
+  parishId: string,
+  enabled: boolean,
+) {
+  return deliveryFetch<{ ok: boolean; override_enabled: boolean }>(
+    accessToken,
+    `/admin/pricing/parishes/${parishId}/override-enabled`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify({ enabled }),
+    },
+  );
+}
+
+export function setMarketOverrideEnabled(
+  accessToken: string,
+  marketId: string,
+  enabled: boolean,
+) {
+  return deliveryFetch<{ ok: boolean; override_enabled: boolean }>(
+    accessToken,
+    `/admin/pricing/markets/${marketId}/override-enabled`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify({ enabled }),
+    },
+  );
 }
 
 export function fetchPricingTiers(accessToken: string) {

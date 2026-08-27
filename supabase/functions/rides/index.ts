@@ -138,7 +138,7 @@ import {
   delegateReconcile,
   delegateDeclineOffer,
 } from "./matchingBrainClient.ts";
-import { latLngToH3 } from "../_shared/h3/geoIndex.ts";
+import { latLngToH3, DEFAULT_H3_RESOLUTION } from "../_shared/h3/geoIndex.ts";
 
 // ---------------------------------------------------------------------------
 // Wave 5: Env boot validation — fail-fast if critical secrets missing
@@ -2196,12 +2196,29 @@ app.post("/v1/drivers/presence", async (c) => {
   const headingRaw = body.heading_degrees != null ? Number(body.heading_degrees) : null;
   const headingDegrees = headingRaw != null && Number.isFinite(headingRaw) ? headingRaw : null;
 
-  // Compute H3 cell for spatial indexing (Phase 4)
+  // Compute H3 cell for spatial indexing — fail closed when going online
   let h3Cell: string | null = null;
   try {
-    h3Cell = latLngToH3(lat, lng, 7); // Default resolution 7
-  } catch {
-    // H3 computation failed, proceed without it
+    h3Cell = latLngToH3(lat, lng, DEFAULT_H3_RESOLUTION);
+  } catch (e) {
+    logLine({
+      event: "presence_h3_failed",
+      user_id: auth.user.id,
+      message: e instanceof Error ? e.message : String(e),
+    });
+    if (goingOnline) {
+      return c.json({
+        error: "presence_h3_required",
+        message: "Could not index driver location; try again",
+      }, 503);
+    }
+  }
+
+  if (goingOnline && !h3Cell) {
+    return c.json({
+      error: "presence_h3_required",
+      message: "Could not index driver location; try again",
+    }, 503);
   }
 
   const dispatchModeRaw = typeof body.dispatch_mode === "string"
@@ -2219,6 +2236,7 @@ app.post("/v1/drivers/presence", async (c) => {
     available_for_rides: Boolean(body.available_for_rides ?? true),
     body_type_slug: bodyTypeSlug,
     h3_cell: h3Cell,
+    h3_res: h3Cell ? DEFAULT_H3_RESOLUTION : null,
     dispatch_mode: dispatchMode,
     updated_at: new Date().toISOString(),
   };
@@ -2232,6 +2250,7 @@ app.post("/v1/drivers/presence", async (c) => {
     p_body_type_slug: upsert.body_type_slug,
     p_h3_cell: upsert.h3_cell,
     p_dispatch_mode: upsert.dispatch_mode,
+    p_h3_res: upsert.h3_res,
   });
 
   if (rpcError) {

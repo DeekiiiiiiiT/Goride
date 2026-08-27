@@ -31,6 +31,7 @@ import {
   CoordinateEntryOverlay,
   type NamedBorderPoint,
 } from './CoordinateEntryOverlay';
+import { HexCellsMapOverlay } from './HexCellsMapOverlay';
 
 export type ZoneMapUiMode = 'view' | 'cutout' | 'adjust' | 'radius';
 
@@ -85,6 +86,8 @@ export type ZoneMapEditorProps = {
   referenceTownPins?: Array<{ id: string; name: string; lat: number; lng: number }>;
   /** Open the lat/lng coordinate overlay immediately (e.g. from Edit coordinates). */
   autoOpenCoordinates?: boolean;
+  /** Compiled H3 cells to overlay (include/exclude). */
+  hexCells?: Array<{ h3_cell: string; kind: string }>;
 };
 
 function styleForKind(kind: DashZoneKind, zoneId?: string): google.maps.PolygonOptions {
@@ -191,6 +194,7 @@ export function ZoneMapEditor({
   foundationScope = 'town',
   referenceTownPins = [],
   autoOpenCoordinates = false,
+  hexCells = [],
 }: ZoneMapEditorProps) {
   const foundationNoun = foundationScope === 'parish' ? 'parish' : 'town';
   const foundationTitle =
@@ -245,6 +249,8 @@ export function ZoneMapEditor({
   );
   const [namedPoints, setNamedPoints] = useState<NamedBorderPoint[]>([]);
   const [radiusM, setRadiusM] = useState(300);
+  const [showHexOverlay, setShowHexOverlay] = useState(false);
+  const [mapInstance, setMapInstance] = useState<google.maps.Map | null>(null);
 
 
   uiModeRef.current = uiMode;
@@ -534,6 +540,7 @@ export function ZoneMapEditor({
       gestureHandling: 'greedy',
     });
     mapRef.current = map;
+    setMapInstance(map);
 
     map.addListener('click', async (e: google.maps.MapMouseEvent) => {
       const latLng = e.latLng;
@@ -965,6 +972,19 @@ export function ZoneMapEditor({
           <Satellite className="w-3.5 h-3.5" />
           {mapType === 'hybrid' ? 'Satellite' : 'Streets'}
         </button>
+        {hexCells.length > 0 && (
+          <button
+            type="button"
+            onClick={() => setShowHexOverlay((v) => !v)}
+            className={`inline-flex items-center gap-1 px-2.5 py-2 rounded-lg border text-xs ${
+              showHexOverlay
+                ? 'border-cyan-500/50 bg-cyan-500/15 text-cyan-200'
+                : 'border-slate-700 text-slate-300'
+            }`}
+          >
+            Hex overlay ({hexCells.length})
+          </button>
+        )}
         {onTestPoint && (
           <button
             type="button"
@@ -1144,6 +1164,7 @@ export function ZoneMapEditor({
         className="w-full rounded-lg overflow-hidden border border-slate-800"
         style={{ height: `${mapHeight}px` }}
       />
+      <HexCellsMapOverlay map={mapInstance} cells={hexCells} visible={showHexOverlay} />
 
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-xs text-slate-500 flex items-center gap-1.5">

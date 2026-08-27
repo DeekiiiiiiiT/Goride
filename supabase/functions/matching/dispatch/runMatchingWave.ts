@@ -5,7 +5,7 @@
  */
 
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { loadAvailableDriverLocations } from "../supply/loadLocations.ts";
+import { loadAvailableDriverLocations, loadDriverLocationsH3 } from "../supply/loadLocations.ts";
 import { buildCandidatePool, rotateCandidates, type Candidate } from "./candidatePool.ts";
 import { insertDriverOfferRow, getExcludedDriverIds } from "./offerWrites.ts";
 import {
@@ -13,6 +13,7 @@ import {
   getWaveRadiusKm,
   driverLocationMaxAgeMs,
   isSerialDispatchEnabled,
+  isH3SupplyEnabled,
   type ResolvedPolicy,
 } from "../policy/loadPolicy.ts";
 import { rankDriversByDriveTime } from "../../rides/fare/distanceMatrix.ts";
@@ -21,6 +22,9 @@ import {
   loadServiceBodyTypeTiers,
 } from "../../rides/fare/serviceMatching.ts";
 import { getRidesAdminDb } from "../../_shared/ridesAdminDb.ts";
+import {
+  getCellsForWave,
+} from "../../_shared/h3/geoIndex.ts";
 
 export interface RideSnapshot {
   id: string;
@@ -120,9 +124,37 @@ export async function runMatchingWave(
   const freshSince = new Date(Date.now() - driverLocationMaxAgeMs(policy)).toISOString();
   const serviceSlug = (ride.vehicle_option ?? "").trim().toLowerCase();
 
+  let supplySource: "h3" | "legacy" = "legacy";
+  const loadLocations = async () => {
+    if (isH3SupplyEnabled(policy)) {
+      const cells = getCellsForWave(
+        pickupLat,
+        pickupLng,
+        wave,
+        policy.wave_radius_km,
+        policy.wave_h3_k_rings.length ? policy.wave_h3_k_rings : null,
+        policy.h3_resolution,
+      );
+      const result = await loadDriverLocationsH3(cells, freshSince);
+      supplySource = result.source;
+      logLine({
+        event: "match_wave_supply",
+        ride_id: rideId,
+        wave,
+        path: result.source,
+        cells: cells.length,
+        rows: result.locations.length,
+        h3_res: policy.h3_resolution,
+        request_id: requestId ?? null,
+      });
+      return result.locations;
+    }
+    return loadAvailableDriverLocations(freshSince);
+  };
+
   // Independent: driver locations, body-type tiers, excluded prior offers
   const [locations, tierResult, excludedIds] = await Promise.all([
-    loadAvailableDriverLocations(freshSince),
+    loadLocations(),
     (async (): Promise<{ allowedBodySlugs: Set<string>; tiersCount: number }> => {
       if (!serviceSlug || !policy.body_type_filtering_enabled) {
         return { allowedBodySlugs: new Set(), tiersCount: 0 };
@@ -226,7 +258,7 @@ export async function runMatchingWave(
       wave,
       candidates_found: candidates.length,
       offers_created: 0,
-      supply_source: "legacy",
+      supply_source: supplySource,
       error: "patch_failed",
     };
   }
@@ -294,6 +326,6 @@ export async function runMatchingWave(
     wave,
     candidates_found: candidates.length,
     offers_created: offersInserted,
-    supply_source: "legacy",
+    supply_source: supplySource,
   };
 }

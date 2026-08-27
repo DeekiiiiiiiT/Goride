@@ -144,10 +144,10 @@ export const SECTION_KEYS: Record<SectionId, (keyof MatchingPolicy)[]> = {
     'pin_verification_required_for_start',
   ],
   h3Indexing: [
-    'h3_resolution',
+    // h3_resolution intentionally omitted — migration-only (Bug #1)
     'h3_supply_enabled',
     'h3_surge_enabled',
-    'wave_h3_k_rings',
+    // wave_h3_k_rings derived from radii; not patchable from UI
   ],
 };
 
@@ -233,13 +233,13 @@ export const TOOLTIPS: Record<string, string> = {
 
   // H3 Indexing
   h3_resolution:
-    'H3 hexagon resolution for spatial indexing. 7 = ~1.2km edge (urban), 8 = ~460m edge (dense urban). Calibrate per market.',
+    'H3 hexagon resolution for spatial indexing. Locked in admin — changing it requires an engineering migration to re-stamp live presence cells.',
   h3_supply_enabled:
-    'Use H3 hexagonal indexing for driver supply lookups instead of simple radius queries.',
+    'Use H3 hexagonal indexing for driver supply lookups instead of simple radius queries. Requires MATCHING_H3_SUPPLY=1.',
   h3_surge_enabled:
-    'Use H3 hexagonal cells for surge pricing calculations.',
+    'Use H3 hexagonal cells for surge pricing calculations. Requires MATCHING_H3_SURGE=1.',
   wave_h3_k_rings:
-    'K-ring values per wave for H3 lookups. Higher values search larger areas. Calibrate per market.',
+    'Derived automatically from wave radii (+1 ring margin). Hand-entered overrides are discouraged.',
 };
 
 /**

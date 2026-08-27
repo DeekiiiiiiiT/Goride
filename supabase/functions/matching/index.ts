@@ -111,9 +111,10 @@ const POLICY_PATCH_ALLOWED_FIELDS = [
   "name",
   ...POLICY_DUAL_WRITE_FIELDS,
   "serial_dispatch_enabled",
-  "h3_resolution",
+  // h3_resolution is migration-only — rejected below if present in body
   "h3_supply_enabled",
   "h3_surge_enabled",
+  // wave_h3_k_rings derived at runtime; optional override still allowed for ops
   "wave_h3_k_rings",
 ] as const;
 
@@ -315,6 +316,14 @@ app.patch("/admin/policies/:id", async (c) => {
         return c.json({ error: "wave_radius_km_must_ascend" }, 400);
       }
     }
+  }
+
+  // Bug #1: resolution changes must be a re-stamp migration, never a live toggle
+  if (body.h3_resolution !== undefined) {
+    return c.json({
+      error: "h3_resolution_locked",
+      message: "Changing H3 resolution requires an engineering migration to re-stamp live presence cells.",
+    }, 400);
   }
 
   // Build patch

@@ -80,9 +80,27 @@ async function getMerchantForUser(supabase: SupabaseClient, userId: string) {
   return merchant as Record<string, unknown>;
 }
 
+/** Browser Maps keys are HTTP-referrer restricted — never hand the partner key to roamrush.app. */
+function mapsBrowserKeyForRequest(c: { req: { header: (name: string) => string | undefined } }) {
+  const merchant = (Deno.env.get("GOOGLE_MAPS_API_KEY_MERCHANT") || "").trim();
+  const customer = (Deno.env.get("GOOGLE_MAPS_API_KEY") || "").trim();
+  const origin = (c.req.header("Origin") || c.req.header("Referer") || "").toLowerCase();
+
+  const isPartnerOrigin =
+    origin.includes("partner.roamrush.app") ||
+    origin.includes("command.roamrush.app");
+
+  if (isPartnerOrigin) {
+    return merchant || customer;
+  }
+  // Customer + Ops Console (roamrush.app), courier, localhost, previews
+  return customer || merchant;
+}
+
+/** Server-side Geocoding/Places — prefer customer key, then merchant fallback. */
 function mapsApiKey() {
-  return Deno.env.get("GOOGLE_MAPS_API_KEY_MERCHANT") ||
-    Deno.env.get("GOOGLE_MAPS_API_KEY") ||
+  return (Deno.env.get("GOOGLE_MAPS_API_KEY") || "").trim() ||
+    (Deno.env.get("GOOGLE_MAPS_API_KEY_MERCHANT") || "").trim() ||
     "";
 }
 
@@ -227,7 +245,7 @@ export function registerMerchantApplicationRoutes(app: Hono) {
   });
 
   app.get("/maps-config", (c) => {
-    const apiKey = mapsApiKey();
+    const apiKey = mapsBrowserKeyForRequest(c);
     if (!apiKey) {
       return c.json({ error: "Maps API not configured" }, 503);
     }

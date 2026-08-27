@@ -249,6 +249,38 @@ export function buildOrderPricing(input: PricingInput): PricingBreakdown {
   };
 }
 
+/** Deep-merge snake_case rules blobs. Later layers win. Arrays are replaced, not concat. */
+export function mergePricingRuleLayers(
+  ...layers: Array<Record<string, unknown> | null | undefined>
+): Record<string, unknown> {
+  const isPlainObject = (v: unknown): v is Record<string, unknown> =>
+    v != null && typeof v === 'object' && !Array.isArray(v);
+
+  const mergeTwo = (
+    base: Record<string, unknown>,
+    over: Record<string, unknown>,
+  ): Record<string, unknown> => {
+    const out: Record<string, unknown> = { ...base };
+    for (const [key, value] of Object.entries(over)) {
+      if (value === undefined) continue;
+      const prev = out[key];
+      if (isPlainObject(prev) && isPlainObject(value)) {
+        out[key] = mergeTwo(prev, value);
+      } else {
+        out[key] = value;
+      }
+    }
+    return out;
+  };
+
+  let acc: Record<string, unknown> = {};
+  for (const layer of layers) {
+    if (!layer || typeof layer !== 'object') continue;
+    acc = mergeTwo(acc, layer);
+  }
+  return acc;
+}
+
 /** Parse DB rules JSON (snake_case) into PricingRules. */
 export function parsePricingRules(raw: Record<string, unknown> | null | undefined): PricingRules {
   if (!raw || typeof raw !== 'object') {

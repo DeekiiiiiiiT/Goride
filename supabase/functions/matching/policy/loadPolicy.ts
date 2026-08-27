@@ -119,7 +119,8 @@ export const DEFAULT_POLICY: Omit<MatchingPolicy, "id" | "updated_at" | "updated
   h3_resolution: 7,
   h3_supply_enabled: false,
   h3_surge_enabled: false,
-  wave_h3_k_rings: [0, 2, 6],
+  // Empty = derive at runtime via kRingForRadiusKmWithMargin
+  wave_h3_k_rings: [],
   is_default: true,
 };
 
@@ -156,6 +157,12 @@ function parseNumericArray(raw: unknown): number[] {
   if (!Array.isArray(raw)) return [...DEFAULT_POLICY.wave_radius_km];
   const nums = raw.map((v) => Number(v)).filter((n) => Number.isFinite(n) && n > 0);
   return nums.length ? nums : [...DEFAULT_POLICY.wave_radius_km];
+}
+
+/** Optional k-ring overrides; empty means derive from radii at request time. */
+function parseKRingOverride(raw: unknown): number[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((v) => Number(v)).filter((n) => Number.isFinite(n) && n >= 0);
 }
 
 function normalizeRadii(radii: number[], maxWaves: number): number[] {
@@ -216,7 +223,7 @@ function rowToPolicy(row: Record<string, unknown>): MatchingPolicy {
     h3_resolution: clamp(Number(row.h3_resolution), 4, 10, DEFAULT_POLICY.h3_resolution),
     h3_supply_enabled: row.h3_supply_enabled === true,
     h3_surge_enabled: row.h3_surge_enabled === true,
-    wave_h3_k_rings: parseNumericArray(row.wave_h3_k_rings).length ? parseNumericArray(row.wave_h3_k_rings) : [...DEFAULT_POLICY.wave_h3_k_rings],
+    wave_h3_k_rings: parseKRingOverride(row.wave_h3_k_rings),
     is_default: row.is_default === true,
     updated_at: typeof row.updated_at === "string" ? row.updated_at : new Date().toISOString(),
     updated_by: typeof row.updated_by === "string" ? row.updated_by : null,

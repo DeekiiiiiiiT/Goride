@@ -53,13 +53,15 @@ export function H3IndexingSection({ policy, canEdit, onSave }: H3IndexingSection
 
   const disabled = isSectionDisabled(canEdit, isEditing);
 
-  const handleKRingsChange = (value: string) => {
-    const kRings = value
-      .split(',')
-      .map((s) => parseInt(s.trim(), 10))
-      .filter((n) => !isNaN(n) && n >= 0);
-    updateField('wave_h3_k_rings', kRings);
-  };
+  const derivedPreview = formData.wave_radius_km?.length
+    ? formData.wave_radius_km
+        .map((r) => {
+          const edge = 1.22;
+          const k = Math.max(0, Math.ceil(Number(r) / (edge * Math.sqrt(3)))) + 1;
+          return String(k);
+        })
+        .join(', ')
+    : 'derived from wave radii';
 
   return (
     <SettingsSection
@@ -115,31 +117,33 @@ export function H3IndexingSection({ policy, canEdit, onSave }: H3IndexingSection
             {formData.h3_resolution}
           </span>
         </div>
+        {/* Resolution changes are a data migration — never a live toggle (ADR 0013 / Bug #1). */}
         <Slider
           min={4}
           max={10}
           step={1}
-          disabled={disabled}
+          disabled
           value={[formData.h3_resolution]}
-          onValueChange={([v]) => updateField('h3_resolution', v)}
+          onValueChange={() => {}}
         />
         <p className="text-xs text-slate-500">
           {H3_RESOLUTION_LABELS[formData.h3_resolution] || `Resolution ${formData.h3_resolution}`}
+          {' — '}
+          locked. Changing resolution requires an engineering migration (re-stamp live presence).
         </p>
       </div>
 
       <div className="space-y-1.5 mt-4">
-        <SettingLabel label="Wave K-Rings" tooltip={TOOLTIPS.wave_h3_k_rings} />
+        <SettingLabel label="Wave K-Rings (derived)" tooltip={TOOLTIPS.wave_h3_k_rings} />
         <input
           type="text"
-          disabled={disabled}
-          value={formData.wave_h3_k_rings.join(', ')}
-          onChange={(e) => handleKRingsChange(e.target.value)}
-          placeholder="4, 13, 29"
+          disabled
+          readOnly
+          value={derivedPreview}
           className={settingsInputClass}
         />
         <p className="text-xs text-slate-500">
-          K-ring values per wave. Calibrate per market.
+          Derived at request time from wave radii (+1 ring margin). Hand-entered overrides removed.
         </p>
       </div>
     </SettingsSection>

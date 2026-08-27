@@ -124,7 +124,7 @@ export const DEFAULT_MATCHING_POLICY: Omit<MatchingPolicy, 'id' | 'created_at' |
   h3_resolution: 7,
   h3_supply_enabled: false,
   h3_surge_enabled: false,
-  wave_h3_k_rings: [0, 2, 6],
+  wave_h3_k_rings: [],
   is_default: true,
 };
 

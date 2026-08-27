@@ -36,6 +36,11 @@ import {
   applyParishCoverageModeIfRequested,
   suggestParishCoverageMode,
 } from "./parishModeSuggest.ts";
+import {
+  compileMarketCoverageCells,
+  previewCoverageDiff,
+  recomputeMerchantCoverageCells,
+} from "../coverageCompile.ts";
 
 type Vertex = CoverageVertex;
 
@@ -660,10 +665,44 @@ export function registerMarketAdminRoutes(app: Hono) {
         zone_count: zonesJson.length,
       }),
     );
+
+    let hexCompile: { include: number; exclude: number } | null = null;
+    try {
+      hexCompile = await compileMarketCoverageCells(db, marketId, (zones ?? []) as Array<{ kind?: string; polygon?: unknown }>);
+    } catch (e) {
+      console.log(JSON.stringify({
+        event: "coverage_hex_compile_failed",
+        market_id: marketId,
+        message: e instanceof Error ? e.message : String(e),
+      }));
+    }
+
     const merchantRecompute = await recomputeMerchantMarkets(db, {
       includeLocked: body.recompute_locked === true,
       unlockAfter: body.unlock_after === true,
     });
+
+    // Recompute merchant reach hexes for merchants in this market
+    try {
+      const { data: merchants } = await db
+        .from("merchants")
+        .select("id, lat, lng, delivery_radius_km, market_id")
+        .eq("market_id", marketId);
+      for (const m of merchants ?? []) {
+        await recomputeMerchantCoverageCells(db, String(m.id), {
+          lat: Number(m.lat),
+          lng: Number(m.lng),
+          deliveryRadiusKm: Number(m.delivery_radius_km) || 8,
+          marketId,
+        });
+      }
+    } catch (e) {
+      console.log(JSON.stringify({
+        event: "merchant_hex_recompute_failed",
+        market_id: marketId,
+        message: e instanceof Error ? e.message : String(e),
+      }));
+    }
 
     const parishId = (market as Record<string, unknown>).parish_id != null
       ? String((market as Record<string, unknown>).parish_id)
@@ -687,9 +726,47 @@ export function registerMarketAdminRoutes(app: Hono) {
       market: updated,
       version: ver,
       merchant_recompute: merchantRecompute,
+      hex_compile: hexCompile,
       parish_mode_suggestion: parishModeSuggestion,
       parish_mode_applied: body.apply_parish_mode ?? null,
     });
+  });
+
+  admin.post("/:id/coverage-diff", async (c) => {
+    const adminUser = c.get("adminUser") as ProductAdminUser;
+    const denied = requireDashWrite(adminUser);
+    if (denied) return denied;
+    const marketId = c.req.param("id");
+    const db = getDb();
+    const { data: zones, error: zErr } = await db
+      .from("service_zone_polygons")
+      .select("*")
+      .eq("market_id", marketId);
+    if (zErr) return c.json({ error: zErr.message }, 500);
+    try {
+      const diff = await previewCoverageDiff(db, marketId, (zones ?? []) as Array<{ kind?: string; polygon?: unknown }>);
+      return c.json({
+        diff,
+        message: `+${diff.added} hexes, −${diff.removed} hexes (res 7 preview)`,
+      });
+    } catch (e) {
+      return c.json({ error: e instanceof Error ? e.message : String(e) }, 500);
+    }
+  });
+
+  admin.get("/:id/coverage-cells", async (c) => {
+    const adminUser = c.get("adminUser") as ProductAdminUser;
+    if (!adminUser) return c.json({ error: "unauthorized" }, 401);
+    const marketId = c.req.param("id");
+    const res = Number(c.req.query("res") ?? 7);
+    const db = getDb();
+    const { data, error } = await db
+      .from("coverage_cells")
+      .select("h3_cell, h3_res, kind")
+      .eq("market_id", marketId)
+      .eq("h3_res", res);
+    if (error) return c.json({ error: error.message }, 500);
+    return c.json({ cells: data ?? [], resolution: res });
   });
 
   admin.post("/:id/versions/:versionId/restore", async (c) => {

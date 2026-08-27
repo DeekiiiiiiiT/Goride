@@ -204,13 +204,59 @@ async function dispatchOffersForOrder(
     originLng = Number(merchant?.lng);
   }
 
-  const { data: online } = await serviceSb
-    .from("courier_availability")
-    .select("driver_id, current_lat, current_lng")
-    .eq("is_online", true)
-    .limit(80);
+  const useH3 = Deno.env.get("RUSH_H3_DISPATCH_ENABLED") === "1";
+  let online: Array<{
+    driver_id: string;
+    current_lat: number | null;
+    current_lng: number | null;
+  }> = [];
+  let supplyPath: "h3" | "legacy" = "legacy";
+  let cellsQueried = 0;
 
-  const onlineIds = (online ?? []).map((r) => String(r.driver_id));
+  if (useH3 && Number.isFinite(originLat) && Number.isFinite(originLng)) {
+    try {
+      const {
+        DEFAULT_H3_RESOLUTION,
+        h3Disk,
+        kRingForRadiusKmWithMargin,
+      } = await import("../_shared/h3/geoIndex.ts");
+      const k = kRingForRadiusKmWithMargin(DISPATCH_RADIUS_KM, DEFAULT_H3_RESOLUTION);
+      const cells = h3Disk(originLat, originLng, k, DEFAULT_H3_RESOLUTION);
+      cellsQueried = cells.length;
+      const freshSince = new Date(Date.now() - 15 * 60 * 1000).toISOString();
+      const { data: rpcRows, error: rpcErr } = await serviceSb.rpc("delivery_couriers_in_h3_cells", {
+        p_cells: cells,
+        p_res: DEFAULT_H3_RESOLUTION,
+        p_fresh_since: freshSince,
+        p_limit: 200,
+      });
+      if (!rpcErr && Array.isArray(rpcRows)) {
+        online = rpcRows.map((r: Record<string, unknown>) => ({
+          driver_id: String(r.driver_id),
+          current_lat: r.current_lat != null ? Number(r.current_lat) : null,
+          current_lng: r.current_lng != null ? Number(r.current_lng) : null,
+        }));
+        supplyPath = "h3";
+      }
+    } catch {
+      supplyPath = "legacy";
+    }
+  }
+
+  if (supplyPath === "legacy") {
+    const { data } = await serviceSb
+      .from("courier_availability")
+      .select("driver_id, current_lat, current_lng")
+      .eq("is_online", true)
+      .limit(80);
+    online = (data ?? []).map((r) => ({
+      driver_id: String(r.driver_id),
+      current_lat: r.current_lat != null ? Number(r.current_lat) : null,
+      current_lng: r.current_lng != null ? Number(r.current_lng) : null,
+    }));
+  }
+
+  const onlineIds = online.map((r) => String(r.driver_id));
   const activeCourierIds = new Set<string>();
   if (onlineIds.length > 0) {
     const { data: activeProfiles } = await serviceSb
@@ -225,14 +271,13 @@ async function dispatchOffersForOrder(
 
   type Ranked = { driver_id: string; km: number };
   const ranked: Ranked[] = [];
-  for (const row of online || []) {
+  for (const row of online) {
     if (!activeCourierIds.has(String(row.driver_id))) continue;
     const hasCapacity = await courierHasStackCapacity(serviceSb, String(row.driver_id));
     if (!hasCapacity) continue;
     const lat = Number(row.current_lat);
     const lng = Number(row.current_lng);
     if (!Number.isFinite(originLat) || !Number.isFinite(originLng)) {
-      // No origin coords — fall back to unranked include (soft-launch safety)
       ranked.push({ driver_id: row.driver_id, km: 999 });
       continue;
     }
@@ -244,6 +289,18 @@ async function dispatchOffersForOrder(
   }
   ranked.sort((a, b) => a.km - b.km);
   const targets = ranked.slice(0, DISPATCH_MAX_OFFERS);
+
+  console.log(JSON.stringify({
+    svc: "delivery",
+    event: "courier_dispatch_supply",
+    order_id: orderId,
+    path: supplyPath,
+    cells: cellsQueried,
+    rows: online.length,
+    ranked: ranked.length,
+    targets: targets.length,
+    fell_back: useH3 && supplyPath === "legacy",
+  }));
 
   const expiresAt = new Date(Date.now() + DISPATCH_OFFER_TTL_MS).toISOString();
   let created = 0;
@@ -280,6 +337,22 @@ async function dispatchOffersForOrder(
       }
     }
   }
+
+  // Demand event for windowed surge (H3)
+  if (Number.isFinite(originLat) && Number.isFinite(originLng)) {
+    try {
+      const { latLngToH3, DEFAULT_H3_RESOLUTION } = await import("../_shared/h3/geoIndex.ts");
+      const cell = latLngToH3(originLat, originLng, DEFAULT_H3_RESOLUTION);
+      await serviceSb.from("demand_events").insert({
+        h3_cell: cell,
+        h3_res: DEFAULT_H3_RESOLUTION,
+        order_id: orderId,
+      });
+    } catch {
+      /* non-blocking */
+    }
+  }
+
   return created;
 }
 
@@ -366,6 +439,22 @@ export function registerCourierConsumerRoutes(app: Hono, deps: Deps) {
     };
     if (lat != null && Number.isFinite(lat)) payload.current_lat = lat;
     if (lng != null && Number.isFinite(lng)) payload.current_lng = lng;
+
+    if (isOnline) {
+      if (lat == null || lng == null || !Number.isFinite(lat) || !Number.isFinite(lng)) {
+        return c.json({ error: "location_required", message: "Online couriers must send lat/lng" }, 400);
+      }
+      try {
+        const { latLngToH3, DEFAULT_H3_RESOLUTION } = await import("../_shared/h3/geoIndex.ts");
+        payload.h3_cell = latLngToH3(lat, lng, DEFAULT_H3_RESOLUTION);
+        payload.h3_res = DEFAULT_H3_RESOLUTION;
+      } catch (e) {
+        return c.json({
+          error: "presence_h3_required",
+          message: e instanceof Error ? e.message : "Could not index courier location",
+        }, 503);
+      }
+    }
 
     if (existing?.id) {
       const { data, error } = await serviceSb

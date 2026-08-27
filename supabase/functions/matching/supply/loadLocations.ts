@@ -79,7 +79,8 @@ export async function loadAvailableDriverLocations(freshSince: string): Promise<
         continue;
       }
       if (rows && rows.length > 0) return rows;
-      if (rows && rows.length === 0 && select === DRIVER_LOCATIONS_SELECT_BASE) {
+      if (rows && rows.length === 0) {
+        // Valid empty market — do not storm alternate sources
         return rows;
       }
     }
@@ -116,6 +117,8 @@ export async function loadDriverLocationsH3(
   const { data: rpcData, error: rpcError } = await db.rpc("rides_drivers_in_h3_cells", {
     p_h3_cells: h3Cells,
     p_fresh_since: freshSince,
+    p_h3_res: 7,
+    p_limit: 500,
   });
 
   if (!rpcError && rpcData) {

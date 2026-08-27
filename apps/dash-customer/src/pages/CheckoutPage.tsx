@@ -309,13 +309,22 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
           throw new Error(error.error || 'Order does not meet the minimum amount');
         }
         if (error.code === 'out_of_coverage') {
-          throw new Error(error.error || "We don’t deliver to this address yet");
+          throw new Error(error.error || "You're outside our delivery zone.");
+        }
+        if (error.code === 'excluded_zone') {
+          throw new Error(error.error || "We're not currently serving your address.");
+        }
+        if (error.code === 'too_far_from_store') {
+          throw new Error(error.error || "This store doesn't deliver that far.");
+        }
+        if (error.code === 'market_inactive') {
+          throw new Error(error.error || 'Roam Rush is not available in this area yet.');
         }
         if (error.code === 'merchant_out_of_market') {
-          throw new Error(error.error || "This store doesn’t deliver to your area");
+          throw new Error(error.error || "This store doesn't deliver to your area");
         }
         if (error.code === 'outside_parish') {
-          throw new Error(error.error || "We don’t deliver outside this parish yet");
+          throw new Error(error.error || "You're outside our delivery zone.");
         }
         if (error.code === 'merchant_out_of_parish') {
           throw new Error(error.error || "This store doesn’t deliver to your parish");
