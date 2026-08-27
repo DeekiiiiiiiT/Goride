@@ -1598,33 +1598,35 @@ function ParishMapOverlay({
           setImportText('');
         }}
         onImport={() => {
-          const text = importText.trim();
-          if (!text) return;
-          let parsed: unknown;
-          try {
-            parsed = JSON.parse(text);
-          } catch {
-            toast.error('Invalid JSON');
-            return;
-          }
-          if (!Array.isArray(parsed) && isLegacyGeoJsonBlocked(parsed)) {
-            toast.error(LEGACY_IMPORT_BLOCKED_MESSAGE);
-            return;
-          }
-          const ring = Array.isArray(parsed)
-            ? (parsed as DashZoneVertex[])
-            : polygonFromGeoJson(parsed);
-          if (!ring || ring.length < 3) {
-            toast.error(
-              isLegacyGeoJsonBlocked(parsed)
-                ? LEGACY_IMPORT_BLOCKED_MESSAGE
-                : 'Need a single-ring Polygon (or Feature with one). Use Import Boundaries for official files.',
-            );
-            return;
-          }
-          setShowImport(false);
-          setImportText('');
-          await onSaveOutline(sanitizeVertices(ring) as DashZoneVertex[], promoteTemplate);
+          void (async () => {
+            const text = importText.trim();
+            if (!text) return;
+            let parsed: unknown;
+            try {
+              parsed = JSON.parse(text);
+            } catch {
+              toast.error('Invalid JSON');
+              return;
+            }
+            if (!Array.isArray(parsed) && isLegacyGeoJsonBlocked(parsed)) {
+              toast.error(LEGACY_IMPORT_BLOCKED_MESSAGE);
+              return;
+            }
+            const ring = Array.isArray(parsed)
+              ? (parsed as DashZoneVertex[])
+              : polygonFromGeoJson(parsed);
+            if (!ring || ring.length < 3) {
+              toast.error(
+                isLegacyGeoJsonBlocked(parsed)
+                  ? LEGACY_IMPORT_BLOCKED_MESSAGE
+                  : 'Need a single-ring Polygon (or Feature with one). Use Import Boundaries for official files.',
+              );
+              return;
+            }
+            setShowImport(false);
+            setImportText('');
+            await onSaveOutline(sanitizeVertices(ring) as DashZoneVertex[], promoteTemplate);
+          })();
         }}
       />
 
