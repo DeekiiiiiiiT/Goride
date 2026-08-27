@@ -2,10 +2,34 @@
 
 **Project:** GoRide (`csfllzzastacofsvcdsc`, us-east-1, Postgres 17.6.1.054)
 **Date:** 2026-08-27
-**Scope:** Security advisor findings only. **No code or database changes were made.**
+**Scope:** Security advisor findings only. Original pass made **no** code or database changes.
 **Method:** Pulled the raw advisor lint set via the Supabase API (259 lints), then verified each
 class of finding directly against the live database with read-only SQL — including role-switched
 (`SET LOCAL ROLE anon`) reads inside a rolled-back transaction to confirm real reachability.
+
+---
+
+## Remediation status (applied 2026-08-27)
+
+Live GoRide (`csfllzzastacofsvcdsc`) remediations applied via versioned migrations:
+
+| Phase | Migration | Result |
+|-------|-----------|--------|
+| A | `20260827150000_advisor_remediation_phase_a_safe_locks.sql` | Trigger EXECUTE revoked; `order_idempotency_keys` RLS+revoke; 13 `search_path` pins |
+| B | `20260827151000_advisor_remediation_phase_b_revoke_rpc_grants.sql` | Money/ops SD RPCs service_role-only; RBAC helpers keep `authenticated` |
+| B2 | `20260827155000_advisor_remediation_phase_b2_remaining_anon_sd.sql` | Remaining anon SD helpers/ledger funcs cleaned |
+| C | `20260827152000_advisor_remediation_phase_c_platform_rls.sql` | RLS+policies on identities/invites/comm-log; platform views invoker |
+| D1 | `20260827153000_advisor_remediation_phase_d1_finance_views_invoker.sql` | Finance views invoker + anon SELECT revoked |
+| D2 | `20260827154000_advisor_remediation_phase_d2_fleet_views_invoker.sql` | Fleet/ops views invoker + anon SELECT revoked |
+
+**Advisor after remediation:** **0 ERROR / 21 WARN / 49 INFO** (was 52 / 165 / 48).
+Cleared: `security_definer_view`, `rls_disabled_in_public`, all `anon_security_definer_function_executable`, audited money RPC grants, mutable `search_path` list.
+**Closed (operator, 2026-08-27):** leaked-password protection on; MFA TOTP + AAL1 session limit on (Dash Admin gates staff on AAL2).
+**Still open (deferred):** `pg_trgm` in `public` (indexes on `vehicle_catalog` — defer); Group C INFO deny-all tables left intentional; 7 ledger backup tables retention TBD; remaining `authenticated_security_definer_*` WARN (19) on intentional RLS/RBAC helpers.
+
+**Group C review:** `service_markets` / parishes / zones / waitlist / support_cases / review_votes / haulage bookings are edge/service-role only — no client policies added. `kv_store_37f42386` stays locked.
+
+PostgREST bridge for unauthenticated ledger write/read is closed; application money-rule integrity remains under `FINANCIAL_INTEGRITY_AUDIT.md`.
 
 ---
 
