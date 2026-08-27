@@ -55,7 +55,7 @@ export function polygonCentroid(polygon: GeoVertex[]): GeoVertex | null {
  * Never apply to imported / official boundaries: angular sort destroys non-star-shaped rings.
  * Rings with more than 16 vertices are returned unchanged (never scramble imported geometry).
  */
-export function orderRingClockwise<T extends GeoVertex>(points: T[]): T[] {
+function orderRingClockwise<T extends GeoVertex>(points: T[]): T[] {
   if (points.length < 3 || points.length > 16) return points;
   const c = polygonCentroid(points);
   if (!c) return points;
@@ -67,7 +67,7 @@ export function orderRingClockwise<T extends GeoVertex>(points: T[]): T[] {
   });
 }
 
-/** Alias clarifying that orderRingClockwise is for manual corner entry only. */
+/** Manual corner entry only — do not use on imported / official rings. */
 export const orderRingClockwiseForManualCorners = orderRingClockwise;
 
 /** Prefer official COD-AB center over vertex-average centroid. */

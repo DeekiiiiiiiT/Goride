@@ -97,6 +97,11 @@ export function ImportTownBorderOverlay({
         </div>
 
         <div className="overflow-y-auto flex-1 p-4 space-y-3">
+          <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">
+            Prefer <span className="font-semibold">Import Boundaries</span> (COD-AB catalog) for
+            official MultiPolygon files. This tool is for rare single-ring CSV / hand-pasted outlines
+            only.
+          </div>
           <input
             ref={fileInputRef}
             type="file"

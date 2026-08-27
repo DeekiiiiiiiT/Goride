@@ -67,11 +67,11 @@ export function ImportParishTownPinsOverlay({
         <div className="flex items-start justify-between gap-3 border-b border-slate-800 px-4 py-3">
           <div>
             <h2 id="import-town-pins-title" className="text-base font-semibold text-white">
-              Import town pins · GeoJSON
+              Import town pins (legacy) · GeoJSON
             </h2>
             <p className="text-xs text-slate-400 mt-0.5">
               Upload Point features for towns/cities in {parishName}. These are reference pins only —
-              not delivery borders.
+              not delivery borders. Prefer catalog towns from Import Boundaries.
             </p>
           </div>
           <button
@@ -84,6 +84,10 @@ export function ImportParishTownPinsOverlay({
         </div>
 
         <div className="overflow-y-auto flex-1 p-4 space-y-3">
+          <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">
+            Legacy fallback. Official town locations come from COD-AB admin2 centroids and market
+            borders — use Import Boundaries / catalog create when possible.
+          </div>
           <input
             ref={fileInputRef}
             type="file"

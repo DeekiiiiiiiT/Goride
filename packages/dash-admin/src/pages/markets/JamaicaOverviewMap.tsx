@@ -1,5 +1,6 @@
 /**
- * Read-only Jamaica overview: all parish foundations, town borders, cutouts, and pins.
+ * Read-only Jamaica overview: parish foundations, town borders, cutouts.
+ * Town markers prefer market/catalog centers; legacy town_pins are fallback only.
  */
 import React, { useEffect, useRef, useState } from 'react';
 import { Loader2, Satellite, X } from 'lucide-react';
@@ -30,6 +31,33 @@ function excludeZones(town: { zones?: Array<{ kind?: string; polygon?: DashZoneV
   return (town.zones ?? []).filter(
     (z) => z.kind === 'exclude' && Array.isArray(z.polygon) && z.polygon.length >= 3,
   );
+}
+
+function townMarkerPos(town: {
+  name?: string;
+  center_lat?: number | null;
+  center_lng?: number | null;
+  zones?: Array<{ kind?: string; polygon?: DashZoneVertex[]; center_lat?: number | null; center_lng?: number | null }>;
+}): { lat: number; lng: number; name: string } | null {
+  const name = String(town.name ?? 'Town');
+  if (Number.isFinite(town.center_lat) && Number.isFinite(town.center_lng)) {
+    return { lat: Number(town.center_lat), lng: Number(town.center_lng), name };
+  }
+  const inc = includeZones(town)[0];
+  if (inc && Number.isFinite(inc.center_lat) && Number.isFinite(inc.center_lng)) {
+    return { lat: Number(inc.center_lat), lng: Number(inc.center_lng), name };
+  }
+  const ring = inc?.polygon ?? [];
+  if (ring.length >= 3) {
+    let lat = 0;
+    let lng = 0;
+    for (const v of ring) {
+      lat += v.lat;
+      lng += v.lng;
+    }
+    return { lat: lat / ring.length, lng: lng / ring.length, name };
+  }
+  return null;
 }
 
 const JAMAICA_CENTER = { lat: 18.15, lng: -77.3 };
@@ -167,8 +195,24 @@ export function JamaicaOverviewMap({
           }
         }
 
-        for (const pin of parish.town_pins ?? []) {
-          if (!Number.isFinite(pin.lat) || !Number.isFinite(pin.lng)) continue;
+        // Prefer catalog/market centers; legacy town_pins only when no market markers exist.
+        const marketMarkers: Array<{ lat: number; lng: number; name: string }> = [];
+        for (const town of parish.towns ?? []) {
+          const pos = townMarkerPos(town);
+          if (pos) marketMarkers.push(pos);
+        }
+        const markerSource =
+          marketMarkers.length > 0
+            ? marketMarkers
+            : (parish.town_pins ?? [])
+                .filter((pin) => Number.isFinite(pin.lat) && Number.isFinite(pin.lng))
+                .map((pin) => ({
+                  lat: pin.lat,
+                  lng: pin.lng,
+                  name: `${pin.name} (legacy pin)`,
+                }));
+
+        for (const pin of markerSource) {
           bounds.extend({ lat: pin.lat, lng: pin.lng });
           hasGeom = true;
           if (canUseAdvancedMarker && AdvancedMarkerCtor) {

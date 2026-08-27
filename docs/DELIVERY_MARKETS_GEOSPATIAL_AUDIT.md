@@ -1,483 +1,394 @@
-# Delivery Markets — Geospatial Audit & Enterprise Enhancement Plan
+# Delivery Markets — Geospatial Audit & Remediation Status
 
-**Date:** 2026-08-27
-**Scope:** `packages/dash-admin/src/pages/markets/*` (5,436 LOC), `delivery.service_parishes` / `service_zone_polygons`, `supabase/functions/delivery/admin/coverageZones.ts`
-**Trigger:** Adopting the official COD-AB Jamaica boundary set (admin0–admin3) at `Roam/Mapping/Jamaica`
-**Status:** Audit only — no code changed.
-
----
-
-## 0. Executive summary
-
-The Delivery Markets section was built for **hand-drawn, single-ring town outlines**. The new dataset is
-**official, multi-level, multi-part, hole-bearing administrative geometry**. These are not the same shape of
-problem, and the gap is structural rather than cosmetic.
-
-The headline finding is not a missing feature — it is a **silent data-loss bug that is already live**:
-
-> The GeoJSON import path keeps only the **first polygon of the first feature's outer ring**.
-> Every admin0/admin1 file is a `MultiPolygon`. Importing `admin1-parishes/kingston.json` today
-> would **silently discard 23.7% of Kingston parish**, and in `parish_boundary` coverage mode that
-> truncated shape becomes the **live customer delivery boundary**.
-
-Three more findings of similar severity follow from the same root cause: the storage model is a flat
-`{lat,lng}[]` ring, which is structurally incapable of representing what the data contains.
-
-**Verdict:** the import path needs a data-model change before the new files can be adopted safely.
-Uploading them into the current system would quietly corrupt coverage rather than fail loudly.
+**Original audit:** 2026-08-27
+**Last updated:** 2026-08-27 (OPEN remediation complete on live GoRide)
+**Scope:** `packages/dash-admin/src/pages/markets/*`, `delivery.admin_boundaries` / `service_parishes` / `service_zone_polygons`, `supabase/functions/delivery/admin/boundaryRoutes.ts`, `scripts/import-codab-boundaries.ts`
+**Data source:** COD-AB Jamaica admin0–admin3 at `Roam/Mapping/Jamaica` (43 files, 921 features, 301,966 points)
 
 ---
 
-## 1. What the data actually contains
+## 0. Status at a glance
 
-| Level | Files | Features | Coord points | Size | Meaning |
-|---|---:|---:|---:|---:|---|
-| `admin0-country` | 1 | 1 | 30,608 | 1.15 MB | Jamaica national outline |
-| `admin1-parishes` | 14 | 14 | 42,816 | 3.97 MB | Official parish borders |
-| `admin2-towns-by-parish` | 14 | 131 | 79,240 | 7.39 MB | Town / district boundaries |
-| `admin3-communities-by-parish` | 14 | 775 | 149,302 | 14.41 MB | Community boundaries |
-| **Total** | **43** | **921** | **301,966** | **26.93 MB** | |
+All **OPEN-1…OPEN-10** items from the post-implementation re-audit are **Done** on live GoRide
+(`csfllzzastacofsvcdsc`).
 
-**Geometry characteristics the current code does not handle:**
+| Layer | State |
+|---|---|
+| Schema / PostGIS / catalog | ✅ Built and correct |
+| Import pipeline + wizard + API | ✅ Built; service-role importer used for full load |
+| Parser (MultiPolygon, holes, multi-feature) | ✅ Fixed |
+| **COD-AB data imported** | ✅ **921 rows** (1 + 14 + 131 + 775) |
+| **Kingston parish border** | ✅ **`JM03`, 2 parts, 4,370 pts** |
+| Promote snapshots inside RPC | ✅ `20260830170000_promote_snapshot_and_reconcile.sql` |
+| Town / zone pcodes | ✅ Reconciled where unique admin2 match exists |
+| Portmore fake parish | ✅ Deleted (0 markets) |
+| Catalog-only town create | ✅ Linked parishes use admin2 picker only |
 
-| Characteristic | Where it appears | Current handling |
+**Live blast radius remains small.** Spanish Town is still the only active published town —
+metadata pcode `JM0807` attached; published polygon **not** overwritten.
+
+---
+
+## 1. Resolved by the Phase 1–2 implementation
+
+Verified present in `20260830140000_admin_boundaries_geospatial.sql`,
+`20260830150000_boundary_promote_helpers.sql`, `20260830160000_point_in_geom_rpcs.sql`,
+and the rewritten `coverageIo.ts`.
+
+| ID | Finding | Resolution |
 |---|---|---|
-| `MultiPolygon` | Every admin0 + admin1 file (2 parts each) | Only part `[0]` kept |
-| Interior rings (holes) | `admin2/st-catherine.json` | Silently dropped |
-| Multi-feature collections | admin2 (7–15 each), admin3 (36–79 each) | Only feature `[0]` kept |
-| High vertex counts | 1,330–4,033/parish; 30,608 for admin0 | No cap, no simplification |
+| BUG-1 | MultiPolygon truncation | ✅ `geometry(MultiPolygon,4326)`; all parts preserved through promote |
+| BUG-2 | Interior rings dropped | ✅ Holes **materialised as `exclude` zones** in `promote_boundary_to_market_zone` |
+| BUG-3 | First-feature-only import | ✅ `coverageIo.ts` rebuilt on `IoMultiPolygon { outer, holes }`; importer batches all features |
+| BUG-4 | Storage model | ✅ `delivery.admin_boundaries` catalog + dual-write `geom` columns + sync triggers |
+| BUG-5 | Name-collision identity | ✅ `UNIQUE (admin_level, pcode)`; upsert keyed on pcode |
+| BUG-6 | Parish name/slug mismatch | ✅ `slugify()` normalises `Saint` → `st`; slug is the join key |
+| GAP-1/2/3 | admin_level, pcode, provenance | ✅ All columns present incl. `source`, `source_version`, `valid_on` |
+| GAP-4 | admin3 had no home | ✅ `union_admin3_to_market_zone` composes town coverage from communities |
+| GAP-5 | area / centroid discarded | ✅ Captured; `ST_PointOnSurface` fallback at `20260830140000:244-245` |
+| GAP-7 | No idempotent upsert | ✅ `ON CONFLICT (admin_level, pcode) DO UPDATE` |
+| GAP-8 | No bulk import | ✅ `scripts/import-codab-boundaries.ts` + `ImportBoundariesWizard.tsx` |
+| GAP-10 | No parish version history | ✅ `parish_outline_versions` + snapshot/restore endpoints |
+| GAP-11 | No dry run | ✅ `--dry-run` flag and wizard preview |
+| PERF-1 | Editor freeze | ✅ Vertex cap — `ZoneMapEditor.tsx:493`: `const editable = verts.length <= 500` |
+| PERF-2 | No simplification tier | ✅ `geom_display` via `ST_SimplifyPreserveTopology(g, 0.00015)` |
+| PERF-3 | PostGIS unused | ✅ `ST_Covers` RPCs (`point_in_parish_foundation`, `point_in_zone_geom`) |
+| LM-2 | Naive vertex-average centroid | ✅ `ST_PointOnSurface` used instead |
 
-**Per-feature properties available (all currently discarded):**
-
-```
-adm1_name, adm1_pcode, adm2_name, adm2_pcode, adm3_name, adm3_pcode,
-adm0_name, adm0_pcode, area_sqkm, center_lat, center_lon,
-valid_on, valid_to, version, lang, adm3_ref
-```
-
-Only geometry survives import today — and only partially. Every attribute above is thrown away.
-
----
-
-## 2. Critical bugs
-
-### BUG-1 — MultiPolygon truncation causes live coverage loss ⚠️ **SEVERITY: CRITICAL**
-
-`coverageIo.ts:62-65` reads only the first polygon of a `MultiPolygon`:
-
-```ts
-} else if (geometry.type === 'MultiPolygon' && Array.isArray(geometry.coordinates)) {
-  const firstPoly = (geometry.coordinates as unknown[])[0];
-  ring = Array.isArray(firstPoly) ? firstPoly[0] : null;
-}
-```
-
-Measured impact of dropping parts `[1..n]`:
-
-| File | Part 1 | Part 2 | Loss |
-|---|---:|---:|---:|
-| `admin1-parishes/kingston.json` | 76.30% | 23.70% | **23.70%** |
-| `admin1-parishes/st-catherine.json` | 99.89% | 0.11% | 0.11% |
-| `admin0-country/jamaica.json` | 99.99% | 0.01% | 0.01% |
-
-Kingston is the severe case. **Kingston is already live** (`border set · 1 town` in the current UI), and
-`coverageZones.ts:139-158` promotes `foundation_polygon` to a synthetic customer-facing zone whenever
-`coverage_mode = 'parish_boundary'`. A truncated Kingston polygon means real customers in ~24% of the
-parish are told they are outside the delivery area, with no error surfaced to ops.
-
-**Fix:** store and evaluate all polygon parts.
+**Centroid quality verified:** all 920 admin1–3 centroids supplied by COD-AB fall **inside** their own
+polygon (checked by ray-cast against every ring, holes respected). They are point-on-surface quality
+and safe for label placement — no need to recompute.
 
 ---
 
-### BUG-2 — Interior rings (holes) silently dropped ⚠️ **SEVERITY: HIGH**
+## 2. OPEN — remediation results (Done 2026-08-27)
 
-`coverageIo.ts:60-61` takes `coordinates[0]` — the outer ring — and discards every subsequent ring:
+### OPEN-1 — COD-AB import ✅ **Done**
 
-```ts
-if (geometry.type === 'Polygon' && Array.isArray(geometry.coordinates)) {
-  ring = (geometry.coordinates as unknown[])[0];
-}
+Verified:
 ```
+admin_level 0→1, 1→14, 2→131, 3→775  (total 921)
+Kingston admin1: JM03, 2 parts, 4370 pts
+```
+Importer: `scripts/import-codab-via-sql.ts` (service-role upsert path).
 
-`admin2-towns-by-parish/st-catherine.json` contains a feature with 2 rings. A hole is a **genuine
-interior exclusion** — dropping it converts a donut into a solid disc, silently adding coverage that
-the source data explicitly excludes. This is the same class of failure as BUG-1 but inverted: it
-*over*-covers instead of under-covering.
+### OPEN-2 — Kingston restored + fixtures purged ✅ **Done**
 
-**Fix:** preserve rings `[1..n]` as holes, or materialise them as `exclude` zones.
+Kingston parish: `pcode=JM03`, foundation 2 parts / 4370 pts. Deleted `JM01K` and tiny `JM` fixture.
+`parish_outline_versions` has Kingston pre-promote snapshots.
+
+### OPEN-3 — Snapshot inside promote RPCs ✅ **Done**
+
+Migration `20260830170000_promote_snapshot_and_reconcile.sql`:
+- `promote_boundary_to_parish` inserts `parish_outline_versions` before overwrite
+- `promote_boundary_to_market_zone` snapshots zones into `service_coverage_versions`
+- HTTP double-snapshot removed from `boundaryRoutes.ts` (RPC-only path)
+
+### OPEN-4 — St. Catherine / St. Andrew re-promoted ✅ **Done**
+
+| Parish | pcode | parts | pts |
+|---|---|---:|---:|
+| st-catherine | JM08 | 2 | 4033 |
+| st-andrew | JM06 | 1 | 2065 |
+
+Matches catalog `st_numgeometries` / `st_npoints`.
+
+### OPEN-5 — Town pcode reconcile ✅ **Done** (partial name coverage)
+
+`delivery.reconcile_market_pcodes(true)` report:
+- matched 4 (Old Harbour, Linstead, Bog Walk promoted; Spanish Town **metadata only** `JM0807`)
+- unmatched 13 (not in St. Catherine admin2 catalog — e.g. Guy’s Hill, Ewarton, New Kingston)
+- ambiguous 0
+
+Unmatched towns remain for manual Boundary Library / Markets UI attach when needed.
+
+### OPEN-6 — Portmore fake parish ✅ **Done**
+
+Confirmed 0 markets → deleted `service_parishes` row `portmore`.
+
+### OPEN-7 — Catalog-only town create ✅ **Done**
+
+`MarketsPage.tsx`: linked parishes (`pcode` set) → catalog select + `createTownFromBoundary` only.
+Free-text create kept only for unlinked parishes, with warning.
+
+### OPEN-8 — Legacy import banner ✅ **Done**
+
+`ImportTownBorderOverlay` keeps rare single-ring paste path; banner points ops to Import Boundaries.
+
+### OPEN-9 — `orderRingClockwise` export ✅ **Done**
+
+Raw export removed; only `orderRingClockwiseForManualCorners` exported; CoordinateEntryOverlay updated.
+
+### OPEN-10 — `town_pins` demoted ✅ **Done**
+
+Overview prefers market/catalog centers; pin import CTA labeled legacy; copy no longer treats pins as SoT.
 
 ---
 
-### BUG-3 — Only the first feature of a FeatureCollection is imported ⚠️ **SEVERITY: HIGH**
+## 2b. Historical OPEN detail (pre-remediation)
 
-`coverageIo.ts:38-50` loops features but `break`s on the first polygonal one:
+### OPEN-1 — The COD-AB import has never run ⚠️ **P0** (superseded — Done above)
 
-```ts
-for (const f of g.features) {
-  ...
-  if (geom && (geom.type === 'Polygon' || geom.type === 'MultiPolygon')) {
-    geometry = geom;
-    break;      // <-- everything after this is discarded, silently
-  }
-}
+`delivery.admin_boundaries` contains **2 rows**, neither of which is real data:
+
+| pcode | name | parts | points | area_sqkm | Reality |
+|---|---|---:|---:|---:|---|
+| `JM` | Jamaica | 1 | **5** | 10991 | Real admin0 = 30,608 pts |
+| `JM01K` | Kingston | 2 | **10** | 25 | Real Kingston = 4,370 pts, pcode `JM03` |
+
+These are synthetic smoke-test fixtures. `JM01K` is not a COD-AB pcode. Expected after a real import:
+**921 rows** (1 + 14 + 131 + 775).
+
+**Fix:**
+```bash
+# 1. dry run
+deno run -A scripts/import-codab-boundaries.ts \
+  --dir "C:/Users/deeki/OneDrive/Documents/App and Web design/Roam/Mapping/Jamaica" \
+  --token "$TOKEN" --dry-run
+
+# 2. country + parishes first, verify, then towns + communities
+deno run -A scripts/import-codab-boundaries.ts --dir "…" --token "$TOKEN" --levels 0,1
+deno run -A scripts/import-codab-boundaries.ts --dir "…" --token "$TOKEN" --levels 2,3
 ```
 
-Uploading `admin2-towns-by-parish/st-andrew.json` (15 towns) imports **1 town**. Uploading
-`admin3-communities-by-parish/clarendon.json` (79 communities) imports **1 community**. No warning,
-no count, no indication that 14 / 78 shapes were dropped. The toast still reads *"Town border imported"*.
-
-**Fix:** treat a multi-feature collection as a batch, not a single shape (see §5, ENH-1).
-
----
-
-### BUG-4 — Storage model cannot represent the data ⚠️ **SEVERITY: CRITICAL (root cause)**
-
+Verify after step 2:
 ```sql
--- 20260816190000_rush_parish_foundation.sql
-ADD COLUMN IF NOT EXISTS foundation_polygon jsonb   -- '>=3 {lat,lng}'
--- 20260816123000_rush_ops_markets_zones.sql
-polygon jsonb NOT NULL DEFAULT '[]'::jsonb          -- 'jsonb array of {lat,lng} vertices'
+select admin_level, count(*) from delivery.admin_boundaries group by 1 order by 1;
+-- expect 0→1, 1→14, 2→131, 3→775
+select pcode, st_numgeometries(geom), st_npoints(geom)
+from delivery.admin_boundaries where admin_level = 1 and name = 'Kingston';
+-- expect JM03, 2 parts, 4370 points
 ```
-
-```ts
-// dashAdminService.ts:716
-foundation_polygon?: DashZoneVertex[] | null;   // DashZoneVertex = { lat, lng }
-```
-
-A flat vertex array is a **single ring**. It cannot express multi-part geometry or holes, so BUG-1 and
-BUG-2 are not parser oversights that can be patched in isolation — the destination type has nowhere to
-put the information. `sanitizeVertices` (`packages/dash-coverage/src/sanitizeVertices.ts:4-14`) reinforces
-this by flattening any input to `{lat,lng}[]` with no structural validation and **no vertex cap**.
-
-**Fix:** this is the schema change everything else depends on. See §6, Phase 1.
 
 ---
 
-### BUG-5 — Name collisions make name-based matching unsafe ⚠️ **SEVERITY: HIGH**
+### OPEN-2 — Kingston's parish border is a test fixture ⚠️ **P0**
 
-Measured duplicate names in the source data:
+```
+slug=kingston  pcode=JM01K  foundation_boundary_pcode=JM01K
+foundation_polygon = 4 points     (real: 4,370)
+foundation_geom    = 10 points, 2 parts
+```
 
-| Level | Distinct names | Names duplicated across parishes |
+Kingston's genuine outline is gone and **no snapshot exists** in `parish_outline_versions` (table is
+empty — see OPEN-3 for why). Not customer-affecting today (`town_zones` mode, only town inactive),
+but it is wrong data in a live table.
+
+**Fix:** after OPEN-1 lands, re-promote from the catalog:
+```sql
+select delivery.promote_boundary_to_parish(
+  (select id from delivery.service_parishes where slug = 'kingston'),
+  'JM03'
+);
+```
+Then delete the fixtures:
+```sql
+delete from delivery.admin_boundaries where pcode in ('JM01K')
+   or (pcode = 'JM' and st_npoints(geom) < 100);
+```
+
+---
+
+### OPEN-3 — Snapshot guard is only at the HTTP layer ⚠️ **P1**
+
+`boundaryRoutes.ts:261-279` correctly snapshots `foundation_polygon` / `foundation_geom` into
+`parish_outline_versions` **before** calling the promote RPC, and exposes list/restore endpoints.
+That path is safe.
+
+But `delivery.promote_boundary_to_parish()` performs a destructive `UPDATE` with **no internal
+snapshot**. Anything calling the RPC directly — SQL console, another service, a migration — silently
+overwrites with no recovery point. This is exactly how Kingston was clobbered: the versions table is
+empty despite Kingston having had a foundation.
+
+**Fix:** move the snapshot inside the function so the guarantee holds regardless of caller.
+Insert into `parish_outline_versions` at the top of `promote_boundary_to_parish`, before the `UPDATE`,
+when the parish already has a `foundation_polygon` or `foundation_geom`. Same for
+`promote_boundary_to_market_zone` (which currently overwrites include zones with no history).
+
+---
+
+### OPEN-4 — St. Catherine's foundation is single-part ⚠️ **P2**
+
+```
+slug=st-catherine  foundation_polygon = 3,557 pts  foundation_geom = 1 part / 3,558 pts
+```
+
+COD-AB St. Catherine is a **2-part** MultiPolygon (3,558 + 475 points). The stored geometry matches
+part `[0]` exactly — a fingerprint of the old truncating parser (original BUG-1). The lost part is
+0.11% of area, so impact is cosmetic, but it is stale pre-fix data.
+
+St. Andrew (2,064 pts, 1 part) should be re-checked the same way once the catalog is populated.
+
+**Fix:** re-promote both from the catalog after OPEN-1; confirm `st_numgeometries` matches the source.
+
+---
+
+### OPEN-5 — No town or zone carries a pcode ⚠️ **P1**
+
+Every `service_markets.pcode` and `service_zone_polygons.boundary_pcode` is `NULL`. The columns and
+indexes exist; nothing has been reconciled into them. Until this is done the catalog and the
+operational tables are two disconnected worlds, and BUG-5 (name collisions — "May Pen" exists in 5
+parishes) remains a live hazard for any matching logic.
+
+**Fix:** a reconciliation pass mapping the 17 existing towns to admin2 pcodes via
+`promote_boundary_to_market_zone`, or an ops screen that lets someone confirm each match. Note the
+existing town names are shouty imports (`OLD HARBOUR BAY`, `GUY'S HILL`) that will need
+case-insensitive, apostrophe-tolerant matching **within the parent parish only**.
+
+---
+
+### OPEN-6 — Data hygiene: `Portmore` is registered as a parish ⚠️ **P2**
+
+`delivery.service_parishes` holds 15 rows. Jamaica has 14 parishes. `Portmore` is a town in
+St. Catherine (COD-AB has no admin1 entry for it), so it will never match an admin1 pcode and will
+sit permanently unreconciled.
+
+**Fix:** demote to a town under `st-catherine`, or delete if unused. Check for dependent markets first.
+
+---
+
+### OPEN-7 — Town creation is still free-text ⚠️ **P2** (GAP-9, Phase 3 item 12)
+
+`MarketsPage.tsx:1846-1850` still creates towns from a typed `newTownName`. Every town created this
+way starts with no pcode and no catalog link, re-creating the orphan problem the catalog was built to
+solve.
+
+**Fix:** replace the text input with a picker over `admin_boundaries WHERE admin_level = 2 AND
+parent_pcode = <parish pcode>` — name, area, and pcode carried through on create.
+
+---
+
+### OPEN-8 — Import overlays not consolidated ⚠️ **P3** (RED-1)
+
+Three overlays now coexist: `ImportBoundariesWizard.tsx` (new), `ImportTownBorderOverlay.tsx`,
+`ImportParishTownPinsOverlay.tsx` (both legacy). The latter two duplicate file-picker + FileReader +
+paste-textarea logic and route through the older single-shape path.
+
+**Fix:** once catalog promotion covers the common cases, retire the two legacy overlays or fold them
+into the wizard as "manual / paste" modes.
+
+---
+
+### OPEN-9 — `orderRingClockwise` is documented, not guarded ⚠️ **P3** (LM-1)
+
+`coverageGeo.ts:70-71` adds a clarifying alias (`orderRingClockwiseForManualCorners`), but the raw
+`orderRingClockwise` is still exported and `CoordinateEntryOverlay.tsx:170` still calls the raw name.
+Angular sorting around a centroid is valid only for star-shaped polygons and would scramble any real
+boundary.
+
+**Fix:** stop exporting the raw name; export only the manual-corners alias.
+
+---
+
+### OPEN-10 — `town_pins` now fully redundant ⚠️ **P3** (RED-4)
+
+With `center_lat` / `center_lng` on both `admin_boundaries` and `service_parishes`, the separate
+`town_pins` jsonb path is a second source of truth for the same information.
+
+**Fix:** derive pins from boundary centroids
+(`SELECT name, center_lat, center_lng FROM delivery.admin_boundaries WHERE admin_level = 2`) and
+retire `town_pins` / `ImportParishTownPinsOverlay`.
+
+---
+
+## 3. Decisions taken
+
+**COD-AB `adminpoints` and `adminlines` layers — rejected, deleted 2026-08-27.**
+
+The HDX archive ships two extra layers alongside admin0–3. Both were extracted, evaluated, and removed:
+
+- **`jam_adminpoints`** (921 Point features) — *not* a settlement gazetteer. Exactly one point per
+  admin0–3 polygon, and byte-identical to the `center_lon`/`center_lat` already in each polygon's
+  properties (verified against `JM0101 Chapelton`). The importer already reads those
+  (`import-codab-boundaries.ts:132-133`) and `upsert_admin_boundary` falls back to
+  `ST_PointOnSurface`. Zero new information.
+- **`jam_adminlines`** (2,310 LineStrings) — `left_pcod` / `right_pcod` and `name` are **null on all
+  2,310 features**, so it carries no adjacency graph. Reproducible on demand via `ST_Boundary(geom)`.
+
+Neither had any consumer in the codebase. Additionally, `import-codab-boundaries.ts:145` walks
+`--dir` **recursively**, and the documented `--dir` is the Jamaica folder itself — so both layers
+would have been opened and parsed on every import run (skipped safely, since Point/LineString fail
+`geometryToParts`, but 4.6 MB of wasted I/O and a trap for future contributors).
+
+**Canonical working set is the 43 polygon files** under `admin0-country/`, `admin1-parishes/`,
+`admin2-towns-by-parish/`, `admin3-communities-by-parish/`. Do not add non-polygon layers to that
+directory while the importer walks it recursively.
+
+**Source fidelity confirmed.** The Shapefile→GeoJSON conversion was validated against the official
+GeoJSON release: 921/921 features, 942/942 rings geometrically identical, max coordinate delta
+**11 nanometres** (float serialisation only); 151 rings differ by starting vertex (rotation —
+geometrically meaningless). The only property difference is `""` vs `null` in six always-empty
+alternate-name/language columns, a DBF limitation. **Either archive is equally valid; no re-export
+needed.**
+
+---
+
+## 4. Priority order
+
+| Priority | Item | Blocking? |
+|---|---|---|
+| **P0** | OPEN-1 Run the COD-AB import | Yes — everything else waits on the catalog |
+| **P0** | OPEN-2 Restore Kingston, purge fixtures | Yes — wrong data in a live table |
+| **P1** | OPEN-3 Move snapshot into the RPC | **Do before OPEN-1** — protects St. Andrew / St. Catherine |
+| **P1** | OPEN-5 Reconcile town/zone pcodes | Unlocks catalog-driven ops |
+| **P2** | OPEN-4 Re-promote St. Catherine / St. Andrew | After catalog loads |
+| **P2** | OPEN-6 Fix `Portmore` parish row | Independent |
+| **P2** | OPEN-7 Catalog-driven town creation | After OPEN-5 |
+| **P3** | OPEN-8/9/10 Consolidation & cleanup | Maintainability |
+
+**Recommended sequence:** OPEN-3 → OPEN-1 (levels 0,1) → verify Kingston = `JM03` / 2 parts /
+4,370 pts → OPEN-2 purge → OPEN-1 (levels 2,3) → OPEN-4 → OPEN-5.
+
+---
+
+## 5. Original audit findings (historical record)
+
+The pre-implementation audit identified 7 bugs, 12 gaps, 5 redundancies, 2 landmines and 14 UX items.
+Everything not listed in §2 above has been resolved — see the §1 table for the mapping.
+
+Key measurements from the original audit, retained for reference:
+
+| Level | Files | Features | Points | Size |
+|---|---:|---:|---:|---:|
+| admin0 | 1 | 1 | 30,608 | 1.15 MB |
+| admin1 | 14 | 14 | 42,816 | 3.97 MB |
+| admin2 | 14 | 131 | 79,240 | 7.39 MB |
+| admin3 | 14 | 775 | 149,302 | 14.41 MB |
+| **Total** | **43** | **921** | **301,966** | **26.93 MB** |
+
+Name-collision measurements (why pcode is mandatory as the join key):
+
+| Level | Distinct names | Duplicated across parishes |
 |---|---:|---:|
-| admin2 | 83 | **29** |
+| admin2 | 83 | **29** — "May Pen" in 5 parishes, "Lucea" in 4 |
 | admin3 | 729 | **42** |
 
-Worked examples:
-
-- **"May Pen"** appears in **5 parishes**: Clarendon, Hanover, St. Andrew, St. Catherine, Westmoreland
-- **"Lucea"** appears in 4: Hanover, Portland, St. Andrew, St. Ann
-- **"Frankfield"**, **"Kellits"**, **"Yallahs"**, **"Williamsfield"** each in 3
-
-The app currently identifies towns **by typed name only** (`MarketsPage.tsx:1808-1812`, `newTownName`).
-Any auto-matching, dedupe, or re-import keyed on name will cross-link the wrong parish's town. `pcode`
-(`adm2_pcode`, e.g. `JM0101`) is the only safe key — and the schema has no column for it.
-
-**Fix:** add `pcode` as the import identity/upsert key. Never match on name.
+Pcode scheme differs from the legacy simplemaps file (`JM01 = Kingston` there,
+`JM01 = Clarendon` in COD-AB; Kingston is `JM03`). Treat `adm1_pcode` from COD-AB as authoritative.
 
 ---
 
-### BUG-6 — Parish naming mismatch (with a lucky escape)
-
-| Source | Kingston | St. Catherine |
-|---|---|---|
-| App display name (`20260816150000_rush_service_parishes.sql:31-33`) | `Kingston` | `St. Catherine` |
-| App slug | `kingston` | `st-catherine` |
-| GeoJSON `adm1_name` | `Kingston` | `Saint Catherine` |
-| Export filename | `kingston.json` | `st-catherine.json` |
-
-Display names differ (`St.` vs `Saint`) so name matching fails. **The slugs happen to align exactly with
-the exported filenames** — this is the natural join key and should be made explicit rather than relied on
-by luck.
-
----
-
-### BUG-7 — Pcode scheme collision with legacy data
-
-The earlier simplemaps file used `JM01 = Kingston`. The official COD-AB set uses `JM01 = Clarendon`.
-If any parish pcode was persisted from the old file, adopting the new set will mis-map parishes. Audit
-for stored simplemaps pcodes before import and treat `adm1_pcode` as authoritative going forward.
-
----
-
-## 3. Performance & scale findings
-
-### PERF-1 — Editor will freeze on official geometry ⚠️ **SEVERITY: HIGH**
-
-`ZoneMapEditor.tsx` builds a Google Maps polygon with `editable: true` and mirrors every vertex into
-React state (`editVertices`, line 242). Google Maps renders **one drag handle per vertex plus one midpoint
-handle per edge** — so importing a real parish outline yields:
-
-| Import | Vertices | Interactive handles |
-|---|---:|---:|
-| St. Catherine parish | 4,033 | ~8,066 |
-| Kingston parish | 4,370 | ~8,740 |
-| Jamaica outline | 30,608 | ~61,216 |
-
-This will lock the browser tab. `CoordinateEntryOverlay.tsx` compounds it by rendering a per-vertex row
-list — a 4,033-row table.
-
-**Fix:** cap editable vertices; simplify on import (Douglas–Peucker); make official boundaries
-**read-only reference layers** rather than editable geometry (see ENH-4).
-
----
-
-### PERF-2 — No simplification tier, full precision shipped to clients
-
-There is no vertex budget anywhere in the stack. `listMarkets` returns every parish and zone polygon in
-full precision on every page load. Adopting admin2 alone (79,240 points) would balloon the admin payload;
-admin3 (149,302 points) is far beyond what a browser list view should carry.
-
-**Fix:** store full precision, serve **tiered simplifications** (display ~1–2 % of vertices, coverage
-math at full precision server-side).
-
----
-
-### PERF-3 — PostGIS is installed but unused for coverage
+## Appendix — verification queries
 
 ```sql
--- 20260829140000_h3_phase1_safety.sql:4
-CREATE EXTENSION IF NOT EXISTS postgis;
+-- catalog completeness
+select admin_level, count(*) as n, count(geom_display) as with_display,
+       count(center_lat) as with_center, min(valid_on) as vintage
+from delivery.admin_boundaries group by 1 order by 1;
+
+-- parish coverage state
+select slug, name, coverage_mode, pcode, boundary_source,
+       st_numgeometries(foundation_geom) as parts,
+       st_npoints(foundation_geom) as pts,
+       (select count(*) from delivery.service_markets m where m.parish_id = p.id) as towns
+from delivery.service_parishes p order by sort_order;
+
+-- unreconciled towns
+select m.name, p.slug as parish, m.pcode
+from delivery.service_markets m
+left join delivery.service_parishes p on p.id = m.parish_id
+where m.pcode is null;
+
+-- built-in health view
+select * from delivery.coverage_health_summary;
 ```
-
-PostGIS is available (pulled in by the H3 work) yet all coverage geometry lives in `jsonb` and all
-point-in-polygon runs as **JS ray-casting** (`coverageGeo.ts:5-18`). Consequences: no spatial index, no
-`ST_Contains`, no `ST_Area`, no topology validation, no `ST_Union`, and every PIP check scans full
-vertex arrays linearly.
-
-> Cross-reference: the H3 review already flags the H3 supply path as dead code with a live resolution
-> footgun. Coverage geometry and H3 indexing should be reconciled in one plan rather than growing a
-> third parallel spatial representation.
-
-**Fix:** `geometry(MultiPolygon, 4326)` column + GiST index; PIP via `ST_Contains`.
-
----
-
-### PERF-4 — Overview map does not scale
-
-`JamaicaOverviewMap.tsx:98-179` instantiates one `google.maps.Polygon` per shape and one
-`google.maps.Marker` per pin, with no clustering, viewport culling, or level-of-detail. It is fine for
-today's handful of shapes and will not survive 921. It also uses `google.maps.Marker`, deprecated since
-Feb 2024 in favour of `AdvancedMarkerElement`.
-
-**Fix:** render via a data layer / vector tiles; cull by viewport; switch to `AdvancedMarkerElement`.
-
----
-
-## 4. Gaps — what the model cannot express
-
-| # | Gap | Consequence |
-|---|---|---|
-| GAP-1 | **No `admin_level` concept** | admin0/1/2/3 cannot be distinguished, stored side by side, or toggled as layers |
-| GAP-2 | **No `pcode` field** | No stable identity; re-import duplicates; forced into unsafe name matching (BUG-5) |
-| GAP-3 | **No provenance** (`source`, `valid_on`, `version`) | Cannot tell an official border from a hand-drawn one, or detect a stale vintage |
-| GAP-4 | **admin3 has no home** | 775 community boundaries have no tier in the model at all |
-| GAP-5 | **`area_sqkm` / `center_lat` / `center_lon` discarded** | Free area + centroid data recomputed badly or not at all |
-| GAP-6 | **No parent-child integrity** | Nothing validates a town polygon lies inside its parish |
-| GAP-7 | **No idempotent upsert** | Re-importing creates duplicates rather than updating in place |
-| GAP-8 | **No bulk import** | 921 features via a one-shape-at-a-time modal ≈ **900+ manual uploads** |
-| GAP-9 | **Towns created by typing a name** (`MarketsPage.tsx:1808`) | Typos create orphans that never reconcile with official data |
-| GAP-10 | **No parish outline version history** | Town coverage is versioned (`listCoverageVersions`); parish border replace is destructive |
-| GAP-11 | **No import preview / dry run** | Ops paste JSON blind and discover the result only after it is saved |
-| GAP-12 | **No topology validation** | Self-intersections, unclosed rings, wrong winding order all pass through |
-
----
-
-## 5. Redundancies
-
-| # | Redundancy | Detail |
-|---|---|---|
-| RED-1 | **Two near-identical import overlays** | `ImportTownBorderOverlay.tsx` and `ImportParishTownPinsOverlay.tsx` duplicate the same file-picker + FileReader + paste-textarea logic (~140 lines each) with cosmetic differences |
-| RED-2 | **Duplicated FeatureCollection traversal** | `polygonFromGeoJson` (`coverageIo.ts:33`) and `pinsFromGeoJson` (`coverageIo.ts:106`) each re-implement the same walk |
-| RED-3 | **Dual source of truth for parish outlines** | `service_parishes.foundation_polygon` **and** `parish_outline_templates.polygon` both hold parish geometry, kept in sync manually via `promote_template` |
-| RED-4 | **`town_pins` largely obsoleted** | admin2 supplies real polygons **and** `center_lat`/`center_lon`. The pin path is explicitly "reference only — not delivery borders" and is now a dead-end duplicate of better data |
-| RED-5 | **Two coverage-mode concepts overlap** | `parish_boundary` mode synthesises a zone from the parish outline (`coverageZones.ts:150-158`) while `town_zones` uses the same outline as an outer gate — one polygon serving two semantics, distinguished only by a flag |
-
----
-
-## 6. Landmines (not currently bugs — do not extend to imported data)
-
-**LM-1 — `orderRingClockwise` would destroy real boundaries.**
-`coverageGeo.ts:52-62` sorts vertices by angle around the centroid. That is valid **only for star-shaped
-polygons**. Real parish outlines are not star-shaped — angular sorting would scramble them into a
-self-intersecting mess.
-
-Currently contained: it is only reached from `CoordinateEntryOverlay.tsx:170`, the manual N/S/E/W corner-entry
-path with a handful of typed points. **It must never be applied to imported geometry.** Worth an explicit
-guard or a comment, since it is exported from a shared module and reads like a general-purpose helper.
-
-**LM-2 — `polygonCentroid` is a vertex average, not an area centroid.**
-`coverageGeo.ts:40-49` averages vertices, which biases toward densely-sampled edges. Official data supplies
-a correct `center_lat`/`center_lon` — prefer it over recomputation.
-
----
-
-## 7. UI/UX findings
-
-| # | Finding | Recommendation |
-|---|---|---|
-| UX-1 | Import is blind — paste JSON, save, hope | **Preview on map + summary before commit** (feature count, vertex count, area, bbox, warnings) |
-| UX-2 | Failures are a one-line toast (`'Need a Polygon…'`) | Structured validation report: per-feature pass/fail with reasons |
-| UX-3 | Silent partial success (BUG-1/2/3) reports full success | Never silently discard; if 15 features arrive and 1 is used, say so loudly |
-| UX-4 | "Import parish border…" buried two levels into a dropdown | Surface a primary **Import boundaries** action |
-| UX-5 | 14 near-identical rows with repeated mode dropdowns | Group/collapse; move mode into a detail view; add search/filter |
-| UX-6 | No search across parishes/towns | Needed immediately at 131 towns; mandatory at 775 communities |
-| UX-7 | No provenance shown on a border | Badge: `Official · COD-AB · valid 2024-08-02` vs `Hand-drawn` |
-| UX-8 | No bulk activate/deactivate | Multi-select with bulk actions |
-| UX-9 | Destructive parish border replace, no undo | Version + restore, mirroring town coverage versioning |
-| UX-10 | "Parishes without towns" section will invert | Once admin2 is imported every parish has towns — rework the empty-state grouping |
-| UX-11 | Import modal is per-town | Folder / multi-file drop, one job with a progress list |
-| UX-12 | Deprecated `google.maps.Marker` | Migrate to `AdvancedMarkerElement` |
-| UX-13 | No admin-level layer toggles on maps | Parish / town / community layer switches with independent styling |
-| UX-14 | `await onSaveOutline(...)` on a `void` return (`MarketsPage.tsx:1555-1557`) | Return the promise so saving state and errors propagate |
-
----
-
-## 8. Enterprise enhancement plan
-
-### Phase 1 — Data model (**blocking; everything else depends on it**)
-
-1. **Add a geometry column.** `geometry(MultiPolygon, 4326)` alongside the legacy `jsonb`, with a GiST
-   index. Dual-write during migration, then cut over.
-2. **Add boundary metadata** to parishes/markets/zones:
-   ```
-   admin_level    smallint     -- 0 | 1 | 2 | 3
-   pcode          text         -- JM01 / JM0101 / JM010101   (unique per level)
-   parent_pcode   text         -- hierarchy link
-   source         text         -- 'cod-ab' | 'manual' | 'import'
-   source_version text         -- 'v01'
-   valid_on       date         -- 2024-08-02
-   area_sqkm      numeric
-   center_lat     numeric
-   center_lng     numeric
-   ```
-3. **Introduce an `admin_boundaries` reference table** — the official set imported once, immutable,
-   *separate* from operational delivery zones. Delivery zones then **reference** a boundary by pcode
-   instead of copying its vertices. This cleanly separates "what Jamaica looks like" from "where we deliver".
-4. **Simplification tiers.** Store full precision; generate `ST_SimplifyPreserveTopology` variants for
-   display (target ≤ 500 vertices/shape).
-5. **Vertex cap + validation** in `sanitizeVertices`: max vertices, ring closure, winding order,
-   `ST_IsValid` / `ST_MakeValid`.
-
-### Phase 2 — Import pipeline
-
-6. **Bulk importer** accepting a folder or multi-file selection; auto-detect admin level from
-   `adm{N}_pcode` presence; route each feature to the right tier.
-7. **Idempotent upsert keyed on `pcode`** — re-import updates in place, never duplicates. Report
-   created / updated / unchanged / skipped counts.
-8. **Full-fidelity parser** replacing `polygonFromGeoJson`: all features, all polygon parts, all rings
-   (holes preserved). Retire the first-feature/first-ring behaviour entirely.
-9. **Dry-run preview**: map render + per-feature table + diff against existing + blocking-error list,
-   before anything is written.
-10. **Auto-match to existing parishes by slug** (`st-catherine` ↔ `st-catherine`), with a manual
-    override for unmatched rows and an explicit `Saint` ↔ `St.` normalisation map.
-11. **Integrity checks on import**: child within parent (`ST_Within`), sibling overlap
-    (`ST_Overlaps`), coverage gaps, orphan pcodes.
-
-### Phase 3 — Operational model
-
-12. **Catalog-driven town creation.** Replace the free-text name field with a picker over admin2
-    boundaries for the selected parish — pcode-keyed, so no typos and no cross-parish collisions.
-13. **admin3 as a sub-zone tier.** Use communities to compose town coverage (select N communities →
-    union → town border) and as fine-grained non-delivery cutouts.
-14. **Derive cutouts from holes.** Interior rings become `exclude` zones automatically.
-15. **Parish outline versioning**, matching the existing town coverage version/restore flow.
-16. **Retire `town_pins`** in favour of admin2 centroids, or demote it to a pure display cache derived
-    from boundary data.
-
-### Phase 4 — UI/UX
-
-17. **Boundary Library** view: browse admin0–3, search, preview, provenance, "use as town border".
-18. **Layered map** with admin-level toggles and per-level styling.
-19. **Import wizard**: pick files → auto-detect → preview → validate → confirm → progress → summary.
-20. **Search + filter + bulk actions** across the parish/town list.
-21. **Provenance badges** distinguishing official from hand-drawn geometry, with vintage.
-22. **Coverage health dashboard**: unassigned areas, overlaps, stale vintages, towns without borders.
-
-### Phase 5 — Consolidation
-
-23. Merge the two import overlays into one parameterised component (RED-1).
-24. Single shared GeoJSON traversal utility (RED-2).
-25. Resolve the `foundation_polygon` / `parish_outline_templates` dual source of truth (RED-3).
-26. Reconcile coverage geometry with the H3 indexing work rather than adding a third spatial model (PERF-3).
-27. Guard or relocate `orderRingClockwise` so it can never touch imported geometry (LM-1).
-
----
-
-## 9. Priority ranking
-
-| Priority | Item | Why |
-|---|---|---|
-| **P0** | BUG-1 MultiPolygon truncation | Live customer coverage loss (Kingston −23.7%) |
-| **P0** | BUG-4 Storage model | Root cause; blocks every fix |
-| **P1** | BUG-2 Holes dropped | Silent over-coverage |
-| **P1** | BUG-3 First-feature-only | Silent 93–99% data loss on bulk files |
-| **P1** | BUG-5 Name collisions | Corrupts any matching logic; needs pcode first |
-| **P1** | PERF-1 Editor freeze | Blocks adoption outright |
-| **P2** | GAP-8 Bulk import | 900+ manual uploads is not viable |
-| **P2** | GAP-1/2/3 Level, pcode, provenance | Prerequisites for a real import pipeline |
-| **P2** | UX-1/2/3 Preview + honest errors | Prevents silent corruption reaching production |
-| **P3** | PERF-2/3 Simplification, PostGIS | Scale and correctness headroom |
-| **P3** | admin3 tier, catalog towns | New capability |
-| **P4** | Redundancy consolidation, UI polish | Maintainability |
-
----
-
-## 10. Recommended immediate action
-
-Before importing anything from the new dataset:
-
-1. **Check whether Kingston is currently in `parish_boundary` mode** and whether its stored
-   `foundation_polygon` came from a MultiPolygon source. If so, coverage is already truncated in production.
-2. **Do not import admin2/admin3 files through the existing UI** — each would import exactly one shape
-   out of 7–79 and report success.
-3. **Audit for stored simplemaps pcodes** (`JM01 = Kingston`) that would collide with the COD-AB scheme
-   (`JM01 = Clarendon`).
-4. Land Phase 1 items 1–2 and Phase 2 item 8, then import admin1 as the first real test.
-
----
-
-## 11. Production check — 2026-08-27
-
-Live audit against project `csfllzzastacofsvcdsc` (`delivery.service_parishes`):
-
-| Parish | coverage_mode | foundation vertices | Classification |
-|---|---|---:|---|
-| Kingston | `town_zones` | 1,329 | **Not live parish-boundary delivery.** Foundation is outer gate only. Vertex count is below full COD-AB MultiPolygon (~4.3k across parts) — treat as incomplete / non-COD-AB until Phase B re-import. |
-| St. Andrew | `town_zones` | 2,064 | Same — gate only |
-| St. Catherine | `town_zones` | 3,557 | Same — gate only |
-| All other parishes | `town_zones` | 0 | No foundation set |
-
-**Pcode collision:** No `pcode` column existed on parishes/markets/zones at audit time — **no stored simplemaps pcodes to remapped.** COD-AB `adm1_pcode` is authoritative going forward.
-
-**Customer blast radius today:** Low for BUG-1 synthetic-zone path (nobody in `parish_boundary`). Residual risk: town_zones outer-gate under-covers if customers near missing Kingston MultiPolygon parts are incorrectly blocked.
-
-**Phase 0 controls applied:** Legacy GeoJSON import hard-blocks MultiPolygon (>1 part), FeatureCollection (>1 polygonal feature), and holes — ops must use Import Boundaries after Phase B.
-
----
-
-## Appendix A — File reference
-
-| File | LOC | Role | Key findings |
-|---|---:|---|---|
-| `MarketsPage.tsx` | 2,456 | Page shell, parish/town cards, overlays | GAP-9, UX-5, UX-14 |
-| `ZoneMapEditor.tsx` | 1,351 | Map editing surface | PERF-1 |
-| `CoordinateEntryOverlay.tsx` | 389 | Manual coordinate entry | PERF-1, LM-1 |
-| `JamaicaOverviewMap.tsx` | 283 | Read-only overview | PERF-4, UX-12 |
-| `coverageIo.ts` | 258 | GeoJSON/CSV parse + export | **BUG-1, BUG-2, BUG-3**, RED-2 |
-| `ManageZonesOverlay.tsx` | 180 | Zone list management | — |
-| `ImportTownBorderOverlay.tsx` | 170 | Border import modal | RED-1, UX-1, UX-11 |
-| `coverageGeo.ts` | 152 | PIP, bounds, centroid, conflicts | LM-1, LM-2, PERF-3 |
-| `ImportParishTownPinsOverlay.tsx` | 143 | Pin import modal | RED-1, RED-4 |
-| `HexCellsMapOverlay.tsx` | 54 | H3 hex overlay | PERF-3 cross-ref |
-
-## Appendix B — Backend reference
-
-| File | Finding |
-|---|---|
-| `supabase/migrations/20260816123000_rush_ops_markets_zones.sql:13-17` | `polygon jsonb` single-ring storage (BUG-4) |
-| `supabase/migrations/20260816190000_rush_parish_foundation.sql:1-25` | `foundation_polygon jsonb`; `parish_outline_templates` (BUG-4, RED-3) |
-| `supabase/migrations/20260816150000_rush_service_parishes.sql:31-33` | Parish slugs — the join key (BUG-6) |
-| `supabase/functions/delivery/admin/coverageZones.ts:139-158` | Parish outline → live customer zone (BUG-1 blast radius) |
-| `supabase/migrations/20260829140000_h3_phase1_safety.sql:4` | PostGIS available but unused (PERF-3) |
-| `packages/dash-coverage/src/sanitizeVertices.ts:4-14` | No vertex cap, no structural validation (BUG-4, PERF-2) |
-| `packages/dash-admin-client/src/dashAdminService.ts:667-723` | `DashZoneVertex` / `DashParishRow` types (BUG-4, GAP-1/2/3) |

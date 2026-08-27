@@ -4,7 +4,7 @@
 import React, { useEffect, useState } from 'react';
 import { Check, Plus, Square, Trash2, X } from 'lucide-react';
 import type { DashZoneVertex } from '@roam/dash-admin-client';
-import { orderRingClockwise, rectangleFromExtremes } from './coverageGeo';
+import { orderRingClockwiseForManualCorners, rectangleFromExtremes } from './coverageGeo';
 
 export type NamedBorderPoint = {
   id: string;
@@ -167,7 +167,7 @@ export function CoordinateEntryOverlay({
       return;
     }
     // Walk around the town edge — ignores the order you typed them in.
-    onApply(orderRingClockwise(points));
+    onApply(orderRingClockwiseForManualCorners(points));
   };
 
   const validCount = rows.filter((r) => parseLatLng(r.lat, r.lng)).length;

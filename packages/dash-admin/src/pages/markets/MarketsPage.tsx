@@ -1426,8 +1426,10 @@ function ParishMapOverlay({
             </h3>
             <p className="text-xs text-slate-300">
               Parish foundation · {foundation.length >= 3 ? 'border set' : 'no border yet'} ·{' '}
-              {townPins.length} pin{townPins.length === 1 ? '' : 's'} · {(parish.towns ?? []).length}{' '}
-              town{(parish.towns ?? []).length === 1 ? '' : 's'}
+              {(parish.towns ?? []).length} town{(parish.towns ?? []).length === 1 ? '' : 's'}
+              {townPins.length > 0
+                ? ` · ${townPins.length} legacy pin${townPins.length === 1 ? '' : 's'}`
+                : ''}
               {editing ? ' · editing border' : null}
             </p>
           </div>
@@ -1455,7 +1457,7 @@ function ParishMapOverlay({
                       setShowPinImport(true);
                     }}
                   >
-                    Import town pins…
+                    Import town pins (legacy)…
                   </button>
                   <button
                     type="button"
@@ -2151,36 +2153,48 @@ export function MarketsPage() {
                     >
                       Create from catalog
                     </button>
+                    <button
+                      type="button"
+                      onClick={() => setAddTownParishId(null)}
+                      className="px-3 py-2 rounded-lg border border-slate-700 text-sm text-slate-300"
+                    >
+                      Cancel
+                    </button>
                   </div>
-                ) : null}
-                <div className="flex flex-wrap items-end gap-2">
-                  <div className="flex-1 min-w-[160px]">
-                    <label className="block text-xs text-slate-400 mb-1">
-                      {p.pcode ? 'Custom (legacy)' : 'Town name'}
-                    </label>
-                    <input
-                      value={newTownName}
-                      onChange={(e) => setNewTownName(e.target.value)}
-                      placeholder="e.g. Portmore"
-                      className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-700 text-sm text-white"
-                    />
+                ) : (
+                  <div className="space-y-2">
+                    <p className="text-xs text-amber-200/90">
+                      This parish is not linked to an official COD-AB border yet. Free-text towns
+                      will not get a catalog pcode — promote a parish boundary first when you can.
+                    </p>
+                    <div className="flex flex-wrap items-end gap-2">
+                      <div className="flex-1 min-w-[160px]">
+                        <label className="block text-xs text-slate-400 mb-1">Town name</label>
+                        <input
+                          value={newTownName}
+                          onChange={(e) => setNewTownName(e.target.value)}
+                          placeholder="e.g. Portmore"
+                          className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-700 text-sm text-white"
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        disabled={saving || !newTownName.trim()}
+                        onClick={() => void submitTown(p.id)}
+                        className="px-3 py-2 rounded-lg border border-slate-600 text-sm text-slate-200 disabled:opacity-50"
+                      >
+                        Create town
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setAddTownParishId(null)}
+                        className="px-3 py-2 rounded-lg border border-slate-700 text-sm text-slate-300"
+                      >
+                        Cancel
+                      </button>
+                    </div>
                   </div>
-                  <button
-                    type="button"
-                    disabled={saving || !newTownName.trim()}
-                    onClick={() => void submitTown(p.id)}
-                    className="px-3 py-2 rounded-lg border border-slate-600 text-sm text-slate-200 disabled:opacity-50"
-                  >
-                    Create custom
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setAddTownParishId(null)}
-                    className="px-3 py-2 rounded-lg border border-slate-700 text-sm text-slate-300"
-                  >
-                    Cancel
-                  </button>
-                </div>
+                )}
               </div>
             )}
 

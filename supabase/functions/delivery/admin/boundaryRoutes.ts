@@ -255,29 +255,10 @@ export function registerBoundaryAdminRoutes(app: Hono) {
 
     const db = getDb();
     const parishId = c.req.param("parishId");
-    const { data: before } = await db.from("service_parishes").select("*").eq("id", parishId).maybeSingle();
+    const { data: before } = await db.from("service_parishes").select("id").eq("id", parishId).maybeSingle();
     if (!before) return c.json({ error: "Parish not found" }, 404);
 
-    if (before.foundation_polygon) {
-      const { data: last } = await db
-        .from("parish_outline_versions")
-        .select("version")
-        .eq("parish_id", parishId)
-        .order("version", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      await db.from("parish_outline_versions").insert({
-        parish_id: parishId,
-        version: (last?.version ?? 0) + 1,
-        label: "Pre-promote snapshot",
-        foundation_polygon: before.foundation_polygon,
-        foundation_geom: before.foundation_geom,
-        foundation_boundary_pcode: before.foundation_boundary_pcode,
-        boundary_source: before.boundary_source,
-        created_by: adminUser.userId,
-      });
-    }
-
+    // Snapshot lives inside promote_boundary_to_parish (OPEN-3) — single code path
     const { error } = await db.rpc("promote_boundary_to_parish", {
       p_parish_id: parishId,
       p_pcode: pcode,
