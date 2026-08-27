@@ -36,6 +36,8 @@ export type OrderTotals = {
 };
 
 export type CheckoutPricing = {
+  /** Resolved merchant UUID from pricing API (cart may still hold a slug). */
+  merchantId?: string;
   pricingModel: 'legacy' | 'v2';
   platformFeeRate: number;
   deliveryFee: number;
@@ -221,6 +223,7 @@ export async function fetchMerchantCheckoutPricing(
   }
 
   const data = (await res.json().catch(() => ({}))) as {
+    merchant_id?: string;
     pricing_model?: string;
     platform_fee_rate?: number | null;
     delivery_fee?: number;
@@ -238,6 +241,11 @@ export async function fetchMerchantCheckoutPricing(
     card_processing_fee_percent?: number;
   };
 
+  const resolvedMerchantId =
+    typeof data.merchant_id === 'string' && data.merchant_id.trim()
+      ? data.merchant_id.trim()
+      : undefined;
+
   if (data.pricing_model === 'v2') {
     const deliveryFee = Math.max(0, Number(data.delivery_fee ?? 0));
     const serviceFee = Math.max(0, Number(data.service_fee ?? 0));
@@ -247,6 +255,7 @@ export async function fetchMerchantCheckoutPricing(
     const processingFee = Math.max(0, Number(data.processing_fee ?? 0));
     const total = Math.max(0, Number(data.total ?? 0));
     return {
+      merchantId: resolvedMerchantId,
       pricingModel: 'v2',
       platformFeeRate: 0,
       deliveryFee,
@@ -277,6 +286,7 @@ export async function fetchMerchantCheckoutPricing(
       ? Math.max(0, data.tax_rate_percent)
       : GCT_RATE_FALLBACK_PERCENT;
   return {
+    merchantId: resolvedMerchantId,
     pricingModel: 'legacy',
     platformFeeRate: data.platform_fee_rate,
     deliveryFee,

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Session } from '@supabase/supabase-js';
-import { API_ENDPOINTS } from '@roam/api-client';
+import { API_ENDPOINTS, supabaseAnonFunctionHeaders } from '@roam/api-client';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import { DeliveryInstructionsSheet } from '@/components/cart/DeliveryInstructionsSheet';
 import { ItemDetailSheet } from '@/components/restaurant/ItemDetailSheet';
@@ -128,8 +128,12 @@ export default function CartPage({ onNavigate, session }: Props) {
     try {
       const res = await fetch(`${API_ENDPOINTS.delivery}/promotions/redeem`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code, merchantId: merchantId || undefined, subtotal }),
+        headers: supabaseAnonFunctionHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({
+          code,
+          merchantId: checkoutPricing?.merchantId || merchantId || undefined,
+          subtotal,
+        }),
       });
       const data = (await res.json().catch(() => ({}))) as {
         error?: string;

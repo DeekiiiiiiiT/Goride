@@ -60,6 +60,19 @@ function isPromoCurrentlyActive(promo: PromoRow, now = new Date()): boolean {
   return true;
 }
 
+/** Accept merchant UUID or public slug (cart often stores slug). */
+async function resolveMerchantUuid(
+  serviceSb: SupabaseClient,
+  merchantIdOrSlug: string,
+): Promise<string | null> {
+  const key = merchantIdOrSlug.trim();
+  if (!key) return null;
+  const byId = await serviceSb.from("merchants").select("id").eq("id", key).maybeSingle();
+  if (byId.data?.id) return String(byId.data.id);
+  const bySlug = await serviceSb.from("merchants").select("id").eq("slug", key).maybeSingle();
+  return bySlug.data?.id ? String(bySlug.data.id) : null;
+}
+
 export async function resolveActivePromoByCode(
   serviceSb: SupabaseClient,
   code: string,
@@ -67,6 +80,14 @@ export async function resolveActivePromoByCode(
 ): Promise<{ ok: true; promo: PromoRow } | { ok: false; error: string; status: number }> {
   const normalized = code.trim().toUpperCase();
   if (!normalized) return { ok: false, error: "Promo code required", status: 400 };
+
+  let resolvedMerchantId: string | null = null;
+  if (merchantId) {
+    resolvedMerchantId = await resolveMerchantUuid(serviceSb, merchantId);
+    if (!resolvedMerchantId) {
+      return { ok: false, error: "Merchant not found for this promo", status: 404 };
+    }
+  }
 
   let query = serviceSb
     .from("merchant_promotions")
@@ -77,8 +98,8 @@ export async function resolveActivePromoByCode(
     .eq("status", "active")
     .limit(5);
 
-  if (merchantId) {
-    query = query.eq("merchant_id", merchantId);
+  if (resolvedMerchantId) {
+    query = query.eq("merchant_id", resolvedMerchantId);
   }
 
   const { data, error } = await query;
@@ -102,7 +123,13 @@ export function registerCustomerDiscoveryRoutes(app: Hono, deps: CustomerDiscove
   // Active merchant promotions (customer-facing)
   app.get("/promotions", async (c) => {
     const serviceSb = getServiceSupabase();
-    const merchantId = c.req.query("merchantId");
+    const merchantIdRaw = c.req.query("merchantId");
+    const merchantId = merchantIdRaw
+      ? await resolveMerchantUuid(serviceSb, merchantIdRaw)
+      : null;
+    if (merchantIdRaw && !merchantId) {
+      return c.json({ promotions: [] });
+    }
 
     let query = serviceSb
       .from("merchant_promotions")

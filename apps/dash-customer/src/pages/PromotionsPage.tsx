@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { API_ENDPOINTS } from '@roam/api-client';
+import { API_ENDPOINTS, supabaseAnonFunctionHeaders } from '@roam/api-client';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import { AccountSubHeader } from '@/components/account/AccountSubHeader';
 import { saveCheckoutPreferences } from '@/lib/checkoutStorage';
@@ -36,7 +36,9 @@ export default function PromotionsPage({ onNavigate, returnTo = 'account' }: Pro
     (async () => {
       try {
         const qs = merchantId ? `?merchantId=${encodeURIComponent(merchantId)}` : '';
-        const res = await fetch(`${API_ENDPOINTS.delivery}/promotions${qs}`);
+        const res = await fetch(`${API_ENDPOINTS.delivery}/promotions${qs}`, {
+          headers: supabaseAnonFunctionHeaders(),
+        });
         if (!res.ok) throw new Error('Failed to load promotions');
         const data = (await res.json()) as { promotions?: ApiPromo[] };
         if (!cancelled) setPromotions(data.promotions || []);
@@ -61,7 +63,7 @@ export default function PromotionsPage({ onNavigate, returnTo = 'account' }: Pro
     try {
       const res = await fetch(`${API_ENDPOINTS.delivery}/promotions/redeem`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: supabaseAnonFunctionHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({
           code,
           merchantId: merchantId || undefined,

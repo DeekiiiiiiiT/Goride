@@ -277,7 +277,7 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
           'Idempotency-Key': idempotencyKeyRef.current ?? undefined,
         },
         body: JSON.stringify({
-          merchantId,
+          merchantId: checkoutPricing?.merchantId || merchantId,
           items: items.map(item => ({
             id: item.itemId,
             menuItemId: item.itemId,
