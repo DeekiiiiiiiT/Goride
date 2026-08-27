@@ -1,12 +1,11 @@
 import { allowMocks } from './mocksGate';
 
-export type DealFilter = 'all' | 'free-delivery' | 'percent-off' | 'bogo';
+export type DealFilter = 'all' | 'free-delivery' | 'percent-off';
 
 export const DEAL_FILTERS: { id: DealFilter; label: string }[] = [
   { id: 'all', label: 'All' },
   { id: 'free-delivery', label: 'Free Delivery' },
   { id: 'percent-off', label: '% Off' },
-  { id: 'bogo', label: 'BOGO' },
 ];
 
 export type FeaturedDeal = {
@@ -35,20 +34,6 @@ export const FEATURED_DEALS: FeaturedDeal[] = [
     logo:
       'https://lh3.googleusercontent.com/aida-public/AB6AXuBgpuC8havXa2V6jepq2jMrPJ98Copdklti3RUJpY3pAT7DPdEm5OZntVLCrieOIUaKSH5JO8FLcJhLgTn7tJMNwXuvYV1N51DyI5n5spHXFOZA_yJ28PIqgQ5yAppPy_dSH9bOPcnGXMDYAVoZYeg59Xug7606xugRL2W7an6pXM_OvGHHawtyaG0gdHfSH9XnOaPbIkfwvtO6LDRne2zKump7VXAr5-XmbkvI1S51zN0RxVG6m1PQ7A0gX-1mOYqZ9mffb_ixEJLU',
     filter: 'percent-off',
-  },
-  {
-    id: 'pizza-palace-bogo',
-    merchantId: 'marios-pizza',
-    merchantName: 'Pizza Palace',
-    badge: 'BOGO',
-    title: 'Buy One Get One Free on Large Pizzas',
-    validUntil: 'Valid until tomorrow',
-    urgent: true,
-    image:
-      'https://lh3.googleusercontent.com/aida-public/AB6AXuAU8y7X1qIvMSI0550nBf9hnLSMf_V2EqTrImQiTtYk3tV-JMmUez7CFP66RyLJj1IUkWcTS9Pyn98DklROZ8yPJzmVl33mKggo8yeoOCU1PuV9GC5H5bXGceOr_OireTVYjAo8jTuBdzE9LmPZ2fOcEotm4MgkLrpvEQ_3RNvXGrM41HFK4MCJ9-i98ChR3yZb4h4NLDwUkQUdKTlQky69wa9526b68za6RMZP3IG1XQKwlt_Vk5vSnDku4u0g1DgOBAxpueP1_o-2',
-    logo:
-      'https://lh3.googleusercontent.com/aida-public/AB6AXuCtErmUzbgbbcYXIs5_Y7DmJWNABY7LKSk18gkgrbHaVkInPd-NFbyIGnVY5IPH4nvmc1_gkmXJ-tnL9aA0eDqBPAStGGJn1c3Di3rqJlr3-GJpen7uJWF2-yycHDFwSC6XXAc9LMoBuBx7RzATkJ7N5au7PNi5zk9IVL6Qh4DnZF8mC82XMG8VfwUAWOsAM5YbMbM6kBp61PM0Y6rbzyb37-5gVU4GnZQ2mHpX6fjCOhqpzv4GSaYakbU6xefnST0h68-xQldMyWhp',
-    filter: 'bogo',
   },
 ];
 

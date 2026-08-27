@@ -198,7 +198,7 @@ export default function OrdersPage({ onNavigate }: Props) {
               </div>
               {order.paymentStatus &&
                 order.paymentStatus !== 'paid' &&
-                (order.paymentMethod === 'wipay' || order.paymentMethod === 'paypal') && (
+                order.paymentMethod === 'wipay' && (
                 <PaymentPendingBanner
                   className="mt-3 mb-4"
                   orderId={order.id}

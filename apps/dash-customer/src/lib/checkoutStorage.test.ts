@@ -26,9 +26,9 @@ function stubLocalStorage() {
 }
 
 describe('normalizePaymentMethodId', () => {
-  it('keeps live rails', () => {
-    expect(normalizePaymentMethodId('paypal')).toBe('paypal');
+  it('keeps wipay and maps legacy paypal to wipay', () => {
     expect(normalizePaymentMethodId('wipay')).toBe('wipay');
+    expect(normalizePaymentMethodId('paypal')).toBe('wipay');
   });
 
   it('maps cash and legacy card ids to WiPay', () => {

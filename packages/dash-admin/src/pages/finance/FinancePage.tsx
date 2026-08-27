@@ -11,20 +11,18 @@ import {
   listAdjustments,
   listDisputes,
   listPayouts,
-  listPromotions,
   releasePayout,
   resolveDispute,
   type AdjustmentRow,
 } from '@roam/dash-admin-client';
 import type { AdminOutletContext } from '../../DashAdminPortal';
 
-type TabId = 'payouts' | 'disputes' | 'adjustments' | 'promos';
+type TabId = 'payouts' | 'disputes' | 'adjustments';
 
 const TABS: { id: TabId; label: string }[] = [
   { id: 'payouts', label: 'Payouts' },
   { id: 'disputes', label: 'Disputes' },
   { id: 'adjustments', label: 'Adjustments' },
-  { id: 'promos', label: 'Promos' },
 ];
 
 export function FinancePage() {
@@ -36,7 +34,6 @@ export function FinancePage() {
   const [payouts, setPayouts] = useState<Array<Record<string, unknown>>>([]);
   const [disputes, setDisputes] = useState<Array<Record<string, unknown>>>([]);
   const [adjustments, setAdjustments] = useState<AdjustmentRow[]>([]);
-  const [promos, setPromos] = useState<Array<Record<string, unknown>>>([]);
   const [loading, setLoading] = useState(true);
 
   const [merchantId, setMerchantId] = useState('');
@@ -46,16 +43,14 @@ export function FinancePage() {
   const [formError, setFormError] = useState<string | null>(null);
 
   const refresh = async () => {
-    const [p, d, a, pr] = await Promise.all([
+    const [p, d, a] = await Promise.all([
       listPayouts(session.access_token),
       listDisputes(session.access_token),
       listAdjustments(session.access_token).catch(() => ({ adjustments: [] })),
-      listPromotions(session.access_token).catch(() => ({ promotions: [] })),
     ]);
     setPayouts((p as { payouts: Array<Record<string, unknown>> }).payouts ?? []);
     setDisputes((d as { disputes: Array<Record<string, unknown>> }).disputes ?? []);
     setAdjustments((a as { adjustments: AdjustmentRow[] }).adjustments ?? []);
-    setPromos((pr as { promotions: Array<Record<string, unknown>> }).promotions ?? []);
   };
 
   useEffect(() => {
@@ -293,34 +288,6 @@ export function FinancePage() {
               </tbody>
             </table>
           </div>
-        </div>
-      )}
-
-      {tab === 'promos' && (
-        <div className="rounded-xl border border-slate-800 overflow-hidden">
-          <table className="w-full text-sm">
-            <thead className="bg-slate-900/80 text-slate-400 text-left">
-              <tr>
-                <th className="px-4 py-3">Code</th>
-                <th className="px-4 py-3">Type</th>
-                <th className="px-4 py-3">Value</th>
-                <th className="px-4 py-3">Status</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-800">
-              {promos.length === 0 && (
-                <tr><td colSpan={4} className="px-4 py-6 text-center text-slate-500">No promotions.</td></tr>
-              )}
-              {promos.map((p) => (
-                <tr key={String(p.id)}>
-                  <td className="px-4 py-3 text-white">{String(p.code ?? p.name ?? '—')}</td>
-                  <td className="px-4 py-3 text-slate-400">{String(p.discount_type ?? p.type ?? '—')}</td>
-                  <td className="px-4 py-3 text-slate-400">{String(p.discount_value ?? p.value ?? '—')}</td>
-                  <td className="px-4 py-3 text-slate-400">{p.is_active === false ? 'Inactive' : 'Active'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
         </div>
       )}
     </div>

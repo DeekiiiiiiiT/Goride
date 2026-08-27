@@ -38,7 +38,7 @@ async function main() {
   }
 
   const paidVisible = dbOrders.filter(
-    (o) => !['wipay', 'paypal'].includes(String(o.payment_method)) || o.payment_status !== 'pending',
+    (o) => String(o.payment_method) !== 'wipay' || o.payment_status !== 'pending',
   );
   console.log(`\nDB orders visible to kitchen filter: ${paidVisible.length}`);
 

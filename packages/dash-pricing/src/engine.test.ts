@@ -98,7 +98,7 @@ describe('resolveProcessingFee', () => {
   });
 
   it('computes PayPal fee', () => {
-    expect(resolveProcessingFee(200, 0.045, 'paypal')).toBe(9);
+    expect(resolveProcessingFee(200, 0.045, 'wipay')).toBe(9);
   });
 });
 

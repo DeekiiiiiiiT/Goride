@@ -26,6 +26,7 @@ type Props = {
 export default function OrderTrackingPage({ orderId, demoPhase, onNavigate }: Props) {
   const mocksOk = allowMocks();
   const [cancelPending, setCancelPending] = useState(false);
+  const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['order', orderId],
     queryFn: async () => {
@@ -40,8 +41,14 @@ export default function OrderTrackingPage({ orderId, demoPhase, onNavigate }: Pr
       return res.json();
     },
     enabled: !!orderId && !(mocksOk && demoPhase),
-    refetchInterval: 5000,
-    retry: false,
+    refetchInterval: (query) => {
+      const status = String(
+        (query.state.data as { order?: { status?: string } } | undefined)?.order?.status ?? '',
+      ).toLowerCase();
+      if (['delivered', 'cancelled', 'canceled'].includes(status)) return false;
+      return 5000;
+    },
+    retry: 2,
   });
 
   // Prefer realtime updates for courier GPS when publication is enabled
@@ -100,10 +107,14 @@ export default function OrderTrackingPage({ orderId, demoPhase, onNavigate }: Pr
 
   const handleClose = () => onNavigate('home');
 
-  const handleCancelOrder = async () => {
+  const handleCancelOrder = () => {
     if (!orderId || cancelPending) return;
-    const confirmed = window.confirm('Cancel this order? You can only cancel before the restaurant starts preparing.');
-    if (!confirmed) return;
+    setShowCancelConfirm(true);
+  };
+
+  const confirmCancelOrder = async () => {
+    if (!orderId || cancelPending) return;
+    setShowCancelConfirm(false);
     setCancelPending(true);
     try {
       const {
@@ -184,26 +195,77 @@ export default function OrderTrackingPage({ orderId, demoPhase, onNavigate }: Pr
   const handleHelp = () => onNavigate('report-issue', { orderId: order.id, returnTo: 'tracking' });
   const handleDetails = () => onNavigate('order-details', { orderId: order.id });
 
+  const cancelConfirmSheet = showCancelConfirm ? (
+    <div className="fixed inset-0 z-[80] flex items-end justify-center bg-black/40 sm:items-center">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="cancel-order-title"
+        className="w-full max-w-md rounded-t-2xl bg-surface p-6 shadow-xl sm:rounded-2xl"
+      >
+        <h2 id="cancel-order-title" className="text-headline-sm font-semibold text-on-surface">
+          Cancel this order?
+        </h2>
+        <p className="mt-2 text-body-md text-on-surface-variant">
+          You can only cancel before the restaurant starts preparing.
+        </p>
+        <div className="mt-6 flex gap-3">
+          <button
+            type="button"
+            onClick={() => setShowCancelConfirm(false)}
+            className="flex-1 rounded-lg border border-outline-variant py-3 text-label-md font-semibold text-on-surface"
+          >
+            Keep order
+          </button>
+          <button
+            type="button"
+            onClick={() => void confirmCancelOrder()}
+            disabled={cancelPending}
+            className="flex-1 rounded-lg bg-error py-3 text-label-md font-semibold text-on-error disabled:opacity-50"
+          >
+            {cancelPending ? 'Cancelling…' : 'Cancel order'}
+          </button>
+        </div>
+      </div>
+    </div>
+  ) : null;
+
   switch (phase) {
     case 'courier_assigned':
       return (
-        <CourierAssignedView order={order} onBack={handleClose} onHelp={handleHelp} onDetails={handleDetails} />
+        <>
+          <CourierAssignedView order={order} onBack={handleClose} onHelp={handleHelp} onDetails={handleDetails} />
+          {cancelConfirmSheet}
+        </>
       );
     case 'on_the_way':
-      return <OnTheWayView order={order} onBack={handleClose} onHelp={handleHelp} onDetails={handleDetails} />;
+      return (
+        <>
+          <OnTheWayView order={order} onBack={handleClose} onHelp={handleHelp} onDetails={handleDetails} />
+          {cancelConfirmSheet}
+        </>
+      );
     case 'almost_there':
-      return <AlmostThereView order={order} onClose={handleClose} onHelp={handleHelp} />;
+      return (
+        <>
+          <AlmostThereView order={order} onClose={handleClose} onHelp={handleHelp} />
+          {cancelConfirmSheet}
+        </>
+      );
     case 'preparing':
     default:
       return (
-        <PreparingTrackingView
-          order={order}
-          onClose={handleClose}
-          onCancel={handleCancelOrder}
-          cancelPending={cancelPending}
-          onHelp={handleHelp}
-          onNavigate={(page) => onNavigate(page)}
-        />
+        <>
+          <PreparingTrackingView
+            order={order}
+            onClose={handleClose}
+            onCancel={handleCancelOrder}
+            cancelPending={cancelPending}
+            onHelp={handleHelp}
+            onNavigate={(page) => onNavigate(page)}
+          />
+          {cancelConfirmSheet}
+        </>
       );
   }
 }

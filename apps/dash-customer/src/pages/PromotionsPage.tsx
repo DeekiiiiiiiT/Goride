@@ -93,12 +93,16 @@ export default function PromotionsPage({ onNavigate, returnTo = 'account' }: Pro
       cacheValidatedPromo({
         code: data.promo.code,
         title: data.promo.title,
-        type: data.promo.type as 'percent_off' | 'amount_off',
+        type: data.promo.type as 'percent_off' | 'amount_off' | 'free_delivery',
         value,
         minOrder: Number(data.promo.minOrder || 0),
       });
       saveCheckoutPreferences({ appliedPromoCode: data.promo.code });
-      setMessage(`${data.promo.code} applied (−J$${Number(data.discount || 0).toFixed(0)})`);
+      setMessage(
+        data.promo.type === 'free_delivery'
+          ? `${data.promo.code} applied (free delivery)`
+          : `${data.promo.code} applied (−J$${Number(data.discount || 0).toFixed(0)})`,
+      );
     } catch {
       setMessage('Could not validate promo');
     }

@@ -135,10 +135,12 @@ export function usePromotions(_merchantId: string) {
 
   const promotions = query.data?.promotions ?? [];
   const activePromotions = promotions.filter((promotion) => promotion.status === 'active');
+  const pausedPromotions = promotions.filter((promotion) => promotion.status === 'paused');
 
   return {
     promotions,
     activePromotions,
+    pausedPromotions,
     weeklyRedemptions: query.data?.weeklyRedemptions ?? [],
     isLoading: query.isLoading,
     isError: query.isError,

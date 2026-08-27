@@ -294,6 +294,7 @@ export function registerFinanceAdminRoutes(app: Hono) {
     const promoCode = String(body.promo_code || body.promoCode || "").trim().toUpperCase();
     if (!merchantId) return c.json({ error: "merchant_id is required" }, 400);
     if (!type) return c.json({ error: "type is required" }, 400);
+    if (type === "bogo") return c.json({ error: "BOGO promotions are not available yet" }, 400);
     if (!title) return c.json({ error: "title is required" }, 400);
     if (!dateStart) return c.json({ error: "date_start is required" }, 400);
 
@@ -323,7 +324,25 @@ export function registerFinanceAdminRoutes(app: Hono) {
     if (denied) return denied;
     const db = getDb();
     const { data, error } = await db.from("merchant_promotions")
-      .update({ status: "disabled", updated_at: new Date().toISOString() })
+      .update({ status: "paused", updated_at: new Date().toISOString() })
+      .eq("id", c.req.param("id")).select().single();
+    if (error) return c.json({ error: error.message }, 500);
+    return c.json({ promotion: data });
+  });
+
+  /** Set promotion status: active | paused | ended | scheduled */
+  admin.patch("/promotions/:id/status", async (c) => {
+    const admin = c.get("adminUser") as ProductAdminUser;
+    const denied = requireDashWrite(admin);
+    if (denied) return denied;
+    const body = await c.req.json().catch(() => ({}));
+    const status = String(body.status || "").trim().toLowerCase();
+    if (!["active", "paused", "ended", "scheduled"].includes(status)) {
+      return c.json({ error: "status must be active, paused, ended, or scheduled" }, 400);
+    }
+    const db = getDb();
+    const { data, error } = await db.from("merchant_promotions")
+      .update({ status, updated_at: new Date().toISOString() })
       .eq("id", c.req.param("id")).select().single();
     if (error) return c.json({ error: error.message }, 500);
     return c.json({ promotion: data });

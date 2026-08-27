@@ -425,8 +425,8 @@ export async function smokeCustomerPayment(page: Page) {
   await smokeCustomerAccountRow(page, 'Payment Methods');
   await expect(page.getByText('Checkout options')).toBeVisible();
   await expect(page.getByText('WiPay', { exact: true })).toBeVisible();
-  await expect(page.getByText('PayPal', { exact: true })).toBeVisible();
   await expect(page.getByText('Cash on delivery')).toBeVisible();
+  await expect(page.getByText('PayPal')).toHaveCount(0);
   await clickBackIfPresent(page);
 }
 

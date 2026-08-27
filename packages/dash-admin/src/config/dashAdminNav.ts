@@ -18,6 +18,7 @@ import {
   Map,
   Activity,
   DollarSign,
+  Tag,
 } from 'lucide-react';
 import type { AdminConfig } from '@roam/admin-core';
 import { isCourierOnlyRole } from '../utils/isCourierOnlyRole';
@@ -100,6 +101,7 @@ export const DASH_ADMIN_CONFIG: AdminConfig = {
     { id: 'live-ops', label: 'Live Ops', icon: Radio },
     { id: 'orders', label: 'Orders', icon: ClipboardList },
     { id: 'finance', label: 'Finance', icon: Wallet },
+    { id: 'promotions', label: 'Promotions', icon: Tag },
     { id: 'pricing', label: 'Pricing', icon: DollarSign },
     { id: 'reviews', label: 'Reviews', icon: Star },
     { id: 'support', label: 'Support', icon: HeadphonesIcon },
@@ -154,6 +156,7 @@ export function pathnameToNavId(pathname: string): string {
   if (pathname.startsWith('/users/audit') || pathname.startsWith('/activity')) return 'users-audit';
   if (pathname.startsWith('/users')) return 'users-directory';
   if (pathname.startsWith('/finance') || pathname.startsWith('/disputes')) return 'finance';
+  if (pathname.startsWith('/promotions')) return 'promotions';
   if (pathname.startsWith('/pricing')) return 'pricing';
   if (pathname.startsWith('/reviews')) return 'reviews';
   if (pathname.startsWith('/support')) return 'support';
@@ -199,6 +202,8 @@ export function navIdToPath(navId: string): string {
       return '/users?persona=customer';
     case 'finance':
       return '/finance';
+    case 'promotions':
+      return '/promotions';
     case 'pricing':
       return '/pricing';
     case 'reviews':

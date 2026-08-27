@@ -61,7 +61,7 @@ export type ServiceFeeOverride = {
   max?: number;
 };
 
-export type PaymentMethod = 'wipay' | 'paypal' | 'cash';
+export type PaymentMethod = 'wipay' | 'cash';
 
 export type PricingInput = {
   subtotal: number;

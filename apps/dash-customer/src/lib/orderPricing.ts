@@ -42,6 +42,7 @@ export type CheckoutPricing = {
   serviceFee: number;
   tax: number;
   taxRatePercent: number;
+  gctRegistered?: boolean;
   orderTotal: number;
   processingFee: number;
   total: number;
@@ -66,7 +67,12 @@ function computeDiscount(subtotal: number, promo: PromoCode | null): number {
   if (type === 'fixed' || type === 'amount_off') {
     return roundMoney(Math.min(subtotal, promo.value));
   }
+  // free_delivery: $0 line discount — caller zeros deliveryFee via isFreeDeliveryPromo
   return 0;
+}
+
+export function isFreeDeliveryPromo(promo: PromoCode | null | undefined): boolean {
+  return promo?.type === 'free_delivery';
 }
 
 /** Parse "J$150 delivery fee" / "Free delivery" labels from restaurant profiles. */
@@ -86,7 +92,7 @@ function clampFeeRate(rate: number | null | undefined): number {
 }
 
 function isCardPayment(method?: string | null): boolean {
-  return method === 'wipay' || method === 'paypal';
+  return method === 'wipay';
 }
 
 export type CalculateOrderTotalsOptions = {
@@ -113,7 +119,9 @@ export function calculateOrderTotals(
   const discount = computeDiscount(subtotal, appliedPromo);
   const discountedSubtotal = roundMoney(Math.max(0, subtotal - discount));
   const safeTip = Math.max(0, options?.tip ?? tip);
-  const safeDeliveryFee = Math.max(0, deliveryFee);
+  const freeDelivery =
+    isFreeDeliveryPromo(appliedPromo) || Boolean(options?.v2Quote?.freeDeliveryApplied);
+  const safeDeliveryFee = freeDelivery ? 0 : Math.max(0, deliveryFee);
 
   if (options?.v2Quote?.pricingModel === 'v2') {
     const q = options.v2Quote;
@@ -145,6 +153,7 @@ export function calculateOrderTotals(
       ? roundMoney(Math.max(0, serviceFeeFlat))
       : roundMoney(subtotal * clampFeeRate(platformFeeRate));
   const gctRate = options?.taxRatePercent ?? GCT_RATE_FALLBACK_PERCENT;
+  // When taxRatePercent is explicitly 0 (non-GCT merchant), do not invent 16.5%
   const tax = roundMoney(discountedSubtotal * (gctRate / 100));
   const orderTotal = roundMoney(discountedSubtotal + safeDeliveryFee + serviceFee + tax + safeTip);
   const processingFee = 0;
@@ -169,7 +178,7 @@ export type FetchPricingOptions = {
   subtotal?: number;
   dropoffLat?: number | null;
   dropoffLng?: number | null;
-  paymentMethod?: 'wipay' | 'paypal' | 'cash';
+  paymentMethod?: 'wipay' | 'cash';
   tip?: number;
 };
 
@@ -206,7 +215,10 @@ export async function fetchMerchantCheckoutPricing(
   const qs = params.toString();
   const url = `${API_ENDPOINTS.delivery}/merchants/${opts.merchantId}/pricing${qs ? `?${qs}` : ''}`;
   const res = await fetch(url, { headers });
-  if (!res.ok) return null;
+  if (!res.ok) {
+    const errBody = (await res.json().catch(() => ({}))) as { error?: string; code?: string };
+    throw new Error(errBody.error || `Pricing unavailable (${res.status})`);
+  }
 
   const data = (await res.json().catch(() => ({}))) as {
     pricing_model?: string;
@@ -217,6 +229,7 @@ export async function fetchMerchantCheckoutPricing(
     order_total?: number;
     tax?: number;
     tax_rate_percent?: number;
+    gct_registered?: boolean;
     total?: number;
     distance_km?: number | null;
     tier?: string;
@@ -229,7 +242,7 @@ export async function fetchMerchantCheckoutPricing(
     const deliveryFee = Math.max(0, Number(data.delivery_fee ?? 0));
     const serviceFee = Math.max(0, Number(data.service_fee ?? 0));
     const tax = Math.max(0, Number(data.tax ?? 0));
-    const taxRatePercent = Math.max(0, Number(data.tax_rate_percent ?? GCT_RATE_FALLBACK_PERCENT));
+    const taxRatePercent = Math.max(0, Number(data.tax_rate_percent ?? 0));
     const orderTotal = Math.max(0, Number(data.order_total ?? 0));
     const processingFee = Math.max(0, Number(data.processing_fee ?? 0));
     const total = Math.max(0, Number(data.total ?? 0));
@@ -240,6 +253,7 @@ export async function fetchMerchantCheckoutPricing(
       serviceFee,
       tax,
       taxRatePercent,
+      gctRegistered: data.gct_registered,
       orderTotal,
       processingFee,
       total,
@@ -252,21 +266,27 @@ export async function fetchMerchantCheckoutPricing(
   }
 
   if (typeof data.platform_fee_rate !== 'number' || !Number.isFinite(data.platform_fee_rate)) {
-    return null;
+    throw new Error('Pricing quote incomplete');
   }
   const deliveryFee =
     typeof data.delivery_fee === 'number' && Number.isFinite(data.delivery_fee)
       ? Math.max(0, data.delivery_fee)
       : 0;
+  const taxRatePercent =
+    typeof data.tax_rate_percent === 'number' && Number.isFinite(data.tax_rate_percent)
+      ? Math.max(0, data.tax_rate_percent)
+      : GCT_RATE_FALLBACK_PERCENT;
   return {
     pricingModel: 'legacy',
     platformFeeRate: data.platform_fee_rate,
     deliveryFee,
     serviceFee: 0,
     tax: 0,
-    taxRatePercent: GCT_RATE_FALLBACK_PERCENT,
+    taxRatePercent,
+    gctRegistered: data.gct_registered,
     orderTotal: 0,
     processingFee: 0,
     total: 0,
+    minOrderSubtotalJmd: data.min_order_subtotal_jmd,
   };
 }

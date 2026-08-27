@@ -18,7 +18,7 @@ function clamp(value: number, min: number, max: number): number {
 }
 
 function isCardPayment(method: PaymentMethod | undefined): boolean {
-  return method === 'wipay' || method === 'paypal';
+  return method === 'wipay';
 }
 
 /** Resolve merchant commission rate from tier + optional override. */

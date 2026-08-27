@@ -1,6 +1,6 @@
 export type PromotionType = 'percent_off' | 'amount_off' | 'free_delivery' | 'bogo';
 
-export type PromotionStatus = 'active' | 'scheduled' | 'ended';
+export type PromotionStatus = 'active' | 'scheduled' | 'ended' | 'paused';
 
 export type AppliesTo = 'entire_order' | 'specific_items' | 'specific_category';
 
@@ -49,8 +49,10 @@ export const PROMOTION_TYPE_OPTIONS: { value: PromotionType; label: string; crea
   { value: 'percent_off', label: '% Off', createLabel: 'Percentage Off' },
   { value: 'amount_off', label: '$ Off', createLabel: 'Amount Off' },
   { value: 'free_delivery', label: 'Free Delivery', createLabel: 'Free Delivery' },
-  { value: 'bogo', label: 'BOGO', createLabel: 'BOGO' },
 ];
+
+/** BOGO kept in type union for historical rows — not creatable until item-level design ships */
+export const BOGO_COMING_SOON = true;
 
 export const APPLIES_TO_OPTIONS: { value: AppliesTo; label: string }[] = [
   { value: 'entire_order', label: 'Entire Order' },

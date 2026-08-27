@@ -91,7 +91,6 @@ type StackPage =
   | 'tracking'
   | 'login'
   | 'payment-callback-wipay'
-  | 'payment-callback-paypal';
 
 type AppPhase =
   | 'splash'
@@ -120,7 +119,6 @@ const IMMERSIVE_STACK_PAGES: StackPage[] = [
   'out-of-delivery',
   'saved-addresses',
   'payment-callback-wipay',
-  'payment-callback-paypal',
 ];
 
 const DashAdminPortal = React.lazy(async () => {
@@ -222,7 +220,6 @@ function paymentCallbackStackPage(): StackPage | null {
   if (typeof window === 'undefined') return null;
   const path = window.location.pathname;
   if (path.includes('/payment/callback/wipay')) return 'payment-callback-wipay';
-  if (path.includes('/payment/callback/paypal')) return 'payment-callback-paypal';
   return null;
 }
 
@@ -409,8 +406,6 @@ function DashCustomerShell() {
     const path = window.location.pathname;
     if (path.includes('/payment/callback/wipay')) {
       setStackPage('payment-callback-wipay');
-    } else if (path.includes('/payment/callback/paypal')) {
-      setStackPage('payment-callback-paypal');
     }
 
     const merchantId = new URLSearchParams(window.location.search).get('merchant')?.trim();
@@ -858,8 +853,6 @@ function DashCustomerShell() {
         return <LoginPage onNavigate={navigate} onSignInSuccess={() => navigate('home')} fullScreen />;
       case 'payment-callback-wipay':
         return <PaymentCallbackPage onNavigate={navigate} session={session} provider="wipay" />;
-      case 'payment-callback-paypal':
-        return <PaymentCallbackPage onNavigate={navigate} session={session} provider="paypal" />;
       default:
         return null;
     }

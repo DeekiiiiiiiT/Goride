@@ -27,7 +27,7 @@ export type CustomerProfileDto = {
   savedAddresses: CustomerSavedAddressDto[];
   accountStatus: string;
   notificationPrefs?: NotificationPrefs;
-  preferredPaymentMethod?: 'wipay' | 'paypal' | 'cash';
+  preferredPaymentMethod?: 'wipay' | 'cash';
   avatarUrl?: string | null;
 };
 
@@ -57,7 +57,7 @@ export async function patchCustomerProfile(body: {
   email?: string;
   savedAddresses?: CustomerSavedAddressDto[];
   notificationPrefs?: NotificationPrefs;
-  preferredPaymentMethod?: 'wipay' | 'paypal' | 'cash';
+  preferredPaymentMethod?: 'wipay' | 'cash';
 }): Promise<CustomerProfileDto> {
   const headers = await authHeaders();
   if (!headers) throw new Error('Sign in required');

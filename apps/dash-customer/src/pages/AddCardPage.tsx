@@ -7,12 +7,12 @@ type Props = {
 };
 
 /**
- * Legacy Add Card route — vaulting happens via WiPay/PayPal hosted checkout.
+ * Legacy Add Card route — vaulting happens via WiPay hosted checkout.
  * Redirects so this is never a dead-end screen.
  */
 export default function AddCardPage({ returnTo = 'payment-methods', onNavigate }: Props) {
   useEffect(() => {
-    toast.info('Cards are saved during checkout with WiPay or PayPal.');
+    toast.info('Cards are saved during checkout with WiPay.');
     onNavigate(returnTo || 'payment-methods');
   }, [onNavigate, returnTo]);
 

@@ -49,7 +49,6 @@ export const PROMOTION_TYPE_OPTIONS: { value: PromotionType; label: string; crea
   { value: 'percent_off', label: '% Off', createLabel: 'Percentage Off' },
   { value: 'amount_off', label: '$ Off', createLabel: 'Amount Off' },
   { value: 'free_delivery', label: 'Free Delivery', createLabel: 'Free Delivery' },
-  { value: 'bogo', label: 'BOGO', createLabel: 'BOGO' },
 ];
 
 export const APPLIES_TO_OPTIONS: { value: AppliesTo; label: string }[] = [

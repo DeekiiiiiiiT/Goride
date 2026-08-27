@@ -1,5 +1,4 @@
 import { useMemo, useState } from 'react';
-import { toast } from 'sonner';
 import { MaterialIcon } from '../../signup/components/MaterialIcon';
 import { usePromotions } from '../../hooks/usePromotions';
 import QueryErrorState from '../QueryErrorState';
@@ -16,6 +15,7 @@ export default function PromotionsView({ merchantId, onBack }: PromotionsViewPro
   const [showCreate, setShowCreate] = useState(false);
   const {
     activePromotions,
+    pausedPromotions,
     weeklyRedemptions,
     form,
     updateForm,
@@ -131,22 +131,66 @@ export default function PromotionsView({ merchantId, onBack }: PromotionsViewPro
                   <span className="text-label-sm text-outline">
                     {formatEndsLabel(promotion.dateEnd)}
                   </span>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      toast.message(promotion.title, {
-                        description: `${promotion.redemptions} redemptions to date.`,
-                      })
-                    }
-                    className="text-label-md text-primary"
-                  >
-                    View Stats
-                  </button>
+                  <div className="flex gap-3">
+                    <button
+                      type="button"
+                      onClick={() => updatePromotion(promotion.id, { status: 'paused' })}
+                      className="text-label-md text-on-surface-variant hover:text-primary"
+                    >
+                      Pause
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => updatePromotion(promotion.id, { status: 'ended' })}
+                      className="text-label-md text-error"
+                    >
+                      End
+                    </button>
+                  </div>
                 </div>
               </article>
             ))}
           </div>
         </section>
+
+        {pausedPromotions.length > 0 && (
+          <section className="flex flex-col gap-inset-sm">
+            <h2 className="text-label-md uppercase tracking-wider text-on-surface-variant">
+              Paused
+            </h2>
+            <div className="flex flex-col gap-2">
+              {pausedPromotions.map((promotion) => (
+                <article
+                  key={promotion.id}
+                  className="flex items-center justify-between rounded-lg border border-outline-variant bg-surface-container-lowest p-inset-md"
+                >
+                  <div>
+                    <h3 className="text-body-md font-medium text-on-surface">{promotion.title}</h3>
+                    {promotion.promoCode && (
+                      <p className="text-label-sm text-primary">{promotion.promoCode}</p>
+                    )}
+                  </div>
+                  <div className="flex gap-3">
+                    <button
+                      type="button"
+                      onClick={() => updatePromotion(promotion.id, { status: 'active' })}
+                      className="text-label-md text-primary"
+                    >
+                      Turn on
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => updatePromotion(promotion.id, { status: 'ended' })}
+                      className="text-label-md text-on-surface-variant"
+                    >
+                      End
+                    </button>
+                  </div>
+                </article>
+              ))}
+            </div>
+          </section>
+        )}
 
         <section className="flex flex-col justify-between rounded-lg border border-outline-variant bg-surface-container-lowest p-inset-md shadow-sm">
           <div>

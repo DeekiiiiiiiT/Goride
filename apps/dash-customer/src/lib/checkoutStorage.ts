@@ -1,8 +1,8 @@
 import type { PromoCode } from './orderPricing';
 import { PROMO_CODES } from './orderPricing';
 
-/** Soft-launch: only real checkout rails — no fake saved cards */
-export type PaymentMethodId = 'wipay' | 'paypal' | 'cash';
+/** Soft-launch: WiPay card rail + cash (coming soon). PayPal permanently removed. */
+export type PaymentMethodId = 'wipay' | 'cash';
 
 export type CheckoutPreferences = {
   appliedPromoCode: string | null;
@@ -26,9 +26,11 @@ const DEFAULTS: CheckoutPreferences = {
   paymentMethodId: 'wipay',
 };
 
+/** Map legacy paypal prefs → wipay so old localStorage/profiles keep working. */
 export function normalizePaymentMethodId(id: unknown): PaymentMethodId {
-  if (id === 'paypal' || id === 'wipay') return id;
-  if (id === 'cash') return 'wipay';
+  if (id === 'wipay') return 'wipay';
+  if (id === 'cash') return 'wipay'; // cash not selectable until DASH_ALLOW_CASH_ORDERS
+  // paypal and anything else → wipay
   return 'wipay';
 }
 
@@ -83,7 +85,6 @@ export type LivePaymentOption = {
 
 export const LIVE_PAYMENT_OPTIONS: LivePaymentOption[] = [
   { id: 'wipay', label: 'WiPay', icon: 'credit_card', description: 'Pay securely with WiPay' },
-  { id: 'paypal', label: 'PayPal', icon: 'account_balance_wallet', description: 'Pay with PayPal' },
 ];
 
 export const COMING_SOON_PAYMENT_OPTIONS: LivePaymentOption[] = [
@@ -107,16 +108,15 @@ export function getSelectablePaymentOptions(): LivePaymentOption[] {
 }
 
 export function isSelectablePaymentMethod(id: PaymentMethodId): boolean {
-  return id === 'wipay' || id === 'paypal';
+  return id === 'wipay';
 }
 
 export function getPaymentLabel(id: PaymentMethodId): string {
   return PAYMENT_OPTIONS.find((o) => o.id === id)?.label ?? 'WiPay';
 }
 
-export function getApiPaymentMethod(id: PaymentMethodId): 'wipay' | 'paypal' {
-  const normalized = normalizePaymentMethodId(id);
-  return normalized === 'paypal' ? 'paypal' : 'wipay';
+export function getApiPaymentMethod(id: PaymentMethodId): 'wipay' {
+  return 'wipay';
 }
 
 /** Apply a server-saved default rail to local checkout prefs. */

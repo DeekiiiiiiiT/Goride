@@ -252,7 +252,7 @@ app.get("/merchants", async (c) => {
     const dropoffLng = c.req.query("dropoff_lng") ? Number(c.req.query("dropoff_lng")) : null;
     const subtotalQ = c.req.query("subtotal") ? Number(c.req.query("subtotal")) : 0;
     const paymentRaw = c.req.query("payment_method") ?? "wipay";
-    const paymentMethod = paymentRaw === "cash" ? "cash" : paymentRaw === "paypal" ? "paypal" : "wipay";
+    const paymentMethod = paymentRaw === "cash" ? "cash" : "wipay";
     const tipQ = c.req.query("tip") ? Number(c.req.query("tip")) : 0;
 
     let merchantId: string | null = null;
@@ -338,11 +338,23 @@ app.get("/merchants", async (c) => {
     }
 
     const resolved = await resolveFeeRateForMerchant(supabase, merchantId);
+    const { resolveMerchantFoodGctRate } = await import("../_shared/gctRate.ts");
+    const gct = await resolveMerchantFoodGctRate(supabase, merchantId);
+    const { data: merchantMinRow } = await supabase
+      .from("merchants")
+      .select("min_order_amount")
+      .eq("id", merchantId)
+      .maybeSingle();
     return c.json({
       merchant_id: merchantId,
       pricing_model: "legacy",
       platform_fee_rate: resolved.rate,
       delivery_fee: deliveryFee,
+      tax_rate_percent: gct.gctRegistered === false ? 0 : gct.ratePercent,
+      gct_registered: gct.gctRegistered !== false,
+      min_order_subtotal_jmd: merchantMinRow?.min_order_amount != null
+        ? Number(merchantMinRow.min_order_amount)
+        : 0,
       has_override: resolved.merchantOverride != null,
     });
   });
@@ -1327,7 +1339,7 @@ app.get("/merchant/orders", async (c) => {
   // channel=all or omitted: no channel filter (backward compatible pre-migration)
   
   // Hide unpaid WiPay/PayPal orders from the kitchen until payment clears.
-  query = query.or("payment_method.not.in.(wipay,paypal),payment_status.neq.pending");
+  query = query.or("payment_method.neq.wipay,payment_status.neq.pending");
 
   if (status) {
     query = query.eq("status", status);
@@ -1370,7 +1382,7 @@ app.get("/merchant/orders", async (c) => {
     } else if (channelFilter === "roam_app") {
       fallbackQuery = fallbackQuery.eq("channel", "roam_app");
     }
-    fallbackQuery = fallbackQuery.or("payment_method.not.in.(wipay,paypal),payment_status.neq.pending");
+    fallbackQuery = fallbackQuery.or("payment_method.neq.wipay,payment_status.neq.pending");
     if (status) {
       fallbackQuery = fallbackQuery.eq("status", status);
     } else {
@@ -2248,6 +2260,9 @@ app.post("/merchant/promotions", async (c) => {
   if (!promoCode) return c.json({ error: "Promo code is required" }, 400);
   if (!body.title) return c.json({ error: "Title is required" }, 400);
   if (!body.type) return c.json({ error: "Type is required" }, 400);
+  if (String(body.type) === "bogo") {
+    return c.json({ error: "BOGO promotions are not available yet" }, 400);
+  }
   if (!body.dateStart) return c.json({ error: "Start date is required" }, 400);
 
   const { data, error } = await supabase
@@ -2289,7 +2304,13 @@ app.patch("/merchant/promotions/:id", async (c) => {
   const body = await c.req.json();
   const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
 
-  if (body.status != null) updates.status = body.status;
+  if (body.status != null) {
+    const status = String(body.status).toLowerCase();
+    if (!["active", "paused", "ended", "scheduled"].includes(status)) {
+      return c.json({ error: "status must be active, paused, ended, or scheduled" }, 400);
+    }
+    updates.status = status;
+  }
   if (body.title != null) updates.title = body.title;
   if (body.dateEnd != null) updates.date_end = body.dateEnd;
 

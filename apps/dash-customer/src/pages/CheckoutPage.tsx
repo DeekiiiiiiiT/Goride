@@ -17,11 +17,12 @@ import {
   getPaymentLabel,
   saveCheckoutPreferences,
 } from '@/lib/checkoutStorage';
-import { calculateOrderTotals, fetchMerchantCheckoutPricing, GCT_RATE_FALLBACK_PERCENT, type CheckoutPricing } from '@/lib/orderPricing';
+import { calculateOrderTotals, fetchMerchantCheckoutPricing, type CheckoutPricing } from '@/lib/orderPricing';
 import { formatJmd } from '@/lib/restaurantContent';
 import { toast } from 'sonner';
 import { fetchCustomerProfile } from '@/lib/customerApi';
 import { checkDeliveryZoneAsync } from '@/lib/deliveryZones';
+import { isAllowedPaymentRedirectUrl } from '@/lib/resumePayment';
 import PharmacyNoticeSheet, {
   isPharmacyNoticeAcknowledged,
 } from '@/components/checkout/PharmacyNoticeSheet';
@@ -57,6 +58,7 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
   const [platformFeeRate, setPlatformFeeRate] = useState(0.05);
   const [merchantDeliveryFee, setMerchantDeliveryFee] = useState(0);
   const [checkoutPricing, setCheckoutPricing] = useState<CheckoutPricing | null>(null);
+  const [pricingError, setPricingError] = useState<string | null>(null);
   const [accountSuspended, setAccountSuspended] = useState(false);
   const [instructionsOpen, setInstructionsOpen] = useState(false);
 
@@ -71,26 +73,41 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
   const appliedPromo = getAppliedPromo();
   const paymentMethodId = getCheckoutPreferences().paymentMethodId;
   const apiPaymentMethod = getApiPaymentMethod(paymentMethodId);
+  const hasLivePricing = checkoutPricing != null && !pricingError;
   const totals = useMemo(
     () =>
-      calculateOrderTotals(
-        subtotal,
-        appliedPromo,
-        tip,
-        merchantDeliveryFee,
-        platformFeeRate,
-        checkoutPricing?.pricingModel === 'v2' ? checkoutPricing.serviceFee : undefined,
-        {
-          v2Quote: checkoutPricing,
-          paymentMethod: apiPaymentMethod,
-          tip,
-          taxRatePercent: checkoutPricing?.taxRatePercent,
-        },
-      ),
-    [subtotal, appliedPromo, tip, merchantDeliveryFee, platformFeeRate, checkoutPricing, apiPaymentMethod],
+      hasLivePricing
+        ? calculateOrderTotals(
+            subtotal,
+            appliedPromo,
+            tip,
+            merchantDeliveryFee,
+            platformFeeRate,
+            checkoutPricing?.pricingModel === 'v2' ? checkoutPricing.serviceFee : undefined,
+            {
+              v2Quote: checkoutPricing,
+              paymentMethod: apiPaymentMethod,
+              tip,
+              taxRatePercent: checkoutPricing?.taxRatePercent,
+            },
+          )
+        : {
+            discount: 0,
+            discountedSubtotal: subtotal,
+            deliveryFee: 0,
+            serviceFee: 0,
+            tax: 0,
+            tip,
+            orderTotal: subtotal + tip,
+            processingFee: 0,
+            total: subtotal + tip,
+          },
+    [subtotal, appliedPromo, tip, merchantDeliveryFee, platformFeeRate, checkoutPricing, apiPaymentMethod, hasLivePricing],
   );
-  const taxRateLabel = checkoutPricing?.taxRatePercent ?? GCT_RATE_FALLBACK_PERCENT;
+  const taxRateLabel = checkoutPricing?.taxRatePercent;
   const paymentLabel = getPaymentLabel(paymentMethodId);
+  const minOrder = Number(checkoutPricing?.minOrderSubtotalJmd ?? 0);
+  const belowMinOrder = minOrder > 0 && subtotal < minOrder;
 
   useEffect(() => {
     if (items.length === 0) {
@@ -102,6 +119,8 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
     if (!merchantId) {
       setPlatformFeeRate(0.05);
       setMerchantDeliveryFee(0);
+      setCheckoutPricing(null);
+      setPricingError(null);
       return;
     }
     let cancelled = false;
@@ -116,12 +135,15 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
           paymentMethod: apiPaymentMethod,
           tip,
         });
-        if (cancelled || !pricing) return;
+        if (cancelled) return;
         setCheckoutPricing(pricing);
         setPlatformFeeRate(pricing.platformFeeRate);
         setMerchantDeliveryFee(pricing.deliveryFee);
-      } catch {
-        /* keep fallback */
+        setPricingError(null);
+      } catch (err) {
+        if (cancelled) return;
+        setCheckoutPricing(null);
+        setPricingError(err instanceof Error ? err.message : 'Could not load pricing');
       }
     })();
     return () => {
@@ -203,6 +225,14 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
     if (!deliveryAddress) {
       toast.error('Add a delivery address before placing your order');
       onNavigate('address');
+      return;
+    }
+    if (pricingError || !hasLivePricing) {
+      toast.error(pricingError || 'Wait for pricing to load before placing your order');
+      return;
+    }
+    if (belowMinOrder) {
+      toast.error(`Minimum food order is ${formatJmd(minOrder)}`);
       return;
     }
 
@@ -300,7 +330,7 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
       // Prefer server totals — client fees are display-only
       const serverTotal = Number(order.total ?? totals.total);
 
-      if (paymentMethod === 'wipay' || paymentMethod === 'paypal') {
+      if (paymentMethod === 'wipay') {
         const paymentRes = await fetch(`${API_ENDPOINTS.payments}/intents`, {
           method: 'POST',
           headers: supabaseAnonFunctionHeaders({
@@ -319,10 +349,17 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
             (paymentError as { error?: string }).error || 'Failed to create payment',
           );
         }
-        const { clientSecret } = await paymentRes.json();
+        const payData = (await paymentRes.json()) as {
+          paymentRedirectUrl?: string;
+          clientSecret?: string;
+        };
+        const redirectUrl = payData.paymentRedirectUrl ?? payData.clientSecret;
+        if (!isAllowedPaymentRedirectUrl(redirectUrl)) {
+          throw new Error('Invalid payment redirect URL');
+        }
         idempotencyKeyRef.current = null;
         clearCart();
-        window.location.href = clientSecret;
+        window.location.href = redirectUrl;
         return;
       }
 
@@ -590,10 +627,12 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
                   <span>Service Fee</span>
                   <span>{formatJmd(totals.serviceFee)}</span>
                 </div>
-                <div className="flex justify-between">
-                  <span>Tax (GCT {taxRateLabel}%)</span>
-                  <span>{formatJmd(totals.tax)}</span>
-                </div>
+                {(taxRateLabel != null && taxRateLabel > 0) || totals.tax > 0 ? (
+                  <div className="flex justify-between">
+                    <span>Tax (GCT {taxRateLabel ?? 0}%)</span>
+                    <span>{formatJmd(totals.tax)}</span>
+                  </div>
+                ) : null}
                 {totals.processingFee > 0 && (
                   <div className="flex justify-between">
                     <span>Card processing</span>
@@ -616,6 +655,14 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
             Your account is suspended. Contact support — you cannot place orders.
           </p>
         )}
+        {pricingError && (
+          <p className="text-sm text-error text-center mb-2 max-w-2xl mx-auto">{pricingError}</p>
+        )}
+        {belowMinOrder && (
+          <p className="text-sm text-amber-700 text-center mb-2 max-w-2xl mx-auto">
+            Minimum order {formatJmd(minOrder)} — add {formatJmd(minOrder - subtotal)} more.
+          </p>
+        )}
         {!deliveryAddress && (
           <p className="text-sm text-error text-center mb-2 max-w-2xl mx-auto">
             Add a delivery address before placing your order.
@@ -623,8 +670,8 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
         )}
         <button
           type="button"
-          onClick={handlePlaceOrder}
-          disabled={isPlacingOrder || accountSuspended || !deliveryAddress}
+          onClick={() => void handlePlaceOrder()}
+          disabled={isPlacingOrder || accountSuspended || !deliveryAddress || !hasLivePricing || belowMinOrder}
           className="w-full max-w-2xl mx-auto bg-primary text-on-primary text-headline-sm font-semibold py-4 rounded-xl flex justify-between items-center px-6 active:scale-[0.98] transition-transform disabled:opacity-50"
         >
           <span>{isPlacingOrder ? 'Processing...' : 'Place Order'}</span>

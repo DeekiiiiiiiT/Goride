@@ -146,7 +146,7 @@ export default function PaymentMethodsPage({ returnTo = 'account', mode = 'manag
           ) : vaultMethods.length === 0 ? (
             <div className="bg-surface-container-lowest rounded-xl p-4 border border-dashed border-surface-variant">
               <p className="text-body-md text-on-surface-variant">
-                Cards are saved securely during checkout through WiPay or PayPal (hosted payment). There is no separate Add Card step in the app.
+                Cards are saved securely during checkout through WiPay (hosted payment). There is no separate Add Card step in the app.
               </p>
             </div>
           ) : (
@@ -168,7 +168,7 @@ export default function PaymentMethodsPage({ returnTo = 'account', mode = 'manag
                 </div>
               ))}
               <p className="text-body-sm text-on-surface-variant px-1">
-                New cards are added automatically when you pay with WiPay or PayPal at checkout.
+                New cards are added automatically when you pay with WiPay at checkout.
               </p>
             </div>
           )}

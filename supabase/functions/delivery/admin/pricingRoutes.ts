@@ -267,7 +267,7 @@ export function registerPricingAdminRoutes(app: Hono) {
       ? String(body.market_id ?? body.marketId)
       : null;
     const paymentRaw = String(body.payment_method ?? body.paymentMethod ?? "wipay");
-    const paymentMethod = paymentRaw === "cash" ? "cash" : paymentRaw === "paypal" ? "paypal" : "wipay";
+    const paymentMethod = paymentRaw === "cash" ? "cash" : "wipay";
     const customerOrderCount = body.customer_order_count != null || body.customerOrderCount != null
       ? Number(body.customer_order_count ?? body.customerOrderCount)
       : null;

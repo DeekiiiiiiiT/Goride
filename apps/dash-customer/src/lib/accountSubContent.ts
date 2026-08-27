@@ -126,13 +126,13 @@ export const FAQ_ITEMS = [
     id: 'payment-charge',
     topic: 'payment',
     title: 'Charges & refunds',
-    body: 'WiPay and PayPal charges happen on their hosted checkout. Cash is collected by the courier. If you were charged twice or the amount looks wrong, report a payment issue from this screen with the order number.',
+    body: 'WiPay charges happen on their hosted checkout. Cash is collected by the courier when available. If you were charged twice or the amount looks wrong, report a payment issue from this screen with the order number.',
   },
   {
     id: 'payment-methods',
     topic: 'payment',
     title: 'Cards & payment methods',
-    body: 'Choose WiPay, PayPal, or cash as your default under Account → Payment Methods. Cards are saved during hosted checkout — there is no separate Add Card form.',
+    body: 'Choose WiPay or cash as your default under Account → Payment Methods. Cards are saved during hosted checkout — there is no separate Add Card form.',
   },
   {
     id: 'safety-courier',

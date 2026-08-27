@@ -1,6 +1,6 @@
 /**
  * Payments Service - Roam Rush
- * Handles WiPay and PayPal payment processing for Jamaica market
+ * Handles WiPay payment processing for Jamaica market (PayPal removed)
  */
 
 import { Hono } from "https://deno.land/x/hono@v4.3.11/mod.ts";
@@ -15,7 +15,7 @@ import { validateBody, z } from "../_shared/validateBody.ts";
 
 const PaymentIntentBody = z.object({
   orderId: z.string().uuid(),
-  provider: z.enum(["wipay", "paypal"]).optional(),
+  provider: z.enum(["wipay"]).optional(),
   returnOrigin: z.string().url().optional(),
 });
 
@@ -321,7 +321,7 @@ function wipayGatewayUrl(): string {
 }
 
 // Health check
-app.get("/health", (c) => c.json({ service: "payments", status: "ok", providers: ["wipay", "paypal"] }));
+app.get("/health", (c) => c.json({ service: "payments", status: "ok", providers: ["wipay"] }));
 
 // ============================================================================
 // Payment Intents
@@ -385,7 +385,8 @@ app.post("/intents", async (c) => {
 
     return c.json({
       intentId: existingIntent.id,
-      clientSecret: existingIntent.client_secret,
+      paymentRedirectUrl: existingIntent.client_secret,
+      clientSecret: existingIntent.client_secret, // legacy alias
       provider: existingIntent.provider,
       amount: existingIntent.amount,
       currency: existingIntent.currency,
@@ -404,14 +405,6 @@ app.post("/intents", async (c) => {
     clientSecret = wipayResult.paymentUrl;
     providerIntentId = wipayResult.transactionId;
     providerData = wipayResult;
-  } else if (provider === "paypal") {
-    const paypalResult = await createPayPalOrder(order);
-    if (paypalResult.error) {
-      return c.json({ error: paypalResult.error }, 500);
-    }
-    clientSecret = paypalResult.approvalUrl;
-    providerIntentId = paypalResult.orderId;
-    providerData = paypalResult;
   } else {
     return c.json({ error: "Unsupported payment provider" }, 400);
   }
@@ -437,7 +430,8 @@ app.post("/intents", async (c) => {
   
   return c.json({ 
     intentId: intent.id,
-    clientSecret: intent.client_secret,
+    paymentRedirectUrl: intent.client_secret,
+    clientSecret: intent.client_secret, // legacy alias
     provider,
     amount: intent.amount,
     currency: intent.currency
@@ -604,222 +598,6 @@ app.post("/wipay/complete", async (c) => {
 });
 
 // ============================================================================
-// PayPal Integration
-// ============================================================================
-
-async function getPayPalAccessToken() {
-  const clientId = Deno.env.get("PAYPAL_CLIENT_ID");
-  const clientSecret = Deno.env.get("PAYPAL_CLIENT_SECRET");
-  const baseUrl = Deno.env.get("PAYPAL_ENV") === "live" 
-    ? "https://api-m.paypal.com"
-    : "https://api-m.sandbox.paypal.com";
-  
-  if (!clientId || !clientSecret) {
-    throw new Error(
-      "PayPal not configured — set PAYPAL_CLIENT_ID and PAYPAL_CLIENT_SECRET via supabase secrets set",
-    );
-  }
-  
-  const response = await fetchWithTimeout(`${baseUrl}/v1/oauth2/token`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/x-www-form-urlencoded",
-      "Authorization": `Basic ${btoa(`${clientId}:${clientSecret}`)}`
-    },
-    body: "grant_type=client_credentials",
-    timeoutMs: 15000,
-  });
-  
-  const data = await response.json();
-  return data.access_token;
-}
-
-async function createPayPalOrder(order: any) {
-  try {
-    const accessToken = await getPayPalAccessToken();
-    const baseUrl = Deno.env.get("PAYPAL_ENV") === "live" 
-      ? "https://api-m.paypal.com"
-      : "https://api-m.sandbox.paypal.com";
-    const returnUrl = Deno.env.get("APP_URL") ?? "https://dash.roamja.com";
-    
-    const response = await fetchWithTimeout(`${baseUrl}/v2/checkout/orders`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${accessToken}`
-      },
-      body: JSON.stringify({
-        intent: "CAPTURE",
-        purchase_units: [{
-          reference_id: order.id,
-          description: `Roam Rush Order #${order.order_number}`,
-          custom_id: order.id,
-          amount: {
-            currency_code: "USD",
-            value: (order.total / 155).toFixed(2) // Convert JMD to USD (approx rate)
-          }
-        }],
-        application_context: {
-          brand_name: "Roam Rush",
-          landing_page: "NO_PREFERENCE",
-          user_action: "PAY_NOW",
-          return_url: `${returnUrl}/payment/callback/paypal?orderId=${order.id}`,
-          cancel_url: `${returnUrl}/orders/${order.id}?cancelled=true`
-        }
-      }),
-      timeoutMs: 15000,
-    });
-    
-    const result = await response.json();
-    
-    if (result.id) {
-      const approvalUrl = result.links.find((l: any) => l.rel === "approve")?.href;
-      return {
-        orderId: result.id,
-        approvalUrl,
-        raw: result
-      };
-    } else {
-      return { error: result.message || "PayPal error" };
-    }
-  } catch (err) {
-    console.error("PayPal error:", err);
-    return { error: "Failed to create PayPal order" };
-  }
-}
-
-// Capture PayPal payment after approval
-app.post("/paypal/capture", async (c) => {
-  const authHeader = c.req.header("Authorization");
-  if (!authHeader) return c.json({ error: "Unauthorized" }, 401);
-
-  const supabase = getSupabase(authHeader);
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return c.json({ error: "Unauthorized" }, 401);
-  
-  const body = await c.req.json();
-  const { paypalOrderId, orderId } = body;
-  if (!paypalOrderId || !orderId) {
-    return c.json({ error: "paypalOrderId and orderId required" }, 400);
-  }
-
-  const owned = await assertCustomerOwnsOrder(user.id, String(orderId));
-  if (!owned.ok) return c.json({ error: owned.error }, owned.status);
-  
-  const serviceSupabase = getServiceSupabase();
-  
-  try {
-    const accessToken = await getPayPalAccessToken();
-    const baseUrl = Deno.env.get("PAYPAL_ENV") === "live" 
-      ? "https://api-m.paypal.com"
-      : "https://api-m.sandbox.paypal.com";
-    
-    const response = await fetchWithTimeout(`${baseUrl}/v2/checkout/orders/${paypalOrderId}/capture`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${accessToken}`
-      },
-      timeoutMs: 15000,
-    });
-    
-    const result = await response.json();
-    
-    if (result.status === "COMPLETED") {
-      const { data: intent } = await serviceSupabase
-        .schema("payments")
-        .from("payment_intents")
-        .select("*")
-        .eq("provider_intent_id", paypalOrderId)
-        .single();
-
-      if (!intent) {
-        return c.json({ error: "Payment intent not found" }, 404);
-      }
-      // Intent must belong to this customer and match the claimed order
-      if (String(intent.customer_id) !== owned.customerId) {
-        return c.json({ error: "Forbidden" }, 403);
-      }
-      if (String(intent.order_id) !== String(orderId)) {
-        return c.json({ error: "Order mismatch" }, 403);
-      }
-      
-      await serviceSupabase
-        .schema("payments")
-        .from("payment_intents")
-        .update({ status: "completed", completed_at: new Date().toISOString() })
-        .eq("id", intent.id);
-      
-      const order = owned.order;
-      const capture = result.purchase_units[0].payments.captures[0];
-
-      const { data: feeOrder } = await serviceSupabase
-        .schema("delivery")
-        .from("orders")
-        .select("merchant_id, courier_id, platform_fee, delivery_fee, tip")
-        .eq("id", intent.order_id)
-        .single();
-
-      const { computeDashCaptureSplit } = await import("../_shared/dashMoneySplit.ts");
-      const split = computeDashCaptureSplit(
-        feeOrder || order || {},
-        Number(intent.amount),
-      );
-      
-      const { data: txn } = await serviceSupabase
-        .schema("payments")
-        .from("transactions")
-        .insert({
-          intent_id: intent.id,
-          order_id: intent.order_id,
-          customer_id: intent.customer_id,
-          amount: intent.amount,
-          net_amount: split.merchantReceivable,
-          currency: "JMD",
-          status: "completed",
-          provider: "paypal",
-          provider_transaction_id: capture.id,
-          provider_data: { ...result, money_split: split },
-          payment_method: "paypal",
-        })
-        .select("id")
-        .single();
-
-      if (txn?.id) {
-        try {
-          const { dualWriteDashPayment } = await import("../_shared/unifiedLedger/dualWriteDash.ts");
-          await dualWriteDashPayment({
-            transactionId: String(txn.id),
-            orderId: String(intent.order_id),
-            merchantId: split.merchantId,
-            courierId: split.courierId,
-            amount: split.merchantReceivable,
-            currency: "JMD",
-            kind: "order_capture",
-            split,
-          });
-        } catch (e) {
-          console.error("[payments/paypal] unified dual-write failed:", e);
-        }
-      }
-      
-      await serviceSupabase
-        .schema("delivery")
-        .from("orders")
-        .update({ payment_status: "paid" })
-        .eq("id", intent.order_id);
-      
-      return c.json({ success: true, captureId: capture.id });
-    } else {
-      return c.json({ error: "Payment not completed", status: result.status }, 400);
-    }
-  } catch (err) {
-    console.error("PayPal capture error:", err);
-    return c.json({ error: "Failed to capture payment" }, 500);
-  }
-});
-
-// ============================================================================
 // Refunds
 // ============================================================================
 
@@ -914,49 +692,10 @@ app.post("/refunds", async (c) => {
 
   try {
     if (provider === "paypal") {
-      const paypalEnv = Deno.env.get("PAYPAL_ENV") || "sandbox";
-      const clientId = Deno.env.get("PAYPAL_CLIENT_ID");
-      const clientSecret = Deno.env.get("PAYPAL_CLIENT_SECRET");
-      const captureId = String(transaction.provider_transaction_id || "");
-      if (!clientId || !clientSecret || !captureId) {
-        return c.json({
-          error: "PayPal refund not configured (missing credentials or capture id)",
-          refund,
-        }, 502);
-      }
-      const base = paypalEnv === "live" ? "https://api-m.paypal.com" : "https://api-m.sandbox.paypal.com";
-      const basic = btoa(`${clientId}:${clientSecret}`);
-      const tokenRes = await fetch(`${base}/v1/oauth2/token`, {
-        method: "POST",
-        headers: {
-          Authorization: `Basic ${basic}`,
-          "Content-Type": "application/x-www-form-urlencoded",
-        },
-        body: "grant_type=client_credentials",
-      });
-      if (!tokenRes.ok) {
-        return c.json({ error: "PayPal auth failed", refund }, 502);
-      }
-      const tokenJson = await tokenRes.json();
-      const refundRes = await fetch(`${base}/v2/payments/captures/${captureId}/refund`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${tokenJson.access_token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          amount: {
-            value: Number(refundAmount).toFixed(2),
-            currency_code: String(transaction.currency || "USD"),
-          },
-        }),
-      });
-      const refundJson = await refundRes.json().catch(() => ({}));
-      if (!refundRes.ok) {
-        return c.json({ error: "PayPal refund failed", details: refundJson, refund }, 502);
-      }
-      providerRefundId = String(refundJson.id || "");
-      refundStatus = "completed";
+      return c.json({
+        error: "PayPal is no longer supported — refund historical PayPal captures manually",
+        refund,
+      }, 502);
     } else if (provider === "wipay") {
       // WiPay refund API varies by account — fail closed until WIPAY_REFUND_URL is set
       const refundUrl = Deno.env.get("WIPAY_REFUND_URL");
@@ -1111,8 +850,8 @@ app.get("/methods", async (c) => {
  */
 const SaveMethodBody = z.object({
   providerToken: z.string().min(8).max(512),
-  provider: z.enum(["wipay", "paypal"]).default("wipay"),
-  type: z.enum(["card", "paypal"]).default("card"),
+  provider: z.enum(["wipay"]).default("wipay"),
+  type: z.enum(["card"]).default("card"),
   last4: z.string().regex(/^\d{4}$/),
   brand: z.string().min(1).max(32),
   expMonth: z.coerce.number().int().min(1).max(12),

@@ -58,6 +58,9 @@ const MarketsPage = React.lazy(() =>
 const FinancePage = React.lazy(() =>
   import('./pages/finance/FinancePage').then((m) => ({ default: m.FinancePage })),
 );
+const PromotionsPage = React.lazy(() =>
+  import('./pages/promotions/PromotionsPage').then((m) => ({ default: m.PromotionsPage })),
+);
 const PricingHubPage = React.lazy(() =>
   import('./pages/pricing/PricingHubPage').then((m) => ({ default: m.PricingHubPage })),
 );
@@ -225,6 +228,14 @@ export function DashAdminPortal() {
               element={
                 <Suspense fallback={<AdminRouteFallback />}>
                   <FinancePage />
+                </Suspense>
+              }
+            />
+            <Route
+              path="promotions"
+              element={
+                <Suspense fallback={<AdminRouteFallback />}>
+                  <PromotionsPage />
                 </Suspense>
               }
             />

@@ -43,7 +43,7 @@ const PatchProfileBody = z.object({
     emailNewsletters: z.boolean().optional(),
     smsUpdates: z.boolean().optional(),
   }).optional(),
-  preferredPaymentMethod: z.enum(["wipay", "paypal", "cash"]).optional(),
+  preferredPaymentMethod: z.enum(["wipay", "cash"]).optional(),
 }).passthrough();
 
 const FavoriteBody = z.object({
@@ -120,8 +120,10 @@ function mergeNotificationPrefs(raw: unknown) {
   };
 }
 
-function normalizePreferredPayment(raw: unknown): "wipay" | "paypal" | "cash" {
-  if (raw === "paypal" || raw === "cash" || raw === "wipay") return raw;
+function normalizePreferredPayment(raw: unknown): "wipay" | "cash" {
+  if (raw === "cash") return "cash";
+  // legacy paypal → wipay
+  if (raw === "wipay" || raw === "paypal") return "wipay";
   return "wipay";
 }
 

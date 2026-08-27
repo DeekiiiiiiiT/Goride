@@ -38,8 +38,13 @@ export function computePromoDiscount(promo: PromoRow, subtotal: number): number 
   if (promo.type === "amount_off" && promo.discount_amount != null) {
     return roundMoney(Math.min(safeSubtotal, Number(promo.discount_amount)));
   }
-  // free_delivery / bogo: no line discount (delivery fee already server-controlled)
+  // free_delivery: line discount $0 — fee waived via freeDelivery flag on pricing resolver
+  // bogo: not implemented — returns $0 and must not be advertised as working
   return 0;
+}
+
+export function isFreeDeliveryPromo(promo: { type?: string } | null | undefined): boolean {
+  return String(promo?.type || "").toLowerCase() === "free_delivery";
 }
 
 function isPromoCurrentlyActive(promo: PromoRow, now = new Date()): boolean {
@@ -116,6 +121,8 @@ export function registerCustomerDiscoveryRoutes(app: Hono, deps: CustomerDiscove
     const now = new Date();
     const promotions = ((data || []) as PromoRow[])
       .filter((row) => isPromoCurrentlyActive(row, now))
+      // Do not advertise unimplemented BOGO deals
+      .filter((row) => String(row.type).toLowerCase() !== "bogo")
       .map((row) => ({
         id: row.id,
         merchantId: row.merchant_id,
@@ -143,6 +150,9 @@ export function registerCustomerDiscoveryRoutes(app: Hono, deps: CustomerDiscove
     if (!resolved.ok) return c.json({ error: resolved.error }, resolved.status);
 
     const promo = resolved.promo;
+    if (String(promo.type).toLowerCase() === "bogo") {
+      return c.json({ error: "This promotion type is not available yet" }, 400);
+    }
     const subtotal = Math.max(0, Number(body.subtotal) || 0);
     if (promo.min_order != null && subtotal < Number(promo.min_order)) {
       return c.json({
@@ -161,8 +171,10 @@ export function registerCustomerDiscoveryRoutes(app: Hono, deps: CustomerDiscove
         discountPercent: promo.discount_percent != null ? Number(promo.discount_percent) : null,
         discountAmount: promo.discount_amount != null ? Number(promo.discount_amount) : null,
         minOrder: promo.min_order != null ? Number(promo.min_order) : null,
+        freeDelivery: isFreeDeliveryPromo(promo),
       },
       discount,
+      freeDelivery: isFreeDeliveryPromo(promo),
     });
   });
 

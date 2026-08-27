@@ -1262,9 +1262,52 @@ export function hideReview(accessToken: string, orderId: string, hidden: boolean
   });
 }
 
-export function listPromotions(accessToken: string, merchantId?: string) {
-  const sp = merchantId ? `?merchant_id=${merchantId}` : '';
-  return deliveryFetch(accessToken, `/admin/finance/promotions${sp}`);
+export function listPromotions(accessToken: string, merchantId?: string, status?: string) {
+  const sp = new URLSearchParams();
+  if (merchantId) sp.set('merchant_id', merchantId);
+  if (status) sp.set('status', status);
+  const q = sp.toString();
+  return deliveryFetch(accessToken, `/admin/finance/promotions${q ? `?${q}` : ''}`);
+}
+
+export function createPromotion(
+  accessToken: string,
+  body: {
+    merchant_id: string;
+    type: string;
+    title: string;
+    date_start: string;
+    promo_code?: string;
+    discount_percent?: number | null;
+    discount_amount?: number | null;
+    min_order?: number | null;
+    date_end?: string | null;
+    customer_eligibility?: string;
+    status?: string;
+  },
+) {
+  return deliveryFetch(accessToken, '/admin/finance/promotions', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+}
+
+export function setPromotionStatus(
+  accessToken: string,
+  id: string,
+  status: 'active' | 'paused' | 'ended' | 'scheduled',
+) {
+  return deliveryFetch(accessToken, `/admin/finance/promotions/${id}/status`, {
+    method: 'PATCH',
+    body: JSON.stringify({ status }),
+  });
+}
+
+/** Pause a promotion (legacy disable endpoint → status paused). */
+export function disablePromotion(accessToken: string, id: string) {
+  return deliveryFetch(accessToken, `/admin/finance/promotions/${id}/disable`, {
+    method: 'POST',
+  });
 }
 
 export function listMerchantOwners(accessToken: string, q?: string, page = 1) {
@@ -1467,7 +1510,7 @@ export function previewPricing(
     customer_order_count?: number;
     /** Force / suppress launch free-delivery promo in simulator */
     free_delivery?: boolean;
-    payment_method?: 'wipay' | 'paypal' | 'cash';
+    payment_method?: 'wipay' | 'cash';
     market_id?: string;
   },
 ) {

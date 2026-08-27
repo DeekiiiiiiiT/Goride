@@ -13,7 +13,7 @@ import {
   getCheckoutPreferences,
   saveCheckoutPreferences,
 } from '@/lib/checkoutStorage';
-import { cacheValidatedPromo, calculateOrderTotals, fetchMerchantCheckoutPricing, GCT_RATE_FALLBACK_PERCENT, type CheckoutPricing } from '@/lib/orderPricing';
+import { cacheValidatedPromo, calculateOrderTotals, fetchMerchantCheckoutPricing, type CheckoutPricing } from '@/lib/orderPricing';
 import { formatJmd, getRestaurantProfile } from '@/lib/restaurantContent';
 import { toast } from '@/lib/toast';
 
@@ -35,6 +35,8 @@ export default function CartPage({ onNavigate, session }: Props) {
   const [platformFeeRate, setPlatformFeeRate] = useState(0.05);
   const [merchantDeliveryFee, setMerchantDeliveryFee] = useState(0);
   const [checkoutPricing, setCheckoutPricing] = useState<CheckoutPricing | null>(null);
+  const [pricingError, setPricingError] = useState<string | null>(null);
+  const [pricingLoading, setPricingLoading] = useState(false);
 
   const editingCartItem = items.find((i) => i.id === editingCartItemId);
   const editingMenuItem = editingCartItem && merchantId
@@ -55,9 +57,12 @@ export default function CartPage({ onNavigate, session }: Props) {
     if (!merchantId) {
       setPlatformFeeRate(0.05);
       setMerchantDeliveryFee(0);
+      setCheckoutPricing(null);
+      setPricingError(null);
       return;
     }
     let cancelled = false;
+    setPricingLoading(true);
     void (async () => {
       try {
         const pricing = await fetchMerchantCheckoutPricing({
@@ -68,12 +73,17 @@ export default function CartPage({ onNavigate, session }: Props) {
           dropoffLng: savedAddress?.lng,
           paymentMethod: 'wipay',
         });
-        if (cancelled || !pricing) return;
+        if (cancelled) return;
         setCheckoutPricing(pricing);
         setPlatformFeeRate(pricing.platformFeeRate);
         setMerchantDeliveryFee(pricing.deliveryFee);
-      } catch {
-        /* keep fallback */
+        setPricingError(null);
+      } catch (err) {
+        if (cancelled) return;
+        setCheckoutPricing(null);
+        setPricingError(err instanceof Error ? err.message : 'Could not load pricing');
+      } finally {
+        if (!cancelled) setPricingLoading(false);
       }
     })();
     return () => {
@@ -81,17 +91,33 @@ export default function CartPage({ onNavigate, session }: Props) {
     };
   }, [merchantId, session?.access_token, subtotal, savedAddress?.lat, savedAddress?.lng]);
 
-  const { discount, deliveryFee, serviceFee, tax, processingFee, total } = calculateOrderTotals(
-    subtotal,
-    appliedPromo,
-    0,
-    merchantDeliveryFee,
-    platformFeeRate,
-    checkoutPricing?.pricingModel === 'v2' ? checkoutPricing.serviceFee : undefined,
-    { v2Quote: checkoutPricing, paymentMethod: 'wipay', taxRatePercent: checkoutPricing?.taxRatePercent },
-  );
+  const hasLivePricing = checkoutPricing != null && !pricingError;
+  const { discount, deliveryFee, serviceFee, tax, processingFee, total } = hasLivePricing
+    ? calculateOrderTotals(
+        subtotal,
+        appliedPromo,
+        0,
+        merchantDeliveryFee,
+        platformFeeRate,
+        checkoutPricing?.pricingModel === 'v2' ? checkoutPricing.serviceFee : undefined,
+        {
+          v2Quote: checkoutPricing,
+          paymentMethod: 'wipay',
+          taxRatePercent: checkoutPricing?.taxRatePercent,
+        },
+      )
+    : {
+        discount: 0,
+        deliveryFee: 0,
+        serviceFee: 0,
+        tax: 0,
+        processingFee: 0,
+        total: subtotal,
+      };
 
-  const taxRateLabel = checkoutPricing?.taxRatePercent ?? GCT_RATE_FALLBACK_PERCENT;
+  const taxRateLabel = checkoutPricing?.taxRatePercent;
+  const minOrder = Number(checkoutPricing?.minOrderSubtotalJmd ?? 0);
+  const belowMinOrder = minOrder > 0 && subtotal < minOrder;
 
   const handleApplyPromo = async () => {
     const code = promoInput.trim().toUpperCase();
@@ -128,14 +154,18 @@ export default function CartPage({ onNavigate, session }: Props) {
       const cached = {
         code: data.promo.code,
         title: data.promo.title,
-        type: data.promo.type as 'percent_off' | 'amount_off',
+        type: data.promo.type as 'percent_off' | 'amount_off' | 'free_delivery',
         value,
         minOrder: Number(data.promo.minOrder || 0),
       };
       cacheValidatedPromo(cached);
       saveCheckoutPreferences({ appliedPromoCode: data.promo.code });
       setAppliedPromo(cached);
-      setPromoMessage(`Applied (−${formatJmd(Number(data.discount || 0))})`);
+      setPromoMessage(
+        data.promo.type === 'free_delivery'
+          ? 'Applied (free delivery)'
+          : `Applied (−${formatJmd(Number(data.discount || 0))})`,
+      );
     } catch {
       setPromoMessage('Could not validate promo');
     }
@@ -156,6 +186,14 @@ export default function CartPage({ onNavigate, session }: Props) {
     }
     if (items.length === 0) {
       toast.error('Your cart is empty');
+      return;
+    }
+    if (pricingError || !hasLivePricing) {
+      toast.error('Wait for pricing to load, or retry');
+      return;
+    }
+    if (belowMinOrder) {
+      toast.error(`Minimum order is ${formatJmd(minOrder)}`);
       return;
     }
     onNavigate('checkout');
@@ -324,6 +362,16 @@ export default function CartPage({ onNavigate, session }: Props) {
 
         <section className="px-4 mb-8">
           <h2 className="text-headline-sm font-semibold text-on-surface mb-4 px-1">Order Summary</h2>
+          {pricingError && (
+            <p className="mb-3 text-body-sm text-error px-1">
+              {pricingError}. Totals may be incomplete — pull to refresh or try again.
+            </p>
+          )}
+          {belowMinOrder && (
+            <p className="mb-3 text-body-sm text-amber-700 px-1">
+              Add {formatJmd(minOrder - subtotal)} more to meet the {formatJmd(minOrder)} minimum.
+            </p>
+          )}
           <div className="bg-surface-container-lowest p-4 rounded-xl shadow-[0px_4px_20px_rgba(0,0,0,0.04)] flex flex-col gap-2">
             <div className="flex justify-between text-body-md text-on-surface-variant">
               <span>Subtotal</span>
@@ -337,16 +385,18 @@ export default function CartPage({ onNavigate, session }: Props) {
             )}
             <div className="flex justify-between text-body-md text-primary-container">
               <span>Delivery</span>
-              <span>{deliveryFee === 0 ? 'FREE' : formatJmd(deliveryFee)}</span>
+              <span>{!hasLivePricing ? '—' : deliveryFee === 0 ? 'FREE' : formatJmd(deliveryFee)}</span>
             </div>
             <div className="flex justify-between text-body-md text-on-surface-variant">
               <span>Service Fee</span>
-              <span>{formatJmd(serviceFee)}</span>
+              <span>{hasLivePricing ? formatJmd(serviceFee) : '—'}</span>
             </div>
-            <div className="flex justify-between text-body-md text-on-surface-variant">
-              <span>Tax (GCT {taxRateLabel}%)</span>
-              <span>{formatJmd(tax)}</span>
-            </div>
+            {(taxRateLabel != null && taxRateLabel > 0) || tax > 0 ? (
+              <div className="flex justify-between text-body-md text-on-surface-variant">
+                <span>Tax (GCT {taxRateLabel ?? 0}%)</span>
+                <span>{hasLivePricing ? formatJmd(tax) : '—'}</span>
+              </div>
+            ) : null}
             {processingFee > 0 && (
               <div className="flex justify-between text-body-md text-on-surface-variant">
                 <span>Card processing</span>
@@ -356,7 +406,7 @@ export default function CartPage({ onNavigate, session }: Props) {
             <div className="h-px w-full bg-surface-variant my-2" />
             <div className="flex justify-between text-headline-md font-semibold text-on-surface">
               <span>Total</span>
-              <span>{formatJmd(total)}</span>
+              <span>{hasLivePricing ? formatJmd(total) : pricingLoading ? '…' : '—'}</span>
             </div>
           </div>
         </section>
@@ -366,10 +416,11 @@ export default function CartPage({ onNavigate, session }: Props) {
         <button
           type="button"
           onClick={handleCheckout}
-          className="w-full bg-primary text-on-primary rounded-lg py-4 px-6 flex justify-between items-center text-headline-sm font-semibold hover:opacity-90 active:scale-[0.98] transition-all mb-4"
+          disabled={!hasLivePricing || belowMinOrder || pricingLoading}
+          className="w-full bg-primary text-on-primary rounded-lg py-4 px-6 flex justify-between items-center text-headline-sm font-semibold hover:opacity-90 active:scale-[0.98] transition-all mb-4 disabled:opacity-50"
         >
-          <span>Go to Checkout</span>
-          <span>{formatJmd(total)}</span>
+          <span>{belowMinOrder ? `Min ${formatJmd(minOrder)}` : 'Go to Checkout'}</span>
+          <span>{hasLivePricing ? formatJmd(total) : '—'}</span>
         </button>
       </div>
 

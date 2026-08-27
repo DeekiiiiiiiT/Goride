@@ -1,5 +1,11 @@
 import { API_ENDPOINTS, supabaseAnonFunctionHeaders } from '@roam/api-client';
 
+const ALLOWED_PAY_HOST_SUFFIXES = [
+  'wipayfinancial.com',
+  'roamrush.app',
+  'localhost',
+];
+
 export function isResumePaymentEligible(
   paymentStatus: string | undefined,
   paymentMethod: string | undefined,
@@ -8,8 +14,22 @@ export function isResumePaymentEligible(
     !!paymentStatus &&
     paymentStatus !== 'paid' &&
     !!paymentMethod &&
-    ['wipay', 'paypal'].includes(paymentMethod)
+    paymentMethod === 'wipay'
   );
+}
+
+export function isAllowedPaymentRedirectUrl(raw: unknown): raw is string {
+  if (typeof raw !== 'string' || !raw.trim()) return false;
+  try {
+    const url = new URL(raw);
+    if (url.protocol !== 'https:' && url.hostname !== 'localhost') return false;
+    const host = url.hostname.toLowerCase();
+    return ALLOWED_PAY_HOST_SUFFIXES.some(
+      (suffix) => host === suffix || host.endsWith(`.${suffix}`),
+    );
+  } catch {
+    return false;
+  }
 }
 
 export async function resumeOrderPayment(
@@ -17,6 +37,10 @@ export async function resumeOrderPayment(
   provider: string,
   accessToken: string,
 ): Promise<void> {
+  if (provider !== 'wipay') {
+    throw new Error('Unsupported payment provider');
+  }
+
   const paymentRes = await fetch(`${API_ENDPOINTS.payments}/intents`, {
     method: 'POST',
     headers: supabaseAnonFunctionHeaders({
@@ -25,7 +49,7 @@ export async function resumeOrderPayment(
     }),
     body: JSON.stringify({
       orderId,
-      provider,
+      provider: 'wipay',
       returnOrigin: window.location.origin,
     }),
   });
@@ -37,6 +61,14 @@ export async function resumeOrderPayment(
     );
   }
 
-  const { clientSecret } = await paymentRes.json();
-  window.location.href = clientSecret;
+  const data = (await paymentRes.json()) as {
+    paymentRedirectUrl?: string;
+    clientSecret?: string;
+  };
+  // paymentRedirectUrl is the hosted checkout URL (legacy field was misnamed clientSecret)
+  const redirectUrl = data.paymentRedirectUrl ?? data.clientSecret;
+  if (!isAllowedPaymentRedirectUrl(redirectUrl)) {
+    throw new Error('Invalid payment redirect URL');
+  }
+  window.location.href = redirectUrl;
 }

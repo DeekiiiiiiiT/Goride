@@ -7,7 +7,7 @@ test.describe('Roam Rush customer — payment', () => {
     await resetCustomerStorage(page);
   });
 
-  test('Customer UI payment — WiPay PayPal Cash options', async ({ page }) => {
+  test('Customer UI payment — WiPay and Cash options', async ({ page }) => {
     await signInCustomer(page);
     await smokeCustomerPayment(page);
   });

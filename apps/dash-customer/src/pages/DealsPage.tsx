@@ -33,13 +33,13 @@ type ApiPromo = {
 
 const DEAL_IMAGE_FALLBACK = '/images/logo.png';
 
-function mapPromo(p: ApiPromo): FeaturedDeal {
+function mapPromo(p: ApiPromo): FeaturedDeal | null {
+  // Only advertise types that actually change the bill
+  if (p.type === 'bogo') return null;
   const filter: DealFilter =
     p.type === 'free_delivery'
       ? 'free-delivery'
-      : p.type === 'bogo'
-        ? 'bogo'
-        : 'percent-off';
+      : 'percent-off';
   const image = (p.imageUrl || p.image || '').trim() || DEAL_IMAGE_FALLBACK;
   const logo = (p.logoUrl || p.logo || '').trim() || DEAL_IMAGE_FALLBACK;
   return {
@@ -47,11 +47,13 @@ function mapPromo(p: ApiPromo): FeaturedDeal {
     merchantId: p.merchantId,
     merchantName: p.merchantName || 'Partner',
     badge:
-      p.discountPercent != null
-        ? `${p.discountPercent}% OFF`
-        : p.discountAmount != null
-          ? `J$${p.discountAmount} OFF`
-          : p.promoCode || 'Deal',
+      p.type === 'free_delivery'
+        ? 'FREE DELIVERY'
+        : p.discountPercent != null
+          ? `${p.discountPercent}% OFF`
+          : p.discountAmount != null
+            ? `J$${p.discountAmount} OFF`
+            : p.promoCode || 'Deal',
     title: p.title,
     validUntil: p.promoCode || 'Limited time',
     image,
@@ -73,7 +75,9 @@ export default function DealsPage({ onNavigate }: Props) {
       });
       if (!res.ok) throw new Error('failed');
       const data = await res.json();
-      const mapped = ((data.promotions as ApiPromo[]) ?? []).map(mapPromo);
+      const mapped = ((data.promotions as ApiPromo[]) ?? [])
+        .map(mapPromo)
+        .filter((d): d is FeaturedDeal => d != null);
       setDeals(mapped.length ? mapped : allowMocks() ? FEATURED_DEALS : []);
     } catch {
       setDeals(allowMocks() ? FEATURED_DEALS : []);

@@ -10,6 +10,7 @@ import { requireResolvedMerchantWithPermission } from "./merchantAuth.ts";
 import { validateBody, z } from "../_shared/validateBody.ts";
 import {
   computePromoDiscount,
+  isFreeDeliveryPromo,
   resolveActivePromoByCode,
 } from "./customerDiscoveryRoutes.ts";
 import {
@@ -189,6 +190,7 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
     // Promo: re-validate server-side — never trust client discount amounts
     let discount = 0;
     let appliedPromoCode: string | null = null;
+    let freeDeliveryFromPromo = false;
     const requestedPromo = typeof body.promoCode === "string" ? body.promoCode.trim() : "";
     if (requestedPromo) {
       const provisionalSubtotal = pricedLines.reduce((sum, line) => {
@@ -202,6 +204,9 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
       );
       if (!resolved.ok) return c.json({ error: resolved.error }, resolved.status);
       const promo = resolved.promo;
+      if (String(promo.type).toLowerCase() === "bogo") {
+        return c.json({ error: "This promotion type is not available yet" }, 400);
+      }
       if (promo.min_order != null && provisionalSubtotal < Number(promo.min_order)) {
         return c.json({
           error: `Minimum order J$${Number(promo.min_order).toFixed(0)} required for promo`,
@@ -209,6 +214,7 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
       }
       discount = computePromoDiscount(promo, provisionalSubtotal);
       appliedPromoCode = promo.promo_code;
+      freeDeliveryFromPromo = isFreeDeliveryPromo(promo);
       await serviceSb
         .from("merchant_promotions")
         .update({ redemptions: Number(promo.redemptions ?? 0) + 1 })
@@ -261,7 +267,7 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
 
     if (paymentMethod === "cash" && Deno.env.get("DASH_ALLOW_CASH_ORDERS") !== "true") {
       return c.json({
-        error: "Cash on delivery is not available yet. Please pay with card via WiPay or PayPal.",
+        error: "Cash on delivery is not available yet. Please pay with card via WiPay.",
         code: "cash_not_available",
       }, 400);
     }
@@ -275,9 +281,10 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
       dropoffLat,
       dropoffLng,
       customerId: customer.id,
-      paymentMethod: paymentMethod === "cash" ? "cash" : paymentMethod === "paypal" ? "paypal" : "wipay",
+      paymentMethod: paymentMethod === "cash" ? "cash" : "wipay",
       marketIdOverride: coverageGate.marketId,
       requireCoverage: false,
+      freeDelivery: freeDeliveryFromPromo,
     });
 
     let deliveryFee: number;
@@ -342,7 +349,9 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
       const feeRate = resolveDashPlatformFeeRate(merchantOverride, globalRate);
       platformFee = Math.round(pricing.subtotal * feeRate * 100) / 100;
       serviceFee = platformFee;
-      deliveryFee = Math.max(0, Number(merchantRow?.delivery_fee ?? 0));
+      deliveryFee = freeDeliveryFromPromo
+        ? 0
+        : Math.max(0, Number(merchantRow?.delivery_fee ?? 0));
       deliveryFeeCourierAmount = deliveryFee;
       total = Math.round(
         (pricing.subtotal - discount + platformFee + deliveryFee + pricing.tax + tip) * 100,
