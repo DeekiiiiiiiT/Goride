@@ -39,7 +39,41 @@ export type CodRules = {
   pauseThresholdJmd?: number;
 };
 
-/** Full market pricing profile rules blob */
+export type PricingParty = 'customer' | 'rider' | 'partner' | 'platform';
+
+/** Snake_case party sections stored in DB JSONB */
+export type PlatformRulesBlob = {
+  pricing_v2_enabled?: boolean;
+  tax_rate_percent?: number;
+};
+
+export type CustomerRulesBlob = {
+  service_fee?: Record<string, unknown>;
+  delivery?: Record<string, unknown>;
+  min_order_subtotal_jmd?: number;
+  card_processing_fee_percent?: number;
+  launch_promos?: Record<string, unknown>;
+};
+
+export type RiderRulesBlob = {
+  courier_delivery_share?: number;
+  cod?: Record<string, unknown>;
+  road_distance_multiplier?: number;
+  tip_processing_from_rider?: boolean;
+};
+
+export type PartnerRulesBlob = {
+  default_tier_slug?: string;
+};
+
+export type NestedRulesBlob = {
+  platform?: PlatformRulesBlob;
+  customer?: CustomerRulesBlob;
+  rider?: RiderRulesBlob;
+  partner?: PartnerRulesBlob;
+};
+
+/** Full market pricing profile rules blob — flat runtime shape for engine */
 export type PricingRules = {
   pricingV2Enabled?: boolean;
   delivery: DeliveryFeeRules;
@@ -54,6 +88,8 @@ export type PricingRules = {
   minOrderSubtotalJmd?: number;
   /** Card/wallet processing fee rate applied to order total (e.g. 0.045) */
   cardProcessingFeePercent?: number;
+  /** When true, card processing on tip is deducted from courier tip (default true) */
+  tipProcessingFromRider?: boolean;
 };
 
 export type ServiceFeeOverride = {

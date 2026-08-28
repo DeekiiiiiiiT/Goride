@@ -9,6 +9,11 @@ import type {
   ServiceFeeRules,
 } from './types.ts';
 import { resolveOrderGct } from './gct.ts';
+import {
+  flattenNestedToLegacy,
+  normalizeRulesBlob,
+  serializePricingRulesNested,
+} from './rulesBlob.ts';
 
 function roundMoney(value: number): number {
   return Math.round(value * 100) / 100;
@@ -366,15 +371,16 @@ export function mergePricingRuleLayers(
 
 const DEFAULTS = defaultPricingRules();
 
-/** Parse DB rules JSON (snake_case) into PricingRules. */
+/** Parse DB rules JSON (snake_case, flat or nested) into PricingRules. */
 export function parsePricingRules(raw: Record<string, unknown> | null | undefined): PricingRules {
   if (!raw || typeof raw !== 'object') {
     return defaultPricingRules();
   }
-  const delivery = (raw.delivery ?? {}) as Record<string, unknown>;
-  const serviceFee = (raw.service_fee ?? {}) as Record<string, unknown>;
-  const launchPromos = (raw.launch_promos ?? {}) as Record<string, unknown>;
-  const cod = (raw.cod ?? {}) as Record<string, unknown>;
+  const flat = flattenNestedToLegacy(normalizeRulesBlob(raw));
+  const delivery = (flat.delivery ?? {}) as Record<string, unknown>;
+  const serviceFee = (flat.service_fee ?? {}) as Record<string, unknown>;
+  const launchPromos = (flat.launch_promos ?? {}) as Record<string, unknown>;
+  const cod = (flat.cod ?? {}) as Record<string, unknown>;
 
   const modeRaw = serviceFee.mode;
   const mode: ServiceFeeRules['mode'] =
@@ -383,7 +389,7 @@ export function parsePricingRules(raw: Record<string, unknown> | null | undefine
     : 'flat';
 
   return {
-    pricingV2Enabled: Boolean(raw.pricing_v2_enabled),
+    pricingV2Enabled: Boolean(flat.pricing_v2_enabled),
     delivery: {
       baseFeeJmd: Number(delivery.base_fee_jmd ?? DEFAULTS.delivery.baseFeeJmd),
       includedKm: Number(delivery.included_km ?? DEFAULTS.delivery.includedKm),
@@ -406,7 +412,7 @@ export function parsePricingRules(raw: Record<string, unknown> | null | undefine
         ? Number(serviceFee.override_threshold_jmd)
         : DEFAULTS.serviceFee.overrideThresholdJmd,
     },
-    courierDeliveryShare: Number(raw.courier_delivery_share ?? DEFAULTS.courierDeliveryShare),
+    courierDeliveryShare: Number(flat.courier_delivery_share ?? DEFAULTS.courierDeliveryShare),
     launchPromos: {
       freeDeliveryFirstNOrders: Number(
         launchPromos.free_delivery_first_n_orders ?? DEFAULTS.launchPromos?.freeDeliveryFirstNOrders ?? 0,
@@ -415,52 +421,25 @@ export function parsePricingRules(raw: Record<string, unknown> | null | undefine
     cod: {
       pauseThresholdJmd: Number(cod.pause_threshold_jmd ?? DEFAULTS.cod?.pauseThresholdJmd ?? 10000),
     },
-    taxRatePercent: Number(raw.tax_rate_percent ?? DEFAULTS.taxRatePercent),
-    roadDistanceMultiplier: raw.road_distance_multiplier != null
-      ? Number(raw.road_distance_multiplier)
+    taxRatePercent: Number(flat.tax_rate_percent ?? DEFAULTS.taxRatePercent),
+    roadDistanceMultiplier: flat.road_distance_multiplier != null
+      ? Number(flat.road_distance_multiplier)
       : DEFAULTS.roadDistanceMultiplier,
-    minOrderSubtotalJmd: raw.min_order_subtotal_jmd != null
-      ? Number(raw.min_order_subtotal_jmd)
+    minOrderSubtotalJmd: flat.min_order_subtotal_jmd != null
+      ? Number(flat.min_order_subtotal_jmd)
       : DEFAULTS.minOrderSubtotalJmd,
-    cardProcessingFeePercent: raw.card_processing_fee_percent != null
-      ? Number(raw.card_processing_fee_percent)
+    cardProcessingFeePercent: flat.card_processing_fee_percent != null
+      ? Number(flat.card_processing_fee_percent)
       : DEFAULTS.cardProcessingFeePercent,
+    tipProcessingFromRider: flat.tip_processing_from_rider != null
+      ? Boolean(flat.tip_processing_from_rider)
+      : DEFAULTS.tipProcessingFromRider,
   };
 }
 
-/** Serialize PricingRules to DB JSON (snake_case). */
+/** Serialize PricingRules to nested DB JSON (snake_case party namespaces). */
 export function serializePricingRules(rules: PricingRules): Record<string, unknown> {
-  const sf = rules.serviceFee;
-  return {
-    pricing_v2_enabled: rules.pricingV2Enabled ?? false,
-    delivery: {
-      base_fee_jmd: rules.delivery.baseFeeJmd,
-      included_km: rules.delivery.includedKm,
-      per_extra_km_jmd: rules.delivery.perExtraKmJmd,
-      max_fee_jmd: rules.delivery.maxFeeJmd,
-    },
-    service_fee: {
-      mode: sf.mode,
-      flat_jmd: sf.flatJmd,
-      percent: sf.percent,
-      min_jmd: sf.minJmd,
-      max_jmd: sf.maxJmd,
-      avg_rate: sf.avgRate,
-      override_rate: sf.overrideRate,
-      override_threshold_jmd: sf.overrideThresholdJmd,
-    },
-    courier_delivery_share: rules.courierDeliveryShare,
-    launch_promos: {
-      free_delivery_first_n_orders: rules.launchPromos?.freeDeliveryFirstNOrders ?? 0,
-    },
-    cod: {
-      pause_threshold_jmd: rules.cod?.pauseThresholdJmd ?? 10000,
-    },
-    tax_rate_percent: rules.taxRatePercent ?? 16.5,
-    road_distance_multiplier: rules.roadDistanceMultiplier ?? 1.4,
-    min_order_subtotal_jmd: rules.minOrderSubtotalJmd,
-    card_processing_fee_percent: rules.cardProcessingFeePercent,
-  };
+  return flattenNestedToLegacy(serializePricingRulesNested(rules));
 }
 
 export function defaultPricingRules(): PricingRules {
@@ -489,6 +468,7 @@ export function defaultPricingRules(): PricingRules {
     roadDistanceMultiplier: 1.4,
     minOrderSubtotalJmd: 800,
     cardProcessingFeePercent: 0.045,
+    tipProcessingFromRider: true,
   };
 }
 

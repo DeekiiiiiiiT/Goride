@@ -2,9 +2,14 @@
  * Load and merge pricing layers: Default → Parish → Town.
  */
 import {
+  computeRulesProvenance,
   mergePricingRuleLayers,
   parsePricingRules,
+  resolvePartySections,
+  serializePricingRules,
+  type PricingParty,
   type PricingRules,
+  type RulesProvenance,
 } from "../_shared/dashPricing.ts";
 
 // deno-lint-ignore no-explicit-any
@@ -32,7 +37,9 @@ export type ResolvedPricingLayers = {
   raw: {
     global: Record<string, unknown> | null;
     parish: Record<string, unknown> | null;
+    parishStored: Record<string, unknown> | null;
     market: Record<string, unknown> | null;
+    marketStored: Record<string, unknown> | null;
     merged: Record<string, unknown>;
   };
 };
@@ -185,8 +192,48 @@ export async function resolvePricingLayers(
     raw: {
       global: globalRow?.rules ?? null,
       parish: parishRow?.overrideEnabled ? parishRow.rules : null,
+      parishStored: parishRow?.rules ?? null,
       market: marketRow?.overrideEnabled ? marketRow.rules : null,
+      marketStored: marketRow?.rules ?? null,
       merged,
     },
   };
 }
+
+export type LayerEnrichment = {
+  resolved: ReturnType<typeof resolvePartySections>;
+  provenance: RulesProvenance;
+  effective_rules: Record<string, unknown>;
+};
+
+/** Merged effective rules + per-party sections and provenance for admin UI. */
+export function enrichPricingLayers(layered: ResolvedPricingLayers): LayerEnrichment {
+  const provenance = computeRulesProvenance([
+    { label: "default", blob: layered.raw.global },
+    { label: "parish", blob: layered.raw.parish },
+    { label: "town", blob: layered.raw.market },
+  ]);
+  return {
+    resolved: resolvePartySections(layered.rules),
+    provenance,
+    effective_rules: serializePricingRules(layered.rules),
+  };
+}
+
+export function scopeStoredRules(
+  layered: ResolvedPricingLayers,
+  scope: "global" | "parish" | "market",
+): Record<string, unknown> {
+  if (scope === "global") {
+    return (layered.raw.global ?? serializePricingRules(parsePricingRules(null))) as Record<
+      string,
+      unknown
+    >;
+  }
+  if (scope === "parish") {
+    return (layered.raw.parishStored ?? {}) as Record<string, unknown>;
+  }
+  return (layered.raw.marketStored ?? {}) as Record<string, unknown>;
+}
+
+export type { PricingParty };

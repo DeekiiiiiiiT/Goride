@@ -13,7 +13,10 @@ same structural disease; see §7).
 
 ---
 
-## 0. Executive verdict
+## Market Rules — Three-party model (2026-08-28)
+
+Market Rules admin UI and DB JSON now use **Customer**, **Partner**, **Rider**, and **Platform** namespaces under each layer (Default → Parish → Town). Partner commission % remains on **Merchant Tiers**. See [pricing-party-rules-matrix.md](./pricing-party-rules-matrix.md).
+
 
 The pricing engine is **not underdeveloped in the way it looks**. The math package is clean, pure,
 well-factored, and has 24 passing tests. The layering model (Default → Parish → Town), the versioned

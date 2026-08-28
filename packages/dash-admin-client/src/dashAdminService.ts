@@ -1648,8 +1648,14 @@ export type PricingParishSummary = {
   override_enabled?: boolean;
 };
 
+export type PricingParty = 'customer' | 'rider' | 'partner' | 'platform';
+
 export type PricingRulesPayload = {
   pricing_v2_enabled?: boolean;
+  platform?: Record<string, unknown>;
+  customer?: Record<string, unknown>;
+  rider?: Record<string, unknown>;
+  partner?: Record<string, unknown>;
   delivery?: {
     base_fee_jmd?: number;
     included_km?: number;
@@ -1673,11 +1679,20 @@ export type PricingRulesPayload = {
   road_distance_multiplier?: number;
   min_order_subtotal_jmd?: number;
   card_processing_fee_percent?: number;
+  tip_processing_from_rider?: boolean;
 };
 
 export type PricingLayerResponse = {
   scope: 'global' | 'parish' | 'market';
   rules: PricingRulesPayload;
+  effective_rules?: PricingRulesPayload;
+  resolved?: {
+    platform?: Record<string, unknown>;
+    customer?: Record<string, unknown>;
+    rider?: Record<string, unknown>;
+    partner?: Record<string, unknown>;
+  };
+  provenance?: Partial<Record<PricingParty, Record<string, string>>>;
   has_override?: boolean;
   override_enabled?: boolean;
   has_parish_override?: boolean;
@@ -1716,6 +1731,17 @@ export function updateDefaultPricing(accessToken: string, rules: PricingRulesPay
   });
 }
 
+export function updateDefaultPartyPricing(
+  accessToken: string,
+  party: PricingParty,
+  rules: PricingRulesPayload,
+) {
+  return deliveryFetch(accessToken, '/admin/pricing/defaults', {
+    method: 'PUT',
+    body: JSON.stringify({ party, rules }),
+  });
+}
+
 export function fetchParishPricing(accessToken: string, parishId: string) {
   return deliveryFetch<PricingLayerResponse>(
     accessToken,
@@ -1731,6 +1757,18 @@ export function updateParishPricing(
   return deliveryFetch(accessToken, `/admin/pricing/parishes/${parishId}`, {
     method: 'PUT',
     body: JSON.stringify({ rules }),
+  });
+}
+
+export function updateParishPartyPricing(
+  accessToken: string,
+  parishId: string,
+  party: PricingParty,
+  rules: PricingRulesPayload,
+) {
+  return deliveryFetch(accessToken, `/admin/pricing/parishes/${parishId}`, {
+    method: 'PUT',
+    body: JSON.stringify({ party, rules }),
   });
 }
 
@@ -1755,6 +1793,18 @@ export function updateMarketPricing(
   return deliveryFetch(accessToken, `/admin/pricing/markets/${marketId}`, {
     method: 'PUT',
     body: JSON.stringify({ rules }),
+  });
+}
+
+export function updateMarketPartyPricing(
+  accessToken: string,
+  marketId: string,
+  party: PricingParty,
+  rules: PricingRulesPayload,
+) {
+  return deliveryFetch(accessToken, `/admin/pricing/markets/${marketId}`, {
+    method: 'PUT',
+    body: JSON.stringify({ party, rules }),
   });
 }
 

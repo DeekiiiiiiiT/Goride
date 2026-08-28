@@ -6,12 +6,21 @@ import { requireProductAdmin, type ProductAdminUser } from "../../_shared/produc
 import { requireDashWrite } from "./dashPermissions.ts";
 import { getDb, writeKvAudit } from "./merchantAdminShared.ts";
 import {
+  flattenNestedToLegacy,
+  mergePartyRulesBlob,
   parsePricingRules,
   serializePricingRules,
+  validatePartyRules,
+  validatePricingRules,
+  type PricingParty,
   type PricingRules,
 } from "../../_shared/dashPricing.ts";
 import { resolveDashOrderPricing } from "../pricingResolver.ts";
-import { resolvePricingLayers } from "../pricingLayers.ts";
+import {
+  enrichPricingLayers,
+  resolvePricingLayers,
+  scopeStoredRules,
+} from "../pricingLayers.ts";
 import { recordCashSettlement } from "../courierCashLedger.ts";
 import { computeCodTrialBalance } from "../../_shared/dashPricing.ts";
 
@@ -19,37 +28,79 @@ function adminFromCtx(c: { get: (k: string) => unknown }): ProductAdminUser {
   return c.get("adminUser") as ProductAdminUser;
 }
 
-function validatePricingRules(rules: PricingRules): string | null {
-  const sf = rules.serviceFee;
-  if (sf.mode === "marginal") {
-    const avg = sf.avgRate ?? 0;
-    const override = sf.overrideRate ?? 0;
-    if (avg < 0 || avg > 1) return "avg_rate must be between 0 and 1";
-    if (override < 0 || override > 1) return "override_rate must be between 0 and 1";
-    if ((sf.overrideThresholdJmd ?? 0) < 0) return "override_threshold_jmd must be >= 0";
+const PRICING_PARTIES: PricingParty[] = ["customer", "rider", "partner", "platform"];
+
+function isPricingParty(v: unknown): v is PricingParty {
+  return typeof v === "string" && PRICING_PARTIES.includes(v as PricingParty);
+}
+
+async function loadActiveProfileRules(opts: {
+  db: ReturnType<typeof getDb>;
+  table: "global_pricing_profiles" | "parish_pricing_profiles" | "market_pricing_profiles";
+  matchColumn?: "parish_id" | "market_id";
+  matchId?: string;
+}): Promise<Record<string, unknown>> {
+  const { db, table, matchColumn, matchId } = opts;
+  let query = db.from(table).select("rules").eq("is_active", true);
+  if (matchColumn && matchId) query = query.eq(matchColumn, matchId);
+  const { data } = await query.order("version", { ascending: false }).limit(1).maybeSingle();
+  return ((data?.rules ?? {}) as Record<string, unknown>);
+}
+
+/** Apply full or party-scoped rules update; returns serialized blob or error. */
+async function prepareRulesForSave(opts: {
+  db: ReturnType<typeof getDb>;
+  table: "global_pricing_profiles" | "parish_pricing_profiles" | "market_pricing_profiles";
+  matchColumn?: "parish_id" | "market_id";
+  matchId?: string;
+  body: Record<string, unknown>;
+}): Promise<
+  | { serialized: Record<string, unknown>; parsed: PricingRules; party?: PricingParty }
+  | { error: string; status: number }
+> {
+  const partyRaw = body.party;
+  const party = isPricingParty(partyRaw) ? partyRaw : undefined;
+  const incomingRules = (
+    party && body.rules != null
+      ? body.rules
+      : body.rules ?? body
+  ) as Record<string, unknown>;
+
+  let mergedRaw: Record<string, unknown>;
+  if (party) {
+    const current = await loadActiveProfileRules(opts);
+    mergedRaw = flattenNestedToLegacy(mergePartyRulesBlob(current, party, incomingRules));
+  } else {
+    mergedRaw = incomingRules;
   }
-  const min = sf.minJmd ?? 0;
-  const max = sf.maxJmd ?? 99999;
-  if (min > max) return "min_jmd cannot exceed max_jmd";
-  if ((rules.minOrderSubtotalJmd ?? 0) < 0) return "min_order_subtotal_jmd must be >= 0";
-  const proc = rules.cardProcessingFeePercent ?? 0;
-  if (proc < 0 || proc > 0.15) return "card_processing_fee_percent must be between 0 and 0.15";
-  const share = rules.courierDeliveryShare ?? 0;
-  if (share < 0 || share > 1) return "courier_delivery_share must be between 0 and 1";
-  const d = rules.delivery;
-  if ((d.baseFeeJmd ?? 0) < 0) return "delivery.base_fee_jmd must be >= 0";
-  if ((d.includedKm ?? 0) < 0) return "delivery.included_km must be >= 0";
-  if ((d.perExtraKmJmd ?? 0) < 0) return "delivery.per_extra_km_jmd must be >= 0";
-  if (d.maxFeeJmd != null && d.maxFeeJmd > 0 && d.maxFeeJmd < d.baseFeeJmd) {
-    return "delivery.max_fee_jmd cannot be below base_fee_jmd";
-  }
-  const taxRate = rules.taxRatePercent ?? 16.5;
-  if (taxRate < 0 || taxRate > 30) return "tax_rate_percent must be between 0 and 30";
-  const promoN = rules.launchPromos?.freeDeliveryFirstNOrders ?? 0;
-  if (promoN < 0 || promoN > 99) return "free_delivery_first_n_orders must be between 0 and 99";
-  const roadMult = rules.roadDistanceMultiplier ?? 1.4;
-  if (roadMult < 1 || roadMult > 3) return "road_distance_multiplier must be between 1 and 3";
-  return null;
+
+  const parsed = parsePricingRules(mergedRaw);
+  const validationError = party
+    ? validatePartyRules(party, parsed)
+    : validatePricingRules(parsed);
+  if (validationError) return { error: validationError, status: 400 };
+
+  return {
+    serialized: party ? mergedRaw : serializePricingRules(parsed),
+    parsed,
+    party,
+  };
+}
+
+function layerJsonResponse(
+  scope: "global" | "parish" | "market",
+  layered: Awaited<ReturnType<typeof resolvePricingLayers>>,
+  extra: Record<string, unknown> = {},
+) {
+  const enrichment = enrichPricingLayers(layered);
+  return {
+    scope,
+    rules: scopeStoredRules(layered, scope),
+    effective_rules: enrichment.effective_rules,
+    resolved: enrichment.resolved,
+    provenance: enrichment.provenance,
+    ...extra,
+  };
 }
 
 async function writeVersionedProfile(opts: {
@@ -268,13 +319,11 @@ export function registerPricingAdminRoutes(app: Hono) {
   admin.get("/pricing/defaults", async (c) => {
     const db = getDb();
     const layered = await resolvePricingLayers(db, {});
-    return c.json({
-      scope: "global",
+    return c.json(layerJsonResponse("global", layered, {
       profile: layered.layers.global,
-      rules: serializePricingRules(layered.rules),
       has_override: Boolean(layered.layers.global),
       stack: ["Default"],
-    });
+    }));
   });
 
   admin.put("/pricing/defaults", async (c) => {
@@ -284,11 +333,14 @@ export function registerPricingAdminRoutes(app: Hono) {
 
     const body = await c.req.json().catch(() => ({}));
     const db = getDb();
-    const incomingRules = (body.rules ?? body) as Record<string, unknown>;
-    const parsed = parsePricingRules(incomingRules);
-    const validationError = validatePricingRules(parsed);
-    if (validationError) return c.json({ error: validationError }, 400);
-    const serialized = serializePricingRules(parsed);
+    const prepared = await prepareRulesForSave({
+      db,
+      table: "global_pricing_profiles",
+      body: body as Record<string, unknown>,
+    });
+    if ("error" in prepared) return c.json({ error: prepared.error }, prepared.status);
+
+    const { serialized, parsed, party } = prepared;
 
     const { current, created, error, nextVersion } = await writeVersionedProfile({
       db,
@@ -304,7 +356,11 @@ export function registerPricingAdminRoutes(app: Hono) {
       actor_email: adminUser.email,
       action: "global_pricing_updated",
       before_state: current ? { version: current.version, rules: current.rules } : null,
-      after_state: { version: nextVersion, rules: serialized },
+      after_state: {
+        version: nextVersion,
+        rules: serialized,
+        party: party ?? "all",
+      },
     });
     await writeKvAudit(
       adminUser,
@@ -327,11 +383,9 @@ export function registerPricingAdminRoutes(app: Hono) {
     if (!parish) return c.json({ error: "Parish not found" }, 404);
 
     const layered = await resolvePricingLayers(db, { parishId });
-    return c.json({
-      scope: "parish",
+    return c.json(layerJsonResponse("parish", layered, {
       parish,
       profile: layered.layers.parish,
-      rules: serializePricingRules(layered.rules),
       has_override: layered.layers.parish?.hasOverride === true,
       override_enabled: layered.layers.parish?.overrideEnabled === true,
       stack: [
@@ -340,7 +394,7 @@ export function registerPricingAdminRoutes(app: Hono) {
           ? String(parish.name)
           : null,
       ].filter(Boolean),
-    });
+    }));
   });
 
   admin.patch("/pricing/parishes/:parishId/override-enabled", async (c) => {
@@ -399,11 +453,17 @@ export function registerPricingAdminRoutes(app: Hono) {
       .maybeSingle();
     if (!parish) return c.json({ error: "Parish not found" }, 404);
 
-    const incomingRules = (body.rules ?? body) as Record<string, unknown>;
-    const parsed = parsePricingRules(incomingRules);
-    const validationError = validatePricingRules(parsed);
-    if (validationError) return c.json({ error: validationError }, 400);
-    const serialized = serializePricingRules(parsed);
+    const incomingBody = body as Record<string, unknown>;
+    const prepared = await prepareRulesForSave({
+      db,
+      table: "parish_pricing_profiles",
+      matchColumn: "parish_id",
+      matchId: parishId,
+      body: incomingBody,
+    });
+    if ("error" in prepared) return c.json({ error: prepared.error }, prepared.status);
+
+    const { serialized, parsed, party } = prepared;
 
     const { current, created, error, nextVersion } = await writeVersionedProfile({
       db,
@@ -422,7 +482,11 @@ export function registerPricingAdminRoutes(app: Hono) {
       actor_email: adminUser.email,
       action: "parish_pricing_updated",
       before_state: current ? { version: current.version, rules: current.rules } : null,
-      after_state: { version: nextVersion, rules: serialized },
+      after_state: {
+        version: nextVersion,
+        rules: serialized,
+        party: party ?? "all",
+      },
     });
     await writeKvAudit(
       adminUser,
@@ -533,11 +597,9 @@ export function registerPricingAdminRoutes(app: Hono) {
         .data?.name
       : null;
 
-    return c.json({
-      scope: "market",
+    return c.json(layerJsonResponse("market", layered, {
       market,
       profile: layered.layers.market,
-      rules: serializePricingRules(layered.rules),
       has_override: layered.layers.market?.hasOverride === true,
       override_enabled: layered.layers.market?.overrideEnabled === true,
       has_parish_override: layered.layers.parish?.hasOverride === true,
@@ -550,7 +612,7 @@ export function registerPricingAdminRoutes(app: Hono) {
           ? String(market.name)
           : null,
       ].filter(Boolean),
-    });
+    }));
   });
 
   admin.patch("/pricing/markets/:marketId/override-enabled", async (c) => {
@@ -610,11 +672,16 @@ export function registerPricingAdminRoutes(app: Hono) {
       .maybeSingle();
     if (!market) return c.json({ error: "Market not found" }, 404);
 
-    const incomingRules = (body.rules ?? body) as Record<string, unknown>;
-    const parsed = parsePricingRules(incomingRules);
-    const validationError = validatePricingRules(parsed);
-    if (validationError) return c.json({ error: validationError }, 400);
-    const serialized = serializePricingRules(parsed);
+    const prepared = await prepareRulesForSave({
+      db,
+      table: "market_pricing_profiles",
+      matchColumn: "market_id",
+      matchId: marketId,
+      body: body as Record<string, unknown>,
+    });
+    if ("error" in prepared) return c.json({ error: prepared.error }, prepared.status);
+
+    const { serialized, parsed, party } = prepared;
 
     const { current, created, error, nextVersion } = await writeVersionedProfile({
       db,
@@ -633,7 +700,11 @@ export function registerPricingAdminRoutes(app: Hono) {
       actor_email: adminUser.email,
       action: "market_pricing_updated",
       before_state: current ? { version: current.version, rules: current.rules } : null,
-      after_state: { version: nextVersion, rules: serialized },
+      after_state: {
+        version: nextVersion,
+        rules: serialized,
+        party: party ?? "all",
+      },
     });
 
     await writeKvAudit(
@@ -799,6 +870,12 @@ export function registerPricingAdminRoutes(app: Hono) {
         }, 404);
       }
 
+      const effectiveMarketId = resolved.resolvedMarketId ?? resolved.marketId ?? null;
+      const layered = effectiveMarketId
+        ? await resolvePricingLayers(db, { marketId: effectiveMarketId })
+        : await resolvePricingLayers(db, {});
+      const partyRules = enrichPricingLayers(layered);
+
       return c.json({
         breakdown: resolved,
         pricing_v2_enabled: resolved.pricingV2Enabled,
@@ -807,6 +884,19 @@ export function registerPricingAdminRoutes(app: Hono) {
         covered: resolved.covered ?? null,
         coverage: resolved.coverage ?? null,
         market_override_applied: resolved.marketOverrideApplied ?? false,
+        party_rules: {
+          resolved: partyRules.resolved,
+          provenance: partyRules.provenance,
+          stack: [
+            "Default",
+            layered.layers.parish?.hasOverride && layered.layers.parish.overrideEnabled
+              ? "Parish"
+              : null,
+            layered.layers.market?.hasOverride && layered.layers.market.overrideEnabled
+              ? "Town"
+              : null,
+          ].filter(Boolean),
+        },
       });
     } catch (e) {
       console.error("[pricing/preview]", e);
