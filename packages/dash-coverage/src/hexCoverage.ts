@@ -1,27 +1,20 @@
 /**
  * ADR 0013 coverage reason codes + customer copy.
  */
-export type CoverageReasonCode =
-  | 'market_inactive'
-  | 'excluded_zone'
-  | 'out_of_coverage'
-  | 'too_far_from_store'
-  | 'outside_parish';
+export type { CoverageReasonCode } from './zoneEval.ts';
+export { customerCopyForReason } from './zoneEval.ts';
+import type { CoverageReasonCode } from './zoneEval.ts';
 
-export const COVERAGE_CUSTOMER_COPY: Record<CoverageReasonCode, string> = {
+export const COVERAGE_CUSTOMER_COPY: Record<
+  import('./zoneEval.ts').CoverageReasonCode,
+  string
+> = {
   market_inactive: 'Roam Rush is not available in this area yet.',
   excluded_zone: "We're not currently serving your address.",
   out_of_coverage: "You're outside our delivery zone.",
   too_far_from_store: "This store doesn't deliver that far.",
   outside_parish: "You're outside our delivery zone.",
 };
-
-export function customerCopyForReason(code: string | undefined | null): string {
-  if (code && code in COVERAGE_CUSTOMER_COPY) {
-    return COVERAGE_CUSTOMER_COPY[code as CoverageReasonCode];
-  }
-  return "You're outside our delivery zone.";
-}
 
 /** Hex-set evaluation (market cells). Merchant reach is a separate optional narrow. */
 export function evaluateHexCoverage(opts: {

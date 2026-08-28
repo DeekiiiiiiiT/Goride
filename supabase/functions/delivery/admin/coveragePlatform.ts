@@ -50,6 +50,13 @@ export function zoneSnapshotPayload(z: ZoneRow) {
     center_lat: z.center_lat ?? null,
     center_lng: z.center_lng ?? null,
     radius_m: z.radius_m ?? null,
+    is_active: z.is_active !== false,
+    effective_from: z.effective_from ?? null,
+    effective_to: z.effective_to ?? null,
+    category: z.category ?? null,
+    reason: z.reason ?? null,
+    zone_policy: z.zone_policy ?? { action: "block" },
+    schedules: z.schedules ?? null,
   };
 }
 
@@ -66,6 +73,16 @@ export function zonesFromSnapshot(zonesJson: unknown): CoverageZone[] {
       kind: normalizeKind(z.kind),
       polygon: multi?.[0]?.outer?.length ? multi[0].outer : polygon,
       multiPolygon: multi ?? undefined,
+      priority: z.priority != null ? Number(z.priority) : 0,
+      is_active: z.is_active !== false,
+      effective_from: z.effective_from != null ? String(z.effective_from) : null,
+      effective_to: z.effective_to != null ? String(z.effective_to) : null,
+      category: z.category != null ? String(z.category) : null,
+      reason: z.reason != null ? String(z.reason) : null,
+      schedules: Array.isArray(z.schedules) ? z.schedules as CoverageZone["schedules"] : undefined,
+      zone_policy: z.zone_policy && typeof z.zone_policy === "object"
+        ? z.zone_policy as CoverageZone["zone_policy"]
+        : { action: "block" },
     };
   });
 }

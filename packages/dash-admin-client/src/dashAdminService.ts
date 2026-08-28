@@ -664,10 +664,40 @@ export function changeDashTeamRole(accessToken: string, userId: string, role: Da
 export type DashZoneKind = 'include' | 'exclude';
 export type DashZoneSource = 'manual' | 'radius' | 'auto_outline' | 'import';
 
+export type ZoneCategory =
+  | 'safety'
+  | 'access'
+  | 'legal'
+  | 'operational'
+  | 'temporary'
+  | 'geographic';
+
+export type ZonePolicyAction =
+  | 'block'
+  | 'surcharge'
+  | 'courier_opt_in'
+  | 'manager_approval'
+  | 'cash_disabled';
+
 export interface DashZoneVertex {
   lat: number;
   lng: number;
 }
+
+export type ZoneOperationalPayload = {
+  is_active?: boolean;
+  effective_from?: string | null;
+  effective_to?: string | null;
+  category?: ZoneCategory | string | null;
+  reason?: string | null;
+  zone_policy?: { action: ZonePolicyAction; params?: Record<string, unknown> };
+  schedules?: Array<{
+    dow: number[];
+    start_time: string;
+    end_time: string;
+    timezone?: string;
+  }>;
+};
 
 export interface DashZoneRow {
   id: string;
@@ -680,6 +710,30 @@ export interface DashZoneRow {
   center_lat?: number | null;
   center_lng?: number | null;
   radius_m?: number | null;
+  is_active?: boolean;
+  effective_from?: string | null;
+  effective_to?: string | null;
+  category?: ZoneCategory | string | null;
+  reason?: string | null;
+  zone_policy?: { action: ZonePolicyAction; params?: Record<string, unknown> } | null;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface ScopedExclusionRow {
+  id: string;
+  scope: 'global' | 'parish' | 'market';
+  parish_id?: string | null;
+  market_id?: string | null;
+  name: string;
+  polygon: DashZoneVertex[];
+  priority: number;
+  is_active?: boolean;
+  effective_from?: string | null;
+  effective_to?: string | null;
+  category?: ZoneCategory | string | null;
+  reason?: string | null;
+  zone_policy?: { action: ZonePolicyAction; params?: Record<string, unknown> } | null;
   created_at?: string;
   updated_at?: string;
 }
@@ -1043,7 +1097,7 @@ export function createZone(
     center_lat?: number;
     center_lng?: number;
     radius_m?: number;
-  },
+  } & ZoneOperationalPayload,
 ) {
   return deliveryFetch<{ zone: DashZoneRow }>(
     accessToken,
@@ -1069,7 +1123,7 @@ export function updateZone(
     confirm_foundation_edit?: boolean;
     /** Upsert town_outline_templates from this include polygon. */
     promote_template?: boolean;
-  },
+  } & ZoneOperationalPayload,
 ) {
   return deliveryFetch<{ zone: DashZoneRow }>(
     accessToken,
@@ -1082,6 +1136,56 @@ export function deleteZone(accessToken: string, marketId: string, zoneId: string
   return deliveryFetch<{ ok: boolean }>(
     accessToken,
     `/admin/markets/${marketId}/zones/${zoneId}`,
+    { method: 'DELETE' },
+  );
+}
+
+export function listScopedExclusions(accessToken: string, scope?: string) {
+  const q = scope ? `?scope=${encodeURIComponent(scope)}` : '';
+  return deliveryFetch<{ zones: ScopedExclusionRow[] }>(
+    accessToken,
+    `/admin/markets/scoped-exclusions${q}`,
+  );
+}
+
+export function createScopedExclusion(
+  accessToken: string,
+  payload: {
+    scope: 'global' | 'parish' | 'market';
+    name: string;
+    polygon: DashZoneVertex[];
+    parish_id?: string;
+    market_id?: string;
+    priority?: number;
+  } & ZoneOperationalPayload,
+) {
+  return deliveryFetch<{ zone: ScopedExclusionRow }>(
+    accessToken,
+    '/admin/markets/scoped-exclusions',
+    { method: 'POST', body: JSON.stringify(payload) },
+  );
+}
+
+export function updateScopedExclusion(
+  accessToken: string,
+  zoneId: string,
+  payload: {
+    name?: string;
+    polygon?: DashZoneVertex[];
+    priority?: number;
+  } & ZoneOperationalPayload,
+) {
+  return deliveryFetch<{ zone: ScopedExclusionRow }>(
+    accessToken,
+    `/admin/markets/scoped-exclusions/${zoneId}`,
+    { method: 'PATCH', body: JSON.stringify(payload) },
+  );
+}
+
+export function deleteScopedExclusion(accessToken: string, zoneId: string) {
+  return deliveryFetch<{ ok: boolean }>(
+    accessToken,
+    `/admin/markets/scoped-exclusions/${zoneId}`,
     { method: 'DELETE' },
   );
 }

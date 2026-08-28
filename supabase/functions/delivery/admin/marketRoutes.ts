@@ -10,6 +10,7 @@ import {
 } from "./dashPermissions.ts";
 import { getDb, writeKvAudit } from "./merchantAdminShared.ts";
 import { attachBoundaryAdminRoutes } from "./boundaryRoutes.ts";
+import { attachScopedExclusionRoutes } from "./scopedExclusionRoutes.ts";
 import {
   buildParishSyntheticZone,
   evaluateCoverage,
@@ -43,6 +44,7 @@ function requireMarketIdParam(
 }
 import {
   asCoverageZones,
+  enrichZonesWithGeomParts,
   loadPublishedZonesForMarket,
   recomputeMerchantMarkets,
   resolveMarketForPoint,
@@ -56,8 +58,49 @@ import {
   previewCoverageDiff,
   recomputeMerchantCoverageCells,
 } from "../coverageCompile.ts";
+import { enrichMarketZonesWithSchedules } from "../coverageLayers.ts";
 
 type Vertex = CoverageVertex;
+
+async function upsertZoneSchedules(
+  db: ReturnType<typeof getDb>,
+  zoneId: string,
+  schedules: unknown,
+) {
+  if (!Array.isArray(schedules)) return;
+  await db.from("zone_schedules").delete().eq("zone_id", zoneId);
+  for (const row of schedules) {
+    if (!row || typeof row !== "object") continue;
+    const s = row as Record<string, unknown>;
+    const dow = Array.isArray(s.dow) ? s.dow : [];
+    if (!dow.length) continue;
+    await db.from("zone_schedules").insert({
+      zone_id: zoneId,
+      dow,
+      start_time: String(s.start_time ?? "00:00"),
+      end_time: String(s.end_time ?? "23:59"),
+      timezone: String(s.timezone ?? "America/Jamaica"),
+    });
+  }
+}
+
+function applyOperationalZoneFields(
+  target: Record<string, unknown>,
+  body: Record<string, unknown>,
+) {
+  if (body.is_active != null) target.is_active = body.is_active !== false;
+  if (body.effective_from != null) {
+    target.effective_from = body.effective_from ? String(body.effective_from) : null;
+  }
+  if (body.effective_to != null) {
+    target.effective_to = body.effective_to ? String(body.effective_to) : null;
+  }
+  if (body.category != null) target.category = body.category ? String(body.category) : null;
+  if (body.reason != null) target.reason = body.reason ? String(body.reason) : null;
+  if (body.zone_policy != null && typeof body.zone_policy === "object") {
+    target.zone_policy = body.zone_policy;
+  }
+}
 
 function normalizePolygon(input: unknown): Vertex[] | null {
   if (!Array.isArray(input)) return null;
@@ -240,6 +283,7 @@ export function registerMarketAdminRoutes(app: Hono) {
 
   // Static catalog paths must register before /:id (otherwise "boundaries" is treated as a market UUID).
   attachBoundaryAdminRoutes(admin);
+  attachScopedExclusionRoutes(admin, { getDb });
 
   admin.get("/", async (c) => {
     const db = getDb();
@@ -646,8 +690,21 @@ export function registerMarketAdminRoutes(app: Hono) {
       return c.json({ error: "Publish requires a valid delivery area" }, 400);
     }
 
+    const uncategorized = (zones ?? []).filter((z) => {
+      const row = z as Record<string, unknown>;
+      return normalizeKind(row.kind) === "exclude" && !row.category;
+    });
+    if (uncategorized.length) {
+      return c.json({
+        error: "All non-delivery zones require a category before publish",
+        zone_ids: uncategorized.map((z) => (z as Record<string, unknown>).id),
+      }, 400);
+    }
+
+    const enriched = await enrichMarketZonesWithSchedules(db, (zones ?? []) as Record<string, unknown>[]);
+
     const zonesJson: Record<string, unknown>[] = [];
-    for (const z of zones ?? []) {
+    for (const z of enriched) {
       const row = z as Record<string, unknown>;
       let multiPolygon = row.multiPolygon;
       if (!multiPolygon && row.id && row.geom != null) {
@@ -681,6 +738,18 @@ export function registerMarketAdminRoutes(app: Hono) {
       draft_dirty: false,
     }).eq("id", marketId).select().single();
     if (uErr) return c.json({ error: uErr.message }, 500);
+
+    let netCoverageStats: Record<string, unknown> | null = null;
+    try {
+      const { data: stats } = await db.rpc("refresh_market_net_coverage", { p_market_id: marketId });
+      netCoverageStats = stats as Record<string, unknown> | null;
+    } catch (e) {
+      console.log(JSON.stringify({
+        event: "net_coverage_refresh_failed",
+        market_id: marketId,
+        message: e instanceof Error ? e.message : String(e),
+      }));
+    }
 
     await writeKvAudit(
       adminUser,
@@ -755,6 +824,7 @@ export function registerMarketAdminRoutes(app: Hono) {
       version: ver,
       merchant_recompute: merchantRecompute,
       hex_compile: hexCompile,
+      net_coverage_stats: netCoverageStats,
       parish_mode_suggestion: parishModeSuggestion,
       parish_mode_applied: body.apply_parish_mode ?? null,
     });
@@ -1147,6 +1217,7 @@ export function registerMarketAdminRoutes(app: Hono) {
       priority: Number.isFinite(Number(body.priority)) ? Math.trunc(Number(body.priority)) : 0,
       updated_by: adminUser.id || null,
     };
+    applyOperationalZoneFields(insert, body as Record<string, unknown>);
     if (body.center_lat != null && body.center_lng != null) {
       insert.center_lat = Number(body.center_lat);
       insert.center_lng = Number(body.center_lng);
@@ -1158,6 +1229,7 @@ export function registerMarketAdminRoutes(app: Hono) {
     const db = getDb();
     const { data, error } = await db.from("service_zone_polygons").insert(insert).select().single();
     if (error) return c.json({ error: error.message }, 500);
+    await upsertZoneSchedules(db, String(data.id), body.schedules);
     await markDraftDirty(db, marketId);
     await writeKvAudit(
       adminUser,
@@ -1225,6 +1297,7 @@ export function registerMarketAdminRoutes(app: Hono) {
     if (body.center_lat != null) updates.center_lat = Number(body.center_lat);
     if (body.center_lng != null) updates.center_lng = Number(body.center_lng);
     if (body.radius_m != null) updates.radius_m = Number(body.radius_m);
+    applyOperationalZoneFields(updates, body as Record<string, unknown>);
 
     const { data, error } = await db.from("service_zone_polygons")
       .update(updates)
@@ -1232,6 +1305,9 @@ export function registerMarketAdminRoutes(app: Hono) {
       .eq("market_id", marketId)
       .select().single();
     if (error) return c.json({ error: error.message }, 500);
+    if (body.schedules != null) {
+      await upsertZoneSchedules(db, zoneId, body.schedules);
+    }
     await markDraftDirty(db, marketId);
 
     const promote = body.promote_template === true && nextKind === "include";
@@ -1347,7 +1423,8 @@ export function registerPublicGeoRoutes(
     for (const m of markets ?? []) {
       const market = m as Record<string, unknown>;
       const published = await loadPublishedZonesForMarket(db, market);
-      for (const z of published) {
+      const enriched = await enrichZonesWithGeomParts(db, published);
+      for (const z of enriched) {
         zones.push({ ...z, market_id: market.id });
       }
     }
@@ -1404,10 +1481,17 @@ export function registerPublicGeoRoutes(
         return {
           id: z.id,
           name: z.name,
-          priority: z.priority,
+          priority: z.priority ?? 0,
           kind: normalizeKind(z.kind),
           polygon: z.polygon,
+          multiPolygon: z.multiPolygon ?? null,
+          market_id: z.market_id ?? null,
           source: z.source ?? null,
+          is_active: z.is_active !== false,
+          effective_from: z.effective_from ?? null,
+          effective_to: z.effective_to ?? null,
+          category: z.category ?? null,
+          zone_policy: z.zone_policy ?? { action: "block" },
           market: market
             ? { id: market.id, slug: market.slug, name: market.name }
             : null,

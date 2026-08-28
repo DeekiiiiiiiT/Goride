@@ -131,7 +131,12 @@ export function polygonsOverlapOrTouch(a: GeoVertex[], b: GeoVertex[]): boolean 
 export type CoverageConflict = {
   code: 'cutout_outside_town' | 'tiny_delivery_area' | 'overlapping_cutouts';
   message: string;
+  severity: 'error' | 'warning';
 };
+
+export function hasBlockingCoverageConflicts(conflicts: CoverageConflict[]): boolean {
+  return conflicts.some((c) => c.severity === 'error');
+}
 
 export function detectCoverageConflicts(
   includes: { id: string; name: string; polygon: GeoVertex[] }[],
@@ -149,6 +154,7 @@ export function detectCoverageConflicts(
         conflicts.push({
           code: 'tiny_delivery_area',
           message: 'Town border looks unusually small — confirm the foundation outline.',
+          severity: 'warning',
         });
       }
     }
@@ -158,6 +164,7 @@ export function detectCoverageConflicts(
         conflicts.push({
           code: 'cutout_outside_town',
           message: `Non-delivery zone “${ex.name}” does not intersect the town border.`,
+          severity: 'error',
         });
       }
     }
@@ -168,6 +175,7 @@ export function detectCoverageConflicts(
         conflicts.push({
           code: 'overlapping_cutouts',
           message: `Non-delivery zones “${excludes[i].name}” and “${excludes[j].name}” overlap.`,
+          severity: 'error',
         });
       }
     }

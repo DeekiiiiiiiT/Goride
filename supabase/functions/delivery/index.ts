@@ -281,8 +281,19 @@ app.get("/merchants", async (c) => {
     }
     if (!merchantId) return c.json({ error: "Merchant not found" }, 404);
 
+    if (
+      dropoffLat == null || dropoffLng == null ||
+      !Number.isFinite(dropoffLat) || !Number.isFinite(dropoffLng)
+    ) {
+      return c.json({
+        error: "dropoff_lat and dropoff_lng are required for delivery pricing",
+        code: "dropoff_required",
+        requireCoverage: true,
+      }, 400);
+    }
+
     const { assertSameMarketCoverage, resolveDashOrderPricing } = await import("./pricingResolver.ts");
-    if (dropoffLat != null && dropoffLng != null && Number.isFinite(dropoffLat) && Number.isFinite(dropoffLng)) {
+    {
       const coverageGate = await assertSameMarketCoverage(supabase, {
         dropoffLat,
         dropoffLng,

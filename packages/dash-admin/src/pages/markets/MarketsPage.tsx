@@ -68,11 +68,19 @@ import { sanitizeVertices, createAdminCoverageLayers, type ActiveCoverageZone } 
 import type { AdminOutletContext } from '../../DashAdminPortal';
 import { ZoneMapEditor, type ZoneMapUiMode } from './ZoneMapEditor';
 import { JamaicaOverviewMap } from './JamaicaOverviewMap';
-import { detectCoverageConflicts } from './coverageGeo';
+import { detectCoverageConflicts, hasBlockingCoverageConflicts } from './coverageGeo';
 import { ManageZonesOverlay } from './ManageZonesOverlay';
 import { ImportTownBorderOverlay } from './ImportTownBorderOverlay';
 import { ImportParishTownPinsOverlay } from './ImportParishTownPinsOverlay';
 import { ImportBoundariesWizard } from './ImportBoundariesWizard';
+import {
+  ExclusionDetailSheet,
+  defaultExclusionForm,
+  exclusionStatusLabel,
+  formFromZone,
+  type ExclusionFormValues,
+} from './ExclusionDetailSheet';
+import { PlatformExclusionsPanel } from './PlatformExclusionsPanel';
 import {
   downloadTextFile,
   parsePolygonCsv,
@@ -200,6 +208,7 @@ type TownCardProps = {
   onToggleActive: (m: DashMarketRow) => void;
   onOpenMap: (opts?: { editor?: EditorTarget }) => void;
   onRemoveZone: (marketId: string, zone: DashZoneRow) => void;
+  onEditExclusionMeta?: (marketId: string, zone: DashZoneRow) => void;
   onDeleteTown: (town: DashMarketRow) => void | Promise<void>;
   onApplyOfficialBorder: (town: DashMarketRow) => void | Promise<void>;
   onCommunitiesUnioned?: () => void;
@@ -216,6 +225,7 @@ function TownCard({
   onToggleActive,
   onOpenMap,
   onRemoveZone,
+  onEditExclusionMeta,
   onDeleteTown,
   onApplyOfficialBorder,
   onCommunitiesUnioned,
@@ -368,8 +378,20 @@ function TownCard({
                     {z.source === 'radius' ? 'Radius' : 'No delivery'}
                   </span>
                   <span className="font-medium text-slate-200">{z.name}</span>
+                  {exclusionStatusLabel(z) ? (
+                    <span className="text-[10px] text-slate-500">{exclusionStatusLabel(z)}</span>
+                  ) : null}
                   {canWrite && (
                     <div className="ml-auto flex items-center gap-1">
+                      {onEditExclusionMeta ? (
+                        <button
+                          type="button"
+                          onClick={() => onEditExclusionMeta(m.id, z)}
+                          className="px-2 py-1 rounded text-[10px] text-slate-400 hover:bg-slate-800"
+                        >
+                          Details
+                        </button>
+                      ) : null}
                       <button
                         type="button"
                         onClick={() =>
@@ -1858,6 +1880,9 @@ export function MarketsPage() {
   const [readiness, setReadiness] = useState<MarketReadiness | null>(null);
   const [versions, setVersions] = useState<CoverageVersionRow[]>([]);
   const [activity, setActivity] = useState<ActivityLogRow[]>([]);
+  const [metaEditZone, setMetaEditZone] = useState<{ marketId: string; zone: DashZoneRow } | null>(
+    null,
+  );
 
   const load = useCallback(async () => {
     try {
@@ -2097,12 +2122,14 @@ export function MarketsPage() {
           polygon: payload.polygon,
           kind: 'exclude',
           priority: 10,
+          category: 'operational',
           source: payload.source ?? (editor.mode === 'radius' ? 'radius' : 'manual'),
           center_lat: payload.center_lat,
           center_lng: payload.center_lng,
           radius_m: payload.radius_m,
+          zone_policy: { action: 'block' },
         });
-        toast.success('Non-delivery zone saved — publish when ready');
+        toast.success('Non-delivery zone saved — set details, then publish');
       } else {
         const isFoundation = editor.zone.kind === 'include';
         const updated = await updateZone(session.access_token, editor.marketId, editor.zone.id, {
@@ -2191,6 +2218,30 @@ export function MarketsPage() {
     }
   };
 
+  const saveExclusionMeta = async (values: ExclusionFormValues) => {
+    if (!metaEditZone || !canWrite) return;
+    setSaving(true);
+    try {
+      await updateZone(session.access_token, metaEditZone.marketId, metaEditZone.zone.id, {
+        name: values.name.trim(),
+        category: values.category || null,
+        reason: values.reason || null,
+        is_active: values.is_active,
+        effective_from: values.effective_from || null,
+        effective_to: values.effective_to || null,
+        priority: values.priority,
+        zone_policy: { action: values.zone_policy },
+      });
+      toast.success('Non-delivery zone updated');
+      setMetaEditZone(null);
+      await load();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Save failed');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const townProps = (town: DashMarketRow, parish?: DashParishRow): TownCardProps => ({
     town,
     canWrite,
@@ -2202,6 +2253,7 @@ export function MarketsPage() {
     onToggleActive: (m) => void toggleActive(m),
     onOpenMap: (opts) => openTownMap(town.id, opts),
     onRemoveZone: (id, z) => void removeZone(id, z),
+    onEditExclusionMeta: (id, z) => setMetaEditZone({ marketId: id, zone: z }),
     onDeleteTown: (t) => void removeTown(t),
     onApplyOfficialBorder: (t) => applyOfficialBorder(t),
     onCommunitiesUnioned: () => void load(),
@@ -2429,6 +2481,11 @@ export function MarketsPage() {
 
   return (
     <div className="space-y-6 text-slate-200">
+      <PlatformExclusionsPanel
+        accessToken={session.access_token}
+        parishes={parishes}
+        canWrite={canWrite}
+      />
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h2 className="text-xl font-semibold text-white flex items-center gap-2">
@@ -2622,6 +2679,10 @@ export function MarketsPage() {
           }}
           onPublish={() => {
             void (async () => {
+              if (hasBlockingCoverageConflicts(conflicts)) {
+                toast.error('Fix non-delivery zone conflicts before publishing');
+                return;
+              }
               setSaving(true);
               try {
                 let diffMsg = '';
@@ -2817,6 +2878,17 @@ export function MarketsPage() {
         accessToken={session.access_token}
         onClose={() => setShowImportBoundaries(false)}
         onImported={() => void load()}
+      />
+
+      <ExclusionDetailSheet
+        open={metaEditZone != null}
+        title="Non-delivery zone"
+        initial={
+          metaEditZone ? formFromZone(metaEditZone.zone) : defaultExclusionForm()
+        }
+        saving={saving}
+        onClose={() => setMetaEditZone(null)}
+        onSave={saveExclusionMeta}
       />
     </div>
   );

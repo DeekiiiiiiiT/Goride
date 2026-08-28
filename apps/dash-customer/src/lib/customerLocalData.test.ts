@@ -74,7 +74,7 @@ describe('clearCustomerLocalData', () => {
     local.set('roam-dash-favorite-items', '[]');
     local.set('roam-dash-recent-searches', '["pizza"]');
     local.set('roam-dash-customer-onboarding-complete', 'true');
-    local.set('roam-dash-delivery-zones-v5', '{}');
+    local.set('roam-dash-delivery-zones-v7', '{}');
     session.set('roam_cart_vertical', 'grocery');
 
     for (const key of CUSTOMER_USER_LOCAL_STORAGE_KEYS) {
@@ -90,7 +90,7 @@ describe('clearCustomerLocalData', () => {
     expect(local.get('roam-dash-favorite-items')).toBeUndefined();
     expect(local.get('roam-dash-recent-searches')).toBeUndefined();
     expect(local.get('roam-dash-customer-onboarding-complete')).toBe('true');
-    expect(local.get('roam-dash-delivery-zones-v5')).toBe('{}');
+    expect(local.get('roam-dash-delivery-zones-v7')).toBe('{}');
     expect(session.get('roam_cart_vertical')).toBeUndefined();
   });
 });

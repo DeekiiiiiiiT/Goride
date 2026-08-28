@@ -14,6 +14,10 @@ import {
   type ParishCoverageMode,
 } from "./coverageEval.ts";
 import { normalizeKind } from "./coveragePlatform.ts";
+import {
+  enrichMarketZonesWithSchedules,
+  loadScopedExclusionsForPoint,
+} from "../coverageLayers.ts";
 
 // deno-lint-ignore no-explicit-any
 type ServiceSb = {
@@ -120,6 +124,16 @@ export function asCoverageZones(rows: Record<string, unknown>[]): CoverageZone[]
       kind: normalizeKind(z.kind),
       polygon: multi?.[0]?.outer?.length ? multi[0].outer : polygon,
       multiPolygon: multi ?? undefined,
+      priority: z.priority != null ? Number(z.priority) : 0,
+      is_active: z.is_active !== false,
+      effective_from: z.effective_from != null ? String(z.effective_from) : null,
+      effective_to: z.effective_to != null ? String(z.effective_to) : null,
+      category: z.category != null ? String(z.category) : null,
+      reason: z.reason != null ? String(z.reason) : null,
+      schedules: Array.isArray(z.schedules) ? z.schedules as CoverageZone["schedules"] : undefined,
+      zone_policy: z.zone_policy && typeof z.zone_policy === "object"
+        ? z.zone_policy as CoverageZone["zone_policy"]
+        : { action: "block" },
     };
   });
 }
@@ -252,8 +266,9 @@ async function buildCoverageZonesForMarkets(
   for (const market of townZoneMarkets) {
     const published = await loadPublishedZonesForMarket(sb, market);
     const enriched = await enrichZonesWithGeomParts(sb, published);
+    const withSchedules = await enrichMarketZonesWithSchedules(sb, enriched);
     allZones.push(
-      ...asCoverageZones(enriched).map((z) => ({
+      ...asCoverageZones(withSchedules).map((z) => ({
         ...z,
         market_id: z.market_id ?? market.id,
       })),
@@ -261,6 +276,44 @@ async function buildCoverageZonesForMarkets(
   }
 
   return allZones;
+}
+
+async function loadAllScopedExclusions(sb: ServiceSb): Promise<CoverageZone[]> {
+  const { data } = await sb
+    .from("scoped_exclusion_zones")
+    .select("*")
+    .eq("is_active", true);
+  const rows = (data ?? []) as Record<string, unknown>[];
+  return asCoverageZones(rows.map((r) => ({ ...r, kind: "exclude" })));
+}
+
+/** Merge market zones with applicable scoped exclusions for evaluation. */
+export async function buildCoverageZonesForEvaluation(
+  sb: ServiceSb,
+  markets: ActiveMarketRow[],
+  parishMap: Map<string, ParishContext>,
+  lat?: number,
+  lng?: number,
+): Promise<CoverageZone[]> {
+  const base = await buildCoverageZonesForMarkets(sb, markets, parishMap);
+  if (lat == null || lng == null || !Number.isFinite(lat) || !Number.isFinite(lng)) {
+    return [...base, ...(await loadAllScopedExclusions(sb))];
+  }
+
+  let parishId: string | null = null;
+  let marketId: string | null = null;
+  const probe = evaluateCoverage(lat, lng, base);
+  if (probe.matchedInclude?.market_id) {
+    marketId = probe.matchedInclude.market_id;
+    const m = markets.find((x) => x.id === marketId);
+    parishId = m?.parish_id ?? null;
+  }
+
+  const scoped = await loadScopedExclusionsForPoint(sb, parishId, marketId);
+  const scopedZones = asCoverageZones(
+    scoped.map((r) => ({ ...r, kind: "exclude" })),
+  );
+  return [...base, ...scopedZones];
 }
 
 export type MarketPointResolve = {
@@ -296,8 +349,30 @@ export async function resolveMarketForPoint(
   }
 
   const parishMap = await loadParishMap(sb);
-  const allZones = await buildCoverageZonesForMarkets(sb, markets, parishMap);
+  const allZones = await buildCoverageZonesForEvaluation(sb, markets, parishMap, lat, lng);
   const evalResult = evaluateCoverage(lat, lng, allZones);
+
+  // Optional PostGIS dual-run (staging parity check)
+  if (typeof sb.rpc === "function" && Deno.env.get("COVERAGE_POSTGIS_EVAL") === "1") {
+    const probeMarket = evalResult.matchedInclude?.market_id ?? null;
+    const probeParish = probeMarket
+      ? markets.find((m) => m.id === probeMarket)?.parish_id ?? null
+      : null;
+    const { data: pgRows, error } = await sb.rpc("resolve_containing_zones", {
+      p_lat: lat,
+      p_lng: lng,
+      p_market_id: probeMarket,
+      p_parish_id: probeParish,
+    });
+    if (!error && Array.isArray(pgRows) && pgRows.length) {
+      const ids = new Set((pgRows as Record<string, unknown>[]).map((r) => String(r.zone_id)));
+      const pgZones = allZones.filter((z) => ids.has(z.id));
+      const pgEval = evaluateCoverage(lat, lng, pgZones.length ? pgZones : allZones);
+      if (pgEval.inZone !== evalResult.inZone) {
+        console.warn("[coverage] PostGIS parity mismatch", { lat, lng, js: evalResult.inZone, pg: pgEval.inZone });
+      }
+    }
+  }
 
   if (!evalResult.inZone || !evalResult.matchedInclude?.market_id) {
     return {

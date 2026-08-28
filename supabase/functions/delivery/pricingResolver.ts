@@ -258,6 +258,16 @@ export async function resolveDashOrderPricing(
     platformGctEnabled: gct.gctEnabled,
   });
 
+  const zoneSurchargeJmd =
+    coverage?.policy?.action === "surcharge"
+      ? Math.max(0, Math.trunc(Number(coverage.policy.params?.amount_jmd ?? 200)))
+      : 0;
+  if (zoneSurchargeJmd > 0) {
+    breakdown.deliveryFee += zoneSurchargeJmd;
+    breakdown.orderTotal += zoneSurchargeJmd;
+    breakdown.total += zoneSurchargeJmd;
+  }
+
   return {
     ...breakdown,
     taxRatePercent: gct.ratePercent,

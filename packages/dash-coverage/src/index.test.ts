@@ -41,6 +41,7 @@ const CUTOUT: CoverageZone = {
   name: 'Barracks',
   market_id: ST_MARKET,
   kind: 'exclude',
+  priority: 10,
   polygon: [
     { lat: 18.01, lng: -76.97 },
     { lat: 18.01, lng: -76.96 },
@@ -153,6 +154,28 @@ describe('evaluateCoverage', () => {
     };
     expect(evaluateCoverage(18.05, -76.95, [zone]).inZone).toBe(false);
     expect(evaluateCoverage(18.02, -76.95, [zone]).inZone).toBe(true);
+  });
+
+  it('safe island: higher-priority include wins over exclude', () => {
+    const island: CoverageZone = {
+      ...ST_INCLUDE,
+      id: 'z-island',
+      name: 'Hospital',
+      priority: 30,
+      polygon: CUTOUT.polygon,
+    };
+    const r = evaluateCoverage(18.015, -76.965, [ST_INCLUDE, CUTOUT, island]);
+    expect(r.inZone).toBe(true);
+    expect(r.matchedInclude?.name).toBe('Hospital');
+  });
+
+  it('ignores expired exclusions', () => {
+    const expired: CoverageZone = {
+      ...CUTOUT,
+      effective_to: '2020-01-01T00:00:00.000Z',
+    };
+    const r = evaluateCoverage(18.015, -76.965, [ST_INCLUDE, expired], new Date('2026-01-01'));
+    expect(r.inZone).toBe(true);
   });
 });
 

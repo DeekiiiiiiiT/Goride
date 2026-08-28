@@ -1,6 +1,7 @@
 import {
   createDeliveryZoneLoader,
   createZoneCache,
+  customerCopyForReason,
   DELIVERY_ZONES_CACHE_KEY,
   DELIVERY_ZONES_CACHE_TTL_MS,
   evaluateCoverage,
@@ -147,13 +148,21 @@ export function evaluateActiveCoverage(lat: number, lng: number): DeliveryZoneRe
     kind: z.kind,
     market_id: z.market_id,
     polygon: z.polygon,
+    multiPolygon: z.multiPolygon,
+    priority: z.priority,
+    is_active: z.is_active,
+    effective_from: z.effective_from,
+    effective_to: z.effective_to,
+    category: z.category,
+    schedules: z.schedules,
+    zone_policy: z.zone_policy,
   }));
 
   const result = evaluateCoverage(lat, lng, zones);
   if (result.inZone) return { inZone: true };
   return {
     inZone: false,
-    reason: 'This address is outside our current delivery area.',
+    reason: result.reason ?? customerCopyForReason(result.reasonCode, activeZones.find((z) => z.kind === 'exclude')?.category),
   };
 }
 

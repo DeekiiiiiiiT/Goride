@@ -17,10 +17,18 @@ export {
 } from './geometry.ts';
 
 import {
-  pointInMultiPolygon,
   type CoverageMultiPolygon,
   type CoverageVertex,
 } from './geometry.ts';
+
+export type {
+  CoverageReasonCode,
+  EvaluableZone,
+  ZoneKind,
+  ZonePolicy,
+  ZonePolicyAction,
+  ZoneSchedule,
+} from './zoneEval.ts';
 
 export type CoverageZone = {
   id: string;
@@ -30,11 +38,21 @@ export type CoverageZone = {
   polygon: CoverageVertex[];
   /** When set, PIP uses multi-part + holes; polygon kept for legacy display/H3 fallback. */
   multiPolygon?: CoverageMultiPolygon;
+  priority?: number;
+  is_active?: boolean;
+  effective_from?: string | null;
+  effective_to?: string | null;
+  category?: string | null;
+  reason?: string | null;
+  schedules?: import('./zoneEval.ts').ZoneSchedule[];
+  zone_policy?: import('./zoneEval.ts').ZonePolicy | null;
 };
 
 export type CoverageEvalResult = {
   inZone: boolean;
   reason?: string;
+  reasonCode?: import('./zoneEval.ts').CoverageReasonCode;
+  policy?: import('./zoneEval.ts').ZonePolicy;
   matchedInclude?: { id: string; name: string; market_id?: string } | null;
   matchedExclude?: { id: string; name: string; market_id?: string } | null;
 };
@@ -55,65 +73,103 @@ export function pointInPolygon(lat: number, lng: number, polygon: CoverageVertex
   return inside;
 }
 
-function zoneContains(lat: number, lng: number, zone: CoverageZone): boolean {
-  if (zone.multiPolygon && zone.multiPolygon.length > 0) {
-    return pointInMultiPolygon(lat, lng, zone.multiPolygon);
-  }
-  const ring = Array.isArray(zone.polygon) ? zone.polygon : [];
-  return ring.length >= 3 && pointInPolygon(lat, lng, ring);
-}
+import {
+  customerCopyForReason,
+  filterActiveZones,
+  normalizeKind,
+  normalizePolicy,
+  pickWinningMatch,
+  reasonCodeForCategory,
+  zoneContains,
+  type ZoneMatch,
+} from './zoneEval.ts';
 
-function normalizeKind(kind: string | null | undefined): 'include' | 'exclude' {
-  return kind === 'exclude' ? 'exclude' : 'include';
-}
+export {
+  filterActiveZones,
+  normalizeKind,
+  normalizePolicy,
+  pickWinningMatch,
+  zoneContains,
+} from './zoneEval.ts';
 
 /**
- * inZone = inside ≥1 include AND not inside any exclude.
+ * ADR-0014: collect matches, filter active/time/schedule, highest priority wins.
+ * Default exclude (priority 10) beats include (priority 0); safe islands use higher include priority.
  */
 export function evaluateCoverage(
   lat: number,
   lng: number,
   zones: CoverageZone[],
+  at: Date = new Date(),
 ): CoverageEvalResult {
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
-    return { inZone: false, reason: 'Invalid coordinates' };
+    return { inZone: false, reason: 'Invalid coordinates', reasonCode: 'out_of_coverage' };
   }
 
-  let matchedInclude: CoverageEvalResult['matchedInclude'] = null;
-  let matchedExclude: CoverageEvalResult['matchedExclude'] = null;
+  const active = filterActiveZones(zones, at);
+  const matches: ZoneMatch[] = [];
 
-  for (const zone of zones) {
+  for (const zone of active) {
     if (!zoneContains(lat, lng, zone)) continue;
-
-    const kind = normalizeKind(zone.kind);
-    const hit = { id: zone.id, name: zone.name, market_id: zone.market_id };
-    if (kind === 'exclude') {
-      if (!matchedExclude) matchedExclude = hit;
-    } else if (!matchedInclude) {
-      matchedInclude = hit;
-    }
+    matches.push({
+      zone,
+      kind: normalizeKind(zone.kind),
+      priority: Number.isFinite(Number(zone.priority)) ? Number(zone.priority) : 0,
+    });
   }
 
-  if (matchedExclude) {
+  const winner = pickWinningMatch(matches);
+  const matchedInclude = matches.find((m) => m.kind === 'include');
+  const matchedExclude = matches.find((m) => m.kind === 'exclude');
+
+  if (!winner) {
     return {
       inZone: false,
-      reason: `Excluded by zone “${matchedExclude.name}”`,
-      matchedInclude,
-      matchedExclude,
-    };
-  }
-  if (matchedInclude) {
-    return {
-      inZone: true,
-      matchedInclude,
+      reason: 'Outside all active delivery zones',
+      reasonCode: 'out_of_coverage',
+      matchedInclude: null,
       matchedExclude: null,
     };
   }
+
+  const hit = {
+    id: winner.zone.id,
+    name: winner.zone.name,
+    market_id: winner.zone.market_id,
+  };
+
+  if (winner.kind === 'exclude') {
+    const policy = normalizePolicy(winner.zone.zone_policy);
+    const reasonCode = reasonCodeForCategory(winner.zone.category);
+    const blocked = policy.action === 'block';
+    return {
+      inZone: !blocked,
+      reason: blocked
+        ? customerCopyForReason(reasonCode, winner.zone.category)
+        : undefined,
+      reasonCode: blocked ? reasonCode : undefined,
+      policy,
+      matchedInclude: matchedInclude
+        ? {
+            id: matchedInclude.zone.id,
+            name: matchedInclude.zone.name,
+            market_id: matchedInclude.zone.market_id,
+          }
+        : null,
+      matchedExclude: hit,
+    };
+  }
+
   return {
-    inZone: false,
-    reason: 'Outside all active delivery zones',
-    matchedInclude: null,
-    matchedExclude: null,
+    inZone: true,
+    matchedInclude: hit,
+    matchedExclude: matchedExclude
+      ? {
+          id: matchedExclude.zone.id,
+          name: matchedExclude.zone.name,
+          market_id: matchedExclude.zone.market_id,
+        }
+      : null,
   };
 }
 
@@ -155,5 +211,5 @@ export {
   COVERAGE_CUSTOMER_COPY,
   customerCopyForReason,
   evaluateHexCoverage,
-  type CoverageReasonCode,
 } from './hexCoverage.ts';
+export type { CoverageReasonCode } from './zoneEval.ts';

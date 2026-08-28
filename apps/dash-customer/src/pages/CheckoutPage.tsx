@@ -240,24 +240,27 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
     const checkoutLocation = getCheckoutLocation();
     const zoneLat = checkoutLocation.lat ?? savedAddress?.lat;
     const zoneLng = checkoutLocation.lng ?? savedAddress?.lng;
-    if (zoneLat != null && zoneLng != null) {
-      try {
-        const zone = await checkDeliveryZoneAsync({
-          line1: deliveryAddress,
-          lat: zoneLat,
-          lng: zoneLng,
+    if (zoneLat == null || zoneLng == null || !Number.isFinite(zoneLat) || !Number.isFinite(zoneLng)) {
+      toast.error('Add a map pin to your delivery address before placing your order');
+      onNavigate('address');
+      return;
+    }
+    try {
+      const zone = await checkDeliveryZoneAsync({
+        line1: deliveryAddress,
+        lat: zoneLat,
+        lng: zoneLng,
+      });
+      if (!zone.inZone) {
+        toast.error(zone.reason ?? "We don't deliver to this address yet");
+        onNavigate('out-of-delivery', {
+          returnTo: 'checkout',
+          attemptedAddress: deliveryAddress,
         });
-        if (!zone.inZone) {
-          toast.error("We don’t deliver to this address yet");
-          onNavigate('out-of-delivery', {
-            returnTo: 'checkout',
-            attemptedAddress: deliveryAddress,
-          });
-          return;
-        }
-      } catch {
-        /* server still enforces on POST /orders */
+        return;
       }
+    } catch {
+      /* server still enforces on POST /orders */
     }
 
     // Synchronous lock so double-taps can't trigger another request before React re-renders.
