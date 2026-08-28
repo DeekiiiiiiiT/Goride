@@ -4,6 +4,7 @@ import { ChevronRight, Loader2, X } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   fetchPricingOverview,
+  fetchPricingBacktest,
   fetchDefaultPricing,
   updateDefaultPricing,
   fetchParishPricing,
@@ -27,6 +28,7 @@ import {
   type PricingParishSummary,
   type MerchantTierRow,
   type PricingRulesPayload,
+  type PricingRevenueSummary,
 } from '@roam/dash-admin-client';
 import { getPlaceDetails, searchAddresses, type AddressSuggestion } from '@roam/location';
 import { canWriteDashAdmin } from '../../utils/dashAdminRoles';
@@ -178,12 +180,18 @@ export function PricingHubPage() {
   const [townRulesParishKey, setTownRulesParishKey] = useState<string | null>(null);
   const [selectedTownOverrideIds, setSelectedTownOverrideIds] = useState<string[]>([]);
   const [bulkClearing, setBulkClearing] = useState(false);
+  const [revenue, setRevenue] = useState<PricingRevenueSummary | null>(null);
+  const [recentChanges, setRecentChanges] = useState<Array<Record<string, unknown>>>([]);
+  const [backtestRows, setBacktestRows] = useState<Array<Record<string, unknown>>>([]);
+  const [backtestLoading, setBacktestLoading] = useState(false);
 
   const refresh = async () => {
     const overview = await fetchPricingOverview(session.access_token);
     setMarkets(overview.markets ?? []);
     setParishes(overview.parishes ?? []);
     setTiers(overview.tiers ?? []);
+    setRevenue(overview.revenue ?? null);
+    setRecentChanges(overview.recent_changes ?? []);
     if (!selectedParishId && overview.parishes?.[0]) {
       setSelectedParishId(overview.parishes[0].id);
     }
@@ -689,6 +697,21 @@ export function PricingHubPage() {
   const overviewParish = overviewParishKey
     ? parishGroups.find((p) => p.key === overviewParishKey) ?? null
     : null;
+  const anyTownModelB = markets.some((m) => m.pricing_v2_enabled);
+  const globalModelB = Boolean(defaultRules.pricing_v2_enabled);
+
+  const runBacktest = async () => {
+    setBacktestLoading(true);
+    try {
+      const res = await fetchPricingBacktest(session.access_token, 28);
+      setBacktestRows(res.rows ?? []);
+      toast.success(`Backtested ${res.count ?? 0} orders`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Backtest failed');
+    } finally {
+      setBacktestLoading(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -712,6 +735,34 @@ export function PricingHubPage() {
         </p>
       </div>
 
+      {!globalModelB && (
+        <div
+          className={`rounded-xl border px-4 py-3 text-sm ${
+            anyTownModelB
+              ? 'border-amber-700/60 bg-amber-950/30 text-amber-100'
+              : 'border-red-800/60 bg-red-950/30 text-red-100'
+          }`}
+          role="status"
+        >
+          {anyTownModelB ? (
+            <>
+              <strong>Model B is enabled for specific towns only</strong> — orders outside those
+              towns still use the legacy engine. Global default remains off.
+            </>
+          ) : (
+            <>
+              <strong>Model B pricing is disabled</strong> — live orders use the legacy engine.
+              Rules saved here do not affect customer bills until Model B is enabled per town.
+            </>
+          )}
+          {(tab === 'simulator' || tab === 'market') && (
+            <span className="block mt-1 text-xs opacity-90">
+              Simulator previews Model B math — preview only until enablement.
+            </span>
+          )}
+        </div>
+      )}
+
       <div className="flex flex-wrap gap-2 border-b border-slate-800 pb-2">
         {TABS.map((t) => (
           <button
@@ -731,6 +782,34 @@ export function PricingHubPage() {
 
       {tab === 'overview' && (
         <div className="space-y-6">
+          {revenue && (
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4">
+                <p className="text-xs text-slate-500">Commission recorded</p>
+                <p className="text-lg font-semibold text-white mt-1">
+                  {formatJmd(revenue.commission_total_jmd)}
+                </p>
+              </div>
+              <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4">
+                <p className="text-xs text-slate-500">Service fees</p>
+                <p className="text-lg font-semibold text-white mt-1">
+                  {formatJmd(revenue.service_fee_total_jmd)}
+                </p>
+              </div>
+              <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4">
+                <p className="text-xs text-slate-500">Take rate (commission / food)</p>
+                <p className="text-lg font-semibold text-white mt-1">
+                  {revenue.take_rate_percent}%
+                </p>
+              </div>
+              <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4">
+                <p className="text-xs text-slate-500">Model B orders</p>
+                <p className="text-lg font-semibold text-white mt-1">
+                  {revenue.v2_order_count}
+                </p>
+              </div>
+            </div>
+          )}
           <div className="space-y-2">
             {parishGroups.map((parish) => (
               <button
@@ -753,11 +832,31 @@ export function PricingHubPage() {
             ))}
           </div>
           <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4">
+            <h3 className="font-medium text-white mb-3">Recent pricing changes</h3>
+            {recentChanges.length === 0 ? (
+              <p className="text-sm text-slate-500">No changes logged yet.</p>
+            ) : (
+              <ul className="space-y-2 text-sm text-slate-400">
+                {recentChanges.map((e) => (
+                  <li key={String(e.id)}>
+                    {String(e.scope ?? 'market')} ·{' '}
+                    {e.created_at ? new Date(String(e.created_at)).toLocaleString() : '—'}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+          <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4">
             <h3 className="font-medium text-white mb-3">Merchant Tiers</h3>
             <ul className="space-y-2">
               {tiers.map((t) => (
                 <li key={t.id} className="flex justify-between text-sm text-slate-300">
-                  <span>{t.name}</span>
+                  <span>
+                    {t.name}
+                    <span className="text-slate-500 ml-2">
+                      ({t.merchant_count ?? 0} merchants)
+                    </span>
+                  </span>
                   <span>{Math.round(t.commission_rate * 100)}% commission</span>
                 </li>
               ))}
@@ -1631,6 +1730,58 @@ export function PricingHubPage() {
             </div>
           </SimStep>
 
+          <SimStep n={4} title="Historical backtest">
+            <p className="text-xs text-slate-500 mb-2">
+              Replay recent orders against current rules — compare what would have been charged vs
+              what was recorded.
+            </p>
+            <button
+              type="button"
+              disabled={backtestLoading}
+              onClick={() => void runBacktest()}
+              className="px-4 py-2 rounded-lg border border-slate-600 text-slate-200 text-sm disabled:opacity-50"
+            >
+              {backtestLoading ? 'Running…' : 'Backtest last 28 orders'}
+            </button>
+            {backtestRows.length > 0 && (
+              <div className="mt-3 overflow-x-auto rounded-lg border border-slate-800">
+                <table className="w-full text-xs">
+                  <thead className="bg-slate-900 text-slate-400">
+                    <tr>
+                      <th className="text-left p-2">Order</th>
+                      <th className="text-right p-2">Recorded</th>
+                      <th className="text-right p-2">Replay</th>
+                      <th className="text-right p-2">Delta</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {backtestRows.map((row) => (
+                      <tr key={String(row.order_id)} className="border-t border-slate-800">
+                        <td className="p-2 font-mono text-slate-400">
+                          {String(row.order_id).slice(0, 8)}…
+                        </td>
+                        <td className="p-2 text-right text-slate-300">
+                          {formatJmd(Number(row.recorded_total ?? 0))}
+                        </td>
+                        <td className="p-2 text-right text-white">
+                          {formatJmd(Number(row.replay_total ?? 0))}
+                        </td>
+                        <td
+                          className={`p-2 text-right ${
+                            Number(row.delta_jmd ?? 0) === 0 ? 'text-emerald-400' : 'text-amber-400'
+                          }`}
+                        >
+                          {Number(row.delta_jmd ?? 0) >= 0 ? '+' : ''}
+                          {formatJmd(Number(row.delta_jmd ?? 0))}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </SimStep>
+
           {simResult && (
             <SimBreakdownPanel
               title={
@@ -1733,8 +1884,10 @@ export function PricingHubPage() {
               <tbody>
                 {codBalances.length === 0 ? (
                   <tr>
-                    <td colSpan={4} className="p-4 text-center text-slate-500">
-                      No COD balances yet
+                    <td colSpan={4} className="p-4 text-center text-slate-500 text-sm">
+                      No courier balances yet. Cash orders now enter{' '}
+                      <code className="text-slate-400">pending_collection</code> at checkout;
+                      balances appear after delivery. Historical orders were backfilled on deploy.
                     </td>
                   </tr>
                 ) : (
@@ -1922,7 +2075,7 @@ function RulesReadonlyBody({ rules }: { rules: PricingRulesPayload }) {
     },
     {
       label: 'Free delivery first N orders',
-      value: String(rules.launch_promos?.free_delivery_first_n_orders ?? 3),
+      value: String(rules.launch_promos?.free_delivery_first_n_orders ?? 0),
     },
   ];
   return (
@@ -2081,7 +2234,7 @@ function RulesEditForm({
         />
         <Field
           label="Free delivery first N orders"
-          value={rules.launch_promos?.free_delivery_first_n_orders ?? 3}
+          value={rules.launch_promos?.free_delivery_first_n_orders ?? 0}
           onChange={(v) =>
             setRules((r) => ({
               ...r,
@@ -2342,16 +2495,55 @@ function SimBreakdownPanel({
       <SimLine label="Food subtotal" value={breakdown.discountedSubtotal ?? breakdown.subtotal ?? 0} />
       <SimLine label="Service fee" value={breakdown.serviceFee ?? 0} expected={expected?.serviceFee} />
       <SimLine label="Delivery fee" value={breakdown.deliveryFee ?? 0} expected={expected?.deliveryFee} />
-      <SimLine label="GCT" value={breakdown.tax ?? 0} expected={expected?.tax} />
+      {(breakdown.taxFoodJmd ?? 0) > 0 && (
+        <SimLine label="GCT on food" value={breakdown.taxFoodJmd ?? 0} />
+      )}
+      {(breakdown.taxPlatformJmd ?? 0) > 0 && (
+        <SimLine label="GCT on platform fees" value={breakdown.taxPlatformJmd ?? 0} />
+      )}
+      {(breakdown.taxFoodJmd ?? 0) === 0 && (breakdown.taxPlatformJmd ?? 0) === 0 && (
+        <SimLine label="GCT (total)" value={breakdown.tax ?? 0} expected={expected?.tax} />
+      )}
       <SimLine label="Tip" value={breakdown.tip ?? 0} />
       <SimLine label="Order total" value={breakdown.orderTotal ?? 0} expected={expected?.orderTotal} bold />
-      <SimLine label="Processing fee" value={breakdown.processingFee ?? 0} expected={expected?.processingFee} />
+      <SimLine
+        label="Processing fee (order)"
+        value={breakdown.processingFeeOrder ?? breakdown.processingFee ?? 0}
+        expected={expected?.processingFee}
+      />
       <SimLine
         label="Customer pays"
         value={breakdown.customerTotal ?? breakdown.total ?? 0}
         expected={expected?.customerTotal}
         bold
       />
+      <hr className="border-slate-800 my-2" />
+      <p className="text-xs text-slate-500 uppercase tracking-wide">Split preview</p>
+      <SimLine
+        label="Merchant net (food − commission)"
+        value={Math.max(
+          0,
+          (breakdown.discountedSubtotal ?? 0) - (breakdown.merchantCommissionAmount ?? 0),
+        )}
+      />
+      <SimLine
+        label="Courier net (delivery + tip net)"
+        value={
+          (breakdown.deliveryFeeCourierAmount ?? 0) + (breakdown.courierTipNet ?? breakdown.tip ?? 0)
+        }
+      />
+      <SimLine
+        label="Platform net (fees + commission + GCT held on COD)"
+        value={
+          (breakdown.serviceFee ?? 0)
+          + (breakdown.merchantCommissionAmount ?? 0)
+          + Math.max(0, breakdown.deliveryFeePlatformAmount ?? 0)
+          + (breakdown.tax ?? 0)
+        }
+      />
+      {(breakdown.promoCostJmd ?? 0) > 0 && (
+        <SimLine label="Promo cost (platform)" value={breakdown.promoCostJmd ?? 0} />
+      )}
     </div>
   );
 }

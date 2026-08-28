@@ -3,6 +3,7 @@
  * Loads merchant tier + market profile, computes distance, returns breakdown.
  */
 import {
+  applyRoadDistanceMultiplier,
   buildOrderPricing,
   haversineKm,
   parsePricingRules,
@@ -18,7 +19,7 @@ import {
   resolveMarketForPoint,
   type MarketPointResolve,
 } from "./admin/coverageZones.ts";
-import { resolveMerchantFoodGctRate } from "../_shared/gctRate.ts";
+import { resolveOrderGctRates } from "../_shared/gctRate.ts";
 import { resolvePricingLayers } from "./pricingLayers.ts";
 
 export type PricingResolverInput = {
@@ -91,10 +92,10 @@ async function loadMerchantPricingContext(
   serviceFeeOverride: ReturnType<typeof parseServiceFeeOverride>;
   error?: string;
 }> {
-  // Minimal select first — optional Model B columns may be missing on older DBs
+  // Single fetch — Model B columns exist on all current DBs
   const { data: merchant, error } = await sb
     .from("merchants")
-    .select("id, lat, lng")
+    .select("id, lat, lng, merchant_commission_rate, service_fee_override, pricing_tier_id")
     .eq("id", merchantId)
     .maybeSingle();
 
@@ -125,38 +126,26 @@ async function loadMerchantPricingContext(
 
   const base = merchant as Record<string, unknown>;
   let tier: MerchantTier | null = null;
-  let merchantCommissionRateOverride: number | null = null;
-  let serviceFeeOverride: ReturnType<typeof parseServiceFeeOverride> = null;
-
-  const { data: extras } = await sb
-    .from("merchants")
-    .select("merchant_commission_rate, service_fee_override, pricing_tier_id")
-    .eq("id", merchantId)
-    .maybeSingle();
-
-  if (extras) {
-    const row = extras as Record<string, unknown>;
-    merchantCommissionRateOverride = row.merchant_commission_rate != null
-      ? Number(row.merchant_commission_rate)
-      : null;
-    serviceFeeOverride = parseServiceFeeOverride(
-      row.service_fee_override as Record<string, unknown> | null,
-    );
-    const tierId = row.pricing_tier_id ? String(row.pricing_tier_id) : null;
-    if (tierId) {
-      const { data: tierRow } = await sb
-        .from("merchant_tiers")
-        .select("slug, name, commission_rate")
-        .eq("id", tierId)
-        .maybeSingle();
-      if (tierRow) {
-        const t = tierRow as Record<string, unknown>;
-        tier = {
-          slug: String(t.slug),
-          name: String(t.name),
-          commissionRate: Number(t.commission_rate),
-        };
-      }
+  const merchantCommissionRateOverride = base.merchant_commission_rate != null
+    ? Number(base.merchant_commission_rate)
+    : null;
+  const serviceFeeOverride = parseServiceFeeOverride(
+    base.service_fee_override as Record<string, unknown> | null,
+  );
+  const tierId = base.pricing_tier_id ? String(base.pricing_tier_id) : null;
+  if (tierId) {
+    const { data: tierRow } = await sb
+      .from("merchant_tiers")
+      .select("slug, name, commission_rate")
+      .eq("id", tierId)
+      .maybeSingle();
+    if (tierRow) {
+      const t = tierRow as Record<string, unknown>;
+      tier = {
+        slug: String(t.slug),
+        name: String(t.name),
+        commissionRate: Number(t.commission_rate),
+      };
     }
   }
 
@@ -233,9 +222,14 @@ export async function resolveDashOrderPricing(
   rules = layered.rules;
   version = layered.version;
 
+  let distanceKmRaw: number | null = null;
   let distanceKm: number | null = null;
   if (dropLat != null && dropLng != null && ctx.lat != null && ctx.lng != null) {
-    distanceKm = roundDistanceKm(haversineKm(ctx.lat, ctx.lng, dropLat, dropLng));
+    distanceKmRaw = roundDistanceKm(haversineKm(ctx.lat, ctx.lng, dropLat, dropLng));
+    distanceKm = applyRoadDistanceMultiplier(
+      distanceKmRaw,
+      rules.roadDistanceMultiplier,
+    );
   }
 
   const customerOrderCount = input.customerOrderCount != null &&
@@ -243,13 +237,14 @@ export async function resolveDashOrderPricing(
     ? Math.max(0, Math.floor(Number(input.customerOrderCount)))
     : await loadCustomerOrderCount(sb, input.customerId);
 
-  const gct = await resolveMerchantFoodGctRate(sb, input.merchantId);
+  const gct = await resolveOrderGctRates(sb, input.merchantId);
 
   const breakdown = buildOrderPricing({
     subtotal: input.subtotal,
     discount: input.discount,
     tip: input.tip,
     distanceKm,
+    distanceKmRaw,
     rules,
     tier: ctx.tier,
     merchantCommissionRateOverride: ctx.merchantCommissionRateOverride,
@@ -259,11 +254,14 @@ export async function resolveDashOrderPricing(
     paymentMethod: input.paymentMethod,
     serviceFeeWaived: input.serviceFeeWaived,
     taxRatePercent: gct.ratePercent,
+    platformTaxRatePercent: gct.platformRatePercent,
+    platformGctEnabled: gct.gctEnabled,
   });
 
   return {
     ...breakdown,
     taxRatePercent: gct.ratePercent,
+    platformTaxRatePercent: gct.platformRatePercent,
     gctRegistered: gct.gctRegistered,
     pricingProfileVersion: version,
     marketId,

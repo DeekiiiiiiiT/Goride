@@ -636,7 +636,20 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
                   <span>Service Fee</span>
                   <span>{formatJmd(totals.serviceFee)}</span>
                 </div>
-                {(taxRateLabel != null && taxRateLabel > 0) || totals.tax > 0 ? (
+                {(totals.taxFoodJmd ?? 0) > 0 && (
+                  <div className="flex justify-between">
+                    <span>Tax (GCT on food)</span>
+                    <span>{formatJmd(totals.taxFoodJmd ?? 0)}</span>
+                  </div>
+                )}
+                {(totals.taxPlatformJmd ?? 0) > 0 && (
+                  <div className="flex justify-between">
+                    <span>Tax (GCT on platform fees)</span>
+                    <span>{formatJmd(totals.taxPlatformJmd ?? 0)}</span>
+                  </div>
+                )}
+                {(totals.taxFoodJmd ?? 0) === 0 && (totals.taxPlatformJmd ?? 0) === 0 &&
+                ((taxRateLabel != null && taxRateLabel > 0) || totals.tax > 0) ? (
                   <div className="flex justify-between">
                     <span>Tax (GCT {taxRateLabel ?? 0}%)</span>
                     <span>{formatJmd(totals.tax)}</span>

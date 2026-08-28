@@ -256,8 +256,8 @@ export function GlobalPlatformSettingsPage({
               />
             </label>
             <p className="text-xs text-slate-500">
-              Merchant food GCT uses this rate when the merchant is GCT-registered. Service fee
-              taxation is pending accountant review.
+              Merchant food GCT uses this rate when the merchant is GCT-registered. Platform service
+              fee and delivery fee GCT apply at the standard rate under Model B pricing.
             </p>
           </div>
         </SettingsPanel>

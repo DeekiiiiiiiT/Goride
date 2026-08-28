@@ -13,6 +13,7 @@ import {
 import { resolveDashOrderPricing } from "../pricingResolver.ts";
 import { resolvePricingLayers } from "../pricingLayers.ts";
 import { recordCashSettlement } from "../courierCashLedger.ts";
+import { computeCodTrialBalance } from "../../_shared/dashPricing.ts";
 
 function adminFromCtx(c: { get: (k: string) => unknown }): ProductAdminUser {
   return c.get("adminUser") as ProductAdminUser;
@@ -33,6 +34,21 @@ function validatePricingRules(rules: PricingRules): string | null {
   if ((rules.minOrderSubtotalJmd ?? 0) < 0) return "min_order_subtotal_jmd must be >= 0";
   const proc = rules.cardProcessingFeePercent ?? 0;
   if (proc < 0 || proc > 0.15) return "card_processing_fee_percent must be between 0 and 0.15";
+  const share = rules.courierDeliveryShare ?? 0;
+  if (share < 0 || share > 1) return "courier_delivery_share must be between 0 and 1";
+  const d = rules.delivery;
+  if ((d.baseFeeJmd ?? 0) < 0) return "delivery.base_fee_jmd must be >= 0";
+  if ((d.includedKm ?? 0) < 0) return "delivery.included_km must be >= 0";
+  if ((d.perExtraKmJmd ?? 0) < 0) return "delivery.per_extra_km_jmd must be >= 0";
+  if (d.maxFeeJmd != null && d.maxFeeJmd > 0 && d.maxFeeJmd < d.baseFeeJmd) {
+    return "delivery.max_fee_jmd cannot be below base_fee_jmd";
+  }
+  const taxRate = rules.taxRatePercent ?? 16.5;
+  if (taxRate < 0 || taxRate > 30) return "tax_rate_percent must be between 0 and 30";
+  const promoN = rules.launchPromos?.freeDeliveryFirstNOrders ?? 0;
+  if (promoN < 0 || promoN > 99) return "free_delivery_first_n_orders must be between 0 and 99";
+  const roadMult = rules.roadDistanceMultiplier ?? 1.4;
+  if (roadMult < 1 || roadMult > 3) return "road_distance_multiplier must be between 1 and 3";
   return null;
 }
 
@@ -189,13 +205,63 @@ export function registerPricingAdminRoutes(app: Hono) {
       };
     });
 
+    const { data: tierCounts } = await db
+      .from("merchants")
+      .select("pricing_tier_id")
+      .not("pricing_tier_id", "is", null);
+
+    const merchantsByTier = new Map<string, number>();
+    for (const row of tierCounts ?? []) {
+      const tid = String((row as Record<string, unknown>).pricing_tier_id);
+      merchantsByTier.set(tid, (merchantsByTier.get(tid) ?? 0) + 1);
+    }
+
+    const tiersWithCounts = (tiers ?? []).map((t: Record<string, unknown>) => ({
+      ...t,
+      merchant_count: merchantsByTier.get(String(t.id)) ?? 0,
+    }));
+
+    const { data: revenueRows } = await db
+      .from("orders")
+      .select("pricing_model, merchant_commission_amount, service_fee, subtotal, total")
+      .not("status", "in", '("cancelled")');
+
+    let v2Orders = 0;
+    let commissionTotal = 0;
+    let serviceFeeTotal = 0;
+    let grossFood = 0;
+    for (const o of revenueRows ?? []) {
+      const row = o as Record<string, unknown>;
+      if (row.pricing_model === "v2") v2Orders++;
+      commissionTotal += Number(row.merchant_commission_amount ?? 0);
+      serviceFeeTotal += Number(row.service_fee ?? 0);
+      grossFood += Number(row.subtotal ?? 0);
+    }
+    const takeRate = grossFood > 0
+      ? Math.round((commissionTotal / grossFood) * 1000) / 10
+      : 0;
+
+    const { data: recentChanges } = await db
+      .from("pricing_change_log")
+      .select("id, scope, created_at, created_by, market_id")
+      .order("created_at", { ascending: false })
+      .limit(5);
+
     return c.json({
       markets: marketSummaries,
       parishes: parishSummaries,
       global: globalProfiles?.[0]
         ? { id: globalProfiles[0].id, version: globalProfiles[0].version, has_override: true }
         : null,
-      tiers: tiers ?? [],
+      tiers: tiersWithCounts,
+      revenue: {
+        v2_order_count: v2Orders,
+        commission_total_jmd: Math.round(commissionTotal * 100) / 100,
+        service_fee_total_jmd: Math.round(serviceFeeTotal * 100) / 100,
+        gross_food_jmd: Math.round(grossFood * 100) / 100,
+        take_rate_percent: takeRate,
+      },
+      recent_changes: recentChanges ?? [],
     });
   });
 
@@ -823,6 +889,157 @@ export function registerPricingAdminRoutes(app: Hono) {
     );
 
     return c.json({ ok: true, balance_after: result.balanceAfter });
+  });
+
+  /** Replay historical orders against current rules (UX-9 backtest). */
+  admin.get("/pricing/backtest", async (c) => {
+    const db = getDb();
+    const limit = Math.min(100, Math.max(1, Number(c.req.query("limit") ?? 28)));
+    const { data: orders, error } = await db
+      .from("orders")
+      .select(
+        "id, subtotal, discount, tip, total, delivery_lat, delivery_lng, merchant_id, pricing_model, merchant_commission_amount, service_fee",
+      )
+      .not("status", "in", '("cancelled")')
+      .order("created_at", { ascending: false })
+      .limit(limit);
+    if (error) return c.json({ error: error.message }, 500);
+
+    const rows = [];
+    for (const o of orders ?? []) {
+      const order = o as Record<string, unknown>;
+      const merchantId = String(order.merchant_id ?? "");
+      if (!merchantId) continue;
+      try {
+        const replay = await resolveDashOrderPricing(db, {
+          merchantId,
+          subtotal: Number(order.subtotal ?? 0),
+          discount: Number(order.discount ?? 0),
+          tip: Number(order.tip ?? 0),
+          dropoffLat: order.delivery_lat != null ? Number(order.delivery_lat) : null,
+          dropoffLng: order.delivery_lng != null ? Number(order.delivery_lng) : null,
+          paymentMethod: "cash",
+          requireCoverage: false,
+        });
+        if (!replay) continue;
+        const recordedTotal = Number(order.total ?? 0);
+        rows.push({
+          order_id: order.id,
+          recorded_total: recordedTotal,
+          replay_total: replay.customerTotal,
+          delta_jmd: Math.round((replay.customerTotal - recordedTotal) * 100) / 100,
+          recorded_commission: Number(order.merchant_commission_amount ?? 0),
+          replay_commission: replay.merchantCommissionAmount,
+          recorded_service_fee: Number(order.service_fee ?? 0),
+          replay_service_fee: replay.serviceFee,
+          pricing_model: order.pricing_model,
+          replay_v2_enabled: replay.pricingV2Enabled,
+        });
+      } catch {
+        // skip unrunnable rows
+      }
+    }
+    return c.json({ rows, count: rows.length });
+  });
+
+  /** Nightly-style reconciliation — snapshot vs columns vs ledger (GAP-10). */
+  admin.get("/pricing/reconciliation", async (c) => {
+    const db = getDb();
+    const { data: v2Orders, error } = await db
+      .from("orders")
+      .select("*")
+      .eq("pricing_model", "v2")
+      .not("status", "in", '("cancelled")')
+      .order("created_at", { ascending: false })
+      .limit(50);
+    if (error) return c.json({ error: error.message }, 500);
+
+    const violations: Array<Record<string, unknown>> = [];
+    for (const o of v2Orders ?? []) {
+      const order = o as Record<string, unknown>;
+      try {
+        const balance = computeCodTrialBalance({
+          subtotal: order.subtotal,
+          discount: order.discount,
+          merchantCommissionAmount: order.merchant_commission_amount,
+          serviceFee: order.service_fee,
+          deliveryFeePlatformAmount: order.delivery_fee_platform_amount,
+          deliveryFeeCourierAmount: order.delivery_fee_courier_amount,
+          taxFoodJmd: order.tax_food_jmd,
+          taxPlatformJmd: order.tax_platform_jmd,
+          tax: order.tax,
+          tip: order.tip,
+          courierTipNet: order.courier_tip_net,
+          total: order.total,
+          pricingModel: "v2",
+        });
+        const sum = Math.round(
+          (balance.platformDueJmd + balance.merchantDueJmd + balance.courierRetainedJmd) * 100,
+        ) / 100;
+        const total = Math.round(Number(order.total ?? 0) * 100) / 100;
+        if (Math.abs(sum - total) > 0.02) {
+          violations.push({
+            order_id: order.id,
+            expected_total: total,
+            computed_sum: sum,
+            balance,
+          });
+        }
+      } catch (e) {
+        violations.push({
+          order_id: order.id,
+          error: e instanceof Error ? e.message : "balance_error",
+        });
+      }
+    }
+    return c.json({
+      v2_orders_checked: (v2Orders ?? []).length,
+      violation_count: violations.length,
+      violations,
+    });
+  });
+
+  admin.get("/pricing/merchants/commission", async (c) => {
+    const db = getDb();
+    const { data, error } = await db
+      .from("merchants")
+      .select("id, name, slug, pricing_tier_id")
+      .eq("is_active", true)
+      .order("name");
+    if (error) return c.json({ error: error.message }, 500);
+
+    const { data: orders } = await db
+      .from("orders")
+      .select("merchant_id, merchant_commission_amount, subtotal")
+      .eq("pricing_model", "v2")
+      .not("status", "in", '("cancelled")');
+
+    const agg = new Map<string, { commission: number; food: number; orders: number }>();
+    for (const o of orders ?? []) {
+      const row = o as Record<string, unknown>;
+      const mid = String(row.merchant_id ?? "");
+      if (!mid) continue;
+      const cur = agg.get(mid) ?? { commission: 0, food: 0, orders: 0 };
+      cur.commission += Number(row.merchant_commission_amount ?? 0);
+      cur.food += Number(row.subtotal ?? 0);
+      cur.orders += 1;
+      agg.set(mid, cur);
+    }
+
+    const rows = (data ?? []).map((m: Record<string, unknown>) => {
+      const id = String(m.id);
+      const stats = agg.get(id) ?? { commission: 0, food: 0, orders: 0 };
+      return {
+        merchant_id: id,
+        name: m.name,
+        slug: m.slug,
+        tier_id: m.pricing_tier_id,
+        v2_order_count: stats.orders,
+        commission_total_jmd: Math.round(stats.commission * 100) / 100,
+        gross_food_jmd: Math.round(stats.food * 100) / 100,
+      };
+    });
+    return c.json({ merchants: rows });
   });
 
   app.route("/admin", admin);

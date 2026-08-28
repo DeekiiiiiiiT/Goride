@@ -299,41 +299,62 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
     let distanceKm: number | null = null;
     let pricingProfileVersion: number | null = null;
     let pricingSnapshot: Record<string, unknown> | null = null;
+    let taxFoodJmd: number | null = null;
+    let taxPlatformJmd: number | null = null;
+    let taxRateFoodPercent: number | null = null;
+    let taxRatePlatformPercent: number | null = null;
+    let courierTipNet: number | null = null;
+
+    // Minimum order — legacy + v2 (MINORDER-1)
+    const minRequired = resolveMinOrderSubtotal(
+      v2Pricing?.rules?.minOrderSubtotalJmd,
+      merchantMinOrder,
+    );
+    if (minRequired > 0 && discountedSubtotal < minRequired) {
+      return c.json({
+        error: `Minimum food order J$${minRequired.toFixed(0)} required`,
+        code: "min_order_not_met",
+        min_order_jmd: minRequired,
+      }, 400);
+    }
 
     if (v2Pricing?.pricingV2Enabled) {
-      const minRequired = resolveMinOrderSubtotal(
-        v2Pricing.rules.minOrderSubtotalJmd,
-        merchantMinOrder,
-      );
-      if (minRequired > 0 && discountedSubtotal < minRequired) {
-        return c.json({
-          error: `Minimum food order J$${minRequired.toFixed(0)} required`,
-          code: "min_order_not_met",
-          min_order_jmd: minRequired,
-        }, 400);
-      }
-
       pricingModel = "v2";
       deliveryFee = v2Pricing.deliveryFee;
       serviceFee = v2Pricing.serviceFee;
-      platformFee = serviceFee; // backward compat for legacy readers
+      platformFee = serviceFee; // legacy alias — service_fee is authoritative for Model B
       merchantCommissionAmount = v2Pricing.merchantCommissionAmount;
       deliveryFeePlatformAmount = v2Pricing.deliveryFeePlatformAmount;
       deliveryFeeCourierAmount = v2Pricing.deliveryFeeCourierAmount;
       distanceKm = v2Pricing.distanceKm;
       pricingProfileVersion = v2Pricing.pricingProfileVersion;
       processingFee = v2Pricing.processingFee;
+      taxFoodJmd = v2Pricing.taxFoodJmd;
+      taxPlatformJmd = v2Pricing.taxPlatformJmd;
+      taxRateFoodPercent = v2Pricing.taxRateFoodPercent;
+      taxRatePlatformPercent = v2Pricing.taxRatePlatformPercent;
+      courierTipNet = v2Pricing.courierTipNet;
       pricingSnapshot = {
         rules: v2Pricing.rules,
         tier_slug: v2Pricing.tierSlug,
         merchant_commission_rate: v2Pricing.merchantCommissionRate,
         free_delivery_applied: v2Pricing.freeDeliveryApplied,
+        promo_cost_jmd: v2Pricing.promoCostJmd,
         order_total: v2Pricing.orderTotal,
         processing_fee: v2Pricing.processingFee,
+        processing_fee_order: v2Pricing.processingFeeOrder,
+        processing_fee_tip: v2Pricing.processingFeeTip,
         customer_total: v2Pricing.customerTotal,
+        tax_food_jmd: v2Pricing.taxFoodJmd,
+        tax_platform_jmd: v2Pricing.taxPlatformJmd,
+        service_fee: v2Pricing.serviceFee,
+        delivery_fee: v2Pricing.deliveryFee,
+        delivery_fee_platform_amount: v2Pricing.deliveryFeePlatformAmount,
+        delivery_fee_courier_amount: v2Pricing.deliveryFeeCourierAmount,
+        distance_km_raw: v2Pricing.distanceKmRaw,
+        courier_tip_net: v2Pricing.courierTipNet,
       };
       total = v2Pricing.customerTotal;
-      // Override tax from v2 engine (uses market tax rate)
       pricing.tax = v2Pricing.tax;
     } else {
       // Legacy Model A: merchant commission_rate override → global settings → 5%
@@ -356,14 +377,6 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
       total = Math.round(
         (pricing.subtotal - discount + platformFee + deliveryFee + pricing.tax + tip) * 100,
       ) / 100;
-
-      if (merchantMinOrder != null && merchantMinOrder > 0 && discountedSubtotal < merchantMinOrder) {
-        return c.json({
-          error: `Minimum food order J$${merchantMinOrder.toFixed(0)} required`,
-          code: "min_order_not_met",
-          min_order_jmd: merchantMinOrder,
-        }, 400);
-      }
     }
 
     async function waitForOrderById(orderId: string) {
@@ -455,6 +468,11 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
       pricing_snapshot: pricingSnapshot,
       pricing_model: pricingModel,
       tax: pricing.tax,
+      tax_food_jmd: taxFoodJmd,
+      tax_platform_jmd: taxPlatformJmd,
+      tax_rate_food_percent: taxRateFoodPercent,
+      tax_rate_platform_percent: taxRatePlatformPercent,
+      courier_tip_net: courierTipNet,
       tip,
       discount,
       total,
@@ -464,9 +482,7 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
       delivery_lng: hasDropoffPin ? dropoffLng : null,
       delivery_instructions: body.deliveryInstructions,
       payment_method: paymentMethod,
-      payment_status: isCash
-        ? (pricingModel === "v2" ? "pending_collection" : "paid")
-        : "pending",
+      payment_status: isCash ? "pending_collection" : "pending",
       ...(appliedPromoCode ? { promo_code: appliedPromoCode } : {}),
     };
 

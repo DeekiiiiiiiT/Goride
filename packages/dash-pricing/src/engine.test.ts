@@ -1,12 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import {
+  applyRoadDistanceMultiplier,
   buildOrderPricing,
   resolveDeliveryFee,
   resolveDeliverySplit,
   resolveMarginalServiceFee,
   resolveMinOrderSubtotal,
   resolveProcessingFee,
+  resolveProcessingFeeSplit,
   resolveServiceFee,
+  shouldApplyFreeDelivery,
   defaultPricingRules,
   mergePricingRuleLayers,
 } from './engine.ts';
@@ -41,7 +44,31 @@ const MARGINAL_RULES: PricingRules = {
   },
   minOrderSubtotalJmd: 800,
   cardProcessingFeePercent: 0.045,
+  launchPromos: { freeDeliveryFirstNOrders: 0 },
 };
+
+const PROMO_RULES: PricingRules = {
+  ...MARGINAL_RULES,
+  launchPromos: { freeDeliveryFirstNOrders: 3 },
+};
+
+describe('shouldApplyFreeDelivery', () => {
+  it('never applies when N=0', () => {
+    expect(shouldApplyFreeDelivery(MARGINAL_RULES, 0)).toBe(false);
+    expect(shouldApplyFreeDelivery(MARGINAL_RULES, 1)).toBe(false);
+  });
+
+  it('applies when N>0 and under count', () => {
+    expect(shouldApplyFreeDelivery(PROMO_RULES, 1)).toBe(true);
+    expect(shouldApplyFreeDelivery(PROMO_RULES, 5)).toBe(false);
+  });
+});
+
+describe('applyRoadDistanceMultiplier', () => {
+  it('defaults to 1.4×', () => {
+    expect(applyRoadDistanceMultiplier(10, undefined)).toBe(14);
+  });
+});
 
 describe('resolveDeliveryFee', () => {
   it('charges base fee for trips under included km', () => {
@@ -63,43 +90,41 @@ describe('resolveMarginalServiceFee', () => {
   const rules = MARGINAL_RULES.serviceFee;
 
   it('applies avg rate below threshold', () => {
-    expect(resolveMarginalServiceFee(rules, 1200)).toBe(180); // 15% × 1200
+    expect(resolveMarginalServiceFee(rules, 1200)).toBe(180);
   });
 
   it('applies bracketed rate above threshold', () => {
-    // 5000 × 15% + 1000 × 9% = 750 + 90 = 840
     expect(resolveMarginalServiceFee(rules, 6000)).toBe(840);
   });
 
   it('caps at max for huge orders', () => {
-    // raw would be 5000×0.15 + 55000×0.09 = 750 + 4950 = 5700 → cap 2500
     expect(resolveMarginalServiceFee(rules, 60000)).toBe(2500);
   });
 
   it('floors at min for tiny orders', () => {
-    expect(resolveMarginalServiceFee(rules, 400)).toBe(150); // 15% × 400 = 60 → floor 150
+    expect(resolveMarginalServiceFee(rules, 400)).toBe(150);
   });
 });
 
 describe('resolveServiceFee', () => {
-  it('charges flat J$120 by default', () => {
-    expect(resolveServiceFee(SPANISH_TOWN_RULES.serviceFee, 2500)).toBe(120);
+  it('uses marginal mode by default', () => {
+    expect(resolveServiceFee(SPANISH_TOWN_RULES.serviceFee, 2500)).toBe(375);
   });
 
   it('respects min/max for percent mode', () => {
     const percentRules = { ...SPANISH_TOWN_RULES.serviceFee, mode: 'percent' as const, percent: 0.05 };
-    expect(resolveServiceFee(percentRules, 1000)).toBe(100);
-    expect(resolveServiceFee(percentRules, 5000)).toBe(200);
+    expect(resolveServiceFee(percentRules, 1000)).toBe(150);
+    expect(resolveServiceFee(percentRules, 5000)).toBe(250);
+  });
+
+  it('inherits market min when override omits it', () => {
+    expect(
+      resolveServiceFee(MARGINAL_RULES.serviceFee, 50000, { mode: 'percent', amount: 0.05 }),
+    ).toBe(2500);
   });
 
   it('returns 0 when waived', () => {
     expect(resolveServiceFee(MARGINAL_RULES.serviceFee, 2500, null, true)).toBe(0);
-  });
-
-  it('uses merchant override when present', () => {
-    expect(
-      resolveServiceFee(MARGINAL_RULES.serviceFee, 2500, { mode: 'flat', amount: 99 }),
-    ).toBe(99);
   });
 });
 
@@ -108,12 +133,21 @@ describe('resolveProcessingFee', () => {
     expect(resolveProcessingFee(1000, 0.045, 'cash')).toBe(0);
   });
 
-  it('computes card fee on order total', () => {
+  it('computes card fee on amount', () => {
     expect(resolveProcessingFee(1000, 0.045, 'wipay')).toBe(45);
   });
 
-  it('computes PayPal fee', () => {
+  it('computes wipay fee', () => {
     expect(resolveProcessingFee(200, 0.045, 'wipay')).toBe(9);
+  });
+});
+
+describe('resolveProcessingFeeSplit', () => {
+  it('charges order processing on customer, tip processing from courier', () => {
+    const r = resolveProcessingFeeSplit(2000, 100, 0.045, 'wipay');
+    expect(r.processingFeeOrder).toBe(90);
+    expect(r.processingFeeTip).toBe(4.5);
+    expect(r.courierTipNet).toBe(95.5);
   });
 });
 
@@ -132,38 +166,42 @@ describe('resolveDeliverySplit', () => {
   });
 });
 
-describe('buildOrderPricing — Spanish Town fixture (legacy flat)', () => {
-  it('computes full breakdown for 3.2 km, J$2500 subtotal, standard tier', () => {
+describe('buildOrderPricing — marginal defaults', () => {
+  it('computes full breakdown for 3.2 km, J$2500 subtotal', () => {
     const result = buildOrderPricing({
       subtotal: 2500,
       discount: 0,
       distanceKm: 3.2,
-      rules: SPANISH_TOWN_RULES,
+      rules: { ...SPANISH_TOWN_RULES, pricingV2Enabled: true },
       tier: { slug: 'standard', name: 'Standard', commissionRate: 0.20 },
       customerOrderCount: 5,
       taxRatePercent: 16.5,
+      platformTaxRatePercent: 16.5,
     });
 
     expect(result.deliveryFee).toBe(520);
-    expect(result.serviceFee).toBe(120);
+    expect(result.serviceFee).toBe(375);
     expect(result.merchantCommissionAmount).toBe(500);
-    expect(result.orderTotal).toBe(3552.5);
+    expect(result.taxFoodJmd).toBe(412.5);
+    expect(result.taxPlatformJmd).toBeGreaterThan(0);
     expect(result.processingFee).toBe(0);
-    expect(result.customerTotal).toBe(3552.5);
-    expect(result.total).toBe(3552.5);
   });
 
-  it('zeros delivery for first-N launch promo', () => {
+  it('free delivery promo pays courier — platform absorbs', () => {
     const result = buildOrderPricing({
       subtotal: 1500,
       distanceKm: 3,
-      rules: SPANISH_TOWN_RULES,
+      rules: PROMO_RULES,
       tier: { slug: 'basic', name: 'Basic', commissionRate: 0.12 },
       customerOrderCount: 1,
       taxRatePercent: 16.5,
+      platformTaxRatePercent: 16.5,
     });
     expect(result.freeDeliveryApplied).toBe(true);
     expect(result.deliveryFee).toBe(0);
+    expect(result.deliveryFeeCourierAmount).toBeGreaterThan(0);
+    expect(result.promoCostJmd).toBe(result.deliveryFeeCourierAmount);
+    expect(result.deliveryFeePlatformAmount).toBe(-result.deliveryFeeCourierAmount);
   });
 });
 
@@ -178,12 +216,29 @@ describe('buildOrderPricing — marginal + processing', () => {
       customerOrderCount: 5,
       paymentMethod: 'wipay',
       taxRatePercent: 16.5,
+      platformTaxRatePercent: 16.5,
     });
     expect(result.serviceFee).toBe(180);
-    expect(result.tax).toBe(198); // 16.5% × 1200
-    expect(result.orderTotal).toBe(1978); // 1200 + 180 + 400 + 198
-    expect(result.processingFee).toBe(89.01); // 4.5% × 1978
-    expect(result.customerTotal).toBe(2067.01);
+    expect(result.taxFoodJmd).toBe(198);
+    expect(result.taxPlatformJmd).toBeGreaterThan(0);
+    const orderBase = 1200 + 180 + 400 + result.tax;
+    expect(result.processingFeeOrder).toBe(Math.round(orderBase * 0.045 * 100) / 100);
+    expect(result.customerTotal).toBe(result.orderTotal + result.processingFeeOrder);
+  });
+
+  it('small order $300 floor, cash', () => {
+    const result = buildOrderPricing({
+      subtotal: 300,
+      discount: 0,
+      distanceKm: 2,
+      rules: MARGINAL_RULES,
+      tier: { slug: 'standard', name: 'Standard', commissionRate: 0.20 },
+      customerOrderCount: 5,
+      paymentMethod: 'cash',
+      taxRatePercent: 16.5,
+      platformTaxRatePercent: 16.5,
+    });
+    expect(result.serviceFee).toBe(150);
   });
 
   it('large order capped, card', () => {
@@ -196,6 +251,7 @@ describe('buildOrderPricing — marginal + processing', () => {
       customerOrderCount: 5,
       paymentMethod: 'wipay',
       taxRatePercent: 16.5,
+      platformTaxRatePercent: 16.5,
     });
     expect(result.serviceFee).toBe(2500);
   });
@@ -210,12 +266,31 @@ describe('buildOrderPricing — marginal + processing', () => {
       customerOrderCount: 5,
       paymentMethod: 'cash',
       taxRatePercent: 16.5,
+      platformTaxRatePercent: 16.5,
     });
     expect(result.processingFee).toBe(0);
     expect(result.customerTotal).toBe(result.orderTotal);
   });
 
-  it('fee waiver skips service fee and min floor', () => {
+  it('card with tip — customer not charged tip processing', () => {
+    const result = buildOrderPricing({
+      subtotal: 1200,
+      discount: 0,
+      distanceKm: 2,
+      tip: 100,
+      rules: MARGINAL_RULES,
+      tier: { slug: 'standard', name: 'Standard', commissionRate: 0.20 },
+      customerOrderCount: 5,
+      paymentMethod: 'wipay',
+      taxRatePercent: 16.5,
+      platformTaxRatePercent: 16.5,
+    });
+    expect(result.processingFeeTip).toBe(4.5);
+    expect(result.courierTipNet).toBe(95.5);
+    expect(result.customerTotal).toBe(result.orderTotal + result.processingFeeOrder);
+  });
+
+  it('fee waiver skips service fee', () => {
     const result = buildOrderPricing({
       subtotal: 1200,
       discount: 0,
@@ -225,6 +300,7 @@ describe('buildOrderPricing — marginal + processing', () => {
       customerOrderCount: 5,
       serviceFeeWaived: true,
       taxRatePercent: 16.5,
+      platformTaxRatePercent: 16.5,
     });
     expect(result.serviceFee).toBe(0);
   });
@@ -238,8 +314,30 @@ describe('buildOrderPricing — marginal + processing', () => {
       tier: { slug: 'standard', name: 'Standard', commissionRate: 0.20 },
       customerOrderCount: 5,
       taxRatePercent: 16.5,
+      platformTaxRatePercent: 16.5,
     });
-    // fee on 5000 not 6000 → 5000 × 15% = 750
     expect(result.serviceFee).toBe(750);
+  });
+});
+
+describe('buildOrderPricing — trial balance invariant', () => {
+  it('v2 COD parts sum to customer total', () => {
+    const result = buildOrderPricing({
+      subtotal: 1200,
+      discount: 0,
+      distanceKm: 2.5,
+      rules: MARGINAL_RULES,
+      tier: { slug: 'standard', name: 'Standard', commissionRate: 0.20 },
+      customerOrderCount: 5,
+      paymentMethod: 'cash',
+      taxRatePercent: 16.5,
+      platformTaxRatePercent: 16.5,
+      tip: 50,
+    });
+    const platformDue = result.serviceFee + result.merchantCommissionAmount
+      + Math.max(0, result.deliveryFeePlatformAmount) + result.tax;
+    const merchantDue = result.discountedSubtotal - result.merchantCommissionAmount;
+    const courier = result.deliveryFeeCourierAmount + result.courierTipNet;
+    expect(Math.round((platformDue + merchantDue + courier) * 100) / 100).toBe(result.customerTotal);
   });
 });

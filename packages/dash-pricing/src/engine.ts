@@ -8,6 +8,7 @@ import type {
   ServiceFeeOverride,
   ServiceFeeRules,
 } from './types.ts';
+import { resolveOrderGct } from './gct.ts';
 
 function roundMoney(value: number): number {
   return Math.round(value * 100) / 100;
@@ -76,20 +77,25 @@ function resolveLegacyServiceFee(
 ): number {
   const effective: ServiceFeeRules = override
     ? {
-        mode: override.mode,
-        flatJmd: override.mode === 'flat' ? override.amount : undefined,
-        percent: override.mode === 'percent' ? override.amount : undefined,
-        minJmd: override.min,
-        maxJmd: override.max,
+        mode: override.mode ?? rules.mode,
+        flatJmd: override.mode === 'flat' ? override.amount : rules.flatJmd,
+        percent: override.mode === 'percent' ? override.amount : rules.percent,
+        minJmd: override.min ?? rules.minJmd,
+        maxJmd: override.max ?? rules.maxJmd,
+        avgRate: rules.avgRate,
+        overrideRate: rules.overrideRate,
+        overrideThresholdJmd: rules.overrideThresholdJmd,
       }
     : rules;
 
   let fee = 0;
   if (effective.mode === 'flat') {
     fee = effective.flatJmd ?? 0;
-  } else {
+  } else if (effective.mode === 'percent') {
     const pct = effective.percent ?? 0.05;
     fee = discountedSubtotal * pct;
+  } else {
+    return resolveMarginalServiceFee(effective, discountedSubtotal);
   }
 
   const min = effective.minJmd ?? 0;
@@ -117,16 +123,46 @@ export function resolveServiceFee(
   return resolveLegacyServiceFee(rules, discountedSubtotal, null);
 }
 
-/** Card processing fee on pre-processing order total. */
+/** Card processing fee on a taxable/chargeable amount. */
 export function resolveProcessingFee(
-  orderTotal: number,
+  amount: number,
   cardProcessingFeePercent: number | undefined,
   paymentMethod: PaymentMethod | undefined,
 ): number {
   if (!isCardPayment(paymentMethod)) return 0;
   const rate = cardProcessingFeePercent ?? 0;
   if (rate <= 0) return 0;
-  return roundMoney(Math.max(0, orderTotal) * rate);
+  return roundMoney(Math.max(0, amount) * rate);
+}
+
+/** Split card processing: order portion on customer; tip portion from courier tip. */
+export function resolveProcessingFeeSplit(
+  orderBase: number,
+  tip: number,
+  cardProcessingFeePercent: number | undefined,
+  paymentMethod: PaymentMethod | undefined,
+): {
+  processingFeeOrder: number;
+  processingFeeTip: number;
+  processingFee: number;
+  courierTipNet: number;
+} {
+  const processingFeeOrder = resolveProcessingFee(
+    orderBase,
+    cardProcessingFeePercent,
+    paymentMethod,
+  );
+  const processingFeeTip = resolveProcessingFee(
+    tip,
+    cardProcessingFeePercent,
+    paymentMethod,
+  );
+  return {
+    processingFeeOrder,
+    processingFeeTip,
+    processingFee: roundMoney(processingFeeOrder + processingFeeTip),
+    courierTipNet: roundMoney(Math.max(0, tip - processingFeeTip)),
+  };
 }
 
 /** Distance-based delivery fee. */
@@ -146,6 +182,18 @@ export function resolveDeliveryFee(
     fee = Math.min(fee, rules.maxFeeJmd);
   }
   return roundMoney(fee);
+}
+
+/** Apply road-distance multiplier to raw haversine km. */
+export function applyRoadDistanceMultiplier(
+  rawKm: number | null | undefined,
+  multiplier: number | undefined,
+): number | null {
+  if (rawKm == null || !Number.isFinite(rawKm) || rawKm <= 0) return null;
+  const mult = multiplier != null && Number.isFinite(multiplier) && multiplier > 0
+    ? multiplier
+    : 1.4;
+  return roundMoney(rawKm * mult);
 }
 
 /** Split delivery fee between platform and courier. */
@@ -176,11 +224,11 @@ export function buildOrderPricing(input: PricingInput): PricingBreakdown {
   const subtotal = Math.max(0, input.subtotal);
   const discount = Math.max(0, input.discount ?? 0);
   const discountedSubtotal = roundMoney(Math.max(0, subtotal - discount));
-  const taxRatePercent = input.taxRatePercent;
-  if (taxRatePercent == null || !Number.isFinite(taxRatePercent)) {
+  const foodRatePercent = input.taxRatePercent;
+  if (foodRatePercent == null || !Number.isFinite(foodRatePercent)) {
     throw new Error('buildOrderPricing requires taxRatePercent from GCT resolver');
   }
-  const taxRate = taxRatePercent / 100;
+  const platformRatePercent = input.platformTaxRatePercent ?? foodRatePercent;
   const tip = Math.max(0, input.tip ?? 0);
 
   const { rate: merchantCommissionRate, amount: merchantCommissionAmount } =
@@ -197,34 +245,60 @@ export function buildOrderPricing(input: PricingInput): PricingBreakdown {
     input.serviceFeeWaived,
   );
 
-  const distanceKm =
-    input.distanceKm != null && Number.isFinite(input.distanceKm)
-      ? roundMoney(input.distanceKm)
-      : null;
+  const distanceKmRaw = input.distanceKmRaw ?? input.distanceKm ?? null;
+  const distanceKm = input.distanceKm != null && Number.isFinite(input.distanceKm)
+    ? roundMoney(input.distanceKm)
+    : null;
 
-  let deliveryFee = resolveDeliveryFee(input.rules.delivery, distanceKm);
+  const grossDeliveryFee = resolveDeliveryFee(input.rules.delivery, distanceKm);
   const freeDeliveryApplied = shouldApplyFreeDelivery(
     input.rules,
     input.customerOrderCount ?? 0,
     input.freeDelivery,
   );
+
+  let deliveryFee = grossDeliveryFee;
+  let deliveryFeePlatformAmount = 0;
+  let deliveryFeeCourierAmount = 0;
+  let promoCostJmd = 0;
+
   if (freeDeliveryApplied) {
     deliveryFee = 0;
+    const grossSplit = resolveDeliverySplit(
+      grossDeliveryFee,
+      input.rules.courierDeliveryShare,
+    );
+    deliveryFeeCourierAmount = grossSplit.courierAmount;
+    deliveryFeePlatformAmount = roundMoney(-grossSplit.courierAmount);
+    promoCostJmd = grossSplit.courierAmount;
+  } else {
+    const split = resolveDeliverySplit(grossDeliveryFee, input.rules.courierDeliveryShare);
+    deliveryFeePlatformAmount = split.platformAmount;
+    deliveryFeeCourierAmount = split.courierAmount;
   }
 
-  const { platformAmount: deliveryFeePlatformAmount, courierAmount: deliveryFeeCourierAmount } =
-    resolveDeliverySplit(deliveryFee, input.rules.courierDeliveryShare);
+  const gct = resolveOrderGct({
+    discountedSubtotal,
+    serviceFee,
+    deliveryFeePlatformAmount,
+    foodRatePercent,
+    platformRatePercent,
+    platformGctEnabled: input.platformGctEnabled,
+  });
 
-  const tax = roundMoney(discountedSubtotal * taxRate);
-  const orderTotal = roundMoney(
-    discountedSubtotal + serviceFee + deliveryFee + tax + tip,
+  const orderBase = roundMoney(
+    discountedSubtotal + serviceFee + deliveryFee + gct.tax,
   );
-  const processingFee = resolveProcessingFee(
-    orderTotal,
+  const orderTotal = roundMoney(orderBase + tip);
+
+  const proc = resolveProcessingFeeSplit(
+    orderBase,
+    tip,
     input.rules.cardProcessingFeePercent,
     input.paymentMethod,
   );
-  const customerTotal = roundMoney(orderTotal + processingFee);
+
+  const customerTotal = roundMoney(orderBase + tip + proc.processingFeeOrder);
 
   return {
     subtotal,
@@ -237,10 +311,19 @@ export function buildOrderPricing(input: PricingInput): PricingBreakdown {
     deliveryFeePlatformAmount,
     deliveryFeeCourierAmount,
     distanceKm,
-    tax,
+    distanceKmRaw,
+    tax: gct.tax,
+    taxFoodJmd: gct.taxFoodJmd,
+    taxPlatformJmd: gct.taxPlatformJmd,
+    taxRateFoodPercent: gct.taxRateFoodPercent,
+    taxRatePlatformPercent: gct.taxRatePlatformPercent,
     tip,
+    courierTipNet: proc.courierTipNet,
     orderTotal,
-    processingFee,
+    processingFee: proc.processingFee,
+    processingFeeOrder: proc.processingFeeOrder,
+    processingFeeTip: proc.processingFeeTip,
+    promoCostJmd,
     customerTotal,
     total: customerTotal,
     tierSlug: input.tier?.slug,
@@ -281,6 +364,8 @@ export function mergePricingRuleLayers(
   return acc;
 }
 
+const DEFAULTS = defaultPricingRules();
+
 /** Parse DB rules JSON (snake_case) into PricingRules. */
 export function parsePricingRules(raw: Record<string, unknown> | null | undefined): PricingRules {
   if (!raw || typeof raw !== 'object') {
@@ -300,37 +385,46 @@ export function parsePricingRules(raw: Record<string, unknown> | null | undefine
   return {
     pricingV2Enabled: Boolean(raw.pricing_v2_enabled),
     delivery: {
-      baseFeeJmd: Number(delivery.base_fee_jmd ?? 400),
-      includedKm: Number(delivery.included_km ?? 2),
-      perExtraKmJmd: Number(delivery.per_extra_km_jmd ?? 60),
-      maxFeeJmd: delivery.max_fee_jmd != null ? Number(delivery.max_fee_jmd) : undefined,
+      baseFeeJmd: Number(delivery.base_fee_jmd ?? DEFAULTS.delivery.baseFeeJmd),
+      includedKm: Number(delivery.included_km ?? DEFAULTS.delivery.includedKm),
+      perExtraKmJmd: Number(delivery.per_extra_km_jmd ?? DEFAULTS.delivery.perExtraKmJmd),
+      maxFeeJmd: delivery.max_fee_jmd != null
+        ? Number(delivery.max_fee_jmd)
+        : DEFAULTS.delivery.maxFeeJmd,
     },
     serviceFee: {
       mode,
-      flatJmd: serviceFee.flat_jmd != null ? Number(serviceFee.flat_jmd) : 120,
-      percent: serviceFee.percent != null ? Number(serviceFee.percent) : 0.05,
-      minJmd: serviceFee.min_jmd != null ? Number(serviceFee.min_jmd) : 100,
-      maxJmd: serviceFee.max_jmd != null ? Number(serviceFee.max_jmd) : 200,
-      avgRate: serviceFee.avg_rate != null ? Number(serviceFee.avg_rate) : undefined,
-      overrideRate: serviceFee.override_rate != null ? Number(serviceFee.override_rate) : undefined,
+      flatJmd: serviceFee.flat_jmd != null ? Number(serviceFee.flat_jmd) : DEFAULTS.serviceFee.flatJmd,
+      percent: serviceFee.percent != null ? Number(serviceFee.percent) : DEFAULTS.serviceFee.percent,
+      minJmd: serviceFee.min_jmd != null ? Number(serviceFee.min_jmd) : DEFAULTS.serviceFee.minJmd,
+      maxJmd: serviceFee.max_jmd != null ? Number(serviceFee.max_jmd) : DEFAULTS.serviceFee.maxJmd,
+      avgRate: serviceFee.avg_rate != null ? Number(serviceFee.avg_rate) : DEFAULTS.serviceFee.avgRate,
+      overrideRate: serviceFee.override_rate != null
+        ? Number(serviceFee.override_rate)
+        : DEFAULTS.serviceFee.overrideRate,
       overrideThresholdJmd: serviceFee.override_threshold_jmd != null
         ? Number(serviceFee.override_threshold_jmd)
-        : undefined,
+        : DEFAULTS.serviceFee.overrideThresholdJmd,
     },
-    courierDeliveryShare: Number(raw.courier_delivery_share ?? 0.8),
+    courierDeliveryShare: Number(raw.courier_delivery_share ?? DEFAULTS.courierDeliveryShare),
     launchPromos: {
-      freeDeliveryFirstNOrders: Number(launchPromos.free_delivery_first_n_orders ?? 0),
+      freeDeliveryFirstNOrders: Number(
+        launchPromos.free_delivery_first_n_orders ?? DEFAULTS.launchPromos?.freeDeliveryFirstNOrders ?? 0,
+      ),
     },
     cod: {
-      pauseThresholdJmd: Number(cod.pause_threshold_jmd ?? 10000),
+      pauseThresholdJmd: Number(cod.pause_threshold_jmd ?? DEFAULTS.cod?.pauseThresholdJmd ?? 10000),
     },
-    taxRatePercent: Number(raw.tax_rate_percent ?? 16.5),
+    taxRatePercent: Number(raw.tax_rate_percent ?? DEFAULTS.taxRatePercent),
+    roadDistanceMultiplier: raw.road_distance_multiplier != null
+      ? Number(raw.road_distance_multiplier)
+      : DEFAULTS.roadDistanceMultiplier,
     minOrderSubtotalJmd: raw.min_order_subtotal_jmd != null
       ? Number(raw.min_order_subtotal_jmd)
-      : undefined,
+      : DEFAULTS.minOrderSubtotalJmd,
     cardProcessingFeePercent: raw.card_processing_fee_percent != null
       ? Number(raw.card_processing_fee_percent)
-      : undefined,
+      : DEFAULTS.cardProcessingFeePercent,
   };
 }
 
@@ -363,6 +457,7 @@ export function serializePricingRules(rules: PricingRules): Record<string, unkno
       pause_threshold_jmd: rules.cod?.pauseThresholdJmd ?? 10000,
     },
     tax_rate_percent: rules.taxRatePercent ?? 16.5,
+    road_distance_multiplier: rules.roadDistanceMultiplier ?? 1.4,
     min_order_subtotal_jmd: rules.minOrderSubtotalJmd,
     card_processing_fee_percent: rules.cardProcessingFeePercent,
   };
@@ -378,16 +473,20 @@ export function defaultPricingRules(): PricingRules {
       maxFeeJmd: 1500,
     },
     serviceFee: {
-      mode: 'flat',
+      mode: 'marginal',
       flatJmd: 120,
       percent: 0.05,
-      minJmd: 100,
-      maxJmd: 200,
+      minJmd: 150,
+      maxJmd: 2500,
+      avgRate: 0.15,
+      overrideRate: 0.09,
+      overrideThresholdJmd: 5000,
     },
     courierDeliveryShare: 0.8,
-    launchPromos: { freeDeliveryFirstNOrders: 3 },
+    launchPromos: { freeDeliveryFirstNOrders: 0 },
     cod: { pauseThresholdJmd: 10000 },
     taxRatePercent: 16.5,
+    roadDistanceMultiplier: 1.4,
     minOrderSubtotalJmd: 800,
     cardProcessingFeePercent: 0.045,
   };

@@ -48,6 +48,8 @@ export type PricingRules = {
   launchPromos?: LaunchPromoRules;
   cod?: CodRules;
   taxRatePercent?: number;
+  /** Road-distance multiplier applied to haversine km (default 1.4) */
+  roadDistanceMultiplier?: number;
   /** Checkout gate — minimum food subtotal before order can proceed */
   minOrderSubtotalJmd?: number;
   /** Card/wallet processing fee rate applied to order total (e.g. 0.045) */
@@ -66,9 +68,15 @@ export type PaymentMethod = 'wipay' | 'cash';
 export type PricingInput = {
   subtotal: number;
   discount?: number;
+  /** Merchant food GCT rate (0 when unregistered) */
   taxRatePercent?: number;
+  /** Roam platform GCT rate on service + delivery platform share */
+  platformTaxRatePercent?: number;
+  platformGctEnabled?: boolean;
   tip?: number;
   distanceKm?: number | null;
+  /** Raw haversine km before road multiplier (audit trail) */
+  distanceKmRaw?: number | null;
   rules: PricingRules;
   tier?: MerchantTier | null;
   merchantCommissionRateOverride?: number | null;
@@ -93,11 +101,21 @@ export type PricingBreakdown = {
   deliveryFeePlatformAmount: number;
   deliveryFeeCourierAmount: number;
   distanceKm: number | null;
+  distanceKmRaw?: number | null;
   tax: number;
+  taxFoodJmd: number;
+  taxPlatformJmd: number;
+  taxRateFoodPercent: number;
+  taxRatePlatformPercent: number;
   tip: number;
-  /** Pre-processing order total */
+  courierTipNet: number;
+  /** Pre-processing order total (includes tip) */
   orderTotal: number;
   processingFee: number;
+  processingFeeOrder: number;
+  processingFeeTip: number;
+  /** Platform marketing cost when free-delivery promo funds courier */
+  promoCostJmd: number;
   /** Final amount customer pays */
   customerTotal: number;
   /** Alias for customerTotal (backward compat) */

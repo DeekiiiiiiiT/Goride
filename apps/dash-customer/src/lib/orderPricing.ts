@@ -29,6 +29,8 @@ export type OrderTotals = {
   deliveryFee: number;
   serviceFee: number;
   tax: number;
+  taxFoodJmd?: number;
+  taxPlatformJmd?: number;
   tip: number;
   orderTotal: number;
   processingFee: number;
@@ -43,6 +45,8 @@ export type CheckoutPricing = {
   deliveryFee: number;
   serviceFee: number;
   tax: number;
+  taxFoodJmd?: number;
+  taxPlatformJmd?: number;
   taxRatePercent: number;
   gctRegistered?: boolean;
   orderTotal: number;
@@ -129,20 +133,17 @@ export function calculateOrderTotals(
     const q = options.v2Quote;
     const serviceFee = roundMoney(Math.max(0, q.serviceFee));
     const tax = roundMoney(Math.max(0, q.tax));
-    const orderTotal = roundMoney(
-      discountedSubtotal + serviceFee + safeDeliveryFee + tax + safeTip,
-    );
-    const procRate = q.cardProcessingFeePercent ?? 0;
-    const processingFee = isCardPayment(options.paymentMethod)
-      ? roundMoney(orderTotal * procRate)
-      : 0;
-    const total = roundMoney(orderTotal + processingFee);
+    const orderTotal = roundMoney(Math.max(0, q.orderTotal));
+    const processingFee = roundMoney(Math.max(0, q.processingFee));
+    const total = roundMoney(Math.max(0, q.total));
     return {
       discount,
       discountedSubtotal,
       deliveryFee: safeDeliveryFee,
       serviceFee,
       tax,
+      taxFoodJmd: q.taxFoodJmd,
+      taxPlatformJmd: q.taxPlatformJmd,
       tip: safeTip,
       orderTotal,
       processingFee,
@@ -231,8 +232,11 @@ export async function fetchMerchantCheckoutPricing(
     processing_fee?: number;
     order_total?: number;
     tax?: number;
+    tax_food_jmd?: number;
+    tax_platform_jmd?: number;
     tax_rate_percent?: number;
     gct_registered?: boolean;
+    processing_fee_order?: number;
     total?: number;
     distance_km?: number | null;
     tier?: string;
@@ -250,6 +254,8 @@ export async function fetchMerchantCheckoutPricing(
     const deliveryFee = Math.max(0, Number(data.delivery_fee ?? 0));
     const serviceFee = Math.max(0, Number(data.service_fee ?? 0));
     const tax = Math.max(0, Number(data.tax ?? 0));
+    const taxFoodJmd = Math.max(0, Number(data.tax_food_jmd ?? 0));
+    const taxPlatformJmd = Math.max(0, Number(data.tax_platform_jmd ?? 0));
     const taxRatePercent = Math.max(0, Number(data.tax_rate_percent ?? 0));
     const orderTotal = Math.max(0, Number(data.order_total ?? 0));
     const processingFee = Math.max(0, Number(data.processing_fee ?? 0));
@@ -261,6 +267,8 @@ export async function fetchMerchantCheckoutPricing(
       deliveryFee,
       serviceFee,
       tax,
+      taxFoodJmd,
+      taxPlatformJmd,
       taxRatePercent,
       gctRegistered: data.gct_registered,
       orderTotal,
@@ -284,6 +292,8 @@ export async function fetchMerchantCheckoutPricing(
   const taxRatePercent =
     typeof data.tax_rate_percent === 'number' && Number.isFinite(data.tax_rate_percent)
       ? Math.max(0, data.tax_rate_percent)
+      : data.gct_registered === false
+      ? 0
       : GCT_RATE_FALLBACK_PERCENT;
   return {
     merchantId: resolvedMerchantId,

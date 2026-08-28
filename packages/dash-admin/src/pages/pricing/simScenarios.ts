@@ -124,13 +124,21 @@ export type SimBreakdown = {
   serviceFee?: number;
   deliveryFee?: number;
   tax?: number;
+  taxFoodJmd?: number;
+  taxPlatformJmd?: number;
   tip?: number;
   orderTotal?: number;
   processingFee?: number;
+  processingFeeOrder?: number;
   customerTotal?: number;
   total?: number;
   distanceKm?: number | null;
   freeDeliveryApplied?: boolean;
+  merchantCommissionAmount?: number;
+  deliveryFeeCourierAmount?: number;
+  deliveryFeePlatformAmount?: number;
+  courierTipNet?: number;
+  promoCostJmd?: number;
 };
 
 export type MarketRulesForSim = {
@@ -227,11 +235,19 @@ export function pickBreakdown(raw: Record<string, unknown> | null): SimBreakdown
     serviceFee: Number(raw.serviceFee ?? 0),
     deliveryFee: Number(raw.deliveryFee ?? 0),
     tax: Number(raw.tax ?? 0),
+    taxFoodJmd: Number(raw.taxFoodJmd ?? 0),
+    taxPlatformJmd: Number(raw.taxPlatformJmd ?? 0),
     tip: Number(raw.tip ?? 0),
     orderTotal: Number(raw.orderTotal ?? 0),
     processingFee: Number(raw.processingFee ?? 0),
+    processingFeeOrder: Number(raw.processingFeeOrder ?? 0),
     customerTotal: Number(raw.customerTotal ?? raw.total ?? 0),
     total: Number(raw.total ?? 0),
+    merchantCommissionAmount: Number(raw.merchantCommissionAmount ?? 0),
+    deliveryFeeCourierAmount: Number(raw.deliveryFeeCourierAmount ?? 0),
+    deliveryFeePlatformAmount: Number(raw.deliveryFeePlatformAmount ?? 0),
+    courierTipNet: Number(raw.courierTipNet ?? raw.tip ?? 0),
+    promoCostJmd: Number(raw.promoCostJmd ?? 0),
     distanceKm: raw.distanceKm != null && Number.isFinite(Number(raw.distanceKm))
       ? Number(raw.distanceKm)
       : null,

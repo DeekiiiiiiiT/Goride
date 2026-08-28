@@ -1614,6 +1614,15 @@ export type MerchantTierRow = {
   promo_eligible: boolean;
   sort_order: number;
   is_active: boolean;
+  merchant_count?: number;
+};
+
+export type PricingRevenueSummary = {
+  v2_order_count: number;
+  commission_total_jmd: number;
+  service_fee_total_jmd: number;
+  gross_food_jmd: number;
+  take_rate_percent: number;
 };
 
 export type PricingMarketSummary = {
@@ -1661,6 +1670,7 @@ export type PricingRulesPayload = {
   cod?: { pause_threshold_jmd?: number };
   launch_promos?: { free_delivery_first_n_orders?: number };
   tax_rate_percent?: number;
+  road_distance_multiplier?: number;
   min_order_subtotal_jmd?: number;
   card_processing_fee_percent?: number;
 };
@@ -1683,7 +1693,16 @@ export function fetchPricingOverview(accessToken: string) {
     parishes: PricingParishSummary[];
     global: { id: string; version: number; has_override: boolean } | null;
     tiers: MerchantTierRow[];
+    revenue?: PricingRevenueSummary;
+    recent_changes?: Array<Record<string, unknown>>;
   }>(accessToken, '/admin/pricing/overview');
+}
+
+export function fetchPricingBacktest(accessToken: string, limit = 28) {
+  return deliveryFetch<{
+    rows: Array<Record<string, unknown>>;
+    count: number;
+  }>(accessToken, `/admin/pricing/backtest?limit=${limit}`);
 }
 
 export function fetchDefaultPricing(accessToken: string) {

@@ -3,6 +3,8 @@
  * Tracks cash collected on delivery and auto-pauses at threshold.
  */
 
+import { computeCodTrialBalance, assertCodTrialBalance } from "../_shared/dashPricing.ts";
+
 // deno-lint-ignore no-explicit-any
 type Sb = { from: (t: string) => any };
 
@@ -14,6 +16,15 @@ export type CashCollectionInput = {
   /** Platform + merchant portion courier must remit */
   platformDueJmd: number;
   merchantDueJmd: number;
+  /** Full split for audit metadata */
+  split?: CodTrialBalance;
+};
+
+export type CodTrialBalance = {
+  platformDueJmd: number;
+  merchantDueJmd: number;
+  courierRetainedJmd: number;
+  gctDueJmd: number;
 };
 
 function roundMoney(v: number): number {
@@ -61,6 +72,15 @@ export async function recordCashCollection(
     });
   }
 
+  const meta = input.split
+    ? JSON.stringify({
+      platform_due_jmd: input.split.platformDueJmd,
+      merchant_due_jmd: input.split.merchantDueJmd,
+      courier_retained_jmd: input.split.courierRetainedJmd,
+      gct_due_jmd: input.split.gctDueJmd,
+    })
+    : null;
+
   await sb.from("courier_cash_events").insert({
     courier_id: input.courierId,
     order_id: input.orderId,
@@ -68,6 +88,7 @@ export async function recordCashCollection(
     amount_jmd: ledgerAmount,
     balance_after: balanceAfter,
     notes: `COD collection: platform J$${input.platformDueJmd}, merchant J$${input.merchantDueJmd}`,
+    metadata: meta,
   });
 
   return { balanceAfter, isPaused };
@@ -153,44 +174,75 @@ export async function handleOrderDelivered(
       .eq("id", orderId);
 
     if (courierId) {
-      const { platformDueJmd, merchantDueJmd } = computeCodLedgerAmounts(row);
+      const split = computeCodLedgerAmounts(row);
       await recordCashCollection(sb, {
         courierId,
         orderId,
         collectedAmountJmd: Number(row.total ?? 0),
-        platformDueJmd,
-        merchantDueJmd,
+        platformDueJmd: split.platformDueJmd,
+        merchantDueJmd: split.merchantDueJmd,
+        split,
       });
     }
   }
 }
 
-export function computeCodLedgerAmounts(order: Record<string, unknown>): {
-  platformDueJmd: number;
-  merchantDueJmd: number;
-} {
+export function computeCodLedgerAmounts(order: Record<string, unknown>): CodTrialBalance {
   const subtotal = Number(order.subtotal ?? 0);
   const discount = Number(order.discount ?? 0);
   const discountedSubtotal = Math.max(0, subtotal - discount);
-  const merchantCommission = Number(order.merchant_commission_amount ?? 0);
-  const serviceFee = Number(order.service_fee ?? order.platform_fee ?? 0);
-  const deliveryPlatform = Number(order.delivery_fee_platform_amount ?? 0);
+  const total = Number(order.total ?? 0);
 
-  const platformDueJmd = roundMoney(serviceFee + merchantCommission + deliveryPlatform);
-  const merchantDueJmd = roundMoney(Math.max(0, discountedSubtotal - merchantCommission));
+  const balance = computeCodTrialBalance({
+    subtotal,
+    discount,
+    merchantCommissionAmount: Number(order.merchant_commission_amount ?? 0),
+    serviceFee: Number(order.service_fee ?? order.platform_fee ?? 0),
+    deliveryFeePlatformAmount: Number(order.delivery_fee_platform_amount ?? 0),
+    deliveryFeeCourierAmount: Number(order.delivery_fee_courier_amount ?? 0),
+    taxFoodJmd: Number(order.tax_food_jmd ?? 0),
+    taxPlatformJmd: Number(order.tax_platform_jmd ?? 0),
+    tax: Number(order.tax ?? 0),
+    tip: Number(order.tip ?? 0),
+    courierTipNet: order.courier_tip_net != null ? Number(order.courier_tip_net) : undefined,
+    total,
+    pricingModel: order.pricing_model === "v2" ? "v2" : "legacy",
+    platformFee: Number(order.platform_fee ?? 0),
+    deliveryFee: Number(order.delivery_fee ?? 0),
+  });
 
-  // Legacy Model A: platform fee only; merchant gets food portion
-  if (order.pricing_model !== "v2") {
-    const platformFee = Number(order.platform_fee ?? 0);
-    const deliveryFee = Number(order.delivery_fee ?? 0);
-    const tip = Number(order.tip ?? 0);
-    const tax = Number(order.tax ?? 0);
-    const total = Number(order.total ?? 0);
-    return {
-      platformDueJmd: roundMoney(platformFee),
-      merchantDueJmd: roundMoney(Math.max(0, total - platformFee - deliveryFee - tip)),
-    };
-  }
+  assertCodTrialBalance(balance, total);
 
-  return { platformDueJmd, merchantDueJmd };
+  return balance;
+}
+
+/** Backfill ledger for delivered cash orders missing events (one-time ops). */
+export async function backfillCashLedgerForOrder(
+  sb: Sb,
+  order: Record<string, unknown>,
+): Promise<boolean> {
+  const paymentMethod = String(order.payment_method ?? "");
+  const status = String(order.status ?? "");
+  const courierId = order.courier_id ? String(order.courier_id) : null;
+  if (paymentMethod !== "cash" || !courierId) return false;
+  if (status !== "delivered" && status !== "completed") return false;
+
+  const orderId = String(order.id);
+  const { data: existing } = await sb
+    .from("courier_cash_events")
+    .select("id")
+    .eq("order_id", orderId)
+    .maybeSingle();
+  if (existing) return false;
+
+  const split = computeCodLedgerAmounts(order);
+  await recordCashCollection(sb, {
+    courierId,
+    orderId,
+    collectedAmountJmd: Number(order.total ?? 0),
+    platformDueJmd: split.platformDueJmd,
+    merchantDueJmd: split.merchantDueJmd,
+    split,
+  });
+  return true;
 }

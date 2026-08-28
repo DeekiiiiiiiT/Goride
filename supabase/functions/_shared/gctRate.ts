@@ -106,6 +106,25 @@ export async function resolveMerchantFoodGctRate(
   };
 }
 
+/** Platform GCT rate — Roam service fee + delivery platform share. */
+export function effectivePlatformGctRatePercent(config: GctConfig): number {
+  if (!config.enabled) return 0;
+  return config.ratePercent;
+}
+
+/** Resolve food + platform GCT rates for Model B pricing. */
+export async function resolveOrderGctRates(
+  // deno-lint-ignore no-explicit-any
+  sb: { schema?: (s: string) => { from: (t: string) => any }; from: (t: string) => any },
+  merchantId: string,
+): Promise<MerchantGctResolution & { platformRatePercent: number }> {
+  const food = await resolveMerchantFoodGctRate(sb, merchantId);
+  const platformRatePercent = food.gctEnabled
+    ? effectivePlatformGctRatePercent({ ratePercent: food.globalRatePercent, enabled: true })
+    : 0;
+  return { ...food, platformRatePercent };
+}
+
 /** POS in-store rate — uses merchant pos_tax_rate_percent when set, else global. */
 export async function resolvePosGctRate(
   // deno-lint-ignore no-explicit-any
