@@ -155,6 +155,9 @@ function mockSb(opts: {
       }
       throw new Error(`unexpected table ${table}`);
     },
+    rpc(_fn: string, _args?: Record<string, unknown>) {
+      return Promise.resolve({ data: null, error: null });
+    },
   };
 }
 

@@ -30,6 +30,7 @@ import {
   createParish,
   createTownFromBoundary,
   createZone,
+  deleteMarket,
   deleteParish,
   deleteZone,
   fetchCustomerDeliveryZones,
@@ -44,6 +45,8 @@ import {
   fetchMarketCoverageCells,
   restoreCoverageVersion,
   formatMerchantRecomputeToast,
+  promoteMarketBoundary,
+  unionCommunitiesToMarket,
   updateMarket,
   updateParish,
   updateParishOutline,
@@ -191,10 +194,15 @@ type TownCardProps = {
   canWrite: boolean;
   expanded: boolean;
   parishBoundaryMode?: boolean;
+  parishPcode?: string | null;
+  accessToken?: string;
   onToggleExpanded: () => void;
   onToggleActive: (m: DashMarketRow) => void;
   onOpenMap: (opts?: { editor?: EditorTarget }) => void;
   onRemoveZone: (marketId: string, zone: DashZoneRow) => void;
+  onDeleteTown: (town: DashMarketRow) => void | Promise<void>;
+  onApplyOfficialBorder: (town: DashMarketRow) => void | Promise<void>;
+  onCommunitiesUnioned?: () => void;
 };
 
 function TownCard({
@@ -202,14 +210,77 @@ function TownCard({
   canWrite,
   expanded,
   parishBoundaryMode,
+  parishPcode,
+  accessToken,
   onToggleExpanded,
   onToggleActive,
   onOpenMap,
   onRemoveZone,
+  onDeleteTown,
+  onApplyOfficialBorder,
+  onCommunitiesUnioned,
 }: TownCardProps) {
   const zones = m.zones ?? [];
   const includes = zones.filter((z) => z.kind === 'include');
   const excludes = zones.filter((z) => z.kind === 'exclude');
+  const townPcode = m.pcode?.trim() || null;
+  const [showUnion, setShowUnion] = useState(false);
+  const [applyBusy, setApplyBusy] = useState(false);
+  const [communities, setCommunities] = useState<
+    Array<{ pcode: string; name: string }>
+  >([]);
+  const [selectedPcodes, setSelectedPcodes] = useState<string[]>([]);
+  const [unionBusy, setUnionBusy] = useState(false);
+
+  useEffect(() => {
+    if (!showUnion || !accessToken || !parishPcode) return;
+    let cancelled = false;
+    void listAdminBoundaries(accessToken, { admin_level: 3 })
+      .then((r) => {
+        if (cancelled) return;
+        setCommunities(
+          (r.boundaries ?? [])
+            .filter((b) =>
+              townPcode
+                ? b.parent_pcode === townPcode
+                : String(b.parent_pcode ?? '').startsWith(parishPcode),
+            )
+            .map((b) => ({ pcode: b.pcode, name: b.name })),
+        );
+      })
+      .catch(() => {
+        if (!cancelled) setCommunities([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [showUnion, accessToken, parishPcode, townPcode]);
+
+  const applyOfficialBorder = async () => {
+    if (!townPcode) return;
+    setApplyBusy(true);
+    try {
+      await onApplyOfficialBorder(m);
+    } finally {
+      setApplyBusy(false);
+    }
+  };
+
+  const runUnion = async () => {
+    if (!accessToken || selectedPcodes.length === 0) return;
+    setUnionBusy(true);
+    try {
+      await unionCommunitiesToMarket(accessToken, m.id, selectedPcodes, m.name);
+      toast.success(`Built border from ${selectedPcodes.length} communities`);
+      setShowUnion(false);
+      setSelectedPcodes([]);
+      onCommunitiesUnioned?.();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Union failed');
+    } finally {
+      setUnionBusy(false);
+    }
+  };
 
   return (
     <div className="rounded-lg border border-slate-800 bg-slate-950/40 overflow-hidden">
@@ -253,24 +324,34 @@ function TownCard({
           Open map
         </button>
         {canWrite && (
-          <button
-            type="button"
-            onClick={() => onToggleActive(m)}
-            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-              m.is_active ? 'bg-emerald-500' : 'bg-slate-700'
-            }`}
-            title={
-              includeZones(m).length === 0 && !m.is_active
-                ? 'Add a town border first'
-                : undefined
-            }
-          >
-            <span
-              className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                m.is_active ? 'translate-x-6' : 'translate-x-1'
+          <>
+            <button
+              type="button"
+              onClick={() => onToggleActive(m)}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                m.is_active ? 'bg-emerald-500' : 'bg-slate-700'
               }`}
-            />
-          </button>
+              title={
+                includeZones(m).length === 0 && !m.is_active
+                  ? 'Add a town border first'
+                  : undefined
+              }
+            >
+              <span
+                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                  m.is_active ? 'translate-x-6' : 'translate-x-1'
+                }`}
+              />
+            </button>
+            <button
+              type="button"
+              onClick={() => onDeleteTown(m)}
+              className="p-1.5 rounded hover:bg-slate-800 text-red-400"
+              title="Delete town"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+          </>
         )}
       </div>
 
@@ -316,6 +397,16 @@ function TownCard({
 
           {canWrite && (
             <div className="flex flex-wrap gap-2">
+              {townPcode && includes.length === 0 ? (
+                <button
+                  type="button"
+                  disabled={applyBusy}
+                  onClick={() => void applyOfficialBorder()}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-emerald-500/40 text-xs text-emerald-200 disabled:opacity-50"
+                >
+                  {applyBusy ? 'Applying…' : `Apply official border (${townPcode})`}
+                </button>
+              ) : null}
               <button
                 type="button"
                 onClick={() => {
@@ -343,6 +434,76 @@ function TownCard({
               >
                 Draw non-delivery zone
               </button>
+              {parishPcode && accessToken ? (
+                <button
+                  type="button"
+                  onClick={() => setShowUnion((v) => !v)}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-amber-500/40 text-xs text-amber-200"
+                >
+                  Build from communities…
+                </button>
+              ) : null}
+            </div>
+          )}
+
+          {showUnion && parishPcode && (
+            <div className="rounded-lg border border-slate-700 bg-slate-950/70 p-3 space-y-2">
+              <p className="text-xs text-slate-400">
+                {townPcode
+                  ? `Pick admin3 communities under ${m.name} (${townPcode}) to build the delivery border.`
+                  : 'These towns often sit at community level — pick admin3 communities under this parish to build the delivery border.'}
+              </p>
+              {communities.length === 0 ? (
+                <p className="text-xs text-slate-500">No communities in catalog for this parish.</p>
+              ) : (
+                <div className="max-h-40 overflow-y-auto space-y-1">
+                  {communities.map((c) => {
+                    const checked = selectedPcodes.includes(c.pcode);
+                    return (
+                      <label
+                        key={c.pcode}
+                        className="flex items-center gap-2 text-xs text-slate-200"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() =>
+                            setSelectedPcodes((prev) =>
+                              checked
+                                ? prev.filter((p) => p !== c.pcode)
+                                : [...prev, c.pcode],
+                            )
+                          }
+                        />
+                        <span>
+                          {c.name}{' '}
+                          <span className="text-slate-500">({c.pcode})</span>
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  disabled={unionBusy || selectedPcodes.length === 0}
+                  onClick={() => void runUnion()}
+                  className="px-3 py-1.5 rounded-lg bg-amber-500 text-slate-950 text-xs font-semibold disabled:opacity-50"
+                >
+                  {unionBusy ? 'Building…' : `Union ${selectedPcodes.length || ''}`}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowUnion(false);
+                    setSelectedPcodes([]);
+                  }}
+                  className="px-3 py-1.5 rounded-lg border border-slate-700 text-xs text-slate-300"
+                >
+                  Cancel
+                </button>
+              </div>
             </div>
           )}
         </div>
@@ -1999,15 +2160,51 @@ export function MarketsPage() {
     }
   };
 
-  const townProps = (town: DashMarketRow): TownCardProps => ({
+  const removeTown = async (town: DashMarketRow) => {
+    if (!canWrite) return;
+    const ok = await confirm({
+      title: `Delete town “${town.name}”?`,
+      description:
+        'Removes this town and all its zones. Merchants linked to it will be unassigned. This cannot be undone.',
+      confirmLabel: 'Delete town',
+      variant: 'danger',
+    });
+    if (!ok) return;
+    try {
+      await deleteMarket(session.access_token, town.id);
+      toast.success(`Deleted ${town.name}`);
+      if (mapTownId === town.id) setMapTownId(null);
+      await load();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Delete town failed');
+    }
+  };
+
+  const applyOfficialBorder = async (town: DashMarketRow) => {
+    if (!canWrite || !town.pcode) return;
+    try {
+      await promoteMarketBoundary(session.access_token, town.id, town.pcode, town.name);
+      toast.success(`Official border applied (${town.pcode})`);
+      await load();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Apply official border failed');
+    }
+  };
+
+  const townProps = (town: DashMarketRow, parish?: DashParishRow): TownCardProps => ({
     town,
     canWrite,
     expanded: townExpanded[town.id] === true,
+    parishPcode: parish?.pcode ?? null,
+    accessToken: session.access_token,
     onToggleExpanded: () =>
       setTownExpanded((t) => ({ ...t, [town.id]: !(t[town.id] === true) })),
     onToggleActive: (m) => void toggleActive(m),
     onOpenMap: (opts) => openTownMap(town.id, opts),
     onRemoveZone: (id, z) => void removeZone(id, z),
+    onDeleteTown: (t) => void removeTown(t),
+    onApplyOfficialBorder: (t) => applyOfficialBorder(t),
+    onCommunitiesUnioned: () => void load(),
   });
 
   const renderParishBlock = (p: DashParishRow) => {
@@ -2204,7 +2401,7 @@ export function MarketsPage() {
               towns.map((t) => (
                 <TownCard
                   key={t.id}
-                  {...townProps(t)}
+                  {...townProps(t, p)}
                   parishBoundaryMode={parishBoundaryMode}
                 />
               ))

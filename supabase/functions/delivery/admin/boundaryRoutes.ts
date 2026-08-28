@@ -85,15 +85,8 @@ function resolveGeoJson(f: BoundaryUpsertRow): Record<string, unknown> | null {
   return null;
 }
 
-export function registerBoundaryAdminRoutes(app: Hono) {
-  const admin = new Hono();
-
-  admin.use("*", async (c, next) => {
-    const result = await requireProductAdmin(c, "dash");
-    if (result instanceof Response) return result;
-    c.set("adminUser", result);
-    await next();
-  });
+export function attachBoundaryAdminRoutes(admin: Hono) {
+  // Mounted on the markets admin Hono BEFORE /:id catch-alls (OPEN route clash fix).
 
   admin.get("/boundaries", async (c) => {
     const db = getDb();
@@ -424,6 +417,17 @@ export function registerBoundaryAdminRoutes(app: Hono) {
     if (updErr) return c.json({ error: updErr.message }, 500);
     return c.json({ parish });
   });
+}
 
+/** @deprecated Prefer attachBoundaryAdminRoutes on the markets admin Hono (avoids /:id clash). */
+export function registerBoundaryAdminRoutes(app: Hono) {
+  const admin = new Hono();
+  admin.use("*", async (c, next) => {
+    const result = await requireProductAdmin(c, "dash");
+    if (result instanceof Response) return result;
+    c.set("adminUser", result);
+    await next();
+  });
+  attachBoundaryAdminRoutes(admin);
   app.route("/admin/markets", admin);
 }

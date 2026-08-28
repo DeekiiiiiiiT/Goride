@@ -9,6 +9,7 @@ import {
   requireDashWrite,
 } from "./dashPermissions.ts";
 import { getDb, writeKvAudit } from "./merchantAdminShared.ts";
+import { attachBoundaryAdminRoutes } from "./boundaryRoutes.ts";
 import {
   buildParishSyntheticZone,
   evaluateCoverage,
@@ -26,6 +27,20 @@ import {
   polygonSummary,
   zoneSnapshotPayload,
 } from "./coveragePlatform.ts";
+
+const MARKET_ID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function requireMarketIdParam(
+  c: { req: { param: (k: string) => string }; json: (b: unknown, s?: number) => Response },
+  key = "id",
+) {
+  const id = String(c.req.param(key) ?? "").trim();
+  if (!MARKET_ID_RE.test(id)) {
+    return c.json({ error: "Invalid market id" }, 400);
+  }
+  return null;
+}
 import {
   asCoverageZones,
   loadPublishedZonesForMarket,
@@ -222,6 +237,9 @@ export function registerMarketAdminRoutes(app: Hono) {
     c.set("adminUser", result);
     await next();
   });
+
+  // Static catalog paths must register before /:id (otherwise "boundaries" is treated as a market UUID).
+  attachBoundaryAdminRoutes(admin);
 
   admin.get("/", async (c) => {
     const db = getDb();
@@ -628,6 +646,17 @@ export function registerMarketAdminRoutes(app: Hono) {
       return c.json({ error: "Publish requires a valid delivery area" }, 400);
     }
 
+    const zonesJson: Record<string, unknown>[] = [];
+    for (const z of zones ?? []) {
+      const row = z as Record<string, unknown>;
+      let multiPolygon = row.multiPolygon;
+      if (!multiPolygon && row.id && row.geom != null) {
+        const { data: parts } = await db.rpc("zone_geom_parts", { p_zone_id: row.id });
+        multiPolygon = parts;
+      }
+      zonesJson.push(zoneSnapshotPayload({ ...row, multiPolygon }));
+    }
+
     const { data: last } = await db
       .from("service_coverage_versions")
       .select("version")
@@ -636,7 +665,6 @@ export function registerMarketAdminRoutes(app: Hono) {
       .limit(1)
       .maybeSingle();
     const nextVersion = (last?.version != null ? Number(last.version) : 0) + 1;
-    const zonesJson = (zones ?? []).map((z) => zoneSnapshotPayload(z as Record<string, unknown>));
 
     const { data: ver, error: vErr } = await db.from("service_coverage_versions").insert({
       market_id: marketId,
@@ -793,19 +821,28 @@ export function registerMarketAdminRoutes(app: Hono) {
 
     for (const z of snapZones) {
       const polygon = normalizePolygon(z.polygon);
-      if (!polygon) continue;
-      await db.from("service_zone_polygons").insert({
+      const multi = Array.isArray(z.multiPolygon) ? z.multiPolygon : null;
+      if (!polygon && !(multi && multi.length)) continue;
+      let geom: unknown = null;
+      if (multi && multi.length) {
+        const { data: g } = await db.rpc("coverage_parts_to_geom", { parts: multi });
+        geom = g;
+      }
+      const insertRow: Record<string, unknown> = {
         market_id: marketId,
         name: String(z.name || "Zone"),
-        polygon,
+        polygon: polygon ?? (multi as Array<{ outer?: unknown }>)?.[0]?.outer ?? [],
         kind: normalizeKind(z.kind),
         priority: Number.isFinite(Number(z.priority)) ? Math.trunc(Number(z.priority)) : 0,
         source: normalizeSource(z.source),
         center_lat: z.center_lat != null ? Number(z.center_lat) : null,
         center_lng: z.center_lng != null ? Number(z.center_lng) : null,
         radius_m: z.radius_m != null ? Number(z.radius_m) : null,
+        boundary_pcode: z.boundary_pcode != null ? String(z.boundary_pcode) : null,
         updated_by: adminUser.id || null,
-      });
+      };
+      if (geom != null) insertRow.geom = geom;
+      await db.from("service_zone_polygons").insert(insertRow);
     }
 
     await writeKvAudit(
@@ -831,7 +868,16 @@ export function registerMarketAdminRoutes(app: Hono) {
         .limit(1)
         .maybeSingle();
       const nextVersion = (last?.version != null ? Number(last.version) : 0) + 1;
-      const zonesJson = (zones ?? []).map((z) => zoneSnapshotPayload(z as Record<string, unknown>));
+      const zonesJson: Record<string, unknown>[] = [];
+      for (const z of zones ?? []) {
+        const row = z as Record<string, unknown>;
+        let multiPolygon = row.multiPolygon;
+        if (!multiPolygon && row.id && row.geom != null) {
+          const { data: parts } = await db.rpc("zone_geom_parts", { p_zone_id: row.id });
+          multiPolygon = parts;
+        }
+        zonesJson.push(zoneSnapshotPayload({ ...row, multiPolygon }));
+      }
       const { data: newVer } = await db.from("service_coverage_versions").insert({
         market_id: marketId,
         version: nextVersion,
@@ -951,6 +997,8 @@ export function registerMarketAdminRoutes(app: Hono) {
   });
 
   admin.get("/:id", async (c) => {
+    const badId = requireMarketIdParam(c);
+    if (badId) return badId;
     const db = getDb();
     const { data: market, error } = await db
       .from("service_markets").select("*").eq("id", c.req.param("id")).maybeSingle();
@@ -1306,13 +1354,20 @@ export function registerPublicGeoRoutes(
 
     const { data: parishes } = await db
       .from("service_parishes")
-      .select("id, name, coverage_mode, foundation_polygon")
+      .select("id, name, coverage_mode, foundation_polygon, foundation_geom")
       .eq("coverage_mode", "parish_boundary");
     for (const p of parishes ?? []) {
       const parish = p as Record<string, unknown>;
-      const foundation = parseFoundationPolygon(parish.foundation_polygon);
-      if (!foundation) continue;
       const parishId = String(parish.id);
+      let multi: unknown = null;
+      if (parish.foundation_geom != null) {
+        const { data: parts } = await db.rpc("parish_foundation_parts", { p_parish_id: parishId });
+        multi = parts;
+      }
+      const foundation = multi
+        ? parseFoundationPolygon(multi) // first outer for legacy field
+        : parseFoundationPolygon(parish.foundation_polygon);
+      if (!foundation && !(Array.isArray(multi) && multi.length)) continue;
       const parishName = String(parish.name ?? "Parish");
       const parishMarkets = (markets ?? [])
         .filter((m) => String((m as Record<string, unknown>).parish_id ?? "") === parishId)
@@ -1323,13 +1378,15 @@ export function registerPublicGeoRoutes(
           parishId,
           String(market.id),
           parishName,
-          foundation,
+          Array.isArray(multi) && multi.length ? multi as never : foundation!,
+          Array.isArray(multi) && multi.length ? multi as never : null,
         );
         zones.push({
           id: synthetic.id,
           name: synthetic.name,
           kind: "include",
           polygon: synthetic.polygon,
+          multiPolygon: synthetic.multiPolygon ?? null,
           market_id: market.id,
           source: "parish_boundary",
           priority: 100,

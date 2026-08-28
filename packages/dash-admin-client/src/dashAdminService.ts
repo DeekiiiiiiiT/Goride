@@ -1086,6 +1086,12 @@ export function deleteZone(accessToken: string, marketId: string, zoneId: string
   );
 }
 
+export function deleteMarket(accessToken: string, marketId: string) {
+  return deliveryFetch<{ ok: boolean }>(accessToken, `/admin/markets/${marketId}`, {
+    method: 'DELETE',
+  });
+}
+
 /** Server-side coverage check (same rules as Rush customer app). */
 export function checkCoveragePoint(accessToken: string, lat: number, lng: number) {
   return deliveryFetch<CoverageCheckResult>(accessToken, '/admin/markets/check-point', {

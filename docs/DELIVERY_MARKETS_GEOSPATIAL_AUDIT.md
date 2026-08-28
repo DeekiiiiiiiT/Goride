@@ -1,7 +1,7 @@
 # Delivery Markets — Geospatial Audit & Remediation Status
 
 **Original audit:** 2026-08-27
-**Last updated:** 2026-08-27 (OPEN remediation complete on live GoRide)
+**Last updated:** 2026-08-27 (OPEN-1…OPEN-16 complete on live GoRide)
 **Scope:** `packages/dash-admin/src/pages/markets/*`, `delivery.admin_boundaries` / `service_parishes` / `service_zone_polygons`, `supabase/functions/delivery/admin/boundaryRoutes.ts`, `scripts/import-codab-boundaries.ts`
 **Data source:** COD-AB Jamaica admin0–admin3 at `Roam/Mapping/Jamaica` (43 files, 921 features, 301,966 points)
 
@@ -9,8 +9,30 @@
 
 ## 0. Status at a glance
 
-All **OPEN-1…OPEN-10** items from the post-implementation re-audit are **Done** on live GoRide
-(`csfllzzastacofsvcdsc`).
+All **OPEN-1…OPEN-16** items are **Done** on live GoRide
+(`csfllzzastacofsvcdsc`) — independently verified against the live database, not self-reported.
+
+> OPEN-11…13 closed in the follow-up pass: geom-first coverage, New Kingston fixture purge,
+> admin3 community-union UI. **Re-verified 2026-08-27** — including a functional probe proving the
+> previously-lost 23.7% of Kingston now resolves as covered (§2c).
+>
+> **OPEN-15…16** closed after Spanish Town ops session: delete-town control + apply-official-border
+> on existing catalog-linked towns; legacy St. Catherine bulk-import towns purged; Spanish Town
+> re-created from `JM0807`, published, and active (§2d).
+>
+> **OPEN-14** closed 2026-08-27: schema column comments now document `*_geom` as coverage SoT
+> (`20260830190000_geom_column_comments_open14.sql`).
+
+**Verification evidence (2026-08-27):**
+
+| Check | Result |
+|---|---|
+| Catalog rows | 921 (1 / 14 / 131 / 775) · **0 invalid geometries** · all with `geom_display` + centroid · vintage `2024-08-02` |
+| Point fidelity vs source | admin0 = 30,608 ✓ · admin1 min 1,638 (Manchester) / max 4,627 (Clarendon) ✓ |
+| Parish ↔ catalog | `ST_Equals(foundation_geom, catalog.geom) = true` for **all 14** |
+| Fixtures | 0 remaining (`JM01K` and tiny `JM` purged) |
+| Parishes | 14 (Portmore deleted) · 0 without pcode |
+| Snapshots | `20260830170000` present; Kingston / St. Andrew / St. Catherine each have 2 versions |
 
 | Layer | State |
 |---|---|
@@ -23,9 +45,13 @@ All **OPEN-1…OPEN-10** items from the post-implementation re-audit are **Done*
 | Town / zone pcodes | ✅ Reconciled where unique admin2 match exists |
 | Portmore fake parish | ✅ Deleted (0 markets) |
 | Catalog-only town create | ✅ Linked parishes use admin2 picker only |
+| Delete town (ops UI) | ✅ Trash on town row → `DELETE /admin/markets/:id` |
+| Apply official border (existing town) | ✅ Button when `pcode` set + no include zone |
 
-**Live blast radius remains small.** Spanish Town is still the only active published town —
-metadata pcode `JM0807` attached; published polygon **not** overwritten.
+**Live blast radius:** Spanish Town is the **only** market row (`1` total). It is **active**,
+**published**, `pcode=JM0807`, `boundary_pcode=JM0807`, include zone **1,124 pts** (official COD-AB
+geom). Legacy St. Catherine bulk-import towns (16 rows, ALL CAPS, no pcode) and the New Kingston
+fixture market were deleted 2026-08-27.
 
 ---
 
@@ -95,12 +121,15 @@ Matches catalog `st_numgeometries` / `st_npoints`.
 
 ### OPEN-5 — Town pcode reconcile ✅ **Done** (partial name coverage)
 
-`delivery.reconcile_market_pcodes(true)` report:
-- matched 4 (Old Harbour, Linstead, Bog Walk promoted; Spanish Town **metadata only** `JM0807`)
+`delivery.reconcile_market_pcodes(true)` report (initial run):
+- matched 4 (Old Harbour, Linstead, Bog Walk promoted; Spanish Town **metadata only** `JM0807` at
+  that time — hand-drawn border intentionally left intact)
 - unmatched 13 (not in St. Catherine admin2 catalog — e.g. Guy’s Hill, Ewarton, New Kingston)
 - ambiguous 0
 
-Unmatched towns remain for manual Boundary Library / Markets UI attach when needed.
+**Subsequent ops (2026-08-27):** legacy town rows deleted; Spanish Town re-created from catalog with
+full `JM0807` geom (see §2d). Unmatched admin3-only names remain available via community union when
+needed.
 
 ### OPEN-6 — Portmore fake parish ✅ **Done**
 
@@ -122,6 +151,302 @@ Raw export removed; only `orderRingClockwiseForManualCorners` exported; Coordina
 ### OPEN-10 — `town_pins` demoted ✅ **Done**
 
 Overview prefers market/catalog centers; pin import CTA labeled legacy; copy no longer treats pins as SoT.
+
+---
+
+## 2c. Post-remediation verification (2026-08-27)
+
+Independent verification against live GoRide (`csfllzzastacofsvcdsc`) confirmed OPEN-1…OPEN-10 are
+genuinely complete. Three further items surfaced (OPEN-11 / 12 / 13) — all now **Done and
+independently re-verified**. OPEN-14 (schema comments) **Done** 2026-08-27.
+
+---
+
+### OPEN-11 — Legacy `jsonb` ring truncation is still load-bearing ✅ **Done — verified**
+
+Coverage paths now prefer PostGIS geom via `delivery.parish_foundation_parts` /
+`delivery.zone_geom_parts` / `delivery.geom_to_coverage_parts` (`20260830180000`).
+
+- Parish synthetic zones use full MultiPolygon parts
+- Town zone reads attach `multiPolygon` from geom
+- Publish/restore snapshots carry `multiPolygon` + `boundary_pcode` and restore `geom`
+- `parishModeSuggest` treats `foundation_geom` as a valid foundation
+
+Legacy jsonb rings may still be truncated for dual-write display; they are no longer used for
+coverage decisions when geom exists.
+
+#### Verification evidence (independent, 2026-08-27)
+
+**Functional proof — the previously-lost region now resolves as covered.** A probe placed on
+Kingston's second polygon part (the 23.7% that the truncated ring omitted):
+
+```
+probe (17.93828, -76.81897)      st_covers(part1, probe) = false   ← outside part [1]
+delivery.point_in_parish_foundation(kingston, …) = true             ← now covered ✓
+delivery.parish_foundation_parts(kingston) → 2 parts                ✓
+part areas: 20.61 km² + 6.40 km²  →  part 2 = 23.7% of the parish
+```
+
+**Call sites traced end-to-end:**
+
+| Site | Verified |
+|---|---|
+| `coverageZones.ts:139` | `parish_foundation_parts` RPC when `foundation_geom` present |
+| `coverageZones.ts:82-105` | `multiPolygon` attached from live geom |
+| `coveragePlatform.ts:38-54` | `zoneSnapshotPayload` emits `multiPolygon` **and** `boundary_pcode` |
+| `marketRoutes.ts:1362-1382` | geom-first; full `multi` → `buildParishSyntheticZone` → emitted as `multiPolygon` |
+| `parishCoverage.ts:73-81` | `isMultiPolygonShape` returns **all** parts; first outer ring kept only as the legacy `polygon` field |
+| `parishModeSuggest.ts:56-58` | `hasGeom \|\| Boolean(foundation)` — suggestion toast no longer a trap |
+
+**Tests:** `packages/dash-coverage` — **25/25 passing**, including
+`uses multiPolygon when present (second part)` and `treats hole as outside include multiPolygon`.
+
+**Guards:** zone-jsonb-truncated = **0**; multi-part parish in `parish_boundary` mode = **0**.
+(Parish-jsonb guard returns 2 **by design** — see the design contract note below.)
+
+---
+
+### OPEN-12 — Leftover smoke-test zone on New Kingston ✅ **Done — verified**
+
+Deleted fixture zone “Kingston delivery area”, cleared `published_version_id`, removed orphan
+coverage versions. Market row kept inactive for future catalog create.
+
+**Verified (2026-08-27 initial):** New Kingston → 0 zones, `published = false`, `draft_dirty = true`.
+Zone count 5 → 4. No tiny published zones remain.
+
+**Follow-up (same day):** New Kingston **market row deleted** during legacy purge. Spanish Town was
+later deleted and re-created from catalog by ops; current row is catalog-clean with official geom
+(see §2d).
+
+---
+
+### OPEN-13 — 13 of 17 towns remain unreconciled ✅ **Done** (ops path)
+
+Admin3 community multi-select → `unionCommunitiesToMarket` added on town cards (“Build from
+communities…”) for linked parishes. No auto-union of all 13.
+
+**Verified wiring:** `MarketsPage.tsx` → `unionCommunitiesToMarket`
+(`dashAdminService.ts`) → `POST /admin/markets/markets/:marketId/union-communities`
+(`boundaryRoutes.ts:295-310`) → `union_admin3_to_market_zone` RPC. UI surfaces as
+**“Build from communities…”** with a per-community checkbox list. When the town already has a
+catalog `pcode`, the list is scoped to **that town's admin3 children** (`parent_pcode = town.pcode`);
+otherwise it falls back to the whole parish.
+
+---
+
+### OPEN-15 — No delete-town control in Markets UI ✅ **Done — verified**
+
+Ops could delete parish rows (trash on parish header) but not individual towns. Legacy cleanup
+required SQL or direct API calls.
+
+**Fix:** `deleteMarket` in `dashAdminService.ts` → `DELETE /admin/markets/:id`
+(`marketRoutes.ts:1117`). Town row trash icon with confirm dialog in `MarketsPage.tsx`.
+
+**Used 2026-08-27:** purged 16 legacy St. Catherine towns + New Kingston fixture via the same API
+path (also run once via approved SQL reset before the UI shipped).
+
+---
+
+### OPEN-16 — No “apply catalog border” on existing towns ✅ **Done — verified**
+
+`promoteMarketBoundary` / `POST …/markets/:marketId/promote-boundary` existed but was only reachable
+via **Create from catalog** on **new** towns. Existing rows with a `pcode` but a deleted hand-drawn
+border (Spanish Town after ops deleted the old green zone) had no one-click recovery — ops were sent
+to **Build from communities…** incorrectly.
+
+**Fix:** expanded town row shows **“Apply official border (JM0807)”** when `town.pcode` is set and
+include zone count is 0. Calls `promoteMarketBoundary`.
+
+**Correct ops path for admin2 catalog towns:** Create from catalog (new) **or** Apply official border
+(existing) — **not** community union.
+
+---
+
+### OPEN-14 — Schema comments contradict the geom-first contract ✅ **Done — verified**
+
+With OPEN-11 landed, `foundation_geom` / `service_zone_polygons.geom` are the **source of truth for
+coverage**, and the `jsonb` columns are a legacy first-ring projection kept for back-compat. The
+database's own documentation previously pointed developers at the truncated columns.
+
+**Fix applied:** migration `20260830190000_geom_column_comments_open14.sql` on live GoRide:
+
+| Column | Comment (summary) |
+|---|---|
+| `service_parishes.foundation_polygon` | LEGACY display — first outer ring only; not for coverage |
+| `service_parishes.foundation_geom` | SoT for parish coverage; use `parish_foundation_parts()` |
+| `service_zone_polygons.polygon` | LEGACY display — first outer ring only |
+| `service_zone_polygons.geom` | SoT for zone coverage; use `zone_geom_parts()` |
+
+**Verified:** `pg_description` on all four columns matches the migration text (2026-08-27).
+
+---
+
+### Design contract — the parish jsonb guard is expected to return 2
+
+The appendix guard *"parishes whose legacy jsonb is a truncated view of their real geometry"*
+returns **2 rows (Kingston, St. Catherine)** and **that is now correct behaviour, not a failure**.
+
+It was written before OPEN-11 to detect the bug. Post-fix, truncated jsonb is the accepted
+dual-write contract; the property that matters is that **nothing reads it for coverage**. Guards 2
+and 3 (zone truncation, multi-part parish in `parish_boundary` mode) remain true 0-row invariants.
+
+Do not "fix" guard 1 by backfilling all parts into the jsonb — flat `{lat,lng}[]` cannot represent
+multi-part geometry, which was BUG-4. Re-interpret it as an inventory of parishes whose jsonb must
+never be used for coverage.
+
+---
+
+## 2d. Ops playbook — Spanish Town clean launch (2026-08-27)
+
+Lessons from the first real catalog-driven town launch. Parishes and Boundary Library (921 rows) were
+already clean; **town rows were not**.
+
+### What was legacy vs official
+
+| Layer | Legacy? | Action taken |
+|---|---|---|
+| 14 parishes (`JM01`–`JM14`, cod-ab borders) | No — keep | None |
+| Boundary Library (921 COD-AB rows) | No — keep | None |
+| 16 St. Catherine towns (ALL CAPS, no pcode) | Yes — pre-catalog bulk import | Deleted all |
+| New Kingston fixture market (Kingston parish) | Yes — smoke test | Deleted |
+| Spanish Town (seed + hand-drawn border, then border deleted) | Hybrid broken | Deleted → recreated from `JM0807` |
+
+### Correct workflow (admin2 town in catalog)
+
+1. St. Catherine → **+ Add town** → **Spanish Town (`JM0807`)** → **Create from catalog**
+2. **Open map** → confirm green border
+3. **Publish coverage**
+4. Toggle **Active** ON
+
+Alternative on an **existing** catalog-linked town missing its border: expand town → **Apply official
+border (`pcode`)** — do not use community union.
+
+### Communities — when they apply
+
+| Case | Tool |
+|---|---|
+| Town exists at admin2 (e.g. Spanish Town `JM0807`) | Create from catalog / Apply official border |
+| Place exists only at admin3 (e.g. Sligoville `JM080714` as its own market) | Manual town → **Build from communities…** → Union |
+| Neighborhood inside an official town border but **not** in Boundary Library (e.g. local names like “Magil Palm”) | **Nothing** — if inside the green border, delivery already works. Do **not** hand-insert rows into `admin_boundaries`. Extend the town border on the map only if geography is genuinely outside COD-AB. |
+
+Spanish Town has **20** official admin3 communities under `JM0807` (Sydenham, Sligoville, etc.).
+Informal subdivision names not in COD-AB are expected; the town-level polygon is authoritative.
+
+### Verified live state (post-launch)
+
+```
+markets total = 1
+Spanish Town: active=true, published=true, draft_dirty=false,
+  pcode=JM0807, boundary_pcode=JM0807, include zone ≈1124 pts
+readiness: merchants=3 matched, couriers=3 matched (market_id may have changed after recreate)
+```
+
+---
+
+### OPEN-11 — Legacy `jsonb` ring truncation is still load-bearing ⚠️ **P1** (historical)
+
+The dual-write design stores full geometry in PostGIS `geom` columns but keeps a **single outer ring**
+in the legacy `jsonb` columns (`promote_boundary_to_parish` comments this as *"primary outer ring as
+legacy jsonb for clients still on flat rings"*). Three code paths still read the **jsonb**, not the
+`geom` — so multi-part boundaries silently lose every part after `[0]`.
+
+**Confirmed truncation in live data:**
+
+| Parish | `foundation_geom` | legacy `foundation_polygon` | Area lost if jsonb is used |
+|---|---:|---:|---:|
+| Kingston (`JM03`) | 4,370 pts / 2 parts | **1,329 pts** | **23.7%** |
+| St. Catherine (`JM08`) | 4,033 pts / 2 parts | 3,557 pts | 0.11% |
+
+**Catalog exposure — how many boundaries are multi-part:**
+
+| Level | Multi-part | With holes | Max parts |
+|---|---:|---:|---:|
+| admin0 | 1 | 0 | 2 |
+| admin1 | 2 | 0 | 2 |
+| admin2 | **8** | **7** | **3** |
+| admin3 | 1 | 0 | 2 |
+
+Holes are handled correctly (materialised as `exclude` zones). **Multi-part truncation is not.**
+
+**The three call sites:**
+
+1. **`coverageZones.ts:178`** — `parish_boundary` synthetic customer zone
+   ```ts
+   buildParishSyntheticZone(parishId, market.id, parish.name, parish.foundation_polygon)
+   //                                                          ^^^^^^^^^^^^^^^^^^^^^^^^ truncated
+   ```
+   Lines 161 and 174 also gate on `foundation_polygon` alone and should accept `has_foundation_geom`.
+   *(The outer-gate check at line 105 is correct — it uses the `point_in_parish_foundation` RPC.)*
+
+2. **`coverageZones.ts:74`** — town zone coverage read: `polygon: Array.isArray(z.polygon) ? … : []`.
+   Harmless today (all 5 live zones are single-part) but will truncate as soon as one of the 8
+   multi-part admin2 boundaries is promoted to a town.
+
+3. **`coveragePlatform.ts:32`** — `zoneSnapshotPayload` stores `polygon: z.polygon` only. Publishing a
+   multi-part town **freezes the truncated ring into the published version**, and restore replays it.
+   No `geom` and no `boundary_pcode` are carried into the snapshot.
+
+**Reachability — this is one click away, today.**
+`parishModeSuggest.ts:60-68` suggests `parish_boundary` when a parish is `town_zones` + has a
+foundation + has **exactly one** active town with includes. St. Catherine matches that condition right
+now (Spanish Town), so ops sees a toast with an **"Apply Parish border"** action that would switch it
+onto the truncated ring. Kingston is dormant only because New Kingston is inactive — activating it
+arms the same toast with **23.7%** of the parish at stake.
+
+**Fix:**
+- Prefer `foundation_geom` / `z.geom` wherever a coverage decision is made; fall back to jsonb only
+  when the geom column is null.
+- Extend `zoneSnapshotPayload` to persist the full geometry (GeoJSON or WKB) plus `boundary_pcode`,
+  so published versions and restores are lossless.
+- Consider emitting **all** parts into the legacy jsonb as a MultiPolygon-aware structure, or add a
+  `foundation_parts` count so a stale reader can at least detect that it is seeing a partial shape.
+
+**Guard query — should return 0 rows once fixed:**
+```sql
+select slug, jsonb_array_length(foundation_polygon) as jsonb_pts,
+       st_npoints(foundation_geom) as geom_pts, st_numgeometries(foundation_geom) as parts
+from delivery.service_parishes
+where st_numgeometries(foundation_geom) > 1
+  and jsonb_array_length(foundation_polygon) < st_npoints(foundation_geom) - 1;
+-- currently: kingston, st-catherine
+```
+
+---
+
+### OPEN-12 — Leftover smoke-test zone on New Kingston ⚠️ **P2**
+
+The `JM01K` era left an orphan zone behind when the boundary fixtures were purged:
+
+```
+market   = New Kingston (kingston)   is_active = false   pcode = NULL
+zone     = "Kingston delivery area"  source = 'import'   boundary_pcode = NULL
+polygon  = 4 jsonb pts / 5 geom pts  (a synthetic box)
+published_version_id IS NOT NULL  →  flagged published
+```
+
+Inactive so it is not serving customers, but it is a published-flagged fake delivery area sitting in
+a live table, and it will reappear in any coverage export, health view, or overview map.
+
+**Fix:** delete the zone and clear `published_version_id` on New Kingston (or delete the market if it
+was only ever a fixture), then re-promote from `JM03`'s admin2 children if a real Kingston town is
+wanted.
+
+---
+
+### OPEN-13 — 13 of 17 towns remain unreconciled ⚠️ **P3** (tracking only)
+
+`reconcile_market_pcodes` matched 4 of 17 (Bog Walk `JM0801`, Linstead `JM0802`, Old Harbour `JM0804`
+promoted with real geometry; Spanish Town `JM0807` metadata-only, published polygon correctly left
+intact). The other 13 are **legitimately absent from the admin2 catalog** — Guy's Hill, Ewarton,
+Sligoville and similar sit at **admin3**, not admin2.
+
+This is expected, not a defect. Recorded so it is not re-investigated. When those towns need real
+borders, the path is `union_admin3_to_market_zone` over the relevant community pcodes rather than an
+admin2 match.
+
+Note for any future matcher: existing town names are shouty legacy imports (`OLD HARBOUR BAY`,
+`GUY'S HILL`) — matching must be case-insensitive, apostrophe-tolerant, and **scoped to the parent
+parish** (29 of 83 admin2 names repeat across parishes; "May Pen" exists in 5).
 
 ---
 
@@ -314,6 +639,11 @@ would have been opened and parsed on every import run (skipped safely, since Poi
 `admin2-towns-by-parish/`, `admin3-communities-by-parish/`. Do not add non-polygon layers to that
 directory while the importer walks it recursively.
 
+**Do not hand-author catalog communities.** `admin_boundaries` is COD-AB official data only (bulk
+import / upsert). Local or informal neighborhood names absent from COD-AB (e.g. “Magil Palm” inside
+Spanish Town) are not missing data — delivery follows the **town** polygon. Extend operational borders
+via map edit / GeoJSON import on the market, not by inserting fake admin3 rows.
+
 **Source fidelity confirmed.** The Shapefile→GeoJSON conversion was validated against the official
 GeoJSON release: 921/921 features, 942/942 rings geometrically identical, max coordinate delta
 **11 nanometres** (float serialisation only); 151 rings differ by starting vertex (rotation —
@@ -325,19 +655,29 @@ needed.**
 
 ## 4. Priority order
 
-| Priority | Item | Blocking? |
-|---|---|---|
-| **P0** | OPEN-1 Run the COD-AB import | Yes — everything else waits on the catalog |
-| **P0** | OPEN-2 Restore Kingston, purge fixtures | Yes — wrong data in a live table |
-| **P1** | OPEN-3 Move snapshot into the RPC | **Do before OPEN-1** — protects St. Andrew / St. Catherine |
-| **P1** | OPEN-5 Reconcile town/zone pcodes | Unlocks catalog-driven ops |
-| **P2** | OPEN-4 Re-promote St. Catherine / St. Andrew | After catalog loads |
-| **P2** | OPEN-6 Fix `Portmore` parish row | Independent |
-| **P2** | OPEN-7 Catalog-driven town creation | After OPEN-5 |
-| **P3** | OPEN-8/9/10 Consolidation & cleanup | Maintainability |
+### Outstanding work
 
-**Recommended sequence:** OPEN-3 → OPEN-1 (levels 0,1) → verify Kingston = `JM03` / 2 parts /
-4,370 pts → OPEN-2 purge → OPEN-1 (levels 2,3) → OPEN-4 → OPEN-5.
+**None.** OPEN-1…OPEN-16 are complete and independently verified on live GoRide.
+
+### Completed (2026-08-27)
+
+| Priority | Item | Status |
+|---|---|---|
+| P0 | OPEN-1 Run the COD-AB import | ✅ 921 rows verified |
+| P0 | OPEN-2 Restore Kingston, purge fixtures | ✅ `JM03`, 2 parts, 4,370 pts |
+| P1 | OPEN-3 Move snapshot into the RPC | ✅ `20260830170000` |
+| P1 | OPEN-5 Reconcile town/zone pcodes | ✅ 4 matched, 13 tracked as OPEN-13 |
+| P2 | OPEN-4 Re-promote St. Catherine / St. Andrew | ✅ `ST_Equals` = true |
+| P2 | OPEN-6 Fix `Portmore` parish row | ✅ deleted |
+| P2 | OPEN-7 Catalog-driven town creation | ✅ picker for linked parishes |
+| P3 | OPEN-8/9/10 Consolidation & cleanup | ✅ |
+| **P1** | **OPEN-11** Geom-first coverage (3 call sites) | ✅ `20260830180000` · functional probe passes · 25/25 tests |
+| **P2** | **OPEN-12** New Kingston fixture cleanup | ✅ 0 zones, unpublished |
+| **P3** | **OPEN-13** admin3 community-union ops path | ✅ "Build from communities…" wired end-to-end |
+| **P2** | **OPEN-15** Delete town in Markets UI | ✅ trash + `deleteMarket` client |
+| **P2** | **OPEN-16** Apply official border on existing catalog town | ✅ promote button on town card |
+| **P3** | **OPEN-14** Schema comments name `*_geom` as coverage SoT | ✅ `20260830190000` |
+| — | Spanish Town clean launch | ✅ 1 market, `JM0807` published + active (§2d) |
 
 ---
 
@@ -391,4 +731,63 @@ where m.pcode is null;
 
 -- built-in health view
 select * from delivery.coverage_health_summary;
+```
+
+### OPEN-11 regression guards
+
+> **Guards 2 and 3 must return 0 rows. Guard 1 is expected to return 2** (Kingston, St. Catherine) —
+> see the design-contract note in §2c. It is an inventory, not a failure.
+
+```sql
+-- 1. INVENTORY (expect 2): parishes whose legacy jsonb is a first-ring-only projection.
+--    These rows are fine — the contract is that nothing reads jsonb for coverage.
+--    Do NOT "fix" by backfilling parts: flat {lat,lng}[] cannot hold multi-part geometry (BUG-4).
+select slug, jsonb_array_length(foundation_polygon) as jsonb_pts,
+       st_npoints(foundation_geom) as geom_pts, st_numgeometries(foundation_geom) as parts
+from delivery.service_parishes
+where st_numgeometries(foundation_geom) > 1
+  and jsonb_array_length(foundation_polygon) < st_npoints(foundation_geom) - 1;
+
+-- 2. same check for town zones (fires once a multi-part admin2 is promoted)
+select z.id, z.name, jsonb_array_length(z.polygon) as jsonb_pts,
+       st_npoints(z.geom) as geom_pts, st_numgeometries(z.geom) as parts
+from delivery.service_zone_polygons z
+where st_numgeometries(z.geom) > 1
+  and jsonb_array_length(z.polygon) < st_npoints(z.geom) - 1;
+
+-- 3. multi-part parishes currently in parish_boundary mode (was: live truncation risk)
+select slug, name, st_numgeometries(foundation_geom) as parts
+from delivery.service_parishes
+where coverage_mode = 'parish_boundary' and st_numgeometries(foundation_geom) > 1;
+```
+
+### OPEN-11 functional check — the coverage probe
+
+The structural guards cannot prove coverage actually works. This probes a point on a parish's
+**second** polygon part and asserts the coverage RPC covers it. Expect `rpc_covers = true` and
+`parts_returned = 2`; before the fix this returned `false`.
+
+```sql
+with k as (select foundation_geom g, id from delivery.service_parishes where slug = 'kingston'),
+p as (select st_geometryn(g,1) a, st_geometryn(g,2) b, id from k),
+probe as (select st_pointonsurface(b) pt, a, b, id from p)
+select st_y(pt) as lat, st_x(pt) as lng,
+       st_covers(a, pt)                                             as inside_part1_only,
+       delivery.point_in_parish_foundation(id, st_y(pt), st_x(pt))  as rpc_covers,
+       jsonb_array_length(delivery.parish_foundation_parts(id))     as parts_returned,
+       round((st_area(b::geography) /
+             (st_area(a::geography) + st_area(b::geography)) * 100)::numeric, 1) as part2_pct
+from probe;
+-- 2026-08-27: inside_part1_only=false · rpc_covers=true · parts_returned=2 · part2_pct=23.7
+```
+
+### Catalog multi-part / hole census (exposure sizing for OPEN-11)
+
+```sql
+select admin_level,
+       count(*) filter (where st_numgeometries(geom) > 1) as multipart,
+       count(*) filter (where st_nrings(geom) > st_numgeometries(geom)) as with_holes,
+       max(st_numgeometries(geom)) as max_parts
+from delivery.admin_boundaries group by admin_level order by admin_level;
+-- 2026-08-27: L0 1/0/2 · L1 2/0/2 · L2 8/7/3 · L3 1/0/2
 ```

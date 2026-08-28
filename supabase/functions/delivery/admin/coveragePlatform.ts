@@ -4,6 +4,7 @@
 import {
   evaluateCoverage,
   pointInPolygon,
+  type CoverageMultiPolygon,
   type CoverageVertex,
   type CoverageZone,
 } from "./coverageEval.ts";
@@ -14,22 +15,36 @@ export function normalizeKind(input: unknown): "include" | "exclude" {
   return String(input || "include").toLowerCase() === "exclude" ? "exclude" : "include";
 }
 
+function asMulti(raw: unknown): CoverageMultiPolygon | null {
+  if (!Array.isArray(raw) || raw.length === 0) return null;
+  const first = raw[0];
+  if (!first || typeof first !== "object" || !("outer" in first)) return null;
+  return raw as CoverageMultiPolygon;
+}
+
 export function hasValidInclude(zones: unknown[]): boolean {
   return zones.some((z) => {
     const row = z as Record<string, unknown>;
     const kind = normalizeKind(row.kind);
+    if (kind !== "include") return false;
+    const multi = asMulti(row.multiPolygon);
+    if (multi && multi.some((p) => Array.isArray(p.outer) && p.outer.length >= 3)) return true;
+    if (row.geom != null) return true;
     const poly = row.polygon;
-    return kind === "include" && Array.isArray(poly) && poly.length >= 3;
+    return Array.isArray(poly) && poly.length >= 3;
   });
 }
 
 export function zoneSnapshotPayload(z: ZoneRow) {
+  const multi = asMulti(z.multiPolygon);
   return {
     id: z.id,
     market_id: z.market_id,
     name: z.name,
     kind: normalizeKind(z.kind),
     polygon: z.polygon,
+    multiPolygon: multi,
+    boundary_pcode: z.boundary_pcode ?? null,
     priority: z.priority ?? 0,
     source: z.source ?? "manual",
     center_lat: z.center_lat ?? null,
@@ -42,12 +57,15 @@ export function zonesFromSnapshot(zonesJson: unknown): CoverageZone[] {
   if (!Array.isArray(zonesJson)) return [];
   return zonesJson.map((raw, idx) => {
     const z = raw as Record<string, unknown>;
+    const multi = asMulti(z.multiPolygon);
+    const polygon = Array.isArray(z.polygon) ? (z.polygon as CoverageVertex[]) : [];
     return {
       id: String(z.id ?? `snap-${idx}`),
       name: String(z.name ?? ""),
       market_id: z.market_id != null ? String(z.market_id) : undefined,
       kind: normalizeKind(z.kind),
-      polygon: Array.isArray(z.polygon) ? (z.polygon as CoverageVertex[]) : [],
+      polygon: multi?.[0]?.outer?.length ? multi[0].outer : polygon,
+      multiPolygon: multi ?? undefined,
     };
   });
 }

@@ -31,7 +31,7 @@ async function countActiveTownsWithIncludes(
     const marketId = String((m as Record<string, unknown>).id);
     const { data: zones } = await sb
       .from("service_zone_polygons")
-      .select("kind, polygon")
+      .select("kind, polygon, geom, multiPolygon")
       .eq("market_id", marketId);
     if (hasValidInclude(zones ?? [])) count += 1;
   }
@@ -45,7 +45,7 @@ export async function suggestParishCoverageMode(
 ): Promise<ParishModeSuggestion | null> {
   const { data: parish, error } = await sb
     .from("service_parishes")
-    .select("id, name, coverage_mode, foundation_polygon")
+    .select("id, name, coverage_mode, foundation_polygon, foundation_geom")
     .eq("id", parishId)
     .maybeSingle();
   if (error || !parish) return null;
@@ -53,13 +53,15 @@ export async function suggestParishCoverageMode(
   const row = parish as Record<string, unknown>;
   const current: ParishCoverageMode =
     row.coverage_mode === "parish_boundary" ? "parish_boundary" : "town_zones";
+  const hasGeom = row.foundation_geom != null;
   const foundation = parseFoundationPolygon(row.foundation_polygon);
+  const hasFoundation = hasGeom || Boolean(foundation);
   const activeWithIncludes = await countActiveTownsWithIncludes(sb, parishId);
   const parishName = String(row.name ?? "Parish");
 
   if (
     current === "town_zones" &&
-    foundation &&
+    hasFoundation &&
     activeWithIncludes === 1
   ) {
     return {
@@ -67,8 +69,9 @@ export async function suggestParishCoverageMode(
       parish_name: parishName,
       current,
       suggested: "parish_boundary",
-      reason:
-        "This parish has a foundation border and one active town with a delivery area — parish border mode may be simpler for whole-parish launch.",
+      reason: hasGeom
+        ? "This parish has a full PostGIS foundation border and one active town with a delivery area — parish border mode may be simpler for whole-parish launch."
+        : "This parish has a foundation border and one active town with a delivery area — parish border mode may be simpler for whole-parish launch.",
     };
   }
 

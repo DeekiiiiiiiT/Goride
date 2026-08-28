@@ -5,8 +5,10 @@ import {
   buildParishSyntheticZone,
   evaluateCoverage,
   isInsideParishFoundation,
+  parseFoundationGeometry,
   parseFoundationPolygon,
   type CoverageEvalResult,
+  type CoverageMultiPolygon,
   type CoverageVertex,
   type CoverageZone,
   type ParishCoverageMode,
@@ -14,7 +16,13 @@ import {
 import { normalizeKind } from "./coveragePlatform.ts";
 
 // deno-lint-ignore no-explicit-any
-type ServiceSb = { from: (t: string) => any };
+type ServiceSb = {
+  from: (t: string) => any;
+  rpc?: (
+    fn: string,
+    args?: Record<string, unknown>,
+  ) => Promise<{ data: unknown; error: { message: string } | null }>;
+};
 
 export type MerchantMarketLockSource = "manual" | "pin" | null;
 
@@ -35,9 +43,15 @@ export type ParishContext = {
   name: string;
   coverage_mode: ParishCoverageMode;
   foundation_polygon: CoverageVertex[] | null;
+  /** Full MultiPolygon parts from foundation_geom (OPEN-11). */
+  foundation_multi: CoverageMultiPolygon | null;
   /** When true, prefer PostGIS ST_Covers via point_covers_geom RPC. */
   has_foundation_geom?: boolean;
 };
+
+function asCoverageMulti(raw: unknown): CoverageMultiPolygon | null {
+  return parseFoundationGeometry(raw);
+}
 
 export async function loadPublishedZonesForMarket(
   sb: ServiceSb,
@@ -65,14 +79,49 @@ export async function loadPublishedZonesForMarket(
   return (zones ?? []) as Record<string, unknown>[];
 }
 
+/** Attach multiPolygon from live geom when present (OPEN-11). */
+export async function enrichZonesWithGeomParts(
+  sb: ServiceSb,
+  rows: Record<string, unknown>[],
+): Promise<Record<string, unknown>[]> {
+  const out: Record<string, unknown>[] = [];
+  for (const z of rows) {
+    if (Array.isArray(z.multiPolygon) && (z.multiPolygon as unknown[]).length > 0) {
+      out.push(z);
+      continue;
+    }
+    const id = z.id != null ? String(z.id) : "";
+    const hasGeom = z.geom != null;
+    if (!hasGeom || !id || id.startsWith("parish-") || typeof sb.rpc !== "function") {
+      out.push(z);
+      continue;
+    }
+    const { data, error } = await sb.rpc("zone_geom_parts", { p_zone_id: id });
+    if (error || data == null) {
+      out.push(z);
+      continue;
+    }
+    const multi = asCoverageMulti(data);
+    out.push(multi ? { ...z, multiPolygon: multi } : z);
+  }
+  return out;
+}
+
 export function asCoverageZones(rows: Record<string, unknown>[]): CoverageZone[] {
-  return rows.map((z) => ({
-    id: String(z.id),
-    name: String(z.name ?? ""),
-    market_id: z.market_id != null ? String(z.market_id) : undefined,
-    kind: normalizeKind(z.kind),
-    polygon: Array.isArray(z.polygon) ? (z.polygon as CoverageVertex[]) : [],
-  }));
+  return rows.map((z) => {
+    const multi =
+      asCoverageMulti(z.multiPolygon) ??
+      null;
+    const polygon = Array.isArray(z.polygon) ? (z.polygon as CoverageVertex[]) : [];
+    return {
+      id: String(z.id),
+      name: String(z.name ?? ""),
+      market_id: z.market_id != null ? String(z.market_id) : undefined,
+      kind: normalizeKind(z.kind),
+      polygon: multi?.[0]?.outer?.length ? multi[0].outer : polygon,
+      multiPolygon: multi ?? undefined,
+    };
+  });
 }
 
 async function loadParishMap(sb: ServiceSb): Promise<Map<string, ParishContext>> {
@@ -83,12 +132,23 @@ async function loadParishMap(sb: ServiceSb): Promise<Map<string, ParishContext>>
   for (const row of parishes ?? []) {
     const p = row as Record<string, unknown>;
     const mode = p.coverage_mode === "parish_boundary" ? "parish_boundary" : "town_zones";
-    map.set(String(p.id), {
-      id: String(p.id),
+    const id = String(p.id);
+    const hasGeom = p.foundation_geom != null;
+    let foundation_multi: CoverageMultiPolygon | null = null;
+    if (hasGeom && typeof sb.rpc === "function") {
+      const { data } = await sb.rpc("parish_foundation_parts", { p_parish_id: id });
+      foundation_multi = asCoverageMulti(data);
+    }
+    const foundation_polygon =
+      (foundation_multi?.[0]?.outer?.length ? foundation_multi[0].outer : null) ??
+      parseFoundationPolygon(p.foundation_polygon);
+    map.set(id, {
+      id,
       name: String(p.name ?? "Parish"),
       coverage_mode: mode,
-      foundation_polygon: parseFoundationPolygon(p.foundation_polygon),
-      has_foundation_geom: p.foundation_geom != null,
+      foundation_polygon,
+      foundation_multi,
+      has_foundation_geom: hasGeom,
     });
   }
   return map;
@@ -110,7 +170,7 @@ export async function isInsideParishFoundationResolved(
     });
     if (!error && typeof data === "boolean") return data;
   }
-  return isInsideParishFoundation(lat, lng, parish.foundation_polygon);
+  return isInsideParishFoundation(lat, lng, parish.foundation_multi ?? parish.foundation_polygon);
 }
 
 export async function loadParishCoverageContext(
@@ -134,8 +194,8 @@ async function loadActiveMarkets(sb: ServiceSb): Promise<ActiveMarketRow[]> {
     .from("service_markets")
     .select("id, slug, parish_id, is_active, published_version_id")
     .eq("is_active", true);
-  return (markets ?? []).map((m) => {
-    const row = m as Record<string, unknown>;
+  return ((markets ?? []) as Record<string, unknown>[]).map((m) => {
+    const row = m;
     return {
       id: String(row.id),
       slug: String(row.slug ?? row.id),
@@ -158,7 +218,8 @@ async function buildCoverageZonesForMarkets(
 
   for (const market of markets) {
     const parish = market.parish_id ? parishMap.get(market.parish_id) : null;
-    if (parish?.coverage_mode === "parish_boundary" && parish.foundation_polygon) {
+    const hasFoundation = Boolean(parish?.foundation_multi?.length || parish?.foundation_polygon);
+    if (parish?.coverage_mode === "parish_boundary" && hasFoundation) {
       const list = parishBoundaryMarkets.get(parish.id) ?? [];
       list.push(market);
       parishBoundaryMarkets.set(parish.id, list);
@@ -171,19 +232,28 @@ async function buildCoverageZonesForMarkets(
 
   for (const [parishId, parishMarkets] of parishBoundaryMarkets) {
     const parish = parishMap.get(parishId);
-    if (!parish?.foundation_polygon) continue;
+    const multi = parish?.foundation_multi;
+    const flat = parish?.foundation_polygon;
+    if (!multi?.length && !flat) continue;
     const sorted = [...parishMarkets].sort((a, b) => a.slug.localeCompare(b.slug));
     for (const market of sorted) {
       allZones.push(
-        buildParishSyntheticZone(parishId, market.id, parish.name, parish.foundation_polygon),
+        buildParishSyntheticZone(
+          parishId,
+          market.id,
+          parish!.name,
+          multi?.length ? multi : flat!,
+          multi,
+        ) as CoverageZone,
       );
     }
   }
 
   for (const market of townZoneMarkets) {
     const published = await loadPublishedZonesForMarket(sb, market);
+    const enriched = await enrichZonesWithGeomParts(sb, published);
     allZones.push(
-      ...asCoverageZones(published).map((z) => ({
+      ...asCoverageZones(enriched).map((z) => ({
         ...z,
         market_id: z.market_id ?? market.id,
       })),
