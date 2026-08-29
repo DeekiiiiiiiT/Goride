@@ -1,11 +1,14 @@
 name: CI
 
-on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
-  workflow_dispatch:
+# Manual only — auto push/PR runs were re-enabled during Aug audits and
+# started failing every sync. Real deploy is Deploy Supabase Edge Function.
+# Uncomment push/PR below when ready to gate merges again.
+# on:
+#   push:
+#     branches: [main]
+#   pull_request:
+#     branches: [main]
+on: workflow_dispatch
 
 jobs:
   test-and-build:

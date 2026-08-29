@@ -4,12 +4,18 @@
 # edge-function logic — including the toll controller, geofence core, and rate schedule.
 name: Test Supabase Functions
 
-on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
-  workflow_dispatch:
+# Manual only — was flipped on for every push during Aug audits.
+# Uncomment push/PR (optionally with supabase/functions path filter) when ready.
+# on:
+#   push:
+#     branches: [main]
+#     paths:
+#       - 'supabase/functions/**'
+#   pull_request:
+#     branches: [main]
+#     paths:
+#       - 'supabase/functions/**'
+on: workflow_dispatch
 
 jobs:
   deno-test:

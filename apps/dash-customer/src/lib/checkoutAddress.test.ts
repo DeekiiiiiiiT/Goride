@@ -27,11 +27,21 @@ describe('calculateOrderTotals', () => {
     expect(totals.deliveryFee).toBe(0);
   });
 
-  it('matches server Island Grill smoke totals at 15% platform fee', () => {
-    const totals = calculateOrderTotals(1200, null, 100, 150, 0.15);
+  it('matches Island Grill smoke totals at 15% platform fee + explicit 15% GCT', () => {
+    // Client must not invent GCT — pass taxRatePercent from the server quote.
+    const totals = calculateOrderTotals(1200, null, 100, 150, 0.15, undefined, {
+      taxRatePercent: 15,
+    });
     expect(totals.serviceFee).toBe(180);
-    expect(totals.tax).toBe(198);
-    expect(totals.total).toBe(1828);
+    expect(totals.tax).toBe(180);
+    expect(totals.total).toBe(1810);
+  });
+
+  it('shows tax as 0 when GCT rate is missing (no client guess)', () => {
+    const totals = calculateOrderTotals(1200, null, 100, 150, 0.15);
+    expect(totals.tax).toBe(0);
+    expect(totals.serviceFee).toBe(180);
+    expect(totals.total).toBe(1630);
   });
 
   it('uses v2 server totals verbatim when customer total is provided', () => {
