@@ -129,7 +129,6 @@ SET rules = rules
       'min_order_subtotal_jmd', COALESCE((rules->'customer'->>'min_order_subtotal_jmd')::numeric, 1500)
     ),
     'platform', COALESCE(rules->'platform', '{}'::jsonb) || jsonb_build_object(
-      'commission_base', COALESCE(rules->'platform'->>'commission_base', 'marketplace'),
       'max_menu_inflation_percent', COALESCE((rules->'platform'->>'max_menu_inflation_percent')::numeric, 0.25),
       'pricing_v2_enabled', true
     )

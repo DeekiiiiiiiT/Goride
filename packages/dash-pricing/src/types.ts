@@ -49,8 +49,6 @@ export type PricingParty = 'customer' | 'rider' | 'partner' | 'platform';
 export type PlatformRulesBlob = {
   pricing_v2_enabled?: boolean;
   tax_rate_percent?: number;
-  /** Commission on marketplace (inflated) or in-store price. */
-  commission_base?: 'marketplace' | 'in_store';
   max_menu_inflation_percent?: number;
 };
 
@@ -108,7 +106,6 @@ export type PricingRules = {
   smallOrderFeeJmd?: number;
   cardProcessingFeePercent?: number;
   tipProcessingFromRider?: boolean;
-  commissionBase?: 'marketplace' | 'in_store';
   maxMenuInflationPercent?: number;
 };
 

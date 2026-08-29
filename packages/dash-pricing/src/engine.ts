@@ -27,7 +27,8 @@ function isCardPayment(method: PaymentMethod | undefined): boolean {
   return method === 'wipay';
 }
 
-/** Resolve merchant commission rate from tier + optional override. */
+/** Resolve merchant commission rate from tier + optional override.
+ * Commission is always on the marketplace (customer-facing) subtotal. */
 export function resolveMerchantCommissionRate(
   tier: MerchantTier | null | undefined,
   override: number | null | undefined,
@@ -546,7 +547,6 @@ export function parsePricingRules(raw: Record<string, unknown> | null | undefine
     tipProcessingFromRider: flat.tip_processing_from_rider != null
       ? Boolean(flat.tip_processing_from_rider)
       : DEFAULTS.tipProcessingFromRider,
-    commissionBase: flat.commission_base === 'in_store' ? 'in_store' : 'marketplace',
     maxMenuInflationPercent: flat.max_menu_inflation_percent != null
       ? Number(flat.max_menu_inflation_percent)
       : DEFAULTS.maxMenuInflationPercent,
@@ -591,7 +591,6 @@ export function defaultPricingRules(): PricingRules {
     smallOrderFeeJmd: 400,
     cardProcessingFeePercent: 0.045,
     tipProcessingFromRider: true,
-    commissionBase: 'marketplace',
     maxMenuInflationPercent: 0.25,
   };
 }

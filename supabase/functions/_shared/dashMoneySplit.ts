@@ -15,10 +15,14 @@ export type DashOrderFeeFields = {
   tax_food_jmd?: number | null;
   tax_platform_jmd?: number | null;
   tip?: number | null;
+  /** Tip after card processing on tip (courier absorbs tip fee). */
+  courier_tip_net?: number | null;
   peak_pay_amount?: number | null;
   /** Platform delivery subsidy (courier pay above customer delivery fee). */
   platform_delivery_subsidy_jmd?: number | null;
   small_order_fee?: number | null;
+  subtotal?: number | null;
+  discount?: number | null;
   pricing_model?: string | null;
   courier_id?: string | null;
   merchant_id?: string | null;
@@ -34,11 +38,11 @@ export type DashCaptureSplit = {
 };
 
 /**
- * Model B: platform keeps service_fee + processing + merchant_commission
- * + signed delivery platform share + GCT + small-order fee;
- * courier earns delivery courier share + tip + peak_pay.
- * Negative delivery platform share (promo/subsidy) reduces platform take —
- * merchant residual must not absorb that cost.
+ * Model B: platform keeps service + processing + commission + signed delivery
+ * share + GCT + small-order fee − peak (platform-funded bonus).
+ * Courier earns delivery share + tip net + peak.
+ * Merchant receivable is always discountedSubtotal − commission when food
+ * amounts are present (never residual arithmetic drift).
  */
 export function computeDashCaptureSplit(
   order: DashOrderFeeFields,
@@ -46,6 +50,9 @@ export function computeDashCaptureSplit(
 ): DashCaptureSplit {
   const gross = Math.max(0, Number(captureAmount) || 0);
   const tip = Math.max(0, Number(order.tip ?? 0));
+  const tipNet = order.courier_tip_net != null && Number.isFinite(Number(order.courier_tip_net))
+    ? Math.max(0, Number(order.courier_tip_net))
+    : tip;
   const peakPay = Math.max(0, Number(order.peak_pay_amount ?? 0));
 
   const serviceFee = Math.max(0, Number(order.service_fee ?? order.platform_fee ?? 0));
@@ -61,6 +68,7 @@ export function computeDashCaptureSplit(
   const taxPlatform = Math.max(0, Number(order.tax_platform_jmd ?? 0));
   const smallOrderFee = Math.max(0, Number(order.small_order_fee ?? 0));
 
+  // Peak is a platform cost (like delivery subsidy) — reduce platform take.
   const platformFee = roundMoney(
     serviceFee +
       processingFee +
@@ -68,10 +76,21 @@ export function computeDashCaptureSplit(
       deliveryPlatform +
       taxFood +
       taxPlatform +
-      smallOrderFee,
+      smallOrderFee -
+      peakPay,
   );
-  const courierPayable = roundMoney(deliveryCourier + tip + peakPay);
-  const merchantReceivable = roundMoney(Math.max(0, gross - platformFee - courierPayable));
+  const courierPayable = roundMoney(deliveryCourier + tipNet + peakPay);
+
+  let merchantReceivable: number;
+  if (order.subtotal != null && Number.isFinite(Number(order.subtotal))) {
+    const discountedSubtotal = roundMoney(
+      Math.max(0, Number(order.subtotal) - Math.max(0, Number(order.discount ?? 0))),
+    );
+    merchantReceivable = roundMoney(Math.max(0, discountedSubtotal - merchantCommission));
+  } else {
+    merchantReceivable = roundMoney(Math.max(0, gross - platformFee - courierPayable));
+  }
+
   return {
     captureAmount: gross,
     platformFee,
@@ -88,4 +107,12 @@ export function courierDeliveryEarnings(order: DashOrderFeeFields): number {
     0,
     Number(order.delivery_fee_courier_amount ?? order.delivery_fee ?? 0),
   );
+}
+
+/** Tip amount owed to courier (net of tip processing when available). */
+export function courierTipEarnings(order: DashOrderFeeFields): number {
+  if (order.courier_tip_net != null && Number.isFinite(Number(order.courier_tip_net))) {
+    return Math.max(0, Number(order.courier_tip_net));
+  }
+  return Math.max(0, Number(order.tip ?? 0));
 }

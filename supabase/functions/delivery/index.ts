@@ -284,11 +284,23 @@ app.get("/merchants", async (c) => {
     const { id } = c.req.param();
 
     let merchant: Record<string, unknown> | null = null;
-    const byId = await supabase.from("merchants").select("*").eq("id", id).maybeSingle();
+    const byId = await supabase
+      .from("merchants")
+      .select(
+        "*, pricing_tier:merchant_tiers(id, slug, name, commission_rate, base_delivery_fee_jmd, menu_inflation_percent, search_boost, default_delivery_radius_km, promo_eligible)",
+      )
+      .eq("id", id)
+      .maybeSingle();
     if (byId.data) {
       merchant = byId.data as Record<string, unknown>;
     } else {
-      const bySlug = await supabase.from("merchants").select("*").eq("slug", id).maybeSingle();
+      const bySlug = await supabase
+        .from("merchants")
+        .select(
+          "*, pricing_tier:merchant_tiers(id, slug, name, commission_rate, base_delivery_fee_jmd, menu_inflation_percent, search_boost, default_delivery_radius_km, promo_eligible)",
+        )
+        .eq("slug", id)
+        .maybeSingle();
       if (bySlug.data) merchant = bySlug.data as Record<string, unknown>;
     }
 
@@ -299,32 +311,54 @@ app.get("/merchants", async (c) => {
     }
 
     const merchantId = String(merchant.id);
+    const tier = merchant.pricing_tier as Record<string, unknown> | null;
+    const tierBase = tier?.base_delivery_fee_jmd != null
+      ? Number(tier.base_delivery_fee_jmd)
+      : null;
+    const boost = tier?.search_boost != null ? Number(tier.search_boost) : 0;
 
-    const [{ data: categories }, { data: items }, { data: hours }, feeResolved] = await Promise.all([
-      supabase
-        .from("menu_categories")
-        .select("*")
-        .eq("merchant_id", merchantId)
-        .eq("is_active", true)
-        .order("sort_order"),
-      supabase
-        .from("menu_items")
-        .select("*")
-        .eq("merchant_id", merchantId)
-        .eq("is_available", true)
-        .order("sort_order"),
-      supabase
-        .from("merchant_hours")
-        .select("day_of_week, open_time, close_time, is_closed")
-        .eq("merchant_id", merchantId)
-        .order("day_of_week"),
-      resolveFeeRateForMerchant(supabase, merchantId),
-    ]);
+    const [{ data: categories }, { data: items }, { data: hours }, feeResolved, layered] =
+      await Promise.all([
+        supabase
+          .from("menu_categories")
+          .select("*")
+          .eq("merchant_id", merchantId)
+          .eq("is_active", true)
+          .order("sort_order"),
+        supabase
+          .from("menu_items")
+          .select("*")
+          .eq("merchant_id", merchantId)
+          .eq("is_available", true)
+          .order("sort_order"),
+        supabase
+          .from("merchant_hours")
+          .select("day_of_week, open_time, close_time, is_closed")
+          .eq("merchant_id", merchantId)
+          .order("day_of_week"),
+        resolveFeeRateForMerchant(supabase, merchantId),
+        import("./pricingLayers.ts").then(({ resolvePricingLayers }) =>
+          resolvePricingLayers(supabase, {
+            marketId: merchant!.market_id != null ? String(merchant!.market_id) : null,
+          })
+        ),
+      ]);
+
+    const { resolveDeliveryFee } = await import("../_shared/dashPricing.ts");
+    const deliveryFee = resolveDeliveryFee(layered.rules.delivery, null, tierBase);
+    const enrichedMerchant = {
+      ...merchant,
+      delivery_fee: deliveryFee,
+      search_boost: boost,
+      is_promoted: boost > 0,
+      promoted: boost > 0,
+      tier_slug: tier?.slug != null ? String(tier.slug) : null,
+    };
 
     const acceptingNow = await assertMerchantAcceptingOrders(supabase, merchantId);
 
     return c.json({
-      merchant,
+      merchant: enrichedMerchant,
       categories: categories || [],
       items: items || [],
       hours: hours || [],

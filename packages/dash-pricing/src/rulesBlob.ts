@@ -50,7 +50,6 @@ export function deepMergeObjects(
 const FLAT_TO_PARTY: Array<{ party: PricingParty; key: string; nestedKey?: string }> = [
   { party: 'platform', key: 'pricing_v2_enabled' },
   { party: 'platform', key: 'tax_rate_percent' },
-  { party: 'platform', key: 'commission_base' },
   { party: 'platform', key: 'max_menu_inflation_percent' },
   { party: 'customer', key: 'service_fee' },
   { party: 'customer', key: 'min_order_subtotal_jmd' },
@@ -120,7 +119,6 @@ export function serializePricingRulesNested(rules: PricingRules): NestedRulesBlo
     platform: {
       pricing_v2_enabled: rules.pricingV2Enabled ?? true,
       tax_rate_percent: rules.taxRatePercent ?? 16.5,
-      commission_base: rules.commissionBase ?? 'marketplace',
       max_menu_inflation_percent: rules.maxMenuInflationPercent ?? 0.25,
     },
     customer: {
@@ -193,9 +191,6 @@ export function flattenNestedToLegacy(blob: NestedRulesBlob): Record<string, unk
   }
   if (platform.tax_rate_percent !== undefined) {
     out.tax_rate_percent = platform.tax_rate_percent;
-  }
-  if (platform.commission_base !== undefined) {
-    out.commission_base = platform.commission_base;
   }
   if (platform.max_menu_inflation_percent !== undefined) {
     out.max_menu_inflation_percent = platform.max_menu_inflation_percent;

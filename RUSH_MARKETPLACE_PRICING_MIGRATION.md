@@ -1,559 +1,417 @@
-# Rush Marketplace Pricing — Migration Audit
+# Rush Marketplace Pricing — Migration Audit & Implementation Review
 
-**Date:** 2026-08-28
 **Scope:** Roam Rush food-delivery pricing (`delivery` schema, `dash-*` apps)
-**Status:** Audit only. No code was changed.
-
-**Question asked:** how do we move from the current pricing architecture to the
-merchant-subsidized marketplace model (tier-driven delivery fees, menu inflation,
-partitioned micro-fees)?
-
-**Short answer:** you are roughly 70% of the way there already, and the remaining 30%
-is not evenly distributed. The fee *engine* is more sophisticated than the blueprint
-asks for. The three things the blueprint actually depends on — tiers controlling the
-customer-facing delivery fee, menu inflation, and courier pay decoupled from the
-delivery fee — are the three things that do not exist. There are also two live money
-defects that are survivable today and become severe the moment commission goes to 30%.
+**Original audit:** 2026-08-28
+**Implementation reviewed:** 2026-08-28, commit `515a88ea` (50 files, +2,464/−418)
+**Status:** Migration substantially complete. 5 gaps closed, 2 defects fixed and verified.
+One build blocker and three money/consistency issues remain open.
 
 ---
 
-## 1. What you already have
+## 0. Verification summary
 
-Your current system is internally called **Model B** / `pricing_v2`, gated behind a
-`pricing_v2_enabled` flag. It is genuinely good. Inventory:
+Every item from the original audit was re-checked against the code. What follows is the
+scorecard; details and evidence are in §1 (closed) and §2 (open).
 
-### 1.1 Merchant tiers — table exists, seeded, admin-editable
-
-`delivery.merchant_tiers` ([migration](supabase/migrations/20260823120000_dash_pricing_engine.sql)):
-
-| column | meaning | wired up? |
+| # | Item | Status |
 |---|---|---|
-| `slug`, `name` | tier identity | yes |
-| `commission_rate` | 0–1, platform's cut of food | **yes — this is the only live field** |
-| `search_boost` | intended feed ranking reward | **no — stored, never read** |
-| `default_delivery_radius_km` | intended radius reward | **no — stored, never read** |
-| `promo_eligible` | intended promo gating | **no — stored, never read** |
+| GAP 1 | Tier controls customer-facing delivery fee | ✅ **Closed** |
+| GAP 2 | Menu inflation (dual price model) | ✅ **Closed** |
+| GAP 3 | Courier pay decoupled from delivery fee | ✅ **Closed** |
+| GAP 4 | Small-order fee instead of hard block | ✅ **Closed** |
+| GAP 5 | Feed card fee matches checkout | ⚠️ **Partial** — feed + search fixed, **detail page not** |
+| GAP 6 | `search_boost` drives ranking | ✅ **Closed** (with "Promoted" labels) |
+| GAP 7 | Merchant tier selection + contract history | ✅ **Closed** |
+| GAP 8 | Payout automation | ⏸️ Deferred (out of scope for this pass) |
+| GAP 9 | Client pricing mirror kept in sync | ✅ **Closed** |
+| GAP 10 | Currency / magnitude translated to JMD | ✅ **Closed** |
+| GAP 11 | Model A retired | ✅ **Closed** |
+| DEFECT A | v2 orders settling through Model A branch | ✅ **Fixed** |
+| DEFECT B | Promo/subsidy cost charged to merchant | ✅ **Fixed** (verified numerically) |
 
-Seeded as `basic 12%` / `standard 20%` / `premium 25%`.
-Merchants link via `merchants.pricing_tier_id`, with a per-merchant escape hatch
-`merchants.merchant_commission_rate`.
+**Test/typecheck state at review time:**
 
-Resolution order lives in
-[engine.ts:31](packages/dash-pricing/src/engine.ts#L31):
-merchant override → tier rate → `0.20` fallback. Commission is charged on the
-*discounted* subtotal ([engine.ts:45](packages/dash-pricing/src/engine.ts#L45)).
+| Check | Result |
+|---|---|
+| `dash-pricing` unit tests | 51 passed, **1 failed** (stale assertion — §2.4) |
+| `dashMoneySplit` Deno tests | 5 passed |
+| `dash-courier` tests | 29 passed |
+| `dash-customer` tests | 99 passed |
+| `dash-admin` typecheck | Clean **with the uncommitted fix**; HEAD does not compile (§2.1) |
+| `deno check` edge graph | 410 errors — pre-existing baseline, **none touch the new fields** |
 
-Admin CRUD: [pricingRoutes.ts:748-825](supabase/functions/delivery/admin/pricingRoutes.ts#L748).
-Admin UI: "Merchant Tiers" tab in [PricingHubPage.tsx](packages/dash-admin/src/pages/pricing/PricingHubPage.tsx#L1621) — but the
-editor only exposes the commission percentage.
-
-### 1.2 Partitioned micro-fees — already richer than the blueprint
-
-[`buildOrderPricing`](packages/dash-pricing/src/engine.ts#L228) already emits every line
-item the blueprint describes, plus several it doesn't:
-
-| blueprint line item | your equivalent | status |
-|---|---|---|
-| Base delivery fee | `delivery.base_fee_jmd` | ✅ exists (per-market, not per-tier) |
-| Long-distance surcharge | `included_km` + `per_extra_km_jmd` + `max_fee_jmd` | ✅ exists, better (has a cap) |
-| Service fee (10–15%) | marginal-bracket service fee | ✅ exists, **much** better |
-| Small-order penalty | — | ❌ **missing** (you hard-block instead) |
-| — | zone risk surcharge | ✅ bonus |
-| — | card processing fee, split order/tip | ✅ bonus |
-| — | dual-supply GCT (food vs. platform) | ✅ bonus |
-| — | courier/platform delivery-fee split | ✅ bonus |
-
-Your service fee is already a **marginal bracket**, which is strictly better than the
-blueprint's flat percentage: 15% up to J$5,000 of food, 9% on everything above,
-clamped to J$150–J$2,500 ([engine.ts:56](packages/dash-pricing/src/engine.ts#L56)).
-That is the DoorDash-style curve. Do not replace it with the blueprint's flat 10%.
-
-Distance is haversine × a `road_distance_multiplier` (default 1.4), rounded up to whole
-km before the per-km charge ([engine.ts:174](packages/dash-pricing/src/engine.ts#L174)).
-
-### 1.3 Three-layer rules hierarchy
-
-Rules resolve **Global → Parish → Town**, deep-merged, each layer independently
-toggleable via `override_enabled`, each versioned, with per-leaf provenance for the
-admin UI and a `pricing_change_log` audit table.
-
-- Tables: `global_pricing_profiles`, `parish_pricing_profiles`, `market_pricing_profiles`
-- Merge: [pricingLayers.ts](supabase/functions/delivery/pricingLayers.ts)
-- Blob shape: rules are namespaced by *party* (`platform` / `customer` / `rider` / `partner`)
-  in [rulesBlob.ts](packages/dash-pricing/src/rulesBlob.ts), with per-party validators.
-
-This is the single most valuable asset you have for this migration. Any new knob the
-new model needs (tier delivery fees, inflation caps, small-order fee) drops into this
-hierarchy and inherits geographic override for free.
-
-### 1.4 Order snapshotting
-
-Every v2 order writes an immutable `pricing_snapshot` jsonb plus flattened columns
-(`merchant_commission_amount`, `service_fee`, `delivery_fee_platform_amount`,
-`delivery_fee_courier_amount`, `tax_food_jmd`, `tax_platform_jmd`, `courier_tip_net`,
-`pricing_profile_version`) — [customerOrderRoutes.ts:464-470](supabase/functions/delivery/customerOrderRoutes.ts#L464).
-This means a rules change never retroactively rewrites historical money. Keep this
-discipline for every new field.
-
-### 1.5 Current default rules (Spanish Town / global)
-
-```
-delivery:      base J$400, 2km included, J$60/extra km, cap J$1,500
-service fee:   marginal 15% → 9% above J$5,000, min J$150, max J$2,500
-courier share: 80% of delivery fee
-GCT:           16.5%
-card fee:      4.5%
-min order:     J$800 (hard block)
-road mult:     1.4×
-```
+On that last row: the errors are spread across ~25 edge files, most untouched by this
+work (`marketRoutes` 38, `merchantInventoryRoutes` 29, `identityRoutes` 17, …), and a
+filter for every new field name (`small_order`, `courier_base_pay`, `subsidy`,
+`marketplace_price`, `in_store_price`, `base_delivery_fee`, `menu_inflation`,
+`commission_base`) returns zero hits. This migration did not add to that pile, but it is
+worth knowing the baseline is 410 and not 0.
 
 ---
 
-## 2. Gaps — what the new model needs that does not exist
+## 1. What was implemented
 
-Ordered by how much work each one is and how load-bearing it is.
+### GAP 1 — Tier-driven delivery fee ✅
 
-### GAP 1 — Tier does not control the customer-facing delivery fee 🔴 load-bearing
+The blueprint's core mechanism now exists end to end.
 
-**This is the entire mechanism of the new model and it is absent.**
+- `merchant_tiers.base_delivery_fee_jmd` + `menu_inflation_percent`
+  ([migration](supabase/migrations/20260829200000_rush_marketplace_pricing.sql))
+- `MerchantTier.baseDeliveryFeeJmd` ([types.ts:7](packages/dash-pricing/src/types.ts#L7))
+- `resolveDeliveryFee(rules, distanceKm, tierBaseFeeJmd)` — tier base **replaces** market
+  base, market `per_extra_km_jmd` and `max_fee_jmd` still apply
+  ([engine.ts:174](packages/dash-pricing/src/engine.ts#L174))
+- Resolver loads the tier columns
+  ([pricingResolver.ts:143](supabase/functions/delivery/pricingResolver.ts#L143))
+- Admin tier editor exposes base fee + inflation
+  ([PricingHubPage.tsx:2864](packages/dash-admin/src/pages/pricing/PricingHubPage.tsx#L2864))
 
-Today `base_fee_jmd` lives in the *market* rules blob (global/parish/town). Every
-merchant in Spanish Town shows the same J$400 base delivery fee regardless of whether
-they pay 12% or 25%. There is no way to express "Dominant tier merchants show J$150,
-Economy tier merchants show J$900, same town."
+This matches the recommendation exactly: base set commercially per tier, distance
+economics still set geographically.
 
-The blueprint's entire premise — restaurant surrenders commission, platform buys down
-their visible delivery fee — has no representation in the schema.
+**Tier ladder reseeded** — `basic/standard/premium` renamed in place to
+`economy/growth/dominant`:
 
-**What's needed:**
-- `merchant_tiers.base_delivery_fee_jmd` (and probably `included_km` / `per_extra_km_jmd`
-  overrides too, so tiers can differ on distance policy).
-- A resolution order in `resolveDeliveryFee`: **tier delivery override → market rules →
-  defaults**, mirroring how commission already resolves.
-- `MerchantTier` type gains the fields ([types.ts:2](packages/dash-pricing/src/types.ts#L2)).
-- `PricingInput` already carries `tier`, so the plumbing to the engine is free.
+| Tier | Commission | Base delivery | Menu inflation | Search boost |
+|---|---|---|---|---|
+| Economy | 15% | J$900 | 0% | 0 |
+| Growth | 25% | J$450 | 10% | 10 |
+| Dominant | 30% | J$150 | 20% | 50 |
 
-**Design decision you have to make:** does the tier fee *replace* the market base fee,
-or *cap* it? Recommendation: replace the base, but keep market-level `per_extra_km_jmd`
-and `max_fee_jmd` — you want distance economics set geographically (rural Portland costs
-more to serve than Kingston) and the base set commercially.
+The in-place `UPDATE … WHERE slug = 'basic'` followed by an `INSERT … ON CONFLICT`
+is the right shape — existing `pricing_tier_id` foreign keys survive the rename.
 
-### GAP 2 — No menu inflation 🔴 load-bearing
+### GAP 2 — Menu inflation ✅
 
-`delivery.menu_items` has exactly one price column:
-[delivery_schema.sql:48](supabase/migrations/20260511140000_delivery_schema.sql#L48). No
-`in_store_price` / `marketplace_price` split, no per-tier inflation multiplier, no
-merchant-facing UI for it ([MenuPage.tsx](apps/dash-merchant/src/pages/MenuPage.tsx)).
+- `menu_items.in_store_price` + `marketplace_price`, backfilled from `price`
+- A `BEFORE INSERT OR UPDATE` trigger (`sync_menu_item_price_alias`) keeps `price` as a
+  live alias of `marketplace_price` — nothing downstream that still reads `price` breaks
+- `resolveMarketplaceMenuPrices` applies tier inflation and enforces the platform cap
+  ([index.ts:125](supabase/functions/delivery/index.ts#L125)), rejecting manual
+  overrides above `max_menu_inflation_percent` (default 25%) with a readable error
+- Merchant dashboard edits the in-store price and previews the marketplace price
+  ([EditItemView.tsx](apps/dash-merchant/src/components/menu/EditItemView.tsx))
+- Customer paths read `marketplace_price` with a `price` fallback — order lines
+  ([customerOrderRoutes.ts:161](supabase/functions/delivery/customerOrderRoutes.ts#L161)),
+  discovery ([customerDiscoveryRoutes.ts:327](supabase/functions/delivery/customerDiscoveryRoutes.ts#L327)),
+  menu mapping ([merchantMenu.ts](apps/dash-customer/src/lib/merchantMenu.ts))
+- Order line snapshots record **both** prices, so historical orders stay auditable
+  against the merchant's real menu
 
-This is a bigger change than it looks, because *everything downstream is computed off
-that single price*:
+The guardrail recommendation was taken: `max_menu_inflation_percent` is a platform-level
+rule in the `platform` namespace, inheritable per market.
 
-- order `items` jsonb snapshot
-- `subtotal` → commission base
-- `subtotal` → food GCT base
-- `subtotal` → merchant payout base
-- `subtotal` → service fee bracket
-- min-order gate
+### GAP 3 — Courier pay ladder ✅
 
-**Non-obvious consequence you should decide deliberately:** in the blueprint's own math,
-commission is taken on the **inflated** subtotal ($48 × 30%, not $40 × 30%). That means
-the merchant pays you commission on the markup *they* added to cover your commission.
-That is how the majors do it, and it is also the single most common cause of merchant
-churn and "delivery apps are killing restaurants" press. It is a real business decision,
-not a technical detail. Whichever way you go, make it an explicit config field
-(`commission_base: 'marketplace' | 'in_store'`) rather than an emergent property of
-which column the code happens to read.
+`resolveCourierPayLadder` computes courier pay from trip economics only
+([engine.ts:222](packages/dash-pricing/src/engine.ts#L222)) — `courier_base_pay_jmd`
+(J$250) + `courier_per_km_jmd` (J$80) × km, floored at `courier_min_pay_jmd` (J$350),
+with the min-pay top-up attributed to base so the UI can show components.
 
-**Second consequence:** GCT. The customer pays 16.5% on the inflated food price, and the
-merchant is the one who remits it. Their tax exposure goes up with the markup. That
-needs to be stated in the merchant contract, not discovered by their accountant.
+The customer delivery fee and courier pay are now fully independent. The platform share
+is the signed difference and can go negative, with the shortfall booked as
+`platformDeliverySubsidyJmd` ([engine.ts:327-346](packages/dash-pricing/src/engine.ts#L327)).
+The old `courierDeliveryShare` path is kept as a fallback for profiles without a ladder
+and marked `@deprecated`.
 
-**What's needed:**
-- `menu_items.in_store_price` + `menu_items.marketplace_price` (keep `price` as a
-  generated/synced alias during transition so nothing breaks).
-- `merchant_tiers.menu_inflation_percent` (Economy 0%, Growth 10%, Dominant 20%).
-- Backfill: `in_store_price = price`, `marketplace_price = price` — zero-inflation start.
-- Merchant dashboard shows both, clearly labeled ("your in-store price" vs "what
-  customers see in Roam Rush").
-- A platform-level `max_menu_inflation_percent` guardrail so a merchant can't set 80%
-  and torch your marketplace's price perception.
-- Customer surfaces read `marketplace_price` **only**, everywhere.
-
-### GAP 3 — Courier pay is a % of the customer's delivery fee 🔴 load-bearing
-
-Today: `courier_delivery_share = 0.80`, applied to whatever the customer paid for
-delivery ([engine.ts:205](packages/dash-pricing/src/engine.ts#L205)).
-
-Under the new model this breaks immediately. A Dominant-tier merchant shows J$150
-delivery. A 12km run. Courier earns J$120 for a 12km trip and stops accepting Rush
-offers in that town. The blueprint explicitly says the platform pays the driver a base
-rate **out of pocket** — meaning courier pay must be computed from *trip economics*, not
-from *customer-facing price*.
-
-**The good news:** the seam already exists. Your free-delivery promo path already models
-"customer pays less than the courier earns, platform eats the difference":
+Worked example from the test suite — Dominant tier, 12 km:
 
 ```
-deliveryFeeCourierAmount = base share + surcharge share   // courier made whole
-deliveryFeePlatformAmount = -baseSplit.courierAmount + …  // goes NEGATIVE
-promoCostJmd = baseSplit.courierAmount                    // marketing cost booked
+customer delivery fee   J$750    (150 base + 10 extra km × 60)
+courier ladder pay      J$1,210  (250 base + 12 km × 80)
+platform delivery share −J$460   (signed)
+platform subsidy         J$460   (booked, not hidden)
 ```
-— [engine.ts:276-293](packages/dash-pricing/src/engine.ts#L276)
 
-Generalize that into a first-class **courier pay ladder** (`courier_base_pay_jmd` +
-`courier_per_km_jmd` + `courier_min_pay_jmd`) computed independently of the customer
-delivery fee, with the delta booked as `platform_delivery_subsidy_jmd`. This also makes
-your unit economics legible — right now you cannot answer "what did we spend subsidizing
-delivery in Spanish Town last week" from the data.
+The subsidy also reaches accounting: `dualWriteDash.ts` now posts an
+`order_capture_platform_subsidy` ledger entry when the platform take is negative.
+Courier apps read `courier_base_pay_jmd` for earnings display.
 
-⚠️ But see **DEFECT A** below: the negative-platform-share case is currently clamped away
-at capture, so today the *merchant* silently absorbs the promo cost. Fix that before you
-generalize the pattern, or you will multiply the bug.
+### GAP 4 — Small-order fee ✅
 
-### GAP 4 — No small-order fee 🟡
+Correctly implemented as a **two-floor** model rather than replacing the wall with a fee:
 
-You currently **hard-block** below the minimum:
+- `hard_min_order_subtotal_jmd` (J$400) still hard-blocks with `min_order_not_met`
+- Between J$400 and `small_order_threshold_jmd` (J$1,500), a J$400
+  `small_order_fee_jmd` applies instead of a block
+- The old soft-min block only runs when no small-order fee is configured
+  ([customerOrderRoutes.ts:306](supabase/functions/delivery/customerOrderRoutes.ts#L306)) —
+  a good compatibility guard
 
-```
-code: "min_order_not_met"  → HTTP 400
-```
-— [customerOrderRoutes.ts](supabase/functions/delivery/customerOrderRoutes.ts), min resolved as
-`max(market floor, merchant floor)` ([engine.ts:507](packages/dash-pricing/src/engine.ts#L507)).
+The fee is threaded everywhere it needs to be: the platform GCT base
+([gct.ts:37](packages/dash-pricing/src/gct.ts#L37)), the platform's take in
+`computeDashCaptureSplit`, an `orders.small_order_fee` column, the client mirror, and
+the admin customer-rules form.
 
-The blueprint wants a **penalty fee instead of a wall**, which converts a lost order into
-a profitable small one. Blocking is the more customer-hostile of the two and it silently
-discards revenue.
+### GAP 5 — Feed fee source ⚠️ partial
 
-**What's needed:** `small_order_fee_jmd` + `small_order_threshold_jmd` in the `customer`
-rules namespace; a new `smallOrderFee` line in `PricingBreakdown`; a new
-`orders.small_order_fee` column; and — easy to forget — it must be added to the
-**platform GCT base** in [gct.ts:33](packages/dash-pricing/src/gct.ts#L33) and to the
-platform's take in [dashMoneySplit.ts:60](supabase/functions/_shared/dashMoneySplit.ts#L60).
-Recommend keeping the hard block as a *second, much lower* floor (say J$400) so J$50
-orders still can't happen.
+Home feed and search both now resolve the real tier fee through the shared engine:
 
-### GAP 5 — The feed card shows a different fee than checkout charges 🟠
+- Home feed joins the tier and calls `resolveDeliveryFee(marketRules.delivery, null, tierBase)`
+  ([index.ts:211](supabase/functions/delivery/index.ts#L211))
+- Search does the same, and correctly widened its window to 40 rows before sorting and
+  slicing to 20 — so boost ranking isn't confined to an arbitrary page
+  ([customerDiscoveryRoutes.ts:251](supabase/functions/delivery/customerDiscoveryRoutes.ts#L251))
 
-Discovery selects the **legacy static column** `merchants.delivery_fee`:
+**The restaurant detail page was missed.** See §2.3.
 
-```
-.select("… avg_prep_time_mins, delivery_fee, min_order_amount, market_id")
-…
-deliveryFee: m.delivery_fee != null ? Number(m.delivery_fee) : null,
-```
-— [customerDiscoveryRoutes.ts:235](supabase/functions/delivery/customerDiscoveryRoutes.ts#L235)
-and [:270](supabase/functions/delivery/customerDiscoveryRoutes.ts#L270)
+### GAP 6 — Search ranking ✅
 
-Meanwhile checkout charges the engine's computed fee. These two numbers have no
-enforced relationship. They can silently diverge right now.
+Both listings sort by `search_boost DESC` then `rating DESC`, and set `is_promoted` /
+`promoted` flags. The disclosure recommendation was taken — `DiscoverStoreCard` renders
+a **"Promoted"** badge ([DiscoverStoreCard.tsx:56](apps/dash-customer/src/components/discovery/DiscoverStoreCard.tsx#L56)).
 
-The entire psychological premise of the new model is *"customer sees J$150 on the card,
-feels like a deal, converts."* If the card says J$150 and checkout says J$400, you get
-the worst of both: the trust damage of a bait-and-switch **and** none of the conversion
-lift. This gap is cheap to fix and expensive to leave.
+### GAP 7 — Tier selection and history ✅
 
-**What's needed:** the feed must render the tier-resolved base delivery fee from the
-same resolver checkout uses (at zero distance), not a denormalized column. Either join
-`merchant_tiers` in discovery, or maintain `merchants.delivery_fee` as a
-trigger-maintained cache of the tier fee. Prefer the join; caches drift.
+- `merchant_tier_assignments` table (merchant, tier, effective_from/to, changed_by, agreed_at)
+- Written from admin tier changes
+  ([merchantRoutes.ts:699](supabase/functions/delivery/admin/merchantRoutes.ts#L699))
+  and from merchant onboarding
+  ([merchant_application_routes.ts:445](supabase/functions/delivery/merchant_application_routes.ts#L445))
+- Merchant-facing plan chooser with commission and tagline per tier
+  ([PlanStepContent.tsx](apps/dash-merchant/src/components/onboarding/PlanStepContent.tsx))
 
-### GAP 6 — `search_boost` is decorative 🟠
+### GAP 9 / 10 / 11 — Mirror, currency, Model A ✅
 
-Grep confirms `search_boost` appears only in the tier type, the admin write path, and
-the client type. **No discovery query orders by it.** Discovery has no ranking clause at
-all beyond the market filter.
+The client mirror carries `smallOrderFee` through both the quote and fallback paths
+([orderPricing.ts](apps/dash-customer/src/lib/orderPricing.ts)).
 
-The Dominant tier's headline promise — "we push you to the top of search" — is currently
-not a thing the software does. You would be selling it. Either implement ranking
-(`ORDER BY tier.search_boost DESC, rating DESC`) or remove it from the tier pitch.
+Defaults were retranslated to JMD, and the audit's recommendations were adopted: min
+order J$1,500, small-order fee J$400, hard floor J$400, courier ladder 250/80/350. The
+marginal service fee was correctly left alone, and `included_km` stayed at 2 rather than
+copying the blueprint's US-suburb 10 km.
 
-Note the compliance angle: paid ranking placement generally needs disclosure ("Sponsored" /
-"Promoted") in most markets. Build the label at the same time as the sort.
+Model A is gone: `computeDashCaptureSplit` no longer branches on `pricing_model`, the
+migration forces `pricing_v2_enabled: true` on all three profile layers (both nested and
+flat key forms — a nice touch for legacy blobs), and `defaultPricingRules()` now
+defaults it to `true`.
 
-### GAP 7 — No merchant-facing tier selection or contract record 🟡
+### DEFECT A — capture select list ✅ fixed
 
-`pricing_tier_id` is admin-assigned only. There is no merchant self-serve plan chooser,
-no record of *when* a merchant moved tiers, no contract/consent artifact, and no
-effective-dating. The blueprint's "three fixed signup plans" implies merchants pick one
-at onboarding and can change it.
+[payments/index.ts:200](supabase/functions/payments/index.ts#L200) now selects
+`pricing_model`, `service_fee`, `processing_fee`, `merchant_commission_amount`,
+`delivery_fee_platform_amount`, `delivery_fee_courier_amount`, `peak_pay_amount`,
+`tax_food_jmd`, `tax_platform_jmd`, `platform_delivery_subsidy_jmd`, and
+`small_order_fee`. Commission is now actually withheld at capture.
 
-**What's needed:** a `merchant_tier_assignments` history table (merchant_id, tier_id,
-effective_from, effective_to, changed_by, agreed_at), plus a plan-selection step in
-merchant onboarding. Orders already snapshot `tier_slug` and
-`merchant_commission_rate` into `pricing_snapshot`, so historical orders stay correct
-across tier changes — that part is already right.
+### DEFECT B — subsidy charged to merchant ✅ fixed, verified
 
-### GAP 8 — Payout automation is manual 🟡
+The `Math.max(0, …)` clamp on `delivery_fee_platform_amount` is gone; the value is now
+read signed, with an explanatory comment
+([dashMoneySplit.ts:55](supabase/functions/_shared/dashMoneySplit.ts#L55)). GCT is also
+now attributed to the platform rather than falling into the merchant residual.
 
-`payments.merchant_payouts` exists but is driven by admin CRUD in
-[financeRoutes.ts](supabase/functions/delivery/admin/financeRoutes.ts). Stripe Connect
-account onboarding exists ([stripeConnectRoutes.ts](supabase/functions/delivery/stripeConnectRoutes.ts))
-but there is **no automated split transfer** — no `application_fee_amount`, no
-`transfer_data`, no destination charges. The blueprint's step 4 ("payment gateway
-initiates a split transfer") is not implemented.
-
-Also note your live rail is **WiPay** (JMD), not Stripe — Stripe Connect appears to be
-scaffolding. The split logic lives in the WiPay callback and is currently defective
-(see DEFECT A). Decide which rail is real before building automation on top of it.
-
-### GAP 9 — Client-side pricing mirror will drift 🟡
-
-[apps/dash-customer/src/lib/orderPricing.ts](apps/dash-customer/src/lib/orderPricing.ts)
-re-implements the total formula client-side ("Client totals must match server formula").
-The *server* is properly single-sourced — `_shared/dashPricing.ts` is a 2-line re-export
-of the `dash-pricing` package, so edge functions and the admin share one engine. The
-customer app does not.
-
-Every new line item (small-order fee, subsidy, inflation) must land in **both** places or
-the cart preview stops matching the charge. Consider making the client render the
-server's quote verbatim rather than recomputing.
-
-### GAP 10 — Currency and magnitude 🟢 easy but do it deliberately
-
-The blueprint is written in USD; your engine is JMD integers. Rough translation at
-~J$155/USD, with sane rounding:
-
-| blueprint | JMD equivalent | your current value |
-|---|---|---|
-| $0.99 base delivery | J$150 | J$400 |
-| $2.99 base delivery | J$450 | — |
-| $5.99 base delivery | J$900 | — |
-| $0.75 / extra km | J$115 | J$60 |
-| 10 km free radius | 10 km | 2 km |
-| $12 min order | J$1,800 | J$800 |
-| $2.50 small-order fee | J$400 | — (blocked) |
-| 10% service fee | 10% | 15%→9% marginal |
-
-Two things stand out. Your **included distance is 2 km, not 10 km** — on a Jamaican town
-geography that is probably correct and the blueprint's 10 km is a US-suburb assumption;
-do not copy it. And your **service fee is already higher and better-shaped** than the
-blueprint's — keep yours.
-
-### GAP 11 — The legacy Model A path is still live and semantically confusing 🟡
-
-`pricing_v2_enabled` is `true` only for Spanish Town. Everywhere else, orders fall
-through to the legacy branch, which uses `merchants.commission_rate` as a
-**platform fee percentage** — not as a commission
-([customerOrderRoutes.ts](supabase/functions/delivery/customerOrderRoutes.ts),
-[platformFeeRate.ts](supabase/functions/delivery/platformFeeRate.ts)). The same column
-name means two different things in two code paths. The 2026-08-23 migration tried to
-untangle this by copying `commission_rate` into `service_fee_override`, but the legacy
-reader still reads the original column.
-
-Before this migration, decide: are you cutting over every market to v2, or maintaining
-both? Maintaining both while adding tier fees + inflation + small-order fees means
-building each feature twice. **Recommendation: finish the v2 cutover first**, delete the
-legacy branch, then build the new model on one path.
+I verified this numerically rather than by reading. On a Dominant-tier 12 km order with
+a J$460 platform subsidy, the merchant receives `discountedSubtotal − commission`
+exactly — the subsidy is absorbed by the platform, as intended. The regression test the
+audit asked for exists ("free-delivery negative platform share (merchant not charged)").
 
 ---
 
-## 3. Two live money defects to fix first
+## 2. Open items
 
-These exist today. They are survivable at 12–25% commission with J$400 delivery fees.
-At 30% commission with deliberately below-cost delivery fees, they are not.
+### 2.1 🔴 HEAD does not compile — duplicate `};` in PricingHubPage
 
-### DEFECT A — Model B orders settle through the Model A branch at capture 🔴
+The committed version of
+[PricingHubPage.tsx](packages/dash-admin/src/pages/pricing/PricingHubPage.tsx) has a
+stray second `};` at line 835:
 
-The WiPay capture callback loads the order with this select:
-
-```ts
-.select("merchant_id, courier_id, platform_fee, delivery_fee, tip")
 ```
-— [payments/index.ts:197-202](supabase/functions/payments/index.ts#L197)
-
-…and passes it to `computeDashCaptureSplit`, which branches on
-`order.pricing_model === "v2"` ([dashMoneySplit.ts:31](supabase/functions/_shared/dashMoneySplit.ts#L31)).
-
-`pricing_model` **is not in the select list.** Neither are `service_fee`,
-`merchant_commission_amount`, `delivery_fee_platform_amount`,
-`delivery_fee_courier_amount`, `processing_fee`, or `peak_pay_amount`.
-
-So `isModelB()` returns `false` for every order, and every v2 order settles through the
-legacy Model A formula:
-
-- platform keeps only `platform_fee` — **merchant commission is never withheld**
-- courier is credited the **full customer delivery fee**, not the 80% share
-- merchant receivable is the residual, so the merchant absorbs both errors
-
-The split is then written into `payments.transactions.net_amount` and dual-written into
-the unified ledger, so the error propagates into accounting, not just a display.
-
-**Fix is one line** (add the missing columns to the select), but verify the resulting
-numbers against `pricing_snapshot` on existing v2 orders before backfilling anything —
-and check whether any payouts were already made on the wrong figures.
-
-### DEFECT B — Free-delivery promo cost is charged to the merchant 🟠
-
-`computeDashCaptureSplit` clamps the platform delivery share at zero:
-
-```ts
-const deliveryPlatform = Math.max(0, Number(order.delivery_fee_platform_amount ?? 0));
+      setSimRunning(false);
+    }
+  };
+  };          ← syntax error
 ```
-— [dashMoneySplit.ts:52](supabase/functions/_shared/dashMoneySplit.ts#L52)
 
-But the engine deliberately makes that value **negative** under a free-delivery promo —
-that negative number *is* the platform's marketing cost
-([engine.ts:290](packages/dash-pricing/src/engine.ts#L290)). Clamping it to zero doesn't
-make the cost disappear; since merchant receivable is computed as
-`gross − platformFee − courierPayable`, the courier still gets paid the full share and
-the shortfall comes straight out of the merchant's line.
+Your **uncommitted working-tree change already deletes it** — `git diff` shows exactly
+that one-line removal, and `tsc --noEmit -p packages/dash-admin` is clean with it
+applied. So the fix exists; it just isn't committed. Commit it before anything builds
+from `main`.
 
-Separately, neither GCT component appears in `platformFee`, so `tax_platform_jmd` —
-which is Roam's own tax liability — currently lands in the merchant residual too.
+### 2.2 🟠 Two residual leaks still charge the merchant
 
-This is masked today because DEFECT A means the v2 branch never runs. Fixing A will
-expose B. **Fix them together**, and add a test asserting
-`merchantReceivable == discountedSubtotal − commission + taxFood` for the promo case.
+`computeDashCaptureSplit` derives `merchantReceivable` as
+`gross − platformFee − courierPayable`. Because it's a residual, anything the platform
+pays that the customer didn't fund lands on the merchant. Two such items remain.
 
-This matters enormously for the new model, because GAP 3's courier-pay decoupling makes
-"platform delivery share is negative" the **normal** case for Dominant-tier orders, not
-a promo edge case.
+I ran the real engine + split against a Dominant-tier 12 km order (food J$4,000, tip
+J$500, card):
+
+```
+expected merchant     J$2,800.00   (discountedSubtotal − commission)
+actual merchant       J$2,777.50   → short J$22.50
+with peak pay J$300   J$2,477.50   → short J$322.50
+```
+
+**Leak 1 — `processingFeeTip`.** The engine computes `courierTipNet = tip − processingFeeTip`
+([engine.ts:169](packages/dash-pricing/src/engine.ts#L169)), meaning the courier is
+intended to absorb the card fee on the tip. But the split credits the courier the
+**gross** `tip` while `platformFee` also includes the full `processing_fee` (order +
+tip portions). The tip fee gets counted twice and the merchant covers it.
+`courier_tip_net` is computed, stored on the order, and used by the COD ledger
+([courierCashLedger.ts:207](supabase/functions/delivery/courierCashLedger.ts#L207)) —
+but the card capture path ignores it.
+
+**Leak 2 — `peak_pay_amount`.** Platform-funded courier bonus. It's added to
+`courierPayable` with no offsetting entry in `platformFee`, and the customer never paid
+it — so it comes straight out of the merchant residual. This one predates the migration,
+but it's larger and more visible now.
+
+The same gross-tip treatment appears in the courier payout aggregation
+([courierConsumerRoutes.ts:1036](supabase/functions/delivery/courierConsumerRoutes.ts#L1036)),
+which sums `courierDeliveryEarnings + tip + peak_pay_amount`.
+
+**Suggested fix:** use `courier_tip_net` in `courierPayable`, and subtract `peak_pay` from
+`platformFee` (it is a platform cost, like the delivery subsidy). Then add the invariant
+as a test — it's the cheapest guard against this class of bug recurring:
+
+```
+merchantReceivable === discountedSubtotal − merchantCommissionAmount
+```
+
+Longer term, consider computing `merchantReceivable` **directly** from that formula and
+letting the *platform* take the residual. The merchant is the party with the least
+ability to audit the split; they shouldn't be the one absorbing arithmetic drift.
+
+### 2.3 🟠 Restaurant detail page still shows the legacy static fee
+
+GAP 5 was fixed on the two list surfaces but not on the page the customer actually lands
+on before adding to cart.
+
+- `GET /merchants/:id` does `select("*")` with no tier join and returns the row as-is
+  ([index.ts:287](supabase/functions/delivery/index.ts#L287)) — no `delivery_fee` override
+- `mapMerchantMenuResponse` reads `merchant.delivery_fee`
+  ([merchantMenu.ts:113](apps/dash-customer/src/lib/merchantMenu.ts#L113)) and renders
+  `"Free delivery"` when it is 0
+
+New merchants are created with `delivery_fee: 0`
+([merchantRestaurantRoutes.ts:214](supabase/functions/delivery/merchantRestaurantRoutes.ts#L214)),
+so an Economy-tier restaurant shows **J$900 on the feed card and "Free delivery" on its
+own page**, then charges J$900 at checkout. That's the exact bait-and-switch the original
+GAP 5 was about, on the highest-intent screen.
+
+The item prices on that same endpoint *were* fixed (the commit updated `mapMenuItem` to
+prefer `marketplace_price`), so this looks like a simple miss rather than a design
+choice. Fix: join the tier in `/merchants/:id` and resolve the fee the same way the feed
+does.
+
+### 2.4 🟡 One stale failing test
+
+[rulesBlob.test.ts:60](packages/dash-pricing/src/rulesBlob.test.ts#L60) asserts that a
+legacy blob with explicit `pricing_v2_enabled: false` and `min_order_subtotal_jmd: 800`
+parses equal to `defaultPricingRules()` — which now returns `true` and `1500`.
+
+The parse is behaving **correctly**: it honours the explicit stored values over the new
+defaults, which is exactly what you want for old profiles. The test's expectation is
+what's stale. Rewrite it to assert against an explicit expected object instead of
+`defaultPricingRules()`, so it tests parsing rather than tracking defaults.
+
+### 2.5 🟡 `commission_base` is a dead knob
+
+`commission_base` is defined in the platform rules type, parsed, serialized, validated,
+merged across layers, and defaulted to `'marketplace'` — and **never read by any pricing
+logic**. `resolveMerchantCommission` unconditionally uses `discountedSubtotal`, which is
+always built from marketplace (inflated) prices.
+
+Setting `commission_base: 'in_store'` today silently does nothing.
+
+This was flagged in the original audit as *the* decision to make explicit rather than
+leave emergent, and the config field was added — but the branch behind it wasn't. The
+current behaviour (commission on the inflated subtotal) matches the blueprint and the
+industry norm, so the *behaviour* is fine; the problem is a setting that lies.
+
+Two honest options: implement the branch (order routes would need to compute an
+in-store subtotal from the line snapshots, which already carry `in_store_price`), or
+drop the field and document the choice in the merchant agreement. It is currently not
+exposed in the admin UI, which limits the blast radius — don't expose it until it works.
+
+### 2.6 🟡 Migration filename sorts before 20 already-applied migrations
+
+`20260829200000_rush_marketplace_pricing.sql` sorts **before** twenty existing
+`20260830*` migrations (toll views, geospatial boundaries, coverage). If those are
+already applied on the remote, the Supabase CLI may skip this one or require
+`--include-all`, and the ordering will look wrong in migration history forever.
+
+Rename it to a timestamp later than the newest applied migration
+(`20260830230000_fix_net_coverage_multipolygon.sql`) before pushing, and confirm against
+`supabase migration list` rather than the local directory.
+
+### 2.7 🟢 Worth sanity-checking: courier distance pay starts at km 0
+
+The customer's distance charge starts after `included_km` (2 km), but the courier's
+distance pay bills from km 0. On the 12 km example that's 12 × J$80 vs the customer's
+10 × J$60 — structurally, the subsidy widens with every kilometre, on top of the tier
+discount.
+
+This looks deliberate (couriers really do drive the first 2 km), but it means long trips
+to Dominant-tier merchants are your most expensive orders. Run the ladder against real
+delivered-order distances before turning Dominant on broadly — the numbers are now all
+recorded on the order rows, so `platform_delivery_subsidy_jmd` grouped by market and
+tier will answer it directly.
 
 ---
 
-## 4. Suggested migration sequence
+## 3. Recommended order of work
 
-Each phase is independently shippable and independently reversible. Do not start at
-phase 3.
-
-### Phase 0 — Stop the bleeding (before any new features)
-1. Fix DEFECT A (select list) and DEFECT B (clamp + GCT attribution) together.
-2. Add regression tests to `dashMoneySplit.test.ts` covering: v2 normal, v2 free-delivery,
-   v2 with negative platform delivery share, legacy.
-3. Reconcile: compare `pricing_snapshot` against `payments.transactions.money_split` for
-   all existing v2 orders. Quantify any real exposure before deciding on corrections.
-4. Fix GAP 5 (feed fee source) — cheap, and it's a trust issue that compounds.
-
-### Phase 1 — Make tiers actually mean something
-1. `merchant_tiers` gains `base_delivery_fee_jmd`, `menu_inflation_percent`,
-   `search_boost` (already there — start reading it), and effective-dating.
-2. `resolveDeliveryFee` learns the tier override, ordered tier → market → default.
-   Add to `PricingInput` (tier is already passed in — pure engine change).
-3. Implement `search_boost` in discovery ordering **with a "Promoted" label**.
-4. Wire `default_delivery_radius_km` and `promo_eligible` — they're seeded and ignored.
-5. Admin tier editor exposes the new fields; the simulator in `PricingHubPage` should
-   show side-by-side tier comparison for the same basket.
-6. Re-seed the tier ladder to the new commercial shape. Note the blueprint's ladder is
-   materially more aggressive than yours (15/25/30 vs your 12/20/25) — that's a pricing
-   decision, run it past the merchant pipeline before committing.
-
-### Phase 2 — Courier pay decoupling
-1. New `rider` rules: `courier_base_pay_jmd`, `courier_per_km_jmd`, `courier_min_pay_jmd`.
-2. `buildOrderPricing` computes courier pay independently; books the delta as
-   `platform_delivery_subsidy_jmd` in the breakdown and on the order.
-3. `courier_delivery_share` becomes legacy — keep reading it for old orders, stop writing it.
-4. Money split and the unified ledger learn the subsidy line.
-5. Courier apps read the new field
-   ([mapOrderToActiveDelivery.ts](apps/dash-courier/src/lib/mapOrderToActiveDelivery.ts),
-   [mapOrderToSingleOffer.ts](apps/dash-courier/src/lib/mapOrderToSingleOffer.ts),
-   [courierApi.ts:534](apps/dash-courier/src/lib/courierApi.ts#L534)).
-
-**Do this before Phase 3.** Cheap delivery fees without decoupled courier pay = supply
-collapse in the exact markets you're trying to grow.
-
-### Phase 3 — Menu inflation
-1. Schema: `in_store_price` + `marketplace_price`, backfilled equal, `price` kept as an
-   alias during transition.
-2. Decide and encode `commission_base: 'marketplace' | 'in_store'` explicitly.
-3. Ingestion applies tier inflation on merchant menu writes; platform cap enforced.
-4. Merchant dashboard shows both prices side by side, unambiguously labeled.
-5. Every customer read path switches to `marketplace_price`. Audit for stragglers —
-   discovery item search reads `price` directly today
-   ([customerDiscoveryRoutes.ts:250](supabase/functions/delivery/customerDiscoveryRoutes.ts#L250)).
-6. Merchant agreement language updated for the GCT exposure on the markup.
-
-### Phase 4 — Small-order fee
-Straightforward once the pattern from Phase 1–3 is established: new rules fields, new
-breakdown line, new column, GCT platform base, money split, client mirror, admin form,
-simulator scenario.
-
-### Phase 5 — Retire Model A
-Cut every market to `pricing_v2_enabled: true`, delete the legacy branch in
-`customerOrderRoutes` and `dashMoneySplit`, retire `merchants.commission_rate` and
-`merchants.delivery_fee`.
-
-### Phase 6 — Payout automation
-Only after the split math is proven correct against real settled orders. Pick the rail
-(WiPay vs Stripe Connect) first.
+1. **Commit the `PricingHubPage.tsx` fix** (§2.1) — nothing builds until then.
+2. **Fix the two split leaks** (§2.2) and add the `merchantReceivable` invariant test.
+3. **Join the tier in `/merchants/:id`** (§2.3) — small, and it closes the last
+   place where the displayed fee and the charged fee diverge.
+4. **Rename the migration** (§2.6) before the next push.
+5. **Repair the stale test** (§2.4).
+6. **Decide on `commission_base`** (§2.5) — implement or delete.
+7. Then GAP 8 (payout automation), on a split that's now provably correct.
 
 ---
 
-## 5. Decisions you asked to be prompted on
+## 4. Architecture reference
 
-You closed by asking for three numbers. Here they are with recommendations, plus the
-ones you didn't ask about that matter more.
+Retained from the original audit — the map of what lives where.
 
-**Service fee default.** Keep what you have — marginal 15% → 9% above J$5,000, clamped
-J$150–J$2,500. It is better than the blueprint's flat 10%: it protects small-basket
-economics without punishing large orders. Do not flatten it.
-
-**Long-distance threshold.** Keep 2 km included, not 10. Ten kilometers is a US-suburb
-number; on Spanish Town / Kingston geography a 10 km free radius means most orders never
-trigger distance pricing at all, and you eat the cost. Consider raising `per_extra_km_jmd`
-from J$60 toward J$100–115 instead, and making *that* the tier-varying knob.
-
-**Small-order threshold and fee.** J$1,500 threshold, J$400 fee, with a hard block
-retained at J$400 subtotal. Replaces a J$800 wall with a fee, which converts orders you
-currently reject.
-
-**The ones that matter more, and that only you can answer:**
-
-1. **Commission base under inflation** — marketplace price or in-store price? Determines
-   whether merchants pay commission on the markup covering your commission. Business and
-   reputational decision, not technical.
-2. **Max inflation cap** — a platform ceiling on `menu_inflation_percent`. Without one,
-   your marketplace's price perception is in each merchant's hands.
-3. **Courier pay floor** — the actual JMD number a courier must clear on a 12 km run for
-   supply to hold. Everything in Phase 2 is downstream of this number, and it's the one
-   the blueprint hand-waves.
-4. **Model A retirement date** — every phase costs roughly double while both paths live.
-5. **Disclosure posture** — paid ranking labeling, and whether in-app prices are
-   disclosed as differing from in-store. Some jurisdictions require the latter.
-
----
-
-## 6. Files this migration touches
-
-**Engine (single source of truth, shared server-side):**
-- [packages/dash-pricing/src/engine.ts](packages/dash-pricing/src/engine.ts) — `buildOrderPricing`, fee resolvers, rules parse/serialize
-- [packages/dash-pricing/src/types.ts](packages/dash-pricing/src/types.ts) — `MerchantTier`, `PricingInput`, `PricingBreakdown`, rules blobs
-- [packages/dash-pricing/src/gct.ts](packages/dash-pricing/src/gct.ts) — tax base classification for every new fee
+**Engine (single source of truth; edge functions re-export it via a 2-line shim):**
+- [packages/dash-pricing/src/engine.ts](packages/dash-pricing/src/engine.ts) — `buildOrderPricing`, fee resolvers, courier ladder, rules parse/serialize
+- [packages/dash-pricing/src/types.ts](packages/dash-pricing/src/types.ts) — `MerchantTier`, `PricingInput`, `PricingBreakdown`, party rule blobs
+- [packages/dash-pricing/src/gct.ts](packages/dash-pricing/src/gct.ts) — food vs. platform tax base
 - [packages/dash-pricing/src/rulesBlob.ts](packages/dash-pricing/src/rulesBlob.ts) — party namespacing, validators, provenance
-- [supabase/functions/_shared/dashPricing.ts](supabase/functions/_shared/dashPricing.ts) — re-export shim, no changes needed
+- [supabase/functions/_shared/dashPricing.ts](supabase/functions/_shared/dashPricing.ts) — re-export shim
 
 **Server:**
-- [supabase/functions/delivery/pricingResolver.ts](supabase/functions/delivery/pricingResolver.ts) — tier + market load, distance, engine call
-- [supabase/functions/delivery/pricingLayers.ts](supabase/functions/delivery/pricingLayers.ts) — layer merge
-- [supabase/functions/delivery/customerOrderRoutes.ts](supabase/functions/delivery/customerOrderRoutes.ts) — order placement, snapshot, min-order gate, legacy branch
-- [supabase/functions/delivery/customerDiscoveryRoutes.ts](supabase/functions/delivery/customerDiscoveryRoutes.ts) — feed fee source, ranking, item prices
-- [supabase/functions/delivery/admin/pricingRoutes.ts](supabase/functions/delivery/admin/pricingRoutes.ts) — tier CRUD, preview, backtest, reconciliation
-- [supabase/functions/_shared/dashMoneySplit.ts](supabase/functions/_shared/dashMoneySplit.ts) — **defect A/B live here**
-- [supabase/functions/payments/index.ts](supabase/functions/payments/index.ts#L197) — **defect A live here**
+- [pricingResolver.ts](supabase/functions/delivery/pricingResolver.ts) — tier + market load, distance, engine call
+- [pricingLayers.ts](supabase/functions/delivery/pricingLayers.ts) — Global → Parish → Town merge
+- [customerOrderRoutes.ts](supabase/functions/delivery/customerOrderRoutes.ts) — order placement, dual-price lines, snapshot, order gates
+- [customerDiscoveryRoutes.ts](supabase/functions/delivery/customerDiscoveryRoutes.ts) — search feed, tier fee, boost ranking
+- [index.ts](supabase/functions/delivery/index.ts) — home feed, merchant detail, pricing quote, menu inflation helper
+- [admin/pricingRoutes.ts](supabase/functions/delivery/admin/pricingRoutes.ts) — tier CRUD, preview, backtest, reconciliation
+- [_shared/dashMoneySplit.ts](supabase/functions/_shared/dashMoneySplit.ts) — capture split
+- [_shared/unifiedLedger/dualWriteDash.ts](supabase/functions/_shared/unifiedLedger/dualWriteDash.ts) — ledger posting incl. subsidy
 
 **Clients:**
-- [apps/dash-customer/src/lib/orderPricing.ts](apps/dash-customer/src/lib/orderPricing.ts) — client mirror, must stay in sync
-- [apps/dash-merchant/src/pages/MenuPage.tsx](apps/dash-merchant/src/pages/MenuPage.tsx) — dual-price editing
-- [apps/dash-courier/src/lib/](apps/dash-courier/src/lib/) — earnings display
+- [apps/dash-customer/src/lib/orderPricing.ts](apps/dash-customer/src/lib/orderPricing.ts) — client mirror
+- [apps/dash-merchant/src/components/menu/EditItemView.tsx](apps/dash-merchant/src/components/menu/EditItemView.tsx) — dual-price editing
+- [apps/dash-merchant/src/components/onboarding/PlanStepContent.tsx](apps/dash-merchant/src/components/onboarding/PlanStepContent.tsx) — tier selection
+- [apps/dash-courier/src/lib/](apps/dash-courier/src/lib/) — ladder-based earnings
 - [packages/dash-admin/src/pages/pricing/](packages/dash-admin/src/pages/pricing/) — hub, tier editor, party rule forms, simulator
 
 **Schema:**
 - [20260511140000_delivery_schema.sql](supabase/migrations/20260511140000_delivery_schema.sql) — base tables
-- [20260823120000_dash_pricing_engine.sql](supabase/migrations/20260823120000_dash_pricing_engine.sql) — tiers, market profiles, snapshots, COD
+- [20260823120000_dash_pricing_engine.sql](supabase/migrations/20260823120000_dash_pricing_engine.sql) — tiers, market profiles, order snapshots, COD
 - [20260829120000_pricing_hierarchy_layers.sql](supabase/migrations/20260829120000_pricing_hierarchy_layers.sql) — global/parish layers
+- [20260829200000_rush_marketplace_pricing.sql](supabase/migrations/20260829200000_rush_marketplace_pricing.sql) — tier fees, dual prices, ladder + small-order columns, Model B forcing, tier reseed
 
 ---
 
-## 7. Bottom line
+## 5. Bottom line
 
-The blueprint reads like a greenfield spec, but you are not greenfield — you have a
-better fee engine than it describes, sitting on a three-layer geographic override system
-it doesn't imagine. What you're missing is narrow and specific:
+The migration landed well. The three load-bearing mechanisms the original audit called
+out — tier-driven delivery fees, menu inflation, and courier pay decoupling — are all
+implemented properly, with the guardrails (inflation cap, two-floor order minimum,
+Promoted labels, tier assignment history) that the audit recommended but the blueprint
+never mentioned. Both accounting defects are fixed, and I confirmed the subsidy one
+numerically rather than taking the code's word for it.
 
-1. Tiers must set the customer's delivery fee, not just your commission. *(the whole idea)*
-2. Menus need a two-price model. *(the subsidy)*
-3. Courier pay must stop being a percentage of the customer's delivery fee. *(or supply dies)*
-4. Small orders need a fee, not a wall. *(recovered revenue)*
-5. The feed must show the fee checkout will actually charge. *(or the illusion is a lie)*
-
-And two accounting defects need fixing before any of it, because the new model makes
-both of them much worse.
+What's left is a short list. One is a build blocker you've already fixed but not
+committed. One is a pair of small residual leaks that still route platform costs onto
+merchants — worth fixing now precisely because the split is otherwise correct, and
+because a residual-based split will keep producing this bug shape until the invariant is
+asserted in a test. One is a single missed endpoint that reintroduces the
+feed-vs-checkout divergence on the highest-intent screen. The rest are hygiene.

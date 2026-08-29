@@ -40,7 +40,7 @@ describe('normalizeRulesBlob', () => {
 describe('parsePricingRules flat/nested parity', () => {
   const flat = serializePricingRules(defaultPricingRules());
 
-  it('parses legacy flat blob', () => {
+  it('parses legacy flat blob — honours stored values over new defaults', () => {
     const legacy = {
       pricing_v2_enabled: false,
       delivery: { base_fee_jmd: 400, included_km: 2, per_extra_km_jmd: 60, max_fee_jmd: 1500 },
@@ -57,7 +57,18 @@ describe('parsePricingRules flat/nested parity', () => {
       min_order_subtotal_jmd: 800,
       card_processing_fee_percent: 0.045,
     };
-    expect(parsePricingRules(legacy)).toEqual(defaultPricingRules());
+    const parsed = parsePricingRules(legacy);
+    expect(parsed.pricingV2Enabled).toBe(false);
+    expect(parsed.minOrderSubtotalJmd).toBe(800);
+    expect(parsed.delivery.baseFeeJmd).toBe(400);
+    expect(parsed.delivery.includedKm).toBe(2);
+    expect(parsed.delivery.perExtraKmJmd).toBe(60);
+    expect(parsed.delivery.maxFeeJmd).toBe(1500);
+    expect(parsed.serviceFee.mode).toBe('marginal');
+    expect(parsed.serviceFee.avgRate).toBe(0.15);
+    expect(parsed.courierDeliveryShare).toBe(0.8);
+    expect(parsed.cardProcessingFeePercent).toBe(0.045);
+    expect(parsed.cod?.pauseThresholdJmd).toBe(10000);
   });
 
   it('round-trips nested serialize without changing pricing output', () => {

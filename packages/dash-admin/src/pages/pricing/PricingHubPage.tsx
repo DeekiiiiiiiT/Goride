@@ -832,7 +832,6 @@ export function PricingHubPage() {
       setSimRunning(false);
     }
   };
-  };
 
   const handleRunScenario = async (scenario: SimScenario) => {
     if (!scenario.runnable) return;

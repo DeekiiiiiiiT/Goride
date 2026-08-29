@@ -198,7 +198,7 @@ async function completeWipayIntent(
       .schema("delivery")
       .from("orders")
       .select(
-        "merchant_id, courier_id, platform_fee, service_fee, processing_fee, delivery_fee, tip, pricing_model, merchant_commission_amount, delivery_fee_platform_amount, delivery_fee_courier_amount, peak_pay_amount, tax_food_jmd, tax_platform_jmd, platform_delivery_subsidy_jmd, small_order_fee",
+        "merchant_id, courier_id, platform_fee, service_fee, processing_fee, delivery_fee, tip, courier_tip_net, subtotal, discount, pricing_model, merchant_commission_amount, delivery_fee_platform_amount, delivery_fee_courier_amount, peak_pay_amount, tax_food_jmd, tax_platform_jmd, platform_delivery_subsidy_jmd, small_order_fee",
       )
       .eq("id", intent.order_id)
       .single();

@@ -6,7 +6,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { dualWriteDashPayment } from "../_shared/unifiedLedger/dualWriteDash.ts";
 import { getCourierRouteEstimate } from "../_shared/directionsRoute.ts";
 import { computeCourierCancelCompensation } from "../_shared/courierCancelCompensation.ts";
-import { courierDeliveryEarnings } from "../_shared/dashMoneySplit.ts";
+import { courierDeliveryEarnings, courierTipEarnings } from "../_shared/dashMoneySplit.ts";
 import { isCourierCashPaused } from "./courierCashLedger.ts";
 import { resolvePeakPayBonus } from "../_shared/courierPeakPay.ts";
 import { ORDER_CUSTOMER_EMBED_MINIMAL } from "./orderSelectEmbeds.ts";
@@ -151,7 +151,7 @@ async function rollbackStackAccept(
 function stackOrderEarnings(order: Record<string, unknown>): number {
   return (
     courierDeliveryEarnings(order) +
-    Number(order.tip || 0) +
+    courierTipEarnings(order) +
     Number(order.peak_pay_amount || 0)
   );
 }
@@ -877,7 +877,7 @@ export function registerCourierConsumerRoutes(app: Hono, deps: Deps) {
       .from("orders")
       .select(`
         id, order_number, status, delivery_fee, delivery_fee_courier_amount,
-        courier_base_pay_jmd, courier_distance_pay_jmd, tip, peak_pay_amount, delivered_at, delivery_address,
+        courier_base_pay_jmd, courier_distance_pay_jmd, tip, courier_tip_net, peak_pay_amount, delivered_at, delivery_address,
         merchant:merchants(name)
       `)
       .eq("courier_id", auth.userId)
@@ -891,7 +891,7 @@ export function registerCourierConsumerRoutes(app: Hono, deps: Deps) {
     let total = 0;
     const deliveries = rows.map((o) => {
       const fee = courierDeliveryEarnings(o as Record<string, unknown>);
-      const tip = Number(o.tip || 0);
+      const tip = courierTipEarnings(o as Record<string, unknown>);
       const peak = Number((o as { peak_pay_amount?: number }).peak_pay_amount || 0);
       const amount = fee + tip + peak;
       total += amount;
@@ -942,7 +942,7 @@ export function registerCourierConsumerRoutes(app: Hono, deps: Deps) {
     const startIso = start.toISOString();
     const select = `
       id, order_number, status, delivery_fee, delivery_fee_courier_amount,
-      courier_base_pay_jmd, courier_distance_pay_jmd, tip, peak_pay_amount, courier_compensation_amount,
+      courier_base_pay_jmd, courier_distance_pay_jmd, tip, courier_tip_net, peak_pay_amount, courier_compensation_amount,
       delivered_at, cancelled_at, delivery_address,
       merchant:merchants(name)
     `;
@@ -970,7 +970,7 @@ export function registerCourierConsumerRoutes(app: Hono, deps: Deps) {
     const mapRow = (o: Record<string, unknown>, kind: "completed" | "cancelled") => {
       const merchant = o.merchant as { name?: string } | null;
       const fee = courierDeliveryEarnings(o);
-      const tip = Number(o.tip || 0);
+      const tip = courierTipEarnings(o);
       const peak = Number(o.peak_pay_amount || 0);
       const compensation = Number(o.courier_compensation_amount || 0);
       return {
@@ -1024,7 +1024,7 @@ export function registerCourierConsumerRoutes(app: Hono, deps: Deps) {
     const serviceSb = getServiceSupabase();
     const { data: orders, error } = await serviceSb
       .from("orders")
-      .select("id, delivery_fee, delivery_fee_courier_amount, courier_base_pay_jmd, courier_distance_pay_jmd, pricing_model, tip, peak_pay_amount, delivered_at")
+      .select("id, delivery_fee, delivery_fee_courier_amount, courier_base_pay_jmd, courier_distance_pay_jmd, pricing_model, tip, courier_tip_net, peak_pay_amount, delivered_at")
       .eq("courier_id", auth.userId)
       .in("status", ["delivered", "completed"])
       .gte("delivered_at", periodStart)
@@ -1036,7 +1036,7 @@ export function registerCourierConsumerRoutes(app: Hono, deps: Deps) {
       (sum, o) =>
         sum +
         courierDeliveryEarnings(o as Record<string, unknown>) +
-        Number(o.tip || 0) +
+        courierTipEarnings(o as Record<string, unknown>) +
         Number(o.peak_pay_amount || 0),
       0,
     );
