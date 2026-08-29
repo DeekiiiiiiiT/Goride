@@ -11,6 +11,8 @@ export type CodTrialBalanceInput = {
   serviceFee?: number;
   deliveryFeePlatformAmount?: number;
   deliveryFeeCourierAmount?: number;
+  /** Customer small-order fee — platform take (same as card split). */
+  smallOrderFee?: number;
   taxFoodJmd?: number;
   taxPlatformJmd?: number;
   tax?: number;
@@ -51,10 +53,11 @@ export function computeCodTrialBalance(input: CodTrialBalanceInput): CodTrialBal
   const serviceFee = Math.max(0, Number(input.serviceFee ?? 0));
   const deliveryPlatform = Number(input.deliveryFeePlatformAmount ?? 0) || 0;
   const deliveryCourier = Math.max(0, Number(input.deliveryFeeCourierAmount ?? 0));
+  const smallOrderFee = Math.max(0, Number(input.smallOrderFee ?? 0));
 
   const merchantDueJmd = roundMoney(Math.max(0, discountedSubtotal - commission));
   const platformDueJmd = roundMoney(
-    serviceFee + commission + deliveryPlatform + gctDueJmd,
+    serviceFee + commission + deliveryPlatform + gctDueJmd + smallOrderFee,
   );
   const courierRetainedJmd = roundMoney(deliveryCourier + courierTipNet);
 

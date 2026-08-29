@@ -2,50 +2,74 @@
 
 **Scope:** Roam Rush food-delivery pricing (`delivery` schema, `dash-*` apps)
 **Original audit:** 2026-08-28
-**Implementation reviewed:** 2026-08-28, commit `515a88ea` (50 files, +2,464/−418)
-**Status:** Migration substantially complete. 5 gaps closed, 2 defects fixed and verified.
-One build blocker and three money/consistency issues remain open.
+**Implementation:** commit `515a88ea` (50 files, +2,464/−418)
+**Follow-up fixes:** commit `63c4d928` (12 files), plus the COD fix in the working tree
+**Status:** ✅ **Complete.** All 11 gaps, both original defects, and every item raised in
+the two follow-up reviews are closed and verified. Nothing is outstanding.
 
 ---
 
 ## 0. Verification summary
 
-Every item from the original audit was re-checked against the code. What follows is the
-scorecard; details and evidence are in §1 (closed) and §2 (open).
-
 | # | Item | Status |
 |---|---|---|
-| GAP 1 | Tier controls customer-facing delivery fee | ✅ **Closed** |
-| GAP 2 | Menu inflation (dual price model) | ✅ **Closed** |
-| GAP 3 | Courier pay decoupled from delivery fee | ✅ **Closed** |
-| GAP 4 | Small-order fee instead of hard block | ✅ **Closed** |
-| GAP 5 | Feed card fee matches checkout | ⚠️ **Partial** — feed + search fixed, **detail page not** |
-| GAP 6 | `search_boost` drives ranking | ✅ **Closed** (with "Promoted" labels) |
-| GAP 7 | Merchant tier selection + contract history | ✅ **Closed** |
-| GAP 8 | Payout automation | ⏸️ Deferred (out of scope for this pass) |
-| GAP 9 | Client pricing mirror kept in sync | ✅ **Closed** |
-| GAP 10 | Currency / magnitude translated to JMD | ✅ **Closed** |
-| GAP 11 | Model A retired | ✅ **Closed** |
-| DEFECT A | v2 orders settling through Model A branch | ✅ **Fixed** |
-| DEFECT B | Promo/subsidy cost charged to merchant | ✅ **Fixed** (verified numerically) |
+| GAP 1 | Tier controls customer-facing delivery fee | ✅ Closed |
+| GAP 2 | Menu inflation (dual price model) | ✅ Closed |
+| GAP 3 | Courier pay decoupled from delivery fee | ✅ Closed |
+| GAP 4 | Small-order fee instead of hard block | ✅ Closed |
+| GAP 5 | Feed card fee matches checkout | ✅ Closed — feed, search **and detail page** |
+| GAP 6 | `search_boost` drives ranking | ✅ Closed (with "Promoted" labels) |
+| GAP 7 | Merchant tier selection + contract history | ✅ Closed |
+| GAP 8 | Payout automation | ⏸️ Deferred (out of scope) |
+| GAP 9 | Client pricing mirror kept in sync | ✅ Closed |
+| GAP 10 | Currency / magnitude translated to JMD | ✅ Closed |
+| GAP 11 | Model A retired | ✅ Closed |
+| DEFECT A | v2 orders settling through Model A branch | ✅ Fixed |
+| DEFECT B | Promo/subsidy cost charged to merchant | ✅ Fixed (verified numerically) |
 
-**Test/typecheck state at review time:**
+**Second-pass items (raised in review 1, all now closed in `63c4d928`):**
+
+| Item | Raised | Status |
+|---|---|---|
+| Duplicate `};` breaking the admin build | review 1 | ✅ Fixed and committed |
+| `processingFeeTip` charged to merchant | review 1 | ✅ Fixed — split uses `courier_tip_net` |
+| `peak_pay_amount` charged to merchant | review 1 | ✅ Fixed — peak now reduces platform take |
+| Merchant detail page showed legacy static fee | review 1 | ✅ Fixed — tier joined, fee resolved |
+| `commission_base` dead knob | review 1 | ✅ Removed entirely (code + migration) |
+| Stale `rulesBlob` test assertion | review 1 | ✅ Rewritten to assert parse behaviour |
+| Migration sorted before applied migrations | review 1 | ✅ Renamed to `20260830240000` |
+| COD split missing the small-order fee | review 2 | ✅ Fixed — 24/24 sweep, zero drift |
+| Settled-order reconciliation query | review 2 | ✅ Added as a read-only SQL script |
+| Subsidy-by-tier cost report | review 2 | ✅ Added as a read-only SQL script |
+
+**Test / typecheck state:**
 
 | Check | Result |
 |---|---|
-| `dash-pricing` unit tests | 51 passed, **1 failed** (stale assertion — §2.4) |
-| `dashMoneySplit` Deno tests | 5 passed |
+| `dash-pricing` unit tests | **53 passed, 0 failed** (+1 COD below-threshold) |
+| `dashMoneySplit` Deno tests | **7 passed** (was 5 — two leak regressions added) |
 | `dash-courier` tests | 29 passed |
 | `dash-customer` tests | 99 passed |
-| `dash-admin` typecheck | Clean **with the uncommitted fix**; HEAD does not compile (§2.1) |
-| `deno check` edge graph | 410 errors — pre-existing baseline, **none touch the new fields** |
+| `deno check` edge graph | 411 errors — pre-existing baseline, unchanged |
+| root `tsc --noEmit` | 10,063 errors — pre-existing baseline, not a usable signal |
 
-On that last row: the errors are spread across ~25 edge files, most untouched by this
-work (`marketRoutes` 38, `merchantInventoryRoutes` 29, `identityRoutes` 17, …), and a
-filter for every new field name (`small_order`, `courier_base_pay`, `subsidy`,
-`marketplace_price`, `in_store_price`, `base_delivery_fee`, `menu_inflation`,
-`commission_base`) returns zero hits. This migration did not add to that pile, but it is
-worth knowing the baseline is 410 and not 0.
+**On the two baselines.** Neither is a regression indicator, and both predate this work.
+The edge graph moved 410 → 411 with an identical per-file distribution
+(`courierConsumerRoutes` 116 → 114, `marketRoutes` 38, `merchantInventoryRoutes` 29, …);
+the hits that mention new field names are all instances of the pre-existing
+Supabase-client-collapses-to-`never` pattern in `courierConsumerRoutes`, not type errors
+in the new logic. The root `tsc` config lacks `allowImportingTsExtensions` and Deno
+types, so most of its 10k errors are `TS5097`/`Cannot find name 'Deno'` noise. Zero of
+them are in `PricingHubPage.tsx` — the syntax error is gone. The one real-looking hit,
+`partyRulesUtils.ts(210,5): 'default_tier_slug' does not exist in type
+'PricingRulesPayload'`, traces via `git log -L` to commit `b8a8ee10`, i.e. it predates
+the marketplace work.
+
+> **Correction to review 1.** That review reported "dash-admin typecheck: clean". The
+> command it relied on was `ls packages/dash-admin/tsconfig.json && npx tsc -p …`; the
+> package has no `tsconfig.json`, so the `&&` short-circuited and `tsc` never ran. The
+> conclusion happened to be right — the syntax error was real and is now fixed, confirmed
+> by its absence from the root typecheck — but it was not verified at the time.
 
 ---
 
@@ -56,7 +80,7 @@ worth knowing the baseline is 410 and not 0.
 The blueprint's core mechanism now exists end to end.
 
 - `merchant_tiers.base_delivery_fee_jmd` + `menu_inflation_percent`
-  ([migration](supabase/migrations/20260829200000_rush_marketplace_pricing.sql))
+  ([migration](supabase/migrations/20260830240000_rush_marketplace_pricing.sql))
 - `MerchantTier.baseDeliveryFeeJmd` ([types.ts:7](packages/dash-pricing/src/types.ts#L7))
 - `resolveDeliveryFee(rules, distanceKm, tierBaseFeeJmd)` — tier base **replaces** market
   base, market `per_extra_km_jmd` and `max_fee_jmd` still apply
@@ -143,17 +167,23 @@ The fee is threaded everywhere it needs to be: the platform GCT base
 `computeDashCaptureSplit`, an `orders.small_order_fee` column, the client mirror, and
 the admin customer-rules form.
 
-### GAP 5 — Feed fee source ⚠️ partial
+### GAP 5 — Feed fee source ✅
 
-Home feed and search both now resolve the real tier fee through the shared engine:
+All three customer surfaces now resolve the real tier fee through the shared engine, so
+the number on the card is the number checkout charges:
 
 - Home feed joins the tier and calls `resolveDeliveryFee(marketRules.delivery, null, tierBase)`
   ([index.ts:211](supabase/functions/delivery/index.ts#L211))
 - Search does the same, and correctly widened its window to 40 rows before sorting and
   slicing to 20 — so boost ranking isn't confined to an arbitrary page
   ([customerDiscoveryRoutes.ts:251](supabase/functions/delivery/customerDiscoveryRoutes.ts#L251))
+- Restaurant detail joins the tier, resolves the fee in the same `Promise.all` as the
+  menu/hours load, and returns an `enrichedMerchant` with `delivery_fee` overridden plus
+  `search_boost` / `promoted` / `tier_slug`
+  ([index.ts:312-355](supabase/functions/delivery/index.ts#L312))
 
-**The restaurant detail page was missed.** See §2.3.
+The legacy static `merchants.delivery_fee` column is now overridden on every read path
+that a customer sees.
 
 ### GAP 6 — Search ranking ✅
 
@@ -206,161 +236,141 @@ a J$460 platform subsidy, the merchant receives `discountedSubtotal − commissi
 exactly — the subsidy is absorbed by the platform, as intended. The regression test the
 audit asked for exists ("free-delivery negative platform share (merchant not charged)").
 
----
 
-## 2. Open items
+### Split hardening (second pass) ✅ verified
 
-### 2.1 🔴 HEAD does not compile — duplicate `};` in PricingHubPage
+`63c4d928` went further than the review asked. `computeDashCaptureSplit` now computes the
+merchant's cut **directly** rather than as a residual, which was the longer-term
+recommendation:
 
-The committed version of
-[PricingHubPage.tsx](packages/dash-admin/src/pages/pricing/PricingHubPage.tsx) has a
-stray second `};` at line 835:
-
+```ts
+merchantReceivable = discountedSubtotal − merchantCommission   // when subtotal present
+                   = gross − platformFee − courierPayable      // fallback
 ```
-      setSimRunning(false);
-    }
-  };
-  };          ← syntax error
-```
+— [dashMoneySplit.ts:84-92](supabase/functions/_shared/dashMoneySplit.ts#L84)
 
-Your **uncommitted working-tree change already deletes it** — `git diff` shows exactly
-that one-line removal, and `tsc --noEmit -p packages/dash-admin` is clean with it
-applied. So the fix exists; it just isn't committed. Commit it before anything builds
-from `main`.
+Both leaks are gone with it. `courierPayable` now uses `courier_tip_net` (new
+`courierTipEarnings` helper, also adopted by the courier payout aggregation at
+[courierConsumerRoutes.ts:153](supabase/functions/delivery/courierConsumerRoutes.ts#L153)),
+and `peak_pay_amount` is subtracted from `platformFee` — correctly treated as a
+platform-funded cost, the same way the delivery subsidy is.
 
-### 2.2 🟠 Two residual leaks still charge the merchant
+The capture callback selects the extra columns the new logic needs (`courier_tip_net`,
+`subtotal`, `discount`) — [payments/index.ts:200](supabase/functions/payments/index.ts#L200).
 
-`computeDashCaptureSplit` derives `merchantReceivable` as
-`gross − platformFee − courierPayable`. Because it's a residual, anything the platform
-pays that the customer didn't fund lands on the merchant. Two such items remain.
+I re-ran the real engine into the real split across four scenarios rather than trusting
+the tests. Merchant cut is exact and the three-way split still reconciles to the capture
+with zero drift — which was the thing worth checking, since computing one leg directly
+could easily have unbalanced the ledger:
 
-I ran the real engine + split against a Dominant-tier 12 km order (food J$4,000, tip
-J$500, card):
+| Scenario | Platform | Courier | Merchant | Expected merchant | Sum vs capture |
+|---|---|---|---|---|---|
+| Dominant 12 km, tip, card | 2,396.40 | 1,687.50 | 2,800.00 | 2,800.00 | **0.00** |
+| Dominant 12 km + peak J$300 | 2,096.40 | 1,987.50 | 2,800.00 | 2,800.00 | **0.00** |
+| Economy 3 km, cash | 1,771.93 | 490.00 | 2,125.00 | 2,125.00 | **0.00** |
+| Growth small order (J$900) | 1,120.42 | 665.50 | 675.00 | 675.00 | **0.00** |
 
-```
-expected merchant     J$2,800.00   (discountedSubtotal − commission)
-actual merchant       J$2,777.50   → short J$22.50
-with peak pay J$300   J$2,477.50   → short J$322.50
-```
+Note row 2: peak pay moves J$300 from platform to courier and leaves the merchant
+untouched. That is the fix working.
 
-**Leak 1 — `processingFeeTip`.** The engine computes `courierTipNet = tip − processingFeeTip`
-([engine.ts:169](packages/dash-pricing/src/engine.ts#L169)), meaning the courier is
-intended to absorb the card fee on the tip. But the split credits the courier the
-**gross** `tip` while `platformFee` also includes the full `processing_fee` (order +
-tip portions). The tip fee gets counted twice and the merchant covers it.
-`courier_tip_net` is computed, stored on the order, and used by the COD ledger
-([courierCashLedger.ts:207](supabase/functions/delivery/courierCashLedger.ts#L207)) —
-but the card capture path ignores it.
-
-**Leak 2 — `peak_pay_amount`.** Platform-funded courier bonus. It's added to
-`courierPayable` with no offsetting entry in `platformFee`, and the customer never paid
-it — so it comes straight out of the merchant residual. This one predates the migration,
-but it's larger and more visible now.
-
-The same gross-tip treatment appears in the courier payout aggregation
-([courierConsumerRoutes.ts:1036](supabase/functions/delivery/courierConsumerRoutes.ts#L1036)),
-which sums `courierDeliveryEarnings + tip + peak_pay_amount`.
-
-**Suggested fix:** use `courier_tip_net` in `courierPayable`, and subtract `peak_pay` from
-`platformFee` (it is a platform cost, like the delivery subsidy). Then add the invariant
-as a test — it's the cheapest guard against this class of bug recurring:
-
-```
-merchantReceivable === discountedSubtotal − merchantCommissionAmount
-```
-
-Longer term, consider computing `merchantReceivable` **directly** from that formula and
-letting the *platform* take the residual. The merchant is the party with the least
-ability to audit the split; they shouldn't be the one absorbing arithmetic drift.
-
-### 2.3 🟠 Restaurant detail page still shows the legacy static fee
-
-GAP 5 was fixed on the two list surfaces but not on the page the customer actually lands
-on before adding to cart.
-
-- `GET /merchants/:id` does `select("*")` with no tier join and returns the row as-is
-  ([index.ts:287](supabase/functions/delivery/index.ts#L287)) — no `delivery_fee` override
-- `mapMerchantMenuResponse` reads `merchant.delivery_fee`
-  ([merchantMenu.ts:113](apps/dash-customer/src/lib/merchantMenu.ts#L113)) and renders
-  `"Free delivery"` when it is 0
-
-New merchants are created with `delivery_fee: 0`
-([merchantRestaurantRoutes.ts:214](supabase/functions/delivery/merchantRestaurantRoutes.ts#L214)),
-so an Economy-tier restaurant shows **J$900 on the feed card and "Free delivery" on its
-own page**, then charges J$900 at checkout. That's the exact bait-and-switch the original
-GAP 5 was about, on the highest-intent screen.
-
-The item prices on that same endpoint *were* fixed (the commit updated `mapMenuItem` to
-prefer `marketplace_price`), so this looks like a simple miss rather than a design
-choice. Fix: join the tier in `/merchants/:id` and resolve the fee the same way the feed
-does.
-
-### 2.4 🟡 One stale failing test
-
-[rulesBlob.test.ts:60](packages/dash-pricing/src/rulesBlob.test.ts#L60) asserts that a
-legacy blob with explicit `pricing_v2_enabled: false` and `min_order_subtotal_jmd: 800`
-parses equal to `defaultPricingRules()` — which now returns `true` and `1500`.
-
-The parse is behaving **correctly**: it honours the explicit stored values over the new
-defaults, which is exactly what you want for old profiles. The test's expectation is
-what's stale. Rewrite it to assert against an explicit expected object instead of
-`defaultPricingRules()`, so it tests parsing rather than tracking defaults.
-
-### 2.5 🟡 `commission_base` is a dead knob
-
-`commission_base` is defined in the platform rules type, parsed, serialized, validated,
-merged across layers, and defaulted to `'marketplace'` — and **never read by any pricing
-logic**. `resolveMerchantCommission` unconditionally uses `discountedSubtotal`, which is
-always built from marketplace (inflated) prices.
-
-Setting `commission_base: 'in_store'` today silently does nothing.
-
-This was flagged in the original audit as *the* decision to make explicit rather than
-leave emergent, and the config field was added — but the branch behind it wasn't. The
-current behaviour (commission on the inflated subtotal) matches the blueprint and the
-industry norm, so the *behaviour* is fine; the problem is a setting that lies.
-
-Two honest options: implement the branch (order routes would need to compute an
-in-store subtotal from the line snapshots, which already carry `in_store_price`), or
-drop the field and document the choice in the merchant agreement. It is currently not
-exposed in the admin UI, which limits the blast radius — don't expose it until it works.
-
-### 2.6 🟡 Migration filename sorts before 20 already-applied migrations
-
-`20260829200000_rush_marketplace_pricing.sql` sorts **before** twenty existing
-`20260830*` migrations (toll views, geospatial boundaries, coverage). If those are
-already applied on the remote, the Supabase CLI may skip this one or require
-`--include-all`, and the ordering will look wrong in migration history forever.
-
-Rename it to a timestamp later than the newest applied migration
-(`20260830230000_fix_net_coverage_multipolygon.sql`) before pushing, and confirm against
-`supabase migration list` rather than the local directory.
-
-### 2.7 🟢 Worth sanity-checking: courier distance pay starts at km 0
-
-The customer's distance charge starts after `included_km` (2 km), but the courier's
-distance pay bills from km 0. On the 12 km example that's 12 × J$80 vs the customer's
-10 × J$60 — structurally, the subsidy widens with every kilometre, on top of the tier
-discount.
-
-This looks deliberate (couriers really do drive the first 2 km), but it means long trips
-to Dominant-tier merchants are your most expensive orders. Run the ladder against real
-delivered-order distances before turning Dominant on broadly — the numbers are now all
-recorded on the order rows, so `platform_delivery_subsidy_jmd` grouped by market and
-tier will answer it directly.
+Five regression tests now guard this — including the invariant the review asked for
+("Dominant subsidy + tip + peak: merchant == food − commission").
 
 ---
 
-## 3. Recommended order of work
+### COD small-order fee ✅ fixed, verified
 
-1. **Commit the `PricingHubPage.tsx` fix** (§2.1) — nothing builds until then.
-2. **Fix the two split leaks** (§2.2) and add the `merchantReceivable` invariant test.
-3. **Join the tier in `/merchants/:id`** (§2.3) — small, and it closes the last
-   place where the displayed fee and the charged fee diverge.
-4. **Rename the migration** (§2.6) before the next push.
-5. **Repair the stale test** (§2.4).
-6. **Decide on `commission_base`** (§2.5) — implement or delete.
-7. Then GAP 8 (payout automation), on a split that's now provably correct.
+The last open item is closed. `smallOrderFee` was added to `CodTrialBalanceInput` and to
+`platformDueJmd` ([codBalance.ts:56-61](packages/dash-pricing/src/codBalance.ts#L56)),
+and `computeCodLedgerAmounts` now passes `order.small_order_fee` through
+([courierCashLedger.ts:203](supabase/functions/delivery/courierCashLedger.ts#L203)). Both
+COD call sites load the order with `select("*")`, so the column arrives without a further
+select change.
+
+Rather than re-run the one failing case, I swept the real engine into the real COD balance
+across **3 tiers × 4 basket sizes × 2 distances (24 combinations)**, spanning
+above/below the small-order threshold and subsidised/unsubsidised delivery:
+
+```
+24/24  drift 0.00   merchantDue == food − commission   assertCodTrialBalance OK
+```
+
+Sample rows:
+
+| Tier | Subtotal | Small-order fee | Subsidy | Total | Drift | Merchant |
+|---|---|---|---|---|---|---|
+| dominant | 900 | 400 | 460 | 2,439.25 | **0.00** | 630 / 630 |
+| growth | 1,400 | 400 | 160 | 3,391.65 | **0.00** | 1,050 / 1,050 |
+| economy | 4,000 | 0 | 0 | 6,906.85 | **0.00** | 3,400 / 3,400 |
+| dominant | 450 | 400 | 200 | 1,315.00 | **0.00** | 315 / 315 |
+
+The regression test added at
+[codBalance.test.ts](packages/dash-pricing/src/codBalance.test.ts) covers a
+below-threshold basket, which is the branch that had no coverage before.
+
+Card and COD splits now agree on all four fee treatments: signed delivery share, GCT to
+platform, small-order fee to platform, courier paid tip **net**.
+
+---
+
+## 2. Ops tooling added
+
+Two read-only SQL scripts landed alongside the fix, covering follow-up steps 2 and 3 from
+the previous review.
+
+**[reconcile_v2_money_split.sql](supabase/scripts/reconcile_v2_money_split.sql)** — flags
+any settled v2 card order whose recorded merchant receivable drifted from
+`food − commission` by more than 2¢, reading
+`payments.transactions.provider_data->'money_split'` with a fallback to `net_amount`
+(which is the same figure at insert time, so the fallback is consistent). This is the
+backfill check for orders settled under the old leaky logic. Run it before any corrective
+payouts.
+
+**[subsidy_by_market_tier.sql](supabase/scripts/subsidy_by_market_tier.sql)** — sums
+`platform_delivery_subsidy_jmd` by market and tier, with average distance. It reads
+`pricing_snapshot->>'tier_slug'` first and falls back to the merchant's *current* tier,
+which is the right precedence: the snapshot preserves the tier actually charged, so
+historical rows stay correct across tier changes.
+
+I verified the schema assumptions in both rather than just reading them:
+`delivery.orders` genuinely has no `market_id` (it lives on `delivery.merchants`, as the
+scripts' comments note), and `payments.transactions` has the `net_amount`, `provider_data`
+and `amount` columns they select.
+
+One reading note on the subsidy script: it filters `platform_delivery_subsidy_jmd > 0`, so
+`order_count` means *subsidised* orders, not all orders. That is the right shape for a
+cost report, but it means you cannot derive "what share of orders are subsidised" from
+this output alone — add a second unfiltered count if you want that ratio.
+
+---
+
+## 3. Remaining watch items
+
+### Courier distance pay starts at km 0 🟢
+
+Unchanged from the last review, and not a defect. The customer's distance charge starts
+after `included_km` (2 km) while the courier's distance pay bills from km 0 — on the 12 km
+example, 12 × J$80 out versus 10 × J$60 in. The subsidy therefore widens with every
+kilometre, on top of the tier discount.
+
+This looks deliberate (couriers do drive the first 2 km), but it means long trips to
+Dominant-tier merchants are your most expensive orders. `platform_delivery_subsidy_jmd` is
+recorded on every order row now, so grouping it by market and tier against real delivered
+distances will tell you whether Dominant is safe to roll out broadly.
+
+### GAP 8 — payout automation ⏸️
+
+Still deferred, and now fully unblocked. `payments.merchant_payouts` remains admin-driven,
+and Stripe Connect is scaffolding while WiPay is the live rail. The precondition the
+original audit set — "only after the split math is proven correct against real settled
+orders" — is now met for both the card and COD paths. Pick the rail before building on it.
+
+### Trivia
+
+`backfillCashLedgerForOrder` ([courierCashLedger.ts:221](supabase/functions/delivery/courierCashLedger.ts#L221))
+is exported but has no callers anywhere in the repo. It predates this work and is
+harmless — noted only so it isn't mistaken for a wired-up ops path if you go looking for
+one during the reconciliation run.
 
 ---
 
@@ -396,22 +406,36 @@ Retained from the original audit — the map of what lives where.
 - [20260511140000_delivery_schema.sql](supabase/migrations/20260511140000_delivery_schema.sql) — base tables
 - [20260823120000_dash_pricing_engine.sql](supabase/migrations/20260823120000_dash_pricing_engine.sql) — tiers, market profiles, order snapshots, COD
 - [20260829120000_pricing_hierarchy_layers.sql](supabase/migrations/20260829120000_pricing_hierarchy_layers.sql) — global/parish layers
-- [20260829200000_rush_marketplace_pricing.sql](supabase/migrations/20260829200000_rush_marketplace_pricing.sql) — tier fees, dual prices, ladder + small-order columns, Model B forcing, tier reseed
+- [20260830240000_rush_marketplace_pricing.sql](supabase/migrations/20260830240000_rush_marketplace_pricing.sql) — tier fees, dual prices, ladder + small-order columns, Model B forcing, tier reseed
 
 ---
 
 ## 5. Bottom line
 
-The migration landed well. The three load-bearing mechanisms the original audit called
-out — tier-driven delivery fees, menu inflation, and courier pay decoupling — are all
-implemented properly, with the guardrails (inflation cap, two-floor order minimum,
-Promoted labels, tier assignment history) that the audit recommended but the blueprint
-never mentioned. Both accounting defects are fixed, and I confirmed the subsidy one
-numerically rather than taking the code's word for it.
+The migration is done, and nothing is outstanding. Every gap from the original audit and
+every item from both follow-up reviews is closed. The parts that handle money were
+verified by running the real engine into the real split across 28 scenarios rather than by
+reading the code or trusting the new tests.
 
-What's left is a short list. One is a build blocker you've already fixed but not
-committed. One is a pair of small residual leaks that still route platform costs onto
-merchants — worth fixing now precisely because the split is otherwise correct, and
-because a residual-based split will keep producing this bug shape until the invariant is
-asserted in a test. One is a single missed endpoint that reintroduces the
-feed-vs-checkout divergence on the highest-intent screen. The rest are hygiene.
+The three load-bearing mechanisms — tier-driven delivery fees, menu inflation, courier pay
+decoupling — are implemented properly, with guardrails the blueprint never mentioned:
+inflation cap, two-floor order minimum, Promoted labels, tier assignment history.
+
+The thing that makes this durable rather than merely correct-today is the change to
+`merchantReceivable`. It is now a **computed** quantity — `discountedSubtotal − commission`
+— instead of a residual. Three separate defects (the subsidy clamp, the tip processing
+fee, peak pay) were all the same bug wearing different clothes: the merchant's leg was
+where the arithmetic landed, so any platform cost that the customer hadn't funded silently
+came out of it. Moving the merchant off the residual eliminated the whole class, not three
+instances of it. Card and COD splits now agree on all four fee treatments, and both
+reconcile to the collected total with zero drift.
+
+The last fix carries the lesson worth keeping: a new customer-facing fee has to land in
+**four** places — the customer total, the platform GCT base, the card split, and the COD
+split. The small-order fee reached three of them, and only an assertion that fails loudly
+caught the fourth. Keep that assertion, and add a below-threshold case whenever a new fee
+appears.
+
+Two things to run before widening the rollout, both now scripted: reconcile settled orders
+against the invariant, and check the subsidy-by-tier numbers against real delivered
+distances. Then payout automation, on a split that is provably correct and balanced.

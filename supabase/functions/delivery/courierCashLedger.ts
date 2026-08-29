@@ -200,6 +200,7 @@ export function computeCodLedgerAmounts(order: Record<string, unknown>): CodTria
     serviceFee: Number(order.service_fee ?? order.platform_fee ?? 0),
     deliveryFeePlatformAmount: Number(order.delivery_fee_platform_amount ?? 0),
     deliveryFeeCourierAmount: Number(order.delivery_fee_courier_amount ?? 0),
+    smallOrderFee: Number(order.small_order_fee ?? 0),
     taxFoodJmd: Number(order.tax_food_jmd ?? 0),
     taxPlatformJmd: Number(order.tax_platform_jmd ?? 0),
     tax: Number(order.tax ?? 0),
