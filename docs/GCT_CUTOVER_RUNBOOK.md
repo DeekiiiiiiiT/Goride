@@ -1,30 +1,21 @@
 # GCT Cutover Runbook — COMPLETE
 
-**Status: done.** Accounting `gct_rates` is the sole live charge source. Legacy Global Settings / KV tax is removed from the app.
+**Status: done.** Accounting `gct_rates` is the sole live charge source.
 
-## What shipped
+## Follow-ups closed after cutover
 
-1. Resolver flags: `db_authoritative: true`, `kv_fallback: false`, `gct_enabled: true` (migration `20260830280300_gct_engine_authoritative.sql`).
-2. `loadGlobalGctConfig` reads **only** the Accounting engine (seed fallback only if DB is down).
-3. Global Settings GCT panel, `TaxSettings`, and fleet-server default `tax` block deleted.
-4. Saving global settings strips any leftover `tax` key from KV.
+- **V11** — `public.gct_*` views use `security_invoker`; sensitive tables not SELECT-able by `authenticated`.
+- **V12** — Merchant setup copy + fixtures at 15%.
+- **V8b** — Expense Hub posts with vendor TRN shadow-write `gct_input_tax` (manual/CSV remains).
+- **F3** — Blank-TRN `gct_registered` merchants reset; CHECK prevents regression.
 
-## Day-to-day ops
+## Day-to-day
 
 | Need | Where |
 |---|---|
 | Change standard rate | Dominion → Accounting → GCT → Rates & classes |
-| Kill switch (platform GCT off) | `POST /gct-admin/resolver-flags` with `{ "gct_enabled": false }` |
-| Registrations / TRNs | GCT → Entities |
+| Kill switch | `POST /gct-admin/resolver-flags` `{ "gct_enabled": false }` |
+| Registrations / Roam TRN | GCT → Registrations |
 | Remittance | GCT → Remittance & filing |
 
-## Verify after deploy
-
-- Dominion → GCT engine shows **Engine live** and rate matches Rates page.
-- Registered merchant quote / POS: food GCT at engine rate.
-- Unregistered: food GCT $0.
-- Global Settings has **no** GCT panel.
-
-## Rollback (emergency only)
-
-Re-introduce KV dual-read only via a new code deploy — there is no soft flag back to Global Settings tax. Prefer fixing `gct_rates` rows or setting `gct_enabled: false` to stop charging.
+Paper sign-off: [GCT_PHASE0_OPS_CHECKLIST.md](./GCT_PHASE0_OPS_CHECKLIST.md).

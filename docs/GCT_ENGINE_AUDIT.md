@@ -1,13 +1,16 @@
 # GCT Engine — Implementation Audit
 
-**Status:** Audit (2026-08-29) + **verification pass after implementation (2026-08-29)** — see §0.5.
+**Status:** Audit (2026-08-29) → verification pass 1 → **verification pass 2 after remediation
+(2026-08-29)** — see §0.5.
 **Goal:** Build a single GCT calculation engine in Roam Dominion (under Accounting) that every
 other Roam product consumes, starting with Roam Rush (customer / partner / courier). Remove the
 legacy GCT settings currently living in Dominion → Global Settings → General.
 
-> **Current position:** Phases 1–3 are built and the architecture is sound. Two live money bugs
-> remain — the 16.5% over-collection is staged but not cut over, and the POS silent-zero-GCT path
-> is still open. Jump to [§0.5 Verification pass](#05-verification-pass--post-implementation).
+> **Current position:** The engine is **built, cut over and authoritative**. Live rate is **15%**.
+> Legacy KV / Global Settings tax is removed. V11–V12 and V8b expense feed are closed.
+> Remaining work is **accountant paper** (D1–D3 / §11) — see [GCT_PHASE0_OPS_CHECKLIST.md](./GCT_PHASE0_OPS_CHECKLIST.md).
+>
+> Jump to [§0.5](#05-verification-pass--post-implementation) for verification evidence.
 
 **Companion docs:** [JAMAICA_GCT_GUIDE.md](./JAMAICA_GCT_GUIDE.md) (the law),
 [dash-gct-centralization-audit.md](./dash-gct-centralization-audit.md) (prior pass, partially
@@ -65,27 +68,42 @@ value alone leaves most of them untouched. Inventory in §2.
 | **Rides** | `classifyRideFareGct` imported into `rides/fare/buildQuote.ts` |
 | **Defaults corrected** | `platform-settings/defaults.ts` and `_fleet-server/platform_settings.ts` now seed **15** |
 
-### Outstanding
+### V1–V10 — status after remediation (verification pass 2)
+
+**Re-verified 2026-08-29.** `npx vitest run packages/gct-core packages/dash-pricing
+packages/merchant-ops` → **69 tests passing** (6 files, +6 new POS guard tests).
+
+| # | Item | Status | Evidence |
+|---|---|---|---|
+| **V1** | Over-collection still live; `db_authoritative: false` | ✅ **Closed** | [`…280300_gct_engine_authoritative.sql`](../supabase/migrations/20260830280300_gct_engine_authoritative.sql) sets `{prefer_db, kv_fallback: false, db_authoritative: true, gct_enabled: true}`. [`loadGlobalGctConfig`](../supabase/functions/_shared/gctRate.ts#L94) no longer reads KV at all — DB rate or seeded 15% with a `gct_rate_db_unavailable` warning. Kill switch migrated to `resolver.gct_enabled` |
+| **V2** | POS silent-zero GCT | ✅ **Closed** | `resolvePosTaxRatePercent()` added — unregistered → 0, registered with missing/invalid rate → **throws**. `PosRegisterPage` now types `taxRate` as `number \| null` ("never invent 0%"); `usePosCart` computes `rateBlocked` and withholds tax/total until the rate loads. 6 new tests |
+| **V3** | Legacy Global Settings card not deleted | ✅ **Closed** | Zero matches for `TaxSettings` / `DEFAULT_TAX_SETTINGS` / `gctStandardRatePercent` / `gctEnabled` across `platform-settings`, `admin-core` and `_fleet-server/platform_settings.ts` |
+| **V4** | `partyRulesUtils` re-injects 16.5 | ✅ **Closed** | Both fallbacks removed; replaced with a comment recording why (`was resurrecting 16.5`) |
+| **V5** | `DEFAULTS.taxRatePercent` silent fallback | ✅ **Closed** | `engine.ts:528` now returns `undefined` when the blob has no valid rate, so `buildOrderPricing` throws as designed. Literal removed from `DEFAULTS` |
+| **V6** | Haul classifier never imported | ✅ **Closed** | `classifyHaulageGoodsSupply` imported and applied in `buildHaulageQuote.ts:164` |
+| **V7** | Freight `GCT_RATE = 0.15` default | ✅ **Closed** | New `freight/resolveImportGctRate.ts` bridges to the engine; all three call sites (`courierOsRoutes` ×2, `dualLedgerBilling`) pass `gctRate`. The constant is now a documented last-resort only |
+| **V8** | Input tax manual-entry only | 🟡 **Partial** | `POST /input-tax/batch` added for bulk entry, but there is still **no automated feed** from vendor/expense data — `adminNavConfig.ts:142` explicitly scopes the vendor catalog out of the engine. See V8b |
+| **V9** | No orphan sweep for closed-period supplies | ✅ **Closed** | `/health` returns `orphanOutputCount` / `orphanInputCount`; `GET /orphans` lists them; `POST /orphans/assign` reassigns |
+| **V10** | Test fixtures asserting 16.5 | ✅ **Closed** | Zero occurrences remain in `engine.test.ts` |
+
+**Also verified clean:** no residual `16.5` anywhere in live code paths (only in superseded
+migrations, which is correct — they are history).
+
+### New findings from the cutover
 
 | # | Item | Severity | Location |
 |---|---|---|---|
-| **V1** | **The over-collection is still live.** `gct_engine_flags.resolver` is `{"prefer_db": true, "kv_fallback": true, "db_authoritative": false}`. In that state [`loadGlobalGctConfig`](../supabase/functions/_shared/gctRate.ts#L168) returns **`kv.ratePercent`** for actual charging — the DB rate is read only to log `gct_rate_source_disagreement`. Production KV holds whatever was last saved in the Global Settings card (16.5 as at the audit). Deliberate and correctly commented, pending D1 sign-off — but **F1 is not closed until the flag flips** | 🔴 | `gct_engine_flags`, `gctRate.ts:168-177` |
-| **V2** | **POS silent-zero GCT — the original bug, still open.** [`PosRegisterPage.tsx:46`](../apps/rush-command/src/pages/restaurant-mgmt/PosRegisterPage.tsx#L46) passes `taxRateProp ?? 0` into [`merchant-ops/order-pricing.ts:33`](../packages/merchant-ops/src/order-pricing.ts#L33), which has **no guard**: `Math.max(0, Number(input.taxRatePercent))`. The server twin `_shared/orderPricing.ts:42` throws; the client mirror does not, despite its header claiming it mirrors the server. A GCT-registered merchant whose prop is missing rings up a sale with **$0 GCT on the receipt** — under-collection, s. 56(4). Deduplicating the two files removed the copy, not the defect | 🔴 | `PosRegisterPage.tsx:46`, `merchant-ops/order-pricing.ts:33` |
-| **V3** | **Legacy Global Settings GCT card not deleted.** Still at `GlobalPlatformSettingsPage.tsx:211-264`, with `TaxSettings` (types.ts:106), `DEFAULT_TAX_SETTINGS` (defaults.ts:140) and the `tax` block (`_fleet-server/platform_settings.ts:140`). Defensible while KV is authoritative — but there are now **two editable rate fields and the deprecated one is the one that charges**. Remove at cutover, not before | 🟠 | §6 deletion list |
-| **V4** | **`partyRulesUtils.ts` re-injects 16.5.** Lines 109 and 159 use `tax_rate_percent ?? 16.5`. The migration stripped that key from the DB blobs, so this fallback now **resurrects the stripped field with the wrong number** in the admin seed/diff path | 🟠 | `packages/dash-admin/src/pages/pricing/marketRules/partyRulesUtils.ts:109,159` |
-| **V5** | `DEFAULTS.taxRatePercent = 15` still consumed at `engine.ts:528` as a silent fallback for `flat.tax_rate_percent`. §6 called for deletion — `buildOrderPricing` already throws without a rate, so the default only masks bugs | 🟡 | `packages/dash-pricing/src/engine.ts:528,586` |
-| **V6** | `rides/haulage/gctClassify.ts` exports `classifyHaulageGoodsSupply` / `classifyHaulPassengerLegIfAny` — **never imported anywhere**. Dead code, and F7 stays partial for Haul | 🟡 | `supabase/functions/rides/haulage/gctClassify.ts` |
-| **V7** | `freight/landedCost.ts:10` keeps `GCT_RATE = 0.15` as the default when no engine rate is supplied. Confirm every caller passes `gctRate`, or the constant silently re-introduces a second source | 🟡 | `supabase/functions/freight/landedCost.ts:10` |
-| **V8** | **Input tax is manual-entry only** (`POST /input-tax`). Nothing feeds it from the vendor/expense data Accounting already holds, so `net_payable_jmd` overstates the liability until it does | 🟡 | `gct-admin/index.ts:370` |
-| **V9** | Supplies whose tax point lands in a `closed`/`filed` period are written with **`period_id = NULL`**. Correct — but there is no orphan sweep or report, so they silently never reach a return | 🟡 | `_shared/gctLedger.ts:35` |
-| **V10** | `engine.test.ts` fixtures still assert against `16.5`. Cosmetic, but the suite now encodes a rate that is not the statutory one | 🟡 | `packages/dash-pricing/src/engine.test.ts` |
+| **V11** | **The `public.gct_*` mirror views bypass RLS and are readable by every authenticated user.** [`…280400_gct_public_api_mirrors.sql`](../supabase/migrations/20260830280400_gct_public_api_mirrors.sql) mirrors all seven engine tables into `public` so PostgREST can reach them — reasonable — but **none of the views set `security_invoker = on`**, so they execute with the view owner's privileges and the RLS policies on `accounting.*` never apply. Combined with `GRANT SELECT ... TO authenticated` (lines 26-32), any holder of a user JWT — a customer, a **courier**, a merchant — can read `public.gct_entities` (merchant **TRNs**, registration status, evidence URLs), `public.gct_output_tax` (every taxable supply, amount and counterparty) and `public.gct_input_tax`. Courier apps hold authenticated Supabase clients that reach PostgREST directly (`apps/dash-courier/src/lib/*Service.ts`), so this is reachable, not theoretical. The repo already has the correct pattern — see `20260718161000_rls_wave1_view_invoker.sql`; these views deviate from it. **Fix:** add `WITH (security_invoker = on)` to all seven views and drop `authenticated` from the SELECT grants on `gct_entities`, `gct_output_tax`, `gct_input_tax` and `gct_engine_flags` — Dominion reads through the service-role edge function, so it does not need them | 🔴 | `20260830280400_gct_public_api_mirrors.sql:5-40` |
+| **V12** | **Stale 16.5% in merchant-facing copy and fixtures.** [`RestaurantMgmtSetupWizard.tsx:138`](../apps/rush-command/src/components/restaurant-mgmt/RestaurantMgmtSetupWizard.tsx#L138) tells merchants during setup "settings (currently 16.5% GCT)" — now factually wrong and shown to partners. [`restaurant-mgmt-fixtures.ts:69`](../apps/dash-merchant/src/lib/restaurant-mgmt-fixtures.ts#L69) still carries `taxRatePercent: 16.5`, which feeds `FIXTURE_SETUP_DRAFT` — the non-API branch of `PosRegisterPage`, so demo/offline POS prices at the old rate | 🟠 | Two files |
+| **V8b** | Input-tax feed still manual/batch. Until vendor and expense data flows into `gct_input_tax`, `net_payable_jmd` on a closed period **overstates the liability** — you would remit more than you owe. Not blocking the first period if you reconcile by hand, but it should not stay manual | 🟡 | `gct-admin/index.ts:381,418` |
 
 ### Recommended order
 
-1. **V2 and V4 now** — both are independent of the rate decision. V2 under-collects; V4 quietly undoes the migration you just ran.
-2. **V5, V6, V7, V10** — cheap cleanup, any time.
-3. **D1 sign-off**, then the cutover runbook: flip `db_authoritative`, verify no `gct_rate_source_disagreement` warnings, then **V3** (delete the card and `TaxSettings`).
-4. **V8, V9** before the first real filing, or the first Form 4A figure will be wrong in both directions.
+1. **V11 immediately.** It is a data-exposure regression introduced by the cutover, it is one
+   migration to fix, and merchant TRNs are the kind of thing that should never have been reachable
+   by a courier's JWT.
+2. **V12** — one-line copy change and one fixture value; the wizard text is customer-facing.
+3. **V8b** before the first filing, or reconcile input tax manually and document that you did.
 
 ---
 
@@ -418,8 +436,12 @@ Page contents:
 
 ## 7. Phasing
 
-**Progress:** Phase 0 ⏸ (D1 outstanding) · Phase 1 ✅ · Phase 2 ✅ · Phase 3 🟡 (V2, V3, V4) ·
-Phase 4 🟡 (output ledger done; V8, V9 open) · Phase 5 🟡 (Fleet/Freight/Rides done; Haul V6)
+**Progress:** Phase 0 ✅ (rate corrected to 15% and cut over — D1 sign-off should still be filed) ·
+Phase 1 ✅ · Phase 2 ✅ · Phase 3 ✅ · Phase 4 🟡 (output ledger, periods and orphan handling done;
+input-tax feed still manual — V8b) · Phase 5 ✅ (Fleet, Freight, Rides, Haul all wired)
+
+**Open:** V11 (🔴 RLS bypass on the public mirror views), V12 (🟠 stale 16.5% in merchant copy),
+V8b (🟡 manual input tax).
 
 ### Phase 0 — Stop the bleeding (do first, independently of the engine)
 
@@ -534,6 +556,12 @@ Phase 4 🟡 (output ledger done; V8, V9 open) · Phase 5 🟡 (Fleet/Freight/Ri
 
 ## 12. Cutover runbook — flipping `db_authoritative`
 
+> **Executed.** `20260830280300_gct_engine_authoritative.sql` performed the flip and also set
+> `kv_fallback: false`, so the KV path is gone rather than dormant. Steps 8 and 9 below are done
+> (V3 deleted; `gct_ensure_current_period` seeds the period). Kept as the record, and as the
+> procedure for the **next** rate change under s. 4(2) — a future rate is a new `gct_rates` row with
+> an `effective_from`, which needs no flag flip at all.
+
 Do not run this until **D1** is answered in writing.
 
 1. **Confirm the seeded rate.** Dominion → Accounting → Rates & classes: standard class shows the
@@ -561,6 +589,19 @@ looked up at read time.
 
 ---
 
-*Original audit 2026-08-29 (no code changed). Verification pass 2026-08-29 against the shipped
-implementation — §0.5, §6 status column, §7 progress line and §12 added. Line references are as at
-the verification pass.*
+## 13. Remaining work
+
+```
+📋 Paper only — see GCT_PHASE0_OPS_CHECKLIST.md
+   D1/D2 rate + prior over-collection written confirmation
+   D3 Roam Rush TRN on Registrations (roam_rush)
+   §11 COD / courier / TAJ questions
+
+Engineering closed: V1–V12, V8b expense feed, F3 blank-TRN reset, V11 RLS.
+```
+
+---
+
+*Original audit 2026-08-29 (no code changed). Verification pass 1 — §0.5, §6 status column, §7
+progress line, §12 runbook. Verification pass 2 (2026-08-29, post-remediation) — V1–V10 outcomes,
+new findings V11/V12/V8b, §13. Line references are as at verification pass 2.*

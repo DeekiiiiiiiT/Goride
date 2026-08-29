@@ -33,6 +33,8 @@ export const platformVendorAdminService = {
     name: string;
     categoryDefault?: string;
     notes?: string;
+    trn?: string;
+    gctRegistered?: boolean;
   }) {
     return adminFetch<{ success: boolean; data: ExpenseVendor }>(V, {
       method: 'POST',
@@ -51,7 +53,9 @@ export const platformVendorAdminService = {
 
   updateVendor(
     id: string,
-    body: Partial<Pick<ExpenseVendor, 'name' | 'categoryDefault' | 'notes' | 'isActive' | 'status'>>,
+    body: Partial<
+      Pick<ExpenseVendor, 'name' | 'categoryDefault' | 'notes' | 'isActive' | 'status' | 'trn' | 'gctRegistered'>
+    >,
   ) {
     return adminFetch<{ success: boolean; data: ExpenseVendor }>(`${V}/${id}`, {
       method: 'PUT',

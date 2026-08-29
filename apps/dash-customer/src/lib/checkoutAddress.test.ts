@@ -42,7 +42,7 @@ describe('calculateOrderTotals', () => {
         deliveryFee: 200,
         serviceFee: 40,
         tax: 132,
-        taxRatePercent: 16.5,
+        taxRatePercent: 15,
         orderTotal: 1172,
         processingFee: 35,
         smallOrderFee: 400,

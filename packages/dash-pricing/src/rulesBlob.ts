@@ -49,7 +49,6 @@ export function deepMergeObjects(
 
 const FLAT_TO_PARTY: Array<{ party: PricingParty; key: string; nestedKey?: string }> = [
   { party: 'platform', key: 'pricing_v2_enabled' },
-  { party: 'platform', key: 'tax_rate_percent' },
   { party: 'platform', key: 'max_menu_inflation_percent' },
   { party: 'customer', key: 'service_fee' },
   { party: 'customer', key: 'min_order_subtotal_jmd' },
@@ -80,6 +79,7 @@ export function normalizeRulesBlob(
   const platform: Record<string, unknown> = isPlainObject(raw.platform)
     ? { ...raw.platform }
     : {};
+  delete platform.tax_rate_percent;
   const customer: Record<string, unknown> = isPlainObject(raw.customer)
     ? { ...raw.customer }
     : {};
@@ -187,9 +187,6 @@ export function flattenNestedToLegacy(blob: NestedRulesBlob): Record<string, unk
 
   if (platform.pricing_v2_enabled !== undefined) {
     out.pricing_v2_enabled = platform.pricing_v2_enabled;
-  }
-  if (platform.tax_rate_percent !== undefined) {
-    out.tax_rate_percent = platform.tax_rate_percent;
   }
   if (platform.max_menu_inflation_percent !== undefined) {
     out.max_menu_inflation_percent = platform.max_menu_inflation_percent;
@@ -381,8 +378,6 @@ export function validatePartnerRules(_rules: PricingRules): string | null {
 }
 
 export function validatePlatformRules(rules: PricingRules): string | null {
-  const taxRate = rules.taxRatePercent ?? 15;
-  if (taxRate < 0 || taxRate > 30) return 'tax_rate_percent must be between 0 and 30';
   const maxInflation = rules.maxMenuInflationPercent ?? 0.25;
   if (maxInflation < 0 || maxInflation > 1) return 'max_menu_inflation_percent must be between 0 and 1';
   return null;

@@ -35,7 +35,7 @@ Use this checklist before relying on exclusions in production. Prefer a **surcha
 `18.02126, -76.97146` — zone name `EXC-8 audit pilot (safety surcharge)` (priority **100**, surcharge J$200).
 
 **Closeout pilots (2026-08-29, ~7-day `effective_to`):**
-- `EXC closeout block pilot` — market `block` + `zone_schedules` all-day window
+- `EXC closeout block pilot` — market `block` + `zone_schedules` `00:00:00`–`23:59:59` (use `23:59:59`, not `23:59:00`, if you need near-24h coverage; for true always-on, omit schedules entirely)
 - `EXC closeout parish scoped block` — St. Catherine parish `scoped_exclusion_zones`
 
 ---
@@ -72,7 +72,7 @@ PATCH /admin/markets/{marketId}/zones/{zoneId}
     {
       "dow": [0, 1, 2, 3, 4, 5, 6],
       "start_time": "20:00",
-      "end_time": "23:59",
+      "end_time": "23:59:59",
       "timezone": "America/Jamaica"
     }
   ]
@@ -80,7 +80,7 @@ PATCH /admin/markets/{marketId}/zones/{zoneId}
 ```
 
 Scoped: `PATCH /admin/markets/scoped-exclusions/{id}` with the same `schedules` array.  
-Empty schedules = always active (subject to `effective_*` / `is_active`). Evaluation honours an injected `at` clock in `@roam/dash-coverage` tests.
+Empty / omitted schedules = always active (subject to `effective_*` / `is_active`). Prefer that for true 24/7 safety zones. If you express a near-all-day window, use `end_time: "23:59:59"` — end is **inclusive** through that minute (no 23:59 gap). Evaluation honours an injected `at` clock in `@roam/dash-coverage` tests.
 
 ---
 

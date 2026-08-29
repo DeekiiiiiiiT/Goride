@@ -211,16 +211,19 @@ describe('evaluateCoverage', () => {
         {
           dow: [0, 1, 2, 3, 4, 5, 6],
           start_time: '20:00',
-          end_time: '23:59',
+          end_time: '23:59:59',
           timezone: 'America/Jamaica',
         },
       ],
     };
-    // 2026-08-29 21:00 America/Jamaica = 2026-08-30 02:00 UTC (EDT-less; Jamaica is UTC-5)
+    // 2026-08-29 21:00 America/Jamaica = 2026-08-30 02:00 UTC
     const inside = new Date('2026-08-30T02:00:00.000Z');
     const outside = new Date('2026-08-29T18:00:00.000Z'); // 13:00 Jamaica
+    // 23:59 Jamaica — inclusive end must still apply (no nightly hole)
+    const lastMinute = new Date('2026-08-30T04:59:00.000Z');
     expect(evaluateCoverage(18.015, -76.965, [ST_INCLUDE, scheduled], inside).inZone).toBe(false);
     expect(evaluateCoverage(18.015, -76.965, [ST_INCLUDE, scheduled], outside).inZone).toBe(true);
+    expect(evaluateCoverage(18.015, -76.965, [ST_INCLUDE, scheduled], lastMinute).inZone).toBe(false);
   });
 
   it('ignores expired exclusions', () => {

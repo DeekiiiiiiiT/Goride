@@ -32,8 +32,6 @@ export interface PricingResult {
   }>;
 }
 
-export const GCT_STANDARD_RATE_FALLBACK = 15;
-
 function roundMoney(value: number) {
   return Math.round(value * 100) / 100;
 }
@@ -45,7 +43,7 @@ export function resolveTaxRatePercent(input: PricingInput): number {
     return Math.max(0, Number(input.taxRatePercent));
   }
   throw new Error(
-    'taxRatePercent is required for GCT pricing — resolve from Dominion global settings before calling calculateOrderPricing',
+    'taxRatePercent is required for GCT pricing — resolve from Accounting GCT engine before calling calculateOrderPricing',
   );
 }
 

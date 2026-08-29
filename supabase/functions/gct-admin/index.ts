@@ -83,8 +83,6 @@ app.get('/health', async (c) => {
     effectiveRatePercent: config.ratePercent,
     gctEnabled: config.enabled,
     fromDb: config.fromDb ?? false,
-    sourceDisagreement: config.sourceDisagreement ?? false,
-    kvRatePercent: config.kvRatePercent ?? null,
     dbStandardRatePercent: dbStandard,
     resolverFlags: (flags as { value?: unknown } | null)?.value ?? null,
     needsReviewEntities: needsReview ?? [],
@@ -338,7 +336,54 @@ app.post('/periods/:id/close', async (c) => {
   if (period.status !== 'open') return c.json({ error: 'Period is not open' }, 400);
 
   const [{ data: outputs }, { data: inputs }] = await Promise.all([
-    a.from('gct_output_tax').select('tax_amount_jmd').eq('period_id', id),
+    a.from('gct_output_tax').select('tax_amount_jmd, supply_class, base_amount_jmd').eq('period_id', id),
+    a.from('gct_input_tax').select('id, tax_amount_jmd, creditable_amount_jmd, credit_restriction').eq('period_id', id),
+  ]);
+
+  let taxableBase = 0;
+  let totalBase = 0;
+  let exemptOutputTax = 0;
+  for (const r of outputs ?? []) {
+    const base = Number((r as { base_amount_jmd?: number }).base_amount_jmd ?? 0);
+    const tax = Number((r as { tax_amount_jmd?: number }).tax_amount_jmd ?? 0);
+    const cls = String((r as { supply_class?: string }).supply_class || 'standard');
+    totalBase += Math.abs(base);
+    if (cls === 'exempt' || cls === 'zero_rated') {
+      exemptOutputTax += tax;
+    } else {
+      taxableBase += Math.abs(base);
+    }
+  }
+
+  const partlyExempt = exemptOutputTax !== 0 && taxableBase > 0 && totalBase > 0;
+  const creditFraction = partlyExempt && totalBase > 0
+    ? Math.min(1, Math.max(0, taxableBase / totalBase))
+    : 1;
+
+  // When partly-exempt, scale unrestricted input credits by taxable/total fraction
+  if (partlyExempt && creditFraction < 1) {
+    const { apportionInputCredit } = await import('../_shared/gctCore.ts');
+    for (const row of inputs ?? []) {
+      const restriction = String((row as { credit_restriction?: string }).credit_restriction || 'none');
+      if (restriction !== 'none' && restriction !== 'apportioned') continue;
+      const taxAmt = Number((row as { tax_amount_jmd?: number }).tax_amount_jmd ?? 0);
+      if (taxAmt <= 0) continue;
+      const adjusted = apportionInputCredit({
+        inputTaxJmd: taxAmt,
+        taxableSuppliesJmd: taxableBase,
+        totalSuppliesJmd: totalBase,
+      });
+      await a
+        .from('gct_input_tax')
+        .update({
+          creditable_amount_jmd: adjusted,
+          credit_restriction: 'apportioned',
+        })
+        .eq('id', (row as { id: string }).id);
+    }
+  }
+
+  const [{ data: inputsAfter }] = await Promise.all([
     a.from('gct_input_tax').select('creditable_amount_jmd').eq('period_id', id),
   ]);
 
@@ -346,7 +391,7 @@ app.post('/periods/:id/close', async (c) => {
     (s: number, r: { tax_amount_jmd?: number }) => s + Number(r.tax_amount_jmd ?? 0),
     0,
   );
-  const inputTotal = (inputs ?? []).reduce(
+  const inputTotal = (inputsAfter ?? inputs ?? []).reduce(
     (s: number, r: { creditable_amount_jmd?: number }) => s + Number(r.creditable_amount_jmd ?? 0),
     0,
   );
@@ -368,6 +413,14 @@ app.post('/periods/:id/close', async (c) => {
   if (error) return c.json({ error: error.message }, 500);
   return c.json({
     period: data,
+    apportionment: partlyExempt
+      ? {
+          taxableSuppliesJmd: Math.round(taxableBase * 100) / 100,
+          totalSuppliesJmd: Math.round(totalBase * 100) / 100,
+          creditFraction: Math.round(creditFraction * 10000) / 10000,
+          applied: true,
+        }
+      : null,
     form4a: {
       periodStart: data.period_start,
       periodEnd: data.period_end,

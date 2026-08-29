@@ -12,12 +12,12 @@ Deno.test('calculateOrderPricing — modifier lines', () => {
         modifiers: [{ name: 'Cheese', priceAdjustment: 150 }],
       },
     ],
-    taxRatePercent: 16.5,
+    taxRatePercent: 15,
     discount: 0,
   });
   assertEquals(result.subtotal, 1350);
-  assertEquals(result.tax, 222.75);
-  assertEquals(result.total, 1572.75);
+  assertEquals(result.tax, 202.5);
+  assertEquals(result.total, 1552.5);
 });
 
 Deno.test('calculateOrderPricing — zero tax when not GCT registered', () => {
@@ -26,22 +26,22 @@ Deno.test('calculateOrderPricing — zero tax when not GCT registered', () => {
       { menuItemId: 'a', name: 'A', unitPrice: 100, quantity: 3 },
       { menuItemId: 'b', name: 'B', unitPrice: 50, quantity: 2 },
     ],
-    taxRatePercent: 16.5,
+    taxRatePercent: 15,
     gctRegistered: false,
   });
   assertEquals(result.subtotal, 400);
   assertEquals(result.total, 400);
 });
 
-Deno.test('calculateOrderPricing — Jamaica GCT 16.5% on food subtotal', () => {
+Deno.test('calculateOrderPricing — Jamaica GCT 15% on food subtotal', () => {
   const result = calculateOrderPricing({
     lines: [
       { menuItemId: 'item-1', name: 'Jerk', unitPrice: 1000, quantity: 2 },
     ],
-    taxRatePercent: 16.5,
+    taxRatePercent: 15,
     discount: 0,
   });
   assertEquals(result.subtotal, 2000);
-  assertEquals(result.tax, 330);
-  assertEquals(result.total, 2330);
+  assertEquals(result.tax, 300);
+  assertEquals(result.total, 2300);
 });

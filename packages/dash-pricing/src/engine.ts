@@ -525,9 +525,8 @@ export function parsePricingRules(raw: Record<string, unknown> | null | undefine
     cod: {
       pauseThresholdJmd: Number(cod.pause_threshold_jmd ?? DEFAULTS.cod?.pauseThresholdJmd ?? 10000),
     },
-    taxRatePercent: flat.tax_rate_percent != null && Number.isFinite(Number(flat.tax_rate_percent))
-      ? Number(flat.tax_rate_percent)
-      : undefined,
+    // Statutory GCT is Accounting → GCT resolver only — never from pricing blob
+    taxRatePercent: undefined,
     roadDistanceMultiplier: flat.road_distance_multiplier != null
       ? Number(flat.road_distance_multiplier)
       : DEFAULTS.roadDistanceMultiplier,

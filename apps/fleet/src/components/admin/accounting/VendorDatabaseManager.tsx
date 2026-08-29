@@ -45,6 +45,8 @@ export function VendorDatabaseManager({ embedded = false }: { embedded?: boolean
   const [name, setName] = React.useState('');
   const [categoryDefault, setCategoryDefault] = React.useState('none');
   const [notes, setNotes] = React.useState('');
+  const [trn, setTrn] = React.useState('');
+  const [gctRegistered, setGctRegistered] = React.useState(true);
   const [bulkText, setBulkText] = React.useState('');
   const [busy, setBusy] = React.useState(false);
   const [migrating, setMigrating] = React.useState(false);
@@ -85,6 +87,8 @@ export function VendorDatabaseManager({ embedded = false }: { embedded?: boolean
     setName('');
     setCategoryDefault('none');
     setNotes('');
+    setTrn('');
+    setGctRegistered(true);
   };
 
   const openAdd = () => {
@@ -97,6 +101,8 @@ export function VendorDatabaseManager({ embedded = false }: { embedded?: boolean
     setName(vendor.name || '');
     setCategoryDefault(vendor.categoryDefault || 'none');
     setNotes(vendor.notes || '');
+    setTrn(vendor.trn || '');
+    setGctRegistered(vendor.gctRegistered !== false);
     setFormOpen(true);
   };
 
@@ -108,13 +114,16 @@ export function VendorDatabaseManager({ embedded = false }: { embedded?: boolean
         name: name.trim(),
         categoryDefault: categoryDefault === 'none' ? undefined : categoryDefault,
         notes: notes.trim() || undefined,
+        trn: trn.trim() || undefined,
+        gctRegistered,
       };
       if (editing) {
         await platformVendorAdminService.updateVendor(editing.id, {
           name: payload.name,
           notes: payload.notes,
-          // Empty string clears default category on the server
           categoryDefault: (payload.categoryDefault ?? '') as ExpenseVendor['categoryDefault'],
+          trn: payload.trn ?? '',
+          gctRegistered: payload.gctRegistered,
         });
         toast.success('Vendor updated');
       } else {
@@ -361,6 +370,24 @@ export function VendorDatabaseManager({ embedded = false }: { embedded?: boolean
                 rows={2}
               />
             </div>
+            <div>
+              <Label htmlFor="admin-vendor-trn">TRN (GCT input tax)</Label>
+              <Input
+                id="admin-vendor-trn"
+                value={trn}
+                onChange={(e) => setTrn(e.target.value)}
+                placeholder="9-digit TRN"
+              />
+            </div>
+            <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
+              <input
+                type="checkbox"
+                checked={gctRegistered}
+                onChange={(e) => setGctRegistered(e.target.checked)}
+                className="rounded border-slate-300"
+              />
+              Vendor is GCT-registered (creditable input tax)
+            </label>
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setFormOpen(false)}>

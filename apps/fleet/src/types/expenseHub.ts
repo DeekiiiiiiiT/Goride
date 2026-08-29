@@ -39,6 +39,10 @@ export type ExpenseVendor = {
   categoryDefault?: ExpenseCategory;
   notes?: string;
   isActive: boolean;
+  /** Jamaica TRN — required for GCT input-tax credit from Expense Hub. */
+  trn?: string;
+  /** When false, expense GCT is not credited on the GCT ledger. */
+  gctRegistered?: boolean;
   /** verified = GOD list; pending = fleet request; rejected = blocked for new use. */
   status?: PlatformVendorStatus;
   requestedByOrgId?: string;

@@ -1,5 +1,8 @@
 # GCT Centralization Audit — Dominion → Roam Rush
 
+> **Superseded.** See [GCT_ENGINE_AUDIT.md](./GCT_ENGINE_AUDIT.md) for the live Accounting GCT
+> engine status. This document is historical only.
+
 Status: audit only, no code changed. Scope: Roam Rush apps only
 (`dash-customer`, `dash-merchant`, `rush-command`, `dash-admin`/Pricing Hub),
 sourcing General Consumption Tax (GCT) config from Dominion (`apps/admin`).

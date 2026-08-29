@@ -286,6 +286,12 @@ export function ExpenseHubNewExpenseWizard({
                     </div>
                   </div>
                 </div>
+                {tax > 0 && (
+                  <p className="text-sm text-amber-800 dark:text-amber-200">
+                    GCT on this expense posts to Accounting only if the vendor has a TRN and is marked
+                    GCT-registered in Vendors &amp; categories.
+                  </p>
+                )}
                 <div className="space-y-2">
                   <Label htmlFor="hub-exp-method">Payment method</Label>
                   <Select value={paymentMethod} onValueChange={setPaymentMethod}>

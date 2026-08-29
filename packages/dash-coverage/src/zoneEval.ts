@@ -114,6 +114,7 @@ function zonedNow(timezone: string, at: Date = new Date()): Date {
   }
 }
 
+/** Inclusive end: ops writing end_time "23:59" / "23:59:59" mean through that minute. */
 function isWithinSchedule(schedules: ZoneSchedule[] | undefined, at: Date = new Date()): boolean {
   if (!schedules?.length) return true;
   for (const s of schedules) {
@@ -126,8 +127,8 @@ function isWithinSchedule(schedules: ZoneSchedule[] | undefined, at: Date = new 
     const nowMin = local.getUTCHours() * 60 + local.getUTCMinutes();
     if (start == null || end == null) continue;
     if (start <= end) {
-      if (nowMin >= start && nowMin < end) return true;
-    } else if (nowMin >= start || nowMin < end) {
+      if (nowMin >= start && nowMin <= end) return true;
+    } else if (nowMin >= start || nowMin <= end) {
       return true;
     }
   }

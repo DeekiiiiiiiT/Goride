@@ -1791,7 +1791,7 @@ export type PricingRulesPayload = {
   courier_min_pay_jmd?: number;
   cod?: { pause_threshold_jmd?: number };
   launch_promos?: { free_delivery_first_n_orders?: number };
-  tax_rate_percent?: number;
+
   road_distance_multiplier?: number;
   min_order_subtotal_jmd?: number;
   hard_min_order_subtotal_jmd?: number;
@@ -2013,8 +2013,7 @@ export function previewPricing(
     tier_id?: string;
     /** Standalone: GCT-registered restaurant (default true) */
     gct_registered?: boolean;
-    /** Standalone: optional food GCT % override */
-    tax_rate_percent?: number;
+
   },
 ) {
   return deliveryFetch<{

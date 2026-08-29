@@ -24,7 +24,7 @@ surcharge pilot fires at `18.02125, -76.97145`; block + parish scoped + `zone_sc
 | Priority defaults | ✅ migration `…240000_zone_priority_bands`; UI/API exclude default 100; ADR-0014 amended (soft bands, safe islands via higher include) |
 | Schedule `at` | ✅ `zonedNow(tz, at)` honours injected clock; unit tests pass |
 | Pilot fires | ✅ exclude priority 100 > service area 10; `effective_to` extended to ~2026-09-05; `delivery` redeployed |
-| Untested paths | ✅ block pilot · parish scoped · zone_schedules (all-day on block pilot) |
+| Untested paths | ✅ block pilot · parish scoped · zone_schedules (`00:00`–`23:59:59` on block pilot) |
 | Guards | ✅ losing/tying=0 · scoped=1 · schedules=1 · block=1 · parent regressions=0 |
 | Tests | ✅ dash-coverage **35** · dash-pricing **53** |
 
@@ -237,7 +237,7 @@ geometry    4 pts · ST_IsValid true · ST_Covers(include) true · 0.001 km²
 | Path | Rows | Note |
 |---|---:|---|
 | `scoped_exclusion_zones` | **1** | Parish St. Catherine closeout block |
-| `zone_schedules` + `scoped_zone_schedules` | **1** | All-day window on block pilot |
+| `zone_schedules` + `scoped_zone_schedules` | **1** | `00:00:00`–`23:59:59` on block pilot (`scoped_zone_schedules` left at 0 — same code path) |
 | `block`-action exclusions | **1** | `EXC closeout block pilot` |
 
 ### PRIORITY-DEFAULT-1 — DB defaults disagree ✅ **Done**

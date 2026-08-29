@@ -23,6 +23,10 @@ import {
   allocateEvenly,
 } from "../../../apps/fleet/src/utils/expenseHubJournal.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import {
+  recordExpenseInputTax,
+  reverseExpenseInputTax,
+} from "../_shared/gctInputLedger.ts";
 import type { FixedExpenseConfig } from "../../../apps/fleet/src/types/expenses.ts";
 import type {
   ExpenseDocument,
@@ -573,8 +577,54 @@ export function registerExpenseHubRoutes(app: {
       await appendHubDocumentLedger(c, next);
       next.status = "posted";
       next.postedAt = nowIso();
+      // Shadow-write GCT input tax when vendor has TRN (Accounting engine)
+      try {
+        let vendorTrn: string | null = null;
+        let vendorGctRegistered: boolean | undefined;
+        if (next.vendorId) {
+          const vendor = (await kv.get(`platform_vendor:${next.vendorId}`)) as ExpenseVendor | null;
+          vendorTrn = vendor?.trn?.trim() || null;
+          vendorGctRegistered = vendor?.gctRegistered;
+        }
+        const sb = createClient(
+          Deno.env.get("SUPABASE_URL") ?? "",
+          Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+        );
+        await recordExpenseInputTax(sb, {
+          expenseDocId: next.id,
+          vendorTrn,
+          vendorGctRegistered,
+          baseAmountJmd: Number(next.netAmount) || 0,
+          taxAmountJmd: Number(next.taxAmount) || 0,
+          incurredDate: next.incurredDate || new Date().toISOString().slice(0, 10),
+          category: next.category,
+        });
+      } catch (e) {
+        console.warn(
+          JSON.stringify({
+            event: "gct_input_tax_hook_failed",
+            error: e instanceof Error ? e.message : String(e),
+            expenseDocId: next.id,
+          }),
+        );
+      }
     }
     if (to === "voided") {
+      try {
+        const sb = createClient(
+          Deno.env.get("SUPABASE_URL") ?? "",
+          Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+        );
+        await reverseExpenseInputTax(sb, doc.id);
+      } catch (e) {
+        console.warn(
+          JSON.stringify({
+            event: "gct_input_tax_void_hook_failed",
+            error: e instanceof Error ? e.message : String(e),
+            expenseDocId: doc.id,
+          }),
+        );
+      }
       const journal = buildVoidJournal(doc, getOrgId(c) || "", ymd());
       await kv.set(
         `expense_journal:${journal.id}`,

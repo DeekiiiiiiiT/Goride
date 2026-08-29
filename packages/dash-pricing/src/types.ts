@@ -48,7 +48,6 @@ export type PricingParty = 'customer' | 'rider' | 'partner' | 'platform';
 /** Snake_case party sections stored in DB JSONB */
 export type PlatformRulesBlob = {
   pricing_v2_enabled?: boolean;
-  tax_rate_percent?: number;
   max_menu_inflation_percent?: number;
 };
 

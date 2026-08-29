@@ -2,8 +2,6 @@
 
 /** Fallback only — prefer resolved rate from merchant pricing API. */
 export const PLATFORM_FEE_RATE = 0.05;
-/** @deprecated Removed — never guess GCT. Prefer server quote tax_rate_percent. */
-export const GCT_RATE_FALLBACK_PERCENT = Number.NaN;
 
 export type PromoCode = {
   code: string;

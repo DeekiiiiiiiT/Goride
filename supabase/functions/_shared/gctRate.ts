@@ -17,10 +17,6 @@ export type GctConfig = {
   enabled: boolean;
   /** True when rate came from accounting.gct_rates */
   fromDb?: boolean;
-  /** @deprecated Always false — KV is no longer a charge source */
-  sourceDisagreement?: boolean;
-  /** @deprecated Always null after cutover */
-  kvRatePercent?: number | null;
 };
 
 export function isValidGctRate(rate: unknown): rate is number {
@@ -100,8 +96,6 @@ export async function loadGlobalGctConfig(sb: Sb): Promise<GctConfig> {
       ratePercent: dbRate,
       enabled: flags.gctEnabled,
       fromDb: true,
-      sourceDisagreement: false,
-      kvRatePercent: null,
     };
   }
 
@@ -116,8 +110,6 @@ export async function loadGlobalGctConfig(sb: Sb): Promise<GctConfig> {
     ratePercent: GCT_STANDARD_RATE_FALLBACK,
     enabled: flags.gctEnabled,
     fromDb: false,
-    sourceDisagreement: false,
-    kvRatePercent: null,
   };
 }
 

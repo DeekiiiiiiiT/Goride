@@ -28,8 +28,6 @@ export type GctHealth = {
   effectiveRatePercent: number;
   gctEnabled: boolean;
   fromDb: boolean;
-  sourceDisagreement: boolean;
-  kvRatePercent: number | null;
   dbStandardRatePercent: number | null;
   resolverFlags: Record<string, unknown> | null;
   needsReviewEntities: Array<Record<string, unknown>>;

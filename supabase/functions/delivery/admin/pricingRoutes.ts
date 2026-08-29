@@ -899,9 +899,15 @@ export function registerPricingAdminRoutes(app: Hono) {
       : merchantId
       ? null
       : true;
-    const taxRatePercent = body.tax_rate_percent != null || body.taxRatePercent != null
-      ? Number(body.tax_rate_percent ?? body.taxRatePercent)
-      : null;
+    // Statutory rate from Accounting GCT engine only — ignore body tax_rate_percent
+    let taxRatePercent: number | null = null;
+    try {
+      const { loadGlobalGctConfig } = await import("../../_shared/gctRate.ts");
+      const gctCfg = await loadGlobalGctConfig(getDb() as never);
+      taxRatePercent = gctCfg.ratePercent;
+    } catch {
+      taxRatePercent = null;
+    }
 
     // Merchant path OR standalone calculator (pickup + tier)
     if (!merchantId) {

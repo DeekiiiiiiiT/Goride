@@ -135,7 +135,7 @@ export default function RestaurantMgmtSetupWizard({
               <>
                 <p className="text-body-sm text-on-surface-variant">
                   Applied to in-store orders at checkout. Default rate comes from Roam Dominion
-                  settings (currently 16.5% GCT).
+                  Accounting → GCT (standard rate). Override only if ops set a store-specific rate.
                 </p>
                 <label className="block">
                   <span className="text-label-md text-on-surface-variant">Tax rate (%)</span>

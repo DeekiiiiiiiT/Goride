@@ -156,7 +156,7 @@ export function partyPreviewMetrics(
         label: 'Model',
         value: seed.pricing_v2_enabled ? 'Model B' : 'Legacy A',
       },
-      { label: 'Tax in blob', value: 'deprecated — Accounting GCT' },
+      { label: 'GCT', value: 'Accounting → GCT engine' },
     ];
   }
   const tierLine = tiers

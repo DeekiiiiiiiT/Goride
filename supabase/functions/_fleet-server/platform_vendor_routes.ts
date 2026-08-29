@@ -183,6 +183,8 @@ export function registerPlatformVendorRoutes(app: Hono, verifySuperadmin: Verify
       name,
       categoryDefault: body.categoryDefault,
       notes: body.notes ? String(body.notes).trim() : undefined,
+      trn: body.trn ? String(body.trn).trim() : undefined,
+      gctRegistered: body.gctRegistered !== undefined ? Boolean(body.gctRegistered) : true,
       isActive: body.isActive !== false,
       status: "verified",
       createdAt: nowIso(),
@@ -269,6 +271,12 @@ export function registerPlatformVendorRoutes(app: Hono, verifySuperadmin: Verify
       notes: body.notes !== undefined ? String(body.notes || "").trim() || undefined : existing.notes,
       isActive: body.isActive !== undefined ? Boolean(body.isActive) : existing.isActive,
       status: body.status !== undefined ? body.status : existing.status || "verified",
+      trn: body.trn !== undefined
+        ? (String(body.trn || "").trim() || undefined)
+        : existing.trn,
+      gctRegistered: body.gctRegistered !== undefined
+        ? Boolean(body.gctRegistered)
+        : existing.gctRegistered,
       updatedAt: nowIso(),
     };
     if (!next.name) return c.json({ error: "Name required" }, 400);

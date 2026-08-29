@@ -26,7 +26,7 @@ Roam holds and remits **all GCT** (food + platform) on cash orders. See `compute
 
 ## Verification
 
-- [ ] Dominion Global Settings shows 16.5% / enabled
+- [ ] Dominion Accounting → GCT Rates shows 15% standard / enabled
 - [ ] dash-customer checkout shows food GCT + platform GCT lines when applicable
 - [ ] Simulator four-way split shows platform GCT on COD
 - [ ] Unregistered merchant orders show $0 food GCT
