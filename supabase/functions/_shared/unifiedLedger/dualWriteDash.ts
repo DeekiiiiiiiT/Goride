@@ -83,6 +83,7 @@ async function dualWriteDashPaymentInner(
       kind: row.kind,
     };
 
+    // Signed platform take: positive = revenue; negative = delivery subsidy / promo absorb.
     if (split.platformFee > 0) {
       await ledgerPostEntry({
         idempotencyKey: `dash_payments:${row.transactionId}:platform`,
@@ -95,6 +96,21 @@ async function dualWriteDashPaymentInner(
         referenceType: "order",
         referenceId: row.orderId,
         metadata: baseMeta,
+        sourceSystem: "dash_payments",
+        sourceId: row.transactionId,
+      });
+    } else if (split.platformFee < 0) {
+      await ledgerPostEntry({
+        idempotencyKey: `dash_payments:${row.transactionId}:platform_subsidy`,
+        entryType: "order_capture_platform_subsidy",
+        debitAccountKey: "platform:revenue",
+        creditAccountKey: "platform:clearing",
+        amountMinor: majorToMinor(Math.abs(split.platformFee)),
+        currency,
+        product,
+        referenceType: "order",
+        referenceId: row.orderId,
+        metadata: { ...baseMeta, subsidy: true },
         sourceSystem: "dash_payments",
         sourceId: row.transactionId,
       });

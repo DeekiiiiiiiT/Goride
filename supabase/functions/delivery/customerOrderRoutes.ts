@@ -13,10 +13,6 @@ import {
   isFreeDeliveryPromo,
   resolveActivePromoByCode,
 } from "./customerDiscoveryRoutes.ts";
-import {
-  loadDashGlobalPlatformFeeRate,
-  resolveDashPlatformFeeRate,
-} from "./platformFeeRate.ts";
 import { resolveMinOrderSubtotal } from "../_shared/dashPricing.ts";
 import { assertSameMarketCoverage, resolveDashOrderPricing } from "./pricingResolver.ts";
 import { resolveMerchantFoodGctRate } from "../_shared/gctRate.ts";
@@ -137,7 +133,7 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
 
     const { data: menuRows, error: menuErr } = await serviceSb
       .from("menu_items")
-      .select("id, name, price, is_available, merchant_id")
+      .select("id, name, price, marketplace_price, in_store_price, is_available, merchant_id")
       .eq("merchant_id", body.merchantId)
       .in("id", menuItemIds);
 
@@ -161,12 +157,15 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
       }
       const quantity = Math.max(1, Math.floor(Number(item.quantity) || 0));
       if (!quantity) return c.json({ error: "Invalid quantity" }, 400);
-      const unitPrice = Number(menuRow.price);
+      const unitPrice = Number(
+        (menuRow as { marketplace_price?: number }).marketplace_price ?? menuRow.price,
+      );
+      const inStorePrice = Number(
+        (menuRow as { in_store_price?: number }).in_store_price ?? menuRow.price,
+      );
       const modifiers = Array.isArray(item.modifiers)
         ? item.modifiers.map((m: { name?: string; priceAdjustment?: number }) => ({
             name: String(m.name || ""),
-            // Modifier adjustments still come from client until options are DB-backed;
-            // clamp to non-negative to block negative-price abuse.
             priceAdjustment: Math.max(0, Number(m.priceAdjustment) || 0),
           }))
         : undefined;
@@ -182,6 +181,8 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
         menuItemId,
         name: menuRow.name,
         price: unitPrice,
+        marketplace_price: unitPrice,
+        in_store_price: inStorePrice,
         quantity,
         ...(modifiers ? { modifiers } : {}),
       });
@@ -272,7 +273,7 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
       }, 400);
     }
 
-    // Model B pricing — market already validated via same-town gate
+    // Model B only — market already validated via same-town gate
     const v2Pricing = await resolveDashOrderPricing(serviceSb, {
       merchantId: body.merchantId,
       subtotal: pricing.subtotal,
@@ -287,98 +288,80 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
       freeDelivery: freeDeliveryFromPromo,
     });
 
-    let deliveryFee: number;
-    let platformFee: number;
-    let total: number;
-    let processingFee = 0;
-    let pricingModel = "legacy";
-    let serviceFee = 0;
-    let merchantCommissionAmount = 0;
-    let deliveryFeePlatformAmount = 0;
-    let deliveryFeeCourierAmount = 0;
-    let distanceKm: number | null = null;
-    let pricingProfileVersion: number | null = null;
-    let pricingSnapshot: Record<string, unknown> | null = null;
-    let taxFoodJmd: number | null = null;
-    let taxPlatformJmd: number | null = null;
-    let taxRateFoodPercent: number | null = null;
-    let taxRatePlatformPercent: number | null = null;
-    let courierTipNet: number | null = null;
+    if (!v2Pricing) {
+      return c.json({ error: "Unable to resolve pricing for this merchant", code: "pricing_unavailable" }, 503);
+    }
 
-    // Minimum order — legacy + v2 (MINORDER-1)
-    const minRequired = resolveMinOrderSubtotal(
-      v2Pricing?.rules?.minOrderSubtotalJmd,
-      merchantMinOrder,
-    );
-    if (minRequired > 0 && discountedSubtotal < minRequired) {
+    const hardMin = Math.max(0, Number(v2Pricing.rules.hardMinOrderSubtotalJmd ?? 400));
+    if (hardMin > 0 && discountedSubtotal < hardMin) {
       return c.json({
-        error: `Minimum food order J$${minRequired.toFixed(0)} required`,
+        error: `Minimum food order J$${hardMin.toFixed(0)} required`,
         code: "min_order_not_met",
-        min_order_jmd: minRequired,
+        min_order_jmd: hardMin,
       }, 400);
     }
 
-    if (v2Pricing?.pricingV2Enabled) {
-      pricingModel = "v2";
-      deliveryFee = v2Pricing.deliveryFee;
-      serviceFee = v2Pricing.serviceFee;
-      platformFee = serviceFee; // legacy alias — service_fee is authoritative for Model B
-      merchantCommissionAmount = v2Pricing.merchantCommissionAmount;
-      deliveryFeePlatformAmount = v2Pricing.deliveryFeePlatformAmount;
-      deliveryFeeCourierAmount = v2Pricing.deliveryFeeCourierAmount;
-      distanceKm = v2Pricing.distanceKm;
-      pricingProfileVersion = v2Pricing.pricingProfileVersion;
-      processingFee = v2Pricing.processingFee;
-      taxFoodJmd = v2Pricing.taxFoodJmd;
-      taxPlatformJmd = v2Pricing.taxPlatformJmd;
-      taxRateFoodPercent = v2Pricing.taxRateFoodPercent;
-      taxRatePlatformPercent = v2Pricing.taxRatePlatformPercent;
-      courierTipNet = v2Pricing.courierTipNet;
-      pricingSnapshot = {
-        rules: v2Pricing.rules,
-        tier_slug: v2Pricing.tierSlug,
-        merchant_commission_rate: v2Pricing.merchantCommissionRate,
-        free_delivery_applied: v2Pricing.freeDeliveryApplied,
-        promo_cost_jmd: v2Pricing.promoCostJmd,
-        order_total: v2Pricing.orderTotal,
-        processing_fee: v2Pricing.processingFee,
-        processing_fee_order: v2Pricing.processingFeeOrder,
-        processing_fee_tip: v2Pricing.processingFeeTip,
-        customer_total: v2Pricing.customerTotal,
-        tax_food_jmd: v2Pricing.taxFoodJmd,
-        tax_platform_jmd: v2Pricing.taxPlatformJmd,
-        service_fee: v2Pricing.serviceFee,
-        delivery_fee: v2Pricing.deliveryFee,
-        delivery_fee_platform_amount: v2Pricing.deliveryFeePlatformAmount,
-        delivery_fee_courier_amount: v2Pricing.deliveryFeeCourierAmount,
-        zone_surcharge_jmd: v2Pricing.zoneSurchargeJmd,
-        distance_km_raw: v2Pricing.distanceKmRaw,
-        courier_tip_net: v2Pricing.courierTipNet,
-      };
-      total = v2Pricing.customerTotal;
-      pricing.tax = v2Pricing.tax;
-    } else {
-      // Legacy Model A: merchant commission_rate override → global settings → 5%
-      const { data: merchantRow } = await serviceSb
-        .from("merchants")
-        .select("delivery_fee, commission_rate")
-        .eq("id", body.merchantId)
-        .maybeSingle();
-      const globalRate = await loadDashGlobalPlatformFeeRate(serviceSb);
-      const merchantOverride = merchantRow?.commission_rate != null
-        ? Number(merchantRow.commission_rate)
-        : null;
-      const feeRate = resolveDashPlatformFeeRate(merchantOverride, globalRate);
-      platformFee = Math.round(pricing.subtotal * feeRate * 100) / 100;
-      serviceFee = platformFee;
-      deliveryFee = freeDeliveryFromPromo
-        ? 0
-        : Math.max(0, Number(merchantRow?.delivery_fee ?? 0));
-      deliveryFeeCourierAmount = deliveryFee;
-      total = Math.round(
-        (pricing.subtotal - discount + platformFee + deliveryFee + pricing.tax + tip) * 100,
-      ) / 100;
+    // Soft min wall only when small-order fee is not configured
+    const smallOrderThreshold = Number(v2Pricing.rules.smallOrderThresholdJmd ?? 0);
+    const smallOrderFeeConfigured = Number(v2Pricing.rules.smallOrderFeeJmd ?? 0);
+    if (!(smallOrderThreshold > 0 && smallOrderFeeConfigured > 0)) {
+      const softMin = resolveMinOrderSubtotal(
+        v2Pricing.rules.minOrderSubtotalJmd,
+        merchantMinOrder,
+      );
+      if (softMin > 0 && discountedSubtotal < softMin) {
+        return c.json({
+          error: `Minimum food order J$${softMin.toFixed(0)} required`,
+          code: "min_order_not_met",
+          min_order_jmd: softMin,
+        }, 400);
+      }
     }
+
+    const pricingModel = "v2";
+    const deliveryFee = v2Pricing.deliveryFee;
+    const serviceFee = v2Pricing.serviceFee;
+    const platformFee = serviceFee; // alias — service_fee is authoritative for Model B
+    const merchantCommissionAmount = v2Pricing.merchantCommissionAmount;
+    const deliveryFeePlatformAmount = v2Pricing.deliveryFeePlatformAmount;
+    const deliveryFeeCourierAmount = v2Pricing.deliveryFeeCourierAmount;
+    const distanceKm = v2Pricing.distanceKm;
+    const pricingProfileVersion = v2Pricing.pricingProfileVersion;
+    const processingFee = v2Pricing.processingFee;
+    const taxFoodJmd = v2Pricing.taxFoodJmd;
+    const taxPlatformJmd = v2Pricing.taxPlatformJmd;
+    const taxRateFoodPercent = v2Pricing.taxRateFoodPercent;
+    const taxRatePlatformPercent = v2Pricing.taxRatePlatformPercent;
+    const courierTipNet = v2Pricing.courierTipNet;
+    const smallOrderFee = v2Pricing.smallOrderFee ?? 0;
+    const platformDeliverySubsidyJmd = v2Pricing.platformDeliverySubsidyJmd ?? 0;
+    const pricingSnapshot: Record<string, unknown> = {
+      rules: v2Pricing.rules,
+      tier_slug: v2Pricing.tierSlug,
+      merchant_commission_rate: v2Pricing.merchantCommissionRate,
+      free_delivery_applied: v2Pricing.freeDeliveryApplied,
+      promo_cost_jmd: v2Pricing.promoCostJmd,
+      order_total: v2Pricing.orderTotal,
+      processing_fee: v2Pricing.processingFee,
+      processing_fee_order: v2Pricing.processingFeeOrder,
+      processing_fee_tip: v2Pricing.processingFeeTip,
+      customer_total: v2Pricing.customerTotal,
+      tax_food_jmd: v2Pricing.taxFoodJmd,
+      tax_platform_jmd: v2Pricing.taxPlatformJmd,
+      service_fee: v2Pricing.serviceFee,
+      delivery_fee: v2Pricing.deliveryFee,
+      delivery_fee_platform_amount: v2Pricing.deliveryFeePlatformAmount,
+      delivery_fee_courier_amount: v2Pricing.deliveryFeeCourierAmount,
+      zone_surcharge_jmd: v2Pricing.zoneSurchargeJmd,
+      distance_km_raw: v2Pricing.distanceKmRaw,
+      courier_tip_net: v2Pricing.courierTipNet,
+      small_order_fee: smallOrderFee,
+      platform_delivery_subsidy_jmd: platformDeliverySubsidyJmd,
+      courier_base_pay_jmd: v2Pricing.courierBasePayJmd ?? 0,
+      courier_distance_pay_jmd: v2Pricing.courierDistancePayJmd ?? 0,
+    };
+    const total = v2Pricing.customerTotal;
+    pricing.tax = v2Pricing.tax;
 
     async function waitForOrderById(orderId: string) {
       for (let attempt = 0; attempt < 10; attempt++) {
@@ -464,6 +447,10 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
       merchant_commission_amount: merchantCommissionAmount,
       delivery_fee_platform_amount: deliveryFeePlatformAmount,
       delivery_fee_courier_amount: deliveryFeeCourierAmount,
+      platform_delivery_subsidy_jmd: platformDeliverySubsidyJmd,
+      small_order_fee: smallOrderFee,
+      courier_base_pay_jmd: v2Pricing.courierBasePayJmd ?? 0,
+      courier_distance_pay_jmd: v2Pricing.courierDistancePayJmd ?? 0,
       distance_km: distanceKm,
       pricing_profile_version: pricingProfileVersion,
       pricing_snapshot: pricingSnapshot,

@@ -13,6 +13,7 @@ import OperatingHoursStepContent from './OperatingHoursStepContent';
 import BrandingStepContent from './BrandingStepContent';
 import { createDefaultHours, type DayHours } from './operating-hours';
 import VerificationStepContent from './VerificationStepContent';
+import PlanStepContent from './PlanStepContent';
 import OnboardingWizardShell from './OnboardingWizardShell';
 import {
   bootstrapPartnerMerchant,
@@ -193,6 +194,8 @@ export default function UnifiedOnboardingWizard({
         website: formData.website || undefined,
         logoUrl: formData.logoUrl || undefined,
         coverImageUrl: formData.coverImageUrl || undefined,
+        tierSlug: formData.pricingTierSlug || undefined,
+        pricingTierSlug: formData.pricingTierSlug || undefined,
       });
       const merchant = (result as { merchant: { id: string } }).merchant;
 
@@ -255,6 +258,8 @@ export default function UnifiedOnboardingWizard({
         );
       case 'branding':
         return <BrandingStepContent data={formData} onChange={updateForm} />;
+      case 'plan':
+        return <PlanStepContent data={formData} onChange={updateForm} />;
       case 'verification':
         return (
           <VerificationStepContent

@@ -110,6 +110,7 @@ export type PartnerWizardStepKey =
   | 'business-details'
   | 'operating-hours'
   | 'branding'
+  | 'plan'
   | 'verification';
 
 /** Serializable partner wizard draft (no File blobs). */
@@ -141,6 +142,8 @@ export interface PartnerOnboardingDraft {
   website?: string;
   logoUrl?: string;
   coverImageUrl?: string;
+  /** Chosen plan slug (economy | growth | dominant) during onboarding. */
+  pricingTierSlug?: string;
   bankName?: string;
   accountHolderName?: string;
   accountType?: 'checking' | 'savings';
@@ -249,6 +252,11 @@ export interface MerchantApplicationPayload {
   logoUrl?: string;
   coverImageUrl?: string;
   website?: string;
+  /** Preferred plan slug — resolved to pricing_tier_id on submit. */
+  tierSlug?: string;
+  pricingTierSlug?: string;
+  pricingTierId?: string;
+  pricing_tier_id?: string;
 }
 
 export interface MerchantBankAccountInput {

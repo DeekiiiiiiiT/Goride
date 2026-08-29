@@ -3,6 +3,10 @@ export type MerchantTier = {
   slug: string;
   name: string;
   commissionRate: number;
+  /** Customer-facing base delivery fee override (replaces market base). */
+  baseDeliveryFeeJmd?: number | null;
+  /** Menu inflation percent 0–1 (e.g. 0.20 = 20%). */
+  menuInflationPercent?: number | null;
   searchBoost?: number;
   defaultDeliveryRadiusKm?: number;
   promoEligible?: boolean;
@@ -45,18 +49,27 @@ export type PricingParty = 'customer' | 'rider' | 'partner' | 'platform';
 export type PlatformRulesBlob = {
   pricing_v2_enabled?: boolean;
   tax_rate_percent?: number;
+  /** Commission on marketplace (inflated) or in-store price. */
+  commission_base?: 'marketplace' | 'in_store';
+  max_menu_inflation_percent?: number;
 };
 
 export type CustomerRulesBlob = {
   service_fee?: Record<string, unknown>;
   delivery?: Record<string, unknown>;
   min_order_subtotal_jmd?: number;
+  hard_min_order_subtotal_jmd?: number;
+  small_order_threshold_jmd?: number;
+  small_order_fee_jmd?: number;
   card_processing_fee_percent?: number;
   launch_promos?: Record<string, unknown>;
 };
 
 export type RiderRulesBlob = {
   courier_delivery_share?: number;
+  courier_base_pay_jmd?: number;
+  courier_per_km_jmd?: number;
+  courier_min_pay_jmd?: number;
   cod?: Record<string, unknown>;
   road_distance_multiplier?: number;
   tip_processing_from_rider?: boolean;
@@ -78,18 +91,25 @@ export type PricingRules = {
   pricingV2Enabled?: boolean;
   delivery: DeliveryFeeRules;
   serviceFee: ServiceFeeRules;
+  /** @deprecated Prefer courier pay ladder; kept for free-delivery promo split fallback. */
   courierDeliveryShare: number;
+  courierBasePayJmd?: number;
+  courierPerKmJmd?: number;
+  courierMinPayJmd?: number;
   launchPromos?: LaunchPromoRules;
   cod?: CodRules;
   taxRatePercent?: number;
-  /** Road-distance multiplier applied to haversine km (default 1.4) */
   roadDistanceMultiplier?: number;
-  /** Checkout gate — minimum food subtotal before order can proceed */
+  /** Soft floor / small-order threshold alias when fee not set */
   minOrderSubtotalJmd?: number;
-  /** Card/wallet processing fee rate applied to order total (e.g. 0.045) */
+  /** Absolute hard block below this subtotal */
+  hardMinOrderSubtotalJmd?: number;
+  smallOrderThresholdJmd?: number;
+  smallOrderFeeJmd?: number;
   cardProcessingFeePercent?: number;
-  /** When true, card processing on tip is deducted from courier tip (default true) */
   tipProcessingFromRider?: boolean;
+  commissionBase?: 'marketplace' | 'in_store';
+  maxMenuInflationPercent?: number;
 };
 
 export type ServiceFeeOverride = {
@@ -104,31 +124,20 @@ export type PaymentMethod = 'wipay' | 'cash';
 export type PricingInput = {
   subtotal: number;
   discount?: number;
-  /** Merchant food GCT rate (0 when unregistered) */
   taxRatePercent?: number;
-  /** Roam platform GCT rate on service + delivery platform share */
   platformTaxRatePercent?: number;
   platformGctEnabled?: boolean;
   tip?: number;
   distanceKm?: number | null;
-  /** Raw haversine km before road multiplier (audit trail) */
   distanceKmRaw?: number | null;
   rules: PricingRules;
   tier?: MerchantTier | null;
   merchantCommissionRateOverride?: number | null;
   serviceFeeOverride?: ServiceFeeOverride | null;
-  /** Customer completed order count for launch promos */
   customerOrderCount?: number;
-  /** Force free delivery (promo applied) */
   freeDelivery?: boolean;
   paymentMethod?: PaymentMethod;
-  /** Skip service fee entirely (promo/loyalty waiver) */
   serviceFeeWaived?: boolean;
-  /**
-   * Zone risk surcharge (JMD) from coverage policy action=surcharge.
-   * Folded into gross delivery fee before the platform/courier split.
-   * Not waived by free-delivery promos.
-   */
   zoneSurchargeJmd?: number;
 };
 
@@ -142,7 +151,6 @@ export type PricingBreakdown = {
   deliveryFee: number;
   deliveryFeePlatformAmount: number;
   deliveryFeeCourierAmount: number;
-  /** Zone policy surcharge folded into deliveryFee (0 when none). */
   zoneSurchargeJmd: number;
   distanceKm: number | null;
   distanceKmRaw?: number | null;
@@ -153,16 +161,16 @@ export type PricingBreakdown = {
   taxRatePlatformPercent: number;
   tip: number;
   courierTipNet: number;
-  /** Pre-processing order total (includes tip) */
   orderTotal: number;
   processingFee: number;
   processingFeeOrder: number;
   processingFeeTip: number;
-  /** Platform marketing cost when free-delivery promo funds courier */
   promoCostJmd: number;
-  /** Final amount customer pays */
+  smallOrderFee: number;
+  platformDeliverySubsidyJmd: number;
+  courierBasePayJmd: number;
+  courierDistancePayJmd: number;
   customerTotal: number;
-  /** Alias for customerTotal (backward compat) */
   total: number;
   pricingProfileVersion?: number;
   tierSlug?: string;

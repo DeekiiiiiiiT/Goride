@@ -124,7 +124,8 @@ export default function MenuPage({ merchant, onNavigate, onOpenMobileNav, setupB
       const payload = {
         name: item.name,
         description: item.description,
-        price: item.price,
+        price: item.in_store_price ?? item.price,
+        in_store_price: item.in_store_price ?? item.price,
         categoryId: item.category_id || null,
         imageUrl: item.image_url,
         isAvailable: item.is_available,
@@ -143,7 +144,8 @@ export default function MenuPage({ merchant, onNavigate, onOpenMobileNav, setupB
             body: JSON.stringify({
               name: item.name,
               description: item.description,
-              price: item.price,
+              price: item.in_store_price ?? item.price,
+              in_store_price: item.in_store_price ?? item.price,
               category_id: item.category_id || null,
               image_url: item.image_url,
               is_available: item.is_available,

@@ -53,7 +53,22 @@ describe('mapOrderToActiveDelivery', () => {
     expect(delivery.turnInstruction).toBe('Heading to Island Grill');
     expect(delivery.earnings.total).toBe(420);
     expect(delivery.earnings.basePay).toBe(350);
+    expect(delivery.earnings.distanceBonus).toBe(0);
     expect(delivery.earnings.tip).toBe(70);
+  });
+
+  it('maps courier ladder base + distance into earnings', () => {
+    const delivery = mapOrderToActiveDelivery({
+      ...baseOrder,
+      delivery_fee_courier_amount: 400,
+      courier_base_pay_jmd: 250,
+      courier_distance_pay_jmd: 150,
+      peak_pay_amount: 50,
+    });
+    expect(delivery.earnings.basePay).toBe(250);
+    expect(delivery.earnings.distanceBonus).toBe(150);
+    expect(delivery.earnings.peakPay).toBe(50);
+    expect(delivery.earnings.total).toBe(520);
   });
 
   it('falls back to pickup→dropoff when courier coords missing', () => {

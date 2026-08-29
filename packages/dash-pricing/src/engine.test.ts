@@ -15,7 +15,17 @@ import {
 } from './engine.ts';
 import type { PricingRules } from './types.ts';
 
-const SPANISH_TOWN_RULES = defaultPricingRules();
+const SPANISH_TOWN_RULES: PricingRules = {
+  ...defaultPricingRules(),
+  // Existing unit tests assert legacy % delivery split + no small-order fee.
+  courierBasePayJmd: 0,
+  courierPerKmJmd: 0,
+  courierMinPayJmd: 0,
+  smallOrderThresholdJmd: 0,
+  smallOrderFeeJmd: 0,
+  hardMinOrderSubtotalJmd: 400,
+  minOrderSubtotalJmd: 800,
+};
 
 describe('mergePricingRuleLayers', () => {
   it('lets town win over parish over default', () => {
@@ -34,6 +44,11 @@ describe('mergePricingRuleLayers', () => {
 const MARGINAL_RULES: PricingRules = {
   ...defaultPricingRules(),
   pricingV2Enabled: true,
+  courierBasePayJmd: 0,
+  courierPerKmJmd: 0,
+  courierMinPayJmd: 0,
+  smallOrderThresholdJmd: 0,
+  smallOrderFeeJmd: 0,
   serviceFee: {
     mode: 'marginal',
     avgRate: 0.15,
@@ -442,6 +457,65 @@ describe('buildOrderPricing — zone surcharge (SURCHARGE-1)', () => {
     const courier = result.deliveryFeeCourierAmount + result.courierTipNet;
     expect(Math.round((platformDue + merchantDue + courier) * 100) / 100).toBe(
       result.customerTotal,
+    );
+  });
+});
+
+describe('marketplace — tier base, courier ladder, small-order fee', () => {
+  it('tier base replaces market base at zero distance', () => {
+    expect(
+      resolveDeliveryFee(SPANISH_TOWN_RULES.delivery, null, 150),
+    ).toBe(150);
+    expect(
+      resolveDeliveryFee(SPANISH_TOWN_RULES.delivery, 5, 150),
+    ).toBe(150 + 3 * 60);
+  });
+
+  it('courier ladder pays independently of customer fee', () => {
+    const rules: PricingRules = {
+      ...SPANISH_TOWN_RULES,
+      courierBasePayJmd: 250,
+      courierPerKmJmd: 80,
+      courierMinPayJmd: 350,
+    };
+    const result = buildOrderPricing({
+      subtotal: 2000,
+      distanceKm: 12,
+      rules,
+      tier: {
+        slug: 'dominant',
+        name: 'Dominant',
+        commissionRate: 0.30,
+        baseDeliveryFeeJmd: 150,
+      },
+      paymentMethod: 'cash',
+      taxRatePercent: 16.5,
+      platformTaxRatePercent: 16.5,
+    });
+    expect(result.deliveryFee).toBe(150 + 10 * 60); // 2km included
+    expect(result.deliveryFeeCourierAmount).toBe(250 + 12 * 80); // 1210
+    expect(result.platformDeliverySubsidyJmd).toBeGreaterThan(0);
+    expect(result.deliveryFeePlatformAmount).toBeLessThan(0);
+  });
+
+  it('small-order fee applies below threshold', () => {
+    const rules: PricingRules = {
+      ...SPANISH_TOWN_RULES,
+      smallOrderThresholdJmd: 1500,
+      smallOrderFeeJmd: 400,
+    };
+    const result = buildOrderPricing({
+      subtotal: 900,
+      distanceKm: 1,
+      rules,
+      paymentMethod: 'cash',
+      taxRatePercent: 0,
+      platformTaxRatePercent: 0,
+      platformGctEnabled: false,
+    });
+    expect(result.smallOrderFee).toBe(400);
+    expect(result.customerTotal).toBe(
+      900 + result.serviceFee + result.deliveryFee + 400,
     );
   });
 });

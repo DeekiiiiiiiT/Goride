@@ -50,12 +50,20 @@ export function deepMergeObjects(
 const FLAT_TO_PARTY: Array<{ party: PricingParty; key: string; nestedKey?: string }> = [
   { party: 'platform', key: 'pricing_v2_enabled' },
   { party: 'platform', key: 'tax_rate_percent' },
+  { party: 'platform', key: 'commission_base' },
+  { party: 'platform', key: 'max_menu_inflation_percent' },
   { party: 'customer', key: 'service_fee' },
   { party: 'customer', key: 'min_order_subtotal_jmd' },
+  { party: 'customer', key: 'hard_min_order_subtotal_jmd' },
+  { party: 'customer', key: 'small_order_threshold_jmd' },
+  { party: 'customer', key: 'small_order_fee_jmd' },
   { party: 'customer', key: 'card_processing_fee_percent' },
   { party: 'customer', key: 'launch_promos' },
   { party: 'customer', key: 'delivery' },
   { party: 'rider', key: 'courier_delivery_share' },
+  { party: 'rider', key: 'courier_base_pay_jmd' },
+  { party: 'rider', key: 'courier_per_km_jmd' },
+  { party: 'rider', key: 'courier_min_pay_jmd' },
   { party: 'rider', key: 'cod' },
   { party: 'rider', key: 'road_distance_multiplier' },
   { party: 'rider', key: 'tip_processing_from_rider' },
@@ -110,8 +118,10 @@ export function serializePricingRulesNested(rules: PricingRules): NestedRulesBlo
   const sf = rules.serviceFee;
   return {
     platform: {
-      pricing_v2_enabled: rules.pricingV2Enabled ?? false,
+      pricing_v2_enabled: rules.pricingV2Enabled ?? true,
       tax_rate_percent: rules.taxRatePercent ?? 16.5,
+      commission_base: rules.commissionBase ?? 'marketplace',
+      max_menu_inflation_percent: rules.maxMenuInflationPercent ?? 0.25,
     },
     customer: {
       service_fee: {
@@ -131,6 +141,9 @@ export function serializePricingRulesNested(rules: PricingRules): NestedRulesBlo
         max_fee_jmd: rules.delivery.maxFeeJmd,
       },
       min_order_subtotal_jmd: rules.minOrderSubtotalJmd,
+      hard_min_order_subtotal_jmd: rules.hardMinOrderSubtotalJmd,
+      small_order_threshold_jmd: rules.smallOrderThresholdJmd,
+      small_order_fee_jmd: rules.smallOrderFeeJmd,
       card_processing_fee_percent: rules.cardProcessingFeePercent,
       launch_promos: {
         free_delivery_first_n_orders: rules.launchPromos?.freeDeliveryFirstNOrders ?? 0,
@@ -138,6 +151,9 @@ export function serializePricingRulesNested(rules: PricingRules): NestedRulesBlo
     },
     rider: {
       courier_delivery_share: rules.courierDeliveryShare,
+      courier_base_pay_jmd: rules.courierBasePayJmd,
+      courier_per_km_jmd: rules.courierPerKmJmd,
+      courier_min_pay_jmd: rules.courierMinPayJmd,
       cod: {
         pause_threshold_jmd: rules.cod?.pauseThresholdJmd ?? 10000,
       },
@@ -178,10 +194,25 @@ export function flattenNestedToLegacy(blob: NestedRulesBlob): Record<string, unk
   if (platform.tax_rate_percent !== undefined) {
     out.tax_rate_percent = platform.tax_rate_percent;
   }
+  if (platform.commission_base !== undefined) {
+    out.commission_base = platform.commission_base;
+  }
+  if (platform.max_menu_inflation_percent !== undefined) {
+    out.max_menu_inflation_percent = platform.max_menu_inflation_percent;
+  }
   if (customer.service_fee !== undefined) out.service_fee = customer.service_fee;
   if (customer.delivery !== undefined) out.delivery = customer.delivery;
   if (customer.min_order_subtotal_jmd !== undefined) {
     out.min_order_subtotal_jmd = customer.min_order_subtotal_jmd;
+  }
+  if (customer.hard_min_order_subtotal_jmd !== undefined) {
+    out.hard_min_order_subtotal_jmd = customer.hard_min_order_subtotal_jmd;
+  }
+  if (customer.small_order_threshold_jmd !== undefined) {
+    out.small_order_threshold_jmd = customer.small_order_threshold_jmd;
+  }
+  if (customer.small_order_fee_jmd !== undefined) {
+    out.small_order_fee_jmd = customer.small_order_fee_jmd;
   }
   if (customer.card_processing_fee_percent !== undefined) {
     out.card_processing_fee_percent = customer.card_processing_fee_percent;
@@ -189,6 +220,15 @@ export function flattenNestedToLegacy(blob: NestedRulesBlob): Record<string, unk
   if (customer.launch_promos !== undefined) out.launch_promos = customer.launch_promos;
   if (rider.courier_delivery_share !== undefined) {
     out.courier_delivery_share = rider.courier_delivery_share;
+  }
+  if (rider.courier_base_pay_jmd !== undefined) {
+    out.courier_base_pay_jmd = rider.courier_base_pay_jmd;
+  }
+  if (rider.courier_per_km_jmd !== undefined) {
+    out.courier_per_km_jmd = rider.courier_per_km_jmd;
+  }
+  if (rider.courier_min_pay_jmd !== undefined) {
+    out.courier_min_pay_jmd = rider.courier_min_pay_jmd;
   }
   if (rider.cod !== undefined) out.cod = rider.cod;
   if (rider.road_distance_multiplier !== undefined) {
@@ -312,6 +352,9 @@ export function validateCustomerRules(rules: PricingRules): string | null {
   const max = sf.maxJmd ?? 99999;
   if (min > max) return 'min_jmd cannot exceed max_jmd';
   if ((rules.minOrderSubtotalJmd ?? 0) < 0) return 'min_order_subtotal_jmd must be >= 0';
+  if ((rules.hardMinOrderSubtotalJmd ?? 0) < 0) return 'hard_min_order_subtotal_jmd must be >= 0';
+  if ((rules.smallOrderThresholdJmd ?? 0) < 0) return 'small_order_threshold_jmd must be >= 0';
+  if ((rules.smallOrderFeeJmd ?? 0) < 0) return 'small_order_fee_jmd must be >= 0';
   const proc = rules.cardProcessingFeePercent ?? 0;
   if (proc < 0 || proc > 0.15) return 'card_processing_fee_percent must be between 0 and 0.15';
   const d = rules.delivery;
@@ -329,6 +372,9 @@ export function validateCustomerRules(rules: PricingRules): string | null {
 export function validateRiderRules(rules: PricingRules): string | null {
   const share = rules.courierDeliveryShare ?? 0;
   if (share < 0 || share > 1) return 'courier_delivery_share must be between 0 and 1';
+  if ((rules.courierBasePayJmd ?? 0) < 0) return 'courier_base_pay_jmd must be >= 0';
+  if ((rules.courierPerKmJmd ?? 0) < 0) return 'courier_per_km_jmd must be >= 0';
+  if ((rules.courierMinPayJmd ?? 0) < 0) return 'courier_min_pay_jmd must be >= 0';
   const roadMult = rules.roadDistanceMultiplier ?? 1.4;
   if (roadMult < 1 || roadMult > 3) return 'road_distance_multiplier must be between 1 and 3';
   const cod = rules.cod?.pauseThresholdJmd ?? 10000;
@@ -343,6 +389,8 @@ export function validatePartnerRules(_rules: PricingRules): string | null {
 export function validatePlatformRules(rules: PricingRules): string | null {
   const taxRate = rules.taxRatePercent ?? 16.5;
   if (taxRate < 0 || taxRate > 30) return 'tax_rate_percent must be between 0 and 30';
+  const maxInflation = rules.maxMenuInflationPercent ?? 0.25;
+  if (maxInflation < 0 || maxInflation > 1) return 'max_menu_inflation_percent must be between 0 and 1';
   return null;
 }
 

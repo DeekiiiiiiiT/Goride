@@ -50,11 +50,16 @@ function mapModifiers(raw: unknown): MenuModifierGroup[] {
 }
 
 function mapMenuItem(row: Record<string, unknown>): MenuItem {
+  const marketplacePrice = row.marketplace_price;
+  const price =
+    marketplacePrice != null && Number.isFinite(Number(marketplacePrice))
+      ? Number(marketplacePrice)
+      : Number(row.price ?? 0);
   return {
     id: String(row.id ?? ''),
     name: String(row.name ?? 'Item'),
     description: String(row.description ?? ''),
-    price: Number(row.price ?? 0),
+    price,
     image: String(row.image_url ?? row.image ?? ''),
     categoryId: String(row.category_id ?? 'uncategorized'),
     featured: Boolean(row.is_featured),

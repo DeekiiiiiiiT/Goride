@@ -58,6 +58,15 @@ export function partyFormSeed(
       min_order_subtotal_jmd: Number(
         c.min_order_subtotal_jmd ?? effective.min_order_subtotal_jmd ?? 800,
       ),
+      hard_min_order_subtotal_jmd: Number(
+        c.hard_min_order_subtotal_jmd ?? effective.hard_min_order_subtotal_jmd ?? 400,
+      ),
+      small_order_threshold_jmd: Number(
+        c.small_order_threshold_jmd ?? effective.small_order_threshold_jmd ?? 1500,
+      ),
+      small_order_fee_jmd: Number(
+        c.small_order_fee_jmd ?? effective.small_order_fee_jmd ?? 400,
+      ),
       card_processing_fee_percent: Number(
         c.card_processing_fee_percent ?? effective.card_processing_fee_percent ?? 0.045,
       ),
@@ -70,6 +79,15 @@ export function partyFormSeed(
     return {
       courier_delivery_share: Number(
         r.courier_delivery_share ?? effective.courier_delivery_share ?? 0.8,
+      ),
+      courier_base_pay_jmd: Number(
+        r.courier_base_pay_jmd ?? effective.courier_base_pay_jmd ?? 250,
+      ),
+      courier_per_km_jmd: Number(
+        r.courier_per_km_jmd ?? effective.courier_per_km_jmd ?? 80,
+      ),
+      courier_min_pay_jmd: Number(
+        r.courier_min_pay_jmd ?? effective.courier_min_pay_jmd ?? 350,
       ),
       cod: (r.cod ?? effective.cod) as PricingRulesPayload['cod'],
       road_distance_multiplier: Number(
@@ -164,6 +182,9 @@ export function partySavePayload(
       service_fee: { ...form.service_fee, mode: 'marginal' },
       delivery: form.delivery,
       min_order_subtotal_jmd: form.min_order_subtotal_jmd,
+      hard_min_order_subtotal_jmd: form.hard_min_order_subtotal_jmd,
+      small_order_threshold_jmd: form.small_order_threshold_jmd,
+      small_order_fee_jmd: form.small_order_fee_jmd,
       card_processing_fee_percent: form.card_processing_fee_percent,
       launch_promos: form.launch_promos,
     };
@@ -171,6 +192,9 @@ export function partySavePayload(
   if (party === 'rider') {
     return {
       courier_delivery_share: form.courier_delivery_share,
+      courier_base_pay_jmd: form.courier_base_pay_jmd,
+      courier_per_km_jmd: form.courier_per_km_jmd,
+      courier_min_pay_jmd: form.courier_min_pay_jmd,
       cod: form.cod,
       road_distance_multiplier: form.road_distance_multiplier,
       tip_processing_from_rider: form.tip_processing_from_rider,

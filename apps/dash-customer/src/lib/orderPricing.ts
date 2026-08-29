@@ -34,6 +34,7 @@ export type OrderTotals = {
   tip: number;
   orderTotal: number;
   processingFee: number;
+  smallOrderFee: number;
   total: number;
 };
 
@@ -51,6 +52,7 @@ export type CheckoutPricing = {
   gctRegistered?: boolean;
   orderTotal: number;
   processingFee: number;
+  smallOrderFee?: number;
   total: number;
   distanceKm?: number | null;
   tier?: string;
@@ -112,6 +114,7 @@ export type CalculateOrderTotalsOptions = {
 /**
  * Mirrors server: tax on (subtotal - discount), platform fee on subtotal,
  * delivery fee from merchant (passed in — never trust a hardcoded client constant).
+ * When v2 quote includes customer total + breakdown, use server figures verbatim.
  */
 export function calculateOrderTotals(
   subtotal: number,
@@ -131,10 +134,37 @@ export function calculateOrderTotals(
 
   if (options?.v2Quote?.pricingModel === 'v2') {
     const q = options.v2Quote;
+    const hasServerTotal = Number.isFinite(q.total);
+    const hasBreakdown =
+      Number.isFinite(q.serviceFee) ||
+      Number.isFinite(q.tax) ||
+      Number.isFinite(q.processingFee) ||
+      Number.isFinite(q.smallOrderFee ?? NaN) ||
+      Number.isFinite(q.deliveryFee);
+
+    if (hasServerTotal && hasBreakdown) {
+      // Server already priced customer total — do not recompute fee lines.
+      return {
+        discount,
+        discountedSubtotal,
+        deliveryFee: freeDelivery ? 0 : roundMoney(Math.max(0, q.deliveryFee)),
+        serviceFee: roundMoney(Math.max(0, q.serviceFee)),
+        tax: roundMoney(Math.max(0, q.tax)),
+        taxFoodJmd: q.taxFoodJmd,
+        taxPlatformJmd: q.taxPlatformJmd,
+        tip: safeTip,
+        orderTotal: roundMoney(Math.max(0, q.orderTotal)),
+        processingFee: roundMoney(Math.max(0, q.processingFee)),
+        smallOrderFee: roundMoney(Math.max(0, q.smallOrderFee ?? 0)),
+        total: roundMoney(Math.max(0, q.total)),
+      };
+    }
+
     const serviceFee = roundMoney(Math.max(0, q.serviceFee));
     const tax = roundMoney(Math.max(0, q.tax));
     const orderTotal = roundMoney(Math.max(0, q.orderTotal));
     const processingFee = roundMoney(Math.max(0, q.processingFee));
+    const smallOrderFee = roundMoney(Math.max(0, q.smallOrderFee ?? 0));
     const total = roundMoney(Math.max(0, q.total));
     return {
       discount,
@@ -147,6 +177,7 @@ export function calculateOrderTotals(
       tip: safeTip,
       orderTotal,
       processingFee,
+      smallOrderFee,
       total,
     };
   }
@@ -171,6 +202,7 @@ export function calculateOrderTotals(
     tip: safeTip,
     orderTotal,
     processingFee,
+    smallOrderFee: 0,
     total,
   };
 }
@@ -237,6 +269,7 @@ export async function fetchMerchantCheckoutPricing(
     tax_rate_percent?: number;
     gct_registered?: boolean;
     processing_fee_order?: number;
+    small_order_fee?: number;
     total?: number;
     distance_km?: number | null;
     tier?: string;
@@ -259,6 +292,7 @@ export async function fetchMerchantCheckoutPricing(
     const taxRatePercent = Math.max(0, Number(data.tax_rate_percent ?? 0));
     const orderTotal = Math.max(0, Number(data.order_total ?? 0));
     const processingFee = Math.max(0, Number(data.processing_fee ?? 0));
+    const smallOrderFee = Math.max(0, Number(data.small_order_fee ?? 0));
     const total = Math.max(0, Number(data.total ?? 0));
     return {
       merchantId: resolvedMerchantId,
@@ -273,6 +307,7 @@ export async function fetchMerchantCheckoutPricing(
       gctRegistered: data.gct_registered,
       orderTotal,
       processingFee,
+      smallOrderFee,
       total,
       distanceKm: data.distance_km,
       tier: data.tier,

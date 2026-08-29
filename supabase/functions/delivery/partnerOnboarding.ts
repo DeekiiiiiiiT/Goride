@@ -9,7 +9,8 @@ export const WIZARD_STEPS = [
   { id: 4, key: "business-details", label: "Details" },
   { id: 5, key: "operating-hours", label: "Hours" },
   { id: 6, key: "branding", label: "Branding" },
-  { id: 7, key: "verification", label: "Verify" },
+  { id: 7, key: "plan", label: "Plan" },
+  { id: 8, key: "verification", label: "Verify" },
 ] as const;
 
 export type WizardStepKey = (typeof WIZARD_STEPS)[number]["key"];
@@ -37,6 +38,7 @@ const DRAFT_JSON_ALLOWLIST = new Set([
   "website",
   "logoUrl",
   "coverImageUrl",
+  "pricingTierSlug",
   "bankName",
   "accountHolderName",
   "accountType",
@@ -237,13 +239,14 @@ export function merchantPayloadFromBody(
     city: body.city || null,
     postal_code: body.postalCode || null,
     website: body.website || null,
+    pricing_tier_id: body.pricingTierId || body.pricing_tier_id || null,
     vertical_type: verticalSnapshot?.vertical_type ?? null,
     fulfillment_type: verticalSnapshot?.fulfillment_type ?? null,
     go_live_rule: verticalSnapshot?.go_live_rule ?? null,
     verification_status: "pending",
     onboarding_status: "submitted",
     submitted_at: new Date().toISOString(),
-    wizard_step: 7,
+    wizard_step: 8,
     wizard_step_key: "verification",
     last_onboarding_activity_at: new Date().toISOString(),
   };
@@ -253,7 +256,7 @@ export function incompleteSetupStageLabel(row: Record<string, unknown>): string 
   if (row.onboarding_status === "draft") {
     const step = Number(row.wizard_step) || wizardStepFromKey(String(row.wizard_step_key || ""));
     const label = wizardStepLabel(row.wizard_step_key as string);
-    return `Step ${step} of 7 — ${label}`;
+    return `Step ${step} of ${WIZARD_STEPS.length} — ${label}`;
   }
   return "";
 }

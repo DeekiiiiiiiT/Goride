@@ -185,6 +185,17 @@ export function PricingHubPage() {
     }>
   >([]);
   const [simRunning, setSimRunning] = useState(false);
+  const [simTierCompare, setSimTierCompare] = useState<
+    Array<{
+      tierId: string;
+      tierName: string;
+      customerTotal: number;
+      deliveryFee: number;
+      commission: number;
+      courierPay: number;
+      subsidy: number;
+    }>
+  >([]);
   const [simMerchants, setSimMerchants] = useState<DashMerchant[]>([]);
   const [simMerchantsLoading, setSimMerchantsLoading] = useState(false);
   /** auto = resolve market from dropoff pin; manual = force Market Rules dropdown */
@@ -679,12 +690,13 @@ export function PricingHubPage() {
     }
   };
 
-  const handleTierUpdate = async (tier: MerchantTierRow, commissionPct: number) => {
+  const handleTierUpdate = async (
+    tier: MerchantTierRow,
+    updates: Partial<MerchantTierRow>,
+  ) => {
     if (!canWrite) return;
     try {
-      await updatePricingTier(session.access_token, tier.id, {
-        commission_rate: commissionPct / 100,
-      });
+      await updatePricingTier(session.access_token, tier.id, updates);
       toast.success(`${tier.name} tier updated`);
       const res = await fetchPricingTiers(session.access_token);
       setTiers(res.tiers ?? []);
@@ -764,6 +776,62 @@ export function PricingHubPage() {
     } finally {
       setSimRunning(false);
     }
+  };
+
+  const handleCompareTiers = async () => {
+    if (!simMerchantId.trim()) {
+      toast.error('Pick a restaurant first');
+      return;
+    }
+    if (!tiers.length) {
+      toast.error('No tiers loaded');
+      return;
+    }
+    setSimRunning(true);
+    try {
+      const rows: Array<{
+        tierId: string;
+        tierName: string;
+        customerTotal: number;
+        deliveryFee: number;
+        commission: number;
+        courierPay: number;
+        subsidy: number;
+      }> = [];
+      for (const tier of tiers.filter((t) => t.is_active !== false)) {
+        const res = await previewPricing(session.access_token, {
+          merchant_id: simMerchantId.trim(),
+          subtotal: Number(simSubtotal) || 0,
+          tip: Number(simTip) || 0,
+          dropoff_lat: Number(simLat),
+          dropoff_lng: Number(simLng),
+          payment_method: simPayment,
+          market_id: simMarketMode === 'manual' ? selectedMarketId || undefined : undefined,
+          customer_order_count: simApplyFreeDeliveryPromo ? 0 : 999,
+          free_delivery: simApplyFreeDeliveryPromo ? true : false,
+          tier_id: tier.id,
+        });
+        const b = pickBreakdown(res.breakdown ?? null);
+        const raw = res.breakdown as Record<string, unknown> | null;
+        rows.push({
+          tierId: tier.id,
+          tierName: tier.name,
+          customerTotal: Number(b?.customerTotal ?? b?.total ?? 0),
+          deliveryFee: Number(b?.deliveryFee ?? 0),
+          commission: Number(b?.merchantCommissionAmount ?? 0),
+          courierPay: Number(b?.deliveryFeeCourierAmount ?? 0),
+          subsidy: Number(
+            raw?.platformDeliverySubsidyJmd ?? raw?.platform_delivery_subsidy_jmd ?? 0,
+          ),
+        });
+      }
+      setSimTierCompare(rows);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Tier compare failed');
+    } finally {
+      setSimRunning(false);
+    }
+  };
   };
 
   const handleRunScenario = async (scenario: SimScenario) => {
@@ -1619,13 +1687,13 @@ export function PricingHubPage() {
       )}
 
       {tab === 'tiers' && (
-        <div className="space-y-3 max-w-lg">
+        <div className="space-y-3 max-w-2xl">
           {tiers.map((tier) => (
             <TierRow
               key={tier.id}
               tier={tier}
               canWrite={canWrite}
-              onSave={(pct) => void handleTierUpdate(tier, pct)}
+              onSave={(updates) => void handleTierUpdate(tier, updates)}
             />
           ))}
         </div>
@@ -1866,6 +1934,14 @@ export function PricingHubPage() {
               >
                 {simRunning ? 'Running…' : 'Run quote'}
               </button>
+              <button
+                type="button"
+                disabled={simRunning || !simMerchantId || !tiers.length}
+                onClick={() => void handleCompareTiers()}
+                className="px-4 py-2 rounded-lg border border-amber-700/60 text-amber-200 text-sm disabled:opacity-50"
+              >
+                Compare tiers
+              </button>
             </div>
           </SimStep>
 
@@ -1945,6 +2021,50 @@ export function PricingHubPage() {
               </div>
             )}
           </SimStep>
+
+          {simTierCompare.length > 0 && (
+            <div className="rounded-xl border border-slate-800 overflow-hidden">
+              <div className="px-3 py-2 text-xs font-medium text-slate-400 bg-slate-900/80">
+                Same basket — tier comparison
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm text-left">
+                  <thead className="text-xs text-slate-500 border-b border-slate-800">
+                    <tr>
+                      <th className="px-3 py-2">Tier</th>
+                      <th className="px-3 py-2">Customer total</th>
+                      <th className="px-3 py-2">Delivery</th>
+                      <th className="px-3 py-2">Commission</th>
+                      <th className="px-3 py-2">Courier pay</th>
+                      <th className="px-3 py-2">Subsidy</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {simTierCompare.map((row) => (
+                      <tr key={row.tierId} className="border-b border-slate-800/80">
+                        <td className="px-3 py-2 text-white font-medium">{row.tierName}</td>
+                        <td className="px-3 py-2 text-slate-200">
+                          J${row.customerTotal.toLocaleString()}
+                        </td>
+                        <td className="px-3 py-2 text-slate-300">
+                          J${row.deliveryFee.toLocaleString()}
+                        </td>
+                        <td className="px-3 py-2 text-slate-300">
+                          J${row.commission.toLocaleString()}
+                        </td>
+                        <td className="px-3 py-2 text-slate-300">
+                          J${row.courierPay.toLocaleString()}
+                        </td>
+                        <td className="px-3 py-2 text-amber-300">
+                          J${row.subsidy.toLocaleString()}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
 
           {simResult && (
             <>
@@ -2739,34 +2859,135 @@ function TierRow({
 }: {
   tier: MerchantTierRow;
   canWrite: boolean;
-  onSave: (pct: number) => void;
+  onSave: (updates: Partial<MerchantTierRow>) => void;
 }) {
   const [pct, setPct] = useState(Math.round(tier.commission_rate * 100));
+  const [baseFee, setBaseFee] = useState(Number(tier.base_delivery_fee_jmd ?? 0));
+  const [inflationPct, setInflationPct] = useState(
+    Math.round(Number(tier.menu_inflation_percent ?? 0) * 1000) / 10,
+  );
+  const [boost, setBoost] = useState(Number(tier.search_boost ?? 0));
+  const [radiusKm, setRadiusKm] = useState(Number(tier.default_delivery_radius_km ?? 8));
+  const [promoEligible, setPromoEligible] = useState(tier.promo_eligible !== false);
+  const [isActive, setIsActive] = useState(tier.is_active !== false);
+
+  useEffect(() => {
+    setPct(Math.round(tier.commission_rate * 100));
+    setBaseFee(Number(tier.base_delivery_fee_jmd ?? 0));
+    setInflationPct(Math.round(Number(tier.menu_inflation_percent ?? 0) * 1000) / 10);
+    setBoost(Number(tier.search_boost ?? 0));
+    setRadiusKm(Number(tier.default_delivery_radius_km ?? 8));
+    setPromoEligible(tier.promo_eligible !== false);
+    setIsActive(tier.is_active !== false);
+  }, [tier]);
+
   return (
-    <div className="flex items-center gap-3 rounded-xl border border-slate-800 bg-slate-900/50 p-3">
-      <div className="flex-1">
-        <p className="text-sm font-medium text-white">{tier.name}</p>
-        <p className="text-xs text-slate-500">{tier.slug}</p>
+    <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4 space-y-3">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-sm font-medium text-white">{tier.name}</p>
+          <p className="text-xs text-slate-500">{tier.slug}</p>
+        </div>
+        {canWrite && (
+          <button
+            type="button"
+            onClick={() =>
+              onSave({
+                commission_rate: pct / 100,
+                base_delivery_fee_jmd: baseFee,
+                menu_inflation_percent: inflationPct / 100,
+                search_boost: boost,
+                default_delivery_radius_km: radiusKm,
+                promo_eligible: promoEligible,
+                is_active: isActive,
+              })
+            }
+            className="px-3 py-1 text-sm rounded-lg bg-amber-600 text-white shrink-0"
+          >
+            Save
+          </button>
+        )}
       </div>
-      <input
-        type="number"
-        min={0}
-        max={50}
-        value={pct}
-        disabled={!canWrite}
-        onChange={(e) => setPct(Number(e.target.value))}
-        className="w-20 px-2 py-1 rounded bg-slate-950 border border-slate-700 text-white text-sm"
-      />
-      <span className="text-sm text-slate-400">%</span>
-      {canWrite && (
-        <button
-          type="button"
-          onClick={() => onSave(pct)}
-          className="px-3 py-1 text-sm rounded-lg bg-amber-600 text-white"
-        >
-          Save
-        </button>
-      )}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <label className="block text-xs text-slate-500">
+          Commission %
+          <input
+            type="number"
+            min={0}
+            max={50}
+            value={pct}
+            disabled={!canWrite}
+            onChange={(e) => setPct(Number(e.target.value))}
+            className="mt-1 w-full px-2 py-1.5 rounded bg-slate-950 border border-slate-700 text-white text-sm disabled:opacity-50"
+          />
+        </label>
+        <label className="block text-xs text-slate-500">
+          Base delivery (JMD)
+          <input
+            type="number"
+            min={0}
+            value={baseFee}
+            disabled={!canWrite}
+            onChange={(e) => setBaseFee(Number(e.target.value))}
+            className="mt-1 w-full px-2 py-1.5 rounded bg-slate-950 border border-slate-700 text-white text-sm disabled:opacity-50"
+          />
+        </label>
+        <label className="block text-xs text-slate-500">
+          Inflation %
+          <input
+            type="number"
+            min={0}
+            max={100}
+            step={0.1}
+            value={inflationPct}
+            disabled={!canWrite}
+            onChange={(e) => setInflationPct(Number(e.target.value))}
+            className="mt-1 w-full px-2 py-1.5 rounded bg-slate-950 border border-slate-700 text-white text-sm disabled:opacity-50"
+          />
+        </label>
+        <label className="block text-xs text-slate-500">
+          Search boost
+          <input
+            type="number"
+            min={0}
+            value={boost}
+            disabled={!canWrite}
+            onChange={(e) => setBoost(Number(e.target.value))}
+            className="mt-1 w-full px-2 py-1.5 rounded bg-slate-950 border border-slate-700 text-white text-sm disabled:opacity-50"
+          />
+        </label>
+        <label className="block text-xs text-slate-500">
+          Radius (km)
+          <input
+            type="number"
+            min={1}
+            value={radiusKm}
+            disabled={!canWrite}
+            onChange={(e) => setRadiusKm(Number(e.target.value))}
+            className="mt-1 w-full px-2 py-1.5 rounded bg-slate-950 border border-slate-700 text-white text-sm disabled:opacity-50"
+          />
+        </label>
+      </div>
+      <div className="flex flex-wrap gap-4">
+        <label className="flex items-center gap-2 text-sm text-slate-400">
+          <input
+            type="checkbox"
+            checked={promoEligible}
+            disabled={!canWrite}
+            onChange={(e) => setPromoEligible(e.target.checked)}
+          />
+          Promo eligible
+        </label>
+        <label className="flex items-center gap-2 text-sm text-slate-400">
+          <input
+            type="checkbox"
+            checked={isActive}
+            disabled={!canWrite}
+            onChange={(e) => setIsActive(e.target.checked)}
+          />
+          Active
+        </label>
+      </div>
     </div>
   );
 }

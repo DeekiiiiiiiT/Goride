@@ -59,6 +59,10 @@ export function canContinueBrandingStep(_data: SignUpFormData): boolean {
   return true;
 }
 
+export function canContinuePlanStep(data: SignUpFormData): boolean {
+  return ['economy', 'growth', 'dominant'].includes(data.pricingTierSlug);
+}
+
 function docUploaded(
   data: SignUpFormData,
   docType: MerchantDocumentType,
@@ -114,6 +118,8 @@ export function canContinueWizardStep(
       return canContinueOperatingHoursStep(_hours);
     case 'branding':
       return canContinueBrandingStep(data);
+    case 'plan':
+      return canContinuePlanStep(data);
     case 'verification':
       return canContinueVerificationStep(data, options?.enableUpload ?? false, requiredDocs);
     default:

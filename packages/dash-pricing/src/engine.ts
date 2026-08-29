@@ -170,12 +170,18 @@ export function resolveProcessingFeeSplit(
   };
 }
 
-/** Distance-based delivery fee. */
+/** Distance-based delivery fee. Tier base replaces market base when set. */
 export function resolveDeliveryFee(
   rules: DeliveryFeeRules,
   distanceKm: number | null | undefined,
+  tierBaseFeeJmd?: number | null,
 ): number {
-  const base = Math.max(0, rules.baseFeeJmd);
+  const base = Math.max(
+    0,
+    tierBaseFeeJmd != null && Number.isFinite(tierBaseFeeJmd)
+      ? Number(tierBaseFeeJmd)
+      : rules.baseFeeJmd,
+  );
   if (distanceKm == null || !Number.isFinite(distanceKm) || distanceKm <= 0) {
     return base;
   }
@@ -201,7 +207,7 @@ export function applyRoadDistanceMultiplier(
   return roundMoney(rawKm * mult);
 }
 
-/** Split delivery fee between platform and courier. */
+/** Split delivery fee between platform and courier (legacy % share). */
 export function resolveDeliverySplit(
   deliveryFee: number,
   courierShareRate: number,
@@ -210,6 +216,35 @@ export function resolveDeliverySplit(
   const courierAmount = roundMoney(deliveryFee * share);
   const platformAmount = roundMoney(deliveryFee - courierAmount);
   return { platformAmount, courierAmount };
+}
+
+/** Independent courier pay ladder from trip economics. */
+export function resolveCourierPayLadder(
+  rules: PricingRules,
+  distanceKm: number | null | undefined,
+): { basePay: number; distancePay: number; total: number } {
+  const basePay = Math.max(0, Number(rules.courierBasePayJmd ?? 0));
+  const perKm = Math.max(0, Number(rules.courierPerKmJmd ?? 0));
+  const minPay = Math.max(0, Number(rules.courierMinPayJmd ?? 0));
+  const km = distanceKm != null && Number.isFinite(distanceKm) ? Math.max(0, distanceKm) : 0;
+  const distancePay = roundMoney(Math.ceil(km) * perKm);
+  const raw = roundMoney(basePay + distancePay);
+  const total = roundMoney(Math.max(raw, minPay));
+  // Attribute any min-pay top-up to base so UI can show components
+  const topUp = roundMoney(Math.max(0, total - raw));
+  return { basePay: roundMoney(basePay + topUp), distancePay, total };
+}
+
+/** Small-order fee when subtotal is below threshold (and above hard min). */
+export function resolveSmallOrderFee(
+  rules: PricingRules,
+  discountedSubtotal: number,
+): number {
+  const threshold = Math.max(0, Number(rules.smallOrderThresholdJmd ?? 0));
+  const fee = Math.max(0, Number(rules.smallOrderFeeJmd ?? 0));
+  if (threshold <= 0 || fee <= 0) return 0;
+  if (discountedSubtotal >= threshold) return 0;
+  return roundMoney(fee);
 }
 
 /** Check if launch promo applies free delivery. */
@@ -250,12 +285,19 @@ export function buildOrderPricing(input: PricingInput): PricingBreakdown {
     input.serviceFeeWaived,
   );
 
+  const smallOrderFee = resolveSmallOrderFee(input.rules, discountedSubtotal);
+
   const distanceKmRaw = input.distanceKmRaw ?? input.distanceKm ?? null;
   const distanceKm = input.distanceKm != null && Number.isFinite(input.distanceKm)
     ? roundMoney(input.distanceKm)
     : null;
 
-  const baseDeliveryFee = resolveDeliveryFee(input.rules.delivery, distanceKm);
+  const tierBase = input.tier?.baseDeliveryFeeJmd;
+  const baseDeliveryFee = resolveDeliveryFee(
+    input.rules.delivery,
+    distanceKm,
+    tierBase,
+  );
   // Risk premium from zone policy — always charged; free-delivery only waives base.
   const zoneSurchargeJmd = Math.max(
     0,
@@ -268,12 +310,41 @@ export function buildOrderPricing(input: PricingInput): PricingBreakdown {
     input.freeDelivery,
   );
 
+  // Courier pay from ladder when configured; else legacy % of customer delivery fee.
+  const ladderConfigured =
+    (input.rules.courierBasePayJmd ?? 0) > 0 ||
+    (input.rules.courierPerKmJmd ?? 0) > 0 ||
+    (input.rules.courierMinPayJmd ?? 0) > 0;
+
   let deliveryFee = grossDeliveryFee;
   let deliveryFeePlatformAmount = 0;
   let deliveryFeeCourierAmount = 0;
   let promoCostJmd = 0;
+  let courierBasePayJmd = 0;
+  let courierDistancePayJmd = 0;
+  let platformDeliverySubsidyJmd = 0;
 
-  if (freeDeliveryApplied) {
+  if (ladderConfigured) {
+    const ladder = resolveCourierPayLadder(input.rules, distanceKm);
+    courierBasePayJmd = ladder.basePay;
+    courierDistancePayJmd = ladder.distancePay;
+    deliveryFeeCourierAmount = ladder.total;
+
+    if (freeDeliveryApplied) {
+      // Customer pays surcharge only; courier still earns full ladder.
+      deliveryFee = zoneSurchargeJmd;
+      deliveryFeePlatformAmount = roundMoney(zoneSurchargeJmd - ladder.total);
+      promoCostJmd = roundMoney(Math.max(0, ladder.total - zoneSurchargeJmd));
+      platformDeliverySubsidyJmd = promoCostJmd;
+    } else {
+      deliveryFee = grossDeliveryFee;
+      // Platform share = what customer paid for delivery minus courier pay (can be negative).
+      deliveryFeePlatformAmount = roundMoney(grossDeliveryFee - ladder.total);
+      platformDeliverySubsidyJmd = roundMoney(
+        Math.max(0, ladder.total - grossDeliveryFee),
+      );
+    }
+  } else if (freeDeliveryApplied) {
     const baseSplit = resolveDeliverySplit(
       baseDeliveryFee,
       input.rules.courierDeliveryShare,
@@ -282,7 +353,6 @@ export function buildOrderPricing(input: PricingInput): PricingBreakdown {
       zoneSurchargeJmd,
       input.rules.courierDeliveryShare,
     );
-    // Customer pays surcharge only; courier still earns base share (platform promo) + surcharge share.
     deliveryFee = zoneSurchargeJmd;
     deliveryFeeCourierAmount = roundMoney(
       baseSplit.courierAmount + surchargeSplit.courierAmount,
@@ -291,6 +361,7 @@ export function buildOrderPricing(input: PricingInput): PricingBreakdown {
       -baseSplit.courierAmount + surchargeSplit.platformAmount,
     );
     promoCostJmd = baseSplit.courierAmount;
+    platformDeliverySubsidyJmd = promoCostJmd;
   } else {
     const split = resolveDeliverySplit(grossDeliveryFee, input.rules.courierDeliveryShare);
     deliveryFeePlatformAmount = split.platformAmount;
@@ -301,13 +372,14 @@ export function buildOrderPricing(input: PricingInput): PricingBreakdown {
     discountedSubtotal,
     serviceFee,
     deliveryFeePlatformAmount,
+    smallOrderFee,
     foodRatePercent,
     platformRatePercent,
     platformGctEnabled: input.platformGctEnabled,
   });
 
   const orderBase = roundMoney(
-    discountedSubtotal + serviceFee + deliveryFee + gct.tax,
+    discountedSubtotal + serviceFee + deliveryFee + smallOrderFee + gct.tax,
   );
   const orderTotal = roundMoney(orderBase + tip);
 
@@ -345,6 +417,10 @@ export function buildOrderPricing(input: PricingInput): PricingBreakdown {
     processingFeeOrder: proc.processingFeeOrder,
     processingFeeTip: proc.processingFeeTip,
     promoCostJmd,
+    smallOrderFee,
+    platformDeliverySubsidyJmd,
+    courierBasePayJmd,
+    courierDistancePayJmd,
     customerTotal,
     total: customerTotal,
     tierSlug: input.tier?.slug,
@@ -405,7 +481,9 @@ export function parsePricingRules(raw: Record<string, unknown> | null | undefine
     : 'flat';
 
   return {
-    pricingV2Enabled: Boolean(flat.pricing_v2_enabled),
+    pricingV2Enabled: flat.pricing_v2_enabled !== undefined
+      ? Boolean(flat.pricing_v2_enabled)
+      : DEFAULTS.pricingV2Enabled,
     delivery: {
       baseFeeJmd: Number(delivery.base_fee_jmd ?? DEFAULTS.delivery.baseFeeJmd),
       includedKm: Number(delivery.included_km ?? DEFAULTS.delivery.includedKm),
@@ -429,6 +507,15 @@ export function parsePricingRules(raw: Record<string, unknown> | null | undefine
         : DEFAULTS.serviceFee.overrideThresholdJmd,
     },
     courierDeliveryShare: Number(flat.courier_delivery_share ?? DEFAULTS.courierDeliveryShare),
+    courierBasePayJmd: flat.courier_base_pay_jmd != null
+      ? Number(flat.courier_base_pay_jmd)
+      : DEFAULTS.courierBasePayJmd,
+    courierPerKmJmd: flat.courier_per_km_jmd != null
+      ? Number(flat.courier_per_km_jmd)
+      : DEFAULTS.courierPerKmJmd,
+    courierMinPayJmd: flat.courier_min_pay_jmd != null
+      ? Number(flat.courier_min_pay_jmd)
+      : DEFAULTS.courierMinPayJmd,
     launchPromos: {
       freeDeliveryFirstNOrders: Number(
         launchPromos.free_delivery_first_n_orders ?? DEFAULTS.launchPromos?.freeDeliveryFirstNOrders ?? 0,
@@ -444,12 +531,25 @@ export function parsePricingRules(raw: Record<string, unknown> | null | undefine
     minOrderSubtotalJmd: flat.min_order_subtotal_jmd != null
       ? Number(flat.min_order_subtotal_jmd)
       : DEFAULTS.minOrderSubtotalJmd,
+    hardMinOrderSubtotalJmd: flat.hard_min_order_subtotal_jmd != null
+      ? Number(flat.hard_min_order_subtotal_jmd)
+      : DEFAULTS.hardMinOrderSubtotalJmd,
+    smallOrderThresholdJmd: flat.small_order_threshold_jmd != null
+      ? Number(flat.small_order_threshold_jmd)
+      : DEFAULTS.smallOrderThresholdJmd,
+    smallOrderFeeJmd: flat.small_order_fee_jmd != null
+      ? Number(flat.small_order_fee_jmd)
+      : DEFAULTS.smallOrderFeeJmd,
     cardProcessingFeePercent: flat.card_processing_fee_percent != null
       ? Number(flat.card_processing_fee_percent)
       : DEFAULTS.cardProcessingFeePercent,
     tipProcessingFromRider: flat.tip_processing_from_rider != null
       ? Boolean(flat.tip_processing_from_rider)
       : DEFAULTS.tipProcessingFromRider,
+    commissionBase: flat.commission_base === 'in_store' ? 'in_store' : 'marketplace',
+    maxMenuInflationPercent: flat.max_menu_inflation_percent != null
+      ? Number(flat.max_menu_inflation_percent)
+      : DEFAULTS.maxMenuInflationPercent,
   };
 }
 
@@ -460,7 +560,7 @@ export function serializePricingRules(rules: PricingRules): Record<string, unkno
 
 export function defaultPricingRules(): PricingRules {
   return {
-    pricingV2Enabled: false,
+    pricingV2Enabled: true,
     delivery: {
       baseFeeJmd: 400,
       includedKm: 2,
@@ -478,13 +578,21 @@ export function defaultPricingRules(): PricingRules {
       overrideThresholdJmd: 5000,
     },
     courierDeliveryShare: 0.8,
+    courierBasePayJmd: 250,
+    courierPerKmJmd: 80,
+    courierMinPayJmd: 350,
     launchPromos: { freeDeliveryFirstNOrders: 0 },
     cod: { pauseThresholdJmd: 10000 },
     taxRatePercent: 16.5,
     roadDistanceMultiplier: 1.4,
-    minOrderSubtotalJmd: 800,
+    minOrderSubtotalJmd: 1500,
+    hardMinOrderSubtotalJmd: 400,
+    smallOrderThresholdJmd: 1500,
+    smallOrderFeeJmd: 400,
     cardProcessingFeePercent: 0.045,
     tipProcessingFromRider: true,
+    commissionBase: 'marketplace',
+    maxMenuInflationPercent: 0.25,
   };
 }
 

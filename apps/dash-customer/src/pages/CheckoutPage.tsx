@@ -100,6 +100,7 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
             tip,
             orderTotal: subtotal + tip,
             processingFee: 0,
+            smallOrderFee: 0,
             total: subtotal + tip,
           },
     [subtotal, appliedPromo, tip, merchantDeliveryFee, platformFeeRate, checkoutPricing, apiPaymentMethod, hasLivePricing],
@@ -639,6 +640,12 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
                   <span>Service Fee</span>
                   <span>{formatJmd(totals.serviceFee)}</span>
                 </div>
+                {totals.smallOrderFee > 0 && (
+                  <div className="flex justify-between">
+                    <span>Small order fee</span>
+                    <span>{formatJmd(totals.smallOrderFee)}</span>
+                  </div>
+                )}
                 {(totals.taxFoodJmd ?? 0) > 0 && (
                   <div className="flex justify-between">
                     <span>Tax (GCT on food)</span>

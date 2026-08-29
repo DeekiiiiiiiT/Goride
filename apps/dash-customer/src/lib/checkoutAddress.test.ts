@@ -18,6 +18,7 @@ describe('calculateOrderTotals', () => {
     expect(totals.deliveryFee).toBe(175);
     expect(totals.tip).toBe(50);
     expect(totals.serviceFee).toBe(50);
+    expect(totals.smallOrderFee).toBe(0);
     expect(totals.total).toBeGreaterThan(1000);
   });
 
@@ -31,6 +32,29 @@ describe('calculateOrderTotals', () => {
     expect(totals.serviceFee).toBe(180);
     expect(totals.tax).toBe(198);
     expect(totals.total).toBe(1828);
+  });
+
+  it('uses v2 server totals verbatim when customer total is provided', () => {
+    const totals = calculateOrderTotals(800, null, 0, 999, 0.05, undefined, {
+      v2Quote: {
+        pricingModel: 'v2',
+        platformFeeRate: 0,
+        deliveryFee: 200,
+        serviceFee: 40,
+        tax: 132,
+        taxRatePercent: 16.5,
+        orderTotal: 1172,
+        processingFee: 35,
+        smallOrderFee: 400,
+        total: 1607,
+      },
+    });
+    expect(totals.deliveryFee).toBe(200);
+    expect(totals.serviceFee).toBe(40);
+    expect(totals.tax).toBe(132);
+    expect(totals.processingFee).toBe(35);
+    expect(totals.smallOrderFee).toBe(400);
+    expect(totals.total).toBe(1607);
   });
 });
 

@@ -42,6 +42,8 @@ export type PricingResolverInput = {
    * Admin preview with override can still price without coverage.
    */
   requireCoverage?: boolean;
+  /** Admin simulator: force a merchant tier instead of the merchant's assigned tier */
+  tierIdOverride?: string | null;
 };
 
 export type ResolvedPricing = PricingBreakdown & {
@@ -83,6 +85,7 @@ async function loadCustomerOrderCount(
 async function loadMerchantPricingContext(
   sb: ServiceSb,
   merchantId: string,
+  tierIdOverride?: string | null,
 ): Promise<{
   found: boolean;
   lat: number | null;
@@ -132,11 +135,12 @@ async function loadMerchantPricingContext(
   const serviceFeeOverride = parseServiceFeeOverride(
     base.service_fee_override as Record<string, unknown> | null,
   );
-  const tierId = base.pricing_tier_id ? String(base.pricing_tier_id) : null;
+  const tierId = (tierIdOverride && String(tierIdOverride).trim())
+    || (base.pricing_tier_id ? String(base.pricing_tier_id) : null);
   if (tierId) {
     const { data: tierRow } = await sb
       .from("merchant_tiers")
-      .select("slug, name, commission_rate")
+      .select("slug, name, commission_rate, base_delivery_fee_jmd, menu_inflation_percent, search_boost, default_delivery_radius_km, promo_eligible")
       .eq("id", tierId)
       .maybeSingle();
     if (tierRow) {
@@ -145,6 +149,17 @@ async function loadMerchantPricingContext(
         slug: String(t.slug),
         name: String(t.name),
         commissionRate: Number(t.commission_rate),
+        baseDeliveryFeeJmd: t.base_delivery_fee_jmd != null
+          ? Number(t.base_delivery_fee_jmd)
+          : null,
+        menuInflationPercent: t.menu_inflation_percent != null
+          ? Number(t.menu_inflation_percent)
+          : null,
+        searchBoost: t.search_boost != null ? Number(t.search_boost) : undefined,
+        defaultDeliveryRadiusKm: t.default_delivery_radius_km != null
+          ? Number(t.default_delivery_radius_km)
+          : undefined,
+        promoEligible: t.promo_eligible != null ? Boolean(t.promo_eligible) : undefined,
       };
     }
   }
@@ -166,7 +181,7 @@ export async function resolveDashOrderPricing(
   sb: ServiceSb,
   input: PricingResolverInput,
 ): Promise<ResolvedPricing | null> {
-  const ctx = await loadMerchantPricingContext(sb, input.merchantId);
+  const ctx = await loadMerchantPricingContext(sb, input.merchantId, input.tierIdOverride);
   if (!ctx.found) {
     console.error("[pricingResolver] cannot resolve:", ctx.error, input.merchantId);
     return null;
@@ -203,11 +218,12 @@ export async function resolveDashOrderPricing(
         distanceKm: null,
         rules: parsePricingRules(null),
         paymentMethod: input.paymentMethod,
+        taxRatePercent: 16.5,
       }),
       pricingProfileVersion: 0,
       marketId: null,
       rules: parsePricingRules(null),
-      pricingV2Enabled: false,
+      pricingV2Enabled: true,
       resolvedMarketId: null,
       covered: false,
       coverage,
@@ -273,7 +289,7 @@ export async function resolveDashOrderPricing(
     pricingProfileVersion: version,
     marketId,
     rules,
-    pricingV2Enabled: rules.pricingV2Enabled === true,
+    pricingV2Enabled: true,
     resolvedMarketId,
     covered,
     coverage,

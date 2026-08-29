@@ -497,7 +497,8 @@ export function registerCourierConsumerRoutes(app: Hono, deps: Deps) {
       .select(`
         *,
         order:orders(
-          id, order_number, status, total, delivery_fee, tip, delivery_address,
+          id, order_number, status, total, delivery_fee, delivery_fee_courier_amount,
+          courier_base_pay_jmd, courier_distance_pay_jmd, tip, delivery_address,
           delivery_address_line2, delivery_lat, delivery_lng, ready_at, delivery_instructions, items,
           peak_pay_amount,
           merchant:merchants(id, name, address, lat, lng, phone, vertical_type, fulfillment_type),
@@ -875,7 +876,8 @@ export function registerCourierConsumerRoutes(app: Hono, deps: Deps) {
     const { data: orders, error } = await serviceSb
       .from("orders")
       .select(`
-        id, order_number, status, delivery_fee, tip, peak_pay_amount, delivered_at, delivery_address,
+        id, order_number, status, delivery_fee, delivery_fee_courier_amount,
+        courier_base_pay_jmd, courier_distance_pay_jmd, tip, peak_pay_amount, delivered_at, delivery_address,
         merchant:merchants(name)
       `)
       .eq("courier_id", auth.userId)
@@ -888,7 +890,7 @@ export function registerCourierConsumerRoutes(app: Hono, deps: Deps) {
     const rows = orders || [];
     let total = 0;
     const deliveries = rows.map((o) => {
-      const fee = Number(o.delivery_fee || 0);
+      const fee = courierDeliveryEarnings(o as Record<string, unknown>);
       const tip = Number(o.tip || 0);
       const peak = Number((o as { peak_pay_amount?: number }).peak_pay_amount || 0);
       const amount = fee + tip + peak;
@@ -939,7 +941,8 @@ export function registerCourierConsumerRoutes(app: Hono, deps: Deps) {
     }
     const startIso = start.toISOString();
     const select = `
-      id, order_number, status, delivery_fee, tip, peak_pay_amount, courier_compensation_amount,
+      id, order_number, status, delivery_fee, delivery_fee_courier_amount,
+      courier_base_pay_jmd, courier_distance_pay_jmd, tip, peak_pay_amount, courier_compensation_amount,
       delivered_at, cancelled_at, delivery_address,
       merchant:merchants(name)
     `;
@@ -966,7 +969,7 @@ export function registerCourierConsumerRoutes(app: Hono, deps: Deps) {
 
     const mapRow = (o: Record<string, unknown>, kind: "completed" | "cancelled") => {
       const merchant = o.merchant as { name?: string } | null;
-      const fee = Number(o.delivery_fee || 0);
+      const fee = courierDeliveryEarnings(o);
       const tip = Number(o.tip || 0);
       const peak = Number(o.peak_pay_amount || 0);
       const compensation = Number(o.courier_compensation_amount || 0);
@@ -1021,7 +1024,7 @@ export function registerCourierConsumerRoutes(app: Hono, deps: Deps) {
     const serviceSb = getServiceSupabase();
     const { data: orders, error } = await serviceSb
       .from("orders")
-      .select("id, delivery_fee, delivery_fee_courier_amount, pricing_model, tip, peak_pay_amount, delivered_at")
+      .select("id, delivery_fee, delivery_fee_courier_amount, courier_base_pay_jmd, courier_distance_pay_jmd, pricing_model, tip, peak_pay_amount, delivered_at")
       .eq("courier_id", auth.userId)
       .in("status", ["delivered", "completed"])
       .gte("delivered_at", periodStart)
@@ -1233,7 +1236,8 @@ export function registerCourierConsumerRoutes(app: Hono, deps: Deps) {
       .select(`
         id, order_id, stack_group_id, sequence, leg_status,
         order:orders(
-          id, order_number, status, delivery_fee, tip, peak_pay_amount, delivery_address,
+          id, order_number, status, delivery_fee, delivery_fee_courier_amount,
+          courier_base_pay_jmd, courier_distance_pay_jmd, tip, peak_pay_amount, delivery_address,
           delivery_address_line2, delivery_lat, delivery_lng, delivery_instructions, items,
           merchant:merchants(id, name, address, lat, lng, phone, vertical_type, fulfillment_type),
           ${ORDER_CUSTOMER_EMBED_MINIMAL}

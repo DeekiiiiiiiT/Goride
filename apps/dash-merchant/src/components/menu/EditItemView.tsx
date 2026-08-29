@@ -39,7 +39,13 @@ export default function EditItemView({
 
   useEffect(() => {
     if (item) {
-      setFormData(item);
+      const inStore = Number(item.in_store_price ?? item.price ?? 0);
+      setFormData({
+        ...item,
+        in_store_price: inStore,
+        price: inStore,
+        marketplace_price: item.marketplace_price ?? null,
+      });
       setExpandedGroups(new Set(item.options.map((group) => group.id)));
     } else {
       setFormData(createEmptyMenuItem(defaultCategoryId));
@@ -71,7 +77,7 @@ export default function EditItemView({
   };
 
   const handleSubmit = () => {
-    if (!formData.name.trim() || formData.price <= 0) return;
+    if (!formData.name.trim() || (formData.in_store_price ?? formData.price) <= 0) return;
     onSave(formData);
   };
 
@@ -175,7 +181,7 @@ export default function EditItemView({
 
             <div className="flex flex-col gap-2">
               <label className="text-label-md text-on-surface-variant" htmlFor="itemPrice">
-                Base Price
+                Your in-store price
               </label>
               <div className="relative">
                 <span className="absolute left-4 top-1/2 -translate-y-1/2 text-body-lg text-on-surface-variant">
@@ -186,16 +192,28 @@ export default function EditItemView({
                   type="number"
                   step="0.01"
                   min="0"
-                  value={formData.price || ''}
-                  onChange={(event) =>
+                  value={formData.in_store_price || formData.price || ''}
+                  onChange={(event) => {
+                    const next = parseFloat(event.target.value) || 0;
                     setFormData((prev) => ({
                       ...prev,
-                      price: parseFloat(event.target.value) || 0,
-                    }))
-                  }
+                      in_store_price: next,
+                      price: next,
+                    }));
+                  }}
                   className="h-12 w-full rounded-lg border border-outline-variant bg-surface-container-lowest pl-8 pr-4 text-body-lg text-on-surface outline-none transition-all focus:border-primary-container focus:ring-1 focus:ring-primary-container"
                 />
               </div>
+              {formData.marketplace_price != null && (
+                <div className="rounded-lg border border-outline-variant bg-surface-container-low px-4 py-3">
+                  <p className="text-label-sm text-on-surface-variant">
+                    What customers see on Roam Rush
+                  </p>
+                  <p className="text-body-lg font-medium text-on-surface">
+                    ${Number(formData.marketplace_price).toFixed(2)}
+                  </p>
+                </div>
+              )}
             </div>
           </div>
         </section>
@@ -324,7 +342,11 @@ export default function EditItemView({
           <button
             type="button"
             onClick={handleSubmit}
-            disabled={!formData.name.trim() || formData.price <= 0 || isPending}
+            disabled={
+              !formData.name.trim() ||
+              (formData.in_store_price ?? formData.price) <= 0 ||
+              isPending
+            }
             className="flex h-12 w-full items-center justify-center gap-2 rounded-lg bg-primary-container text-label-md font-semibold text-white shadow-sm transition-colors hover:bg-primary active:scale-[0.98] disabled:opacity-50"
           >
             <MaterialIcon name="save" className="text-sm" />

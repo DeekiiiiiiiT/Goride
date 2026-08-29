@@ -49,7 +49,25 @@ export function RiderRulesForm({
       </p>
       <div className="grid grid-cols-2 gap-3">
         <Field
-          label="Courier delivery share (%)"
+          label="Courier base pay (JMD)"
+          value={rules.courier_base_pay_jmd ?? 250}
+          onChange={(v) => setRules((r) => ({ ...r, courier_base_pay_jmd: v }))}
+          disabled={!canWrite}
+        />
+        <Field
+          label="Courier per km (JMD)"
+          value={rules.courier_per_km_jmd ?? 80}
+          onChange={(v) => setRules((r) => ({ ...r, courier_per_km_jmd: v }))}
+          disabled={!canWrite}
+        />
+        <Field
+          label="Courier min pay (JMD)"
+          value={rules.courier_min_pay_jmd ?? 350}
+          onChange={(v) => setRules((r) => ({ ...r, courier_min_pay_jmd: v }))}
+          disabled={!canWrite}
+        />
+        <Field
+          label="Courier delivery share (%) — legacy"
           value={Math.round((rules.courier_delivery_share ?? 0.8) * 100)}
           onChange={(v) => setRules((r) => ({ ...r, courier_delivery_share: v / 100 }))}
           disabled={!canWrite}
@@ -88,7 +106,19 @@ export function RiderRulesForm({
 export function RiderRulesReadonly({ rules }: { rules: PricingRulesPayload }) {
   const rows = [
     {
-      label: 'Courier delivery share',
+      label: 'Courier base pay',
+      value: formatJmd(rules.courier_base_pay_jmd ?? 250),
+    },
+    {
+      label: 'Courier per km',
+      value: formatJmd(rules.courier_per_km_jmd ?? 80),
+    },
+    {
+      label: 'Courier min pay',
+      value: formatJmd(rules.courier_min_pay_jmd ?? 350),
+    },
+    {
+      label: 'Courier delivery share (legacy)',
       value: `${Math.round((rules.courier_delivery_share ?? 0.8) * 100)}%`,
     },
     {

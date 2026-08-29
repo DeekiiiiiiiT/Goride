@@ -43,6 +43,8 @@ export interface SignUpFormData {
   website: string;
   logoUrl: string;
   coverImageUrl: string;
+  /** economy | growth | dominant */
+  pricingTierSlug: string;
   bankName: string;
   accountHolderName: string;
   accountNumber: string;
@@ -81,6 +83,7 @@ export const INITIAL_SIGN_UP_DATA: SignUpFormData = {
   website: '',
   logoUrl: '',
   coverImageUrl: '',
+  pricingTierSlug: '',
   bankName: '',
   accountHolderName: '',
   accountNumber: '',

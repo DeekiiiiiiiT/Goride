@@ -1718,6 +1718,10 @@ export type MerchantTierRow = {
   slug: string;
   name: string;
   commission_rate: number;
+  /** Customer-facing base delivery fee for this tier (JMD). */
+  base_delivery_fee_jmd?: number | null;
+  /** Menu inflation 0–1 (e.g. 0.20 = 20%). */
+  menu_inflation_percent?: number | null;
   search_boost: number;
   default_delivery_radius_km: number;
   promo_eligible: boolean;
@@ -1782,11 +1786,17 @@ export type PricingRulesPayload = {
     override_threshold_jmd?: number;
   };
   courier_delivery_share?: number;
+  courier_base_pay_jmd?: number;
+  courier_per_km_jmd?: number;
+  courier_min_pay_jmd?: number;
   cod?: { pause_threshold_jmd?: number };
   launch_promos?: { free_delivery_first_n_orders?: number };
   tax_rate_percent?: number;
   road_distance_multiplier?: number;
   min_order_subtotal_jmd?: number;
+  hard_min_order_subtotal_jmd?: number;
+  small_order_threshold_jmd?: number;
+  small_order_fee_jmd?: number;
   card_processing_fee_percent?: number;
   tip_processing_from_rider?: boolean;
 };
@@ -1995,6 +2005,8 @@ export function previewPricing(
     free_delivery?: boolean;
     payment_method?: 'wipay' | 'cash';
     market_id?: string;
+    /** Admin: force a merchant tier for side-by-side comparison */
+    tier_id?: string;
   },
 ) {
   return deliveryFetch<{

@@ -12,6 +12,7 @@ import { getCategoryTaxonomyKey } from '@roam/vertical-config';
  *   (delivery radius is Roam-owned — set in admin after approval)
  * - operating-hours: hours
  * - branding: logoUrl, coverImageUrl
+ * - plan: pricingTierSlug (Economy / Growth / Dominant)
  * - verification: ownerFullName, identity documents (final step — submits application)
  * Bank account is collected after the merchant's first customer order (see PayoutSetupSheet).
  */
@@ -23,7 +24,8 @@ export const WIZARD_STEPS = [
   { id: 4, key: 'business-details', icon: 'description', label: 'Details' },
   { id: 5, key: 'operating-hours', icon: 'schedule', label: 'Hours' },
   { id: 6, key: 'branding', icon: 'image', label: 'Branding' },
-  { id: 7, key: 'verification', icon: 'verified_user', label: 'Verify' },
+  { id: 7, key: 'plan', icon: 'workspace_premium', label: 'Plan' },
+  { id: 8, key: 'verification', icon: 'verified_user', label: 'Verify' },
 ] as const;
 
 export type WizardStepId = (typeof WIZARD_STEPS)[number]['key'];

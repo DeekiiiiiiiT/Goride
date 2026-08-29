@@ -56,6 +56,7 @@ function mapApiMerchant(row: Record<string, unknown>): DiscoverMerchant {
   const prep = Number(row.avg_prep_time_mins ?? 25);
   const fee = Number(row.delivery_fee ?? 0);
   const minOrder = Number(row.min_order_amount ?? 0);
+  const promoted = Boolean(row.promoted ?? row.search_boost ?? row.is_promoted);
   return {
     id: String(row.id ?? row.slug ?? ''),
     slug: String(row.slug ?? ''),
@@ -63,13 +64,14 @@ function mapApiMerchant(row: Record<string, unknown>): DiscoverMerchant {
     cuisines: String(row.cuisine_type ?? row.description ?? ''),
     rating: Number(row.rating ?? 4.5),
     eta: `${prep}-${prep + 15} min`,
-    delivery: fee === 0 ? 'Free' : `$${fee.toFixed(0)}`,
+    delivery: fee === 0 ? 'Free' : `J$${fee.toFixed(0)}`,
     image: String(row.cover_image_url ?? row.logo_url ?? ''),
     vertical_type: (row.vertical_type as VerticalType) ?? 'restaurant',
     lat: row.lat != null ? Number(row.lat) : undefined,
     lng: row.lng != null ? Number(row.lng) : undefined,
     minOrder,
     priceLevel: priceLevelFromCosts(minOrder, fee),
+    promoted: promoted || undefined,
   };
 }
 

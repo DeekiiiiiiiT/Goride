@@ -92,7 +92,7 @@ export default function CartPage({ onNavigate, session }: Props) {
   }, [merchantId, session?.access_token, subtotal, savedAddress?.lat, savedAddress?.lng]);
 
   const hasLivePricing = checkoutPricing != null && !pricingError;
-  const { discount, deliveryFee, serviceFee, tax, processingFee, total } = hasLivePricing
+  const { discount, deliveryFee, serviceFee, tax, processingFee, smallOrderFee, total } = hasLivePricing
     ? calculateOrderTotals(
         subtotal,
         appliedPromo,
@@ -112,6 +112,7 @@ export default function CartPage({ onNavigate, session }: Props) {
         serviceFee: 0,
         tax: 0,
         processingFee: 0,
+        smallOrderFee: 0,
         total: subtotal,
       };
 
@@ -395,6 +396,12 @@ export default function CartPage({ onNavigate, session }: Props) {
               <span>Service Fee</span>
               <span>{hasLivePricing ? formatJmd(serviceFee) : '—'}</span>
             </div>
+            {smallOrderFee > 0 && (
+              <div className="flex justify-between text-body-md text-on-surface-variant">
+                <span>Small order fee</span>
+                <span>{formatJmd(smallOrderFee)}</span>
+              </div>
+            )}
             {(taxRateLabel != null && taxRateLabel > 0) || tax > 0 ? (
               <div className="flex justify-between text-body-md text-on-surface-variant">
                 <span>Tax (GCT {taxRateLabel ?? 0}%)</span>

@@ -53,6 +53,11 @@ export function DiscoverStoreCard({ merchant, onClick, variant = 'list' }: Props
           >
             {verticalLabel(merchant.vertical_type)}
           </span>
+          {merchant.promoted ? (
+            <span className="rounded-full bg-on-surface/90 px-3 py-1 text-label-md font-semibold text-surface shadow-lg">
+              Promoted
+            </span>
+          ) : null}
           <span className="flex items-center gap-1 rounded-full bg-white/90 px-2 py-1 text-label-md font-semibold text-on-surface shadow-sm backdrop-blur-sm">
             <MaterialIcon name="star" className="text-sm text-amber-500" filled />
             {merchant.rating}

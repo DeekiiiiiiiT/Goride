@@ -688,6 +688,44 @@ export function registerMerchantAdminRoutes(app: Hono) {
 
     const { data, error } = await sb.from("merchants").update(updates).eq("id", id).select().single();
     if (error) return c.json({ error: error.message }, 500);
+
+    if (
+      Object.prototype.hasOwnProperty.call(body, "pricing_tier_id") &&
+      String(updates.pricing_tier_id ?? "") !== String(currentRow.pricing_tier_id ?? "")
+    ) {
+      const nowIso = new Date().toISOString();
+      if (currentRow.pricing_tier_id) {
+        await sb
+          .from("merchant_tier_assignments")
+          .update({ effective_to: nowIso })
+          .eq("merchant_id", id)
+          .is("effective_to", null);
+      }
+      if (updates.pricing_tier_id) {
+        await sb.from("merchant_tier_assignments").insert({
+          merchant_id: id,
+          tier_id: String(updates.pricing_tier_id),
+          effective_from: nowIso,
+          changed_by: admin.id,
+          agreed_at: nowIso,
+        });
+        const { data: tierRow } = await sb
+          .from("merchant_tiers")
+          .select("default_delivery_radius_km")
+          .eq("id", String(updates.pricing_tier_id))
+          .maybeSingle();
+        if (tierRow?.default_delivery_radius_km != null) {
+          await sb
+            .from("merchants")
+            .update({
+              delivery_radius_km: Number(tierRow.default_delivery_radius_km),
+              updated_at: nowIso,
+            })
+            .eq("id", id);
+        }
+      }
+    }
+
     if (Object.prototype.hasOwnProperty.call(body, "payout_ready")) {
       await logMerchantAudit(sb, {
         merchant_id: id,

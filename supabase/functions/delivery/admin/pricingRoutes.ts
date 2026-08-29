@@ -768,19 +768,37 @@ export function registerPricingAdminRoutes(app: Hono) {
       return c.json({ error: "slug, name, and commission_rate required" }, 400);
     }
 
+    const baseDeliveryFee = body.base_delivery_fee_jmd ?? body.baseDeliveryFeeJmd;
+    const menuInflationRaw = body.menu_inflation_percent ?? body.menuInflationPercent;
+    let menuInflation: number | null = null;
+    if (menuInflationRaw != null && menuInflationRaw !== "") {
+      menuInflation = Number(menuInflationRaw);
+      if (!Number.isFinite(menuInflation) || menuInflation < 0 || menuInflation > 1) {
+        return c.json({ error: "menu_inflation_percent must be between 0 and 1" }, 400);
+      }
+    }
+
     const db = getDb();
+    const insertRow: Record<string, unknown> = {
+      slug,
+      name,
+      commission_rate: commissionRate,
+      search_boost: Number(body.search_boost ?? body.searchBoost ?? 0),
+      default_delivery_radius_km: Number(
+        body.default_delivery_radius_km ?? body.defaultDeliveryRadiusKm ?? 8,
+      ),
+      promo_eligible: (body.promo_eligible ?? body.promoEligible) !== false,
+      sort_order: Number(body.sort_order ?? body.sortOrder ?? 0),
+      is_active: (body.is_active ?? body.isActive) !== false,
+    };
+    if (baseDeliveryFee != null && baseDeliveryFee !== "") {
+      insertRow.base_delivery_fee_jmd = Number(baseDeliveryFee);
+    }
+    if (menuInflation != null) insertRow.menu_inflation_percent = menuInflation;
+
     const { data, error } = await db
       .from("merchant_tiers")
-      .insert({
-        slug,
-        name,
-        commission_rate: commissionRate,
-        search_boost: Number(body.search_boost ?? body.searchBoost ?? 0),
-        default_delivery_radius_km: Number(body.default_delivery_radius_km ?? 8),
-        promo_eligible: body.promo_eligible !== false,
-        sort_order: Number(body.sort_order ?? 0),
-        is_active: body.is_active !== false,
-      })
+      .insert(insertRow)
       .select()
       .single();
 
@@ -801,15 +819,35 @@ export function registerPricingAdminRoutes(app: Hono) {
     if (body.commission_rate != null || body.commissionRate != null) {
       updates.commission_rate = Number(body.commission_rate ?? body.commissionRate);
     }
+    if (body.base_delivery_fee_jmd != null || body.baseDeliveryFeeJmd != null) {
+      updates.base_delivery_fee_jmd = Number(
+        body.base_delivery_fee_jmd ?? body.baseDeliveryFeeJmd,
+      );
+    }
+    if (body.menu_inflation_percent != null || body.menuInflationPercent != null) {
+      const menuInflation = Number(body.menu_inflation_percent ?? body.menuInflationPercent);
+      if (!Number.isFinite(menuInflation) || menuInflation < 0 || menuInflation > 1) {
+        return c.json({ error: "menu_inflation_percent must be between 0 and 1" }, 400);
+      }
+      updates.menu_inflation_percent = menuInflation;
+    }
     if (body.search_boost != null || body.searchBoost != null) {
       updates.search_boost = Number(body.search_boost ?? body.searchBoost);
     }
-    if (body.default_delivery_radius_km != null) {
-      updates.default_delivery_radius_km = Number(body.default_delivery_radius_km);
+    if (body.default_delivery_radius_km != null || body.defaultDeliveryRadiusKm != null) {
+      updates.default_delivery_radius_km = Number(
+        body.default_delivery_radius_km ?? body.defaultDeliveryRadiusKm,
+      );
     }
-    if (body.promo_eligible != null) updates.promo_eligible = Boolean(body.promo_eligible);
-    if (body.sort_order != null) updates.sort_order = Number(body.sort_order);
-    if (body.is_active != null) updates.is_active = Boolean(body.is_active);
+    if (body.promo_eligible != null || body.promoEligible != null) {
+      updates.promo_eligible = Boolean(body.promo_eligible ?? body.promoEligible);
+    }
+    if (body.sort_order != null || body.sortOrder != null) {
+      updates.sort_order = Number(body.sort_order ?? body.sortOrder);
+    }
+    if (body.is_active != null || body.isActive != null) {
+      updates.is_active = Boolean(body.is_active ?? body.isActive);
+    }
 
     const db = getDb();
     const { data, error } = await db
@@ -843,6 +881,9 @@ export function registerPricingAdminRoutes(app: Hono) {
       : body.free_delivery === false || body.freeDelivery === false
       ? false
       : undefined;
+    const tierIdOverride = body.tier_id != null || body.tierId != null
+      ? String(body.tier_id ?? body.tierId)
+      : null;
 
     if (!merchantId) return c.json({ error: "merchant_id required" }, 400);
 
@@ -861,6 +902,7 @@ export function registerPricingAdminRoutes(app: Hono) {
           : null,
         freeDelivery,
         requireCoverage: false,
+        tierIdOverride,
       });
 
       if (!resolved) {

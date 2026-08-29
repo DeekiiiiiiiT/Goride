@@ -31,7 +31,13 @@ export type AvailableOrder = {
   order_number?: string;
   status: string;
   delivery_fee?: number;
+  /** Courier share of delivery fee (Model B). */
+  delivery_fee_courier_amount?: number;
+  /** Ladder base when present; otherwise use delivery_fee_courier_amount as full base. */
+  courier_base_pay_jmd?: number | null;
+  courier_distance_pay_jmd?: number | null;
   tip?: number;
+  peak_pay_amount?: number;
   delivery_address?: string;
   delivery_address_line2?: string;
   delivery_lat?: number;
@@ -530,9 +536,9 @@ export async function declineStackedOffers(
 }
 
 export function orderEarnings(order: AvailableOrder): number {
-  const deliveryShare =
-    (order as { delivery_fee_courier_amount?: number }).delivery_fee_courier_amount ??
-    order.delivery_fee ??
-    0;
-  return deliveryShare + (order.tip ?? 0) + ((order as { peak_pay_amount?: number }).peak_pay_amount ?? 0);
+  const deliveryShare = Math.max(
+    0,
+    Number(order.delivery_fee_courier_amount ?? order.delivery_fee ?? 0),
+  );
+  return deliveryShare + (order.tip ?? 0) + (order.peak_pay_amount ?? 0);
 }

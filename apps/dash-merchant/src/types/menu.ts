@@ -17,7 +17,12 @@ export interface MenuItem {
   id: string;
   name: string;
   description: string;
+  /** Alias of marketplace / customer-facing price during transition. */
   price: number;
+  /** Merchant kitchen / in-store price (what they enter). */
+  in_store_price?: number | null;
+  /** What customers see on Roam Rush (may include tier inflation). */
+  marketplace_price?: number | null;
   image_url: string;
   category_id: string;
   is_available: boolean;
@@ -48,6 +53,8 @@ export function createEmptyMenuItem(categoryId = ''): MenuItem {
     name: '',
     description: '',
     price: 0,
+    in_store_price: 0,
+    marketplace_price: null,
     image_url: '',
     category_id: categoryId,
     is_available: true,

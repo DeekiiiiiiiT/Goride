@@ -8,6 +8,9 @@ type OrderLike = AvailableOrder & {
   delivery_instructions?: string;
   delivery_address_line2?: string;
   delivery_fee?: number;
+  delivery_fee_courier_amount?: number;
+  courier_base_pay_jmd?: number | null;
+  courier_distance_pay_jmd?: number | null;
   tip?: number;
   peak_pay_amount?: number;
   total?: number;
@@ -16,6 +19,23 @@ type OrderLike = AvailableOrder & {
   delivered_at?: string | null;
   customer?: { name?: string | null; phone?: string | null } | null;
 };
+
+/** Prefer ladder base when present; else full courier delivery share. */
+function resolveCourierBasePay(order: OrderLike): number {
+  if (order.courier_base_pay_jmd != null && Number.isFinite(Number(order.courier_base_pay_jmd))) {
+    return Math.max(0, Number(order.courier_base_pay_jmd));
+  }
+  return Math.max(
+    0,
+    Number(order.delivery_fee_courier_amount ?? order.delivery_fee ?? 0),
+  );
+}
+
+function resolveCourierDistancePay(order: OrderLike): number {
+  if (order.courier_distance_pay_jmd == null) return 0;
+  const n = Number(order.courier_distance_pay_jmd);
+  return Number.isFinite(n) ? Math.max(0, n) : 0;
+}
 
 export type MapOrderCoords = { lat?: number; lng?: number };
 
@@ -75,14 +95,8 @@ export function mapOrderToActiveDelivery(
   const pickup = order.merchant?.address || '';
   const dropoff = String(order.delivery_address || '');
   const tip = Math.max(0, Number(order.tip || 0));
-  const basePay = Math.max(
-    0,
-    Number(
-      (order as { delivery_fee_courier_amount?: number }).delivery_fee_courier_amount ??
-        order.delivery_fee ??
-        0,
-    ),
-  );
+  const basePay = resolveCourierBasePay(order);
+  const distanceBonus = resolveCourierDistancePay(order);
   const peakPay = Math.max(0, Number(order.peak_pay_amount || 0));
   const customerName = String(
     order.customer_name || order.customer?.name || 'Customer',
@@ -174,10 +188,10 @@ export function mapOrderToActiveDelivery(
     checklist,
     earnings: {
       basePay,
-      distanceBonus: 0,
+      distanceBonus,
       tip,
       peakPay,
-      total: basePay + tip + peakPay,
+      total: basePay + distanceBonus + tip + peakPay,
     },
     tripDistanceKm,
     tripMinutes,

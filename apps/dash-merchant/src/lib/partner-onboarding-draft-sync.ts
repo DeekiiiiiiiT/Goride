@@ -39,6 +39,7 @@ export function formDataToOnboardingDraft(
     website: formData.website || undefined,
     logoUrl: formData.logoUrl || undefined,
     coverImageUrl: formData.coverImageUrl || undefined,
+    pricingTierSlug: formData.pricingTierSlug || undefined,
     bankName: formData.bankName || undefined,
     accountHolderName: formData.accountHolderName || undefined,
     accountType: formData.accountType,
@@ -76,6 +77,7 @@ export function onboardingDraftToFormData(
     website: d.website ?? '',
     logoUrl: d.logoUrl ?? '',
     coverImageUrl: d.coverImageUrl ?? '',
+    pricingTierSlug: d.pricingTierSlug ?? '',
     bankName: d.bankName ?? '',
     accountHolderName: d.accountHolderName ?? '',
     accountType: d.accountType ?? 'checking',
@@ -107,6 +109,7 @@ export function isWizardStepId(value: string | null | undefined): value is Wizar
     'business-details',
     'operating-hours',
     'branding',
+    'plan',
     'verification',
   ].includes(value ?? '');
 }

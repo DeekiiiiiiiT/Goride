@@ -46,27 +46,17 @@ export function computeCodTrialBalance(input: CodTrialBalanceInput): CodTrialBal
   );
   const gctDueJmd = roundMoney(taxFood + taxPlatform || taxTotal);
 
-  if (input.pricingModel === 'v2') {
-    const commission = Math.max(0, Number(input.merchantCommissionAmount ?? 0));
-    const serviceFee = Math.max(0, Number(input.serviceFee ?? 0));
-    const deliveryPlatform = Number(input.deliveryFeePlatformAmount ?? 0);
-    const deliveryCourier = Math.max(0, Number(input.deliveryFeeCourierAmount ?? 0));
+  // Model B only — signed delivery platform share (promo/subsidy may be negative).
+  const commission = Math.max(0, Number(input.merchantCommissionAmount ?? 0));
+  const serviceFee = Math.max(0, Number(input.serviceFee ?? 0));
+  const deliveryPlatform = Number(input.deliveryFeePlatformAmount ?? 0) || 0;
+  const deliveryCourier = Math.max(0, Number(input.deliveryFeeCourierAmount ?? 0));
 
-    const merchantDueJmd = roundMoney(Math.max(0, discountedSubtotal - commission));
-    const platformDueJmd = roundMoney(
-      serviceFee + commission + Math.max(0, deliveryPlatform) + gctDueJmd,
-    );
-    const courierRetainedJmd = roundMoney(deliveryCourier + courierTipNet);
-
-    return { platformDueJmd, merchantDueJmd, courierRetainedJmd, gctDueJmd };
-  }
-
-  // Legacy — platform holds all GCT; merchant gets food only; courier gets delivery + tip
-  const platformFee = Math.max(0, Number(input.platformFee ?? 0));
-  const deliveryFee = Math.max(0, Number(input.deliveryFee ?? 0));
-  const merchantDueJmd = discountedSubtotal;
-  const platformDueJmd = roundMoney(platformFee + gctDueJmd);
-  const courierRetainedJmd = roundMoney(deliveryFee + courierTipNet);
+  const merchantDueJmd = roundMoney(Math.max(0, discountedSubtotal - commission));
+  const platformDueJmd = roundMoney(
+    serviceFee + commission + deliveryPlatform + gctDueJmd,
+  );
+  const courierRetainedJmd = roundMoney(deliveryCourier + courierTipNet);
 
   return { platformDueJmd, merchantDueJmd, courierRetainedJmd, gctDueJmd };
 }

@@ -121,6 +121,63 @@ function getAuthClient(authHeader: string) {
   );
 }
 
+/** Apply tier inflation to in-store price → marketplace price (capped). */
+async function resolveMarketplaceMenuPrices(
+  // deno-lint-ignore no-explicit-any
+  sb: { from: (t: string) => any },
+  merchantId: string,
+  inStorePrice: number,
+  marketplaceOverride?: unknown,
+): Promise<
+  | { ok: true; inStorePrice: number; marketplacePrice: number }
+  | { ok: false; error: string }
+> {
+  const inStore = Math.round(Math.max(0, Number(inStorePrice) || 0) * 100) / 100;
+  const { data: merchant } = await sb
+    .from("merchants")
+    .select("pricing_tier_id, market_id")
+    .eq("id", merchantId)
+    .maybeSingle();
+
+  let inflation = 0;
+  if (merchant?.pricing_tier_id) {
+    const { data: tier } = await sb
+      .from("merchant_tiers")
+      .select("menu_inflation_percent")
+      .eq("id", merchant.pricing_tier_id)
+      .maybeSingle();
+    inflation = Math.max(0, Number(tier?.menu_inflation_percent ?? 0));
+  }
+
+  const { resolvePricingLayers } = await import("./pricingLayers.ts");
+  const layered = await resolvePricingLayers(sb, {
+    marketId: merchant?.market_id != null ? String(merchant.market_id) : null,
+  });
+  const maxInflation = Math.min(
+    1,
+    Math.max(0, Number(layered.rules.maxMenuInflationPercent ?? 0.25)),
+  );
+  inflation = Math.min(inflation, maxInflation);
+
+  let marketplace = Math.round(inStore * (1 + inflation) * 100) / 100;
+  if (marketplaceOverride != null && marketplaceOverride !== "") {
+    const override = Number(marketplaceOverride);
+    if (!Number.isFinite(override) || override < 0) {
+      return { ok: false, error: "Invalid marketplace price" };
+    }
+    const maxAllowed = Math.round(inStore * (1 + maxInflation) * 100) / 100;
+    if (override > maxAllowed + 0.01) {
+      return {
+        ok: false,
+        error: `Marketplace price cannot exceed J$${maxAllowed.toFixed(0)} (${(maxInflation * 100).toFixed(0)}% cap)`,
+      };
+    }
+    marketplace = Math.round(override * 100) / 100;
+  }
+
+  return { ok: true, inStorePrice: inStore, marketplacePrice: marketplace };
+}
+
 // ============================================================================
 // Health Check
 // ============================================================================
@@ -152,7 +209,7 @@ app.get("/merchants", async (c) => {
 
   let query = supabase
     .from("merchants")
-    .select("*")
+    .select("*, pricing_tier:merchant_tiers(id, slug, name, commission_rate, base_delivery_fee_jmd, menu_inflation_percent, search_boost, default_delivery_radius_km, promo_eligible)")
     .eq("onboarding_status", "submitted")
     .eq("is_active", true)
     .eq("is_accepting_orders", true);
@@ -169,19 +226,52 @@ app.get("/merchants", async (c) => {
   if (vertical) {
     query = query.eq("vertical_type", vertical);
   }
-  // radius reserved for future distance sort; market filter is authoritative
   void radius;
 
+  // Fetch a wider window then sort by search_boost DESC, rating DESC
   const { data, error } = await query
     .order("rating", { ascending: false })
-    .range(offset, offset + limit - 1);
+    .range(0, Math.min(offset + limit + 50, 200));
 
   if (error) return c.json({ error: error.message }, 500);
+
+  const { resolveDeliveryFee } = await import("../_shared/dashPricing.ts");
+  const { resolvePricingLayers } = await import("./pricingLayers.ts");
+  const layered = await resolvePricingLayers(supabase, {
+    marketId: pin.parishBoundaryMode ? pin.marketIds[0] ?? null : pin.marketId,
+  });
+  const marketRules = layered.rules;
+
+  const enriched = (data ?? []).map((row: Record<string, unknown>) => {
+    const tier = row.pricing_tier as Record<string, unknown> | null;
+    const tierBase = tier?.base_delivery_fee_jmd != null
+      ? Number(tier.base_delivery_fee_jmd)
+      : null;
+    const boost = tier?.search_boost != null ? Number(tier.search_boost) : 0;
+    const deliveryFee = resolveDeliveryFee(marketRules.delivery, null, tierBase);
+    return {
+      ...row,
+      delivery_fee: deliveryFee,
+      search_boost: boost,
+      is_promoted: boost > 0,
+      promoted: boost > 0,
+      tier_slug: tier?.slug != null ? String(tier.slug) : null,
+    };
+  });
+
+  enriched.sort((a, b) => {
+    const boostDiff = Number(b.search_boost ?? 0) - Number(a.search_boost ?? 0);
+    if (boostDiff !== 0) return boostDiff;
+    return Number(b.rating ?? 0) - Number(a.rating ?? 0);
+  });
+
+  const page = enriched.slice(offset, offset + limit);
+
   return c.json({
-    merchants: data,
+    merchants: page,
     limit,
     offset,
-    hasMore: (data?.length ?? 0) === limit,
+    hasMore: offset + limit < enriched.length,
     market_id: pin.marketId,
     parish_id: pin.parishId,
     parish_boundary_mode: pin.parishBoundaryMode,
@@ -321,61 +411,48 @@ app.get("/merchants", async (c) => {
       }, 400);
     }
 
-    if (v2?.pricingV2Enabled) {
-      return c.json({
-        merchant_id: merchantId,
-        pricing_model: "v2",
-        platform_fee_rate: null,
-        delivery_fee: v2.deliveryFee,
-        service_fee: v2.serviceFee,
-        processing_fee: v2.processingFee,
-        order_total: v2.orderTotal,
-        merchant_commission_rate: v2.merchantCommissionRate,
-        merchant_commission_amount: v2.merchantCommissionAmount,
-        delivery_fee_courier_amount: v2.deliveryFeeCourierAmount,
-        delivery_fee_platform_amount: v2.deliveryFeePlatformAmount,
-        zone_surcharge_jmd: v2.zoneSurchargeJmd,
-        distance_km: v2.distanceKm,
-        tax: v2.tax,
-        tax_food_jmd: v2.taxFoodJmd,
-        tax_platform_jmd: v2.taxPlatformJmd,
-        tax_rate_food_percent: v2.taxRateFoodPercent,
-        tax_rate_platform_percent: v2.taxRatePlatformPercent,
-        tax_rate_percent: v2.taxRatePercent ?? 0,
-        gct_registered: v2.gctRegistered ?? false,
-        processing_fee_order: v2.processingFeeOrder,
-        processing_fee_tip: v2.processingFeeTip,
-        courier_tip_net: v2.courierTipNet,
-        promo_cost_jmd: v2.promoCostJmd,
-        total: v2.customerTotal,
-        pricing_profile_version: v2.pricingProfileVersion,
-        tier: v2.tierSlug,
-        free_delivery_applied: v2.freeDeliveryApplied,
-        min_order_subtotal_jmd: v2.rules.minOrderSubtotalJmd ?? 0,
-        card_processing_fee_percent: v2.rules.cardProcessingFeePercent ?? 0,
-        has_override: false,
-      });
+    if (!v2) {
+      return c.json({ error: "Unable to resolve pricing", code: "pricing_unavailable" }, 503);
     }
 
-    const resolved = await resolveFeeRateForMerchant(supabase, merchantId);
-    const { resolveMerchantFoodGctRate } = await import("../_shared/gctRate.ts");
-    const gct = await resolveMerchantFoodGctRate(supabase, merchantId);
-    const { data: merchantMinRow } = await supabase
-      .from("merchants")
-      .select("min_order_amount")
-      .eq("id", merchantId)
-      .maybeSingle();
     return c.json({
       merchant_id: merchantId,
-      pricing_model: "legacy",
-      platform_fee_rate: resolved.rate,
-      delivery_fee: deliveryFee,
-      tax_rate_percent: gct.gctRegistered === false ? 0 : gct.ratePercent,
-      gct_registered: gct.gctRegistered !== false,
-      min_order_subtotal_jmd: merchantMinRow?.min_order_amount != null
-        ? Number(merchantMinRow.min_order_amount)
-        : 0,
-      has_override: resolved.merchantOverride != null,
+      pricing_model: "v2",
+      platform_fee_rate: null,
+      delivery_fee: v2.deliveryFee,
+      service_fee: v2.serviceFee,
+      processing_fee: v2.processingFee,
+      order_total: v2.orderTotal,
+      merchant_commission_rate: v2.merchantCommissionRate,
+      merchant_commission_amount: v2.merchantCommissionAmount,
+      delivery_fee_courier_amount: v2.deliveryFeeCourierAmount,
+      delivery_fee_platform_amount: v2.deliveryFeePlatformAmount,
+      zone_surcharge_jmd: v2.zoneSurchargeJmd,
+      distance_km: v2.distanceKm,
+      tax: v2.tax,
+      tax_food_jmd: v2.taxFoodJmd,
+      tax_platform_jmd: v2.taxPlatformJmd,
+      tax_rate_food_percent: v2.taxRateFoodPercent,
+      tax_rate_platform_percent: v2.taxRatePlatformPercent,
+      tax_rate_percent: v2.taxRatePercent ?? 0,
+      gct_registered: v2.gctRegistered ?? false,
+      processing_fee_order: v2.processingFeeOrder,
+      processing_fee_tip: v2.processingFeeTip,
+      courier_tip_net: v2.courierTipNet,
+      promo_cost_jmd: v2.promoCostJmd,
+      small_order_fee: v2.smallOrderFee ?? 0,
+      platform_delivery_subsidy_jmd: v2.platformDeliverySubsidyJmd ?? 0,
+      courier_base_pay_jmd: v2.courierBasePayJmd ?? 0,
+      courier_distance_pay_jmd: v2.courierDistancePayJmd ?? 0,
+      total: v2.customerTotal,
+      pricing_profile_version: v2.pricingProfileVersion,
+      tier: v2.tierSlug,
+      free_delivery_applied: v2.freeDeliveryApplied,
+      min_order_subtotal_jmd: v2.rules.minOrderSubtotalJmd ?? 0,
+      hard_min_order_subtotal_jmd: v2.rules.hardMinOrderSubtotalJmd ?? 400,
+      small_order_threshold_jmd: v2.rules.smallOrderThresholdJmd ?? 0,
+      card_processing_fee_percent: v2.rules.cardProcessingFeePercent ?? 0,
+      has_override: false,
     });
   });
 
@@ -769,7 +846,13 @@ app.post("/merchants/:merchantId/items", async (c) => {
 
   const serviceSb = getServiceSupabase();
   const body = await c.req.json();
-  
+  const inStore = Number(body.in_store_price ?? body.inStorePrice ?? body.price ?? 0);
+  if (!Number.isFinite(inStore) || inStore < 0) {
+    return c.json({ error: "Invalid in-store price" }, 400);
+  }
+  const priced = await resolveMarketplaceMenuPrices(serviceSb, merchantId, inStore, body.marketplace_price ?? body.marketplacePrice);
+  if (!priced.ok) return c.json({ error: priced.error }, 400);
+
   const { data, error } = await serviceSb
     .from("menu_items")
     .insert({
@@ -777,7 +860,9 @@ app.post("/merchants/:merchantId/items", async (c) => {
       category_id: body.categoryId,
       name: body.name,
       description: body.description,
-      price: body.price,
+      price: priced.marketplacePrice,
+      in_store_price: priced.inStorePrice,
+      marketplace_price: priced.marketplacePrice,
       image_url: body.imageUrl,
       is_available: body.isAvailable !== false,
       is_featured: body.isFeatured || false,
@@ -803,10 +888,51 @@ app.put("/merchants/:merchantId/items/:itemId", async (c) => {
 
   const serviceSb = getServiceSupabase();
   const body = await c.req.json();
-  
+  const updates: Record<string, unknown> = { ...body };
+  // Normalize camelCase from clients
+  if (body.categoryId != null) updates.category_id = body.categoryId;
+  if (body.imageUrl != null) updates.image_url = body.imageUrl;
+  if (body.isAvailable != null) updates.is_available = body.isAvailable;
+  if (body.isFeatured != null) updates.is_featured = body.isFeatured;
+  if (body.prepTimeMins != null) updates.prep_time_mins = body.prepTimeMins;
+
+  const hasPriceUpdate =
+    body.price != null ||
+    body.in_store_price != null ||
+    body.inStorePrice != null ||
+    body.marketplace_price != null ||
+    body.marketplacePrice != null;
+
+  if (hasPriceUpdate) {
+    const inStore = Number(
+      body.in_store_price ?? body.inStorePrice ?? body.price ?? 0,
+    );
+    if (!Number.isFinite(inStore) || inStore < 0) {
+      return c.json({ error: "Invalid in-store price" }, 400);
+    }
+    const priced = await resolveMarketplaceMenuPrices(
+      serviceSb,
+      merchantId,
+      inStore,
+      body.marketplace_price ?? body.marketplacePrice,
+    );
+    if (!priced.ok) return c.json({ error: priced.error }, 400);
+    updates.in_store_price = priced.inStorePrice;
+    updates.marketplace_price = priced.marketplacePrice;
+    updates.price = priced.marketplacePrice;
+  }
+
+  delete updates.categoryId;
+  delete updates.imageUrl;
+  delete updates.isAvailable;
+  delete updates.isFeatured;
+  delete updates.prepTimeMins;
+  delete updates.inStorePrice;
+  delete updates.marketplacePrice;
+
   const { data, error } = await serviceSb
     .from("menu_items")
-    .update(body)
+    .update(updates)
     .eq("id", itemId)
     .eq("merchant_id", merchantId)
     .select()

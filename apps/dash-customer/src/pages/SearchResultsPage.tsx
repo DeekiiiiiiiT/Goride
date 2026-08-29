@@ -99,7 +99,7 @@ export default function SearchResultsPage({
           rating: Number(m.rating ?? 0),
           eta: m.etaMins != null ? `${m.etaMins}-${Number(m.etaMins) + 10} min` : '25-35 min',
           image: String(m.coverImageUrl ?? m.logoUrl ?? m.cover_image_url ?? m.logo_url ?? ''),
-          delivery: Number.isFinite(fee) ? (fee === 0 ? 'Free' : `$${fee}`) : undefined,
+          delivery: Number.isFinite(fee) ? (fee === 0 ? 'Free' : `J$${fee}`) : undefined,
           priceLevel: priceLevelFromCosts(minOrder, feeAmount),
         };
       });

@@ -23,20 +23,23 @@ describe('computeCodTrialBalance', () => {
     expect(balance.merchantDueJmd).toBe(800);
   });
 
-  it('legacy COD — platform holds GCT', () => {
+  it('v2 free-delivery negative platform share — merchant not charged', () => {
     const balance = computeCodTrialBalance({
-      subtotal: 1000,
+      subtotal: 2000,
       discount: 0,
-      platformFee: 50,
-      deliveryFee: 400,
-      tax: 165,
-      tip: 50,
-      total: 1665,
-      pricingModel: 'legacy',
+      merchantCommissionAmount: 400,
+      serviceFee: 200,
+      deliveryFeePlatformAmount: -320,
+      deliveryFeeCourierAmount: 320,
+      taxFoodJmd: 330,
+      taxPlatformJmd: 33,
+      tip: 0,
+      total: 2563,
+      pricingModel: 'v2',
     });
-    assertCodTrialBalance(balance, 1665);
-    expect(balance.platformDueJmd).toBe(215);
-    expect(balance.merchantDueJmd).toBe(1000);
-    expect(balance.courierRetainedJmd).toBe(450);
+    expect(balance.merchantDueJmd).toBe(1600);
+    expect(balance.platformDueJmd).toBe(200 + 400 + (-320) + 363);
+    expect(balance.courierRetainedJmd).toBe(320);
+    assertCodTrialBalance(balance, 2563);
   });
 });

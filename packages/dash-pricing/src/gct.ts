@@ -7,8 +7,9 @@ function roundMoney(value: number): number {
 export type OrderGctInput = {
   discountedSubtotal: number;
   serviceFee: number;
-  /** Platform share of delivery fee (>= 0 for GCT base) */
+  /** Platform share of delivery fee (>= 0 for GCT base; negatives ignored) */
   deliveryFeePlatformAmount: number;
+  smallOrderFee?: number;
   foodRatePercent: number;
   platformRatePercent: number;
   platformGctEnabled?: boolean;
@@ -22,7 +23,7 @@ export type OrderGctBreakdown = {
   taxRatePlatformPercent: number;
 };
 
-/** Resolve GCT on food + platform service/delivery supplies. */
+/** Resolve GCT on food + platform service/delivery/small-order supplies. */
 export function resolveOrderGct(input: OrderGctInput): OrderGctBreakdown {
   const foodRate = Math.max(0, input.foodRatePercent) / 100;
   const platformRate = input.platformGctEnabled === false
@@ -30,7 +31,10 @@ export function resolveOrderGct(input: OrderGctInput): OrderGctBreakdown {
     : Math.max(0, input.platformRatePercent) / 100;
 
   const taxFoodJmd = roundMoney(Math.max(0, input.discountedSubtotal) * foodRate);
-  const platformBase = Math.max(0, input.serviceFee) + Math.max(0, input.deliveryFeePlatformAmount);
+  const platformBase =
+    Math.max(0, input.serviceFee) +
+    Math.max(0, input.deliveryFeePlatformAmount) +
+    Math.max(0, input.smallOrderFee ?? 0);
   const taxPlatformJmd = roundMoney(platformBase * platformRate);
 
   return {

@@ -108,6 +108,23 @@ export async function resolveActivePromoByCode(
   const rows = (data || []) as PromoRow[];
   const promo = rows.find((row) => row.promo_code.toUpperCase() === normalized && isPromoCurrentlyActive(row));
   if (!promo) return { ok: false, error: "Invalid or expired promo code", status: 404 };
+
+  // Economy tier is not promo-eligible by default
+  const mid = resolvedMerchantId || String(promo.merchant_id);
+  const { data: merchant } = await serviceSb
+    .from("merchants")
+    .select("pricing_tier_id, pricing_tier:merchant_tiers(promo_eligible)")
+    .eq("id", mid)
+    .maybeSingle();
+  const tier = merchant?.pricing_tier as { promo_eligible?: boolean } | null;
+  if (tier && tier.promo_eligible === false) {
+    return {
+      ok: false,
+      error: "This restaurant’s plan does not include promotions",
+      status: 400,
+    };
+  }
+
   return { ok: true, promo };
 }
 
@@ -232,11 +249,11 @@ export function registerCustomerDiscoveryRoutes(app: Hono, deps: CustomerDiscove
 
     let merchantQuery = serviceSb
       .from("merchants")
-      .select("id, name, logo_url, cover_image_url, cuisine_type, rating, avg_prep_time_mins, delivery_fee, min_order_amount, market_id")
+      .select("id, name, logo_url, cover_image_url, cuisine_type, rating, avg_prep_time_mins, delivery_fee, min_order_amount, market_id, pricing_tier_id, pricing_tier:merchant_tiers(base_delivery_fee_jmd, search_boost, slug)")
       .eq("is_active", true)
       .eq("is_accepting_orders", true)
       .or(`name.ilike."${pattern}",cuisine_type.ilike."${pattern}"`)
-      .limit(20);
+      .limit(40);
 
     if (pin.parishBoundaryMode) {
       merchantQuery = merchantQuery.in("market_id", pin.marketIds);
@@ -249,7 +266,7 @@ export function registerCustomerDiscoveryRoutes(app: Hono, deps: CustomerDiscove
       serviceSb
         .from("menu_items")
         .select(
-          "id, name, description, price, image_url, merchant_id, merchant:merchants!inner(id, name, logo_url, is_active, is_accepting_orders, market_id)",
+          "id, name, description, price, marketplace_price, in_store_price, image_url, merchant_id, merchant:merchants!inner(id, name, logo_url, is_active, is_accepting_orders, market_id)",
         )
         .eq("is_available", true)
         .ilike("name", pattern)
@@ -259,17 +276,38 @@ export function registerCustomerDiscoveryRoutes(app: Hono, deps: CustomerDiscove
     if (merchantsRes.error) return c.json({ error: merchantsRes.error.message }, 500);
     if (itemsRes.error) return c.json({ error: itemsRes.error.message }, 500);
 
-    const merchants = (merchantsRes.data || []).map((m: Record<string, unknown>) => ({
-      id: String(m.id),
-      name: String(m.name ?? ""),
-      logoUrl: m.logo_url ? String(m.logo_url) : null,
-      coverImageUrl: m.cover_image_url ? String(m.cover_image_url) : null,
-      cuisineType: m.cuisine_type ? String(m.cuisine_type) : null,
-      rating: m.rating != null ? Number(m.rating) : null,
-      etaMins: m.avg_prep_time_mins != null ? Number(m.avg_prep_time_mins) : null,
-      deliveryFee: m.delivery_fee != null ? Number(m.delivery_fee) : null,
-      minOrderAmount: m.min_order_amount != null ? Number(m.min_order_amount) : null,
-    }));
+    const { resolveDeliveryFee } = await import("../_shared/dashPricing.ts");
+    const { resolvePricingLayers } = await import("./pricingLayers.ts");
+    const layered = await resolvePricingLayers(serviceSb, {
+      marketId: pin.parishBoundaryMode ? pin.marketIds[0] ?? null : pin.marketId,
+    });
+
+    const merchants = (merchantsRes.data || [])
+      .map((m: Record<string, unknown>) => {
+        const tier = m.pricing_tier as Record<string, unknown> | null;
+        const tierBase = tier?.base_delivery_fee_jmd != null
+          ? Number(tier.base_delivery_fee_jmd)
+          : null;
+        const boost = tier?.search_boost != null ? Number(tier.search_boost) : 0;
+        const deliveryFee = resolveDeliveryFee(layered.rules.delivery, null, tierBase);
+        return {
+          id: String(m.id),
+          name: String(m.name ?? ""),
+          logoUrl: m.logo_url ? String(m.logo_url) : null,
+          coverImageUrl: m.cover_image_url ? String(m.cover_image_url) : null,
+          cuisineType: m.cuisine_type ? String(m.cuisine_type) : null,
+          rating: m.rating != null ? Number(m.rating) : null,
+          etaMins: m.avg_prep_time_mins != null ? Number(m.avg_prep_time_mins) : null,
+          deliveryFee,
+          delivery_fee: deliveryFee,
+          minOrderAmount: m.min_order_amount != null ? Number(m.min_order_amount) : null,
+          search_boost: boost,
+          is_promoted: boost > 0,
+          promoted: boost > 0,
+        };
+      })
+      .sort((a, b) => (b.search_boost ?? 0) - (a.search_boost ?? 0))
+      .slice(0, 20);
 
     const items = (itemsRes.data || [])
       .filter((row: Record<string, unknown>) => {
@@ -286,7 +324,8 @@ export function registerCustomerDiscoveryRoutes(app: Hono, deps: CustomerDiscove
           id: String(row.id),
           name: String(row.name ?? ""),
           description: String(row.description ?? ""),
-          price: Number(row.price ?? 0),
+          price: Number(row.marketplace_price ?? row.price ?? 0),
+          marketplace_price: Number(row.marketplace_price ?? row.price ?? 0),
           imageUrl: row.image_url ? String(row.image_url) : null,
           merchantId: String(row.merchant_id ?? merchant.id ?? ""),
           merchantName: String(merchant.name ?? ""),

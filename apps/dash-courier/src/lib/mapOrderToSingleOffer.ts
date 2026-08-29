@@ -6,7 +6,35 @@ type OrderLike = AvailableOrder & {
   items?: Array<{ name?: string; quantity?: number }>;
   tip?: number;
   delivery_fee?: number;
+  delivery_fee_courier_amount?: number;
+  courier_base_pay_jmd?: number | null;
+  courier_distance_pay_jmd?: number | null;
 };
+
+/** Split courier pay when ladder fields exist; else full courier amount as baseFare. */
+function resolveOfferFares(order: OrderLike): { baseFare: number; distanceFare: number } {
+  const courierAmount = Math.max(
+    0,
+    Number(order.delivery_fee_courier_amount ?? order.delivery_fee ?? 0),
+  );
+  const hasBaseSplit =
+    order.courier_base_pay_jmd != null && Number.isFinite(Number(order.courier_base_pay_jmd));
+  const hasDistanceSplit =
+    order.courier_distance_pay_jmd != null &&
+    Number.isFinite(Number(order.courier_distance_pay_jmd));
+
+  if (!hasBaseSplit && !hasDistanceSplit) {
+    return { baseFare: courierAmount, distanceFare: 0 };
+  }
+
+  const distanceFare = hasDistanceSplit
+    ? Math.max(0, Number(order.courier_distance_pay_jmd))
+    : 0;
+  const baseFare = hasBaseSplit
+    ? Math.max(0, Number(order.courier_base_pay_jmd))
+    : Math.max(0, courierAmount - distanceFare);
+  return { baseFare, distanceFare };
+}
 
 type Coords = { lat?: number; lng?: number };
 
@@ -28,14 +56,7 @@ export function mapOrderToSingleOffer(
   const pickupAddress = order.merchant?.address || '';
   const dropoff = String(order.delivery_address || '');
   const tip = Math.max(0, Number(order.tip || 0));
-  const baseFare = Math.max(
-    0,
-    Number(
-      (order as { delivery_fee_courier_amount?: number }).delivery_fee_courier_amount ??
-        order.delivery_fee ??
-        0,
-    ),
-  );
+  const { baseFare, distanceFare } = resolveOfferFares(order);
   const items = Array.isArray(order.items) ? order.items : [];
   const offerItems = items.map((item) => ({
     qty: Math.max(1, Number(item.quantity || 1)),
@@ -63,7 +84,6 @@ export function mapOrderToSingleOffer(
 
   const totalDistanceKm = roundKm(pickupDistanceKm + dropoffDistanceKm);
   const estMinutes = estimateEtaMinutes(totalDistanceKm || dropoffDistanceKm || pickupDistanceKm);
-  const distanceFare = 0;
   const peakPay = Math.max(0, Number((order as { peak_pay_amount?: number }).peak_pay_amount || 0));
   const earnings = baseFare + tip + distanceFare + peakPay;
 

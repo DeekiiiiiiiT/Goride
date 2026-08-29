@@ -365,17 +365,37 @@ export function registerMerchantApplicationRoutes(app: Hono) {
       ? rowToBusinessTypeMetadata(typeRow as unknown as Record<string, unknown>)
       : rowToBusinessTypeMetadata(null);
     const verticalSnapshot = verticalSnapshotFromMetadata(typeMeta);
-    const payload = merchantPayloadFromBody({ ...body, name }, user.id, verticalSnapshot) as Record<
-      string,
-      unknown
-    >;
+
+    const sb = getServiceSupabase();
+    const tierSlug = String(
+      body.tierSlug || body.tier_slug || body.pricingTierSlug || body.pricing_tier_slug || "",
+    ).trim().toLowerCase();
+    let pricingTierId =
+      body.pricingTierId != null || body.pricing_tier_id != null
+        ? String(body.pricingTierId ?? body.pricing_tier_id)
+        : null;
+    if (!pricingTierId && tierSlug) {
+      const { data: tierRow } = await sb
+        .from("merchant_tiers")
+        .select("id")
+        .eq("slug", tierSlug)
+        .eq("is_active", true)
+        .maybeSingle();
+      if (tierRow?.id) pricingTierId = String(tierRow.id);
+    }
+
+    const payload = merchantPayloadFromBody(
+      { ...body, name, pricingTierId, pricing_tier_id: pricingTierId },
+      user.id,
+      verticalSnapshot,
+    ) as Record<string, unknown>;
+    if (!pricingTierId) delete payload.pricing_tier_id;
     const pinLat = Number(payload.lat);
     const pinLng = Number(payload.lng);
     if (Number.isFinite(pinLat) && Number.isFinite(pinLng)) {
-      const suggested = await suggestMarketIdForMerchantPin(getServiceSupabase(), pinLat, pinLng);
+      const suggested = await suggestMarketIdForMerchantPin(sb, pinLat, pinLng);
       if (suggested) payload.market_id = suggested;
     }
-    const sb = getServiceSupabase();
 
     let merchant: Record<string, unknown>;
     let created = false;
@@ -418,6 +438,16 @@ export function registerMerchantApplicationRoutes(app: Hono) {
       if (error) return c.json({ error: error.message }, 500);
       merchant = data as Record<string, unknown>;
       created = true;
+    }
+
+    if (pricingTierId && merchant?.id) {
+      // Best-effort history; pricing_tier_id on merchants is the source of truth.
+      await sb.from("merchant_tier_assignments").insert({
+        merchant_id: merchant.id,
+        tier_id: pricingTierId,
+        changed_by: user.id,
+        agreed_at: new Date().toISOString(),
+      });
     }
 
     const { data: teamRow } = await sb
