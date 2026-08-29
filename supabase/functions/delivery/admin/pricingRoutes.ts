@@ -863,10 +863,17 @@ export function registerPricingAdminRoutes(app: Hono) {
 
   admin.post("/pricing/preview", async (c) => {
     const body = await c.req.json().catch(() => ({}));
-    const merchantId = String(body.merchant_id ?? body.merchantId ?? "");
+    const merchantIdRaw = String(body.merchant_id ?? body.merchantId ?? "").trim();
+    const merchantId = merchantIdRaw || null;
     const subtotal = Number(body.subtotal ?? 1000);
     const dropoffLat = body.dropoff_lat != null ? Number(body.dropoff_lat) : null;
     const dropoffLng = body.dropoff_lng != null ? Number(body.dropoff_lng) : null;
+    const pickupLat = body.pickup_lat != null || body.pickupLat != null
+      ? Number(body.pickup_lat ?? body.pickupLat)
+      : null;
+    const pickupLng = body.pickup_lng != null || body.pickupLng != null
+      ? Number(body.pickup_lng ?? body.pickupLng)
+      : null;
     const tip = Number(body.tip ?? 0);
     const marketIdOverride = body.market_id != null || body.marketId != null
       ? String(body.market_id ?? body.marketId)
@@ -884,8 +891,26 @@ export function registerPricingAdminRoutes(app: Hono) {
     const tierIdOverride = body.tier_id != null || body.tierId != null
       ? String(body.tier_id ?? body.tierId)
       : null;
+    const gctRegistered = body.gct_registered === false || body.gctRegistered === false
+      ? false
+      : body.gct_registered === true || body.gctRegistered === true
+      ? true
+      : merchantId
+      ? null
+      : true;
+    const taxRatePercent = body.tax_rate_percent != null || body.taxRatePercent != null
+      ? Number(body.tax_rate_percent ?? body.taxRatePercent)
+      : null;
 
-    if (!merchantId) return c.json({ error: "merchant_id required" }, 400);
+    // Merchant path OR standalone calculator (pickup + tier)
+    if (!merchantId) {
+      if (pickupLat == null || !Number.isFinite(pickupLat) || pickupLng == null || !Number.isFinite(pickupLng)) {
+        return c.json({ error: "pickup_lat and pickup_lng required when merchant_id is omitted" }, 400);
+      }
+      if (!tierIdOverride) {
+        return c.json({ error: "tier_id required when merchant_id is omitted" }, 400);
+      }
+    }
 
     try {
       const db = getDb();
@@ -895,6 +920,8 @@ export function registerPricingAdminRoutes(app: Hono) {
         tip,
         dropoffLat,
         dropoffLng,
+        pickupLat,
+        pickupLng,
         paymentMethod,
         marketIdOverride,
         customerOrderCount: Number.isFinite(customerOrderCount as number)
@@ -903,11 +930,15 @@ export function registerPricingAdminRoutes(app: Hono) {
         freeDelivery,
         requireCoverage: false,
         tierIdOverride,
+        gctRegistered,
+        taxRatePercent: Number.isFinite(taxRatePercent as number) ? taxRatePercent : null,
       });
 
       if (!resolved) {
         return c.json({
-          error: "Restaurant not found or could not load pricing. Pick another restaurant and try again.",
+          error: merchantId
+            ? "Restaurant not found or could not load pricing. Pick another restaurant and try again."
+            : "Could not resolve standalone pricing. Check store pin and tier.",
           code: "pricing_unresolved",
         }, 404);
       }

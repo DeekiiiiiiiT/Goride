@@ -1995,18 +1995,26 @@ export function updatePricingTier(
 export function previewPricing(
   accessToken: string,
   payload: {
-    merchant_id: string;
+    /** Omit for standalone calculator — use pickup + tier instead */
+    merchant_id?: string;
     subtotal: number;
     dropoff_lat?: number;
     dropoff_lng?: number;
+    /** Standalone: store pin */
+    pickup_lat?: number;
+    pickup_lng?: number;
     tip?: number;
     customer_order_count?: number;
     /** Force / suppress launch free-delivery promo in simulator */
     free_delivery?: boolean;
     payment_method?: 'wipay' | 'cash';
     market_id?: string;
-    /** Admin: force a merchant tier for side-by-side comparison */
+    /** Admin: force a merchant tier (required when merchant_id omitted) */
     tier_id?: string;
+    /** Standalone: GCT-registered restaurant (default true) */
+    gct_registered?: boolean;
+    /** Standalone: optional food GCT % override */
+    tax_rate_percent?: number;
   },
 ) {
   return deliveryFetch<{

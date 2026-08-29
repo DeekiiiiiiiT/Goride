@@ -12,7 +12,8 @@ export function migratePartnerSessionToCommand() {
   if (typeof window === 'undefined') return;
   try {
     if (localStorage.getItem(COMMAND_STORAGE_KEY)) return;
-    const partner = localStorage.getItem(PARTNER_STORAGE_KEY);
+    const partner =
+      localStorage.getItem(PARTNER_STORAGE_KEY) ?? sessionStorage.getItem(PARTNER_STORAGE_KEY);
     if (partner) localStorage.setItem(COMMAND_STORAGE_KEY, partner);
   } catch {
     // ignore

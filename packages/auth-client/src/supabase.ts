@@ -13,13 +13,20 @@ const roamFetch: typeof fetch = (url, options) => {
   );
 };
 
-function createRoamAuthClient(storageKey: string): SupabaseClient {
+type RoamAuthOptions = NonNullable<Parameters<typeof createClient>[2]>['auth'];
+
+/** Shared factory — apps may pass custom `storage` (e.g. partner remember-me). */
+export function createRoamAuthClient(
+  storageKey: string,
+  authOverrides?: Omit<RoamAuthOptions, 'storageKey'>,
+): SupabaseClient {
   return createClient(supabaseUrl, publicAnonKey, {
     auth: {
       storageKey,
       autoRefreshToken: true,
       persistSession: true,
       detectSessionInUrl: shouldMainClientDetectSessionInUrl(),
+      ...authOverrides,
     },
     global: { fetch: roamFetch },
   });

@@ -22,11 +22,9 @@ import {
   fetchPricingAudit,
   fetchCodBalances,
   settleCourierCash,
-  listMerchants,
   updateDefaultPartyPricing,
   updateParishPartyPricing,
   updateMarketPartyPricing,
-  type DashMerchant,
   type PricingMarketSummary,
   type PricingParishSummary,
   type MerchantTierRow,
@@ -67,9 +65,12 @@ import {
 } from './marketRules/partyRulesUtils';
 import { PartyRulesViewHeader, ProvenanceChips } from './marketRules/ProvenanceChips';
 import { ResolvedRulesPanel } from './marketRules/ResolvedRulesPanel';
+import { SimStorePinMap } from './SimStorePinMap';
 
-const SIM_MERCHANT_STORAGE_KEY = 'dash-admin-sim-merchant-id';
-const DEFAULT_DROPOFF = { lat: '18.015', lng: '-76.955', label: 'Spanish Town (default pin)' };
+const SIM_STORE_PIN_STORAGE_KEY = 'dash-admin-sim-store-pin';
+const SIM_TIER_STORAGE_KEY = 'dash-admin-sim-tier-id';
+const DEFAULT_PIN = { lat: '18.015', lng: '-76.955', label: 'Spanish Town (default pin)' };
+const DEFAULT_DROPOFF = DEFAULT_PIN;
 const DASH_ADMIN_BASENAME = '/admin';
 
 type TabId = 'overview' | 'market' | 'tiers' | 'simulator' | 'cod' | 'audit';
@@ -160,8 +161,48 @@ export function PricingHubPage() {
   const [rulesLoading, setRulesLoading] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  // Simulator — all quote fields are always visible (manual ops workflow)
-  const [simMerchantId, setSimMerchantId] = useState('');
+  // Simulator — standalone calculator (no restaurant account)
+  const [simStoreLat, setSimStoreLat] = useState(() => {
+    try {
+      const raw = localStorage.getItem(SIM_STORE_PIN_STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw) as { lat?: string };
+        if (parsed.lat) return parsed.lat;
+      }
+    } catch {
+      /* ignore */
+    }
+    return DEFAULT_PIN.lat;
+  });
+  const [simStoreLng, setSimStoreLng] = useState(() => {
+    try {
+      const raw = localStorage.getItem(SIM_STORE_PIN_STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw) as { lng?: string };
+        if (parsed.lng) return parsed.lng;
+      }
+    } catch {
+      /* ignore */
+    }
+    return DEFAULT_PIN.lng;
+  });
+  const [simStoreAddress, setSimStoreAddress] = useState(() => {
+    try {
+      const raw = localStorage.getItem(SIM_STORE_PIN_STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw) as { label?: string };
+        if (parsed.label) return parsed.label;
+      }
+    } catch {
+      /* ignore */
+    }
+    return DEFAULT_PIN.label;
+  });
+  const [simStoreAddressQuery, setSimStoreAddressQuery] = useState('');
+  const [simStoreAddressSuggestions, setSimStoreAddressSuggestions] = useState<AddressSuggestion[]>([]);
+  const [simStoreAddressBusy, setSimStoreAddressBusy] = useState(false);
+  const [simTierId, setSimTierId] = useState(() => localStorage.getItem(SIM_TIER_STORAGE_KEY) ?? '');
+  const [simGctRegistered, setSimGctRegistered] = useState(true);
   const [simSubtotal, setSimSubtotal] = useState('1200');
   const [simLat, setSimLat] = useState(DEFAULT_DROPOFF.lat);
   const [simLng, setSimLng] = useState(DEFAULT_DROPOFF.lng);
@@ -196,8 +237,6 @@ export function PricingHubPage() {
       subsidy: number;
     }>
   >([]);
-  const [simMerchants, setSimMerchants] = useState<DashMerchant[]>([]);
-  const [simMerchantsLoading, setSimMerchantsLoading] = useState(false);
   /** auto = resolve market from dropoff pin; manual = force Market Rules dropdown */
   const [simMarketMode, setSimMarketMode] = useState<'auto' | 'manual'>('auto');
   const [simCoverage, setSimCoverage] = useState<{
@@ -322,60 +361,96 @@ export function PricingHubPage() {
 
   useEffect(() => {
     if (tab !== 'simulator') return;
-    let cancelled = false;
-    setSimMerchantsLoading(true);
-    void listMerchants(session.access_token, {
-      operational_status: 'active',
-      limit: 100,
-    })
-      .then(async (res) => {
-        if (cancelled) return;
-        let rows = res.merchants ?? [];
-        if (rows.length === 0) {
-          const fallback = await listMerchants(session.access_token, { limit: 100 });
-          if (cancelled) return;
-          rows = fallback.merchants ?? [];
-        }
-        setSimMerchants(rows);
-        if (rows.length === 0) return;
+    if (!tiers.length) return;
+    const active = tiers.filter((t) => t.is_active !== false);
+    const pool = active.length ? active : tiers;
+    const storedId = localStorage.getItem(SIM_TIER_STORAGE_KEY);
+    const stored = storedId ? pool.find((t) => t.id === storedId) : undefined;
+    const preferred = stored ?? pool[0];
+    if (preferred && (!simTierId || !pool.some((t) => t.id === simTierId))) {
+      setSimTierId(preferred.id);
+      localStorage.setItem(SIM_TIER_STORAGE_KEY, preferred.id);
+    }
+  }, [tab, tiers, simTierId]);
 
-        const storedId = localStorage.getItem(SIM_MERCHANT_STORAGE_KEY);
-        const stored = storedId ? rows.find((m) => m.id === storedId) : undefined;
-        const preferred =
-          stored ??
-          rows.find((m) => m.is_active && m.is_accepting_orders) ??
-          rows[0];
-        if (preferred) {
-          const currentValid = simMerchantId && rows.some((m) => m.id === simMerchantId);
-          if (!currentValid) {
-            setSimMerchantId(preferred.id);
-            localStorage.setItem(SIM_MERCHANT_STORAGE_KEY, preferred.id);
-          }
-        }
-      })
-      .catch((e) => {
-        if (!cancelled) toast.error(e instanceof Error ? e.message : 'Could not load restaurants');
-      })
-      .finally(() => {
-        if (!cancelled) setSimMerchantsLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [tab, session.access_token]);
+  const persistStorePin = (lat: string, lng: string, label: string) => {
+    setSimStoreLat(lat);
+    setSimStoreLng(lng);
+    setSimStoreAddress(label);
+    localStorage.setItem(
+      SIM_STORE_PIN_STORAGE_KEY,
+      JSON.stringify({ lat, lng, label }),
+    );
+  };
 
-  const handleSimMerchantChange = (merchantId: string) => {
-    setSimMerchantId(merchantId);
-    localStorage.setItem(SIM_MERCHANT_STORAGE_KEY, merchantId);
+  const handleSimTierChange = (tierId: string) => {
+    setSimTierId(tierId);
+    localStorage.setItem(SIM_TIER_STORAGE_KEY, tierId);
     setSimResult(null);
     setSimExpected(null);
     setSimBatchResults([]);
     setSimActiveScenario(null);
   };
 
-  const selectedSimMerchant = simMerchants.find((m) => m.id === simMerchantId);
+  const simStoreReady =
+    Number.isFinite(Number(simStoreLat)) && Number.isFinite(Number(simStoreLng));
+  const simCanRun = simStoreReady && Boolean(simTierId.trim());
 
-  // Address autocomplete for dropoff (biased toward selected restaurant)
+  // Address autocomplete for store pin
+  useEffect(() => {
+    if (tab !== 'simulator') return;
+    const q = simStoreAddressQuery.trim();
+    if (q.length < 3) {
+      setSimStoreAddressSuggestions([]);
+      return;
+    }
+    let cancelled = false;
+    const t = window.setTimeout(() => {
+      void (async () => {
+        setSimStoreAddressBusy(true);
+        try {
+          const biasLat = Number(simStoreLat) || Number(DEFAULT_PIN.lat);
+          const biasLng = Number(simStoreLng) || Number(DEFAULT_PIN.lng);
+          const raw = await searchAddresses(q, {
+            locationBias:
+              Number.isFinite(biasLat) && Number.isFinite(biasLng)
+                ? { lat: biasLat, lng: biasLng, radiusMeters: 25_000 }
+                : undefined,
+          });
+          if (!cancelled) setSimStoreAddressSuggestions(raw.slice(0, 6));
+        } catch {
+          if (!cancelled) setSimStoreAddressSuggestions([]);
+        } finally {
+          if (!cancelled) setSimStoreAddressBusy(false);
+        }
+      })();
+    }, 280);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(t);
+    };
+  }, [tab, simStoreAddressQuery, simStoreLat, simStoreLng]);
+
+  const handleSelectSimStoreAddress = async (s: AddressSuggestion) => {
+    setSimStoreAddressBusy(true);
+    try {
+      const details = await getPlaceDetails(s.placeId);
+      persistStorePin(
+        String(details.lat),
+        String(details.lng),
+        details.formattedAddress || s.description,
+      );
+      setSimStoreAddressQuery('');
+      setSimStoreAddressSuggestions([]);
+      setSimActiveScenario(null);
+    } catch {
+      toast.error('Could not resolve that address — try another search or enter lat/lng');
+    } finally {
+      setSimStoreAddressBusy(false);
+    }
+  };
+
+  // Address autocomplete for dropoff (biased toward store pin)
   useEffect(() => {
     if (tab !== 'simulator') return;
     const q = simAddressQuery.trim();
@@ -388,8 +463,8 @@ export function PricingHubPage() {
       void (async () => {
         setSimAddressBusy(true);
         try {
-          const biasLat = selectedSimMerchant?.lat ?? Number(DEFAULT_DROPOFF.lat);
-          const biasLng = selectedSimMerchant?.lng ?? Number(DEFAULT_DROPOFF.lng);
+          const biasLat = Number(simStoreLat) || Number(DEFAULT_DROPOFF.lat);
+          const biasLng = Number(simStoreLng) || Number(DEFAULT_DROPOFF.lng);
           const raw = await searchAddresses(q, {
             locationBias:
               Number.isFinite(biasLat) && Number.isFinite(biasLng)
@@ -408,7 +483,7 @@ export function PricingHubPage() {
       cancelled = true;
       window.clearTimeout(t);
     };
-  }, [tab, simAddressQuery, selectedSimMerchant?.lat, selectedSimMerchant?.lng]);
+  }, [tab, simAddressQuery, simStoreLat, simStoreLng]);
 
   const handleSelectSimAddress = async (s: AddressSuggestion) => {
     setSimAddressBusy(true);
@@ -711,12 +786,15 @@ export function PricingHubPage() {
     payment: 'wipay' | 'cash';
     scenarioId?: string | null;
   }): Promise<{ breakdown: SimBreakdown | null; expected: SimScenarioExpected | null }> => {
-    if (!simMerchantId.trim()) {
-      toast.error('Pick a restaurant first');
+    if (!simCanRun) {
+      toast.error('Set store pin and pick a tier first');
       return { breakdown: null, expected: null };
     }
     const res = await previewPricing(session.access_token, {
-      merchant_id: simMerchantId.trim(),
+      pickup_lat: Number(simStoreLat),
+      pickup_lng: Number(simStoreLng),
+      tier_id: simTierId.trim(),
+      gct_registered: simGctRegistered,
       subtotal: opts.subtotal,
       tip: opts.tip,
       dropoff_lat: Number(simLat),
@@ -779,8 +857,8 @@ export function PricingHubPage() {
   };
 
   const handleCompareTiers = async () => {
-    if (!simMerchantId.trim()) {
-      toast.error('Pick a restaurant first');
+    if (!simCanRun) {
+      toast.error('Set store pin and pick a tier first');
       return;
     }
     if (!tiers.length) {
@@ -800,7 +878,10 @@ export function PricingHubPage() {
       }> = [];
       for (const tier of tiers.filter((t) => t.is_active !== false)) {
         const res = await previewPricing(session.access_token, {
-          merchant_id: simMerchantId.trim(),
+          pickup_lat: Number(simStoreLat),
+          pickup_lng: Number(simStoreLng),
+          tier_id: tier.id,
+          gct_registered: simGctRegistered,
           subtotal: Number(simSubtotal) || 0,
           tip: Number(simTip) || 0,
           dropoff_lat: Number(simLat),
@@ -809,7 +890,6 @@ export function PricingHubPage() {
           market_id: simMarketMode === 'manual' ? selectedMarketId || undefined : undefined,
           customer_order_count: simApplyFreeDeliveryPromo ? 0 : 999,
           free_delivery: simApplyFreeDeliveryPromo ? true : false,
-          tier_id: tier.id,
         });
         const b = pickBreakdown(res.breakdown ?? null);
         const raw = res.breakdown as Record<string, unknown> | null;
@@ -854,8 +934,8 @@ export function PricingHubPage() {
   };
 
   const handleRunAllScenarios = async () => {
-    if (!simMerchantId.trim()) {
-      toast.error('Pick a restaurant first');
+    if (!simCanRun) {
+      toast.error('Set store pin and pick a tier first');
       return;
     }
     setSimRunning(true);
@@ -1700,34 +1780,91 @@ export function PricingHubPage() {
 
       {tab === 'simulator' && (
         <div className="space-y-6 max-w-4xl">
-          <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-4 space-y-3">
-            <h3 className="text-sm font-semibold text-white">How to use the simulator</h3>
-            <ol className="text-sm text-slate-300 space-y-1.5 list-decimal list-inside">
-              <li>Pick a restaurant and market.</li>
-              <li>Enter food amount, tip, and customer dropoff address (or lat/lng).</li>
-              <li>Run quote — or click a scenario card to fill food/tip/payment and run.</li>
-            </ol>
-            <p className="text-xs text-slate-500">
-              Restaurant sets store pin, tier, and GCT — not the food total. Food and tip are always
-              manual. Green = matches your current Market Rules; amber = mismatch.
-            </p>
-          </div>
+          <SimStep n={1} title="Store & market">
+            <div className="space-y-2 relative">
+              <label className="block text-xs text-slate-400">Store address</label>
+              <input
+                type="text"
+                value={simStoreAddressQuery}
+                onChange={(e) => setSimStoreAddressQuery(e.target.value)}
+                placeholder="Search street / area in Jamaica…"
+                className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-700 text-white text-sm"
+              />
+              {simStoreAddressBusy && (
+                <p className="text-xs text-slate-500 flex items-center gap-1">
+                  <Loader2 className="w-3 h-3 animate-spin" /> Searching…
+                </p>
+              )}
+              {simStoreAddressSuggestions.length > 0 && (
+                <ul className="absolute z-20 left-0 right-0 mt-1 max-h-48 overflow-auto rounded-lg border border-slate-700 bg-slate-950 shadow-lg">
+                  {simStoreAddressSuggestions.map((s) => (
+                    <li key={s.placeId}>
+                      <button
+                        type="button"
+                        className="w-full text-left px-3 py-2 text-sm text-slate-200 hover:bg-slate-800"
+                        onClick={() => void handleSelectSimStoreAddress(s)}
+                      >
+                        <span className="block text-white">{s.mainText}</span>
+                        {s.secondaryText ? (
+                          <span className="block text-xs text-slate-500">{s.secondaryText}</span>
+                        ) : null}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {simStoreAddress && (
+                <p className="text-xs text-emerald-400/90">Selected: {simStoreAddress}</p>
+              )}
+            </div>
 
-          <SimStep n={1} title="Restaurant & market">
-            <div className="grid gap-3 md:grid-cols-2">
+            <div className="grid gap-3 md:grid-cols-2 mt-3">
+              <Field
+                label="Store latitude"
+                value={Number(simStoreLat) || 0}
+                step="any"
+                onChange={(v) => {
+                  persistStorePin(String(v), simStoreLng, 'Manual lat/lng');
+                  setSimActiveScenario(null);
+                }}
+              />
+              <Field
+                label="Store longitude"
+                value={Number(simStoreLng) || 0}
+                step="any"
+                onChange={(v) => {
+                  persistStorePin(simStoreLat, String(v), 'Manual lat/lng');
+                  setSimActiveScenario(null);
+                }}
+              />
+            </div>
+
+            <div className="mt-3">
+              <SimStorePinMap
+                lat={Number(simStoreLat) || Number(DEFAULT_PIN.lat)}
+                lng={Number(simStoreLng) || Number(DEFAULT_PIN.lng)}
+                onChange={(lat, lng) => {
+                  persistStorePin(String(lat), String(lng), 'Map pin');
+                  setSimActiveScenario(null);
+                }}
+              />
+            </div>
+
+            <div className="grid gap-3 md:grid-cols-2 mt-3">
               <LabeledSelect
-                label="Restaurant"
-                hint="Used for store pin, tier, and GCT — not menu prices."
-                value={simMerchantId}
-                disabled={simMerchantsLoading || simMerchants.length === 0}
-                onChange={handleSimMerchantChange}
+                label="Merchant tier"
+                hint="Commission and base delivery fee for this quote."
+                value={simTierId}
+                onChange={handleSimTierChange}
                 options={
-                  simMerchants.length === 0
-                    ? [{ value: '', label: simMerchantsLoading ? 'Loading restaurants…' : 'No active restaurants found' }]
-                    : simMerchants.map((m) => ({
-                        value: m.id,
-                        label: `${m.name}${m.is_accepting_orders ? '' : ' (paused)'}`,
-                      }))
+                  tiers.length === 0
+                    ? [{ value: '', label: 'No tiers loaded' }]
+                    : tiers
+                        .filter((t) => t.is_active !== false)
+                        .map((t) => ({
+                          value: t.id,
+                          label: `${t.name} (${Math.round(Number(t.commission_rate ?? 0) * 100)}%)`,
+                        }))
                 }
               />
               <LabeledSelect
@@ -1745,6 +1882,17 @@ export function PricingHubPage() {
                 }))}
               />
             </div>
+
+            <label className="flex items-center gap-2 text-xs text-slate-300 mt-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={simGctRegistered}
+                onChange={(e) => setSimGctRegistered(e.target.checked)}
+                className="rounded border-slate-600"
+              />
+              Restaurant GCT registered (food tax on quote)
+            </label>
+
             <div className="flex flex-wrap items-center gap-2 mt-2">
               <button
                 type="button"
@@ -1788,20 +1936,13 @@ export function PricingHubPage() {
                 </span>
               )}
             </div>
-            {selectedSimMerchant && (
-              <p className="text-xs text-slate-500 font-mono mt-2">
-                ID: {selectedSimMerchant.id}
-                {selectedSimMerchant.lat != null && selectedSimMerchant.lng != null
-                  ? ` · Store at ${selectedSimMerchant.lat}, ${selectedSimMerchant.lng}`
-                  : ' · Store pin missing — delivery falls back to base fee'}
-                {selectedSimMerchant.market_id
-                  ? ` · Town: ${
-                      markets.find((m) => m.market.id === selectedSimMerchant.market_id)?.market
-                        .name ?? selectedSimMerchant.market_id
-                    }`
-                  : ' · Town unassigned'}
-              </p>
-            )}
+            <p className="text-xs text-slate-500 font-mono mt-2">
+              Store at {simStoreLat}, {simStoreLng}
+              {simTierId
+                ? ` · Tier: ${tiers.find((t) => t.id === simTierId)?.name ?? simTierId}`
+                : ' · No tier'}
+              {simGctRegistered ? ' · GCT on' : ' · GCT off'}
+            </p>
           </SimStep>
 
           <SimStep n={2} title="Quote inputs (always editable)">
@@ -1886,8 +2027,7 @@ export function PricingHubPage() {
               />
             </div>
             <p className="text-xs text-slate-500 mt-1">
-              Delivery fee = distance from restaurant pin to this dropoff. Default pin:{' '}
-              {DEFAULT_DROPOFF.label} ({DEFAULT_DROPOFF.lat}, {DEFAULT_DROPOFF.lng}).
+              Delivery fee = distance from store pin to this dropoff.
             </p>
 
             <div className="flex flex-wrap gap-3 items-center mt-4">
@@ -1927,7 +2067,7 @@ export function PricingHubPage() {
               </label>
               <button
                 type="button"
-                disabled={simRunning || !simMerchantId}
+                disabled={simRunning || !simCanRun}
                 onClick={() => void handleSimulate()}
                 className="ml-auto px-4 py-2 rounded-lg bg-amber-600 text-white text-sm disabled:opacity-50"
               >
@@ -1935,7 +2075,7 @@ export function PricingHubPage() {
               </button>
               <button
                 type="button"
-                disabled={simRunning || !simMerchantId || !tiers.length}
+                disabled={simRunning || !simCanRun || !tiers.length}
                 onClick={() => void handleCompareTiers()}
                 className="px-4 py-2 rounded-lg border border-amber-700/60 text-amber-200 text-sm disabled:opacity-50"
               >
@@ -1948,7 +2088,7 @@ export function PricingHubPage() {
             <div className="flex flex-wrap gap-2 mb-3">
               <button
                 type="button"
-                disabled={simRunning || !simMerchantId}
+                disabled={simRunning || !simCanRun}
                 onClick={() => void handleRunAllScenarios()}
                 className="px-4 py-2 rounded-lg border border-slate-600 text-slate-200 text-sm disabled:opacity-50"
               >
@@ -1962,7 +2102,7 @@ export function PricingHubPage() {
                   scenario={scenario}
                   active={simActiveScenario === scenario.id}
                   minOrderJmd={marketRules.min_order_subtotal_jmd ?? 800}
-                  disabled={simRunning || !simMerchantId}
+                  disabled={simRunning || !simCanRun}
                   onRun={() => void handleRunScenario(scenario)}
                 />
               ))}

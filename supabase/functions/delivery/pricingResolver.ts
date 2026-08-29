@@ -1,6 +1,7 @@
 /**
  * Server-side pricing resolver for Rush Model B.
  * Loads merchant tier + market profile, computes distance, returns breakdown.
+ * Admin simulator can run standalone (no merchant row) with pickup pin + tier + GCT.
  */
 import {
   applyRoadDistanceMultiplier,
@@ -19,16 +20,26 @@ import {
   resolveMarketForPoint,
   type MarketPointResolve,
 } from "./admin/coverageZones.ts";
-import { resolveOrderGctRates } from "../_shared/gctRate.ts";
+import {
+  effectiveFoodGctRatePercent,
+  effectivePlatformGctRatePercent,
+  isValidGctRate,
+  loadGlobalGctConfig,
+  resolveOrderGctRates,
+} from "../_shared/gctRate.ts";
 import { resolvePricingLayers } from "./pricingLayers.ts";
 
 export type PricingResolverInput = {
-  merchantId: string;
+  /** Real order / merchant preview. Omit for admin standalone calculator. */
+  merchantId?: string | null;
   subtotal: number;
   discount?: number;
   tip?: number;
   dropoffLat?: number | null;
   dropoffLng?: number | null;
+  /** Standalone calculator: store pin (required when no merchantId) */
+  pickupLat?: number | null;
+  pickupLng?: number | null;
   customerId?: string | null;
   freeDelivery?: boolean;
   paymentMethod?: PaymentMethod;
@@ -44,6 +55,10 @@ export type PricingResolverInput = {
   requireCoverage?: boolean;
   /** Admin simulator: force a merchant tier instead of the merchant's assigned tier */
   tierIdOverride?: string | null;
+  /** Standalone calculator: treat restaurant as GCT-registered (default true) */
+  gctRegistered?: boolean | null;
+  /** Standalone calculator: optional food GCT % override */
+  taxRatePercent?: number | null;
 };
 
 export type ResolvedPricing = PricingBreakdown & {
@@ -62,6 +77,16 @@ export type ResolvedPricing = PricingBreakdown & {
 
 // deno-lint-ignore no-explicit-any
 type ServiceSb = { from: (t: string) => any };
+
+type PricingContext = {
+  found: boolean;
+  lat: number | null;
+  lng: number | null;
+  tier: MerchantTier | null;
+  merchantCommissionRateOverride: number | null;
+  serviceFeeOverride: ReturnType<typeof parseServiceFeeOverride>;
+  error?: string;
+};
 
 function asCoord(v: unknown): number | null {
   if (v == null || v === "") return null;
@@ -82,19 +107,43 @@ async function loadCustomerOrderCount(
   return count ?? 0;
 }
 
+async function loadTierById(
+  sb: ServiceSb,
+  tierId: string | null | undefined,
+): Promise<MerchantTier | null> {
+  if (!tierId || !String(tierId).trim()) return null;
+  const { data: tierRow } = await sb
+    .from("merchant_tiers")
+    .select(
+      "slug, name, commission_rate, base_delivery_fee_jmd, menu_inflation_percent, search_boost, default_delivery_radius_km, promo_eligible",
+    )
+    .eq("id", String(tierId).trim())
+    .maybeSingle();
+  if (!tierRow) return null;
+  const t = tierRow as Record<string, unknown>;
+  return {
+    slug: String(t.slug),
+    name: String(t.name),
+    commissionRate: Number(t.commission_rate),
+    baseDeliveryFeeJmd: t.base_delivery_fee_jmd != null
+      ? Number(t.base_delivery_fee_jmd)
+      : null,
+    menuInflationPercent: t.menu_inflation_percent != null
+      ? Number(t.menu_inflation_percent)
+      : null,
+    searchBoost: t.search_boost != null ? Number(t.search_boost) : undefined,
+    defaultDeliveryRadiusKm: t.default_delivery_radius_km != null
+      ? Number(t.default_delivery_radius_km)
+      : undefined,
+    promoEligible: t.promo_eligible != null ? Boolean(t.promo_eligible) : undefined,
+  };
+}
+
 async function loadMerchantPricingContext(
   sb: ServiceSb,
   merchantId: string,
   tierIdOverride?: string | null,
-): Promise<{
-  found: boolean;
-  lat: number | null;
-  lng: number | null;
-  tier: MerchantTier | null;
-  merchantCommissionRateOverride: number | null;
-  serviceFeeOverride: ReturnType<typeof parseServiceFeeOverride>;
-  error?: string;
-}> {
+): Promise<PricingContext> {
   // Single fetch — Model B columns exist on all current DBs
   const { data: merchant, error } = await sb
     .from("merchants")
@@ -128,7 +177,6 @@ async function loadMerchantPricingContext(
   }
 
   const base = merchant as Record<string, unknown>;
-  let tier: MerchantTier | null = null;
   const merchantCommissionRateOverride = base.merchant_commission_rate != null
     ? Number(base.merchant_commission_rate)
     : null;
@@ -137,32 +185,7 @@ async function loadMerchantPricingContext(
   );
   const tierId = (tierIdOverride && String(tierIdOverride).trim())
     || (base.pricing_tier_id ? String(base.pricing_tier_id) : null);
-  if (tierId) {
-    const { data: tierRow } = await sb
-      .from("merchant_tiers")
-      .select("slug, name, commission_rate, base_delivery_fee_jmd, menu_inflation_percent, search_boost, default_delivery_radius_km, promo_eligible")
-      .eq("id", tierId)
-      .maybeSingle();
-    if (tierRow) {
-      const t = tierRow as Record<string, unknown>;
-      tier = {
-        slug: String(t.slug),
-        name: String(t.name),
-        commissionRate: Number(t.commission_rate),
-        baseDeliveryFeeJmd: t.base_delivery_fee_jmd != null
-          ? Number(t.base_delivery_fee_jmd)
-          : null,
-        menuInflationPercent: t.menu_inflation_percent != null
-          ? Number(t.menu_inflation_percent)
-          : null,
-        searchBoost: t.search_boost != null ? Number(t.search_boost) : undefined,
-        defaultDeliveryRadiusKm: t.default_delivery_radius_km != null
-          ? Number(t.default_delivery_radius_km)
-          : undefined,
-        promoEligible: t.promo_eligible != null ? Boolean(t.promo_eligible) : undefined,
-      };
-    }
-  }
+  const tier = await loadTierById(sb, tierId);
 
   return {
     found: true,
@@ -174,6 +197,85 @@ async function loadMerchantPricingContext(
   };
 }
 
+/** Admin calculator: no merchant row — pin + tier + GCT from request. */
+async function loadStandalonePricingContext(
+  sb: ServiceSb,
+  input: PricingResolverInput,
+): Promise<PricingContext> {
+  const lat = asCoord(input.pickupLat);
+  const lng = asCoord(input.pickupLng);
+  if (lat == null || lng == null) {
+    return {
+      found: false,
+      lat: null,
+      lng: null,
+      tier: null,
+      merchantCommissionRateOverride: null,
+      serviceFeeOverride: null,
+      error: "pickup_lat and pickup_lng required for standalone preview",
+    };
+  }
+  const tierId = input.tierIdOverride && String(input.tierIdOverride).trim()
+    ? String(input.tierIdOverride).trim()
+    : null;
+  if (!tierId) {
+    return {
+      found: false,
+      lat,
+      lng,
+      tier: null,
+      merchantCommissionRateOverride: null,
+      serviceFeeOverride: null,
+      error: "tier_id required for standalone preview",
+    };
+  }
+  const tier = await loadTierById(sb, tierId);
+  if (!tier) {
+    return {
+      found: false,
+      lat,
+      lng,
+      tier: null,
+      merchantCommissionRateOverride: null,
+      serviceFeeOverride: null,
+      error: "Tier not found",
+    };
+  }
+  return {
+    found: true,
+    lat,
+    lng,
+    tier,
+    merchantCommissionRateOverride: null,
+    serviceFeeOverride: null,
+  };
+}
+
+async function resolveStandaloneGct(
+  sb: ServiceSb,
+  input: PricingResolverInput,
+): Promise<{
+  ratePercent: number;
+  gctRegistered: boolean;
+  platformRatePercent: number;
+  gctEnabled: boolean;
+}> {
+  const config = await loadGlobalGctConfig(sb as Parameters<typeof loadGlobalGctConfig>[0]);
+  const gctRegistered = input.gctRegistered === false ? false : true;
+  const ratePercent = isValidGctRate(input.taxRatePercent)
+    ? Number(input.taxRatePercent)
+    : effectiveFoodGctRatePercent(config, gctRegistered);
+  const platformRatePercent = config.enabled
+    ? effectivePlatformGctRatePercent(config)
+    : 0;
+  return {
+    ratePercent,
+    gctRegistered,
+    platformRatePercent,
+    gctEnabled: config.enabled,
+  };
+}
+
 export { resolveMarketForPoint, assertSameMarketCoverage } from "./admin/coverageZones.ts";
 
 /** Resolve full pricing for a merchant order quote or placement. */
@@ -181,9 +283,20 @@ export async function resolveDashOrderPricing(
   sb: ServiceSb,
   input: PricingResolverInput,
 ): Promise<ResolvedPricing | null> {
-  const ctx = await loadMerchantPricingContext(sb, input.merchantId, input.tierIdOverride);
+  const merchantId = input.merchantId && String(input.merchantId).trim()
+    ? String(input.merchantId).trim()
+    : null;
+
+  const ctx = merchantId
+    ? await loadMerchantPricingContext(sb, merchantId, input.tierIdOverride)
+    : await loadStandalonePricingContext(sb, input);
+
   if (!ctx.found) {
-    console.error("[pricingResolver] cannot resolve:", ctx.error, input.merchantId);
+    console.error(
+      "[pricingResolver] cannot resolve:",
+      ctx.error,
+      merchantId ?? "standalone",
+    );
     return null;
   }
 
@@ -206,7 +319,7 @@ export async function resolveDashOrderPricing(
   const coverage = geo?.eval ?? null;
 
   // Pricing market: override (admin) wins; else geo only — never invent first active market
-  let marketId: string | null = overrideRaw ?? resolvedMarketId;
+  const marketId: string | null = overrideRaw ?? resolvedMarketId;
 
   const requireCoverage = input.requireCoverage !== false && !overrideRaw;
   if (requireCoverage && dropLat != null && dropLng != null && !covered) {
@@ -253,7 +366,9 @@ export async function resolveDashOrderPricing(
     ? Math.max(0, Math.floor(Number(input.customerOrderCount)))
     : await loadCustomerOrderCount(sb, input.customerId);
 
-  const gct = await resolveOrderGctRates(sb, input.merchantId);
+  const gct = merchantId
+    ? await resolveOrderGctRates(sb, merchantId)
+    : await resolveStandaloneGct(sb, input);
 
   // Fold into buildOrderPricing so split / GCT / processing fee see the surcharge.
   const zoneSurchargeJmd =

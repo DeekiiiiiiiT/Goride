@@ -1,4 +1,5 @@
 export {
+  createRoamAuthClient,
   supabase,
   supabaseDriverApp,
   supabaseDriverAdmin,

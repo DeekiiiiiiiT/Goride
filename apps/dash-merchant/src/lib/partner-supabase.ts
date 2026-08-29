@@ -1,9 +1,6 @@
 import { projectId } from '@roam/api-client';
-import { supabaseDashPartner } from '@roam/auth-client';
+import { createRoamAuthClient } from '@roam/auth-client';
 import type { Session } from '@supabase/supabase-js';
-
-/** Partner app auth — isolated from admin/driver sessions on the same host. */
-export const supabase = supabaseDashPartner;
 
 const PARTNER_STORAGE_KEY = `sb-${projectId}-auth-dash-partner`;
 const LEGACY_DRIVER_STORAGE_KEY = `sb-${projectId}-auth-driver`;
@@ -13,7 +10,9 @@ const REMEMBER_ME_KEY = 'roam-partner-remember-me';
 export function migrateLegacyPartnerSession() {
   if (typeof window === 'undefined') return;
   try {
-    if (localStorage.getItem(PARTNER_STORAGE_KEY)) return;
+    if (localStorage.getItem(PARTNER_STORAGE_KEY) || sessionStorage.getItem(PARTNER_STORAGE_KEY)) {
+      return;
+    }
     const legacy = localStorage.getItem(LEGACY_DRIVER_STORAGE_KEY);
     if (legacy) localStorage.setItem(PARTNER_STORAGE_KEY, legacy);
   } catch {
@@ -21,42 +20,66 @@ export function migrateLegacyPartnerSession() {
   }
 }
 
-/** Prefer sessionStorage when "Remember me" is off so closing the tab ends the session. */
-function hydrateEphemeralPartnerSession() {
-  if (typeof window === 'undefined') return;
+function rememberMeEnabled(): boolean {
   try {
-    const ephemeral = sessionStorage.getItem(PARTNER_STORAGE_KEY);
-    if (ephemeral && !localStorage.getItem(PARTNER_STORAGE_KEY)) {
-      localStorage.setItem(PARTNER_STORAGE_KEY, ephemeral);
-    }
+    // Unset = keep signed in. Only explicit "0" is ephemeral.
+    return localStorage.getItem(REMEMBER_ME_KEY) !== '0';
   } catch {
-    // ignore
+    return true;
   }
 }
 
-hydrateEphemeralPartnerSession();
-
-if (typeof window !== 'undefined') {
-  window.addEventListener('pagehide', () => {
+/**
+ * Remember-me without pagehide storage moves.
+ * The old pagehide wipe raced Google OAuth (PKCE verifier lives in the same key)
+ * and bounced partners back to the sign-in screen after redirect.
+ */
+const partnerAuthStorage = {
+  getItem(key: string): string | null {
     try {
-      if (localStorage.getItem(REMEMBER_ME_KEY) === '0') {
-        const raw = localStorage.getItem(PARTNER_STORAGE_KEY);
-        if (raw) sessionStorage.setItem(PARTNER_STORAGE_KEY, raw);
-        localStorage.removeItem(PARTNER_STORAGE_KEY);
+      return localStorage.getItem(key) ?? sessionStorage.getItem(key);
+    } catch {
+      return null;
+    }
+  },
+  setItem(key: string, value: string): void {
+    try {
+      if (rememberMeEnabled()) {
+        localStorage.setItem(key, value);
+        sessionStorage.removeItem(key);
+      } else {
+        sessionStorage.setItem(key, value);
+        localStorage.removeItem(key);
       }
     } catch {
       // ignore
     }
-  });
-}
+  },
+  removeItem(key: string): void {
+    try {
+      localStorage.removeItem(key);
+      sessionStorage.removeItem(key);
+    } catch {
+      // ignore
+    }
+  },
+};
+
+/** Partner app auth — isolated from admin/driver sessions on the same host. */
+export const supabase = createRoamAuthClient(PARTNER_STORAGE_KEY, {
+  storage: partnerAuthStorage,
+  flowType: 'pkce',
+});
 
 export function applyPartnerRememberMe(remember: boolean) {
   if (typeof window === 'undefined') return;
   try {
     localStorage.setItem(REMEMBER_ME_KEY, remember ? '1' : '0');
-    const raw = localStorage.getItem(PARTNER_STORAGE_KEY);
+    const raw =
+      localStorage.getItem(PARTNER_STORAGE_KEY) ?? sessionStorage.getItem(PARTNER_STORAGE_KEY);
     if (!raw) return;
     if (remember) {
+      localStorage.setItem(PARTNER_STORAGE_KEY, raw);
       sessionStorage.removeItem(PARTNER_STORAGE_KEY);
       return;
     }
