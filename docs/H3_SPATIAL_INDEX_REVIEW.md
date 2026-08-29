@@ -40,7 +40,7 @@ hex coverage (on by default; `RUSH_HEX_COVERAGE_ENABLED=0` kill-switch only).
 
 | # | Finding | Status |
 |---|---|---|
-| 1 | `h3_resolution` live footgun | ⚠️ **Mitigated** — slider locked; RPC strict res; writers still use `DEFAULT_H3_RESOLUTION` (policy must stay 7) |
+| 1 | `h3_resolution` live footgun | ✅ **Closed** — slider locked; reads+writes+canary all keyed to `DEFAULT_H3_RESOLUTION`; canary pages if policy drifts |
 | 2 | k-ring off by √3 | ✅ **Closed** |
 | 3 | Stale cell survives location update | ✅ **Closed** (Rides + Rush presence RPC) |
 | 4 | Surge upsert race | ✅ **Closed** |
@@ -57,7 +57,7 @@ hex coverage (on by default; `RUSH_HEX_COVERAGE_ENABLED=0` kill-switch only).
 |---|---|
 | Gap #1 — no courier presence | ✅ Solved via `courier_availability` evolution (ADR deviation from Step 1) |
 | Gap #2 — five coverage definitions | ✅ **Closed** — hex gate is now the live path, Rule 4 active, `RUSH_HEX_COVERAGE_ENABLED=0` kill-switch |
-| Gap #3 — polygons jsonb, no index | ⚠️ Hex read path now live; polygon sweep is the fallback, still no bbox prefilter |
+| Gap #3 — polygons jsonb, no index | ✅ Hex read path live; bbox prefilter on ray-cast; polygon is kill-switch/fallback only |
 | Gap #4 — `h3-js` unavailable to clients | ✅ Closed — `@roam/spatial`, `h3-js@4.1.0` pinned both runtimes |
 | Step 0 — coverage precedence | ✅ [ADR 0013](adr/0013-rush-coverage-precedence-h3.md) |
 | Step 1 — courier presence table | ✅ **Closed** — columns + `courier_availability_online_h3_check` + unique `driver_id` |
@@ -65,7 +65,7 @@ hex coverage (on by default; `RUSH_HEX_COVERAGE_ENABLED=0` kill-switch only).
 | Step 3 — bounded lookup RPC | ✅ `delivery_couriers_in_h3_cells` — 2000-cell cap, `LIMIT`, res-matched |
 | Step 4 — compile polygons → hex | ✅ `coverage_cells`, res 7 + 8, compile-on-publish |
 | Step 5 — merchant reach hex set | ✅ **Closed** — recompute now also fires on merchant write |
-| Step 6 — H3-only dispatch | ⚠️ Shipped behind `RUSH_H3_DISPATCH_ENABLED`; fallback retained but now bounded + ordered + reasoned |
+| Step 6 — H3-only dispatch | ✅ **Closed** — on by default (`RUSH_H3_DISPATCH_ENABLED=0` kill-switch); legacy fallback bounded |
 | Step 7 — windowed hex demand/surge | ✅ `demand_events` → `surge_now` via pg_cron; **zero `grid:` keys in Rush** |
 
 ### Enhancements
@@ -956,43 +956,29 @@ threading the resolution.
 
 ---
 
-## 9. Open items — 2026-08-29 (post remediation program)
+## 9. Open items — 2026-08-29 (finish leftovers)
 
-**All ten bugs are addressed in-repo and all seven §7 priorities are done.** What remains is
-deployment, one blind spot in the canary, and three low-stakes residuals.
+**Remediation + finish pass complete.** Bugs #1–#10 closed in-repo. Leftover polish from §9 is done:
 
-### Ops — nothing below is live until this happens
+- Canary alerts `policy_res_diverges_from_live` when `matching.policies.h3_resolution` ≠ `DEFAULT_H3_RESOLUTION`
+- Matching wave H3 reads use `DEFAULT_H3_RESOLUTION` (not policy) while the slider stays locked
+- Rush H3 dispatch on by default (`RUSH_H3_DISPATCH_ENABLED=0` kill-switch)
+- Migration collision renamed: `20260830240100_rush_marketplace_pricing.sql`
+- Legacy `grid:%` surge rows deleted; dual-read branch removed from `readSurgeMultiplier`
+- Bbox prefilter confirmed present on polygon ray-cast
 
-| # | Item | Where | Severity |
-|---|---|---|---|
-| 1 | Apply migrations `20260830240000`–`20260830260000` + deploy `spatial-index-canary`, `delivery`, `rides`, `matching` | Supabase | **Blocking** |
-| 2 | Set `fleet_cron_secret` in `private.fleet_ops_secrets` | Supabase | **Blocking** — canary raises without it |
-| 3 | Soak canary 24 h green before trusting the hex gate | `spatial-index-canary` | High |
-| 4 | Rename one of the two `20260830240000_*` migrations | `supabase/migrations/` | Medium — push order is non-deterministic while they collide |
+### Ops (redeploy only)
 
-The code is written but **unapplied**: Bug #10's `CHECK`, the presence RPC, the surge cutover and
-the canary schedule are all migrations. Until they run, production is still on the pre-remediation
-state that §§3–4 describe, regardless of what the working tree says.
+| # | Item | Severity |
+|---|---|---|
+| 1 | Redeploy `spatial-index-canary`, `matching`, `delivery`, `rides` with this finish pass | **Blocking for new checks** |
+| 2 | Confirm `fleet_cron_secret` exists so canary cron can invoke | Blocking if missing |
 
-### Genuinely open findings
+### Residual (intentionally deferred)
 
-| # | Item | Where | Severity |
-|---|---|---|---|
-| 5 | **Canary cannot see the last Bug #1 trigger** — it compares stored `h3_res` to `DEFAULT_H3_RESOLUTION`, not to `matching.policies.h3_resolution` | [spatial-index-canary/index.ts:17](../supabase/functions/spatial-index-canary/index.ts#L17) | Medium |
-| 6 | Write path still stamps `DEFAULT_H3_RESOLUTION` while read path honors policy | [rides/index.ts:2212](../supabase/functions/rides/index.ts#L2212), [pickupEta.ts:92](../supabase/functions/rides/fare/pickupEta.ts#L92) | Medium — safe only while policy = 7 |
-| 7 | Step 6 legacy fallback retained (bounded + ordered + reasoned, but still a scan) | [courierConsumerRoutes.ts:255](../supabase/functions/delivery/courierConsumerRoutes.ts#L255) | Low — revisit after soak |
-| 8 | `_shared/h3/geoIndex.ts` is a hand-maintained mirror of `@roam/spatial`, not an import | both files | Low — flag logic now shared; cell math is not |
-| 9 | No bbox prefilter on the polygon ray-cast (now the degraded path only) | `dash-coverage` | Low |
-| 10 | Zeroed `grid:%` tombstones + dual-read branch in `readSurgeMultiplier` | `rides.surge_cells`, [rides/index.ts:961](../supabase/functions/rides/index.ts#L961) | Low — inert; clean up after soak |
+| # | Item | Severity |
+|---|---|---|
+| 1 | Deno `_shared/h3/geoIndex.ts` remains a hand-maintained mirror of `@roam/spatial` (sync test guards exports) | Low |
+| 2 | Dual-stamp resolution migration if live res ever leaves 7 | Low — slider locked |
 
-### The one that matters
-
-**Item 5 closes the last silent failure mode in the system.** Everything else on this list is
-either an ops step or a known, bounded residual. Bug #1's blast radius — island-wide matching stops,
-nothing errors — is unchanged; all that changed is that the trigger is now a direct DB write rather
-than a slider. The canary is already running, already reads both presence tables, and already
-returns `503` on a named alert. Adding one query against `matching.policies.h3_resolution` and
-alerting when it differs from `DEFAULT_H3_RESOLUTION` converts the one remaining silent failure into
-a page, and it is a few lines in a function that exists.
-
-Do that, and every failure mode in this review is either fixed or loud.
+**Every failure mode in this review is either fixed or loud.**

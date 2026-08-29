@@ -47,6 +47,25 @@ Deno.serve(async (req) => {
   };
 
   try {
+    // --- Policy res must equal live DEFAULT (slider locked; DB edit = silent blackout) ---
+    let policyRes: number | null = null;
+    const { data: defaultPolicy, error: policyErr } = await sb
+      .from("matching_policies")
+      .select("h3_resolution")
+      .eq("is_default", true)
+      .maybeSingle();
+    if (policyErr) {
+      // Public view may lag; non-fatal — still run presence checks
+      report.policy_res_lookup_error = policyErr.message;
+    } else if (defaultPolicy?.h3_resolution != null) {
+      policyRes = Number(defaultPolicy.h3_resolution);
+      report.policy_h3_resolution = policyRes;
+      if (Number.isFinite(policyRes) && policyRes !== LIVE_RES) {
+        (report.alerts as string[]).push("policy_res_diverges_from_live");
+        report.ok = false;
+      }
+    }
+
     // --- Rides: resolution mismatch among available drivers ---
     const { count: ridesResMismatch, error: ridesResErr } = await sb
       .from("rides_driver_locations")

@@ -204,7 +204,7 @@ async function dispatchOffersForOrder(
     originLng = Number(merchant?.lng);
   }
 
-  const useH3 = Deno.env.get("RUSH_H3_DISPATCH_ENABLED") === "1";
+  const useH3 = (await import("../_shared/h3/geoIndex.ts")).isRushH3DispatchEnabled();
   let online: Array<{
     driver_id: string;
     current_lat: number | null;

@@ -1763,7 +1763,9 @@ export function PricingHubPage() {
       )}
 
       {tab === 'simulator' && (
-        <div className="space-y-6 max-w-4xl">
+        <div className="space-y-6 max-w-6xl">
+          <div className="grid gap-4 lg:grid-cols-2 lg:items-start">
+            <div className="space-y-4 min-w-0">
           <SimStep n={1} title="Store & market">
             <div className="space-y-2 relative">
               <label className="block text-xs text-slate-400">Store address</label>
@@ -1800,27 +1802,6 @@ export function PricingHubPage() {
               {simStoreAddress && (
                 <p className="text-xs text-emerald-400/90">Selected: {simStoreAddress}</p>
               )}
-            </div>
-
-            <div className="grid gap-3 md:grid-cols-2 mt-3">
-              <Field
-                label="Store latitude"
-                value={Number(simStoreLat) || 0}
-                step="any"
-                onChange={(v) => {
-                  persistStorePin(String(v), simStoreLng, 'Manual lat/lng');
-                  setSimActiveScenario(null);
-                }}
-              />
-              <Field
-                label="Store longitude"
-                value={Number(simStoreLng) || 0}
-                step="any"
-                onChange={(v) => {
-                  persistStorePin(simStoreLat, String(v), 'Manual lat/lng');
-                  setSimActiveScenario(null);
-                }}
-              />
             </div>
 
             <div className="mt-3">
@@ -1920,153 +1901,173 @@ export function PricingHubPage() {
                 </span>
               )}
             </div>
-            <p className="text-xs text-slate-500 font-mono mt-2">
-              Store at {simStoreLat}, {simStoreLng}
+            <p className="text-xs text-slate-500 mt-2">
+              {simStoreAddress ? `${simStoreAddress} · ` : ''}
               {simTierId
-                ? ` · Tier: ${tiers.find((t) => t.id === simTierId)?.name ?? simTierId}`
-                : ' · No tier'}
+                ? `Tier: ${tiers.find((t) => t.id === simTierId)?.name ?? simTierId}`
+                : 'No tier'}
               {simGctRegistered ? ' · GCT on' : ' · GCT off'}
             </p>
           </SimStep>
 
-          <SimStep n={2} title="Quote inputs (always editable)">
-            <div className="grid gap-3 md:grid-cols-2">
-              <Field
-                label="Food subtotal (JMD)"
-                value={Number(simSubtotal) || 0}
-                onChange={(v) => {
-                  setSimSubtotal(String(v));
-                  setSimActiveScenario(null);
-                }}
-              />
-              <Field
-                label="Courier tip (JMD)"
-                value={Number(simTip) || 0}
-                onChange={(v) => {
-                  setSimTip(String(v));
-                  setSimActiveScenario(null);
-                }}
-              />
-            </div>
-
-            <div className="mt-3 space-y-2 relative">
-              <label className="block text-xs text-slate-400">Customer dropoff address</label>
-              <input
-                type="text"
-                value={simAddressQuery}
-                onChange={(e) => setSimAddressQuery(e.target.value)}
-                placeholder="Search street / area in Jamaica…"
-                className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-700 text-white text-sm"
-              />
-              {simAddressBusy && (
-                <p className="text-xs text-slate-500 flex items-center gap-1">
-                  <Loader2 className="w-3 h-3 animate-spin" /> Searching…
-                </p>
-              )}
-              {simAddressSuggestions.length > 0 && (
-                <ul className="absolute z-20 left-0 right-0 mt-1 max-h-48 overflow-auto rounded-lg border border-slate-700 bg-slate-950 shadow-lg">
-                  {simAddressSuggestions.map((s) => (
-                    <li key={s.placeId}>
-                      <button
-                        type="button"
-                        className="w-full text-left px-3 py-2 text-sm text-slate-200 hover:bg-slate-800"
-                        onClick={() => void handleSelectSimAddress(s)}
-                      >
-                        <span className="block text-white">{s.mainText}</span>
-                        {s.secondaryText ? (
-                          <span className="block text-xs text-slate-500">{s.secondaryText}</span>
-                        ) : null}
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
-              {simAddress && (
-                <p className="text-xs text-emerald-400/90">
-                  Selected: {simAddress}
-                </p>
-              )}
-            </div>
-
-            <div className="grid gap-3 md:grid-cols-2 mt-3">
-              <Field
-                label="Dropoff latitude"
-                value={Number(simLat) || 0}
-                step="any"
-                onChange={(v) => {
-                  setSimLat(String(v));
-                  setSimAddress('Manual lat/lng');
-                  setSimActiveScenario(null);
-                }}
-              />
-              <Field
-                label="Dropoff longitude"
-                value={Number(simLng) || 0}
-                step="any"
-                onChange={(v) => {
-                  setSimLng(String(v));
-                  setSimAddress('Manual lat/lng');
-                  setSimActiveScenario(null);
-                }}
-              />
-            </div>
-            <p className="text-xs text-slate-500 mt-1">
-              Delivery fee = distance from store pin to this dropoff.
-            </p>
-
-            <div className="flex flex-wrap gap-3 items-center mt-4">
-              <span className="text-xs text-slate-500">Payment:</span>
-              <button
-                type="button"
-                onClick={() => {
-                  setSimPayment('wipay');
-                  setSimActiveScenario(null);
-                }}
-                className={`px-3 py-1.5 text-sm rounded-lg ${
-                  simPayment === 'wipay' ? 'bg-amber-600 text-white' : 'bg-slate-800 text-slate-400'
-                }`}
-              >
-                Card
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setSimPayment('cash');
-                  setSimActiveScenario(null);
-                }}
-                className={`px-3 py-1.5 text-sm rounded-lg ${
-                  simPayment === 'cash' ? 'bg-amber-600 text-white' : 'bg-slate-800 text-slate-400'
-                }`}
-              >
-                COD
-              </button>
-              <label className="flex items-center gap-2 text-xs text-slate-300 ml-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={simApplyFreeDeliveryPromo}
-                  onChange={(e) => setSimApplyFreeDeliveryPromo(e.target.checked)}
-                  className="rounded border-slate-600"
+            <SimStep n={2} title="Quote inputs (always editable)">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Field
+                  label="Food subtotal (JMD)"
+                  value={Number(simSubtotal) || 0}
+                  onChange={(v) => {
+                    setSimSubtotal(String(v));
+                    setSimActiveScenario(null);
+                  }}
                 />
-                Apply launch free-delivery promo
-              </label>
-              <button
-                type="button"
-                disabled={simRunning || !simCanRun}
-                onClick={() => void handleSimulate()}
-                className="ml-auto px-4 py-2 rounded-lg bg-amber-600 text-white text-sm disabled:opacity-50"
-              >
-                {simRunning ? 'Running…' : 'Run quote'}
-              </button>
-              <button
-                type="button"
-                disabled={simRunning || !simCanRun || !tiers.length}
-                onClick={() => void handleCompareTiers()}
-                className="px-4 py-2 rounded-lg border border-amber-700/60 text-amber-200 text-sm disabled:opacity-50"
-              >
-                Compare tiers
-              </button>
+                <Field
+                  label="Courier tip (JMD)"
+                  value={Number(simTip) || 0}
+                  onChange={(v) => {
+                    setSimTip(String(v));
+                    setSimActiveScenario(null);
+                  }}
+                />
+              </div>
+
+              <div className="mt-3 space-y-2 relative">
+                <label className="block text-xs text-slate-400">Customer dropoff address</label>
+                <input
+                  type="text"
+                  value={simAddressQuery}
+                  onChange={(e) => setSimAddressQuery(e.target.value)}
+                  placeholder="Search street / area in Jamaica…"
+                  className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-700 text-white text-sm"
+                />
+                {simAddressBusy && (
+                  <p className="text-xs text-slate-500 flex items-center gap-1">
+                    <Loader2 className="w-3 h-3 animate-spin" /> Searching…
+                  </p>
+                )}
+                {simAddressSuggestions.length > 0 && (
+                  <ul className="absolute z-20 left-0 right-0 mt-1 max-h-48 overflow-auto rounded-lg border border-slate-700 bg-slate-950 shadow-lg">
+                    {simAddressSuggestions.map((s) => (
+                      <li key={s.placeId}>
+                        <button
+                          type="button"
+                          className="w-full text-left px-3 py-2 text-sm text-slate-200 hover:bg-slate-800"
+                          onClick={() => void handleSelectSimAddress(s)}
+                        >
+                          <span className="block text-white">{s.mainText}</span>
+                          {s.secondaryText ? (
+                            <span className="block text-xs text-slate-500">{s.secondaryText}</span>
+                          ) : null}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {simAddress && (
+                  <p className="text-xs text-emerald-400/90">
+                    Selected: {simAddress}
+                  </p>
+                )}
+              </div>
+
+              <p className="text-xs text-slate-500 mt-1">
+                Delivery fee = distance from store pin to this dropoff.
+              </p>
+
+              <div className="flex flex-wrap gap-3 items-center mt-4">
+                <span className="text-xs text-slate-500">Payment:</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSimPayment('wipay');
+                    setSimActiveScenario(null);
+                  }}
+                  className={`px-3 py-1.5 text-sm rounded-lg ${
+                    simPayment === 'wipay' ? 'bg-amber-600 text-white' : 'bg-slate-800 text-slate-400'
+                  }`}
+                >
+                  Card
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSimPayment('cash');
+                    setSimActiveScenario(null);
+                  }}
+                  className={`px-3 py-1.5 text-sm rounded-lg ${
+                    simPayment === 'cash' ? 'bg-amber-600 text-white' : 'bg-slate-800 text-slate-400'
+                  }`}
+                >
+                  COD
+                </button>
+                <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer w-full sm:w-auto">
+                  <input
+                    type="checkbox"
+                    checked={simApplyFreeDeliveryPromo}
+                    onChange={(e) => setSimApplyFreeDeliveryPromo(e.target.checked)}
+                    className="rounded border-slate-600"
+                  />
+                  Apply launch free-delivery promo
+                </label>
+                <button
+                  type="button"
+                  disabled={simRunning || !simCanRun}
+                  onClick={() => void handleSimulate()}
+                  className="px-4 py-2 rounded-lg bg-amber-600 text-white text-sm disabled:opacity-50"
+                >
+                  {simRunning ? 'Running…' : 'Run quote'}
+                </button>
+                <button
+                  type="button"
+                  disabled={simRunning || !simCanRun || !tiers.length}
+                  onClick={() => void handleCompareTiers()}
+                  className="px-4 py-2 rounded-lg border border-amber-700/60 text-amber-200 text-sm disabled:opacity-50"
+                >
+                  Compare tiers
+                </button>
+              </div>
+            </SimStep>
             </div>
-          </SimStep>
+
+            <div className="lg:sticky lg:top-4 space-y-3 min-w-0">
+              {simResult ? (
+                <>
+                  {(simResult.party_rules as Record<string, unknown> | undefined) && (
+                    <ResolvedRulesPanel
+                      resolved={
+                        (simResult.party_rules as { resolved?: Record<string, unknown> })?.resolved as
+                          | Partial<Record<PricingParty, Record<string, unknown>>>
+                          | undefined
+                      }
+                      provenance={
+                        (simResult.party_rules as { provenance?: Record<string, unknown> })
+                          ?.provenance as
+                          | Partial<Record<PricingParty, Record<string, string>>>
+                          | undefined
+                      }
+                      stack={
+                        (simResult.party_rules as { stack?: string[] })?.stack
+                      }
+                    />
+                  )}
+                  <SimBreakdownPanel
+                    title={
+                      simActiveScenario
+                        ? `Scenario ${simActiveScenario} — result`
+                        : 'Custom quote — result'
+                    }
+                    breakdown={pickBreakdown(simResult)!}
+                    minOrderJmd={marketRules.min_order_subtotal_jmd ?? 800}
+                    subtotal={Number(simSubtotal) || 0}
+                    dropoffLabel={simAddress}
+                  />
+                </>
+              ) : (
+                <div className="rounded-xl border border-dashed border-slate-700 bg-slate-900/20 p-6 text-sm text-slate-500 h-full min-h-[12rem]">
+                  Run a quote to see Customer / Partner / Courier results here.
+                </div>
+              )}
+            </div>
+          </div>
 
           {simTierCompare.length > 0 && (
             <div className="rounded-xl border border-slate-800 overflow-hidden">
@@ -2110,40 +2111,6 @@ export function PricingHubPage() {
                 </table>
               </div>
             </div>
-          )}
-
-          {simResult && (
-            <>
-              {(simResult.party_rules as Record<string, unknown> | undefined) && (
-                <ResolvedRulesPanel
-                  resolved={
-                    (simResult.party_rules as { resolved?: Record<string, unknown> })?.resolved as
-                      | Partial<Record<PricingParty, Record<string, unknown>>>
-                      | undefined
-                  }
-                  provenance={
-                    (simResult.party_rules as { provenance?: Record<string, unknown> })
-                      ?.provenance as
-                      | Partial<Record<PricingParty, Record<string, string>>>
-                      | undefined
-                  }
-                  stack={
-                    (simResult.party_rules as { stack?: string[] })?.stack
-                  }
-                />
-              )}
-              <SimBreakdownPanel
-              title={
-                simActiveScenario
-                  ? `Scenario ${simActiveScenario} — result`
-                  : 'Custom quote — result'
-              }
-              breakdown={pickBreakdown(simResult)!}
-              minOrderJmd={marketRules.min_order_subtotal_jmd ?? 800}
-              subtotal={Number(simSubtotal) || 0}
-              dropoffLabel={simAddress}
-            />
-            </>
           )}
 
           <SimStep n={3} title="Preset scenarios (fills food / tip / payment)">

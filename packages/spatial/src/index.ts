@@ -183,7 +183,8 @@ export function isMatchingH3SurgeEnabled(policyEnabled: boolean): boolean {
 }
 
 export function isRushH3DispatchEnabled(): boolean {
-  return envFlag('RUSH_H3_DISPATCH_ENABLED') === '1';
+  // On by default; set RUSH_H3_DISPATCH_ENABLED=0 to force legacy scan.
+  return envFlag('RUSH_H3_DISPATCH_ENABLED') !== '0';
 }
 
 /** Hex coverage is live by default; set RUSH_HEX_COVERAGE_ENABLED=0 only to kill-switch. */

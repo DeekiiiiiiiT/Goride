@@ -893,12 +893,11 @@ async function requireUser(authHeader: string | undefined) {
 }
 
 async function bumpSurgeDemand(cellKey: string, delta: number, h3CellKey?: string) {
-  const h3Key = h3CellKey ?? (cellKey.startsWith("grid:") ? undefined : cellKey);
-  const primaryKey = h3Key ?? cellKey;
+  const primaryKey = h3CellKey ?? cellKey;
 
   const { data: rpcResult, error: rpcError } = await pubSvc().rpc("rides_upsert_surge_cell", {
     p_cell_key: primaryKey,
-    p_h3_cell_key: h3Key ?? primaryKey,
+    p_h3_cell_key: primaryKey,
     p_delta: delta,
   });
 
@@ -906,23 +905,18 @@ async function bumpSurgeDemand(cellKey: string, delta: number, h3CellKey?: strin
     return;
   }
 
-  // Fallback to direct writes (H3 as cell_key)
   const db = svc();
   const { data: row } = await db
     .from("surge_cells")
     .select("*")
-    .or(
-      h3Key
-        ? `cell_key.eq.${primaryKey},h3_cell_key.eq.${h3Key}`
-        : `cell_key.eq.${primaryKey}`,
-    )
+    .or(`cell_key.eq.${primaryKey},h3_cell_key.eq.${primaryKey}`)
     .maybeSingle();
 
   if (!row) {
     if (delta <= 0) return;
     await db.from("surge_cells").insert({
       cell_key: primaryKey,
-      h3_cell_key: h3Key ?? primaryKey,
+      h3_cell_key: primaryKey,
       open_requests: Math.max(0, delta),
       surge_multiplier: 1,
     });
@@ -937,17 +931,17 @@ async function bumpSurgeDemand(cellKey: string, delta: number, h3CellKey?: strin
   await db.from("surge_cells").update({
     open_requests: next,
     surge_multiplier: mult,
-    h3_cell_key: h3Key ?? row.h3_cell_key ?? primaryKey,
+    h3_cell_key: primaryKey,
     updated_at: new Date().toISOString(),
   }).eq("cell_key", row.cell_key);
 }
 
 async function readSurgeMultiplier(cellKey: string, h3CellKey?: string): Promise<number> {
-  const h3Key = h3CellKey ?? (cellKey.startsWith("grid:") ? undefined : cellKey);
+  const primaryKey = h3CellKey ?? cellKey;
 
   const { data: rpcResult, error: rpcError } = await pubSvc().rpc("rides_read_surge_multiplier", {
-    p_cell_key: h3Key ?? cellKey,
-    p_h3_cell_key: h3Key ?? cellKey,
+    p_cell_key: primaryKey,
+    p_h3_cell_key: primaryKey,
   });
 
   if (!rpcError && typeof rpcResult === "number") {
@@ -955,33 +949,20 @@ async function readSurgeMultiplier(cellKey: string, h3CellKey?: string): Promise
   }
 
   const db = svc();
-
-  if (h3Key) {
-    const { data: h3Data } = await db
-      .from("surge_cells")
-      .select("surge_multiplier")
-      .eq("h3_cell_key", h3Key)
-      .maybeSingle();
-    if (h3Data?.surge_multiplier != null) {
-      return Number(h3Data.surge_multiplier);
-    }
-    const { data: byCell } = await db
-      .from("surge_cells")
-      .select("surge_multiplier")
-      .eq("cell_key", h3Key)
-      .maybeSingle();
-    if (byCell?.surge_multiplier != null) {
-      return Number(byCell.surge_multiplier);
-    }
-  }
-
-  // Dual-read window: legacy grid: rows (pre-cutover)
-  const { data } = await db
+  const { data: h3Data } = await db
     .from("surge_cells")
     .select("surge_multiplier")
-    .eq("cell_key", cellKey)
+    .eq("h3_cell_key", primaryKey)
     .maybeSingle();
-  return data?.surge_multiplier != null ? Number(data.surge_multiplier) : 1;
+  if (h3Data?.surge_multiplier != null) {
+    return Number(h3Data.surge_multiplier);
+  }
+  const { data: byCell } = await db
+    .from("surge_cells")
+    .select("surge_multiplier")
+    .eq("cell_key", primaryKey)
+    .maybeSingle();
+  return byCell?.surge_multiplier != null ? Number(byCell.surge_multiplier) : 1;
 }
 
 async function audit(

@@ -23,6 +23,7 @@ import {
 } from "../../rides/fare/serviceMatching.ts";
 import { getRidesAdminDb } from "../../_shared/ridesAdminDb.ts";
 import {
+  DEFAULT_H3_RESOLUTION,
   getCellsForWave,
 } from "../../_shared/h3/geoIndex.ts";
 
@@ -127,15 +128,17 @@ export async function runMatchingWave(
   let supplySource: "h3" | "legacy" = "legacy";
   const loadLocations = async () => {
     if (isH3SupplyEnabled(policy)) {
+      // Live res is DEFAULT_H3_RESOLUTION while admin slider is locked (Bug #1).
+      // Do not use policy.h3_resolution for cells/RPC until a dual-stamp migration.
       const cells = getCellsForWave(
         pickupLat,
         pickupLng,
         wave,
         policy.wave_radius_km,
         policy.wave_h3_k_rings.length ? policy.wave_h3_k_rings : null,
-        policy.h3_resolution,
+        DEFAULT_H3_RESOLUTION,
       );
-      const result = await loadDriverLocationsH3(cells, freshSince, policy.h3_resolution);
+      const result = await loadDriverLocationsH3(cells, freshSince, DEFAULT_H3_RESOLUTION);
       supplySource = result.source;
       logLine({
         event: "match_wave_supply",
@@ -144,7 +147,8 @@ export async function runMatchingWave(
         path: result.source,
         cells: cells.length,
         rows: result.locations.length,
-        h3_res: policy.h3_resolution,
+        h3_res: DEFAULT_H3_RESOLUTION,
+        policy_h3_resolution: policy.h3_resolution,
         request_id: requestId ?? null,
       });
       return result.locations;
