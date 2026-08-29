@@ -3,7 +3,9 @@
  */
 import {
   buildParishSyntheticZone,
+  COVERAGE_CUSTOMER_COPY,
   evaluateCoverage,
+  evaluateHexCoverage,
   evaluateLiveCoverage,
   filterLiveCoverageZones,
   isInsideParishFoundation,
@@ -20,6 +22,7 @@ import {
   enrichMarketZonesWithSchedules,
   loadScopedExclusionsForPoint,
 } from "../coverageLayers.ts";
+import { DEFAULT_H3_RESOLUTION, latLngToH3 } from "../../_shared/h3/geoIndex.ts";
 
 // deno-lint-ignore no-explicit-any
 type ServiceSb = {
@@ -354,6 +357,135 @@ export async function resolveMarketForPoint(
   const parishMap = await loadParishMap(sb);
   const allZones = await buildCoverageZonesForEvaluation(sb, markets, parishMap, lat, lng);
 
+  // ADR 0013 hex gate — when compiled cells exist; else polygon fallback.
+  if (Deno.env.get("RUSH_HEX_COVERAGE_ENABLED") === "1") {
+    try {
+      const customerCell = latLngToH3(lat, lng, DEFAULT_H3_RESOLUTION);
+      const { data: cellRows, error: cellErr } = await sb
+        .from("coverage_cells")
+        .select("market_id, kind")
+        .eq("h3_res", DEFAULT_H3_RESOLUTION)
+        .eq("h3_cell", customerCell);
+
+      if (!cellErr && Array.isArray(cellRows) && cellRows.length > 0) {
+        const byMarket = new Map<string, { include: string[]; exclude: string[] }>();
+        for (const row of cellRows as Array<{ market_id: string; kind: string }>) {
+          const mid = String(row.market_id);
+          let bucket = byMarket.get(mid);
+          if (!bucket) {
+            bucket = { include: [], exclude: [] };
+            byMarket.set(mid, bucket);
+          }
+          if (row.kind === "exclude") bucket.exclude.push(customerCell);
+          else bucket.include.push(customerCell);
+        }
+
+        let hexEval: CoverageEvalResult = {
+          inZone: false,
+          reasonCode: "out_of_coverage",
+          reason: COVERAGE_CUSTOMER_COPY.out_of_coverage,
+        };
+        let matchedMarketId: string | null = null;
+
+        for (const m of markets) {
+          const bucket = byMarket.get(m.id);
+          if (!bucket) continue;
+          const result = evaluateHexCoverage({
+            customerCell,
+            includeCells: bucket.include.length ? bucket.include : [],
+            excludeCells: bucket.exclude,
+          });
+          // Markets with only exclude hit → excluded; with include → covered
+          if (bucket.exclude.includes(customerCell) && !bucket.include.includes(customerCell)) {
+            hexEval = {
+              inZone: false,
+              reasonCode: "excluded_zone",
+              reason: COVERAGE_CUSTOMER_COPY.excluded_zone,
+              matchedExclude: { id: m.id, name: m.slug ?? m.id, market_id: m.id },
+            };
+            continue;
+          }
+          if (result.inZone) {
+            matchedMarketId = m.id;
+            hexEval = {
+              inZone: true,
+              matchedInclude: { id: m.id, name: m.slug ?? m.id, market_id: m.id },
+            };
+            break;
+          }
+          if (result.reasonCode === "excluded_zone") {
+            hexEval = {
+              inZone: false,
+              reasonCode: "excluded_zone",
+              reason: COVERAGE_CUSTOMER_COPY.excluded_zone,
+              matchedExclude: { id: m.id, name: m.slug ?? m.id, market_id: m.id },
+            };
+          }
+        }
+
+        if (!matchedMarketId) {
+          return {
+            covered: false,
+            marketId: null,
+            parishId: null,
+            parishBoundaryMode: false,
+            marketIds: [],
+            outsideParish: false,
+            zones: allZones,
+            eval: hexEval,
+          };
+        }
+
+        const matchedMarket = markets.find((m) => m.id === matchedMarketId);
+        const parish = matchedMarket?.parish_id ? parishMap.get(matchedMarket.parish_id) : null;
+        const parishBoundaryMode = parish?.coverage_mode === "parish_boundary";
+
+        if (!parishBoundaryMode && (parish?.foundation_polygon || parish?.has_foundation_geom)) {
+          if (!(await isInsideParishFoundationResolved(sb, lat, lng, parish))) {
+            return {
+              covered: false,
+              marketId: null,
+              parishId: parish!.id,
+              parishBoundaryMode: false,
+              marketIds: [],
+              outsideParish: true,
+              zones: allZones,
+              eval: {
+                ...hexEval,
+                inZone: false,
+                reasonCode: "outside_parish",
+                reason: COVERAGE_CUSTOMER_COPY.outside_parish,
+              },
+            };
+          }
+        }
+
+        const parishId = matchedMarket?.parish_id ?? null;
+        const marketIds = parishBoundaryMode && parishId
+          ? markets.filter((m) => m.parish_id === parishId).map((m) => m.id)
+          : [matchedMarketId];
+
+        return {
+          covered: true,
+          marketId: matchedMarketId,
+          parishId,
+          parishBoundaryMode,
+          marketIds,
+          outsideParish: false,
+          zones: allZones,
+          eval: hexEval,
+        };
+      }
+      // No compiled cells for this point → fall through to polygon path
+    } catch (e) {
+      console.warn(JSON.stringify({
+        svc: "delivery",
+        event: "hex_coverage_resolve_failed",
+        error: e instanceof Error ? e.message : String(e),
+      }));
+    }
+  }
+
   const runJsEval = (zones: CoverageZone[]) => evaluateLiveCoverage(lat, lng, zones);
 
   let evalResult = runJsEval(allZones);
@@ -494,13 +626,15 @@ export type SameMarketAssert =
       | "out_of_coverage"
       | "outside_parish"
       | "merchant_out_of_market"
-      | "merchant_out_of_parish";
+      | "merchant_out_of_parish"
+      | "too_far_from_store";
     error: string;
     eval?: CoverageEvalResult;
   };
 
 /**
  * Same-town rule (town_zones) or same-parish rule (parish_boundary).
+ * When RUSH_HEX_COVERAGE_ENABLED + merchantId: also enforce merchant reach hex set.
  */
 export async function assertSameMarketCoverage(
   sb: ServiceSb,
@@ -508,6 +642,7 @@ export async function assertSameMarketCoverage(
     dropoffLat: number | null | undefined;
     dropoffLng: number | null | undefined;
     merchantMarketId: string | null | undefined;
+    merchantId?: string | null | undefined;
   },
 ): Promise<SameMarketAssert> {
   const lat = opts.dropoffLat != null ? Number(opts.dropoffLat) : NaN;
@@ -526,14 +661,14 @@ export async function assertSameMarketCoverage(
       return {
         ok: false,
         code: "outside_parish",
-        error: "We don’t deliver outside this parish yet",
+        error: COVERAGE_CUSTOMER_COPY.outside_parish,
         eval: resolved.eval,
       };
     }
     return {
       ok: false,
       code: "out_of_coverage",
-      error: "We don’t deliver to this address yet",
+      error: resolved.eval.reason ?? COVERAGE_CUSTOMER_COPY.out_of_coverage,
       eval: resolved.eval,
     };
   }
@@ -568,10 +703,7 @@ export async function assertSameMarketCoverage(
         eval: resolved.eval,
       };
     }
-    return { ok: true, marketId: merchantMarketId, eval: resolved.eval };
-  }
-
-  if (merchantMarketId !== resolved.marketId) {
+  } else if (merchantMarketId !== resolved.marketId) {
     return {
       ok: false,
       code: "merchant_out_of_market",
@@ -580,7 +712,53 @@ export async function assertSameMarketCoverage(
     };
   }
 
-  return { ok: true, marketId: resolved.marketId, eval: resolved.eval };
+  // ADR 0013 Rule 4 — merchant hex reach (when flag on and merchantId provided)
+  if (
+    Deno.env.get("RUSH_HEX_COVERAGE_ENABLED") === "1" &&
+    opts.merchantId
+  ) {
+    try {
+      const customerCell = latLngToH3(lat, lng, DEFAULT_H3_RESOLUTION);
+      const { data: reach, error } = await sb
+        .from("merchant_coverage_cells")
+        .select("h3_cell")
+        .eq("merchant_id", String(opts.merchantId))
+        .eq("h3_res", DEFAULT_H3_RESOLUTION)
+        .eq("h3_cell", customerCell)
+        .maybeSingle();
+      // Only enforce when merchant has compiled reach cells (avoid blocking pre-compile)
+      const { count: reachCount } = await sb
+        .from("merchant_coverage_cells")
+        .select("h3_cell", { count: "exact", head: true })
+        .eq("merchant_id", String(opts.merchantId))
+        .eq("h3_res", DEFAULT_H3_RESOLUTION);
+      if (!error && (reachCount ?? 0) > 0 && !reach) {
+        return {
+          ok: false,
+          code: "too_far_from_store",
+          error: COVERAGE_CUSTOMER_COPY.too_far_from_store,
+          eval: {
+            ...resolved.eval,
+            inZone: false,
+            reasonCode: "too_far_from_store",
+            reason: COVERAGE_CUSTOMER_COPY.too_far_from_store,
+          },
+        };
+      }
+    } catch (e) {
+      console.warn(JSON.stringify({
+        svc: "delivery",
+        event: "merchant_hex_reach_check_failed",
+        error: e instanceof Error ? e.message : String(e),
+      }));
+    }
+  }
+
+  return {
+    ok: true,
+    marketId: resolved.parishBoundaryMode ? merchantMarketId : resolved.marketId,
+    eval: resolved.eval,
+  };
 }
 
 /** Suggest market_id from lat/lng across all markets (active or not) for admin assignment. */

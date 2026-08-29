@@ -46,8 +46,37 @@ import {
 } from "../platformFeeRate.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { suggestMarketIdForMerchantPin } from "./coverageZones.ts";
+import { recomputeMerchantCoverageCells } from "../coverageCompile.ts";
 
 const SLA_HOURS = 48;
+
+/** Best-effort merchant hex reach refresh after radius/location/market changes. */
+async function refreshMerchantReachHexes(
+  sb: ReturnType<typeof getDb>,
+  merchantId: string,
+  row: {
+    lat?: unknown;
+    lng?: unknown;
+    delivery_radius_km?: unknown;
+    market_id?: unknown;
+  },
+): Promise<void> {
+  try {
+    await recomputeMerchantCoverageCells(sb, merchantId, {
+      lat: Number(row.lat),
+      lng: Number(row.lng),
+      deliveryRadiusKm: Number(row.delivery_radius_km) || 8,
+      marketId: row.market_id != null ? String(row.market_id) : null,
+    });
+  } catch (e) {
+    console.warn(JSON.stringify({
+      svc: "delivery",
+      event: "merchant_reach_recompute_failed",
+      merchant_id: merchantId,
+      error: e instanceof Error ? e.message : String(e),
+    }));
+  }
+}
 
 function adminFromCtx(c: { get: (k: string) => unknown }): ProductAdminUser {
   return c.get("adminUser") as ProductAdminUser;
@@ -480,6 +509,10 @@ export function registerMerchantAdminRoutes(app: Hono) {
     const { data: updated, error: updateErr } = await sb.from("merchants").update(update).eq("id", id).select().single();
     if (updateErr) return c.json({ error: updateErr.message }, 500);
 
+    if (delivery_radius_km != null && newStatus === "approved") {
+      await refreshMerchantReachHexes(sb, id, updated as Record<string, unknown>);
+    }
+
     await logMerchantAudit(sb, {
       merchant_id: id,
       actor_id: admin.id,
@@ -722,8 +755,22 @@ export function registerMerchantAdminRoutes(app: Hono) {
               updated_at: nowIso,
             })
             .eq("id", id);
+          (data as Record<string, unknown>).delivery_radius_km = Number(
+            tierRow.default_delivery_radius_km,
+          );
         }
       }
+    }
+
+    const reachTouched =
+      body.delivery_radius_km != null ||
+      Object.prototype.hasOwnProperty.call(body, "market_id") ||
+      Object.prototype.hasOwnProperty.call(body, "pricing_tier_id") ||
+      body.lat != null ||
+      body.lng != null;
+    if (reachTouched) {
+      const row = { ...(currentRow as Record<string, unknown>), ...(data as Record<string, unknown>) };
+      await refreshMerchantReachHexes(sb, id, row);
     }
 
     if (Object.prototype.hasOwnProperty.call(body, "payout_ready")) {
@@ -795,6 +842,11 @@ export function registerMerchantAdminRoutes(app: Hono) {
       .select()
       .single();
     if (upErr) return c.json({ error: upErr.message }, 500);
+
+    await refreshMerchantReachHexes(sb, id, {
+      ...(merchant as Record<string, unknown>),
+      ...(updated as Record<string, unknown>),
+    });
 
     await logMerchantAudit(sb, {
       merchant_id: id,

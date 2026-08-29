@@ -892,15 +892,13 @@ async function requireUser(authHeader: string | undefined) {
   return { user };
 }
 
-function isH3SurgeEnabled(): boolean {
-  return Deno.env.get("MATCHING_H3_SURGE") === "1";
-}
-
 async function bumpSurgeDemand(cellKey: string, delta: number, h3CellKey?: string) {
-  // Use RPC if available (supports H3 dual-write)
+  const h3Key = h3CellKey ?? (cellKey.startsWith("grid:") ? undefined : cellKey);
+  const primaryKey = h3Key ?? cellKey;
+
   const { data: rpcResult, error: rpcError } = await pubSvc().rpc("rides_upsert_surge_cell", {
-    p_cell_key: cellKey,
-    p_h3_cell_key: isH3SurgeEnabled() ? h3CellKey : null,
+    p_cell_key: primaryKey,
+    p_h3_cell_key: h3Key ?? primaryKey,
     p_delta: delta,
   });
 
@@ -908,21 +906,26 @@ async function bumpSurgeDemand(cellKey: string, delta: number, h3CellKey?: strin
     return;
   }
 
-  // Fallback to direct writes
+  // Fallback to direct writes (H3 as cell_key)
   const db = svc();
-  const { data: row } = await db.from("surge_cells").select("*").eq("cell_key", cellKey).maybeSingle();
+  const { data: row } = await db
+    .from("surge_cells")
+    .select("*")
+    .or(
+      h3Key
+        ? `cell_key.eq.${primaryKey},h3_cell_key.eq.${h3Key}`
+        : `cell_key.eq.${primaryKey}`,
+    )
+    .maybeSingle();
 
   if (!row) {
     if (delta <= 0) return;
-    const insertRow: Record<string, unknown> = {
-      cell_key: cellKey,
+    await db.from("surge_cells").insert({
+      cell_key: primaryKey,
+      h3_cell_key: h3Key ?? primaryKey,
       open_requests: Math.max(0, delta),
       surge_multiplier: 1,
-    };
-    if (isH3SurgeEnabled() && h3CellKey) {
-      insertRow.h3_cell_key = h3CellKey;
-    }
-    await db.from("surge_cells").insert(insertRow);
+    });
     return;
   }
 
@@ -931,46 +934,53 @@ async function bumpSurgeDemand(cellKey: string, delta: number, h3CellKey?: strin
   if (next >= 8) mult = Math.min(2.5, mult + 0.05);
   else if (next <= 2) mult = Math.max(1, mult - 0.02);
 
-  const updateRow: Record<string, unknown> = {
+  await db.from("surge_cells").update({
     open_requests: next,
     surge_multiplier: mult,
+    h3_cell_key: h3Key ?? row.h3_cell_key ?? primaryKey,
     updated_at: new Date().toISOString(),
-  };
-  if (isH3SurgeEnabled() && h3CellKey && !row.h3_cell_key) {
-    updateRow.h3_cell_key = h3CellKey;
-  }
-
-  await db.from("surge_cells").update(updateRow).eq("cell_key", cellKey);
+  }).eq("cell_key", row.cell_key);
 }
 
 async function readSurgeMultiplier(cellKey: string, h3CellKey?: string): Promise<number> {
-  // Use RPC if available (supports H3 lookup with fallback)
+  const h3Key = h3CellKey ?? (cellKey.startsWith("grid:") ? undefined : cellKey);
+
   const { data: rpcResult, error: rpcError } = await pubSvc().rpc("rides_read_surge_multiplier", {
-    p_cell_key: cellKey,
-    p_h3_cell_key: isH3SurgeEnabled() ? h3CellKey : null,
+    p_cell_key: h3Key ?? cellKey,
+    p_h3_cell_key: h3Key ?? cellKey,
   });
 
   if (!rpcError && typeof rpcResult === "number") {
     return rpcResult;
   }
 
-  // Fallback to direct query
   const db = svc();
 
-  // Try H3 first if enabled
-  if (isH3SurgeEnabled() && h3CellKey) {
+  if (h3Key) {
     const { data: h3Data } = await db
       .from("surge_cells")
       .select("surge_multiplier")
-      .eq("h3_cell_key", h3CellKey)
+      .eq("h3_cell_key", h3Key)
       .maybeSingle();
     if (h3Data?.surge_multiplier != null) {
       return Number(h3Data.surge_multiplier);
     }
+    const { data: byCell } = await db
+      .from("surge_cells")
+      .select("surge_multiplier")
+      .eq("cell_key", h3Key)
+      .maybeSingle();
+    if (byCell?.surge_multiplier != null) {
+      return Number(byCell.surge_multiplier);
+    }
   }
 
-  // Fallback to legacy key
-  const { data } = await db.from("surge_cells").select("surge_multiplier").eq("cell_key", cellKey).maybeSingle();
+  // Dual-read window: legacy grid: rows (pre-cutover)
+  const { data } = await db
+    .from("surge_cells")
+    .select("surge_multiplier")
+    .eq("cell_key", cellKey)
+    .maybeSingle();
   return data?.surge_multiplier != null ? Number(data.surge_multiplier) : 1;
 }
 

@@ -2,14 +2,16 @@
  * Driver Location Supply — Load available drivers for matching
  *
  * Supports two modes:
- * - Legacy: Full table scan with JS Haversine filter
- * - H3 (Phase 4): Index-based lookup with cell query
+ * - Legacy: Bounded table scan with JS Haversine filter
+ * - H3: Index-based lookup via RPC only (never .in() hex sets in URL)
  */
 
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { DEFAULT_H3_RESOLUTION } from "../../_shared/h3/geoIndex.ts";
 
 const DRIVER_LOCATIONS_SELECT_FULL = "user_id, lat, lng, updated_at, body_type_slug";
 const DRIVER_LOCATIONS_SELECT_BASE = "user_id, lat, lng, updated_at";
+const LEGACY_SUPPLY_LIMIT = 500;
 
 export interface DriverLocation {
   user_id: string;
@@ -44,7 +46,9 @@ async function queryFreshDriverLocations(
     .from(table)
     .select(select)
     .gte("updated_at", freshSince)
-    .eq("available_for_rides", true);
+    .eq("available_for_rides", true)
+    .order("updated_at", { ascending: false })
+    .limit(LEGACY_SUPPLY_LIMIT);
 
   if (error) return { rows: null, error: error.message };
 
@@ -100,24 +104,25 @@ export async function loadAvailableDriverLocations(freshSince: string): Promise<
 }
 
 /**
- * Load driver locations using H3 cell index (Phase 4).
- * Falls back to legacy scan if H3 not enabled or no results.
+ * Load driver locations using H3 cell index.
+ * On RPC failure → legacy loader only (never PostgREST .in() hex URL).
  */
 export async function loadDriverLocationsH3(
   h3Cells: string[],
   freshSince: string,
+  h3Res: number = DEFAULT_H3_RESOLUTION,
 ): Promise<{ locations: DriverLocation[]; source: "h3" | "legacy" }> {
   if (h3Cells.length === 0) {
     return { locations: await loadAvailableDriverLocations(freshSince), source: "legacy" };
   }
 
   const db = pubSvc();
+  const res = Number.isFinite(h3Res) ? Math.trunc(h3Res) : DEFAULT_H3_RESOLUTION;
 
-  // Try the RPC function first
   const { data: rpcData, error: rpcError } = await db.rpc("rides_drivers_in_h3_cells", {
     p_h3_cells: h3Cells,
     p_fresh_since: freshSince,
-    p_h3_res: 7,
+    p_h3_res: res,
     p_limit: 500,
   });
 
@@ -136,38 +141,24 @@ export async function loadDriverLocationsH3(
       event: "h3_driver_locs_loaded",
       cells: h3Cells.length,
       drivers: locations.length,
+      h3_res: res,
     }));
 
     return { locations, source: "h3" };
   }
 
-  // Fallback to direct query
-  const { data, error } = await svc()
-    .from("driver_locations")
-    .select("user_id, lat, lng, updated_at, body_type_slug")
-    .in("h3_cell", h3Cells)
-    .gte("updated_at", freshSince)
-    .eq("available_for_rides", true);
-
-  if (error) {
-    console.log(JSON.stringify({
-      svc: "matching",
-      ts: new Date().toISOString(),
-      event: "h3_driver_locs_failed",
-      error: error.message,
-      rpc_error: rpcError?.message,
-      cells: h3Cells.length,
-    }));
-    return { locations: await loadAvailableDriverLocations(freshSince), source: "legacy" };
-  }
-
-  const locations = (data ?? []).map((row: Record<string, unknown>) => ({
-    user_id: String(row.user_id),
-    lat: Number(row.lat),
-    lng: Number(row.lng),
-    updated_at: String(row.updated_at),
-    body_type_slug: (row as { body_type_slug?: string | null }).body_type_slug ?? null,
+  console.log(JSON.stringify({
+    svc: "matching",
+    ts: new Date().toISOString(),
+    event: "h3_driver_locs_rpc_failed",
+    error: rpcError?.message ?? "unknown",
+    cells: h3Cells.length,
+    h3_res: res,
+    fell_back: true,
   }));
 
-  return { locations, source: "h3" };
+  return {
+    locations: await loadAvailableDriverLocations(freshSince),
+    source: "legacy",
+  };
 }

@@ -213,6 +213,9 @@ async function dispatchOffersForOrder(
   let supplyPath: "h3" | "legacy" = "legacy";
   let cellsQueried = 0;
 
+  const freshSince = new Date(Date.now() - 15 * 60 * 1000).toISOString();
+  let legacyReason: string | null = null;
+
   if (useH3 && Number.isFinite(originLat) && Number.isFinite(originLng)) {
     try {
       const {
@@ -223,7 +226,6 @@ async function dispatchOffersForOrder(
       const k = kRingForRadiusKmWithMargin(DISPATCH_RADIUS_KM, DEFAULT_H3_RESOLUTION);
       const cells = h3Disk(originLat, originLng, k, DEFAULT_H3_RESOLUTION);
       cellsQueried = cells.length;
-      const freshSince = new Date(Date.now() - 15 * 60 * 1000).toISOString();
       const { data: rpcRows, error: rpcErr } = await serviceSb.rpc("delivery_couriers_in_h3_cells", {
         p_cells: cells,
         p_res: DEFAULT_H3_RESOLUTION,
@@ -237,10 +239,18 @@ async function dispatchOffersForOrder(
           current_lng: r.current_lng != null ? Number(r.current_lng) : null,
         }));
         supplyPath = "h3";
+      } else {
+        legacyReason = rpcErr?.message ?? "h3_rpc_empty_error";
+        supplyPath = "legacy";
       }
-    } catch {
+    } catch (e) {
+      legacyReason = e instanceof Error ? e.message : "h3_dispatch_exception";
       supplyPath = "legacy";
     }
+  } else if (!useH3) {
+    legacyReason = "flag_off";
+  } else {
+    legacyReason = "origin_invalid";
   }
 
   if (supplyPath === "legacy") {
@@ -248,6 +258,8 @@ async function dispatchOffersForOrder(
       .from("courier_availability")
       .select("driver_id, current_lat, current_lng")
       .eq("is_online", true)
+      .gte("last_location_update", freshSince)
+      .order("last_location_update", { ascending: false })
       .limit(80);
     online = (data ?? []).map((r) => ({
       driver_id: String(r.driver_id),
@@ -300,6 +312,8 @@ async function dispatchOffersForOrder(
     ranked: ranked.length,
     targets: targets.length,
     fell_back: useH3 && supplyPath === "legacy",
+    legacy_reason: legacyReason,
+    fresh_since: freshSince,
   }));
 
   const expiresAt = new Date(Date.now() + DISPATCH_OFFER_TTL_MS).toISOString();
@@ -425,53 +439,26 @@ export function registerCourierConsumerRoutes(app: Hono, deps: Deps) {
       if (!gate.ok) return c.json({ error: gate.error }, gate.status);
     }
 
-    const { data: existing } = await serviceSb
-      .from("courier_availability")
-      .select("id")
-      .eq("driver_id", auth.userId)
-      .maybeSingle();
-
-    const payload: Record<string, unknown> = {
-      driver_id: auth.userId,
-      is_online: isOnline,
-      last_location_update: new Date().toISOString(),
-      active_order_id: activeOrderId,
-    };
-    if (lat != null && Number.isFinite(lat)) payload.current_lat = lat;
-    if (lng != null && Number.isFinite(lng)) payload.current_lng = lng;
-
-    if (isOnline) {
-      if (lat == null || lng == null || !Number.isFinite(lat) || !Number.isFinite(lng)) {
-        return c.json({ error: "location_required", message: "Online couriers must send lat/lng" }, 400);
-      }
-      try {
-        const { latLngToH3, DEFAULT_H3_RESOLUTION } = await import("../_shared/h3/geoIndex.ts");
-        payload.h3_cell = latLngToH3(lat, lng, DEFAULT_H3_RESOLUTION);
-        payload.h3_res = DEFAULT_H3_RESOLUTION;
-      } catch (e) {
-        return c.json({
-          error: "presence_h3_required",
-          message: e instanceof Error ? e.message : "Could not index courier location",
-        }, 503);
-      }
-    }
-
-    if (existing?.id) {
-      const { data, error } = await serviceSb
-        .from("courier_availability")
-        .update(payload)
-        .eq("id", existing.id)
-        .select()
-        .single();
-      if (error) return c.json({ error: error.message }, 500);
-      return c.json({ availability: data });
+    const { upsertCourierPresence } = await import("./courierPresence.ts");
+    const presence = await upsertCourierPresence(serviceSb, {
+      driverId: auth.userId,
+      lat: lat != null && Number.isFinite(lat) ? lat : null,
+      lng: lng != null && Number.isFinite(lng) ? lng : null,
+      isOnline,
+      activeOrderId,
+    });
+    if (!presence.ok) {
+      return c.json(
+        { error: presence.error, message: presence.message },
+        presence.status,
+      );
     }
 
     const { data, error } = await serviceSb
       .from("courier_availability")
-      .insert(payload)
       .select()
-      .single();
+      .eq("driver_id", auth.userId)
+      .maybeSingle();
     if (error) return c.json({ error: error.message }, 500);
     return c.json({ availability: data });
   });

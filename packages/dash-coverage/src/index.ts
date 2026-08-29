@@ -14,11 +14,16 @@ export {
   multiPolygonToGeoJsonCoords,
   multiPolygonToGeoJsonGeometry,
   preferCentroid,
+  ringBBox,
+  pointInBBox,
 } from './geometry.ts';
 
 import {
   type CoverageMultiPolygon,
   type CoverageVertex,
+  ringBBox,
+  pointInBBox,
+  pointInRing,
 } from './geometry.ts';
 
 export type {
@@ -61,17 +66,9 @@ export type CoverageEvalResult = {
 /** Ray-cast point-in-polygon. Ring may or may not repeat the first vertex. */
 export function pointInPolygon(lat: number, lng: number, polygon: CoverageVertex[]): boolean {
   if (!polygon || polygon.length < 3) return false;
-  let inside = false;
-  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
-    const yi = polygon[i].lat;
-    const xi = polygon[i].lng;
-    const yj = polygon[j].lat;
-    const xj = polygon[j].lng;
-    const intersect =
-      yi > lat !== yj > lat && lng < ((xj - xi) * (lat - yi)) / (yj - yi + 0.0) + xi;
-    if (intersect) inside = !inside;
-  }
-  return inside;
+  const box = ringBBox(polygon);
+  if (box && !pointInBBox(lat, lng, box)) return false;
+  return pointInRing(lat, lng, polygon);
 }
 
 import {

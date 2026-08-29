@@ -4,7 +4,6 @@ import { ChevronRight, Loader2, X } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   fetchPricingOverview,
-  fetchPricingBacktest,
   fetchDefaultPricing,
   updateDefaultPricing,
   fetchParishPricing,
@@ -262,8 +261,6 @@ export function PricingHubPage() {
   const [bulkClearing, setBulkClearing] = useState(false);
   const [revenue, setRevenue] = useState<PricingRevenueSummary | null>(null);
   const [recentChanges, setRecentChanges] = useState<Array<Record<string, unknown>>>([]);
-  const [backtestRows, setBacktestRows] = useState<Array<Record<string, unknown>>>([]);
-  const [backtestLoading, setBacktestLoading] = useState(false);
 
   const refresh = async () => {
     const overview = await fetchPricingOverview(session.access_token);
@@ -998,19 +995,6 @@ export function PricingHubPage() {
     : null;
   const anyTownModelB = markets.some((m) => m.pricing_v2_enabled);
   const globalModelB = Boolean(defaultRules.pricing_v2_enabled);
-
-  const runBacktest = async () => {
-    setBacktestLoading(true);
-    try {
-      const res = await fetchPricingBacktest(session.access_token, 28);
-      setBacktestRows(res.rows ?? []);
-      toast.success(`Backtested ${res.count ?? 0} orders`);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Backtest failed');
-    } finally {
-      setBacktestLoading(false);
-    }
-  };
 
   if (loading) {
     return (
@@ -2084,83 +2068,6 @@ export function PricingHubPage() {
             </div>
           </SimStep>
 
-          <SimStep n={3} title="Preset scenarios (fills food / tip / payment)">
-            <div className="flex flex-wrap gap-2 mb-3">
-              <button
-                type="button"
-                disabled={simRunning || !simCanRun}
-                onClick={() => void handleRunAllScenarios()}
-                className="px-4 py-2 rounded-lg border border-slate-600 text-slate-200 text-sm disabled:opacity-50"
-              >
-                {simRunning ? 'Running all…' : 'Run all scenarios (A–I)'}
-              </button>
-            </div>
-            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-              {AUDIT_SIM_SCENARIOS.map((scenario) => (
-                <ScenarioCard
-                  key={scenario.id}
-                  scenario={scenario}
-                  active={simActiveScenario === scenario.id}
-                  minOrderJmd={marketRules.min_order_subtotal_jmd ?? 800}
-                  disabled={simRunning || !simCanRun}
-                  onRun={() => void handleRunScenario(scenario)}
-                />
-              ))}
-            </div>
-          </SimStep>
-
-          <SimStep n={4} title="Historical backtest">
-            <p className="text-xs text-slate-500 mb-2">
-              Replay recent orders against current rules — compare what would have been charged vs
-              what was recorded.
-            </p>
-            <button
-              type="button"
-              disabled={backtestLoading}
-              onClick={() => void runBacktest()}
-              className="px-4 py-2 rounded-lg border border-slate-600 text-slate-200 text-sm disabled:opacity-50"
-            >
-              {backtestLoading ? 'Running…' : 'Backtest last 28 orders'}
-            </button>
-            {backtestRows.length > 0 && (
-              <div className="mt-3 overflow-x-auto rounded-lg border border-slate-800">
-                <table className="w-full text-xs">
-                  <thead className="bg-slate-900 text-slate-400">
-                    <tr>
-                      <th className="text-left p-2">Order</th>
-                      <th className="text-right p-2">Recorded</th>
-                      <th className="text-right p-2">Replay</th>
-                      <th className="text-right p-2">Delta</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {backtestRows.map((row) => (
-                      <tr key={String(row.order_id)} className="border-t border-slate-800">
-                        <td className="p-2 font-mono text-slate-400">
-                          {String(row.order_id).slice(0, 8)}…
-                        </td>
-                        <td className="p-2 text-right text-slate-300">
-                          {formatJmd(Number(row.recorded_total ?? 0))}
-                        </td>
-                        <td className="p-2 text-right text-white">
-                          {formatJmd(Number(row.replay_total ?? 0))}
-                        </td>
-                        <td
-                          className={`p-2 text-right ${
-                            Number(row.delta_jmd ?? 0) === 0 ? 'text-emerald-400' : 'text-amber-400'
-                          }`}
-                        >
-                          {Number(row.delta_jmd ?? 0) >= 0 ? '+' : ''}
-                          {formatJmd(Number(row.delta_jmd ?? 0))}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </SimStep>
-
           {simTierCompare.length > 0 && (
             <div className="rounded-xl border border-slate-800 overflow-hidden">
               <div className="px-3 py-2 text-xs font-medium text-slate-400 bg-slate-900/80">
@@ -2239,6 +2146,31 @@ export function PricingHubPage() {
             />
             </>
           )}
+
+          <SimStep n={3} title="Preset scenarios (fills food / tip / payment)">
+            <div className="flex flex-wrap gap-2 mb-3">
+              <button
+                type="button"
+                disabled={simRunning || !simCanRun}
+                onClick={() => void handleRunAllScenarios()}
+                className="px-4 py-2 rounded-lg border border-slate-600 text-slate-200 text-sm disabled:opacity-50"
+              >
+                {simRunning ? 'Running all…' : 'Run all scenarios (A–I)'}
+              </button>
+            </div>
+            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              {AUDIT_SIM_SCENARIOS.map((scenario) => (
+                <ScenarioCard
+                  key={scenario.id}
+                  scenario={scenario}
+                  active={simActiveScenario === scenario.id}
+                  minOrderJmd={marketRules.min_order_subtotal_jmd ?? 800}
+                  disabled={simRunning || !simCanRun}
+                  onRun={() => void handleRunScenario(scenario)}
+                />
+              ))}
+            </div>
+          </SimStep>
 
           {simBatchResults.length > 0 && (
             <div className="rounded-xl border border-slate-800 overflow-hidden">
@@ -2907,12 +2839,50 @@ function SimBreakdownPanel({
   subtotal: number;
   dropoffLabel?: string;
 }) {
+  const [partyTab, setPartyTab] = useState<'customer' | 'partner' | 'courier'>('customer');
   const wouldBlock = Boolean(expected?.blocked) && subtotal < minOrderJmd;
+
+  const food = breakdown.discountedSubtotal ?? breakdown.subtotal ?? 0;
+  const commission = breakdown.merchantCommissionAmount ?? 0;
+  const commissionPct = Math.round((breakdown.merchantCommissionRate ?? 0) * 1000) / 10;
+  const merchantNet = Math.max(0, food - commission);
+  const courierDelivery = breakdown.deliveryFeeCourierAmount ?? 0;
+  const courierTip = breakdown.courierTipNet ?? breakdown.tip ?? 0;
+  const courierTotal = courierDelivery + courierTip;
+  const platformNet =
+    (breakdown.serviceFee ?? 0)
+    + commission
+    + Math.max(0, breakdown.deliveryFeePlatformAmount ?? 0)
+    + (breakdown.smallOrderFee ?? 0)
+    + (breakdown.tax ?? 0);
+
+  const tabs: Array<{ id: 'customer' | 'partner' | 'courier'; label: string }> = [
+    { id: 'customer', label: 'Customer' },
+    { id: 'partner', label: 'Partner' },
+    { id: 'courier', label: 'Courier' },
+  ];
 
   return (
     <div className="rounded-xl border border-slate-800 bg-slate-950 p-4 space-y-2 text-sm">
       <p className="text-white font-medium">{title}</p>
-      {dropoffLabel && (
+      <div className="flex gap-1 border-b border-slate-800 pb-2">
+        {tabs.map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            onClick={() => setPartyTab(t.id)}
+            className={`px-3 py-1.5 text-xs rounded-lg transition-colors ${
+              partyTab === t.id
+                ? 'bg-amber-600 text-white'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {dropoffLabel && partyTab === 'customer' && (
         <p className="text-xs text-slate-500">Dropoff: {dropoffLabel}</p>
       )}
       {breakdown.distanceKm != null && (
@@ -2921,71 +2891,110 @@ function SimBreakdownPanel({
           {breakdown.freeDeliveryApplied ? ' · launch free-delivery applied' : ''}
         </p>
       )}
-      {breakdown.distanceKm == null && (
+      {breakdown.distanceKm == null && partyTab === 'customer' && (
         <p className="text-xs text-amber-400/90">
           Distance unknown (missing store or dropoff pin) — base delivery fee used unless promo zeroed it.
           {breakdown.freeDeliveryApplied ? ' Launch free-delivery applied.' : ''}
         </p>
       )}
-      {wouldBlock && (
+      {wouldBlock && partyTab === 'customer' && (
         <p className="text-amber-400 text-xs rounded-lg bg-amber-950/30 p-2">
           Checkout would be blocked — food subtotal J${subtotal} is below min order J${minOrderJmd}.
         </p>
       )}
-      {expected?.note && !wouldBlock && (
+      {expected?.note && !wouldBlock && partyTab === 'customer' && (
         <p className="text-slate-400 text-xs">{expected.note}</p>
       )}
-      <SimLine label="Food subtotal" value={breakdown.discountedSubtotal ?? breakdown.subtotal ?? 0} />
-      <SimLine label="Service fee" value={breakdown.serviceFee ?? 0} expected={expected?.serviceFee} />
-      <SimLine label="Delivery fee" value={breakdown.deliveryFee ?? 0} expected={expected?.deliveryFee} />
-      {(breakdown.taxFoodJmd ?? 0) > 0 && (
-        <SimLine label="GCT on food" value={breakdown.taxFoodJmd ?? 0} />
+
+      {partyTab === 'customer' && (
+        <>
+          <SimLine label="Food subtotal" value={food} />
+          <SimLine label="Service fee" value={breakdown.serviceFee ?? 0} expected={expected?.serviceFee} />
+          <SimLine label="Delivery fee" value={breakdown.deliveryFee ?? 0} expected={expected?.deliveryFee} />
+          <SimLine
+            label="Small-order fee"
+            value={breakdown.smallOrderFee ?? 0}
+            expected={expected?.smallOrderFee}
+          />
+          {(breakdown.taxFoodJmd ?? 0) > 0 && (
+            <SimLine label="GCT on food" value={breakdown.taxFoodJmd ?? 0} />
+          )}
+          {(breakdown.taxPlatformJmd ?? 0) > 0 && (
+            <SimLine label="GCT on platform fees" value={breakdown.taxPlatformJmd ?? 0} />
+          )}
+          {(breakdown.taxFoodJmd ?? 0) === 0 && (breakdown.taxPlatformJmd ?? 0) === 0 && (
+            <SimLine label="GCT (total)" value={breakdown.tax ?? 0} expected={expected?.tax} />
+          )}
+          <SimLine label="Tip" value={breakdown.tip ?? 0} />
+          <SimLine label="Order total" value={breakdown.orderTotal ?? 0} expected={expected?.orderTotal} bold />
+          <SimLine
+            label="Processing fee (order)"
+            value={breakdown.processingFeeOrder ?? breakdown.processingFee ?? 0}
+            expected={expected?.processingFee}
+          />
+          <SimLine
+            label="Customer pays"
+            value={breakdown.customerTotal ?? breakdown.total ?? 0}
+            expected={expected?.customerTotal}
+            bold
+          />
+        </>
       )}
-      {(breakdown.taxPlatformJmd ?? 0) > 0 && (
-        <SimLine label="GCT on platform fees" value={breakdown.taxPlatformJmd ?? 0} />
+
+      {partyTab === 'partner' && (
+        <>
+          <p className="text-xs text-slate-500 pb-1">What the restaurant earns / pays on this order</p>
+          <SimLine label="Food subtotal (marketplace)" value={food} />
+          <SimLine
+            label={`Commission${commissionPct > 0 ? ` (${commissionPct}%)` : ''}`}
+            value={commission}
+          />
+          <SimLine label="Partner net (food − commission)" value={merchantNet} bold />
+          <p className="text-xs text-slate-500 pt-2">
+            Customer fees (service, delivery, GCT, card) are not partner revenue — they go to platform / courier.
+          </p>
+          <hr className="border-slate-800 my-2" />
+          <p className="text-xs text-slate-500 uppercase tracking-wide">Context</p>
+          <SimLine label="Platform take (fees + commission + GCT)" value={platformNet} />
+          <SimLine label="Customer pays (full bill)" value={breakdown.customerTotal ?? breakdown.total ?? 0} />
+        </>
       )}
-      {(breakdown.taxFoodJmd ?? 0) === 0 && (breakdown.taxPlatformJmd ?? 0) === 0 && (
-        <SimLine label="GCT (total)" value={breakdown.tax ?? 0} expected={expected?.tax} />
-      )}
-      <SimLine label="Tip" value={breakdown.tip ?? 0} />
-      <SimLine label="Order total" value={breakdown.orderTotal ?? 0} expected={expected?.orderTotal} bold />
-      <SimLine
-        label="Processing fee (order)"
-        value={breakdown.processingFeeOrder ?? breakdown.processingFee ?? 0}
-        expected={expected?.processingFee}
-      />
-      <SimLine
-        label="Customer pays"
-        value={breakdown.customerTotal ?? breakdown.total ?? 0}
-        expected={expected?.customerTotal}
-        bold
-      />
-      <hr className="border-slate-800 my-2" />
-      <p className="text-xs text-slate-500 uppercase tracking-wide">Split preview</p>
-      <SimLine
-        label="Merchant net (food − commission)"
-        value={Math.max(
-          0,
-          (breakdown.discountedSubtotal ?? 0) - (breakdown.merchantCommissionAmount ?? 0),
-        )}
-      />
-      <SimLine
-        label="Courier net (delivery + tip net)"
-        value={
-          (breakdown.deliveryFeeCourierAmount ?? 0) + (breakdown.courierTipNet ?? breakdown.tip ?? 0)
-        }
-      />
-      <SimLine
-        label="Platform net (fees + commission + GCT held on COD)"
-        value={
-          (breakdown.serviceFee ?? 0)
-          + (breakdown.merchantCommissionAmount ?? 0)
-          + Math.max(0, breakdown.deliveryFeePlatformAmount ?? 0)
-          + (breakdown.tax ?? 0)
-        }
-      />
-      {(breakdown.promoCostJmd ?? 0) > 0 && (
-        <SimLine label="Promo cost (platform)" value={breakdown.promoCostJmd ?? 0} />
+
+      {partyTab === 'courier' && (
+        <>
+          <p className="text-xs text-slate-500 pb-1">What the courier earns on this trip</p>
+          {(breakdown.courierBasePayJmd ?? 0) > 0 || (breakdown.courierDistancePayJmd ?? 0) > 0 ? (
+            <>
+              <SimLine label="Base pay" value={breakdown.courierBasePayJmd ?? 0} />
+              <SimLine label="Distance pay" value={breakdown.courierDistancePayJmd ?? 0} />
+            </>
+          ) : null}
+          <SimLine label="Delivery pay (courier share)" value={courierDelivery} />
+          <SimLine label="Tip (net to courier)" value={courierTip} />
+          {(breakdown.processingFeeTip ?? 0) > 0 && (
+            <SimLine label="Tip processing (taken from tip)" value={breakdown.processingFeeTip ?? 0} />
+          )}
+          <SimLine label="Courier total" value={courierTotal} bold />
+          {(breakdown.platformDeliverySubsidyJmd ?? 0) > 0 && (
+            <SimLine
+              label="Platform delivery subsidy"
+              value={breakdown.platformDeliverySubsidyJmd ?? 0}
+            />
+          )}
+          {(breakdown.promoCostJmd ?? 0) > 0 && (
+            <SimLine label="Promo cost (platform)" value={breakdown.promoCostJmd ?? 0} />
+          )}
+          <p className="text-xs text-slate-500 pt-2">
+            Customer delivery fee may differ from courier pay when Rider ladder / subsidy rules apply.
+          </p>
+          <hr className="border-slate-800 my-2" />
+          <p className="text-xs text-slate-500 uppercase tracking-wide">Context</p>
+          <SimLine label="Customer delivery fee charged" value={breakdown.deliveryFee ?? 0} />
+          <SimLine
+            label="Platform delivery share"
+            value={Math.max(0, breakdown.deliveryFeePlatformAmount ?? 0)}
+          />
+        </>
       )}
     </div>
   );

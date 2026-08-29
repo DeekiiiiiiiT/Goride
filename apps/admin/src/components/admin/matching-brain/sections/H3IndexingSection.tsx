@@ -129,7 +129,7 @@ export function H3IndexingSection({ policy, canEdit, onSave }: H3IndexingSection
         <p className="text-xs text-slate-500">
           {H3_RESOLUTION_LABELS[formData.h3_resolution] || `Resolution ${formData.h3_resolution}`}
           {' — '}
-          locked. Changing resolution requires an engineering migration (re-stamp live presence).
+          locked. Changing resolution requires an engineering migration (re-stamp live presence). See ADR 0013.
         </p>
       </div>
 

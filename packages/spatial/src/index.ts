@@ -172,6 +172,11 @@ export function isMatchingH3SupplyEnabled(policyEnabled: boolean): boolean {
   return policyEnabled;
 }
 
+/** Alias kept in sync with Deno geoIndex.isH3SupplyEnabled */
+export function isH3SupplyEnabled(policyEnabled: boolean): boolean {
+  return isMatchingH3SupplyEnabled(policyEnabled);
+}
+
 export function isMatchingH3SurgeEnabled(policyEnabled: boolean): boolean {
   if (denoGlobal && envFlag('MATCHING_H3_SURGE') !== '1') return false;
   return policyEnabled;
@@ -179,4 +184,8 @@ export function isMatchingH3SurgeEnabled(policyEnabled: boolean): boolean {
 
 export function isRushH3DispatchEnabled(): boolean {
   return envFlag('RUSH_H3_DISPATCH_ENABLED') === '1';
+}
+
+export function isRushHexCoverageEnabled(): boolean {
+  return envFlag('RUSH_HEX_COVERAGE_ENABLED') === '1';
 }

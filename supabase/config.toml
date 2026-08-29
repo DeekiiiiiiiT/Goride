@@ -421,6 +421,9 @@ verify_jwt = false
 [functions.finance-doctor]
 verify_jwt = false
 
+[functions.spatial-index-canary]
+verify_jwt = false
+
 # Cron sync uses service_role / CRON_SECRET inside the function; admin routes use requirePlatformAdmin.
 [functions.petrojam-prices]
 verify_jwt = false

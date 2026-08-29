@@ -422,6 +422,7 @@ app.get("/merchants", async (c) => {
         dropoffLat,
         dropoffLng,
         merchantMarketId,
+        merchantId,
       });
       if (!coverageGate.ok) {
         return c.json({ error: coverageGate.error, code: coverageGate.code }, 400);
@@ -1740,33 +1741,20 @@ app.patch("/orders/:id/courier-location", async (c) => {
 
   if (updateError) return c.json({ error: updateError.message }, 500);
 
-  // Mirror onto courier_availability (best-effort)
-  const { data: existingAvail } = await serviceSb
-    .from("courier_availability")
-    .select("id")
-    .eq("driver_id", user.id)
-    .maybeSingle();
-
-  if (existingAvail?.id) {
-    await serviceSb
-      .from("courier_availability")
-      .update({
-        current_lat: lat,
-        current_lng: lng,
-        last_location_update: new Date().toISOString(),
-        active_order_id: id,
-        is_online: true,
-      })
-      .eq("id", existingAvail.id);
-  } else {
-    await serviceSb.from("courier_availability").insert({
-      driver_id: user.id,
-      current_lat: lat,
-      current_lng: lng,
-      last_location_update: new Date().toISOString(),
-      active_order_id: id,
-      is_online: true,
-    });
+  // Mirror onto courier_availability via presence RPC (lat/lng + H3 together)
+  const { upsertCourierPresence } = await import("./courierPresence.ts");
+  const presence = await upsertCourierPresence(serviceSb, {
+    driverId: user.id,
+    lat,
+    lng,
+    isOnline: true,
+    activeOrderId: id,
+  });
+  if (!presence.ok) {
+    return c.json(
+      { error: presence.error, message: presence.message },
+      presence.status,
+    );
   }
 
   return c.json({ location: updated, client_seq: clientSeq });

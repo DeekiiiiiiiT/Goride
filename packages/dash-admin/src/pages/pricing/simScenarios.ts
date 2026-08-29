@@ -7,6 +7,7 @@ export type SimScenarioExpected = {
   processingFee?: number;
   customerTotal?: number;
   deliveryFee?: number;
+  smallOrderFee?: number;
   blocked?: boolean;
   note?: string;
 };
@@ -123,6 +124,7 @@ export type SimBreakdown = {
   subtotal?: number;
   serviceFee?: number;
   deliveryFee?: number;
+  smallOrderFee?: number;
   tax?: number;
   taxFoodJmd?: number;
   taxPlatformJmd?: number;
@@ -130,15 +132,20 @@ export type SimBreakdown = {
   orderTotal?: number;
   processingFee?: number;
   processingFeeOrder?: number;
+  processingFeeTip?: number;
   customerTotal?: number;
   total?: number;
   distanceKm?: number | null;
   freeDeliveryApplied?: boolean;
   merchantCommissionAmount?: number;
+  merchantCommissionRate?: number;
   deliveryFeeCourierAmount?: number;
   deliveryFeePlatformAmount?: number;
   courierTipNet?: number;
+  courierBasePayJmd?: number;
+  courierDistancePayJmd?: number;
   promoCostJmd?: number;
+  platformDeliverySubsidyJmd?: number;
 };
 
 export type MarketRulesForSim = {
@@ -154,6 +161,15 @@ export type MarketRulesForSim = {
   };
   card_processing_fee_percent?: number;
   min_order_subtotal_jmd?: number;
+  small_order_threshold_jmd?: number;
+  small_order_fee_jmd?: number;
+  customer?: {
+    small_order_threshold_jmd?: number;
+    small_order_fee_jmd?: number;
+    service_fee?: MarketRulesForSim['service_fee'];
+    card_processing_fee_percent?: number;
+    min_order_subtotal_jmd?: number;
+  };
 };
 
 function roundMoney(value: number): number {
@@ -210,8 +226,27 @@ export function expectedFromMarketRules(
   const tip = Math.max(0, opts.tip);
   const deliveryFee = Math.max(0, opts.deliveryFee);
   const tax = Math.max(0, opts.tax);
-  const orderTotal = roundMoney(opts.subtotal + serviceFee + deliveryFee + tax + tip);
-  const procRate = rules.card_processing_fee_percent ?? 0.045;
+  const threshold = Math.max(
+    0,
+    Number(
+      rules.small_order_threshold_jmd
+        ?? rules.customer?.small_order_threshold_jmd
+        ?? 0,
+    ),
+  );
+  const smallFee = Math.max(
+    0,
+    Number(rules.small_order_fee_jmd ?? rules.customer?.small_order_fee_jmd ?? 0),
+  );
+  const smallOrderFee =
+    threshold > 0 && smallFee > 0 && opts.subtotal < threshold ? roundMoney(smallFee) : 0;
+  const orderTotal = roundMoney(
+    opts.subtotal + serviceFee + deliveryFee + smallOrderFee + tax + tip,
+  );
+  const procRate =
+    rules.card_processing_fee_percent
+    ?? rules.customer?.card_processing_fee_percent
+    ?? 0.045;
   const processingFee =
     opts.payment === 'cash' ? 0 : roundMoney(Math.max(0, orderTotal) * procRate);
   const customerTotal = roundMoney(orderTotal + processingFee);
@@ -220,6 +255,7 @@ export function expectedFromMarketRules(
     serviceFee,
     tax,
     deliveryFee,
+    smallOrderFee,
     orderTotal,
     processingFee,
     customerTotal,
@@ -234,6 +270,7 @@ export function pickBreakdown(raw: Record<string, unknown> | null): SimBreakdown
     subtotal: Number(raw.subtotal ?? 0),
     serviceFee: Number(raw.serviceFee ?? 0),
     deliveryFee: Number(raw.deliveryFee ?? 0),
+    smallOrderFee: Number(raw.smallOrderFee ?? raw.small_order_fee ?? 0),
     tax: Number(raw.tax ?? 0),
     taxFoodJmd: Number(raw.taxFoodJmd ?? 0),
     taxPlatformJmd: Number(raw.taxPlatformJmd ?? 0),
@@ -241,13 +278,18 @@ export function pickBreakdown(raw: Record<string, unknown> | null): SimBreakdown
     orderTotal: Number(raw.orderTotal ?? 0),
     processingFee: Number(raw.processingFee ?? 0),
     processingFeeOrder: Number(raw.processingFeeOrder ?? 0),
+    processingFeeTip: Number(raw.processingFeeTip ?? 0),
     customerTotal: Number(raw.customerTotal ?? raw.total ?? 0),
     total: Number(raw.total ?? 0),
     merchantCommissionAmount: Number(raw.merchantCommissionAmount ?? 0),
+    merchantCommissionRate: Number(raw.merchantCommissionRate ?? 0),
     deliveryFeeCourierAmount: Number(raw.deliveryFeeCourierAmount ?? 0),
     deliveryFeePlatformAmount: Number(raw.deliveryFeePlatformAmount ?? 0),
     courierTipNet: Number(raw.courierTipNet ?? raw.tip ?? 0),
+    courierBasePayJmd: Number(raw.courierBasePayJmd ?? 0),
+    courierDistancePayJmd: Number(raw.courierDistancePayJmd ?? 0),
     promoCostJmd: Number(raw.promoCostJmd ?? 0),
+    platformDeliverySubsidyJmd: Number(raw.platformDeliverySubsidyJmd ?? 0),
     distanceKm: raw.distanceKm != null && Number.isFinite(Number(raw.distanceKm))
       ? Number(raw.distanceKm)
       : null,

@@ -28,9 +28,42 @@ export function ringVertexCount(multi: CoverageMultiPolygon): number {
   return n;
 }
 
+/** Ray-cast PIP for a single ring (bbox reject first). */
+export function ringBBox(ring: CoverageRing): {
+  minLat: number;
+  maxLat: number;
+  minLng: number;
+  maxLng: number;
+} | null {
+  if (!ring || ring.length < 3) return null;
+  let minLat = Infinity;
+  let maxLat = -Infinity;
+  let minLng = Infinity;
+  let maxLng = -Infinity;
+  for (const p of ring) {
+    if (!Number.isFinite(p.lat) || !Number.isFinite(p.lng)) continue;
+    if (p.lat < minLat) minLat = p.lat;
+    if (p.lat > maxLat) maxLat = p.lat;
+    if (p.lng < minLng) minLng = p.lng;
+    if (p.lng > maxLng) maxLng = p.lng;
+  }
+  if (!Number.isFinite(minLat)) return null;
+  return { minLat, maxLat, minLng, maxLng };
+}
+
+export function pointInBBox(
+  lat: number,
+  lng: number,
+  box: { minLat: number; maxLat: number; minLng: number; maxLng: number },
+): boolean {
+  return lat >= box.minLat && lat <= box.maxLat && lng >= box.minLng && lng <= box.maxLng;
+}
+
 /** Ray-cast PIP for a single ring. */
 export function pointInRing(lat: number, lng: number, ring: CoverageRing): boolean {
   if (!ring || ring.length < 3) return false;
+  const box = ringBBox(ring);
+  if (box && !pointInBBox(lat, lng, box)) return false;
   let inside = false;
   for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
     const yi = ring[i].lat;

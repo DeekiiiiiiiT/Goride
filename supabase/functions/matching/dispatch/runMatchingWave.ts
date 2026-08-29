@@ -135,7 +135,7 @@ export async function runMatchingWave(
         policy.wave_h3_k_rings.length ? policy.wave_h3_k_rings : null,
         policy.h3_resolution,
       );
-      const result = await loadDriverLocationsH3(cells, freshSince);
+      const result = await loadDriverLocationsH3(cells, freshSince, policy.h3_resolution);
       supplySource = result.source;
       logLine({
         event: "match_wave_supply",

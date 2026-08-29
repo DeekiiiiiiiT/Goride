@@ -58,6 +58,7 @@ async function prepareRulesForSave(opts: {
   | { serialized: Record<string, unknown>; parsed: PricingRules; party?: PricingParty }
   | { error: string; status: number }
 > {
+  const body = opts.body;
   const partyRaw = body.party;
   const party = isPricingParty(partyRaw) ? partyRaw : undefined;
   const incomingRules = (

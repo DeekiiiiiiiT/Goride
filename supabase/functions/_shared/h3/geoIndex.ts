@@ -157,3 +157,7 @@ export function isMatchingH3SurgeEnabled(policyEnabled: boolean): boolean {
 export function isRushH3DispatchEnabled(): boolean {
   return Deno.env.get("RUSH_H3_DISPATCH_ENABLED") === "1";
 }
+
+export function isRushHexCoverageEnabled(): boolean {
+  return Deno.env.get("RUSH_HEX_COVERAGE_ENABLED") === "1";
+}

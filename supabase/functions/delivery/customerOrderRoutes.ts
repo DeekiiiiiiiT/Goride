@@ -245,6 +245,7 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
       dropoffLat,
       dropoffLng,
       merchantMarketId,
+      merchantId: body.merchantId,
     });
     if (!coverageGate.ok) {
       return c.json({ error: coverageGate.error, code: coverageGate.code }, 400);

@@ -13,6 +13,10 @@
 
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getFlagFromEnv } from "../../_shared/featureFlags.ts";
+import {
+  isH3SupplyEnabled as isH3SupplyEnabledFlag,
+  isMatchingH3SurgeEnabled as isMatchingH3SurgeEnabledFlag,
+} from "../../_shared/h3/geoIndex.ts";
 
 // -----------------------------------------------------------------------------
 // Types
@@ -449,12 +453,11 @@ export function isSerialDispatchEnabled(policy: Pick<MatchingPolicy, "serial_dis
   return policy.serial_dispatch_enabled;
 }
 
+/** Single kill-switch implementation lives in geoIndex — policy is the second gate. */
 export function isH3SupplyEnabled(policy: Pick<MatchingPolicy, "h3_supply_enabled">): boolean {
-  if (Deno.env.get("MATCHING_H3_SUPPLY") !== "1") return false;
-  return policy.h3_supply_enabled;
+  return isH3SupplyEnabledFlag(policy.h3_supply_enabled);
 }
 
 export function isH3SurgeEnabled(policy: Pick<MatchingPolicy, "h3_surge_enabled">): boolean {
-  if (Deno.env.get("MATCHING_H3_SURGE") !== "1") return false;
-  return policy.h3_surge_enabled;
+  return isMatchingH3SurgeEnabledFlag(policy.h3_surge_enabled);
 }

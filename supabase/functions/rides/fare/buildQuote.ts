@@ -6,6 +6,7 @@ import { mintQuoteToken } from "./quoteToken.ts";
 import type { DispatchSettings } from "./dispatchSettings.ts";
 import { resolvePickupEta, type PickupEtaSource } from "./pickupEta.ts";
 import { estimateRouteTolls } from "./estimateRouteTolls.ts";
+import { DEFAULT_H3_RESOLUTION, latLngToH3 } from "../../_shared/h3/geoIndex.ts";
 
 export interface BuiltFareQuote {
   distanceKm: number;
@@ -28,8 +29,19 @@ export interface BuiltFareQuote {
   quoteToken: string;
 }
 
-export function gridCellKey(lat: number, lng: number): string {
+/** H3 surge primary key (Phase 7 cutover — no new `grid:` writes). */
+export function surgeCellKey(lat: number, lng: number): string {
+  return latLngToH3(lat, lng, DEFAULT_H3_RESOLUTION);
+}
+
+/** @deprecated Read-fallback only for pre-cutover rows. */
+export function legacyGridCellKey(lat: number, lng: number): string {
   return `grid:${Math.floor(lat * 50)}:${Math.floor(lng * 50)}`;
+}
+
+/** Surge cell key — H3 index (alias kept for call-site compatibility). */
+export function gridCellKey(lat: number, lng: number): string {
+  return surgeCellKey(lat, lng);
 }
 
 export async function buildFareQuote(
