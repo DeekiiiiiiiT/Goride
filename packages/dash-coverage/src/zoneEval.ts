@@ -85,7 +85,8 @@ function parseTimeToMinutes(value: string): number | null {
   return h * 60 + min;
 }
 
-function zonedNow(timezone: string): Date {
+/** Map an absolute instant into a synthetic UTC date carrying local DOW/time for `timezone`. */
+function zonedNow(timezone: string, at: Date = new Date()): Date {
   try {
     const parts = new Intl.DateTimeFormat('en-US', {
       timeZone: timezone,
@@ -93,7 +94,7 @@ function zonedNow(timezone: string): Date {
       minute: 'numeric',
       weekday: 'short',
       hour12: false,
-    }).formatToParts(new Date());
+    }).formatToParts(at);
     const hour = Number(parts.find((p) => p.type === 'hour')?.value ?? 0);
     const minute = Number(parts.find((p) => p.type === 'minute')?.value ?? 0);
     const weekday = parts.find((p) => p.type === 'weekday')?.value ?? 'Sun';
@@ -109,7 +110,7 @@ function zonedNow(timezone: string): Date {
     const dow = dowMap[weekday] ?? 0;
     return new Date(Date.UTC(2000, 0, 2 + dow, hour, minute));
   } catch {
-    return new Date();
+    return at;
   }
 }
 
@@ -117,7 +118,7 @@ function isWithinSchedule(schedules: ZoneSchedule[] | undefined, at: Date = new 
   if (!schedules?.length) return true;
   for (const s of schedules) {
     const tz = s.timezone?.trim() || 'America/Jamaica';
-    const local = zonedNow(tz);
+    const local = zonedNow(tz, at);
     const dow = local.getUTCDay();
     if (!s.dow.includes(dow)) continue;
     const start = parseTimeToMinutes(s.start_time);
@@ -157,12 +158,12 @@ export type ZoneMatch = {
   priority: number;
 };
 
-/** ADR-0014: highest priority wins; at tie include before exclude (safe island needs higher include priority). */
+/** ADR-0014: highest priority wins; at equal priority exclude wins (fail-safe). Safe islands need higher include priority. */
 export function pickWinningMatch(matches: ZoneMatch[]): ZoneMatch | null {
   if (!matches.length) return null;
   const sorted = [...matches].sort((a, b) => {
     if (b.priority !== a.priority) return b.priority - a.priority;
-    const kindOrder = (k: ZoneKind) => (k === 'include' ? 0 : 1);
+    const kindOrder = (k: ZoneKind) => (k === 'exclude' ? 0 : 1);
     if (kindOrder(a.kind) !== kindOrder(b.kind)) return kindOrder(a.kind) - kindOrder(b.kind);
     return a.zone.id.localeCompare(b.zone.id);
   });

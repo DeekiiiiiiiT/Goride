@@ -1239,7 +1239,11 @@ export function registerMarketAdminRoutes(app: Hono) {
       polygon,
       kind,
       source,
-      priority: Number.isFinite(Number(body.priority)) ? Math.trunc(Number(body.priority)) : 0,
+      priority: Number.isFinite(Number(body.priority))
+        ? Math.trunc(Number(body.priority))
+        : kind === "exclude"
+          ? 100
+          : 0,
       updated_by: adminUser.id || null,
     };
     applyOperationalZoneFields(insert, body as Record<string, unknown>);
@@ -1496,7 +1500,7 @@ export function registerPublicGeoRoutes(
           multiPolygon: synthetic.multiPolygon ?? null,
           market_id: market.id,
           source: "parish_boundary",
-          priority: 100,
+          priority: 5,
         });
       }
     }

@@ -8,7 +8,6 @@ import type {
   GlobalPlatformSettings,
   SecurityPolicies,
   SettingsSegment,
-  TaxSettings,
 } from './types';
 
 export const DEFAULT_SECURITY_POLICIES: SecurityPolicies = {
@@ -136,18 +135,11 @@ export const DEFAULT_ENTERPRISE_SETTINGS: FleetProductSettings = baseFleetProduc
   { ...DEFAULT_ENTERPRISE_ENABLED_MODULES },
 );
 
-/** @deprecated KV dual-read only — Accounting GCT engine is SSOT after cutover. */
-export const DEFAULT_TAX_SETTINGS: TaxSettings = {
-  gctStandardRatePercent: 15,
-  gctEnabled: true,
-};
-
 export const DEFAULT_GLOBAL_SETTINGS: GlobalPlatformSettings = {
   maintenanceMode: false,
   maintenanceMessage: '',
   securityPolicies: { ...DEFAULT_SECURITY_POLICIES },
   announcement: { ...DEFAULT_ANNOUNCEMENT },
-  tax: { ...DEFAULT_TAX_SETTINGS },
 };
 
 const CONSUMER_SEGMENT_NAMES: Record<'rides' | 'driver' | 'haul' | 'dash' | 'courier', string> = {

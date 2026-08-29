@@ -38,7 +38,7 @@ export function defaultExclusionForm(name = ''): ExclusionFormValues {
     is_active: true,
     effective_from: '',
     effective_to: '',
-    priority: 10,
+    priority: 100,
     zone_policy: 'block',
   };
 }
@@ -52,7 +52,7 @@ export function formFromZone(zone: DashZoneRow): ExclusionFormValues {
     is_active: zone.is_active !== false,
     effective_from: zone.effective_from?.slice(0, 16) ?? '',
     effective_to: zone.effective_to?.slice(0, 16) ?? '',
-    priority: zone.priority ?? 10,
+    priority: zone.priority ?? 100,
     zone_policy: policy as ZonePolicyAction,
   };
 }
@@ -143,7 +143,7 @@ export function ExclusionDetailSheet({ open, title, initial, saving, onClose, on
             </label>
           </div>
           <label className="block space-y-1">
-            <span className="text-xs text-zinc-400">Priority (higher wins — use 20+ for safe islands)</span>
+            <span className="text-xs text-zinc-400">Priority (excludes default 100; safe-island includes must be higher, e.g. 200)</span>
             <input
               type="number"
               className="w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100"

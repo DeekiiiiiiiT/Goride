@@ -2326,7 +2326,7 @@ export function MarketsPage() {
           name,
           polygon: payload.polygon,
           kind: 'exclude',
-          priority: 10,
+          priority: 100,
           category: 'operational',
           source: payload.source ?? (editor.mode === 'radius' ? 'radius' : 'manual'),
           center_lat: payload.center_lat,

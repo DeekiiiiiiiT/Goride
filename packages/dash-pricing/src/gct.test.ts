@@ -7,12 +7,12 @@ describe('resolveOrderGct', () => {
       discountedSubtotal: 1000,
       serviceFee: 150,
       deliveryFeePlatformAmount: 80,
-      foodRatePercent: 16.5,
-      platformRatePercent: 16.5,
+      foodRatePercent: 15,
+      platformRatePercent: 15,
     });
-    expect(r.taxFoodJmd).toBe(165);
-    expect(r.taxPlatformJmd).toBe(37.95);
-    expect(r.tax).toBe(202.95);
+    expect(r.taxFoodJmd).toBe(150);
+    expect(r.taxPlatformJmd).toBe(34.5);
+    expect(r.tax).toBe(184.5);
   });
 
   it('zero food rate when merchant unregistered', () => {
@@ -21,10 +21,10 @@ describe('resolveOrderGct', () => {
       serviceFee: 150,
       deliveryFeePlatformAmount: 80,
       foodRatePercent: 0,
-      platformRatePercent: 16.5,
+      platformRatePercent: 15,
     });
     expect(r.taxFoodJmd).toBe(0);
-    expect(r.taxPlatformJmd).toBe(37.95);
+    expect(r.taxPlatformJmd).toBe(34.5);
   });
 
   it('ignores negative platform delivery (promo absorb)', () => {
@@ -32,9 +32,9 @@ describe('resolveOrderGct', () => {
       discountedSubtotal: 1000,
       serviceFee: 150,
       deliveryFeePlatformAmount: -320,
-      foodRatePercent: 16.5,
-      platformRatePercent: 16.5,
+      foodRatePercent: 15,
+      platformRatePercent: 15,
     });
-    expect(r.taxPlatformJmd).toBe(24.75); // 150 × 16.5% only
+    expect(r.taxPlatformJmd).toBe(22.5); // 150 × 15% only
   });
 });

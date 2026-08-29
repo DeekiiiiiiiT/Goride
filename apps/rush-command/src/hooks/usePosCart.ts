@@ -6,14 +6,46 @@ function lineKey(menuItemId: string) {
   return `line-${menuItemId}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 }
 
-export function usePosCart(taxRatePercent: number, gctRegistered = true) {
+const EMPTY_PRICING = { subtotal: 0, tax: 0, discount: 0, total: 0 };
+
+/** taxRatePercent null = rate unresolved (registered merchants must not price). */
+export function usePosCart(
+  taxRatePercent: number | null,
+  gctRegistered = true,
+) {
   const [lines, setLines] = useState<PosCartLine[]>([]);
   const [discount, setDiscount] = useState(0);
 
-  const pricing = useMemo(
-    () => calculateOrderPricing({ lines, taxRatePercent, gctRegistered, discount }),
-    [lines, taxRatePercent, gctRegistered, discount],
-  );
+  const rateBlocked =
+    gctRegistered !== false &&
+    (taxRatePercent == null || !Number.isFinite(taxRatePercent));
+
+  const pricing = useMemo(() => {
+    if (rateBlocked) {
+      // Still show subtotal for UX; tax/total withheld until rate loads
+      try {
+        const sub = calculateOrderPricing({
+          lines,
+          taxRatePercent: 0,
+          gctRegistered: false,
+          discount,
+        });
+        return { ...sub, tax: 0, total: sub.subtotal - (discount || 0) };
+      } catch {
+        return EMPTY_PRICING;
+      }
+    }
+    try {
+      return calculateOrderPricing({
+        lines,
+        taxRatePercent: taxRatePercent as number,
+        gctRegistered,
+        discount,
+      });
+    } catch {
+      return EMPTY_PRICING;
+    }
+  }, [lines, taxRatePercent, gctRegistered, discount, rateBlocked]);
 
   const addItem = useCallback(
     (item: { id: string; name: string; price: number }, quantity = 1) => {
@@ -68,5 +100,6 @@ export function usePosCart(taxRatePercent: number, gctRegistered = true) {
     removeLine,
     clear,
     isEmpty: lines.length === 0,
+    rateBlocked,
   };
 }

@@ -3,6 +3,7 @@ import {
   DEFAULT_FX_USD_JMD,
   type LandedCostResult,
 } from "./landedCost.ts";
+import { resolveImportGctRateFraction } from "./resolveImportGctRate.ts";
 
 export type DualLedgerLine = {
   ledger: "courier_revenue" | "government_passthrough";
@@ -121,16 +122,22 @@ export function buildDualLedgerInvoice(input: {
   };
 }
 
-export function computeDutyFromPackageRow(pkg: {
-  declared_value_usd_minor?: number | null;
-  freight_fee_usd_minor?: number | null;
-  insurance_usd_minor?: number | null;
-  cetRate?: number | null;
-}): LandedCostResult {
+export async function computeDutyFromPackageRow(
+  pkg: {
+    declared_value_usd_minor?: number | null;
+    freight_fee_usd_minor?: number | null;
+    insurance_usd_minor?: number | null;
+    cetRate?: number | null;
+  },
+  // deno-lint-ignore no-explicit-any
+  sb?: any,
+): Promise<LandedCostResult> {
+  const gctRate = await resolveImportGctRateFraction(sb ?? null);
   return computeLandedCost({
     itemCostUsdMinor: Number(pkg.declared_value_usd_minor ?? 0),
     freightUsdMinor: pkg.freight_fee_usd_minor,
     insuranceUsdMinor: pkg.insurance_usd_minor,
     cetRate: pkg.cetRate ?? 0.2,
+    gctRate,
   });
 }

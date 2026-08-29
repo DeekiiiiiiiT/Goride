@@ -11,8 +11,8 @@ type Sb = {
 };
 
 function acct(sb: Sb) {
-  if (typeof sb.schema === 'function') return sb.schema('accounting');
-  return null;
+  // public.* mirrors of accounting.* (PostgREST-exposed)
+  return sb;
 }
 
 async function ensureOpenPeriodFor(

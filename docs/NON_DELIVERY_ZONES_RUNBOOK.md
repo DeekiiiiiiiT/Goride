@@ -1,9 +1,11 @@
 # Non-Delivery Zones — Ops Runbook
 
 **Program:** Non-Delivery Zones Full Implementation  
-**Last updated:** 2026-08-28
+**Last updated:** 2026-08-29
 
 > **Launch footprint:** Prefer [Service Areas runbook](./SERVICE_AREAS_RUNBOOK.md) (ADR-0018). Red cutouts are for temporary hazards *inside* live service areas — not for inventing the launch shape.
+
+> **Priority:** New exclusions default to **100**. Service areas stay at **10**. Equal-priority ties favour **exclude** (fail-safe). Safe islands need include priority **higher than** the surrounding exclude (e.g. exclude 100 + island 200).
 
 ---
 
@@ -17,6 +19,7 @@ Use this checklist before relying on exclusions in production. Prefer a **surcha
 4. **Details** on the cutout:
    - **Category:** Safety (required for publish)
    - **Policy:** Surcharge (e.g. J$200) for the money-path pilot — or Block for hard reject copy
+   - **Priority:** leave **100** (default) unless modelling a safe island nearby
    - **Effective to:** ~24h from now
 5. **Publish coverage** — resolve any red conflict banners first.
 6. Confirm **net coverage** refreshed: `service_markets.net_coverage_geom IS NOT NULL` for Spanish Town.
@@ -28,8 +31,12 @@ Use this checklist before relying on exclusions in production. Prefer a **surcha
 10. **Restore** prior coverage version → pin behaves normally again (restore also refreshes net coverage).
 11. Record test pin lat/lng and version id in Notion (geospatial program page).
 
-**Pilot pin (EXC-8 audit insert, 2026-08-28):** near Service area 1 centroid  
-`18.02126, -76.97146` — zone name `EXC-8 audit pilot (safety surcharge)`.
+**Pilot pin (EXC-8 audit insert, 2026-08-28; priority bumped 2026-08-29):** near Service area 1 centroid  
+`18.02126, -76.97146` — zone name `EXC-8 audit pilot (safety surcharge)` (priority **100**, surcharge J$200).
+
+**Closeout pilots (2026-08-29, ~7-day `effective_to`):**
+- `EXC closeout block pilot` — market `block` + `zone_schedules` all-day window
+- `EXC closeout parish scoped block` — St. Catherine parish `scoped_exclusion_zones`
 
 ---
 
@@ -49,15 +56,38 @@ SELECT * FROM delivery.v_expired_active_exclusions;
 ## Parish-wide hazard (one polygon)
 
 1. **Markets → Platform exclusions → Parish** tab.
-2. **Add** → edit **Details** (category, expiry, reason).
+2. **Add** → edit **Details** (category, expiry, reason). Prefer a real polygon overlapping the towns you intend to block (placeholder box may miss live service areas).
 3. No per-town duplicate draw needed — applies to all towns in parish at evaluation.
+
+---
+
+## Recurring schedule (API only — no Markets UI yet)
+
+Attach windows when creating/updating a market cutout or scoped exclusion:
+
+```http
+PATCH /admin/markets/{marketId}/zones/{zoneId}
+{
+  "schedules": [
+    {
+      "dow": [0, 1, 2, 3, 4, 5, 6],
+      "start_time": "20:00",
+      "end_time": "23:59",
+      "timezone": "America/Jamaica"
+    }
+  ]
+}
+```
+
+Scoped: `PATCH /admin/markets/scoped-exclusions/{id}` with the same `schedules` array.  
+Empty schedules = always active (subject to `effective_*` / `is_active`). Evaluation honours an injected `at` clock in `@roam/dash-coverage` tests.
 
 ---
 
 ## Safe island inside a no-go area
 
-1. Draw **exclude** at priority **10** (default).
-2. Draw small **include** polygon over hospital/gated community at priority **30+**.
+1. Draw **exclude** at priority **100** (default).
+2. Draw small **include** polygon over hospital/gated community at priority **200** (must be higher than the exclude).
 3. Publish — test pin inside island should deliver.
 
 ---

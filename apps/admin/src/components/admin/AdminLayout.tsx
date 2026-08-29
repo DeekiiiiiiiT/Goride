@@ -27,7 +27,8 @@ import {
   FUEL_MANAGEMENT_CHILDREN,
   TOLL_MANAGEMENT_CHILDREN,
   VEHICLE_DATABASE_CHILDREN,
-  ACCOUNTING_CHILDREN,
+  GCT_CHILDREN,
+  ACCOUNTING_VENDOR_CHILDREN,
   GLOBAL_SETTINGS_CHILDREN,
   SETTINGS_CHILDREN,
   API_CENTER_CHILDREN,
@@ -65,7 +66,8 @@ function allNavChildren(): NavChild[] {
     ...FUEL_MANAGEMENT_CHILDREN,
     ...TOLL_MANAGEMENT_CHILDREN,
     ...VEHICLE_DATABASE_CHILDREN,
-    ...ACCOUNTING_CHILDREN,
+    ...GCT_CHILDREN,
+    ...ACCOUNTING_VENDOR_CHILDREN,
     ...GLOBAL_SETTINGS_CHILDREN,
     ...SETTINGS_CHILDREN,
     ...API_CENTER_CHILDREN,
@@ -91,6 +93,12 @@ function pageTitle(currentPage: string): string {
       || currentPage.startsWith('enterprise-settings-')
     ) {
       return settingsPageTitle(currentPage, child.label);
+    }
+    if (currentPage.startsWith('gct-')) {
+      return `Accounting — GCT — ${child.label}`;
+    }
+    if (currentPage === 'vendor-database' || currentPage === 'pending-vendor-requests') {
+      return `Accounting — ${child.label}`;
     }
     return child.label;
   }
@@ -155,7 +163,8 @@ export function AdminLayout({ children, currentPage, onNavigate }: AdminLayoutPr
       ? { ...c, badgeCount: pendingCatalogOpenCount }
       : c,
   );
-  const visibleAccounting = filterChildren(ACCOUNTING_CHILDREN);
+  const visibleGct = filterChildren(GCT_CHILDREN);
+  const visibleAccountingVendors = filterChildren(ACCOUNTING_VENDOR_CHILDREN);
   const visibleGlobalSettings = filterChildren(GLOBAL_SETTINGS_CHILDREN);
   const visibleLegacySettings = filterChildren(SETTINGS_CHILDREN);
   const visibleApiCenter = filterChildren(API_CENTER_CHILDREN);
@@ -171,7 +180,15 @@ export function AdminLayout({ children, currentPage, onNavigate }: AdminLayoutPr
   const fuelIds = useMemo(() => visibleFuel.map((c) => c.id), [visibleFuel]);
   const tollIds = useMemo(() => visibleToll.map((c) => c.id), [visibleToll]);
   const vehicleIds = useMemo(() => visibleVehicleDb.map((c) => c.id), [visibleVehicleDb]);
-  const accountingIds = useMemo(() => visibleAccounting.map((c) => c.id), [visibleAccounting]);
+  const gctIds = useMemo(() => visibleGct.map((c) => c.id), [visibleGct]);
+  const accountingVendorIds = useMemo(
+    () => visibleAccountingVendors.map((c) => c.id),
+    [visibleAccountingVendors],
+  );
+  const accountingIds = useMemo(
+    () => [...gctIds, ...accountingVendorIds],
+    [gctIds, accountingVendorIds],
+  );
   const globalSettingsIds = useMemo(() => visibleGlobalSettings.map((c) => c.id), [visibleGlobalSettings]);
   const legacySettingsIds = useMemo(() => visibleLegacySettings.map((c) => c.id), [visibleLegacySettings]);
   const apiIds = useMemo(() => visibleApiCenter.map((c) => c.id), [visibleApiCenter]);
@@ -186,6 +203,11 @@ export function AdminLayout({ children, currentPage, onNavigate }: AdminLayoutPr
   const [fuelOpen, setFuelOpen] = useSectionOpen(currentPage, fuelIds);
   const [tollOpen, setTollOpen] = useSectionOpen(currentPage, tollIds);
   const [vehicleDbOpen, setVehicleDbOpen] = useSectionOpen(currentPage, vehicleIds);
+  const [gctOpen, setGctOpen] = useSectionOpen(currentPage, gctIds);
+  const [accountingVendorsOpen, setAccountingVendorsOpen] = useSectionOpen(
+    currentPage,
+    accountingVendorIds,
+  );
   const [accountingOpen, setAccountingOpen] = useSectionOpen(currentPage, accountingIds);
   const businessSegmentIds = useMemo(
     () => [...enterpriseIds, ...fleetIds, ...driverIds, ...ridesIds, ...haulIds, ...dashIds],
@@ -301,14 +323,24 @@ export function AdminLayout({ children, currentPage, onNavigate }: AdminLayoutPr
       setOpen: setVehicleDbOpen,
       isActive: vehicleIds.includes(currentPage),
     },
+  ];
+
+  const accountingSections = [
     {
-      key: 'accounting',
-      label: 'Accounting',
-      icon: Receipt,
-      children: visibleAccounting,
-      open: accountingOpen,
-      setOpen: setAccountingOpen,
-      isActive: accountingIds.includes(currentPage),
+      key: 'gct',
+      ...SECTION_META.gct,
+      children: visibleGct,
+      open: gctOpen,
+      setOpen: setGctOpen,
+      isActive: gctIds.includes(currentPage),
+    },
+    {
+      key: 'accounting-vendors',
+      ...SECTION_META.accountingVendors,
+      children: visibleAccountingVendors,
+      open: accountingVendorsOpen,
+      setOpen: setAccountingVendorsOpen,
+      isActive: accountingVendorIds.includes(currentPage),
     },
   ];
 
@@ -405,6 +437,19 @@ export function AdminLayout({ children, currentPage, onNavigate }: AdminLayoutPr
               isActive={section.isActive}
             />
           ))}
+
+          {(visibleGct.length > 0 || visibleAccountingVendors.length > 0) && (
+            <AdminNavGroup
+              label={SECTION_META.accounting.label}
+              icon={SECTION_META.accounting.icon}
+              sections={accountingSections}
+              currentPage={currentPage}
+              open={accountingOpen}
+              onToggle={() => setAccountingOpen(!accountingOpen)}
+              onNavigate={handleNav}
+              isActive={accountingIds.includes(currentPage)}
+            />
+          )}
 
           {visibleApiCenter.length > 0 && (
             <AdminNavSection

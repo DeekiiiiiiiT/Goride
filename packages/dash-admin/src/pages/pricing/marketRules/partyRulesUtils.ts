@@ -106,7 +106,7 @@ export function partyFormSeed(
       pricing_v2_enabled: Boolean(
         p.pricing_v2_enabled ?? effective.pricing_v2_enabled ?? false,
       ),
-      tax_rate_percent: Number(p.tax_rate_percent ?? effective.tax_rate_percent ?? 16.5),
+      // Statutory GCT is Accounting → GCT — do not seed tax_rate_percent (was resurrecting 16.5)
     };
   }
 
@@ -156,7 +156,7 @@ export function partyPreviewMetrics(
         label: 'Model',
         value: seed.pricing_v2_enabled ? 'Model B' : 'Legacy A',
       },
-      { label: 'Tax in blob', value: `${seed.tax_rate_percent ?? 16.5}%` },
+      { label: 'Tax in blob', value: 'deprecated — Accounting GCT' },
     ];
   }
   const tierLine = tiers
@@ -203,7 +203,6 @@ export function partySavePayload(
   if (party === 'platform') {
     return {
       pricing_v2_enabled: form.pricing_v2_enabled,
-      tax_rate_percent: form.tax_rate_percent,
     };
   }
   return {

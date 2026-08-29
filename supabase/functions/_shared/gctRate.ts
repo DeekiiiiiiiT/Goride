@@ -1,6 +1,6 @@
 /**
- * Jamaica GCT rate resolution — dual-read: prefer accounting.gct_rates, fall back to KV.
- * Public API unchanged for Rush callers. Customer cutover: set db_authoritative when accountant signs off.
+ * Jamaica GCT rate resolution — Accounting `gct_rates` is the sole live source.
+ * Legacy Global Settings / KV tax is not used for charging.
  */
 
 import {
@@ -9,17 +9,17 @@ import {
   SEED_STANDARD_RATE_PERCENT,
 } from './gctCore.ts';
 
-/** Fallback only when both DB and KV unavailable — seeded statutory rate. */
+/** Last-resort only when DB unavailable — seeded statutory rate. */
 export const GCT_STANDARD_RATE_FALLBACK = SEED_STANDARD_RATE_PERCENT;
-export const GLOBAL_SETTINGS_KV_KEY = 'platform:settings:global';
 
 export type GctConfig = {
   ratePercent: number;
   enabled: boolean;
   /** True when rate came from accounting.gct_rates */
   fromDb?: boolean;
-  /** True when KV and DB disagreed during dual-read */
+  /** @deprecated Always false — KV is no longer a charge source */
   sourceDisagreement?: boolean;
+  /** @deprecated Always null after cutover */
   kvRatePercent?: number | null;
 };
 
@@ -30,67 +30,45 @@ export function isValidGctRate(rate: unknown): rate is number {
   return Number.isFinite(n) && n >= 0 && n <= 100;
 }
 
-export function parseGctConfigFromSettings(
-  value: Record<string, unknown> | null | undefined,
-): GctConfig {
-  const tax = value?.tax as Record<string, unknown> | undefined;
-  const rateRaw = tax?.gctStandardRatePercent;
-  const enabledRaw = tax?.gctEnabled;
-  return {
-    ratePercent: isValidGctRate(rateRaw) ? Number(rateRaw) : GCT_STANDARD_RATE_FALLBACK,
-    enabled: enabledRaw === false ? false : true,
-    fromDb: false,
-  };
-}
-
 type Sb = {
   schema?: (s: string) => { from: (t: string) => any };
   from: (t: string) => any;
 };
 
-function publicClient(sb: Sb) {
-  return typeof sb.schema === 'function' ? sb.schema('public') : sb;
-}
-
-function accountingClient(sb: Sb) {
-  if (typeof sb.schema === 'function') return sb.schema('accounting');
-  return null;
+/**
+ * GCT tables live in accounting.*; public.* views mirror them for PostgREST
+ * until `accounting` is on the project's Exposed schemas list.
+ */
+function gctClient(sb: Sb) {
+  return sb;
 }
 
 async function loadResolverFlags(sb: Sb): Promise<{
   preferDb: boolean;
-  kvFallback: boolean;
-  dbAuthoritative: boolean;
+  gctEnabled: boolean;
 }> {
-  const acct = accountingClient(sb);
-  if (!acct) {
-    return { preferDb: true, kvFallback: true, dbAuthoritative: false };
-  }
   try {
-    const { data, error } = await acct
+    const { data, error } = await gctClient(sb)
       .from('gct_engine_flags')
       .select('value')
       .eq('key', 'resolver')
       .maybeSingle();
     if (error || !data) {
-      return { preferDb: true, kvFallback: true, dbAuthoritative: false };
+      return { preferDb: true, gctEnabled: true };
     }
     const v = (data as { value?: Record<string, unknown> }).value ?? {};
     return {
       preferDb: v.prefer_db !== false,
-      kvFallback: v.kv_fallback !== false,
-      dbAuthoritative: v.db_authoritative === true,
+      gctEnabled: v.gct_enabled !== false,
     };
   } catch {
-    return { preferDb: true, kvFallback: true, dbAuthoritative: false };
+    return { preferDb: true, gctEnabled: true };
   }
 }
 
 async function loadStandardRateFromDb(sb: Sb, asOf = new Date()): Promise<number | null> {
-  const acct = accountingClient(sb);
-  if (!acct) return null;
   try {
-    const { data, error } = await acct
+    const { data, error } = await gctClient(sb)
       .from('gct_rates')
       .select('supply_class, rate_percent, effective_from, effective_to')
       .eq('supply_class', 'standard');
@@ -112,76 +90,34 @@ async function loadStandardRateFromDb(sb: Sb, asOf = new Date()): Promise<number
   }
 }
 
-async function loadKvGctConfig(sb: Sb): Promise<GctConfig> {
-  const client = publicClient(sb);
-  const { data, error } = await client
-    .from('kv_store_37f42386')
-    .select('value')
-    .eq('key', GLOBAL_SETTINGS_KV_KEY)
-    .maybeSingle();
-  if (error || !data) {
-    return { ratePercent: GCT_STANDARD_RATE_FALLBACK, enabled: true, fromDb: false };
-  }
-  const value = (data as { value?: Record<string, unknown> }).value;
-  if (!value || typeof value !== 'object') {
-    return { ratePercent: GCT_STANDARD_RATE_FALLBACK, enabled: true, fromDb: false };
-  }
-  return parseGctConfigFromSettings(value);
-}
-
-/** Load GCT config — prefer DB rate, dual-read KV until db_authoritative. */
+/** Load GCT config from Accounting engine only. */
 export async function loadGlobalGctConfig(sb: Sb): Promise<GctConfig> {
   const flags = await loadResolverFlags(sb);
-  const [dbRate, kvConfig] = await Promise.all([
-    flags.preferDb ? loadStandardRateFromDb(sb) : Promise.resolve(null),
-    flags.kvFallback || !flags.dbAuthoritative
-      ? loadKvGctConfig(sb)
-      : Promise.resolve(null as GctConfig | null),
-  ]);
+  const dbRate = flags.preferDb ? await loadStandardRateFromDb(sb) : null;
 
-  const kv = kvConfig ?? { ratePercent: GCT_STANDARD_RATE_FALLBACK, enabled: true, fromDb: false };
-  const disagreement =
-    dbRate != null &&
-    Math.abs(dbRate - kv.ratePercent) > 0.001;
-
-  if (disagreement) {
-    console.warn(
-      JSON.stringify({
-        event: 'gct_rate_source_disagreement',
-        dbRatePercent: dbRate,
-        kvRatePercent: kv.ratePercent,
-        dbAuthoritative: flags.dbAuthoritative,
-      }),
-    );
-  }
-
-  if (flags.dbAuthoritative && dbRate != null) {
+  if (dbRate != null) {
     return {
       ratePercent: dbRate,
-      enabled: kv.enabled,
+      enabled: flags.gctEnabled,
       fromDb: true,
-      sourceDisagreement: disagreement,
-      kvRatePercent: kv.ratePercent,
+      sourceDisagreement: false,
+      kvRatePercent: null,
     };
   }
 
-  if (dbRate != null && flags.preferDb) {
-    // Dual-read window: prefer DB for health, but keep charging KV until cutover
-    // so customer prices stay unchanged until accountant sign-off.
-    return {
-      ratePercent: kv.ratePercent,
-      enabled: kv.enabled,
-      fromDb: false,
-      sourceDisagreement: disagreement,
-      kvRatePercent: kv.ratePercent,
-    };
-  }
+  console.warn(
+    JSON.stringify({
+      event: 'gct_rate_db_unavailable',
+      fallbackPercent: GCT_STANDARD_RATE_FALLBACK,
+    }),
+  );
 
   return {
-    ...kv,
+    ratePercent: GCT_STANDARD_RATE_FALLBACK,
+    enabled: flags.gctEnabled,
     fromDb: false,
-    sourceDisagreement: disagreement,
-    kvRatePercent: kv.ratePercent,
+    sourceDisagreement: false,
+    kvRatePercent: null,
   };
 }
 
@@ -214,7 +150,6 @@ export async function resolveMerchantFoodGctRate(
   sb: Sb,
   merchantId: string,
 ): Promise<MerchantGctResolution> {
-  // Callers pass delivery-scoped or public-view clients; keep merchants read as before.
   const [config, merchantResult] = await Promise.all([
     loadGlobalGctConfig(sb),
     sb

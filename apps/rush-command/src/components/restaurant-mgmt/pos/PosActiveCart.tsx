@@ -11,8 +11,9 @@ interface PosActiveCartProps {
   subtotal: number;
   tax: number;
   total: number;
-  taxRate: number;
+  taxRate: number | null;
   gctRegistered?: boolean;
+  gctRateUnavailable?: boolean;
   submitting: boolean;
   fulfillmentType: InStoreFulfillmentType;
   guestName: string;
@@ -104,6 +105,7 @@ export default function PosActiveCart({
   total,
   taxRate,
   gctRegistered = true,
+  gctRateUnavailable = false,
   submitting,
   fulfillmentType,
   guestName,
@@ -233,18 +235,29 @@ export default function PosActiveCart({
                 <span>{formatJmd(subtotal)}</span>
               </div>
               <div className="flex items-center justify-between text-body-lg text-on-surface-variant">
-                <span>{gctRegistered === false ? 'Tax (exempt)' : `Tax (GCT ${taxRate}%)`}</span>
-                <span>{formatJmd(tax)}</span>
+                <span>
+                  {gctRegistered === false
+                    ? 'Tax (exempt)'
+                    : gctRateUnavailable || taxRate == null
+                      ? 'Tax (GCT rate unavailable)'
+                      : `Tax (GCT ${taxRate}%)`}
+                </span>
+                <span>{gctRateUnavailable ? '—' : formatJmd(tax)}</span>
               </div>
+              {gctRateUnavailable && (
+                <p className="text-xs text-destructive">
+                  Cannot checkout until GCT rate loads. Refresh or check Dominion Accounting settings.
+                </p>
+              )}
               <div className="my-2 h-px w-full bg-surface-variant" />
               <div className="flex items-center justify-between text-headline-md text-on-surface">
                 <span>Total</span>
-                <span className="text-primary">{formatJmd(total)}</span>
+                <span className="text-primary">{gctRateUnavailable ? '—' : formatJmd(total)}</span>
               </div>
             </div>
             <button
               type="button"
-              disabled={lines.length === 0}
+              disabled={lines.length === 0 || gctRateUnavailable}
               onClick={onCheckout}
               className="mt-2 flex min-h-[52px] w-full items-center justify-between rounded-xl bg-primary px-6 py-4 text-title-lg text-on-primary shadow-sm transition-all hover:bg-primary-container hover:text-on-primary-container active:scale-[0.98] disabled:opacity-50"
             >

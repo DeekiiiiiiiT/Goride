@@ -1,9 +1,9 @@
 # GCT Phase 0 — Ops & Accountant Gate
 
-**Status:** Required before Workstream D (customer-facing rate cutover).  
-**Related:** [GCT_ENGINE_AUDIT.md](./GCT_ENGINE_AUDIT.md), [JAMAICA_GCT_GUIDE.md](./JAMAICA_GCT_GUIDE.md)
+**Status:** Engineering cutover is **live** (Accounting engine sole charge source — see [GCT_CUTOVER_RUNBOOK.md](./GCT_CUTOVER_RUNBOOK.md)).  
+Accountant / ops rows below remain required for filing quality and TRN hygiene.
 
-Engineering does not change live customer prices until this checklist is signed off.
+**Related:** [GCT_ENGINE_AUDIT.md](./GCT_ENGINE_AUDIT.md), [JAMAICA_GCT_GUIDE.md](./JAMAICA_GCT_GUIDE.md)
 
 ---
 
@@ -11,7 +11,7 @@ Engineering does not change live customer prices until this checklist is signed 
 
 | # | Question | Answer | Date | Signed |
 |---|---|---|---|---|
-| 1 | Standard rate in force — **15%** or **16.5%**? | | | |
+| 1 | Standard rate in force — **15%** or **16.5%**? (Engine seeded at **15%** from 2020-04-01) | | | |
 | 2 | Past over-collection at 16.5% — **forward-only** or restate? (Plan default: forward-only) | | | |
 | 3 | Is Roam Rush GCT-registered? Entity name + TRN? | | | |
 | 4 | COD: Roam holds/remits merchant food GCT — documented in merchant agreement? Separate-account discipline? | | | |
@@ -40,18 +40,8 @@ For each row:
 
 ---
 
-## Go-live note (after sign-off)
+## Filing notes
 
 - Rate correction is **forward-only** unless accountant directs restatement.
 - Do not restate historical `tax_food_jmd` / `tax_platform_jmd` without written instruction.
-- Attach this signed checklist to the Dominion cutover ticket.
-
----
-
-## Engineering health checks (after schema lands)
-
-Dominion → Accounting → GCT engine surfaces:
-
-- Merchants with `gct_registered` and blank TRN
-- Dual-read disagreement (KV vs `accounting.gct_rates`)
-- Open tax periods
+- Dominion → Accounting → GCT: entities needing review, open periods, orphan ledger rows.

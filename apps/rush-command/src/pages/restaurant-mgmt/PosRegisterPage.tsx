@@ -36,19 +36,26 @@ export default function PosRegisterPage({
   merchant,
   useApi,
   taxRatePercent: taxRateProp,
-  gctRegistered: gctRegisteredProp = true,
+  gctRegistered: gctRegisteredProp,
   storeName,
   staffName,
   onUnpair,
   onEndShift,
 }: PosRegisterPageProps) {
-  const taxRate = useApi
-    ? (taxRateProp ?? 0)
+  // API mode: never invent 0% — null means rate not loaded yet (block checkout).
+  const taxRate: number | null = useApi
+    ? taxRateProp != null && Number.isFinite(Number(taxRateProp))
+      ? Number(taxRateProp)
+      : null
     : Number(
         JSON.parse(localStorage.getItem(`roam_restaurant_mgmt_setup_${merchant.id}`) || 'null')
           ?.taxRatePercent ?? FIXTURE_SETUP_DRAFT.taxRatePercent,
       );
-  const gctRegistered = useApi ? (gctRegisteredProp ?? true) : true;
+  const gctRegistered = useApi
+    ? gctRegisteredProp === undefined
+      ? true
+      : Boolean(gctRegisteredProp)
+    : true;
 
   const menuQuery = useMerchantMenu(useApi ? merchant.id : '');
   const categories = useApi
@@ -83,6 +90,7 @@ export default function PosRegisterPage({
   const [printJobCreated, setPrintJobCreated] = useState<boolean | null>(null);
 
   const cart = usePosCart(taxRate, gctRegistered);
+  const gctRateUnavailable = cart.rateBlocked;
   const displayStoreName = storeName ?? merchant.name;
   const showHeader = Boolean(staffName || storeName);
 
@@ -102,6 +110,10 @@ export default function PosRegisterPage({
   const openCheckout = () => {
     if (cart.isEmpty) {
       toast.error('Add items to the cart first');
+      return;
+    }
+    if (gctRateUnavailable) {
+      toast.error('GCT rate unavailable — refresh settings before checkout');
       return;
     }
     setStep('checkout');
@@ -127,6 +139,10 @@ export default function PosRegisterPage({
   };
 
   const completeSale = async () => {
+    if (gctRateUnavailable) {
+      toast.error('GCT rate unavailable — cannot complete sale');
+      return;
+    }
     setSubmitting(true);
     try {
       if (useApi) {
@@ -239,6 +255,7 @@ export default function PosRegisterPage({
           total={cart.pricing.total}
           taxRate={taxRate}
           gctRegistered={gctRegistered}
+          gctRateUnavailable={gctRateUnavailable}
           submitting={submitting}
           fulfillmentType={fulfillmentType}
           guestName={guestName}

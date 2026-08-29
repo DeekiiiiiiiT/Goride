@@ -8,6 +8,7 @@ import { requireEnterpriseAccess } from "../_shared/enterpriseAccess.ts";
 import { serviceClient } from "../_shared/enterpriseAccess.ts";
 import { canTransitionPackage } from "./packageTransitions.ts";
 import { computeLandedCost, DEFAULT_FX_USD_JMD } from "./landedCost.ts";
+import { resolveImportGctRateFraction } from "./resolveImportGctRate.ts";
 import { evaluateManifestReadiness } from "./manifestReadiness.ts";
 import { buildAwboldsXml, sha256Hex } from "./awboldsXml.ts";
 import { submitAwboldsToJca } from "./jcaSubmit.ts";
@@ -753,11 +754,13 @@ export function registerCourierOsRoutes(app: FreightApp) {
     const cet = Number(
       (pkg.hs_tariff_codes as { cet_rate?: number } | null)?.cet_rate ?? 0.2,
     );
+    const gctRate = await resolveImportGctRateFraction(serviceClient());
     const result = computeLandedCost({
       itemCostUsdMinor: Number(pkg.declared_value_usd_minor ?? 0),
       freightUsdMinor: pkg.freight_fee_usd_minor,
       insuranceUsdMinor: pkg.insurance_usd_minor,
       cetRate: cet,
+      gctRate,
     });
     const row = {
       organization_id: user.organizationId,
@@ -1105,12 +1108,12 @@ export function registerCourierOsRoutes(app: FreightApp) {
       const cet = Number(
         (pkg.hs_tariff_codes as { cet_rate?: number } | null)?.cet_rate ?? 0.2,
       );
-      const computed = computeDutyFromPackageRow({
+      const computed = await computeDutyFromPackageRow({
         declared_value_usd_minor: pkg.declared_value_usd_minor,
         freight_fee_usd_minor: pkg.freight_fee_usd_minor,
         insurance_usd_minor: pkg.insurance_usd_minor,
         cetRate: cet,
-      });
+      }, serviceClient());
       const upsert = {
         organization_id: user.organizationId,
         package_id: pkg.id,
@@ -1141,6 +1144,7 @@ export function registerCourierOsRoutes(app: FreightApp) {
       duty = saved;
     }
 
+    const gctRateForInvoice = await resolveImportGctRateFraction(serviceClient());
     const dutyResult = computeLandedCost({
       itemCostUsdMinor: Number(duty?.item_cost_usd_minor ?? 0),
       freightUsdMinor: Number(duty?.freight_usd_minor ?? 0),
@@ -1149,6 +1153,7 @@ export function registerCourierOsRoutes(app: FreightApp) {
       stampJmdMinor: Number(duty?.stamp_jmd_minor ?? 0),
       cafJmdMinor: Number(duty?.caf_jmd_minor ?? 0),
       fxUsdJmd: Number(duty?.fx_usd_jmd ?? DEFAULT_FX_USD_JMD),
+      gctRate: gctRateForInvoice,
     });
 
     const invoice = buildDualLedgerInvoice({

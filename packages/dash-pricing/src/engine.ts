@@ -525,7 +525,9 @@ export function parsePricingRules(raw: Record<string, unknown> | null | undefine
     cod: {
       pauseThresholdJmd: Number(cod.pause_threshold_jmd ?? DEFAULTS.cod?.pauseThresholdJmd ?? 10000),
     },
-    taxRatePercent: Number(flat.tax_rate_percent ?? DEFAULTS.taxRatePercent),
+    taxRatePercent: flat.tax_rate_percent != null && Number.isFinite(Number(flat.tax_rate_percent))
+      ? Number(flat.tax_rate_percent)
+      : undefined,
     roadDistanceMultiplier: flat.road_distance_multiplier != null
       ? Number(flat.road_distance_multiplier)
       : DEFAULTS.roadDistanceMultiplier,
@@ -583,7 +585,8 @@ export function defaultPricingRules(): PricingRules {
     courierMinPayJmd: 350,
     launchPromos: { freeDeliveryFirstNOrders: 0 },
     cod: { pauseThresholdJmd: 10000 },
-    taxRatePercent: 15,
+    // Tax rate is NOT a pricing-rules default — callers must supply via GCT resolver.
+    // Omitted from defaults so parsePricingRules cannot silently invent a statutory rate.
     roadDistanceMultiplier: 1.4,
     minOrderSubtotalJmd: 1500,
     hardMinOrderSubtotalJmd: 400,

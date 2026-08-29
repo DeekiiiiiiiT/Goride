@@ -171,6 +171,58 @@ describe('evaluateCoverage', () => {
     expect(r.matchedInclude?.name).toBe('Hospital');
   });
 
+  it('exclude wins an equal-priority tie (fail safe)', () => {
+    const square = CUTOUT.polygon;
+    const zones: CoverageZone[] = [
+      { id: 'inc', name: 'Inc', kind: 'include', priority: 10, polygon: square, market_id: ST_MARKET },
+      {
+        id: 'exc',
+        name: 'Exc',
+        kind: 'exclude',
+        priority: 10,
+        polygon: square,
+        market_id: ST_MARKET,
+        zone_policy: { action: 'block' },
+      },
+    ];
+    expect(evaluateCoverage(18.015, -76.965, zones).inZone).toBe(false);
+  });
+
+  it('safe island at exclude-default band: include 200 beats exclude 100', () => {
+    const cut: CoverageZone = { ...CUTOUT, priority: 100 };
+    const island: CoverageZone = {
+      ...ST_INCLUDE,
+      id: 'z-island-hi',
+      name: 'Hospital hi',
+      priority: 200,
+      polygon: CUTOUT.polygon,
+    };
+    const r = evaluateCoverage(18.015, -76.965, [ST_INCLUDE, cut, island]);
+    expect(r.inZone).toBe(true);
+    expect(r.matchedInclude?.name).toBe('Hospital hi');
+  });
+
+  it('honours recurring schedule via injected at', () => {
+    const scheduled: CoverageZone = {
+      ...CUTOUT,
+      priority: 100,
+      zone_policy: { action: 'block' },
+      schedules: [
+        {
+          dow: [0, 1, 2, 3, 4, 5, 6],
+          start_time: '20:00',
+          end_time: '23:59',
+          timezone: 'America/Jamaica',
+        },
+      ],
+    };
+    // 2026-08-29 21:00 America/Jamaica = 2026-08-30 02:00 UTC (EDT-less; Jamaica is UTC-5)
+    const inside = new Date('2026-08-30T02:00:00.000Z');
+    const outside = new Date('2026-08-29T18:00:00.000Z'); // 13:00 Jamaica
+    expect(evaluateCoverage(18.015, -76.965, [ST_INCLUDE, scheduled], inside).inZone).toBe(false);
+    expect(evaluateCoverage(18.015, -76.965, [ST_INCLUDE, scheduled], outside).inZone).toBe(true);
+  });
+
   it('ignores expired exclusions', () => {
     const expired: CoverageZone = {
       ...CUTOUT,

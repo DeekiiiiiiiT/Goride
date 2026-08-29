@@ -12,6 +12,7 @@ import {
   itemsFingerprint,
   mintHaulageQuoteToken,
 } from "./haulageQuoteToken.ts";
+import { classifyHaulageGoodsSupply } from "./gctClassify.ts";
 
 export type HaulageFareBreakdown = {
   base_minor: number;
@@ -160,5 +161,6 @@ export async function buildHaulageQuote(
     breakdown,
     booking_kind,
     scheduled_pickup_at: params.scheduled_pickup_at ?? null,
+    gct: classifyHaulageGoodsSupply(),
   };
 }

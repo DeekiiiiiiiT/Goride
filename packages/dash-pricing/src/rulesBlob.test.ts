@@ -78,8 +78,8 @@ describe('parsePricingRules flat/nested parity', () => {
       distanceKm: 3.2,
       rules: { ...parsed, pricingV2Enabled: true },
       tier: { slug: 'standard', name: 'Standard', commissionRate: 0.2 },
-      taxRatePercent: 16.5,
-      platformTaxRatePercent: 16.5,
+      taxRatePercent: 15,
+      platformTaxRatePercent: 15,
     });
     const roundTripped = parsePricingRules(serializePricingRules(parsed));
     const after = buildOrderPricing({
@@ -87,8 +87,8 @@ describe('parsePricingRules flat/nested parity', () => {
       distanceKm: 3.2,
       rules: { ...roundTripped, pricingV2Enabled: true },
       tier: { slug: 'standard', name: 'Standard', commissionRate: 0.2 },
-      taxRatePercent: 16.5,
-      platformTaxRatePercent: 16.5,
+      taxRatePercent: 15,
+      platformTaxRatePercent: 15,
     });
     expect(after.deliveryFee).toBe(before.deliveryFee);
     expect(after.serviceFee).toBe(before.serviceFee);

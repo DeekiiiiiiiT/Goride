@@ -82,7 +82,7 @@ export function attachScopedExclusionRoutes(
       geom,
       parish_id: body.parish_id ? String(body.parish_id) : null,
       market_id: body.market_id ? String(body.market_id) : null,
-      priority: Number.isFinite(Number(body.priority)) ? Math.trunc(Number(body.priority)) : 10,
+      priority: Number.isFinite(Number(body.priority)) ? Math.trunc(Number(body.priority)) : 100,
       category: body.category ? String(body.category) : null,
       reason: body.reason ? String(body.reason) : null,
       is_active: body.is_active !== false,

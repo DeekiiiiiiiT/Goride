@@ -109,7 +109,7 @@ export function PlatformExclusionsPanel({ accessToken, parishes, canWrite }: Pro
         name: tab === 'global' ? 'Platform exclusion' : `${parish!.name} exclusion`,
         polygon: box,
         category: 'operational',
-        priority: 10,
+        priority: 100,
         zone_policy: { action: 'block' },
       });
       toast.success('Draft created — edit polygon in a future map pass; set metadata now');

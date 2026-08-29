@@ -28,7 +28,8 @@ function svc(): SupabaseClient {
 }
 
 function acct(sb: SupabaseClient) {
-  return sb.schema('accounting');
+  // public.* API mirrors of accounting.* until accounting is on Exposed schemas
+  return sb;
 }
 
 app.get('/health', async (c) => {
@@ -39,8 +40,14 @@ app.get('/health', async (c) => {
   const a = acct(sb);
   const config = await loadGlobalGctConfig(sb);
 
-  const [{ data: flags }, { data: needsReview }, { count: openPeriods }, { data: rateRows }] =
-    await Promise.all([
+  const [
+    { data: flags },
+    { data: needsReview },
+    { count: openPeriods },
+    { data: rateRows },
+    { count: orphanOutput },
+    { count: orphanInput },
+  ] = await Promise.all([
       a.from('gct_engine_flags').select('value').eq('key', 'resolver').maybeSingle(),
       a
         .from('gct_entities')
@@ -52,6 +59,8 @@ app.get('/health', async (c) => {
         .from('gct_rates')
         .select('supply_class, rate_percent, effective_from, effective_to')
         .eq('supply_class', 'standard'),
+      a.from('gct_output_tax').select('id', { count: 'exact', head: true }).is('period_id', null),
+      a.from('gct_input_tax').select('id', { count: 'exact', head: true }).is('period_id', null),
     ]);
 
   let dbStandard: number | null = null;
@@ -80,6 +89,8 @@ app.get('/health', async (c) => {
     resolverFlags: (flags as { value?: unknown } | null)?.value ?? null,
     needsReviewEntities: needsReview ?? [],
     openPeriodCount: openPeriods ?? 0,
+    orphanOutputCount: orphanOutput ?? 0,
+    orphanInputCount: orphanInput ?? 0,
   });
 });
 
@@ -404,6 +415,90 @@ app.post('/input-tax', async (c) => {
   return c.json({ row: data });
 });
 
+app.post('/input-tax/batch', async (c) => {
+  const auth = await requirePlatformAdmin(c);
+  if (auth instanceof Response) return auth;
+  if (!WRITE_ROLES.has(auth.role)) return c.json({ error: 'Forbidden' }, 403);
+
+  const body = await c.req.json();
+  const rowsIn = Array.isArray(body.rows) ? body.rows : [];
+  if (rowsIn.length === 0) return c.json({ error: 'rows required' }, 400);
+
+  const a = acct(svc());
+  const inserts = rowsIn.map((row: Record<string, unknown>) => {
+    const taxAmount = Number(row.tax_amount_jmd ?? row.taxAmountJmd ?? 0);
+    const restriction = String(
+      row.credit_restriction ?? row.creditRestriction ?? 'none',
+    ) as InputTaxCreditRestriction;
+    return {
+      tax_point: row.tax_point ?? row.taxPoint ?? new Date().toISOString(),
+      supplier_trn: row.supplier_trn ?? row.supplierTrn ?? null,
+      base_amount_jmd: Number(row.base_amount_jmd ?? row.baseAmountJmd ?? 0),
+      rate_percent: Number(row.rate_percent ?? row.ratePercent ?? 15),
+      tax_amount_jmd: taxAmount,
+      credit_restriction: restriction,
+      creditable_amount_jmd: resolveCreditableInputTax({
+        taxAmountJmd: taxAmount,
+        restriction,
+        creditFraction: row.credit_fraction ?? row.creditFraction,
+      }),
+      period_id: row.period_id ?? row.periodId ?? body.period_id ?? body.periodId ?? null,
+      evidence_url: row.evidence_url ?? row.evidenceUrl ?? null,
+      source_ref: row.source_ref ?? row.sourceRef ?? null,
+    };
+  });
+
+  const { data, error } = await a.from('gct_input_tax').insert(inserts).select('id');
+  if (error) return c.json({ error: error.message }, 500);
+  return c.json({ inserted: data?.length ?? 0 });
+});
+
+app.get('/orphans', async (c) => {
+  const auth = await requirePlatformAdmin(c);
+  if (auth instanceof Response) return auth;
+  const a = acct(svc());
+  const [{ data: output }, { data: input }] = await Promise.all([
+    a.from('gct_output_tax').select('*').is('period_id', null).order('tax_point', { ascending: false }).limit(200),
+    a.from('gct_input_tax').select('*').is('period_id', null).order('tax_point', { ascending: false }).limit(200),
+  ]);
+  return c.json({
+    output: output ?? [],
+    input: input ?? [],
+    outputCount: output?.length ?? 0,
+    inputCount: input?.length ?? 0,
+  });
+});
+
+app.post('/orphans/assign', async (c) => {
+  const auth = await requirePlatformAdmin(c);
+  if (auth instanceof Response) return auth;
+  if (!WRITE_ROLES.has(auth.role)) return c.json({ error: 'Forbidden' }, 403);
+
+  const body = await c.req.json();
+  const periodId = String(body.period_id ?? body.periodId ?? '').trim();
+  if (!periodId) return c.json({ error: 'period_id required' }, 400);
+
+  const a = acct(svc());
+  const { data: period, error: pErr } = await a.from('gct_periods').select('id, status').eq('id', periodId).single();
+  if (pErr || !period) return c.json({ error: 'Period not found' }, 404);
+  if (period.status !== 'open') {
+    return c.json({ error: 'Can only assign orphans to an open period' }, 400);
+  }
+
+  const [{ data: outUpdated, error: outErr }, { data: inUpdated, error: inErr }] = await Promise.all([
+    a.from('gct_output_tax').update({ period_id: periodId }).is('period_id', null).select('id'),
+    a.from('gct_input_tax').update({ period_id: periodId }).is('period_id', null).select('id'),
+  ]);
+  if (outErr || inErr) {
+    return c.json({ error: outErr?.message || inErr?.message }, 500);
+  }
+  return c.json({
+    assignedOutput: outUpdated?.length ?? 0,
+    assignedInput: inUpdated?.length ?? 0,
+    periodId,
+  });
+});
+
 app.post('/resolver-flags', async (c) => {
   const auth = await requirePlatformAdmin(c);
   if (auth instanceof Response) return auth;
@@ -412,8 +507,9 @@ app.post('/resolver-flags', async (c) => {
   const body = await c.req.json();
   const value = {
     prefer_db: body.prefer_db !== false,
-    kv_fallback: body.kv_fallback !== false,
-    db_authoritative: body.db_authoritative === true,
+    kv_fallback: false,
+    db_authoritative: true,
+    gct_enabled: body.gct_enabled !== false,
   };
   const a = acct(svc());
   const { data, error } = await a

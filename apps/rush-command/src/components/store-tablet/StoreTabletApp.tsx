@@ -14,7 +14,7 @@ import StationKioskFlow from '../staff-ops/station/StationKioskFlow';
 import ActingShiftBar from '../staff-ops/station/ActingShiftBar';
 import CounterOrdersPage from '../../pages/staff-ops/CounterOrdersPage';
 import KitchenQueuePage from '../../pages/staff-ops/KitchenQueuePage';
-import PosRegisterPage from '../../pages/restaurant-mgmt/PosRegisterPage';
+import PosRegisterWithSettings from './PosRegisterWithSettings';
 import BarQueuePage from '../../pages/staff-ops/BarQueuePage';
 import ExpoRunnerPage from '../../pages/staff-ops/ExpoRunnerPage';
 import DriveThruLanePage from '../../pages/staff-ops/DriveThruLanePage';
@@ -28,7 +28,6 @@ import {
   parseTabletUrlParams,
   syncTabletPairingCodeInUrl,
 } from '../../lib/storeTabletUrl';
-import { hasCapability, CAPABILITY_IN_STORE } from '../../lib/merchant-capabilities';
 
 type TabletView = 'pairing' | 'kiosk' | 'station';
 
@@ -142,9 +141,8 @@ export default function StoreTabletApp() {
     }
     if (deviceSession.station === 'pos') {
       return (
-        <PosRegisterPage
+        <PosRegisterWithSettings
           merchant={merchant}
-          useApi={hasCapability(merchant, CAPABILITY_IN_STORE)}
           storeName={deviceSession.storeName}
           staffName={actingMember.name}
           onUnpair={() => void handleUnpair()}

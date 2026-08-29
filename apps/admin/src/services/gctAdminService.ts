@@ -34,6 +34,8 @@ export type GctHealth = {
   resolverFlags: Record<string, unknown> | null;
   needsReviewEntities: Array<Record<string, unknown>>;
   openPeriodCount: number;
+  orphanOutputCount?: number;
+  orphanInputCount?: number;
 };
 
 export const gctAdminService = {
@@ -79,9 +81,27 @@ export const gctAdminService = {
     }),
   closePeriod: (id: string) =>
     gctFetch(`/periods/${id}/close`, { method: 'POST', body: '{}' }),
+  recordInputTax: (body: Record<string, unknown>) =>
+    gctFetch('/input-tax', { method: 'POST', body: JSON.stringify(body) }),
+  importInputTaxBatch: (rows: Array<Record<string, unknown>>, periodId?: string) =>
+    gctFetch('/input-tax/batch', {
+      method: 'POST',
+      body: JSON.stringify({ rows, period_id: periodId }),
+    }),
+  orphans: () =>
+    gctFetch<{
+      output: Array<Record<string, unknown>>;
+      input: Array<Record<string, unknown>>;
+      outputCount: number;
+      inputCount: number;
+    }>('/orphans'),
+  assignOrphans: (periodId: string) =>
+    gctFetch('/orphans/assign', {
+      method: 'POST',
+      body: JSON.stringify({ period_id: periodId }),
+    }),
   setResolverFlags: (flags: {
     prefer_db?: boolean;
-    kv_fallback?: boolean;
-    db_authoritative?: boolean;
+    gct_enabled?: boolean;
   }) => gctFetch('/resolver-flags', { method: 'POST', body: JSON.stringify(flags) }),
 };

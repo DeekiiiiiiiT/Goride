@@ -11,6 +11,8 @@ function money(n: unknown) {
 
 export function GctRemittancePage() {
   const [periods, setPeriods] = useState<Array<Record<string, unknown>>>([]);
+  const [orphanCount, setOrphanCount] = useState(0);
+  const [assignPeriodId, setAssignPeriodId] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -19,8 +21,14 @@ export function GctRemittancePage() {
     setLoading(true);
     setError(null);
     try {
-      const data = await gctAdminService.periods();
+      const [data, orphans] = await Promise.all([
+        gctAdminService.periods(),
+        gctAdminService.orphans(),
+      ]);
       setPeriods(data.periods);
+      setOrphanCount(orphans.outputCount + orphans.inputCount);
+      const open = data.periods.find((p) => p.status === 'open');
+      if (open) setAssignPeriodId(String(open.id));
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load periods');
     } finally {
@@ -45,6 +53,15 @@ export function GctRemittancePage() {
   }
 
   async function closePeriod(id: string) {
+    if (orphanCount > 0) {
+      if (
+        !confirm(
+          `${orphanCount} ledger row(s) have no period (orphans). Assign them before closing, or continue anyway?`,
+        )
+      ) {
+        return;
+      }
+    }
     if (!confirm('Close and lock this period? Totals will freeze.')) return;
     setBusy(true);
     try {
@@ -52,6 +69,19 @@ export function GctRemittancePage() {
       await load();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Close failed');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function assignOrphans() {
+    if (!assignPeriodId) return;
+    setBusy(true);
+    try {
+      await gctAdminService.assignOrphans(assignPeriodId);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Assign failed');
     } finally {
       setBusy(false);
     }
@@ -94,6 +124,36 @@ export function GctRemittancePage() {
       </div>
 
       {error && <p className="text-sm text-destructive">{error}</p>}
+
+      {orphanCount > 0 && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Orphan ledger rows</CardTitle>
+            <CardDescription>
+              {orphanCount} row(s) with no period (tax point fell in a closed/filed month). Assign to
+              an open period before filing.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-wrap gap-2 items-center">
+            <select
+              className="border rounded-md h-9 px-2 text-sm"
+              value={assignPeriodId}
+              onChange={(e) => setAssignPeriodId(e.target.value)}
+            >
+              {periods
+                .filter((p) => p.status === 'open')
+                .map((p) => (
+                  <option key={String(p.id)} value={String(p.id)}>
+                    {String(p.period_start)} → {String(p.period_end)}
+                  </option>
+                ))}
+            </select>
+            <Button size="sm" onClick={() => void assignOrphans()} disabled={busy || !assignPeriodId}>
+              Assign orphans to open period
+            </Button>
+          </CardContent>
+        </Card>
+      )}
 
       {loading ? (
         <Loader2 className="h-5 w-5 animate-spin" />

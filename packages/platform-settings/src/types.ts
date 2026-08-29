@@ -102,21 +102,12 @@ export interface FleetProductSettings {
   updatedAt?: string;
 }
 
-/** @deprecated Prefer accounting.gct_rates — kept for KV dual-read until cutover. */
-export interface TaxSettings {
-  /** Standard GCT rate on taxable supplies. */
-  gctStandardRatePercent: number;
-  /** Kill switch — when false, food GCT computes to zero platform-wide. */
-  gctEnabled: boolean;
-}
-
-/** Dominion global emergency / cross-product controls. */
+/** Dominion global emergency / cross-product controls. GCT lives in Accounting → GCT. */
 export interface GlobalPlatformSettings {
   maintenanceMode?: boolean;
   maintenanceMessage?: string;
   securityPolicies?: Partial<SecurityPolicies>;
   announcement?: Partial<AnnouncementSettings>;
-  tax?: TaxSettings;
   updatedAt?: string;
 }
 

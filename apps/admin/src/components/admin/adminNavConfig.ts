@@ -131,15 +131,22 @@ export const VEHICLE_DATABASE_CHILDREN: NavChild[] = [
   { id: 'parts-sourcing', label: 'Parts sourcing', icon: ShoppingCart },
 ];
 
-export const ACCOUNTING_CHILDREN: NavChild[] = [
-  { id: 'gct-engine', label: 'GCT engine', icon: Scale },
+export const GCT_CHILDREN: NavChild[] = [
+  { id: 'gct-engine', label: 'Engine', icon: Scale },
   { id: 'gct-rates', label: 'Rates & classes', icon: Percent },
-  { id: 'gct-entities', label: 'GCT registrations', icon: BadgeCheck },
-  { id: 'gct-ledger', label: 'GCT ledger', icon: BookOpen },
+  { id: 'gct-entities', label: 'Registrations', icon: BadgeCheck },
+  { id: 'gct-ledger', label: 'Ledger', icon: BookOpen },
   { id: 'gct-remittance', label: 'Remittance & filing', icon: Receipt },
+];
+
+/** Vendor catalog under Accounting — supports expenses / input-tax suppliers, not the GCT engine. */
+export const ACCOUNTING_VENDOR_CHILDREN: NavChild[] = [
   { id: 'vendor-database', label: 'Vendors & categories', icon: Store },
   { id: 'pending-vendor-requests', label: 'Pending vendor requests', icon: Inbox },
 ];
+
+/** @deprecated Prefer GCT_CHILDREN + ACCOUNTING_VENDOR_CHILDREN. */
+export const ACCOUNTING_CHILDREN = [...GCT_CHILDREN, ...ACCOUNTING_VENDOR_CHILDREN];
 
 export const ROAM_FLEET_CHILDREN: NavChild[] = [
   { id: 'fleet-overview', label: 'Overview', icon: BarChart3 },
@@ -298,6 +305,9 @@ export const SECTION_META = {
   rides: { label: 'Roam Rides', icon: Navigation },
   haul: { label: 'Roam Haul', icon: Truck },
   driver: { label: 'Roam Driver', icon: Car },
+  accounting: { label: 'Accounting', icon: Receipt },
+  gct: { label: 'GCT', icon: Scale },
+  accountingVendors: { label: 'Vendors', icon: Store },
 } as const;
 
 export function settingsTabFromPageId(pageId: string): string | null {

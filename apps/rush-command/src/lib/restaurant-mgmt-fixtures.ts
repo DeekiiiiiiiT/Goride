@@ -66,7 +66,7 @@ export const FIXTURE_PRINT_JOBS: PrintJobFixture[] = [
 ];
 
 export const FIXTURE_SETUP_DRAFT: RestaurantMgmtSetupDraft = {
-  taxRatePercent: 16.5,
+  taxRatePercent: 15,
   printerName: 'Counter Star MC',
   receiptFooter: 'Thank you for dining with us!',
 };

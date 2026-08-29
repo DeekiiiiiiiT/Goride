@@ -27,13 +27,20 @@ export function GctEnginePage() {
     void load();
   }, [load]);
 
+  const fromEngine = Boolean(health?.fromDb);
+  const gctOn =
+    health?.resolverFlags &&
+    typeof health.resolverFlags === 'object' &&
+    (health.resolverFlags as { gct_enabled?: boolean }).gct_enabled !== false;
+
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">GCT engine</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Health of the shared Jamaica GCT rate, registrations, and dual-read status.
+            Live Jamaica GCT rates, registrations, and ledger health. Accounting is the only charge
+            source.
           </p>
         </div>
         <Button variant="outline" size="sm" onClick={() => void load()} disabled={loading}>
@@ -60,18 +67,18 @@ export function GctEnginePage() {
               </CardHeader>
               <CardContent className="text-sm text-muted-foreground">
                 {health.gctEnabled ? 'GCT enabled' : 'GCT disabled'} ·{' '}
-                {health.fromDb ? 'DB authoritative' : 'KV dual-read (prices unchanged until cutover)'}
+                {fromEngine ? 'Accounting engine' : 'Fallback seed (DB unavailable)'}
               </CardContent>
             </Card>
             <Card>
               <CardHeader className="pb-2">
-                <CardDescription>DB seeded standard</CardDescription>
+                <CardDescription>Standard rate (engine)</CardDescription>
                 <CardTitle className="text-3xl">
                   {health.dbStandardRatePercent != null ? `${health.dbStandardRatePercent}%` : '—'}
                 </CardTitle>
               </CardHeader>
               <CardContent className="text-sm text-muted-foreground">
-                KV: {health.kvRatePercent != null ? `${health.kvRatePercent}%` : '—'}
+                Edit under Rates & classes
               </CardContent>
             </Card>
             <Card>
@@ -81,25 +88,51 @@ export function GctEnginePage() {
               </CardHeader>
               <CardContent className="text-sm text-muted-foreground">
                 Needs review: {health.needsReviewEntities.length}
+                {(health.orphanOutputCount || health.orphanInputCount) ? (
+                  <>
+                    {' '}
+                    · Orphans: {(health.orphanOutputCount ?? 0) + (health.orphanInputCount ?? 0)}
+                  </>
+                ) : null}
               </CardContent>
             </Card>
           </div>
 
-          {health.sourceDisagreement ? (
-            <Alert variant="destructive">
-              <AlertCircle className="h-4 w-4" />
-              <AlertTitle>Rate source disagreement</AlertTitle>
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Engine status</CardTitle>
+              <CardDescription>
+                Live quotes use Accounting → Rates. Global Settings tax has been removed.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="text-sm space-y-1">
+              <p>
+                Resolver flags:{' '}
+                <code className="text-xs">{JSON.stringify(health.resolverFlags ?? {})}</code>
+              </p>
+              <p>
+                Engine authoritative:{' '}
+                {fromEngine && gctOn ? 'yes' : fromEngine ? 'yes (GCT kill-switch off)' : 'degraded'}
+              </p>
+            </CardContent>
+          </Card>
+
+          {fromEngine ? (
+            <Alert>
+              <CheckCircle2 className="h-4 w-4" />
+              <AlertTitle>Engine live</AlertTitle>
               <AlertDescription>
-                Database standard rate and Dominion KV disagree. Do not flip DB-authoritative until
-                accountant sign-off (see docs/GCT_PHASE0_OPS_CHECKLIST.md).
+                Customer charges use the Accounting standard rate. Manage rates under Rates &
+                classes; remittance under Remittance & filing.
               </AlertDescription>
             </Alert>
           ) : (
-            <Alert>
-              <CheckCircle2 className="h-4 w-4" />
-              <AlertTitle>Sources aligned or dual-read idle</AlertTitle>
+            <Alert variant="destructive">
+              <AlertCircle className="h-4 w-4" />
+              <AlertTitle>Engine rate unavailable</AlertTitle>
               <AlertDescription>
-                No active disagreement signal on this refresh.
+                No standard rate row resolved — charging fell back to the seeded statutory rate.
+                Check Rates & classes.
               </AlertDescription>
             </Alert>
           )}
@@ -108,7 +141,7 @@ export function GctEnginePage() {
             <CardHeader>
               <CardTitle className="text-base">Entities needing review</CardTitle>
               <CardDescription>
-                Registered without TRN or placeholder Roam entity — ops must clear before cutover.
+                Registered without TRN or placeholder Roam entity — clear before filing.
               </CardDescription>
             </CardHeader>
             <CardContent>

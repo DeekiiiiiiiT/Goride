@@ -190,14 +190,14 @@ describe('buildOrderPricing — marginal defaults', () => {
       rules: { ...SPANISH_TOWN_RULES, pricingV2Enabled: true },
       tier: { slug: 'standard', name: 'Standard', commissionRate: 0.20 },
       customerOrderCount: 5,
-      taxRatePercent: 16.5,
-      platformTaxRatePercent: 16.5,
+      taxRatePercent: 15,
+      platformTaxRatePercent: 15,
     });
 
     expect(result.deliveryFee).toBe(520);
     expect(result.serviceFee).toBe(375);
     expect(result.merchantCommissionAmount).toBe(500);
-    expect(result.taxFoodJmd).toBe(412.5);
+    expect(result.taxFoodJmd).toBe(375);
     expect(result.taxPlatformJmd).toBeGreaterThan(0);
     expect(result.processingFee).toBe(0);
   });
@@ -209,8 +209,8 @@ describe('buildOrderPricing — marginal defaults', () => {
       rules: PROMO_RULES,
       tier: { slug: 'basic', name: 'Basic', commissionRate: 0.12 },
       customerOrderCount: 1,
-      taxRatePercent: 16.5,
-      platformTaxRatePercent: 16.5,
+      taxRatePercent: 15,
+      platformTaxRatePercent: 15,
     });
     expect(result.freeDeliveryApplied).toBe(true);
     expect(result.deliveryFee).toBe(0);
@@ -230,11 +230,11 @@ describe('buildOrderPricing — marginal + processing', () => {
       tier: { slug: 'standard', name: 'Standard', commissionRate: 0.20 },
       customerOrderCount: 5,
       paymentMethod: 'wipay',
-      taxRatePercent: 16.5,
-      platformTaxRatePercent: 16.5,
+      taxRatePercent: 15,
+      platformTaxRatePercent: 15,
     });
     expect(result.serviceFee).toBe(180);
-    expect(result.taxFoodJmd).toBe(198);
+    expect(result.taxFoodJmd).toBe(180);
     expect(result.taxPlatformJmd).toBeGreaterThan(0);
     const orderBase = 1200 + 180 + 400 + result.tax;
     expect(result.processingFeeOrder).toBe(Math.round(orderBase * 0.045 * 100) / 100);
@@ -250,8 +250,8 @@ describe('buildOrderPricing — marginal + processing', () => {
       tier: { slug: 'standard', name: 'Standard', commissionRate: 0.20 },
       customerOrderCount: 5,
       paymentMethod: 'cash',
-      taxRatePercent: 16.5,
-      platformTaxRatePercent: 16.5,
+      taxRatePercent: 15,
+      platformTaxRatePercent: 15,
     });
     expect(result.serviceFee).toBe(150);
   });
@@ -265,8 +265,8 @@ describe('buildOrderPricing — marginal + processing', () => {
       tier: { slug: 'standard', name: 'Standard', commissionRate: 0.20 },
       customerOrderCount: 5,
       paymentMethod: 'wipay',
-      taxRatePercent: 16.5,
-      platformTaxRatePercent: 16.5,
+      taxRatePercent: 15,
+      platformTaxRatePercent: 15,
     });
     expect(result.serviceFee).toBe(2500);
   });
@@ -280,8 +280,8 @@ describe('buildOrderPricing — marginal + processing', () => {
       tier: { slug: 'standard', name: 'Standard', commissionRate: 0.20 },
       customerOrderCount: 5,
       paymentMethod: 'cash',
-      taxRatePercent: 16.5,
-      platformTaxRatePercent: 16.5,
+      taxRatePercent: 15,
+      platformTaxRatePercent: 15,
     });
     expect(result.processingFee).toBe(0);
     expect(result.customerTotal).toBe(result.orderTotal);
@@ -297,8 +297,8 @@ describe('buildOrderPricing — marginal + processing', () => {
       tier: { slug: 'standard', name: 'Standard', commissionRate: 0.20 },
       customerOrderCount: 5,
       paymentMethod: 'wipay',
-      taxRatePercent: 16.5,
-      platformTaxRatePercent: 16.5,
+      taxRatePercent: 15,
+      platformTaxRatePercent: 15,
     });
     expect(result.processingFeeTip).toBe(4.5);
     expect(result.courierTipNet).toBe(95.5);
@@ -314,8 +314,8 @@ describe('buildOrderPricing — marginal + processing', () => {
       tier: { slug: 'standard', name: 'Standard', commissionRate: 0.20 },
       customerOrderCount: 5,
       serviceFeeWaived: true,
-      taxRatePercent: 16.5,
-      platformTaxRatePercent: 16.5,
+      taxRatePercent: 15,
+      platformTaxRatePercent: 15,
     });
     expect(result.serviceFee).toBe(0);
   });
@@ -328,8 +328,8 @@ describe('buildOrderPricing — marginal + processing', () => {
       rules: MARGINAL_RULES,
       tier: { slug: 'standard', name: 'Standard', commissionRate: 0.20 },
       customerOrderCount: 5,
-      taxRatePercent: 16.5,
-      platformTaxRatePercent: 16.5,
+      taxRatePercent: 15,
+      platformTaxRatePercent: 15,
     });
     expect(result.serviceFee).toBe(750);
   });
@@ -345,8 +345,8 @@ describe('buildOrderPricing — trial balance invariant', () => {
       tier: { slug: 'standard', name: 'Standard', commissionRate: 0.20 },
       customerOrderCount: 5,
       paymentMethod: 'cash',
-      taxRatePercent: 16.5,
-      platformTaxRatePercent: 16.5,
+      taxRatePercent: 15,
+      platformTaxRatePercent: 15,
       tip: 50,
     });
     const platformDue = result.serviceFee + result.merchantCommissionAmount
@@ -365,8 +365,8 @@ describe('buildOrderPricing — zone surcharge (SURCHARGE-1)', () => {
       rules: { ...SPANISH_TOWN_RULES, pricingV2Enabled: true },
       tier: { slug: 'standard', name: 'Standard', commissionRate: 0.20 },
       customerOrderCount: 5,
-      taxRatePercent: 16.5,
-      platformTaxRatePercent: 16.5,
+      taxRatePercent: 15,
+      platformTaxRatePercent: 15,
     });
     const withSur = buildOrderPricing({
       subtotal: 2500,
@@ -374,8 +374,8 @@ describe('buildOrderPricing — zone surcharge (SURCHARGE-1)', () => {
       rules: { ...SPANISH_TOWN_RULES, pricingV2Enabled: true },
       tier: { slug: 'standard', name: 'Standard', commissionRate: 0.20 },
       customerOrderCount: 5,
-      taxRatePercent: 16.5,
-      platformTaxRatePercent: 16.5,
+      taxRatePercent: 15,
+      platformTaxRatePercent: 15,
       zoneSurchargeJmd: 200,
     });
     expect(withSur.zoneSurchargeJmd).toBe(200);
@@ -394,8 +394,8 @@ describe('buildOrderPricing — zone surcharge (SURCHARGE-1)', () => {
       tier: { slug: 'standard', name: 'Standard', commissionRate: 0.20 },
       customerOrderCount: 5,
       paymentMethod: 'wipay',
-      taxRatePercent: 16.5,
-      platformTaxRatePercent: 16.5,
+      taxRatePercent: 15,
+      platformTaxRatePercent: 15,
     });
     const withSur = buildOrderPricing({
       subtotal: 2000,
@@ -404,8 +404,8 @@ describe('buildOrderPricing — zone surcharge (SURCHARGE-1)', () => {
       tier: { slug: 'standard', name: 'Standard', commissionRate: 0.20 },
       customerOrderCount: 5,
       paymentMethod: 'wipay',
-      taxRatePercent: 16.5,
-      platformTaxRatePercent: 16.5,
+      taxRatePercent: 15,
+      platformTaxRatePercent: 15,
       zoneSurchargeJmd: 200,
     });
     expect(withSur.processingFeeOrder).toBeGreaterThan(without.processingFeeOrder);
@@ -421,8 +421,8 @@ describe('buildOrderPricing — zone surcharge (SURCHARGE-1)', () => {
       rules: PROMO_RULES,
       tier: { slug: 'basic', name: 'Basic', commissionRate: 0.12 },
       customerOrderCount: 1,
-      taxRatePercent: 16.5,
-      platformTaxRatePercent: 16.5,
+      taxRatePercent: 15,
+      platformTaxRatePercent: 15,
       zoneSurchargeJmd: 200,
     });
     expect(result.freeDeliveryApplied).toBe(true);
@@ -443,8 +443,8 @@ describe('buildOrderPricing — zone surcharge (SURCHARGE-1)', () => {
       tier: { slug: 'standard', name: 'Standard', commissionRate: 0.20 },
       customerOrderCount: 5,
       paymentMethod: 'cash',
-      taxRatePercent: 16.5,
-      platformTaxRatePercent: 16.5,
+      taxRatePercent: 15,
+      platformTaxRatePercent: 15,
       tip: 50,
       zoneSurchargeJmd: 200,
     });
@@ -489,8 +489,8 @@ describe('marketplace — tier base, courier ladder, small-order fee', () => {
         baseDeliveryFeeJmd: 150,
       },
       paymentMethod: 'cash',
-      taxRatePercent: 16.5,
-      platformTaxRatePercent: 16.5,
+      taxRatePercent: 15,
+      platformTaxRatePercent: 15,
     });
     expect(result.deliveryFee).toBe(150 + 10 * 60); // 2km included
     expect(result.deliveryFeeCourierAmount).toBe(250 + 12 * 80); // 1210

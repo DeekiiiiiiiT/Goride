@@ -9,7 +9,6 @@ import {
   AlertTriangle,
   Globe,
   Megaphone,
-  Receipt,
 } from 'lucide-react';
 import { withSettingsSegmentHeaders } from '@roam/api-client';
 import {
@@ -205,20 +204,6 @@ export function GlobalPlatformSettingsPage({
               <p className="text-slate-900 dark:text-white">Supabase Edge Functions + KV</p>
             </div>
           </div>
-        </SettingsPanel>
-      )}
-
-      {activeTab === 'general' && (
-        <SettingsPanel
-          icon={<Receipt className="w-4 h-4 text-violet-400" />}
-          title="General Consumption Tax (GCT)"
-          description="Moved to Accounting → GCT engine."
-        >
-          <p className="text-sm text-slate-700 dark:text-slate-200">
-            Manage rates, registrations, ledger, and remittance under{' '}
-            <strong>Accounting → GCT</strong>. The legacy Global Settings rate field has been
-            removed so Dominion cannot silently diverge from the engine.
-          </p>
         </SettingsPanel>
       )}
 
