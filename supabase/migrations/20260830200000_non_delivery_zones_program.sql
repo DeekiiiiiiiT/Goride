@@ -33,6 +33,9 @@ CREATE TABLE IF NOT EXISTS delivery.zone_schedules (
 CREATE INDEX IF NOT EXISTS idx_zone_schedules_zone
   ON delivery.zone_schedules(zone_id);
 
+ALTER TABLE delivery.zone_schedules ENABLE ROW LEVEL SECURITY;
+GRANT ALL ON delivery.zone_schedules TO service_role;
+
 -- Phase 2: scoped exclusions (global / parish / market)
 CREATE TABLE IF NOT EXISTS delivery.scoped_exclusion_zones (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -82,6 +85,11 @@ CREATE TABLE IF NOT EXISTS delivery.scoped_zone_schedules (
 
 CREATE INDEX IF NOT EXISTS idx_scoped_zone_schedules_zone
   ON delivery.scoped_zone_schedules(zone_id);
+
+ALTER TABLE delivery.scoped_exclusion_zones ENABLE ROW LEVEL SECURITY;
+ALTER TABLE delivery.scoped_zone_schedules ENABLE ROW LEVEL SECURITY;
+GRANT ALL ON delivery.scoped_exclusion_zones TO service_role;
+GRANT ALL ON delivery.scoped_zone_schedules TO service_role;
 
 -- Phase 4: materialised net coverage per market
 ALTER TABLE delivery.service_markets
@@ -238,3 +246,5 @@ WHERE is_active
   AND effective_to < now();
 
 GRANT SELECT ON delivery.v_expired_active_exclusions TO service_role;
+
+NOTIFY pgrst, 'reload schema';

@@ -43,6 +43,7 @@ export async function loadPartnerMapsApi(): Promise<void> {
         }
 
         const script = document.createElement('script');
+        // Drawing Library removed in Maps JS API v3.65 (May 2026) — do not load `drawing`.
         script.src = `https://maps.googleapis.com/maps/api/js?key=${data.apiKey}&loading=async&v=weekly&libraries=places`;
         script.async = true;
         script.defer = true;

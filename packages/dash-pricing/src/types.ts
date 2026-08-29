@@ -124,6 +124,12 @@ export type PricingInput = {
   paymentMethod?: PaymentMethod;
   /** Skip service fee entirely (promo/loyalty waiver) */
   serviceFeeWaived?: boolean;
+  /**
+   * Zone risk surcharge (JMD) from coverage policy action=surcharge.
+   * Folded into gross delivery fee before the platform/courier split.
+   * Not waived by free-delivery promos.
+   */
+  zoneSurchargeJmd?: number;
 };
 
 export type PricingBreakdown = {
@@ -136,6 +142,8 @@ export type PricingBreakdown = {
   deliveryFee: number;
   deliveryFeePlatformAmount: number;
   deliveryFeeCourierAmount: number;
+  /** Zone policy surcharge folded into deliveryFee (0 when none). */
+  zoneSurchargeJmd: number;
   distanceKm: number | null;
   distanceKmRaw?: number | null;
   tax: number;

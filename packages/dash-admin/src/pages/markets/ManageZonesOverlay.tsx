@@ -1,19 +1,23 @@
 /**
- * Overlay to pick a town border or non-delivery zone, then edit on map / coordinates or delete.
+ * Overlay to pick a town border, service area, or non-delivery zone, then edit / delete.
  */
 import React from 'react';
-import { Map as MapIcon, MapPin, Trash2, X } from 'lucide-react';
+import { Map as MapIcon, MapPin, Plus, Trash2, X } from 'lucide-react';
 import type { DashZoneRow } from '@roam/dash-admin-client';
 
 type ManageZonesOverlayProps = {
   open: boolean;
   townName: string;
   delivery: DashZoneRow | null;
+  serviceAreas: DashZoneRow[];
   excludes: DashZoneRow[];
   onClose: () => void;
   onEditTownOnMap: () => void;
   onEditTownCoordinates: () => void;
   onDeleteTownBorder: (zone: DashZoneRow) => void;
+  onEditServiceOnMap: (zone: DashZoneRow) => void;
+  onDeleteService: (zone: DashZoneRow) => void;
+  onAddServiceArea: () => void;
   onEditExcludeOnMap: (zone: DashZoneRow) => void;
   onEditExcludeCoordinates: (zone: DashZoneRow) => void;
   onDeleteExclude: (zone: DashZoneRow) => void;
@@ -23,16 +27,22 @@ export function ManageZonesOverlay({
   open,
   townName,
   delivery,
+  serviceAreas,
   excludes,
   onClose,
   onEditTownOnMap,
   onEditTownCoordinates,
   onDeleteTownBorder,
+  onEditServiceOnMap,
+  onDeleteService,
+  onAddServiceArea,
   onEditExcludeOnMap,
   onEditExcludeCoordinates,
   onDeleteExclude,
 }: ManageZonesOverlayProps) {
   if (!open) return null;
+
+  const hasServiceAreas = serviceAreas.length > 0;
 
   return (
     <div className="fixed inset-0 z-[90] flex items-end sm:items-center justify-center p-3 sm:p-6">
@@ -54,7 +64,9 @@ export function ManageZonesOverlay({
               Manage zones · {townName}
             </h2>
             <p className="text-xs text-slate-400 mt-0.5">
-              Edit or delete the green town border. Non-delivery zones are listed below.
+              {hasServiceAreas
+                ? 'Service areas control live delivery. Official border is map context only.'
+                : 'Edit or delete the green town border. Non-delivery zones are listed below.'}
             </p>
           </div>
           <button
@@ -69,7 +81,7 @@ export function ManageZonesOverlay({
         <div className="overflow-y-auto flex-1 p-4 space-y-4">
           <section className="space-y-2">
             <p className="text-[10px] uppercase tracking-wide text-slate-500 font-medium">
-              Town border (foundation)
+              {hasServiceAreas ? 'Official town border (context)' : 'Town border (foundation)'}
             </p>
             <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2.5 space-y-2">
               <div className="flex-1 min-w-0">
@@ -78,7 +90,7 @@ export function ManageZonesOverlay({
                 </p>
                 <p className="text-[11px] text-emerald-200/70">
                   {delivery
-                    ? `${delivery.polygon.length} points`
+                    ? `${delivery.polygon.length} points${hasServiceAreas ? ' · not live for customers' : ''}`
                     : 'No border set — import GeoJSON or draw one on the map'}
                 </p>
               </div>
@@ -112,6 +124,62 @@ export function ManageZonesOverlay({
                 </button>
               </div>
             </div>
+          </section>
+
+          <section className="space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-[10px] uppercase tracking-wide text-slate-500 font-medium">
+                Service areas ({serviceAreas.length})
+              </p>
+              <button
+                type="button"
+                onClick={onAddServiceArea}
+                className="inline-flex items-center gap-1 px-2 py-1 rounded-md border border-emerald-500/40 text-[11px] text-emerald-200"
+              >
+                <Plus className="w-3 h-3" />
+                Add
+              </button>
+            </div>
+            {serviceAreas.length === 0 ? (
+              <p className="text-xs text-slate-500 rounded-lg border border-slate-800 px-3 py-4 text-center">
+                None yet. Add a service area to deliver only in pockets — the full town border becomes
+                context.
+              </p>
+            ) : (
+              <ul className="space-y-2">
+                {serviceAreas.map((z) => (
+                  <li
+                    key={z.id}
+                    className="rounded-lg border border-fuchsia-500/40 bg-fuchsia-500/15 px-3 py-2.5 space-y-2"
+                  >
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-fuchsia-50 truncate">{z.name}</p>
+                      <p className="text-[11px] text-fuchsia-200/70">
+                        Live delivery · {z.polygon.length} points
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => onEditServiceOnMap(z)}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-fuchsia-500 text-slate-950 text-xs font-semibold"
+                      >
+                        <MapIcon className="w-3.5 h-3.5" />
+                        Edit on map
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => onDeleteService(z)}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-red-500/40 text-red-200 text-xs font-semibold"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        Delete
+                      </button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
           </section>
 
           <section className="space-y-2">
@@ -162,7 +230,7 @@ export function ManageZonesOverlay({
                       <button
                         type="button"
                         onClick={() => onDeleteExclude(z)}
-                        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-slate-600 text-slate-300 text-xs"
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-red-500/40 text-red-200 text-xs font-semibold"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                         Delete

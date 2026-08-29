@@ -35,7 +35,11 @@ export function PlatformExclusionsPanel({ accessToken, parishes, canWrite }: Pro
       const res = await listScopedExclusions(accessToken);
       setZones(res.zones);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Failed to load platform exclusions');
+      const msg = e instanceof Error ? e.message : '';
+      if (!/schema cache|does not exist|PGRST205/i.test(msg)) {
+        toast.error(msg || 'Failed to load platform exclusions');
+      }
+      setZones([]);
     } finally {
       setLoading(false);
     }

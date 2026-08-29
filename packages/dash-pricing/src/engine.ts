@@ -255,7 +255,13 @@ export function buildOrderPricing(input: PricingInput): PricingBreakdown {
     ? roundMoney(input.distanceKm)
     : null;
 
-  const grossDeliveryFee = resolveDeliveryFee(input.rules.delivery, distanceKm);
+  const baseDeliveryFee = resolveDeliveryFee(input.rules.delivery, distanceKm);
+  // Risk premium from zone policy — always charged; free-delivery only waives base.
+  const zoneSurchargeJmd = Math.max(
+    0,
+    Math.trunc(Number(input.zoneSurchargeJmd ?? 0) || 0),
+  );
+  const grossDeliveryFee = roundMoney(baseDeliveryFee + zoneSurchargeJmd);
   const freeDeliveryApplied = shouldApplyFreeDelivery(
     input.rules,
     input.customerOrderCount ?? 0,
@@ -268,14 +274,23 @@ export function buildOrderPricing(input: PricingInput): PricingBreakdown {
   let promoCostJmd = 0;
 
   if (freeDeliveryApplied) {
-    deliveryFee = 0;
-    const grossSplit = resolveDeliverySplit(
-      grossDeliveryFee,
+    const baseSplit = resolveDeliverySplit(
+      baseDeliveryFee,
       input.rules.courierDeliveryShare,
     );
-    deliveryFeeCourierAmount = grossSplit.courierAmount;
-    deliveryFeePlatformAmount = roundMoney(-grossSplit.courierAmount);
-    promoCostJmd = grossSplit.courierAmount;
+    const surchargeSplit = resolveDeliverySplit(
+      zoneSurchargeJmd,
+      input.rules.courierDeliveryShare,
+    );
+    // Customer pays surcharge only; courier still earns base share (platform promo) + surcharge share.
+    deliveryFee = zoneSurchargeJmd;
+    deliveryFeeCourierAmount = roundMoney(
+      baseSplit.courierAmount + surchargeSplit.courierAmount,
+    );
+    deliveryFeePlatformAmount = roundMoney(
+      -baseSplit.courierAmount + surchargeSplit.platformAmount,
+    );
+    promoCostJmd = baseSplit.courierAmount;
   } else {
     const split = resolveDeliverySplit(grossDeliveryFee, input.rules.courierDeliveryShare);
     deliveryFeePlatformAmount = split.platformAmount;
@@ -315,6 +330,7 @@ export function buildOrderPricing(input: PricingInput): PricingBreakdown {
     deliveryFee,
     deliveryFeePlatformAmount,
     deliveryFeeCourierAmount,
+    zoneSurchargeJmd,
     distanceKm,
     distanceKmRaw,
     tax: gct.tax,

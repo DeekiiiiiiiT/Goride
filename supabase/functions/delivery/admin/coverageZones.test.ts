@@ -73,6 +73,19 @@ const ST_FOUNDATION: CoverageZone["polygon"] = [
   { lat: 18.08, lng: -77.05 },
 ];
 
+function emptyListQuery() {
+  const q: Record<string, unknown> = {};
+  const self = () => q;
+  q.select = self;
+  q.eq = self;
+  q.in = self;
+  q.order = () => Promise.resolve({ data: [] });
+  // Thenable so `await sb.from(...).select().eq(...).in(...)` resolves.
+  q.then = (resolve: (v: unknown) => unknown, reject?: (e: unknown) => unknown) =>
+    Promise.resolve({ data: [] }).then(resolve, reject);
+  return q;
+}
+
 function mockSb(opts: {
   markets: Array<Record<string, unknown>>;
   zonesByMarket: Record<string, Record<string, unknown>[]>;
@@ -152,6 +165,14 @@ function mockSb(opts: {
             };
           },
         };
+      }
+      // Non-delivery program tables (schedules / scoped layers) — empty in unit mocks.
+      if (
+        table === "zone_schedules" ||
+        table === "scoped_zone_schedules" ||
+        table === "scoped_exclusion_zones"
+      ) {
+        return emptyListQuery();
       }
       throw new Error(`unexpected table ${table}`);
     },
@@ -434,6 +455,13 @@ Deno.test("recomputeMerchantMarkets — unlockAfter clears lock on forced update
           },
         };
       }
+      if (
+        table === "zone_schedules" ||
+        table === "scoped_zone_schedules" ||
+        table === "scoped_exclusion_zones"
+      ) {
+        return emptyListQuery();
+      }
       throw new Error(`unexpected ${table}`);
     },
   };
@@ -533,6 +561,13 @@ Deno.test("recomputeMerchantMarkets — pin lock skipped unless includeLocked", 
             };
           },
         };
+      }
+      if (
+        table === "zone_schedules" ||
+        table === "scoped_zone_schedules" ||
+        table === "scoped_exclusion_zones"
+      ) {
+        return emptyListQuery();
       }
       throw new Error(`unexpected ${table}`);
     },

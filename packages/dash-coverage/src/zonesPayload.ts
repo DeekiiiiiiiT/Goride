@@ -24,6 +24,8 @@ export type ActiveCoverageZone = {
   multiPolygon?: CoverageMultiPolygon;
   market_id?: string;
   source?: string;
+  /** live = customer coverage; context = map-only (official border when service areas exist). */
+  coverage_role?: 'live' | 'context';
   priority?: number;
   is_active?: boolean;
   effective_from?: string | null;
@@ -35,7 +37,7 @@ export type ActiveCoverageZone = {
 };
 
 /** Bump when zone payload shape / fallback policy changes so stale caches drop. */
-export const DELIVERY_ZONES_CACHE_KEY = 'roam-dash-delivery-zones-v7';
+export const DELIVERY_ZONES_CACHE_KEY = 'roam-dash-delivery-zones-v8';
 
 export const DELIVERY_ZONES_CACHE_TTL_MS = 10 * 60 * 1000;
 
@@ -118,6 +120,10 @@ export function parseAllZonesPayload(payload: unknown): ActiveCoverageZone[] {
       multiPolygon: multi,
       market_id: z.market_id != null ? String(z.market_id) : undefined,
       source: z.source != null ? String(z.source) : undefined,
+      coverage_role:
+        z.coverage_role === 'context' || z.coverage_role === 'live'
+          ? z.coverage_role
+          : undefined,
       priority: z.priority != null ? Number(z.priority) : undefined,
       is_active: z.is_active !== false,
       effective_from: z.effective_from != null ? String(z.effective_from) : null,

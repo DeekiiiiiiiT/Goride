@@ -5,6 +5,8 @@ import {
   DELIVERY_ZONES_CACHE_TTL_MS,
   draftZonesDifferFromPublished,
   evaluateCoverage,
+  evaluateLiveCoverage,
+  filterLiveCoverageZones,
   isInsideParishFoundation,
   MAX_EDITABLE_VERTICES,
   normalizeDraftZonesFromAdmin,
@@ -366,5 +368,57 @@ describe('draftZonesDifferFromPublished', () => {
       { kind: 'include', polygon: ST_INCLUDE.polygon, market_id: ST_MARKET },
     ];
     expect(draftZonesDifferFromPublished(zones, zones, ST_MARKET)).toBe(false);
+  });
+});
+
+describe('evaluateLiveCoverage / service areas', () => {
+  const OFFICIAL: CoverageZone = {
+    ...ST_INCLUDE,
+    id: 'z-official',
+    name: 'Spanish Town official',
+    source: 'import',
+    priority: 0,
+  };
+  const SERVICE: CoverageZone = {
+    id: 'z-svc',
+    name: 'Horizon Park',
+    market_id: ST_MARKET,
+    kind: 'include',
+    source: 'manual',
+    priority: 10,
+    polygon: [
+      { lat: 18.01, lng: -76.97 },
+      { lat: 18.01, lng: -76.96 },
+      { lat: 18.02, lng: -76.96 },
+      { lat: 18.02, lng: -76.97 },
+    ],
+  };
+
+  it('import-only market: pin inside official border delivers', () => {
+    const r = evaluateLiveCoverage(18.015, -76.955, [OFFICIAL]);
+    expect(r.inZone).toBe(true);
+  });
+
+  it('with service area: pin inside official but outside service is blocked', () => {
+    const r = evaluateLiveCoverage(18.015, -76.955, [OFFICIAL, SERVICE]);
+    expect(r.inZone).toBe(false);
+  });
+
+  it('with service area: pin inside service delivers', () => {
+    const r = evaluateLiveCoverage(18.015, -76.965, [OFFICIAL, SERVICE]);
+    expect(r.inZone).toBe(true);
+    expect(r.matchedInclude?.name).toBe('Horizon Park');
+  });
+
+  it('with service area + exclude: pin in service cutout blocked', () => {
+    const cut: CoverageZone = { ...CUTOUT, priority: 20 };
+    const r = evaluateLiveCoverage(18.015, -76.965, [OFFICIAL, SERVICE, cut]);
+    expect(r.inZone).toBe(false);
+    expect(r.matchedExclude?.name).toBe('Barracks');
+  });
+
+  it('filterLiveCoverageZones drops import when service exists', () => {
+    const live = filterLiveCoverageZones([OFFICIAL, SERVICE]);
+    expect(live.map((z) => z.id)).toEqual(['z-svc']);
   });
 });

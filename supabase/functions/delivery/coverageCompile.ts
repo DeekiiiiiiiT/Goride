@@ -13,9 +13,12 @@ import {
   polygonToH3Cells,
   type LatLng,
 } from "../_shared/h3/geoIndex.ts";
+import { filterLiveCoverageZones } from "./admin/coverageEval.ts";
 
 type ZoneRow = {
   kind?: string | null;
+  source?: string | null;
+  market_id?: string | null;
   polygon?: unknown;
 };
 
@@ -67,12 +70,20 @@ export async function compileMarketCoverageCells(
 ): Promise<{ include: number; exclude: number }> {
   await db.from("coverage_cells").delete().eq("market_id", marketId);
 
+  const liveZones = filterLiveCoverageZones(
+    zones.map((z) => ({
+      ...z,
+      market_id: z.market_id ?? marketId,
+      source: z.source ?? "manual",
+    })),
+  );
+
   const rows: Array<{ market_id: string; h3_cell: string; h3_res: number; kind: string }> = [];
   let include = 0;
   let exclude = 0;
 
   for (const res of COMPILE_H3_RESOLUTIONS) {
-    for (const z of zones) {
+    for (const z of liveZones) {
       const kind = z.kind === "exclude" ? "exclude" : "include";
       for (const poly of polygonsForCompile(z.polygon)) {
         const cells = polygonToH3Cells(poly, res, kind);

@@ -4,7 +4,10 @@
  */
 export {
   buildParishSyntheticZone,
+  coverageRoleForZone,
   evaluateCoverage,
+  evaluateLiveCoverage,
+  filterLiveCoverageZones,
   isInsideParishFoundation,
   parseFoundationGeometry,
   parseFoundationPolygon,

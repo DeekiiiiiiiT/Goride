@@ -341,3 +341,107 @@ describe('buildOrderPricing — trial balance invariant', () => {
     expect(Math.round((platformDue + merchantDue + courier) * 100) / 100).toBe(result.customerTotal);
   });
 });
+
+describe('buildOrderPricing — zone surcharge (SURCHARGE-1)', () => {
+  it('splits surcharge into platform + courier (identity holds)', () => {
+    const without = buildOrderPricing({
+      subtotal: 2500,
+      distanceKm: 3.2,
+      rules: { ...SPANISH_TOWN_RULES, pricingV2Enabled: true },
+      tier: { slug: 'standard', name: 'Standard', commissionRate: 0.20 },
+      customerOrderCount: 5,
+      taxRatePercent: 16.5,
+      platformTaxRatePercent: 16.5,
+    });
+    const withSur = buildOrderPricing({
+      subtotal: 2500,
+      distanceKm: 3.2,
+      rules: { ...SPANISH_TOWN_RULES, pricingV2Enabled: true },
+      tier: { slug: 'standard', name: 'Standard', commissionRate: 0.20 },
+      customerOrderCount: 5,
+      taxRatePercent: 16.5,
+      platformTaxRatePercent: 16.5,
+      zoneSurchargeJmd: 200,
+    });
+    expect(withSur.zoneSurchargeJmd).toBe(200);
+    expect(withSur.deliveryFee).toBe(without.deliveryFee + 200);
+    expect(
+      withSur.deliveryFeePlatformAmount + withSur.deliveryFeeCourierAmount,
+    ).toBeCloseTo(withSur.deliveryFee, 2);
+    expect(withSur.customerTotal).toBeGreaterThan(without.customerTotal);
+  });
+
+  it('card processing fee rises with surcharge-inclusive order base', () => {
+    const without = buildOrderPricing({
+      subtotal: 2000,
+      distanceKm: 2,
+      rules: MARGINAL_RULES,
+      tier: { slug: 'standard', name: 'Standard', commissionRate: 0.20 },
+      customerOrderCount: 5,
+      paymentMethod: 'wipay',
+      taxRatePercent: 16.5,
+      platformTaxRatePercent: 16.5,
+    });
+    const withSur = buildOrderPricing({
+      subtotal: 2000,
+      distanceKm: 2,
+      rules: MARGINAL_RULES,
+      tier: { slug: 'standard', name: 'Standard', commissionRate: 0.20 },
+      customerOrderCount: 5,
+      paymentMethod: 'wipay',
+      taxRatePercent: 16.5,
+      platformTaxRatePercent: 16.5,
+      zoneSurchargeJmd: 200,
+    });
+    expect(withSur.processingFeeOrder).toBeGreaterThan(without.processingFeeOrder);
+    expect(
+      withSur.deliveryFeePlatformAmount + withSur.deliveryFeeCourierAmount,
+    ).toBeCloseTo(withSur.deliveryFee, 2);
+  });
+
+  it('free delivery still charges surcharge; split identity holds', () => {
+    const result = buildOrderPricing({
+      subtotal: 1500,
+      distanceKm: 3,
+      rules: PROMO_RULES,
+      tier: { slug: 'basic', name: 'Basic', commissionRate: 0.12 },
+      customerOrderCount: 1,
+      taxRatePercent: 16.5,
+      platformTaxRatePercent: 16.5,
+      zoneSurchargeJmd: 200,
+    });
+    expect(result.freeDeliveryApplied).toBe(true);
+    expect(result.deliveryFee).toBe(200);
+    expect(result.zoneSurchargeJmd).toBe(200);
+    expect(result.promoCostJmd).toBeGreaterThan(0);
+    expect(
+      result.deliveryFeePlatformAmount + result.deliveryFeeCourierAmount,
+    ).toBeCloseTo(result.deliveryFee, 2);
+  });
+
+  it('COD trial balance holds with surcharge', () => {
+    const result = buildOrderPricing({
+      subtotal: 1200,
+      discount: 0,
+      distanceKm: 2.5,
+      rules: MARGINAL_RULES,
+      tier: { slug: 'standard', name: 'Standard', commissionRate: 0.20 },
+      customerOrderCount: 5,
+      paymentMethod: 'cash',
+      taxRatePercent: 16.5,
+      platformTaxRatePercent: 16.5,
+      tip: 50,
+      zoneSurchargeJmd: 200,
+    });
+    expect(
+      result.deliveryFeePlatformAmount + result.deliveryFeeCourierAmount,
+    ).toBeCloseTo(result.deliveryFee, 2);
+    const platformDue = result.serviceFee + result.merchantCommissionAmount
+      + Math.max(0, result.deliveryFeePlatformAmount) + result.tax;
+    const merchantDue = result.discountedSubtotal - result.merchantCommissionAmount;
+    const courier = result.deliveryFeeCourierAmount + result.courierTipNet;
+    expect(Math.round((platformDue + merchantDue + courier) * 100) / 100).toBe(
+      result.customerTotal,
+    );
+  });
+});

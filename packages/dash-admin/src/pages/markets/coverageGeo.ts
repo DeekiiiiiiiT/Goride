@@ -138,37 +138,55 @@ export function hasBlockingCoverageConflicts(conflicts: CoverageConflict[]): boo
   return conflicts.some((c) => c.severity === 'error');
 }
 
+function cutoutIntersectsInclude(
+  cutout: GeoVertex[],
+  include: GeoVertex[],
+): boolean {
+  if (cutout.length < 3 || include.length < 3) return false;
+  if (cutout.some((p) => pointInPolygon(p.lat, p.lng, include))) return true;
+  if (include.some((p) => pointInPolygon(p.lat, p.lng, cutout))) return true;
+  return polygonsOverlapOrTouch(cutout, include);
+}
+
+/**
+ * Conflicts against the union of live delivery includes (service areas when present,
+ * otherwise the official town border). Cutouts must intersect at least one live include.
+ */
 export function detectCoverageConflicts(
   includes: { id: string; name: string; polygon: GeoVertex[] }[],
   excludes: { id: string; name: string; polygon: GeoVertex[] }[],
 ): CoverageConflict[] {
   const conflicts: CoverageConflict[] = [];
-  const primary = includes[0];
-  if (primary && primary.polygon.length >= 3) {
+  const liveIncludes = includes.filter((inc) => inc.polygon.length >= 3);
+
+  for (const primary of liveIncludes) {
     const b = polygonBounds(primary.polygon);
-    if (b) {
-      const latSpan = (b.north - b.south) * 111_320;
-      const lngSpan =
-        (b.east - b.west) * 111_320 * Math.cos((((b.north + b.south) / 2) * Math.PI) / 180);
-      if (latSpan < 200 || lngSpan < 200) {
-        conflicts.push({
-          code: 'tiny_delivery_area',
-          message: 'Town border looks unusually small — confirm the foundation outline.',
-          severity: 'warning',
-        });
-      }
+    if (!b) continue;
+    const latSpan = (b.north - b.south) * 111_320;
+    const lngSpan =
+      (b.east - b.west) * 111_320 * Math.cos((((b.north + b.south) / 2) * Math.PI) / 180);
+    if (latSpan < 200 || lngSpan < 200) {
+      conflicts.push({
+        code: 'tiny_delivery_area',
+        message: `Delivery area “${primary.name}” looks unusually small — confirm the outline.`,
+        severity: 'warning',
+      });
     }
+  }
+
+  if (liveIncludes.length > 0) {
     for (const ex of excludes) {
-      const anyInside = ex.polygon.some((p) => pointInPolygon(p.lat, p.lng, primary.polygon));
-      if (!anyInside) {
+      const hitsAny = liveIncludes.some((inc) => cutoutIntersectsInclude(ex.polygon, inc.polygon));
+      if (!hitsAny) {
         conflicts.push({
           code: 'cutout_outside_town',
-          message: `Non-delivery zone “${ex.name}” does not intersect the town border.`,
+          message: `Non-delivery zone “${ex.name}” does not intersect any live delivery area.`,
           severity: 'error',
         });
       }
     }
   }
+
   for (let i = 0; i < excludes.length; i++) {
     for (let j = i + 1; j < excludes.length; j++) {
       if (polygonsOverlapOrTouch(excludes[i].polygon, excludes[j].polygon)) {

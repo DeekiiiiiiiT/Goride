@@ -334,6 +334,7 @@ app.get("/merchants", async (c) => {
         merchant_commission_amount: v2.merchantCommissionAmount,
         delivery_fee_courier_amount: v2.deliveryFeeCourierAmount,
         delivery_fee_platform_amount: v2.deliveryFeePlatformAmount,
+        zone_surcharge_jmd: v2.zoneSurchargeJmd,
         distance_km: v2.distanceKm,
         tax: v2.tax,
         tax_food_jmd: v2.taxFoodJmd,

@@ -4,7 +4,7 @@ import {
   customerCopyForReason,
   DELIVERY_ZONES_CACHE_KEY,
   DELIVERY_ZONES_CACHE_TTL_MS,
-  evaluateCoverage,
+  evaluateLiveCoverage,
   parseAllZonesPayload,
   pointInPolygon,
   type ActiveCoverageZone,
@@ -156,9 +156,10 @@ export function evaluateActiveCoverage(lat: number, lng: number): DeliveryZoneRe
     category: z.category,
     schedules: z.schedules,
     zone_policy: z.zone_policy,
+    source: z.source,
   }));
 
-  const result = evaluateCoverage(lat, lng, zones);
+  const result = evaluateLiveCoverage(lat, lng, zones);
   if (result.inZone) return { inZone: true };
   return {
     inZone: false,

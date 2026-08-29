@@ -351,6 +351,7 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
         delivery_fee: v2Pricing.deliveryFee,
         delivery_fee_platform_amount: v2Pricing.deliveryFeePlatformAmount,
         delivery_fee_courier_amount: v2Pricing.deliveryFeeCourierAmount,
+        zone_surcharge_jmd: v2Pricing.zoneSurchargeJmd,
         distance_km_raw: v2Pricing.distanceKmRaw,
         courier_tip_net: v2Pricing.courierTipNet,
       };

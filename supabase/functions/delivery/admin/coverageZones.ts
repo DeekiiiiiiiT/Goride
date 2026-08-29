@@ -4,6 +4,8 @@
 import {
   buildParishSyntheticZone,
   evaluateCoverage,
+  evaluateLiveCoverage,
+  filterLiveCoverageZones,
   isInsideParishFoundation,
   parseFoundationGeometry,
   parseFoundationPolygon,
@@ -124,6 +126,7 @@ export function asCoverageZones(rows: Record<string, unknown>[]): CoverageZone[]
       kind: normalizeKind(z.kind),
       polygon: multi?.[0]?.outer?.length ? multi[0].outer : polygon,
       multiPolygon: multi ?? undefined,
+      source: z.source != null ? String(z.source) : "manual",
       priority: z.priority != null ? Number(z.priority) : 0,
       is_active: z.is_active !== false,
       effective_from: z.effective_from != null ? String(z.effective_from) : null,
@@ -302,7 +305,7 @@ export async function buildCoverageZonesForEvaluation(
 
   let parishId: string | null = null;
   let marketId: string | null = null;
-  const probe = evaluateCoverage(lat, lng, base);
+  const probe = evaluateLiveCoverage(lat, lng, base);
   if (probe.matchedInclude?.market_id) {
     marketId = probe.matchedInclude.market_id;
     const m = markets.find((x) => x.id === marketId);
@@ -350,27 +353,81 @@ export async function resolveMarketForPoint(
 
   const parishMap = await loadParishMap(sb);
   const allZones = await buildCoverageZonesForEvaluation(sb, markets, parishMap, lat, lng);
-  const evalResult = evaluateCoverage(lat, lng, allZones);
 
-  // Optional PostGIS dual-run (staging parity check)
-  if (typeof sb.rpc === "function" && Deno.env.get("COVERAGE_POSTGIS_EVAL") === "1") {
-    const probeMarket = evalResult.matchedInclude?.market_id ?? null;
+  const runJsEval = (zones: CoverageZone[]) => evaluateLiveCoverage(lat, lng, zones);
+
+  let evalResult = runJsEval(allZones);
+  const postgisPrimary = Deno.env.get("COVERAGE_POSTGIS_PRIMARY") === "1";
+  const postgisShadow = Deno.env.get("COVERAGE_POSTGIS_EVAL") === "1";
+
+  // Primary path: GiST candidates → same JS winner/schedule/ADR-0018 logic on the subset.
+  if (postgisPrimary && typeof sb.rpc === "function") {
+    const { data: pgRows, error } = await sb.rpc("resolve_containing_zones", {
+      p_lat: lat,
+      p_lng: lng,
+      p_market_id: null,
+      p_parish_id: null,
+    });
+    if (!error && Array.isArray(pgRows) && pgRows.length > 0) {
+      const ids = new Set(
+        (pgRows as Record<string, unknown>[]).map((r) => String(r.zone_id)),
+      );
+      const subset = allZones.filter((z) => ids.has(z.id));
+      if (subset.length > 0) {
+        evalResult = runJsEval(subset);
+      }
+      // else: empty geom match vs JS payload → keep full JS fallback
+    }
+    // RPC error / empty → keep full JS fallback
+  }
+
+  // Shadow dual-run (staging parity). Uses full-candidate RPC when JS has no market match.
+  if (postgisShadow && typeof sb.rpc === "function") {
+    const jsFull = postgisPrimary ? runJsEval(allZones) : evalResult;
+    const probeMarket = jsFull.matchedInclude?.market_id ?? null;
     const probeParish = probeMarket
       ? markets.find((m) => m.id === probeMarket)?.parish_id ?? null
       : null;
     const { data: pgRows, error } = await sb.rpc("resolve_containing_zones", {
       p_lat: lat,
       p_lng: lng,
+      // Full candidate set when uncovered — avoids empty parish/market scoped miss.
       p_market_id: probeMarket,
       p_parish_id: probeParish,
     });
-    if (!error && Array.isArray(pgRows) && pgRows.length) {
-      const ids = new Set((pgRows as Record<string, unknown>[]).map((r) => String(r.zone_id)));
+    if (!error && Array.isArray(pgRows)) {
+      const rows = pgRows as Record<string, unknown>[];
+      const ids = new Set(rows.map((r) => String(r.zone_id)));
       const pgZones = allZones.filter((z) => ids.has(z.id));
-      const pgEval = evaluateCoverage(lat, lng, pgZones.length ? pgZones : allZones);
-      if (pgEval.inZone !== evalResult.inZone) {
-        console.warn("[coverage] PostGIS parity mismatch", { lat, lng, js: evalResult.inZone, pg: pgEval.inZone });
+      // Only compare when PostGIS returned candidates (empty often means missing geom).
+      if (rows.length > 0) {
+        const pgEval = runJsEval(pgZones.length ? pgZones : allZones);
+        if (
+          pgEval.inZone !== jsFull.inZone ||
+          (pgEval.matchedInclude?.id ?? null) !== (jsFull.matchedInclude?.id ?? null) ||
+          (pgEval.matchedExclude?.id ?? null) !== (jsFull.matchedExclude?.id ?? null)
+        ) {
+          console.warn("[coverage] PostGIS parity mismatch", {
+            lat,
+            lng,
+            js: {
+              inZone: jsFull.inZone,
+              include: jsFull.matchedInclude?.id ?? null,
+              exclude: jsFull.matchedExclude?.id ?? null,
+            },
+            pg: {
+              inZone: pgEval.inZone,
+              include: pgEval.matchedInclude?.id ?? null,
+              exclude: pgEval.matchedExclude?.id ?? null,
+              candidateIds: [...ids],
+            },
+            primary: postgisPrimary,
+            decisionInZone: evalResult.inZone,
+          });
+        }
       }
+    } else if (error) {
+      console.warn("[coverage] PostGIS shadow RPC error", { lat, lng, error: error.message });
     }
   }
 
@@ -548,7 +605,7 @@ export async function suggestMarketIdForMerchantPin(
   }));
 
   const allZones = await buildCoverageZonesForMarkets(sb, rows, parishMap);
-  const evalResult = evaluateCoverage(lat, lng, allZones);
+  const evalResult = evaluateLiveCoverage(lat, lng, allZones);
   if (!evalResult.inZone || !evalResult.matchedInclude?.market_id) return null;
 
   const matchedId = evalResult.matchedInclude.market_id;

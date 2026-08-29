@@ -239,6 +239,12 @@ export async function resolveDashOrderPricing(
 
   const gct = await resolveOrderGctRates(sb, input.merchantId);
 
+  // Fold into buildOrderPricing so split / GCT / processing fee see the surcharge.
+  const zoneSurchargeJmd =
+    coverage?.policy?.action === "surcharge"
+      ? Math.max(0, Math.trunc(Number(coverage.policy.params?.amount_jmd ?? 200)))
+      : 0;
+
   const breakdown = buildOrderPricing({
     subtotal: input.subtotal,
     discount: input.discount,
@@ -256,17 +262,8 @@ export async function resolveDashOrderPricing(
     taxRatePercent: gct.ratePercent,
     platformTaxRatePercent: gct.platformRatePercent,
     platformGctEnabled: gct.gctEnabled,
+    zoneSurchargeJmd,
   });
-
-  const zoneSurchargeJmd =
-    coverage?.policy?.action === "surcharge"
-      ? Math.max(0, Math.trunc(Number(coverage.policy.params?.amount_jmd ?? 200)))
-      : 0;
-  if (zoneSurchargeJmd > 0) {
-    breakdown.deliveryFee += zoneSurchargeJmd;
-    breakdown.orderTotal += zoneSurchargeJmd;
-    breakdown.total += zoneSurchargeJmd;
-  }
 
   return {
     ...breakdown,

@@ -2,7 +2,7 @@
  * Enterprise coverage publish / readiness helpers for Rush Markets.
  */
 import {
-  evaluateCoverage,
+  filterLiveCoverageZones,
   pointInPolygon,
   type CoverageMultiPolygon,
   type CoverageVertex,
@@ -22,9 +22,19 @@ function asMulti(raw: unknown): CoverageMultiPolygon | null {
   return raw as CoverageMultiPolygon;
 }
 
+function liveZoneRows(zones: unknown[]): Record<string, unknown>[] {
+  return filterLiveCoverageZones(
+    (zones as Record<string, unknown>[]).map((z) => ({
+      ...z,
+      kind: normalizeKind(z.kind),
+      source: z.source != null ? String(z.source) : "manual",
+      market_id: z.market_id != null ? String(z.market_id) : undefined,
+    })),
+  );
+}
+
 export function hasValidInclude(zones: unknown[]): boolean {
-  return zones.some((z) => {
-    const row = z as Record<string, unknown>;
+  return liveZoneRows(zones).some((row) => {
     const kind = normalizeKind(row.kind);
     if (kind !== "include") return false;
     const multi = asMulti(row.multiPolygon);
@@ -71,6 +81,7 @@ export function zonesFromSnapshot(zonesJson: unknown): CoverageZone[] {
       name: String(z.name ?? ""),
       market_id: z.market_id != null ? String(z.market_id) : undefined,
       kind: normalizeKind(z.kind),
+      source: z.source != null ? String(z.source) : "manual",
       polygon: multi?.[0]?.outer?.length ? multi[0].outer : polygon,
       multiPolygon: multi ?? undefined,
       priority: z.priority != null ? Number(z.priority) : 0,
@@ -105,17 +116,20 @@ export function polygonSummary(polygon: unknown) {
   };
 }
 
+/** Cutouts must intersect at least one live include (any service area / official fallback). */
 export function cutoutsIntersectDelivery(zones: ZoneRow[]): boolean {
-  const includes = zones.filter((z) => normalizeKind(z.kind) === "include");
-  const excludes = zones.filter((z) => normalizeKind(z.kind) === "exclude");
+  const live = liveZoneRows(zones);
+  const includes = live.filter((z) => normalizeKind(z.kind) === "include");
+  const excludes = live.filter((z) => normalizeKind(z.kind) === "exclude");
   if (includes.length === 0) return excludes.length === 0;
-  const primary = includes[0];
-  const ring = Array.isArray(primary.polygon) ? (primary.polygon as CoverageVertex[]) : [];
-  if (ring.length < 3) return false;
+  const rings = includes
+    .map((inc) => (Array.isArray(inc.polygon) ? (inc.polygon as CoverageVertex[]) : []))
+    .filter((r) => r.length >= 3);
+  if (!rings.length) return false;
   for (const ex of excludes) {
     const poly = Array.isArray(ex.polygon) ? (ex.polygon as CoverageVertex[]) : [];
     if (poly.length < 3) continue;
-    const hits = poly.some((p) => pointInPolygon(p.lat, p.lng, ring));
+    const hits = poly.some((p) => rings.some((ring) => pointInPolygon(p.lat, p.lng, ring)));
     if (!hits) return false;
   }
   return true;
@@ -174,4 +188,4 @@ export function buildReadinessChecks(opts: {
   return { ready: checks.every((c) => c.ok), checks };
 }
 
-export { evaluateCoverage };
+export { evaluateCoverage, evaluateLiveCoverage } from "./coverageEval.ts";

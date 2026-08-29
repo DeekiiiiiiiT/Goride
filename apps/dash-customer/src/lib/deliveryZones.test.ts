@@ -34,11 +34,13 @@ describe('pointInPolygon / delivery zone coverage', () => {
   });
 
   it('exclude wins over include', () => {
+    // ADR-0014: at equal priority include wins (safe islands). Excludes default to 10.
     __setActiveZonesForTests([
-      { kind: 'include', name: 'Metro', polygon: KINGSTON_DELIVERY_POLYGON },
+      { kind: 'include', name: 'Metro', priority: 0, polygon: KINGSTON_DELIVERY_POLYGON },
       {
         kind: 'exclude',
         name: 'Hole',
+        priority: 10,
         polygon: [
           { lat: 18.02, lng: -76.79 },
           { lat: 18.02, lng: -76.77 },

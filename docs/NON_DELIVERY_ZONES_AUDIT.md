@@ -11,33 +11,35 @@
 
 ---
 
-## 0. Executive verdict
+## 0. Status at a glance (updated 2026-08-28, closeout)
 
-**The foundation is modern and correct. The exclusion model on top of it is the thinnest part of the
-geospatial stack — and it has never been used once in production.**
+**All outstanding audit items are closed** (SURCHARGE-1, EXC-6, EXC-8, PRIORITY-DEFAULT-1).
+EXC-1 through EXC-5, EXC-7 and EXC-9 were already built; closeout exercised them live.
 
-```
-service_zone_polygons where kind = 'exclude'  →  0 rows
-```
+> Closeout evidence (2026-08-28):
+> - **SURCHARGE-1** — zone surcharge folded into `buildOrderPricing` before split; 35 `dash-pricing` tests; `delivery` function redeployed.
+> - **EXC-8** — Spanish Town pilot exclude `EXC-8 audit pilot (safety surcharge)` published as coverage **v4**; pin `18.0213, -76.97145`.
+> - **EXC-7** — `refresh_market_net_coverage` fixed (MultiPolygon cast); Spanish Town `net_coverage_geom` populated (~12.13 km²).
+> - **EXC-6** — hardened shadow logging; `COVERAGE_POSTGIS_EVAL=1` + `COVERAGE_POSTGIS_PRIMARY=1` on GoRide `delivery`; JS fallback retained.
+> - **PRIORITY-DEFAULT-1** — `service_zone_polygons.priority` DEFAULT **10**.
 
-Live coverage is two include-only zones, both promoted from the official catalog, both single-part
-and single-ring:
+**Verification evidence (closeout 2026-08-28):**
 
-| Town | Zone | Kind | pcode | Points | Parts | Rings |
-|---|---|---|---|---:|---:|---:|
-| Old Harbour | Old Harbour | include | `JM0804` | 1,218 | 1 | 1 |
-| Spanish Town | Spanish Town | include | `JM0807` | 1,124 | 1 | 1 |
+| Check | Result |
+|---|---|
+| `dash-pricing` tests | **35 passing** (incl. SURCHARGE-1 suite) |
+| Migrations | `…200000`…`…210000` + `…220000_zone_priority_default_10` + `…230000_fix_net_coverage_multipolygon` |
+| ADRs | 0014–0018 |
+| **Exclusions in production** | **≥1** market exclude (Spanish Town EXC-8 pilot, 24h expiry, surcharge J$200) |
+| **Markets with `net_coverage_geom`** | Spanish Town **yes** |
+| Edge secrets | `COVERAGE_POSTGIS_EVAL=1`, `COVERAGE_POSTGIS_PRIMARY=1` |
 
-The set semantics, the geometry engine, and the authoring safeguards are all genuinely good — better
-than most commercial delivery platforms. What's missing is everything that makes exclusions an
-**operational** tool rather than a permanent-only one: no time dimension, no scope above a single
-market, no severity beyond total removal, and a `priority` column that is silently ignored.
+**Two design decisions worth calling out as good judgment:**
 
-Because no exclusion has ever existed, none of this — including the holes→exclusion path built during
-the boundary work — has ever been exercised against real data.
-
-**Verdict:** the design is sound and worth building on. Two cheap changes (§3 FIX-1, FIX-2) close most
-of the gap. Do not build more surface area until one real exclusion has been driven end to end.
+1. `evaluateCoverage` takes an injectable `at: Date = new Date()`, so all time-window and schedule
+   logic is deterministically testable.
+2. PostGIS was first shadow-only, then promoted behind `COVERAGE_POSTGIS_PRIMARY` with full JS
+   fallback — schedules / ADR-0018 / policy still resolve in JS on the GiST candidate subset.
 
 ---
 
@@ -56,7 +58,76 @@ of the gap. Do not build more surface area until one real exclusion has been dri
 
 ---
 
-## 2. Gaps versus a modern exclusion system
+## 1b. Resolution of the original gaps (verified 2026-08-28)
+
+| ID | Original gap | Status | Evidence |
+|---|---|---|---|
+| EXC-1 | No time dimension | ✅ **Done** | `is_active NOT NULL DEFAULT true`, `effective_from`, `effective_to` on `service_zone_polygons`; `zone_schedules` + `scoped_zone_schedules` for recurring windows; `v_expired_active_exclusions` hygiene view; `filterActiveZones(zones, at)` applied before matching |
+| EXC-2 | Market-only scope | ✅ **Done** | `scoped_exclusion_zones` with `scope IN ('global','parish','market')`, a CHECK enforcing the matching FK is populated, GiST + scope indexes, `scopedExclusionRoutes.ts`, `coverageLayers.ts` resolution |
+| EXC-3 | `priority` ignored | ✅ **Done** | ADR-0014. `pickWinningMatch` sorts priority DESC; exclusions default to **10**, includes to 0, so a higher-priority include models a safe island |
+| EXC-4 | Binary only | ✅ **Done** | `zone_policy jsonb NOT NULL DEFAULT '{"action":"block"}'`; `normalizePolicy` whitelists actions and falls back to `block` on anything unrecognised (fail-safe). Surcharge reaches pricing via `buildOrderPricing` (SURCHARGE-1 closed) |
+| EXC-5 | No taxonomy | ✅ **Done** | `category` with CHECK constraint + `reason`; `customerCopyForReason` branches on category (`safety` → *"Delivery is paused in this area for safety reasons."*) |
+| EXC-6 | Index not on hot path | ✅ **Done** (2026-08-28 closeout) | Shadow hardened; `COVERAGE_POSTGIS_PRIMARY=1` evaluates GiST candidates then JS winner; full JS fallback |
+| EXC-7 | No net coverage | ✅ **Done** | RPC + MultiPolygon fix; Spanish Town net ~12.13 km² |
+| EXC-8 | Path unexercised | ✅ **Done** (2026-08-28 closeout) | Spanish Town safety+surcharge+24h pilot published v4 |
+| EXC-9 | H3 exclusion dead code | ✅ **Resolved as intended** | Polygons remain SoT per ADR-0013; no new features built on the H3 path |
+
+---
+
+## 2b. CLOSEOUT — previously open items (resolved 2026-08-28)
+
+### SURCHARGE-1 — Zone surcharge allocated to nobody ✅ **Done**
+
+**Fix:** `zoneSurchargeJmd` is an input to `buildOrderPricing` and is added to gross delivery fee
+**before** `resolveDeliverySplit`. Free-delivery promos waive base delivery only — surcharge still
+charges. Snapshot field `zone_surcharge_jmd`. Invariant tests in `packages/dash-pricing/src/engine.test.ts`.
+
+### EXC-6 — Spatial index not on hot path ✅ **Done**
+
+**Fix:** `COVERAGE_POSTGIS_PRIMARY=1` uses `resolve_containing_zones` candidates, then the same JS
+live filter + winner/policy path. `COVERAGE_POSTGIS_EVAL=1` logs richer parity (include/exclude ids).
+Unset `COVERAGE_POSTGIS_PRIMARY` to rollback to full JS.
+
+### EXC-8 — Zero exclusions in production ✅ **Done**
+
+**Fix:** Spanish Town pilot exclude published (v4). Restore path now also calls
+`refresh_market_net_coverage`. Runbook Phase 0 expanded for surcharge + net coverage + expiry.
+
+### PRIORITY-DEFAULT-1 — DB defaults disagree ✅ **Done**
+
+**Fix:** `ALTER TABLE delivery.service_zone_polygons ALTER COLUMN priority SET DEFAULT 10;`
+(`20260830220000_zone_priority_default_10.sql`).
+
+---
+
+## 2b-archive. Prior open wording (superseded by closeout above)
+
+<details>
+<summary>Historical open findings text (pre-closeout)</summary>
+
+### SURCHARGE-1 — The zone surcharge is allocated to nobody ⚠️ **P1 (real defect)**
+
+`pricingResolver.ts:261-269` mutates the pricing breakdown **after** `buildOrderPricing` has already
+computed the platform/courier split:
+
+```ts
+const zoneSurchargeJmd =
+  coverage?.policy?.action === "surcharge"
+    ? Math.max(0, Math.trunc(Number(coverage.policy.params?.amount_jmd ?? 200)))
+    : 0;
+if (zoneSurchargeJmd > 0) {
+  breakdown.deliveryFee  += zoneSurchargeJmd;
+  breakdown.orderTotal   += zoneSurchargeJmd;
+  breakdown.total        += zoneSurchargeJmd;
+}
+// deliveryFeePlatformAmount and deliveryFeeCourierAmount are NOT updated
+```
+
+</details>
+
+---
+
+## 2. Gaps versus a modern exclusion system *(original pre-implementation detail — see §1b for status)*
 
 ### EXC-1 — No time dimension ⚠️ **P1 — the most important gap**
 
@@ -271,17 +342,31 @@ After FIX-2 and FIX-3 land, since they reshape the same table. Closes EXC-4.
 
 ## 4. Priority summary
 
+### Outstanding (2026-08-28 closeout)
+
 | Priority | Item | Notes |
 |---|---|---|
-| **P1** | EXC-8 Exercise the path with one real exclusion | Do first — validates everything else |
-| **P1** | EXC-1 No time dimension (FIX-2) | Biggest functional gap; temporary zones are the common case |
-| **P1** | EXC-2 Market-only scope (FIX-3) | Duplication that will drift |
-| **P2** | EXC-3 `priority` ignored (FIX-1) | Cheapest fix in the list |
-| **P2** | EXC-4 Binary only (FIX-6) | Schema-shape decision |
-| **P2** | EXC-5 No taxonomy (FIX-2) | Ships with FIX-2 |
-| **P2** | EXC-6 Index unused on hot path (FIX-4) | Scale, not correctness |
-| **P3** | EXC-7 No net coverage (FIX-5) | Reporting + UX win |
-| **P3** | EXC-9 H3 exclusion dead code | Leave until H3 decision resolves |
+| — | **None** | SURCHARGE-1 · EXC-8 · EXC-6 · PRIORITY-DEFAULT-1 all closed |
+
+**Ops follow-up:** watch Edge logs for `[coverage] PostGIS parity mismatch` for a few days; unset
+`COVERAGE_POSTGIS_PRIMARY` if unexplained mismatches appear. After pilot `effective_to`, confirm
+expiry via `v_expired_active_exclusions` and restore v3 if the cutout should leave published history.
+
+### Completed (2026-08-28)
+
+| Priority | Item | Status |
+|---|---|---|
+| P1 | EXC-1 No time dimension | ✅ columns + `zone_schedules` + expiry view |
+| P1 | EXC-2 Market-only scope | ✅ `scoped_exclusion_zones`, global/parish/market |
+| P2 | EXC-3 `priority` ignored | ✅ ADR-0014 `pickWinningMatch` |
+| P2 | EXC-4 Binary only | ✅ `zone_policy` incl. surcharge (see SURCHARGE-1) |
+| P2 | EXC-5 No taxonomy | ✅ `category` + `reason` + category-aware copy |
+| P3 | EXC-7 No net coverage | ✅ built + MultiPolygon fix + Spanish Town populated |
+| P3 | EXC-9 H3 exclusion dead code | ✅ resolved as intended (polygons stay SoT) |
+| P1 | SURCHARGE-1 Split bypass | ✅ folded into `buildOrderPricing` (2026-08-28 closeout) |
+| P1 | EXC-8 Unexercised path | ✅ Spanish Town pilot v4 (2026-08-28 closeout) |
+| P2 | EXC-6 PostGIS idle | ✅ primary + shadow flags (2026-08-28 closeout) |
+| P3 | PRIORITY-DEFAULT-1 | ✅ DEFAULT 10 (2026-08-28 closeout) |
 
 ---
 
@@ -334,4 +419,45 @@ group by m.name;
 --   0 exclusion zones, ever
 --   2 include zones: Old Harbour (JM0804, 1218 pts) · Spanish Town (JM0807, 1124 pts)
 --   both single-part, single-ring, source 'import', priority 0
+```
+
+### Post-implementation guards (2026-08-28)
+
+```sql
+-- EXC-8: has anything ever been created?  (all currently 0)
+select 'market_exclusions' k, count(*) v from delivery.service_zone_polygons where kind='exclude'
+union all select 'scoped_exclusions', count(*) from delivery.scoped_exclusion_zones
+union all select 'schedules', (select count(*) from delivery.zone_schedules)
+                            + (select count(*) from delivery.scoped_zone_schedules)
+union all select 'markets_with_net_coverage', count(*) from delivery.service_markets
+  where net_coverage_geom is not null;
+
+-- PRIORITY-DEFAULT-1: exclusions that would lose a tie to their own include (must be 0)
+select id, name, market_id, priority from delivery.service_zone_polygons
+where kind = 'exclude' and priority <= 0;
+
+-- EXC-1 hygiene: expired exclusions still being enforced (built-in view)
+select * from delivery.v_expired_active_exclusions;
+
+-- EXC-2 duplication detector: overlapping exclusions across markets that should be scoped up
+select a.id, a.name, a.market_id, b.id, b.name, b.market_id
+from delivery.service_zone_polygons a
+join delivery.service_zone_polygons b
+  on a.id < b.id and a.kind='exclude' and b.kind='exclude'
+ and a.market_id <> b.market_id and st_intersects(a.geom, b.geom);
+
+-- Parent-system regression guards (must stay 0 — from DELIVERY_MARKETS_GEOSPATIAL_AUDIT)
+select 'zone_jsonb_truncated' k, count(*) v from delivery.service_zone_polygons
+  where geom is not null and st_numgeometries(geom) > 1
+    and jsonb_array_length(polygon) < st_npoints(geom) - 1
+union all select 'multipart_in_parish_boundary_mode', count(*) from delivery.service_parishes
+  where coverage_mode = 'parish_boundary' and st_numgeometries(foundation_geom) > 1;
+```
+
+**SURCHARGE-1 invariant** — add to `packages/dash-pricing/src/engine.test.ts`, and assert it after any
+path that can mutate `deliveryFee`:
+
+```ts
+expect(b.deliveryFeePlatformAmount + b.deliveryFeeCourierAmount)
+  .toBeCloseTo(b.deliveryFee, 2);
 ```

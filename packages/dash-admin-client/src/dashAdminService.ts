@@ -1345,6 +1345,11 @@ export function importMarketGeoJson(
     polygon?: DashZoneVertex[];
     geojson?: unknown;
     promote_template?: boolean;
+    /** Add as live service area without replacing official border. */
+    as_service_area?: boolean;
+    name?: string;
+    /** When only a manual include exists, allow replacing it as foundation. */
+    replace_foundation?: boolean;
   },
 ) {
   return deliveryFetch<{ zone: DashZoneRow }>(

@@ -35,6 +35,7 @@ export type CoverageZone = {
   name: string;
   market_id?: string;
   kind?: string | null;
+  source?: string | null;
   polygon: CoverageVertex[];
   /** When set, PIP uses multi-part + holes; polygon kept for legacy display/H3 fallback. */
   multiPolygon?: CoverageMultiPolygon;
@@ -171,6 +172,28 @@ export function evaluateCoverage(
         }
       : null,
   };
+}
+
+import {
+  filterLiveCoverageZones,
+} from './liveCoverageZones.ts';
+
+export {
+  filterLiveCoverageZones,
+  coverageRoleForZone,
+  marketHasServiceAreas,
+  isServiceIncludeSource,
+  isImportIncludeSource,
+} from './liveCoverageZones.ts';
+
+/** ADR-0018: apply service-area live filter, then evaluateCoverage. */
+export function evaluateLiveCoverage(
+  lat: number,
+  lng: number,
+  zones: CoverageZone[],
+  at: Date = new Date(),
+): CoverageEvalResult {
+  return evaluateCoverage(lat, lng, filterLiveCoverageZones(zones), at);
 }
 
 export type { ActiveCoverageZone, LatLng, ZoneKind } from './zonesPayload.ts';

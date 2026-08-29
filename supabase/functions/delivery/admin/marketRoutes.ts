@@ -13,6 +13,7 @@ import { attachBoundaryAdminRoutes } from "./boundaryRoutes.ts";
 import { attachScopedExclusionRoutes } from "./scopedExclusionRoutes.ts";
 import {
   buildParishSyntheticZone,
+  coverageRoleForZone,
   evaluateCoverage,
   parseFoundationPolygon,
   type CoverageVertex,
@@ -962,6 +963,8 @@ export function registerMarketAdminRoutes(app: Hono) {
           draft_dirty: false,
         }).eq("id", marketId);
       }
+      // Keep net coverage in sync with publish path (EXC-7 / EXC-8).
+      await db.rpc("refresh_market_net_coverage", { p_market_id: marketId });
     } else {
       await markDraftDirty(db, marketId);
     }
@@ -1024,28 +1027,50 @@ export function registerMarketAdminRoutes(app: Hono) {
     const { data: market } = await db.from("service_markets").select("*").eq("id", marketId).maybeSingle();
     if (!market) return c.json({ error: "Market not found" }, 404);
 
-    const { data: includes } = await db
-      .from("service_zone_polygons")
-      .select("id")
-      .eq("market_id", marketId)
-      .eq("kind", "include");
-    for (const row of includes ?? []) {
-      await db.from("service_zone_polygons").delete().eq("id", String((row as Record<string, unknown>).id));
+    // as_service_area: add a live service include without wiping official / other includes.
+    // Otherwise: replace only the official foundation (source=import), keep service areas.
+    const asServiceArea = body.as_service_area === true;
+    if (!asServiceArea) {
+      const { data: foundationRows } = await db
+        .from("service_zone_polygons")
+        .select("id, source")
+        .eq("market_id", marketId)
+        .eq("kind", "include");
+      const toReplace = (foundationRows ?? []).filter((row) => {
+        const src = String((row as Record<string, unknown>).source ?? "import").toLowerCase();
+        return src === "import";
+      });
+      // Compat: if no import row yet, replace the sole include only when it is the only one
+      // (legacy single-border towns). Never wipe manual service areas.
+      if (toReplace.length === 0 && (foundationRows ?? []).length === 1) {
+        const only = foundationRows![0] as Record<string, unknown>;
+        const src = String(only.source ?? "").toLowerCase();
+        if (src !== "manual" && src !== "radius" && src !== "auto_outline") {
+          toReplace.push(only as { id: unknown; source: unknown });
+        } else if (body.replace_foundation === true) {
+          toReplace.push(only as { id: unknown; source: unknown });
+        }
+      }
+      for (const row of toReplace) {
+        await db.from("service_zone_polygons").delete().eq("id", String((row as Record<string, unknown>).id));
+      }
     }
 
     const { data: zone, error } = await db.from("service_zone_polygons").insert({
       market_id: marketId,
-      name: deliveryAreaName(String(market.name)),
+      name: asServiceArea
+        ? String(body.name || `Service area`).slice(0, 80)
+        : deliveryAreaName(String(market.name)),
       polygon,
       kind: "include",
-      priority: 10,
-      source: "import",
+      priority: asServiceArea ? 10 : 0,
+      source: asServiceArea ? "manual" : "import",
       updated_by: adminUser.id || null,
     }).select().single();
     if (error) return c.json({ error: error.message }, 500);
     await markDraftDirty(db, marketId);
 
-    const promote = body.promote_template === true;
+    const promote = body.promote_template === true && !asServiceArea;
     if (promote && market.slug) {
       await db.from("town_outline_templates").upsert({
         slug: String(market.slug),
@@ -1266,12 +1291,17 @@ export function registerMarketAdminRoutes(app: Hono) {
 
     const beforeKind = normalizeKind((before as Record<string, unknown>).kind);
     const nextKind = body.kind != null ? normalizeKind(body.kind) : beforeKind;
+    const beforeSource = normalizeSource((before as Record<string, unknown>).source);
     const touchesFoundationGeometry =
       nextKind === "include" &&
       (body.polygon != null || (body.kind != null && normalizeKind(body.kind) === "include"));
 
-    // Soft guard: include (town foundation) geometry edits require explicit confirm.
-    if (beforeKind === "include" && body.polygon != null) {
+    // Soft guard: official/foundation include edits need confirm.
+    // Live service areas (manual / radius / auto_outline) update without that flag.
+    const isServiceAreaInclude =
+      beforeKind === "include" &&
+      (beforeSource === "manual" || beforeSource === "radius" || beforeSource === "auto_outline");
+    if (beforeKind === "include" && body.polygon != null && !isServiceAreaInclude) {
       if (body.confirm_foundation_edit !== true) {
         return c.json({
           error:
@@ -1474,10 +1504,19 @@ export function registerPublicGeoRoutes(
     // Stable priority sort
     zones.sort((a, b) => Number(b.priority ?? 0) - Number(a.priority ?? 0));
 
+    // Mark official import borders as context when the market has service areas (ADR-0018).
     c.header("Cache-Control", "public, max-age=60");
     return c.json({
       zones: zones.map((z) => {
         const market = marketById.get(String(z.market_id));
+        const role = coverageRoleForZone(
+          { kind: String(z.kind ?? "include"), source: z.source as string | null, market_id: z.market_id as string | null },
+          zones.map((row) => ({
+            kind: String(row.kind ?? "include"),
+            source: row.source as string | null,
+            market_id: row.market_id as string | null,
+          })),
+        );
         return {
           id: z.id,
           name: z.name,
@@ -1487,6 +1526,7 @@ export function registerPublicGeoRoutes(
           multiPolygon: z.multiPolygon ?? null,
           market_id: z.market_id ?? null,
           source: z.source ?? null,
+          coverage_role: role,
           is_active: z.is_active !== false,
           effective_from: z.effective_from ?? null,
           effective_to: z.effective_to ?? null,
