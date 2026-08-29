@@ -323,6 +323,7 @@ export async function resolveDashOrderPricing(
 
   const requireCoverage = input.requireCoverage !== false && !overrideRaw;
   if (requireCoverage && dropLat != null && dropLng != null && !covered) {
+    const gctConfig = await loadGlobalGctConfig(sb as Parameters<typeof loadGlobalGctConfig>[0]);
     return {
       ...buildOrderPricing({
         subtotal: input.subtotal,
@@ -331,7 +332,8 @@ export async function resolveDashOrderPricing(
         distanceKm: null,
         rules: parsePricingRules(null),
         paymentMethod: input.paymentMethod,
-        taxRatePercent: 16.5,
+        taxRatePercent: gctConfig.ratePercent,
+        platformTaxRatePercent: effectivePlatformGctRatePercent(gctConfig),
       }),
       pricingProfileVersion: 0,
       marketId: null,

@@ -137,7 +137,7 @@ export function defaultSettingsForSegment(segment: SettingsSegment): Record<stri
         securityPolicies: { ...DEFAULT_SECURITY },
         announcement: { ...DEFAULT_ANNOUNCEMENT },
         tax: {
-          gctStandardRatePercent: 16.5,
+          gctStandardRatePercent: 15,
           gctEnabled: true,
         },
       };

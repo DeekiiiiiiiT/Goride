@@ -9,6 +9,8 @@ import { requireWrite as requireCourierWrite } from "./permissions.ts";
 import { getDb } from "./merchantAdminShared.ts";
 import { orchestrateOrderRefund } from "./orderRefund.ts";
 import { ORDER_CUSTOMER_EMBED } from "../orderSelectEmbeds.ts";
+import { handleOrderDelivered } from "../courierCashLedger.ts";
+import { reverseOrderOutputTax } from "../../_shared/gctLedger.ts";
 
 async function requireDashOrCourierAdmin(c: { req: { header: (n: string) => string | undefined } }) {
   const dash = await requireProductAdmin(c, "dash");
@@ -210,6 +212,8 @@ export function registerOrderAdminRoutes(app: Hono) {
       notes: reason,
     });
 
+    await reverseOrderOutputTax(db, orderId);
+
     let refund: RefundOrchestratorResultSummary | null = null;
     const payStatus = String(
       (existing as { payment_status?: string } | null)?.payment_status
@@ -266,6 +270,8 @@ export function registerOrderAdminRoutes(app: Hono) {
       actor_id: adminUser.id,
       notes: "Force completed by support",
     });
+
+    await handleOrderDelivered(db, orderId, order.courier_id ? String(order.courier_id) : null);
 
     return c.json({ ok: true, order });
   });

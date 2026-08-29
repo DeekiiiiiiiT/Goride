@@ -10,6 +10,9 @@
     ".": "./src/index.ts",
     "./*": "./src/*"
   },
+  "dependencies": {
+    "@roam/gct-core": "workspace:*"
+  },
   "devDependencies": {
     "vitest": "^3.2.4"
   }

@@ -583,7 +583,7 @@ export function defaultPricingRules(): PricingRules {
     courierMinPayJmd: 350,
     launchPromos: { freeDeliveryFirstNOrders: 0 },
     cod: { pauseThresholdJmd: 10000 },
-    taxRatePercent: 16.5,
+    taxRatePercent: 15,
     roadDistanceMultiplier: 1.4,
     minOrderSubtotalJmd: 1500,
     hardMinOrderSubtotalJmd: 400,

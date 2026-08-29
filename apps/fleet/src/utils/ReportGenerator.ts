@@ -87,11 +87,9 @@ export const ReportGenerator = {
 
   generateTaxExport(trips: Trip[]): ReportSummary {
     const totalRevenue = trips.reduce((sum, t) => sum + (t.amount || 0), 0);
-    // Regional Tax: GCT (General Consumption Tax) - Example 15%
-    const gctRate = 0.15;
-    const gctAmount = totalRevenue * gctRate;
-    
+
     // Income Tax Estimate (after 25% standard expense deduction)
+    // GCT liabilities are not estimated from revenue — use Dominion Accounting → GCT remittance.
     const taxableIncome = totalRevenue * 0.75;
     const incomeTaxRate = 0.25;
     const incomeTaxEstimate = taxableIncome * incomeTaxRate;
@@ -102,15 +100,13 @@ export const ReportGenerator = {
       period: "Quarterly Review",
       stats: [
         { label: "Gross Revenue", value: `$${totalRevenue.toLocaleString()}` },
-        { label: "GCT (15%)", value: `$${gctAmount.toLocaleString()}` },
-        { label: "Income Tax Est.", value: `$${incomeTaxEstimate.toLocaleString()}` }
+        { label: "Income Tax Est.", value: `$${incomeTaxEstimate.toLocaleString()}` },
       ],
       details: [
         { category: 'Gross Revenue', amount: totalRevenue },
         { category: 'Estimated Expenses (25%)', amount: totalRevenue * 0.25 },
         { category: 'Taxable Income', amount: taxableIncome },
         { category: 'Income Tax', amount: incomeTaxEstimate },
-        { category: 'GCT Liabilities', amount: gctAmount }
       ]
     };
   }

@@ -136,8 +136,9 @@ export const DEFAULT_ENTERPRISE_SETTINGS: FleetProductSettings = baseFleetProduc
   { ...DEFAULT_ENTERPRISE_ENABLED_MODULES },
 );
 
+/** @deprecated KV dual-read only — Accounting GCT engine is SSOT after cutover. */
 export const DEFAULT_TAX_SETTINGS: TaxSettings = {
-  gctStandardRatePercent: 16.5,
+  gctStandardRatePercent: 15,
   gctEnabled: true,
 };
 

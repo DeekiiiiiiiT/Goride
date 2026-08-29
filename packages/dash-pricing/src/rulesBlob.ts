@@ -118,7 +118,6 @@ export function serializePricingRulesNested(rules: PricingRules): NestedRulesBlo
   return {
     platform: {
       pricing_v2_enabled: rules.pricingV2Enabled ?? true,
-      tax_rate_percent: rules.taxRatePercent ?? 16.5,
       max_menu_inflation_percent: rules.maxMenuInflationPercent ?? 0.25,
     },
     customer: {
@@ -382,7 +381,7 @@ export function validatePartnerRules(_rules: PricingRules): string | null {
 }
 
 export function validatePlatformRules(rules: PricingRules): string | null {
-  const taxRate = rules.taxRatePercent ?? 16.5;
+  const taxRate = rules.taxRatePercent ?? 15;
   if (taxRate < 0 || taxRate > 30) return 'tax_rate_percent must be between 0 and 30';
   const maxInflation = rules.maxMenuInflationPercent ?? 0.25;
   if (maxInflation < 0 || maxInflation > 1) return 'max_menu_inflation_percent must be between 0 and 1';

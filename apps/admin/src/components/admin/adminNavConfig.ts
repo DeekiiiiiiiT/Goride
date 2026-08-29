@@ -38,6 +38,9 @@ import {
   CreditCard,
   Tags,
   Scale,
+  Percent,
+  BadgeCheck,
+  BookOpen,
 } from 'lucide-react';
 
 export type NavChild = {
@@ -129,6 +132,11 @@ export const VEHICLE_DATABASE_CHILDREN: NavChild[] = [
 ];
 
 export const ACCOUNTING_CHILDREN: NavChild[] = [
+  { id: 'gct-engine', label: 'GCT engine', icon: Scale },
+  { id: 'gct-rates', label: 'Rates & classes', icon: Percent },
+  { id: 'gct-entities', label: 'GCT registrations', icon: BadgeCheck },
+  { id: 'gct-ledger', label: 'GCT ledger', icon: BookOpen },
+  { id: 'gct-remittance', label: 'Remittance & filing', icon: Receipt },
   { id: 'vendor-database', label: 'Vendors & categories', icon: Store },
   { id: 'pending-vendor-requests', label: 'Pending vendor requests', icon: Inbox },
 ];
@@ -224,6 +232,11 @@ const SHARED_PLATFORM_PAGES = [
   'pending-motor-vehicles',
   'maintenance-templates',
   'parts-sourcing',
+  'gct-engine',
+  'gct-rates',
+  'gct-entities',
+  'gct-ledger',
+  'gct-remittance',
   'vendor-database',
   'pending-vendor-requests',
   ...GLOBAL_SETTINGS_PAGES,

@@ -28,6 +28,11 @@ import { HaulOverviewCard } from './product-overviews/HaulOverviewCard';
 import { PartsSourcingManager } from './parts-sourcing/PartsSourcingManager';
 import { AccountingCatalogManager } from './accounting/AccountingCatalogManager';
 import { PendingVendorRequestsManager } from './accounting/PendingVendorRequestsManager';
+import { GctEnginePage } from './gct/GctEnginePage';
+import { GctRatesPage } from './gct/GctRatesPage';
+import { GctEntitiesPage } from './gct/GctEntitiesPage';
+import { GctLedgerPage } from './gct/GctLedgerPage';
+import { GctRemittancePage } from './gct/GctRemittancePage';
 import { ErrorBoundary } from '@roam/roam-shared';
 import { StationDatabaseView } from '../fuel/stations/StationDatabaseView';
 import type { ResolutionQueueSubTab } from '../fuel/stations/ResolutionQueueTab';
@@ -352,6 +357,41 @@ export function AdminPortal() {
       {currentPage === 'parts-sourcing' && (
         <div className="bg-white rounded-xl shadow-sm overflow-hidden min-h-[600px] dark:bg-card">
           <PartsSourcingManager />
+        </div>
+      )}
+      {currentPage === 'gct-engine' && (
+        <div className="bg-white rounded-xl shadow-sm overflow-hidden min-h-[600px] dark:bg-card">
+          <ErrorBoundary>
+            <GctEnginePage />
+          </ErrorBoundary>
+        </div>
+      )}
+      {currentPage === 'gct-rates' && (
+        <div className="bg-white rounded-xl shadow-sm overflow-hidden min-h-[600px] dark:bg-card">
+          <ErrorBoundary>
+            <GctRatesPage />
+          </ErrorBoundary>
+        </div>
+      )}
+      {currentPage === 'gct-entities' && (
+        <div className="bg-white rounded-xl shadow-sm overflow-hidden min-h-[600px] dark:bg-card">
+          <ErrorBoundary>
+            <GctEntitiesPage />
+          </ErrorBoundary>
+        </div>
+      )}
+      {currentPage === 'gct-ledger' && (
+        <div className="bg-white rounded-xl shadow-sm overflow-hidden min-h-[600px] dark:bg-card">
+          <ErrorBoundary>
+            <GctLedgerPage />
+          </ErrorBoundary>
+        </div>
+      )}
+      {currentPage === 'gct-remittance' && (
+        <div className="bg-white rounded-xl shadow-sm overflow-hidden min-h-[600px] dark:bg-card">
+          <ErrorBoundary>
+            <GctRemittancePage />
+          </ErrorBoundary>
         </div>
       )}
       {(currentPage === 'vendor-database' || currentPage === 'expense-categories') && (

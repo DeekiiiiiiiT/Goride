@@ -2,8 +2,8 @@
 
 /** Fallback only — prefer resolved rate from merchant pricing API. */
 export const PLATFORM_FEE_RATE = 0.05;
-/** Last-resort GCT label when pricing API unavailable (matches Dominion default). */
-export const GCT_RATE_FALLBACK_PERCENT = 16.5;
+/** @deprecated Removed — never guess GCT. Prefer server quote tax_rate_percent. */
+export const GCT_RATE_FALLBACK_PERCENT = Number.NaN;
 
 export type PromoCode = {
   code: string;
@@ -186,8 +186,24 @@ export function calculateOrderTotals(
     serviceFeeFlat != null && Number.isFinite(serviceFeeFlat)
       ? roundMoney(Math.max(0, serviceFeeFlat))
       : roundMoney(subtotal * clampFeeRate(platformFeeRate));
-  const gctRate = options?.taxRatePercent ?? GCT_RATE_FALLBACK_PERCENT;
-  // When taxRatePercent is explicitly 0 (non-GCT merchant), do not invent 16.5%
+  const gctRate = options?.taxRatePercent;
+  if (gctRate == null || !Number.isFinite(gctRate)) {
+    // Fail visibly — do not invent a statutory rate on the client
+    const tax = 0;
+    const orderTotal = roundMoney(discountedSubtotal + safeDeliveryFee + serviceFee + tax + safeTip);
+    return {
+      discount,
+      discountedSubtotal,
+      deliveryFee: safeDeliveryFee,
+      serviceFee,
+      tax,
+      tip: safeTip,
+      orderTotal,
+      processingFee: 0,
+      smallOrderFee: 0,
+      total: orderTotal,
+    };
+  }
   const tax = roundMoney(discountedSubtotal * (gctRate / 100));
   const orderTotal = roundMoney(discountedSubtotal + safeDeliveryFee + serviceFee + tax + safeTip);
   const processingFee = 0;
@@ -329,7 +345,10 @@ export async function fetchMerchantCheckoutPricing(
       ? Math.max(0, data.tax_rate_percent)
       : data.gct_registered === false
       ? 0
-      : GCT_RATE_FALLBACK_PERCENT;
+      : Number.NaN;
+  if (!Number.isFinite(taxRatePercent) && data.gct_registered !== false) {
+    throw new Error('GCT rate unavailable — refresh pricing before checkout');
+  }
   return {
     merchantId: resolvedMerchantId,
     pricingModel: 'legacy',

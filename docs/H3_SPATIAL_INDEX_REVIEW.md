@@ -17,24 +17,43 @@
 
 ## 0. Remediation status — verified 2026-08-29
 
-Second pass against the working tree after Track A (Rides safety) and the Rush H3 foundation
-landed. **6 of 9 bugs fully closed, all 7 Rush steps shipped, ADR 0013 written and accepted.**
+**All 10 bugs and all 7 Rush steps are closed in code, and the schema changes are applied and
+verified live on `csfllzzastacofsvcdsc`.** Phases 1–7 of the H3 Audit Remediation Plan are done.
 
-**Full remediation program (2026-08-29 evening):** Phases 1–7 of the H3 Audit Remediation Plan
-implemented in-repo (presence RPC + CHECK, canary, bounded supply, resolution threading, hex
-coverage flag, shared kill-switch, Rides surge H3 cutover). Apply migrations
-`20260830240000`–`20260830260000` and deploy edge functions before enabling
-hex coverage (on by default; `RUSH_HEX_COVERAGE_ENABLED=0` kill-switch only).
+> ### ⚠️ One thing is not finished: the canary is scheduled but not deployed
+>
+> `cron.job` runs `spatial-index-canary` every 10 minutes and reports **`succeeded`** — but
+> `net._http_response` shows **every one of those calls returning `404`**, because the
+> `spatial-index-canary` edge function was left out of the deploy batch that shipped `delivery`,
+> `rides`, `matching` and the rest at 18:35 UTC.
+>
+> `cron.schedule` only wraps `net.http_post`, which succeeds at *queueing* the request. So the job
+> log says green while the canary has never once run. The single component built to convert silent
+> failures into loud ones is itself failing silently.
+>
+> **Fix: `supabase functions deploy spatial-index-canary`.** Nothing else is outstanding.
+> See §9.
 
-**Landed since the review:** `packages/spatial`, migrations
+**Verified live** (read-only queries, 2026-08-29): all four remediation migrations applied
+(`delivery_courier_upsert_presence`, `spatial_index_canary_cron`, `rides_surge_h3_cutover`,
+`rides_surge_delete_grid_tombstones`); `courier_availability_online_h3_check` present;
+`delivery_courier_upsert_presence` present; unique `driver_id` index present; `fleet_cron_secret`
+set; all three cron jobs active; **0** `grid:%` rows left in `rides.surge_cells`; **0** online
+couriers with a null cell; `matching.policies.h3_resolution` = **7**, matching
+`DEFAULT_H3_RESOLUTION`; **1,154** market coverage cells and **2,166** merchant reach cells
+compiled against real data. `delivery`, `rides` and `matching` all redeployed after the final
+commit.
+
+**Landed since the review:** `packages/spatial` (+ `mirror-sync.test.ts`), migrations
 [`20260829140000_h3_phase1_safety.sql`](../supabase/migrations/20260829140000_h3_phase1_safety.sql),
 [`20260829150000_rush_h3_foundation.sql`](../supabase/migrations/20260829150000_rush_h3_foundation.sql),
 [`20260829160000_rides_h3_res_and_bounded_supply.sql`](../supabase/migrations/20260829160000_rides_h3_res_and_bounded_supply.sql),
 [`20260830240000_delivery_courier_upsert_presence.sql`](../supabase/migrations/20260830240000_delivery_courier_upsert_presence.sql),
 [`20260830250000_spatial_index_canary_cron.sql`](../supabase/migrations/20260830250000_spatial_index_canary_cron.sql),
 [`20260830260000_rides_surge_h3_cutover.sql`](../supabase/migrations/20260830260000_rides_surge_h3_cutover.sql),
-`delivery/coverageCompile.ts`, `dash-coverage/hexCoverage.ts`,
-[ADR 0013](adr/0013-rush-coverage-precedence-h3.md).
+[`20260830270000_rides_surge_delete_grid_tombstones.sql`](../supabase/migrations/20260830270000_rides_surge_delete_grid_tombstones.sql),
+`spatial-index-canary/`, `delivery/coverageCompile.ts`, `dash-coverage/hexCoverage.ts`,
+`dash-coverage/geometry.ts` (bbox prefilter), [ADR 0013](adr/0013-rush-coverage-precedence-h3.md).
 
 ### Bugs
 
@@ -182,14 +201,28 @@ control that looks safe to touch, and the blast radius is total.
 > [:2249](../supabase/functions/rides/index.ts#L2249)), as does `pickupEta`
 > ([:92-93](../supabase/functions/rides/fare/pickupEta.ts#L92-L93)).
 >
-> **Residual, stated plainly:** the system is correct **only while `policy.h3_resolution` is 7.**
-> `loadPolicy` still clamps 4–10 and honors the stored value, so a direct DB write to that column
-> would leave the wave path querying at res 8 against rows stamped 7 — zero rows, island-wide.
-> The canary does **not** cover this: it compares stored `h3_res` against `DEFAULT_H3_RESOLUTION`,
-> not against the policy row, so a uniformly-stamped fleet looks healthy while the read path
-> queries elsewhere. The UI lock remains the real guard. To close: have the canary read
-> `matching.policies.h3_resolution` and alert when it differs from `DEFAULT_H3_RESOLUTION`, which
-> makes the one remaining trigger loud. See §9 item 1.
+> **Final resolution 2026-08-29 — ✅ Closed, by pinning rather than threading.**
+> The split was resolved in the opposite direction to fix 2, and the choice is sound.
+> Rather than thread `policy.h3_resolution` into the writers, the **read** path was pinned to
+> `DEFAULT_H3_RESOLUTION` to match them
+> ([runMatchingWave.ts:131-152](../supabase/functions/matching/dispatch/runMatchingWave.ts#L131-L152)),
+> with the reasoning recorded at the call site: *"Live res is DEFAULT_H3_RESOLUTION while admin
+> slider is locked. Do not use policy.h3_resolution for cells/RPC until a dual-stamp migration."*
+> The policy value is still logged as `policy_h3_resolution` beside the live `h3_res`, so the two
+> are observable but only one is load-bearing.
+>
+> That is the better call. Threading the policy value would have made a settings row able to change
+> spatial behaviour with no re-stamp — the original footgun with extra steps. Pinning both sides to
+> one constant makes resolution a code-level fact, and §3's fix 3 ("a migration, not a toggle")
+> is then true by construction rather than by convention.
+>
+> The last silent trigger is closed too: the canary now reads
+> `matching_policies.h3_resolution WHERE is_default` and raises `policy_res_diverges_from_live`
+> when it differs from `DEFAULT_H3_RESOLUTION`
+> ([spatial-index-canary/index.ts:50-67](../supabase/functions/spatial-index-canary/index.ts#L50-L67)),
+> treating a lookup error as non-fatal so the presence checks still run. Verified live:
+> `policy_res` = 7, so the two agree today.
+> **Caveat: this alert only fires once the canary is actually deployed.** See §0.
 
 ### Bug #2 — k-ring calibration is wrong by a factor of √3 (Critical for Rush)
 
@@ -819,10 +852,14 @@ price. Single H3 key. No `grid:` string anywhere in Rush.
 > ([loadPolicy.ts:456-464](../supabase/functions/matching/policy/loadPolicy.ts#L456-L464)). There is
 > now one place where `MATCHING_H3_SUPPLY` / `MATCHING_H3_SURGE` are read, so a flag cannot be on in
 > one place and off in another. `isRushHexCoverageEnabled` was added to the same single home.
-> Residual, lower stakes than the flag split: `_shared/h3/geoIndex.ts` is still a hand-maintained
-> mirror of `@roam/spatial` rather than an import of it. The cell math is now identical in both and
-> covered by tests on the package side, so drift would surface as a test failure rather than a
-> silent divergence — but a comment is still not a compiler.
+> The mirror residual is now guarded too: `packages/spatial/src/mirror-sync.test.ts` asserts that
+> the Deno file declares all 18 shared exports and the same `DEFAULT_H3_RESOLUTION`, so API drift
+> fails CI instead of diverging quietly. Full source sync is still manual — the test catches a
+> missing or renamed export, not a changed function body — but that is a fair trade for a file that
+> must stay importable from two runtimes. All 7 spatial tests pass.
+>
+> Every flag now funnels through `geoIndex`: **zero** direct `Deno.env.get("RUSH_*")` reads remain
+> at call sites, including the dispatch gate, which previously read the env inline.
 > **✅ `no_supply` telemetry** — `logNoSupply` emits `cells_queried`, `h3_res`, `rows_returned`,
 > `fresh_since`, `fell_back` plus a `reason` discriminator
 > ([pickupEta.ts:35-42](../supabase/functions/rides/fare/pickupEta.ts#L35-L42)); matching logs
@@ -837,9 +874,11 @@ price. Single H3 key. No `grid:` string anywhere in Rush.
 > Two details worth crediting: it is **detect-only** ("never auto-rewrite production rows"), which
 > is right — a canary that silently repairs is a canary that hides the bug it found; and the stale
 > sample orders by recency, so it watches the rows that are actually dispatchable.
-> Gap: the res checks compare stored `h3_res` against `DEFAULT_H3_RESOLUTION`, not against
-> `matching.policies.h3_resolution` — so the one surviving Bug #1 trigger (a direct DB edit of the
-> policy row) is the one thing this canary cannot see. See §9 item 1.
+> The gap flagged on the previous pass is closed: a `policy_res_diverges_from_live` check now
+> compares `matching_policies.h3_resolution` against `DEFAULT_H3_RESOLUTION`, so the last Bug #1
+> trigger is covered. Six checks total.
+> **But the function is not deployed** — the cron job has been calling it into a `404` since it was
+> scheduled, while reporting `succeeded`. See §0 and §9.
 > **✅ Coverage-set diffing** — `previewCoverageDiff` +
 > [marketRoutes.ts:846](../supabase/functions/delivery/admin/marketRoutes.ts#L846).
 > **✅ Hex overlay** — [`HexCellsMapOverlay.tsx`](../packages/dash-admin/src/pages/markets/HexCellsMapOverlay.tsx).
@@ -954,11 +993,39 @@ threading the resolution.
   non-deterministic between environments. Worth renaming one before the next deploy.
 - Still no code or schema changes made by this review.
 
+### Fourth pass — 2026-08-29 (live verification)
+
+First pass to check the **running system** rather than the working tree. Read-only SQL against
+`csfllzzastacofsvcdsc` plus the edge-function and migration listings.
+
+- All four remediation migrations present in `supabase_migrations.schema_migrations`
+  (applied as `20260829172933`, `173004`, `173005`, `182112` — Supabase renumbers on push, so
+  local filenames and applied versions differ by design).
+- `courier_availability_online_h3_check`, `delivery_courier_upsert_presence` and
+  `courier_availability_driver_id_uidx` all present. `private.fleet_ops_secrets.fleet_cron_secret`
+  set and ≥ 8 chars.
+- `cron.job`: `spatial-index-canary` (`*/10 * * * *`), `delivery_courier_stale_offline`
+  (`*/5 * * * *`), `delivery_refresh_surge_now` (`* * * * *`) — all `active = true`.
+- Data invariants hold: **0** `grid:%` rows in `rides.surge_cells`, **0** online couriers with a
+  null `h3_cell`, `policy.h3_resolution = 7`.
+- Coverage compile has run against real data: 1,154 `coverage_cells`, 2,166
+  `merchant_coverage_cells`.
+- One `rides.driver_locations` row has a null `h3_res` — a pre-H3 row last updated 2026-06-14.
+  The canary's predicate excludes null cells, so it will not alert on it, and the freshness window
+  excludes it from matching. Benign; noted only so it is not mistaken for drift later.
+- **`spatial-index-canary` is absent from the deployed edge functions**, while its cron job reports
+  `succeeded` on all 7 runs and `net._http_response` records 7 × `404`. This is the finding of the
+  pass; see §0 and §9.
+- Migration timestamp collision resolved (`20260830240100_rush_marketplace_pricing.sql`).
+- `packages/spatial`: 7/7 tests pass, including the new mirror-sync guardrail.
+- No code or schema changes made by this review.
+
 ---
 
-## 9. Open items — 2026-08-29 (finish leftovers)
+## 9. Open items — 2026-08-29 (after live verification)
 
-**Remediation + finish pass complete.** Bugs #1–#10 closed in-repo. Leftover polish from §9 is done:
+**Remediation complete in code and applied to the database. One deploy outstanding.**
+Bugs #1–#10 closed. Leftover polish from the previous §9 is done:
 
 - Canary alerts `policy_res_diverges_from_live` when `matching.policies.h3_resolution` ≠ `DEFAULT_H3_RESOLUTION`
 - Matching wave H3 reads use `DEFAULT_H3_RESOLUTION` (not policy) while the slider stays locked
@@ -967,18 +1034,48 @@ threading the resolution.
 - Legacy `grid:%` surge rows deleted; dual-read branch removed from `readSurgeMultiplier`
 - Bbox prefilter confirmed present on polygon ray-cast
 
-### Ops (redeploy only)
+### Ops — verified live 2026-08-29
 
-| # | Item | Severity |
+| # | Item | Status |
 |---|---|---|
-| 1 | Redeploy `spatial-index-canary`, `matching`, `delivery`, `rides` with this finish pass | **Blocking for new checks** |
-| 2 | Confirm `fleet_cron_secret` exists so canary cron can invoke | Blocking if missing |
+| 1 | Apply the four remediation migrations | ✅ All present in `schema_migrations` |
+| 2 | `fleet_cron_secret` set so canary cron can invoke | ✅ Present, ≥ 8 chars |
+| 3 | Redeploy `matching`, `delivery`, `rides` | ✅ All redeployed 18:35 UTC, after the final commit |
+| 4 | **Deploy `spatial-index-canary`** | ❌ **Never deployed — cron is calling a 404** |
+
+### The one open item
+
+**`supabase functions deploy spatial-index-canary`.**
+
+The function is written, the cron job is scheduled and active, the secret is set, and the six
+checks are correct. The function itself was simply left out of the deploy batch that shipped
+everything else. Live evidence:
+
+```
+cron.job_run_details   → spatial-index-canary: 7 runs, all "succeeded"
+net._http_response     → 7 responses, all 404
+```
+
+Both readings are true at once, and that is the trap worth naming. `cron.schedule` runs
+`net.http_post`, which succeeds when it *queues* the request — the HTTP status lands in a different
+table that nothing watches. So the job log is green, the schedule looks healthy, and the canary has
+never executed a single check.
+
+This is the same failure shape the review opened with — `supply_source` asserting `"legacy"` as a
+hardcoded literal, a green field reporting a state nobody measured — reappearing one level up, in
+the monitoring. Worth remembering when the next cron-driven check is added: **assert on
+`net._http_response.status_code`, not on `cron.job_run_details.status`.**
+
+Until the deploy runs, Bugs #1, #3 and #10 are *fixed* but not *watched*: the constraint and the
+presence RPC prevent them structurally, so nothing is currently broken — but the detection layer
+that was supposed to catch a regression is inert.
 
 ### Residual (intentionally deferred)
 
 | # | Item | Severity |
 |---|---|---|
-| 1 | Deno `_shared/h3/geoIndex.ts` remains a hand-maintained mirror of `@roam/spatial` (sync test guards exports) | Low |
-| 2 | Dual-stamp resolution migration if live res ever leaves 7 | Low — slider locked |
+| 1 | Deno `_shared/h3/geoIndex.ts` remains a hand-maintained mirror of `@roam/spatial` (sync test guards the export surface, not bodies) | Low |
+| 2 | Dual-stamp resolution migration if live res ever leaves 7 | Low — slider locked, canary alerts on divergence |
+| 3 | Rush legacy dispatch fallback retained (bounded, ordered, reasoned) | Low — revisit after soak |
 
-**Every failure mode in this review is either fixed or loud.**
+**After that one deploy, every failure mode in this review is either fixed or loud.**

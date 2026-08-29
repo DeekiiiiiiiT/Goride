@@ -36,6 +36,7 @@ import {
 import { assertMerchantAcceptingOrders } from "./merchantOpenCheck.ts";
 import { registerMerchantInventoryRoutes } from "./merchantInventoryRoutes.ts";
 import { registerCustomerOrderRoutes } from "./customerOrderRoutes.ts";
+import { reverseOrderOutputTax } from "../_shared/gctLedger.ts";
 import { registerCustomerAccountRoutes } from "./customerAccountRoutes.ts";
 import { registerCustomerDiscoveryRoutes } from "./customerDiscoveryRoutes.ts";
 import {
@@ -1181,6 +1182,7 @@ app.put("/orders/:id/status", async (c) => {
     );
     if (status === "cancelled") {
       await applyCancelCompensation(serviceSb, id, String(actorType));
+      await reverseOrderOutputTax(serviceSb, id);
     }
 
     const shiftHeader = c.req.header("X-Staff-Shift-Token");
@@ -1275,6 +1277,9 @@ app.put("/orders/:id/status", async (c) => {
         await completeStackLeg(serviceSb, user.id, id);
         await handleOrderDelivered(serviceSb, id, user.id);
       }
+      if (status === "cancelled") {
+        await reverseOrderOutputTax(serviceSb, id);
+      }
     }
 
     await notifyCustomerOrderStatus(serviceSb, id, status);
@@ -1341,6 +1346,7 @@ app.put("/orders/:id/status", async (c) => {
     await applyCancelCompensation(serviceSb, id, String(actorType));
     const courierId = (order as { courier_id?: string | null }).courier_id;
     if (courierId) await completeStackLeg(serviceSb, String(courierId), id);
+    await reverseOrderOutputTax(serviceSb, id);
   }
   if (status === "delivered") {
     const courierId = (order as { courier_id?: string | null }).courier_id;

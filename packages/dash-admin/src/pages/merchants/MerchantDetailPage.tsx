@@ -482,7 +482,8 @@ export function MerchantDetailPage() {
     if (!merchant) return;
     const next = !merchant.gct_registered;
     if (next && !merchant.tax_id?.trim()) {
-      toast.warning('No TRN on file — verify tax ID before enabling GCT collection');
+      toast.error('TRN required before marking GCT registered — add tax ID first');
+      return;
     }
     try {
       await patchMerchantOps(token, merchant.id, { gct_registered: next });
@@ -866,8 +867,8 @@ export function MerchantDetailPage() {
       <section className="rounded-xl border border-slate-800 bg-slate-900/50 p-4 space-y-3">
         <h3 className="text-sm font-medium text-white">GCT registration</h3>
         <p className="text-sm text-slate-400">
-          Only GCT-registered merchants may charge General Consumption Tax on food sales. Rate is set
-          in Dominion Global Settings.
+          Only GCT-registered merchants with a TRN may charge GCT on food. Rate comes from Accounting →
+          GCT engine (Dominion).
         </p>
         {merchant.tax_id && (
           <p className="text-xs text-slate-500">TRN on file: {merchant.tax_id}</p>

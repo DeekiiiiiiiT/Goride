@@ -427,3 +427,6 @@ verify_jwt = false
 # Cron sync uses service_role / CRON_SECRET inside the function; admin routes use requirePlatformAdmin.
 [functions.petrojam-prices]
 verify_jwt = false
+
+[functions.gct-admin]
+verify_jwt = false

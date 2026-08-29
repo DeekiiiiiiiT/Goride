@@ -4,6 +4,7 @@
  */
 
 import { computeCodTrialBalance, assertCodTrialBalance } from "../_shared/dashPricing.ts";
+import { recordOrderOutputTax } from "../_shared/gctLedger.ts";
 
 // deno-lint-ignore no-explicit-any
 type Sb = { from: (t: string) => any };
@@ -166,6 +167,33 @@ export async function handleOrderDelivered(
   const row = order as Record<string, unknown>;
   const paymentMethod = String(row.payment_method ?? "cash");
   const paymentStatus = String(row.payment_status ?? "");
+
+  // Shadow-write GCT output tax at delivery tax point (Workstream E)
+  const taxFood = Number(row.tax_food_jmd ?? 0);
+  const taxPlatform = Number(row.tax_platform_jmd ?? 0);
+  if (taxFood > 0 || taxPlatform > 0) {
+    const discountedSubtotal = Math.max(
+      0,
+      Number(row.subtotal ?? 0) - Number(row.discount ?? 0),
+    );
+    const platformBase =
+      Math.max(0, Number(row.service_fee ?? 0)) +
+      Math.max(0, Number(row.delivery_fee_platform ?? row.platform_delivery_fee ?? 0)) +
+      Math.max(0, Number(row.small_order_fee ?? 0));
+    await recordOrderOutputTax(sb, {
+      orderId,
+      merchantId: row.merchant_id ? String(row.merchant_id) : null,
+      taxFoodJmd: taxFood,
+      taxPlatformJmd: taxPlatform,
+      foodBaseJmd: discountedSubtotal,
+      platformBaseJmd: platformBase,
+      foodRatePercent: Number(row.tax_rate_food_percent ?? row.tax_rate_percent ?? 0),
+      platformRatePercent: Number(row.tax_rate_platform_percent ?? row.tax_rate_percent ?? 0),
+      invoiceAt: row.created_at ? String(row.created_at) : null,
+      paymentAt: paymentStatus === "paid" ? new Date().toISOString() : null,
+      deliveryAt: row.delivered_at ? String(row.delivered_at) : new Date().toISOString(),
+    });
+  }
 
   if (paymentMethod === "cash" && paymentStatus === "pending_collection") {
     await sb

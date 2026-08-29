@@ -32,7 +32,7 @@ export interface PricingResult {
   }>;
 }
 
-export const GCT_STANDARD_RATE_FALLBACK = 16.5;
+export const GCT_STANDARD_RATE_FALLBACK = 15;
 
 function roundMoney(value: number) {
   return Math.round(value * 100) / 100;

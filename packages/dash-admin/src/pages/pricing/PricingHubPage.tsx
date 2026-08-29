@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
-import { ChevronRight, Loader2, X } from 'lucide-react';
+import { ChevronRight, HelpCircle, Loader2, X } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   fetchPricingOverview,
@@ -2941,6 +2941,42 @@ function SimBreakdownPanel({
   );
 }
 
+const TIER_FIELD_TIPS = {
+  commission:
+    'Platform cut of food sales for restaurants on this tier (e.g. 25% = partner keeps 75%).',
+  baseDelivery:
+    'Starting customer delivery fee for this tier. Overrides the Customer rules base delivery when set.',
+  inflation:
+    'Optional menu markup % for marketplace pricing vs in-store. 0 = no inflation.',
+  searchBoost:
+    'Extra weight in discovery / search ranking. Higher = more likely to appear higher in results.',
+  radius:
+    'Default delivery coverage radius suggestion for restaurants on this tier (km).',
+  promoEligible:
+    'When checked, restaurants on this tier can run launch / promo free-delivery offers.',
+  active: 'When off, this tier is hidden from new assignments and tier compare.',
+} as const;
+
+function TierFieldLabel({ label, tip }: { label: string; tip: string }) {
+  return (
+    <span className="inline-flex items-center gap-1">
+      <span>{label}</span>
+      <span className="relative group inline-flex" tabIndex={0}>
+        <HelpCircle
+          className="w-3.5 h-3.5 text-slate-600 hover:text-slate-400 cursor-help shrink-0"
+          aria-hidden
+        />
+        <span
+          role="tooltip"
+          className="pointer-events-none absolute left-full top-1/2 z-50 ml-2 w-52 -translate-y-1/2 rounded-md border border-slate-700 bg-slate-800 px-2 py-1.5 text-[11px] leading-snug text-slate-200 opacity-0 shadow-lg transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
+        >
+          {tip}
+        </span>
+      </span>
+    </span>
+  );
+}
+
 function TierRow({
   tier,
   canWrite,
@@ -2999,7 +3035,7 @@ function TierRow({
       </div>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         <label className="block text-xs text-slate-500">
-          Commission %
+          <TierFieldLabel label="Commission %" tip={TIER_FIELD_TIPS.commission} />
           <input
             type="number"
             min={0}
@@ -3011,7 +3047,7 @@ function TierRow({
           />
         </label>
         <label className="block text-xs text-slate-500">
-          Base delivery (JMD)
+          <TierFieldLabel label="Base delivery (JMD)" tip={TIER_FIELD_TIPS.baseDelivery} />
           <input
             type="number"
             min={0}
@@ -3022,7 +3058,7 @@ function TierRow({
           />
         </label>
         <label className="block text-xs text-slate-500">
-          Inflation %
+          <TierFieldLabel label="Inflation %" tip={TIER_FIELD_TIPS.inflation} />
           <input
             type="number"
             min={0}
@@ -3035,7 +3071,7 @@ function TierRow({
           />
         </label>
         <label className="block text-xs text-slate-500">
-          Search boost
+          <TierFieldLabel label="Search boost" tip={TIER_FIELD_TIPS.searchBoost} />
           <input
             type="number"
             min={0}
@@ -3046,7 +3082,7 @@ function TierRow({
           />
         </label>
         <label className="block text-xs text-slate-500">
-          Radius (km)
+          <TierFieldLabel label="Radius (km)" tip={TIER_FIELD_TIPS.radius} />
           <input
             type="number"
             min={1}
@@ -3065,7 +3101,7 @@ function TierRow({
             disabled={!canWrite}
             onChange={(e) => setPromoEligible(e.target.checked)}
           />
-          Promo eligible
+          <TierFieldLabel label="Promo eligible" tip={TIER_FIELD_TIPS.promoEligible} />
         </label>
         <label className="flex items-center gap-2 text-sm text-slate-400">
           <input
@@ -3074,7 +3110,7 @@ function TierRow({
             disabled={!canWrite}
             onChange={(e) => setIsActive(e.target.checked)}
           />
-          Active
+          <TierFieldLabel label="Active" tip={TIER_FIELD_TIPS.active} />
         </label>
       </div>
     </div>

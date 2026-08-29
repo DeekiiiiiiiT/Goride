@@ -8,3 +8,4 @@ export * from './tablet-enroll-errors';
 export * from './auth';
 export * from './station-api';
 export * from './restaurant-mgmt-api';
+export * from './order-pricing';

@@ -7,6 +7,7 @@ import type { DispatchSettings } from "./dispatchSettings.ts";
 import { resolvePickupEta, type PickupEtaSource } from "./pickupEta.ts";
 import { estimateRouteTolls } from "./estimateRouteTolls.ts";
 import { DEFAULT_H3_RESOLUTION, latLngToH3 } from "../../_shared/h3/geoIndex.ts";
+import { classifyRideFareGct, type RideGctClassification } from "./gctExempt.ts";
 
 export interface BuiltFareQuote {
   distanceKm: number;
@@ -27,6 +28,8 @@ export interface BuiltFareQuote {
   pickupEtaSource: PickupEtaSource;
   etaArrivalAt?: string;
   quoteToken: string;
+  /** Passenger transport — exempt; never charge GCT on ride fares. */
+  gct: RideGctClassification;
 }
 
 /** H3 surge primary key (Phase 7 cutover — no new `grid:` writes). */
@@ -178,5 +181,6 @@ export async function buildFareQuote(
     pickupEtaSource: pickupEta.pickupEtaSource,
     etaArrivalAt,
     quoteToken,
+    gct: classifyRideFareGct(),
   };
 }

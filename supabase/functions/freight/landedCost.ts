@@ -6,7 +6,9 @@
 export const USD_TAX_FREE_THRESHOLD_MINOR = 100_00; // US$100.00
 export const SCF_RATE = 0.003;
 export const ENV_RATE = 0.005;
+/** Default import GCT rate (fraction). Prefer passing engine rate via LandedCostInput.gctRate. */
 export const GCT_RATE = 0.15;
+
 export const DEFAULT_STAMP_JMD_MINOR = 100_00; // J$100.00
 export const DEFAULT_CAF_JMD_MINOR = 2500_00; // flat tier default J$2,500
 export const DEFAULT_INSURANCE_RATE = 0.01;
@@ -20,6 +22,8 @@ export type LandedCostInput = {
   stampJmdMinor?: number | null;
   cafJmdMinor?: number | null;
   fxUsdJmd?: number | null;
+  /** Import GCT rate as fraction (s.8 base). Default GCT_RATE from engine seed (15%). */
+  gctRate?: number | null;
 };
 
 export type LandedCostResult = {
@@ -78,7 +82,11 @@ export function computeLandedCost(input: LandedCostInput): LandedCostResult {
     scfUsdMinor = Math.round(cifUsdMinor * SCF_RATE);
     envUsdMinor = Math.round(cifUsdMinor * ENV_RATE);
     const gctBase = cifUsdMinor + importDutyUsdMinor + scfUsdMinor + envUsdMinor;
-    gctUsdMinor = Math.round(gctBase * GCT_RATE);
+    const gctRateFrac =
+      input.gctRate != null && Number.isFinite(Number(input.gctRate))
+        ? Math.min(1, Math.max(0, Number(input.gctRate)))
+        : GCT_RATE;
+    gctUsdMinor = Math.round(gctBase * gctRateFrac);
     stampApplied = stampJmdMinor;
     cafApplied = cafJmdMinor;
   }

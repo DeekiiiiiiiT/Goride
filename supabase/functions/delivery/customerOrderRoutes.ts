@@ -16,6 +16,7 @@ import {
 import { resolveMinOrderSubtotal } from "../_shared/dashPricing.ts";
 import { assertSameMarketCoverage, resolveDashOrderPricing } from "./pricingResolver.ts";
 import { resolveMerchantFoodGctRate } from "../_shared/gctRate.ts";
+import { reverseOrderOutputTax } from "../_shared/gctLedger.ts";
 import { assertMerchantAcceptingOrders } from "./merchantOpenCheck.ts";
 import { ORDER_CUSTOMER_EMBED_WITH_USER } from "./orderSelectEmbeds.ts";
 
@@ -774,6 +775,8 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
       actor_id: user.id,
       notes: reason,
     });
+
+    await reverseOrderOutputTax(serviceSb, id);
 
     if (order.courier_id) {
       await serviceSb

@@ -60,7 +60,7 @@ export function DutyPanel({
                     ['Import Duty', dutyView.importDutyUsd],
                     ['SCF 0.3%', dutyView.scfUsd],
                     ['ENV 0.5%', dutyView.envUsd],
-                    ['GCT 15%', dutyView.gctUsd],
+                    ['GCT (standard — Accounting engine)', dutyView.gctUsd],
                     ['Stamp (J$)', dutyView.stampJmd],
                     ['CAF (J$)', dutyView.cafJmd],
                   ] as const
