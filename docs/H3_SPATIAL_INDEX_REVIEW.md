@@ -24,7 +24,7 @@ landed. **6 of 9 bugs fully closed, all 7 Rush steps shipped, ADR 0013 written a
 implemented in-repo (presence RPC + CHECK, canary, bounded supply, resolution threading, hex
 coverage flag, shared kill-switch, Rides surge H3 cutover). Apply migrations
 `20260830240000`–`20260830260000` and deploy edge functions before enabling
-`RUSH_HEX_COVERAGE_ENABLED=1`.
+hex coverage (on by default; `RUSH_HEX_COVERAGE_ENABLED=0` kill-switch only).
 
 **Landed since the review:** `packages/spatial`, migrations
 [`20260829140000_h3_phase1_safety.sql`](../supabase/migrations/20260829140000_h3_phase1_safety.sql),
@@ -56,16 +56,16 @@ coverage flag, shared kill-switch, Rides surge H3 cutover). Apply migrations
 | Item | Status |
 |---|---|
 | Gap #1 — no courier presence | ✅ Solved via `courier_availability` evolution (ADR deviation from Step 1) |
-| Gap #2 — five coverage definitions | ⚠️ Precedence frozen in ADR 0013 and coded; **not yet the live gate** |
-| Gap #3 — polygons jsonb, no index | ⚠️ Hex compile shipped; no bbox prefilter, hex read path not wired |
+| Gap #2 — five coverage definitions | ✅ **Closed** — hex gate is now the live path, Rule 4 active, `RUSH_HEX_COVERAGE_ENABLED=0` kill-switch |
+| Gap #3 — polygons jsonb, no index | ⚠️ Hex read path now live; polygon sweep is the fallback, still no bbox prefilter |
 | Gap #4 — `h3-js` unavailable to clients | ✅ Closed — `@roam/spatial`, `h3-js@4.1.0` pinned both runtimes |
 | Step 0 — coverage precedence | ✅ [ADR 0013](adr/0013-rush-coverage-precedence-h3.md) |
-| Step 1 — courier presence table | ✅ Shipped as columns on `courier_availability`, **minus `NOT NULL`** |
-| Step 2 — presence RPC with hard invariant | ❌ No `courier_upsert_presence`; writes go direct via PostgREST |
+| Step 1 — courier presence table | ✅ **Closed** — columns + `courier_availability_online_h3_check` + unique `driver_id` |
+| Step 2 — presence RPC with hard invariant | ✅ **Closed** — `delivery_courier_upsert_presence` raises on missing cell |
 | Step 3 — bounded lookup RPC | ✅ `delivery_couriers_in_h3_cells` — 2000-cell cap, `LIMIT`, res-matched |
 | Step 4 — compile polygons → hex | ✅ `coverage_cells`, res 7 + 8, compile-on-publish |
-| Step 5 — merchant reach hex set | ✅ `merchant_coverage_cells`, disk ∩ market include |
-| Step 6 — H3-only dispatch | ⚠️ Shipped behind `RUSH_H3_DISPATCH_ENABLED`; legacy fallback retained |
+| Step 5 — merchant reach hex set | ✅ **Closed** — recompute now also fires on merchant write |
+| Step 6 — H3-only dispatch | ⚠️ Shipped behind `RUSH_H3_DISPATCH_ENABLED`; fallback retained but now bounded + ordered + reasoned |
 | Step 7 — windowed hex demand/surge | ✅ `demand_events` → `surge_now` via pg_cron; **zero `grid:` keys in Rush** |
 
 ### Enhancements
@@ -73,9 +73,9 @@ coverage flag, shared kill-switch, Rides surge H3 cutover). Apply migrations
 | Item | Status |
 |---|---|
 | Vendor/pin `h3-js` | ✅ No `esm.sh/h3-js` remaining |
-| One shared spatial module | ⚠️ `@roam/spatial` exists; Deno file is a hand-maintained mirror, `isH3SupplyEnabled` still duplicated |
+| One shared spatial module | ✅ **Closed** — `loadPolicy` delegates to the single `geoIndex` kill-switch; no duplicated flag logic |
 | Structured `no_supply` telemetry | ✅ All five fields logged |
-| Resolution/staleness canary | ❌ **Not started** |
+| Resolution/staleness canary | ✅ **Closed** — `spatial-index-canary` edge fn on a 10-min `pg_cron` + `pg_net` schedule |
 | Coverage-set diffing in admin | ✅ `previewCoverageDiff` |
 | Hex overlay in admin | ✅ `HexCellsMapOverlay.tsx` |
 | `supply_source` measured not asserted | ✅ Real path + cell count returned |
@@ -165,23 +165,31 @@ control that looks safe to touch, and the blast radius is total.
    live presence rows before the read path switches over. Realistically: make the admin control
    read-only with a "contact engineering" note until dual-resolution stamping exists.
 
-> **Status 2026-08-29 — ⚠️ Mitigated, not closed.**
-> Done: fix 1 (`h3_res SMALLINT` on `rides.driver_locations` and `delivery.courier_availability`,
-> indexed first, filtered in both lookup RPCs) and fix 3 (the slider is `disabled` with a
-> "requires an engineering migration" note —
-> [H3IndexingSection.tsx:120-133](../apps/admin/src/components/admin/matching-brain/sections/H3IndexingSection.tsx#L120-L133)).
-> **Not done: fix 2.** The hardcoded `7`s survive and now disagree with the read path:
-> writes stamp `DEFAULT_H3_RESOLUTION` ([rides/index.ts:2202](../supabase/functions/rides/index.ts#L2202),
-> [:2239](../supabase/functions/rides/index.ts#L2239),
-> [courierConsumerRoutes.ts:449](../supabase/functions/delivery/courierConsumerRoutes.ts#L449)),
-> reads use `policy.h3_resolution`
-> ([runMatchingWave.ts:136](../supabase/functions/matching/dispatch/runMatchingWave.ts#L136)),
-> and `loadDriverLocationsH3` hardcodes `p_h3_res: 7`
-> ([loadLocations.ts:120](../supabase/functions/matching/supply/loadLocations.ts#L120)).
-> `loadPolicy` still clamps 4–10 and honors the stored value, so the UI lock is the *only* thing
-> holding this shut — a direct DB edit still produces the silent island-wide blackout. The rides
-> RPC's res predicate is also lenient (`p_h3_res IS NULL OR dl.h3_res IS NULL OR dl.h3_res = p_h3_res`),
-> so a mismatch returns nothing *quietly*, which was the failure mode fix 1 was meant to make loud.
+> **Status 2026-08-29 (rev. after Phase 1–7) — ⚠️ Mitigated; one residual by design.**
+> **Fix 1 done and now strict.** `h3_res` is stored and indexed on both presence tables, and the
+> lenient predicate was tightened to a plain `dl.h3_res = p_h3_res`
+> ([20260830240000:184](../supabase/migrations/20260830240000_delivery_courier_upsert_presence.sql#L184)) —
+> a resolution mismatch is now a clean zero-row answer on a known axis rather than an accident.
+> **Fix 3 done.** The slider is `disabled` with a "requires an engineering migration" note
+> ([H3IndexingSection.tsx:120-133](../apps/admin/src/components/admin/matching-brain/sections/H3IndexingSection.tsx#L120-L133)).
+> **Fix 2 partial — deliberately.** The read path is fully threaded:
+> `loadDriverLocationsH3` now takes an `h3Res` parameter and forwards it as `p_h3_res`
+> ([loadLocations.ts:110-127](../supabase/functions/matching/supply/loadLocations.ts#L110-L127)),
+> fed `policy.h3_resolution` from
+> [runMatchingWave.ts:138](../supabase/functions/matching/dispatch/runMatchingWave.ts#L138).
+> The **write** path still stamps `DEFAULT_H3_RESOLUTION`
+> ([rides/index.ts:2212](../supabase/functions/rides/index.ts#L2212),
+> [:2249](../supabase/functions/rides/index.ts#L2249)), as does `pickupEta`
+> ([:92-93](../supabase/functions/rides/fare/pickupEta.ts#L92-L93)).
+>
+> **Residual, stated plainly:** the system is correct **only while `policy.h3_resolution` is 7.**
+> `loadPolicy` still clamps 4–10 and honors the stored value, so a direct DB write to that column
+> would leave the wave path querying at res 8 against rows stamped 7 — zero rows, island-wide.
+> The canary does **not** cover this: it compares stored `h3_res` against `DEFAULT_H3_RESOLUTION`,
+> not against the policy row, so a uniformly-stamped fleet looks healthy while the read path
+> queries elsewhere. The UI lock remains the real guard. To close: have the canary read
+> `matching.policies.h3_resolution` and alert when it differs from `DEFAULT_H3_RESOLUTION`, which
+> makes the one remaining trigger loud. See §9 item 1.
 
 ### Bug #2 — k-ring calibration is wrong by a factor of √3 (Critical for Rush)
 
@@ -252,15 +260,18 @@ instead of just being absent.
 > `GENERATED` column and eliminate this class of bug at the database level. That means the
 > write-path invariant above is the *only* defense. Enforce it in SQL, not in TypeScript.
 
-> **Status 2026-08-29 — ⚠️ Closed in Rides, regressed in Rush.**
-> Rides is fixed: `rides_upsert_driver_presence` now assigns `h3_cell = EXCLUDED.h3_cell` with no
-> `COALESCE` ([20260829140000:62](../supabase/migrations/20260829140000_h3_phase1_safety.sql#L62)),
-> and the presence route fails closed with `503 presence_h3_required` when a driver goes online
-> without a computable cell ([rides/index.ts:2209-2222](../supabase/functions/rides/index.ts#L2209-L2222)).
-> The derived key can no longer outlive its coordinates.
-> **But the "enforce it in SQL, not in TypeScript" half was not taken**, and Rush now demonstrates
-> exactly why — see **Bug #10**. `delivery.courier_availability.h3_cell` is nullable, there is no
-> presence RPC, and two write sites bypass the TypeScript guard.
+> **Status 2026-08-29 (rev.) — ✅ Closed in both verticals, and now enforced in SQL.**
+> Rides: `rides_upsert_driver_presence` assigns `h3_cell = EXCLUDED.h3_cell` with no `COALESCE`
+> ([20260829140000:62](../supabase/migrations/20260829140000_h3_phase1_safety.sql#L62)); the route
+> fails closed with `503 presence_h3_required`
+> ([rides/index.ts:2219-2232](../supabase/functions/rides/index.ts#L2219-L2232)).
+> Rush: `delivery_courier_upsert_presence` re-derives the cell **only when coordinates are present
+> in the same statement**, and otherwise leaves both untouched
+> ([20260830240000:112-129](../supabase/migrations/20260830240000_delivery_courier_upsert_presence.sql#L112-L129)) —
+> which is the invariant this bug asked for, expressed exactly.
+> The "enforce it in SQL" half was taken on the second pass: a `CHECK` constraint now makes an
+> online row without a cell **unrepresentable** ([:46-55](../supabase/migrations/20260830240000_delivery_courier_upsert_presence.sql#L46-L55)).
+> See Bug #10 for the regression this closed.
 
 ### Bug #4 — Surge upsert race (High — fires exactly when surge matters)
 
@@ -299,17 +310,25 @@ Separately, that `OR` predicate can use neither index and degrades to a sequenti
 instant, stop writing legacy keys, and backfill `h3_cell_key` from the stored lat/lng of the demand
 event rather than from the square. For **Rush, never introduce the square key at all** (§5).
 
-> **Status 2026-08-29 — ⚠️ Partial (Rides deferred by plan; Rush clean).**
-> The cross-cell merge is gone: the upsert no longer matches on
-> `cell_key = p_cell_key OR h3_cell_key = p_h3_cell_key`, so a request in square B can no longer
-> increment square A's counter, and the `OR`-predicate seq-scan under `FOR UPDATE` went with it.
-> **Rush took the recommendation in full** — no `grid:` key exists anywhere in `delivery/`.
-> Still open for Rides: `gridCellKey()` is called at seven sites in
-> [rides/index.ts](../supabase/functions/rides/index.ts), so both keys are still written, and
-> `readSurgeMultiplier` prefers `.eq("h3_cell_key", …)`
-> ([rides/index.ts:961-966](../supabase/functions/rides/index.ts#L961-L966)) — a read can still land
-> on a different row than the write. No cutover instant has been picked. §7 rated Rides fixes as
-> deferrable, so this is open by plan rather than by oversight.
+> **Status 2026-08-29 (rev.) — ✅ Closed. The cutover was taken.**
+> Three things landed, in the order the fix prescribed.
+> First, the cross-cell merge went away with the `OR` predicate: the upsert is now
+> `ON CONFLICT (cell_key)` only, so a request in square B can no longer increment square A.
+> Second, **the two geometries were never reconciled — one was retired.** `gridCellKey()` is now a
+> thin alias over `surgeCellKey()` returning an **H3 cell id**
+> ([buildQuote.ts:42-45](../supabase/functions/rides/fare/buildQuote.ts#L42-L45)), so all seven
+> call sites in `rides/index.ts` write H3 as `cell_key` without any of them changing. The
+> `grid:{floor(lat*50)}:{floor(lng*50)}` square is no longer produced anywhere.
+> Third, the cutover instant was picked and the stale counters retired rather than migrated:
+> [`20260830260000_rides_surge_h3_cutover.sql`](../supabase/migrations/20260830260000_rides_surge_h3_cutover.sql)
+> zeroes `open_requests` and resets `surge_multiplier` on every `grid:%` row, so pre-cutover demand
+> cannot keep pricing rides after the switch, and both columns carry a comment recording the
+> cutover date. Zeroing rather than back-computing is the right call — H3 cannot be recomputed from
+> a square key in SQL without the extension, and a few minutes of lost surge history beats a
+> fabricated one.
+> Residual: legacy `grid:%` rows remain in the table as zeroed tombstones and `readSurgeMultiplier`
+> still has its dual-read branch. Both are inert once writes are H3-only; a later cleanup can drop
+> the rows and the branch.
 
 ### Bug #6 — `.in("h3_cell", cells)` will exceed URL length (High, latent)
 
@@ -324,11 +343,16 @@ same conditions as the primary aren't fallbacks.
 **Fix:** the fallback must also be a POST-body RPC, or chunk the cell array. Never send hex sets in
 a URL.
 
-> **Status 2026-08-29 — ❌ Not started.**
-> [loadLocations.ts:148](../supabase/functions/matching/supply/loadLocations.ts#L148) is unchanged:
-> `.in("h3_cell", h3Cells)` still serializes the full hex set into the query string. The primary
-> path is now a bounded RPC, which *lowers* the odds of reaching this branch but does not change
-> what happens when it is reached. This is the only review finding with no work against it at all.
+> **Status 2026-08-29 (rev.) — ✅ Closed, by deletion.**
+> The `.in("h3_cell", …)` branch was **removed entirely** rather than chunked. `loadDriverLocationsH3`
+> now has exactly two outcomes: the bounded RPC, or the legacy loader — the file comment states the
+> rule as "On RPC failure → legacy loader only (never PostgREST `.in()` hex URL)"
+> ([loadLocations.ts:106-109](../supabase/functions/matching/supply/loadLocations.ts#L106-L109)),
+> and the fallback now emits `h3_driver_locs_rpc_failed` with `cells`, `h3_res` and `fell_back`
+> so the degradation is visible rather than silent.
+> **Verified: zero `.in("h3_cell"` matches remain under `supabase/functions/`.**
+> Deleting the middle path is better than chunking it — a fallback that shares a failure mode with
+> its primary was the actual finding, and there is now no third path to keep correct.
 
 ### Bug #7 — Unbounded supply queries (High at scale)
 
@@ -343,19 +367,20 @@ against a partial index on a busy table can approach that.
 **Fix:** `LIMIT` inside the RPC, ordered by `updated_at DESC`, cap ~500. Cap the cell-array length
 server-side and reject oversized requests loudly.
 
-> **Status 2026-08-29 — ⚠️ Partial.**
-> Both RPCs took the fix in full: `rides_drivers_in_h3_cells` and `delivery_couriers_in_h3_cells`
-> cap the cell array at 2000 with `RAISE EXCEPTION 'h3_cell_array_too_large'`, clamp `p_limit`,
-> and `ORDER BY … DESC LIMIT`
+> **Status 2026-08-29 (rev.) — ✅ Closed on every path.**
+> Both RPCs cap the cell array at 2000 with `RAISE EXCEPTION 'h3_cell_array_too_large'`, clamp
+> `p_limit`, and `ORDER BY … DESC LIMIT`
 > ([20260829160000:33-59](../supabase/migrations/20260829160000_rides_h3_res_and_bounded_supply.sql#L33-L59)).
-> Still unbounded: `loadAvailableDriverLocations`
-> ([loadLocations.ts:43-47](../supabase/functions/matching/supply/loadLocations.ts#L43-L47)) has no
-> `.limit()` — it is still the nationwide scan with the `db-max-rows` silent-truncation exposure.
-> `pickupEta`'s own legacy loader did get `.limit(500)`
-> ([pickupEta.ts:63](../supabase/functions/rides/fare/pickupEta.ts#L63)); the matching copy was
-> missed. Rush's legacy fallback uses `.limit(80)` with **no `ORDER BY`**
-> ([courierConsumerRoutes.ts:246-251](../supabase/functions/delivery/courierConsumerRoutes.ts#L246-L251)),
-> which is the arbitrary-subset failure this bug describes, just with a smaller N.
+> The two gaps flagged on the previous pass are both fixed:
+> `queryFreshDriverLocations` now carries `.order("updated_at", { ascending: false })` and
+> `.limit(LEGACY_SUPPLY_LIMIT)`
+> ([loadLocations.ts:44-51](../supabase/functions/matching/supply/loadLocations.ts#L44-L51)), so the
+> nationwide legacy scan is bounded **and deterministic** — the `db-max-rows` silent-truncation
+> exposure is gone, since the truncation is now ours and ordered by freshness.
+> Rush's fallback gained both a `.gte("last_location_update", freshSince)` filter and
+> `.order("last_location_update", { ascending: false })`
+> ([courierConsumerRoutes.ts:256-262](../supabase/functions/delivery/courierConsumerRoutes.ts#L256-L262)),
+> so its `LIMIT` now selects the freshest couriers rather than an arbitrary subset.
 
 ### Bug #8 — `gridRingUnsafe` throws near pentagons (Low for Jamaica)
 
@@ -422,6 +447,24 @@ can write a half-row, and `delivery/index.ts` is forced to stamp or fail. Backfi
 Until that lands, the narrow patch is to stamp the cell in `delivery/index.ts` alongside the
 coordinates, and to move the `courierConsumerRoutes` stamp out of the `isOnline` branch.
 
+> **Status 2026-08-29 (rev.) — ✅ Closed, structurally.**
+> The structural fix was taken, not the narrow patch.
+> [`20260830240000_delivery_courier_upsert_presence.sql`](../supabase/migrations/20260830240000_delivery_courier_upsert_presence.sql)
+> does all four steps in the right order: force-offline any online row missing a cell (**without
+> guessing H3 in SQL** — the migration says so explicitly, which is correct, since a fabricated cell
+> is worse than an offline courier); de-duplicate `driver_id` keeping the newest row and add the
+> unique index the upsert needs; add `courier_availability_online_h3_check` making an online row
+> without `h3_cell` + `h3_res` **unrepresentable**; and add
+> `delivery_courier_upsert_presence`, which raises `presence_h3_required` / `location_required`
+> before writing and re-derives the cell only alongside coordinates.
+> Both offending call sites now route through it: `delivery/index.ts` replaced its hand-rolled
+> mirror with `upsertCourierPresence(...)` and propagates the failure status to the caller
+> ([delivery/index.ts:1744-1758](../supabase/functions/delivery/index.ts#L1744-L1758)), sharing one
+> helper ([`courierPresence.ts:79`](../supabase/functions/delivery/courierPresence.ts#L79)) with the
+> consumer route. The invariant now lives in the schema, so a future third writer cannot reintroduce
+> this — which was the whole point of the finding.
+> The canary independently watches for it via `rush_online_null_cell` and `rush_stale_cell`.
+
 ---
 
 ## 4. The Rush-specific gaps
@@ -469,17 +512,25 @@ cancelled," which is a support-cost and trust problem, not a technical one.
 **This must be resolved before the hex compile, not after** — otherwise you compile an ambiguity
 into a cell set and make it harder to see.
 
-> **Status 2026-08-29 — ⚠️ Decided and coded; not yet the live gate.**
+> **Status 2026-08-29 (rev.) — ✅ Closed. The hex gate is now the live path.**
 > [ADR 0013](adr/0013-rush-coverage-precedence-h3.md) freezes the five-step order exactly as
 > recommended, with a customer-facing reason code per step, and demotes tier / business-type radii
-> to merchant-creation defaults. The codes and copy are implemented in
-> [`dash-coverage/hexCoverage.ts`](../packages/dash-coverage/src/hexCoverage.ts) as
-> `COVERAGE_CUSTOMER_COPY` + `evaluateHexCoverage`.
-> **But `evaluateHexCoverage` has no runtime caller** — it is exported from the package index and
-> nothing else. The precedence rule was settled before the compile, as required, so the ambiguity
-> was not baked into the cell set; the remaining work is wiring the eligibility check to it.
-> ADR 0013 line 30 scopes this deliberately ("Rule 4 activates only after merchant hex reach
-> ships"), so it is open by plan.
+> to merchant-creation defaults.
+> The wiring gap flagged on the previous pass is closed:
+> [`coverageZones.ts:365`](../supabase/functions/delivery/admin/coverageZones.ts#L365) resolves the
+> customer's cell and evaluates include/exclude against `coverage_cells` as a primary-key hit, and
+> **Rule 4 is now active** — [:719-740](../supabase/functions/delivery/admin/coverageZones.ts#L719-L740)
+> narrows by `merchant_coverage_cells` and returns `too_far_from_store` with the ADR's copy.
+> Two design choices worth recording, both correct:
+> - The gate is **on by default** with `RUSH_HEX_COVERAGE_ENABLED=0` as a kill-switch back to
+>   polygons, rather than off-by-default. Right way round for a path that must be exercised to be
+>   trusted, and it avoids the Rides pattern where a dark flag hid an unwired code path for months.
+> - Rule 4 enforces **only when the merchant actually has compiled reach cells** (`reachCount > 0`),
+>   so a merchant awaiting compile fails open to market coverage instead of rejecting every
+>   customer. Without that guard, shipping the compile and the gate together would have blacked out
+>   every uncompiled merchant.
+>
+> Five concepts are now two, in data as well as on paper.
 
 
 
@@ -504,9 +555,11 @@ editing and for the polygon→hex compile.
 > [`marketRoutes.ts:769`](../supabase/functions/delivery/admin/marketRoutes.ts#L769) with merchant
 > reach recomputed at [:790](../supabase/functions/delivery/admin/marketRoutes.ts#L790). Polygons
 > remain source of truth; cells are deleted and rebuilt per market, so the recompile-all property holds.
-> Still open: the JS ray-cast in `dash-coverage` has **no bounding-box prefilter**, and because
-> `evaluateHexCoverage` is unwired (Gap #2), the per-request geometry sweep is still the live path.
-> The O(zones × vertices) cost this gap describes is unchanged in production.
+> **Revised 2026-08-29:** the hex path is now live (Gap #2), so the common case is a
+> primary-key lookup on `coverage_cells`, not a geometry sweep — the cost this gap describes is off
+> the hot path. The ray-cast remains as the fallback for cells with no compiled coverage and under
+> the kill-switch, and still has **no bounding-box prefilter**. That is now a
+> degraded-mode performance issue rather than a per-request one, which is a fair place to leave it.
 
 ### Gap #4 — `h3-js` exists nowhere outside edge functions
 
@@ -584,12 +637,17 @@ view with `security_invoker = true`, no `anon` grant. Courier live location is s
 `rides_driver_locations` is `authenticated`-only with RLS, and Rush must match that from day one,
 not retrofit it.
 
-> **Status — ⚠️ Shipped as columns on `courier_availability`, minus both `NOT NULL`s.**
-> Difference 3 (`last_location_update DESC` in a partial index) landed. Differences 1 and 2 — the
-> two constraints that were the entire point of building the table fresh — did not: `h3_cell` and
-> `h3_res` are both nullable. That is **Bug #10**, and it is why the "you get to do it right the
-> first time" advantage was partly spent. The security pattern *was* followed: RLS enabled,
-> `security_invoker` public views, `authenticated`/`service_role` grants only, no `anon`
+> **Status 2026-08-29 (rev.) — ✅ Closed. All three differences now hold.**
+> Difference 3 (`last_location_update DESC` in a partial index) landed with the foundation.
+> Differences 1 and 2 landed on the second pass in a form that suits a table with existing rows:
+> instead of column-level `NOT NULL` — which would have required inventing cells for historical
+> rows — `courier_availability_online_h3_check` enforces the constraint **where it matters**, on
+> online rows only, after force-offlining the rows that could not satisfy it
+> ([20260830240000:8-55](../supabase/migrations/20260830240000_delivery_courier_upsert_presence.sql#L8-L55)).
+> Offline history keeps its nulls; nothing dispatchable can lack a cell. That is a better fit than
+> the blanket `NOT NULL` this section proposed, and it reaches the same invariant.
+> The security pattern was followed throughout: RLS enabled, `security_invoker` public views,
+> `authenticated`/`service_role` grants only, no `anon`
 > ([20260829150000:239-253](../supabase/migrations/20260829150000_rush_h3_foundation.sql#L239-L253)).
 
 ### Step 2 — Presence RPC with a hard write invariant
@@ -609,13 +667,17 @@ written.** Never let a derived spatial key outlive the coordinates it was derive
 Add a `pg_cron` sweep (pg_cron **is** installed) that marks presence rows stale past the freshness
 window, so dead app sessions can't linger as phantom supply.
 
-> **Status — ❌ RPC not built; ✅ sweep done.**
-> There is no `delivery.courier_upsert_presence`. Presence is written by direct PostgREST
-> `update`/`insert` from two different modules, with the cell stamped in TypeScript at one of them.
-> The rule "`h3_cell` and `lat/lng` are written in the same statement or neither is written" has no
-> enforcement point, which is precisely how Bug #10 arose.
-> The `pg_cron` sweep did land — `delivery_courier_stale_offline` every 5 min, flipping
-> `is_online = FALSE` past a 15-minute window
+> **Status 2026-08-29 (rev.) — ✅ Closed, matching the specification.**
+> `public.delivery_courier_upsert_presence(p_driver_id, p_lat, p_lng, p_h3_cell, p_h3_res,
+> p_is_online, p_active_order_id)` exists and behaves as this step prescribed: it
+> `RAISE`s on a null/empty cell for an online write rather than coalescing to the previous value,
+> and it is an `INSERT … ON CONFLICT (driver_id) DO UPDATE`
+> ([20260830240000:61-133](../supabase/migrations/20260830240000_delivery_courier_upsert_presence.sql#L61-L133)).
+> The rule holds: the cell is re-derived only when coordinates arrive in the same statement.
+> Both writers go through `courierPresence.ts`, so there is now one enforcement point in TypeScript
+> *and* one in SQL.
+> The `pg_cron` sweep landed with the foundation — `delivery_courier_stale_offline` every 5 min
+> past a 15-minute window
 > ([20260829150000:207-233](../supabase/migrations/20260829150000_rush_h3_foundation.sql#L207-L233)),
 > alongside a per-minute `delivery_refresh_surge_now`.
 
@@ -688,17 +750,17 @@ radius change or merchant relocation.
 merchant can never reach outside its market — enforcing the Step 0 precedence in data rather than
 in code.
 
-> **Status — ⚠️ Table and compile done; recompute trigger incomplete.**
-> `delivery.merchant_coverage_cells (merchant_id, h3_cell, h3_res)` exists with the
-> `∩ market include` intersection in `recomputeMerchantCoverageCells`, and the intersection does
-> enforce "a merchant can never reach outside its market" in data.
-> **But the only caller is market publish** ([marketRoutes.ts:790](../supabase/functions/delivery/admin/marketRoutes.ts#L790)).
-> "Recompute on radius change or merchant relocation" was not wired: `delivery_radius_km` is
-> updated at [merchantRoutes.ts:465](../supabase/functions/delivery/admin/merchantRoutes.ts#L465)
-> and [:620](../supabase/functions/delivery/admin/merchantRoutes.ts#L620) with no recompute call.
-> A merchant's reach cells therefore drift from its stored radius until someone republishes the
-> market — a derived cache with a missing invalidation edge, the same class of defect as Bug #3
-> one level up. Harmless while Rule 4 is dormant (Gap #2); a correctness bug the day it activates.
+> **Status 2026-08-29 (rev.) — ✅ Closed. The missing invalidation edge was added.**
+> `delivery.merchant_coverage_cells (merchant_id, h3_cell, h3_res)` with the `∩ market include`
+> intersection enforces "a merchant can never reach outside its market" in data.
+> The drift flagged on the previous pass is fixed: `recomputeMerchantCoverageCells` is now imported
+> and called from the merchant write path
+> ([merchantRoutes.ts:49](../supabase/functions/delivery/admin/merchantRoutes.ts#L49),
+> [:65](../supabase/functions/delivery/admin/merchantRoutes.ts#L65)) as well as from market publish
+> ([marketRoutes.ts:790](../supabase/functions/delivery/admin/marketRoutes.ts#L790)), so a radius
+> change or relocation invalidates the derived cells immediately.
+> This mattered more once Rule 4 went live (Gap #2) — the two shipped together, which is the right
+> ordering.
 
 ### Step 6 — Wire dispatch, H3-only
 
@@ -715,11 +777,14 @@ double gate is why nobody noticed the wave path was never wired.
 > genuinely wired — `gridDisk` at `kRingForRadiusKmWithMargin(DISPATCH_RADIUS_KM)` into the Step 3
 > RPC ([courierConsumerRoutes.ts:216-244](../supabase/functions/delivery/courierConsumerRoutes.ts#L216-L244)),
 > with `supplyPath` and `cellsQueried` measured rather than asserted.
-> Deviation: "no legacy loader, no nationwide scan" was not taken —
-> [:246-257](../supabase/functions/delivery/courierConsumerRoutes.ts#L246-L257) falls back to a
-> `courier_availability` scan with `.limit(80)` and **no `ORDER BY`**, which is the arbitrary-subset
-> hazard of Bug #7. Defensible as launch insurance; it should be ordered by
-> `last_location_update DESC` at minimum, and carry a log line so silent fallback is visible.
+> Deviation retained: "no legacy loader, no nationwide scan" was not taken — the fallback still
+> exists. But the two hazards flagged on the previous pass are fixed: it now filters on
+> `freshSince`, orders by `last_location_update DESC`
+> ([:256-262](../supabase/functions/delivery/courierConsumerRoutes.ts#L256-L262)), and records a
+> `legacyReason` discriminating `flag_off` / `origin_invalid` / RPC error, so a silent slide onto
+> the legacy path is now visible in logs.
+> A bounded, ordered, *instrumented* fallback is a reasonable launch posture; the case for deleting
+> it is weaker now than it was. Revisit once the H3 path has soaked.
 
 ### Step 7 — Demand/surge on hexes, time-windowed
 
@@ -745,24 +810,36 @@ price. Single H3 key. No `grid:` string anywhere in Rush.
 
 ## 6. Enhancements worth doing
 
-> **Status 2026-08-29 — 5 of 7 done.** Per item:
+> **Status 2026-08-29 (rev. after Phase 1–7) — 7 of 7 done.** Per item:
 > **✅ Pin `h3-js`** — exact `4.1.0` in `packages/spatial/package.json`, `npm:h3-js@4.1.0` on Deno,
 > zero `esm.sh` imports left.
-> **⚠️ One shared spatial module** — `@roam/spatial` exists, but
-> [`_shared/h3/geoIndex.ts`](../supabase/functions/_shared/h3/geoIndex.ts) is a hand-maintained
-> *mirror* of it ("Keep in sync with packages/spatial/src/index.ts"), not an import. The specific
-> duplication called out below is still present: `isH3SupplyEnabled` at
-> [geoIndex.ts:143](../supabase/functions/_shared/h3/geoIndex.ts#L143) **and**
-> [loadPolicy.ts:452](../supabase/functions/matching/policy/loadPolicy.ts#L452). A comment is not
-> a compiler; the drift risk this item was raised about is unchanged.
+> **✅ One shared spatial module (flag logic)** — the specific duplication called out below is
+> resolved: `loadPolicy` no longer reimplements the env check, it delegates —
+> "Single kill-switch implementation lives in geoIndex — policy is the second gate"
+> ([loadPolicy.ts:456-464](../supabase/functions/matching/policy/loadPolicy.ts#L456-L464)). There is
+> now one place where `MATCHING_H3_SUPPLY` / `MATCHING_H3_SURGE` are read, so a flag cannot be on in
+> one place and off in another. `isRushHexCoverageEnabled` was added to the same single home.
+> Residual, lower stakes than the flag split: `_shared/h3/geoIndex.ts` is still a hand-maintained
+> mirror of `@roam/spatial` rather than an import of it. The cell math is now identical in both and
+> covered by tests on the package side, so drift would surface as a test failure rather than a
+> silent divergence — but a comment is still not a compiler.
 > **✅ `no_supply` telemetry** — `logNoSupply` emits `cells_queried`, `h3_res`, `rows_returned`,
 > `fresh_since`, `fell_back` plus a `reason` discriminator
 > ([pickupEta.ts:35-42](../supabase/functions/rides/fare/pickupEta.ts#L35-L42)); matching logs
 > `match_wave_supply` with path, cells, rows and res.
-> **❌ Resolution/staleness canary — not started.** No cron job, function, or check anywhere
-> compares `h3_res` against policy or `h3_cell` against `recompute(lat, lng)`. Bugs #1 and #3
-> remain *silent* failures; this was the item that would have made them loud, and it is the one
-> that would have caught Bug #10 in Rush before launch.
+> **✅ Resolution/staleness canary — built.**
+> [`supabase/functions/spatial-index-canary/index.ts`](../supabase/functions/spatial-index-canary/index.ts)
+> runs five checks across both verticals — `rides_res_mismatch`, `rush_res_mismatch`,
+> `rush_online_null_cell`, and an 80-row freshest-first sample per vertical that **recomputes
+> `latLngToH3(lat, lng)` and compares it to the stored cell** — returning `503` with a named alert
+> list when any is non-zero. Scheduled every 10 minutes through `pg_cron` → `pg_net` with a shared
+> cron secret ([`20260830250000_spatial_index_canary_cron.sql`](../supabase/migrations/20260830250000_spatial_index_canary_cron.sql)).
+> Two details worth crediting: it is **detect-only** ("never auto-rewrite production rows"), which
+> is right — a canary that silently repairs is a canary that hides the bug it found; and the stale
+> sample orders by recency, so it watches the rows that are actually dispatchable.
+> Gap: the res checks compare stored `h3_res` against `DEFAULT_H3_RESOLUTION`, not against
+> `matching.policies.h3_resolution` — so the one surviving Bug #1 trigger (a direct DB edit of the
+> policy row) is the one thing this canary cannot see. See §9 item 1.
 > **✅ Coverage-set diffing** — `previewCoverageDiff` +
 > [marketRoutes.ts:846](../supabase/functions/delivery/admin/marketRoutes.ts#L846).
 > **✅ Hex overlay** — [`HexCellsMapOverlay.tsx`](../packages/dash-admin/src/pages/markets/HexCellsMapOverlay.tsx).
@@ -817,12 +894,14 @@ price. Single H3 key. No `grid:` string anywhere in Rush.
 | Priority | Item | Why now | Status |
 |---|---|---|---|
 | 1 | Step 0 — write down coverage precedence | Everything downstream compiles this rule into data | ✅ |
-| 2 | Step 1 + 2 — `courier_locations` with NOT NULL cell + `h3_res` | Blocker; nothing about Rush dispatch works without it | ⚠️ columns yes, **NOT NULL + RPC no** |
+| 2 | Step 1 + 2 — `courier_locations` with NOT NULL cell + `h3_res` | Blocker; nothing about Rush dispatch works without it | ✅ CHECK + presence RPC |
 | 3 | Step 3 — bounded lookup RPC | Small, and closes Bugs #6/#7 before they exist in Rush | ✅ |
 | 4 | Fix Bug #2 — derive k from radius, delete hand-entered k-rings | One function; removes a whole category of miscalibration | ✅ |
-| 5 | Steps 4–5 — compile coverage + merchant reach at res 7 **and** 8 | Cheap now, expensive to retrofit | ⚠️ compiled; merchant recompute trigger missing |
-| 6 | Step 6 — H3-only dispatcher behind one flag | The actual feature | ⚠️ shipped with legacy fallback |
-| 7 | Enhancement — `no_supply` telemetry + canary | You will need this in week one of a real market | ⚠️ telemetry ✅, **canary ❌** |
+| 5 | Steps 4–5 — compile coverage + merchant reach at res 7 **and** 8 | Cheap now, expensive to retrofit | ✅ incl. recompute on merchant write |
+| 6 | Step 6 — H3-only dispatcher behind one flag | The actual feature | ⚠️ shipped; fallback bounded + instrumented |
+| 7 | Enhancement — `no_supply` telemetry + canary | You will need this in week one of a real market | ✅ both |
+
+**All seven shipped.** The week's list is done; §9 is what remains beyond it.
 
 **Rides fixes can wait** — with one exception. **Bug #1 is live in production right now**, and its
 trigger is a slider in an admin UI. Until resolution is threaded properly, disable or lock that
@@ -859,22 +938,61 @@ threading the resolution.
 - `evaluateHexCoverage` has exactly one reference outside its own definition: the package re-export.
 - No code or schema changes were made during this pass either. This document remains a review.
 
+### Third pass — 2026-08-29 (after Phases 1–7)
+
+- Re-verified every ⚠️/❌ from the second pass against the working tree. Nine statuses improved;
+  none regressed.
+- `.in("h3_cell"` → **zero** matches under `supabase/functions/` (was one).
+- `delivery_courier_upsert_presence` has two callers, both via `courierPresence.ts`; no direct
+  `courier_availability` location write remains in `delivery/index.ts`.
+- `gridCellKey` now resolves to `surgeCellKey` returning an H3 id, so all seven Rides call sites
+  emit H3 without individual edits.
+- Canary verified as a real edge function with five checks and a `pg_cron` schedule, not a stub.
+- **Housekeeping:** two migrations share the timestamp `20260830240000` —
+  `_delivery_courier_upsert_presence` and `_rush_marketplace_pricing`. They touch disjoint schemas
+  so ordering between them is immaterial, but the collision will make `supabase db push` ordering
+  non-deterministic between environments. Worth renaming one before the next deploy.
+- Still no code or schema changes made by this review.
+
 ---
 
 ## 9. Open items — 2026-08-29 (post remediation program)
 
-Ordered by what will hurt most at launch, same as §3.
+**All ten bugs are addressed in-repo and all seven §7 priorities are done.** What remains is
+deployment, one blind spot in the canary, and three low-stakes residuals.
+
+### Ops — nothing below is live until this happens
 
 | # | Item | Where | Severity |
 |---|---|---|---|
-| 1 | Apply migrations `20260830240000`–`20260830260000` + deploy `spatial-index-canary` | Supabase | **Ops** |
-| 2 | Soak canary 24h green before expanding hex coverage | `spatial-index-canary` | High |
-| 3 | Enable `RUSH_HEX_COVERAGE_ENABLED=1` per market after compile | env | Medium — deferred flip |
-| 4 | Dual-stamp migration if live resolution ever leaves 7 | writers + policy | Low — slider locked |
-| 5 | Delete remaining legacy `grid:` surge rows after soak | `rides.surge_cells` | Low |
+| 1 | Apply migrations `20260830240000`–`20260830260000` + deploy `spatial-index-canary`, `delivery`, `rides`, `matching` | Supabase | **Blocking** |
+| 2 | Set `fleet_cron_secret` in `private.fleet_ops_secrets` | Supabase | **Blocking** — canary raises without it |
+| 3 | Soak canary 24 h green before trusting the hex gate | `spatial-index-canary` | High |
+| 4 | Rename one of the two `20260830240000_*` migrations | `supabase/migrations/` | Medium — push order is non-deterministic while they collide |
 
-### The two that matter this week
+The code is written but **unapplied**: Bug #10's `CHECK`, the presence RPC, the surge cutover and
+the canary schedule are all migrations. Until they run, production is still on the pre-remediation
+state that §§3–4 describe, regardless of what the working tree says.
 
-**Apply Phase 1 migration + deploy presence writers** so Bug #10 cannot recur in prod.
+### Genuinely open findings
 
-**Run the canary** — every remaining failure mode is silent without it.
+| # | Item | Where | Severity |
+|---|---|---|---|
+| 5 | **Canary cannot see the last Bug #1 trigger** — it compares stored `h3_res` to `DEFAULT_H3_RESOLUTION`, not to `matching.policies.h3_resolution` | [spatial-index-canary/index.ts:17](../supabase/functions/spatial-index-canary/index.ts#L17) | Medium |
+| 6 | Write path still stamps `DEFAULT_H3_RESOLUTION` while read path honors policy | [rides/index.ts:2212](../supabase/functions/rides/index.ts#L2212), [pickupEta.ts:92](../supabase/functions/rides/fare/pickupEta.ts#L92) | Medium — safe only while policy = 7 |
+| 7 | Step 6 legacy fallback retained (bounded + ordered + reasoned, but still a scan) | [courierConsumerRoutes.ts:255](../supabase/functions/delivery/courierConsumerRoutes.ts#L255) | Low — revisit after soak |
+| 8 | `_shared/h3/geoIndex.ts` is a hand-maintained mirror of `@roam/spatial`, not an import | both files | Low — flag logic now shared; cell math is not |
+| 9 | No bbox prefilter on the polygon ray-cast (now the degraded path only) | `dash-coverage` | Low |
+| 10 | Zeroed `grid:%` tombstones + dual-read branch in `readSurgeMultiplier` | `rides.surge_cells`, [rides/index.ts:961](../supabase/functions/rides/index.ts#L961) | Low — inert; clean up after soak |
+
+### The one that matters
+
+**Item 5 closes the last silent failure mode in the system.** Everything else on this list is
+either an ops step or a known, bounded residual. Bug #1's blast radius — island-wide matching stops,
+nothing errors — is unchanged; all that changed is that the trigger is now a direct DB write rather
+than a slider. The canary is already running, already reads both presence tables, and already
+returns `503` on a named alert. Adding one query against `matching.policies.h3_resolution` and
+alerting when it differs from `DEFAULT_H3_RESOLUTION` converts the one remaining silent failure into
+a page, and it is a few lines in a function that exists.
+
+Do that, and every failure mode in this review is either fixed or loud.

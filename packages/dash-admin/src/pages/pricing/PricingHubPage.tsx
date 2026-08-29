@@ -2139,7 +2139,6 @@ export function PricingHubPage() {
                   : 'Custom quote — result'
               }
               breakdown={pickBreakdown(simResult)!}
-              expected={simExpected ?? undefined}
               minOrderJmd={marketRules.min_order_subtotal_jmd ?? 800}
               subtotal={Number(simSubtotal) || 0}
               dropoffLabel={simAddress}
@@ -2738,31 +2737,17 @@ function SimLine({
   label,
   value,
   bold,
-  expected,
 }: {
   label: string;
   value: number;
   bold?: boolean;
-  expected?: number;
 }) {
-  const match = nearExpected(value, expected);
   return (
     <div
       className={`flex justify-between gap-4 ${bold ? 'text-white font-medium pt-2 border-t border-slate-800' : 'text-slate-300'}`}
     >
       <span>{label}</span>
-      <span className="text-right">
-        {formatJmd(value)}
-        {expected != null && (
-          <span
-            className={`block text-xs ${
-              match === true ? 'text-emerald-400' : match === false ? 'text-amber-400' : 'text-slate-500'
-            }`}
-          >
-            expected {formatJmd(expected)}
-          </span>
-        )}
-      </span>
+      <span className="text-right">{formatJmd(value)}</span>
     </div>
   );
 }
@@ -2827,20 +2812,18 @@ function ScenarioCard({
 function SimBreakdownPanel({
   title,
   breakdown,
-  expected,
   minOrderJmd,
   subtotal,
   dropoffLabel,
 }: {
   title: string;
   breakdown: SimBreakdown;
-  expected?: SimScenarioExpected;
   minOrderJmd: number;
   subtotal: number;
   dropoffLabel?: string;
 }) {
   const [partyTab, setPartyTab] = useState<'customer' | 'partner' | 'courier'>('customer');
-  const wouldBlock = Boolean(expected?.blocked) && subtotal < minOrderJmd;
+  const wouldBlock = subtotal < minOrderJmd;
 
   const food = breakdown.discountedSubtotal ?? breakdown.subtotal ?? 0;
   const commission = breakdown.merchantCommissionAmount ?? 0;
@@ -2902,20 +2885,13 @@ function SimBreakdownPanel({
           Checkout would be blocked — food subtotal J${subtotal} is below min order J${minOrderJmd}.
         </p>
       )}
-      {expected?.note && !wouldBlock && partyTab === 'customer' && (
-        <p className="text-slate-400 text-xs">{expected.note}</p>
-      )}
 
       {partyTab === 'customer' && (
         <>
           <SimLine label="Food subtotal" value={food} />
-          <SimLine label="Service fee" value={breakdown.serviceFee ?? 0} expected={expected?.serviceFee} />
-          <SimLine label="Delivery fee" value={breakdown.deliveryFee ?? 0} expected={expected?.deliveryFee} />
-          <SimLine
-            label="Small-order fee"
-            value={breakdown.smallOrderFee ?? 0}
-            expected={expected?.smallOrderFee}
-          />
+          <SimLine label="Service fee" value={breakdown.serviceFee ?? 0} />
+          <SimLine label="Delivery fee" value={breakdown.deliveryFee ?? 0} />
+          <SimLine label="Small-order fee" value={breakdown.smallOrderFee ?? 0} />
           {(breakdown.taxFoodJmd ?? 0) > 0 && (
             <SimLine label="GCT on food" value={breakdown.taxFoodJmd ?? 0} />
           )}
@@ -2923,19 +2899,17 @@ function SimBreakdownPanel({
             <SimLine label="GCT on platform fees" value={breakdown.taxPlatformJmd ?? 0} />
           )}
           {(breakdown.taxFoodJmd ?? 0) === 0 && (breakdown.taxPlatformJmd ?? 0) === 0 && (
-            <SimLine label="GCT (total)" value={breakdown.tax ?? 0} expected={expected?.tax} />
+            <SimLine label="GCT (total)" value={breakdown.tax ?? 0} />
           )}
           <SimLine label="Tip" value={breakdown.tip ?? 0} />
-          <SimLine label="Order total" value={breakdown.orderTotal ?? 0} expected={expected?.orderTotal} bold />
+          <SimLine label="Order total" value={breakdown.orderTotal ?? 0} bold />
           <SimLine
             label="Processing fee (order)"
             value={breakdown.processingFeeOrder ?? breakdown.processingFee ?? 0}
-            expected={expected?.processingFee}
           />
           <SimLine
             label="Customer pays"
             value={breakdown.customerTotal ?? breakdown.total ?? 0}
-            expected={expected?.customerTotal}
             bold
           />
         </>

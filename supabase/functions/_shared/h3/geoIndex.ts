@@ -158,6 +158,7 @@ export function isRushH3DispatchEnabled(): boolean {
   return Deno.env.get("RUSH_H3_DISPATCH_ENABLED") === "1";
 }
 
+/** Hex coverage is live by default; set RUSH_HEX_COVERAGE_ENABLED=0 only to kill-switch back to polygons. */
 export function isRushHexCoverageEnabled(): boolean {
-  return Deno.env.get("RUSH_HEX_COVERAGE_ENABLED") === "1";
+  return Deno.env.get("RUSH_HEX_COVERAGE_ENABLED") !== "0";
 }

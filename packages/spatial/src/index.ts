@@ -186,6 +186,7 @@ export function isRushH3DispatchEnabled(): boolean {
   return envFlag('RUSH_H3_DISPATCH_ENABLED') === '1';
 }
 
+/** Hex coverage is live by default; set RUSH_HEX_COVERAGE_ENABLED=0 only to kill-switch. */
 export function isRushHexCoverageEnabled(): boolean {
-  return envFlag('RUSH_HEX_COVERAGE_ENABLED') === '1';
+  return envFlag('RUSH_HEX_COVERAGE_ENABLED') !== '0';
 }

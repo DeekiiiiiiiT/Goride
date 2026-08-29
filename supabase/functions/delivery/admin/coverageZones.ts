@@ -22,7 +22,11 @@ import {
   enrichMarketZonesWithSchedules,
   loadScopedExclusionsForPoint,
 } from "../coverageLayers.ts";
-import { DEFAULT_H3_RESOLUTION, latLngToH3 } from "../../_shared/h3/geoIndex.ts";
+import {
+  DEFAULT_H3_RESOLUTION,
+  isRushHexCoverageEnabled,
+  latLngToH3,
+} from "../../_shared/h3/geoIndex.ts";
 
 // deno-lint-ignore no-explicit-any
 type ServiceSb = {
@@ -357,8 +361,8 @@ export async function resolveMarketForPoint(
   const parishMap = await loadParishMap(sb);
   const allZones = await buildCoverageZonesForEvaluation(sb, markets, parishMap, lat, lng);
 
-  // ADR 0013 hex gate — when compiled cells exist; else polygon fallback.
-  if (Deno.env.get("RUSH_HEX_COVERAGE_ENABLED") === "1") {
+  // ADR 0013 hex gate (on by default). Polygon only if no compiled cells / kill-switch.
+  if (isRushHexCoverageEnabled()) {
     try {
       const customerCell = latLngToH3(lat, lng, DEFAULT_H3_RESOLUTION);
       const { data: cellRows, error: cellErr } = await sb
@@ -634,7 +638,7 @@ export type SameMarketAssert =
 
 /**
  * Same-town rule (town_zones) or same-parish rule (parish_boundary).
- * When RUSH_HEX_COVERAGE_ENABLED + merchantId: also enforce merchant reach hex set.
+ * When hex coverage is on (default) + merchantId: also enforce merchant reach hex set.
  */
 export async function assertSameMarketCoverage(
   sb: ServiceSb,
@@ -712,11 +716,8 @@ export async function assertSameMarketCoverage(
     };
   }
 
-  // ADR 0013 Rule 4 — merchant hex reach (when flag on and merchantId provided)
-  if (
-    Deno.env.get("RUSH_HEX_COVERAGE_ENABLED") === "1" &&
-    opts.merchantId
-  ) {
+  // ADR 0013 Rule 4 — merchant hex reach (default on; kill with RUSH_HEX_COVERAGE_ENABLED=0)
+  if (isRushHexCoverageEnabled() && opts.merchantId) {
     try {
       const customerCell = latLngToH3(lat, lng, DEFAULT_H3_RESOLUTION);
       const { data: reach, error } = await sb
