@@ -11,8 +11,6 @@ export const RIDER_RULE_TIPS = {
     'Extra pay for each whole kilometer of the trip (after the road-distance multiplier is applied).',
   minPay:
     'Floor for courier earnings on a trip. If base + distance is lower, we top them up to this amount.',
-  deliveryShare:
-    'Legacy only: % of the customer delivery fee that went to the courier. Ignored when the pay ladder (base / per km / min) is set.',
   codPause:
     'If a courier is holding this much unpaid COD cash (or more), they are paused from taking new jobs until they settle.',
   roadMultiplier:
@@ -94,14 +92,14 @@ export function RiderRulesForm({
         <Field
           label="Courier base pay (JMD)"
           tip={RIDER_RULE_TIPS.basePay}
-          value={rules.courier_base_pay_jmd ?? 250}
+          value={rules.courier_base_pay_jmd ?? 150}
           onChange={(v) => setRules((r) => ({ ...r, courier_base_pay_jmd: v }))}
           disabled={!canWrite}
         />
         <Field
           label="Courier per km (JMD)"
           tip={RIDER_RULE_TIPS.perKm}
-          value={rules.courier_per_km_jmd ?? 80}
+          value={rules.courier_per_km_jmd ?? 60}
           onChange={(v) => setRules((r) => ({ ...r, courier_per_km_jmd: v }))}
           disabled={!canWrite}
         />
@@ -110,13 +108,6 @@ export function RiderRulesForm({
           tip={RIDER_RULE_TIPS.minPay}
           value={rules.courier_min_pay_jmd ?? 350}
           onChange={(v) => setRules((r) => ({ ...r, courier_min_pay_jmd: v }))}
-          disabled={!canWrite}
-        />
-        <Field
-          label="Courier delivery share (%) — legacy"
-          tip={RIDER_RULE_TIPS.deliveryShare}
-          value={Math.round((rules.courier_delivery_share ?? 0.8) * 100)}
-          onChange={(v) => setRules((r) => ({ ...r, courier_delivery_share: v / 100 }))}
           disabled={!canWrite}
         />
         <Field
@@ -171,22 +162,17 @@ export function RiderRulesReadonly({ rules }: { rules: PricingRulesPayload }) {
     {
       label: 'Courier base pay',
       tip: RIDER_RULE_TIPS.basePay,
-      value: formatJmd(rules.courier_base_pay_jmd ?? 250),
+      value: formatJmd(rules.courier_base_pay_jmd ?? 150),
     },
     {
       label: 'Courier per km',
       tip: RIDER_RULE_TIPS.perKm,
-      value: formatJmd(rules.courier_per_km_jmd ?? 80),
+      value: formatJmd(rules.courier_per_km_jmd ?? 60),
     },
     {
       label: 'Courier min pay',
       tip: RIDER_RULE_TIPS.minPay,
       value: formatJmd(rules.courier_min_pay_jmd ?? 350),
-    },
-    {
-      label: 'Courier delivery share (legacy)',
-      tip: RIDER_RULE_TIPS.deliveryShare,
-      value: `${Math.round((rules.courier_delivery_share ?? 0.8) * 100)}%`,
     },
     {
       label: 'COD pause threshold',
@@ -229,32 +215,98 @@ export function PlatformRulesForm({
   canWrite: boolean;
   scopeLabel: string;
 }) {
+  const gg = rules.growth_guarantee ?? {
+    enabled: true,
+    tier_slugs: ['dominant'],
+    months_from_assignment: 6,
+    min_orders_per_month: 20,
+  };
   return (
     <div className="space-y-4">
       <p className="text-xs text-slate-400">
-        Engine enablement for this {scopeLabel}. Statutory GCT is managed in Accounting → GCT — not
-        per-market blobs.
+        Platform controls for this {scopeLabel}. Statutory GCT is managed in Accounting → GCT — not
+        per-market blobs. Base delivery fee is under Customer → Delivery (platform-wide).
       </p>
-      <label className="flex items-center gap-2 text-sm text-slate-300">
-        <input
-          type="checkbox"
-          checked={Boolean(rules.pricing_v2_enabled)}
-          onChange={(e) => setRules((r) => ({ ...r, pricing_v2_enabled: e.target.checked }))}
-          disabled={!canWrite}
-        />
-        Enable Model B pricing for this layer
-      </label>
+      <div className="rounded-xl border border-amber-900/50 bg-amber-950/20 p-4 space-y-3">
+        <h3 className="text-sm font-medium text-amber-50">Growth Guarantee</h3>
+        <p className="text-xs text-amber-200/80">
+          Dominant merchants under the monthly order floor get a commission credit back to Economy
+          rate. Credits land in merchant adjustments (idempotent per month).
+        </p>
+        <label className="flex items-center gap-2 text-sm text-slate-200 cursor-pointer">
+          <input
+            type="checkbox"
+            disabled={!canWrite}
+            checked={gg.enabled !== false}
+            onChange={(e) =>
+              setRules((r) => ({
+                ...r,
+                growth_guarantee: { ...gg, enabled: e.target.checked },
+              }))
+            }
+            className="rounded border-slate-600"
+          />
+          Enabled
+        </label>
+        <div className="grid grid-cols-2 gap-3">
+          <label className="block text-xs text-slate-400">
+            Months from Dominant assignment
+            <input
+              type="number"
+              min={1}
+              max={24}
+              disabled={!canWrite}
+              value={gg.months_from_assignment ?? 6}
+              onChange={(e) =>
+                setRules((r) => ({
+                  ...r,
+                  growth_guarantee: {
+                    ...gg,
+                    months_from_assignment: Number(e.target.value) || 6,
+                  },
+                }))
+              }
+              className="mt-1 w-full px-3 py-1.5 text-sm rounded-lg bg-slate-950 border border-slate-700 text-white"
+            />
+          </label>
+          <label className="block text-xs text-slate-400">
+            Min completed orders / month
+            <input
+              type="number"
+              min={1}
+              max={500}
+              disabled={!canWrite}
+              value={gg.min_orders_per_month ?? 20}
+              onChange={(e) =>
+                setRules((r) => ({
+                  ...r,
+                  growth_guarantee: {
+                    ...gg,
+                    min_orders_per_month: Number(e.target.value) || 20,
+                  },
+                }))
+              }
+              className="mt-1 w-full px-3 py-1.5 text-sm rounded-lg bg-slate-950 border border-slate-700 text-white"
+            />
+          </label>
+        </div>
+      </div>
     </div>
   );
 }
 
 export function PlatformRulesReadonly({ rules }: { rules: PricingRulesPayload }) {
+  const gg = rules.growth_guarantee;
   const rows = [
+    { label: 'GCT', value: 'Accounting → GCT engine' },
+    { label: 'Base delivery', value: 'Customer → Delivery' },
+    { label: 'Menu inflation cap', value: 'Platform max (25%)' },
     {
-      label: 'Pricing model',
-      value: rules.pricing_v2_enabled ? 'Model B' : 'Legacy Model A',
+      label: 'Growth Guarantee',
+      value: gg?.enabled === false
+        ? 'Off'
+        : `On · ${gg?.min_orders_per_month ?? 20} orders / ${gg?.months_from_assignment ?? 6} mo`,
     },
-    { label: 'Tax rate in blob', value: 'deprecated — use Accounting GCT' },
   ];
   return (
     <dl className="rounded-xl border border-slate-800 divide-y divide-slate-800">

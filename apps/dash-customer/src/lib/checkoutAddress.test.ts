@@ -13,42 +13,9 @@ describe('parseDeliveryFeeLabel', () => {
 });
 
 describe('calculateOrderTotals', () => {
-  it('uses the provided merchant delivery fee (not a hardcoded constant)', () => {
-    const totals = calculateOrderTotals(1000, null, 50, 175, 0.05);
-    expect(totals.deliveryFee).toBe(175);
-    expect(totals.tip).toBe(50);
-    expect(totals.serviceFee).toBe(50);
-    expect(totals.smallOrderFee).toBe(0);
-    expect(totals.total).toBeGreaterThan(1000);
-  });
-
-  it('keeps delivery fee at zero when merchant fee is zero', () => {
-    const totals = calculateOrderTotals(500, null, 0, 0, 0.05);
-    expect(totals.deliveryFee).toBe(0);
-  });
-
-  it('matches Island Grill smoke totals at 15% platform fee + explicit 15% GCT', () => {
-    // Client must not invent GCT — pass taxRatePercent from the server quote.
-    const totals = calculateOrderTotals(1200, null, 100, 150, 0.15, undefined, {
-      taxRatePercent: 15,
-    });
-    expect(totals.serviceFee).toBe(180);
-    expect(totals.tax).toBe(180);
-    expect(totals.total).toBe(1810);
-  });
-
-  it('shows tax as 0 when GCT rate is missing (no client guess)', () => {
-    const totals = calculateOrderTotals(1200, null, 100, 150, 0.15);
-    expect(totals.tax).toBe(0);
-    expect(totals.serviceFee).toBe(180);
-    expect(totals.total).toBe(1630);
-  });
-
-  it('uses v2 server totals verbatim when customer total is provided', () => {
-    const totals = calculateOrderTotals(800, null, 0, 999, 0.05, undefined, {
+  it('uses v2 server totals verbatim', () => {
+    const totals = calculateOrderTotals(800, null, 0, 999, undefined, undefined, {
       v2Quote: {
-        pricingModel: 'v2',
-        platformFeeRate: 0,
         deliveryFee: 200,
         serviceFee: 40,
         tax: 132,
@@ -65,6 +32,10 @@ describe('calculateOrderTotals', () => {
     expect(totals.processingFee).toBe(35);
     expect(totals.smallOrderFee).toBe(400);
     expect(totals.total).toBe(1607);
+  });
+
+  it('throws without a pricing quote', () => {
+    expect(() => calculateOrderTotals(1000, null, 50)).toThrow(/pricing quote/);
   });
 });
 

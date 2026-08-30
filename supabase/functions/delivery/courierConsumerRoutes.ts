@@ -1011,7 +1011,7 @@ export function registerCourierConsumerRoutes(app: Hono, deps: Deps) {
     const serviceSb = getServiceSupabase();
     const { data: orders, error } = await serviceSb
       .from("orders")
-      .select("id, delivery_fee, delivery_fee_courier_amount, courier_base_pay_jmd, courier_distance_pay_jmd, pricing_model, tip, courier_tip_net, peak_pay_amount, delivered_at")
+      .select("id, delivery_fee, delivery_fee_courier_amount, courier_base_pay_jmd, courier_distance_pay_jmd, tip, courier_tip_net, peak_pay_amount, delivered_at")
       .eq("courier_id", auth.userId)
       .in("status", ["delivered", "completed"])
       .gte("delivered_at", periodStart)

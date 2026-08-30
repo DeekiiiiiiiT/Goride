@@ -151,6 +151,7 @@ export async function persistProfilePhoto(file: File): Promise<UserProfile> {
 export const ACCOUNT_MENU = [
   { id: 'addresses', icon: 'location_on', label: 'Addresses', page: 'saved-addresses' },
   { id: 'payment', icon: 'payment', label: 'Payment Methods', page: 'payment-methods' },
+  { id: 'rush-pass', icon: 'workspace_premium', label: 'Rush Pass', page: 'rush-pass' },
   { id: 'promotions', icon: 'loyalty', label: 'Promotions & Rewards', page: 'promotions' },
   { id: 'favorites', icon: 'favorite', label: 'Favorites', page: 'favorites' },
   { id: 'notifications', icon: 'notifications_active', label: 'Notification Settings', page: 'notification-settings' },

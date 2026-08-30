@@ -21,6 +21,7 @@ import EditProfilePage from './pages/EditProfilePage';
 import SavedAddressesPage from './pages/SavedAddressesPage';
 import AddAddressPage from './pages/AddAddressPage';
 import PromotionsPage from './pages/PromotionsPage';
+import RushPassPage from './pages/RushPassPage';
 import FavoritesPage from './pages/FavoritesPage';
 import NotificationSettingsPage from './pages/NotificationSettingsPage';
 import HelpPage from './pages/HelpPage';
@@ -80,6 +81,7 @@ type StackPage =
   | 'saved-addresses'
   | 'add-address'
   | 'promotions'
+  | 'rush-pass'
   | 'favorites'
   | 'notification-settings'
   | 'help'
@@ -794,6 +796,9 @@ function DashCustomerShell() {
             returnTo={(pageData?.returnTo as string | undefined) ?? 'account'}
           />
         );
+      case 'rush-pass':
+        if (!session) return <LoginPage onNavigate={navigate} onSignInSuccess={() => navigate('rush-pass')} />;
+        return <RushPassPage onNavigate={navigate} />;
       case 'favorites':
         return (
           <FavoritesPage

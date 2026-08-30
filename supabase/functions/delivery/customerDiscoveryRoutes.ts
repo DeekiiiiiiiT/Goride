@@ -249,7 +249,7 @@ export function registerCustomerDiscoveryRoutes(app: Hono, deps: CustomerDiscove
 
     let merchantQuery = serviceSb
       .from("merchants")
-      .select("id, name, logo_url, cover_image_url, cuisine_type, rating, avg_prep_time_mins, delivery_fee, min_order_amount, market_id, pricing_tier_id, pricing_tier:merchant_tiers(base_delivery_fee_jmd, search_boost, slug)")
+      .select("id, name, logo_url, cover_image_url, cuisine_type, rating, avg_prep_time_mins, delivery_fee, min_order_amount, market_id, lat, lng, delivery_radius_km, pricing_tier_id, pricing_tier:merchant_tiers(search_boost, slug, default_delivery_radius_km, auto_ads)")
       .eq("is_active", true)
       .eq("is_accepting_orders", true)
       .or(`name.ilike."${pattern}",cuisine_type.ilike."${pattern}"`)
@@ -276,20 +276,48 @@ export function registerCustomerDiscoveryRoutes(app: Hono, deps: CustomerDiscove
     if (merchantsRes.error) return c.json({ error: merchantsRes.error.message }, 500);
     if (itemsRes.error) return c.json({ error: itemsRes.error.message }, 500);
 
-    const { resolveDeliveryFee } = await import("../_shared/dashPricing.ts");
+    const { resolveDeliveryFee, haversineKm, roundDistanceKm } = await import("../_shared/dashPricing.ts");
     const { resolvePricingLayers } = await import("./pricingLayers.ts");
     const layered = await resolvePricingLayers(serviceSb, {
       marketId: pin.parishBoundaryMode ? pin.marketIds[0] ?? null : pin.marketId,
     });
+    const pinLat = Number(lat);
+    const pinLng = Number(lng);
+    const hasPin = Number.isFinite(pinLat) && Number.isFinite(pinLng);
 
     const merchants = (merchantsRes.data || [])
       .map((m: Record<string, unknown>) => {
         const tier = m.pricing_tier as Record<string, unknown> | null;
-        const tierBase = tier?.base_delivery_fee_jmd != null
-          ? Number(tier.base_delivery_fee_jmd)
-          : null;
         const boost = tier?.search_boost != null ? Number(tier.search_boost) : 0;
-        const deliveryFee = resolveDeliveryFee(layered.rules.delivery, null, tierBase);
+        const autoAds = Boolean(tier?.auto_ads);
+        const isPromoted = autoAds || boost > 0;
+        const deliveryFee = resolveDeliveryFee(layered.rules.delivery, null);
+
+        let distanceKmRaw: number | null = null;
+        if (hasPin && m.lat != null && m.lng != null) {
+          const mLat = Number(m.lat);
+          const mLng = Number(m.lng);
+          if (Number.isFinite(mLat) && Number.isFinite(mLng)) {
+            distanceKmRaw = roundDistanceKm(haversineKm(mLat, mLng, pinLat, pinLng));
+          }
+        }
+
+        const merchantRadius = m.delivery_radius_km != null ? Number(m.delivery_radius_km) : NaN;
+        const tierRadius = tier?.default_delivery_radius_km != null
+          ? Number(tier.default_delivery_radius_km)
+          : NaN;
+        const radiusCandidates = [merchantRadius, tierRadius].filter(
+          (n) => Number.isFinite(n) && n > 0,
+        );
+        if (
+          hasPin &&
+          distanceKmRaw != null &&
+          radiusCandidates.length > 0 &&
+          distanceKmRaw > Math.min(...radiusCandidates)
+        ) {
+          return null;
+        }
+
         return {
           id: String(m.id),
           name: String(m.name ?? ""),
@@ -302,11 +330,17 @@ export function registerCustomerDiscoveryRoutes(app: Hono, deps: CustomerDiscove
           delivery_fee: deliveryFee,
           minOrderAmount: m.min_order_amount != null ? Number(m.min_order_amount) : null,
           search_boost: boost,
-          is_promoted: boost > 0,
-          promoted: boost > 0,
+          auto_ads: autoAds,
+          is_promoted: isPromoted,
+          promoted: isPromoted,
         };
       })
-      .sort((a, b) => (b.search_boost ?? 0) - (a.search_boost ?? 0))
+      .filter((m): m is NonNullable<typeof m> => m != null)
+      .sort((a, b) => {
+        const autoDiff = Number(b.auto_ads) - Number(a.auto_ads);
+        if (autoDiff !== 0) return autoDiff;
+        return (b.search_boost ?? 0) - (a.search_boost ?? 0);
+      })
       .slice(0, 20);
 
     const items = (itemsRes.data || [])

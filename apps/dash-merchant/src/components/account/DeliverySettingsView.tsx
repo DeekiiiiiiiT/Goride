@@ -104,31 +104,45 @@ export default function DeliverySettingsView({
           </div>
 
           <div className="space-y-inset-base">
-            <label className="block text-label-md text-on-surface-variant" htmlFor="delivery-fee">
-              Delivery Fee{' '}
-              <span className="font-body-sm font-normal text-on-surface-variant">
-                (Fee charged to customer)
-              </span>
+            <p className="block text-label-md text-on-surface-variant">Delivery Fee</p>
+            <p className="rounded border border-outline-variant bg-surface-container px-4 py-3 text-body-md text-on-surface-variant">
+              Set by Roam as a platform-wide delivery fee (same for every plan). Customers see that
+              fee — not a store-level amount.
+            </p>
+          </div>
+
+          <div className="space-y-inset-base">
+            <p className="block text-label-md text-on-surface-variant">Delivery coverage</p>
+            <p className="rounded border border-outline-variant bg-surface-container px-4 py-3 text-body-md text-on-surface-variant">
+              Roam sets your delivery radius. Your plan suggests a starting reach; live coverage is
+              managed by our team.
+            </p>
+          </div>
+
+          <div className="space-y-inset-base">
+            <label className="block text-label-md text-on-surface-variant" htmlFor="menu-inflation">
+              Menu inflation (%)
             </label>
-            <div className="relative">
-              <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-body-lg text-on-surface-variant">
-                J$
-              </span>
-              <input
-                id="delivery-fee"
-                type="number"
-                min={0}
-                value={formData.deliveryFee || ''}
-                onChange={(event) =>
-                  onChange({
-                    ...formData,
-                    deliveryFee: parseFloat(event.target.value) || 0,
-                  })
-                }
-                placeholder="0"
-                className={currencyInputClass}
-              />
-            </div>
+            <input
+              id="menu-inflation"
+              type="number"
+              min={0}
+              max={25}
+              step={0.1}
+              value={formData.menuInflationPercent}
+              onChange={(event) => {
+                const raw = Number(event.target.value);
+                const clamped = Number.isFinite(raw)
+                  ? Math.min(25, Math.max(0, raw))
+                  : 0;
+                onChange({ ...formData, menuInflationPercent: clamped });
+              }}
+              className={inputClass}
+            />
+            <p className="text-body-sm text-on-surface-variant">
+              How much app menu prices can sit above in-store (0–25%). Customers see the inflated
+              prices on Roam Rush.
+            </p>
           </div>
 
           <div className="space-y-inset-base">

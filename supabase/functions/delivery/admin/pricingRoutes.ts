@@ -2,6 +2,7 @@
  * Rush Ops admin — pricing & commission configuration.
  */
 import { Hono } from "https://deno.land/x/hono@v4.3.11/mod.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { requireProductAdmin, type ProductAdminUser } from "../../_shared/productAdmin.ts";
 import { requireDashWrite } from "./dashPermissions.ts";
 import { getDb, writeKvAudit } from "./merchantAdminShared.ts";
@@ -11,7 +12,9 @@ import {
   parsePricingRules,
   serializePricingRules,
   validatePartyRules,
+  validatePricingConfig,
   validatePricingRules,
+  type MerchantTier,
   type PricingParty,
   type PricingRules,
 } from "../../_shared/dashPricing.ts";
@@ -32,6 +35,42 @@ const PRICING_PARTIES: PricingParty[] = ["customer", "rider", "partner", "platfo
 
 function isPricingParty(v: unknown): v is PricingParty {
   return typeof v === "string" && PRICING_PARTIES.includes(v as PricingParty);
+}
+
+function rowToMerchantTier(row: Record<string, unknown>): MerchantTier {
+  return {
+    slug: String(row.slug ?? ""),
+    name: String(row.name ?? ""),
+    commissionRate: Number(row.commission_rate ?? 0),
+    searchBoost: row.search_boost != null ? Number(row.search_boost) : undefined,
+    defaultDeliveryRadiusKm: row.default_delivery_radius_km != null
+      ? Number(row.default_delivery_radius_km)
+      : undefined,
+    promoEligible: row.promo_eligible != null ? Boolean(row.promo_eligible) : undefined,
+    autoAds: row.auto_ads != null ? Boolean(row.auto_ads) : undefined,
+  };
+}
+
+async function loadActiveTiers(
+  db: ReturnType<typeof getDb>,
+): Promise<MerchantTier[]> {
+  const { data } = await db
+    .from("merchant_tiers")
+    .select("slug, name, commission_rate, search_boost, default_delivery_radius_km, promo_eligible, auto_ads")
+    .eq("is_active", true)
+    .order("sort_order");
+  return (data ?? []).map((row) => rowToMerchantTier(row as Record<string, unknown>));
+}
+
+async function assertValidPricingConfig(
+  db: ReturnType<typeof getDb>,
+  rules: PricingRules,
+  tiersOverride?: MerchantTier[],
+): Promise<{ error: string; code: string } | null> {
+  const tiers = tiersOverride ?? await loadActiveTiers(db);
+  const err = validatePricingConfig(rules, tiers);
+  if (!err) return null;
+  return { error: err.message, code: err.code };
 }
 
 async function loadActiveProfileRules(opts: {
@@ -56,7 +95,7 @@ async function prepareRulesForSave(opts: {
   body: Record<string, unknown>;
 }): Promise<
   | { serialized: Record<string, unknown>; parsed: PricingRules; party?: PricingParty }
-  | { error: string; status: number }
+  | { error: string; status: number; code?: string }
 > {
   const body = opts.body;
   const partyRaw = body.party;
@@ -71,6 +110,13 @@ async function prepareRulesForSave(opts: {
   if (party) {
     const current = await loadActiveProfileRules(opts);
     mergedRaw = flattenNestedToLegacy(mergePartyRulesBlob(current, party, incomingRules));
+    // Root-level Growth Guarantee knobs (saved from Platform party form)
+    if (incomingRules.growth_guarantee && typeof incomingRules.growth_guarantee === "object") {
+      mergedRaw = {
+        ...mergedRaw,
+        growth_guarantee: incomingRules.growth_guarantee as Record<string, unknown>,
+      };
+    }
   } else {
     mergedRaw = incomingRules;
   }
@@ -80,6 +126,11 @@ async function prepareRulesForSave(opts: {
     ? validatePartyRules(party, parsed)
     : validatePricingRules(parsed);
   if (validationError) return { error: validationError, status: 400 };
+
+  const configErr = await assertValidPricingConfig(opts.db, parsed);
+  if (configErr) {
+    return { error: `${configErr.code}: ${configErr.error}`, status: 400, code: configErr.code };
+  }
 
   return {
     serialized: party ? mergedRaw : serializePricingRules(parsed),
@@ -219,9 +270,6 @@ export function registerPricingAdminRoutes(app: Hono) {
 
     const marketSummaries = (markets ?? []).map((m: Record<string, unknown>) => {
       const profile = profileByMarket.get(String(m.id));
-      const rules = profile
-        ? parsePricingRules(profile.rules as Record<string, unknown>)
-        : null;
       const parishId = m.parish_id != null ? String(m.parish_id) : null;
       const parish = parishId ? parishById.get(parishId) : null;
       return {
@@ -242,7 +290,6 @@ export function registerPricingAdminRoutes(app: Hono) {
         profile: profile ?? null,
         has_town_override: Boolean(profile),
         town_override_enabled: profile ? profile.override_enabled !== false : false,
-        pricing_v2_enabled: rules?.pricingV2Enabled ?? false,
       };
     });
 
@@ -275,23 +322,78 @@ export function registerPricingAdminRoutes(app: Hono) {
 
     const { data: revenueRows } = await db
       .from("orders")
-      .select("pricing_model, merchant_commission_amount, service_fee, subtotal, total")
+      .select(
+        "merchant_commission_amount, service_fee, subtotal, total, contribution_jmd, pricing_snapshot, rush_pass_membership_id",
+      )
       .not("status", "in", '("cancelled")');
 
-    let v2Orders = 0;
+    let orderCount = 0;
     let commissionTotal = 0;
     let serviceFeeTotal = 0;
+    let contributionTotal = 0;
     let grossFood = 0;
+    let passOrders = 0;
+    let passSubsidyTotal = 0;
+    let distanceFeeOrders = 0;
+    let distanceFeeTotal = 0;
     for (const o of revenueRows ?? []) {
       const row = o as Record<string, unknown>;
-      if (row.pricing_model === "v2") v2Orders++;
+      orderCount++;
       commissionTotal += Number(row.merchant_commission_amount ?? 0);
       serviceFeeTotal += Number(row.service_fee ?? 0);
+      contributionTotal += Number(row.contribution_jmd ?? 0);
       grossFood += Number(row.subtotal ?? 0);
+      const snap = (row.pricing_snapshot ?? {}) as Record<string, unknown>;
+      const passApplied = row.rush_pass_membership_id != null ||
+        snap.rush_pass_applied === true ||
+        snap.rushPassApplied === true;
+      if (passApplied) {
+        passOrders++;
+        passSubsidyTotal += Number(
+          snap.platform_delivery_subsidy_jmd ??
+            snap.platformDeliverySubsidyJmd ??
+            snap.promo_cost_jmd ??
+            snap.promoCostJmd ??
+            0,
+        );
+      }
+      const distFee = Number(
+        snap.service_fee_distance_jmd ?? snap.serviceFeeDistanceJmd ?? 0,
+      );
+      if (distFee > 0) {
+        distanceFeeOrders++;
+        distanceFeeTotal += distFee;
+      }
     }
     const takeRate = grossFood > 0
       ? Math.round((commissionTotal / grossFood) * 1000) / 10
       : 0;
+
+    // Growth Guarantee credits (all time + last 90 days)
+    const paymentsDb = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+      { db: { schema: "payments" } },
+    );
+    const since90 = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
+    const { data: ggRows } = await paymentsDb
+      .from("merchant_adjustments")
+      .select("amount_jmd, created_at, idempotency_key")
+      .like("idempotency_key", "gg:%")
+      .gte("created_at", since90);
+
+    let ggCreditCount = 0;
+    let ggCreditTotal = 0;
+    for (const g of ggRows ?? []) {
+      ggCreditCount++;
+      ggCreditTotal += Number((g as { amount_jmd?: number }).amount_jmd ?? 0);
+    }
+
+    const { count: activePassCount } = await db
+      .from("rush_pass_memberships")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "active")
+      .gt("current_period_end", new Date().toISOString());
 
     const { data: recentChanges } = await db
       .from("pricing_change_log")
@@ -307,11 +409,26 @@ export function registerPricingAdminRoutes(app: Hono) {
         : null,
       tiers: tiersWithCounts,
       revenue: {
-        v2_order_count: v2Orders,
+        order_count: orderCount,
+        v2_order_count: orderCount,
         commission_total_jmd: Math.round(commissionTotal * 100) / 100,
         service_fee_total_jmd: Math.round(serviceFeeTotal * 100) / 100,
+        contribution_total_jmd: Math.round(contributionTotal * 100) / 100,
         gross_food_jmd: Math.round(grossFood * 100) / 100,
         take_rate_percent: takeRate,
+        rush_pass_order_count: passOrders,
+        rush_pass_attach_rate_percent: orderCount > 0
+          ? Math.round((passOrders / orderCount) * 1000) / 10
+          : 0,
+        rush_pass_subsidy_total_jmd: Math.round(passSubsidyTotal * 100) / 100,
+        rush_pass_active_memberships: activePassCount ?? 0,
+        distance_fee_order_count: distanceFeeOrders,
+        distance_fee_attach_rate_percent: orderCount > 0
+          ? Math.round((distanceFeeOrders / orderCount) * 1000) / 10
+          : 0,
+        distance_fee_total_jmd: Math.round(distanceFeeTotal * 100) / 100,
+        growth_guarantee_credit_count_90d: ggCreditCount,
+        growth_guarantee_credit_total_jmd_90d: Math.round(ggCreditTotal * 100) / 100,
       },
       recent_changes: recentChanges ?? [],
     });
@@ -339,7 +456,12 @@ export function registerPricingAdminRoutes(app: Hono) {
       table: "global_pricing_profiles",
       body: body as Record<string, unknown>,
     });
-    if ("error" in prepared) return c.json({ error: prepared.error }, prepared.status);
+    if ("error" in prepared) {
+      return c.json(
+        { error: prepared.error, ...(prepared.code ? { code: prepared.code } : {}) },
+        prepared.status,
+      );
+    }
 
     const { serialized, parsed, party } = prepared;
 
@@ -462,7 +584,12 @@ export function registerPricingAdminRoutes(app: Hono) {
       matchId: parishId,
       body: incomingBody,
     });
-    if ("error" in prepared) return c.json({ error: prepared.error }, prepared.status);
+    if ("error" in prepared) {
+      return c.json(
+        { error: prepared.error, ...(prepared.code ? { code: prepared.code } : {}) },
+        prepared.status,
+      );
+    }
 
     const { serialized, parsed, party } = prepared;
 
@@ -680,7 +807,12 @@ export function registerPricingAdminRoutes(app: Hono) {
       matchId: marketId,
       body: body as Record<string, unknown>,
     });
-    if ("error" in prepared) return c.json({ error: prepared.error }, prepared.status);
+    if ("error" in prepared) {
+      return c.json(
+        { error: prepared.error, ...(prepared.code ? { code: prepared.code } : {}) },
+        prepared.status,
+      );
+    }
 
     const { serialized, parsed, party } = prepared;
 
@@ -769,16 +901,6 @@ export function registerPricingAdminRoutes(app: Hono) {
       return c.json({ error: "slug, name, and commission_rate required" }, 400);
     }
 
-    const baseDeliveryFee = body.base_delivery_fee_jmd ?? body.baseDeliveryFeeJmd;
-    const menuInflationRaw = body.menu_inflation_percent ?? body.menuInflationPercent;
-    let menuInflation: number | null = null;
-    if (menuInflationRaw != null && menuInflationRaw !== "") {
-      menuInflation = Number(menuInflationRaw);
-      if (!Number.isFinite(menuInflation) || menuInflation < 0 || menuInflation > 1) {
-        return c.json({ error: "menu_inflation_percent must be between 0 and 1" }, 400);
-      }
-    }
-
     const db = getDb();
     const insertRow: Record<string, unknown> = {
       slug,
@@ -789,13 +911,21 @@ export function registerPricingAdminRoutes(app: Hono) {
         body.default_delivery_radius_km ?? body.defaultDeliveryRadiusKm ?? 8,
       ),
       promo_eligible: (body.promo_eligible ?? body.promoEligible) !== false,
+      auto_ads: Boolean(body.auto_ads ?? body.autoAds ?? false),
       sort_order: Number(body.sort_order ?? body.sortOrder ?? 0),
       is_active: (body.is_active ?? body.isActive) !== false,
     };
-    if (baseDeliveryFee != null && baseDeliveryFee !== "") {
-      insertRow.base_delivery_fee_jmd = Number(baseDeliveryFee);
+
+    const existingTiers = await loadActiveTiers(db);
+    const candidateTiers = [
+      ...existingTiers.filter((t) => t.slug !== slug),
+      ...(insertRow.is_active !== false ? [rowToMerchantTier(insertRow)] : []),
+    ];
+    const layered = await resolvePricingLayers(db, {});
+    const configErr = await assertValidPricingConfig(db, layered.rules, candidateTiers);
+    if (configErr) {
+      return c.json({ error: configErr.error, code: configErr.code }, 400);
     }
-    if (menuInflation != null) insertRow.menu_inflation_percent = menuInflation;
 
     const { data, error } = await db
       .from("merchant_tiers")
@@ -820,18 +950,6 @@ export function registerPricingAdminRoutes(app: Hono) {
     if (body.commission_rate != null || body.commissionRate != null) {
       updates.commission_rate = Number(body.commission_rate ?? body.commissionRate);
     }
-    if (body.base_delivery_fee_jmd != null || body.baseDeliveryFeeJmd != null) {
-      updates.base_delivery_fee_jmd = Number(
-        body.base_delivery_fee_jmd ?? body.baseDeliveryFeeJmd,
-      );
-    }
-    if (body.menu_inflation_percent != null || body.menuInflationPercent != null) {
-      const menuInflation = Number(body.menu_inflation_percent ?? body.menuInflationPercent);
-      if (!Number.isFinite(menuInflation) || menuInflation < 0 || menuInflation > 1) {
-        return c.json({ error: "menu_inflation_percent must be between 0 and 1" }, 400);
-      }
-      updates.menu_inflation_percent = menuInflation;
-    }
     if (body.search_boost != null || body.searchBoost != null) {
       updates.search_boost = Number(body.search_boost ?? body.searchBoost);
     }
@@ -843,6 +961,9 @@ export function registerPricingAdminRoutes(app: Hono) {
     if (body.promo_eligible != null || body.promoEligible != null) {
       updates.promo_eligible = Boolean(body.promo_eligible ?? body.promoEligible);
     }
+    if (body.auto_ads != null || body.autoAds != null) {
+      updates.auto_ads = Boolean(body.auto_ads ?? body.autoAds);
+    }
     if (body.sort_order != null || body.sortOrder != null) {
       updates.sort_order = Number(body.sort_order ?? body.sortOrder);
     }
@@ -851,6 +972,36 @@ export function registerPricingAdminRoutes(app: Hono) {
     }
 
     const db = getDb();
+    const { data: currentTier } = await db
+      .from("merchant_tiers")
+      .select("slug, name, commission_rate, search_boost, default_delivery_radius_km, promo_eligible, auto_ads, is_active")
+      .eq("id", tierId)
+      .maybeSingle();
+    if (!currentTier) return c.json({ error: "Tier not found" }, 404);
+
+    const { data: allTiers } = await db
+      .from("merchant_tiers")
+      .select("id, slug, name, commission_rate, search_boost, default_delivery_radius_km, promo_eligible, auto_ads, is_active")
+      .order("sort_order");
+    const candidateTiers = (allTiers ?? [])
+      .map((row) => {
+        const r = row as Record<string, unknown>;
+        if (String(r.id) === tierId) {
+          const merged = { ...r, ...updates };
+          if (merged.is_active === false) return null;
+          return rowToMerchantTier(merged);
+        }
+        if (r.is_active === false) return null;
+        return rowToMerchantTier(r);
+      })
+      .filter((t): t is MerchantTier => t != null);
+
+    const layered = await resolvePricingLayers(db, {});
+    const configErr = await assertValidPricingConfig(db, layered.rules, candidateTiers);
+    if (configErr) {
+      return c.json({ error: configErr.error, code: configErr.code }, 400);
+    }
+
     const { data, error } = await db
       .from("merchant_tiers")
       .update(updates)
@@ -889,6 +1040,11 @@ export function registerPricingAdminRoutes(app: Hono) {
       : body.free_delivery === false || body.freeDelivery === false
       ? false
       : undefined;
+    const simulateRushPass = body.rush_pass === true || body.rushPass === true ||
+      body.simulate_rush_pass === true || body.simulateRushPass === true;
+    const distanceKmOverride = body.distance_km != null || body.distanceKm != null
+      ? Number(body.distance_km ?? body.distanceKm)
+      : null;
     const tierIdOverride = body.tier_id != null || body.tierId != null
       ? String(body.tier_id ?? body.tierId)
       : null;
@@ -935,6 +1091,10 @@ export function registerPricingAdminRoutes(app: Hono) {
           ? (customerOrderCount as number)
           : null,
         freeDelivery,
+        simulateRushPass,
+        distanceKmOverride: Number.isFinite(distanceKmOverride as number)
+          ? (distanceKmOverride as number)
+          : null,
         requireCoverage: false,
         tierIdOverride,
         gctRegistered,
@@ -958,7 +1118,6 @@ export function registerPricingAdminRoutes(app: Hono) {
 
       return c.json({
         breakdown: resolved,
-        pricing_v2_enabled: resolved.pricingV2Enabled,
         market_id: resolved.marketId,
         resolved_market_id: resolved.resolvedMarketId ?? null,
         covered: resolved.covered ?? null,
@@ -1068,7 +1227,7 @@ export function registerPricingAdminRoutes(app: Hono) {
     const { data: orders, error } = await db
       .from("orders")
       .select(
-        "id, subtotal, discount, tip, total, delivery_lat, delivery_lng, merchant_id, pricing_model, merchant_commission_amount, service_fee",
+        "id, subtotal, discount, tip, total, delivery_lat, delivery_lng, merchant_id, merchant_commission_amount, service_fee, contribution_jmd",
       )
       .not("status", "in", '("cancelled")')
       .order("created_at", { ascending: false })
@@ -1102,8 +1261,8 @@ export function registerPricingAdminRoutes(app: Hono) {
           replay_commission: replay.merchantCommissionAmount,
           recorded_service_fee: Number(order.service_fee ?? 0),
           replay_service_fee: replay.serviceFee,
-          pricing_model: order.pricing_model,
-          replay_v2_enabled: replay.pricingV2Enabled,
+          recorded_contribution: Number(order.contribution_jmd ?? 0),
+          replay_contribution: replay.contributionJmd,
         });
       } catch {
         // skip unrunnable rows
@@ -1115,33 +1274,32 @@ export function registerPricingAdminRoutes(app: Hono) {
   /** Nightly-style reconciliation — snapshot vs columns vs ledger (GAP-10). */
   admin.get("/pricing/reconciliation", async (c) => {
     const db = getDb();
-    const { data: v2Orders, error } = await db
+    const { data: recentOrders, error } = await db
       .from("orders")
       .select("*")
-      .eq("pricing_model", "v2")
       .not("status", "in", '("cancelled")')
       .order("created_at", { ascending: false })
       .limit(50);
     if (error) return c.json({ error: error.message }, 500);
 
     const violations: Array<Record<string, unknown>> = [];
-    for (const o of v2Orders ?? []) {
+    for (const o of recentOrders ?? []) {
       const order = o as Record<string, unknown>;
       try {
         const balance = computeCodTrialBalance({
-          subtotal: order.subtotal,
-          discount: order.discount,
-          merchantCommissionAmount: order.merchant_commission_amount,
-          serviceFee: order.service_fee,
-          deliveryFeePlatformAmount: order.delivery_fee_platform_amount,
-          deliveryFeeCourierAmount: order.delivery_fee_courier_amount,
-          taxFoodJmd: order.tax_food_jmd,
-          taxPlatformJmd: order.tax_platform_jmd,
-          tax: order.tax,
-          tip: order.tip,
-          courierTipNet: order.courier_tip_net,
-          total: order.total,
-          pricingModel: "v2",
+          subtotal: Number(order.subtotal ?? 0),
+          discount: Number(order.discount ?? 0),
+          merchantCommissionAmount: Number(order.merchant_commission_amount ?? 0),
+          serviceFee: Number(order.service_fee ?? 0),
+          deliveryFeePlatformAmount: Number(order.delivery_fee_platform_amount ?? 0),
+          deliveryFeeCourierAmount: Number(order.delivery_fee_courier_amount ?? 0),
+          taxFoodJmd: Number(order.tax_food_jmd ?? 0),
+          taxPlatformJmd: Number(order.tax_platform_jmd ?? 0),
+          tax: Number(order.tax ?? 0),
+          tip: Number(order.tip ?? 0),
+          courierTipNet: order.courier_tip_net != null ? Number(order.courier_tip_net) : undefined,
+          total: Number(order.total ?? 0),
+          smallOrderFee: Number(order.small_order_fee ?? 0),
         });
         const sum = Math.round(
           (balance.platformDueJmd + balance.merchantDueJmd + balance.courierRetainedJmd) * 100,
@@ -1163,10 +1321,42 @@ export function registerPricingAdminRoutes(app: Hono) {
       }
     }
     return c.json({
-      v2_orders_checked: (v2Orders ?? []).length,
+      orders_checked: (recentOrders ?? []).length,
       violation_count: violations.length,
       violations,
     });
+  });
+
+  // Phase 2 — Growth Guarantee monthly credit run (admin or cron with product admin JWT)
+  admin.post("/pricing/growth-guarantee/run", async (c) => {
+    const adminUser = adminFromCtx(c);
+    const denied = requireDashWrite(adminUser);
+    if (denied) return denied;
+
+    const body = await c.req.json().catch(() => ({})) as { period?: string };
+    const { priorJamaicaPeriodYyyyMm, runGrowthGuaranteeForPeriod } = await import(
+      "../growthGuarantee.ts"
+    );
+    const period = String(body.period || priorJamaicaPeriodYyyyMm()).trim();
+    try {
+      const result = await runGrowthGuaranteeForPeriod(getDb(), period);
+      await writeKvAudit(
+        adminUser,
+        "roam_dash.growth_guarantee_run",
+        period,
+        "",
+        JSON.stringify({
+          evaluated: result.evaluated,
+          credited: result.credited,
+          skipped: result.skipped,
+        }),
+      );
+      return c.json(result);
+    } catch (e) {
+      return c.json({
+        error: e instanceof Error ? e.message : "growth_guarantee_failed",
+      }, 500);
+    }
   });
 
   admin.get("/pricing/merchants/commission", async (c) => {
@@ -1181,7 +1371,6 @@ export function registerPricingAdminRoutes(app: Hono) {
     const { data: orders } = await db
       .from("orders")
       .select("merchant_id, merchant_commission_amount, subtotal")
-      .eq("pricing_model", "v2")
       .not("status", "in", '("cancelled")');
 
     const agg = new Map<string, { commission: number; food: number; orders: number }>();
@@ -1204,6 +1393,7 @@ export function registerPricingAdminRoutes(app: Hono) {
         name: m.name,
         slug: m.slug,
         tier_id: m.pricing_tier_id,
+        order_count: stats.orders,
         v2_order_count: stats.orders,
         commission_total_jmd: Math.round(stats.commission * 100) / 100,
         gross_food_jmd: Math.round(stats.food * 100) / 100,

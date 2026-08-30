@@ -182,6 +182,9 @@ async function completeWipayIntent(
   intent: Record<string, unknown>,
   payload: Record<string, unknown>,
 ) {
+  const pd = (intent.provider_data ?? {}) as Record<string, unknown>;
+  const isRushPass = String(pd.purpose || "") === "rush_pass" || !intent.order_id;
+
   const alreadyPaid = String(intent.status) === "completed";
   if (!alreadyPaid) {
     await serviceSupabase
@@ -193,12 +196,59 @@ async function completeWipayIntent(
         provider_data: { ...(intent.provider_data as Record<string, unknown> | null ?? {}), callback: payload },
       })
       .eq("id", intent.id);
+  }
 
+  // Phase 3 Rush Pass — activate membership; skip order capture split
+  if (isRushPass && String(pd.purpose || "") === "rush_pass") {
+    const transactionId = payloadString(payload, "transaction_id", "transactionId", "transactionid")
+      || String(intent.provider_intent_id ?? "");
+    if (!alreadyPaid) {
+      await serviceSupabase
+        .schema("payments")
+        .from("transactions")
+        .insert({
+          intent_id: intent.id,
+          order_id: null,
+          customer_id: intent.customer_id,
+          amount: intent.amount,
+          net_amount: intent.amount,
+          currency: "JMD",
+          status: "completed",
+          provider: "wipay",
+          provider_transaction_id: transactionId,
+          provider_data: { ...payload, purpose: "rush_pass" },
+          payment_method: "credit_card",
+        });
+    }
+
+    try {
+      const { activateRushPassFromPaymentIntent } = await import("../_shared/rushPassActivate.ts");
+      const updatedIntent = {
+        ...intent,
+        status: "completed",
+        provider_data: { ...pd, callback: payload },
+      };
+      const result = await activateRushPassFromPaymentIntent(serviceSupabase, updatedIntent);
+      if ("error" in result) {
+        console.error("[payments/wipay] rush pass activate failed:", result.error);
+      }
+      return result && "membershipId" in result ? String(result.membershipId) : "rush_pass";
+    } catch (e) {
+      console.error("[payments/wipay] rush pass activate error:", e);
+      return "rush_pass";
+    }
+  }
+
+  if (!intent.order_id) {
+    return "";
+  }
+
+  if (!alreadyPaid) {
     const { data: order } = await serviceSupabase
       .schema("delivery")
       .from("orders")
       .select(
-        "merchant_id, courier_id, platform_fee, service_fee, processing_fee, delivery_fee, tip, courier_tip_net, subtotal, discount, pricing_model, merchant_commission_amount, delivery_fee_platform_amount, delivery_fee_courier_amount, peak_pay_amount, tax_food_jmd, tax_platform_jmd, platform_delivery_subsidy_jmd, small_order_fee",
+        "merchant_id, courier_id, platform_fee, service_fee, processing_fee, delivery_fee, tip, courier_tip_net, subtotal, discount, merchant_commission_amount, delivery_fee_platform_amount, delivery_fee_courier_amount, peak_pay_amount, tax_food_jmd, tax_platform_jmd, platform_delivery_subsidy_jmd, small_order_fee",
       )
       .eq("id", intent.order_id)
       .single();
@@ -542,11 +592,14 @@ app.all("/webhooks/wipay", async (c) => {
       .eq("id", intent.id);
   }
 
-  const providerData = (intent.provider_data ?? {}) as { returnBase?: string };
+  const providerData = (intent.provider_data ?? {}) as { returnBase?: string; purpose?: string };
   const returnBase = isAllowedPayReturnOrigin(String(providerData.returnBase ?? ""))
     ? String(providerData.returnBase)
     : (Deno.env.get("APP_URL") ?? "https://roamrush.app");
-  const customerReturn = `${returnBase}/payment/callback/wipay?status=${success ? "success" : "failed"}&order_id=${encodeURIComponent(orderId)}`;
+  const isPass = String(providerData.purpose || "") === "rush_pass";
+  const customerReturn = isPass
+    ? `${returnBase}/payment/callback/wipay?status=${success ? "success" : "failed"}&purpose=rush_pass`
+    : `${returnBase}/payment/callback/wipay?status=${success ? "success" : "failed"}&order_id=${encodeURIComponent(orderId)}`;
 
   const accept = c.req.header("accept") ?? "";
   const contentType = c.req.header("content-type") ?? "";

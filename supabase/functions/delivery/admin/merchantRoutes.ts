@@ -653,7 +653,12 @@ export function registerMerchantAdminRoutes(app: Hono) {
       updates.delivery_radius_km = radius;
     }
     if (Object.prototype.hasOwnProperty.call(body, "pricing_tier_id")) {
-      updates.pricing_tier_id = body.pricing_tier_id === null ? null : String(body.pricing_tier_id);
+      if (body.pricing_tier_id === null || body.pricing_tier_id === "") {
+        return c.json({
+          error: "pricing_tier_id is required — cannot clear merchant pricing tier",
+        }, 400);
+      }
+      updates.pricing_tier_id = String(body.pricing_tier_id);
     }
     if (Object.prototype.hasOwnProperty.call(body, "merchant_commission_rate")) {
       if (body.merchant_commission_rate === null) {
@@ -688,6 +693,17 @@ export function registerMerchantAdminRoutes(app: Hono) {
     }
     if (Object.prototype.hasOwnProperty.call(body, "gct_registered")) {
       updates.gct_registered = Boolean(body.gct_registered);
+    }
+    if (Object.prototype.hasOwnProperty.call(body, "menu_inflation_percent")) {
+      if (body.menu_inflation_percent === null || body.menu_inflation_percent === "") {
+        updates.menu_inflation_percent = 0;
+      } else {
+        const inflation = Number(body.menu_inflation_percent);
+        if (!Number.isFinite(inflation) || inflation < 0 || inflation > 1) {
+          return c.json({ error: "menu_inflation_percent must be between 0 and 1" }, 400);
+        }
+        updates.menu_inflation_percent = inflation;
+      }
     }
     if (Object.prototype.hasOwnProperty.call(body, "market_id")) {
       updates.market_id = body.market_id === null || body.market_id === ""
@@ -744,21 +760,26 @@ export function registerMerchantAdminRoutes(app: Hono) {
         });
         const { data: tierRow } = await sb
           .from("merchant_tiers")
-          .select("default_delivery_radius_km")
+          .select("slug, default_delivery_radius_km")
           .eq("id", String(updates.pricing_tier_id))
           .maybeSingle();
+        const tierPatch: Record<string, unknown> = { updated_at: nowIso };
         if (tierRow?.default_delivery_radius_km != null) {
-          await sb
-            .from("merchants")
-            .update({
-              delivery_radius_km: Number(tierRow.default_delivery_radius_km),
-              updated_at: nowIso,
-            })
-            .eq("id", id);
+          tierPatch.delivery_radius_km = Number(tierRow.default_delivery_radius_km);
           (data as Record<string, unknown>).delivery_radius_km = Number(
             tierRow.default_delivery_radius_km,
           );
         }
+        // Phase 2 Growth Guarantee window — stamp on Dominant assignment
+        const nextSlug = String((tierRow as { slug?: string } | null)?.slug ?? "").toLowerCase();
+        if (nextSlug === "dominant") {
+          tierPatch.dominant_assigned_at = nowIso;
+          (data as Record<string, unknown>).dominant_assigned_at = nowIso;
+        } else {
+          tierPatch.dominant_assigned_at = null;
+          (data as Record<string, unknown>).dominant_assigned_at = null;
+        }
+        await sb.from("merchants").update(tierPatch).eq("id", id);
       }
     }
 

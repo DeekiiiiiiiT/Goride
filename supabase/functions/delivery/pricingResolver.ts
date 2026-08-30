@@ -28,6 +28,7 @@ import {
   resolveOrderGctRates,
 } from "../_shared/gctRate.ts";
 import { resolvePricingLayers } from "./pricingLayers.ts";
+import { loadActiveRushPassMembership } from "./rushPassMembership.ts";
 
 export type PricingResolverInput = {
   /** Real order / merchant preview. Omit for admin standalone calculator. */
@@ -48,6 +49,10 @@ export type PricingResolverInput = {
   marketIdOverride?: string | null;
   /** Admin simulator: override order count (skip DB lookup) for launch free-delivery promo */
   customerOrderCount?: number | null;
+  /** Admin simulator: force Rush Pass benefits without a real membership */
+  simulateRushPass?: boolean;
+  /** Admin simulator: force road distance km */
+  distanceKmOverride?: number | null;
   /**
    * When true (default for customer paths), refuse to invent a market if dropoff is uncovered.
    * Admin preview with override can still price without coverage.
@@ -65,7 +70,6 @@ export type ResolvedPricing = PricingBreakdown & {
   pricingProfileVersion: number;
   marketId: string | null;
   rules: PricingRules;
-  pricingV2Enabled: boolean;
   taxRatePercent?: number;
   gctRegistered?: boolean;
   /** Geo resolution from dropoff (independent of marketIdOverride) */
@@ -115,27 +119,27 @@ async function loadTierById(
   const { data: tierRow } = await sb
     .from("merchant_tiers")
     .select(
-      "slug, name, commission_rate, base_delivery_fee_jmd, menu_inflation_percent, search_boost, default_delivery_radius_km, promo_eligible",
+      "slug, name, commission_rate, search_boost, default_delivery_radius_km, promo_eligible, auto_ads",
     )
     .eq("id", String(tierId).trim())
     .maybeSingle();
   if (!tierRow) return null;
   const t = tierRow as Record<string, unknown>;
+  const commissionRate = Number(t.commission_rate);
+  if (!Number.isFinite(commissionRate)) {
+    console.error("[pricingResolver] tier missing commission_rate:", tierId);
+    return null;
+  }
   return {
     slug: String(t.slug),
     name: String(t.name),
-    commissionRate: Number(t.commission_rate),
-    baseDeliveryFeeJmd: t.base_delivery_fee_jmd != null
-      ? Number(t.base_delivery_fee_jmd)
-      : null,
-    menuInflationPercent: t.menu_inflation_percent != null
-      ? Number(t.menu_inflation_percent)
-      : null,
+    commissionRate,
     searchBoost: t.search_boost != null ? Number(t.search_boost) : undefined,
     defaultDeliveryRadiusKm: t.default_delivery_radius_km != null
       ? Number(t.default_delivery_radius_km)
       : undefined,
     promoEligible: t.promo_eligible != null ? Boolean(t.promo_eligible) : undefined,
+    autoAds: t.auto_ads != null ? Boolean(t.auto_ads) : undefined,
   };
 }
 
@@ -186,6 +190,19 @@ async function loadMerchantPricingContext(
   const tierId = (tierIdOverride && String(tierIdOverride).trim())
     || (base.pricing_tier_id ? String(base.pricing_tier_id) : null);
   const tier = await loadTierById(sb, tierId);
+  if (!tier) {
+    return {
+      found: false,
+      lat: asCoord(base.lat),
+      lng: asCoord(base.lng),
+      tier: null,
+      merchantCommissionRateOverride: null,
+      serviceFeeOverride: null,
+      error: tierId
+        ? "Merchant pricing tier missing or invalid"
+        : "Merchant has no pricing_tier_id — assign a merchant tier",
+    };
+  }
 
   return {
     found: true,
@@ -323,6 +340,10 @@ export async function resolveDashOrderPricing(
 
   const requireCoverage = input.requireCoverage !== false && !overrideRaw;
   if (requireCoverage && dropLat != null && dropLng != null && !covered) {
+    if (!ctx.tier) {
+      console.error("[pricingResolver] uncovered quote missing tier");
+      return null;
+    }
     const gctConfig = await loadGlobalGctConfig(sb as Parameters<typeof loadGlobalGctConfig>[0]);
     return {
       ...buildOrderPricing({
@@ -331,6 +352,7 @@ export async function resolveDashOrderPricing(
         tip: input.tip,
         distanceKm: null,
         rules: parsePricingRules(null),
+        tier: ctx.tier,
         paymentMethod: input.paymentMethod,
         taxRatePercent: gctConfig.ratePercent,
         platformTaxRatePercent: effectivePlatformGctRatePercent(gctConfig),
@@ -338,7 +360,6 @@ export async function resolveDashOrderPricing(
       pricingProfileVersion: 0,
       marketId: null,
       rules: parsePricingRules(null),
-      pricingV2Enabled: true,
       resolvedMarketId: null,
       covered: false,
       coverage,
@@ -355,7 +376,14 @@ export async function resolveDashOrderPricing(
 
   let distanceKmRaw: number | null = null;
   let distanceKm: number | null = null;
-  if (dropLat != null && dropLng != null && ctx.lat != null && ctx.lng != null) {
+  if (
+    input.distanceKmOverride != null &&
+    Number.isFinite(Number(input.distanceKmOverride)) &&
+    Number(input.distanceKmOverride) >= 0
+  ) {
+    distanceKm = roundDistanceKm(Number(input.distanceKmOverride));
+    distanceKmRaw = distanceKm;
+  } else if (dropLat != null && dropLng != null && ctx.lat != null && ctx.lng != null) {
     distanceKmRaw = roundDistanceKm(haversineKm(ctx.lat, ctx.lng, dropLat, dropLng));
     distanceKm = applyRoadDistanceMultiplier(
       distanceKmRaw,
@@ -378,6 +406,42 @@ export async function resolveDashOrderPricing(
       ? Math.max(0, Math.trunc(Number(coverage.policy.params?.amount_jmd ?? 200)))
       : 0;
 
+  // Phase 3 Rush Pass — free delivery + service fee multiplier when tier eligible
+  let freeDelivery = input.freeDelivery === true;
+  let serviceFeeMultiplier: number | undefined;
+  let rushPassApplied = false;
+  let rushPassMembershipId: string | null = null;
+
+  if (input.simulateRushPass === true && ctx.tier) {
+    const eligible = ["growth", "dominant"];
+    if (eligible.includes(String(ctx.tier.slug).toLowerCase())) {
+      rushPassApplied = true;
+      freeDelivery = true;
+      serviceFeeMultiplier = 0.5;
+    }
+  } else if (input.customerId && ctx.tier) {
+    try {
+      const pass = await loadActiveRushPassMembership(
+        sb as Parameters<typeof loadActiveRushPassMembership>[0],
+        String(input.customerId),
+      );
+      if (pass) {
+        const eligible = Array.isArray(pass.plan.eligible_tier_slugs)
+          ? (pass.plan.eligible_tier_slugs as string[]).map((s) => String(s).toLowerCase())
+          : ["growth", "dominant"];
+        if (eligible.includes(String(ctx.tier.slug).toLowerCase())) {
+          rushPassApplied = true;
+          rushPassMembershipId = String(pass.membership.id);
+          if (pass.plan.free_delivery !== false) freeDelivery = true;
+          const mult = Number(pass.plan.service_fee_multiplier);
+          if (Number.isFinite(mult)) serviceFeeMultiplier = mult;
+        }
+      }
+    } catch (e) {
+      console.error("[pricingResolver] rush pass load failed:", e);
+    }
+  }
+
   const breakdown = buildOrderPricing({
     subtotal: input.subtotal,
     discount: input.discount,
@@ -389,9 +453,12 @@ export async function resolveDashOrderPricing(
     merchantCommissionRateOverride: ctx.merchantCommissionRateOverride,
     serviceFeeOverride: ctx.serviceFeeOverride,
     customerOrderCount,
-    freeDelivery: input.freeDelivery,
+    freeDelivery,
     paymentMethod: input.paymentMethod,
     serviceFeeWaived: input.serviceFeeWaived,
+    serviceFeeMultiplier,
+    rushPassApplied,
+    rushPassMembershipId,
     taxRatePercent: gct.ratePercent,
     platformTaxRatePercent: gct.platformRatePercent,
     platformGctEnabled: gct.gctEnabled,
@@ -406,7 +473,6 @@ export async function resolveDashOrderPricing(
     pricingProfileVersion: version,
     marketId,
     rules,
-    pricingV2Enabled: true,
     resolvedMarketId,
     covered,
     coverage,
@@ -414,12 +480,3 @@ export async function resolveDashOrderPricing(
   };
 }
 
-/** Check if Model B pricing is enabled for a market (after Default→Parish→Town merge). */
-export async function isPricingV2EnabledForMarket(
-  sb: ServiceSb,
-  marketId: string | null,
-): Promise<boolean> {
-  if (!marketId) return false;
-  const layered = await resolvePricingLayers(sb, { marketId });
-  return layered.rules.pricingV2Enabled === true;
-}

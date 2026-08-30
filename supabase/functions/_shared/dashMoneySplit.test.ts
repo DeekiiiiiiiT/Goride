@@ -8,7 +8,6 @@ import {
 Deno.test("Model B split — normal", () => {
   const split = computeDashCaptureSplit(
     {
-      pricing_model: "v2",
       service_fee: 120,
       merchant_commission_amount: 500,
       delivery_fee: 520,
@@ -32,7 +31,6 @@ Deno.test("Model B split — normal", () => {
 Deno.test("Model B split — free-delivery negative platform share (merchant not charged)", () => {
   const split = computeDashCaptureSplit(
     {
-      pricing_model: "v2",
       service_fee: 200,
       processing_fee: 0,
       merchant_commission_amount: 400,
@@ -57,7 +55,6 @@ Deno.test("Model B — tip processing fee does not hit merchant", () => {
   // Tip 100, tip fee 4.5 → courier_tip_net 95.5; platform keeps full processing 4.5
   const split = computeDashCaptureSplit(
     {
-      pricing_model: "v2",
       service_fee: 150,
       processing_fee: 94.5, // order + tip portions
       merchant_commission_amount: 400,
@@ -80,7 +77,6 @@ Deno.test("Model B — tip processing fee does not hit merchant", () => {
 
 Deno.test("Model B — peak pay is platform cost; merchant unchanged", () => {
   const base = {
-    pricing_model: "v2" as const,
     service_fee: 150,
     processing_fee: 0,
     merchant_commission_amount: 400,
@@ -104,7 +100,6 @@ Deno.test("Model B — peak pay is platform cost; merchant unchanged", () => {
 Deno.test("Model B — Dominant subsidy + tip + peak: merchant == food − commission", () => {
   const split = computeDashCaptureSplit(
     {
-      pricing_model: "v2",
       service_fee: 360,
       processing_fee: 200,
       merchant_commission_amount: 1200,
@@ -127,7 +122,6 @@ Deno.test("Model B — Dominant subsidy + tip + peak: merchant == food − commi
 Deno.test("courierDeliveryEarnings Model B", () => {
   assertEquals(
     courierDeliveryEarnings({
-      pricing_model: "v2",
       delivery_fee: 520,
       delivery_fee_courier_amount: 416,
     }),

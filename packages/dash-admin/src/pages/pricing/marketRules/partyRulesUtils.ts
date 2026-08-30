@@ -21,12 +21,12 @@ export const PARTY_META: Record<
   },
   rider: {
     label: 'Rider rules',
-    description: 'Courier share, COD threshold, distance multiplier',
+    description: 'Courier pay ladder, COD threshold, distance multiplier',
     accent: 'border-emerald-800/60',
   },
   platform: {
     label: 'Platform engine',
-    description: 'Model B enablement and legacy tax rate in blob',
+    description: 'Max menu inflation cap and platform engine controls',
     accent: 'border-amber-800/60',
   },
 };
@@ -52,14 +52,28 @@ export function partyFormSeed(
 
   if (party === 'customer') {
     const c = (resolved.customer ?? effective.customer ?? effective) as Record<string, unknown>;
+    const deliveryRaw = (c.delivery ?? effective.delivery ?? {}) as Record<string, unknown>;
+    const sfRaw = (c.service_fee ?? effective.service_fee ?? {}) as Record<string, unknown>;
+    const distanceAddonRaw = (sfRaw.distance_addon ?? {}) as Record<string, unknown>;
     return {
-      service_fee: (c.service_fee ?? effective.service_fee) as PricingRulesPayload['service_fee'],
-      delivery: (c.delivery ?? effective.delivery) as PricingRulesPayload['delivery'],
+      service_fee: {
+        ...(sfRaw as PricingRulesPayload['service_fee']),
+        distance_addon: {
+          enabled: distanceAddonRaw.enabled === true,
+          threshold_km: Number(distanceAddonRaw.threshold_km ?? 5),
+          per_km_jmd: Number(distanceAddonRaw.per_km_jmd ?? 20),
+          max_jmd: Number(distanceAddonRaw.max_jmd ?? 200),
+        },
+      },
+      delivery: {
+        base_jmd: Number(deliveryRaw.base_jmd ?? 450),
+        included_km: Number(deliveryRaw.included_km ?? 0),
+        per_extra_km_jmd: Number(
+          deliveryRaw.per_extra_km_jmd ?? deliveryRaw.per_km_jmd ?? 60,
+        ),
+      },
       min_order_subtotal_jmd: Number(
         c.min_order_subtotal_jmd ?? effective.min_order_subtotal_jmd ?? 800,
-      ),
-      hard_min_order_subtotal_jmd: Number(
-        c.hard_min_order_subtotal_jmd ?? effective.hard_min_order_subtotal_jmd ?? 400,
       ),
       small_order_threshold_jmd: Number(
         c.small_order_threshold_jmd ?? effective.small_order_threshold_jmd ?? 1500,
@@ -77,9 +91,6 @@ export function partyFormSeed(
   if (party === 'rider') {
     const r = (resolved.rider ?? effective.rider ?? effective) as Record<string, unknown>;
     return {
-      courier_delivery_share: Number(
-        r.courier_delivery_share ?? effective.courier_delivery_share ?? 0.8,
-      ),
       courier_base_pay_jmd: Number(
         r.courier_base_pay_jmd ?? effective.courier_base_pay_jmd ?? 250,
       ),
@@ -101,12 +112,21 @@ export function partyFormSeed(
   }
 
   if (party === 'platform') {
-    const p = (resolved.platform ?? effective.platform ?? effective) as Record<string, unknown>;
+    // Statutory GCT is Accounting → GCT — do not seed tax_rate_percent
+    const ggRaw = (
+      (effective as { growth_guarantee?: Record<string, unknown> }).growth_guarantee ??
+      (layer?.rules as { growth_guarantee?: Record<string, unknown> } | undefined)?.growth_guarantee ??
+      {}
+    ) as Record<string, unknown>;
     return {
-      pricing_v2_enabled: Boolean(
-        p.pricing_v2_enabled ?? effective.pricing_v2_enabled ?? false,
-      ),
-      // Statutory GCT is Accounting → GCT — do not seed tax_rate_percent (was resurrecting 16.5)
+      growth_guarantee: {
+        enabled: ggRaw.enabled !== false,
+        tier_slugs: Array.isArray(ggRaw.tier_slugs)
+          ? (ggRaw.tier_slugs as string[])
+          : ['dominant'],
+        months_from_assignment: Number(ggRaw.months_from_assignment ?? 6),
+        min_orders_per_month: Number(ggRaw.min_orders_per_month ?? 20),
+      },
     };
   }
 
@@ -129,16 +149,20 @@ export function partyPreviewMetrics(
       { label: 'Service avg', value: `${avg}%` },
       { label: 'Min order', value: formatJmd(seed.min_order_subtotal_jmd ?? 800) },
       {
-        label: 'Base delivery',
-        value: formatJmd(seed.delivery?.base_fee_jmd ?? 400),
+        label: 'Delivery base',
+        value: formatJmd(seed.delivery?.base_jmd ?? 450),
+      },
+      {
+        label: 'Per extra km',
+        value: formatJmd(seed.delivery?.per_extra_km_jmd ?? 60),
       },
     ];
   }
   if (party === 'rider') {
     return [
       {
-        label: 'Courier share',
-        value: `${Math.round((seed.courier_delivery_share ?? 0.8) * 100)}%`,
+        label: 'Courier base pay',
+        value: formatJmd(seed.courier_base_pay_jmd ?? 250),
       },
       {
         label: 'COD pause',
@@ -152,10 +176,7 @@ export function partyPreviewMetrics(
   }
   if (party === 'platform') {
     return [
-      {
-        label: 'Model',
-        value: seed.pricing_v2_enabled ? 'Model B' : 'Legacy A',
-      },
+      { label: 'Tiers', value: 'Commission · radius · boost · promos' },
       { label: 'GCT', value: 'Accounting → GCT engine' },
     ];
   }
@@ -180,9 +201,13 @@ export function partySavePayload(
   if (party === 'customer') {
     return {
       service_fee: { ...form.service_fee, mode: 'marginal' },
-      delivery: form.delivery,
+      delivery: {
+        base_jmd: form.delivery?.base_jmd ?? 450,
+        included_km: form.delivery?.included_km ?? 0,
+        per_extra_km_jmd: form.delivery?.per_extra_km_jmd ?? 60,
+        per_km_jmd: form.delivery?.per_extra_km_jmd ?? 60,
+      },
       min_order_subtotal_jmd: form.min_order_subtotal_jmd,
-      hard_min_order_subtotal_jmd: form.hard_min_order_subtotal_jmd,
       small_order_threshold_jmd: form.small_order_threshold_jmd,
       small_order_fee_jmd: form.small_order_fee_jmd,
       card_processing_fee_percent: form.card_processing_fee_percent,
@@ -191,7 +216,6 @@ export function partySavePayload(
   }
   if (party === 'rider') {
     return {
-      courier_delivery_share: form.courier_delivery_share,
       courier_base_pay_jmd: form.courier_base_pay_jmd,
       courier_per_km_jmd: form.courier_per_km_jmd,
       courier_min_pay_jmd: form.courier_min_pay_jmd,
@@ -202,12 +226,34 @@ export function partySavePayload(
   }
   if (party === 'platform') {
     return {
-      pricing_v2_enabled: form.pricing_v2_enabled,
+      growth_guarantee: form.growth_guarantee ?? {
+        enabled: true,
+        tier_slugs: ['dominant'],
+        months_from_assignment: 6,
+        min_orders_per_month: 20,
+      },
     };
   }
   return {
     default_tier_slug: (form as { default_tier_slug?: string }).default_tier_slug,
   };
+}
+
+/** Lightweight client gate before customer-rules save (full engine validation is server-side). */
+export function customerRulesClientError(form: PricingRulesPayload): string | null {
+  const base = Number(form.delivery?.base_jmd ?? 0);
+  const included = Number(form.delivery?.included_km ?? 0);
+  const perKm = Number(form.delivery?.per_extra_km_jmd ?? 0);
+  const minOrder = Number(form.min_order_subtotal_jmd ?? 0);
+  const smallThreshold = Number(form.small_order_threshold_jmd ?? 0);
+  if (!Number.isFinite(base) || base < 0) return 'Delivery base must be ≥ 0';
+  if (!Number.isFinite(included) || included < 0) return 'Included km must be ≥ 0';
+  if (!Number.isFinite(perKm) || perKm < 0) return 'Per extra km must be ≥ 0';
+  if (!Number.isFinite(minOrder) || minOrder < 0) return 'Minimum order must be ≥ 0';
+  if (smallThreshold > 0 && minOrder > smallThreshold) {
+    return 'Minimum order cannot exceed small-order threshold';
+  }
+  return null;
 }
 
 export const MARKET_RULE_PARTIES: PricingParty[] = ['customer', 'partner', 'rider', 'platform'];

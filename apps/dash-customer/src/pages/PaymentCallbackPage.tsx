@@ -12,6 +12,7 @@ interface PaymentCallbackPageProps {
 export default function PaymentCallbackPage({ onNavigate, session, provider }: PaymentCallbackPageProps) {
   const [status, setStatus] = useState<'processing' | 'success' | 'failed' | 'pending_confirmation'>('processing');
   const [orderId, setOrderId] = useState<string | null>(null);
+  const [isRushPass, setIsRushPass] = useState(false);
 
   useEffect(() => {
     if (provider !== 'wipay') {
@@ -23,9 +24,40 @@ export default function PaymentCallbackPage({ onNavigate, session, provider }: P
     const wipayStatus = params.get('status') || params.get('payment_status') || '';
     const orderIdParam = params.get('order_id') || params.get('orderId') || '';
     const transactionId = params.get('transaction_id') || params.get('transactionId') || '';
+    const purpose = params.get('purpose') || '';
+    const rushPass = purpose === 'rush_pass';
+    setIsRushPass(rushPass);
 
     if (!session) {
       setStatus('failed');
+      return;
+    }
+
+    if (rushPass) {
+      const ok = /success|successful|completed|paid|ok|approved/i.test(wipayStatus) || wipayStatus === '1';
+      if (!ok) {
+        setStatus('failed');
+        return;
+      }
+      const intentId = params.get('intent_id') || params.get('intentId') ||
+        params.get('order_id') || params.get('orderId') || '';
+      void (async () => {
+        try {
+          if (intentId) {
+            await fetch(`${API_ENDPOINTS.delivery}/customer/rush-pass/confirm`, {
+              method: 'POST',
+              headers: supabaseAnonFunctionHeaders({
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${session.access_token}`,
+              }),
+              body: JSON.stringify({ intentId }),
+            });
+          }
+        } catch {
+          // Webhook may already have activated — still show success on payment OK
+        }
+        setStatus('success');
+      })();
       return;
     }
 
@@ -84,13 +116,20 @@ export default function PaymentCallbackPage({ onNavigate, session, provider }: P
       <div className="min-h-dvh flex flex-col items-center justify-center p-4">
         <CheckCircle className="w-20 h-20 text-emerald-500 mb-4" />
         <h1 className="text-2xl font-bold text-gray-900 mb-2">Payment Successful!</h1>
-        <p className="text-gray-500 mb-8">Your order has been confirmed</p>
+        <p className="text-gray-500 mb-8">
+          {isRushPass ? 'Your Rush Pass is activating' : 'Your order has been confirmed'}
+        </p>
         <button
           type="button"
-          onClick={() => onNavigate(orderId ? 'tracking' : 'orders', orderId ? { orderId } : undefined)}
+          onClick={() =>
+            onNavigate(
+              isRushPass ? 'rush-pass' : orderId ? 'tracking' : 'orders',
+              !isRushPass && orderId ? { orderId } : undefined,
+            )
+          }
           className="px-8 py-3 bg-emerald-500 text-white rounded-lg font-medium hover:bg-emerald-600"
         >
-          Track Your Order
+          {isRushPass ? 'View Rush Pass' : 'Track Your Order'}
         </button>
       </div>
     );
@@ -104,7 +143,7 @@ export default function PaymentCallbackPage({ onNavigate, session, provider }: P
       <div className="flex gap-4">
         <button
           type="button"
-          onClick={() => onNavigate('cart')}
+          onClick={() => onNavigate(isRushPass ? 'rush-pass' : 'cart')}
           className="px-6 py-3 bg-gray-100 text-gray-700 rounded-lg font-medium hover:bg-gray-200"
         >
           Try Again

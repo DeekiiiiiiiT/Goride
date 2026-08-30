@@ -235,9 +235,6 @@ export function computeCodLedgerAmounts(order: Record<string, unknown>): CodTria
     tip: Number(order.tip ?? 0),
     courierTipNet: order.courier_tip_net != null ? Number(order.courier_tip_net) : undefined,
     total,
-    pricingModel: order.pricing_model === "v2" ? "v2" : "legacy",
-    platformFee: Number(order.platform_fee ?? 0),
-    deliveryFee: Number(order.delivery_fee ?? 0),
   });
 
   assertCodTrialBalance(balance, total);

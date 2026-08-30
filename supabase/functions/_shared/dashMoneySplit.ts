@@ -23,7 +23,6 @@ export type DashOrderFeeFields = {
   small_order_fee?: number | null;
   subtotal?: number | null;
   discount?: number | null;
-  pricing_model?: string | null;
   courier_id?: string | null;
   merchant_id?: string | null;
 };

@@ -55,8 +55,6 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
   const submitLockRef = useRef(false);
   const idempotencyKeyRef = useRef<string | null>(null);
   const [showPharmacyNotice, setShowPharmacyNotice] = useState(false);
-  const [platformFeeRate, setPlatformFeeRate] = useState(0.05);
-  const [merchantDeliveryFee, setMerchantDeliveryFee] = useState(0);
   const [checkoutPricing, setCheckoutPricing] = useState<CheckoutPricing | null>(null);
   const [pricingError, setPricingError] = useState<string | null>(null);
   const [accountSuspended, setAccountSuspended] = useState(false);
@@ -76,21 +74,11 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
   const hasLivePricing = checkoutPricing != null && !pricingError;
   const totals = useMemo(
     () =>
-      hasLivePricing
-        ? calculateOrderTotals(
-            subtotal,
-            appliedPromo,
+      hasLivePricing && checkoutPricing
+        ? calculateOrderTotals(subtotal, appliedPromo, tip, 0, undefined, undefined, {
+            v2Quote: checkoutPricing,
             tip,
-            merchantDeliveryFee,
-            platformFeeRate,
-            checkoutPricing?.pricingModel === 'v2' ? checkoutPricing.serviceFee : undefined,
-            {
-              v2Quote: checkoutPricing,
-              paymentMethod: apiPaymentMethod,
-              tip,
-              taxRatePercent: checkoutPricing?.taxRatePercent,
-            },
-          )
+          })
         : {
             discount: 0,
             discountedSubtotal: subtotal,
@@ -103,7 +91,7 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
             smallOrderFee: 0,
             total: subtotal + tip,
           },
-    [subtotal, appliedPromo, tip, merchantDeliveryFee, platformFeeRate, checkoutPricing, apiPaymentMethod, hasLivePricing],
+    [subtotal, appliedPromo, tip, checkoutPricing, hasLivePricing],
   );
   const taxRateLabel = checkoutPricing?.taxRatePercent;
   const paymentLabel = getPaymentLabel(paymentMethodId);
@@ -118,8 +106,6 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
 
   useEffect(() => {
     if (!merchantId) {
-      setPlatformFeeRate(0.05);
-      setMerchantDeliveryFee(0);
       setCheckoutPricing(null);
       setPricingError(null);
       return;
@@ -138,8 +124,6 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
         });
         if (cancelled) return;
         setCheckoutPricing(pricing);
-        setPlatformFeeRate(pricing.platformFeeRate);
-        setMerchantDeliveryFee(pricing.deliveryFee);
         setPricingError(null);
       } catch (err) {
         if (cancelled) return;
@@ -627,6 +611,18 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
                 ))}
               </div>
               <hr className="border-outline-variant opacity-30" />
+              {(checkoutPricing?.menuInflationPercent ?? 0) > 0 && (
+                <p className="text-body-sm text-on-surface-variant">
+                  Menu prices may include up to{' '}
+                  {Math.round((checkoutPricing!.menuInflationPercent ?? 0) * 1000) / 10}% above
+                  in-store.
+                </p>
+              )}
+              {checkoutPricing?.rushPassApplied && (
+                <p className="text-body-sm text-primary font-medium">
+                  Rush Pass applied — free delivery &amp; lower service fee
+                </p>
+              )}
               <div className="space-y-1 text-body-sm text-on-surface-variant">
                 <div className="flex justify-between">
                   <span>Subtotal</span>
@@ -638,8 +634,21 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
                 </div>
                 <div className="flex justify-between">
                   <span>Service Fee</span>
-                  <span>{formatJmd(totals.serviceFee)}</span>
+                  <span>
+                    {formatJmd(
+                      Math.max(
+                        0,
+                        totals.serviceFee - Math.max(0, checkoutPricing?.serviceFeeDistanceJmd ?? 0),
+                      ),
+                    )}
+                  </span>
                 </div>
+                {(checkoutPricing?.serviceFeeDistanceJmd ?? 0) > 0 && (
+                  <div className="flex justify-between">
+                    <span>Distance service</span>
+                    <span>{formatJmd(checkoutPricing!.serviceFeeDistanceJmd ?? 0)}</span>
+                  </div>
+                )}
                 {totals.smallOrderFee > 0 && (
                   <div className="flex justify-between">
                     <span>Small order fee</span>

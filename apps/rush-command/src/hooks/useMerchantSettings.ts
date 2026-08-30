@@ -185,6 +185,8 @@ export interface MerchantSettingsFormData {
   minOrderAmount: number;
   deliveryFee: number;
   deliveryRadiusKm: number;
+  /** Display percent 0–25 */
+  menuInflationPercent: number;
   isAcceptingOrders: boolean;
   acceptsPickup: boolean;
   acceptsScheduled: boolean;
@@ -267,6 +269,7 @@ function buildFormData(merchant: Merchant): MerchantSettingsFormData {
     minOrderAmount: merchant.min_order_amount || 0,
     deliveryFee: merchant.delivery_fee || 0,
     deliveryRadiusKm: merchant.delivery_radius_km || 10,
+    menuInflationPercent: Math.round(Number(merchant.menu_inflation_percent ?? 0) * 1000) / 10,
     isAcceptingOrders: merchant.is_accepting_orders,
     acceptsPickup: deliveryExtras.acceptsPickup,
     acceptsScheduled: deliveryExtras.acceptsScheduled,
@@ -544,7 +547,7 @@ export function useMerchantSettings(merchant: Merchant) {
           cuisine_type: data.cuisineTypes.join(', '),
           avg_prep_time_mins: data.avgPrepTimeMins,
           min_order_amount: data.minOrderAmount,
-          delivery_fee: data.deliveryFee,
+          menu_inflation_percent: Math.min(0.25, Math.max(0, data.menuInflationPercent / 100)),
           is_accepting_orders: data.isAcceptingOrders,
           logo_url: data.logoUrl,
           cover_image_url: data.coverImageUrl,

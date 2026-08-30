@@ -21,7 +21,7 @@ export interface MenuItem {
   price: number;
   /** Merchant kitchen / in-store price (what they enter). */
   in_store_price?: number | null;
-  /** What customers see on Roam Rush (may include tier inflation). */
+  /** What customers see on Roam Rush (may include merchant menu inflation). */
   marketplace_price?: number | null;
   image_url: string;
   category_id: string;

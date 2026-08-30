@@ -1,17 +1,3 @@
-/** Merchant tier definition */
-export type MerchantTier = {
-  slug: string;
-  name: string;
-  commissionRate: number;
-  /** Customer-facing base delivery fee override (replaces market base). */
-  baseDeliveryFeeJmd?: number | null;
-  /** Menu inflation percent 0–1 (e.g. 0.20 = 20%). */
-  menuInflationPercent?: number | null;
-  searchBoost?: number;
-  defaultDeliveryRadiusKm?: number;
-  promoEligible?: boolean;
-};
-
 /** Service fee configuration */
 export type ServiceFeeRules = {
   mode: 'flat' | 'percent' | 'marginal';
@@ -27,12 +13,33 @@ export type ServiceFeeRules = {
   overrideThresholdJmd?: number;
 };
 
-/** Distance-based delivery fee rules */
+/** Experiment: distance-based service fee addon (separate checkout line). */
+export type ServiceFeeDistanceAddon = {
+  enabled: boolean;
+  thresholdKm: number;
+  perKmJmd: number;
+  maxJmd: number;
+};
+
+/** Merchant tier definition — demand goods only (no delivery subsidy / inflation). */
+export type MerchantTier = {
+  slug: string;
+  name: string;
+  commissionRate: number;
+  searchBoost?: number;
+  defaultDeliveryRadiusKm?: number;
+  promoEligible?: boolean;
+  /** Dominant auto-promoted placement */
+  autoAds?: boolean;
+};
+
+/** Platform-wide distance-based delivery fee (identical across tiers). */
 export type DeliveryFeeRules = {
-  baseFeeJmd: number;
+  /** Platform starting fee (JMD). */
+  baseJmd: number;
   includedKm: number;
+  /** Alias: per_km_jmd / per_extra_km_jmd in blob */
   perExtraKmJmd: number;
-  maxFeeJmd?: number;
 };
 
 export type LaunchPromoRules = {
@@ -43,11 +50,15 @@ export type CodRules = {
   pauseThresholdJmd?: number;
 };
 
+export type PricingGuardrails = {
+  minDeliveryMarginJmd?: number;
+  minOrderContributionJmd?: number;
+};
+
 export type PricingParty = 'customer' | 'rider' | 'partner' | 'platform';
 
 /** Snake_case party sections stored in DB JSONB */
 export type PlatformRulesBlob = {
-  pricing_v2_enabled?: boolean;
   max_menu_inflation_percent?: number;
 };
 
@@ -55,7 +66,6 @@ export type CustomerRulesBlob = {
   service_fee?: Record<string, unknown>;
   delivery?: Record<string, unknown>;
   min_order_subtotal_jmd?: number;
-  hard_min_order_subtotal_jmd?: number;
   small_order_threshold_jmd?: number;
   small_order_fee_jmd?: number;
   card_processing_fee_percent?: number;
@@ -63,7 +73,6 @@ export type CustomerRulesBlob = {
 };
 
 export type RiderRulesBlob = {
-  courier_delivery_share?: number;
   courier_base_pay_jmd?: number;
   courier_per_km_jmd?: number;
   courier_min_pay_jmd?: number;
@@ -81,31 +90,38 @@ export type NestedRulesBlob = {
   customer?: CustomerRulesBlob;
   rider?: RiderRulesBlob;
   partner?: PartnerRulesBlob;
+  guardrails?: Record<string, unknown>;
+  growth_guarantee?: Record<string, unknown>;
 };
 
 /** Full market pricing profile rules blob — flat runtime shape for engine */
 export type PricingRules = {
-  pricingV2Enabled?: boolean;
   delivery: DeliveryFeeRules;
   serviceFee: ServiceFeeRules;
-  /** @deprecated Prefer courier pay ladder; kept for free-delivery promo split fallback. */
-  courierDeliveryShare: number;
-  courierBasePayJmd?: number;
-  courierPerKmJmd?: number;
-  courierMinPayJmd?: number;
+  /** Distance service fee experiment — off by default */
+  serviceFeeDistanceAddon?: ServiceFeeDistanceAddon;
+  courierBasePayJmd: number;
+  courierPerKmJmd: number;
+  courierMinPayJmd: number;
   launchPromos?: LaunchPromoRules;
   cod?: CodRules;
   taxRatePercent?: number;
   roadDistanceMultiplier?: number;
-  /** Soft floor / small-order threshold alias when fee not set */
-  minOrderSubtotalJmd?: number;
   /** Absolute hard block below this subtotal */
-  hardMinOrderSubtotalJmd?: number;
+  minOrderSubtotalJmd?: number;
   smallOrderThresholdJmd?: number;
   smallOrderFeeJmd?: number;
   cardProcessingFeePercent?: number;
   tipProcessingFromRider?: boolean;
   maxMenuInflationPercent?: number;
+  guardrails?: PricingGuardrails;
+  /** Growth Guarantee config (platform rules) */
+  growthGuarantee?: {
+    enabled: boolean;
+    tierSlugs: string[];
+    monthsFromAssignment: number;
+    minOrdersPerMonth: number;
+  };
 };
 
 export type ServiceFeeOverride = {
@@ -134,7 +150,13 @@ export type PricingInput = {
   freeDelivery?: boolean;
   paymentMethod?: PaymentMethod;
   serviceFeeWaived?: boolean;
+  /** Rush Pass: multiply basket service fee (distance addon unchanged). Default 1. */
+  serviceFeeMultiplier?: number;
   zoneSurchargeJmd?: number;
+  /** Who funds food `discount` — default merchant */
+  promoFundedBy?: 'merchant' | 'platform' | 'shared';
+  rushPassApplied?: boolean;
+  rushPassMembershipId?: string | null;
 };
 
 export type PricingBreakdown = {
@@ -143,7 +165,10 @@ export type PricingBreakdown = {
   discountedSubtotal: number;
   merchantCommissionRate: number;
   merchantCommissionAmount: number;
+  /** Basket-based service fee (after Pass multiplier). */
   serviceFee: number;
+  /** Distance service fee experiment line (not multiplied by Pass). */
+  serviceFeeDistanceJmd: number;
   deliveryFee: number;
   deliveryFeePlatformAmount: number;
   deliveryFeeCourierAmount: number;
@@ -168,8 +193,17 @@ export type PricingBreakdown = {
   courierDistancePayJmd: number;
   customerTotal: number;
   total: number;
+  /** True contribution (excludes GCT + WiPay). */
+  contributionJmd: number;
+  promoFundedBy: 'merchant' | 'platform' | 'shared';
   pricingProfileVersion?: number;
   tierSlug?: string;
   freeDeliveryApplied: boolean;
-  pricingModel: 'v2' | 'legacy';
+  rushPassApplied: boolean;
+  rushPassMembershipId?: string | null;
+};
+
+export type PricingConfigValidationError = {
+  code: string;
+  message: string;
 };

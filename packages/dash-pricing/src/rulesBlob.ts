@@ -3,17 +3,13 @@
  * DB stores nested JSON; engine consumes flat PricingRules.
  */
 import type {
-  CodRules,
   CustomerRulesBlob,
-  DeliveryFeeRules,
-  LaunchPromoRules,
   NestedRulesBlob,
   PartnerRulesBlob,
   PlatformRulesBlob,
   PricingParty,
   PricingRules,
   RiderRulesBlob,
-  ServiceFeeRules,
 } from './types.ts';
 const isPlainObject = (v: unknown): v is Record<string, unknown> =>
   v != null && typeof v === 'object' && !Array.isArray(v);
@@ -48,17 +44,14 @@ export function deepMergeObjects(
 }
 
 const FLAT_TO_PARTY: Array<{ party: PricingParty; key: string; nestedKey?: string }> = [
-  { party: 'platform', key: 'pricing_v2_enabled' },
   { party: 'platform', key: 'max_menu_inflation_percent' },
   { party: 'customer', key: 'service_fee' },
   { party: 'customer', key: 'min_order_subtotal_jmd' },
-  { party: 'customer', key: 'hard_min_order_subtotal_jmd' },
   { party: 'customer', key: 'small_order_threshold_jmd' },
   { party: 'customer', key: 'small_order_fee_jmd' },
   { party: 'customer', key: 'card_processing_fee_percent' },
   { party: 'customer', key: 'launch_promos' },
   { party: 'customer', key: 'delivery' },
-  { party: 'rider', key: 'courier_delivery_share' },
   { party: 'rider', key: 'courier_base_pay_jmd' },
   { party: 'rider', key: 'courier_per_km_jmd' },
   { party: 'rider', key: 'courier_min_pay_jmd' },
@@ -67,6 +60,21 @@ const FLAT_TO_PARTY: Array<{ party: PricingParty; key: string; nestedKey?: strin
   { party: 'rider', key: 'tip_processing_from_rider' },
   { party: 'partner', key: 'default_tier_slug' },
 ];
+
+/** Strip retired legacy keys from a delivery object. */
+function sanitizeDelivery(raw: unknown): Record<string, unknown> | undefined {
+  if (!isPlainObject(raw)) return undefined;
+  const {
+    base_fee_jmd: _dropBase,
+    max_fee_jmd: _dropCap,
+    ...rest
+  } = raw;
+  // Normalize per_km alias
+  if (rest.per_km_jmd != null && rest.per_extra_km_jmd == null) {
+    rest.per_extra_km_jmd = rest.per_km_jmd;
+  }
+  return rest;
+}
 
 /** Lift legacy flat keys into party namespaces. Nested keys win over flat. */
 export function normalizeRulesBlob(
@@ -80,12 +88,22 @@ export function normalizeRulesBlob(
     ? { ...raw.platform }
     : {};
   delete platform.tax_rate_percent;
+  delete platform.pricing_v2_enabled;
+  delete platform.commission_base;
   const customer: Record<string, unknown> = isPlainObject(raw.customer)
     ? { ...raw.customer }
     : {};
+  delete customer.hard_min_order_subtotal_jmd;
   const rider: Record<string, unknown> = isPlainObject(raw.rider) ? { ...raw.rider } : {};
+  delete rider.courier_delivery_share;
   const partner: Record<string, unknown> = isPlainObject(raw.partner)
     ? { ...raw.partner }
+    : {};
+  const guardrails: Record<string, unknown> = isPlainObject(raw.guardrails)
+    ? { ...raw.guardrails }
+    : {};
+  const growthGuarantee: Record<string, unknown> = isPlainObject(raw.growth_guarantee)
+    ? { ...raw.growth_guarantee }
     : {};
 
   for (const { party, key } of FLAT_TO_PARTY) {
@@ -100,6 +118,10 @@ export function normalizeRulesBlob(
     }
   }
 
+  if (customer.delivery !== undefined) {
+    customer.delivery = sanitizeDelivery(customer.delivery);
+  }
+
   if (partner.default_tier_slug === undefined && raw.default_tier_slug !== undefined) {
     partner.default_tier_slug = raw.default_tier_slug;
   }
@@ -109,6 +131,8 @@ export function normalizeRulesBlob(
     customer: Object.keys(customer).length ? customer : undefined,
     rider: Object.keys(rider).length ? rider : undefined,
     partner: Object.keys(partner).length ? partner : undefined,
+    guardrails: Object.keys(guardrails).length ? guardrails : undefined,
+    growth_guarantee: Object.keys(growthGuarantee).length ? growthGuarantee : undefined,
   };
 }
 
@@ -117,7 +141,6 @@ export function serializePricingRulesNested(rules: PricingRules): NestedRulesBlo
   const sf = rules.serviceFee;
   return {
     platform: {
-      pricing_v2_enabled: rules.pricingV2Enabled ?? true,
       max_menu_inflation_percent: rules.maxMenuInflationPercent ?? 0.25,
     },
     customer: {
@@ -130,15 +153,20 @@ export function serializePricingRulesNested(rules: PricingRules): NestedRulesBlo
         avg_rate: sf.avgRate,
         override_rate: sf.overrideRate,
         override_threshold_jmd: sf.overrideThresholdJmd,
+        distance_addon: {
+          enabled: rules.serviceFeeDistanceAddon?.enabled ?? false,
+          threshold_km: rules.serviceFeeDistanceAddon?.thresholdKm ?? 5,
+          per_km_jmd: rules.serviceFeeDistanceAddon?.perKmJmd ?? 20,
+          max_jmd: rules.serviceFeeDistanceAddon?.maxJmd ?? 200,
+        },
       },
       delivery: {
-        base_fee_jmd: rules.delivery.baseFeeJmd,
+        base_jmd: rules.delivery.baseJmd,
         included_km: rules.delivery.includedKm,
+        per_km_jmd: rules.delivery.perExtraKmJmd,
         per_extra_km_jmd: rules.delivery.perExtraKmJmd,
-        max_fee_jmd: rules.delivery.maxFeeJmd,
       },
       min_order_subtotal_jmd: rules.minOrderSubtotalJmd,
-      hard_min_order_subtotal_jmd: rules.hardMinOrderSubtotalJmd,
       small_order_threshold_jmd: rules.smallOrderThresholdJmd,
       small_order_fee_jmd: rules.smallOrderFeeJmd,
       card_processing_fee_percent: rules.cardProcessingFeePercent,
@@ -147,7 +175,6 @@ export function serializePricingRulesNested(rules: PricingRules): NestedRulesBlo
       },
     },
     rider: {
-      courier_delivery_share: rules.courierDeliveryShare,
       courier_base_pay_jmd: rules.courierBasePayJmd,
       courier_per_km_jmd: rules.courierPerKmJmd,
       courier_min_pay_jmd: rules.courierMinPayJmd,
@@ -158,6 +185,16 @@ export function serializePricingRulesNested(rules: PricingRules): NestedRulesBlo
       tip_processing_from_rider: rules.tipProcessingFromRider ?? true,
     },
     partner: {},
+    guardrails: {
+      min_delivery_margin_jmd: rules.guardrails?.minDeliveryMarginJmd ?? 100,
+      min_order_contribution_jmd: rules.guardrails?.minOrderContributionJmd ?? 150,
+    },
+    growth_guarantee: {
+      enabled: rules.growthGuarantee?.enabled ?? true,
+      tier_slugs: rules.growthGuarantee?.tierSlugs ?? ['dominant'],
+      months_from_assignment: rules.growthGuarantee?.monthsFromAssignment ?? 6,
+      min_orders_per_month: rules.growthGuarantee?.minOrdersPerMonth ?? 20,
+    },
   };
 }
 
@@ -185,19 +222,13 @@ export function flattenNestedToLegacy(blob: NestedRulesBlob): Record<string, unk
   const rider = blob.rider ?? {};
   const partner = blob.partner ?? {};
 
-  if (platform.pricing_v2_enabled !== undefined) {
-    out.pricing_v2_enabled = platform.pricing_v2_enabled;
-  }
   if (platform.max_menu_inflation_percent !== undefined) {
     out.max_menu_inflation_percent = platform.max_menu_inflation_percent;
   }
   if (customer.service_fee !== undefined) out.service_fee = customer.service_fee;
-  if (customer.delivery !== undefined) out.delivery = customer.delivery;
+  if (customer.delivery !== undefined) out.delivery = sanitizeDelivery(customer.delivery);
   if (customer.min_order_subtotal_jmd !== undefined) {
     out.min_order_subtotal_jmd = customer.min_order_subtotal_jmd;
-  }
-  if (customer.hard_min_order_subtotal_jmd !== undefined) {
-    out.hard_min_order_subtotal_jmd = customer.hard_min_order_subtotal_jmd;
   }
   if (customer.small_order_threshold_jmd !== undefined) {
     out.small_order_threshold_jmd = customer.small_order_threshold_jmd;
@@ -209,9 +240,6 @@ export function flattenNestedToLegacy(blob: NestedRulesBlob): Record<string, unk
     out.card_processing_fee_percent = customer.card_processing_fee_percent;
   }
   if (customer.launch_promos !== undefined) out.launch_promos = customer.launch_promos;
-  if (rider.courier_delivery_share !== undefined) {
-    out.courier_delivery_share = rider.courier_delivery_share;
-  }
   if (rider.courier_base_pay_jmd !== undefined) {
     out.courier_base_pay_jmd = rider.courier_base_pay_jmd;
   }
@@ -231,6 +259,8 @@ export function flattenNestedToLegacy(blob: NestedRulesBlob): Record<string, unk
   if (partner.default_tier_slug !== undefined) {
     out.default_tier_slug = partner.default_tier_slug;
   }
+  if (blob.guardrails) out.guardrails = blob.guardrails;
+  if (blob.growth_guarantee) out.growth_guarantee = blob.growth_guarantee;
 
   if (blob.platform) out.platform = blob.platform;
   if (blob.customer) out.customer = blob.customer;
@@ -343,29 +373,30 @@ export function validateCustomerRules(rules: PricingRules): string | null {
   const max = sf.maxJmd ?? 99999;
   if (min > max) return 'min_jmd cannot exceed max_jmd';
   if ((rules.minOrderSubtotalJmd ?? 0) < 0) return 'min_order_subtotal_jmd must be >= 0';
-  if ((rules.hardMinOrderSubtotalJmd ?? 0) < 0) return 'hard_min_order_subtotal_jmd must be >= 0';
   if ((rules.smallOrderThresholdJmd ?? 0) < 0) return 'small_order_threshold_jmd must be >= 0';
   if ((rules.smallOrderFeeJmd ?? 0) < 0) return 'small_order_fee_jmd must be >= 0';
   const proc = rules.cardProcessingFeePercent ?? 0;
   if (proc < 0 || proc > 0.15) return 'card_processing_fee_percent must be between 0 and 0.15';
   const d = rules.delivery;
-  if ((d.baseFeeJmd ?? 0) < 0) return 'delivery.base_fee_jmd must be >= 0';
+  if ((d.baseJmd ?? 0) < 0) return 'delivery.base_jmd must be >= 0';
   if ((d.includedKm ?? 0) < 0) return 'delivery.included_km must be >= 0';
-  if ((d.perExtraKmJmd ?? 0) < 0) return 'delivery.per_extra_km_jmd must be >= 0';
-  if (d.maxFeeJmd != null && d.maxFeeJmd > 0 && d.maxFeeJmd < d.baseFeeJmd) {
-    return 'delivery.max_fee_jmd cannot be below base_fee_jmd';
-  }
+  if ((d.perExtraKmJmd ?? 0) < 0) return 'delivery.per_km_jmd must be >= 0';
   const promoN = rules.launchPromos?.freeDeliveryFirstNOrders ?? 0;
   if (promoN < 0 || promoN > 99) return 'free_delivery_first_n_orders must be between 0 and 99';
   return null;
 }
 
 export function validateRiderRules(rules: PricingRules): string | null {
-  const share = rules.courierDeliveryShare ?? 0;
-  if (share < 0 || share > 1) return 'courier_delivery_share must be between 0 and 1';
   if ((rules.courierBasePayJmd ?? 0) < 0) return 'courier_base_pay_jmd must be >= 0';
   if ((rules.courierPerKmJmd ?? 0) < 0) return 'courier_per_km_jmd must be >= 0';
   if ((rules.courierMinPayJmd ?? 0) < 0) return 'courier_min_pay_jmd must be >= 0';
+  const ladderOk =
+    (rules.courierBasePayJmd ?? 0) > 0 ||
+    (rules.courierPerKmJmd ?? 0) > 0 ||
+    (rules.courierMinPayJmd ?? 0) > 0;
+  if (!ladderOk) {
+    return 'courier pay ladder required (base, per km, or min pay must be > 0)';
+  }
   const roadMult = rules.roadDistanceMultiplier ?? 1.4;
   if (roadMult < 1 || roadMult > 3) return 'road_distance_multiplier must be between 1 and 3';
   const cod = rules.cod?.pauseThresholdJmd ?? 10000;

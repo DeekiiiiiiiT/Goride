@@ -5,21 +5,23 @@ import { formatJmd } from './partyRulesUtils';
 
 /** Plain-English tips for customer pricing fields (view + edit). */
 export const CUSTOMER_RULE_TIPS = {
-  baseDelivery: 'Starting delivery price before any distance add-on.',
-  includedKm: 'How many kilometers are covered by the base delivery price.',
+  deliveryBase: 'Platform starting delivery fee (JMD) before distance add-ons. Same for every plan.',
+  includedKm: 'How many kilometers are covered before per-km distance charges apply.',
   perExtraKm: 'Extra charge for each km past the included distance.',
-  maxDeliveryFee: 'Highest delivery fee we will charge, no matter how far.',
   serviceAvgRate: 'Platform fee % on food for orders at or below the threshold.',
   serviceOverrideRate: 'Lower platform fee % on the part of the order above the threshold.',
   overrideThreshold: 'Food total where the lower service rate starts applying.',
   serviceMinFee: 'Smallest service fee we will charge on an order.',
   serviceMaxFee: 'Largest service fee we will charge on an order.',
   minimumOrder: 'Lowest food total allowed before checkout can continue.',
-  hardMinOrder: 'Hard floor — orders below this are blocked even if soft min is lower.',
   smallOrderThreshold: 'Food total below this triggers the small-order fee.',
   smallOrderFee: 'Extra fee when the order is under the small-order threshold.',
   cardProcessingFee: 'Extra % added when the customer pays by card.',
   freeDeliveryFirstN: 'New customers get free delivery for their first N orders. 0 = off.',
+  distanceAddonEnabled: 'Experiment: add a Distance service line on longer trips (off by default).',
+  distanceAddonThreshold: 'Road km before the distance service fee starts.',
+  distanceAddonPerKm: 'JMD charged per whole km past the threshold.',
+  distanceAddonMax: 'Cap on the distance service line (JMD).',
 } as const;
 
 function LabelWithTip({ label, tip }: { label: string; tip: string }) {
@@ -107,23 +109,24 @@ export function CustomerRulesForm({
   return (
     <div className="space-y-4">
       <p className="text-xs text-slate-400">
-        What the customer pays Roam on top of food — for this {scopeLabel}.
+        What the customer pays Roam on top of food — for this {scopeLabel}. Delivery fee is
+        platform-wide (same for every merchant plan).
       </p>
 
       <div className="grid grid-cols-2 gap-3">
         <Field
-          label="Base delivery (JMD)"
-          tip={CUSTOMER_RULE_TIPS.baseDelivery}
-          value={rules.delivery?.base_fee_jmd ?? 400}
+          label="Delivery base (JMD)"
+          tip={CUSTOMER_RULE_TIPS.deliveryBase}
+          value={rules.delivery?.base_jmd ?? 450}
           onChange={(v) =>
-            setRules((r) => ({ ...r, delivery: { ...r.delivery, base_fee_jmd: v } }))
+            setRules((r) => ({ ...r, delivery: { ...r.delivery, base_jmd: v } }))
           }
           disabled={!canWrite}
         />
         <Field
           label="Included km"
           tip={CUSTOMER_RULE_TIPS.includedKm}
-          value={rules.delivery?.included_km ?? 2}
+          value={rules.delivery?.included_km ?? 0}
           onChange={(v) =>
             setRules((r) => ({ ...r, delivery: { ...r.delivery, included_km: v } }))
           }
@@ -135,15 +138,6 @@ export function CustomerRulesForm({
           value={rules.delivery?.per_extra_km_jmd ?? 60}
           onChange={(v) =>
             setRules((r) => ({ ...r, delivery: { ...r.delivery, per_extra_km_jmd: v } }))
-          }
-          disabled={!canWrite}
-        />
-        <Field
-          label="Max delivery fee (JMD)"
-          tip={CUSTOMER_RULE_TIPS.maxDeliveryFee}
-          value={rules.delivery?.max_fee_jmd ?? 1500}
-          onChange={(v) =>
-            setRules((r) => ({ ...r, delivery: { ...r.delivery, max_fee_jmd: v } }))
           }
           disabled={!canWrite}
         />
@@ -224,13 +218,6 @@ export function CustomerRulesForm({
             disabled={!canWrite}
           />
           <Field
-            label="Hard min order (JMD)"
-            tip={CUSTOMER_RULE_TIPS.hardMinOrder}
-            value={rules.hard_min_order_subtotal_jmd ?? 400}
-            onChange={(v) => setRules((r) => ({ ...r, hard_min_order_subtotal_jmd: v }))}
-            disabled={!canWrite}
-          />
-          <Field
             label="Small-order threshold (JMD)"
             tip={CUSTOMER_RULE_TIPS.smallOrderThreshold}
             value={rules.small_order_threshold_jmd ?? 1500}
@@ -265,6 +252,96 @@ export function CustomerRulesForm({
           />
         </div>
       </div>
+
+      <div className="rounded-xl border border-slate-800 bg-slate-900/30 p-4 space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <h3 className="text-sm font-medium text-white">Distance service fee (experiment)</h3>
+          <label className="flex items-center gap-2 text-xs text-slate-400">
+            <input
+              type="checkbox"
+              checked={rules.service_fee?.distance_addon?.enabled === true}
+              disabled={!canWrite}
+              onChange={(e) =>
+                setRules((r) => ({
+                  ...r,
+                  service_fee: {
+                    ...r.service_fee,
+                    distance_addon: {
+                      enabled: e.target.checked,
+                      threshold_km: r.service_fee?.distance_addon?.threshold_km ?? 5,
+                      per_km_jmd: r.service_fee?.distance_addon?.per_km_jmd ?? 20,
+                      max_jmd: r.service_fee?.distance_addon?.max_jmd ?? 200,
+                    },
+                  },
+                }))
+              }
+            />
+            <span title={CUSTOMER_RULE_TIPS.distanceAddonEnabled}>Enabled</span>
+          </label>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <Field
+            label="Threshold (km)"
+            tip={CUSTOMER_RULE_TIPS.distanceAddonThreshold}
+            value={rules.service_fee?.distance_addon?.threshold_km ?? 5}
+            onChange={(v) =>
+              setRules((r) => ({
+                ...r,
+                service_fee: {
+                  ...r.service_fee,
+                  distance_addon: {
+                    enabled: r.service_fee?.distance_addon?.enabled ?? false,
+                    threshold_km: v,
+                    per_km_jmd: r.service_fee?.distance_addon?.per_km_jmd ?? 20,
+                    max_jmd: r.service_fee?.distance_addon?.max_jmd ?? 200,
+                  },
+                },
+              }))
+            }
+            disabled={!canWrite}
+          />
+          <Field
+            label="Per km (JMD)"
+            tip={CUSTOMER_RULE_TIPS.distanceAddonPerKm}
+            value={rules.service_fee?.distance_addon?.per_km_jmd ?? 20}
+            onChange={(v) =>
+              setRules((r) => ({
+                ...r,
+                service_fee: {
+                  ...r.service_fee,
+                  distance_addon: {
+                    enabled: r.service_fee?.distance_addon?.enabled ?? false,
+                    threshold_km: r.service_fee?.distance_addon?.threshold_km ?? 5,
+                    per_km_jmd: v,
+                    max_jmd: r.service_fee?.distance_addon?.max_jmd ?? 200,
+                  },
+                },
+              }))
+            }
+            disabled={!canWrite}
+          />
+          <Field
+            label="Max (JMD)"
+            tip={CUSTOMER_RULE_TIPS.distanceAddonMax}
+            value={rules.service_fee?.distance_addon?.max_jmd ?? 200}
+            onChange={(v) =>
+              setRules((r) => ({
+                ...r,
+                service_fee: {
+                  ...r.service_fee,
+                  distance_addon: {
+                    enabled: r.service_fee?.distance_addon?.enabled ?? false,
+                    threshold_km: r.service_fee?.distance_addon?.threshold_km ?? 5,
+                    per_km_jmd: r.service_fee?.distance_addon?.per_km_jmd ?? 20,
+                    max_jmd: v,
+                  },
+                },
+              }))
+            }
+            disabled={!canWrite}
+          />
+        </div>
+      </div>
     </div>
   );
 }
@@ -273,24 +350,19 @@ export function CustomerRulesReadonly({ rules }: { rules: PricingRulesPayload })
   const avgPct = Math.round((rules.service_fee?.avg_rate ?? 0.15) * 1000) / 10;
   const rows: Array<{ label: string; tip: string; value: string }> = [
     {
-      label: 'Base delivery',
-      tip: CUSTOMER_RULE_TIPS.baseDelivery,
-      value: formatJmd(rules.delivery?.base_fee_jmd ?? 400),
+      label: 'Delivery base',
+      tip: CUSTOMER_RULE_TIPS.deliveryBase,
+      value: formatJmd(rules.delivery?.base_jmd ?? 450),
     },
     {
       label: 'Included km',
       tip: CUSTOMER_RULE_TIPS.includedKm,
-      value: String(rules.delivery?.included_km ?? 2),
+      value: String(rules.delivery?.included_km ?? 0),
     },
     {
       label: 'Per extra km',
       tip: CUSTOMER_RULE_TIPS.perExtraKm,
       value: formatJmd(rules.delivery?.per_extra_km_jmd ?? 60),
-    },
-    {
-      label: 'Max delivery fee',
-      tip: CUSTOMER_RULE_TIPS.maxDeliveryFee,
-      value: formatJmd(rules.delivery?.max_fee_jmd ?? 1500),
     },
     {
       label: 'Service average rate',
@@ -321,11 +393,6 @@ export function CustomerRulesReadonly({ rules }: { rules: PricingRulesPayload })
       label: 'Minimum order',
       tip: CUSTOMER_RULE_TIPS.minimumOrder,
       value: formatJmd(rules.min_order_subtotal_jmd ?? 800),
-    },
-    {
-      label: 'Hard min order',
-      tip: CUSTOMER_RULE_TIPS.hardMinOrder,
-      value: formatJmd(rules.hard_min_order_subtotal_jmd ?? 400),
     },
     {
       label: 'Small-order threshold',

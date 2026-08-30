@@ -21,6 +21,9 @@ import {
   fetchPricingAudit,
   fetchCodBalances,
   settleCourierCash,
+  grantRushPass,
+  revokeRushPass,
+  listRushPassMemberships,
   updateDefaultPartyPricing,
   updateParishPartyPricing,
   updateMarketPartyPricing,
@@ -60,6 +63,7 @@ import {
   MARKET_RULE_PARTIES,
   partyFormSeed,
   partySavePayload,
+  customerRulesClientError,
   PARTY_META,
 } from './marketRules/partyRulesUtils';
 import { PartyRulesViewHeader, ProvenanceChips } from './marketRules/ProvenanceChips';
@@ -151,7 +155,6 @@ export function PricingHubPage() {
   const [layerData, setLayerData] = useState<PricingLayerResponse | null>(null);
   const [partyForm, setPartyForm] = useState<PricingRulesPayload>({});
   const [marketRules, setMarketRules] = useState<PricingRulesPayload>({});
-  const [defaultRules, setDefaultRules] = useState<PricingRulesPayload>({});
   const [parishRulesFocusId, setParishRulesFocusId] = useState<string | null>(null);
   const [townRulesFocusId, setTownRulesFocusId] = useState<string | null>(null);
   const [rulesStack, setRulesStack] = useState<string[]>(['Default']);
@@ -213,6 +216,9 @@ export function PricingHubPage() {
   const [simTip, setSimTip] = useState('0');
   /** Off by default so delivery fee is visible; on = treat as new customer (order count 0) */
   const [simApplyFreeDeliveryPromo, setSimApplyFreeDeliveryPromo] = useState(false);
+  const [simRushPass, setSimRushPass] = useState(false);
+  /** Optional road-km override for simulator (empty = use pin distance) */
+  const [simDistanceKm, setSimDistanceKm] = useState('');
   const [simResult, setSimResult] = useState<Record<string, unknown> | null>(null);
   const [simExpected, setSimExpected] = useState<SimScenarioExpected | null>(null);
   const [simActiveScenario, setSimActiveScenario] = useState<string | null>(null);
@@ -287,7 +293,6 @@ export function PricingHubPage() {
   useEffect(() => {
     void fetchDefaultPricing(session.access_token)
       .then((res) => {
-        setDefaultRules(res.effective_rules ?? res.rules ?? {});
         if (rulesScope === 'global' && rulesPanel === 'list') {
           setLayerData(res);
         }
@@ -302,7 +307,6 @@ export function PricingHubPage() {
         const res = await fetchDefaultPricing(session.access_token);
         setLayerData(res);
         setMarketRules(res.effective_rules ?? res.rules ?? {});
-        setDefaultRules(res.effective_rules ?? res.rules ?? {});
         setRulesStack(res.stack ?? ['Default']);
         setHasLayerOverride(Boolean(res.has_override));
         setLayerOverrideEnabled(true);
@@ -504,7 +508,6 @@ export function PricingHubPage() {
     void fetchDefaultPricing(session.access_token)
       .then((res) => {
         setLayerData(res);
-        setDefaultRules(res.effective_rules ?? res.rules ?? {});
       })
       .catch(console.error);
   }, [session.access_token, rulesScope, rulesPanel]);
@@ -513,6 +516,13 @@ export function PricingHubPage() {
     if (!canWrite || !selectedParty) return;
     if (rulesScope === 'parish' && !selectedParishId) return;
     if (rulesScope === 'market' && !selectedMarketId) return;
+    if (selectedParty === 'customer') {
+      const clientErr = customerRulesClientError(partyForm);
+      if (clientErr) {
+        toast.error(clientErr);
+        return;
+      }
+    }
     setSaving(true);
     try {
       const payload = partySavePayload(selectedParty, partyForm);
@@ -801,6 +811,10 @@ export function PricingHubPage() {
       market_id: simMarketMode === 'manual' ? selectedMarketId || undefined : undefined,
       customer_order_count: simApplyFreeDeliveryPromo ? 0 : 999,
       free_delivery: simApplyFreeDeliveryPromo ? true : false,
+      rush_pass: simRushPass,
+      distance_km: simDistanceKm.trim() !== '' && Number.isFinite(Number(simDistanceKm))
+        ? Number(simDistanceKm)
+        : undefined,
     });
 
     const resolvedId = res.resolved_market_id ?? null;
@@ -887,6 +901,10 @@ export function PricingHubPage() {
           market_id: simMarketMode === 'manual' ? selectedMarketId || undefined : undefined,
           customer_order_count: simApplyFreeDeliveryPromo ? 0 : 999,
           free_delivery: simApplyFreeDeliveryPromo ? true : false,
+          rush_pass: simRushPass,
+          distance_km: simDistanceKm.trim() !== '' && Number.isFinite(Number(simDistanceKm))
+            ? Number(simDistanceKm)
+            : undefined,
         });
         const b = pickBreakdown(res.breakdown ?? null);
         const raw = res.breakdown as Record<string, unknown> | null;
@@ -993,8 +1011,6 @@ export function PricingHubPage() {
   const overviewParish = overviewParishKey
     ? parishGroups.find((p) => p.key === overviewParishKey) ?? null
     : null;
-  const anyTownModelB = markets.some((m) => m.pricing_v2_enabled);
-  const globalModelB = Boolean(defaultRules.pricing_v2_enabled);
 
   if (loading) {
     return (
@@ -1017,34 +1033,6 @@ export function PricingHubPage() {
           .
         </p>
       </div>
-
-      {!globalModelB && (
-        <div
-          className={`rounded-xl border px-4 py-3 text-sm ${
-            anyTownModelB
-              ? 'border-amber-700/60 bg-amber-950/30 text-amber-100'
-              : 'border-red-800/60 bg-red-950/30 text-red-100'
-          }`}
-          role="status"
-        >
-          {anyTownModelB ? (
-            <>
-              <strong>Model B is enabled for specific towns only</strong> — orders outside those
-              towns still use the legacy engine. Global default remains off.
-            </>
-          ) : (
-            <>
-              <strong>Model B pricing is disabled</strong> — live orders use the legacy engine.
-              Rules saved here do not affect customer bills until Model B is enabled per town.
-            </>
-          )}
-          {(tab === 'simulator' || tab === 'market') && (
-            <span className="block mt-1 text-xs opacity-90">
-              Simulator previews Model B math — preview only until enablement.
-            </span>
-          )}
-        </div>
-      )}
 
       <div className="flex flex-wrap gap-2 border-b border-slate-800 pb-2">
         {TABS.map((t) => (
@@ -1086,13 +1074,47 @@ export function PricingHubPage() {
                 </p>
               </div>
               <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4">
-                <p className="text-xs text-slate-500">Model B orders</p>
+                <p className="text-xs text-slate-500">Orders</p>
                 <p className="text-lg font-semibold text-white mt-1">
-                  {revenue.v2_order_count}
+                  {revenue.order_count ?? revenue.v2_order_count}
+                </p>
+              </div>
+              <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4">
+                <p className="text-xs text-slate-500">Rush Pass attach</p>
+                <p className="text-lg font-semibold text-white mt-1">
+                  {revenue.rush_pass_attach_rate_percent ?? 0}%
+                  <span className="text-xs text-slate-500 font-normal ml-1">
+                    ({revenue.rush_pass_active_memberships ?? 0} active)
+                  </span>
+                </p>
+              </div>
+              <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4">
+                <p className="text-xs text-slate-500">Pass subsidy (orders)</p>
+                <p className="text-lg font-semibold text-white mt-1">
+                  {formatJmd(revenue.rush_pass_subsidy_total_jmd ?? 0)}
+                </p>
+              </div>
+              <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4">
+                <p className="text-xs text-slate-500">Distance fee attach</p>
+                <p className="text-lg font-semibold text-white mt-1">
+                  {revenue.distance_fee_attach_rate_percent ?? 0}%
+                  <span className="text-xs text-slate-500 font-normal ml-1">
+                    {formatJmd(revenue.distance_fee_total_jmd ?? 0)}
+                  </span>
+                </p>
+              </div>
+              <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4">
+                <p className="text-xs text-slate-500">Growth Guarantee credits (90d)</p>
+                <p className="text-lg font-semibold text-white mt-1">
+                  {revenue.growth_guarantee_credit_count_90d ?? 0}
+                  <span className="text-xs text-slate-500 font-normal ml-1">
+                    {formatJmd(revenue.growth_guarantee_credit_total_jmd_90d ?? 0)}
+                  </span>
                 </p>
               </div>
             </div>
           )}
+          <RushPassAdminPanel accessToken={session.access_token} canWrite={canWrite} />
           <div className="space-y-2">
             {parishGroups.map((parish) => (
               <button
@@ -1194,15 +1216,6 @@ export function PricingHubPage() {
                         >
                           <div className="flex items-center justify-between gap-2">
                             <h3 className="font-medium text-white">{m.market.name}</h3>
-                            <span
-                              className={`text-xs px-2 py-0.5 rounded-full shrink-0 ${
-                                m.pricing_v2_enabled
-                                  ? 'bg-emerald-900/50 text-emerald-300'
-                                  : 'bg-slate-800 text-slate-400'
-                              }`}
-                            >
-                              {m.pricing_v2_enabled ? 'Model B active' : 'Legacy Model A'}
-                            </span>
                           </div>
                           <p className="text-sm text-slate-400 mt-2">
                             Profile v{(m.profile as { version?: number })?.version ?? '—'}
@@ -1717,11 +1730,20 @@ export function PricingHubPage() {
                         </div>
                       )}
                       {renderPartyModalBody()}
+                      {selectedParty === 'customer' && customerRulesClientError(partyForm) && (
+                        <p className="text-xs text-red-400">
+                          {customerRulesClientError(partyForm)}
+                        </p>
+                      )}
                       <div className="flex flex-wrap gap-2 pt-2">
                         {canWrite && selectedParty && selectedParty !== 'partner' && (
                           <button
                             type="button"
-                            disabled={saving}
+                            disabled={
+                              saving
+                              || (selectedParty === 'customer'
+                                && customerRulesClientError(partyForm) != null)
+                            }
                             onClick={() => void handleSavePartyRules()}
                             className="px-4 py-2 rounded-lg bg-amber-600 text-white text-sm disabled:opacity-50"
                           >
@@ -1751,6 +1773,10 @@ export function PricingHubPage() {
 
       {tab === 'tiers' && (
         <div className="space-y-3 max-w-2xl">
+          <p className="text-sm text-slate-400">
+            Partner plans sell reach and ranking — delivery fee is set once under Customer rules.
+            Higher commission = wider suggested radius, stronger search boost, and promo access.
+          </p>
           {tiers.map((tier) => (
             <TierRow
               key={tier.id}
@@ -2007,6 +2033,27 @@ export function PricingHubPage() {
                     className="rounded border-slate-600"
                   />
                   Apply launch free-delivery promo
+                </label>
+                <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer w-full sm:w-auto">
+                  <input
+                    type="checkbox"
+                    checked={simRushPass}
+                    onChange={(e) => setSimRushPass(e.target.checked)}
+                    className="rounded border-slate-600"
+                  />
+                  Rush Pass (Growth/Dominant)
+                </label>
+                <label className="flex items-center gap-1 text-xs text-slate-300 w-full sm:w-auto">
+                  Distance km
+                  <input
+                    type="number"
+                    min={0}
+                    step={0.1}
+                    value={simDistanceKm}
+                    onChange={(e) => setSimDistanceKm(e.target.value)}
+                    placeholder="auto"
+                    className="w-20 px-2 py-1 rounded-lg bg-slate-950 border border-slate-700 text-white text-xs"
+                  />
                 </label>
                 <button
                   type="button"
@@ -2352,12 +2399,10 @@ function OverrideEnabledToggle({
 
 function rulesPreviewBits(rules: PricingRulesPayload) {
   return {
-    model: rules.pricing_v2_enabled ? 'Model B' : 'Legacy Model A',
-    base: rules.delivery?.base_fee_jmd ?? 400,
     includedKm: rules.delivery?.included_km ?? 2,
     perKm: rules.delivery?.per_extra_km_jmd ?? 60,
     avgPct: Math.round((rules.service_fee?.avg_rate ?? 0.15) * 1000) / 10,
-    courierPct: Math.round((rules.courier_delivery_share ?? 0.8) * 100),
+    courierBase: rules.courier_base_pay_jmd ?? 250,
     minOrder: rules.min_order_subtotal_jmd ?? 800,
   };
 }
@@ -2367,20 +2412,20 @@ function RulesCardPreview({ rules }: { rules: PricingRulesPayload }) {
   return (
     <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
       <div className="rounded-lg bg-slate-950/70 px-2 py-1.5 text-slate-400">
-        <span className="block text-slate-500">Model</span>
-        <span className="text-slate-200">{b.model}</span>
+        <span className="block text-slate-500">Included km</span>
+        <span className="text-slate-200">{b.includedKm}</span>
       </div>
       <div className="rounded-lg bg-slate-950/70 px-2 py-1.5 text-slate-400">
-        <span className="block text-slate-500">Base delivery</span>
-        <span className="text-slate-200">{formatJmd(b.base)}</span>
+        <span className="block text-slate-500">Per extra km</span>
+        <span className="text-slate-200">{formatJmd(b.perKm)}</span>
       </div>
       <div className="rounded-lg bg-slate-950/70 px-2 py-1.5 text-slate-400">
         <span className="block text-slate-500">Service avg</span>
         <span className="text-slate-200">{b.avgPct}%</span>
       </div>
       <div className="rounded-lg bg-slate-950/70 px-2 py-1.5 text-slate-400">
-        <span className="block text-slate-500">Courier share</span>
-        <span className="text-slate-200">{b.courierPct}%</span>
+        <span className="block text-slate-500">Courier base</span>
+        <span className="text-slate-200">{formatJmd(b.courierBase)}</span>
       </div>
     </div>
   );
@@ -2389,8 +2434,6 @@ function RulesCardPreview({ rules }: { rules: PricingRulesPayload }) {
 function RulesReadonlyBody({ rules }: { rules: PricingRulesPayload }) {
   const b = rulesPreviewBits(rules);
   const rows: Array<{ label: string; value: string }> = [
-    { label: 'Pricing model', value: b.model },
-    { label: 'Base delivery', value: formatJmd(b.base) },
     { label: 'Included km', value: String(b.includedKm) },
     { label: 'Per extra km', value: formatJmd(b.perKm) },
     { label: 'Service average rate', value: `${b.avgPct}%` },
@@ -2409,7 +2452,7 @@ function RulesReadonlyBody({ rules }: { rules: PricingRulesPayload }) {
       label: 'Card processing fee',
       value: `${Math.round((rules.card_processing_fee_percent ?? 0.045) * 1000) / 10}%`,
     },
-    { label: 'Courier delivery share', value: `${b.courierPct}%` },
+    { label: 'Courier base pay', value: formatJmd(b.courierBase) },
     {
       label: 'COD pause threshold',
       value: formatJmd(rules.cod?.pause_threshold_jmd ?? 10000),
@@ -2444,25 +2487,11 @@ function RulesEditForm({
 }) {
   return (
     <div className="space-y-4">
-      <label className="flex items-center gap-2 text-sm text-slate-300">
-        <input
-          type="checkbox"
-          checked={Boolean(rules.pricing_v2_enabled)}
-          onChange={(e) => setRules((r) => ({ ...r, pricing_v2_enabled: e.target.checked }))}
-          disabled={!canWrite}
-        />
-        Enable Model B pricing for this {scopeLabel}
-      </label>
+      <p className="text-xs text-slate-400">
+        Fee schedule for this {scopeLabel}. Base delivery is platform-wide under Customer rules.
+      </p>
 
       <div className="grid grid-cols-2 gap-3">
-        <Field
-          label="Base delivery (JMD)"
-          value={rules.delivery?.base_fee_jmd ?? 400}
-          onChange={(v) =>
-            setRules((r) => ({ ...r, delivery: { ...r.delivery, base_fee_jmd: v } }))
-          }
-          disabled={!canWrite}
-        />
         <Field
           label="Included km"
           value={rules.delivery?.included_km ?? 2}
@@ -2560,9 +2589,9 @@ function RulesEditForm({
 
       <div className="grid grid-cols-2 gap-3">
         <Field
-          label="Courier delivery share (%)"
-          value={Math.round((rules.courier_delivery_share ?? 0.8) * 100)}
-          onChange={(v) => setRules((r) => ({ ...r, courier_delivery_share: v / 100 }))}
+          label="Courier base pay (JMD)"
+          value={rules.courier_base_pay_jmd ?? 250}
+          onChange={(v) => setRules((r) => ({ ...r, courier_base_pay_jmd: v }))}
           disabled={!canWrite}
         />
         <Field
@@ -2704,14 +2733,22 @@ function SimLine({
   label,
   value,
   bold,
+  danger,
 }: {
   label: string;
   value: number;
   bold?: boolean;
+  danger?: boolean;
 }) {
   return (
     <div
-      className={`flex justify-between gap-4 ${bold ? 'text-white font-medium pt-2 border-t border-slate-800' : 'text-slate-300'}`}
+      className={`flex justify-between gap-4 ${
+        danger
+          ? 'text-red-400 font-medium pt-2 border-t border-slate-800'
+          : bold
+            ? 'text-white font-medium pt-2 border-t border-slate-800'
+            : 'text-slate-300'
+      }`}
     >
       <span>{label}</span>
       <span className="text-right">{formatJmd(value)}</span>
@@ -2799,6 +2836,8 @@ function SimBreakdownPanel({
   const courierDelivery = breakdown.deliveryFeeCourierAmount ?? 0;
   const courierTip = breakdown.courierTipNet ?? breakdown.tip ?? 0;
   const courierTotal = courierDelivery + courierTip;
+  const contribution = breakdown.contributionJmd ?? 0;
+  const customerPays = breakdown.customerTotal ?? breakdown.total ?? 0;
   const platformNet =
     (breakdown.serviceFee ?? 0)
     + commission
@@ -2815,6 +2854,17 @@ function SimBreakdownPanel({
   return (
     <div className="rounded-xl border border-slate-800 bg-slate-950 p-4 space-y-2 text-sm">
       <p className="text-white font-medium">{title}</p>
+      <div className="rounded-lg border border-slate-800 bg-slate-900/40 px-3 py-2 space-y-1 mb-1">
+        <SimLine
+          label="Contribution (ex GCT/WiPay)"
+          value={contribution}
+          bold
+          danger={contribution < 0}
+        />
+        <SimLine label="Courier pay" value={courierTotal} />
+        <SimLine label="Merchant net" value={merchantNet} />
+        <SimLine label="Customer total" value={customerPays} bold />
+      </div>
       <div className="flex gap-1 border-b border-slate-800 pb-2">
         {tabs.map((t) => (
           <button
@@ -2838,13 +2888,14 @@ function SimBreakdownPanel({
       {breakdown.distanceKm != null && (
         <p className="text-xs text-slate-400">
           Distance: {breakdown.distanceKm.toFixed(2)} km
-          {breakdown.freeDeliveryApplied ? ' · launch free-delivery applied' : ''}
+          {breakdown.rushPassApplied ? ' · Rush Pass applied' : ''}
         </p>
       )}
       {breakdown.distanceKm == null && partyTab === 'customer' && (
         <p className="text-xs text-amber-400/90">
           Distance unknown (missing store or dropoff pin) — base delivery fee used unless promo zeroed it.
           {breakdown.freeDeliveryApplied ? ' Launch free-delivery applied.' : ''}
+          {breakdown.rushPassApplied ? ' Rush Pass applied.' : ''}
         </p>
       )}
       {wouldBlock && partyTab === 'customer' && (
@@ -2856,7 +2907,16 @@ function SimBreakdownPanel({
       {partyTab === 'customer' && (
         <>
           <SimLine label="Food subtotal" value={food} />
-          <SimLine label="Service fee" value={breakdown.serviceFee ?? 0} />
+          <SimLine
+            label="Service fee (basket)"
+            value={Math.max(
+              0,
+              (breakdown.serviceFee ?? 0) - (breakdown.serviceFeeDistanceJmd ?? 0),
+            )}
+          />
+          {(breakdown.serviceFeeDistanceJmd ?? 0) > 0 && (
+            <SimLine label="Distance service" value={breakdown.serviceFeeDistanceJmd ?? 0} />
+          )}
           <SimLine label="Delivery fee" value={breakdown.deliveryFee ?? 0} />
           <SimLine label="Small-order fee" value={breakdown.smallOrderFee ?? 0} />
           {(breakdown.taxFoodJmd ?? 0) > 0 && (
@@ -2897,7 +2957,12 @@ function SimBreakdownPanel({
           <hr className="border-slate-800 my-2" />
           <p className="text-xs text-slate-500 uppercase tracking-wide">Context</p>
           <SimLine label="Platform take (fees + commission + GCT)" value={platformNet} />
-          <SimLine label="Customer pays (full bill)" value={breakdown.customerTotal ?? breakdown.total ?? 0} />
+          <SimLine label="Customer pays (full bill)" value={customerPays} />
+          <SimLine
+            label="Contribution"
+            value={contribution}
+            danger={contribution < 0}
+          />
         </>
       )}
 
@@ -2943,19 +3008,77 @@ function SimBreakdownPanel({
 
 const TIER_FIELD_TIPS = {
   commission:
-    'Platform cut of food sales for restaurants on this tier (e.g. 25% = partner keeps 75%).',
-  baseDelivery:
-    'Starting customer delivery fee for this tier. Overrides the Customer rules base delivery when set.',
-  inflation:
-    'Optional menu markup % for marketplace pricing vs in-store. 0 = no inflation.',
+    'What Roam keeps from food sales. Partner keeps the rest (e.g. 25% → partner keeps 75%).',
   searchBoost:
-    'Extra weight in discovery / search ranking. Higher = more likely to appear higher in results.',
+    'How hard we push this restaurant in search / discovery. Higher = more likely near the top.',
   radius:
-    'Default delivery coverage radius suggestion for restaurants on this tier (km).',
+    'Suggested delivery reach when onboarding (km). Coverage polygons still decide who can order. Roam sets the live radius per store.',
   promoEligible:
-    'When checked, restaurants on this tier can run launch / promo free-delivery offers.',
-  active: 'When off, this tier is hidden from new assignments and tier compare.',
+    'Can this plan join launch / free-delivery promos.',
+  autoAds:
+    'Auto-promoted placement in search and discovery (Dominant default). Sorted ahead of search boost alone.',
+  active: 'Off = hidden from new signups and plan picker.',
 } as const;
+
+/** Plain-English concept + audience for ops / merchant conversations (by slug). */
+function tierCopy(slug: string): { concept: string; bestFor: string } {
+  switch (slug) {
+    case 'economy':
+      return {
+        concept: 'Lowest commission — standard listing, modest reach.',
+        bestFor:
+          'Busy local spots with their own following — they don’t need Roam for marketing.',
+      };
+    case 'growth':
+      return {
+        concept: 'Balanced commission with better radius and mild search boost.',
+        bestFor:
+          'Mid-sized places that want more orders without Dominant-level commission.',
+      };
+    case 'dominant':
+      return {
+        concept: 'Highest commission — widest reach, top ranking, auto-promoted placement.',
+        bestFor:
+          'Delivery-heavy spots that want maximum visibility and volume.',
+      };
+    default:
+      return {
+        concept: 'Custom partner plan — set commission, radius, and boost below.',
+        bestFor: 'Use when none of the standard plans fit.',
+      };
+  }
+}
+
+function tierTalkingPoints(opts: {
+  commissionPct: number;
+  boost: number;
+  radiusKm: number;
+  promoEligible: boolean;
+  autoAds: boolean;
+}): string[] {
+  const keep = Math.max(0, 100 - opts.commissionPct);
+  const points = [
+    `You keep ~${keep}% of food sales; Roam takes ${opts.commissionPct}%.`,
+    `Suggested reach ~${opts.radiusKm} km when setting up the store (Roam sets live coverage).`,
+  ];
+  if (opts.autoAds) {
+    points.push('Automatic promoted placement in search and discovery.');
+  }
+  if (opts.boost <= 0) {
+    points.push('Standard listing — no search boost.');
+  } else if (opts.boost < 30) {
+    points.push(`Mild search boost (${opts.boost}) — show up a bit higher.`);
+  } else {
+    points.push(`Strong search boost (${opts.boost}) — pushed toward the top of results.`);
+  }
+  points.push(
+    opts.promoEligible
+      ? 'Can join free-delivery / launch promos.'
+      : 'Not on free-delivery / launch promos.',
+  );
+  points.push('Delivery fee is platform-wide — not set by this plan.');
+  return points;
+}
 
 function TierFieldLabel({ label, tip }: { label: string; tip: string }) {
   return (
@@ -2987,31 +3110,43 @@ function TierRow({
   onSave: (updates: Partial<MerchantTierRow>) => void;
 }) {
   const [pct, setPct] = useState(Math.round(tier.commission_rate * 100));
-  const [baseFee, setBaseFee] = useState(Number(tier.base_delivery_fee_jmd ?? 0));
-  const [inflationPct, setInflationPct] = useState(
-    Math.round(Number(tier.menu_inflation_percent ?? 0) * 1000) / 10,
-  );
   const [boost, setBoost] = useState(Number(tier.search_boost ?? 0));
   const [radiusKm, setRadiusKm] = useState(Number(tier.default_delivery_radius_km ?? 8));
   const [promoEligible, setPromoEligible] = useState(tier.promo_eligible !== false);
+  const [autoAds, setAutoAds] = useState(Boolean(tier.auto_ads));
   const [isActive, setIsActive] = useState(tier.is_active !== false);
 
   useEffect(() => {
     setPct(Math.round(tier.commission_rate * 100));
-    setBaseFee(Number(tier.base_delivery_fee_jmd ?? 0));
-    setInflationPct(Math.round(Number(tier.menu_inflation_percent ?? 0) * 1000) / 10);
     setBoost(Number(tier.search_boost ?? 0));
     setRadiusKm(Number(tier.default_delivery_radius_km ?? 8));
     setPromoEligible(tier.promo_eligible !== false);
+    setAutoAds(Boolean(tier.auto_ads));
     setIsActive(tier.is_active !== false);
   }, [tier]);
+
+  const talkingPoints = tierTalkingPoints({
+    commissionPct: pct,
+    boost,
+    radiusKm,
+    promoEligible,
+    autoAds,
+  });
+  const copy = tierCopy(tier.slug);
 
   return (
     <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4 space-y-3">
       <div className="flex items-start justify-between gap-3">
-        <div>
+        <div className="min-w-0 space-y-1.5">
           <p className="text-sm font-medium text-white">{tier.name}</p>
-          <p className="text-xs text-slate-500">{tier.slug}</p>
+          <p className="text-xs text-slate-300 leading-snug">
+            <span className="text-slate-500">Concept: </span>
+            {copy.concept}
+          </p>
+          <p className="text-xs text-slate-300 leading-snug">
+            <span className="text-slate-500">Best for: </span>
+            {copy.bestFor}
+          </p>
         </div>
         {canWrite && (
           <button
@@ -3019,11 +3154,10 @@ function TierRow({
             onClick={() =>
               onSave({
                 commission_rate: pct / 100,
-                base_delivery_fee_jmd: baseFee,
-                menu_inflation_percent: inflationPct / 100,
                 search_boost: boost,
                 default_delivery_radius_km: radiusKm,
                 promo_eligible: promoEligible,
+                auto_ads: autoAds,
                 is_active: isActive,
               })
             }
@@ -3033,6 +3167,11 @@ function TierRow({
           </button>
         )}
       </div>
+      <ul className="space-y-1 text-xs text-slate-300 list-disc pl-4">
+        {talkingPoints.map((line) => (
+          <li key={line}>{line}</li>
+        ))}
+      </ul>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         <label className="block text-xs text-slate-500">
           <TierFieldLabel label="Commission %" tip={TIER_FIELD_TIPS.commission} />
@@ -3043,30 +3182,6 @@ function TierRow({
             value={pct}
             disabled={!canWrite}
             onChange={(e) => setPct(Number(e.target.value))}
-            className="mt-1 w-full px-2 py-1.5 rounded bg-slate-950 border border-slate-700 text-white text-sm disabled:opacity-50"
-          />
-        </label>
-        <label className="block text-xs text-slate-500">
-          <TierFieldLabel label="Base delivery (JMD)" tip={TIER_FIELD_TIPS.baseDelivery} />
-          <input
-            type="number"
-            min={0}
-            value={baseFee}
-            disabled={!canWrite}
-            onChange={(e) => setBaseFee(Number(e.target.value))}
-            className="mt-1 w-full px-2 py-1.5 rounded bg-slate-950 border border-slate-700 text-white text-sm disabled:opacity-50"
-          />
-        </label>
-        <label className="block text-xs text-slate-500">
-          <TierFieldLabel label="Inflation %" tip={TIER_FIELD_TIPS.inflation} />
-          <input
-            type="number"
-            min={0}
-            max={100}
-            step={0.1}
-            value={inflationPct}
-            disabled={!canWrite}
-            onChange={(e) => setInflationPct(Number(e.target.value))}
             className="mt-1 w-full px-2 py-1.5 rounded bg-slate-950 border border-slate-700 text-white text-sm disabled:opacity-50"
           />
         </label>
@@ -3106,6 +3221,15 @@ function TierRow({
         <label className="flex items-center gap-2 text-sm text-slate-400">
           <input
             type="checkbox"
+            checked={autoAds}
+            disabled={!canWrite}
+            onChange={(e) => setAutoAds(e.target.checked)}
+          />
+          <TierFieldLabel label="Auto promoted placement" tip={TIER_FIELD_TIPS.autoAds} />
+        </label>
+        <label className="flex items-center gap-2 text-sm text-slate-400">
+          <input
+            type="checkbox"
             checked={isActive}
             disabled={!canWrite}
             onChange={(e) => setIsActive(e.target.checked)}
@@ -3113,6 +3237,123 @@ function TierRow({
           <TierFieldLabel label="Active" tip={TIER_FIELD_TIPS.active} />
         </label>
       </div>
+    </div>
+  );
+}
+
+/** Compact ops panel — grant / revoke / list Rush Pass memberships */
+function RushPassAdminPanel({
+  accessToken,
+  canWrite,
+}: {
+  accessToken: string;
+  canWrite: boolean;
+}) {
+  const [rows, setRows] = useState<Array<Record<string, unknown>>>([]);
+  const [customerId, setCustomerId] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const refresh = async () => {
+    try {
+      const res = await listRushPassMemberships(accessToken);
+      setRows(res.memberships ?? []);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to load Pass memberships');
+    }
+  };
+
+  useEffect(() => {
+    void refresh();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accessToken]);
+
+  return (
+    <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4 space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <p className="text-sm font-medium text-white">Rush Pass memberships</p>
+          <p className="text-xs text-slate-500">Grant or revoke without WiPay (ops).</p>
+        </div>
+        <button
+          type="button"
+          onClick={() => void refresh()}
+          className="text-xs text-slate-400 hover:text-white"
+        >
+          Refresh
+        </button>
+      </div>
+      {canWrite && (
+        <div className="flex flex-wrap gap-2 items-end">
+          <label className="text-xs text-slate-400 grow min-w-[12rem]">
+            Customer UUID
+            <input
+              value={customerId}
+              onChange={(e) => setCustomerId(e.target.value)}
+              className="mt-1 w-full px-2 py-1.5 rounded-lg bg-slate-950 border border-slate-700 text-white text-sm"
+              placeholder="delivery.customers.id"
+            />
+          </label>
+          <button
+            type="button"
+            disabled={busy || !customerId.trim()}
+            onClick={() => {
+              void (async () => {
+                setBusy(true);
+                try {
+                  await grantRushPass(accessToken, { customerId: customerId.trim() });
+                  toast.success('Rush Pass granted');
+                  setCustomerId('');
+                  await refresh();
+                } catch (e) {
+                  toast.error(e instanceof Error ? e.message : 'Grant failed');
+                } finally {
+                  setBusy(false);
+                }
+              })();
+            }}
+            className="px-3 py-1.5 text-sm rounded-lg bg-amber-600 text-white disabled:opacity-50"
+          >
+            Grant 30 days
+          </button>
+        </div>
+      )}
+      <ul className="divide-y divide-slate-800 text-sm max-h-48 overflow-auto">
+        {rows.length === 0 ? (
+          <li className="py-2 text-slate-500 text-xs">No memberships yet</li>
+        ) : (
+          rows.slice(0, 20).map((m) => {
+            const id = String(m.id);
+            const status = String(m.status ?? '');
+            const cust = m.customer as { email?: string; name?: string } | undefined;
+            return (
+              <li key={id} className="py-2 flex flex-wrap items-center justify-between gap-2">
+                <span className="text-slate-300 truncate">
+                  {cust?.email || cust?.name || String(m.customer_id)} · {status}
+                </span>
+                {canWrite && status === 'active' && (
+                  <button
+                    type="button"
+                    className="text-xs text-red-400 hover:text-red-300"
+                    onClick={() => {
+                      void (async () => {
+                        try {
+                          await revokeRushPass(accessToken, { membershipId: id });
+                          toast.success('Revoked');
+                          await refresh();
+                        } catch (e) {
+                          toast.error(e instanceof Error ? e.message : 'Revoke failed');
+                        }
+                      })();
+                    }}
+                  >
+                    Revoke
+                  </button>
+                )}
+              </li>
+            );
+          })
+        )}
+      </ul>
     </div>
   );
 }

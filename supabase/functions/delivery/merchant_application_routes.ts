@@ -117,6 +117,8 @@ const MERCHANT_UPDATE_ALLOWLIST = new Set([
   "logo_url",
   "cover_image_url",
   "avg_prep_time_mins",
+  "min_order_amount",
+  "menu_inflation_percent",
   "business_type",
   "business_registration_number",
   "tax_id",
@@ -520,6 +522,14 @@ export function registerMerchantApplicationRoutes(app: Hono) {
     }
     if (Object.keys(update).length === 0) {
       return c.json({ error: "No valid fields to update" }, 400);
+    }
+
+    if (Object.prototype.hasOwnProperty.call(update, "menu_inflation_percent")) {
+      const inflation = Number(update.menu_inflation_percent);
+      if (!Number.isFinite(inflation) || inflation < 0 || inflation > 1) {
+        return c.json({ error: "menu_inflation_percent must be between 0 and 1" }, 400);
+      }
+      update.menu_inflation_percent = Math.min(1, Math.max(0, inflation));
     }
 
     const current = access.resolved.merchant as Record<string, unknown>;

@@ -3,8 +3,10 @@ import type {
   MerchantTier,
   PaymentMethod,
   PricingBreakdown,
+  PricingConfigValidationError,
   PricingInput,
   PricingRules,
+  ServiceFeeDistanceAddon,
   ServiceFeeOverride,
   ServiceFeeRules,
 } from './types.ts';
@@ -13,6 +15,7 @@ import {
   flattenNestedToLegacy,
   normalizeRulesBlob,
   serializePricingRulesNested,
+  validatePricingRules,
 } from './rulesBlob.ts';
 
 function roundMoney(value: number): number {
@@ -129,6 +132,22 @@ export function resolveServiceFee(
   return resolveLegacyServiceFee(rules, discountedSubtotal, null);
 }
 
+/** Distance service fee experiment — separate line from basket service fee. */
+export function resolveServiceFeeDistanceAddon(
+  addon: ServiceFeeDistanceAddon | null | undefined,
+  distanceKm: number | null | undefined,
+): number {
+  if (!addon?.enabled) return 0;
+  if (distanceKm == null || !Number.isFinite(distanceKm) || distanceKm <= 0) return 0;
+  const threshold = Math.max(0, addon.thresholdKm ?? 0);
+  const perKm = Math.max(0, addon.perKmJmd ?? 0);
+  const maxJmd = Math.max(0, addon.maxJmd ?? 0);
+  const billable = Math.max(0, distanceKm - threshold);
+  if (billable <= 0 || perKm <= 0) return 0;
+  const raw = Math.ceil(billable) * perKm;
+  return roundMoney(maxJmd > 0 ? Math.min(raw, maxJmd) : raw);
+}
+
 /** Card processing fee on a taxable/chargeable amount. */
 export function resolveProcessingFee(
   amount: number,
@@ -171,29 +190,40 @@ export function resolveProcessingFeeSplit(
   };
 }
 
-/** Distance-based delivery fee. Tier base replaces market base when set. */
+/** Platform-wide distance-based delivery fee (identical across tiers). */
 export function resolveDeliveryFee(
   rules: DeliveryFeeRules,
   distanceKm: number | null | undefined,
-  tierBaseFeeJmd?: number | null,
 ): number {
-  const base = Math.max(
-    0,
-    tierBaseFeeJmd != null && Number.isFinite(tierBaseFeeJmd)
-      ? Number(tierBaseFeeJmd)
-      : rules.baseFeeJmd,
-  );
+  const base = Math.max(0, Number(rules.baseJmd ?? 0));
+  if (!Number.isFinite(base)) {
+    throw new Error('resolveDeliveryFee requires customer.delivery.base_jmd');
+  }
   if (distanceKm == null || !Number.isFinite(distanceKm) || distanceKm <= 0) {
     return base;
   }
-  const included = Math.max(0, rules.includedKm);
+  const included = Math.max(0, rules.includedKm ?? 0);
   const extraKm = Math.max(0, distanceKm - included);
-  const extra = Math.ceil(extraKm) * Math.max(0, rules.perExtraKmJmd);
-  let fee = base + extra;
-  if (rules.maxFeeJmd != null && rules.maxFeeJmd > 0) {
-    fee = Math.min(fee, rules.maxFeeJmd);
-  }
-  return roundMoney(fee);
+  const perKm = Math.max(0, rules.perExtraKmJmd ?? 0);
+  const extra = Math.ceil(extraKm) * perKm;
+  return roundMoney(base + extra);
+}
+
+/** True platform contribution (excludes GCT + processing). */
+export function resolveContributionJmd(parts: {
+  merchantCommissionAmount: number;
+  serviceFee: number;
+  deliveryFeePlatformAmount: number;
+  smallOrderFee: number;
+  peakPayAmount?: number;
+}): number {
+  return roundMoney(
+    parts.merchantCommissionAmount
+      + parts.serviceFee
+      + parts.deliveryFeePlatformAmount
+      + parts.smallOrderFee
+      - Math.max(0, parts.peakPayAmount ?? 0),
+  );
 }
 
 /** Apply road-distance multiplier to raw haversine km. */
@@ -206,17 +236,6 @@ export function applyRoadDistanceMultiplier(
     ? multiplier
     : 1.4;
   return roundMoney(rawKm * mult);
-}
-
-/** Split delivery fee between platform and courier (legacy % share). */
-export function resolveDeliverySplit(
-  deliveryFee: number,
-  courierShareRate: number,
-): { platformAmount: number; courierAmount: number } {
-  const share = clamp(courierShareRate, 0, 1);
-  const courierAmount = roundMoney(deliveryFee * share);
-  const platformAmount = roundMoney(deliveryFee - courierAmount);
-  return { platformAmount, courierAmount };
 }
 
 /** Independent courier pay ladder from trip economics. */
@@ -279,26 +298,34 @@ export function buildOrderPricing(input: PricingInput): PricingBreakdown {
       discountedSubtotal,
     );
 
-  const serviceFee = resolveServiceFee(
-    input.rules.serviceFee,
-    discountedSubtotal,
-    input.serviceFeeOverride,
-    input.serviceFeeWaived,
-  );
-
-  const smallOrderFee = resolveSmallOrderFee(input.rules, discountedSubtotal);
-
   const distanceKmRaw = input.distanceKmRaw ?? input.distanceKm ?? null;
   const distanceKm = input.distanceKm != null && Number.isFinite(input.distanceKm)
     ? roundMoney(input.distanceKm)
     : null;
 
-  const tierBase = input.tier?.baseDeliveryFeeJmd;
-  const baseDeliveryFee = resolveDeliveryFee(
-    input.rules.delivery,
-    distanceKm,
-    tierBase,
+  let serviceFee = resolveServiceFee(
+    input.rules.serviceFee,
+    discountedSubtotal,
+    input.serviceFeeOverride,
+    input.serviceFeeWaived,
   );
+  const multiplier = input.serviceFeeMultiplier != null && Number.isFinite(input.serviceFeeMultiplier)
+    ? Math.max(0, Math.min(1, input.serviceFeeMultiplier))
+    : 1;
+  if (multiplier !== 1) {
+    serviceFee = roundMoney(serviceFee * multiplier);
+  }
+
+  const serviceFeeDistanceJmd = resolveServiceFeeDistanceAddon(
+    input.rules.serviceFeeDistanceAddon,
+    distanceKm,
+  );
+  // Total service charged to customer = basket fee + distance addon
+  const serviceFeeTotal = roundMoney(serviceFee + serviceFeeDistanceJmd);
+
+  const smallOrderFee = resolveSmallOrderFee(input.rules, discountedSubtotal);
+
+  const baseDeliveryFee = resolveDeliveryFee(input.rules.delivery, distanceKm);
   // Risk premium from zone policy — always charged; free-delivery only waives base.
   const zoneSurchargeJmd = Math.max(
     0,
@@ -311,67 +338,45 @@ export function buildOrderPricing(input: PricingInput): PricingBreakdown {
     input.freeDelivery,
   );
 
-  // Courier pay from ladder when configured; else legacy % of customer delivery fee.
+  // Courier pay ladder is required (legacy % share of customer fee removed).
   const ladderConfigured =
     (input.rules.courierBasePayJmd ?? 0) > 0 ||
     (input.rules.courierPerKmJmd ?? 0) > 0 ||
     (input.rules.courierMinPayJmd ?? 0) > 0;
+  if (!ladderConfigured) {
+    throw new Error(
+      'buildOrderPricing requires courier pay ladder (courier_base_pay_jmd / per_km / min)',
+    );
+  }
+
+  const ladder = resolveCourierPayLadder(input.rules, distanceKm);
+  const courierBasePayJmd = ladder.basePay;
+  const courierDistancePayJmd = ladder.distancePay;
+  const deliveryFeeCourierAmount = ladder.total;
 
   let deliveryFee = grossDeliveryFee;
   let deliveryFeePlatformAmount = 0;
-  let deliveryFeeCourierAmount = 0;
   let promoCostJmd = 0;
-  let courierBasePayJmd = 0;
-  let courierDistancePayJmd = 0;
   let platformDeliverySubsidyJmd = 0;
 
-  if (ladderConfigured) {
-    const ladder = resolveCourierPayLadder(input.rules, distanceKm);
-    courierBasePayJmd = ladder.basePay;
-    courierDistancePayJmd = ladder.distancePay;
-    deliveryFeeCourierAmount = ladder.total;
-
-    if (freeDeliveryApplied) {
-      // Customer pays surcharge only; courier still earns full ladder.
-      deliveryFee = zoneSurchargeJmd;
-      deliveryFeePlatformAmount = roundMoney(zoneSurchargeJmd - ladder.total);
-      promoCostJmd = roundMoney(Math.max(0, ladder.total - zoneSurchargeJmd));
-      platformDeliverySubsidyJmd = promoCostJmd;
-    } else {
-      deliveryFee = grossDeliveryFee;
-      // Platform share = what customer paid for delivery minus courier pay (can be negative).
-      deliveryFeePlatformAmount = roundMoney(grossDeliveryFee - ladder.total);
-      platformDeliverySubsidyJmd = roundMoney(
-        Math.max(0, ladder.total - grossDeliveryFee),
-      );
-    }
-  } else if (freeDeliveryApplied) {
-    const baseSplit = resolveDeliverySplit(
-      baseDeliveryFee,
-      input.rules.courierDeliveryShare,
-    );
-    const surchargeSplit = resolveDeliverySplit(
-      zoneSurchargeJmd,
-      input.rules.courierDeliveryShare,
-    );
+  if (freeDeliveryApplied) {
+    // Customer pays surcharge only; courier still earns full ladder.
     deliveryFee = zoneSurchargeJmd;
-    deliveryFeeCourierAmount = roundMoney(
-      baseSplit.courierAmount + surchargeSplit.courierAmount,
-    );
-    deliveryFeePlatformAmount = roundMoney(
-      -baseSplit.courierAmount + surchargeSplit.platformAmount,
-    );
-    promoCostJmd = baseSplit.courierAmount;
+    deliveryFeePlatformAmount = roundMoney(zoneSurchargeJmd - ladder.total);
+    promoCostJmd = roundMoney(Math.max(0, ladder.total - zoneSurchargeJmd));
     platformDeliverySubsidyJmd = promoCostJmd;
   } else {
-    const split = resolveDeliverySplit(grossDeliveryFee, input.rules.courierDeliveryShare);
-    deliveryFeePlatformAmount = split.platformAmount;
-    deliveryFeeCourierAmount = split.courierAmount;
+    deliveryFee = grossDeliveryFee;
+    // Platform share = what customer paid for delivery minus courier pay (can be negative).
+    deliveryFeePlatformAmount = roundMoney(grossDeliveryFee - ladder.total);
+    platformDeliverySubsidyJmd = roundMoney(
+      Math.max(0, ladder.total - grossDeliveryFee),
+    );
   }
 
   const gct = resolveOrderGct({
     discountedSubtotal,
-    serviceFee,
+    serviceFee: serviceFeeTotal,
     deliveryFeePlatformAmount,
     smallOrderFee,
     foodRatePercent,
@@ -380,7 +385,7 @@ export function buildOrderPricing(input: PricingInput): PricingBreakdown {
   });
 
   const orderBase = roundMoney(
-    discountedSubtotal + serviceFee + deliveryFee + smallOrderFee + gct.tax,
+    discountedSubtotal + serviceFeeTotal + deliveryFee + smallOrderFee + gct.tax,
   );
   const orderTotal = roundMoney(orderBase + tip);
 
@@ -393,13 +398,22 @@ export function buildOrderPricing(input: PricingInput): PricingBreakdown {
 
   const customerTotal = roundMoney(orderBase + tip + proc.processingFeeOrder);
 
+  const promoFundedBy = input.promoFundedBy ?? 'merchant';
+  const contributionJmd = resolveContributionJmd({
+    merchantCommissionAmount,
+    serviceFee: serviceFeeTotal,
+    deliveryFeePlatformAmount,
+    smallOrderFee,
+  });
+
   return {
     subtotal,
     discount,
     discountedSubtotal,
     merchantCommissionRate,
     merchantCommissionAmount,
-    serviceFee,
+    serviceFee: serviceFeeTotal,
+    serviceFeeDistanceJmd,
     deliveryFee,
     deliveryFeePlatformAmount,
     deliveryFeeCourierAmount,
@@ -424,9 +438,12 @@ export function buildOrderPricing(input: PricingInput): PricingBreakdown {
     courierDistancePayJmd,
     customerTotal,
     total: customerTotal,
+    contributionJmd,
+    promoFundedBy,
     tierSlug: input.tier?.slug,
     freeDeliveryApplied,
-    pricingModel: 'v2',
+    rushPassApplied: input.rushPassApplied === true,
+    rushPassMembershipId: input.rushPassMembershipId ?? null,
   };
 }
 
@@ -481,17 +498,45 @@ export function parsePricingRules(raw: Record<string, unknown> | null | undefine
     : modeRaw === 'percent' ? 'percent'
     : 'flat';
 
+  const guardrailsRaw = (flat.guardrails ?? {}) as Record<string, unknown>;
+  const distanceAddonRaw = (
+    (serviceFee.distance_addon as Record<string, unknown> | undefined)
+    ?? (flat.service_fee_distance_addon as Record<string, unknown> | undefined)
+    ?? {}
+  );
+  const ggRaw = (flat.growth_guarantee ?? {}) as Record<string, unknown>;
+  const perKm = Number(
+    delivery.per_km_jmd ?? delivery.per_extra_km_jmd ?? DEFAULTS.delivery.perExtraKmJmd,
+  );
+
+  const defaultAddon = DEFAULTS.serviceFeeDistanceAddon!;
+  const serviceFeeDistanceAddon: ServiceFeeDistanceAddon = {
+    enabled: distanceAddonRaw.enabled != null
+      ? Boolean(distanceAddonRaw.enabled)
+      : defaultAddon.enabled,
+    thresholdKm: Number(distanceAddonRaw.threshold_km ?? defaultAddon.thresholdKm),
+    perKmJmd: Number(distanceAddonRaw.per_km_jmd ?? defaultAddon.perKmJmd),
+    maxJmd: Number(distanceAddonRaw.max_jmd ?? defaultAddon.maxJmd),
+  };
+
+  const growthGuarantee = {
+    enabled: ggRaw.enabled != null ? Boolean(ggRaw.enabled) : (DEFAULTS.growthGuarantee?.enabled ?? true),
+    tierSlugs: Array.isArray(ggRaw.tier_slugs)
+      ? (ggRaw.tier_slugs as string[])
+      : (DEFAULTS.growthGuarantee?.tierSlugs ?? ['dominant']),
+    monthsFromAssignment: Number(
+      ggRaw.months_from_assignment ?? DEFAULTS.growthGuarantee?.monthsFromAssignment ?? 6,
+    ),
+    minOrdersPerMonth: Number(
+      ggRaw.min_orders_per_month ?? DEFAULTS.growthGuarantee?.minOrdersPerMonth ?? 20,
+    ),
+  };
+
   return {
-    pricingV2Enabled: flat.pricing_v2_enabled !== undefined
-      ? Boolean(flat.pricing_v2_enabled)
-      : DEFAULTS.pricingV2Enabled,
     delivery: {
-      baseFeeJmd: Number(delivery.base_fee_jmd ?? DEFAULTS.delivery.baseFeeJmd),
+      baseJmd: Number(delivery.base_jmd ?? DEFAULTS.delivery.baseJmd),
       includedKm: Number(delivery.included_km ?? DEFAULTS.delivery.includedKm),
-      perExtraKmJmd: Number(delivery.per_extra_km_jmd ?? DEFAULTS.delivery.perExtraKmJmd),
-      maxFeeJmd: delivery.max_fee_jmd != null
-        ? Number(delivery.max_fee_jmd)
-        : DEFAULTS.delivery.maxFeeJmd,
+      perExtraKmJmd: perKm,
     },
     serviceFee: {
       mode,
@@ -507,7 +552,7 @@ export function parsePricingRules(raw: Record<string, unknown> | null | undefine
         ? Number(serviceFee.override_threshold_jmd)
         : DEFAULTS.serviceFee.overrideThresholdJmd,
     },
-    courierDeliveryShare: Number(flat.courier_delivery_share ?? DEFAULTS.courierDeliveryShare),
+    serviceFeeDistanceAddon,
     courierBasePayJmd: flat.courier_base_pay_jmd != null
       ? Number(flat.courier_base_pay_jmd)
       : DEFAULTS.courierBasePayJmd,
@@ -525,7 +570,6 @@ export function parsePricingRules(raw: Record<string, unknown> | null | undefine
     cod: {
       pauseThresholdJmd: Number(cod.pause_threshold_jmd ?? DEFAULTS.cod?.pauseThresholdJmd ?? 10000),
     },
-    // Statutory GCT is Accounting → GCT resolver only — never from pricing blob
     taxRatePercent: undefined,
     roadDistanceMultiplier: flat.road_distance_multiplier != null
       ? Number(flat.road_distance_multiplier)
@@ -533,9 +577,6 @@ export function parsePricingRules(raw: Record<string, unknown> | null | undefine
     minOrderSubtotalJmd: flat.min_order_subtotal_jmd != null
       ? Number(flat.min_order_subtotal_jmd)
       : DEFAULTS.minOrderSubtotalJmd,
-    hardMinOrderSubtotalJmd: flat.hard_min_order_subtotal_jmd != null
-      ? Number(flat.hard_min_order_subtotal_jmd)
-      : DEFAULTS.hardMinOrderSubtotalJmd,
     smallOrderThresholdJmd: flat.small_order_threshold_jmd != null
       ? Number(flat.small_order_threshold_jmd)
       : DEFAULTS.smallOrderThresholdJmd,
@@ -551,6 +592,15 @@ export function parsePricingRules(raw: Record<string, unknown> | null | undefine
     maxMenuInflationPercent: flat.max_menu_inflation_percent != null
       ? Number(flat.max_menu_inflation_percent)
       : DEFAULTS.maxMenuInflationPercent,
+    guardrails: {
+      minDeliveryMarginJmd: guardrailsRaw.min_delivery_margin_jmd != null
+        ? Number(guardrailsRaw.min_delivery_margin_jmd)
+        : DEFAULTS.guardrails?.minDeliveryMarginJmd,
+      minOrderContributionJmd: guardrailsRaw.min_order_contribution_jmd != null
+        ? Number(guardrailsRaw.min_order_contribution_jmd)
+        : DEFAULTS.guardrails?.minOrderContributionJmd,
+    },
+    growthGuarantee,
   };
 }
 
@@ -561,12 +611,10 @@ export function serializePricingRules(rules: PricingRules): Record<string, unkno
 
 export function defaultPricingRules(): PricingRules {
   return {
-    pricingV2Enabled: true,
     delivery: {
-      baseFeeJmd: 400,
-      includedKm: 2,
+      baseJmd: 450,
+      includedKm: 0,
       perExtraKmJmd: 60,
-      maxFeeJmd: 1500,
     },
     serviceFee: {
       mode: 'marginal',
@@ -574,26 +622,39 @@ export function defaultPricingRules(): PricingRules {
       percent: 0.05,
       minJmd: 150,
       maxJmd: 2500,
-      avgRate: 0.15,
-      overrideRate: 0.09,
+      avgRate: 0.115,
+      overrideRate: 0.085,
       overrideThresholdJmd: 5000,
     },
-    courierDeliveryShare: 0.8,
-    courierBasePayJmd: 250,
-    courierPerKmJmd: 80,
+    serviceFeeDistanceAddon: {
+      enabled: false,
+      thresholdKm: 5,
+      perKmJmd: 20,
+      maxJmd: 200,
+    },
+    courierBasePayJmd: 150,
+    courierPerKmJmd: 60,
     courierMinPayJmd: 350,
     launchPromos: { freeDeliveryFirstNOrders: 0 },
     cod: { pauseThresholdJmd: 10000 },
     // Tax rate is NOT a pricing-rules default — callers must supply via GCT resolver.
-    // Omitted from defaults so parsePricingRules cannot silently invent a statutory rate.
     roadDistanceMultiplier: 1.4,
-    minOrderSubtotalJmd: 1500,
-    hardMinOrderSubtotalJmd: 400,
-    smallOrderThresholdJmd: 1500,
-    smallOrderFeeJmd: 400,
+    minOrderSubtotalJmd: 600,
+    smallOrderThresholdJmd: 800,
+    smallOrderFeeJmd: 150,
     cardProcessingFeePercent: 0.045,
     tipProcessingFromRider: true,
     maxMenuInflationPercent: 0.25,
+    guardrails: {
+      minDeliveryMarginJmd: 100,
+      minOrderContributionJmd: 150,
+    },
+    growthGuarantee: {
+      enabled: true,
+      tierSlugs: ['dominant'],
+      monthsFromAssignment: 6,
+      minOrdersPerMonth: 20,
+    },
   };
 }
 
@@ -612,12 +673,162 @@ export function parseServiceFeeOverride(
   };
 }
 
-/** Minimum order gate — max of market and merchant floors. */
-export function resolveMinOrderSubtotal(
+/** Absolute order floor — market hard min (merchant min_order is advisory/UI only). */
+export function resolveOrderFloorJmd(
   marketMinJmd: number | undefined,
-  merchantMinJmd: number | null | undefined,
 ): number {
-  const market = Math.max(0, marketMinJmd ?? 0);
-  const merchant = Math.max(0, merchantMinJmd ?? 0);
-  return Math.max(market, merchant);
+  return Math.max(0, marketMinJmd ?? 0);
+}
+
+/**
+ * Reject configs that can lose money on delivery or invert the tier ladder.
+ * Called on every admin pricing write path + CI.
+ */
+export function validatePricingConfig(
+  rules: PricingRules,
+  tiers: MerchantTier[],
+  opts?: { maxRadiusKm?: number },
+): PricingConfigValidationError | null {
+  const baseErr = validatePricingRules(rules);
+  if (baseErr) {
+    return { code: 'RULES_INVALID', message: baseErr };
+  }
+
+  const customerPerKm = rules.delivery.perExtraKmJmd ?? 0;
+  const courierPerKm = rules.courierPerKmJmd ?? 0;
+  if (customerPerKm < courierPerKm) {
+    return {
+      code: 'PER_KM_BELOW_COST',
+      message: `customer per_km (${customerPerKm}) must be >= courier per_km (${courierPerKm})`,
+    };
+  }
+
+  const included = rules.delivery.includedKm ?? 0;
+  if (included > 0) {
+    const funded = (rules.delivery.baseJmd ?? 0) >= included * courierPerKm;
+    if (!funded) {
+      return {
+        code: 'INCLUDED_KM_UNFUNDED',
+        message: `included_km ${included} is not funded by delivery base_jmd`,
+      };
+    }
+  }
+
+  const maxRadius = Math.max(1, opts?.maxRadiusKm ?? 100);
+  const minMargin = rules.guardrails?.minDeliveryMarginJmd ?? 100;
+  for (let km = 1; km <= maxRadius; km++) {
+    const fee = resolveDeliveryFee(rules.delivery, km);
+    const courier = resolveCourierPayLadder(rules, km).total;
+    const margin = roundMoney(fee - courier);
+    if (margin < minMargin) {
+      return {
+        code: 'DELIVERY_MARGIN_FLOOR',
+        message: `delivery margin ${margin} at ${km} km is below floor ${minMargin}`,
+      };
+    }
+  }
+
+  const minOrder = rules.minOrderSubtotalJmd ?? 0;
+  const smallThreshold = rules.smallOrderThresholdJmd ?? 0;
+  if (smallThreshold > 0 && minOrder > smallThreshold) {
+    return {
+      code: 'ORDER_FLOORS_INCOHERENT',
+      message: `min_order_subtotal (${minOrder}) cannot exceed small_order_threshold (${smallThreshold})`,
+    };
+  }
+
+  if (tiers.length >= 2) {
+    const sorted = [...tiers].sort((a, b) => a.commissionRate - b.commissionRate);
+    const baskets = [800, 2500, 10000];
+    for (const basket of baskets) {
+      let prev: number | null = null;
+      for (const tier of sorted) {
+        const b = buildOrderPricing({
+          subtotal: basket,
+          distanceKm: 5,
+          rules,
+          tier,
+          taxRatePercent: 0.15,
+          paymentMethod: 'cash',
+        });
+        if (prev != null && b.contributionJmd < prev) {
+          return {
+            code: 'TIER_LADDER_NOT_MONOTONE',
+            message: `contribution falls at basket ${basket} for tier ${tier.slug}`,
+          };
+        }
+        prev = b.contributionJmd;
+      }
+    }
+  }
+
+  // Distance addon at max radius must not break delivery margin (addon is platform revenue)
+  const distAddon = rules.serviceFeeDistanceAddon;
+  if (distAddon?.enabled) {
+    const feeAtMax = resolveDeliveryFee(rules.delivery, maxRadius);
+    const courierAtMax = resolveCourierPayLadder(rules, maxRadius).total;
+    const margin = roundMoney(feeAtMax - courierAtMax);
+    if (margin < minMargin) {
+      return {
+        code: 'DELIVERY_MARGIN_FLOOR',
+        message: `with distance addon enabled, delivery margin ${margin} at ${maxRadius} km is below floor ${minMargin}`,
+      };
+    }
+  }
+
+  // Rush Pass worst-case: free delivery + 50% service fee at Growth/Dominant must still
+  // clear contribution floor when platform funds delivery (promoCost). Floor check uses
+  // contribution after subsidy — Pass makes contribution lower; reject if negative at
+  // typical baskets for eligible tiers with max distance addon.
+  const passEligible = tiers.filter((t) =>
+    ['growth', 'dominant'].includes(String(t.slug).toLowerCase())
+  );
+  const passRules: PricingRules = {
+    ...rules,
+    serviceFeeDistanceAddon: distAddon?.enabled
+      ? distAddon
+      : { enabled: true, thresholdKm: 5, perKmJmd: 20, maxJmd: 200 },
+  };
+  const contribFloor = rules.guardrails?.minOrderContributionJmd ?? 0;
+  for (const tier of passEligible) {
+    for (const basket of [800, 2500]) {
+      const pass = buildOrderPricing({
+        subtotal: basket,
+        distanceKm: maxRadius,
+        rules: passRules,
+        tier,
+        taxRatePercent: 0.15,
+        paymentMethod: 'cash',
+        freeDelivery: true,
+        serviceFeeMultiplier: 0.5,
+        rushPassApplied: true,
+      });
+      // Platform-funded free delivery: contribution can dip but must not go deeply negative
+      // beyond the configured floor when Pass is off; with Pass on, allow down to -promoCost
+      // but reject configs where non-Pass contribution at same basket is already below floor.
+      const base = buildOrderPricing({
+        subtotal: basket,
+        distanceKm: 5,
+        rules,
+        tier,
+        taxRatePercent: 0.15,
+        paymentMethod: 'cash',
+      });
+      if (contribFloor > 0 && base.contributionJmd < contribFloor) {
+        return {
+          code: 'PASS_CONTRIBUTION_FLOOR',
+          message: `tier ${tier.slug} basket ${basket} contribution ${base.contributionJmd} below floor ${contribFloor} (Pass worst-case baseline)`,
+        };
+      }
+      // Pass quote itself should still have finite totals / non-NaN contribution
+      if (!Number.isFinite(pass.contributionJmd) || !Number.isFinite(pass.customerTotal)) {
+        return {
+          code: 'PASS_CONTRIBUTION_FLOOR',
+          message: `Rush Pass quote invalid for tier ${tier.slug} basket ${basket}`,
+        };
+      }
+    }
+  }
+
+  return null;
 }

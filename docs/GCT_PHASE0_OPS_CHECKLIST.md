@@ -3,7 +3,8 @@
 **Status:** Engineering is **complete** (Accounting GCT engine is the sole live charge source).  
 This page is the **paper catch-up** checklist — accountant / ops signatures only.
 
-**Related:** [GCT_ENGINE_AUDIT.md](./GCT_ENGINE_AUDIT.md), [GCT_CUTOVER_RUNBOOK.md](./GCT_CUTOVER_RUNBOOK.md), [JAMAICA_GCT_GUIDE.md](./JAMAICA_GCT_GUIDE.md)
+**Related:** [GCT_ENGINE_AUDIT.md](./GCT_ENGINE_AUDIT.md), [GCT_CUTOVER_RUNBOOK.md](./GCT_CUTOVER_RUNBOOK.md).  
+**Operator guide:** Dominion → Accounting → GCT → Knowledge base (`apps/admin/.../gctKnowledgeBase.md`).
 
 ---
 

@@ -1,0 +1,102 @@
+name: Rush pricing cron jobs
+
+# Growth Guarantee (monthly) + Rush Pass renew (daily)
+
+on:
+  schedule:
+    # 1st of month 15:00 UTC ≈ 10:00 Jamaica — prior calendar month GG
+    - cron: '0 15 1 * *'
+    # Daily 13:00 UTC ≈ 08:00 Jamaica — Pass renew / past_due / expire
+    - cron: '0 13 * * *'
+  workflow_dispatch:
+    inputs:
+      job:
+        description: 'Which job to run'
+        required: true
+        default: 'both'
+        type: choice
+        options:
+          - both
+          - growth_guarantee
+          - rush_pass_renew
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve job flags
+        id: flags
+        run: |
+          JOB="${{ github.event.inputs.job || 'both' }}"
+          # On schedule: day-of-month 1 → GG; every day → Pass renew
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            DAY="$(date -u +%d)"
+            if [ "$DAY" = "01" ]; then
+              echo "gg=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "gg=false" >> "$GITHUB_OUTPUT"
+            fi
+            echo "pass=true" >> "$GITHUB_OUTPUT"
+          else
+            case "$JOB" in
+              growth_guarantee) echo "gg=true" >> "$GITHUB_OUTPUT"; echo "pass=false" >> "$GITHUB_OUTPUT" ;;
+              rush_pass_renew) echo "gg=false" >> "$GITHUB_OUTPUT"; echo "pass=true" >> "$GITHUB_OUTPUT" ;;
+              *) echo "gg=true" >> "$GITHUB_OUTPUT"; echo "pass=true" >> "$GITHUB_OUTPUT" ;;
+            esac
+          fi
+
+      - name: Growth Guarantee monthly credit
+        if: steps.flags.outputs.gg == 'true'
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          set -euo pipefail
+          SUPABASE_URL="$(printf '%s' "$SUPABASE_URL" | tr -d '\r\n' | sed 's/[[:space:]]*$//;s/^[[:space:]]*//')"
+          SERVICE_KEY="$(printf '%s' "$SUPABASE_SERVICE_ROLE_KEY" | tr -d '\r\n' | sed 's/[[:space:]]*$//;s/^[[:space:]]*//')"
+          CRON_VAL="$(printf '%s' "${CRON_SECRET:-}" | tr -d '\r\n' | sed 's/[[:space:]]*$//;s/^[[:space:]]*//')"
+          CURL_ARGS=(
+            -sS -w "\nHTTP_CODE:%{http_code}\n"
+            -X POST
+            "${SUPABASE_URL}/functions/v1/delivery/internal/pricing/growth-guarantee/run"
+            -H "Authorization: Bearer ${SERVICE_KEY}"
+            -H "apikey: ${SERVICE_KEY}"
+            -H "x-service-role: ${SERVICE_KEY}"
+            -H "Content-Type: application/json"
+            -d '{}'
+          )
+          if [ -n "$CRON_VAL" ]; then
+            CURL_ARGS+=(-H "x-fleet-cron-secret: ${CRON_VAL}")
+          fi
+          RESP="$(curl "${CURL_ARGS[@]}")"
+          echo "$RESP"
+          echo "$RESP" | grep -q 'HTTP_CODE:200' || exit 1
+
+      - name: Rush Pass renew / expire
+        if: steps.flags.outputs.pass == 'true'
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          set -euo pipefail
+          SUPABASE_URL="$(printf '%s' "$SUPABASE_URL" | tr -d '\r\n' | sed 's/[[:space:]]*$//;s/^[[:space:]]*//')"
+          SERVICE_KEY="$(printf '%s' "$SUPABASE_SERVICE_ROLE_KEY" | tr -d '\r\n' | sed 's/[[:space:]]*$//;s/^[[:space:]]*//')"
+          CRON_VAL="$(printf '%s' "${CRON_SECRET:-}" | tr -d '\r\n' | sed 's/[[:space:]]*$//;s/^[[:space:]]*//')"
+          CURL_ARGS=(
+            -sS -w "\nHTTP_CODE:%{http_code}\n"
+            -X POST
+            "${SUPABASE_URL}/functions/v1/delivery/internal/pricing/rush-pass/renew"
+            -H "Authorization: Bearer ${SERVICE_KEY}"
+            -H "apikey: ${SERVICE_KEY}"
+            -H "x-service-role: ${SERVICE_KEY}"
+            -H "Content-Type: application/json"
+            -d '{}'
+          )
+          if [ -n "$CRON_VAL" ]; then
+            CURL_ARGS+=(-H "x-fleet-cron-secret: ${CRON_VAL}")
+          fi
+          RESP="$(curl "${CURL_ARGS[@]}")"
+          echo "$RESP"
+          echo "$RESP" | grep -q 'HTTP_CODE:200' || exit 1

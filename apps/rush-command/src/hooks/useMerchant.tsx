@@ -44,6 +44,8 @@ export interface Merchant {
   min_order_amount: number;
   delivery_fee: number;
   delivery_radius_km: number;
+  /** Menu markup 0–1 */
+  menu_inflation_percent?: number | null;
   commission_rate: number;
   rating: number;
   total_ratings: number;

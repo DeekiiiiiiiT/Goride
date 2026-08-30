@@ -11,7 +11,7 @@ export type DashTransactionDualWrite = {
   amount: number;
   currency?: string;
   kind: "order_capture" | "order_refund" | "merchant_payout" | "merchant_payout_reversal" | "courier_payout";
-  /** Model A split — when set on order_capture, posts platform / courier / merchant lines. */
+  /** Marketplace capture split — when set on order_capture, posts platform / courier / merchant lines. */
   split?: DashCaptureSplit | null;
 };
 
@@ -74,7 +74,7 @@ async function dualWriteDashPaymentInner(
   const currency = row.currency ?? "JMD";
   const product = resolveDashProduct(row.kind);
 
-  // Model A capture: three accrual lines instead of full gross → merchant
+  // Marketplace capture: three accrual lines instead of full gross → merchant
   if (row.kind === "order_capture" && row.split) {
     const split = row.split;
     const baseMeta = {

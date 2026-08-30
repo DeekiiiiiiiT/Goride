@@ -33,6 +33,7 @@ import { GctRatesPage } from './gct/GctRatesPage';
 import { GctEntitiesPage } from './gct/GctEntitiesPage';
 import { GctLedgerPage } from './gct/GctLedgerPage';
 import { GctRemittancePage } from './gct/GctRemittancePage';
+import { GctKnowledgeBasePage } from './gct/GctKnowledgeBasePage';
 import { ErrorBoundary } from '@roam/roam-shared';
 import { StationDatabaseView } from '../fuel/stations/StationDatabaseView';
 import type { ResolutionQueueSubTab } from '../fuel/stations/ResolutionQueueTab';
@@ -391,6 +392,13 @@ export function AdminPortal() {
         <div className="bg-white rounded-xl shadow-sm overflow-hidden min-h-[600px] dark:bg-card">
           <ErrorBoundary>
             <GctRemittancePage />
+          </ErrorBoundary>
+        </div>
+      )}
+      {currentPage === 'gct-knowledge' && (
+        <div className="bg-white rounded-xl shadow-sm overflow-hidden h-[calc(100vh-7.5rem)] dark:bg-card">
+          <ErrorBoundary>
+            <GctKnowledgeBasePage />
           </ErrorBoundary>
         </div>
       )}

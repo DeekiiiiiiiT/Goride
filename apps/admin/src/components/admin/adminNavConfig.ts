@@ -41,6 +41,7 @@ import {
   Percent,
   BadgeCheck,
   BookOpen,
+  BookMarked,
 } from 'lucide-react';
 
 export type NavChild = {
@@ -137,6 +138,7 @@ export const GCT_CHILDREN: NavChild[] = [
   { id: 'gct-entities', label: 'Registrations', icon: BadgeCheck },
   { id: 'gct-ledger', label: 'Ledger', icon: BookOpen },
   { id: 'gct-remittance', label: 'Remittance & filing', icon: Receipt },
+  { id: 'gct-knowledge', label: 'Knowledge base', icon: BookMarked },
 ];
 
 /** Vendor catalog under Accounting — supports expenses / input-tax suppliers, not the GCT engine. */
@@ -244,6 +246,7 @@ const SHARED_PLATFORM_PAGES = [
   'gct-entities',
   'gct-ledger',
   'gct-remittance',
+  'gct-knowledge',
   'vendor-database',
   'pending-vendor-requests',
   ...GLOBAL_SETTINGS_PAGES,

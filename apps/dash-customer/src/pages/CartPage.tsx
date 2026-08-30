@@ -32,8 +32,6 @@ export default function CartPage({ onNavigate, session }: Props) {
   const [promoInput, setPromoInput] = useState(getCheckoutPreferences().appliedPromoCode ?? '');
   const [promoMessage, setPromoMessage] = useState('');
   const [appliedPromo, setAppliedPromo] = useState(getAppliedPromo());
-  const [platformFeeRate, setPlatformFeeRate] = useState(0.05);
-  const [merchantDeliveryFee, setMerchantDeliveryFee] = useState(0);
   const [checkoutPricing, setCheckoutPricing] = useState<CheckoutPricing | null>(null);
   const [pricingError, setPricingError] = useState<string | null>(null);
   const [pricingLoading, setPricingLoading] = useState(false);
@@ -55,8 +53,6 @@ export default function CartPage({ onNavigate, session }: Props) {
 
   useEffect(() => {
     if (!merchantId) {
-      setPlatformFeeRate(0.05);
-      setMerchantDeliveryFee(0);
       setCheckoutPricing(null);
       setPricingError(null);
       return;
@@ -75,8 +71,6 @@ export default function CartPage({ onNavigate, session }: Props) {
         });
         if (cancelled) return;
         setCheckoutPricing(pricing);
-        setPlatformFeeRate(pricing.platformFeeRate);
-        setMerchantDeliveryFee(pricing.deliveryFee);
         setPricingError(null);
       } catch (err) {
         if (cancelled) return;
@@ -93,19 +87,10 @@ export default function CartPage({ onNavigate, session }: Props) {
 
   const hasLivePricing = checkoutPricing != null && !pricingError;
   const { discount, deliveryFee, serviceFee, tax, processingFee, smallOrderFee, total } = hasLivePricing
-    ? calculateOrderTotals(
-        subtotal,
-        appliedPromo,
-        0,
-        merchantDeliveryFee,
-        platformFeeRate,
-        checkoutPricing?.pricingModel === 'v2' ? checkoutPricing.serviceFee : undefined,
-        {
-          v2Quote: checkoutPricing,
-          paymentMethod: 'wipay',
-          taxRatePercent: checkoutPricing?.taxRatePercent,
-        },
-      )
+    && checkoutPricing
+    ? calculateOrderTotals(subtotal, appliedPromo, 0, 0, undefined, undefined, {
+        v2Quote: checkoutPricing,
+      })
     : {
         discount: 0,
         deliveryFee: 0,
@@ -115,6 +100,11 @@ export default function CartPage({ onNavigate, session }: Props) {
         smallOrderFee: 0,
         total: subtotal,
       };
+
+  const serviceFeeDistanceJmd = hasLivePricing
+    ? Math.max(0, Number(checkoutPricing?.serviceFeeDistanceJmd ?? 0))
+    : 0;
+  const serviceFeeBasket = Math.max(0, serviceFee - serviceFeeDistanceJmd);
 
   const taxRateLabel = checkoutPricing?.taxRatePercent;
   const minOrder = Number(checkoutPricing?.minOrderSubtotalJmd ?? 0);
@@ -377,6 +367,13 @@ export default function CartPage({ onNavigate, session }: Props) {
               Add {formatJmd(minOrder - subtotal)} more to meet the {formatJmd(minOrder)} minimum.
             </p>
           )}
+          {hasLivePricing && (checkoutPricing?.menuInflationPercent ?? 0) > 0 && (
+            <p className="mb-3 text-body-sm text-on-surface-variant px-1">
+              Menu prices may include up to{' '}
+              {Math.round((checkoutPricing!.menuInflationPercent ?? 0) * 1000) / 10}% above
+              in-store.
+            </p>
+          )}
           <div className="bg-surface-container-lowest p-4 rounded-xl shadow-[0px_4px_20px_rgba(0,0,0,0.04)] flex flex-col gap-2">
             <div className="flex justify-between text-body-md text-on-surface-variant">
               <span>Subtotal</span>
@@ -394,8 +391,17 @@ export default function CartPage({ onNavigate, session }: Props) {
             </div>
             <div className="flex justify-between text-body-md text-on-surface-variant">
               <span>Service Fee</span>
-              <span>{hasLivePricing ? formatJmd(serviceFee) : '—'}</span>
+              <span>{hasLivePricing ? formatJmd(serviceFeeBasket) : '—'}</span>
             </div>
+            {serviceFeeDistanceJmd > 0 && (
+              <div className="flex justify-between text-body-md text-on-surface-variant">
+                <span>Distance service</span>
+                <span>{formatJmd(serviceFeeDistanceJmd)}</span>
+              </div>
+            )}
+            {checkoutPricing?.rushPassApplied && (
+              <p className="text-body-sm text-primary font-medium">Rush Pass applied</p>
+            )}
             {smallOrderFee > 0 && (
               <div className="flex justify-between text-body-md text-on-surface-variant">
                 <span>Small order fee</span>

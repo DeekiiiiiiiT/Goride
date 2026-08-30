@@ -74,6 +74,10 @@ export interface DashMerchant {
   market_id_locked?: boolean;
   /** manual = ops locked; pin = follows store pin but resists publish recompute; null = auto */
   market_id_lock_source?: 'manual' | 'pin' | null;
+  /** Merchant menu markup 0–1 (e.g. 0.10 = 10%), capped by platform max. */
+  menu_inflation_percent?: number | null;
+  /** When Dominant tier was assigned (Growth Guarantee window). */
+  dominant_assigned_at?: string | null;
 }
 
 export interface MerchantHours {
@@ -377,6 +381,8 @@ export function patchMerchantOps(
     merchant_commission_rate?: number | null;
     pricing_tier_id?: string | null;
     delivery_radius_km?: number;
+    /** Menu markup 0–1 */
+    menu_inflation_percent?: number;
     admin_internal_notes?: string;
     capabilities?: string[];
     payout_ready?: boolean;
@@ -1718,24 +1724,34 @@ export type MerchantTierRow = {
   slug: string;
   name: string;
   commission_rate: number;
-  /** Customer-facing base delivery fee for this tier (JMD). */
-  base_delivery_fee_jmd?: number | null;
-  /** Menu inflation 0–1 (e.g. 0.20 = 20%). */
-  menu_inflation_percent?: number | null;
   search_boost: number;
   default_delivery_radius_km: number;
   promo_eligible: boolean;
+  /** Auto-promoted placement in discovery (Dominant default). */
+  auto_ads: boolean;
   sort_order: number;
   is_active: boolean;
   merchant_count?: number;
 };
 
 export type PricingRevenueSummary = {
-  v2_order_count: number;
+  order_count: number;
+  /** @deprecated alias of order_count */
+  v2_order_count?: number;
   commission_total_jmd: number;
   service_fee_total_jmd: number;
+  contribution_total_jmd?: number;
   gross_food_jmd: number;
   take_rate_percent: number;
+  rush_pass_order_count?: number;
+  rush_pass_attach_rate_percent?: number;
+  rush_pass_subsidy_total_jmd?: number;
+  rush_pass_active_memberships?: number;
+  distance_fee_order_count?: number;
+  distance_fee_attach_rate_percent?: number;
+  distance_fee_total_jmd?: number;
+  growth_guarantee_credit_count_90d?: number;
+  growth_guarantee_credit_total_jmd_90d?: number;
 };
 
 export type PricingMarketSummary = {
@@ -1750,7 +1766,6 @@ export type PricingMarketSummary = {
   profile: Record<string, unknown> | null;
   has_town_override?: boolean;
   town_override_enabled?: boolean;
-  pricing_v2_enabled: boolean;
 };
 
 export type PricingParishSummary = {
@@ -1764,16 +1779,15 @@ export type PricingParishSummary = {
 export type PricingParty = 'customer' | 'rider' | 'partner' | 'platform';
 
 export type PricingRulesPayload = {
-  pricing_v2_enabled?: boolean;
   platform?: Record<string, unknown>;
   customer?: Record<string, unknown>;
   rider?: Record<string, unknown>;
   partner?: Record<string, unknown>;
   delivery?: {
-    base_fee_jmd?: number;
+    base_jmd?: number;
     included_km?: number;
     per_extra_km_jmd?: number;
-    max_fee_jmd?: number;
+    per_km_jmd?: number;
   };
   service_fee?: {
     mode?: 'flat' | 'percent' | 'marginal';
@@ -1784,17 +1798,27 @@ export type PricingRulesPayload = {
     avg_rate?: number;
     override_rate?: number;
     override_threshold_jmd?: number;
+    distance_addon?: {
+      enabled?: boolean;
+      threshold_km?: number;
+      per_km_jmd?: number;
+      max_jmd?: number;
+    };
   };
-  courier_delivery_share?: number;
   courier_base_pay_jmd?: number;
   courier_per_km_jmd?: number;
   courier_min_pay_jmd?: number;
   cod?: { pause_threshold_jmd?: number };
   launch_promos?: { free_delivery_first_n_orders?: number };
+  growth_guarantee?: {
+    enabled?: boolean;
+    tier_slugs?: string[];
+    months_from_assignment?: number;
+    min_orders_per_month?: number;
+  };
 
   road_distance_multiplier?: number;
   min_order_subtotal_jmd?: number;
-  hard_min_order_subtotal_jmd?: number;
   small_order_threshold_jmd?: number;
   small_order_fee_jmd?: number;
   card_processing_fee_percent?: number;
@@ -2007,6 +2031,10 @@ export function previewPricing(
     customer_order_count?: number;
     /** Force / suppress launch free-delivery promo in simulator */
     free_delivery?: boolean;
+    /** Simulator: apply Rush Pass benefits (Growth/Dominant only) */
+    rush_pass?: boolean;
+    /** Simulator: override road distance km (skips lat/lng distance) */
+    distance_km?: number;
     payment_method?: 'wipay' | 'cash';
     market_id?: string;
     /** Admin: force a merchant tier (required when merchant_id omitted) */
@@ -2018,7 +2046,6 @@ export function previewPricing(
 ) {
   return deliveryFetch<{
     breakdown: Record<string, unknown>;
-    pricing_v2_enabled?: boolean;
     market_id?: string | null;
     resolved_market_id?: string | null;
     covered?: boolean | null;
@@ -2066,4 +2093,34 @@ export function settleCourierCash(
     method: 'POST',
     body: JSON.stringify(payload),
   });
+}
+
+export function grantRushPass(
+  accessToken: string,
+  payload: { customerId: string; planSlug?: string; days?: number },
+) {
+  return deliveryFetch<{ membership: Record<string, unknown> }>(
+    accessToken,
+    '/admin/rush-pass/grant',
+    { method: 'POST', body: JSON.stringify(payload) },
+  );
+}
+
+export function revokeRushPass(
+  accessToken: string,
+  payload: { membershipId: string; customerId?: string },
+) {
+  return deliveryFetch<{ membership: Record<string, unknown> }>(
+    accessToken,
+    '/admin/rush-pass/revoke',
+    { method: 'POST', body: JSON.stringify(payload) },
+  );
+}
+
+export function listRushPassMemberships(accessToken: string, status?: string) {
+  const sp = status ? `?status=${encodeURIComponent(status)}` : '';
+  return deliveryFetch<{ memberships: Array<Record<string, unknown>> }>(
+    accessToken,
+    `/admin/rush-pass/memberships${sp}`,
+  );
 }

@@ -5,26 +5,53 @@ export const PARTNER_PLAN_OPTIONS = [
   {
     slug: 'economy',
     name: 'Economy',
-    tagline: 'Lowest commission — customers pay more for delivery.',
+    concept: 'Lowest commission — standard listing, modest reach.',
+    bestFor:
+      'Busy local spots with their own following — they don’t need Roam for marketing.',
     commissionPct: 15,
-    deliveryFeeJmd: 900,
+    radiusKm: 5,
     boostLabel: 'Standard listing',
+    bullets: [
+      'You keep ~85% of food sales',
+      'Suggested ~5 km reach (Roam sets live coverage)',
+      'Standard search placement',
+      'Delivery fee is platform-wide — not set by this plan',
+    ],
   },
   {
     slug: 'growth',
     name: 'Growth',
-    tagline: 'Balanced commission with a mid-range delivery fee.',
+    concept: 'Balanced commission with better radius and mild search boost.',
+    bestFor:
+      'Mid-sized places that want more orders without Dominant-level commission.',
     commissionPct: 25,
-    deliveryFeeJmd: 450,
-    boostLabel: 'Higher search placement',
+    radiusKm: 8,
+    boostLabel: 'Higher in search',
+    bullets: [
+      'You keep ~75% of food sales',
+      'Suggested ~8 km reach + mild search boost',
+      'Promo eligible for launch / free-delivery campaigns',
+      'Access to Rush Pass members (free delivery + fee cut)',
+      'Delivery fee is platform-wide — not set by this plan',
+    ],
   },
   {
     slug: 'dominant',
     name: 'Dominant',
-    tagline: 'Highest commission — we buy down delivery and push you up search.',
+    concept: 'Highest commission — widest reach, top ranking, automatic promoted placement.',
+    bestFor:
+      'Delivery-heavy spots that want maximum visibility and volume.',
     commissionPct: 30,
-    deliveryFeeJmd: 150,
+    radiusKm: 12,
     boostLabel: 'Top search boost',
+    bullets: [
+      'You keep ~70% of food sales',
+      'Suggested ~12 km reach + strong search boost',
+      'Automatic promoted placement in Rush (not a paid ads marketplace)',
+      'Access to Rush Pass members (free delivery + fee cut)',
+      'Priority placement and promo access for more orders',
+      'Delivery fee is platform-wide — not set by this plan',
+    ],
   },
 ] as const;
 
@@ -41,7 +68,8 @@ export default function PlanStepContent({ data, onChange }: PlanStepContentProps
       <div>
         <h1 className="text-headline-lg text-on-surface">Choose your plan</h1>
         <p className="mt-2 text-body-md text-on-surface-variant">
-          Pick how you want to show up on Roam Rush. You can change this later with our team.
+          Higher commission = wider reach, stronger ranking, and promo access. Delivery fee is set
+          by Roam for everyone — not by plan. You can change this later with our team.
         </p>
       </div>
 
@@ -62,7 +90,14 @@ export default function PlanStepContent({ data, onChange }: PlanStepContentProps
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <p className="text-title-md text-on-surface">{plan.name}</p>
-                  <p className="mt-1 text-body-sm text-on-surface-variant">{plan.tagline}</p>
+                  <p className="mt-1 text-body-sm text-on-surface-variant">
+                    <span className="font-medium text-on-surface">Concept: </span>
+                    {plan.concept}
+                  </p>
+                  <p className="mt-1 text-body-sm text-on-surface-variant">
+                    <span className="font-medium text-on-surface">Best for: </span>
+                    {plan.bestFor}
+                  </p>
                 </div>
                 <MaterialIcon
                   name={selected ? 'check_circle' : 'radio_button_unchecked'}
@@ -75,16 +110,19 @@ export default function PlanStepContent({ data, onChange }: PlanStepContentProps
                   <dd className="text-label-lg text-on-surface">{plan.commissionPct}%</dd>
                 </div>
                 <div className="rounded-lg bg-surface-container-low px-2 py-2">
-                  <dt className="text-label-sm text-on-surface-variant">Delivery</dt>
-                  <dd className="text-label-lg text-on-surface">
-                    J${plan.deliveryFeeJmd.toLocaleString()}
-                  </dd>
+                  <dt className="text-label-sm text-on-surface-variant">Reach</dt>
+                  <dd className="text-label-lg text-on-surface">~{plan.radiusKm} km</dd>
                 </div>
                 <div className="rounded-lg bg-surface-container-low px-2 py-2">
                   <dt className="text-label-sm text-on-surface-variant">Boost</dt>
                   <dd className="text-label-md text-on-surface leading-tight">{plan.boostLabel}</dd>
                 </div>
               </dl>
+              <ul className="mt-3 space-y-1 text-body-sm text-on-surface-variant list-disc pl-4">
+                {plan.bullets.map((b) => (
+                  <li key={b}>{b}</li>
+                ))}
+              </ul>
             </button>
           );
         })}

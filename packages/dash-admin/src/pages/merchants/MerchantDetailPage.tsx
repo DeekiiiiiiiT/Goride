@@ -94,14 +94,14 @@ export function MerchantDetailPage() {
   const [actionStatus, setActionStatus] = useState<MerchantVerificationStatus | null>(null);
   const [checklist, setChecklist] = useState<Record<string, boolean>>({});
   const [actionBusy, setActionBusy] = useState(false);
-  const [globalFeePercent, setGlobalFeePercent] = useState(5);
-  const [feeOverridePercent, setFeeOverridePercent] = useState('');
   const [feeSaving, setFeeSaving] = useState(false);
   const [pricingTiers, setPricingTiers] = useState<MerchantTierRow[]>([]);
   const [selectedTierId, setSelectedTierId] = useState('');
   const [commissionOverridePercent, setCommissionOverridePercent] = useState('');
   const [deliveryRadiusKm, setDeliveryRadiusKm] = useState('5');
   const [radiusSaving, setRadiusSaving] = useState(false);
+  const [menuInflationPct, setMenuInflationPct] = useState('0');
+  const [inflationSaving, setInflationSaving] = useState(false);
   const [markets, setMarkets] = useState<DashMarketRow[]>([]);
   const [team, setTeam] = useState<MerchantTeamMemberRow[]>([]);
   const [pendingInvites, setPendingInvites] = useState<Array<Record<string, unknown>>>([]);
@@ -119,18 +119,16 @@ export function MerchantDetailPage() {
       setOwnerEmail(res.ownerEmail);
       setDocuments(res.documents || []);
       setChecklist(res.merchant.verification_checklist || {});
-      setGlobalFeePercent(res.global_platform_fee_percent ?? 5);
-      const override = res.merchant.commission_rate;
-      setFeeOverridePercent(
-        override != null && Number.isFinite(Number(override))
-          ? String(Math.round(Number(override) * 10000) / 100)
-          : '',
-      );
       setDeliveryRadiusKm(
         String(
           Number.isFinite(Number(res.merchant.delivery_radius_km))
             ? Number(res.merchant.delivery_radius_km)
             : 5,
+        ),
+      );
+      setMenuInflationPct(
+        String(
+          Math.round(Number(res.merchant.menu_inflation_percent ?? 0) * 1000) / 10,
         ),
       );
       setSelectedTierId(res.merchant.pricing_tier_id ?? '');
@@ -359,46 +357,6 @@ export function MerchantDetailPage() {
     }
   };
 
-  const saveFeeOverride = async () => {
-    if (!merchant || !canWrite) return;
-    const raw = feeOverridePercent.trim();
-    if (!raw) {
-      toast.error('Enter a fee % or clear the override');
-      return;
-    }
-    const pct = Number(raw);
-    if (!Number.isFinite(pct) || pct < 0 || pct > 100) {
-      toast.error('Platform fee must be between 0 and 100%');
-      return;
-    }
-    setFeeSaving(true);
-    try {
-      await patchMerchantOps(token, merchant.id, {
-        commission_rate: Math.round(pct * 100) / 10000,
-      });
-      toast.success('Merchant fee override saved');
-      void load();
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Failed to save fee override');
-    } finally {
-      setFeeSaving(false);
-    }
-  };
-
-  const clearFeeOverride = async () => {
-    if (!merchant || !canWrite) return;
-    setFeeSaving(true);
-    try {
-      await patchMerchantOps(token, merchant.id, { commission_rate: null });
-      toast.success('Override cleared — using global fee');
-      void load();
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Failed to clear override');
-    } finally {
-      setFeeSaving(false);
-    }
-  };
-
   const saveDeliveryRadius = async () => {
     if (!merchant || !canWrite) return;
     const km = Number(deliveryRadiusKm);
@@ -417,6 +375,27 @@ export function MerchantDetailPage() {
       toast.error(e instanceof Error ? e.message : 'Failed to save delivery radius');
     } finally {
       setRadiusSaving(false);
+    }
+  };
+
+  const saveMenuInflation = async () => {
+    if (!merchant || !canWrite) return;
+    const pct = Number(menuInflationPct);
+    if (!Number.isFinite(pct) || pct < 0 || pct > 25) {
+      toast.error('Menu inflation must be between 0 and 25%');
+      return;
+    }
+    setInflationSaving(true);
+    try {
+      await patchMerchantOps(token, merchant.id, {
+        menu_inflation_percent: Math.round(pct * 10) / 1000,
+      });
+      toast.success('Menu inflation saved');
+      void load();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to save menu inflation');
+    } finally {
+      setInflationSaving(false);
     }
   };
 
@@ -777,6 +756,42 @@ export function MerchantDetailPage() {
       </section>
 
       <section className="rounded-xl border border-slate-800 bg-slate-900/50 p-4 space-y-3">
+        <h3 className="text-sm font-medium text-white">Menu inflation</h3>
+        <p className="text-sm text-slate-400">
+          How much this store’s app menu can sit above in-store prices (0–25%). Set per merchant —
+          not by plan.
+        </p>
+        {canWrite ? (
+          <div className="flex flex-wrap items-end gap-2">
+            <div>
+              <label className="block text-xs text-slate-500 mb-1">Inflation %</label>
+              <input
+                type="number"
+                min={0}
+                max={25}
+                step={0.1}
+                value={menuInflationPct}
+                onChange={(e) => setMenuInflationPct(e.target.value)}
+                className="w-28 px-3 py-1.5 text-sm rounded-lg bg-slate-950 border border-slate-700 text-white"
+              />
+            </div>
+            <button
+              type="button"
+              disabled={inflationSaving}
+              onClick={() => void saveMenuInflation()}
+              className="px-3 py-1.5 text-sm rounded-lg bg-amber-600 text-white disabled:opacity-50"
+            >
+              Save inflation
+            </button>
+          </div>
+        ) : (
+          <p className="text-sm text-slate-300">
+            {Math.round(Number(merchant.menu_inflation_percent ?? 0) * 1000) / 10}%
+          </p>
+        )}
+      </section>
+
+      <section className="rounded-xl border border-slate-800 bg-slate-900/50 p-4 space-y-3">
         <h3 className="text-sm font-medium text-white">Delivery town</h3>
         <p className="text-sm text-slate-400">
           Customers can only order when their pin and this store share the same active town.
@@ -932,6 +947,34 @@ export function MerchantDetailPage() {
             </button>
           </div>
         )}
+        {(() => {
+          const tier = pricingTiers.find((t) => t.id === selectedTierId);
+          const isDominant = String(tier?.slug ?? '').toLowerCase() === 'dominant';
+          if (!isDominant) return null;
+          const assigned = merchant.dominant_assigned_at
+            ? new Date(merchant.dominant_assigned_at)
+            : null;
+          const monthsLeft = assigned
+            ? Math.max(
+                0,
+                6 - (Date.now() - assigned.getTime()) / (30.4375 * 24 * 60 * 60 * 1000),
+              )
+            : null;
+          return (
+            <div className="mt-3 rounded-lg border border-amber-800/60 bg-amber-950/30 px-3 py-2 text-sm text-amber-100">
+              <p className="font-medium text-amber-50">Growth Guarantee</p>
+              <p className="text-xs text-amber-200/90 mt-1">
+                If completed orders in a month fall below the Pricing Hub floor, we credit the
+                Dominant−Economy commission delta into merchant adjustments (one credit per month).
+              </p>
+              <p className="text-xs text-amber-200/80 mt-2">
+                {assigned
+                  ? `Assigned ${assigned.toLocaleDateString()} · ~${monthsLeft != null ? monthsLeft.toFixed(1) : '?'} months left in window`
+                  : 'Assignment date will stamp when you save Dominant'}
+              </p>
+            </div>
+          );
+        })()}
         <div className="pt-2 border-t border-slate-800">
           <p className="text-xs text-slate-500 mb-2">Commission override (optional)</p>
           {canWrite ? (
@@ -963,11 +1006,6 @@ export function MerchantDetailPage() {
             </p>
           )}
         </div>
-        <p className="text-xs text-slate-500">
-          Legacy service fee override: {merchant.commission_rate != null
-            ? `${Math.round(Number(merchant.commission_rate) * 10000) / 100}% (Model A)`
-            : `global ${globalFeePercent}%`}
-        </p>
       </section>
 
       {(team.length > 0 || pendingInvites.length > 0) && (

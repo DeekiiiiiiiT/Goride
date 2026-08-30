@@ -1,0 +1,288 @@
+/**
+ * Phase 2 — Growth Guarantee monthly credit for Dominant merchants.
+ * Credits the commission delta vs Economy when prior-month completed orders < min.
+ */
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { parsePricingRules } from "../_shared/dashPricing.ts";
+
+// deno-lint-ignore no-explicit-any
+type ServiceSb = { from: (t: string) => any };
+
+export type GrowthGuaranteeRunResult = {
+  period: string;
+  evaluated: number;
+  credited: number;
+  skipped: number;
+  credits: Array<{
+    merchant_id: string;
+    order_count: number;
+    credit_jmd: number;
+    adjustment_id?: string;
+    skipped?: string;
+  }>;
+};
+
+function getPaymentsDb() {
+  return createClient(
+    Deno.env.get("SUPABASE_URL")!,
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    { db: { schema: "payments" } },
+  );
+}
+
+/** Jamaica has no DST — fixed UTC-5. */
+export function jamaicaMonthBounds(periodYyyyMm: string): { startIso: string; endIso: string } {
+  const m = /^(\d{4})-(\d{2})$/.exec(String(periodYyyyMm).trim());
+  if (!m) throw new Error(`Invalid period ${periodYyyyMm}; expected YYYY-MM`);
+  const year = Number(m[1]);
+  const month = Number(m[2]); // 1-12
+  if (month < 1 || month > 12) throw new Error(`Invalid month in period ${periodYyyyMm}`);
+  const startUtc = Date.UTC(year, month - 1, 1, 5, 0, 0); // midnight Jamaica = 05:00 UTC
+  const endUtc = Date.UTC(year, month, 1, 5, 0, 0);
+  return {
+    startIso: new Date(startUtc).toISOString(),
+    endIso: new Date(endUtc).toISOString(),
+  };
+}
+
+/** Default: prior calendar month in America/Jamaica. */
+export function priorJamaicaPeriodYyyyMm(now = new Date()): string {
+  // Approximate "now in Jamaica" by subtracting 5h then take previous month
+  const jm = new Date(now.getTime() - 5 * 60 * 60 * 1000);
+  const y = jm.getUTCFullYear();
+  const mo = jm.getUTCMonth(); // 0-11 current Jamaica month
+  const prevMonth = mo === 0 ? 11 : mo - 1;
+  const yearNum = mo === 0 ? y - 1 : y;
+  return `${yearNum}-${String(prevMonth + 1).padStart(2, "0")}`;
+}
+
+function monthsBetween(fromIso: string, toIso: string): number {
+  const a = new Date(fromIso).getTime();
+  const b = new Date(toIso).getTime();
+  if (!Number.isFinite(a) || !Number.isFinite(b) || b < a) return Infinity;
+  return (b - a) / (30.4375 * 24 * 60 * 60 * 1000);
+}
+
+function roundMoney(n: number): number {
+  return Math.round(n * 100) / 100;
+}
+
+/**
+ * Run Growth Guarantee for a calendar month (America/Jamaica).
+ * @param periodYyyyMm e.g. "2026-07" — the month whose completed orders are counted
+ */
+export async function runGrowthGuaranteeForPeriod(
+  sb: ServiceSb,
+  periodYyyyMm: string,
+): Promise<GrowthGuaranteeRunResult> {
+  const period = String(periodYyyyMm).trim();
+  const { startIso, endIso } = jamaicaMonthBounds(period);
+
+  const layered = await sb
+    .from("global_pricing_profiles")
+    .select("rules")
+    .eq("is_active", true)
+    .order("version", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const rules = parsePricingRules((layered.data?.rules ?? null) as Record<string, unknown> | null);
+  const gg = rules.growthGuarantee ?? {
+    enabled: true,
+    tierSlugs: ["dominant"],
+    monthsFromAssignment: 6,
+    minOrdersPerMonth: 20,
+  };
+
+  const result: GrowthGuaranteeRunResult = {
+    period,
+    evaluated: 0,
+    credited: 0,
+    skipped: 0,
+    credits: [],
+  };
+
+  if (!gg.enabled) {
+    return result;
+  }
+
+  const { data: tiers } = await sb
+    .from("merchant_tiers")
+    .select("id, slug, commission_rate")
+    .in("slug", ["economy", "dominant", ...(gg.tierSlugs ?? [])]);
+
+  const bySlug = new Map<string, { id: string; slug: string; commission_rate: number }>();
+  for (const t of tiers ?? []) {
+    const row = t as { id: string; slug: string; commission_rate: number };
+    bySlug.set(String(row.slug), {
+      id: String(row.id),
+      slug: String(row.slug),
+      commission_rate: Number(row.commission_rate),
+    });
+  }
+
+  const dominant = bySlug.get("dominant");
+  const economy = bySlug.get("economy");
+  if (!dominant || !economy) {
+    throw new Error("economy and dominant tiers required for Growth Guarantee");
+  }
+
+  const dominantRate = dominant.commission_rate;
+  const economyRate = economy.commission_rate;
+  if (!(dominantRate > economyRate) || dominantRate <= 0) {
+    throw new Error("Invalid tier commission ladder for Growth Guarantee");
+  }
+
+  const eligibleSlugs = new Set(
+    (gg.tierSlugs?.length ? gg.tierSlugs : ["dominant"]).map((s) => String(s).toLowerCase()),
+  );
+  const eligibleTier = [...bySlug.values()].filter((t) => eligibleSlugs.has(t.slug.toLowerCase()));
+  if (!eligibleTier.length) {
+    return result;
+  }
+
+  const monthsWindow = Math.max(1, Number(gg.monthsFromAssignment ?? 6));
+  const minOrders = Math.max(0, Math.floor(Number(gg.minOrdersPerMonth ?? 20)));
+
+  const { data: merchants, error: merchErr } = await sb
+    .from("merchants")
+    .select("id, pricing_tier_id, dominant_assigned_at")
+    .in("pricing_tier_id", eligibleTier.map((t) => t.id))
+    .not("dominant_assigned_at", "is", null);
+
+  if (merchErr) throw new Error(merchErr.message);
+
+  const pdb = getPaymentsDb();
+  const periodEndMs = new Date(endIso).getTime();
+
+  for (const m of merchants ?? []) {
+    const merchantId = String((m as { id: string }).id);
+    const assignedAt = String((m as { dominant_assigned_at?: string }).dominant_assigned_at ?? "");
+    result.evaluated += 1;
+
+    if (!assignedAt) {
+      result.skipped += 1;
+      result.credits.push({ merchant_id: merchantId, order_count: 0, credit_jmd: 0, skipped: "no_assignment_date" });
+      continue;
+    }
+
+    // Still within N months of Dominant assignment as of period end
+    if (monthsBetween(assignedAt, endIso) > monthsWindow) {
+      result.skipped += 1;
+      result.credits.push({ merchant_id: merchantId, order_count: 0, credit_jmd: 0, skipped: "outside_window" });
+      continue;
+    }
+    // Assignment must have started before period ended
+    if (new Date(assignedAt).getTime() >= periodEndMs) {
+      result.skipped += 1;
+      result.credits.push({ merchant_id: merchantId, order_count: 0, credit_jmd: 0, skipped: "assigned_after_period" });
+      continue;
+    }
+
+    const { data: orders, error: ordErr } = await sb
+      .from("orders")
+      .select("id, subtotal, merchant_commission_amount, status")
+      .eq("merchant_id", merchantId)
+      .gte("placed_at", startIso)
+      .lt("placed_at", endIso)
+      .neq("status", "cancelled");
+
+    if (ordErr) throw new Error(ordErr.message);
+
+    const completed = (orders ?? []).filter((o: { status?: string }) => {
+      const s = String(o.status ?? "").toLowerCase();
+      return s !== "cancelled" && s !== "rejected";
+    });
+    const orderCount = completed.length;
+
+    if (orderCount >= minOrders) {
+      result.skipped += 1;
+      result.credits.push({
+        merchant_id: merchantId,
+        order_count: orderCount,
+        credit_jmd: 0,
+        skipped: "met_minimum",
+      });
+      continue;
+    }
+
+    // Credit = sum(subtotal * (dominantRate - economyRate)) — commission delta vs Economy
+    let credit = 0;
+    for (const o of completed) {
+      const sub = Number((o as { subtotal?: number }).subtotal ?? 0);
+      if (Number.isFinite(sub) && sub > 0) {
+        credit += sub * (dominantRate - economyRate);
+      }
+    }
+    credit = roundMoney(credit);
+    if (credit <= 0) {
+      result.skipped += 1;
+      result.credits.push({
+        merchant_id: merchantId,
+        order_count: orderCount,
+        credit_jmd: 0,
+        skipped: "zero_credit",
+      });
+      continue;
+    }
+
+    const idempotencyKey = `gg:${merchantId}:${period}`;
+    const reason =
+      `Growth Guarantee ${period}: ${orderCount}/${minOrders} orders — ` +
+      `commission delta ${(dominantRate - economyRate) * 100}% vs Economy`;
+
+    const { data: existing } = await pdb
+      .from("merchant_adjustments")
+      .select("id, amount")
+      .eq("idempotency_key", idempotencyKey)
+      .maybeSingle();
+
+    if (existing) {
+      result.skipped += 1;
+      result.credits.push({
+        merchant_id: merchantId,
+        order_count: orderCount,
+        credit_jmd: Number(existing.amount ?? credit),
+        adjustment_id: String(existing.id),
+        skipped: "already_credited",
+      });
+      continue;
+    }
+
+    const { data: adj, error: adjErr } = await pdb
+      .from("merchant_adjustments")
+      .insert({
+        merchant_id: merchantId,
+        amount: credit,
+        reason,
+        idempotency_key: idempotencyKey,
+      })
+      .select("id")
+      .single();
+
+    if (adjErr) {
+      // Race on unique index
+      if (String(adjErr.message || "").toLowerCase().includes("unique") ||
+        String(adjErr.code) === "23505") {
+        result.skipped += 1;
+        result.credits.push({
+          merchant_id: merchantId,
+          order_count: orderCount,
+          credit_jmd: credit,
+          skipped: "already_credited",
+        });
+        continue;
+      }
+      throw new Error(adjErr.message);
+    }
+
+    result.credited += 1;
+    result.credits.push({
+      merchant_id: merchantId,
+      order_count: orderCount,
+      credit_jmd: credit,
+      adjustment_id: adj ? String(adj.id) : undefined,
+    });
+  }
+
+  return result;
+}

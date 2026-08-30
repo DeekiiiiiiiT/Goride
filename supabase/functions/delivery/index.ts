@@ -39,6 +39,7 @@ import { registerCustomerOrderRoutes } from "./customerOrderRoutes.ts";
 import { reverseOrderOutputTax } from "../_shared/gctLedger.ts";
 import { registerCustomerAccountRoutes } from "./customerAccountRoutes.ts";
 import { registerCustomerDiscoveryRoutes } from "./customerDiscoveryRoutes.ts";
+import { registerRushPassRoutes } from "./rushPassRoutes.ts";
 import {
   registerCourierConsumerRoutes,
   requireActiveCourier,
@@ -136,19 +137,11 @@ async function resolveMarketplaceMenuPrices(
   const inStore = Math.round(Math.max(0, Number(inStorePrice) || 0) * 100) / 100;
   const { data: merchant } = await sb
     .from("merchants")
-    .select("pricing_tier_id, market_id")
+    .select("menu_inflation_percent, market_id")
     .eq("id", merchantId)
     .maybeSingle();
 
-  let inflation = 0;
-  if (merchant?.pricing_tier_id) {
-    const { data: tier } = await sb
-      .from("merchant_tiers")
-      .select("menu_inflation_percent")
-      .eq("id", merchant.pricing_tier_id)
-      .maybeSingle();
-    inflation = Math.max(0, Number(tier?.menu_inflation_percent ?? 0));
-  }
+  let inflation = Math.max(0, Number(merchant?.menu_inflation_percent ?? 0));
 
   const { resolvePricingLayers } = await import("./pricingLayers.ts");
   const layered = await resolvePricingLayers(sb, {
@@ -210,7 +203,7 @@ app.get("/merchants", async (c) => {
 
   let query = supabase
     .from("merchants")
-    .select("*, pricing_tier:merchant_tiers(id, slug, name, commission_rate, base_delivery_fee_jmd, menu_inflation_percent, search_boost, default_delivery_radius_km, promo_eligible)")
+    .select("*, pricing_tier:merchant_tiers(id, slug, name, commission_rate, search_boost, default_delivery_radius_km, promo_eligible, auto_ads)")
     .eq("onboarding_status", "submitted")
     .eq("is_active", true)
     .eq("is_accepting_orders", true);
@@ -229,38 +222,71 @@ app.get("/merchants", async (c) => {
   }
   void radius;
 
-  // Fetch a wider window then sort by search_boost DESC, rating DESC
+  // Fetch a wider window then sort by auto_ads DESC, search_boost DESC, rating DESC
   const { data, error } = await query
     .order("rating", { ascending: false })
     .range(0, Math.min(offset + limit + 50, 200));
 
   if (error) return c.json({ error: error.message }, 500);
 
-  const { resolveDeliveryFee } = await import("../_shared/dashPricing.ts");
+  const { resolveDeliveryFee, haversineKm, roundDistanceKm } = await import("../_shared/dashPricing.ts");
   const { resolvePricingLayers } = await import("./pricingLayers.ts");
   const layered = await resolvePricingLayers(supabase, {
     marketId: pin.parishBoundaryMode ? pin.marketIds[0] ?? null : pin.marketId,
   });
   const marketRules = layered.rules;
+  const pinLat = Number(lat);
+  const pinLng = Number(lng);
+  const hasPin = Number.isFinite(pinLat) && Number.isFinite(pinLng);
 
   const enriched = (data ?? []).map((row: Record<string, unknown>) => {
     const tier = row.pricing_tier as Record<string, unknown> | null;
-    const tierBase = tier?.base_delivery_fee_jmd != null
-      ? Number(tier.base_delivery_fee_jmd)
-      : null;
     const boost = tier?.search_boost != null ? Number(tier.search_boost) : 0;
-    const deliveryFee = resolveDeliveryFee(marketRules.delivery, null, tierBase);
+    const autoAds = Boolean(tier?.auto_ads);
+    const isPromoted = autoAds || boost > 0;
+    const deliveryFee = resolveDeliveryFee(marketRules.delivery, null);
+
+    let distanceKmRaw: number | null = null;
+    if (hasPin && row.lat != null && row.lng != null) {
+      const mLat = Number(row.lat);
+      const mLng = Number(row.lng);
+      if (Number.isFinite(mLat) && Number.isFinite(mLng)) {
+        distanceKmRaw = roundDistanceKm(haversineKm(mLat, mLng, pinLat, pinLng));
+      }
+    }
+
+    const merchantRadius = row.delivery_radius_km != null ? Number(row.delivery_radius_km) : NaN;
+    const tierRadius = tier?.default_delivery_radius_km != null
+      ? Number(tier.default_delivery_radius_km)
+      : NaN;
+    const radiusCandidates = [merchantRadius, tierRadius].filter(
+      (n) => Number.isFinite(n) && n > 0,
+    );
+    const maxRadiusKm = radiusCandidates.length > 0 ? Math.min(...radiusCandidates) : null;
+
+    if (
+      hasPin &&
+      distanceKmRaw != null &&
+      maxRadiusKm != null &&
+      distanceKmRaw > maxRadiusKm
+    ) {
+      return null;
+    }
+
     return {
       ...row,
       delivery_fee: deliveryFee,
       search_boost: boost,
-      is_promoted: boost > 0,
-      promoted: boost > 0,
+      auto_ads: autoAds,
+      is_promoted: isPromoted,
+      promoted: isPromoted,
       tier_slug: tier?.slug != null ? String(tier.slug) : null,
+      distance_km_raw: distanceKmRaw,
     };
-  });
-
+  }).filter((row): row is NonNullable<typeof row> => row != null);
   enriched.sort((a, b) => {
+    const autoDiff = Number(b.auto_ads) - Number(a.auto_ads);
+    if (autoDiff !== 0) return autoDiff;
     const boostDiff = Number(b.search_boost ?? 0) - Number(a.search_boost ?? 0);
     if (boostDiff !== 0) return boostDiff;
     return Number(b.rating ?? 0) - Number(a.rating ?? 0);
@@ -288,7 +314,7 @@ app.get("/merchants", async (c) => {
     const byId = await supabase
       .from("merchants")
       .select(
-        "*, pricing_tier:merchant_tiers(id, slug, name, commission_rate, base_delivery_fee_jmd, menu_inflation_percent, search_boost, default_delivery_radius_km, promo_eligible)",
+        "*, pricing_tier:merchant_tiers(id, slug, name, commission_rate, search_boost, default_delivery_radius_km, promo_eligible, auto_ads)",
       )
       .eq("id", id)
       .maybeSingle();
@@ -298,7 +324,7 @@ app.get("/merchants", async (c) => {
       const bySlug = await supabase
         .from("merchants")
         .select(
-          "*, pricing_tier:merchant_tiers(id, slug, name, commission_rate, base_delivery_fee_jmd, menu_inflation_percent, search_boost, default_delivery_radius_km, promo_eligible)",
+          "*, pricing_tier:merchant_tiers(id, slug, name, commission_rate, search_boost, default_delivery_radius_km, promo_eligible, auto_ads)",
         )
         .eq("slug", id)
         .maybeSingle();
@@ -313,10 +339,9 @@ app.get("/merchants", async (c) => {
 
     const merchantId = String(merchant.id);
     const tier = merchant.pricing_tier as Record<string, unknown> | null;
-    const tierBase = tier?.base_delivery_fee_jmd != null
-      ? Number(tier.base_delivery_fee_jmd)
-      : null;
     const boost = tier?.search_boost != null ? Number(tier.search_boost) : 0;
+    const autoAds = Boolean(tier?.auto_ads);
+    const isPromoted = autoAds || boost > 0;
 
     const [{ data: categories }, { data: items }, { data: hours }, feeResolved, layered] =
       await Promise.all([
@@ -346,13 +371,14 @@ app.get("/merchants", async (c) => {
       ]);
 
     const { resolveDeliveryFee } = await import("../_shared/dashPricing.ts");
-    const deliveryFee = resolveDeliveryFee(layered.rules.delivery, null, tierBase);
+    const deliveryFee = resolveDeliveryFee(layered.rules.delivery, null);
     const enrichedMerchant = {
       ...merchant,
       delivery_fee: deliveryFee,
       search_boost: boost,
-      is_promoted: boost > 0,
-      promoted: boost > 0,
+      auto_ads: autoAds,
+      is_promoted: isPromoted,
+      promoted: isPromoted,
       tier_slug: tier?.slug != null ? String(tier.slug) : null,
     };
 
@@ -380,28 +406,50 @@ app.get("/merchants", async (c) => {
     const paymentMethod = paymentRaw === "cash" ? "cash" : "wipay";
     const tipQ = c.req.query("tip") ? Number(c.req.query("tip")) : 0;
 
+    let customerId: string | null = null;
+    const authHeader = c.req.header("Authorization");
+    if (authHeader) {
+      try {
+        const userSb = getSupabase(authHeader);
+        const { data: { user } } = await userSb.auth.getUser();
+        if (user) {
+          const { data: cust } = await supabase
+            .from("customers")
+            .select("id")
+            .eq("user_id", user.id)
+            .maybeSingle();
+          if (cust) customerId = String(cust.id);
+        }
+      } catch {
+        // Anonymous pricing quote is fine
+      }
+    }
+
     let merchantId: string | null = null;
     let merchantMarketId: string | null = null;
     let deliveryFee = 0;
+    let menuInflationPercent = 0;
     const byId = await supabase
       .from("merchants")
-      .select("id, delivery_fee, market_id")
+      .select("id, delivery_fee, market_id, menu_inflation_percent")
       .eq("id", id)
       .maybeSingle();
     if (byId.data) {
       merchantId = String(byId.data.id);
       deliveryFee = Math.max(0, Number(byId.data.delivery_fee ?? 0));
       merchantMarketId = byId.data.market_id != null ? String(byId.data.market_id) : null;
+      menuInflationPercent = Math.max(0, Number(byId.data.menu_inflation_percent ?? 0));
     } else {
       const bySlug = await supabase
         .from("merchants")
-        .select("id, delivery_fee, market_id")
+        .select("id, delivery_fee, market_id, menu_inflation_percent")
         .eq("slug", id)
         .maybeSingle();
       if (bySlug.data) {
         merchantId = String(bySlug.data.id);
         deliveryFee = Math.max(0, Number(bySlug.data.delivery_fee ?? 0));
         merchantMarketId = bySlug.data.market_id != null ? String(bySlug.data.market_id) : null;
+        menuInflationPercent = Math.max(0, Number(bySlug.data.menu_inflation_percent ?? 0));
       }
     }
     if (!merchantId) return c.json({ error: "Merchant not found" }, 404);
@@ -437,6 +485,7 @@ app.get("/merchants", async (c) => {
       dropoffLng,
       paymentMethod,
       tip: tipQ > 0 ? tipQ : undefined,
+      customerId,
       requireCoverage: true,
     });
 
@@ -453,10 +502,9 @@ app.get("/merchants", async (c) => {
 
     return c.json({
       merchant_id: merchantId,
-      pricing_model: "v2",
-      platform_fee_rate: null,
       delivery_fee: v2.deliveryFee,
       service_fee: v2.serviceFee,
+      service_fee_distance_jmd: v2.serviceFeeDistanceJmd ?? 0,
       processing_fee: v2.processingFee,
       order_total: v2.orderTotal,
       merchant_commission_rate: v2.merchantCommissionRate,
@@ -480,14 +528,18 @@ app.get("/merchants", async (c) => {
       platform_delivery_subsidy_jmd: v2.platformDeliverySubsidyJmd ?? 0,
       courier_base_pay_jmd: v2.courierBasePayJmd ?? 0,
       courier_distance_pay_jmd: v2.courierDistancePayJmd ?? 0,
+      contribution_jmd: v2.contributionJmd,
+      promo_funded_by: v2.promoFundedBy,
       total: v2.customerTotal,
       pricing_profile_version: v2.pricingProfileVersion,
       tier: v2.tierSlug,
       free_delivery_applied: v2.freeDeliveryApplied,
+      rush_pass_applied: v2.rushPassApplied === true,
+      rush_pass_membership_id: v2.rushPassMembershipId ?? null,
       min_order_subtotal_jmd: v2.rules.minOrderSubtotalJmd ?? 0,
-      hard_min_order_subtotal_jmd: v2.rules.hardMinOrderSubtotalJmd ?? 400,
       small_order_threshold_jmd: v2.rules.smallOrderThresholdJmd ?? 0,
       card_processing_fee_percent: v2.rules.cardProcessingFeePercent ?? 0,
+      menu_inflation_percent: menuInflationPercent,
       has_override: false,
     });
   });
@@ -2081,7 +2133,16 @@ app.get("/merchant/analytics", async (c) => {
 const WEEKDAY_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 function orderMerchantNet(order: OrderRow): number {
-  // Model A: merchant receivable = total - platform_fee - delivery_fee - tip
+  // Prefer Model B commission snapshot when present
+  const subtotal = Number(order.subtotal || 0);
+  const discount = Number(order.discount || 0);
+  const commission = Number(
+    (order as Record<string, unknown>).merchant_commission_amount ?? NaN,
+  );
+  if (Number.isFinite(commission) && subtotal > 0) {
+    return Math.max(0, Math.round((subtotal - discount - commission) * 100) / 100);
+  }
+  // Historical orders without commission snapshot
   const total = Number(order.total || 0);
   const platformFee = Number(order.platform_fee || 0);
   const deliveryFee = Number(order.delivery_fee || 0);
@@ -2089,8 +2150,6 @@ function orderMerchantNet(order: OrderRow): number {
   if (total > 0) {
     return Math.max(0, Math.round((total - platformFee - deliveryFee - tip) * 100) / 100);
   }
-  const subtotal = Number(order.subtotal || 0);
-  const discount = Number(order.discount || 0);
   const tax = Number(order.tax || 0);
   return Math.max(
     0,
@@ -2671,6 +2730,59 @@ registerCustomerOrderRoutes(app, { getSupabase, getServiceSupabase });
 registerOrderChatRoutes(app, { getSupabase, getServiceSupabase, getPublicServiceSupabase });
 registerAdminOrderChatRoutes(app);
 registerCustomerAccountRoutes(app, { getSupabase, getServiceSupabase });
+registerRushPassRoutes(app, { getSupabase, getServiceSupabase });
+
+// Phase 2 Growth Guarantee — cron / service-role runner (also available as admin POST)
+app.post("/internal/pricing/growth-guarantee/run", async (c) => {
+  const cronSecret = (c.req.header("x-fleet-cron-secret") || c.req.header("x-cron-secret") || "").trim();
+  const serviceKey = (c.req.header("x-service-role") || "").trim();
+  const expectedCron = (
+    Deno.env.get("FLEET_CRON_SECRET") ||
+    Deno.env.get("RIDES_CRON_SECRET") ||
+    Deno.env.get("CRON_SECRET") ||
+    ""
+  ).trim();
+  const expectedService = (Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "").trim();
+  const authorized =
+    (expectedCron && cronSecret === expectedCron) ||
+    (expectedService && serviceKey === expectedService);
+  if (!authorized) return c.json({ error: "Forbidden" }, 403);
+
+  const body = await c.req.json().catch(() => ({})) as { period?: string };
+  const { priorJamaicaPeriodYyyyMm, runGrowthGuaranteeForPeriod } = await import("./growthGuarantee.ts");
+  const period = String(body.period || priorJamaicaPeriodYyyyMm()).trim();
+  try {
+    const result = await runGrowthGuaranteeForPeriod(getServiceSupabase(), period);
+    return c.json(result);
+  } catch (e) {
+    return c.json({ error: e instanceof Error ? e.message : "growth_guarantee_failed" }, 500);
+  }
+});
+
+// Phase 3 Rush Pass — daily renew / past_due / expire
+app.post("/internal/pricing/rush-pass/renew", async (c) => {
+  const cronSecret = (c.req.header("x-fleet-cron-secret") || c.req.header("x-cron-secret") || "").trim();
+  const serviceKey = (c.req.header("x-service-role") || "").trim();
+  const expectedCron = (
+    Deno.env.get("FLEET_CRON_SECRET") ||
+    Deno.env.get("RIDES_CRON_SECRET") ||
+    Deno.env.get("CRON_SECRET") ||
+    ""
+  ).trim();
+  const expectedService = (Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "").trim();
+  const authorized =
+    (expectedCron && cronSecret === expectedCron) ||
+    (expectedService && serviceKey === expectedService);
+  if (!authorized) return c.json({ error: "Forbidden" }, 403);
+
+  try {
+    const { runRushPassRenewalJob } = await import("./rushPassRenew.ts");
+    const result = await runRushPassRenewalJob(getServiceSupabase());
+    return c.json(result);
+  } catch (e) {
+    return c.json({ error: e instanceof Error ? e.message : "rush_pass_renew_failed" }, 500);
+  }
+});
 registerCustomerDiscoveryRoutes(app, { getServiceSupabase, getSupabase });
 registerCourierConsumerRoutes(app, { getSupabase, getServiceSupabase });
 registerDashHealthRoutes(app, { getServiceSupabase });

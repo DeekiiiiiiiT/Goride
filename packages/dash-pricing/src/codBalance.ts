@@ -19,10 +19,6 @@ export type CodTrialBalanceInput = {
   tip?: number;
   courierTipNet?: number;
   total: number;
-  /** legacy Model A */
-  pricingModel?: string;
-  platformFee?: number;
-  deliveryFee?: number;
 };
 
 export type CodTrialBalance = {

@@ -13,7 +13,7 @@ import {
   isFreeDeliveryPromo,
   resolveActivePromoByCode,
 } from "./customerDiscoveryRoutes.ts";
-import { resolveMinOrderSubtotal } from "../_shared/dashPricing.ts";
+import { resolveOrderFloorJmd } from "../_shared/dashPricing.ts";
 import { assertSameMarketCoverage, resolveDashOrderPricing } from "./pricingResolver.ts";
 import { resolveMerchantFoodGctRate } from "../_shared/gctRate.ts";
 import { reverseOrderOutputTax } from "../_shared/gctLedger.ts";
@@ -235,7 +235,9 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
 
     const { data: merchantMarketRow } = await serviceSb
       .from("merchants")
-      .select("market_id, min_order_amount")
+      .select(
+        "market_id, min_order_amount, delivery_radius_km, pricing_tier:merchant_tiers(default_delivery_radius_km)",
+      )
       .eq("id", body.merchantId)
       .maybeSingle();
     const merchantMarketId = merchantMarketRow?.market_id != null
@@ -264,10 +266,6 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
     const paymentMethod = body.paymentMethod || "wipay";
     const discountedSubtotal = Math.round(Math.max(0, pricing.subtotal - discount) * 100) / 100;
 
-    const merchantMinOrder = merchantMarketRow?.min_order_amount != null
-      ? Number(merchantMarketRow.min_order_amount)
-      : null;
-
     if (paymentMethod === "cash" && Deno.env.get("DASH_ALLOW_CASH_ORDERS") !== "true") {
       return c.json({
         error: "Cash on delivery is not available yet. Please pay with card via WiPay.",
@@ -294,33 +292,63 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
       return c.json({ error: "Unable to resolve pricing for this merchant", code: "pricing_unavailable" }, 503);
     }
 
-    const hardMin = Math.max(0, Number(v2Pricing.rules.hardMinOrderSubtotalJmd ?? 400));
-    if (hardMin > 0 && discountedSubtotal < hardMin) {
+    const orderFloor = resolveOrderFloorJmd(v2Pricing.rules.minOrderSubtotalJmd);
+    if (orderFloor > 0 && discountedSubtotal < orderFloor) {
       return c.json({
-        error: `Minimum food order J$${hardMin.toFixed(0)} required`,
+        error: `Minimum food order J$${orderFloor.toFixed(0)} required`,
         code: "min_order_not_met",
-        min_order_jmd: hardMin,
+        min_order_jmd: orderFloor,
       }, 400);
     }
 
-    // Soft min wall only when small-order fee is not configured
-    const smallOrderThreshold = Number(v2Pricing.rules.smallOrderThresholdJmd ?? 0);
-    const smallOrderFeeConfigured = Number(v2Pricing.rules.smallOrderFeeJmd ?? 0);
-    if (!(smallOrderThreshold > 0 && smallOrderFeeConfigured > 0)) {
-      const softMin = resolveMinOrderSubtotal(
-        v2Pricing.rules.minOrderSubtotalJmd,
-        merchantMinOrder,
+    const distanceKmRaw = v2Pricing.distanceKmRaw ?? null;
+    if (distanceKmRaw != null && Number.isFinite(distanceKmRaw)) {
+      const merchantRadius = merchantMarketRow?.delivery_radius_km != null
+        ? Number(merchantMarketRow.delivery_radius_km)
+        : NaN;
+      const tierEmbed = merchantMarketRow?.pricing_tier as
+        | { default_delivery_radius_km?: number | null }
+        | { default_delivery_radius_km?: number | null }[]
+        | null
+        | undefined;
+      const tierRow = Array.isArray(tierEmbed) ? tierEmbed[0] : tierEmbed;
+      const tierRadius = tierRow?.default_delivery_radius_km != null
+        ? Number(tierRow.default_delivery_radius_km)
+        : NaN;
+      const radiusCandidates = [merchantRadius, tierRadius].filter(
+        (n) => Number.isFinite(n) && n > 0,
       );
-      if (softMin > 0 && discountedSubtotal < softMin) {
-        return c.json({
-          error: `Minimum food order J$${softMin.toFixed(0)} required`,
-          code: "min_order_not_met",
-          min_order_jmd: softMin,
-        }, 400);
+      if (radiusCandidates.length > 0) {
+        const maxRadiusKm = Math.min(...radiusCandidates);
+        if (distanceKmRaw > maxRadiusKm) {
+          return c.json({
+            error: `This store only delivers within ${maxRadiusKm.toFixed(0)} km`,
+            code: "outside_delivery_radius",
+            max_radius_km: maxRadiusKm,
+            distance_km_raw: distanceKmRaw,
+          }, 400);
+        }
       }
     }
 
-    const pricingModel = "v2";
+    const minContribution = Math.max(
+      0,
+      Number(v2Pricing.rules.guardrails?.minOrderContributionJmd ?? 150),
+    );
+    // Rush Pass / free-delivery are intentional platform subsidies (prepaid or promo).
+    const subsidyOk = v2Pricing.rushPassApplied === true || v2Pricing.freeDeliveryApplied === true;
+    if (!subsidyOk && minContribution > 0 && v2Pricing.contributionJmd < minContribution) {
+      console.error(
+        "[placeOrder] contribution below floor",
+        v2Pricing.contributionJmd,
+        minContribution,
+      );
+      return c.json({
+        error: "Order cannot be placed with current pricing configuration",
+        code: "order_below_margin_floor",
+      }, 400);
+    }
+
     const deliveryFee = v2Pricing.deliveryFee;
     const serviceFee = v2Pricing.serviceFee;
     const platformFee = serviceFee; // alias — service_fee is authoritative for Model B
@@ -342,6 +370,8 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
       tier_slug: v2Pricing.tierSlug,
       merchant_commission_rate: v2Pricing.merchantCommissionRate,
       free_delivery_applied: v2Pricing.freeDeliveryApplied,
+      rush_pass_applied: v2Pricing.rushPassApplied === true,
+      rush_pass_membership_id: v2Pricing.rushPassMembershipId ?? null,
       promo_cost_jmd: v2Pricing.promoCostJmd,
       order_total: v2Pricing.orderTotal,
       processing_fee: v2Pricing.processingFee,
@@ -351,6 +381,7 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
       tax_food_jmd: v2Pricing.taxFoodJmd,
       tax_platform_jmd: v2Pricing.taxPlatformJmd,
       service_fee: v2Pricing.serviceFee,
+      service_fee_distance_jmd: v2Pricing.serviceFeeDistanceJmd ?? 0,
       delivery_fee: v2Pricing.deliveryFee,
       delivery_fee_platform_amount: v2Pricing.deliveryFeePlatformAmount,
       delivery_fee_courier_amount: v2Pricing.deliveryFeeCourierAmount,
@@ -361,6 +392,8 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
       platform_delivery_subsidy_jmd: platformDeliverySubsidyJmd,
       courier_base_pay_jmd: v2Pricing.courierBasePayJmd ?? 0,
       courier_distance_pay_jmd: v2Pricing.courierDistancePayJmd ?? 0,
+      contribution_jmd: v2Pricing.contributionJmd,
+      promo_funded_by: v2Pricing.promoFundedBy,
     };
     const total = v2Pricing.customerTotal;
     pricing.tax = v2Pricing.tax;
@@ -456,7 +489,8 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
       distance_km: distanceKm,
       pricing_profile_version: pricingProfileVersion,
       pricing_snapshot: pricingSnapshot,
-      pricing_model: pricingModel,
+      contribution_jmd: v2Pricing.contributionJmd,
+      promo_funded_by: v2Pricing.promoFundedBy,
       tax: pricing.tax,
       tax_food_jmd: taxFoodJmd,
       tax_platform_jmd: taxPlatformJmd,
@@ -474,6 +508,9 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
       payment_method: paymentMethod,
       payment_status: isCash ? "pending_collection" : "pending",
       ...(appliedPromoCode ? { promo_code: appliedPromoCode } : {}),
+      ...(v2Pricing.rushPassMembershipId
+        ? { rush_pass_membership_id: v2Pricing.rushPassMembershipId }
+        : {}),
     };
 
     if (idempotencyOrderId) {

@@ -137,6 +137,8 @@ export type SimBreakdown = {
   total?: number;
   distanceKm?: number | null;
   freeDeliveryApplied?: boolean;
+  rushPassApplied?: boolean;
+  serviceFeeDistanceJmd?: number;
   merchantCommissionAmount?: number;
   merchantCommissionRate?: number;
   deliveryFeeCourierAmount?: number;
@@ -146,6 +148,7 @@ export type SimBreakdown = {
   courierDistancePayJmd?: number;
   promoCostJmd?: number;
   platformDeliverySubsidyJmd?: number;
+  contributionJmd?: number;
 };
 
 export type MarketRulesForSim = {
@@ -290,10 +293,15 @@ export function pickBreakdown(raw: Record<string, unknown> | null): SimBreakdown
     courierDistancePayJmd: Number(raw.courierDistancePayJmd ?? 0),
     promoCostJmd: Number(raw.promoCostJmd ?? 0),
     platformDeliverySubsidyJmd: Number(raw.platformDeliverySubsidyJmd ?? 0),
+    contributionJmd: Number(raw.contributionJmd ?? raw.contribution_jmd ?? 0),
     distanceKm: raw.distanceKm != null && Number.isFinite(Number(raw.distanceKm))
       ? Number(raw.distanceKm)
       : null,
     freeDeliveryApplied: Boolean(raw.freeDeliveryApplied),
+    rushPassApplied: Boolean(raw.rushPassApplied ?? raw.rush_pass_applied),
+    serviceFeeDistanceJmd: Number(
+      raw.serviceFeeDistanceJmd ?? raw.service_fee_distance_jmd ?? 0,
+    ),
   };
 }
 

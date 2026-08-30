@@ -1,11 +1,21 @@
 # Rush Marketplace Pricing — Migration Audit & Implementation Review
 
+> **SUPERSEDED (2026-08-30):** Target architecture is now
+> [RUSH_PRICING_STRATEGY_REVIEW.md](RUSH_PRICING_STRATEGY_REVIEW.md) —
+> platform-wide delivery fee, merchant-owned inflation, tiers as demand goods only.
+> Migration `20260830300000_rush_pricing_architecture.sql`. Keep this file as
+> historical audit trail only.
+
 **Scope:** Roam Rush food-delivery pricing (`delivery` schema, `dash-*` apps)
 **Original audit:** 2026-08-28
 **Implementation:** commit `515a88ea` (50 files, +2,464/−418)
 **Follow-up fixes:** commit `63c4d928` (12 files), plus the COD fix in the working tree
-**Status:** ✅ **Complete.** All 11 gaps, both original defects, and every item raised in
-the two follow-up reviews are closed and verified. Nothing is outstanding.
+**Status:** Historical — see architecture rebuild doc for current model.
+
+**Legacy retirement (2026-08-29):** Market-wide `delivery.base_fee_jmd`, Model A /
+`pricing_v2_enabled` toggle, and courier `%` delivery share are **removed**.
+**(Superseded 2026-08-30):** tier `base_delivery_fee_jmd` also removed — delivery base
+is global `customer.delivery.base_jmd`.
 
 ---
 

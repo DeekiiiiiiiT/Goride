@@ -150,7 +150,7 @@ export const FAQ_ITEMS = [
     id: 'pass',
     topic: 'payment',
     title: 'Roam Rush Pass',
-    body: 'Roam Rush Pass is not available yet. Promo codes from restaurants still work at checkout when the partner has an active offer.',
+    body: 'Rush Pass gives free delivery and a lower service fee at Growth and Dominant restaurants. Subscribe under Account → Rush Pass. Promo codes still work at checkout when a partner has an active offer.',
   },
   {
     id: 'promos',
