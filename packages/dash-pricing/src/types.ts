@@ -92,6 +92,7 @@ export type NestedRulesBlob = {
   partner?: PartnerRulesBlob;
   guardrails?: Record<string, unknown>;
   growth_guarantee?: Record<string, unknown>;
+  rush_pass?: Record<string, unknown>;
 };
 
 /** Full market pricing profile rules blob — flat runtime shape for engine */
@@ -121,6 +122,16 @@ export type PricingRules = {
     tierSlugs: string[];
     monthsFromAssignment: number;
     minOrdersPerMonth: number;
+    /** Hard ceiling on credit per merchant per period (JMD). */
+    maxCreditJmdPerPeriod?: number;
+  };
+  /**
+   * Rush Pass free-delivery bounds (platform defaults; plan may override).
+   * Both must be positive — unbounded Pass free delivery is rejected by validatePricingConfig.
+   */
+  rushPass?: {
+    maxFreeDeliveryKm: number;
+    monthlySubsidyBudgetJmd: number;
   };
 };
 
@@ -157,6 +168,11 @@ export type PricingInput = {
   promoFundedBy?: 'merchant' | 'platform' | 'shared';
   rushPassApplied?: boolean;
   rushPassMembershipId?: string | null;
+  /** When Pass is on but free delivery is withheld */
+  rushPassFreeDeliveryDeniedReason?: 'distance' | 'budget' | null;
+  rushPassSubsidyBudgetJmd?: number;
+  rushPassSubsidyUsedJmd?: number;
+  rushPassSubsidyRemainingJmd?: number;
 };
 
 export type PricingBreakdown = {
@@ -201,6 +217,10 @@ export type PricingBreakdown = {
   freeDeliveryApplied: boolean;
   rushPassApplied: boolean;
   rushPassMembershipId?: string | null;
+  rushPassFreeDeliveryDeniedReason?: 'distance' | 'budget' | null;
+  rushPassSubsidyBudgetJmd?: number;
+  rushPassSubsidyUsedJmd?: number;
+  rushPassSubsidyRemainingJmd?: number;
 };
 
 export type PricingConfigValidationError = {

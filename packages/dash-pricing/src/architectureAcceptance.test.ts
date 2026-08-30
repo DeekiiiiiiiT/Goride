@@ -93,7 +93,7 @@ describe('architecture acceptance', () => {
           distanceKm: 5,
           rules,
           tier,
-          taxRatePercent: 0.15,
+          taxRatePercent: 15,
           paymentMethod: 'cash',
         }),
       );
@@ -111,7 +111,7 @@ describe('architecture acceptance', () => {
       distanceKm: 50,
       rules,
       tier: TIERS[2],
-      taxRatePercent: 0.15,
+      taxRatePercent: 15,
       paymentMethod: 'cash',
     });
     expect(b.contributionJmd).toBeGreaterThan(0);

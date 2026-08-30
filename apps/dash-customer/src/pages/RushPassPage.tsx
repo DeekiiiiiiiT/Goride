@@ -15,6 +15,8 @@ type RushPassStatus = {
     free_delivery: boolean;
     service_fee_multiplier: number;
     eligible_tier_slugs?: string[];
+    max_free_delivery_km?: number;
+    monthly_subsidy_budget_jmd?: number;
   } | null;
   membership: {
     id: string;
@@ -24,6 +26,12 @@ type RushPassStatus = {
     auto_renew: boolean;
     source: string;
   } | null;
+  subsidy?: {
+    budget_jmd: number;
+    used_jmd: number;
+    remaining_jmd: number;
+    max_free_delivery_km: number;
+  };
 };
 
 type Props = {
@@ -144,7 +152,10 @@ export default function RushPassPage({ onNavigate }: Props) {
                 {plan?.name ?? 'Rush Pass'}
               </h1>
               <p className="text-body-md text-on-surface-variant">
-                Free delivery and half service fee at Growth &amp; Dominant restaurants.
+                Half service fee at Growth &amp; Dominant. Free delivery within{' '}
+                {plan?.max_free_delivery_km ?? status?.subsidy?.max_free_delivery_km ?? 8} km road
+                distance, up to {formatJmd(plan?.monthly_subsidy_budget_jmd ?? plan?.price_jmd ?? 1500)}{' '}
+                delivery credit per period.
                 {plan ? ` ${formatJmd(plan.price_jmd)} / ${plan.billing_period_days} days.` : ''}
               </p>
             </section>
@@ -155,6 +166,13 @@ export default function RushPassPage({ onNavigate }: Props) {
                   <MaterialIcon name="verified" className="text-lg" />
                   Active until {new Date(membership.current_period_end).toLocaleDateString()}
                 </p>
+                {status?.subsidy ? (
+                  <p className="text-body-sm text-on-surface-variant">
+                    Free-delivery credit left this period:{' '}
+                    {formatJmd(status.subsidy.remaining_jmd)} of{' '}
+                    {formatJmd(status.subsidy.budget_jmd)}
+                  </p>
+                ) : null}
                 <button
                   type="button"
                   disabled={busy}

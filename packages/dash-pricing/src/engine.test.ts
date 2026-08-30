@@ -59,7 +59,7 @@ describe('Rush Pass service fee multiplier', () => {
       distanceKm: 12,
       rules,
       tier: GROWTH,
-      taxRatePercent: 0.15,
+      taxRatePercent: 15,
       paymentMethod: 'cash',
     });
     const pass = buildOrderPricing({
@@ -67,7 +67,7 @@ describe('Rush Pass service fee multiplier', () => {
       distanceKm: 12,
       rules,
       tier: GROWTH,
-      taxRatePercent: 0.15,
+      taxRatePercent: 15,
       paymentMethod: 'cash',
       freeDelivery: true,
       serviceFeeMultiplier: 0.5,
@@ -99,15 +99,15 @@ describe('tier ladder monotone', () => {
     for (const basket of [800, 1500, 2500, 4000, 10000]) {
       const e = buildOrderPricing({
         subtotal: basket, distanceKm: 5, rules: RULES, tier: ECONOMY,
-        taxRatePercent: 0.15, paymentMethod: 'cash',
+        taxRatePercent: 15, paymentMethod: 'cash',
       });
       const g = buildOrderPricing({
         subtotal: basket, distanceKm: 5, rules: RULES, tier: GROWTH,
-        taxRatePercent: 0.15, paymentMethod: 'cash',
+        taxRatePercent: 15, paymentMethod: 'cash',
       });
       const d = buildOrderPricing({
         subtotal: basket, distanceKm: 5, rules: RULES, tier: DOMINANT,
-        taxRatePercent: 0.15, paymentMethod: 'cash',
+        taxRatePercent: 15, paymentMethod: 'cash',
       });
       expect(g.contributionJmd).toBeGreaterThan(e.contributionJmd);
       expect(d.contributionJmd).toBeGreaterThan(g.contributionJmd);
@@ -125,7 +125,7 @@ describe('buildOrderPricing', () => {
       distanceKm: 5,
       rules: RULES,
       tier: ECONOMY,
-      taxRatePercent: 0.15,
+      taxRatePercent: 15,
       paymentMethod: 'wipay',
     });
     expect(b.contributionJmd).toBe(
@@ -147,7 +147,7 @@ describe('buildOrderPricing', () => {
         distanceKm: 3,
         rules: RULES,
         tier: { slug: 'x', name: 'X', commissionRate: 0.2 },
-        taxRatePercent: 0.15,
+        taxRatePercent: 15,
         paymentMethod: 'cash',
       }),
     ).not.toThrow();

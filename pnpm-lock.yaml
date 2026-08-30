@@ -1819,6 +1819,9 @@ importers:
       '@roam/dash-coverage':
         specifier: workspace:*
         version: link:../dash-coverage
+      '@roam/dash-pricing':
+        specifier: workspace:*
+        version: link:../dash-pricing
       '@roam/location':
         specifier: workspace:*
         version: link:../location

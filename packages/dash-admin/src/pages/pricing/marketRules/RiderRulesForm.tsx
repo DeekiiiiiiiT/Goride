@@ -220,6 +220,7 @@ export function PlatformRulesForm({
     tier_slugs: ['dominant'],
     months_from_assignment: 6,
     min_orders_per_month: 20,
+    max_credit_jmd_per_period: 50_000,
   };
   return (
     <div className="space-y-4">
@@ -283,6 +284,25 @@ export function PlatformRulesForm({
                   growth_guarantee: {
                     ...gg,
                     min_orders_per_month: Number(e.target.value) || 20,
+                  },
+                }))
+              }
+              className="mt-1 w-full px-3 py-1.5 text-sm rounded-lg bg-slate-950 border border-slate-700 text-white"
+            />
+          </label>
+          <label className="block text-xs text-slate-400 col-span-2">
+            Max credit per merchant / month (J$)
+            <input
+              type="number"
+              min={0}
+              disabled={!canWrite}
+              value={gg.max_credit_jmd_per_period ?? 50_000}
+              onChange={(e) =>
+                setRules((r) => ({
+                  ...r,
+                  growth_guarantee: {
+                    ...gg,
+                    max_credit_jmd_per_period: Number(e.target.value) || 50_000,
                   },
                 }))
               }

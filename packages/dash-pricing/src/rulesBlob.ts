@@ -105,6 +105,9 @@ export function normalizeRulesBlob(
   const growthGuarantee: Record<string, unknown> = isPlainObject(raw.growth_guarantee)
     ? { ...raw.growth_guarantee }
     : {};
+  const rushPass: Record<string, unknown> = isPlainObject(raw.rush_pass)
+    ? { ...raw.rush_pass }
+    : {};
 
   for (const { party, key } of FLAT_TO_PARTY) {
     if (raw[key] === undefined) continue;
@@ -133,6 +136,7 @@ export function normalizeRulesBlob(
     partner: Object.keys(partner).length ? partner : undefined,
     guardrails: Object.keys(guardrails).length ? guardrails : undefined,
     growth_guarantee: Object.keys(growthGuarantee).length ? growthGuarantee : undefined,
+    rush_pass: Object.keys(rushPass).length ? rushPass : undefined,
   };
 }
 
@@ -194,6 +198,11 @@ export function serializePricingRulesNested(rules: PricingRules): NestedRulesBlo
       tier_slugs: rules.growthGuarantee?.tierSlugs ?? ['dominant'],
       months_from_assignment: rules.growthGuarantee?.monthsFromAssignment ?? 6,
       min_orders_per_month: rules.growthGuarantee?.minOrdersPerMonth ?? 20,
+      max_credit_jmd_per_period: rules.growthGuarantee?.maxCreditJmdPerPeriod ?? 50_000,
+    },
+    rush_pass: {
+      max_free_delivery_km: rules.rushPass?.maxFreeDeliveryKm ?? 8,
+      monthly_subsidy_budget_jmd: rules.rushPass?.monthlySubsidyBudgetJmd ?? 1500,
     },
   };
 }
@@ -261,6 +270,7 @@ export function flattenNestedToLegacy(blob: NestedRulesBlob): Record<string, unk
   }
   if (blob.guardrails) out.guardrails = blob.guardrails;
   if (blob.growth_guarantee) out.growth_guarantee = blob.growth_guarantee;
+  if (blob.rush_pass) out.rush_pass = blob.rush_pass;
 
   if (blob.platform) out.platform = blob.platform;
   if (blob.customer) out.customer = blob.customer;

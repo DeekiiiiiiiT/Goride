@@ -620,7 +620,13 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
               )}
               {checkoutPricing?.rushPassApplied && (
                 <p className="text-body-sm text-primary font-medium">
-                  Rush Pass applied — free delivery &amp; lower service fee
+                  {checkoutPricing.freeDeliveryApplied
+                    ? 'Rush Pass applied — free delivery & lower service fee'
+                    : checkoutPricing.rushPassFreeDeliveryDeniedReason === 'distance'
+                      ? 'Rush Pass — lower service fee (outside free-delivery distance)'
+                      : checkoutPricing.rushPassFreeDeliveryDeniedReason === 'budget'
+                        ? 'Rush Pass — lower service fee (monthly free-delivery credit used)'
+                        : 'Rush Pass — lower service fee'}
                 </p>
               )}
               <div className="space-y-1 text-body-sm text-on-surface-variant">

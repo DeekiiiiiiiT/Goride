@@ -444,6 +444,10 @@ export function buildOrderPricing(input: PricingInput): PricingBreakdown {
     freeDeliveryApplied,
     rushPassApplied: input.rushPassApplied === true,
     rushPassMembershipId: input.rushPassMembershipId ?? null,
+    rushPassFreeDeliveryDeniedReason: input.rushPassFreeDeliveryDeniedReason ?? null,
+    rushPassSubsidyBudgetJmd: input.rushPassSubsidyBudgetJmd,
+    rushPassSubsidyUsedJmd: input.rushPassSubsidyUsedJmd,
+    rushPassSubsidyRemainingJmd: input.rushPassSubsidyRemainingJmd,
   };
 }
 
@@ -530,6 +534,19 @@ export function parsePricingRules(raw: Record<string, unknown> | null | undefine
     minOrdersPerMonth: Number(
       ggRaw.min_orders_per_month ?? DEFAULTS.growthGuarantee?.minOrdersPerMonth ?? 20,
     ),
+    maxCreditJmdPerPeriod: Number(
+      ggRaw.max_credit_jmd_per_period ?? DEFAULTS.growthGuarantee?.maxCreditJmdPerPeriod ?? 50_000,
+    ),
+  };
+
+  const rpRaw = (flat.rush_pass ?? {}) as Record<string, unknown>;
+  const rushPass = {
+    maxFreeDeliveryKm: Number(
+      rpRaw.max_free_delivery_km ?? DEFAULTS.rushPass?.maxFreeDeliveryKm ?? 8,
+    ),
+    monthlySubsidyBudgetJmd: Number(
+      rpRaw.monthly_subsidy_budget_jmd ?? DEFAULTS.rushPass?.monthlySubsidyBudgetJmd ?? 1500,
+    ),
   };
 
   return {
@@ -601,6 +618,7 @@ export function parsePricingRules(raw: Record<string, unknown> | null | undefine
         : DEFAULTS.guardrails?.minOrderContributionJmd,
     },
     growthGuarantee,
+    rushPass,
   };
 }
 
@@ -654,6 +672,11 @@ export function defaultPricingRules(): PricingRules {
       tierSlugs: ['dominant'],
       monthsFromAssignment: 6,
       minOrdersPerMonth: 20,
+      maxCreditJmdPerPeriod: 50_000,
+    },
+    rushPass: {
+      maxFreeDeliveryKm: 8,
+      monthlySubsidyBudgetJmd: 1500,
     },
   };
 }
@@ -678,6 +701,40 @@ export function resolveOrderFloorJmd(
   marketMinJmd: number | undefined,
 ): number {
   return Math.max(0, marketMinJmd ?? 0);
+}
+
+/**
+ * Whether Rush Pass should waive delivery on this quote.
+ * Fee cut (serviceFeeMultiplier) is decided separately by the resolver.
+ */
+export function resolveRushPassFreeDelivery(opts: {
+  planAllowsFreeDelivery: boolean;
+  distanceKm: number | null | undefined;
+  maxFreeDeliveryKm: number;
+  subsidyUsedJmd: number;
+  monthlyBudgetJmd: number;
+}): {
+  apply: boolean;
+  reason: 'ok' | 'disabled' | 'distance' | 'budget';
+  remainingBudgetJmd: number;
+} {
+  const budget = Math.max(0, Number(opts.monthlyBudgetJmd) || 0);
+  const used = Math.max(0, Number(opts.subsidyUsedJmd) || 0);
+  const remaining = roundMoney(Math.max(0, budget - used));
+  if (!opts.planAllowsFreeDelivery) {
+    return { apply: false, reason: 'disabled', remainingBudgetJmd: remaining };
+  }
+  const maxKm = Number(opts.maxFreeDeliveryKm);
+  if (!Number.isFinite(maxKm) || maxKm <= 0) {
+    return { apply: false, reason: 'disabled', remainingBudgetJmd: remaining };
+  }
+  if (opts.distanceKm != null && Number.isFinite(opts.distanceKm) && opts.distanceKm > maxKm) {
+    return { apply: false, reason: 'distance', remainingBudgetJmd: remaining };
+  }
+  if (remaining <= 0) {
+    return { apply: false, reason: 'budget', remainingBudgetJmd: 0 };
+  }
+  return { apply: true, reason: 'ok', remainingBudgetJmd: remaining };
 }
 
 /**
@@ -737,6 +794,7 @@ export function validatePricingConfig(
     };
   }
 
+  const GCT = 15; // percent — never fractional
   if (tiers.length >= 2) {
     const sorted = [...tiers].sort((a, b) => a.commissionRate - b.commissionRate);
     const baskets = [800, 2500, 10000];
@@ -748,7 +806,7 @@ export function validatePricingConfig(
           distanceKm: 5,
           rules,
           tier,
-          taxRatePercent: 0.15,
+          taxRatePercent: GCT,
           paymentMethod: 'cash',
         });
         if (prev != null && b.contributionJmd < prev) {
@@ -776,55 +834,78 @@ export function validatePricingConfig(
     }
   }
 
-  // Rush Pass worst-case: free delivery + 50% service fee at Growth/Dominant must still
-  // clear contribution floor when platform funds delivery (promoCost). Floor check uses
-  // contribution after subsidy — Pass makes contribution lower; reject if negative at
-  // typical baskets for eligible tiers with max distance addon.
+  const passDefaults = rules.rushPass ?? {
+    maxFreeDeliveryKm: 8,
+    monthlySubsidyBudgetJmd: 1500,
+  };
+  const maxFreeKm = Number(passDefaults.maxFreeDeliveryKm);
+  const passBudget = Number(passDefaults.monthlySubsidyBudgetJmd);
+  if (!(maxFreeKm > 0) || !(passBudget > 0)) {
+    return {
+      code: 'PASS_SUBSIDY_UNBOUNDED',
+      message:
+        'Rush Pass free delivery requires max_free_delivery_km > 0 and monthly_subsidy_budget_jmd > 0',
+    };
+  }
+
+  // Pass worst-case: free delivery only at capped km; beyond cap delivery is charged.
   const passEligible = tiers.filter((t) =>
     ['growth', 'dominant'].includes(String(t.slug).toLowerCase())
   );
-  const passRules: PricingRules = {
-    ...rules,
-    serviceFeeDistanceAddon: distAddon?.enabled
-      ? distAddon
-      : { enabled: true, thresholdKm: 5, perKmJmd: 20, maxJmd: 200 },
-  };
   const contribFloor = rules.guardrails?.minOrderContributionJmd ?? 0;
   for (const tier of passEligible) {
     for (const basket of [800, 2500]) {
-      const pass = buildOrderPricing({
+      // At free-delivery cap: subsidy allowed down to −budget for a single order
+      const passFree = buildOrderPricing({
         subtotal: basket,
-        distanceKm: maxRadius,
-        rules: passRules,
+        distanceKm: maxFreeKm,
+        rules,
         tier,
-        taxRatePercent: 0.15,
+        taxRatePercent: GCT,
         paymentMethod: 'cash',
         freeDelivery: true,
         serviceFeeMultiplier: 0.5,
         rushPassApplied: true,
       });
-      // Platform-funded free delivery: contribution can dip but must not go deeply negative
-      // beyond the configured floor when Pass is off; with Pass on, allow down to -promoCost
-      // but reject configs where non-Pass contribution at same basket is already below floor.
-      const base = buildOrderPricing({
-        subtotal: basket,
-        distanceKm: 5,
-        rules,
-        tier,
-        taxRatePercent: 0.15,
-        paymentMethod: 'cash',
-      });
-      if (contribFloor > 0 && base.contributionJmd < contribFloor) {
-        return {
-          code: 'PASS_CONTRIBUTION_FLOOR',
-          message: `tier ${tier.slug} basket ${basket} contribution ${base.contributionJmd} below floor ${contribFloor} (Pass worst-case baseline)`,
-        };
-      }
-      // Pass quote itself should still have finite totals / non-NaN contribution
-      if (!Number.isFinite(pass.contributionJmd) || !Number.isFinite(pass.customerTotal)) {
+      if (!Number.isFinite(passFree.contributionJmd) || !Number.isFinite(passFree.customerTotal)) {
         return {
           code: 'PASS_CONTRIBUTION_FLOOR',
           message: `Rush Pass quote invalid for tier ${tier.slug} basket ${basket}`,
+        };
+      }
+      const subsidy = passFree.platformDeliverySubsidyJmd ?? 0;
+      if (subsidy > passBudget + 0.01) {
+        return {
+          code: 'PASS_CONTRIBUTION_FLOOR',
+          message:
+            `Pass free-delivery subsidy ${subsidy} at ${maxFreeKm} km exceeds monthly budget ${passBudget} for tier ${tier.slug}`,
+        };
+      }
+      if (passFree.contributionJmd < -passBudget) {
+        return {
+          code: 'PASS_CONTRIBUTION_FLOOR',
+          message:
+            `Pass contribution ${passFree.contributionJmd} at ${maxFreeKm} km below −budget ${passBudget} for tier ${tier.slug}`,
+        };
+      }
+
+      // Beyond free-delivery cap: delivery charged; must clear normal contribution floor
+      const passPaidDelivery = buildOrderPricing({
+        subtotal: basket,
+        distanceKm: Math.min(maxRadius, Math.max(maxFreeKm + 1, 12)),
+        rules,
+        tier,
+        taxRatePercent: GCT,
+        paymentMethod: 'cash',
+        freeDelivery: false,
+        serviceFeeMultiplier: 0.5,
+        rushPassApplied: true,
+      });
+      if (contribFloor > 0 && passPaidDelivery.contributionJmd < contribFloor) {
+        return {
+          code: 'PASS_CONTRIBUTION_FLOOR',
+          message:
+            `Pass (delivery charged) contribution ${passPaidDelivery.contributionJmd} below floor ${contribFloor} for tier ${tier.slug}`,
         };
       }
     }

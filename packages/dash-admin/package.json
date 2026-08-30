@@ -18,6 +18,7 @@
     "@roam/auth-client": "workspace:*",
     "@roam/dash-admin-client": "workspace:*",
     "@roam/dash-coverage": "workspace:*",
+    "@roam/dash-pricing": "workspace:*",
     "@roam/location": "workspace:*",
     "@roam/play-store-launch": "workspace:*",
     "@roam/spatial": "workspace:*",

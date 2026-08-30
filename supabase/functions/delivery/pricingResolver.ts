@@ -9,6 +9,7 @@ import {
   haversineKm,
   parsePricingRules,
   parseServiceFeeOverride,
+  resolveRushPassFreeDelivery,
   roundDistanceKm,
   type MerchantTier,
   type PaymentMethod,
@@ -406,18 +407,43 @@ export async function resolveDashOrderPricing(
       ? Math.max(0, Math.trunc(Number(coverage.policy.params?.amount_jmd ?? 200)))
       : 0;
 
-  // Phase 3 Rush Pass — free delivery + service fee multiplier when tier eligible
+  // Phase 3 Rush Pass — fee cut always when eligible; free delivery only within caps
   let freeDelivery = input.freeDelivery === true;
   let serviceFeeMultiplier: number | undefined;
   let rushPassApplied = false;
   let rushPassMembershipId: string | null = null;
+  let rushPassFreeDeliveryDeniedReason: "distance" | "budget" | null = null;
+  let rushPassSubsidyBudgetJmd: number | undefined;
+  let rushPassSubsidyUsedJmd: number | undefined;
+  let rushPassSubsidyRemainingJmd: number | undefined;
+
+  const passDefaults = rules.rushPass ?? {
+    maxFreeDeliveryKm: 8,
+    monthlySubsidyBudgetJmd: 1500,
+  };
 
   if (input.simulateRushPass === true && ctx.tier) {
     const eligible = ["growth", "dominant"];
     if (eligible.includes(String(ctx.tier.slug).toLowerCase())) {
       rushPassApplied = true;
-      freeDelivery = true;
       serviceFeeMultiplier = 0.5;
+      const maxKm = passDefaults.maxFreeDeliveryKm;
+      const budget = passDefaults.monthlySubsidyBudgetJmd;
+      rushPassSubsidyBudgetJmd = budget;
+      rushPassSubsidyUsedJmd = 0;
+      const fd = resolveRushPassFreeDelivery({
+        planAllowsFreeDelivery: true,
+        distanceKm,
+        maxFreeDeliveryKm: maxKm,
+        subsidyUsedJmd: 0,
+        monthlyBudgetJmd: budget,
+      });
+      rushPassSubsidyRemainingJmd = fd.remainingBudgetJmd;
+      if (fd.apply) {
+        freeDelivery = true;
+      } else if (fd.reason === "distance" || fd.reason === "budget") {
+        rushPassFreeDeliveryDeniedReason = fd.reason;
+      }
     }
   } else if (input.customerId && ctx.tier) {
     try {
@@ -432,9 +458,38 @@ export async function resolveDashOrderPricing(
         if (eligible.includes(String(ctx.tier.slug).toLowerCase())) {
           rushPassApplied = true;
           rushPassMembershipId = String(pass.membership.id);
-          if (pass.plan.free_delivery !== false) freeDelivery = true;
           const mult = Number(pass.plan.service_fee_multiplier);
           if (Number.isFinite(mult)) serviceFeeMultiplier = mult;
+
+          const maxKm = Number(
+            pass.plan.max_free_delivery_km ?? passDefaults.maxFreeDeliveryKm,
+          );
+          const budget = Number(
+            pass.plan.monthly_subsidy_budget_jmd ??
+              pass.plan.price_jmd ??
+              passDefaults.monthlySubsidyBudgetJmd,
+          );
+          const periodStart = String(pass.membership.current_period_start ?? "");
+          const used = await loadRushPassSubsidyUsed(
+            sb,
+            rushPassMembershipId,
+            periodStart,
+          );
+          rushPassSubsidyBudgetJmd = budget;
+          rushPassSubsidyUsedJmd = used;
+          const fd = resolveRushPassFreeDelivery({
+            planAllowsFreeDelivery: pass.plan.free_delivery !== false,
+            distanceKm,
+            maxFreeDeliveryKm: maxKm,
+            subsidyUsedJmd: used,
+            monthlyBudgetJmd: budget,
+          });
+          rushPassSubsidyRemainingJmd = fd.remainingBudgetJmd;
+          if (fd.apply) {
+            freeDelivery = true;
+          } else if (fd.reason === "distance" || fd.reason === "budget") {
+            rushPassFreeDeliveryDeniedReason = fd.reason;
+          }
         }
       }
     } catch (e) {
@@ -459,11 +514,63 @@ export async function resolveDashOrderPricing(
     serviceFeeMultiplier,
     rushPassApplied,
     rushPassMembershipId,
+    rushPassFreeDeliveryDeniedReason,
+    rushPassSubsidyBudgetJmd,
+    rushPassSubsidyUsedJmd,
+    rushPassSubsidyRemainingJmd,
     taxRatePercent: gct.ratePercent,
     platformTaxRatePercent: gct.platformRatePercent,
     platformGctEnabled: gct.gctEnabled,
     zoneSurchargeJmd,
   });
+
+  // Reject quote that would overspend remaining Pass budget on this order's subsidy
+  if (
+    rushPassApplied &&
+    breakdown.freeDeliveryApplied &&
+    rushPassSubsidyRemainingJmd != null &&
+    (breakdown.platformDeliverySubsidyJmd ?? 0) > rushPassSubsidyRemainingJmd + 0.01
+  ) {
+    const recalced = buildOrderPricing({
+      subtotal: input.subtotal,
+      discount: input.discount,
+      tip: input.tip,
+      distanceKm,
+      distanceKmRaw,
+      rules,
+      tier: ctx.tier,
+      merchantCommissionRateOverride: ctx.merchantCommissionRateOverride,
+      serviceFeeOverride: ctx.serviceFeeOverride,
+      customerOrderCount,
+      freeDelivery: false,
+      paymentMethod: input.paymentMethod,
+      serviceFeeWaived: input.serviceFeeWaived,
+      serviceFeeMultiplier,
+      rushPassApplied,
+      rushPassMembershipId,
+      rushPassFreeDeliveryDeniedReason: "budget",
+      rushPassSubsidyBudgetJmd,
+      rushPassSubsidyUsedJmd,
+      rushPassSubsidyRemainingJmd: 0,
+      taxRatePercent: gct.ratePercent,
+      platformTaxRatePercent: gct.platformRatePercent,
+      platformGctEnabled: gct.gctEnabled,
+      zoneSurchargeJmd,
+    });
+    return {
+      ...recalced,
+      taxRatePercent: gct.ratePercent,
+      platformTaxRatePercent: gct.platformRatePercent,
+      gctRegistered: gct.gctRegistered,
+      pricingProfileVersion: version,
+      marketId,
+      rules,
+      resolvedMarketId,
+      covered,
+      coverage,
+      marketOverrideApplied,
+    };
+  }
 
   return {
     ...breakdown,
@@ -480,3 +587,33 @@ export async function resolveDashOrderPricing(
   };
 }
 
+async function loadRushPassSubsidyUsed(
+  sb: ServiceSb,
+  membershipId: string,
+  periodStartIso: string,
+): Promise<number> {
+  if (!membershipId || !periodStartIso) return 0;
+  const { data } = await sb
+    .from("orders")
+    .select("platform_delivery_subsidy_jmd, pricing_snapshot, promo_cost_jmd, status")
+    .eq("rush_pass_membership_id", membershipId)
+    .gte("placed_at", periodStartIso);
+  let used = 0;
+  for (const row of data ?? []) {
+    const r = row as Record<string, unknown>;
+    const st = String(r.status ?? "").toLowerCase();
+    if (st === "cancelled" || st === "rejected") continue;
+    const snap = (r.pricing_snapshot ?? {}) as Record<string, unknown>;
+    const fromCol = Number(r.platform_delivery_subsidy_jmd ?? 0);
+    const fromSnap = Number(
+      snap.platform_delivery_subsidy_jmd ??
+        snap.platformDeliverySubsidyJmd ??
+        snap.promo_cost_jmd ??
+        snap.promoCostJmd ??
+        r.promo_cost_jmd ??
+        0,
+    );
+    used += fromCol > 0 ? fromCol : fromSnap;
+  }
+  return Math.round(used * 100) / 100;
+}

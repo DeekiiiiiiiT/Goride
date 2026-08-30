@@ -2,9 +2,10 @@
 
 **Date:** 2026-08-30 · **Implementation reviewed:** 2026-08-30
 **Scope:** `delivery` schema pricing, `@roam/dash-pricing` engine, Model B money split, Merchant Tiers
-**Status:** ✅ **Architecture implemented — 9 of 10 build items complete and verified.**
-One blocker outstanding ([§10.2 A](#a--build-item-1-was-never-done--blocker)) and two minor
-defects. See [§10 Implementation review](#10-implementation-review).
+**Status:** ✅ Architecture implemented — 9 of 10 build items complete ([§10](#10-implementation-review)).
+🔴 **But the defect audit ([§11](#11-defect-audit)) found two serious money defects in the
+out-of-spec Rush Pass and Growth Guarantee code**, plus one blocker carried from §10.
+Commit `a21a1276`.
 **Context:** Pre-launch, no backwards compatibility required. GoRide ledger / fleet finance
 explicitly out of scope.
 
@@ -522,12 +523,23 @@ margin invariant still holds at max radius if it is ever switched on.
 
 ### 10.4 Remaining work
 
-1. 🔴 **Place one real v2 order and reconcile it** (finding A) — nothing else should ship first.
-2. 🟡 Change `0.15` → `15` in the three GCT call sites (finding B).
-3. 🟡 Pre-gate Simulator Save on `validatePricingConfig` (finding C).
-4. ⚪ **Commit the work** — 67 files are uncommitted on `main` with no branch. This is a full
-   pricing-architecture replacement sitting in a dirty tree.
-5. ⚪ Price Rush Pass and the Growth Guarantee once real order frequency exists.
+1. 🔴 **Place one real v2 order and reconcile it** (finding A) — see [docs/RUSH_V2_ORDER_RECONCILE_CHECKLIST.md](docs/RUSH_V2_ORDER_RECONCILE_CHECKLIST.md).
+2. ~~🟡 Change `0.15` → `15` in the three GCT call sites (finding B).~~ **Fixed** in validator + acceptance/engine tests.
+3. ~~🟡 Pre-gate Simulator Save on `validatePricingConfig` (finding C).~~ **Fixed** — Pricing Hub party Save pre-validates client-side.
+4. ⚪ **Commit the work** when ready.
+5. ~~⚪ Bound Rush Pass / fix GG money paths~~ — remediated per §11 (E–H); do not sell Pass until checklist §2–3 signed off.
+
+### 11.3 Priority — remediation status (2026-08-30)
+
+| Finding | Status |
+|---|---|
+| E Pass guardrail | **Fixed in code** — distance cap 8 km + monthly subsidy budget = plan price; validator asserts on Pass quotes |
+| F GG over-credit | **Fixed** — credit from `merchant_commission_amount` |
+| G in-flight orders | **Fixed** — `delivered` / `completed` only |
+| H window / ceiling | **Fixed** — calendar months + `max_credit_jmd_per_period` (claw-back still deferred) |
+| A real order | **Open** — manual QA checklist |
+| B GCT unit | **Fixed** |
+| C Simulator pre-gate | **Fixed** |
 
 ### 10.5 Verdict
 
@@ -539,3 +551,203 @@ better than what I specified.
 
 The gap is verification, not construction: a pricing engine that has never priced a real order is
 not yet proven, however good its unit tests.
+
+> **Scope note.** §10 was a *completeness* check against the §7 build order. It did not review the
+> ~1,000 lines of Rush Pass and Growth Guarantee code, which were never in the spec. That review is
+> [§11](#11-defect-audit), and it is where the serious defects are.
+
+---
+
+## 11. Defect audit
+
+Audited commit `a21a1276` (6,539 insertions / 2,695 deletions across 67 files) on 2026-08-30.
+Focus: the money-handling paths added beyond the §7 spec, which §10 did not cover.
+Reviewed by reading every new money path, tracing call sites, and querying live config.
+**No code was changed.**
+
+### 11.1 Findings
+
+| # | Finding | Severity |
+|---|---|---|
+| [E](#e--rush-pass-has-no-effective-economic-guardrail) | Rush Pass has no effective economic guardrail — unbounded per-order subsidy | 🔴 Critical |
+| [F](#f--growth-guarantee-over-credits-on-discounted-orders) | Growth Guarantee over-credits on any discounted order | 🔴 High |
+| [G](#g--growth-guarantee-counts-in-flight-orders-as-completed) | Growth Guarantee counts in-flight orders as completed | 🟠 Medium |
+| [H](#h--growth-guarantee-minor-issues) | Window drift + no claw-back + no credit ceiling | 🟡 Low |
+| [J](#j--verified-safe-rush-pass-cannot-be-activated-without-payment) | *Verified safe:* Rush Pass cannot be activated without payment | ✅ |
+| [K](#k--pre-existing-out-of-scope) | Client-declared payment status on `/wipay/complete` — **pre-existing** | ⚪ Out of scope |
+
+<a id="e--rush-pass-has-no-effective-economic-guardrail"></a>
+#### E — Rush Pass has no effective economic guardrail 🔴 Critical
+
+**The architecture made every non-Pass order provably profitable. Rush Pass reintroduces exactly the
+unbounded per-order subsidy the rebuild was designed to eliminate — and its guardrail does not
+guard.**
+
+Two independent failures compound:
+
+**1. The validator's Pass check asserts on the wrong quote.**
+[engine.ts:794-828](packages/dash-pricing/src/engine.ts#L794-L828) builds a Pass quote (`pass`) at
+max radius with free delivery and a 0.5 service-fee multiplier — then never asserts anything about
+`pass.contributionJmd` except `Number.isFinite()`. The only real assertion is on `base`, a
+**non-Pass quote at 5 km**:
+
+```ts
+if (contribFloor > 0 && base.contributionJmd < contribFloor) {   // ← `base`, not `pass`
+  return { code: 'PASS_CONTRIBUTION_FLOOR', ... };
+}
+```
+
+`PASS_CONTRIBUTION_FLOOR` therefore cannot fire for an unprofitable Rush Pass configuration. It only
+re-tests a baseline already covered by the monotonicity check. The comment above it describes an
+assertion the code does not make.
+
+**2. The runtime floor is explicitly bypassed for Pass orders.**
+[customerOrderRoutes.ts:339](supabase/functions/delivery/customerOrderRoutes.ts#L339):
+
+```ts
+const subsidyOk = v2Pricing.rushPassApplied === true || v2Pricing.freeDeliveryApplied === true;
+if (!subsidyOk && minContribution > 0 && v2Pricing.contributionJmd < minContribution) { ... }
+```
+
+So neither config-time nor quote-time enforcement applies to Pass orders.
+
+**The exposure.** Live plan: **J$1,500 / 30 days**, `free_delivery: true`,
+`service_fee_multiplier: 0.5`. Worst case within an allowed radius — Dominant (15 km), J$800 basket:
+
+| Component | Amount |
+|---|---|
+| Courier ladder @ 15 km — `max(150 + 15×60, 350)` | J$1,050 |
+| Customer delivery fee (free under Pass) | J$0 |
+| `deliveryFeePlatformAmount` | **−J$1,050** |
+| Commission (30% × 800) | +J$240 |
+| Service fee (J$150 floor × 0.5) | +J$75 |
+| Small-order fee (800 ≥ 800 threshold) | J$0 |
+| **Contribution** | **≈ −J$735** |
+
+**Roughly two such orders consume the entire monthly subscription fee.** There is no per-member
+order cap, no monthly subsidy budget, and no distance restriction beyond the tier radius.
+
+This is a price-point transplant: DashPass and Uber One work at ~US$9.99 because US delivery fees
+are ~US$3.99 and take rates apply to much larger baskets. J$1,500 ≈ US$9.50, but the delivery being
+given away costs J$1,050 at max radius — a far larger fraction of the subscription.
+
+**Recommended (not implemented):** make the Pass check assert on `pass.contributionJmd`; add a
+per-member monthly subsidy budget and/or a Pass-specific distance cap; and re-derive the price from
+expected order frequency once real volume exists.
+
+<a id="f--growth-guarantee-over-credits-on-discounted-orders"></a>
+#### F — Growth Guarantee over-credits on discounted orders 🔴 High
+
+[growthGuarantee.ts:210-215](supabase/functions/delivery/growthGuarantee.ts#L210-L215):
+
+```ts
+for (const o of completed) {
+  const sub = Number((o as { subtotal?: number }).subtotal ?? 0);
+  if (Number.isFinite(sub) && sub > 0) {
+    credit += sub * (dominantRate - economyRate);
+  }
+}
+```
+
+The credit is computed from raw **`subtotal`**, but the engine charges commission on
+**`discountedSubtotal`** (`subtotal − discount`) —
+[engine.ts:262-267](packages/dash-pricing/src/engine.ts#L262). So any order carrying a discount is
+refunded more commission than was ever charged.
+
+The query at [line 183](supabase/functions/delivery/growthGuarantee.ts#L183) already selects
+`merchant_commission_amount` — the authoritative figure — and then never uses it. Deriving the credit
+from the recorded commission (`merchant_commission_amount × (1 − economyRate / dominantRate)`) would
+be both correct and drift-proof.
+
+Real money out of the door, paid automatically by
+`POST /pricing/growth-guarantee/run` into `payments.merchant_adjustments`.
+
+<a id="g--growth-guarantee-counts-in-flight-orders-as-completed"></a>
+#### G — Growth Guarantee counts in-flight orders as completed 🟠 Medium
+
+[growthGuarantee.ts:191-195](supabase/functions/delivery/growthGuarantee.ts#L191-L195):
+
+```ts
+const completed = (orders ?? []).filter((o) => {
+  const s = String(o.status ?? "").toLowerCase();
+  return s !== "cancelled" && s !== "rejected";
+});
+```
+
+The variable is named `completed`, but the predicate admits every non-terminal status —
+`pending`, `paid`, `accepted`, `preparing`, `ready`. A merchant with 15 delivered orders and 6 stuck
+in `pending` counts as 21 and is denied a guarantee they qualified for. It errs in Roam's financial
+favour, which is precisely why it will not surface as a complaint until a merchant audits it.
+
+Define the qualifying set explicitly (`delivered` / `completed`) rather than by exclusion.
+
+<a id="h--growth-guarantee-minor-issues"></a>
+#### H — Growth Guarantee: window drift, no claw-back, no ceiling 🟡 Low
+
+- **Window drift.** [line 63](supabase/functions/delivery/growthGuarantee.ts#L63) measures the
+  6-month eligibility window with an average month of `30.4375` days. Near the boundary the verdict
+  depends on which months a merchant's window spans. Use calendar-month arithmetic for a money gate.
+- **No claw-back.** A credit is computed from orders that were non-cancelled *at run time*. If one is
+  later refunded or cancelled, nothing reverses the credit.
+- **No ceiling.** The credit is uncapped. Nineteen large orders produce an unbounded refund. Arguably
+  correct (DoorDash refunds full commission), but it deserves a deliberate sanity limit and an alert.
+
+Idempotency is handled well — `gg:{merchantId}:{period}` with a pre-check plus `23505` race handling.
+
+<a id="j--verified-safe-rush-pass-cannot-be-activated-without-payment"></a>
+#### J — Verified safe: Rush Pass cannot be activated without payment ✅
+
+I traced the one plausible free-membership path and it is **closed**. Recording it so it is not
+re-litigated:
+
+- `activateRushPassFromPaymentIntent` itself never checks that the intent was paid — it trusts its
+  caller. Both callers guard correctly:
+- `POST /customer/rush-pass/confirm`
+  ([rushPassRoutes.ts:352-355](supabase/functions/delivery/rushPassRoutes.ts#L352)) re-reads
+  `intent.status` **from the database** and requires `completed`/`paid`. Client input cannot set it.
+- The WiPay webhook is secret-verified (`verifyWipayCallbackSecret`) and checks
+  `wipaySuccess(payload.status)` before completing.
+- The client-callable `POST /wipay/complete` *can* locate any intent by `transaction_id` via
+  `findWipayIntent` ([payments/index.ts:142-150](supabase/functions/payments/index.ts#L142)), which is
+  **not** scoped to `order_id` — but it then calls
+  `assertCustomerOwnsOrder(user.id, String(intent.order_id))`, and Rush Pass intents carry
+  `order_id: null`. `String(null)` = `"null"` finds no order, so it returns 404 before reaching
+  activation.
+
+Activation is also idempotent on `last_payment_intent_id`, and renewals correctly extend from the
+existing period end rather than truncating it. Renewal state machine
+(`active → past_due → 3-day grace → expired`) is sound.
+
+<a id="k--pre-existing-out-of-scope"></a>
+#### K — Pre-existing, out of scope ⚪
+
+`POST /payments/wipay/complete` accepts a client-supplied `status` and treats
+`wipaySuccess(body.status)` as sufficient to complete an **order** intent. `git diff` confirms this
+predates commit `a21a1276` — it is not something this work introduced, and the Rush Pass path is not
+reachable through it (finding J). Flagged only so it is on the record; it belongs to a payments
+audit, not this one.
+
+### 11.2 What the audit confirmed is correct
+
+- **The core architecture is sound.** The §3 invariant holds in shipped code; `included_km: 0` and
+  the removal of `max_fee_jmd` are real at both code and data layer.
+- **The validator covers all five write paths** and runs in CI — genuinely enforced, not advisory.
+- **Radius gating uses `distanceKmRaw`** (straight-line) in both the order and discovery paths.
+- **Rush Pass activation, idempotency, and renewal** are correctly built (finding J).
+- **Growth Guarantee idempotency** is correctly built.
+- **`dashMoneySplit` and `dualWriteDash`** carry no residual legacy branching.
+- `@roam/dash-pricing`: **33 tests, all passing.**
+
+### 11.3 Priority
+
+| | Action |
+|---|---|
+| 1 | 🔴 **E** — fix the Pass validator assertion (`pass`, not `base`) and bound the Rush Pass subsidy. **Do not sell Rush Pass until this is closed.** |
+| 2 | 🔴 **F** — derive the Growth Guarantee credit from `merchant_commission_amount`. **Do not run `/growth-guarantee/run` in anger until fixed.** |
+| 3 | 🟠 **G** — define the qualifying order set explicitly |
+| 4 | 🔴 **A** (§10.2) — place one real v2 order and reconcile |
+| 5 | 🟡 **B, C, H** — GCT unit slip, Simulator pre-gate, Growth Guarantee minor issues |
+
+Both critical findings sit in features that were **built ahead of the plan**, which had them as
+"later, once volume exists." The spec'd architecture itself audits clean. That is the lesson worth
+keeping: the parts that were designed against an invariant hold; the parts added without one do not.

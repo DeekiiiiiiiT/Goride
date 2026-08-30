@@ -150,7 +150,7 @@ export const FAQ_ITEMS = [
     id: 'pass',
     topic: 'payment',
     title: 'Roam Rush Pass',
-    body: 'Rush Pass gives free delivery and a lower service fee at Growth and Dominant restaurants. Subscribe under Account → Rush Pass. Promo codes still work at checkout when a partner has an active offer.',
+    body: 'Rush Pass gives half service fee at Growth and Dominant, plus free delivery within ~8 km up to your monthly delivery credit. Subscribe under Account → Rush Pass.',
   },
   {
     id: 'promos',

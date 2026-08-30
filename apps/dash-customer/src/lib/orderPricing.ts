@@ -53,6 +53,9 @@ export type CheckoutPricing = {
   tier?: string;
   freeDeliveryApplied?: boolean;
   rushPassApplied?: boolean;
+  rushPassFreeDeliveryDeniedReason?: 'distance' | 'budget' | null;
+  rushPassSubsidyRemainingJmd?: number;
+  freeDeliveryApplied?: boolean;
   minOrderSubtotalJmd?: number;
   cardProcessingFeePercent?: number;
   /** Merchant menu markup 0–1 when disclosed to customers. */
@@ -201,6 +204,8 @@ export async function fetchMerchantCheckoutPricing(
     tier?: string;
     free_delivery_applied?: boolean;
     rush_pass_applied?: boolean;
+    rush_pass_free_delivery_denied_reason?: 'distance' | 'budget' | null;
+    rush_pass_subsidy_remaining_jmd?: number | null;
     min_order_subtotal_jmd?: number;
     card_processing_fee_percent?: number;
     menu_inflation_percent?: number;
@@ -229,6 +234,11 @@ export async function fetchMerchantCheckoutPricing(
     tier: data.tier,
     freeDeliveryApplied: data.free_delivery_applied,
     rushPassApplied: data.rush_pass_applied === true,
+    rushPassFreeDeliveryDeniedReason: data.rush_pass_free_delivery_denied_reason ?? null,
+    rushPassSubsidyRemainingJmd:
+      data.rush_pass_subsidy_remaining_jmd != null
+        ? Number(data.rush_pass_subsidy_remaining_jmd)
+        : undefined,
     minOrderSubtotalJmd: data.min_order_subtotal_jmd,
     cardProcessingFeePercent: data.card_processing_fee_percent,
     menuInflationPercent: Math.max(0, Number(data.menu_inflation_percent ?? 0)),

@@ -1,9 +1,19 @@
 /**
  * Phase 2 — Growth Guarantee monthly credit for Dominant merchants.
- * Credits the commission delta vs Economy when prior-month completed orders < min.
+ * Credits the commission delta vs Economy when prior-month delivered orders < min.
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { parsePricingRules } from "../_shared/dashPricing.ts";
+import {
+  parsePricingRules,
+  growthGuaranteeCreditFromCommission,
+  jamaicaCalendarMonthsElapsed,
+  GG_QUALIFYING_ORDER_STATUSES,
+} from "../_shared/dashPricing.ts";
+
+export {
+  growthGuaranteeCreditFromCommission,
+  jamaicaCalendarMonthsElapsed,
+};
 
 // deno-lint-ignore no-explicit-any
 type ServiceSb = { from: (t: string) => any };
@@ -47,20 +57,12 @@ export function jamaicaMonthBounds(periodYyyyMm: string): { startIso: string; en
 
 /** Default: prior calendar month in America/Jamaica. */
 export function priorJamaicaPeriodYyyyMm(now = new Date()): string {
-  // Approximate "now in Jamaica" by subtracting 5h then take previous month
   const jm = new Date(now.getTime() - 5 * 60 * 60 * 1000);
   const y = jm.getUTCFullYear();
-  const mo = jm.getUTCMonth(); // 0-11 current Jamaica month
+  const mo = jm.getUTCMonth();
   const prevMonth = mo === 0 ? 11 : mo - 1;
   const yearNum = mo === 0 ? y - 1 : y;
   return `${yearNum}-${String(prevMonth + 1).padStart(2, "0")}`;
-}
-
-function monthsBetween(fromIso: string, toIso: string): number {
-  const a = new Date(fromIso).getTime();
-  const b = new Date(toIso).getTime();
-  if (!Number.isFinite(a) || !Number.isFinite(b) || b < a) return Infinity;
-  return (b - a) / (30.4375 * 24 * 60 * 60 * 1000);
 }
 
 function roundMoney(n: number): number {
@@ -142,6 +144,10 @@ export async function runGrowthGuaranteeForPeriod(
 
   const monthsWindow = Math.max(1, Number(gg.monthsFromAssignment ?? 6));
   const minOrders = Math.max(0, Math.floor(Number(gg.minOrdersPerMonth ?? 20)));
+  const maxCredit = Math.max(
+    0,
+    Number(gg.maxCreditJmdPerPeriod ?? 50_000),
+  );
 
   const { data: merchants, error: merchErr } = await sb
     .from("merchants")
@@ -165,8 +171,8 @@ export async function runGrowthGuaranteeForPeriod(
       continue;
     }
 
-    // Still within N months of Dominant assignment as of period end
-    if (monthsBetween(assignedAt, endIso) > monthsWindow) {
+    // Still within N calendar months of Dominant assignment as of period end
+    if (jamaicaCalendarMonthsElapsed(assignedAt, endIso) >= monthsWindow) {
       result.skipped += 1;
       result.credits.push({ merchant_id: merchantId, order_count: 0, credit_jmd: 0, skipped: "outside_window" });
       continue;
@@ -183,14 +189,13 @@ export async function runGrowthGuaranteeForPeriod(
       .select("id, subtotal, merchant_commission_amount, status")
       .eq("merchant_id", merchantId)
       .gte("placed_at", startIso)
-      .lt("placed_at", endIso)
-      .neq("status", "cancelled");
+      .lt("placed_at", endIso);
 
     if (ordErr) throw new Error(ordErr.message);
 
     const completed = (orders ?? []).filter((o: { status?: string }) => {
       const s = String(o.status ?? "").toLowerCase();
-      return s !== "cancelled" && s !== "rejected";
+      return GG_QUALIFYING_ORDER_STATUSES.has(s);
     });
     const orderCount = completed.length;
 
@@ -205,15 +210,18 @@ export async function runGrowthGuaranteeForPeriod(
       continue;
     }
 
-    // Credit = sum(subtotal * (dominantRate - economyRate)) — commission delta vs Economy
     let credit = 0;
     for (const o of completed) {
-      const sub = Number((o as { subtotal?: number }).subtotal ?? 0);
-      if (Number.isFinite(sub) && sub > 0) {
-        credit += sub * (dominantRate - economyRate);
-      }
+      credit += growthGuaranteeCreditFromCommission(
+        Number((o as { merchant_commission_amount?: number }).merchant_commission_amount ?? 0),
+        dominantRate,
+        economyRate,
+      );
     }
     credit = roundMoney(credit);
+    if (maxCredit > 0 && credit > maxCredit) {
+      credit = roundMoney(maxCredit);
+    }
     if (credit <= 0) {
       result.skipped += 1;
       result.credits.push({

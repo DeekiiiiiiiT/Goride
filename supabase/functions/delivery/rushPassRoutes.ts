@@ -183,6 +183,41 @@ export function registerRushPassRoutes(app: Hono, deps: RushPassRoutesDeps) {
     const plan = await loadActivePlan(serviceSb);
     const active = await loadActiveRushPassMembership(serviceSb, customer.id);
 
+    const maxFreeKm = Number(
+      (plan as { max_free_delivery_km?: number } | null)?.max_free_delivery_km ?? 8,
+    );
+    const budget = Number(
+      (plan as { monthly_subsidy_budget_jmd?: number; price_jmd?: number } | null)
+        ?.monthly_subsidy_budget_jmd ??
+        plan?.price_jmd ??
+        1500,
+    );
+    let subsidyUsed = 0;
+    if (active) {
+      const { data: orders } = await serviceSb
+        .from("orders")
+        .select("platform_delivery_subsidy_jmd, pricing_snapshot, promo_cost_jmd")
+        .eq("rush_pass_membership_id", active.membership.id)
+        .gte("placed_at", String(active.membership.current_period_start))
+        .not("status", "in", '("cancelled","rejected")');
+      for (const row of orders ?? []) {
+        const r = row as Record<string, unknown>;
+        const snap = (r.pricing_snapshot ?? {}) as Record<string, unknown>;
+        const fromCol = Number(r.platform_delivery_subsidy_jmd ?? 0);
+        const fromSnap = Number(
+          snap.platform_delivery_subsidy_jmd ??
+            snap.platformDeliverySubsidyJmd ??
+            snap.promo_cost_jmd ??
+            snap.promoCostJmd ??
+            r.promo_cost_jmd ??
+            0,
+        );
+        subsidyUsed += fromCol > 0 ? fromCol : fromSnap;
+      }
+    }
+    subsidyUsed = Math.round(subsidyUsed * 100) / 100;
+    const remaining = Math.max(0, Math.round((budget - subsidyUsed) * 100) / 100);
+
     return c.json({
       plan: plan
         ? {
@@ -194,6 +229,8 @@ export function registerRushPassRoutes(app: Hono, deps: RushPassRoutesDeps) {
           free_delivery: Boolean(plan.free_delivery),
           service_fee_multiplier: Number(plan.service_fee_multiplier),
           eligible_tier_slugs: plan.eligible_tier_slugs,
+          max_free_delivery_km: maxFreeKm,
+          monthly_subsidy_budget_jmd: budget,
         }
         : null,
       membership: active
@@ -207,6 +244,12 @@ export function registerRushPassRoutes(app: Hono, deps: RushPassRoutesDeps) {
         }
         : null,
       active: Boolean(active),
+      subsidy: {
+        budget_jmd: budget,
+        used_jmd: subsidyUsed,
+        remaining_jmd: remaining,
+        max_free_delivery_km: maxFreeKm,
+      },
     });
   });
 

@@ -126,6 +126,7 @@ export function partyFormSeed(
           : ['dominant'],
         months_from_assignment: Number(ggRaw.months_from_assignment ?? 6),
         min_orders_per_month: Number(ggRaw.min_orders_per_month ?? 20),
+        max_credit_jmd_per_period: Number(ggRaw.max_credit_jmd_per_period ?? 50_000),
       },
     };
   }
@@ -231,6 +232,7 @@ export function partySavePayload(
         tier_slugs: ['dominant'],
         months_from_assignment: 6,
         min_orders_per_month: 20,
+        max_credit_jmd_per_period: 50_000,
       },
     };
   }

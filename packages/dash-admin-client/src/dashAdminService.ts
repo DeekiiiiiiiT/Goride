@@ -1815,6 +1815,7 @@ export type PricingRulesPayload = {
     tier_slugs?: string[];
     months_from_assignment?: number;
     min_orders_per_month?: number;
+    max_credit_jmd_per_period?: number;
   };
 
   road_distance_multiplier?: number;

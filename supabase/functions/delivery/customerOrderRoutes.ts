@@ -335,9 +335,25 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
       0,
       Number(v2Pricing.rules.guardrails?.minOrderContributionJmd ?? 150),
     );
-    // Rush Pass / free-delivery are intentional platform subsidies (prepaid or promo).
-    const subsidyOk = v2Pricing.rushPassApplied === true || v2Pricing.freeDeliveryApplied === true;
-    if (!subsidyOk && minContribution > 0 && v2Pricing.contributionJmd < minContribution) {
+    // Pass free delivery: allow contribution down to −remaining budget; reject overspend.
+    // Launch free-delivery promo (non-Pass): keep platform-funded bypass.
+    // Pass with delivery charged (distance/budget): enforce normal floor.
+    const passFree = v2Pricing.rushPassApplied === true && v2Pricing.freeDeliveryApplied === true;
+    const launchFree = v2Pricing.freeDeliveryApplied === true && v2Pricing.rushPassApplied !== true;
+    const remainingBudget = Number(v2Pricing.rushPassSubsidyRemainingJmd ?? 0);
+    const thisSubsidy = Number(v2Pricing.platformDeliverySubsidyJmd ?? 0);
+    if (passFree) {
+      if (thisSubsidy > remainingBudget + 0.01) {
+        return c.json({
+          error: "Rush Pass free-delivery credit for this period is insufficient for this trip",
+          code: "pass_subsidy_budget_exceeded",
+        }, 400);
+      }
+    } else if (
+      !launchFree &&
+      minContribution > 0 &&
+      v2Pricing.contributionJmd < minContribution
+    ) {
       console.error(
         "[placeOrder] contribution below floor",
         v2Pricing.contributionJmd,
@@ -372,6 +388,10 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
       free_delivery_applied: v2Pricing.freeDeliveryApplied,
       rush_pass_applied: v2Pricing.rushPassApplied === true,
       rush_pass_membership_id: v2Pricing.rushPassMembershipId ?? null,
+      rush_pass_free_delivery_denied_reason: v2Pricing.rushPassFreeDeliveryDeniedReason ?? null,
+      rush_pass_subsidy_budget_jmd: v2Pricing.rushPassSubsidyBudgetJmd ?? null,
+      rush_pass_subsidy_used_jmd: v2Pricing.rushPassSubsidyUsedJmd ?? null,
+      rush_pass_subsidy_remaining_jmd: v2Pricing.rushPassSubsidyRemainingJmd ?? null,
       promo_cost_jmd: v2Pricing.promoCostJmd,
       order_total: v2Pricing.orderTotal,
       processing_fee: v2Pricing.processingFee,

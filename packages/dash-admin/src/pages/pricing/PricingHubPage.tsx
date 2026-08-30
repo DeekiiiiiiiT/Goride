@@ -3,6 +3,11 @@ import { useOutletContext } from 'react-router-dom';
 import { ChevronRight, HelpCircle, Loader2, X } from 'lucide-react';
 import { toast } from 'sonner';
 import {
+  parsePricingRules,
+  validatePricingConfig,
+  type MerchantTier,
+} from '@roam/dash-pricing';
+import {
   fetchPricingOverview,
   fetchDefaultPricing,
   updateDefaultPricing,
@@ -522,6 +527,31 @@ export function PricingHubPage() {
         toast.error(clientErr);
         return;
       }
+    }
+    // Client pre-gate: same validator the server uses (Finding C)
+    try {
+      const payload = partySavePayload(selectedParty, partyForm);
+      const mergedRaw = {
+        ...(layerData?.effective_rules ?? layerData?.rules ?? {}),
+        ...payload,
+      } as Record<string, unknown>;
+      const parsed = parsePricingRules(mergedRaw);
+      const tierModels: MerchantTier[] = tiers
+        .filter((t) => t.is_active !== false)
+        .map((t) => ({
+          slug: String(t.slug),
+          name: String(t.name),
+          commissionRate: Number(t.commission_rate),
+          autoAds: Boolean(t.auto_ads),
+        }));
+      const configErr = validatePricingConfig(parsed, tierModels);
+      if (configErr) {
+        toast.error(`${configErr.code}: ${configErr.message}`);
+        return;
+      }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Pricing config invalid');
+      return;
     }
     setSaving(true);
     try {
