@@ -41,6 +41,21 @@ describe('resumeOrderPayment', () => {
     expect(window.location.href).toBe('https://jm.wipayfinancial.com/pay/abc');
   });
 
+  it('demoPaid skips WiPay redirect and returns to app', async () => {
+    const assign = vi.fn();
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ demoPaid: true, orderId: 'order-1' }),
+    }));
+    vi.stubGlobal('window', {
+      location: { origin: 'http://localhost:5174', href: '', assign },
+    });
+
+    await resumeOrderPayment('order-1', 'wipay', 'token-abc');
+
+    expect(assign).toHaveBeenCalledWith('http://localhost:5174/?orderPaid=order-1');
+  });
+
   it('rejects non-wipay providers', async () => {
     await expect(resumeOrderPayment('order-1', 'paypal', 'token')).rejects.toThrow(
       'Unsupported payment provider',

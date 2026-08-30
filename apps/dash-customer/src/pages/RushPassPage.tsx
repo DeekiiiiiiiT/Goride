@@ -99,8 +99,14 @@ export default function RushPassPage({ onNavigate }: Props) {
         error?: string;
         paymentRedirectUrl?: string;
         intentId?: string;
+        demoPaid?: boolean;
       };
       if (!res.ok) throw new Error(data.error || 'Subscribe failed');
+      if (data.demoPaid) {
+        setMessage('Rush Pass activated (demo pay — WiPay not live yet).');
+        await load();
+        return;
+      }
       if (data.paymentRedirectUrl) {
         window.location.href = data.paymentRedirectUrl;
         return;

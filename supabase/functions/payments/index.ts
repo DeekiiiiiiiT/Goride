@@ -12,6 +12,7 @@ import { assertRateLimit } from "../_shared/rateLimit.ts";
 import { getFlag } from "../_shared/featureFlags.ts";
 import { fetchWithTimeout } from "../_shared/fetchWithTimeout.ts";
 import { validateBody, z } from "../_shared/validateBody.ts";
+import { isWipayDemoMode } from "../_shared/wipayDemo.ts";
 
 const PaymentIntentBody = z.object({
   orderId: z.string().uuid(),
@@ -435,6 +436,27 @@ app.post("/intents", async (c) => {
       return c.json({ error: "Order already paid" }, 409);
     }
 
+    // Sandbox demo: finish pending intents without WiPay hosted checkout
+    if (provider === "wipay" && isWipayDemoMode()) {
+      const demoTxn =
+        String(existingIntent.provider_intent_id ?? "") ||
+        `DEMO-${String(order.order_number || orderId).slice(0, 24)}-${Date.now()}`;
+      await completeWipayIntent(serviceSupabase, existingIntent as Record<string, unknown>, {
+        status: "success",
+        transaction_id: demoTxn,
+        demo: true,
+        message: "WIPAY_DEMO auto-capture",
+      });
+      return c.json({
+        intentId: existingIntent.id,
+        demoPaid: true,
+        orderId,
+        provider: existingIntent.provider,
+        amount: existingIntent.amount,
+        currency: existingIntent.currency,
+      }, 200);
+    }
+
     return c.json({
       intentId: existingIntent.id,
       paymentRedirectUrl: existingIntent.client_secret,
@@ -447,16 +469,23 @@ app.post("/intents", async (c) => {
 
   let clientSecret = null;
   let providerIntentId = null;
-  let providerData = {};
+  let providerData: Record<string, unknown> = {};
   
   if (provider === "wipay") {
-    const wipayResult = await createWiPayIntent(order, returnBase, user.email ?? "");
-    if (wipayResult.error) {
-      return c.json({ error: wipayResult.error }, 500);
+    if (isWipayDemoMode()) {
+      const demoTxn = `DEMO-${String(order.order_number || orderId).replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 24)}-${Date.now()}`;
+      providerIntentId = demoTxn;
+      clientSecret = `demo://${demoTxn}`;
+      providerData = { demo: true, mode: "wipay_demo" };
+    } else {
+      const wipayResult = await createWiPayIntent(order, returnBase, user.email ?? "");
+      if (wipayResult.error) {
+        return c.json({ error: wipayResult.error }, 500);
+      }
+      clientSecret = wipayResult.paymentUrl;
+      providerIntentId = wipayResult.transactionId;
+      providerData = wipayResult as Record<string, unknown>;
     }
-    clientSecret = wipayResult.paymentUrl;
-    providerIntentId = wipayResult.transactionId;
-    providerData = wipayResult;
   } else {
     return c.json({ error: "Unsupported payment provider" }, 400);
   }
@@ -479,6 +508,23 @@ app.post("/intents", async (c) => {
     .single();
   
   if (error) return c.json({ error: error.message }, 500);
+
+  if (provider === "wipay" && isWipayDemoMode()) {
+    await completeWipayIntent(serviceSupabase, intent as Record<string, unknown>, {
+      status: "success",
+      transaction_id: String(providerIntentId ?? intent.id),
+      demo: true,
+      message: "WIPAY_DEMO auto-capture",
+    });
+    return c.json({
+      intentId: intent.id,
+      demoPaid: true,
+      orderId,
+      provider,
+      amount: intent.amount,
+      currency: intent.currency,
+    }, 201);
+  }
   
   return c.json({ 
     intentId: intent.id,

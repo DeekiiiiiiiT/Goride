@@ -64,7 +64,16 @@ export async function resumeOrderPayment(
   const data = (await paymentRes.json()) as {
     paymentRedirectUrl?: string;
     clientSecret?: string;
+    demoPaid?: boolean;
+    orderId?: string;
   };
+  if (data.demoPaid) {
+    const paidOrderId = data.orderId || orderId;
+    window.location.assign(
+      `${window.location.origin}/?orderPaid=${encodeURIComponent(paidOrderId)}`,
+    );
+    return;
+  }
   // paymentRedirectUrl is the hosted checkout URL (legacy field was misnamed clientSecret)
   const redirectUrl = data.paymentRedirectUrl ?? data.clientSecret;
   if (!isAllowedPaymentRedirectUrl(redirectUrl)) {

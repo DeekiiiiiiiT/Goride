@@ -8,6 +8,7 @@ import { requireDashWrite } from "./admin/dashPermissions.ts";
 import { validateBody, z } from "../_shared/validateBody.ts";
 import { activateRushPassFromPaymentIntent } from "../_shared/rushPassActivate.ts";
 import { loadActiveRushPassMembership } from "./rushPassMembership.ts";
+import { isWipayDemoMode } from "../_shared/wipayDemo.ts";
 
 export type RushPassRoutesDeps = {
   getSupabase: (authHeader: string) => SupabaseClient;
@@ -300,6 +301,58 @@ export function registerRushPassRoutes(app: Hono, deps: RushPassRoutesDeps) {
     });
 
     if (reusable) {
+      if (isWipayDemoMode()) {
+        const demoTxn =
+          String(reusable.provider_intent_id ?? "") ||
+          `DEMO-PASS-${String(plan.id).slice(0, 8)}-${Date.now()}`;
+        await pdb
+          .from("payment_intents")
+          .update({
+            status: "completed",
+            completed_at: new Date().toISOString(),
+            provider_intent_id: demoTxn,
+            client_secret: `demo://${demoTxn}`,
+            provider_data: {
+              ...((reusable.provider_data ?? {}) as Record<string, unknown>),
+              demo: true,
+              mode: "wipay_demo",
+              callback: { status: "success", transaction_id: demoTxn, demo: true },
+            },
+          })
+          .eq("id", reusable.id);
+        await pdb.from("transactions").insert({
+          intent_id: reusable.id,
+          order_id: null,
+          customer_id: customer.id,
+          amount: reusable.amount,
+          net_amount: reusable.amount,
+          currency: "JMD",
+          status: "completed",
+          provider: "wipay",
+          provider_transaction_id: demoTxn,
+          provider_data: { purpose: "rush_pass", demo: true },
+          payment_method: "credit_card",
+        });
+        const updated = {
+          ...reusable,
+          status: "completed",
+          provider_intent_id: demoTxn,
+          provider_data: {
+            ...((reusable.provider_data ?? {}) as Record<string, unknown>),
+            demo: true,
+            purpose: "rush_pass",
+            plan_id: plan.id,
+            customer_id: customer.id,
+          },
+        };
+        await activateRushPassFromPaymentIntent(serviceSb, updated);
+        return c.json({
+          intentId: reusable.id,
+          demoPaid: true,
+          amount: reusable.amount,
+          currency: reusable.currency ?? "JMD",
+        });
+      }
       return c.json({
         intentId: reusable.id,
         paymentRedirectUrl: reusable.client_secret,
@@ -330,6 +383,59 @@ export function registerRushPassRoutes(app: Hono, deps: RushPassRoutesDeps) {
 
     if (intentErr || !intent) {
       return c.json({ error: intentErr?.message || "intent_create_failed" }, 500);
+    }
+
+    if (isWipayDemoMode()) {
+      const demoTxn = `DEMO-PASS-${String(plan.id).slice(0, 8)}-${Date.now()}`;
+      await pdb
+        .from("payment_intents")
+        .update({
+          status: "completed",
+          completed_at: new Date().toISOString(),
+          provider_intent_id: demoTxn,
+          client_secret: `demo://${demoTxn}`,
+          provider_data: {
+            purpose: "rush_pass",
+            plan_id: plan.id,
+            customer_id: customer.id,
+            returnBase,
+            demo: true,
+            mode: "wipay_demo",
+            callback: { status: "success", transaction_id: demoTxn, demo: true },
+          },
+        })
+        .eq("id", intent.id);
+      await pdb.from("transactions").insert({
+        intent_id: intent.id,
+        order_id: null,
+        customer_id: customer.id,
+        amount,
+        net_amount: amount,
+        currency: "JMD",
+        status: "completed",
+        provider: "wipay",
+        provider_transaction_id: demoTxn,
+        provider_data: { purpose: "rush_pass", demo: true },
+        payment_method: "credit_card",
+      });
+      await activateRushPassFromPaymentIntent(serviceSb, {
+        ...intent,
+        status: "completed",
+        provider_intent_id: demoTxn,
+        provider_data: {
+          purpose: "rush_pass",
+          plan_id: plan.id,
+          customer_id: customer.id,
+          returnBase,
+          demo: true,
+        },
+      });
+      return c.json({
+        intentId: intent.id,
+        demoPaid: true,
+        amount,
+        currency: "JMD",
+      }, 201);
     }
 
     const wipay = await createWipayRushPassCheckout({

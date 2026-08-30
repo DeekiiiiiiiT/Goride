@@ -12,6 +12,15 @@ campaigns that sell Pass until the checklist is signed.
 
 Pricing Hub shows a sell-gate banner on the Rush Pass panel until ops remove it after sign-off.
 
+## WiPay demo pay (until merchant is live)
+
+WiPay hosted checkout is **not** ready for real sandbox cards on this account. While
+`WIPAY_ENV` is sandbox (default), **`WIPAY_DEMO` defaults on**: Place Order / Pass subscribe
+complete paid immediately through the same capture path as a webhook — no WiPay redirect.
+
+- Turn off demo and use real WiPay: set secret `WIPAY_DEMO=0` and configure live/sandbox credentials.
+- Live/production (`WIPAY_ENV=live`) never uses demo pay.
+
 ## Rule
 
 Do **not** change the live Pass price until there is meaningful volume, then change it only with a human approval using Pricing Hub numbers.

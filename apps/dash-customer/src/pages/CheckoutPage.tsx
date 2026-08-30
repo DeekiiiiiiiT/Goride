@@ -351,7 +351,27 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
         const payData = (await paymentRes.json()) as {
           paymentRedirectUrl?: string;
           clientSecret?: string;
+          demoPaid?: boolean;
+          orderId?: string;
         };
+        if (payData.demoPaid) {
+          const orderNumber =
+            order.order_number ?? `RD-${String(order.id).slice(-4).padStart(4, '0')}`;
+          idempotencyKeyRef.current = null;
+          clearCart();
+          onNavigate('order-confirmation', {
+            orderId: order.id,
+            orderNumber,
+            total: serverTotal,
+            eta: deliveryMode === 'scheduled' && scheduledLabel ? scheduledLabel : '25-35 minutes',
+            items: items.map(i => ({
+              name: i.name,
+              quantity: i.quantity,
+              note: i.options?.find(o => o.name === 'Customizations')?.selections[0]?.name,
+            })),
+          });
+          return;
+        }
         const redirectUrl = payData.paymentRedirectUrl ?? payData.clientSecret;
         if (!isAllowedPaymentRedirectUrl(redirectUrl)) {
           throw new Error('Invalid payment redirect URL');
