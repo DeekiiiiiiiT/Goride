@@ -11,6 +11,7 @@
 import { Hono } from "https://deno.land/x/hono@v4.3.11/mod.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { applyCors } from "../_shared/corsAllowlist.ts";
+import { authorizeCronOrServiceRole } from "../_shared/authorizeCronOrServiceRole.ts";
 import { jwtPrimaryRole } from "../_shared/authEdge.ts";
 import { requireProductAdmin } from "../_shared/productAdmin.ts";
 import { resolveMerchantAccess, requireResolvedMerchantWithPermission, requireMerchantPermission, type TeamPermission, isMerchantOwnerSuspended, OWNER_ACCOUNT_SUSPENDED } from "./merchantAuth.ts";
@@ -2763,19 +2764,9 @@ registerRushPassRoutes(app, { getSupabase, getServiceSupabase });
 
 // Phase 2 Growth Guarantee — cron / service-role runner (also available as admin POST)
 app.post("/internal/pricing/growth-guarantee/run", async (c) => {
-  const cronSecret = (c.req.header("x-fleet-cron-secret") || c.req.header("x-cron-secret") || "").trim();
-  const serviceKey = (c.req.header("x-service-role") || "").trim();
-  const expectedCron = (
-    Deno.env.get("FLEET_CRON_SECRET") ||
-    Deno.env.get("RIDES_CRON_SECRET") ||
-    Deno.env.get("CRON_SECRET") ||
-    ""
-  ).trim();
-  const expectedService = (Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "").trim();
-  const authorized =
-    (expectedCron && cronSecret === expectedCron) ||
-    (expectedService && serviceKey === expectedService);
-  if (!authorized) return c.json({ error: "Forbidden" }, 403);
+  // Same auth as Petrojam: allow legacy eyJ JWT when Edge has sb_secret_* keys
+  const auth = await authorizeCronOrServiceRole(c.req.raw);
+  if (!auth.ok) return c.json({ error: auth.error }, auth.status);
 
   const body = await c.req.json().catch(() => ({})) as { period?: string };
   const { priorJamaicaPeriodYyyyMm, runGrowthGuaranteeForPeriod } = await import("./growthGuarantee.ts");
@@ -2790,19 +2781,8 @@ app.post("/internal/pricing/growth-guarantee/run", async (c) => {
 
 // Phase 3 Rush Pass — daily renew / past_due / expire
 app.post("/internal/pricing/rush-pass/renew", async (c) => {
-  const cronSecret = (c.req.header("x-fleet-cron-secret") || c.req.header("x-cron-secret") || "").trim();
-  const serviceKey = (c.req.header("x-service-role") || "").trim();
-  const expectedCron = (
-    Deno.env.get("FLEET_CRON_SECRET") ||
-    Deno.env.get("RIDES_CRON_SECRET") ||
-    Deno.env.get("CRON_SECRET") ||
-    ""
-  ).trim();
-  const expectedService = (Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "").trim();
-  const authorized =
-    (expectedCron && cronSecret === expectedCron) ||
-    (expectedService && serviceKey === expectedService);
-  if (!authorized) return c.json({ error: "Forbidden" }, 403);
+  const auth = await authorizeCronOrServiceRole(c.req.raw);
+  if (!auth.ok) return c.json({ error: auth.error }, auth.status);
 
   try {
     const { runRushPassRenewalJob } = await import("./rushPassRenew.ts");
