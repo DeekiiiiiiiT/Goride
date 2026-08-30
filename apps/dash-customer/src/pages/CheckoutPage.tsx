@@ -236,7 +236,9 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
         lat: zoneLat,
         lng: zoneLng,
       });
-      if (!zone.inZone) {
+      // Client polygon cache can lag live town coverage; server still enforces on POST /orders.
+      // If we already have a live quote for this pin, do not bounce the customer to waitlist.
+      if (!zone.inZone && !hasLivePricing) {
         toast.error(zone.reason ?? "We don't deliver to this address yet");
         onNavigate('out-of-delivery', {
           returnTo: 'checkout',
@@ -621,7 +623,7 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
               {checkoutPricing?.rushPassApplied && (
                 <p className="text-body-sm text-primary font-medium">
                   {checkoutPricing.freeDeliveryApplied
-                    ? 'Rush Pass applied — free delivery & lower service fee'
+                    ? 'Rush Pass applied — free delivery within 8 km & lower service fee'
                     : checkoutPricing.rushPassFreeDeliveryDeniedReason === 'distance'
                       ? 'Rush Pass — lower service fee (outside free-delivery distance)'
                       : checkoutPricing.rushPassFreeDeliveryDeniedReason === 'budget'

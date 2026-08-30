@@ -191,18 +191,21 @@ export async function deleteSavedAddressAsync(id: string): Promise<void> {
   }
 }
 
-export function getSavedAddress(): DeliveryAddress | null {
+/** Default delivery address for cart/checkout — prefer full saved pin (includes lat/lng). */
+export function getSavedAddress(): SavedAddress | null {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) return JSON.parse(raw) as DeliveryAddress;
-
     const defaultSaved = getSavedAddresses().find((a) => a.isDefault) ?? getSavedAddresses()[0];
-    if (defaultSaved) {
+    if (defaultSaved) return defaultSaved;
+
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      const legacy = JSON.parse(raw) as DeliveryAddress;
       return {
-        label: defaultSaved.label,
-        line1: defaultSaved.line1,
-        line2: defaultSaved.line2,
-        instructions: defaultSaved.instructions,
+        id: 'legacy-delivery',
+        label: legacy.label,
+        line1: legacy.line1,
+        line2: legacy.line2,
+        instructions: legacy.instructions,
       };
     }
     return null;

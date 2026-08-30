@@ -402,7 +402,7 @@ export default function CartPage({ onNavigate, session }: Props) {
             {checkoutPricing?.rushPassApplied && (
               <p className="text-body-sm text-primary font-medium">
                 {checkoutPricing.freeDeliveryApplied
-                  ? 'Rush Pass — free delivery & lower service fee'
+                  ? 'Rush Pass — free delivery within 8 km & lower service fee'
                   : checkoutPricing.rushPassFreeDeliveryDeniedReason === 'distance'
                     ? 'Rush Pass — lower service fee (outside free-delivery distance)'
                     : checkoutPricing.rushPassFreeDeliveryDeniedReason === 'budget'

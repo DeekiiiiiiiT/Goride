@@ -2,10 +2,12 @@
 
 **Date:** 2026-08-30 · **Implementation reviewed:** 2026-08-30
 **Scope:** `delivery` schema pricing, `@roam/dash-pricing` engine, Model B money split, Merchant Tiers
-**Status:** ✅ Architecture implemented — 9 of 10 build items complete ([§10](#10-implementation-review)).
-🔴 **But the defect audit ([§11](#11-defect-audit)) found two serious money defects in the
-out-of-spec Rush Pass and Growth Guarantee code**, plus one blocker carried from §10.
-Commit `a21a1276`.
+**Status:** ✅ **Architecture implemented; every audit defect closed, including the one filed as
+out-of-scope** ([§12](#12-remediation-verification), [§13](#13-follow-up-audit--ae02ac5e)).
+`@roam/dash-pricing`: **45 tests passing** (was 33).
+✅ **Finding A closed 2026-08-30** — first live Model B order priced + reconcile zero-drift
+(`RD-2026-000001`); Pass ≤8 km / >8 km / budget gates smoked. See [§13.4](#134-standing-position)
+and [docs/RUSH_V2_ORDER_RECONCILE_CHECKLIST.md](docs/RUSH_V2_ORDER_RECONCILE_CHECKLIST.md).
 **Context:** Pre-launch, no backwards compatibility required. GoRide ledger / fleet finance
 explicitly out of scope.
 
@@ -751,3 +753,158 @@ audit, not this one.
 Both critical findings sit in features that were **built ahead of the plan**, which had them as
 "later, once volume exists." The spec'd architecture itself audits clean. That is the lesson worth
 keeping: the parts that were designed against an invariant hold; the parts added without one do not.
+
+---
+
+## 12. Remediation verification
+
+Re-audited 2026-08-30 after the remediation pass. Verified by reading each changed path, running
+the suite, and querying live config. **9 of 10 findings closed.**
+
+### 12.1 Status
+
+| # | Finding | Status | Verification |
+|---|---|---|---|
+| **A** | Engine never ran in production | ❌ **Still open** | `delivery.orders` = **0 rows** |
+| B | GCT unit slip (`0.15` → `15`) | ✅ Closed | No `taxRatePercent: 0.15` remains; validator uses a `GCT` constant |
+| C | Simulator not pre-gated | ✅ Closed | `validatePricingConfig` imported and called at [PricingHubPage.tsx:549](packages/dash-admin/src/pages/pricing/PricingHubPage.tsx#L549) |
+| **E** | Rush Pass subsidy unbounded | ✅ **Closed properly** | See [12.2](#122-finding-e--fixed-end-to-end-not-just-in-the-validator) |
+| **F** | GG over-credits on discounts | ✅ Closed | Credit now derives from `merchant_commission_amount` ([growthGuarantee.ts:221](supabase/functions/delivery/growthGuarantee.ts#L221)) |
+| G | GG counted in-flight orders | ✅ Closed | Explicit `GG_QUALIFYING_ORDER_STATUSES` allow-list, delivered/completed only |
+| H1 | 30.4375-day month drift | ✅ Closed | `jamaicaCalendarMonthsElapsed` replaces `monthsBetween` |
+| H2 | No claw-back | ✅ Closed | `shouldClawGrowthGuarantee` + claw-back adjustment posting |
+| H3 | No credit ceiling | ✅ Closed | `max_credit_jmd_per_period` (live: J$50,000) |
+| J/K | Verified-safe / pre-existing | — | Unchanged |
+
+**Tests: 45 passing** (was 33). New `auditRemediation.test.ts` (12 tests) maps 1:1 onto the
+findings — including the specific failure modes: over-credit vs discounted commission, qualifying
+status set, calendar-month drift, and Pass distance/budget bounds. These are real regression tests,
+not coverage padding.
+
+### 12.2 Finding E — fixed end-to-end, not just in the validator
+
+This is the one I checked hardest, because a validator can be made to pass without the runtime
+actually changing. It was fixed at **all four** layers:
+
+1. **Config schema** — `rush_pass.max_free_delivery_km` and `monthly_subsidy_budget_jmd`; live values
+   **8 km / J$1,500**.
+2. **Validator** — new `PASS_SUBSIDY_UNBOUNDED` rejects a zero/absent cap or budget, and the Pass
+   checks now assert on **`passFree.contributionJmd`** and `platformDeliverySubsidyJmd` — the *Pass*
+   quote, which was the actual bug — plus a second quote beyond the free-delivery cap that must
+   clear the normal contribution floor ([engine.ts:837-912](packages/dash-pricing/src/engine.ts#L837-L912)).
+3. **Resolver** — `resolveRushPassFreeDelivery` grants free delivery only within the km cap **and**
+   remaining budget, tracking spend via `loadRushPassSubsidyUsed`
+   ([pricingResolver.ts:464-492](supabase/functions/delivery/pricingResolver.ts#L464-L492)).
+4. **Order path** — the blanket `subsidyOk` bypass is gone. Pass orders are now checked against
+   *remaining budget* and rejected with `pass_subsidy_budget_exceeded`; Pass orders with delivery
+   charged fall through to the normal contribution floor
+   ([customerOrderRoutes.ts:334-360](supabase/functions/delivery/customerOrderRoutes.ts#L334-L360)).
+
+**New worst case.** At the 8 km cap the courier ladder is J$630, so the subsidy is J$630 against a
+J$1,500 monthly budget — roughly 2.4 max-distance free trips per member per month, after which
+delivery is charged normally. The −J$735-per-order exposure is gone, and total Pass subsidy is now
+bounded by the subscription price itself. Commission and the half-rate service fee still accrue on
+every Pass order, so a fully-consumed budget remains net positive.
+
+One deliberate consequence worth knowing: a Pass member at 15 km never gets free delivery — only
+the 50% service-fee cut. That is correct economics; make sure the marketing copy says "free delivery
+within 8 km" rather than "free delivery."
+
+### 12.3 Finding A — closed ✅ (2026-08-30)
+
+Superseded by [§13.4](#134-standing-position). First live Model B order
+`RD-2026-000001` priced with required columns; Pass ≤8 km / >8 km / budget gates smoked;
+reconcile zero-drift. Sign-off:
+[docs/RUSH_V2_ORDER_RECONCILE_CHECKLIST.md](docs/RUSH_V2_ORDER_RECONCILE_CHECKLIST.md).
+
+### 12.4 Verdict
+
+**The remediation is genuinely good work.** Finding E in particular was fixed the hard way — at the
+config, validator, resolver, and order-path layers — rather than by making the failing assertion
+pass. Finding F now derives from the authoritative recorded commission instead of recomputing from
+`subtotal`, which is both correct and drift-proof. The Growth Guarantee gained a claw-back and a
+ceiling that were suggestions, not requirements.
+
+The pricing system is now correct by construction *and* bounded on its subsidy paths. It has still
+never priced a real order.
+
+---
+
+## 13. Follow-up audit — `ae02ac5e`
+
+§12 was audited against the working tree at commit `fa2afcc9`. A further commit `ae02ac5e`
+(**887 insertions across 16 files**) landed afterwards and is audited here. It closes two gaps that
+§12 recorded as open or out-of-scope.
+
+### 13.1 Finding K closed — and it was out of scope ✅
+
+§11 filed finding K as *pre-existing, not introduced by this work, belongs to a payments audit*.
+It was fixed anyway, and fixed correctly.
+
+`POST /payments/wipay/complete` is now **poll-only**
+([payments/index.ts:613-680](supabase/functions/payments/index.ts#L613)):
+
+- Client-supplied `status` is **no longer trusted** for money-marking — the field is retained in the
+  schema but explicitly documented as ignored. Only the secret-verified webhook may mark an intent
+  completed.
+- The endpoint now reports the intent's **database** status back to the caller rather than acting on
+  a claim.
+- Intent lookup prefers an `order_id` match, falling back to `transaction_id` only with the order id
+  supplied — closing the loose un-scoped `provider_intent_id` lookup noted in
+  [§11 J](#j--verified-safe-rush-pass-cannot-be-activated-without-payment).
+- Null-order (Rush Pass) intents are explicitly refused with `not_order_intent`, so the belt-and-braces
+  defence that finding J relied on is now an intentional guard rather than an accident of
+  `String(null)` failing a lookup.
+
+A `wipayCompleteContract.test.ts` pins the contract, and `PaymentCallbackPage.tsx` was reworked to
+poll rather than assert success.
+
+### 13.2 Claw-back is now actually wired ✅
+
+§12.1 marked H2 closed on the basis that `maybeClawbackGrowthGuarantee` existed. That was a
+function-exists check, not a call-site check — **the function was not yet invoked anywhere.** It now
+is, at five sites:
+
+| Trigger | Location |
+|---|---|
+| Admin full refund → `refunded` | [orderRefund.ts:197](supabase/functions/delivery/admin/orderRefund.ts#L197) |
+| Admin order status change | [orderRoutes.ts:223](supabase/functions/delivery/admin/orderRoutes.ts#L223) |
+| Cancellation paths (×3) | [index.ts:1244](supabase/functions/delivery/index.ts#L1244), [:1348](supabase/functions/delivery/index.ts#L1348), [:1424](supabase/functions/delivery/index.ts#L1424) |
+
+Spot-checked the refund site and the guard: it fires only on a **full** refund reaching `refunded`,
+`maybeClawbackGrowthGuarantee` re-checks that the prior status was in
+`GG_QUALIFYING_ORDER_STATUSES`, derives the credited period from `placed_at`, and each call is
+wrapped in `try/catch` so a claw-back failure cannot break the refund itself. Correct.
+
+### 13.3 Also in this commit
+
+Admin Rush Pass / Growth Guarantee operations surfaces (`PricingHubPage.tsx` +161,
+`pricingRoutes.ts` +99, `rushPassRoutes.ts` +124), an ops runbook
+([docs/RUSH_PASS_PRICING_OPS.md](docs/RUSH_PASS_PRICING_OPS.md)), and a reconciliation checklist
+([docs/RUSH_V2_ORDER_RECONCILE_CHECKLIST.md](docs/RUSH_V2_ORDER_RECONCILE_CHECKLIST.md)) — the
+latter being the procedure for finding A. Suite still green at **45 tests**.
+
+### 13.4 Standing position
+
+Every defect raised across §10, §11 and §12 is now closed, including one explicitly filed as out of
+scope. Nothing new was found in `ae02ac5e`.
+
+✅ **Finding A closed 2026-08-30** with live order evidence (checklist signed in
+[docs/RUSH_V2_ORDER_RECONCILE_CHECKLIST.md](docs/RUSH_V2_ORDER_RECONCILE_CHECKLIST.md)):
+
+| Evidence | Value |
+|---|---|
+| Baseline order | `RD-2026-000001` / `be6f9f41-3ab7-4d70-b706-61e2bc0ff5d2` |
+| Merchant | The Burger Spot (Growth) |
+| Columns | `distance_km` 7.07 · `contribution_jmd` 792.75 · `promo_funded_by` merchant · snapshot present |
+| Reconcile | delta **0.00** (money split 1012.50) |
+| Pass ≤8 km | free delivery + halved service fee (UI) |
+| Pass >8 km | delivery charged + “outside free-delivery distance” |
+| Budget gate | charged + “monthly free-delivery credit used” (forced budget=0, then restored) |
+
+**Caveat:** WiPay sandbox card iframe could not be filled by the agent; baseline capture used a
+SQL-simulated completed transaction for the money-split assert. Optional human WiPay re-run for a
+true webhook capture.
+
+Launch leftovers remaining are process-only: no public Pass marketing until checklist §1–3 green
+(now green), GG live cron held until ≥1 Jamaica delivered Dominant month, commit/ship on PO say-so.

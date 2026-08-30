@@ -1,5 +1,17 @@
 # Rush Pass pricing ops
 
+## Sell gate (Finding A)
+
+**Do not market or push Rush Pass publicly** until
+[RUSH_V2_ORDER_RECONCILE_CHECKLIST.md](./RUSH_V2_ORDER_RECONCILE_CHECKLIST.md) checks **§1–3 are green**
+(baseline reconcile, Pass ≤8 km free, Pass >8 km charged). §4 (budget exhaustion) is preferred but
+**not** a marketing blocker once 1–3 pass.
+
+Internal admin grants / test accounts are fine before the gate. No public CTA push, deals, or
+campaigns that sell Pass until the checklist is signed.
+
+Pricing Hub shows a sell-gate banner on the Rush Pass panel until ops remove it after sign-off.
+
 ## Rule
 
 Do **not** change the live Pass price until there is meaningful volume, then change it only with a human approval using Pricing Hub numbers.
@@ -31,3 +43,9 @@ Customer Account → Rush Pass always reads price from the active plan — no ha
 5. Spot-check a cart quote after save.
 
 Live price stays until you decide — nothing auto-reprices.
+
+## Growth Guarantee cron hold
+
+Math and claw-back hooks are green. **Do not** enable or schedule live GG cron against real
+merchants until ≥1 Jamaica calendar month of **delivered/completed** Dominant volume exists.
+Keep claw-back armed so late cancels stay safe when cron is eventually turned on.

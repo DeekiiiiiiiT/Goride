@@ -1,7 +1,8 @@
--- Read-only: flag v2 card settlements where merchant receivable drifted from food − commission.
+-- Read-only: flag card settlements where merchant receivable drifted from food − commission.
 -- Run in Supabase SQL editor. No writes.
 -- Tolerance: 2 cents (matches capture assert).
 -- market_id lives on delivery.merchants (not orders).
+-- Every post-architecture order is Model B (pricing_model column dropped).
 
 WITH settled AS (
   SELECT
@@ -30,7 +31,6 @@ WITH settled AS (
   INNER JOIN payments.transactions t
     ON t.order_id = o.id
    AND t.status = 'completed'
-  WHERE o.pricing_model = 'v2'
 )
 SELECT
   order_id,

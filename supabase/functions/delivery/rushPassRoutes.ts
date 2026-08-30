@@ -142,7 +142,7 @@ async function createWipayRushPassCheckout(opts: {
         }),
         email: opts.customerEmail || "customer@roamrush.app",
         environment: isSandboxWipay() ? "sandbox" : "live",
-        fee_structure: "merchant_pay",
+        fee_structure: "merchant_absorb",
         method: "credit_card_co",
         order_id: orderRef,
         origin: "RoamRushPass",

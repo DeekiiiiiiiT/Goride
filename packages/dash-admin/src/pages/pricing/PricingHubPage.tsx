@@ -1175,6 +1175,10 @@ export function PricingHubPage() {
               </div>
             </div>
           )}
+          <div className="rounded-xl border border-slate-700 bg-slate-900/60 px-4 py-3 text-xs text-slate-300">
+            Growth Guarantee: math green; claw-backs armed. Keep live GG cron off until ≥1 Jamaica
+            calendar month of delivered/completed Dominant volume — see docs/RUSH_PASS_PRICING_OPS.md.
+          </div>
           <RushPassAdminPanel
             accessToken={session.access_token}
             canWrite={canWrite}
@@ -3364,6 +3368,10 @@ function RushPassAdminPanel({
     <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4 space-y-4">
       <div>
         <p className="text-sm font-medium text-white">Rush Pass plan</p>
+        <p className="text-xs text-amber-200/90 mt-1 rounded-lg border border-amber-700/50 bg-amber-950/40 px-2.5 py-2">
+          Sell gate: do not market Pass publicly until Finding A checklist §1–3 are signed
+          (docs/RUSH_V2_ORDER_RECONCILE_CHECKLIST.md). Internal grants/tests only until then.
+        </p>
         <p className="text-xs text-slate-500 mt-0.5">
           Edit price and caps only after enough Pass-paid volume — see docs/RUSH_PASS_PRICING_OPS.md.
           Live price does not auto-change.
