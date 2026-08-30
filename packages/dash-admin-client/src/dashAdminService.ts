@@ -1746,12 +1746,25 @@ export type PricingRevenueSummary = {
   rush_pass_order_count?: number;
   rush_pass_attach_rate_percent?: number;
   rush_pass_subsidy_total_jmd?: number;
+  rush_pass_service_fee_discount_total_jmd?: number;
   rush_pass_active_memberships?: number;
+  rush_pass_subscription_revenue_30d_jmd?: number;
+  rush_pass_paid_intents_30d?: number;
+  rush_pass_subsidy_30d_jmd?: number;
+  rush_pass_sf_discount_30d_jmd?: number;
+  rush_pass_cost_30d_jmd?: number;
+  rush_pass_orders_30d?: number;
+  rush_pass_avg_cost_per_order_30d_jmd?: number;
+  rush_pass_avg_cost_per_member_30d_jmd?: number;
+  rush_pass_break_even_orders_per_member?: number | null;
+  rush_pass_plan_price_jmd?: number;
   distance_fee_order_count?: number;
   distance_fee_attach_rate_percent?: number;
   distance_fee_total_jmd?: number;
   growth_guarantee_credit_count_90d?: number;
   growth_guarantee_credit_total_jmd_90d?: number;
+  growth_guarantee_clawback_count_90d?: number;
+  growth_guarantee_clawback_total_jmd_90d?: number;
 };
 
 export type PricingMarketSummary = {
@@ -2123,5 +2136,29 @@ export function listRushPassMemberships(accessToken: string, status?: string) {
   return deliveryFetch<{ memberships: Array<Record<string, unknown>> }>(
     accessToken,
     `/admin/rush-pass/memberships${sp}`,
+  );
+}
+
+export function fetchRushPassPlan(accessToken: string) {
+  return deliveryFetch<{ plan: Record<string, unknown> }>(
+    accessToken,
+    '/admin/rush-pass/plan',
+  );
+}
+
+export function updateRushPassPlan(
+  accessToken: string,
+  payload: {
+    price_jmd?: number;
+    max_free_delivery_km?: number;
+    monthly_subsidy_budget_jmd?: number;
+    service_fee_multiplier?: number;
+    name?: string;
+  },
+) {
+  return deliveryFetch<{ plan: Record<string, unknown>; warnings?: string[] }>(
+    accessToken,
+    '/admin/rush-pass/plan',
+    { method: 'PUT', body: JSON.stringify(payload) },
   );
 }

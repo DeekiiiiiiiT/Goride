@@ -6,6 +6,7 @@ import {
   validatePricingConfig,
   growthGuaranteeCreditFromCommission,
   jamaicaCalendarMonthsElapsed,
+  shouldClawGrowthGuarantee,
   GG_QUALIFYING_ORDER_STATUSES,
 } from './index.ts';
 import type { MerchantTier, PricingRules } from './types.ts';
@@ -140,6 +141,50 @@ describe('growthGuaranteeCreditFromCommission', () => {
     expect(GG_QUALIFYING_ORDER_STATUSES.has('pending')).toBe(false);
     expect(GG_QUALIFYING_ORDER_STATUSES.has('delivered')).toBe(true);
     expect(GG_QUALIFYING_ORDER_STATUSES.has('completed')).toBe(true);
+  });
+});
+
+describe('shouldClawGrowthGuarantee', () => {
+  it('posts claw only when prior credit exists and order was qualifying', () => {
+    expect(
+      shouldClawGrowthGuarantee({
+        priorQualifyingStatus: true,
+        hasPeriodCredit: true,
+        alreadyClawed: false,
+        inAssignmentWindow: true,
+        clawAmount: 150,
+      }),
+    ).toBe(true);
+  });
+
+  it('no-ops without prior credit, double claw, or pending cancel', () => {
+    expect(
+      shouldClawGrowthGuarantee({
+        priorQualifyingStatus: false,
+        hasPeriodCredit: true,
+        alreadyClawed: false,
+        inAssignmentWindow: true,
+        clawAmount: 150,
+      }),
+    ).toBe(false);
+    expect(
+      shouldClawGrowthGuarantee({
+        priorQualifyingStatus: true,
+        hasPeriodCredit: false,
+        alreadyClawed: false,
+        inAssignmentWindow: true,
+        clawAmount: 150,
+      }),
+    ).toBe(false);
+    expect(
+      shouldClawGrowthGuarantee({
+        priorQualifyingStatus: true,
+        hasPeriodCredit: true,
+        alreadyClawed: true,
+        inAssignmentWindow: true,
+        clawAmount: 150,
+      }),
+    ).toBe(false);
   });
 });
 

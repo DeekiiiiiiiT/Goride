@@ -11,6 +11,7 @@ import { orchestrateOrderRefund } from "./orderRefund.ts";
 import { ORDER_CUSTOMER_EMBED } from "../orderSelectEmbeds.ts";
 import { handleOrderDelivered } from "../courierCashLedger.ts";
 import { reverseOrderOutputTax } from "../../_shared/gctLedger.ts";
+import { maybeClawbackGrowthGuarantee } from "../growthGuarantee.ts";
 
 async function requireDashOrCourierAdmin(c: { req: { header: (n: string) => string | undefined } }) {
   const dash = await requireProductAdmin(c, "dash");
@@ -173,9 +174,13 @@ export function registerOrderAdminRoutes(app: Hono) {
     const now = new Date().toISOString();
 
     const { data: existing } = await db.from("orders")
-      .select("courier_id, payment_status")
+      .select("courier_id, payment_status, status")
       .eq("id", orderId)
       .maybeSingle();
+
+    const priorStatus = String(
+      (existing as { status?: string } | null)?.status ?? "",
+    );
 
     const { data: order, error } = await db.from("orders")
       .update({
@@ -213,6 +218,15 @@ export function registerOrderAdminRoutes(app: Hono) {
     });
 
     await reverseOrderOutputTax(db, orderId);
+
+    try {
+      await maybeClawbackGrowthGuarantee(db, {
+        orderId,
+        priorStatus,
+      });
+    } catch (e) {
+      console.error("[gg-clawback] admin cancel", e);
+    }
 
     let refund: RefundOrchestratorResultSummary | null = null;
     const payStatus = String(

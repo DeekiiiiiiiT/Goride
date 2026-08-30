@@ -613,10 +613,15 @@ app.all("/webhooks/wipay", async (c) => {
 const WipayCompleteBody = z.object({
   orderId: z.string().min(1),
   transactionId: z.string().optional(),
+  /** Ignored for money-marking — client status is not trusted (Finding K). */
   status: z.string().optional(),
 });
 
-// Customer return from WiPay hosted page — marks the order paid so the kitchen can see it.
+/**
+ * Customer return from WiPay hosted page — poll-only.
+ * Only the secret-verified webhook may mark an intent completed.
+ * This endpoint reports whether the webhook (or prior path) already completed payment.
+ */
 app.post("/wipay/complete", async (c) => {
   const authHeader = c.req.header("Authorization");
   if (!authHeader) return c.json({ error: "Unauthorized" }, 401);
@@ -629,27 +634,49 @@ app.post("/wipay/complete", async (c) => {
   if (body instanceof Response) return body;
 
   const serviceSupabase = getServiceSupabase();
-  const payload = {
-    order_id: body.orderId,
-    transaction_id: body.transactionId,
-    status: body.status,
-  };
-  const intent = await findWipayIntent(serviceSupabase, payload, body.orderId);
+  // Prefer order_id match for customer poll (avoid loose transaction_id alone)
+  const byOrder = await findWipayIntent(
+    serviceSupabase,
+    { order_id: body.orderId },
+    body.orderId,
+  );
+  const intent = byOrder ?? (body.transactionId
+    ? await findWipayIntent(serviceSupabase, { transaction_id: body.transactionId }, body.orderId)
+    : null);
   if (!intent) return c.json({ error: "Payment not found" }, 404);
+
+  // Rush Pass uses /customer/rush-pass/confirm — refuse order-complete for null order intents
+  if (!intent.order_id) {
+    return c.json({
+      error: "Not an order payment",
+      code: "not_order_intent",
+    }, 400);
+  }
 
   const owned = await assertCustomerOwnsOrder(user.id, String(intent.order_id));
   if (!owned.ok) return c.json({ error: owned.error }, owned.status);
 
-  if (!wipaySuccess(body.status) && String(intent.status) !== "completed") {
-    return c.json({ error: "Payment not completed" }, 400);
+  const status = String(intent.status ?? "").toLowerCase();
+  if (status === "completed" || status === "paid") {
+    return c.json({ success: true, orderId: String(intent.order_id), status });
+  }
+  if (status === "failed" || status === "cancelled" || status === "expired") {
+    return c.json({
+      success: false,
+      error: "Payment failed",
+      code: "payment_failed",
+      status,
+      orderId: String(intent.order_id),
+    }, 400);
   }
 
-  const orderId = await completeWipayIntent(
-    serviceSupabase,
-    intent as Record<string, unknown>,
-    { ...payload, status: body.status ?? "success" },
-  );
-  return c.json({ success: true, orderId });
+  // Pending — webhook has not completed yet; client must poll (do NOT trust body.status)
+  return c.json({
+    success: false,
+    code: "pending_confirmation",
+    status: status || "pending",
+    orderId: String(intent.order_id),
+  }, 202);
 });
 
 // ============================================================================

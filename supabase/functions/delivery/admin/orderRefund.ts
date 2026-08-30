@@ -5,6 +5,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import type { ProductAdminUser } from "../../_shared/productAdmin.ts";
 import { getDb, writeKvAudit } from "./merchantAdminShared.ts";
+import { maybeClawbackGrowthGuarantee } from "../growthGuarantee.ts";
 
 function getPaymentsDb() {
   return createClient(
@@ -42,7 +43,7 @@ export async function orchestrateOrderRefund(opts: {
 
   const { data: order, error: orderErr } = await db
     .from("orders")
-    .select("id, payment_status, total, customer_id")
+    .select("id, payment_status, total, customer_id, status")
     .eq("id", orderId)
     .maybeSingle();
 
@@ -50,6 +51,7 @@ export async function orchestrateOrderRefund(opts: {
     return { ok: false, status: 404, error: "Order not found" };
   }
 
+  const priorOrderStatus = String((order as { status?: string }).status ?? "");
   const paymentStatus = String(order.payment_status || "");
   if (!["paid", "refund_pending", "partially_refunded"].includes(paymentStatus)) {
     return {
@@ -188,6 +190,18 @@ export async function orchestrateOrderRefund(opts: {
     admin.email,
     `amount=${refundAmount} status=${nextPaymentStatus} reason=${reason}`,
   );
+
+  // Full refund of a delivered/completed order — claw GG share if period was credited
+  if (isFull && nextPaymentStatus === "refunded") {
+    try {
+      await maybeClawbackGrowthGuarantee(db, {
+        orderId,
+        priorStatus: priorOrderStatus,
+      });
+    } catch (e) {
+      console.error("[gg-clawback] full refund", e);
+    }
+  }
 
   return {
     ok: true,

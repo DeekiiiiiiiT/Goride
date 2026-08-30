@@ -522,4 +522,128 @@ export function registerRushPassRoutes(app: Hono, deps: RushPassRoutesDeps) {
     if (error) return c.json({ error: error.message }, 500);
     return c.json({ memberships: data ?? [] });
   });
+
+  // GET /admin/rush-pass/plan — active standard plan
+  app.get("/admin/rush-pass/plan", async (c) => {
+    const admin = await requireProductAdmin(c, "dash");
+    if (admin instanceof Response) return admin;
+    const serviceSb = getServiceSupabase();
+    const plan = await loadActivePlan(serviceSb);
+    if (!plan) return c.json({ error: "Plan not found" }, 404);
+    return c.json({ plan });
+  });
+
+  // PUT /admin/rush-pass/plan — edit price / caps (human-approved; no auto reprice)
+  app.put("/admin/rush-pass/plan", async (c) => {
+    const admin = await requireProductAdmin(c, "dash");
+    if (admin instanceof Response) return admin;
+    const denied = requireDashWrite(admin);
+    if (denied) return denied;
+
+    const body = await validateBody(c, z.object({
+      price_jmd: z.number().positive().optional(),
+      max_free_delivery_km: z.number().positive().optional(),
+      monthly_subsidy_budget_jmd: z.number().positive().optional(),
+      service_fee_multiplier: z.number().min(0).max(1).optional(),
+      name: z.string().min(1).max(120).optional(),
+    }));
+    if (body instanceof Response) return body;
+
+    const serviceSb = getServiceSupabase();
+    const existing = await loadActivePlan(serviceSb);
+    if (!existing) return c.json({ error: "Plan not found" }, 404);
+
+    const nextPrice = body.price_jmd ?? Number(existing.price_jmd);
+    const nextKm = body.max_free_delivery_km ?? Number(existing.max_free_delivery_km ?? 8);
+    const nextBudget = body.monthly_subsidy_budget_jmd ??
+      Number(existing.monthly_subsidy_budget_jmd ?? existing.price_jmd);
+    const nextMult = body.service_fee_multiplier ?? Number(existing.service_fee_multiplier ?? 0.5);
+
+    if (!(nextKm > 0)) {
+      return c.json({
+        error: "max_free_delivery_km must be > 0",
+        code: "PASS_SUBSIDY_UNBOUNDED",
+      }, 400);
+    }
+    if (!(nextBudget > 0)) {
+      return c.json({
+        error: "monthly_subsidy_budget_jmd must be > 0",
+        code: "PASS_SUBSIDY_UNBOUNDED",
+      }, 400);
+    }
+    if (!(nextPrice > 0)) {
+      return c.json({ error: "price_jmd must be > 0" }, 400);
+    }
+
+    // Soft warn: price below trailing 30d avg cost per active member
+    const since30 = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+    const { data: passOrders } = await serviceSb
+      .from("orders")
+      .select("service_fee, pricing_snapshot, rush_pass_membership_id, placed_at")
+      .not("status", "in", '("cancelled")')
+      .gte("placed_at", since30);
+    let cost30 = 0;
+    for (const o of passOrders ?? []) {
+      const row = o as Record<string, unknown>;
+      const snap = (row.pricing_snapshot ?? {}) as Record<string, unknown>;
+      const applied = row.rush_pass_membership_id != null ||
+        snap.rush_pass_applied === true ||
+        snap.rushPassApplied === true;
+      if (!applied) continue;
+      cost30 += Number(
+        snap.platform_delivery_subsidy_jmd ??
+          snap.platformDeliverySubsidyJmd ??
+          snap.promo_cost_jmd ??
+          snap.promoCostJmd ??
+          0,
+      );
+      const sf = Number(row.service_fee ?? 0);
+      const mult = Number(snap.service_fee_multiplier ?? snap.serviceFeeMultiplier ?? 0.5);
+      if (mult > 0 && mult < 1) cost30 += sf * (1 / mult - 1);
+    }
+    const { count: activeCount } = await serviceSb
+      .from("rush_pass_memberships")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "active")
+      .gt("current_period_end", new Date().toISOString());
+    const members = activeCount ?? 0;
+    const avgPerMember = members > 0 ? cost30 / members : 0;
+    const warnings: string[] = [];
+    if (avgPerMember > 0 && nextPrice < avgPerMember) {
+      warnings.push(
+        `Proposed price J$${nextPrice} is below trailing 30d avg Pass cost per active member J$${Math.round(avgPerMember)}`,
+      );
+    }
+
+    const patch: Record<string, unknown> = {
+      price_jmd: nextPrice,
+      max_free_delivery_km: nextKm,
+      monthly_subsidy_budget_jmd: nextBudget,
+      service_fee_multiplier: nextMult,
+      updated_at: new Date().toISOString(),
+    };
+    if (body.name) patch.name = body.name;
+
+    const { data: updated, error } = await serviceSb
+      .from("rush_pass_plans")
+      .update(patch)
+      .eq("id", existing.id)
+      .select()
+      .single();
+
+    if (error || !updated) {
+      return c.json({ error: error?.message || "update_failed" }, 500);
+    }
+
+    await serviceSb.from("pricing_change_log").insert({
+      scope: "rush_pass_plan",
+      actor_id: (admin as ProductAdminUser).id,
+      actor_email: (admin as ProductAdminUser).email,
+      action: "rush_pass_plan_updated",
+      before_state: existing,
+      after_state: updated,
+    });
+
+    return c.json({ plan: updated, warnings });
+  });
 }

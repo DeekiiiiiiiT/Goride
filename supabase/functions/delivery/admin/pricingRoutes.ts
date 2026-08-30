@@ -323,10 +323,11 @@ export function registerPricingAdminRoutes(app: Hono) {
     const { data: revenueRows } = await db
       .from("orders")
       .select(
-        "merchant_commission_amount, service_fee, subtotal, total, contribution_jmd, pricing_snapshot, rush_pass_membership_id",
+        "merchant_commission_amount, service_fee, subtotal, total, contribution_jmd, pricing_snapshot, rush_pass_membership_id, placed_at",
       )
       .not("status", "in", '("cancelled")');
 
+    const since30 = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
     let orderCount = 0;
     let commissionTotal = 0;
     let serviceFeeTotal = 0;
@@ -334,6 +335,10 @@ export function registerPricingAdminRoutes(app: Hono) {
     let grossFood = 0;
     let passOrders = 0;
     let passSubsidyTotal = 0;
+    let passSfDiscountTotal = 0;
+    let passOrders30d = 0;
+    let passSubsidy30d = 0;
+    let passSfDiscount30d = 0;
     let distanceFeeOrders = 0;
     let distanceFeeTotal = 0;
     for (const o of revenueRows ?? []) {
@@ -347,15 +352,32 @@ export function registerPricingAdminRoutes(app: Hono) {
       const passApplied = row.rush_pass_membership_id != null ||
         snap.rush_pass_applied === true ||
         snap.rushPassApplied === true;
+      const placedAt = String(row.placed_at ?? "");
+      const in30 = placedAt >= since30;
       if (passApplied) {
         passOrders++;
-        passSubsidyTotal += Number(
+        const subsidy = Number(
           snap.platform_delivery_subsidy_jmd ??
             snap.platformDeliverySubsidyJmd ??
             snap.promo_cost_jmd ??
             snap.promoCostJmd ??
             0,
         );
+        passSubsidyTotal += subsidy;
+        const sf = Number(row.service_fee ?? 0);
+        const mult = Number(
+          snap.service_fee_multiplier ??
+            snap.serviceFeeMultiplier ??
+            0.5,
+        );
+        // Charged SF is post-Pass; estimate foregone SF vs baseline
+        const sfDiscount = mult > 0 && mult < 1 ? sf * (1 / mult - 1) : 0;
+        passSfDiscountTotal += sfDiscount;
+        if (in30) {
+          passOrders30d++;
+          passSubsidy30d += subsidy;
+          passSfDiscount30d += sfDiscount;
+        }
       }
       const distFee = Number(
         snap.service_fee_distance_jmd ?? snap.serviceFeeDistanceJmd ?? 0,
@@ -369,7 +391,7 @@ export function registerPricingAdminRoutes(app: Hono) {
       ? Math.round((commissionTotal / grossFood) * 1000) / 10
       : 0;
 
-    // Growth Guarantee credits (all time + last 90 days)
+    // Growth Guarantee credits + claw-backs (last 90 days)
     const paymentsDb = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
@@ -378,15 +400,24 @@ export function registerPricingAdminRoutes(app: Hono) {
     const since90 = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
     const { data: ggRows } = await paymentsDb
       .from("merchant_adjustments")
-      .select("amount_jmd, created_at, idempotency_key")
-      .like("idempotency_key", "gg:%")
+      .select("amount, created_at, idempotency_key")
+      .or("idempotency_key.like.gg:%,idempotency_key.like.gg_claw:%")
       .gte("created_at", since90);
 
     let ggCreditCount = 0;
     let ggCreditTotal = 0;
+    let ggClawCount = 0;
+    let ggClawTotal = 0;
     for (const g of ggRows ?? []) {
-      ggCreditCount++;
-      ggCreditTotal += Number((g as { amount_jmd?: number }).amount_jmd ?? 0);
+      const key = String((g as { idempotency_key?: string }).idempotency_key ?? "");
+      const amt = Number((g as { amount?: number }).amount ?? 0);
+      if (key.startsWith("gg_claw:")) {
+        ggClawCount++;
+        ggClawTotal += amt;
+      } else if (key.startsWith("gg:")) {
+        ggCreditCount++;
+        ggCreditTotal += amt;
+      }
     }
 
     const { count: activePassCount } = await db
@@ -394,6 +425,45 @@ export function registerPricingAdminRoutes(app: Hono) {
       .select("id", { count: "exact", head: true })
       .eq("status", "active")
       .gt("current_period_end", new Date().toISOString());
+
+    const activeMembers = activePassCount ?? 0;
+
+    // Pass subscription revenue — completed rush_pass intents in last 30d
+    const { data: passIntentRows } = await paymentsDb
+      .from("payment_intents")
+      .select("amount, status, provider_data, completed_at, created_at")
+      .eq("provider", "wipay")
+      .in("status", ["completed", "paid"])
+      .gte("created_at", since30);
+
+    let passSubRevenue30d = 0;
+    let passPaidIntents30d = 0;
+    for (const intent of passIntentRows ?? []) {
+      const pd = ((intent as { provider_data?: Record<string, unknown> }).provider_data ??
+        {}) as Record<string, unknown>;
+      if (String(pd.purpose || "") !== "rush_pass") continue;
+      passPaidIntents30d++;
+      passSubRevenue30d += Number((intent as { amount?: number }).amount ?? 0);
+    }
+
+    const { data: activePlan } = await db
+      .from("rush_pass_plans")
+      .select("price_jmd, max_free_delivery_km, monthly_subsidy_budget_jmd, service_fee_multiplier")
+      .eq("is_active", true)
+      .eq("slug", "rush_pass_standard")
+      .maybeSingle();
+
+    const planPrice = Number((activePlan as { price_jmd?: number } | null)?.price_jmd ?? 1500);
+    const passCost30d = passSubsidy30d + passSfDiscount30d;
+    const avgSubsidyPerPassOrder30d = passOrders30d > 0
+      ? passCost30d / passOrders30d
+      : 0;
+    const avgCostPerActiveMember30d = activeMembers > 0
+      ? passCost30d / activeMembers
+      : 0;
+    const breakEvenOrdersPerMember = avgSubsidyPerPassOrder30d > 0
+      ? Math.round((planPrice / avgSubsidyPerPassOrder30d) * 10) / 10
+      : null;
 
     const { data: recentChanges } = await db
       .from("pricing_change_log")
@@ -421,7 +491,18 @@ export function registerPricingAdminRoutes(app: Hono) {
           ? Math.round((passOrders / orderCount) * 1000) / 10
           : 0,
         rush_pass_subsidy_total_jmd: Math.round(passSubsidyTotal * 100) / 100,
-        rush_pass_active_memberships: activePassCount ?? 0,
+        rush_pass_service_fee_discount_total_jmd: Math.round(passSfDiscountTotal * 100) / 100,
+        rush_pass_active_memberships: activeMembers,
+        rush_pass_subscription_revenue_30d_jmd: Math.round(passSubRevenue30d * 100) / 100,
+        rush_pass_paid_intents_30d: passPaidIntents30d,
+        rush_pass_subsidy_30d_jmd: Math.round(passSubsidy30d * 100) / 100,
+        rush_pass_sf_discount_30d_jmd: Math.round(passSfDiscount30d * 100) / 100,
+        rush_pass_cost_30d_jmd: Math.round(passCost30d * 100) / 100,
+        rush_pass_orders_30d: passOrders30d,
+        rush_pass_avg_cost_per_order_30d_jmd: Math.round(avgSubsidyPerPassOrder30d * 100) / 100,
+        rush_pass_avg_cost_per_member_30d_jmd: Math.round(avgCostPerActiveMember30d * 100) / 100,
+        rush_pass_break_even_orders_per_member: breakEvenOrdersPerMember,
+        rush_pass_plan_price_jmd: planPrice,
         distance_fee_order_count: distanceFeeOrders,
         distance_fee_attach_rate_percent: orderCount > 0
           ? Math.round((distanceFeeOrders / orderCount) * 1000) / 10
@@ -429,6 +510,8 @@ export function registerPricingAdminRoutes(app: Hono) {
         distance_fee_total_jmd: Math.round(distanceFeeTotal * 100) / 100,
         growth_guarantee_credit_count_90d: ggCreditCount,
         growth_guarantee_credit_total_jmd_90d: Math.round(ggCreditTotal * 100) / 100,
+        growth_guarantee_clawback_count_90d: ggClawCount,
+        growth_guarantee_clawback_total_jmd_90d: Math.round(ggClawTotal * 100) / 100,
       },
       recent_changes: recentChanges ?? [],
     });

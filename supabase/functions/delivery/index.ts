@@ -52,6 +52,7 @@ import { registerDashHealthRoutes } from "./dashHealthRoutes.ts";
 import { registerStripeConnectRoutes } from "./stripeConnectRoutes.ts";
 import { notifyCustomerOrderStatus } from "../_shared/dashOrderSms.ts";
 import { handleOrderDelivered } from "./courierCashLedger.ts";
+import { maybeClawbackGrowthGuarantee } from "./growthGuarantee.ts";
 import {
   aggregateAnalyticsByDay,
   ANALYTICS_CACHE_CONTROL,
@@ -1239,6 +1240,14 @@ app.put("/orders/:id/status", async (c) => {
     if (status === "cancelled") {
       await applyCancelCompensation(serviceSb, id, String(actorType));
       await reverseOrderOutputTax(serviceSb, id);
+      try {
+        await maybeClawbackGrowthGuarantee(serviceSb, {
+          orderId: id,
+          priorStatus: String(orderRow.status ?? ""),
+        });
+      } catch (e) {
+        console.error("[gg-clawback] device cancel", e);
+      }
     }
 
     const shiftHeader = c.req.header("X-Staff-Shift-Token");
@@ -1335,6 +1344,14 @@ app.put("/orders/:id/status", async (c) => {
       }
       if (status === "cancelled") {
         await reverseOrderOutputTax(serviceSb, id);
+        try {
+          await maybeClawbackGrowthGuarantee(serviceSb, {
+            orderId: id,
+            priorStatus: String(orderRow.status ?? ""),
+          });
+        } catch (e) {
+          console.error("[gg-clawback] courier cancel", e);
+        }
       }
     }
 
@@ -1403,6 +1420,14 @@ app.put("/orders/:id/status", async (c) => {
     const courierId = (order as { courier_id?: string | null }).courier_id;
     if (courierId) await completeStackLeg(serviceSb, String(courierId), id);
     await reverseOrderOutputTax(serviceSb, id);
+    try {
+      await maybeClawbackGrowthGuarantee(serviceSb, {
+        orderId: id,
+        priorStatus: String(order.status ?? ""),
+      });
+    } catch (e) {
+      console.error("[gg-clawback] merchant cancel", e);
+    }
   }
   if (status === "delivered") {
     const courierId = (order as { courier_id?: string | null }).courier_id;

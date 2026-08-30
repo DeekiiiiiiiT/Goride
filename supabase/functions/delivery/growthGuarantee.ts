@@ -7,12 +7,17 @@ import {
   parsePricingRules,
   growthGuaranteeCreditFromCommission,
   jamaicaCalendarMonthsElapsed,
+  jamaicaPeriodYyyyMmFromIso,
+  growthGuaranteeCreditIdempotencyKey,
+  growthGuaranteeClawIdempotencyKey,
+  shouldClawGrowthGuarantee,
   GG_QUALIFYING_ORDER_STATUSES,
 } from "../_shared/dashPricing.ts";
 
 export {
   growthGuaranteeCreditFromCommission,
   jamaicaCalendarMonthsElapsed,
+  jamaicaPeriodYyyyMmFromIso,
 };
 
 // deno-lint-ignore no-explicit-any
@@ -294,3 +299,166 @@ export async function runGrowthGuaranteeForPeriod(
 
   return result;
 }
+
+export type ClawbackResult =
+  | { clawed: false; reason: string }
+  | { clawed: true; amount: number; period: string; adjustment_id?: string };
+
+/**
+ * When a previously delivered/completed order cancels or is fully refunded after a GG
+ * period credit was issued, post one idempotent debit for that order's commission delta.
+ */
+export async function maybeClawbackGrowthGuarantee(
+  sb: ServiceSb,
+  opts: {
+    orderId: string;
+    /** Status before cancel/refund — must have been delivered/completed */
+    priorStatus: string;
+  },
+): Promise<ClawbackResult> {
+  const prior = String(opts.priorStatus || "").toLowerCase();
+  if (!GG_QUALIFYING_ORDER_STATUSES.has(prior)) {
+    return { clawed: false, reason: "prior_not_qualifying" };
+  }
+
+  const { data: order, error: ordErr } = await sb
+    .from("orders")
+    .select("id, merchant_id, placed_at, merchant_commission_amount")
+    .eq("id", opts.orderId)
+    .maybeSingle();
+
+  if (ordErr || !order) {
+    return { clawed: false, reason: "order_not_found" };
+  }
+
+  const merchantId = String((order as { merchant_id?: string }).merchant_id ?? "");
+  const placedAt = String((order as { placed_at?: string }).placed_at ?? "");
+  if (!merchantId || !placedAt) {
+    return { clawed: false, reason: "missing_merchant_or_placed_at" };
+  }
+
+  const period = jamaicaPeriodYyyyMmFromIso(placedAt);
+  if (!period) return { clawed: false, reason: "bad_period" };
+
+  const { data: merchant } = await sb
+    .from("merchants")
+    .select("id, dominant_assigned_at, pricing_tier_id")
+    .eq("id", merchantId)
+    .maybeSingle();
+
+  const assignedAt = String(
+    (merchant as { dominant_assigned_at?: string } | null)?.dominant_assigned_at ?? "",
+  );
+  if (!assignedAt) {
+    return { clawed: false, reason: "no_assignment" };
+  }
+
+  const layered = await sb
+    .from("global_pricing_profiles")
+    .select("rules")
+    .eq("is_active", true)
+    .order("version", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const rules = parsePricingRules((layered.data?.rules ?? null) as Record<string, unknown> | null);
+  const gg = rules.growthGuarantee ?? {
+    enabled: true,
+    tierSlugs: ["dominant"],
+    monthsFromAssignment: 6,
+    minOrdersPerMonth: 20,
+  };
+  if (!gg.enabled) return { clawed: false, reason: "gg_disabled" };
+
+  const monthsWindow = Math.max(1, Number(gg.monthsFromAssignment ?? 6));
+  let endIso: string;
+  try {
+    endIso = jamaicaMonthBounds(period).endIso;
+  } catch {
+    return { clawed: false, reason: "bad_period_bounds" };
+  }
+  const inWindow = jamaicaCalendarMonthsElapsed(assignedAt, endIso) < monthsWindow;
+
+  const { data: tiers } = await sb
+    .from("merchant_tiers")
+    .select("slug, commission_rate")
+    .in("slug", ["economy", "dominant"]);
+  const bySlug = new Map<string, number>();
+  for (const t of tiers ?? []) {
+    bySlug.set(String((t as { slug: string }).slug), Number((t as { commission_rate: number }).commission_rate));
+  }
+  const dominantRate = bySlug.get("dominant") ?? 0;
+  const economyRate = bySlug.get("economy") ?? 0;
+
+  const clawAmount = growthGuaranteeCreditFromCommission(
+    Number((order as { merchant_commission_amount?: number }).merchant_commission_amount ?? 0),
+    dominantRate,
+    economyRate,
+  );
+
+  const creditKey = growthGuaranteeCreditIdempotencyKey(merchantId, period);
+  const clawKey = growthGuaranteeClawIdempotencyKey(merchantId, period, opts.orderId);
+  const pdb = getPaymentsDb();
+
+  const { data: creditRow } = await pdb
+    .from("merchant_adjustments")
+    .select("id")
+    .eq("idempotency_key", creditKey)
+    .maybeSingle();
+
+  const { data: existingClaw } = await pdb
+    .from("merchant_adjustments")
+    .select("id")
+    .eq("idempotency_key", clawKey)
+    .maybeSingle();
+
+  if (
+    !shouldClawGrowthGuarantee({
+      priorQualifyingStatus: true,
+      hasPeriodCredit: Boolean(creditRow),
+      alreadyClawed: Boolean(existingClaw),
+      inAssignmentWindow: inWindow,
+      clawAmount,
+    })
+  ) {
+    if (!creditRow) return { clawed: false, reason: "no_period_credit" };
+    if (existingClaw) return { clawed: false, reason: "already_clawed" };
+    if (!inWindow) return { clawed: false, reason: "outside_window" };
+    if (!(clawAmount > 0)) return { clawed: false, reason: "zero_claw" };
+    return { clawed: false, reason: "skipped" };
+  }
+
+  const debit = -roundMoney(clawAmount);
+  const reason =
+    `Growth Guarantee claw-back ${period} for order ${opts.orderId} ` +
+    `(cancel/refund after delivered credit)`;
+
+  const { data: adj, error: adjErr } = await pdb
+    .from("merchant_adjustments")
+    .insert({
+      merchant_id: merchantId,
+      amount: debit,
+      reason,
+      idempotency_key: clawKey,
+    })
+    .select("id")
+    .single();
+
+  if (adjErr) {
+    if (
+      String(adjErr.message || "").toLowerCase().includes("unique") ||
+      String(adjErr.code) === "23505"
+    ) {
+      return { clawed: false, reason: "already_clawed" };
+    }
+    console.error("[gg-clawback]", adjErr.message);
+    return { clawed: false, reason: "insert_failed" };
+  }
+
+  return {
+    clawed: true,
+    amount: debit,
+    period,
+    adjustment_id: adj ? String(adj.id) : undefined,
+  };
+}
+

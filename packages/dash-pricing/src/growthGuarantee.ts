@@ -24,4 +24,38 @@ export function jamaicaCalendarMonthsElapsed(fromIso: string, toPeriodEndIso: st
   return Math.max(0, elapsed);
 }
 
+/** Jamaica calendar month YYYY-MM for an event timestamp. */
+export function jamaicaPeriodYyyyMmFromIso(iso: string): string {
+  const jm = new Date(new Date(iso).getTime() - 5 * 60 * 60 * 1000);
+  if (!Number.isFinite(jm.getTime())) return '';
+  return `${jm.getUTCFullYear()}-${String(jm.getUTCMonth() + 1).padStart(2, '0')}`;
+}
+
+export function growthGuaranteeCreditIdempotencyKey(merchantId: string, period: string): string {
+  return `gg:${merchantId}:${period}`;
+}
+
+export function growthGuaranteeClawIdempotencyKey(
+  merchantId: string,
+  period: string,
+  orderId: string,
+): string {
+  return `gg_claw:${merchantId}:${period}:${orderId}`;
+}
+
+/** Pure gate used by claw-back automation + unit tests. */
+export function shouldClawGrowthGuarantee(opts: {
+  priorQualifyingStatus: boolean;
+  hasPeriodCredit: boolean;
+  alreadyClawed: boolean;
+  inAssignmentWindow: boolean;
+  clawAmount: number;
+}): boolean {
+  if (!opts.priorQualifyingStatus) return false;
+  if (!opts.hasPeriodCredit) return false;
+  if (opts.alreadyClawed) return false;
+  if (!opts.inAssignmentWindow) return false;
+  return opts.clawAmount > 0;
+}
+
 export const GG_QUALIFYING_ORDER_STATUSES = new Set(['delivered', 'completed']);

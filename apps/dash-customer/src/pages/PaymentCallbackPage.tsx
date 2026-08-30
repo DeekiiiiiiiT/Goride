@@ -9,6 +9,9 @@ interface PaymentCallbackPageProps {
   provider: 'wipay';
 }
 
+const POLL_ATTEMPTS = 5;
+const POLL_MS = 1000;
+
 export default function PaymentCallbackPage({ onNavigate, session, provider }: PaymentCallbackPageProps) {
   const [status, setStatus] = useState<'processing' | 'success' | 'failed' | 'pending_confirmation'>('processing');
   const [orderId, setOrderId] = useState<string | null>(null);
@@ -21,7 +24,6 @@ export default function PaymentCallbackPage({ onNavigate, session, provider }: P
     }
 
     const params = new URLSearchParams(window.location.search);
-    const wipayStatus = params.get('status') || params.get('payment_status') || '';
     const orderIdParam = params.get('order_id') || params.get('orderId') || '';
     const transactionId = params.get('transaction_id') || params.get('transactionId') || '';
     const purpose = params.get('purpose') || '';
@@ -34,17 +36,17 @@ export default function PaymentCallbackPage({ onNavigate, session, provider }: P
     }
 
     if (rushPass) {
-      const ok = /success|successful|completed|paid|ok|approved/i.test(wipayStatus) || wipayStatus === '1';
-      if (!ok) {
-        setStatus('failed');
-        return;
-      }
       const intentId = params.get('intent_id') || params.get('intentId') ||
         params.get('order_id') || params.get('orderId') || '';
       void (async () => {
+        setStatus('pending_confirmation');
         try {
-          if (intentId) {
-            await fetch(`${API_ENDPOINTS.delivery}/customer/rush-pass/confirm`, {
+          if (!intentId) {
+            setStatus('failed');
+            return;
+          }
+          for (let i = 0; i < POLL_ATTEMPTS; i++) {
+            const res = await fetch(`${API_ENDPOINTS.delivery}/customer/rush-pass/confirm`, {
               method: 'POST',
               headers: supabaseAnonFunctionHeaders({
                 'Content-Type': 'application/json',
@@ -52,11 +54,23 @@ export default function PaymentCallbackPage({ onNavigate, session, provider }: P
               }),
               body: JSON.stringify({ intentId }),
             });
+            if (res.ok) {
+              setStatus('success');
+              return;
+            }
+            const data = (await res.json().catch(() => ({}))) as { status?: string };
+            // Payment not completed in DB yet — wait for webhook
+            if (res.status === 400 && String(data.status || '').toLowerCase() !== 'failed') {
+              await new Promise((r) => setTimeout(r, POLL_MS));
+              continue;
+            }
+            setStatus('failed');
+            return;
           }
+          setStatus('failed');
         } catch {
-          // Webhook may already have activated — still show success on payment OK
+          setStatus('failed');
         }
-        setStatus('success');
       })();
       return;
     }
@@ -66,33 +80,42 @@ export default function PaymentCallbackPage({ onNavigate, session, provider }: P
       return;
     }
 
-    void completeWipayPayment(orderIdParam, transactionId, wipayStatus);
+    void pollOrderPayment(orderIdParam, transactionId);
   }, [provider, session]);
 
-  const completeWipayPayment = async (
-    orderIdParam: string,
-    transactionId: string,
-    wipayStatus: string,
-  ) => {
+  const pollOrderPayment = async (orderIdParam: string, transactionId: string) => {
+    setStatus('pending_confirmation');
     try {
-      const res = await fetch(`${API_ENDPOINTS.payments}/wipay/complete`, {
-        method: 'POST',
-        headers: supabaseAnonFunctionHeaders({
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${session!.access_token}`,
-        }),
-        body: JSON.stringify({
-          orderId: orderIdParam,
-          transactionId: transactionId || undefined,
-          status: wipayStatus || undefined,
-        }),
-      });
-      const data = (await res.json().catch(() => ({}))) as { orderId?: string };
-      if (res.ok) {
-        setOrderId(data.orderId || orderIdParam);
-        setStatus('success');
+      for (let i = 0; i < POLL_ATTEMPTS; i++) {
+        const res = await fetch(`${API_ENDPOINTS.payments}/wipay/complete`, {
+          method: 'POST',
+          headers: supabaseAnonFunctionHeaders({
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${session!.access_token}`,
+          }),
+          body: JSON.stringify({
+            orderId: orderIdParam,
+            transactionId: transactionId || undefined,
+          }),
+        });
+        const data = (await res.json().catch(() => ({}))) as {
+          orderId?: string;
+          code?: string;
+          success?: boolean;
+        };
+        if (res.ok && data.success) {
+          setOrderId(data.orderId || orderIdParam);
+          setStatus('success');
+          return;
+        }
+        if (res.status === 202 || data.code === 'pending_confirmation') {
+          await new Promise((r) => setTimeout(r, POLL_MS));
+          continue;
+        }
+        setStatus('failed');
         return;
       }
+      // Exhausted polls — still pending webhook
       setStatus('failed');
     } catch {
       setStatus('failed');
@@ -139,7 +162,9 @@ export default function PaymentCallbackPage({ onNavigate, session, provider }: P
     <div className="min-h-dvh flex flex-col items-center justify-center p-4">
       <XCircle className="w-20 h-20 text-red-500 mb-4" />
       <h1 className="text-2xl font-bold text-gray-900 mb-2">Payment Failed</h1>
-      <p className="text-gray-500 mb-8">Something went wrong with your payment</p>
+      <p className="text-gray-500 mb-8">
+        We could not confirm payment yet. If you were charged, refresh in a moment or check Orders.
+      </p>
       <div className="flex gap-4">
         <button
           type="button"
@@ -150,10 +175,10 @@ export default function PaymentCallbackPage({ onNavigate, session, provider }: P
         </button>
         <button
           type="button"
-          onClick={() => onNavigate('home')}
+          onClick={() => onNavigate(isRushPass ? 'home' : 'orders')}
           className="px-6 py-3 bg-emerald-500 text-white rounded-lg font-medium hover:bg-emerald-600"
         >
-          Go Home
+          {isRushPass ? 'Go Home' : 'View Orders'}
         </button>
       </div>
     </div>

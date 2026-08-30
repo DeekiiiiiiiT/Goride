@@ -966,6 +966,7 @@ export function MerchantDetailPage() {
               <p className="text-xs text-amber-200/90 mt-1">
                 If completed orders in a month fall below the Pricing Hub floor, we credit the
                 Dominant−Economy commission delta into merchant adjustments (one credit per month).
+                Late cancel/refund of a credited delivered order posts an automatic claw-back debit.
               </p>
               <p className="text-xs text-amber-200/80 mt-2">
                 {assigned

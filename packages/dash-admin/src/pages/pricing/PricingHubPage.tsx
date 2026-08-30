@@ -29,6 +29,8 @@ import {
   grantRushPass,
   revokeRushPass,
   listRushPassMemberships,
+  fetchRushPassPlan,
+  updateRushPassPlan,
   updateDefaultPartyPricing,
   updateParishPartyPricing,
   updateMarketPartyPricing,
@@ -1125,6 +1127,26 @@ export function PricingHubPage() {
                 </p>
               </div>
               <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4">
+                <p className="text-xs text-slate-500">Pass sub revenue (30d)</p>
+                <p className="text-lg font-semibold text-white mt-1">
+                  {formatJmd(revenue.rush_pass_subscription_revenue_30d_jmd ?? 0)}
+                  <span className="text-xs text-slate-500 font-normal ml-1">
+                    ({revenue.rush_pass_paid_intents_30d ?? 0} paid)
+                  </span>
+                </p>
+              </div>
+              <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4">
+                <p className="text-xs text-slate-500">Pass cost (30d) · break-even</p>
+                <p className="text-lg font-semibold text-white mt-1">
+                  {formatJmd(revenue.rush_pass_cost_30d_jmd ?? 0)}
+                  <span className="text-xs text-slate-500 font-normal ml-1">
+                    {revenue.rush_pass_break_even_orders_per_member != null
+                      ? `~${revenue.rush_pass_break_even_orders_per_member} free trips / member at ${formatJmd(revenue.rush_pass_plan_price_jmd ?? 0)}`
+                      : 'need Pass order volume'}
+                  </span>
+                </p>
+              </div>
+              <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4">
                 <p className="text-xs text-slate-500">Distance fee attach</p>
                 <p className="text-lg font-semibold text-white mt-1">
                   {revenue.distance_fee_attach_rate_percent ?? 0}%
@@ -1142,9 +1164,22 @@ export function PricingHubPage() {
                   </span>
                 </p>
               </div>
+              <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4">
+                <p className="text-xs text-slate-500">GG clawbacks (90d)</p>
+                <p className="text-lg font-semibold text-white mt-1">
+                  {revenue.growth_guarantee_clawback_count_90d ?? 0}
+                  <span className="text-xs text-slate-500 font-normal ml-1">
+                    {formatJmd(revenue.growth_guarantee_clawback_total_jmd_90d ?? 0)}
+                  </span>
+                </p>
+              </div>
             </div>
           )}
-          <RushPassAdminPanel accessToken={session.access_token} canWrite={canWrite} />
+          <RushPassAdminPanel
+            accessToken={session.access_token}
+            canWrite={canWrite}
+            revenue={revenue}
+          />
           <div className="space-y-2">
             {parishGroups.map((parish) => (
               <button
@@ -3271,17 +3306,24 @@ function TierRow({
   );
 }
 
-/** Compact ops panel — grant / revoke / list Rush Pass memberships */
+/** Compact ops panel — plan economics + grant / revoke / list Rush Pass memberships */
 function RushPassAdminPanel({
   accessToken,
   canWrite,
+  revenue,
 }: {
   accessToken: string;
   canWrite: boolean;
+  revenue?: PricingRevenueSummary | null;
 }) {
   const [rows, setRows] = useState<Array<Record<string, unknown>>>([]);
   const [customerId, setCustomerId] = useState('');
   const [busy, setBusy] = useState(false);
+  const [priceJmd, setPriceJmd] = useState('');
+  const [maxKm, setMaxKm] = useState('');
+  const [budgetJmd, setBudgetJmd] = useState('');
+  const [sfMult, setSfMult] = useState('');
+  const [planBusy, setPlanBusy] = useState(false);
 
   const refresh = async () => {
     try {
@@ -3292,14 +3334,125 @@ function RushPassAdminPanel({
     }
   };
 
+  const loadPlan = async () => {
+    try {
+      const res = await fetchRushPassPlan(accessToken);
+      const p = res.plan;
+      setPriceJmd(String(p.price_jmd ?? ''));
+      setMaxKm(String(p.max_free_delivery_km ?? ''));
+      setBudgetJmd(String(p.monthly_subsidy_budget_jmd ?? ''));
+      setSfMult(String(p.service_fee_multiplier ?? ''));
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to load Pass plan');
+    }
+  };
+
   useEffect(() => {
     void refresh();
+    void loadPlan();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accessToken]);
 
+  const avgCost = revenue?.rush_pass_avg_cost_per_order_30d_jmd ?? 0;
+  const proposedPrice = Number(priceJmd) || 0;
+  const calcTrips =
+    avgCost > 0 && proposedPrice > 0
+      ? Math.round((proposedPrice / avgCost) * 10) / 10
+      : null;
+
   return (
-    <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4 space-y-3">
-      <div className="flex flex-wrap items-center justify-between gap-2">
+    <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4 space-y-4">
+      <div>
+        <p className="text-sm font-medium text-white">Rush Pass plan</p>
+        <p className="text-xs text-slate-500 mt-0.5">
+          Edit price and caps only after enough Pass-paid volume — see docs/RUSH_PASS_PRICING_OPS.md.
+          Live price does not auto-change.
+        </p>
+        {calcTrips != null && (
+          <p className="text-xs text-amber-200/90 mt-2">
+            At last 30d avg Pass cost {formatJmd(avgCost)} / order, J${proposedPrice} funds ~
+            {calcTrips} subsidized trips per member.
+          </p>
+        )}
+      </div>
+      {canWrite && (
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+          <label className="text-xs text-slate-400">
+            Price (J$)
+            <input
+              type="number"
+              min={1}
+              value={priceJmd}
+              onChange={(e) => setPriceJmd(e.target.value)}
+              className="mt-1 w-full px-2 py-1.5 rounded-lg bg-slate-950 border border-slate-700 text-white text-sm"
+            />
+          </label>
+          <label className="text-xs text-slate-400">
+            Max free km
+            <input
+              type="number"
+              min={0.1}
+              step={0.1}
+              value={maxKm}
+              onChange={(e) => setMaxKm(e.target.value)}
+              className="mt-1 w-full px-2 py-1.5 rounded-lg bg-slate-950 border border-slate-700 text-white text-sm"
+            />
+          </label>
+          <label className="text-xs text-slate-400">
+            Monthly subsidy budget
+            <input
+              type="number"
+              min={1}
+              value={budgetJmd}
+              onChange={(e) => setBudgetJmd(e.target.value)}
+              className="mt-1 w-full px-2 py-1.5 rounded-lg bg-slate-950 border border-slate-700 text-white text-sm"
+            />
+          </label>
+          <label className="text-xs text-slate-400">
+            Service fee multiplier
+            <input
+              type="number"
+              min={0}
+              max={1}
+              step={0.05}
+              value={sfMult}
+              onChange={(e) => setSfMult(e.target.value)}
+              className="mt-1 w-full px-2 py-1.5 rounded-lg bg-slate-950 border border-slate-700 text-white text-sm"
+            />
+          </label>
+          <button
+            type="button"
+            disabled={planBusy}
+            onClick={() => {
+              void (async () => {
+                setPlanBusy(true);
+                try {
+                  const res = await updateRushPassPlan(accessToken, {
+                    price_jmd: Number(priceJmd),
+                    max_free_delivery_km: Number(maxKm),
+                    monthly_subsidy_budget_jmd: Number(budgetJmd),
+                    service_fee_multiplier: Number(sfMult),
+                  });
+                  if (res.warnings?.length) {
+                    for (const w of res.warnings) toast.warning(w);
+                  }
+                  toast.success('Pass plan saved');
+                  await loadPlan();
+                } catch (e) {
+                  toast.error(e instanceof Error ? e.message : 'Save failed');
+                } finally {
+                  setPlanBusy(false);
+                }
+              })();
+            }}
+            className="px-3 py-1.5 text-sm rounded-lg bg-amber-600 text-white disabled:opacity-50 sm:col-span-2 lg:col-span-4 w-fit"
+          >
+            {planBusy ? 'Saving…' : 'Save plan'}
+          </button>
+        </div>
+      )}
+
+      <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-800 pt-3">
         <div>
           <p className="text-sm font-medium text-white">Rush Pass memberships</p>
           <p className="text-xs text-slate-500">Grant or revoke without WiPay (ops).</p>

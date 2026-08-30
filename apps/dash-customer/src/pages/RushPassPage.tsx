@@ -154,7 +154,7 @@ export default function RushPassPage({ onNavigate }: Props) {
               <p className="text-body-md text-on-surface-variant">
                 Half service fee at Growth &amp; Dominant. Free delivery within{' '}
                 {plan?.max_free_delivery_km ?? status?.subsidy?.max_free_delivery_km ?? 8} km road
-                distance, up to {formatJmd(plan?.monthly_subsidy_budget_jmd ?? plan?.price_jmd ?? 1500)}{' '}
+                distance, up to {formatJmd(plan?.monthly_subsidy_budget_jmd ?? plan?.price_jmd ?? 0)}{' '}
                 delivery credit per period.
                 {plan ? ` ${formatJmd(plan.price_jmd)} / ${plan.billing_period_days} days.` : ''}
               </p>
