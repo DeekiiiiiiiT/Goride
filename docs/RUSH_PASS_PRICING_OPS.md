@@ -1,16 +1,19 @@
 # Rush Pass pricing ops
 
-## Sell gate (Finding A)
+## Sell gate (Finding A + L)
 
-**Do not market or push Rush Pass publicly** until
-[RUSH_V2_ORDER_RECONCILE_CHECKLIST.md](./RUSH_V2_ORDER_RECONCILE_CHECKLIST.md) checks **§1–3 are green**
-(baseline reconcile, Pass ≤8 km free, Pass >8 km charged). §4 (budget exhaustion) is preferred but
-**not** a marketing blocker once 1–3 pass.
+Engineering checklist §1–4 and Finding L are **green**. **PO approved public Pass sales
+2026-08-30.**
 
-Internal admin grants / test accounts are fine before the gate. No public CTA push, deals, or
-campaigns that sell Pass until the checklist is signed.
+Manage live plan economics in **Pricing → Rush Pass** (price, billing days, max free km, monthly
+subsidy budget, service-fee multiplier, free-delivery flag, eligible merchant tiers, and sales
+on/off). Grant/revoke memberships on the same tab for support.
 
-Pricing Hub shows a sell-gate banner on the Rush Pass panel until ops remove it after sign-off.
+Customers subscribe in the app under **Account → Rush Pass**. **Sales on/off** on the plan is the
+admin pause switch — turning it off stops new purchases; current members keep benefits until period end.
+
+Re-hold marketing only if a new money defect opens (e.g. subsidy fail-open) — then restore a Hub
+banner and pause campaigns until fixed.
 
 ## WiPay demo pay (until merchant is live)
 
@@ -33,9 +36,10 @@ Suggested gate: **≥50 Pass-paid orders in the last 30 days** (or your own thre
 
 ## Where to look
 
-Pricing Hub overview cards + **Rush Pass plan** editor:
+Pricing Hub **Rush Pass** tab:
 
-- `price_jmd`, `max_free_delivery_km`, `monthly_subsidy_budget_jmd`, `service_fee_multiplier`
+- `price_jmd`, `billing_period_days`, `max_free_delivery_km`, `monthly_subsidy_budget_jmd`,
+  `service_fee_multiplier`, `free_delivery`, `eligible_tier_slugs`, `is_active`, display `name`
 - Calculator line: “At last 30d avg subsidy X, J$Y funds ~N trips/member”
 - Save is rejected if km or monthly budget ≤ 0
 - Save warns (does not block) if proposed price &lt; trailing 30d avg cost per active member

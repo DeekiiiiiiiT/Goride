@@ -5,9 +5,10 @@
 **Status:** ✅ **Architecture implemented; every audit defect closed, including the one filed as
 out-of-scope** ([§12](#12-remediation-verification), [§13](#13-follow-up-audit--ae02ac5e)).
 `@roam/dash-pricing`: **45 tests passing** (was 33).
-✅ **Finding A closed 2026-08-30** — first live Model B order priced + reconcile zero-drift
-(`RD-2026-000001`); Pass ≤8 km / >8 km / budget gates smoked. See [§13.4](#134-standing-position)
-and [docs/RUSH_V2_ORDER_RECONCILE_CHECKLIST.md](docs/RUSH_V2_ORDER_RECONCILE_CHECKLIST.md).
+✅ **Finding A closed 2026-08-30** — first live Model B orders priced through the real path;
+`RD-2026-000001` reconciles to the cent.
+✅ **Finding L closed 2026-08-30** — Pass subsidy accumulator fixed (fail-closed); real-budget
+deny `RD-2026-000006` and distance deny `RD-2026-000007` persisted. See [§14.4](#144-standing-position).
 **Context:** Pre-launch, no backwards compatibility required. GoRide ledger / fleet finance
 explicitly out of scope.
 
@@ -825,8 +826,9 @@ pass. Finding F now derives from the authoritative recorded commission instead o
 `subtotal`, which is both correct and drift-proof. The Growth Guarantee gained a claw-back and a
 ceiling that were suggestions, not requirements.
 
-The pricing system is now correct by construction *and* bounded on its subsidy paths. It has still
-never priced a real order.
+The pricing system is now correct by construction *and* bounded on its subsidy paths. Finding A
+later proved real orders price and reconcile; Finding L closed the Pass spend accumulator hole
+exposed by those orders.
 
 ---
 
@@ -908,3 +910,253 @@ true webhook capture.
 
 Launch leftovers remaining are process-only: no public Pass marketing until checklist §1–3 green
 (now green), GG live cron held until ≥1 Jamaica delivered Dominant month, commit/ship on PO say-so.
+
+> **Superseded by [§14](#14-live-smoke-audit--finding-l).** Auditing the persisted order rows shows
+> the budget gate is **not** enforcing in normal operation. The gate test passed because it forced
+> `budget = 0`, which does not exercise the accumulator that is actually broken.
+
+---
+
+## 14. Live smoke audit — finding L
+
+Audited 2026-08-30 against the five persisted `delivery.orders` rows.
+**This is precisely why finding A mattered: the defect below is invisible to unit tests and to the
+gate test as it was run.**
+
+### 14.1 Finding A — genuinely closed ✅
+
+Confirmed independently. Five orders, all through the real path (each carries a
+`payments.payment_intents` row; two have completed `transactions`). `distance_km`,
+`contribution_jmd` and `pricing_snapshot` populated on all five.
+
+`RD-2026-000001` (non-Pass, 7.1 km, J$1,500 basket) reconciles **exactly**:
+
+| | |
+|---|---|
+| Delivery J$930 − courier J$630 | **+J$300** — matches the §3.2 steady-state margin exactly |
+| Commission 338 + service 155 + delivery 300 + small-order 0 | **J$793** |
+| Recorded `contribution_jmd` | **J$792.75** — zero drift |
+
+The architecture behaves in production exactly as modelled. That is a real result.
+
+### 14.2 Finding L — the Pass budget accumulator returns 0 🔴 Critical
+
+**Four Pass orders on one membership each took a J$630 free-delivery subsidy — J$2,520 against a
+J$1,500 monthly budget.** All four succeeded.
+
+| Order | Placed | Budget in snapshot | `used` at quote | Subsidy | Expected |
+|---|---|---|---|---|---|
+| RD-2026-000002 | 15:19 | 1500 | 0 | 630 | ✅ allow |
+| RD-2026-000003 | 15:33 | 1500 | **0** ← should be 630 | 630 | ✅ allow |
+| RD-2026-000004 | 15:42 | 1500 | **0** ← should be 1260 | 630 | 🔴 **reject** |
+| RD-2026-000005 | 15:50 | 1500 | **0** ← should be 1890 | 630 | 🔴 **reject** |
+
+`rush_pass_subsidy_used_jmd` is **0 in every snapshot**, including one placed 31 minutes after the
+first. The accumulator never accumulates, so `remaining` is always the full budget and
+`resolveRushPassFreeDelivery` always returns `apply: true`.
+
+**The gate logic is correct.** `resolveRushPassFreeDelivery`
+([engine.ts:710](packages/dash-pricing/src/engine.ts#L710)) computes `remaining = budget − used`
+properly, and the order-path check is wired correctly. The failure is confined to
+`loadRushPassSubsidyUsed`
+([pricingResolver.ts:590-618](supabase/functions/delivery/pricingResolver.ts#L590-L618)).
+
+**Every input to it is valid** — each checked directly:
+
+- `membershipId` populated (`1fc65898…`); the membership *was* found (Pass applied, budget read)
+- `periodStartIso` valid (`2026-08-30 15:02:16+00`) — the `if (!periodStartIso) return 0` guard is
+  not the cause
+- The prior orders exist, are `status = 'placed'` (not cancelled/rejected), and carry
+  `platform_delivery_subsidy_jmd = 630`
+- **The equivalent SQL returns 4 rows totalling J$2,520.** The data is there.
+
+The function's query returns nothing while the same predicate in SQL returns everything.
+
+### 14.2.1 Root cause — proven
+
+**`promo_cost_jmd` does not exist as a column on `delivery.orders`, and the query selects it.**
+
+```ts
+// pricingResolver.ts:598
+.select("platform_delivery_subsidy_jmd, pricing_snapshot, promo_cost_jmd, status")
+//                                       ^^^^^^^^^^^^^^^ not a column
+```
+
+`promo_cost_jmd` is written *inside* the `pricing_snapshot` JSONB
+([customerOrderRoutes.ts](supabase/functions/delivery/customerOrderRoutes.ts)), never as a
+top-level column. Verified against `information_schema`:
+
+| Column in the select list | Exists on `delivery.orders`? |
+|---|---|
+| `platform_delivery_subsidy_jmd` | ✅ |
+| `pricing_snapshot` | ✅ |
+| **`promo_cost_jmd`** | ❌ **No** |
+| `status` | ✅ |
+
+**Proof.** Running the exact select list as SQL:
+
+```
+ERROR: 42703: column "promo_cost_jmd" does not exist
+```
+
+The identical query with that one column removed returns **4 rows, J$2,520** — the positive control.
+
+PostgREST rejects the whole request with **HTTP 400 / `42703`**, so `data` is `null`,
+`for (const row of data ?? [])` iterates nothing, and the function returns **0**. Not intermittent —
+**deterministic on every call since the feature shipped.**
+
+**The irony:** both loops fall back to `r.promo_cost_jmd` as a last-resort source for the subsidy
+figure. That defensive fallback is precisely what puts the non-existent column in the select list
+and kills the query. The `snap.promo_cost_jmd` fallback — reading it from inside the JSONB — would
+have worked correctly on its own.
+
+### 14.2.2 The same bug exists in a second place
+
+Identical shape, and it was missed because the two sites were written together:
+
+| Site | Purpose | Effect |
+|---|---|---|
+| [pricingResolver.ts:598](supabase/functions/delivery/pricingResolver.ts#L598) | **Enforcement** — feeds the budget gate | Gate never fires; unlimited free delivery |
+| [rushPassRoutes.ts:200](supabase/functions/delivery/rushPassRoutes.ts#L200) | **Customer-facing status** — Rush Pass balance | Always reports the **full budget remaining**, whatever the member has spent |
+
+So even if the gate worked, the member-facing balance would still read J$1,500 remaining forever.
+Both sites need the same one-token fix; fixing only the resolver would leave the UI lying.
+
+### 14.2.3 The design flaw that made it silent
+
+```ts
+const { data } = await sb.from("orders")...   // ← error never inspected
+let used = 0;
+for (const row of data ?? []) { ... }         // ← null data silently means "spent nothing"
+```
+
+A hard 400 on every call produced no log line, no alert, and no test failure — it looked exactly
+like a member who had spent nothing. **This fails open on a money guard.** Any error — a renamed
+column, RLS, schema scoping — silently grants unlimited subsidy.
+
+The column typo is a one-token fix. The fail-open is the finding worth keeping: an inability to
+determine spend must **deny** free delivery, not grant it, and the error must be surfaced.
+
+### 14.3 Why the gate test reported a pass
+
+The §13.4 checklist records the budget gate as verified: *"charged + 'monthly free-delivery credit
+used' (forced budget=0, then restored)."*
+
+That test forces `budget = 0`, making `remaining = 0 − used = 0` — which fires the gate **regardless
+of whether `used` is correct**. It exercises `resolveRushPassFreeDelivery` (which works) and
+completely bypasses `loadRushPassSubsidyUsed` (which does not). A passing result was therefore
+guaranteed either way.
+
+The honest test is the one the data already ran: place Pass orders until cumulative subsidy exceeds
+a **real** budget and confirm the next one is refused with `pass_subsidy_budget_exceeded`. That run
+happened, four times, and was not refused.
+
+**On the >8 km distance gate:** the checklist records it as verified in the UI, and no order beyond
+8 km was persisted, so I cannot confirm it from the data either way. Worth re-running so it leaves
+a row — a Pass order at >8 km should persist with delivery charged and
+`rush_pass_free_delivery_denied_reason = 'distance'`.
+
+### 14.4 Standing position
+
+| Item | Status |
+|---|---|
+| Architecture (§3), validator, radius, floors, legacy removal | ✅ Correct in production — reconciles to the cent |
+| Findings B, C, F, G, H, K | ✅ Closed |
+| Finding E — config, validator, gate logic | ✅ Closed |
+| Finding A | ✅ Closed |
+| **Finding L — Pass budget not enforced at runtime** | ✅ **Closed 2026-08-30** |
+| Pass distance gate (persisted) | ✅ Closed — `RD-2026-000007` |
+
+**Closed L (implemented):**
+
+1. Shared [`rushPassSubsidyUsed.ts`](supabase/functions/_shared/rushPassSubsidyUsed.ts) — select only
+   `platform_delivery_subsidy_jmd, pricing_snapshot, status` (no top-level `promo_cost_jmd`).
+2. Fail **closed**: query error ⇒ treat spend as full budget (deny free delivery); Pass status UI
+   reports remaining **0**.
+3. Wired in [`pricingResolver.ts`](supabase/functions/delivery/pricingResolver.ts) +
+   [`rushPassRoutes.ts`](supabase/functions/delivery/rushPassRoutes.ts); `delivery` redeployed.
+4. Real-budget smoke: `RD-2026-000006` — `deny=budget`, `used_snap=2520`, `delivery_fee=930`.
+5. Distance smoke: `RD-2026-000007` — `deny=distance` (temp `max_free_delivery_km=5` so 7.07 km
+   exceeded cap; plan restored to 8). Schema guard script:
+   [`assert_rush_pass_subsidy_select_columns.sql`](supabase/scripts/assert_rush_pass_subsidy_select_columns.sql).
+
+**Sell Pass:** engineering green for A+L; **marketing still PO-gated** per
+[docs/RUSH_PASS_PRICING_OPS.md](docs/RUSH_PASS_PRICING_OPS.md).
+
+The J$2,520 pre-fix overspend was test data on a disposable dataset — nothing to recover. The
+instinct to place real orders was right: unit tests could not see the PostgREST column typo.
+
+---
+
+## 15. Independent verification of the finding L fix
+
+Verified 2026-08-30 against the code and `delivery.orders`. **L is closed. Confirmed.**
+
+### 15.1 The fix is structurally better than the one I proposed
+
+I suggested removing the phantom column from two select lists. What shipped is stronger:
+
+| | |
+|---|---|
+| Shared module | [`_shared/rushPassSubsidyUsed.ts`](supabase/functions/_shared/rushPassSubsidyUsed.ts) — one `RUSH_PASS_SUBSIDY_ORDER_SELECT` constant, imported by **both** [pricingResolver.ts:33](supabase/functions/delivery/pricingResolver.ts#L33) and [rushPassRoutes.ts:12](supabase/functions/delivery/rushPassRoutes.ts#L12) |
+| Fail-closed | `loadRushPassSubsidyUsed` returns a Result type; the resolver applies `spend.ok ? spend.usedJmd : budget` and logs — an unreadable spend now **denies** free delivery |
+| Testability | Pure `sumRushPassSubsidyFromOrderRows` extracted for unit test |
+| Schema guard | [`assert_rush_pass_subsidy_select_columns.sql`](supabase/scripts/assert_rush_pass_subsidy_select_columns.sql) |
+
+Two sites can no longer drift apart — which was the second half of the defect.
+
+### 15.2 The bug class is eradicated, not just the instance
+
+I extracted **every** `.select()` issued against `delivery.orders` across
+`supabase/functions/delivery`, `_shared` and `payments` — 68 select lists — and validated each
+column token against `information_schema`.
+
+**Result: zero phantom columns anywhere.** `promo_cost_jmd` appears in no select list in the
+codebase. This was the systemic check the finding warranted, and it comes back clean.
+
+### 15.3 The budget gate is now proven by an unforced test
+
+`RD-2026-000006` is the gold-standard evidence — nothing was forced to produce it:
+
+| | |
+|---|---|
+| `used` at quote | **J$2,520** — genuinely accumulated from the four prior orders |
+| `remaining` | J$0 |
+| Denial reason | **`budget`** |
+| Delivery fee charged | J$930 (not free) |
+| Delivery margin | **+J$300** — the §3.2 steady state |
+| Contribution | **+J$715** |
+
+This is the test §14.3 said was missing: real spend crossing a real budget, correctly refused. The
+accumulator that returned `0` on every prior call now returns the true figure.
+
+### 15.4 One residual, already disclosed
+
+`RD-2026-000007` (`deny=distance`) was produced by temporarily lowering `max_free_delivery_km` to 5
+so a 7.07 km trip exceeded the cap — **the doc states this plainly**, and the live plan is back at
+8 km (verified). No criticism intended; the disclosure is exactly right.
+
+It does mean **no order beyond a genuine 8 km cap exists in the data**. Residual risk is low — the
+branch is a single `>` comparison and it fired against a real `distanceKm` — but what remains
+unexercised is a long Pass trip end-to-end (delivery correctly charged at distance, margin holding
+at +J$300 past 8 km). Worth one order when convenient; not a launch blocker.
+
+### 15.5 Final position
+
+| Item | Status |
+|---|---|
+| Architecture (§3), validator, radius, floors, legacy removal | ✅ Correct in production |
+| Findings B, C, E, F, G, H, K | ✅ Closed |
+| Finding A | ✅ Closed — `RD-2026-000001` reconciles to the cent |
+| **Finding L** | ✅ **Closed — verified independently** |
+| Genuine >8 km Pass order | ⚠️ Nice-to-have, low risk |
+
+`@roam/dash-pricing`: **45 tests passing.** No open defects.
+
+**Engineering is green.** Every finding raised across §10–§14 is closed, each verified against
+production data rather than assertion. The remaining gates are process, not code: PO sign-off on
+Pass marketing, and the Growth Guarantee cron held until a real Dominant month exists.
+
+The lesson worth carrying forward is §14's, and it survived the fix: the defect that mattered most
+was invisible to 45 green tests and a correct validator, and took five real orders to surface. Keep
+placing real orders.

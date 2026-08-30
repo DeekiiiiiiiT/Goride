@@ -9,6 +9,7 @@ import { validateBody, z } from "../_shared/validateBody.ts";
 import { activateRushPassFromPaymentIntent } from "../_shared/rushPassActivate.ts";
 import { loadActiveRushPassMembership } from "./rushPassMembership.ts";
 import { isWipayDemoMode } from "../_shared/wipayDemo.ts";
+import { loadRushPassSubsidyUsed } from "../_shared/rushPassSubsidyUsed.ts";
 
 export type RushPassRoutesDeps = {
   getSupabase: (authHeader: string) => SupabaseClient;
@@ -95,6 +96,13 @@ async function loadActivePlan(sb: SupabaseClient, slug?: string) {
   if (slug) q = q.eq("slug", slug);
   else q = q.eq("slug", "rush_pass_standard");
   const { data } = await q.maybeSingle();
+  return data as Record<string, unknown> | null;
+}
+
+/** Admin plan editor — load by slug even when sales are paused (is_active=false). */
+async function loadPlanBySlug(sb: SupabaseClient, slug?: string) {
+  const s = slug || "rush_pass_standard";
+  const { data } = await sb.from("rush_pass_plans").select("*").eq("slug", s).maybeSingle();
   return data as Record<string, unknown> | null;
 }
 
@@ -194,30 +202,28 @@ export function registerRushPassRoutes(app: Hono, deps: RushPassRoutesDeps) {
         1500,
     );
     let subsidyUsed = 0;
+    let subsidyLoadOk = true;
     if (active) {
-      const { data: orders } = await serviceSb
-        .from("orders")
-        .select("platform_delivery_subsidy_jmd, pricing_snapshot, promo_cost_jmd")
-        .eq("rush_pass_membership_id", active.membership.id)
-        .gte("placed_at", String(active.membership.current_period_start))
-        .not("status", "in", '("cancelled","rejected")');
-      for (const row of orders ?? []) {
-        const r = row as Record<string, unknown>;
-        const snap = (r.pricing_snapshot ?? {}) as Record<string, unknown>;
-        const fromCol = Number(r.platform_delivery_subsidy_jmd ?? 0);
-        const fromSnap = Number(
-          snap.platform_delivery_subsidy_jmd ??
-            snap.platformDeliverySubsidyJmd ??
-            snap.promo_cost_jmd ??
-            snap.promoCostJmd ??
-            r.promo_cost_jmd ??
-            0,
+      const spend = await loadRushPassSubsidyUsed(
+        serviceSb,
+        String(active.membership.id),
+        String(active.membership.current_period_start),
+      );
+      if (!spend.ok) {
+        subsidyLoadOk = false;
+        // Fail closed for UI: never report full budget remaining when spend is unknown
+        subsidyUsed = budget;
+        console.error(
+          "[rushPassRoutes] subsidy load failed — reporting zero remaining",
+          spend.error,
         );
-        subsidyUsed += fromCol > 0 ? fromCol : fromSnap;
+      } else {
+        subsidyUsed = spend.usedJmd;
       }
     }
-    subsidyUsed = Math.round(subsidyUsed * 100) / 100;
-    const remaining = Math.max(0, Math.round((budget - subsidyUsed) * 100) / 100);
+    const remaining = subsidyLoadOk
+      ? Math.max(0, Math.round((budget - subsidyUsed) * 100) / 100)
+      : 0;
 
     return c.json({
       plan: plan
@@ -554,7 +560,7 @@ export function registerRushPassRoutes(app: Hono, deps: RushPassRoutesDeps) {
     if (body instanceof Response) return body;
 
     const serviceSb = getServiceSupabase();
-    const plan = await loadActivePlan(serviceSb, body.planSlug);
+    const plan = await loadPlanBySlug(serviceSb, body.planSlug);
     if (!plan) return c.json({ error: "Plan not found" }, 404);
 
     const days = body.days ?? Number(plan.billing_period_days ?? 30);
@@ -629,17 +635,18 @@ export function registerRushPassRoutes(app: Hono, deps: RushPassRoutesDeps) {
     return c.json({ memberships: data ?? [] });
   });
 
-  // GET /admin/rush-pass/plan — active standard plan
+  // GET /admin/rush-pass/plan — standard plan (incl. when sales paused)
   app.get("/admin/rush-pass/plan", async (c) => {
     const admin = await requireProductAdmin(c, "dash");
     if (admin instanceof Response) return admin;
     const serviceSb = getServiceSupabase();
-    const plan = await loadActivePlan(serviceSb);
+    const slug = c.req.query("slug") || undefined;
+    const plan = await loadPlanBySlug(serviceSb, slug);
     if (!plan) return c.json({ error: "Plan not found" }, 404);
     return c.json({ plan });
   });
 
-  // PUT /admin/rush-pass/plan — edit price / caps (human-approved; no auto reprice)
+  // PUT /admin/rush-pass/plan — edit price / caps / benefits (human-approved; no auto reprice)
   app.put("/admin/rush-pass/plan", async (c) => {
     const admin = await requireProductAdmin(c, "dash");
     if (admin instanceof Response) return admin;
@@ -652,11 +659,15 @@ export function registerRushPassRoutes(app: Hono, deps: RushPassRoutesDeps) {
       monthly_subsidy_budget_jmd: z.number().positive().optional(),
       service_fee_multiplier: z.number().min(0).max(1).optional(),
       name: z.string().min(1).max(120).optional(),
+      billing_period_days: z.number().int().positive().max(366).optional(),
+      free_delivery: z.boolean().optional(),
+      eligible_tier_slugs: z.array(z.string().min(1).max(40)).min(1).max(10).optional(),
+      is_active: z.boolean().optional(),
     }));
     if (body instanceof Response) return body;
 
     const serviceSb = getServiceSupabase();
-    const existing = await loadActivePlan(serviceSb);
+    const existing = await loadPlanBySlug(serviceSb);
     if (!existing) return c.json({ error: "Plan not found" }, 404);
 
     const nextPrice = body.price_jmd ?? Number(existing.price_jmd);
@@ -664,6 +675,17 @@ export function registerRushPassRoutes(app: Hono, deps: RushPassRoutesDeps) {
     const nextBudget = body.monthly_subsidy_budget_jmd ??
       Number(existing.monthly_subsidy_budget_jmd ?? existing.price_jmd);
     const nextMult = body.service_fee_multiplier ?? Number(existing.service_fee_multiplier ?? 0.5);
+    const nextDays = body.billing_period_days ?? Number(existing.billing_period_days ?? 30);
+    const nextFree =
+      body.free_delivery !== undefined
+        ? body.free_delivery
+        : existing.free_delivery !== false;
+    const nextTiers = body.eligible_tier_slugs ??
+      (Array.isArray(existing.eligible_tier_slugs)
+        ? (existing.eligible_tier_slugs as string[])
+        : ["growth", "dominant"]);
+    const nextActive =
+      body.is_active !== undefined ? body.is_active : existing.is_active !== false;
 
     if (!(nextKm > 0)) {
       return c.json({
@@ -679,6 +701,12 @@ export function registerRushPassRoutes(app: Hono, deps: RushPassRoutesDeps) {
     }
     if (!(nextPrice > 0)) {
       return c.json({ error: "price_jmd must be > 0" }, 400);
+    }
+    if (!(nextDays > 0)) {
+      return c.json({ error: "billing_period_days must be > 0" }, 400);
+    }
+    if (!nextTiers.length) {
+      return c.json({ error: "eligible_tier_slugs must include at least one tier" }, 400);
     }
 
     // Soft warn: price below trailing 30d avg cost per active member
@@ -720,12 +748,21 @@ export function registerRushPassRoutes(app: Hono, deps: RushPassRoutesDeps) {
         `Proposed price J$${nextPrice} is below trailing 30d avg Pass cost per active member J$${Math.round(avgPerMember)}`,
       );
     }
+    if (!nextActive) {
+      warnings.push(
+        "Plan sales paused (is_active=false). Customers cannot buy; existing memberships keep benefits until period end.",
+      );
+    }
 
     const patch: Record<string, unknown> = {
       price_jmd: nextPrice,
       max_free_delivery_km: nextKm,
       monthly_subsidy_budget_jmd: nextBudget,
       service_fee_multiplier: nextMult,
+      billing_period_days: nextDays,
+      free_delivery: nextFree,
+      eligible_tier_slugs: nextTiers.map((t) => String(t).toLowerCase()),
+      is_active: nextActive,
       updated_at: new Date().toISOString(),
     };
     if (body.name) patch.name = body.name;

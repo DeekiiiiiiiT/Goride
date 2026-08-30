@@ -6715,10 +6715,24 @@
           ]
         }
       },
+      "packages/gct-core": {
+        "packageJson": {
+          "dependencies": [
+            "npm:vitest@^3.2.4"
+          ]
+        }
+      },
       "packages/hauler-dispatch": {
         "packageJson": {
           "dependencies": [
             "npm:@supabase/supabase-js@2",
+            "npm:vitest@^3.2.4"
+          ]
+        }
+      },
+      "packages/merchant-ops": {
+        "packageJson": {
+          "dependencies": [
             "npm:vitest@^3.2.4"
           ]
         }

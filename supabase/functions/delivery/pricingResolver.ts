@@ -30,6 +30,7 @@ import {
 } from "../_shared/gctRate.ts";
 import { resolvePricingLayers } from "./pricingLayers.ts";
 import { loadActiveRushPassMembership } from "./rushPassMembership.ts";
+import { loadRushPassSubsidyUsed } from "../_shared/rushPassSubsidyUsed.ts";
 
 export type PricingResolverInput = {
   /** Real order / merchant preview. Omit for admin standalone calculator. */
@@ -470,18 +471,26 @@ export async function resolveDashOrderPricing(
               passDefaults.monthlySubsidyBudgetJmd,
           );
           const periodStart = String(pass.membership.current_period_start ?? "");
-          const used = await loadRushPassSubsidyUsed(
+          const spend = await loadRushPassSubsidyUsed(
             sb,
             rushPassMembershipId,
             periodStart,
           );
           rushPassSubsidyBudgetJmd = budget;
-          rushPassSubsidyUsedJmd = used;
+          // Fail closed: cannot load spend ⇒ treat budget as exhausted (deny free delivery)
+          const usedForGate = spend.ok ? spend.usedJmd : budget;
+          rushPassSubsidyUsedJmd = usedForGate;
+          if (!spend.ok) {
+            console.error(
+              "[pricingResolver] rush pass subsidy load failed — denying free delivery",
+              spend.error,
+            );
+          }
           const fd = resolveRushPassFreeDelivery({
             planAllowsFreeDelivery: pass.plan.free_delivery !== false,
             distanceKm,
             maxFreeDeliveryKm: maxKm,
-            subsidyUsedJmd: used,
+            subsidyUsedJmd: usedForGate,
             monthlyBudgetJmd: budget,
           });
           rushPassSubsidyRemainingJmd = fd.remainingBudgetJmd;
@@ -585,35 +594,4 @@ export async function resolveDashOrderPricing(
     coverage,
     marketOverrideApplied,
   };
-}
-
-async function loadRushPassSubsidyUsed(
-  sb: ServiceSb,
-  membershipId: string,
-  periodStartIso: string,
-): Promise<number> {
-  if (!membershipId || !periodStartIso) return 0;
-  const { data } = await sb
-    .from("orders")
-    .select("platform_delivery_subsidy_jmd, pricing_snapshot, promo_cost_jmd, status")
-    .eq("rush_pass_membership_id", membershipId)
-    .gte("placed_at", periodStartIso);
-  let used = 0;
-  for (const row of data ?? []) {
-    const r = row as Record<string, unknown>;
-    const st = String(r.status ?? "").toLowerCase();
-    if (st === "cancelled" || st === "rejected") continue;
-    const snap = (r.pricing_snapshot ?? {}) as Record<string, unknown>;
-    const fromCol = Number(r.platform_delivery_subsidy_jmd ?? 0);
-    const fromSnap = Number(
-      snap.platform_delivery_subsidy_jmd ??
-        snap.platformDeliverySubsidyJmd ??
-        snap.promo_cost_jmd ??
-        snap.promoCostJmd ??
-        r.promo_cost_jmd ??
-        0,
-    );
-    used += fromCol > 0 ? fromCol : fromSnap;
-  }
-  return Math.round(used * 100) / 100;
 }

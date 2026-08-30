@@ -83,17 +83,24 @@ const DEFAULT_PIN = { lat: '18.015', lng: '-76.955', label: 'Spanish Town (defau
 const DEFAULT_DROPOFF = DEFAULT_PIN;
 const DASH_ADMIN_BASENAME = '/admin';
 
-type TabId = 'overview' | 'market' | 'tiers' | 'simulator' | 'cod' | 'audit';
+type TabId = 'overview' | 'market' | 'tiers' | 'rush-pass' | 'simulator' | 'cod' | 'audit';
 type RulesScope = 'global' | 'parish' | 'market';
 
 const TABS: { id: TabId; label: string }[] = [
   { id: 'overview', label: 'Overview' },
   { id: 'market', label: 'Market Rules' },
   { id: 'tiers', label: 'Merchant Tiers' },
+  { id: 'rush-pass', label: 'Rush Pass' },
   { id: 'simulator', label: 'Simulator' },
   { id: 'cod', label: 'COD Ledger' },
   { id: 'audit', label: 'Audit Log' },
 ];
+
+const PASS_TIER_OPTIONS = [
+  { slug: 'economy', label: 'Economy' },
+  { slug: 'growth', label: 'Growth' },
+  { slug: 'dominant', label: 'Dominant' },
+] as const;
 
 const RULES_SCOPES: { id: RulesScope; label: string; hint: string }[] = [
   { id: 'global', label: 'Default', hint: 'Applies to every area unless overridden' },
@@ -1112,41 +1119,6 @@ export function PricingHubPage() {
                 </p>
               </div>
               <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4">
-                <p className="text-xs text-slate-500">Rush Pass attach</p>
-                <p className="text-lg font-semibold text-white mt-1">
-                  {revenue.rush_pass_attach_rate_percent ?? 0}%
-                  <span className="text-xs text-slate-500 font-normal ml-1">
-                    ({revenue.rush_pass_active_memberships ?? 0} active)
-                  </span>
-                </p>
-              </div>
-              <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4">
-                <p className="text-xs text-slate-500">Pass subsidy (orders)</p>
-                <p className="text-lg font-semibold text-white mt-1">
-                  {formatJmd(revenue.rush_pass_subsidy_total_jmd ?? 0)}
-                </p>
-              </div>
-              <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4">
-                <p className="text-xs text-slate-500">Pass sub revenue (30d)</p>
-                <p className="text-lg font-semibold text-white mt-1">
-                  {formatJmd(revenue.rush_pass_subscription_revenue_30d_jmd ?? 0)}
-                  <span className="text-xs text-slate-500 font-normal ml-1">
-                    ({revenue.rush_pass_paid_intents_30d ?? 0} paid)
-                  </span>
-                </p>
-              </div>
-              <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4">
-                <p className="text-xs text-slate-500">Pass cost (30d) · break-even</p>
-                <p className="text-lg font-semibold text-white mt-1">
-                  {formatJmd(revenue.rush_pass_cost_30d_jmd ?? 0)}
-                  <span className="text-xs text-slate-500 font-normal ml-1">
-                    {revenue.rush_pass_break_even_orders_per_member != null
-                      ? `~${revenue.rush_pass_break_even_orders_per_member} free trips / member at ${formatJmd(revenue.rush_pass_plan_price_jmd ?? 0)}`
-                      : 'need Pass order volume'}
-                  </span>
-                </p>
-              </div>
-              <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4">
                 <p className="text-xs text-slate-500">Distance fee attach</p>
                 <p className="text-lg font-semibold text-white mt-1">
                   {revenue.distance_fee_attach_rate_percent ?? 0}%
@@ -1178,12 +1150,16 @@ export function PricingHubPage() {
           <div className="rounded-xl border border-slate-700 bg-slate-900/60 px-4 py-3 text-xs text-slate-300">
             Growth Guarantee: math green; claw-backs armed. Keep live GG cron off until ≥1 Jamaica
             calendar month of delivered/completed Dominant volume — see docs/RUSH_PASS_PRICING_OPS.md.
+            Rush Pass settings live under the{' '}
+            <button
+              type="button"
+              className="text-amber-400 hover:underline"
+              onClick={() => setTab('rush-pass')}
+            >
+              Rush Pass
+            </button>{' '}
+            tab.
           </div>
-          <RushPassAdminPanel
-            accessToken={session.access_token}
-            canWrite={canWrite}
-            revenue={revenue}
-          />
           <div className="space-y-2">
             {parishGroups.map((parish) => (
               <button
@@ -1855,6 +1831,15 @@ export function PricingHubPage() {
             />
           ))}
         </div>
+      )}
+
+      {tab === 'rush-pass' && session?.access_token && (
+        <RushPassAdminPanel
+          accessToken={session.access_token}
+          canWrite={canWrite}
+          revenue={revenue}
+          onGoToSimulator={() => setTab('simulator')}
+        />
       )}
 
       {tab === 'simulator' && (
@@ -3310,28 +3295,43 @@ function TierRow({
   );
 }
 
-/** Compact ops panel — plan economics + grant / revoke / list Rush Pass memberships */
+/** Dedicated Rush Pass ops — plan economics, sales switch, grant / revoke memberships */
 function RushPassAdminPanel({
   accessToken,
   canWrite,
   revenue,
+  onGoToSimulator,
 }: {
   accessToken: string;
   canWrite: boolean;
   revenue?: PricingRevenueSummary | null;
+  onGoToSimulator?: () => void;
 }) {
   const [rows, setRows] = useState<Array<Record<string, unknown>>>([]);
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'cancelled' | 'expired' | 'past_due'>(
+    'active',
+  );
   const [customerId, setCustomerId] = useState('');
+  const [grantDays, setGrantDays] = useState('30');
   const [busy, setBusy] = useState(false);
+  const [planName, setPlanName] = useState('');
   const [priceJmd, setPriceJmd] = useState('');
+  const [billingDays, setBillingDays] = useState('30');
   const [maxKm, setMaxKm] = useState('');
   const [budgetJmd, setBudgetJmd] = useState('');
   const [sfMult, setSfMult] = useState('');
+  const [freeDelivery, setFreeDelivery] = useState(true);
+  const [eligibleTiers, setEligibleTiers] = useState<string[]>(['growth', 'dominant']);
+  const [planActive, setPlanActive] = useState(true);
   const [planBusy, setPlanBusy] = useState(false);
+  const [planSlug, setPlanSlug] = useState('rush_pass_standard');
 
   const refresh = async () => {
     try {
-      const res = await listRushPassMemberships(accessToken);
+      const res = await listRushPassMemberships(
+        accessToken,
+        statusFilter === 'all' ? undefined : statusFilter,
+      );
       setRows(res.memberships ?? []);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed to load Pass memberships');
@@ -3342,20 +3342,36 @@ function RushPassAdminPanel({
     try {
       const res = await fetchRushPassPlan(accessToken);
       const p = res.plan;
+      setPlanSlug(String(p.slug ?? 'rush_pass_standard'));
+      setPlanName(String(p.name ?? 'Rush Pass'));
       setPriceJmd(String(p.price_jmd ?? ''));
+      setBillingDays(String(p.billing_period_days ?? 30));
       setMaxKm(String(p.max_free_delivery_km ?? ''));
       setBudgetJmd(String(p.monthly_subsidy_budget_jmd ?? ''));
       setSfMult(String(p.service_fee_multiplier ?? ''));
+      setFreeDelivery(p.free_delivery !== false);
+      setPlanActive(p.is_active !== false);
+      const tiers = Array.isArray(p.eligible_tier_slugs)
+        ? (p.eligible_tier_slugs as string[]).map((s) => String(s).toLowerCase())
+        : ['growth', 'dominant'];
+      setEligibleTiers(tiers);
+      if (!grantDays || grantDays === '30') {
+        setGrantDays(String(p.billing_period_days ?? 30));
+      }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed to load Pass plan');
     }
   };
 
   useEffect(() => {
-    void refresh();
     void loadPlan();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accessToken]);
+
+  useEffect(() => {
+    void refresh();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accessToken, statusFilter]);
 
   const avgCost = revenue?.rush_pass_avg_cost_per_order_30d_jmd ?? 0;
   const proposedPrice = Number(priceJmd) || 0;
@@ -3363,58 +3379,222 @@ function RushPassAdminPanel({
     avgCost > 0 && proposedPrice > 0
       ? Math.round((proposedPrice / avgCost) * 10) / 10
       : null;
+  const sfPercentOff =
+    Number(sfMult) >= 0 && Number(sfMult) <= 1
+      ? Math.round((1 - Number(sfMult)) * 100)
+      : null;
+
+  const toggleTier = (slug: string) => {
+    setEligibleTiers((prev) => {
+      if (prev.includes(slug)) {
+        if (prev.length <= 1) return prev;
+        return prev.filter((s) => s !== slug);
+      }
+      return [...prev, slug];
+    });
+  };
+
+  const savePlan = async () => {
+    if (!eligibleTiers.length) {
+      toast.error('Pick at least one merchant tier where Pass applies');
+      return;
+    }
+    setPlanBusy(true);
+    try {
+      const res = await updateRushPassPlan(accessToken, {
+        name: planName.trim() || undefined,
+        price_jmd: Number(priceJmd),
+        billing_period_days: Number(billingDays),
+        max_free_delivery_km: Number(maxKm),
+        monthly_subsidy_budget_jmd: Number(budgetJmd),
+        service_fee_multiplier: Number(sfMult),
+        free_delivery: freeDelivery,
+        eligible_tier_slugs: eligibleTiers,
+        is_active: planActive,
+      });
+      if (res.warnings?.length) {
+        for (const w of res.warnings) toast.warning(w);
+      }
+      toast.success('Pass plan saved');
+      await loadPlan();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Save failed');
+    } finally {
+      setPlanBusy(false);
+    }
+  };
 
   return (
-    <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4 space-y-4">
+    <div className="space-y-6 max-w-5xl">
       <div>
-        <p className="text-sm font-medium text-white">Rush Pass plan</p>
-        <p className="text-xs text-amber-200/90 mt-1 rounded-lg border border-amber-700/50 bg-amber-950/40 px-2.5 py-2">
-          Sell gate: do not market Pass publicly until Finding A checklist §1–3 are signed
-          (docs/RUSH_V2_ORDER_RECONCILE_CHECKLIST.md). Internal grants/tests only until then.
+        <h2 className="text-lg font-medium text-white">Rush Pass</h2>
+        <p className="text-sm text-slate-400 mt-1">
+          Customer subscription: free delivery within km, monthly credit budget, and a cut service fee
+          at eligible merchant tiers. Customers buy under Account → Rush Pass.
+          {onGoToSimulator ? (
+            <>
+              {' '}
+              Preview member pricing in the{' '}
+              <button
+                type="button"
+                className="text-amber-400 hover:underline"
+                onClick={onGoToSimulator}
+              >
+                Simulator
+              </button>
+              .
+            </>
+          ) : null}
         </p>
-        <p className="text-xs text-slate-500 mt-0.5">
-          Edit price and caps only after enough Pass-paid volume — see docs/RUSH_PASS_PRICING_OPS.md.
-          Live price does not auto-change.
+      </div>
+
+      {revenue && (
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4">
+            <p className="text-xs text-slate-500">Pass attach</p>
+            <p className="text-lg font-semibold text-white mt-1">
+              {revenue.rush_pass_attach_rate_percent ?? 0}%
+              <span className="text-xs text-slate-500 font-normal ml-1">
+                ({revenue.rush_pass_active_memberships ?? 0} active)
+              </span>
+            </p>
+          </div>
+          <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4">
+            <p className="text-xs text-slate-500">Delivery subsidy (orders)</p>
+            <p className="text-lg font-semibold text-white mt-1">
+              {formatJmd(revenue.rush_pass_subsidy_total_jmd ?? 0)}
+            </p>
+          </div>
+          <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4">
+            <p className="text-xs text-slate-500">Subscription revenue (30d)</p>
+            <p className="text-lg font-semibold text-white mt-1">
+              {formatJmd(revenue.rush_pass_subscription_revenue_30d_jmd ?? 0)}
+              <span className="text-xs text-slate-500 font-normal ml-1">
+                ({revenue.rush_pass_paid_intents_30d ?? 0} paid)
+              </span>
+            </p>
+          </div>
+          <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4">
+            <p className="text-xs text-slate-500">Pass cost (30d) · break-even</p>
+            <p className="text-lg font-semibold text-white mt-1">
+              {formatJmd(revenue.rush_pass_cost_30d_jmd ?? 0)}
+              <span className="text-xs text-slate-500 font-normal ml-1">
+                {revenue.rush_pass_break_even_orders_per_member != null
+                  ? `~${revenue.rush_pass_break_even_orders_per_member} free trips / member at ${formatJmd(revenue.rush_pass_plan_price_jmd ?? 0)}`
+                  : 'need Pass order volume'}
+              </span>
+            </p>
+          </div>
+        </div>
+      )}
+
+      <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4 space-y-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="text-sm font-medium text-white">Plan settings</p>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Slug <span className="text-slate-400">{planSlug}</span> · edit after enough Pass-paid
+              volume — live price does not auto-change.
+            </p>
+          </div>
+          <label
+            className={`inline-flex items-center gap-2 text-sm rounded-lg border px-3 py-1.5 ${
+              planActive
+                ? 'border-emerald-700/60 bg-emerald-950/40 text-emerald-100'
+                : 'border-slate-700 bg-slate-950 text-slate-400'
+            }`}
+          >
+            <input
+              type="checkbox"
+              checked={planActive}
+              disabled={!canWrite}
+              onChange={(e) => setPlanActive(e.target.checked)}
+            />
+            Sales {planActive ? 'on' : 'paused'}
+          </label>
+        </div>
+
+        <p
+          className={`text-xs rounded-lg border px-2.5 py-2 ${
+            planActive
+              ? 'text-emerald-200/90 border-emerald-800/60 bg-emerald-950/30'
+              : 'text-amber-200/90 border-amber-700/50 bg-amber-950/40'
+          }`}
+        >
+          {planActive
+            ? 'Marketing approved (PO). Customers can buy under Account → Rush Pass. Pause sales above to hide the live plan without cancelling current members.'
+            : 'Sales paused — customers cannot buy. Existing memberships keep benefits until their period ends. Ops can still grant below.'}
         </p>
+
         {calcTrips != null && (
-          <p className="text-xs text-amber-200/90 mt-2">
+          <p className="text-xs text-amber-200/90">
             At last 30d avg Pass cost {formatJmd(avgCost)} / order, J${proposedPrice} funds ~
             {calcTrips} subsidized trips per member.
           </p>
         )}
-      </div>
-      {canWrite && (
-        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <label className="text-xs text-slate-400 sm:col-span-2 lg:col-span-1">
+            Display name
+            <input
+              type="text"
+              value={planName}
+              disabled={!canWrite}
+              onChange={(e) => setPlanName(e.target.value)}
+              className="mt-1 w-full px-2 py-1.5 rounded-lg bg-slate-950 border border-slate-700 text-white text-sm disabled:opacity-60"
+            />
+          </label>
           <label className="text-xs text-slate-400">
             Price (J$)
             <input
               type="number"
               min={1}
               value={priceJmd}
+              disabled={!canWrite}
               onChange={(e) => setPriceJmd(e.target.value)}
-              className="mt-1 w-full px-2 py-1.5 rounded-lg bg-slate-950 border border-slate-700 text-white text-sm"
+              className="mt-1 w-full px-2 py-1.5 rounded-lg bg-slate-950 border border-slate-700 text-white text-sm disabled:opacity-60"
             />
           </label>
           <label className="text-xs text-slate-400">
-            Max free km
+            Billing period (days)
+            <input
+              type="number"
+              min={1}
+              max={366}
+              value={billingDays}
+              disabled={!canWrite}
+              onChange={(e) => setBillingDays(e.target.value)}
+              className="mt-1 w-full px-2 py-1.5 rounded-lg bg-slate-950 border border-slate-700 text-white text-sm disabled:opacity-60"
+            />
+          </label>
+          <label className="text-xs text-slate-400">
+            Max free delivery km
             <input
               type="number"
               min={0.1}
               step={0.1}
               value={maxKm}
+              disabled={!canWrite}
               onChange={(e) => setMaxKm(e.target.value)}
-              className="mt-1 w-full px-2 py-1.5 rounded-lg bg-slate-950 border border-slate-700 text-white text-sm"
+              className="mt-1 w-full px-2 py-1.5 rounded-lg bg-slate-950 border border-slate-700 text-white text-sm disabled:opacity-60"
             />
+            <span className="block text-[11px] text-slate-500 mt-1">
+              Beyond this, Pass still cuts service fee but delivery is charged.
+            </span>
           </label>
           <label className="text-xs text-slate-400">
-            Monthly subsidy budget
+            Monthly subsidy budget (J$)
             <input
               type="number"
               min={1}
               value={budgetJmd}
+              disabled={!canWrite}
               onChange={(e) => setBudgetJmd(e.target.value)}
-              className="mt-1 w-full px-2 py-1.5 rounded-lg bg-slate-950 border border-slate-700 text-white text-sm"
+              className="mt-1 w-full px-2 py-1.5 rounded-lg bg-slate-950 border border-slate-700 text-white text-sm disabled:opacity-60"
             />
+            <span className="block text-[11px] text-slate-500 mt-1">
+              Credit for free-delivery cost per member period; after burn-down, delivery is charged.
+            </span>
           </label>
           <label className="text-xs text-slate-400">
             Service fee multiplier
@@ -3424,127 +3604,197 @@ function RushPassAdminPanel({
               max={1}
               step={0.05}
               value={sfMult}
+              disabled={!canWrite}
               onChange={(e) => setSfMult(e.target.value)}
-              className="mt-1 w-full px-2 py-1.5 rounded-lg bg-slate-950 border border-slate-700 text-white text-sm"
+              className="mt-1 w-full px-2 py-1.5 rounded-lg bg-slate-950 border border-slate-700 text-white text-sm disabled:opacity-60"
             />
+            <span className="block text-[11px] text-slate-500 mt-1">
+              {sfPercentOff != null
+                ? `0.5 = 50% off service fee (member pays ${sfPercentOff}% less).`
+                : '0–1 (e.g. 0.5 = half price).'}
+            </span>
           </label>
+        </div>
+
+        <div className="flex flex-wrap gap-4 items-start border-t border-slate-800 pt-3">
+          <label className="inline-flex items-center gap-2 text-sm text-slate-300">
+            <input
+              type="checkbox"
+              checked={freeDelivery}
+              disabled={!canWrite}
+              onChange={(e) => setFreeDelivery(e.target.checked)}
+            />
+            Include free delivery (within km + budget)
+          </label>
+          <div>
+            <p className="text-xs text-slate-400 mb-1.5">Applies at merchant tiers</p>
+            <div className="flex flex-wrap gap-2">
+              {PASS_TIER_OPTIONS.map((t) => (
+                <label
+                  key={t.slug}
+                  className={`inline-flex items-center gap-1.5 text-xs rounded-lg border px-2.5 py-1.5 cursor-pointer ${
+                    eligibleTiers.includes(t.slug)
+                      ? 'border-amber-600/70 bg-amber-950/40 text-amber-100'
+                      : 'border-slate-700 text-slate-400'
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    className="sr-only"
+                    checked={eligibleTiers.includes(t.slug)}
+                    disabled={!canWrite}
+                    onChange={() => toggleTier(t.slug)}
+                  />
+                  {t.label}
+                </label>
+              ))}
+            </div>
+            <p className="text-[11px] text-slate-500 mt-1">
+              Economy is usually off — Pass is a Growth/Dominant perk.
+            </p>
+          </div>
+        </div>
+
+        {canWrite && (
           <button
             type="button"
             disabled={planBusy}
-            onClick={() => {
-              void (async () => {
-                setPlanBusy(true);
-                try {
-                  const res = await updateRushPassPlan(accessToken, {
-                    price_jmd: Number(priceJmd),
-                    max_free_delivery_km: Number(maxKm),
-                    monthly_subsidy_budget_jmd: Number(budgetJmd),
-                    service_fee_multiplier: Number(sfMult),
-                  });
-                  if (res.warnings?.length) {
-                    for (const w of res.warnings) toast.warning(w);
-                  }
-                  toast.success('Pass plan saved');
-                  await loadPlan();
-                } catch (e) {
-                  toast.error(e instanceof Error ? e.message : 'Save failed');
-                } finally {
-                  setPlanBusy(false);
-                }
-              })();
-            }}
-            className="px-3 py-1.5 text-sm rounded-lg bg-amber-600 text-white disabled:opacity-50 sm:col-span-2 lg:col-span-4 w-fit"
+            onClick={() => void savePlan()}
+            className="px-3 py-1.5 text-sm rounded-lg bg-amber-600 text-white disabled:opacity-50"
           >
             {planBusy ? 'Saving…' : 'Save plan'}
           </button>
-        </div>
-      )}
-
-      <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-800 pt-3">
-        <div>
-          <p className="text-sm font-medium text-white">Rush Pass memberships</p>
-          <p className="text-xs text-slate-500">Grant or revoke without WiPay (ops).</p>
-        </div>
-        <button
-          type="button"
-          onClick={() => void refresh()}
-          className="text-xs text-slate-400 hover:text-white"
-        >
-          Refresh
-        </button>
-      </div>
-      {canWrite && (
-        <div className="flex flex-wrap gap-2 items-end">
-          <label className="text-xs text-slate-400 grow min-w-[12rem]">
-            Customer UUID
-            <input
-              value={customerId}
-              onChange={(e) => setCustomerId(e.target.value)}
-              className="mt-1 w-full px-2 py-1.5 rounded-lg bg-slate-950 border border-slate-700 text-white text-sm"
-              placeholder="delivery.customers.id"
-            />
-          </label>
-          <button
-            type="button"
-            disabled={busy || !customerId.trim()}
-            onClick={() => {
-              void (async () => {
-                setBusy(true);
-                try {
-                  await grantRushPass(accessToken, { customerId: customerId.trim() });
-                  toast.success('Rush Pass granted');
-                  setCustomerId('');
-                  await refresh();
-                } catch (e) {
-                  toast.error(e instanceof Error ? e.message : 'Grant failed');
-                } finally {
-                  setBusy(false);
-                }
-              })();
-            }}
-            className="px-3 py-1.5 text-sm rounded-lg bg-amber-600 text-white disabled:opacity-50"
-          >
-            Grant 30 days
-          </button>
-        </div>
-      )}
-      <ul className="divide-y divide-slate-800 text-sm max-h-48 overflow-auto">
-        {rows.length === 0 ? (
-          <li className="py-2 text-slate-500 text-xs">No memberships yet</li>
-        ) : (
-          rows.slice(0, 20).map((m) => {
-            const id = String(m.id);
-            const status = String(m.status ?? '');
-            const cust = m.customer as { email?: string; name?: string } | undefined;
-            return (
-              <li key={id} className="py-2 flex flex-wrap items-center justify-between gap-2">
-                <span className="text-slate-300 truncate">
-                  {cust?.email || cust?.name || String(m.customer_id)} · {status}
-                </span>
-                {canWrite && status === 'active' && (
-                  <button
-                    type="button"
-                    className="text-xs text-red-400 hover:text-red-300"
-                    onClick={() => {
-                      void (async () => {
-                        try {
-                          await revokeRushPass(accessToken, { membershipId: id });
-                          toast.success('Revoked');
-                          await refresh();
-                        } catch (e) {
-                          toast.error(e instanceof Error ? e.message : 'Revoke failed');
-                        }
-                      })();
-                    }}
-                  >
-                    Revoke
-                  </button>
-                )}
-              </li>
-            );
-          })
         )}
-      </ul>
+      </div>
+
+      <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4 space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <p className="text-sm font-medium text-white">Memberships</p>
+            <p className="text-xs text-slate-500">Grant or revoke without WiPay (ops / support).</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <select
+              value={statusFilter}
+              onChange={(e) =>
+                setStatusFilter(e.target.value as typeof statusFilter)
+              }
+              className="text-xs px-2 py-1.5 rounded-lg bg-slate-950 border border-slate-700 text-slate-300"
+            >
+              <option value="active">Active</option>
+              <option value="cancelled">Cancelled</option>
+              <option value="expired">Expired</option>
+              <option value="past_due">Past due</option>
+              <option value="all">All</option>
+            </select>
+            <button
+              type="button"
+              onClick={() => void refresh()}
+              className="text-xs text-slate-400 hover:text-white"
+            >
+              Refresh
+            </button>
+          </div>
+        </div>
+
+        {canWrite && (
+          <div className="flex flex-wrap gap-2 items-end">
+            <label className="text-xs text-slate-400 grow min-w-[12rem]">
+              Customer UUID
+              <input
+                value={customerId}
+                onChange={(e) => setCustomerId(e.target.value)}
+                className="mt-1 w-full px-2 py-1.5 rounded-lg bg-slate-950 border border-slate-700 text-white text-sm"
+                placeholder="delivery.customers.id"
+              />
+            </label>
+            <label className="text-xs text-slate-400 w-24">
+              Days
+              <input
+                type="number"
+                min={1}
+                max={366}
+                value={grantDays}
+                onChange={(e) => setGrantDays(e.target.value)}
+                className="mt-1 w-full px-2 py-1.5 rounded-lg bg-slate-950 border border-slate-700 text-white text-sm"
+              />
+            </label>
+            <button
+              type="button"
+              disabled={busy || !customerId.trim()}
+              onClick={() => {
+                void (async () => {
+                  setBusy(true);
+                  try {
+                    await grantRushPass(accessToken, {
+                      customerId: customerId.trim(),
+                      days: Number(grantDays) || undefined,
+                    });
+                    toast.success('Rush Pass granted');
+                    setCustomerId('');
+                    await refresh();
+                  } catch (e) {
+                    toast.error(e instanceof Error ? e.message : 'Grant failed');
+                  } finally {
+                    setBusy(false);
+                  }
+                })();
+              }}
+              className="px-3 py-1.5 text-sm rounded-lg bg-amber-600 text-white disabled:opacity-50"
+            >
+              Grant
+            </button>
+          </div>
+        )}
+
+        <ul className="divide-y divide-slate-800 text-sm max-h-80 overflow-auto">
+          {rows.length === 0 ? (
+            <li className="py-2 text-slate-500 text-xs">No memberships for this filter</li>
+          ) : (
+            rows.map((m) => {
+              const id = String(m.id);
+              const status = String(m.status ?? '');
+              const cust = m.customer as { email?: string; name?: string } | undefined;
+              const end = m.current_period_end
+                ? new Date(String(m.current_period_end)).toLocaleDateString()
+                : '—';
+              const source = String(m.source ?? '');
+              return (
+                <li key={id} className="py-2.5 flex flex-wrap items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="text-slate-200 truncate">
+                      {cust?.email || cust?.name || String(m.customer_id)}
+                    </p>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      {status} · ends {end} · {source}
+                      {m.auto_renew === true ? ' · auto-renew' : ''}
+                    </p>
+                  </div>
+                  {canWrite && status === 'active' && (
+                    <button
+                      type="button"
+                      className="text-xs text-red-400 hover:text-red-300 shrink-0"
+                      onClick={() => {
+                        void (async () => {
+                          try {
+                            await revokeRushPass(accessToken, { membershipId: id });
+                            toast.success('Revoked');
+                            await refresh();
+                          } catch (e) {
+                            toast.error(e instanceof Error ? e.message : 'Revoke failed');
+                          }
+                        })();
+                      }}
+                    >
+                      Revoke
+                    </button>
+                  )}
+                </li>
+              );
+            })
+          )}
+        </ul>
+      </div>
     </div>
   );
 }

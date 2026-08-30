@@ -2154,6 +2154,10 @@ export function updateRushPassPlan(
     monthly_subsidy_budget_jmd?: number;
     service_fee_multiplier?: number;
     name?: string;
+    billing_period_days?: number;
+    free_delivery?: boolean;
+    eligible_tier_slugs?: string[];
+    is_active?: boolean;
   },
 ) {
   return deliveryFetch<{ plan: Record<string, unknown>; warnings?: string[] }>(
