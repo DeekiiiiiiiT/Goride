@@ -4,8 +4,7 @@ import { fleetTzDateKey, ymdToLocalDate } from './timezoneDisplay';
 import { getTollTransactionDate } from './tollDate';
 import { VARIANCE_THRESHOLD } from './tollReconciliation';
 import { dateWeekKey } from './fleetMondayWeekKey';
-
-export {
+import {
   isDisputeRefundMatched,
   isTollCoveredByDisputeRefund,
   isVisiblePartialShortfallClaim,
@@ -14,6 +13,17 @@ export {
   isDisputeRefundInWizardPeriod,
   disputeRefundPeriodWeekKey,
 } from './tollPeriodDisputeHelpers';
+
+// Re-export for callers; also import above so local helpers (e.g. computeDisputeRefundCounts) bind the name.
+export {
+  isDisputeRefundMatched,
+  isTollCoveredByDisputeRefund,
+  isVisiblePartialShortfallClaim,
+  isActionablePartialShortfall,
+  hasMatchedDisputeRefund,
+  isDisputeRefundInWizardPeriod,
+  disputeRefundPeriodWeekKey,
+};
 
 /** Edge-safe Monday week key (shared with unlinked shortfall scoring). */
 export { dateWeekKey };

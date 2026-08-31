@@ -30,6 +30,22 @@ describe('isDisputeRefundMatched mirror contract (toll_period_controller.tsx)', 
       expect(isDisputeRefundMatched({ status: row.status })).toBe(row.matched);
     }
   });
+
+  // Regression: export-only re-export left computeDisputeRefundCounts unbound → Expenses tab crash.
+  it('computeDisputeRefundCounts can call isDisputeRefundMatched in-module', async () => {
+    const { computeDisputeRefundCounts } = await import('./tollWeekPeriod');
+    const start = new Date('2026-08-24T00:00:00');
+    const end = new Date('2026-08-30T23:59:59');
+    const result = computeDisputeRefundCounts(
+      [
+        { id: '1', date: '2026-08-25', status: 'matched', amount: 100 } as DisputeRefund,
+        { id: '2', date: '2026-08-26', status: 'unmatched', amount: 50 } as DisputeRefund,
+      ],
+      start,
+      end,
+    );
+    expect(result).toEqual({ matched: 1, unmatched: 1 });
+  });
 });
 
 describe('tollWeekKey / weekKeyFor date-only mirror contract (toll_period_controller.tsx)', () => {
