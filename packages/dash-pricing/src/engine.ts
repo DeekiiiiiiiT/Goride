@@ -267,16 +267,13 @@ export function resolveSmallOrderFee(
   return roundMoney(fee);
 }
 
-/** Check if launch promo applies free delivery. */
+/** Explicit free-delivery flag only — launch first-N lever removed (Finding U). */
 export function shouldApplyFreeDelivery(
-  rules: PricingRules,
-  customerOrderCount: number,
+  _rules: PricingRules,
+  _customerOrderCount: number,
   freeDeliveryFlag?: boolean,
 ): boolean {
-  if (freeDeliveryFlag === true) return true;
-  if (freeDeliveryFlag === false) return false;
-  const n = rules.launchPromos?.freeDeliveryFirstNOrders ?? 0;
-  return n > 0 && customerOrderCount < n;
+  return freeDeliveryFlag === true;
 }
 
 /** Build full order pricing breakdown (Model B). */

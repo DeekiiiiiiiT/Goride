@@ -17,7 +17,7 @@ export const CUSTOMER_RULE_TIPS = {
   smallOrderThreshold: 'Food total below this triggers the small-order fee.',
   smallOrderFee: 'Extra fee when the order is under the small-order threshold.',
   cardProcessingFee: 'Extra % added when the customer pays by card.',
-  freeDeliveryFirstN: 'New customers get free delivery for their first N orders. 0 = off.',
+  freeDeliveryFirstN: 'Removed — use promo free-delivery caps instead.',
   distanceAddonEnabled: 'Experiment: add a Distance service line on longer trips (off by default).',
   distanceAddonThreshold: 'Road km before the distance service fee starts.',
   distanceAddonPerKm: 'JMD charged per whole km past the threshold.',
@@ -239,18 +239,6 @@ export function CustomerRulesForm({
             disabled={!canWrite}
           />
           <Field
-            label="Free delivery first N orders"
-            tip={CUSTOMER_RULE_TIPS.freeDeliveryFirstN}
-            value={rules.launch_promos?.free_delivery_first_n_orders ?? 0}
-            onChange={(v) =>
-              setRules((r) => ({
-                ...r,
-                launch_promos: { free_delivery_first_n_orders: v },
-              }))
-            }
-            disabled={!canWrite}
-          />
-          <Field
             label="Promo free delivery max km"
             tip="Platform free-delivery promos (e.g. FREEDEL) only waive delivery within this distance. Beyond it, delivery is charged."
             value={rules.promo_free_delivery?.max_free_delivery_km ?? 8}
@@ -267,8 +255,8 @@ export function CustomerRulesForm({
             disabled={!canWrite}
           />
           <Field
-            label="Promo free delivery monthly budget (JMD)"
-            tip="Total platform subsidy for non-Pass free-delivery promos per Jamaica calendar month. Cap must cover the courier cost at max km."
+            label="Platform-wide monthly free-delivery budget (JMD)"
+            tip="Finding S: this is ONE pool for the entire platform this Jamaica calendar month — not per customer, not per merchant, and not Rush Pass. At ~J$630 courier cost / free trip, J$1,500 ≈ 2 free deliveries platform-wide before promos charge delivery."
             value={rules.promo_free_delivery?.monthly_subsidy_budget_jmd ?? 1500}
             onChange={(v) =>
               setRules((r) => ({
@@ -441,9 +429,9 @@ export function CustomerRulesReadonly({ rules }: { rules: PricingRulesPayload })
       value: `${Math.round((rules.card_processing_fee_percent ?? 0.045) * 1000) / 10}%`,
     },
     {
-      label: 'Free delivery first N orders',
-      tip: CUSTOMER_RULE_TIPS.freeDeliveryFirstN,
-      value: String(rules.launch_promos?.free_delivery_first_n_orders ?? 0),
+      label: 'Platform-wide FD monthly budget',
+      tip: 'One platform pool per Jamaica calendar month for promo free delivery — not per customer / not Pass.',
+      value: formatJmd(rules.promo_free_delivery?.monthly_subsidy_budget_jmd ?? 1500),
     },
   ];
   return (

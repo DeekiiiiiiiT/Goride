@@ -1,28 +1,18 @@
 /**
- * Rush Pass period subsidy spend — Finding L: never select columns that aren't on
- * delivery.orders (PostgREST 400 → silent used=0 was fail-open unlimited free delivery).
+ * Rush Pass period subsidy spend — Finding L: never select phantom columns.
+ * Finding R: aggregate in Postgres (RPC), never row-transport under PostgREST max_rows.
  */
-
-/** Columns selected from delivery.orders for Pass subsidy aggregation (schema-guarded). */
-export const RUSH_PASS_SUBSIDY_ORDER_SELECT =
-  "platform_delivery_subsidy_jmd, pricing_snapshot, status" as const;
-
-export const RUSH_PASS_SUBSIDY_ORDER_COLUMNS = [
-  "platform_delivery_subsidy_jmd",
-  "pricing_snapshot",
-  "status",
-] as const;
 
 export type RushPassSubsidyLoadOk = { ok: true; usedJmd: number };
 export type RushPassSubsidyLoadErr = { ok: false; error: string; usedJmd: number };
 export type RushPassSubsidyLoadResult = RushPassSubsidyLoadOk | RushPassSubsidyLoadErr;
 
-type OrdersQueryClient = {
+type SubsidyRpcClient = {
   // deno-lint-ignore no-explicit-any
-  from: (table: string) => any;
+  rpc: (fn: string, args?: Record<string, unknown>) => PromiseLike<{ data: unknown; error: { message?: string } | null }>;
 };
 
-/** Pure sum — unit-tested; skips cancelled/rejected. */
+/** Pure sum — unit-tested for row-shape fixtures; production path uses RPC. */
 export function sumRushPassSubsidyFromOrderRows(rows: unknown[]): number {
   let used = 0;
   for (const row of rows) {
@@ -44,12 +34,18 @@ export function sumRushPassSubsidyFromOrderRows(rows: unknown[]): number {
   return Math.round(used * 100) / 100;
 }
 
+function parseUsedJmd(data: unknown): number {
+  const n = typeof data === "number" ? data : Number(data ?? 0);
+  if (!Number.isFinite(n) || n < 0) return 0;
+  return Math.round(n * 100) / 100;
+}
+
 /**
  * Load Pass free-delivery subsidy spent in the current membership period.
- * On query failure returns ok:false (callers must deny free delivery — fail closed).
+ * On RPC failure returns ok:false (callers must deny free delivery — fail closed).
  */
 export async function loadRushPassSubsidyUsed(
-  sb: OrdersQueryClient,
+  sb: SubsidyRpcClient,
   membershipId: string,
   periodStartIso: string,
 ): Promise<RushPassSubsidyLoadResult> {
@@ -57,26 +53,25 @@ export async function loadRushPassSubsidyUsed(
     return { ok: true, usedJmd: 0 };
   }
 
-  const { data, error } = await sb
-    .from("orders")
-    .select(RUSH_PASS_SUBSIDY_ORDER_SELECT)
-    .eq("rush_pass_membership_id", membershipId)
-    .gte("placed_at", periodStartIso);
+  const { data, error } = await sb.rpc("sum_rush_pass_subsidy_used", {
+    p_membership_id: membershipId,
+    p_period_start: periodStartIso,
+  });
 
   if (error) {
     console.error(
-      "[rushPassSubsidyUsed] query failed",
+      "[rushPassSubsidyUsed] rpc failed",
       { membershipId, periodStartIso, message: error.message },
     );
     return {
       ok: false,
-      error: error.message ?? "orders_query_failed",
+      error: error.message ?? "subsidy_rpc_failed",
       usedJmd: 0,
     };
   }
 
   return {
     ok: true,
-    usedJmd: sumRushPassSubsidyFromOrderRows(data ?? []),
+    usedJmd: parseUsedJmd(data),
   };
 }

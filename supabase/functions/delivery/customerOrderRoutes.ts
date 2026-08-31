@@ -515,6 +515,7 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
       delivery_fee_platform_amount: deliveryFeePlatformAmount,
       delivery_fee_courier_amount: deliveryFeeCourierAmount,
       platform_delivery_subsidy_jmd: platformDeliverySubsidyJmd,
+      free_delivery_applied: v2Pricing.freeDeliveryApplied === true,
       small_order_fee: smallOrderFee,
       courier_base_pay_jmd: v2Pricing.courierBasePayJmd ?? 0,
       courier_distance_pay_jmd: v2Pricing.courierDistancePayJmd ?? 0,

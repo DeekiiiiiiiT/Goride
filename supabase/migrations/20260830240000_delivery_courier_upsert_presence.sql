@@ -58,12 +58,13 @@ ALTER TABLE delivery.courier_availability
 -- 4. Presence RPC — hard-assign cell (never COALESCE to prior cell)
 --------------------------------------------------------------------------------
 
+-- p_h3_res is INTEGER (not smallint) so PostgREST matches JSON numbers; cast to smallint for the column.
 CREATE OR REPLACE FUNCTION public.delivery_courier_upsert_presence(
   p_driver_id UUID,
   p_lat DOUBLE PRECISION,
   p_lng DOUBLE PRECISION,
   p_h3_cell TEXT,
-  p_h3_res SMALLINT,
+  p_h3_res INTEGER,
   p_is_online BOOLEAN DEFAULT TRUE,
   p_active_order_id UUID DEFAULT NULL
 )
@@ -74,6 +75,7 @@ SET search_path = delivery, public
 AS $$
 DECLARE
   v_cell TEXT := NULLIF(trim(p_h3_cell), '');
+  v_res SMALLINT := CASE WHEN p_h3_res IS NULL THEN NULL ELSE p_h3_res::SMALLINT END;
 BEGIN
   IF p_driver_id IS NULL THEN
     RAISE EXCEPTION 'driver_id_required' USING ERRCODE = '22023';
@@ -83,7 +85,7 @@ BEGIN
     IF p_lat IS NULL OR p_lng IS NULL THEN
       RAISE EXCEPTION 'location_required' USING ERRCODE = '22023';
     END IF;
-    IF v_cell IS NULL OR p_h3_res IS NULL THEN
+    IF v_cell IS NULL OR v_res IS NULL THEN
       RAISE EXCEPTION 'presence_h3_required' USING ERRCODE = '22023';
     END IF;
   END IF;
@@ -103,7 +105,7 @@ BEGIN
     p_lat,
     p_lng,
     v_cell,
-    p_h3_res,
+    v_res,
     COALESCE(p_is_online, FALSE),
     p_active_order_id,
     NOW(),

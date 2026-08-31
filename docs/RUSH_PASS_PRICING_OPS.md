@@ -1,11 +1,10 @@
 # Rush Pass pricing ops
 
-## Sell gate (Finding A + L + M)
+## Sell gate (Findings A + L + M + R + T + O)
 
-Engineering checklist §1–4, Finding L, and Finding M (plan write → `validatePricingConfig`) are
-**green**. **PO approved public Pass sales 2026-08-30** — keep sales on only while no new money
-defect is open. Finding O (delivered settlement smoke) is still outstanding but does not block Pass
-pricing integrity.
+Engineering checklist §1–5, Finding L, Finding M, Finding R, Finding T, and Finding O
+(`RD-2026-000008` completed + reconcile 0.00) are **green**. **Pass marketing and `FREEDEL`
+remain PO product decisions** — turn on when you choose; engineering money gates are clear.
 
 Manage live plan economics in **Pricing → Rush Pass** (price, billing days, max free km, monthly
 subsidy budget, service-fee multiplier, free-delivery flag, eligible merchant tiers, and sales
@@ -14,8 +13,21 @@ on/off). Grant/revoke memberships on the same tab for support.
 Customers subscribe in the app under **Account → Rush Pass**. **Sales on/off** on the plan is the
 admin pause switch — turning it off stops new purchases; current members keep benefits until period end.
 
-Re-hold marketing only if a new money defect opens (e.g. subsidy fail-open) — then restore a Hub
+Re-hold marketing if a new money defect opens (e.g. subsidy fail-open) — then restore a Hub
 banner and pause campaigns until fixed.
+
+## Subsidy budget denominators (Finding S)
+
+| Config block | Key | Scope | Live default |
+|---|---|---|---|
+| `rush_pass` / plan row | `monthly_subsidy_budget_jmd` | **Per member, per billing period** | J$1,500 |
+| `promo_free_delivery` | `monthly_subsidy_budget_jmd` | **Entire platform, per Jamaica calendar month** | J$1,500 |
+
+Do **not** raise the promo field as if it were a per-customer Pass budget. At ~J$630 courier cost
+per free trip, J$1,500 platform-wide ≈ **2** free-delivery promo trips for all of Roam Rush that month.
+
+Spend is summed in Postgres (`delivery.sum_promo_fd_subsidy_used` /
+`delivery.sum_rush_pass_subsidy_used`) — never by row-transport under PostgREST `max_rows` (Finding R).
 
 ## WiPay demo pay (until merchant is live)
 
@@ -45,6 +57,8 @@ Pricing Hub **Rush Pass** tab:
 - Calculator line: “At last 30d avg subsidy X, J$Y funds ~N trips/member”
 - Save is rejected if km or monthly budget ≤ 0, **or** if `validatePricingConfig` fails when the
 proposed caps are overlaid on the live pricing profile (Finding M). Client Save pre-gates the same way.
+- Profile mirror uses **insert-then-deactivate** (Finding T). Mirror failure returns **409**
+  (`pass_profile_mirror_failed`) — plan row may have saved; retry Save so caps resync.
 - Save warns (does not block) if proposed price &lt; trailing 30d avg cost per active member
 - Every save writes `pricing_change_log` (`scope: rush_pass_plan`)
 
@@ -69,16 +83,22 @@ Dominant volume exists.** The scheduled GG cron job is also removed — run only
 
 Keep claw-back armed so late cancels stay safe when GG is eventually turned on.
 
-## Concurrent Pass budget race (Finding Q)
+## Concurrent Pass budget race (Finding Q) — accepted / won’t-fix
 
-`loadRushPassSubsidyUsed` reads spend at quote/place time; the order row that records that spend is
-inserted afterwards. Two concurrent Pass free-delivery checkouts on one membership can both observe
-the same `used` figure and both clear the gate. Worst case: ~one extra free trip over the monthly
-budget. Accept until Pass volume is material; then serialize budget with a membership lock or atomic
-spend RPC.
+**Status: accepted (not closed).** No membership lock or subsidy ledger is implemented.
+
+`loadRushPassSubsidyUsed` (Postgres RPC) reads spend at quote/place time; the order row that records
+that spend is inserted afterwards. Two concurrent Pass free-delivery checkouts on one membership can
+both observe the same `used` figure and both clear the gate. Worst case: ~one extra free trip over
+the monthly **per-member** budget.
+
+Promo free delivery has the **same race** with a **platform-wide** budget (Finding S) — slightly
+worse blast radius, still acceptable pre-launch.
+
+Revisit when Pass or promo FD volume is material: membership advisory lock or atomic spend RPC.
 
 ## FREEDEL / promo free delivery (Finding N)
 
-Live `FREEDEL` was **paused** during audit closeout until platform promo free-delivery caps ship
-(distance + monthly subsidy budget). Do not re-activate free-delivery promos until Pricing Hub shows
-promo FD caps and engineering confirms the place-order gate.
+Live `FREEDEL` stays **paused** until Finding O (delivered settlement) is signed and PO re-enables.
+Promo FD caps (distance + platform-wide monthly budget) are live; place-order gate uses the Postgres
+sum RPC (Finding R). Do not re-activate free-delivery promos without PO sign-off.

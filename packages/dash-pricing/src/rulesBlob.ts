@@ -400,8 +400,7 @@ export function validateCustomerRules(rules: PricingRules): string | null {
   if ((d.baseJmd ?? 0) < 0) return 'delivery.base_jmd must be >= 0';
   if ((d.includedKm ?? 0) < 0) return 'delivery.included_km must be >= 0';
   if ((d.perExtraKmJmd ?? 0) < 0) return 'delivery.per_km_jmd must be >= 0';
-  const promoN = rules.launchPromos?.freeDeliveryFirstNOrders ?? 0;
-  if (promoN < 0 || promoN > 99) return 'free_delivery_first_n_orders must be between 0 and 99';
+  // launch_promos.free_delivery_first_n_orders ignored (Finding U — unreachable; use promo FD)
   return null;
 }
 

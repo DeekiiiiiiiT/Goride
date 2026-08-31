@@ -801,10 +801,24 @@ export function registerRushPassRoutes(app: Hono, deps: RushPassRoutesDeps) {
       adminUser: admin as ProductAdminUser,
     });
     if (!mirror.ok) {
+      // Finding T: plan row already committed — hard-fail so admin retries; do not 200 with soft warning
       console.error("[rushPassRoutes] plan saved but profile mirror failed", mirror.error);
-      warnings.push(
-        `Plan saved, but pricing-profile sync failed (${mirror.error}). Simulator may show stale Pass caps until the next profile save.`,
-      );
+      await serviceSb.from("pricing_change_log").insert({
+        scope: "rush_pass_plan",
+        actor_id: (admin as ProductAdminUser).id,
+        actor_email: (admin as ProductAdminUser).email,
+        action: "rush_pass_plan_updated_mirror_failed",
+        before_state: existing,
+        after_state: updated,
+      });
+      return c.json({
+        error:
+          `Plan row saved, but active pricing-profile sync failed (${mirror.error}). ` +
+          `Pass caps may be unsynced between rush_pass_plans and the global profile — retry Save.`,
+        code: "pass_profile_mirror_failed",
+        plan: updated,
+        warnings,
+      }, 409);
     }
 
     await serviceSb.from("pricing_change_log").insert({

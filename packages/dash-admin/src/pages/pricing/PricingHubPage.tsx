@@ -2513,10 +2513,6 @@ function RulesReadonlyBody({ rules }: { rules: PricingRulesPayload }) {
       label: 'COD pause threshold',
       value: formatJmd(rules.cod?.pause_threshold_jmd ?? 10000),
     },
-    {
-      label: 'Free delivery first N orders',
-      value: String(rules.launch_promos?.free_delivery_first_n_orders ?? 0),
-    },
   ];
   return (
     <dl className="rounded-xl border border-slate-800 divide-y divide-slate-800">
@@ -2655,17 +2651,6 @@ function RulesEditForm({
           value={rules.cod?.pause_threshold_jmd ?? 10000}
           onChange={(v) =>
             setRules((r) => ({ ...r, cod: { ...r.cod, pause_threshold_jmd: v } }))
-          }
-          disabled={!canWrite}
-        />
-        <Field
-          label="Free delivery first N orders"
-          value={rules.launch_promos?.free_delivery_first_n_orders ?? 0}
-          onChange={(v) =>
-            setRules((r) => ({
-              ...r,
-              launch_promos: { free_delivery_first_n_orders: v },
-            }))
           }
           disabled={!canWrite}
         />

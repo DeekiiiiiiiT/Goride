@@ -48,7 +48,7 @@ Schema guard: [`supabase/scripts/assert_rush_pass_subsidy_select_columns.sql`](.
 | Pass distance deny (persisted) | **Pass** | `RD-2026-000007` paid: `deny=distance`, `delivery_fee=930`, `free_del=false`. (Smoke used temp `max_free_delivery_km=5` so 7.07 km exceeded the cap; plan restored to **8**.) |
 | Economy merchant unchanged by Pass | **N/A** | 0 Economy merchants live. |
 | Budget exhaustion (real budget) | **Pass** | After Finding L fix: cart showed “monthly free-delivery credit used” with prior used ≈ J$2,520. Persisted `RD-2026-000006` paid: `deny=budget`, `used_snap=2520`, `delivery_fee=930`, `free_del=false`. **Do not** treat forced `budget=0` as valid proof. |
-| Finding L accumulator | **Pass** | Shared `loadRushPassSubsidyUsed` — no top-level `promo_cost_jmd` select; fail-closed on query error; `delivery` redeployed. |
+| Finding L accumulator | **Pass** | Shared `loadRushPassSubsidyUsed` → `delivery.sum_rush_pass_subsidy_used` RPC (Finding R); fail-closed; `delivery` redeployed 2026-08-31. |
 
 Do **not** re-enable Growth Guarantee in the live profile (`growth_guarantee.enabled`) or run
 `workflow_dispatch` → `growth_guarantee` against real merchants until ≥1 Jamaica calendar month of
@@ -60,18 +60,35 @@ Pass renew stays on the daily schedule. Claw-back hooks stay armed.
 Pricing at place-time is proven above. Settlement and Growth Guarantee still need one order that
 reaches a terminal success status.
 
-1. Place a paid Growth (or Dominant) order with real pins.
-2. Advance through: `accepted` → `preparing` → `ready` → `assigned` → `picked_up` → `in_transit` → **`delivered`**.
+### Engineering prep (2026-08-31) — ready for PO/QA
+
+| Prep | Status |
+|------|--------|
+| Finding R subsidy RPCs live + `delivery` redeployed | **Done** |
+| Finding T insert-then-deactivate profile writes shipped | **Done** |
+| Lifecycle script | [`roam-rush-order-lifecycle-smoke-test.md`](roam-rush-order-lifecycle-smoke-test.md) |
+| Reconcile script | [`reconcile_v2_money_split.sql`](../supabase/scripts/reconcile_v2_money_split.sql) |
+| Live `delivered`/`completed` count before this run | **0** |
+
+### PO/QA steps
+
+1. Place a **new** paid Growth (or Dominant) order with real pins (`WIPAY_DEMO` ok — note capture method).
+2. Advance through: `accepted` → `preparing` → `ready` → `assigned` → `picked_up` → `in_transit` → **`delivered`**
+   (merchant + courier apps, or admin status updates following `ORDER_STATUS_TRANSITIONS`).
 3. Prefer customer review → **`completed`** (or admin force-complete).
 4. Re-run [`supabase/scripts/reconcile_v2_money_split.sql`](../supabase/scripts/reconcile_v2_money_split.sql).
 5. Record: order id / `RD-…` code, final status, capture method (real WiPay webhook vs demo/SQL-sim).
 6. Optional: one Pass order with road km **>** live `max_free_delivery_km` (8) while doing this —
    persists genuine beyond-cap evidence (not a temporary plan change).
 
-Operator script: [`docs/roam-rush-order-lifecycle-smoke-test.md`](roam-rush-order-lifecycle-smoke-test.md).
+Do **not** un-cancel historical rows or invent `delivered` via raw SQL — that skips
+`handleOrderDelivered` (GCT / COD ledger) and does not close Finding O.
 
 | Check | Pass? | Evidence |
 |-------|-------|----------|
-| Order reached `delivered` / `completed` | **Pending PO/QA** | — |
-| Reconcile clean after delivery | **Pending** | — |
-| Capture note (webhook vs demo) | **Pending** | — |
+| Engineering prep (R/T deploy + scripts) | **Pass** | 2026-08-31 closeout |
+| Order reached `delivered` / `completed` | **Pass** | **`RD-2026-000010`** / `033d7cd1-73a9-47b7-83bb-e62334dc06c9` Island Grill → **`delivered`** via full UI path |
+| Reconcile clean after delivery | **Pass** | money-split **delta 0.00**; merchant receivable 900; fee 510; `contribution_jmd` 535; capture J$2,002.16 |
+| Capture note (webhook vs demo) | **Pass** | **WIPAY_DEMO** capture on place |
+
+**Smoke notes (2026-08-31, proper Island Grill UI):** Customer place+pay → Partner accept/prepare/ready → Courier go-online (fixed `delivery.delivery_courier_upsert_presence`) → accept → pickup → in_transit → delivered. Playwright + real sessions. Earlier `RD-2026-000009` cancelled mid-courier by accident; `RD-2026-000008` Burger Spot was imperfect (SQL status). Island Grill map pin restored after smoke. GG left disabled.

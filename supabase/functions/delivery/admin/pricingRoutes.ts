@@ -26,6 +26,7 @@ import { recordCashSettlement } from "../courierCashLedger.ts";
 import { computeCodTrialBalance } from "../../_shared/dashPricing.ts";
 import {
   assertValidPricingConfig,
+  insertThenActivateProfile,
   loadActiveProfileRules,
   loadActiveTiers,
   rowToMerchantTier,
@@ -129,6 +130,7 @@ async function writeVersionedProfile(opts: {
   adminUser: ProductAdminUser;
 }) {
   const { db, table, matchColumn, matchId, rules, adminUser } = opts;
+  // Capture prior row for change-log (Finding T: insert-then-deactivate)
   let currentQuery = db.from(table).select("*").eq("is_active", true);
   if (matchColumn && matchId) currentQuery = currentQuery.eq(matchColumn, matchId);
   const { data: current } = await currentQuery
@@ -136,27 +138,30 @@ async function writeVersionedProfile(opts: {
     .limit(1)
     .maybeSingle();
 
-  const nextVersion = current ? Number(current.version ?? 0) + 1 : 1;
-  if (current) {
-    await db
-      .from(table)
-      .update({ is_active: false, updated_at: new Date().toISOString() })
-      .eq("id", current.id);
-  }
-
-  const insertRow: Record<string, unknown> = {
-    version: nextVersion,
-    is_active: true,
+  const result = await insertThenActivateProfile({
+    db,
+    table,
+    matchColumn,
+    matchId,
     rules,
-    created_by: adminUser.id,
-  };
-  if (table !== "global_pricing_profiles") {
-    insertRow.override_enabled = current?.override_enabled !== false;
-  }
-  if (matchColumn && matchId) insertRow[matchColumn] = matchId;
+    adminUser,
+    overrideEnabled: current?.override_enabled !== false,
+  });
 
-  const { data: created, error } = await db.from(table).insert(insertRow).select().single();
-  return { current, created, error, nextVersion };
+  if (!result.ok) {
+    return {
+      current,
+      created: null,
+      error: { message: result.error },
+      nextVersion: result.nextVersion,
+    };
+  }
+  return {
+    current,
+    created: result.created,
+    error: null,
+    nextVersion: result.version,
+  };
 }
 
 async function clearVersionedProfile(opts: {

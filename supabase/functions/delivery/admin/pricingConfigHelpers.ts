@@ -82,6 +82,61 @@ export async function assertRushPassPlanCapsValid(opts: {
   return assertValidPricingConfig(db, parsed);
 }
 
+/**
+ * Finding T: insert new active profile first, then deactivate older actives.
+ * Never deactivate-then-insert (insert failure left zero active profiles).
+ */
+export async function insertThenActivateProfile(opts: {
+  db: ReturnType<typeof getDb>;
+  table: "global_pricing_profiles" | "parish_pricing_profiles" | "market_pricing_profiles";
+  matchColumn?: "parish_id" | "market_id";
+  matchId?: string;
+  rules: Record<string, unknown>;
+  adminUser: ProductAdminUser;
+  /** Preserve override_enabled from prior parish/market row when set. */
+  overrideEnabled?: boolean;
+}): Promise<
+  | { ok: true; version: number; created: Record<string, unknown> }
+  | { ok: false; error: string; nextVersion: number }
+> {
+  const { db, table, matchColumn, matchId, rules, adminUser } = opts;
+  let currentQuery = db.from(table).select("*").eq("is_active", true);
+  if (matchColumn && matchId) currentQuery = currentQuery.eq(matchColumn, matchId);
+  const { data: current } = await currentQuery
+    .order("version", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const nextVersion = current ? Number(current.version ?? 0) + 1 : 1;
+  const insertRow: Record<string, unknown> = {
+    version: nextVersion,
+    is_active: true,
+    rules,
+    created_by: adminUser.id,
+  };
+  if (table !== "global_pricing_profiles") {
+    insertRow.override_enabled = opts.overrideEnabled ?? current?.override_enabled !== false;
+  }
+  if (matchColumn && matchId) insertRow[matchColumn] = matchId;
+
+  const { data: created, error } = await db.from(table).insert(insertRow).select().single();
+  if (error || !created) {
+    return { ok: false, error: error?.message ?? "profile_insert_failed", nextVersion };
+  }
+
+  // Deactivate prior actives after successful insert (two actives briefly is OK —
+  // readers take order by version desc limit 1).
+  let deactivate = db
+    .from(table)
+    .update({ is_active: false, updated_at: new Date().toISOString() })
+    .eq("is_active", true)
+    .neq("id", created.id);
+  if (matchColumn && matchId) deactivate = deactivate.eq(matchColumn, matchId);
+  await deactivate;
+
+  return { ok: true, version: nextVersion, created: created as Record<string, unknown> };
+}
+
 /** Mirror plan caps into active global profile so Simulator / CI stay aligned. */
 export async function mirrorRushPassCapsToGlobalProfile(opts: {
   maxFreeDeliveryKm: number;
@@ -106,21 +161,12 @@ export async function mirrorRushPassCapsToGlobalProfile(opts: {
     },
   };
 
-  const nextVersion = current ? Number(current.version ?? 0) + 1 : 1;
-  if (current) {
-    await db
-      .from("global_pricing_profiles")
-      .update({ is_active: false, updated_at: new Date().toISOString() })
-      .eq("id", current.id);
-  }
-
-  const { error } = await db.from("global_pricing_profiles").insert({
-    version: nextVersion,
-    is_active: true,
+  const result = await insertThenActivateProfile({
+    db,
+    table: "global_pricing_profiles",
     rules: nextRules,
-    created_by: opts.adminUser.id,
+    adminUser: opts.adminUser,
   });
-
-  if (error) return { ok: false, error: error.message };
-  return { ok: true, version: nextVersion };
+  if (!result.ok) return { ok: false, error: result.error };
+  return { ok: true, version: result.version };
 }

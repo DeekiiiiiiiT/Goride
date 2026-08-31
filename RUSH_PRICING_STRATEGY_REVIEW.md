@@ -2,22 +2,18 @@
 
 **Date:** 2026-08-30 · **Implementation reviewed:** 2026-08-30 · **Re-audited:** 2026-08-31
 **Scope:** `delivery` schema pricing, `@roam/dash-pricing` engine, Model B money split, Merchant Tiers
-**Status:** ✅ **Architecture implemented; every audit defect closed, including the one filed as
-out-of-scope** ([§12](#12-remediation-verification), [§13](#13-follow-up-audit--ae02ac5e)).
-`@roam/dash-pricing`: **45 tests passing** (was 33).
+**Status:** ✅ Architecture + audit defects through M/N/P closed. **§18 closeout (2026-08-31):**
+R, T, S, U closed in code; Q **accepted**; **O remains** (PO/QA delivered lifecycle).
+`@roam/dash-pricing`: **51 tests passing.**
 ✅ **Finding A closed 2026-08-30** — first live Model B orders priced through the real path;
 `RD-2026-000001` reconciles to the cent.
 ✅ **Finding L closed 2026-08-30** — Pass subsidy accumulator fixed (fail-closed); real-budget
 deny `RD-2026-000006` and distance deny `RD-2026-000007` persisted. See [§14.4](#144-standing-position).
-⚠️ **Re-audit 2026-08-31 ([§16](#16-independent-re-audit--2026-08-31)):** all twelve closed findings
-independently re-confirmed against source and production rows. **Five new items** opened —
-[M](#m--the-pass-caps-are-validated-in-one-store-and-enforced-from-another) 🔴,
-[N](#n--promo-free-delivery-has-no-guardrail--and-one-is-live) 🟠,
-[O](#o--no-order-has-ever-been-delivered-so-settlement-is-unproven) 🟠,
-[P](#p--the-growth-guarantee-cron-is-scheduled-not-held) 🟡,
-[Q](#q--concurrent-pass-orders-can-both-clear-the-budget-gate) ⚪.
-**Closeout 2026-08-31 ([§16.6](#166-closeout-notes--2026-08-31)):** M, N, P, Q closed in code/ops;
-**O remains** (delivered lifecycle QA). `FREEDEL` paused; GG `enabled=false`; profile v8 explicit.
+✅ **M, N, P closed; R, T, S, U closed 2026-08-31** ([§18](#18-closeout-implementation--2026-08-31)).
+`delivery` redeployed. Promo FD + Pass subsidy spend via Postgres RPCs.
+✅ **O closed 2026-08-31** — `RD-2026-000008` → `completed`; WIPAY_DEMO capture; reconcile
+delta **0.00**; delivery margin **+300**. See checklist §5.
+⚪ **Q accepted / won’t-fix** — documented in ops runbook (not “closed”).
 **Context:** Pre-launch, no backwards compatibility required. GoRide ledger / fleet finance
 explicitly out of scope.
 
@@ -1389,3 +1385,282 @@ Ordered by what unblocks the most, not by severity alone.
 - Promo/launch free delivery uses the same distance+budget gate as Pass; `promo_funded_by=platform` when promo FD applies; place-order no longer blanket-bypasses the contribution floor.
 - Pass marketing / `FREEDEL` re-enable remain PO-gated until checklist §5 (delivered order) is signed and you choose to turn sales back on.
 - Redeploy `delivery` after merge so plan-write + promo FD gates are live.
+
+> **Corrected by [§17](#17-verification-of-the-mnp-remediation--2026-08-31).** M, N and P verify
+> clean. **Q does not** — nothing in the code or the migrations implements it, so the line above is a
+> closure claim without a mechanism. Four new findings (R–U) come out of this remediation.
+
+---
+
+## 17. Verification of the M/N/P remediation — 2026-08-31
+
+Audited 2026-08-31 against the working tree at `aa6b42e0` (four commits past §16's `6efe3da2`) and
+the live database (`csfllzzastacofsvcdsc`). Method as before: every closure re-derived from source or
+a direct query, never from the status column. Suite re-run: **51 passing** (was 45 —
+`auditRemediation.test.ts` went 12 → 18). **No code was changed and no configuration was touched.**
+
+| | |
+|---|---|
+| §16 findings verified closed | **3** (M, N, P) |
+| §16 findings still open | **2** (O, Q — Q despite being claimed closed) |
+| New findings | **4** (R 🔴, S 🟠, T 🟠, U 🟡) |
+
+### 17.1 M, N and P are genuinely closed
+
+Each was fixed at the layer that actually executes, not at the layer that was being tested — which
+was the whole complaint in §16.
+
+**M — closed.** `PUT /admin/rush-pass/plan` now calls `assertRushPassPlanCapsValid`
+([rushPassRoutes.ts:717](supabase/functions/delivery/rushPassRoutes.ts#L717)), which overlays the
+proposed caps onto the live global rules and runs the *same* `validatePricingConfig` the profile
+writes use ([pricingConfigHelpers.ts:69-83](supabase/functions/delivery/admin/pricingConfigHelpers.ts#L69-L83)).
+It then mirrors the accepted caps back into the active blob
+([:86-126](supabase/functions/delivery/admin/pricingConfigHelpers.ts#L86-L126)), so the two stores can
+no longer drift. The `{ max_free_delivery_km: 25, budget: 100000 }` payload §16 showed being accepted
+is now rejected with the validator's own code. Live: plan row **8 km / J$1,500**, profile **v8**
+`rush_pass = {8, 1500}` — identical. *(See [T](#t--the-plan-write-can-leave-zero-active-global-profiles)
+for the mirror's failure mode.)*
+
+**N — closed.** Promo free delivery is now a first-class subsidy path rather than an unguarded
+branch:
+
+| Layer | Evidence |
+|---|---|
+| Config | `promo_free_delivery = {8, 1500}` present in active profile **v8** (was `null` through v7) |
+| Validator | `PROMO_FD_SUBSIDY_UNBOUNDED` at [engine.ts:951](packages/dash-pricing/src/engine.ts#L951) |
+| Promo creation | `POST` free-delivery promos refused when caps are missing ([financeRoutes.ts:302-321](supabase/functions/delivery/admin/financeRoutes.ts#L302-L321)) |
+| Resolver | Same distance + budget gate as Pass, **fail-closed** on query error ([pricingResolver.ts:521-551](supabase/functions/delivery/pricingResolver.ts#L521-L551)) |
+| Order path | `promoFree` branch checks remaining budget, rejects `promo_fd_subsidy_budget_exceeded` ([customerOrderRoutes.ts:353-359](supabase/functions/delivery/customerOrderRoutes.ts#L353-L359)) |
+| Denial reasons | `promo_free_delivery_denied_reason` persisted in the snapshot ([:402](supabase/functions/delivery/customerOrderRoutes.ts#L402)) |
+
+The blanket floor bypass §16 quoted is gone: the `else if` chain now ends in the normal contribution
+floor for every order that is not an in-budget Pass or promo subsidy. `FREEDEL` is `paused` in
+`delivery.merchant_promotions`, so the live exposure is closed at the data layer too.
+
+**P — closed, twice over.** `rush-pricing-cron.yml` was restructured so the `schedule` trigger can
+only ever run Pass renew — Growth Guarantee is reachable exclusively through `workflow_dispatch`
+([rush-pricing-cron.yml:30-40](.github/workflows/rush-pricing-cron.yml#L30-L40)). Independently,
+`growth_guarantee.enabled` is now **`false`** in profile v8 (it was `true` in v6). The hold is now a
+configured control rather than an accident of the merchant table, which was the finding.
+
+<a id="171-q-was-not-closed--the-closeout-line-is-wrong"></a>
+### 17.2 Q was not closed — the closeout line is wrong
+
+§16.6 and the header record Q as "closed in code/ops." **Nothing implements it.**
+
+- No advisory lock, `SELECT … FOR UPDATE`, or serializable transaction anywhere in
+  `supabase/functions/delivery`.
+- No subsidy-ledger table and no per-period cumulative constraint — the only migrations since
+  `6efe3da2` are `vehicle_remediation_history_align` and `toll_round_trip_cooldown_ms`, neither
+  related.
+- The mechanism §16 described is unchanged: `loadRushPassSubsidyUsed` reads spend at quote time
+  ([rushPassSubsidyUsed.ts:60-64](supabase/functions/_shared/rushPassSubsidyUsed.ts#L60-L64)) and the
+  order row recording that spend is inserted afterwards, with nothing spanning the two.
+
+Q is genuinely low-severity and *deciding not to fix it* is a perfectly good answer — §16.4 itself
+recommended a runbook note rather than engineering. But recording it as **closed** is the §13.2 H2
+pattern exactly: a status set from intent rather than from a mechanism. It should read *accepted /
+won't-fix, noted in the runbook*, not *closed*. **The promo path
+([R](#r--the-promo-budget-accumulator-is-an-unbounded-read-under-a-1000-row-cap)) now has the same
+race with a platform-wide denominator, which makes it materially less benign than it was for Pass.**
+
+### 17.3 New findings
+
+<a id="r--the-promo-budget-accumulator-is-an-unbounded-read-under-a-1000-row-cap"></a>
+#### R — The promo budget accumulator is an unbounded read under a 1,000-row cap 🔴 High
+
+**Finding L's exact failure mode, reintroduced by the fix for N.** L was *a money guard that silently
+read the wrong number and failed open*. So is this.
+
+`loadPromoFreeDeliverySubsidyUsed`
+([promoFreeDeliverySubsidyUsed.ts:35-39](supabase/functions/_shared/promoFreeDeliverySubsidyUsed.ts#L35-L39))
+fetches **every non-Pass order placed this calendar month** and filters for free delivery *in
+JavaScript* afterwards:
+
+```ts
+.select(RUSH_PASS_SUBSIDY_ORDER_SELECT)   // includes the full pricing_snapshot JSONB
+.is("rush_pass_membership_id", null)
+.gte("placed_at", monthStartIso)
+// no .eq on free delivery · no status filter · no .order() · no .limit()
+```
+
+`supabase/config.toml:18` pins **`max_rows = 1000`** (also the hosted default). So:
+
+```
+non-Pass orders this month ≤ 1000  →  sum is correct
+non-Pass orders this month  > 1000  →  PostgREST truncates to an arbitrary 1000 rows
+                                       (no ORDER BY ⇒ which 1000 is undefined)
+                                    →  `used` silently undercounts
+                                    →  remaining budget overstated
+                                    →  free delivery granted past the budget
+```
+
+No error is raised — `ok: true` with a wrong number, which is strictly worse than L's `ok: false`
+path, because the fail-closed guard the L fix installed never engages. It is **dormant today** (7
+orders have ever existed) and becomes live the first month the platform clears 1,000 non-Pass orders.
+
+Two secondary costs on the same query: it runs on **every quote**, pulling a month of full
+`pricing_snapshot` JSONB blobs into an edge function each time — that is a latency and egress problem
+well before it is a correctness one; and the status filter runs client-side
+([rushPassSubsidyUsed.ts:30-31](supabase/functions/_shared/rushPassSubsidyUsed.ts#L30-L31)), so
+cancelled rows are fetched only to be discarded.
+
+**The fix is to stop transporting rows.** Push the predicate into the query
+(`.eq("free_delivery_applied", true)`, `.not("status","in","(cancelled,rejected)")`) and do the
+addition in Postgres — an RPC returning one `numeric`, or a `sum()` — so the answer cannot depend on
+a row cap. The schema-guard script that §15.1 added for L should grow a companion assertion that this
+accumulator is not a row-transporting read.
+
+<a id="s--one-key-name-two-denominators--the-promo-budget-is-platform-wide"></a>
+#### S — One key name, two denominators: the promo budget is platform-wide 🟠 Medium
+
+`monthly_subsidy_budget_jmd` means two very different things depending on which block it sits in:
+
+| Block | Scope of the budget | Live value |
+|---|---|---|
+| `rush_pass` | **per member, per billing period** | J$1,500 |
+| `promo_free_delivery` | **entire platform, per calendar month** | J$1,500 |
+
+The promo accumulator takes no merchant, customer or promo-code scope — it sums the whole month
+across every merchant. At the live courier ladder that is **J$1,500 ÷ J$630 ≈ 2 free deliveries per
+month for the whole of Roam Rush**, after which every free-delivery promo silently converts to
+delivery-charged with `promo_free_delivery_denied_reason = 'budget'`.
+
+That may be exactly the conservative default you want pre-launch. The finding is that **nothing says
+so**: the value was inherited from the Pass default, the key name implies the Pass denominator, and
+the admin field in `CustomerRulesForm.tsx` sits next to the Pass one with no unit label. The
+predictable failure is someone raising it to a "reasonable per-customer" number — J$5,000, say — and
+unknowingly setting a platform-wide monthly ceiling.
+
+Worth either renaming the key to carry its scope (`platform_monthly_subsidy_budget_jmd`) or labelling
+the admin field, and writing the intended denominator into
+[docs/RUSH_PASS_PRICING_OPS.md](docs/RUSH_PASS_PRICING_OPS.md). Note this also gives
+[Q](#q--concurrent-pass-orders-can-both-clear-the-budget-gate)'s race a platform-wide blast radius
+rather than a per-member one.
+
+<a id="t--the-plan-write-can-leave-zero-active-global-profiles"></a>
+#### T — The plan write can leave zero active global profiles 🟠 Medium
+
+`mirrorRushPassCapsToGlobalProfile` closes M's drift by writing the caps into the profile blob. It
+does so **non-atomically, and after the plan row is already committed**
+([pricingConfigHelpers.ts:110-124](supabase/functions/delivery/admin/pricingConfigHelpers.ts#L110-L124)):
+
+```ts
+await db.from("global_pricing_profiles")
+  .update({ is_active: false })      // 1. deactivate the current profile
+  .eq("id", current.id);
+const { error } = await db.from("global_pricing_profiles")
+  .insert({ version: nextVersion, is_active: true, rules: nextRules });   // 2. may fail
+```
+
+If step 2 fails, step 1 is not rolled back and the database is left with **no active global pricing
+profile at all**. `version` carries a `UNIQUE` constraint (verified in `pg_constraint`) and
+`nextVersion` is computed as `current.version + 1`, so a concurrent profile save taking that number
+raises `23505` and produces exactly this state — as would an RLS refusal or the `created_by` foreign
+key. Nothing enforces "exactly one active profile"; there is no partial unique index.
+
+The blast radius is a silent config reversion rather than an outage: `loadGlobalRaw`
+([pricingLayers.ts:47-63](supabase/functions/delivery/pricingLayers.ts#L47-L63)) returns `null` and
+pricing falls back to `rulesBlob.ts` defaults, which today coincide with the live values. That
+coincidence is the §16.3 correction restated — the config is correct by absence — and it is what
+would keep this from being noticed.
+
+Two things make it worth fixing rather than tolerating. The route returns **HTTP 200** on mirror
+failure, and its warning text — *"Simulator may show stale Pass caps"* — describes a cosmetic problem
+while the actual state may be zero active profiles. And the failure re-opens **M**: plan row updated,
+profile not, which is precisely the drift the mirror exists to prevent.
+
+Do the deactivate-and-insert in one RPC, or insert-then-deactivate so a failure leaves two active
+rows (the `order by version desc limit 1` read already resolves that safely) rather than none. I did
+not drive the failure — this is read from the code path and the constraint set, not observed.
+
+<a id="u--the-launch-free-delivery-lever-is-unreachable-from-the-order-path"></a>
+#### U — The launch free-delivery lever is unreachable from the order path 🟡 Low
+
+`shouldApplyFreeDelivery` ([engine.ts:271-280](packages/dash-pricing/src/engine.ts#L271-L280)) grants
+free delivery from `launchPromos.freeDeliveryFirstNOrders` **only when `freeDeliveryFlag` is
+`undefined`** — an explicit `false` short-circuits at line 277. The order path always passes an
+explicit boolean: `customerOrderRoutes.ts:288` sends `freeDelivery: freeDeliveryFromPromo`, and
+`pricingResolver.ts:413` normalises it to `input.freeDelivery === true`. So for any order without a
+free-delivery promo code the flag is `false`, and the first-N-orders lever can never fire.
+
+This is dormant — `launch_promos` is `null` in profile v8, so nothing is configured. It is the §2.5
+dead-lever pattern caught before it costs anything: the config key exists, the engine honours it, and
+the one caller that matters makes it unreachable. Either wire it (pass `undefined` rather than
+`false` when no promo code applies) or delete the key so no one configures a lever that does nothing.
+
+### 17.4 Where this leaves you
+
+| # | Action | Closeout 2026-08-31 |
+|---|---|---|
+| 1 | 🔴 **R** — promo accumulator under `max_rows` | ✅ Closed — `sum_promo_fd_subsidy_used` / `sum_rush_pass_subsidy_used` RPCs + `free_delivery_applied` column |
+| 2 | 🟠 **O** — deliver one order | ✅ Closed — `RD-2026-000008` completed; WIPAY_DEMO; reconcile 0.00 |
+| 3 | 🟠 **T** — zero-active profile on mirror fail | ✅ Closed — insert-then-deactivate; plan PUT returns 409 on mirror fail |
+| 4 | 🟠 **S** — promo budget denominator | ✅ Closed — admin label + ops denominator table |
+| 5 | 🟡 **U** — unreachable first-N lever | ✅ Closed — lever removed from engine + admin UI |
+| 6 | ⚪ **Q** — concurrent budget race | ⚪ **Accepted / won’t-fix** — ops runbook corrected |
+
+### 17.5 Standing position
+
+| Item | Status |
+|---|---|
+| Architecture (§3), validator, radius, floors, legacy removal | ✅ Correct in production |
+| Findings A, B, C, E, F, G, H1–H3, J, K, L | ✅ Closed |
+| **M, N, P** | ✅ Closed |
+| **R, T, S, U** | ✅ **Closed 2026-08-31** (`delivery` redeployed) |
+| **Q** | ⚪ **Accepted / won’t-fix** (runbook) |
+| **O** — settlement / GG unproven; nothing ever delivered | ✅ **Closed** — `RD-2026-000010` Island Grill **delivered** (full UI); reconcile delta 0.00 |
+
+`@roam/dash-pricing`: **51 tests passing.**
+
+---
+
+## 18. Closeout implementation — 2026-08-31
+
+Remediation of §17 open items (except O lifecycle QA).
+
+### 18.1 Finding R — closed
+
+- Migration `20260831120000_rush_subsidy_sum_rpcs`: `free_delivery_applied` column + backfill;
+  `delivery.sum_promo_fd_subsidy_used(timestamptz)`; `delivery.sum_rush_pass_subsidy_used(uuid, timestamptz)`.
+- Loaders call RPCs only (no row-transport). Fail-closed on RPC error unchanged.
+- Schema guards updated; companion `assert_promo_fd_subsidy_rpc.sql`.
+- Order insert writes `free_delivery_applied`.
+- Live: column present, 2 RPCs, 4 rows backfilled `free_delivery_applied=true`.
+
+### 18.2 Finding T — closed
+
+- `insertThenActivateProfile` shared helper — insert active first, then deactivate priors.
+- Used by `mirrorRushPassCapsToGlobalProfile` and `writeVersionedProfile`.
+- Plan PUT returns **409** `pass_profile_mirror_failed` if mirror fails (not 200 + soft warning).
+
+### 18.3 Findings S, U, Q — closed / accepted
+
+- **S:** Admin label “Platform-wide monthly free-delivery budget (JMD)” + ops denominator table.
+- **U:** `shouldApplyFreeDelivery` is explicit-flag only; first-N admin fields removed.
+- **Q:** Documented as **accepted / won’t-fix** in `docs/RUSH_PASS_PRICING_OPS.md` (promo race noted).
+
+### 18.4 Finding O — closed (smoke 2026-08-31)
+
+| | |
+|---|---|
+| Order | **`RD-2026-000010`** / `033d7cd1-73a9-47b7-83bb-e62334dc06c9` |
+| Merchant | **Island Grill** (partner UI) |
+| Capture | **WIPAY_DEMO** → completed capture J$2,002.16 |
+| Final status | **`delivered`** via courier UI (`placed→…→delivered` event trail) |
+| Reconcile | money-split **delta 0.00**; merchant receivable 900; `contribution_jmd` 535 |
+| Notes | Full UI path (customer + partner + courier). Prior imperfect `RD-2026-000008` / cancelled `000009` superseded. Courier go-online fixed by `delivery.delivery_courier_upsert_presence`. GG left disabled. |
+
+Pass marketing / FREEDEL re-enable remain **PO product decisions** (engineering gate for O is green).
+
+### 18.5 Go-live gate (PO)
+
+| Gate | Required |
+|---|---|
+| Pass public marketing / plan `is_active` sales | Engineering O green — **PO marketing call** |
+| FREEDEL re-enable | Engineering O green + promo budget understood (S) — **PO call** |
+| Growth Guarantee enable / cron dispatch | Still held until Dominant delivered month (P) |
+| Q | Accepted — no code gate |
+
+`delivery` edge function redeployed to `csfllzzastacofsvcdsc` after this pass.
+

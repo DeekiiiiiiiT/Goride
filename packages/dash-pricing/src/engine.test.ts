@@ -198,8 +198,10 @@ describe('resolveOrderFloorJmd', () => {
 });
 
 describe('shouldApplyFreeDelivery', () => {
-  it('never applies when N=0', () => {
+  it('applies only when flag is explicitly true (Finding U)', () => {
     expect(shouldApplyFreeDelivery(RULES, 0)).toBe(false);
+    expect(shouldApplyFreeDelivery(RULES, 0, false)).toBe(false);
+    expect(shouldApplyFreeDelivery(RULES, 0, true)).toBe(true);
   });
 });
 
