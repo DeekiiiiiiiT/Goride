@@ -1,11 +1,24 @@
 import { CsvColumn, formatDateJM } from "../utils/csv-helper";
-import { FuelEntry } from "./fuel";
 import { ServiceRequest, Trip } from "./data";
 import { OdometerReading } from "./vehicle";
 import type { VehicleCatalogRecord } from "./vehicleCatalog";
 import { formatCatalogMonthEnglish } from "./vehicleCatalog";
 
-export const FUEL_CSV_COLUMNS: CsvColumn<FuelEntry>[] = [
+/** Minimal shape for fuel CSV export — full FuelEntry lives in app-local types. */
+type FuelEntryCsvRow = {
+  date?: string;
+  vehicleId?: string;
+  driverId?: string;
+  odometer?: number;
+  liters?: number;
+  amount?: number;
+  type?: string;
+  location?: string;
+  entryMode?: string;
+  paymentSource?: string;
+};
+
+export const FUEL_CSV_COLUMNS: CsvColumn<FuelEntryCsvRow>[] = [
     { key: 'date', label: 'date', formatter: formatDateJM },
     { key: 'vehicleId', label: 'vehicleId' },
     { key: 'driverId', label: 'driverId' },

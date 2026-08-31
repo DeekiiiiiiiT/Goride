@@ -55,7 +55,7 @@ export type CheckoutPricing = {
   rushPassApplied?: boolean;
   rushPassFreeDeliveryDeniedReason?: 'distance' | 'budget' | null;
   rushPassSubsidyRemainingJmd?: number;
-  freeDeliveryApplied?: boolean;
+  promoFreeDeliveryDeniedReason?: 'distance' | 'budget' | null;
   minOrderSubtotalJmd?: number;
   cardProcessingFeePercent?: number;
   /** Merchant menu markup 0–1 when disclosed to customers. */
@@ -119,8 +119,8 @@ export function calculateOrderTotals(
     throw new Error('calculateOrderTotals requires a live pricing quote');
   }
 
-  const freeDelivery =
-    isFreeDeliveryPromo(appliedPromo) || Boolean(q.freeDeliveryApplied);
+  // Trust server quote for free delivery (Pass + promo caps) — never invent from promo type alone
+  const freeDelivery = Boolean(q.freeDeliveryApplied);
 
   return {
     discount,
@@ -146,6 +146,8 @@ export type FetchPricingOptions = {
   dropoffLng?: number | null;
   paymentMethod?: 'wipay' | 'cash';
   tip?: number;
+  /** Request promo/launch free delivery so server can apply caps (Finding N) */
+  freeDelivery?: boolean;
 };
 
 /** Live merchant fee + delivery for cart/checkout display (Model B only). */
@@ -177,6 +179,9 @@ export async function fetchMerchantCheckoutPricing(
   if (opts.tip != null && opts.tip > 0) {
     params.set('tip', String(opts.tip));
   }
+  if (opts.freeDelivery) {
+    params.set('free_delivery', '1');
+  }
 
   const qs = params.toString();
   const url = `${API_ENDPOINTS.delivery}/merchants/${opts.merchantId}/pricing${qs ? `?${qs}` : ''}`;
@@ -206,6 +211,7 @@ export async function fetchMerchantCheckoutPricing(
     rush_pass_applied?: boolean;
     rush_pass_free_delivery_denied_reason?: 'distance' | 'budget' | null;
     rush_pass_subsidy_remaining_jmd?: number | null;
+    promo_free_delivery_denied_reason?: 'distance' | 'budget' | null;
     min_order_subtotal_jmd?: number;
     card_processing_fee_percent?: number;
     menu_inflation_percent?: number;
@@ -239,6 +245,7 @@ export async function fetchMerchantCheckoutPricing(
       data.rush_pass_subsidy_remaining_jmd != null
         ? Number(data.rush_pass_subsidy_remaining_jmd)
         : undefined,
+    promoFreeDeliveryDeniedReason: data.promo_free_delivery_denied_reason ?? null,
     minOrderSubtotalJmd: data.min_order_subtotal_jmd,
     cardProcessingFeePercent: data.card_processing_fee_percent,
     menuInflationPercent: Math.max(0, Number(data.menu_inflation_percent ?? 0)),

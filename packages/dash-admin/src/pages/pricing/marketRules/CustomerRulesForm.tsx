@@ -250,6 +250,37 @@ export function CustomerRulesForm({
             }
             disabled={!canWrite}
           />
+          <Field
+            label="Promo free delivery max km"
+            tip="Platform free-delivery promos (e.g. FREEDEL) only waive delivery within this distance. Beyond it, delivery is charged."
+            value={rules.promo_free_delivery?.max_free_delivery_km ?? 8}
+            onChange={(v) =>
+              setRules((r) => ({
+                ...r,
+                promo_free_delivery: {
+                  max_free_delivery_km: v,
+                  monthly_subsidy_budget_jmd:
+                    r.promo_free_delivery?.monthly_subsidy_budget_jmd ?? 1500,
+                },
+              }))
+            }
+            disabled={!canWrite}
+          />
+          <Field
+            label="Promo free delivery monthly budget (JMD)"
+            tip="Total platform subsidy for non-Pass free-delivery promos per Jamaica calendar month. Cap must cover the courier cost at max km."
+            value={rules.promo_free_delivery?.monthly_subsidy_budget_jmd ?? 1500}
+            onChange={(v) =>
+              setRules((r) => ({
+                ...r,
+                promo_free_delivery: {
+                  max_free_delivery_km: r.promo_free_delivery?.max_free_delivery_km ?? 8,
+                  monthly_subsidy_budget_jmd: v,
+                },
+              }))
+            }
+            disabled={!canWrite}
+          />
         </div>
       </div>
 

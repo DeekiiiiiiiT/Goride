@@ -8,6 +8,8 @@ const RIDES_BASE = API_ENDPOINTS.rides;
 export type TollDispatchSettings = {
   toll_detection_enabled: boolean;
   toll_geofence_radius_m: number;
+  /** Same-plaza re-charge guard for live + fleet detection (ms). */
+  toll_round_trip_cooldown_ms: number;
   toll_detect_enroute: boolean;
   route_toll_estimation_enabled: boolean;
 };
@@ -31,9 +33,13 @@ async function parseError(res: Response): Promise<string> {
 }
 
 function pickTollFields(settings: Record<string, unknown>): TollDispatchSettings {
+  const cooldown = Number(settings.toll_round_trip_cooldown_ms ?? 300_000);
   return {
     toll_detection_enabled: settings.toll_detection_enabled === true,
     toll_geofence_radius_m: Number(settings.toll_geofence_radius_m ?? 100),
+    toll_round_trip_cooldown_ms: Number.isFinite(cooldown)
+      ? Math.min(3_600_000, Math.max(0, cooldown))
+      : 300_000,
     toll_detect_enroute: settings.toll_detect_enroute === true,
     route_toll_estimation_enabled: settings.route_toll_estimation_enabled === true,
   };

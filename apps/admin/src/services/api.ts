@@ -3627,6 +3627,78 @@ export const api = {
     
     return response.json();
   },
+
+  /** Fuel Brain edge — health / policies (platform staff). */
+  async getFuelBrainHealth(): Promise<any> {
+    const response = await fetchWithRetry(
+      `https://${projectId}.supabase.co/functions/v1/fuel-brain/health`,
+      { headers: await getHeaders() },
+    );
+    if (!response.ok) throw new Error('Failed to load Fuel Brain health');
+    return response.json();
+  },
+
+  async getFuelBrainPolicies(): Promise<{ policies: any[] }> {
+    const response = await fetchWithRetry(
+      `https://${projectId}.supabase.co/functions/v1/fuel-brain/admin/policies`,
+      { headers: await getHeaders() },
+    );
+    if (!response.ok) {
+      const err: any = new Error('Failed to load Fuel Brain policies');
+      err.status = response.status;
+      throw err;
+    }
+    return response.json();
+  },
+
+  async putFuelBrainPolicy(policy: Record<string, unknown>): Promise<{ policy: any }> {
+    const response = await fetchWithRetry(
+      `https://${projectId}.supabase.co/functions/v1/fuel-brain/admin/policies`,
+      {
+        method: 'PUT',
+        headers: await getHeaders(),
+        body: JSON.stringify(policy),
+      },
+    );
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error((err as any).message || 'Failed to save Fuel Brain policy');
+    }
+    return response.json();
+  },
+
+  async getFuelReconciliationSettings(): Promise<{
+    fuelBrainEnabled: boolean;
+    fuelBrainShadowCompare: boolean;
+    defaultPricePerLiterJmd: number | null;
+  }> {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/fuel-reconciliation/settings`, {
+      headers: await getHeaders(null),
+    });
+    if (!response.ok) throw new Error('Failed to fetch fuel reconciliation settings');
+    return response.json();
+  },
+
+  async updateFuelReconciliationSettings(patch: {
+    fuelBrainEnabled?: boolean;
+    fuelBrainShadowCompare?: boolean;
+    defaultPricePerLiterJmd?: number | null;
+  }): Promise<{
+    fuelBrainEnabled: boolean;
+    fuelBrainShadowCompare: boolean;
+    defaultPricePerLiterJmd: number | null;
+  }> {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/fuel-reconciliation/settings`, {
+      method: 'PATCH',
+      headers: await getHeaders(),
+      body: JSON.stringify(patch),
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error((err as any).error || 'Failed to update fuel reconciliation settings');
+    }
+    return response.json();
+  },
 };
 
 /**

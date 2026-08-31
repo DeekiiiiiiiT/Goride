@@ -3,7 +3,6 @@ export * from './driver';
 export * from './driverIdentity';
 export * from './fleetDriver';
 export * from './fleetBanking';
-export * from './fuel';
 export * from './toll';
 export * from './tollCrossings';
 export * from './toll-ledger';

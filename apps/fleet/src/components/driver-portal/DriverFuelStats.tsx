@@ -10,6 +10,7 @@ import { useCurrentDriver } from '../../hooks/useCurrentDriver';
 import { api } from '../../services/api';
 import { fuelService } from '../../services/fuelService';
 import { FuelCalculationService } from '../../services/fuelCalculationService';
+import { getCachedDefaultPricePerLiterJmd, loadFuelReconciliationSettings } from '../../services/fuelReconSettings';
 import { FuelDisputeService } from '../../services/fuelDisputeService';
 import { WeeklyFuelReport, FuelDispute } from '../../types/fuel';
 import { Separator } from "../ui/separator";
@@ -63,6 +64,7 @@ export function DriverFuelStats() {
                 return;
             }
 
+            await loadFuelReconciliationSettings().catch(() => null);
             const weeklyReport = FuelCalculationService.calculateReconciliation(
                 myVehicle,
                 start,
@@ -70,7 +72,9 @@ export function DriverFuelStats() {
                 trips,
                 entries,
                 adjustments,
-                scenarios
+                scenarios,
+                undefined,
+                { defaultPricePerLiterJmd: getCachedDefaultPricePerLiterJmd() },
             );
 
             setReport(weeklyReport);

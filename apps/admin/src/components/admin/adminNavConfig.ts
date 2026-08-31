@@ -109,8 +109,6 @@ export const FUEL_MANAGEMENT_CHILDREN: NavChild[] = [
   { id: 'fuel-analytics', label: 'Station Analytics', icon: BarChart3 },
   { id: 'fuel-cost-analytics', label: 'Fuel Cost Analytics', icon: Gauge },
   { id: 'fuel-evidence-bridge', label: 'Evidence Bridge', icon: ShieldCheck },
-  { id: 'fuel-reconciliation-overview', label: 'Reconciliation (read-only)', icon: Scale },
-  { id: 'fuel-transaction-logs', label: 'Transaction Logs (read-only)', icon: Receipt },
 ];
 
 export const TOLL_MANAGEMENT_CHILDREN: NavChild[] = [
@@ -226,8 +224,6 @@ const SHARED_PLATFORM_PAGES = [
   'fuel-analytics',
   'fuel-cost-analytics',
   'fuel-evidence-bridge',
-  'fuel-reconciliation-overview',
-  'fuel-transaction-logs',
   'toll-brain',
   'toll-stations',
   'toll-info',

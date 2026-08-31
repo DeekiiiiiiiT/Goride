@@ -336,21 +336,28 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
       Number(v2Pricing.rules.guardrails?.minOrderContributionJmd ?? 150),
     );
     // Pass free delivery: allow contribution down to −remaining budget; reject overspend.
-    // Launch free-delivery promo (non-Pass): keep platform-funded bypass.
-    // Pass with delivery charged (distance/budget): enforce normal floor.
+    // Promo free delivery (Finding N): same budget check; no blanket floor bypass.
+    // Delivery charged (Pass or promo deny): enforce normal contribution floor.
     const passFree = v2Pricing.rushPassApplied === true && v2Pricing.freeDeliveryApplied === true;
-    const launchFree = v2Pricing.freeDeliveryApplied === true && v2Pricing.rushPassApplied !== true;
-    const remainingBudget = Number(v2Pricing.rushPassSubsidyRemainingJmd ?? 0);
+    const promoFree = v2Pricing.freeDeliveryApplied === true && v2Pricing.rushPassApplied !== true;
+    const remainingPassBudget = Number(v2Pricing.rushPassSubsidyRemainingJmd ?? 0);
+    const remainingPromoBudget = Number(v2Pricing.promoFreeDeliverySubsidyRemainingJmd ?? 0);
     const thisSubsidy = Number(v2Pricing.platformDeliverySubsidyJmd ?? 0);
     if (passFree) {
-      if (thisSubsidy > remainingBudget + 0.01) {
+      if (thisSubsidy > remainingPassBudget + 0.01) {
         return c.json({
           error: "Rush Pass free-delivery credit for this period is insufficient for this trip",
           code: "pass_subsidy_budget_exceeded",
         }, 400);
       }
+    } else if (promoFree) {
+      if (thisSubsidy > remainingPromoBudget + 0.01) {
+        return c.json({
+          error: "Platform free-delivery credit for this month is insufficient for this trip",
+          code: "promo_fd_subsidy_budget_exceeded",
+        }, 400);
+      }
     } else if (
-      !launchFree &&
       minContribution > 0 &&
       v2Pricing.contributionJmd < minContribution
     ) {
@@ -392,6 +399,11 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
       rush_pass_subsidy_budget_jmd: v2Pricing.rushPassSubsidyBudgetJmd ?? null,
       rush_pass_subsidy_used_jmd: v2Pricing.rushPassSubsidyUsedJmd ?? null,
       rush_pass_subsidy_remaining_jmd: v2Pricing.rushPassSubsidyRemainingJmd ?? null,
+      promo_free_delivery_denied_reason: v2Pricing.promoFreeDeliveryDeniedReason ?? null,
+      promo_free_delivery_subsidy_budget_jmd: v2Pricing.promoFreeDeliverySubsidyBudgetJmd ?? null,
+      promo_free_delivery_subsidy_used_jmd: v2Pricing.promoFreeDeliverySubsidyUsedJmd ?? null,
+      promo_free_delivery_subsidy_remaining_jmd:
+        v2Pricing.promoFreeDeliverySubsidyRemainingJmd ?? null,
       promo_cost_jmd: v2Pricing.promoCostJmd,
       order_total: v2Pricing.orderTotal,
       processing_fee: v2Pricing.processingFee,

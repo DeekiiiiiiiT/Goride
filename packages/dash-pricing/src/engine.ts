@@ -398,7 +398,9 @@ export function buildOrderPricing(input: PricingInput): PricingBreakdown {
 
   const customerTotal = roundMoney(orderBase + tip + proc.processingFeeOrder);
 
-  const promoFundedBy = input.promoFundedBy ?? 'merchant';
+  const promoFundedBy =
+    input.promoFundedBy ??
+    (freeDeliveryApplied && input.rushPassApplied !== true ? 'platform' : 'merchant');
   const contributionJmd = resolveContributionJmd({
     merchantCommissionAmount,
     serviceFee: serviceFeeTotal,
@@ -448,6 +450,10 @@ export function buildOrderPricing(input: PricingInput): PricingBreakdown {
     rushPassSubsidyBudgetJmd: input.rushPassSubsidyBudgetJmd,
     rushPassSubsidyUsedJmd: input.rushPassSubsidyUsedJmd,
     rushPassSubsidyRemainingJmd: input.rushPassSubsidyRemainingJmd,
+    promoFreeDeliveryDeniedReason: input.promoFreeDeliveryDeniedReason ?? null,
+    promoFreeDeliverySubsidyBudgetJmd: input.promoFreeDeliverySubsidyBudgetJmd,
+    promoFreeDeliverySubsidyUsedJmd: input.promoFreeDeliverySubsidyUsedJmd,
+    promoFreeDeliverySubsidyRemainingJmd: input.promoFreeDeliverySubsidyRemainingJmd,
   };
 }
 
@@ -549,6 +555,18 @@ export function parsePricingRules(raw: Record<string, unknown> | null | undefine
     ),
   };
 
+  const pfdRaw = (flat.promo_free_delivery ?? {}) as Record<string, unknown>;
+  const promoFreeDelivery = {
+    maxFreeDeliveryKm: Number(
+      pfdRaw.max_free_delivery_km ?? DEFAULTS.promoFreeDelivery?.maxFreeDeliveryKm ?? 8,
+    ),
+    monthlySubsidyBudgetJmd: Number(
+      pfdRaw.monthly_subsidy_budget_jmd ??
+        DEFAULTS.promoFreeDelivery?.monthlySubsidyBudgetJmd ??
+        1500,
+    ),
+  };
+
   return {
     delivery: {
       baseJmd: Number(delivery.base_jmd ?? DEFAULTS.delivery.baseJmd),
@@ -619,6 +637,7 @@ export function parsePricingRules(raw: Record<string, unknown> | null | undefine
     },
     growthGuarantee,
     rushPass,
+    promoFreeDelivery,
   };
 }
 
@@ -678,6 +697,10 @@ export function defaultPricingRules(): PricingRules {
       maxFreeDeliveryKm: 8,
       monthlySubsidyBudgetJmd: 1500,
     },
+    promoFreeDelivery: {
+      maxFreeDeliveryKm: 8,
+      monthlySubsidyBudgetJmd: 1500,
+    },
   };
 }
 
@@ -704,8 +727,8 @@ export function resolveOrderFloorJmd(
 }
 
 /**
- * Whether Rush Pass should waive delivery on this quote.
- * Fee cut (serviceFeeMultiplier) is decided separately by the resolver.
+ * Whether free delivery should apply given distance + monthly subsidy budget.
+ * Used by Rush Pass and platform promo/launch free delivery (Finding N).
  */
 export function resolveRushPassFreeDelivery(opts: {
   planAllowsFreeDelivery: boolean;
@@ -736,6 +759,9 @@ export function resolveRushPassFreeDelivery(opts: {
   }
   return { apply: true, reason: 'ok', remainingBudgetJmd: remaining };
 }
+
+/** Alias — promo/launch free delivery uses the same gate primitive as Pass. */
+export const resolvePromoFreeDelivery = resolveRushPassFreeDelivery;
 
 /**
  * Reject configs that can lose money on delivery or invert the tier ladder.
@@ -906,6 +932,67 @@ export function validatePricingConfig(
           code: 'PASS_CONTRIBUTION_FLOOR',
           message:
             `Pass (delivery charged) contribution ${passPaidDelivery.contributionJmd} below floor ${contribFloor} for tier ${tier.slug}`,
+        };
+      }
+    }
+  }
+
+  // Finding N — promo/launch free delivery must be bounded like Pass
+  const promoFd = rules.promoFreeDelivery ?? {
+    maxFreeDeliveryKm: 8,
+    monthlySubsidyBudgetJmd: 1500,
+  };
+  const promoMaxKm = Number(promoFd.maxFreeDeliveryKm);
+  const promoBudget = Number(promoFd.monthlySubsidyBudgetJmd);
+  if (!(promoMaxKm > 0) || !(promoBudget > 0)) {
+    return {
+      code: 'PROMO_FD_SUBSIDY_UNBOUNDED',
+      message:
+        'Promo free delivery requires max_free_delivery_km > 0 and monthly_subsidy_budget_jmd > 0',
+    };
+  }
+  for (const tier of tiers.length ? tiers : [{ slug: 'growth', name: 'Growth', commissionRate: 0.25 }]) {
+    for (const basket of [800, 2500]) {
+      const promoFree = buildOrderPricing({
+        subtotal: basket,
+        distanceKm: promoMaxKm,
+        rules,
+        tier,
+        taxRatePercent: GCT,
+        paymentMethod: 'cash',
+        freeDelivery: true,
+        rushPassApplied: false,
+      });
+      const subsidy = promoFree.platformDeliverySubsidyJmd ?? 0;
+      if (subsidy > promoBudget + 0.01) {
+        return {
+          code: 'PROMO_FD_CONTRIBUTION_FLOOR',
+          message:
+            `Promo free-delivery subsidy ${subsidy} at ${promoMaxKm} km exceeds monthly budget ${promoBudget} for tier ${tier.slug}`,
+        };
+      }
+      if (promoFree.contributionJmd < -promoBudget) {
+        return {
+          code: 'PROMO_FD_CONTRIBUTION_FLOOR',
+          message:
+            `Promo free-delivery contribution ${promoFree.contributionJmd} at ${promoMaxKm} km below −budget ${promoBudget}`,
+        };
+      }
+      const promoPaid = buildOrderPricing({
+        subtotal: basket,
+        distanceKm: Math.min(maxRadius, Math.max(promoMaxKm + 1, 12)),
+        rules,
+        tier,
+        taxRatePercent: GCT,
+        paymentMethod: 'cash',
+        freeDelivery: false,
+        rushPassApplied: false,
+      });
+      if (contribFloor > 0 && promoPaid.contributionJmd < contribFloor) {
+        return {
+          code: 'PROMO_FD_CONTRIBUTION_FLOOR',
+          message:
+            `Promo (delivery charged) contribution ${promoPaid.contributionJmd} below floor ${contribFloor}`,
         };
       }
     }

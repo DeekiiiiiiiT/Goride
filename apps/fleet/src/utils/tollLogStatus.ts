@@ -1,37 +1,19 @@
 import { isVoidedTx } from './tollTagLedger';
+import {
+  resolveTollStatusDisplay as coreResolve,
+  excludeVoidedTolls,
+  type TollStatusInput,
+} from '@roam/toll-core';
 
-export interface TollStatusInput {
-  status?: string | null;
-  metadata?: Record<string, any> | null;
-}
+export type { TollStatusInput };
 
-/**
- * A soft-voided row keeps whatever status it had before the void, so the void
- * has to win the label — otherwise a reversed toll renders as "Completed" and
- * silently reads as real spend.
- */
+/** Soft-void wins the label; otherwise map ledger status to display text. */
 export function resolveTollStatusDisplay(tx: TollStatusInput): string {
+  // Prefer fleet isVoidedTx so tag-ledger void rules stay in sync with this app.
   if (isVoidedTx(tx as any)) return 'Voided';
-  const status = tx.status || '';
-  switch (status) {
-    case 'Completed':
-    case 'Pending':
-    case 'Failed':
-    case 'Reconciled':
-    case 'Verified':
-    case 'Approved':
-    case 'Rejected':
-    case 'Flagged':
-      return status;
-    case 'Void':
-    case 'Voided':
-      return 'Voided';
-    default:
-      return status || 'Unknown';
-  }
+  return coreResolve(tx);
 }
 
-/** Voided rows stay visible in listings but are excluded from every money total. */
 export function excludeVoided<T extends { isVoided: boolean }>(rows: T[]): T[] {
-  return rows.filter((r) => !r.isVoided);
+  return excludeVoidedTolls(rows);
 }

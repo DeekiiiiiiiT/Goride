@@ -12,6 +12,7 @@ import {
 } from '../services/fuelCalculationService';
 import { classifyWeekForRecon } from '../services/fuelBrainClient';
 import { FLEET_USE_FUEL_BRAIN, FUEL_BRAIN_SHADOW_COMPARE } from '../utils/fuelBrainFlags';
+import { loadFuelReconciliationSettings } from '../services/fuelReconSettings';
 import { resolveDeadheadHintForBrain, DEFAULT_INDUSTRY_FALLBACK_PCT } from '../utils/deadheadHintForBrain';
 import { sumTripRideshareKm } from '../utils/tripRideshareKm';
 import { mapPool } from './fuelMapPool';
@@ -235,6 +236,8 @@ export async function buildFuelWeekReportsForFinalize(
     name: d.name,
   })).filter((d) => d.id);
 
+  const settings = await loadFuelReconciliationSettings().catch(() => null);
+
   const reports = FuelCalculationService.generateDriverFleetReport(
     input.vehicles,
     drivers,
@@ -248,6 +251,7 @@ export async function buildFuelWeekReportsForFinalize(
     input.fuelCards,
     FLEET_USE_FUEL_BRAIN ? brainByDriverVehicle : undefined,
     personalAllowance,
+    settings?.defaultPricePerLiterJmd ?? null,
   );
 
   return { reports, trips };

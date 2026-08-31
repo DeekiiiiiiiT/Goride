@@ -1,9 +1,11 @@
 # Rush Pass pricing ops
 
-## Sell gate (Finding A + L)
+## Sell gate (Finding A + L + M)
 
-Engineering checklist §1–4 and Finding L are **green**. **PO approved public Pass sales
-2026-08-30.**
+Engineering checklist §1–4, Finding L, and Finding M (plan write → `validatePricingConfig`) are
+**green**. **PO approved public Pass sales 2026-08-30** — keep sales on only while no new money
+defect is open. Finding O (delivered settlement smoke) is still outstanding but does not block Pass
+pricing integrity.
 
 Manage live plan economics in **Pricing → Rush Pass** (price, billing days, max free km, monthly
 subsidy budget, service-fee multiplier, free-delivery flag, eligible merchant tiers, and sales
@@ -41,7 +43,8 @@ Pricing Hub **Rush Pass** tab:
 - `price_jmd`, `billing_period_days`, `max_free_delivery_km`, `monthly_subsidy_budget_jmd`,
   `service_fee_multiplier`, `free_delivery`, `eligible_tier_slugs`, `is_active`, display `name`
 - Calculator line: “At last 30d avg subsidy X, J$Y funds ~N trips/member”
-- Save is rejected if km or monthly budget ≤ 0
+- Save is rejected if km or monthly budget ≤ 0, **or** if `validatePricingConfig` fails when the
+proposed caps are overlaid on the live pricing profile (Finding M). Client Save pre-gates the same way.
 - Save warns (does not block) if proposed price &lt; trailing 30d avg cost per active member
 - Every save writes `pricing_change_log` (`scope: rush_pass_plan`)
 
@@ -57,8 +60,25 @@ Customer Account → Rush Pass always reads price from the active plan — no ha
 
 Live price stays until you decide — nothing auto-reprices.
 
-## Growth Guarantee cron hold
+## Growth Guarantee hold (Finding P)
 
-Math and claw-back hooks are green. **Do not** enable or schedule live GG cron against real
-merchants until ≥1 Jamaica calendar month of **delivered/completed** Dominant volume exists.
-Keep claw-back armed so late cancels stay safe when cron is eventually turned on.
+Math and claw-back hooks are green. **Growth Guarantee is disabled in the active pricing profile
+(`growth_guarantee.enabled = false`) until ≥1 Jamaica calendar month of delivered/completed
+Dominant volume exists.** The scheduled GG cron job is also removed — run only via GitHub Actions
+`workflow_dispatch` (job: `growth_guarantee`) after PO re-enables the profile flag.
+
+Keep claw-back armed so late cancels stay safe when GG is eventually turned on.
+
+## Concurrent Pass budget race (Finding Q)
+
+`loadRushPassSubsidyUsed` reads spend at quote/place time; the order row that records that spend is
+inserted afterwards. Two concurrent Pass free-delivery checkouts on one membership can both observe
+the same `used` figure and both clear the gate. Worst case: ~one extra free trip over the monthly
+budget. Accept until Pass volume is material; then serialize budget with a membership lock or atomic
+spend RPC.
+
+## FREEDEL / promo free delivery (Finding N)
+
+Live `FREEDEL` was **paused** during audit closeout until platform promo free-delivery caps ship
+(distance + monthly subsidy budget). Do not re-activate free-delivery promos until Pricing Hub shows
+promo FD caps and engineering confirms the place-order gate.

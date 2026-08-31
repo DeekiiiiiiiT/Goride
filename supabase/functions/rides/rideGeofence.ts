@@ -265,11 +265,13 @@ export async function evaluateGeofenceTransitions(
         : null;
 
     let tollResult: { tollsCrossed: TollCrossingRecord[]; totalTollsMinor: number };
+    const cooldownMs = settings.toll_round_trip_cooldown_ms;
     if (isRidesTollBrainEnabled()) {
       const brain = await brainEvaluatePoint({
         lat: fix.lat,
         lng: fix.lng,
         geofenceRadiusM: settings.toll_geofence_radius_m,
+        cooldownMs,
         alreadyCrossedPlazaIds: [...crossedTollIds],
         recentByPlaza: recentObj,
         organizationId,
@@ -282,7 +284,7 @@ export async function evaluateGeofenceTransitions(
         fix.lng,
         settings.toll_geofence_radius_m,
         crossedTollIds,
-        { recentByPlaza, organizationId, prevLatLng: prevPoint, nowMs },
+        { recentByPlaza, organizationId, prevLatLng: prevPoint, nowMs, cooldownMs },
       );
     } else {
       tollResult = await evaluateTollCrossings(
@@ -291,7 +293,7 @@ export async function evaluateGeofenceTransitions(
         fix.lng,
         settings.toll_geofence_radius_m,
         crossedTollIds,
-        { recentByPlaza, organizationId, prevLatLng: prevPoint, nowMs },
+        { recentByPlaza, organizationId, prevLatLng: prevPoint, nowMs, cooldownMs },
       );
     }
     if (tollResult.tollsCrossed.length > 0) {

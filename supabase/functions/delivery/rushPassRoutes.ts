@@ -10,6 +10,10 @@ import { activateRushPassFromPaymentIntent } from "../_shared/rushPassActivate.t
 import { loadActiveRushPassMembership } from "./rushPassMembership.ts";
 import { isWipayDemoMode } from "../_shared/wipayDemo.ts";
 import { loadRushPassSubsidyUsed } from "../_shared/rushPassSubsidyUsed.ts";
+import {
+  assertRushPassPlanCapsValid,
+  mirrorRushPassCapsToGlobalProfile,
+} from "./admin/pricingConfigHelpers.ts";
 
 export type RushPassRoutesDeps = {
   getSupabase: (authHeader: string) => SupabaseClient;
@@ -709,6 +713,18 @@ export function registerRushPassRoutes(app: Hono, deps: RushPassRoutesDeps) {
       return c.json({ error: "eligible_tier_slugs must include at least one tier" }, 400);
     }
 
+    // Finding M: same money invariants as profile writes (overlay plan caps on live rules)
+    const configErr = await assertRushPassPlanCapsValid({
+      maxFreeDeliveryKm: nextKm,
+      monthlySubsidyBudgetJmd: nextBudget,
+    });
+    if (configErr) {
+      return c.json({
+        error: `${configErr.code}: ${configErr.error}`,
+        code: configErr.code,
+      }, 400);
+    }
+
     // Soft warn: price below trailing 30d avg cost per active member
     const since30 = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
     const { data: passOrders } = await serviceSb
@@ -776,6 +792,19 @@ export function registerRushPassRoutes(app: Hono, deps: RushPassRoutesDeps) {
 
     if (error || !updated) {
       return c.json({ error: error?.message || "update_failed" }, 500);
+    }
+
+    // Keep Simulator / CI blob aligned with plan SoT (dual-write sync, not dual-authority)
+    const mirror = await mirrorRushPassCapsToGlobalProfile({
+      maxFreeDeliveryKm: nextKm,
+      monthlySubsidyBudgetJmd: nextBudget,
+      adminUser: admin as ProductAdminUser,
+    });
+    if (!mirror.ok) {
+      console.error("[rushPassRoutes] plan saved but profile mirror failed", mirror.error);
+      warnings.push(
+        `Plan saved, but pricing-profile sync failed (${mirror.error}). Simulator may show stale Pass caps until the next profile save.`,
+      );
     }
 
     await serviceSb.from("pricing_change_log").insert({

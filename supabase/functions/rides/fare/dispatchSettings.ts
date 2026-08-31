@@ -37,6 +37,8 @@ export type DispatchSettings = {
   pin_verification_required_for_start: boolean;
   toll_detection_enabled: boolean;
   toll_geofence_radius_m: number;
+  /** Min ms between charging the same plaza again on one trip. */
+  toll_round_trip_cooldown_ms: number;
   /** When true, also detect tolls crossed while en route to pickup (deadhead). */
   toll_detect_enroute: boolean;
   /** When true, quote API estimates tolls from route polyline vs toll plaza DB. */
@@ -78,6 +80,7 @@ export const DEFAULT_DISPATCH_SETTINGS: DispatchSettings = {
   pin_verification_required_for_start: false,
   toll_detection_enabled: false,
   toll_geofence_radius_m: 100,
+  toll_round_trip_cooldown_ms: 300_000,
   toll_detect_enroute: false,
   route_toll_estimation_enabled: false,
   roam_platform_fee_bps: 0,
@@ -220,6 +223,16 @@ export function rowToDispatchSettings(row: Record<string, unknown>): DispatchSet
       Math.max(
         50,
         Number(row.toll_geofence_radius_m ?? DEFAULT_DISPATCH_SETTINGS.toll_geofence_radius_m),
+      ),
+    ),
+    toll_round_trip_cooldown_ms: Math.min(
+      3_600_000,
+      Math.max(
+        0,
+        Number(
+          row.toll_round_trip_cooldown_ms ??
+            DEFAULT_DISPATCH_SETTINGS.toll_round_trip_cooldown_ms,
+        ),
       ),
     ),
     toll_detect_enroute: row.toll_detect_enroute === true,

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
+import { Tabs, TabsList, TabsTrigger } from '../ui/tabs';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { 
@@ -23,6 +23,7 @@ import { LearntTollPlazasTab } from './LearntTollPlazasTab';
 import { TollPlazaAttributionDialog } from './TollPlazaAttributionDialog';
 import { toast } from 'sonner@2.0.3';
 import { Plus } from 'lucide-react';
+import { ErrorBoundary } from '@roam/roam-shared';
 
 export function TollDatabaseView() {
   const [plazas, setPlazas] = useState<TollPlaza[]>([]);
@@ -31,6 +32,8 @@ export function TollDatabaseView() {
   const [editingPlaza, setEditingPlaza] = useState<TollPlaza | null>(null);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isAttributionOpen, setIsAttributionOpen] = useState(false);
+  /** Controlled so Spatial Audit map only mounts when the tab is visible (Leaflet needs real size). */
+  const [activeTab, setActiveTab] = useState('all-plazas');
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -204,6 +207,21 @@ export function TollDatabaseView() {
         </div>
       </div>
 
+      {/* Silent-zero guard: detection requires verified plazas (audit I1 / C11) */}
+      {!loading && plazas.length > 0 && verifiedCount === 0 && (
+        <div
+          role="alert"
+          className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950"
+        >
+          <p className="font-semibold">Toll charging is off until plazas are verified</p>
+          <p className="mt-1 text-amber-900/90">
+            Live detection only matches plazas marked Verified. Promote plazas from the list or
+            Spatial Audit after confirming GPS and radius — otherwise crossings stay at zero with
+            no other error.
+          </p>
+        </div>
+      )}
+
       {/* Summary Stat Chips */}
       <div className="flex flex-wrap gap-3">
         <div className="flex items-center gap-2 px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-sm">
@@ -224,7 +242,7 @@ export function TollDatabaseView() {
 
       {/* Tabs Container */}
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-        <Tabs defaultValue="all-plazas" className="w-full">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <div className="border-b border-slate-200 px-4 py-3 bg-slate-50 flex flex-col sm:flex-row items-center justify-between gap-4">
             <div className="flex items-center gap-3">
               <h3 className="font-semibold text-slate-900">Toll Plaza Management</h3>
@@ -265,8 +283,9 @@ export function TollDatabaseView() {
             </TabsList>
           </div>
 
-          {/* Tab 1: All Toll Plazas */}
-          <TabsContent value="all-plazas" className="m-0 p-0 border-0">
+          {/* Panels rendered outside TabsContent — Radix hides inactive content with
+              display:none, which leaves Leaflet at 0×0 and a blank Spatial Audit. */}
+          {activeTab === 'all-plazas' && (
             <TollPlazaList
               plazas={plazas}
               loading={loading}
@@ -277,31 +296,63 @@ export function TollDatabaseView() {
               onAdd={() => { setEditingPlaza(null); setIsAddModalOpen(true); }}
               onPromote={handlePromotePlaza}
             />
-          </TabsContent>
+          )}
 
-          {/* Tab 2: Spatial Audit */}
-          <TabsContent value="spatial-audit" className="m-0 p-0 border-0">
-            <div className="h-[700px]">
-              <TollSpatialAuditMap
-                plazas={plazas}
-                loading={loading}
-                onSelectPlaza={setSelectedPlaza}
-              />
+          {activeTab === 'spatial-audit' && (
+            <div className="w-full bg-slate-50 p-2">
+              <ErrorBoundary name="TollSpatialAuditMap">
+                <TollSpatialAuditMap
+                  plazas={plazas}
+                  loading={loading}
+                  onSelectPlaza={setSelectedPlaza}
+                  onPlazaMoved={async (id, location) => {
+                    const plaza = plazas.find((p) => p.id === id);
+                    if (!plaza) return false;
+                    if (
+                      !confirm(
+                        `Move "${plaza.name}" to ${location.lat.toFixed(5)}, ${location.lng.toFixed(5)}?`,
+                      )
+                    ) {
+                      return false;
+                    }
+                    try {
+                      await handleUpdatePlaza(id, {
+                        location: { ...plaza.location, lat: location.lat, lng: location.lng },
+                      });
+                      toast.success(`Moved "${plaza.name}".`);
+                      return true;
+                    } catch {
+                      return false;
+                    }
+                  }}
+                  onPlazaRadiusChange={async (id, radiusM) => {
+                    const plaza = plazas.find((p) => p.id === id);
+                    try {
+                      await handleUpdatePlaza(id, { geofenceRadius: radiusM });
+                      toast.success(
+                        radiusM === 0
+                          ? `"${plaza?.name || 'Plaza'}" now uses the global geofence default.`
+                          : `"${plaza?.name || 'Plaza'}" geofence set to ${radiusM}m.`,
+                      );
+                    } catch {
+                      // error toast already shown in handleUpdatePlaza
+                    }
+                  }}
+                />
+              </ErrorBoundary>
             </div>
-          </TabsContent>
+          )}
 
-          {/* Tab 3: Verified Toll Plaza */}
-          <TabsContent value="verified-plazas" className="m-0 p-0 border-0">
+          {activeTab === 'verified-plazas' && (
             <VerifiedTollPlazasTab
               plazas={plazas.filter(p => p.status === 'verified')}
               onUpdatePlaza={handleUpdatePlaza}
               onDemotePlaza={handleDemotePlaza}
               onRefresh={fetchData}
             />
-          </TabsContent>
+          )}
 
-          {/* Tab 4: Learnt Toll Plaza */}
-          <TabsContent value="learnt-plazas" className="m-0 p-0 border-0">
+          {activeTab === 'learnt-plazas' && (
             <LearntTollPlazasTab
               learntPlazas={plazas.filter(p => p.status === 'learnt')}
               verifiedPlazas={plazas.filter(p => p.status === 'verified')}
@@ -312,7 +363,7 @@ export function TollDatabaseView() {
               onRefresh={fetchData}
               loading={loading}
             />
-          </TabsContent>
+          )}
         </Tabs>
       </div>
 

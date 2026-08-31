@@ -40,7 +40,7 @@ export const COURIER_ONLY_NAV_IDS = [
   'live-ops',
   'orders',
   'support',
-  'couriers',
+  'users-directory',
   'couriers-compliance',
   'couriers-presence',
   'couriers-ledger',
@@ -72,7 +72,6 @@ export const DASH_ADMIN_CONFIG: AdminConfig = {
       label: 'Couriers',
       icon: Truck,
       children: [
-        { id: 'couriers', label: 'Directory', icon: Users },
         { id: 'couriers-compliance', label: 'Compliance', icon: ShieldCheck },
         { id: 'couriers-presence', label: 'Presence', icon: MapPin },
         { id: 'couriers-ledger', label: 'Delivery Ledger', icon: ScrollText },
@@ -123,18 +122,31 @@ export const DASH_ADMIN_CONFIG: AdminConfig = {
 const COURIER_ALLOWED_TOP_NAV = new Set(['dashboard', 'live-ops', 'orders', 'support', 'settings', 'play-store']);
 
 /** Section ids a courier-only role may see */
-const COURIER_ALLOWED_SECTIONS = new Set(['couriers']);
+const COURIER_ALLOWED_SECTIONS = new Set(['couriers', 'users']);
+
+/** Child nav ids courier-only roles may see under allowed sections */
+const COURIER_ALLOWED_SECTION_CHILD_IDS = new Set([
+  'users-directory',
+  'couriers-compliance',
+  'couriers-presence',
+  'couriers-ledger',
+]);
 
 /**
  * Return a config scoped to the given role. Courier-only roles (courier_admin /
- * courier_ops) get a reduced console: Couriers, Orders, Support, Live Ops.
+ * courier_ops) get a reduced console: Couriers, Users Directory, Orders, Support, Live Ops.
  * Platform + dash roles get the full config unchanged.
  */
 export function filterConfigForRole(role: string | null | undefined): AdminConfig {
   if (!isCourierOnlyRole(role)) return DASH_ADMIN_CONFIG;
   return {
     ...DASH_ADMIN_CONFIG,
-    sections: DASH_ADMIN_CONFIG.sections.filter((s) => COURIER_ALLOWED_SECTIONS.has(s.id)),
+    sections: DASH_ADMIN_CONFIG.sections
+      .filter((s) => COURIER_ALLOWED_SECTIONS.has(s.id))
+      .map((s) => ({
+        ...s,
+        children: (s.children ?? []).filter((c) => COURIER_ALLOWED_SECTION_CHILD_IDS.has(c.id)),
+      })),
     topNavItems: (DASH_ADMIN_CONFIG.topNavItems ?? []).filter((i) =>
       COURIER_ALLOWED_TOP_NAV.has(i.id),
     ),
@@ -152,7 +164,8 @@ export function pathnameToNavId(pathname: string): string {
   if (pathname.startsWith('/couriers/compliance')) return 'couriers-compliance';
   if (pathname.startsWith('/couriers/presence')) return 'couriers-presence';
   if (pathname.startsWith('/couriers/ledger')) return 'couriers-ledger';
-  if (pathname.startsWith('/couriers')) return 'couriers';
+  // Legacy /couriers list redirects to unified Users Directory
+  if (pathname.startsWith('/couriers')) return 'users-directory';
   if (pathname.startsWith('/customers')) return 'users-directory';
   if (pathname.startsWith('/markets/boundaries')) return 'markets-boundaries';
   if (pathname.startsWith('/markets/coverage-health')) return 'markets-coverage-health';
@@ -185,8 +198,6 @@ export function navIdToPath(navId: string): string {
       return '/merchants/onboarding/business-types';
     case 'orders':
       return '/orders';
-    case 'couriers':
-      return '/users?persona=courier';
     case 'couriers-compliance':
       return '/users/compliance';
     case 'couriers-presence':

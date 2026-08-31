@@ -299,6 +299,27 @@ export function registerFinanceAdminRoutes(app: Hono) {
     if (!dateStart) return c.json({ error: "date_start is required" }, 400);
 
     const db = getDb();
+    if (type === "free_delivery") {
+      const { data: profile } = await db
+        .from("global_pricing_profiles")
+        .select("rules")
+        .eq("is_active", true)
+        .order("version", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      const pfd = ((profile?.rules as Record<string, unknown> | undefined)
+        ?.promo_free_delivery ?? {}) as Record<string, unknown>;
+      const maxKm = Number(pfd.max_free_delivery_km ?? 8);
+      const budget = Number(pfd.monthly_subsidy_budget_jmd ?? 1500);
+      if (!(maxKm > 0) || !(budget > 0)) {
+        return c.json({
+          error:
+            "Platform promo free-delivery caps are missing. Set them under Pricing → Customer rules before creating a free-delivery promo.",
+          code: "PROMO_FD_SUBSIDY_UNBOUNDED",
+        }, 400);
+      }
+    }
+
     const { data, error } = await db.from("merchant_promotions").insert({
       merchant_id: merchantId,
       type,

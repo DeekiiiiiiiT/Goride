@@ -491,8 +491,8 @@ export const FuelCalculationService = {
             healthScore = Math.min(healthScore, 60);
         }
 
-        // Fallback efficiency/price makes Ride Share estimates unreliable
-        if (efficiencySource === 'default_fallback' || priceSource === 'default_fallback') {
+        // Fallback efficiency / unavailable price makes Ride Share estimates unreliable
+        if (efficiencySource === 'default_fallback' || priceUnavailable || priceSource === 'unavailable') {
             healthStatus = healthStatus === 'Emerald' ? 'Amber' : healthStatus;
             healthScore = Math.min(healthScore, 65);
         }
@@ -669,6 +669,8 @@ export const FuelCalculationService = {
         /** Key `${driverId}:${vehicleId}` → brain classification (consumer path only). */
         brainByDriverVehicle?: Map<string, FuelBrainClassificationInput>,
         personalAllowance?: PersonalAllowanceReconContext,
+        /** Org-configured JMD/L when gas-card observed price cannot be computed. */
+        defaultPricePerLiterJmd?: number | null,
     ): WeeklyFuelReport[] => {
         const startStr = FuelCalculationService.toLocalDateStr(weekStart);
         const endStr = FuelCalculationService.toLocalDateStr(weekEnd);
@@ -781,6 +783,7 @@ export const FuelCalculationService = {
                         personalAllowance: personalAllowance
                             ? { ...personalAllowance, driverWeekTrips: expandedTrips }
                             : undefined,
+                        defaultPricePerLiterJmd,
                     },
                 );
                 // Restore: pending from original entries
@@ -813,6 +816,7 @@ export const FuelCalculationService = {
                     reportId: `${driverId}_${startStr}`,
                     vehicleIds,
                     vehiclePlates: plates,
+                    defaultPricePerLiterJmd,
                 },
             );
             merged.totalGasCardCost = 0;
@@ -849,6 +853,7 @@ export const FuelCalculationService = {
                         fuelScenarioId: policyId,
                         brainClassification: brainByDriverVehicle?.get(`${driverId}:${vid}`),
                         skipPersonalAllowance: true,
+                        defaultPricePerLiterJmd,
                     },
                 );
                 if (!sliceMeta && slice.metadata?.rideShareCalc) sliceMeta = slice.metadata;

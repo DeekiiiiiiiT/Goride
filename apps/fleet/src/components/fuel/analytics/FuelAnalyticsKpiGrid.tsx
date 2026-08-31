@@ -94,10 +94,15 @@ export function FuelAnalyticsKpiGrid({ kpis }: { kpis: FuelAnalyticsKpis }) {
             <h3 className="text-xl md:text-2xl font-bold text-slate-900 dark:text-slate-100">
               {kpis.avgEfficiencyKmL != null ? `${kpis.avgEfficiencyKmL.toFixed(1)} km/L` : '—'}
             </h3>
+            <p className="text-[10px] text-slate-400 mt-1 leading-snug">
+              Headline = period total km ÷ litres. Sparkline = daily km/L (dives on fill days with little distance).
+            </p>
           </div>
           <div className="flex items-end justify-between gap-2">
             <TrendBadge delta={kpis.efficiencyDeltaPct} invertGood />
-            <Sparkline values={kpis.efficiencySpark} stroke="#10b981" />
+            <span title="Daily km/L proxy — not the period average KPI">
+              <Sparkline values={kpis.efficiencySpark} stroke="#10b981" />
+            </span>
           </div>
         </CardContent>
       </Card>

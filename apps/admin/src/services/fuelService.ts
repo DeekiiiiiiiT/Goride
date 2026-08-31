@@ -208,7 +208,12 @@ export const fuelService = {
       headers: await authHeaders(null),
     });
     if (!response.ok) throw new Error("Failed to fetch fuel entries");
-    return response.json();
+    const data = await response.json();
+    const totalHeader = response.headers.get('X-Total-Count');
+    if (Array.isArray(data) && totalHeader != null) {
+      (data as any).totalCount = parseInt(totalHeader, 10) || data.length;
+    }
+    return data;
   },
 
   /**
@@ -367,12 +372,47 @@ export const fuelService = {
   },
 
   // --- Gas Stations ---
-  async getStations(): Promise<any[]> {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/stations`, {
+  async getStations(opts?: {
+    limit?: number;
+    offset?: number;
+    fields?: 'list' | 'full';
+  }): Promise<any[]> {
+    const limit = opts?.limit ?? 500;
+    const offset = opts?.offset ?? 0;
+    const fields = opts?.fields ?? 'list';
+    const params = new URLSearchParams({
+      limit: String(limit),
+      offset: String(offset),
+      fields,
+    });
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/stations?${params}`, {
       headers: { 'Authorization': `Bearer ${publicAnonKey}` }
     });
     if (!response.ok) throw new Error("Failed to fetch stations");
-    return response.json();
+    const data = await response.json();
+    const totalHeader = response.headers.get('X-Total-Count');
+    if (Array.isArray(data) && totalHeader != null) {
+      (data as any).totalCount = parseInt(totalHeader, 10) || data.length;
+    }
+    return data;
+  },
+
+  async getAllStations(opts?: { fields?: 'list' | 'full'; pageSize?: number }): Promise<any[]> {
+    const pageSize = opts?.pageSize ?? 500;
+    const fields = opts?.fields ?? 'list';
+    const all: any[] = [];
+    let offset = 0;
+    let total = Infinity;
+    while (offset < total) {
+      const page = await this.getStations({ limit: pageSize, offset, fields });
+      const pageTotal =
+        typeof (page as any).totalCount === 'number' ? (page as any).totalCount : page.length;
+      total = pageTotal;
+      all.push(...page);
+      if (page.length === 0 || page.length < pageSize) break;
+      offset += pageSize;
+    }
+    return all;
   },
 
   async checkStationDuplicate(plusCode: string, lat: number, lng: number, excludeId?: string, category?: string): Promise<any> {

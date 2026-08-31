@@ -209,36 +209,6 @@ export function TollTagDetail({
     void fetchLedger({ syncBalance: false });
   }, [tag.assignedVehicleId, tag.id]);
 
-  const [historySeeded, setHistorySeeded] = useState(false);
-
-  useEffect(() => {
-    if (activeTab !== 'history' || historySeeded) return;
-    if (!tag.assignedVehicleId) return;
-    if (tag.assignmentHistory && tag.assignmentHistory.length > 0) return;
-
-    setHistorySeeded(true);
-    void (async () => {
-      try {
-        await api.saveTollTag({
-          ...tag,
-          assignmentHistory: [{
-            vehicleId: tag.assignedVehicleId,
-            vehicleName: tag.assignedVehicleName || 'Unknown Vehicle',
-            assignedAt: tag.createdAt || new Date().toISOString(),
-          }],
-          expectedUpdatedAt: tag.updatedAt,
-          updatedAt: new Date().toISOString(),
-        });
-      } catch (e: any) {
-        if (e?.name === 'TollTagConflictError') {
-          toast.error('This tag was updated in another tab — refresh and try again.');
-          return;
-        }
-        console.error('Failed to seed assignment history:', e);
-      }
-    })();
-  }, [activeTab, historySeeded, tag]);
-
   const scopedLedger = useMemo(() => {
     if (!thisTagOnly) return ledgerAll;
     return ledgerAll.filter((tx) => !isDifferentTagTx(tx, tag.tagNumber));

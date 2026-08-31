@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Receipt, Loader2, RefreshCw, TrendingDown, TrendingUp, CreditCard, Calculator, Users, Zap, MapPin, ShieldCheck } from 'lucide-react';
+import { Receipt, Loader2, RefreshCw, TrendingDown, TrendingUp, CreditCard, Calculator, Users, Zap, MapPin, ShieldCheck, Download, ExternalLink } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
@@ -22,6 +22,26 @@ import { computeETagMetrics, type PlazaRateCard } from '../../utils/tollETagMetr
 import { tollLogKindFromTx } from '../../utils/tollCategoryHelper';
 import { api } from '../../services/api';
 import { useFleetTimezone } from '../../utils/timezoneDisplay';
+import { TOLL_LOG_CSV_COLUMNS, type TollLogEntry } from '../../types/tollLog';
+import { jsonToCsv } from '../../utils/csv-helper';
+import { toast } from 'sonner@2.0.3';
+import { cn } from '../ui/utils';
+
+/** Chart → transaction drill filter (one active at a time). */
+type DrillKind = 'plaza' | 'highway' | 'parish';
+type DrillFilter = { kind: DrillKind; value: string } | null;
+
+function drillMatches(log: TollLogEntry, drill: DrillFilter): boolean {
+  if (!drill || !log.isUsage) return false;
+  if (drill.kind === 'plaza') return (log.plazaName || 'Unknown Plaza') === drill.value;
+  if (drill.kind === 'highway') return (log.highway || 'Unknown Highway') === drill.value;
+  return (log.parish || 'Unknown') === drill.value;
+}
+
+function toggleDrill(prev: DrillFilter, kind: DrillKind, value: string): DrillFilter {
+  if (prev?.kind === kind && prev.value === value) return null;
+  return { kind, value };
+}
 
 /** Colour palette for bar chart cells */
 const PLAZA_COLORS = ['#6366f1', '#10b981', '#ec4899', '#f59e0b', '#38bdf8', '#8b5cf6', '#ef4444', '#14b8a6'];
@@ -52,7 +72,7 @@ function currentWeekBounds(timezone?: string): { start: string; end: string } {
   return { start: week?.startDate || '', end: week?.endDate || '' };
 }
 
-export function TollAnalytics() {
+export function TollAnalytics({ onNavigate }: { onNavigate?: (page: string) => void }) {
   const { logs, loading, vehicles, drivers, plazas, refresh } = useTollLogs();
   const fleetTz = useFleetTimezone();
 
@@ -63,7 +83,7 @@ export function TollAnalytics() {
   const [customStart, setCustomStart] = useState(initialWeek.start);
   const [customEnd, setCustomEnd] = useState(initialWeek.end);
   const [rateCard, setRateCard] = useState<PlazaRateCard[]>([]);
-  const [drillPlaza, setDrillPlaza] = useState<string | null>(null);
+  const [drill, setDrill] = useState<DrillFilter>(null);
 
   useEffect(() => {
     const week = currentWeekBounds(fleetTz);
@@ -117,8 +137,87 @@ export function TollAnalytics() {
   }, [logs, priorPeriod]);
 
   useEffect(() => {
-    setDrillPlaza(null);
+    setDrill(null);
   }, [period.startYmd, period.endYmd]);
+
+  /** Usage rows matching the active chart drill (period, non-voided). */
+  const drillRows = useMemo(() => {
+    if (!drill) return [] as TollLogEntry[];
+    return periodLogs.filter((l) => drillMatches(l, drill));
+  }, [periodLogs, drill]);
+
+  /** Period-scoped CSV of non-voided transactions (same universe as KPI totals). */
+  const exportCsv = () => {
+    if (periodLogs.length === 0) {
+      toast.info('No transactions to export for this period.');
+      return;
+    }
+    const csv = jsonToCsv(periodLogs, TOLL_LOG_CSV_COLUMNS);
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `toll-analytics-${period.startYmd}-to-${period.endYmd}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    toast.success(`Exported ${periodLogs.length} toll transaction${periodLogs.length === 1 ? '' : 's'} (voided excluded).`);
+  };
+
+  const renderDrillTable = (kind: DrillKind) => {
+    if (!drill || drill.kind !== kind) return null;
+    return (
+      <div className="mt-4 rounded-lg border border-slate-200 overflow-hidden">
+        <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 bg-slate-50 border-b border-slate-200">
+          <p className="text-xs text-slate-600">
+            {drillRows.length} passage{drillRows.length !== 1 ? 's' : ''} for{' '}
+            <span className="font-semibold text-slate-800">{drill.value}</span>
+          </p>
+          {onNavigate && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 text-xs text-indigo-600"
+              onClick={() => onNavigate('toll-logs')}
+            >
+              <ExternalLink className="h-3.5 w-3.5 mr-1.5" />
+              Open in Toll Logs
+            </Button>
+          )}
+        </div>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Date</TableHead>
+              {kind !== 'plaza' && <TableHead>Plaza</TableHead>}
+              <TableHead>Vehicle</TableHead>
+              <TableHead className="text-right">Amount</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {drillRows.slice(0, 25).map((l) => (
+              <TableRow key={l.id}>
+                <TableCell className="text-xs">{String(l.date).slice(0, 10)}</TableCell>
+                {kind !== 'plaza' && (
+                  <TableCell className="text-sm">{l.plazaName || '—'}</TableCell>
+                )}
+                <TableCell className="text-sm">{l.vehicleName}</TableCell>
+                <TableCell className="text-right tabular-nums text-sm">{formatJMD(l.absAmount, 2)}</TableCell>
+              </TableRow>
+            ))}
+            {drillRows.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={kind === 'plaza' ? 3 : 4} className="text-center text-sm text-slate-400 py-6">
+                  No passages match this filter.
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
+      </div>
+    );
+  };
 
   // ── Step 2.1 — Summary statistics ──────────────────────────────────────
   const summaryStats = useMemo(() => {
@@ -418,6 +517,15 @@ export function TollAnalytics() {
         </div>
         <div className="flex flex-wrap items-end gap-3">
           {periodFilterControl}
+          <Button
+            variant="outline"
+            className="min-h-11"
+            onClick={exportCsv}
+            disabled={periodLogs.length === 0}
+          >
+            <Download className="h-4 w-4 mr-2" />
+            Export CSV
+          </Button>
           <Button variant="outline" className="min-h-11" onClick={refresh}>
             <RefreshCw className="h-4 w-4 mr-2" />
             Refresh
@@ -592,13 +700,13 @@ export function TollAnalytics() {
             <CardTitle className="text-lg">Spend by Plaza</CardTitle>
             <CardDescription>
               Top toll plazas ranked by total spend.
-              {drillPlaza ? (
+              {drill?.kind === 'plaza' ? (
                 <button
                   type="button"
                   className="ml-2 text-indigo-600 hover:underline"
-                  onClick={() => setDrillPlaza(null)}
+                  onClick={() => setDrill(null)}
                 >
-                  Clear filter ({drillPlaza})
+                  Clear filter ({drill.value})
                 </button>
               ) : (
                 <span className="text-slate-400"> · click a bar to filter passages</span>
@@ -615,7 +723,7 @@ export function TollAnalytics() {
                   onClick={(state: any) => {
                     const name = state?.activeLabel || state?.activePayload?.[0]?.payload?.name;
                     if (typeof name === 'string' && name) {
-                      setDrillPlaza((prev) => (prev === name ? null : name));
+                      setDrill((prev) => toggleDrill(prev, 'plaza', name));
                     }
                   }}
                 >
@@ -639,7 +747,7 @@ export function TollAnalytics() {
                       <Cell
                         key={`plaza-cell-${index}`}
                         fill={
-                          drillPlaza && drillPlaza !== row.name
+                          drill?.kind === 'plaza' && drill.value !== row.name
                             ? '#cbd5e1'
                             : PLAZA_COLORS[index % PLAZA_COLORS.length]
                         }
@@ -649,31 +757,7 @@ export function TollAnalytics() {
                 </BarChart>
               </ResponsiveContainer>
             </div>
-            {drillPlaza && (
-              <div className="mt-4 rounded-lg border border-slate-200 overflow-hidden">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Date</TableHead>
-                      <TableHead>Vehicle</TableHead>
-                      <TableHead className="text-right">Amount</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {periodLogs
-                      .filter((l) => l.isUsage && (l.plazaName || 'Unknown Plaza') === drillPlaza)
-                      .slice(0, 25)
-                      .map((l) => (
-                        <TableRow key={l.id}>
-                          <TableCell className="text-xs">{String(l.date).slice(0, 10)}</TableCell>
-                          <TableCell className="text-sm">{l.vehicleName}</TableCell>
-                          <TableCell className="text-right tabular-nums text-sm">{formatJMD(l.absAmount, 2)}</TableCell>
-                        </TableRow>
-                      ))}
-                  </TableBody>
-                </Table>
-              </div>
-            )}
+            {renderDrillTable('plaza')}
           </CardContent>
         </Card>
       </div>
@@ -765,12 +849,35 @@ export function TollAnalytics() {
         <Card>
           <CardHeader>
             <CardTitle className="text-lg">Spend by Highway</CardTitle>
-            <CardDescription>Top highway corridors ranked by total spend.</CardDescription>
+            <CardDescription>
+              Top highway corridors ranked by total spend.
+              {drill?.kind === 'highway' ? (
+                <button
+                  type="button"
+                  className="ml-2 text-indigo-600 hover:underline"
+                  onClick={() => setDrill(null)}
+                >
+                  Clear filter ({drill.value})
+                </button>
+              ) : (
+                <span className="text-slate-400"> · click a bar to filter passages</span>
+              )}
+            </CardDescription>
           </CardHeader>
           <CardContent className="min-h-[300px] w-full relative">
             <div className="w-full">
               <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={highwaySpendData} layout="vertical" margin={{ left: 40 }}>
+                <BarChart
+                  data={highwaySpendData}
+                  layout="vertical"
+                  margin={{ left: 40 }}
+                  onClick={(state: any) => {
+                    const name = state?.activeLabel || state?.activePayload?.[0]?.payload?.name;
+                    if (typeof name === 'string' && name) {
+                      setDrill((prev) => toggleDrill(prev, 'highway', name));
+                    }
+                  }}
+                >
                   <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
                   <XAxis type="number" hide />
                   <YAxis
@@ -786,14 +893,22 @@ export function TollAnalytics() {
                     contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
                     formatter={(value: number, name: string) => [formatJMD(value), name]}
                   />
-                  <Bar dataKey="spend" radius={[0, 4, 4, 0]} barSize={20} name="Spend">
-                    {highwaySpendData.map((_, index) => (
-                      <Cell key={`highway-cell-${index}`} fill={PLAZA_COLORS[index % PLAZA_COLORS.length]} />
+                  <Bar dataKey="spend" radius={[0, 4, 4, 0]} barSize={20} name="Spend" className="cursor-pointer">
+                    {highwaySpendData.map((row, index) => (
+                      <Cell
+                        key={`highway-cell-${index}`}
+                        fill={
+                          drill?.kind === 'highway' && drill.value !== row.name
+                            ? '#cbd5e1'
+                            : PLAZA_COLORS[index % PLAZA_COLORS.length]
+                        }
+                      />
                     ))}
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
             </div>
+            {renderDrillTable('highway')}
           </CardContent>
         </Card>
 
@@ -996,7 +1111,20 @@ export function TollAnalytics() {
               <MapPin className="w-5 h-5 text-indigo-500" />
               Spend by Parish
             </CardTitle>
-            <CardDescription>Toll expenditure grouped by Jamaican parish.</CardDescription>
+            <CardDescription>
+              Toll expenditure grouped by Jamaican parish.
+              {drill?.kind === 'parish' ? (
+                <button
+                  type="button"
+                  className="ml-2 text-indigo-600 hover:underline"
+                  onClick={() => setDrill(null)}
+                >
+                  Clear filter ({drill.value})
+                </button>
+              ) : (
+                <span className="text-slate-400"> · click a row to filter passages</span>
+              )}
+            </CardDescription>
           </CardHeader>
           <CardContent>
             {parishSpendData.length === 0 ? (
@@ -1004,31 +1132,46 @@ export function TollAnalytics() {
                 No parish data available.
               </div>
             ) : (
-              <div className="max-h-[300px] overflow-y-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="text-xs">Parish</TableHead>
-                      <TableHead className="text-xs text-right">Transactions</TableHead>
-                      <TableHead className="text-xs text-right">Total Spend</TableHead>
-                      <TableHead className="text-xs text-right">Avg / Passage</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {parishSpendData.map((row, i) => (
-                      <TableRow
-                        key={`parish-row-${i}`}
-                        className={i === 0 ? 'bg-indigo-50 dark:bg-indigo-900/10' : ''}
-                      >
-                        <TableCell className="text-sm font-medium">{row.parish}</TableCell>
-                        <TableCell className="text-sm text-right tabular-nums">{row.count}</TableCell>
-                        <TableCell className="text-sm text-right tabular-nums">{formatJMD(row.spend)}</TableCell>
-                        <TableCell className="text-sm text-right tabular-nums">{formatJMD(row.avg)}</TableCell>
+              <>
+                <div className="max-h-[300px] overflow-y-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="text-xs">Parish</TableHead>
+                        <TableHead className="text-xs text-right">Transactions</TableHead>
+                        <TableHead className="text-xs text-right">Total Spend</TableHead>
+                        <TableHead className="text-xs text-right">Avg / Passage</TableHead>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
+                    </TableHeader>
+                    <TableBody>
+                      {parishSpendData.map((row, i) => {
+                        const isActive = drill?.kind === 'parish' && drill.value === row.parish;
+                        return (
+                          <TableRow
+                            key={`parish-row-${i}`}
+                            className={cn(
+                              'cursor-pointer',
+                              isActive
+                                ? 'bg-indigo-100 dark:bg-indigo-900/30'
+                                : i === 0
+                                  ? 'bg-indigo-50 dark:bg-indigo-900/10'
+                                  : '',
+                              drill?.kind === 'parish' && !isActive ? 'opacity-60' : '',
+                            )}
+                            onClick={() => setDrill((prev) => toggleDrill(prev, 'parish', row.parish))}
+                          >
+                            <TableCell className="text-sm font-medium">{row.parish}</TableCell>
+                            <TableCell className="text-sm text-right tabular-nums">{row.count}</TableCell>
+                            <TableCell className="text-sm text-right tabular-nums">{formatJMD(row.spend)}</TableCell>
+                            <TableCell className="text-sm text-right tabular-nums">{formatJMD(row.avg)}</TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+                {renderDrillTable('parish')}
+              </>
             )}
           </CardContent>
         </Card>

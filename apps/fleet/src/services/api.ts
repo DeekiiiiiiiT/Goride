@@ -825,6 +825,11 @@ export const api = {
     return vehicles;
   },
 
+  /** Same as getVehicles, but keeps the truncation honesty flag (20k ceiling). */
+  async getVehiclesWithMeta(): Promise<{ vehicles: any[]; truncated: boolean }> {
+    return this.fetchAllVehicles();
+  },
+
   async saveVehicle(vehicle: any) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/vehicles`, {
         method: 'POST',
@@ -4050,6 +4055,42 @@ export const api = {
       headers: await requireAuthHeaders(null),
     });
     if (!response.ok) throw new Error('Failed to fetch fuel period health');
+    return response.json();
+  },
+
+  async getFuelReconciliationSettings(): Promise<{
+    success: boolean;
+    fuelPnlOffsetEnabled: boolean;
+    fuelBrainEnabled: boolean;
+    fuelBrainShadowCompare: boolean;
+    defaultPricePerLiterJmd: number | null;
+  }> {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/fuel-reconciliation/settings`, {
+      headers: await requireAuthHeaders(null),
+    });
+    if (!response.ok) throw new Error('Failed to fetch fuel reconciliation settings');
+    return response.json();
+  },
+
+  async updateFuelReconciliationSettings(patch: {
+    fuelBrainEnabled?: boolean;
+    fuelBrainShadowCompare?: boolean;
+    defaultPricePerLiterJmd?: number | null;
+  }): Promise<{
+    success: boolean;
+    fuelBrainEnabled: boolean;
+    fuelBrainShadowCompare: boolean;
+    defaultPricePerLiterJmd: number | null;
+  }> {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/fuel-reconciliation/settings`, {
+      method: 'PATCH',
+      headers: await requireAuthHeaders(),
+      body: JSON.stringify(patch),
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error((err as any).error || 'Failed to update fuel reconciliation settings');
+    }
     return response.json();
   },
 

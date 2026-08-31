@@ -159,7 +159,8 @@ function AppContent() {
       setCurrentPage('fuel-analytics');
       return;
     }
-    // Station Database is Super Admin only — never expose to fleet customers
+    // Station catalogue is Roam platform reference data (Dominion Super Admin only).
+    // Fleet apps consume stations; they must not own or edit the shared DB.
     if (page === 'fuel-stations') {
       setCurrentPage('fuel-analytics');
       return;
@@ -189,7 +190,7 @@ function AppContent() {
     }
   }, [currentPage]);
 
-  // Station Database is Super Admin only — block stale bookmarks / deep links
+  // Station catalogue stays Dominion-only — block stale fleet bookmarks / deep links
   useEffect(() => {
     if (currentPage === 'fuel-stations') {
       setCurrentPage('fuel-analytics');
@@ -533,7 +534,7 @@ function AppContent() {
         )}
         {currentPage === 'toll-analytics' && (
           <PermissionGate permission="nav.toll_analytics" onNavigate={setCurrentPage}>
-            <TollAnalytics />
+            <TollAnalytics onNavigate={setCurrentPage} />
           </PermissionGate>
         )}
         {currentPage === 'toll-rate-drift' && (

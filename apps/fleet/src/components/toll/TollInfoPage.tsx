@@ -1695,10 +1695,16 @@ export function TollInfoPage() {
                     placeholder="Operator name"
                   />
                   <Input
-                    value={editSchedule.routeRateGroups[groupIndex]?.effectiveDate ?? group.effectiveDate}
-                    onChange={e => updateRouteGroupMeta(groupIndex, 'effectiveDate', e.target.value)}
-                    className="h-7 w-[100px] text-xs"
-                    placeholder="DD/MM/YYYY"
+                    type="date"
+                    value={toIsoDateKey(
+                      editSchedule.routeRateGroups[groupIndex]?.effectiveDate ?? group.effectiveDate,
+                    )}
+                    onChange={(e) => {
+                      const iso = e.target.value;
+                      if (!iso) return;
+                      updateRouteGroupMeta(groupIndex, 'effectiveDate', isoToDisplayDate(iso));
+                    }}
+                    className="h-7 w-[140px] text-xs"
                   />
                   <button
                     onClick={() => handleRemoveRouteGroup(groupIndex)}
@@ -2553,14 +2559,17 @@ export function TollInfoPage() {
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="grp-effdate">Effective Date (DD/MM/YYYY)</Label>
+              <Label htmlFor="grp-effdate">Effective Date</Label>
               <Input
                 id="grp-effdate"
-                value={newGroupEffDate}
-                onChange={e => setNewGroupEffDate(e.target.value)}
-                placeholder={displaySchedule.effectiveDate || 'DD/MM/YYYY'}
+                type="date"
+                value={toIsoDateKey(newGroupEffDate) || ''}
+                onChange={(e) => {
+                  const iso = e.target.value;
+                  setNewGroupEffDate(iso ? isoToDisplayDate(iso) : '');
+                }}
               />
-              <p className="text-xs text-slate-400">Leave blank to inherit the main schedule's effective date.</p>
+              <p className="text-xs text-slate-400">Leave blank to inherit the main schedule&apos;s effective date.</p>
             </div>
           </div>
           <DialogFooter>

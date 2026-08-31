@@ -121,15 +121,17 @@ export function VehiclesPage({
     refetchOnMount: false,
   });
 
-  // Phase 8: React Query for vehicles
-  const { data: manualVehicles = [] } = useQuery({
-    queryKey: ['vehicles'],
-    queryFn: () => api.getVehicles().catch(() => []),
+  // Phase 8: React Query for vehicles (meta keeps 20k truncation honesty)
+  const { data: vehiclesMeta } = useQuery({
+    queryKey: ['vehicles', 'withMeta'],
+    queryFn: () => api.getVehiclesWithMeta().catch(() => ({ vehicles: [], truncated: false })),
     staleTime: 5 * 60 * 1000, // 5 minutes
     gcTime: 15 * 60 * 1000, // 15 minutes
     refetchOnWindowFocus: false,
     refetchOnMount: false,
   });
+  const manualVehicles = vehiclesMeta?.vehicles ?? [];
+  const vehiclesTruncated = Boolean(vehiclesMeta?.truncated);
 
   // Phase 8: React Query for vehicle metrics
   const { data: vehicleMetrics = [] } = useQuery({
@@ -473,6 +475,12 @@ export function VehiclesPage({
                   </Button>
                   )}
               </div>
+
+              {vehiclesTruncated && (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-800 px-4 py-3 text-sm text-amber-900 dark:text-amber-100">
+                  Showing the first 20,000 vehicles — contact support if your fleet exceeds this limit.
+                </div>
+              )}
 
               {parkedVehicleCount > 0 && (
                 <div className="rounded-xl border border-amber-300 bg-amber-50 p-5 shadow-sm">

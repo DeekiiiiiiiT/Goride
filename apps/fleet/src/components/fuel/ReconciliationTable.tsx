@@ -45,6 +45,10 @@ import {
   FLEET_USE_FUEL_BRAIN,
   FUEL_BRAIN_SHADOW_COMPARE,
 } from "../../utils/fuelBrainFlags";
+import {
+  getCachedDefaultPricePerLiterJmd,
+  loadFuelReconciliationSettings,
+} from "../../services/fuelReconSettings";
 
 import { Vehicle } from '../../types/vehicle';
 import { Trip } from '../../types/data';
@@ -119,6 +123,21 @@ export function ReconciliationTable({
     const [deadheadLoading, setDeadheadLoading] = useState(false);
     const [brainByDriverVehicle, setBrainByDriverVehicle] = useState<Map<string, FuelBrainClassificationInput>>(new Map());
     const [paContext, setPaContext] = useState<PersonalAllowanceReconContext | undefined>();
+    const [defaultPricePerLiterJmd, setDefaultPricePerLiterJmd] = useState<number | null>(
+      () => getCachedDefaultPricePerLiterJmd(),
+    );
+
+    useEffect(() => {
+        let cancelled = false;
+        loadFuelReconciliationSettings()
+            .then((s) => {
+                if (!cancelled) setDefaultPricePerLiterJmd(s.defaultPricePerLiterJmd);
+            })
+            .catch(() => {});
+        return () => {
+            cancelled = true;
+        };
+    }, []);
 
     useEffect(() => {
         if (skipLiveCompute || !weekStart || !weekEnd) return;
@@ -197,8 +216,9 @@ export function ReconciliationTable({
             fuelCards,
             FLEET_USE_FUEL_BRAIN ? brainByDriverVehicle : undefined,
             paContext,
+            defaultPricePerLiterJmd,
         );
-    }, [skipLiveCompute, vehicles, drivers, trips, fuelEntries, adjustments, weekStart, weekEnd, scenarios, deadheadMap, fuelCards, brainByDriverVehicle, paContext]);
+    }, [skipLiveCompute, vehicles, drivers, trips, fuelEntries, adjustments, weekStart, weekEnd, scenarios, deadheadMap, fuelCards, brainByDriverVehicle, paContext, defaultPricePerLiterJmd]);
 
     const reports = reportsOverride ?? computedReports;
 
@@ -920,11 +940,17 @@ export function ReconciliationTable({
                                                                         <span className="font-medium text-slate-900">
                                                                             ${report.metadata.rideShareCalc.actualPricePerLiter}
                                                                             <span className={`ml-1 px-1 py-0.5 rounded text-[10px] ${
-                                                                                report.metadata.rideShareCalc.priceSource === 'fuel_entries' 
-                                                                                    ? 'bg-emerald-100 text-emerald-700' 
-                                                                                    : 'bg-amber-100 text-amber-700'
+                                                                                report.metadata.rideShareCalc.priceSource === 'fuel_entries'
+                                                                                    ? 'bg-emerald-100 text-emerald-700'
+                                                                                    : report.metadata.rideShareCalc.priceSource === 'org_default'
+                                                                                    ? 'bg-amber-100 text-amber-700'
+                                                                                    : 'bg-rose-100 text-rose-700'
                                                                             }`}>
-                                                                                {report.metadata.rideShareCalc.priceSource === 'fuel_entries' ? 'ACTUAL' : 'DEFAULT'}
+                                                                                {report.metadata.rideShareCalc.priceSource === 'fuel_entries'
+                                                                                    ? 'ACTUAL'
+                                                                                    : report.metadata.rideShareCalc.priceSource === 'org_default'
+                                                                                    ? 'DEFAULT'
+                                                                                    : 'NO PRICE'}
                                                                             </span>
                                                                         </span>
                                                                     </div>

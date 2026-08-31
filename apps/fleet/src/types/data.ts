@@ -102,6 +102,21 @@ export interface Trip {
   /** Uber CSV: payments row(s) merged but no row from trip_activity.csv for this Trip UUID (e.g. date cutoff mismatch). */
   missingTripActivityInExport?: boolean;
 
+  /** Live GPS trip recorded in-app (has route polyline for toll replay). */
+  isLiveRecorded?: boolean;
+  isManual?: boolean;
+
+  /**
+   * Stamped by POST /trips fleet toll replay — honest coverage for imports vs live.
+   * Imports without a GPS route stay `not_applicable` (no fake geofence charges).
+   */
+  tollDetection?: {
+    status?: 'not_applicable' | 'eligible' | 'detected' | 'no_plazas' | 'failed' | string;
+    crossingCount?: number;
+    reason?: string;
+    written?: number;
+  };
+
   /**
    * Phase 2 (Uber SSOT canonical decomposition): per-trip fare vs tip components parsed from
    * `payments_transaction.csv` (uber payment rows).

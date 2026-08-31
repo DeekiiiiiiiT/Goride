@@ -10,6 +10,12 @@ import {
   fetchRideTollCrossingsAdmin,
   listActiveRidesForTollMonitor,
 } from '../services/platform/ridesTollMonitorService';
+import {
+  getTollDispatchSettings,
+} from '../services/platform/ridesDispatchSettingsService';
+import { api } from '../services/api';
+import { assessTollDetectionHealth } from '../utils/tollDetectionHealth';
+import { AlertTriangle } from 'lucide-react';
 
 /** Active-ride row may carry list-query crossing enrichments. */
 type ActiveRideWithTollMeta = RideRequestRow & {
@@ -43,7 +49,7 @@ function toMonitorRow(ride: ActiveRideWithTollMeta): LiveTollTripRow {
   };
 }
 
-export function TollLiveMonitorPage() {
+export function TollLiveMonitorPage({ onNavigate }: { onNavigate?: (page: string) => void }) {
   const { session } = useAuth();
   const token = session?.access_token;
   const [rides, setRides] = useState<ActiveRideWithTollMeta[]>([]);
@@ -53,13 +59,28 @@ export function TollLiveMonitorPage() {
   const [selectedRideId, setSelectedRideId] = useState<string | null>(null);
   const [drawerCrossings, setDrawerCrossings] = useState<TollCrossingDto[]>([]);
   const [drawerTotal, setDrawerTotal] = useState(0);
+  const [healthBanner, setHealthBanner] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!token) return;
     setRefreshing(true);
     try {
-      const next = await listActiveRidesForTollMonitor(token);
+      const [next, settings, plazas] = await Promise.all([
+        listActiveRidesForTollMonitor(token),
+        getTollDispatchSettings(token).catch(() => null),
+        api.getTollPlazas().catch(() => []),
+      ]);
       setRides(next as ActiveRideWithTollMeta[]);
+      const health = assessTollDetectionHealth({
+        settings: settings ?? { toll_detection_enabled: false },
+        plazas,
+        tollLogRows: [],
+      });
+      if (health.verificationGateClosed || health.zeroCrossingAlarm) {
+        setHealthBanner(health.summary);
+      } else {
+        setHealthBanner(null);
+      }
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : 'Failed to load active rides');
     } finally {
@@ -113,6 +134,28 @@ export function TollLiveMonitorPage() {
           Refresh
         </button>
       </div>
+
+      {healthBanner && (
+        <div
+          role="alert"
+          className="flex gap-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950"
+        >
+          <AlertTriangle className="h-5 w-5 shrink-0 text-amber-600" />
+          <div>
+            <p className="font-semibold">Detection health</p>
+            <p>{healthBanner}</p>
+            {onNavigate && (
+              <button
+                type="button"
+                className="mt-1 underline font-medium"
+                onClick={() => onNavigate('toll-stations')}
+              >
+                Open Toll Database
+              </button>
+            )}
+          </div>
+        </div>
+      )}
 
       {loading ? (
         <div className="flex justify-center py-16 text-slate-500">

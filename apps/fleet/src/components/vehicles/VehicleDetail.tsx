@@ -2,61 +2,11 @@ import React, { useMemo, useState, useEffect, useCallback, useRef } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { 
   ArrowLeft, 
-  Clock, 
-  MapPin, 
-  TrendingUp, 
-  Wrench,
-  AlertTriangle,
-  CheckCircle2,
-  Plus,
   Loader2,
-  Scan,
-  Activity,
-  Tag,
-  Unlink,
-  FileText,
   Upload,
-  Eye,
-  Download,
-  Trash2,
-  MoreVertical,
-  Wind,
-  Zap,
-  Settings,
-  Scale,
-  Move,
-  Info,
-  Car,
-  Gauge,
-  ShieldCheck,
-  ChevronDown,
-  ListChecks,
-  FileUp,
-  History,
-  RotateCw,
-  BookMarked
 } from 'lucide-react';
 import { toast } from "sonner@2.0.3";
-import { 
-  BarChart, 
-  Bar, 
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
-  Tooltip as RechartsTooltip, 
-} from 'recharts';
-import { SafeResponsiveContainer as ResponsiveContainer } from '../ui/SafeResponsiveContainer';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "../ui/table";
 import { Button } from "../ui/button";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../ui/card";
-import { Badge } from "../ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
@@ -65,17 +15,9 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
-  DialogTitle,
   DialogTitle as DialogTitle2,
 } from "../ui/dialog";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "../ui/tooltip";
 import {
   Select,
   SelectContent,
@@ -83,51 +25,40 @@ import {
   SelectTrigger,
   SelectValue,
 } from "../ui/select";
-import { Checkbox } from "../ui/checkbox";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "../ui/dropdown-menu";
 import { Vehicle, VehicleDocument } from '../../types/vehicle';
 import { Trip } from '../../types/data';
 import { api } from '../../services/api';
 import { odometerService } from '../../services/odometerService';
 import { dateWeekKey } from '../../utils/fleetMondayWeekKey';
-import { ImageWithFallback } from '../figma/ImageWithFallback';
 import { format, subDays, isSameDay, getHours, differenceInDays, addDays, startOfDay, endOfDay, isWithinInterval, startOfWeek, endOfWeek, startOfMonth, endOfMonth } from 'date-fns';
 import { DateRange } from "react-day-picker";
 import { DatePickerWithRange } from "../ui/date-range-picker";
-import { projectId, publicAnonKey } from '../../utils/supabase/info';
-import { ErrorBoundary } from '../ui/ErrorBoundary';
 import { useAuth } from '../auth/AuthContext';
-import { Alert, AlertDescription, AlertTitle } from '../ui/alert';
 import { getFleetVehicleCatalog } from '../../services/pendingVehicleCatalogService';
 import { useMyPendingCatalogRequests } from '../../hooks/useMyPendingCatalogRequests';
 import type { VehicleCatalogRecord } from '../../types/vehicleCatalog';
 import {
   isVehicleParked,
   isVehicleCatalogMatched,
-  catalogStatusLabel,
   deriveCatalogStatus,
 } from '../../utils/vehicleCatalogGate';
 import { showCatalogGateToastIfApplicable } from '../../utils/catalogGateErrors';
-import { CatalogVariantPicker, type CatalogVariantPickerSource } from './CatalogVariantPicker';
-import { CatalogFacetSelect } from './CatalogFacetSelect';
+import { type CatalogVariantPickerSource } from './CatalogVariantPicker';
 import { useCatalogCandidates } from '../../hooks/useCatalogCandidates';
 import { useVehicleCatalogAnchorFacets } from '../../hooks/useVehicleCatalogAnchorFacets';
-import { PendingCatalogRequestsDrawer } from './PendingCatalogRequestsDrawer';
-import { TollClassPicker } from './TollClassPicker';
-
-import { OdometerHistory } from './odometer/OdometerHistory';
-import { MasterLogTimeline } from './odometer/MasterLogTimeline';
-import { ImportOdometerModal } from './odometer/ImportOdometerModal';
 import { FixedExpensesManager } from './expenses/FixedExpensesManager';
-import { EquipmentManager } from './EquipmentManager';
-import { ExteriorManager } from './ExteriorManager';
-import { MaintenanceManager, MaintenanceLog } from './MaintenanceManager';
-import { KmLTracking } from './KmLTracking';
+import { MaintenanceLog } from './MaintenanceManager';
 import type {
   CatalogMaintenanceTaskOption,
   VehicleMaintenanceScheduleRowApi,
 } from '../../types/maintenance';
 import { catalogOptionsFromScheduleRows } from '../../utils/maintenanceCatalogOptions';
+import { VehicleDetailCatalogGate } from './detail/VehicleDetailCatalogGate';
+import { VehicleDetailHeader } from './detail/VehicleDetailHeader';
+import { VehicleDetailPerformanceTab } from './detail/VehicleDetailPerformanceTab';
+import { VehicleDetailOdometerTab } from './detail/VehicleDetailOdometerTab';
+import { VehicleDetailKmTrackingTab } from './detail/VehicleDetailKmTrackingTab';
+import { VehicleDetailProfileTab } from './detail/VehicleDetailProfileTab';
 
 interface VehicleDetailProps {
   vehicle: Vehicle;
@@ -1062,353 +993,56 @@ export function VehicleDetail({ vehicle, trips, onBack, onAssignDriver, onUpdate
         </div>
       </div>
 
-      {parked && (
-        <div className="rounded-xl border border-amber-300 bg-amber-50 p-5 shadow-sm">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-amber-100">
-              <AlertTriangle className="h-5 w-5 text-amber-700" />
-            </div>
-            <div className="min-w-0 flex-1 space-y-3">
-              <div>
-                <h3 className="text-lg font-semibold text-amber-900">
-                  {catalogPendingRow?.status === 'needs_info'
-                    ? 'Action needed: platform admin requested more information'
-                    : 'Vehicle is parked — pending catalog approval'}
-                </h3>
-                <p className="mt-1 text-sm text-amber-900/95">
-                  This vehicle cannot be assigned to a driver, fueled, or have trips recorded against it until the platform
-                  admin approves a motor catalog entry for <strong>{vehicle.year} {vehicle.make} {vehicle.model}</strong>.
-                  Status is locked to <em>Inactive</em> in the meantime.
-                </p>
-              </div>
-              {catalogPendingRow?.status === 'needs_info' && catalogPendingRow.info_request_message && (
-                <div className="rounded-md border border-amber-300 bg-white px-3 py-2 text-sm text-amber-900">
-                  <div className="font-semibold mb-1">Admin message</div>
-                  <p className="whitespace-pre-wrap">{catalogPendingRow.info_request_message}</p>
-                </div>
-              )}
-              <div className="flex flex-wrap items-center gap-2 pt-1">
-                <Button
-                  type="button"
-                  size="sm"
-                  className="bg-amber-700 text-white hover:bg-amber-800"
-                  onClick={() => setAlignModalOpen(true)}
-                >
-                  <ListChecks className="h-4 w-4 mr-2" />
-                  Pick from catalog
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  className="border-amber-300 bg-white hover:bg-amber-100 text-amber-900"
-                  onClick={() => setPendingDrawerOpen(true)}
-                >
-                  <ListChecks className="h-4 w-4 mr-2" />
-                  View pending requests
-                </Button>
-                <span className="text-xs text-amber-800">
-                  Status: <strong>{catalogStatusLabel(effectiveCatalogStatus)}</strong>
-                  {catalogPendingRow?.id ? ` \u00B7 Request #${catalogPendingRow.id.slice(0, 8)}` : ''}
-                  {catalogPendingRow?.created_at
-                    ? (() => {
-                        const hours = Math.max(
-                          0,
-                          (Date.now() - new Date(catalogPendingRow.created_at).getTime()) / 3_600_000,
-                        );
-                        const age =
-                          hours < 1
-                            ? `${Math.round(hours * 60)}m`
-                            : hours < 48
-                              ? `${Math.round(hours)}h`
-                              : `${Math.round(hours / 24)}d`;
-                        return ` \u00B7 Waiting ${age} (Awaiting Dominion match)`;
-                      })()
-                    : ''}
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      <VehicleDetailCatalogGate
+        parked={parked}
+        vehicle={vehicle}
+        catalogPendingRow={catalogPendingRow}
+        effectiveCatalogStatus={effectiveCatalogStatus}
+        showCatalogAlignmentBanner={showCatalogAlignmentBanner}
+        setAlignModalOpen={setAlignModalOpen}
+        setPendingDrawerOpen={setPendingDrawerOpen}
+        alignModalOpen={alignModalOpen}
+        alignSearchMake={alignSearchMake}
+        onAlignMakeChange={onAlignMakeChange}
+        alignMakeOptions={alignMakeOptions}
+        alignMakesLoading={alignMakesLoading}
+        alignSearchModel={alignSearchModel}
+        onAlignModelChange={onAlignModelChange}
+        alignModelOptions={alignModelOptions}
+        alignModelsLoading={alignModelsLoading}
+        alignSearchYear={alignSearchYear}
+        onAlignYearChange={onAlignYearChange}
+        alignYearOptions={alignYearOptions}
+        alignYearsLoading={alignYearsLoading}
+        alignSearchChassis={alignSearchChassis}
+        setAlignSearchChassis={setAlignSearchChassis}
+        alignMmyChassisOptions={alignMmyFacets.chassis_code}
+        alignMmyLoading={alignMmyLoading}
+        alignSearchDrivetrain={alignSearchDrivetrain}
+        setAlignSearchDrivetrain={setAlignSearchDrivetrain}
+        alignDrivetrainOptions={alignFacets.drivetrain}
+        alignFacetsLoading={alignFacetsLoading}
+        alignSearchTransmission={alignSearchTransmission}
+        setAlignSearchTransmission={setAlignSearchTransmission}
+        alignTransmissionOptions={alignFacets.transmission}
+        alignSelectedRow={alignSelectedRow}
+        handleAlignPickerChange={handleAlignPickerChange}
+        alignSaving={alignSaving}
+        handleAlignSave={handleAlignSave}
+        alignPickerSource={alignPickerSource}
+        pendingDrawerOpen={pendingDrawerOpen}
+      />
 
-      {!parked && showCatalogAlignmentBanner && (
-        <Alert className="border-amber-200 bg-amber-50/90 text-amber-950">
-          <BookMarked className="text-amber-700" />
-          <AlertTitle>Motor catalog review in progress</AlertTitle>
-          <AlertDescription className="text-amber-900/90">
-            <p>
-              The current catalog match is being reviewed. Maintenance schedules may update once the platform confirms
-              the right variant.
-            </p>
-            <div className="mt-3 flex flex-wrap items-center gap-2">
-              <Button
-                type="button"
-                size="sm"
-                className="bg-amber-700 text-white hover:bg-amber-800"
-                onClick={() => setAlignModalOpen(true)}
-              >
-                <ListChecks className="h-4 w-4 mr-2" />
-                Align with catalog
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                className="border-amber-300 bg-white hover:bg-amber-100 text-amber-900"
-                onClick={() => setPendingDrawerOpen(true)}
-              >
-                <ListChecks className="h-4 w-4 mr-2" />
-                View pending requests
-              </Button>
-            </div>
-          </AlertDescription>
-        </Alert>
-      )}
-
-      {/* --- Header Section --- */}
-      <div className="grid grid-cols-1 gap-6">
-          <Card className="overflow-hidden border-indigo-100 shadow-sm">
-             <div className="flex flex-col md:flex-row h-full">
-                 <div className="md:w-1/3 relative bg-slate-100 min-h-[200px]">
-                     {vehicle.image?.startsWith('figma:') ? (
-                        <ImageWithFallback src={vehicle.image} alt={vehicle.model} className="h-full w-full object-cover" />
-                     ) : (
-                        <img src={vehicle.image} alt={vehicle.model} className="h-full w-full object-cover" />
-                     )}
-                     <div className="absolute top-3 left-3">
-                         <Badge className={vehicle.status === 'Active' ? 'bg-emerald-500' : 'bg-slate-500'}>
-                             {vehicle.status}
-                         </Badge>
-                     </div>
-                 </div>
-                 <div className="p-6 flex-1 flex flex-col justify-between">
-                     <div>
-                         <div className="flex justify-between items-start">
-                             <div>
-                                 <div className="flex flex-wrap items-center gap-2">
-                                   <h1 className="text-2xl font-bold text-slate-900">
-                                     {vehicle.year} {vehicle.model}
-                                   </h1>
-                                   {showCatalogVerifiedBadge && (
-                                     <Badge
-                                       className="border-0 bg-emerald-600 text-white hover:bg-emerald-600 gap-1 font-medium shadow-sm"
-                                       title={
-                                         linkedCatalog
-                                           ? `Linked to catalog ${linkedCatalog.make} ${linkedCatalog.model} (${vehicle.vehicle_catalog_id})`
-                                           : "This vehicle is linked to a motor catalog row (verified)."
-                                       }
-                                     >
-                                       <ShieldCheck className="h-3.5 w-3.5" aria-hidden />
-                                       Catalog verified
-                                       {linkedCatalog
-                                         ? ` · ${linkedCatalog.make} ${linkedCatalog.model}`
-                                         : ""}
-                                     </Badge>
-                                   )}
-                                   {showCatalogLinkBrokenBadge && (
-                                     <>
-                                       <Badge
-                                         variant="outline"
-                                         className="gap-1 border-amber-500 bg-amber-50 text-amber-900 font-medium"
-                                         title="The saved catalog id no longer exists (e.g. after a catalog re-import). Use Fix catalog link to pick the current row."
-                                       >
-                                         <AlertTriangle className="h-3.5 w-3.5" aria-hidden />
-                                         Catalog link issue
-                                       </Badge>
-                                       <Button
-                                         type="button"
-                                         size="sm"
-                                         className="h-8 gap-1.5 bg-amber-600 text-white shadow-sm hover:bg-amber-700"
-                                         onClick={() => setAlignModalOpen(true)}
-                                       >
-                                         <ListChecks className="h-3.5 w-3.5" aria-hidden />
-                                         Fix catalog link
-                                       </Button>
-                                     </>
-                                   )}
-                                 </div>
-                                 <div className="flex items-center gap-2 mt-1">
-                                     <span className="font-mono text-sm bg-slate-100 px-2 py-0.5 rounded text-slate-600">{vehicle.licensePlate}</span>
-                                     <span className="text-sm text-slate-400">|</span>
-                                     <span className="text-sm text-slate-500">VIN: {vehicle.vin}</span>
-                                 </div>
-                             </div>
-                             <div className="text-right">
-                                 <p className="text-sm text-slate-500">Lifetime Earnings</p>
-                                 <p className="text-2xl font-bold text-emerald-600">${vehicle.metrics.totalLifetimeEarnings.toLocaleString()}</p>
-                             </div>
-                         </div>
-                         
-                             <div className="mt-6 flex items-center gap-4">
-                                 <div className="flex items-center gap-3 bg-indigo-50 p-3 rounded-lg border border-indigo-100 pr-8">
-                                     <div className="h-10 w-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600">
-                                         <Activity className="h-5 w-5" />
-                                     </div>
-                                     <div>
-                                         <p className="text-xs text-indigo-600 font-semibold uppercase tracking-wider">Current Driver</p>
-                                         <p className="font-medium text-slate-900">{vehicle.currentDriverName || 'Unassigned'}</p>
-                                     </div>
-                                     <Button 
-                                        variant="outline" 
-                                        size="sm" 
-                                        className="ml-4 h-8 text-xs bg-white"
-                                        onClick={onAssignDriver}
-                                     >
-                                         Change Driver
-                                     </Button>
-                                 </div>
-
-                                 <div className="flex items-center gap-3 bg-slate-50 p-3 rounded-lg border border-slate-200 pr-8">
-                                    <div className="h-10 w-10 rounded-full bg-slate-200 flex items-center justify-center text-slate-600">
-                                        <Tag className="h-5 w-5" />
-                                    </div>
-                                    <div>
-                                        <p className="text-xs text-slate-500 font-semibold uppercase tracking-wider">Toll Tag</p>
-                                        <p className="font-medium text-slate-900">
-                                            {vehicle.tollTagId ? `${vehicle.tollTagProvider} ${vehicle.tollTagId}` : 'None Assigned'}
-                                        </p>
-                                    </div>
-                                    {vehicle.tollTagId && (
-                                        <Button 
-                                            variant="ghost" 
-                                            size="sm" 
-                                            className="ml-4 h-8 w-8 p-0 text-slate-400 hover:text-red-600"
-                                            onClick={handleUnassignTag}
-                                            title="Unlink Tag"
-                                        >
-                                            <Unlink className="h-4 w-4" />
-                                        </Button>
-                                    )}
-                                </div>
-                             </div>
-                             <div className="mt-3 max-w-md">
-                               <TollClassPicker
-                                 value={vehicle.tollClassId || 'class1'}
-                                 needsReview={!!vehicle.tollClassNeedsReview || !vehicle.tollClassId}
-                                 onChange={async (classId) => {
-                                   const updatedVehicle = {
-                                     ...vehicle,
-                                     tollClassId: classId,
-                                     tollClassNeedsReview: false,
-                                   };
-                                   try {
-                                     await api.saveVehicle(updatedVehicle);
-                                     onUpdate?.(updatedVehicle);
-                                     toast.success('Toll class updated');
-                                   } catch (e: any) {
-                                     toast.error(e?.message || 'Failed to save toll class');
-                                   }
-                                 }}
-                               />
-                             </div>
-                             <div className="mt-3 max-w-lg rounded-lg border border-slate-200 bg-slate-50 p-3">
-                               <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-                                 Jamaica fitness class
-                               </p>
-                               <p className="mt-1 text-xs text-slate-500">
-                                 Used by Expense Hub Fitness permit rules.
-                               </p>
-                               <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
-                                 <div className="space-y-1.5">
-                                   <Label className="text-xs text-slate-500">Usage category</Label>
-                                   <Select
-                                     value={vehicle.usageCategory || 'none'}
-                                     onValueChange={async (v) => {
-                                       const usageCategory =
-                                         v === 'none'
-                                           ? undefined
-                                           : (v as Vehicle['usageCategory']);
-                                       const updatedVehicle = {
-                                         ...vehicle,
-                                         usageCategory,
-                                         fitnessFirstRegistration:
-                                           usageCategory === 'Commercial'
-                                             ? vehicle.fitnessFirstRegistration
-                                             : undefined,
-                                       };
-                                       try {
-                                         await api.saveVehicle(updatedVehicle);
-                                         onUpdate?.(updatedVehicle);
-                                         toast.success('Usage category updated');
-                                       } catch (e: any) {
-                                         toast.error(e?.message || 'Failed to update');
-                                       }
-                                     }}
-                                   >
-                                     <SelectTrigger className="min-h-10 bg-white">
-                                       <SelectValue placeholder="Not set" />
-                                     </SelectTrigger>
-                                     <SelectContent>
-                                       <SelectItem value="none">Not set</SelectItem>
-                                       <SelectItem value="Private">Private / SUV</SelectItem>
-                                       <SelectItem value="Motorcycle">Motorcycle</SelectItem>
-                                       <SelectItem value="Commercial">Commercial</SelectItem>
-                                       <SelectItem value="PPV">Public passenger (PPV)</SelectItem>
-                                       <SelectItem value="Trailer">Trailer / heavy tractor</SelectItem>
-                                     </SelectContent>
-                                   </Select>
-                                 </div>
-                                 <div className="space-y-1.5">
-                                   <Label className="text-xs text-slate-500">Plate class</Label>
-                                   <Select
-                                     value={vehicle.plateClass || 'none'}
-                                     onValueChange={async (v) => {
-                                       const updatedVehicle = {
-                                         ...vehicle,
-                                         plateClass:
-                                           v === 'none' ? undefined : (v as Vehicle['plateClass']),
-                                       };
-                                       try {
-                                         await api.saveVehicle(updatedVehicle);
-                                         onUpdate?.(updatedVehicle);
-                                         toast.success('Plate class updated');
-                                       } catch (e: any) {
-                                         toast.error(e?.message || 'Failed to update');
-                                       }
-                                     }}
-                                   >
-                                     <SelectTrigger className="min-h-10 bg-white">
-                                       <SelectValue placeholder="Not set" />
-                                     </SelectTrigger>
-                                     <SelectContent>
-                                       <SelectItem value="none">Not set</SelectItem>
-                                       <SelectItem value="White">White</SelectItem>
-                                       <SelectItem value="Green">Green</SelectItem>
-                                       <SelectItem value="Red">Red</SelectItem>
-                                     </SelectContent>
-                                   </Select>
-                                 </div>
-                               </div>
-                               {vehicle.usageCategory === 'Commercial' && (
-                                 <label className="mt-3 flex items-center gap-2 text-sm text-slate-700">
-                                   <input
-                                     type="checkbox"
-                                     checked={!!vehicle.fitnessFirstRegistration}
-                                     onChange={async (e) => {
-                                       const updatedVehicle = {
-                                         ...vehicle,
-                                         fitnessFirstRegistration: e.target.checked,
-                                       };
-                                       try {
-                                         await api.saveVehicle(updatedVehicle);
-                                         onUpdate?.(updatedVehicle);
-                                         toast.success('First registration flag updated');
-                                       } catch (err: any) {
-                                         toast.error(err?.message || 'Failed to update');
-                                       }
-                                     }}
-                                   />
-                                   First registration (brand-new commercial fitness)
-                                 </label>
-                               )}
-                             </div>
-                     </div>
-                 </div>
-             </div>
-          </Card>
-
-      </div>
+      <VehicleDetailHeader
+        vehicle={vehicle}
+        showCatalogVerifiedBadge={showCatalogVerifiedBadge}
+        showCatalogLinkBrokenBadge={showCatalogLinkBrokenBadge}
+        linkedCatalog={linkedCatalog}
+        setAlignModalOpen={setAlignModalOpen}
+        onAssignDriver={onAssignDriver}
+        handleUnassignTag={handleUnassignTag}
+        onUpdate={onUpdate}
+      />
 
       <Tabs defaultValue="performance" className="w-full">
           <TabsList>
@@ -1419,85 +1053,7 @@ export function VehicleDetail({ vehicle, trips, onBack, onAssignDriver, onUpdate
               <TabsTrigger value="profile">Profile</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="performance" className="space-y-6 mt-6">
-              <ErrorBoundary name="PerformanceCharts">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <Card>
-                      <CardContent className="p-6">
-                          <div className="flex justify-between items-start mb-2">
-                              <p className="text-sm font-medium text-slate-500">Earnings per Hour</p>
-                              <Clock className="h-4 w-4 text-emerald-500" />
-                          </div>
-                          <h3 className="text-2xl font-bold text-slate-900">${analytics.metrics.earningsPerHour.toFixed(2)}</h3>
-                          <p className="text-xs text-slate-400 mt-1">
-                              From trip duration in selected period
-                          </p>
-                      </CardContent>
-                  </Card>
-                  <Card>
-                      <CardContent className="p-6">
-                          <div className="flex justify-between items-start mb-2">
-                              <p className="text-sm font-medium text-slate-500">Earnings per Trip</p>
-                              <MapPin className="h-4 w-4 text-indigo-500" />
-                          </div>
-                          <h3 className="text-2xl font-bold text-slate-900">${analytics.metrics.earningsPerTrip.toFixed(2)}</h3>
-                          <p className="text-xs text-slate-400 mt-1">
-                              Based on {analytics.metrics.periodTripCount} trips
-                          </p>
-                      </CardContent>
-                  </Card>
-                  <Card>
-                      <CardContent className="p-6">
-                          <div className="flex justify-between items-start mb-2">
-                              <p className="text-sm font-medium text-slate-500">Earnings per Km</p>
-                              <Activity className="h-4 w-4 text-amber-500" />
-                          </div>
-                          <h3 className="text-2xl font-bold text-slate-900">${analytics.metrics.earningsPerKm.toFixed(2)}</h3>
-                          <p className="text-xs text-slate-400 mt-1">
-                              {Math.round(analytics.metrics.totalDistance).toLocaleString()} km in period
-                          </p>
-                      </CardContent>
-                  </Card>
-              </div>
-
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  <Card>
-                      <CardHeader>
-                          <CardTitle>Earnings Trend</CardTitle>
-                          <CardDescription>Daily revenue for the selected period</CardDescription>
-                      </CardHeader>
-                      <CardContent className="h-[300px]">
-                          <ResponsiveContainer width="100%" height="100%" minHeight={200}>
-                              <BarChart data={analytics.trendData}>
-                                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                                  <XAxis dataKey="date" fontSize={12} tickLine={false} axisLine={false} />
-                                  <YAxis fontSize={12} tickLine={false} axisLine={false} tickFormatter={(value) => `$${value}`} />
-                                  <RechartsTooltip formatter={(value) => [`$${Number(value)}`, 'Earnings']} />
-                                  <Bar dataKey="earnings" fill="#6366f1" radius={[4, 4, 0, 0]} />
-                              </BarChart>
-                          </ResponsiveContainer>
-                      </CardContent>
-                  </Card>
-                  <Card>
-                      <CardHeader>
-                          <CardTitle>Hourly Activity</CardTitle>
-                          <CardDescription>Peak earning hours</CardDescription>
-                      </CardHeader>
-                      <CardContent className="h-[300px]">
-                          <ResponsiveContainer width="100%" height="100%" minHeight={200}>
-                              <BarChart data={analytics.activityByHour}>
-                                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                                  <XAxis dataKey="name" fontSize={12} tickLine={false} axisLine={false} interval={2} />
-                                  <YAxis fontSize={12} tickLine={false} axisLine={false} />
-                                  <RechartsTooltip />
-                                  <Bar dataKey="trips" fill="#10b981" radius={[4, 4, 0, 0]} name="Trips" />
-                              </BarChart>
-                          </ResponsiveContainer>
-                      </CardContent>
-                  </Card>
-                </div>
-              </ErrorBoundary>
-          </TabsContent>
+          <VehicleDetailPerformanceTab analytics={analytics} />
 
           <TabsContent value="expenses" className="space-y-6 mt-6">
               <FixedExpensesManager
@@ -1506,478 +1062,33 @@ export function VehicleDetail({ vehicle, trips, onBack, onAssignDriver, onUpdate
               />
           </TabsContent>
 
-          <TabsContent value="odometer" className="space-y-6 mt-6">
-              <ErrorBoundary name="OdometerView">
-                {/* Live Fleet Status - Unified Header */}
-                <div className="bg-slate-950 rounded-2xl p-8 text-white relative overflow-hidden shadow-2xl border border-slate-800">
-                    <div className="absolute top-0 right-0 w-96 h-96 bg-indigo-500/10 rounded-full blur-[100px] -mr-32 -mt-32 pointer-events-none"></div>
-                    <div className="absolute bottom-0 left-0 w-64 h-64 bg-emerald-500/5 rounded-full blur-[80px] -ml-32 -mb-32 pointer-events-none"></div>
-                    
-                    <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-8 relative z-10">
-                        <div className="space-y-6">
-                            <div className="flex items-center gap-3">
-                                <div className="bg-indigo-500/20 p-2 rounded-lg">
-                                    <ShieldCheck className="h-5 w-5 text-indigo-300" />
-                                </div>
-                                <div>
-                                    <h3 className="text-indigo-200 font-semibold tracking-wide uppercase text-[10px]">Verified Odometer Anchor</h3>
-                                    <div className="flex items-center gap-2">
-                                        <span className="text-2xl font-bold tracking-tight">Live Fleet Status</span>
-                                    </div>
-                                </div>
-                            </div>
-                            
-                            <div className="flex items-end gap-3">
-                                <div className="flex gap-1">
-                                    {digits.map((digit, i) => (
-                                        <div key={i} className="w-11 h-16 bg-slate-900 border border-slate-800 rounded-lg flex items-center justify-center text-4xl font-mono font-bold text-white shadow-[inset_0_2px_10px_rgba(0,0,0,0.5)]">
-                                            {digit}
-                                        </div>
-                                    ))}
-                                </div>
-                                <div className="pb-2">
-                                    <span className="text-2xl text-slate-500 font-mono">km</span>
-                                </div>
-                            </div>
-                            
-                            <div className="flex flex-wrap gap-4 pt-2">
-                                <div className="flex items-center gap-2 text-xs text-slate-400 bg-slate-800/50 px-3 py-1.5 rounded-full border border-slate-700/50">
-                                    <div className="h-2 w-2 rounded-full bg-emerald-500"></div>
-                                    <span>Verified Anchor: {lastVerifiedDate ? format(new Date(lastVerifiedDate), 'MMM d, yyyy') : 'N/A'}</span>
-                                </div>
-                                <div className="flex items-center gap-2 text-xs text-slate-400 bg-slate-800/50 px-3 py-1.5 rounded-full border border-slate-700/50">
-                                    <Info className="h-4 w-4 text-indigo-400" />
-                                    <span>Source: {odometerHistory[0]?.source || 'None'}</span>
-                                </div>
-                            </div>
-                        </div>
+          <VehicleDetailOdometerTab
+            digits={digits}
+            lastVerifiedDate={lastVerifiedDate}
+            odometerHistory={odometerHistory}
+            setIsUpdateOdometerOpen={setIsUpdateOdometerOpen}
+            fetchOdometerHistory={fetchOdometerHistory}
+            vehicle={vehicle}
+            handleExportMasterLog={handleExportMasterLog}
+            handleExportCheckins={handleExportCheckins}
+            odometerRefreshTrigger={odometerRefreshTrigger}
+          />
 
-                        <div className="flex flex-col sm:flex-row lg:flex-col gap-3 w-full lg:w-auto">
-                            <Button 
-                                onClick={() => setIsUpdateOdometerOpen(true)} 
-                                className="bg-indigo-600 hover:bg-indigo-500 text-white h-12 px-6 rounded-xl shadow-lg shadow-indigo-500/20 transition-all active:scale-95 font-bold"
-                            >
-                                <Plus className="w-4 h-4 mr-2" />
-                                Manual Odometer Entry
-                            </Button>
-                            <div className="flex gap-2">
-                                <Button 
-                                    variant="outline" 
-                                    className="flex-1 bg-white/5 border-white/10 hover:bg-white/10 text-white h-12 rounded-xl"
-                                    onClick={fetchOdometerHistory}
-                                    title="Refresh Data"
-                                >
-                                    <RotateCw className="w-4 h-4" />
-                                </Button>
-                                <ImportOdometerModal 
-                                    vehicleId={vehicle.id || vehicle.licensePlate} 
-                                    onImportComplete={fetchOdometerHistory} 
-                                    triggerClassName="flex-1 bg-white/5 border-white/10 hover:bg-white/10 text-white h-12 rounded-xl px-4"
-                                />
-                                <DropdownMenu>
-                                    <DropdownMenuTrigger asChild>
-                                        <Button 
-                                            variant="outline" 
-                                            className="flex-1 bg-white/5 border-white/10 hover:bg-white/10 text-white h-12 rounded-xl px-4 min-w-[60px]"
-                                            title="Export Data"
-                                        >
-                                            <FileUp className="w-4 h-4 mr-2" />
-                                            <ChevronDown className="w-3 h-3 opacity-50" />
-                                        </Button>
-                                    </DropdownMenuTrigger>
-                                    <DropdownMenuContent align="end" className="w-56">
-                                        <DropdownMenuLabel>Export Options</DropdownMenuLabel>
-                                        <DropdownMenuSeparator />
-                                        <DropdownMenuItem onClick={handleExportMasterLog}>
-                                            <FileUp className="w-4 h-4 mr-2 text-indigo-500" />
-                                            <span>Export Master Log</span>
-                                        </DropdownMenuItem>
-                                        <DropdownMenuItem onClick={handleExportCheckins}>
-                                            <ListChecks className="w-4 h-4 mr-2 text-emerald-500" />
-                                            <span>Export Check-ins</span>
-                                        </DropdownMenuItem>
-                                    </DropdownMenuContent>
-                                </DropdownMenu>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+          <VehicleDetailKmTrackingTab analytics={analytics} vehicle={vehicle} />
 
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Odometer History</CardTitle>
-                        <CardDescription>
-                            Track mileage verification and history. Gap audit (anchors → trips → personal km) lives in Consumption Reconciliation → Stop-to-Stop → Explain gap.
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <Tabs defaultValue="history">
-                            <TabsList>
-                                <TabsTrigger value="history">History Log</TabsTrigger>
-                                <TabsTrigger value="anomalies">Anomalies</TabsTrigger>
-                            </TabsList>
-                            <TabsContent value="history" className="mt-4">
-                                <OdometerHistory 
-                                    vehicleId={vehicle.id || vehicle.licensePlate} 
-                                    refreshTrigger={odometerRefreshTrigger}
-                                />
-                            </TabsContent>
-                            <TabsContent value="anomalies" className="mt-4">
-                                <MasterLogTimeline vehicleId={vehicle.id || vehicle.licensePlate} viewMode="anomalies" />
-                            </TabsContent>
-                        </Tabs>
-                    </CardContent>
-                </Card>
-              </ErrorBoundary>
-          </TabsContent>
-
-          <TabsContent value="km-tracking" className="space-y-6 mt-6">
-              <Tabs defaultValue="km-overview" className="w-full">
-                  <TabsList className="w-full justify-start bg-transparent border-b border-slate-200 rounded-none h-auto p-0 mb-6 gap-6">
-                      <TabsTrigger 
-                          value="km-overview" 
-                          className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-indigo-600 data-[state=active]:text-indigo-600 border-b-2 border-transparent rounded-none px-0 py-2"
-                      >
-                          Km Overview
-                      </TabsTrigger>
-                      <TabsTrigger 
-                          value="kml-tracking" 
-                          className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-indigo-600 data-[state=active]:text-indigo-600 border-b-2 border-transparent rounded-none px-0 py-2"
-                      >
-                          Km/L Tracking
-                      </TabsTrigger>
-                  </TabsList>
-
-                  <TabsContent value="km-overview" className="space-y-6 mt-0">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                          <Card>
-                              <CardHeader>
-                                  <CardTitle>Km by Platform</CardTitle>
-                                  <CardDescription>Where are the miles coming from?</CardDescription>
-                              </CardHeader>
-                              <CardContent className="h-[300px]">
-                                  <ResponsiveContainer width="100%" height="100%" minHeight={200}>
-                                      <BarChart data={analytics.kmTrackingData}>
-                                          <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                                          <XAxis dataKey="date" fontSize={12} tickLine={false} axisLine={false} />
-                                          <YAxis fontSize={12} tickLine={false} axisLine={false} />
-                                          <RechartsTooltip />
-                                          <Bar dataKey="uber" stackId="a" fill="#000000" name="Uber" />
-                                          <Bar dataKey="indrive" stackId="a" fill="#10b981" name="InDrive" />
-                                          <Bar dataKey="roam" stackId="a" fill="#6366f1" name="Roam" />
-                                          <Bar dataKey="other" stackId="a" fill="#94a3b8" name="Other" radius={[4, 4, 0, 0]} />
-                                      </BarChart>
-                                  </ResponsiveContainer>
-                              </CardContent>
-                          </Card>
-                          
-                          <Card>
-                              <CardHeader>
-                                  <CardTitle>Projected Annual Mileage</CardTitle>
-                                  <CardDescription>Based on current trends</CardDescription>
-                              </CardHeader>
-                              <CardContent>
-                                  <div className="text-center py-10">
-                                      <div className="text-5xl font-bold text-slate-900 mb-2">
-                                          {((analytics.metrics.totalDistance / 30) * 365).toLocaleString(undefined, {maximumFractionDigits: 0})}
-                                      </div>
-                                      <p className="text-sm text-slate-500 uppercase tracking-widest font-semibold">Km / Year</p>
-                                      <div className="mt-6 flex justify-center gap-8">
-                                          <div>
-                                              <p className="text-2xl font-bold text-slate-700">{(analytics.metrics.totalDistance / 30).toFixed(1)}</p>
-                                              <p className="text-xs text-slate-400">Avg Km / Day</p>
-                                          </div>
-                                          <div>
-                                              <p className="text-2xl font-bold text-slate-700">{(analytics.metrics.earningsPerKm * (analytics.metrics.totalDistance / 30)).toLocaleString(undefined, {style: 'currency', currency: 'USD'})}</p>
-                                              <p className="text-xs text-slate-400">Est. Daily Rev</p>
-                                          </div>
-                                      </div>
-                                  </div>
-                              </CardContent>
-                          </Card>
-                      </div>
-                  </TabsContent>
-
-                  <TabsContent value="kml-tracking" className="space-y-6 mt-0">
-                      <KmLTracking vehicle={vehicle} />
-                  </TabsContent>
-              </Tabs>
-          </TabsContent>
-
-          <TabsContent value="profile" className="space-y-6 mt-6">
-              <Tabs defaultValue="general" className="w-full">
-                  <TabsList className="w-full justify-start bg-transparent border-b border-slate-200 rounded-none h-auto p-0 mb-6 gap-6">
-                      <TabsTrigger 
-                          value="general" 
-                          className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-indigo-600 data-[state=active]:text-indigo-600 border-b-2 border-transparent rounded-none px-0 py-2"
-                      >
-                          General Info
-                      </TabsTrigger>
-                      <TabsTrigger 
-                          value="documents" 
-                          className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-indigo-600 data-[state=active]:text-indigo-600 border-b-2 border-transparent rounded-none px-0 py-2"
-                      >
-                          Documents
-                      </TabsTrigger>
-                      <TabsTrigger 
-                          value="maintenance" 
-                          className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-indigo-600 data-[state=active]:text-indigo-600 border-b-2 border-transparent rounded-none px-0 py-2"
-                      >
-                          Maintenance
-                      </TabsTrigger>
-                      <TabsTrigger 
-                          value="equipment" 
-                          className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-indigo-600 data-[state=active]:text-indigo-600 border-b-2 border-transparent rounded-none px-0 py-2"
-                      >
-                          Equipment
-                      </TabsTrigger>
-                      <TabsTrigger 
-                          value="exterior" 
-                          className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-indigo-600 data-[state=active]:text-indigo-600 border-b-2 border-transparent rounded-none px-0 py-2"
-                      >
-                          Exterior Check
-                      </TabsTrigger>
-                  </TabsList>
-
-                  <TabsContent value="general" className="space-y-6">
-                      <Card>
-                          <CardHeader>
-                              <CardTitle>Vehicle details</CardTitle>
-                          </CardHeader>
-                          <CardContent className="space-y-4">
-                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">
-                                  <div>
-                                      <Label className="text-xs text-slate-500">Make</Label>
-                                      <p className="font-medium text-slate-900 mt-0.5">{generalInfoFields.make}</p>
-                                  </div>
-                                  <div>
-                                      <Label className="text-xs text-slate-500">Model</Label>
-                                      <p className="font-medium text-slate-900 mt-0.5">{generalInfoFields.model}</p>
-                                  </div>
-                                  <div>
-                                      <Label className="text-xs text-slate-500">Year</Label>
-                                      <p className="font-medium text-slate-900 mt-0.5">{generalInfoFields.year}</p>
-                                  </div>
-                                  <div>
-                                      <Label className="text-xs text-slate-500">Fuel type</Label>
-                                      <p className="font-medium text-slate-900 mt-0.5">{generalInfoFields.fuelType}</p>
-                                  </div>
-                                  <div>
-                                      <Label className="text-xs text-slate-500">Fuel grade</Label>
-                                      <p className="font-medium text-slate-900 mt-0.5">{generalInfoFields.fuelGrade}</p>
-                                  </div>
-                                  <div>
-                                      <Label className="text-xs text-slate-500">Fuel tank capacity</Label>
-                                      <p className="font-medium text-slate-900 mt-0.5">{generalInfoFields.fuelTank}</p>
-                                  </div>
-                                  <div className="sm:col-span-2">
-                                      <Label className="text-xs text-slate-500">VIN</Label>
-                                      <p className="font-medium text-slate-900 mt-0.5 font-mono text-sm tracking-wide">{generalInfoFields.vin}</p>
-                                  </div>
-                              </div>
-                          </CardContent>
-                      </Card>
-                  </TabsContent>
-
-                  <TabsContent value="documents" className="space-y-6">
-                      <Card>
-                          <CardHeader>
-                              <div className="flex justify-between items-center">
-                                  <CardTitle>Documents</CardTitle>
-                                  <Button variant="outline" size="sm" onClick={() => setIsUploadOpen(true)}>
-                                      <Upload className="h-4 w-4 mr-2" /> Upload
-                                  </Button>
-                              </div>
-                          </CardHeader>
-                          <CardContent>
-                              <div className="space-y-2">
-                                  {documents.map(doc => (
-                                      <div key={doc.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border border-slate-100">
-                                          <div className="flex items-center gap-3">
-                                              <FileText className="h-5 w-5 text-indigo-500" />
-                                              <div>
-                                                  <p className="font-medium text-sm text-slate-900">{doc.name}</p>
-                                                  <p className="text-xs text-slate-500">Expires: {doc.expiryDate || 'N/A'}</p>
-                                              </div>
-                                          </div>
-                                          <Badge variant={doc.status === 'Verified' ? 'default' : 'secondary'}>{doc.status}</Badge>
-                                      </div>
-                                  ))}
-                                  {documents.length === 0 && <p className="text-sm text-slate-500 text-center py-4">No documents uploaded.</p>}
-                              </div>
-                          </CardContent>
-                      </Card>
-                  </TabsContent>
-
-                  <TabsContent value="maintenance" className="space-y-6">
-                      <MaintenanceManager 
-                        vehicleId={vehicle.id || vehicle.licensePlate} 
-                        logs={maintenanceLogs}
-                        maintenanceStatus={maintenanceStatus}
-                        catalogTemplates={catalogMaintenanceOptions}
-                        onRefresh={handleRefreshMaintenance}
-                        vehicleMeta={{
-                          licensePlate: vehicle.licensePlate,
-                          make: vehicle.make,
-                          model: vehicle.model,
-                          year: vehicle.year != null ? String(vehicle.year) : undefined,
-                        }}
-                      />
-                  </TabsContent>
-
-                  <TabsContent value="equipment" className="space-y-6">
-                      <EquipmentManager vehicleId={vehicle.id || vehicle.licensePlate} />
-                  </TabsContent>
-
-                  <TabsContent value="exterior" className="space-y-6">
-                      <ExteriorManager vehicleId={vehicle.id || vehicle.licensePlate} />
-                  </TabsContent>
-              </Tabs>
-          </TabsContent>
+          <VehicleDetailProfileTab
+            generalInfoFields={generalInfoFields}
+            setIsUploadOpen={setIsUploadOpen}
+            documents={documents}
+            vehicle={vehicle}
+            maintenanceLogs={maintenanceLogs}
+            maintenanceStatus={maintenanceStatus}
+            catalogMaintenanceOptions={catalogMaintenanceOptions}
+            handleRefreshMaintenance={handleRefreshMaintenance}
+          />
       </Tabs>
 
       {/* --- Dialogs --- */}
-      <Dialog open={alignModalOpen} onOpenChange={setAlignModalOpen}>
-        <DialogContent className="max-h-[min(90vh,720px)] overflow-y-auto sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle2>Align with motor catalog</DialogTitle2>
-            <DialogDescription>
-              Choose make, model, and year from the catalog, then a chassis code (required). Optionally narrow with
-              drivetrain and transmission. We auto-match when only one catalog row fits.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-2">
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-              <div className="space-y-1.5">
-                <CatalogFacetSelect
-                  label="Make"
-                  value={alignSearchMake}
-                  onChange={onAlignMakeChange}
-                  options={alignMakeOptions}
-                  loading={alignMakesLoading}
-                  optional={false}
-                  allowAny={false}
-                  emptyHint="Could not load makes from catalog"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <CatalogFacetSelect
-                  label="Model"
-                  value={alignSearchModel}
-                  onChange={onAlignModelChange}
-                  options={alignModelOptions}
-                  loading={alignModelsLoading}
-                  optional={false}
-                  allowAny={false}
-                  emptyHint={alignSearchMake.trim().length >= 2 ? "No models for this make" : "Select a make first"}
-                />
-              </div>
-              <div className="space-y-1.5">
-                <CatalogFacetSelect
-                  label="Year"
-                  value={alignSearchYear}
-                  onChange={onAlignYearChange}
-                  options={alignYearOptions}
-                  loading={alignYearsLoading}
-                  optional={false}
-                  allowAny={false}
-                  emptyHint={
-                    alignSearchMake.trim().length >= 2 && alignSearchModel.trim().length >= 2
-                      ? "No years for this make/model"
-                      : "Select make and model first"
-                  }
-                />
-              </div>
-              <div className="space-y-1.5 sm:col-span-3">
-                <CatalogFacetSelect
-                  label="Chassis code"
-                  value={alignSearchChassis}
-                  onChange={(v) => setAlignSearchChassis(v.toUpperCase())}
-                  options={alignMmyFacets.chassis_code}
-                  loading={alignMmyLoading}
-                  optional={false}
-                  allowAny={false}
-                  emptyHint="No chassis codes in the catalog for this make/model/year"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <CatalogFacetSelect
-                  label="Drivetrain"
-                  value={alignSearchDrivetrain}
-                  onChange={setAlignSearchDrivetrain}
-                  options={alignFacets.drivetrain}
-                  loading={alignFacetsLoading}
-                />
-              </div>
-              <div className="space-y-1.5">
-                <CatalogFacetSelect
-                  label="Transmission"
-                  value={alignSearchTransmission}
-                  onChange={setAlignSearchTransmission}
-                  options={alignFacets.transmission}
-                  loading={alignFacetsLoading}
-                />
-              </div>
-            </div>
-            {alignSearchChassis.trim() &&
-            /^\d{4}$/.test(alignSearchYear.trim()) &&
-            alignSearchMake.trim().length >= 2 &&
-            alignSearchModel.trim().length >= 2 ? (
-              <CatalogVariantPicker
-                make={alignSearchMake}
-                model={alignSearchModel}
-                year={alignSearchYear}
-                drivetrain={alignSearchDrivetrain}
-                transmission={alignSearchTransmission}
-                chassis_code={alignSearchChassis}
-                value={alignSelectedRow?.id ?? null}
-                onChange={handleAlignPickerChange}
-                disabled={alignSaving}
-              />
-            ) : (
-              <p className="rounded-md border border-dashed border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">
-                Select make, model, year, and chassis above to search the motor catalog.
-              </p>
-            )}
-          </div>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setAlignModalOpen(false)} disabled={alignSaving}>
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              onClick={() => void handleAlignSave()}
-              disabled={
-                alignSaving ||
-                !alignSearchMake.trim() ||
-                !alignSearchModel.trim() ||
-                !/^\d{4}$/.test(alignSearchYear.trim()) ||
-                !alignSearchChassis.trim() ||
-                !alignSelectedRow ||
-                alignPickerSource === 'pending' ||
-                alignPickerSource === 'none'
-              }
-            >
-              {alignSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              {alignPickerSource === 'auto'
-                ? 'Confirm match'
-                : alignPickerSource === 'manual'
-                  ? 'Save selection'
-                  : 'Pick a row to save'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <PendingCatalogRequestsDrawer
-        open={pendingDrawerOpen}
-        onOpenChange={setPendingDrawerOpen}
-        // We're already on a vehicle detail page; we don't need to navigate
-        // away when the operator picks one. Hiding the per-row "Open vehicle"
-        // button keeps the drawer purely informational here.
-        onOpenVehicle={undefined}
-      />
-
       <Dialog open={isUpdateOdometerOpen} onOpenChange={setIsUpdateOdometerOpen}>
           <DialogContent>
               <DialogHeader>

@@ -136,18 +136,39 @@ export function useVehicleAnalytics() {
     setPreset('this_week');
   }, []);
 
-  const { data: trips = [], isLoading: tripsLoading, refetch: refetchTrips } = useQuery({
+  const { data: trips = [], isLoading: tripsLoading, refetch: refetchTrips, isSuccess: tripsSuccess } = useQuery({
     queryKey: ['vehicleAnalyticsTrips', period.startYmd, period.endYmd],
     queryFn: () => fetchAllPeriodTrips(period.startYmd, period.endYmd).catch(() => []),
     staleTime: 2 * 60 * 1000,
     refetchOnWindowFocus: false,
   });
 
+  const { data: vehiclesMeta, isLoading: vehiclesLoading, refetch: refetchVehicles, isSuccess: vehiclesSuccess } = useQuery({
+    queryKey: ['vehicles', 'withMeta'],
+    queryFn: () =>
+      api.getVehiclesWithMeta().catch(() => ({ vehicles: [] as Vehicle[], truncated: false })),
+    staleTime: 5 * 60 * 1000,
+    refetchOnWindowFocus: false,
+  });
+  const rawVehicles = (vehiclesMeta?.vehicles ?? []) as Vehicle[];
+  const vehiclesTruncated = Boolean(vehiclesMeta?.truncated);
+
+  const { data: ledgerEvents = [], isLoading: ledgerLoading, refetch: refetchLedger, isSuccess: ledgerSuccess } = useQuery({
+    queryKey: ['vehicleAnalyticsLedger', period.startYmd, period.endYmd],
+    queryFn: () => fetchAllCanonicalEvents(period.startYmd, period.endYmd).catch(() => []),
+    staleTime: 2 * 60 * 1000,
+    refetchOnWindowFocus: false,
+  });
+
+  // Defer prior-period + maintenance logs until current-period core data has settled (B3).
+  const coreReady = tripsSuccess && vehiclesSuccess && ledgerSuccess;
+
   const { data: priorTrips = [], refetch: refetchPriorTrips } = useQuery({
     queryKey: ['vehicleAnalyticsTripsPrior', prior.startYmd, prior.endYmd],
     queryFn: () => fetchAllPeriodTrips(prior.startYmd, prior.endYmd).catch(() => []),
     staleTime: 2 * 60 * 1000,
     refetchOnWindowFocus: false,
+    enabled: coreReady,
   });
 
   const { data: tripStats, refetch: refetchTripStats } = useQuery({
@@ -168,13 +189,7 @@ export function useVehicleAnalytics() {
         .catch(() => null),
     staleTime: 2 * 60 * 1000,
     refetchOnWindowFocus: false,
-  });
-
-  const { data: rawVehicles = [], isLoading: vehiclesLoading, refetch: refetchVehicles } = useQuery<Vehicle[]>({
-    queryKey: ['vehicles'],
-    queryFn: () => api.getVehicles().catch(() => []),
-    staleTime: 5 * 60 * 1000,
-    refetchOnWindowFocus: false,
+    enabled: coreReady,
   });
 
   const { data: vehicleMetrics = [], refetch: refetchVehicleMetrics } = useQuery<VehicleMetrics[]>({
@@ -191,18 +206,12 @@ export function useVehicleAnalytics() {
     refetchOnWindowFocus: false,
   });
 
-  const { data: ledgerEvents = [], isLoading: ledgerLoading, refetch: refetchLedger } = useQuery({
-    queryKey: ['vehicleAnalyticsLedger', period.startYmd, period.endYmd],
-    queryFn: () => fetchAllCanonicalEvents(period.startYmd, period.endYmd).catch(() => []),
-    staleTime: 2 * 60 * 1000,
-    refetchOnWindowFocus: false,
-  });
-
   const { data: priorLedgerEvents = [], refetch: refetchPriorLedger } = useQuery({
     queryKey: ['vehicleAnalyticsLedgerPrior', prior.startYmd, prior.endYmd],
     queryFn: () => fetchAllCanonicalEvents(prior.startYmd, prior.endYmd).catch(() => []),
     staleTime: 2 * 60 * 1000,
     refetchOnWindowFocus: false,
+    enabled: coreReady,
   });
 
   const { data: maintenanceLogs = [], refetch: refetchMaintenanceLogs } = useQuery<MaintenanceLog[]>({
@@ -210,6 +219,7 @@ export function useVehicleAnalytics() {
     queryFn: () => api.getAllMaintenanceLogs().catch(() => []),
     staleTime: 5 * 60 * 1000,
     refetchOnWindowFocus: false,
+    enabled: coreReady,
   });
 
   // Selected-vehicle health (lazy)
@@ -550,26 +560,25 @@ export function useVehicleAnalytics() {
     [rawVehicles, selectedVehicleId],
   );
 
-  const selectedDailyMileage = useMemo(() => {
-    if (!selectedOdo.length) return [];
+  const selectedDailyMileageMeta = useMemo(() => {
+    if (!selectedOdo.length) return { points: [] as Array<{ dateYmd: string; name: string; km: number }>, droppedDeltas: 0 };
     const sorted = [...selectedOdo].sort(
       (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime(),
     );
     const byDay = new Map<string, number>();
-    let droppedDeltas = 0;
+    let droppedCount = 0;
     for (let i = 1; i < sorted.length; i++) {
       const prev = sorted[i - 1];
       const cur = sorted[i];
       const delta = Number(cur.value) - Number(prev.value);
       if (delta <= 0 || delta > 2000) {
-        droppedDeltas += 1;
+        droppedCount += 1;
         continue; // skip resets / absurd jumps
       }
       const key = String(cur.date).slice(0, 10);
       byDay.set(key, (byDay.get(key) || 0) + delta);
     }
-    void droppedDeltas; // available for future honesty badge
-    return Array.from(byDay.entries())
+    const points = Array.from(byDay.entries())
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([dateYmd, km]) => {
         // Local calendar label — avoid `new Date("YYYY-MM-DD")` UTC midnight shift
@@ -581,8 +590,11 @@ export function useVehicleAnalytics() {
           km: Number(km.toFixed(1)),
         };
       });
+    return { points, droppedDeltas: droppedCount };
   }, [selectedOdo]);
 
+  const selectedDailyMileage = selectedDailyMileageMeta.points;
+  const droppedDeltas = selectedDailyMileageMeta.droppedDeltas;
   const selectedServiceWarning = useMemo(() => {
     const item = (maintenanceSummary?.items ?? []).find((i) => i.vehicleId === selectedVehicleId);
     if (!item) return null;
@@ -631,11 +643,13 @@ export function useVehicleAnalytics() {
     periodMaintenanceLogs,
     maintenanceLogs,
     vehicles: rawVehicles,
+    vehiclesTruncated,
     selectedVehicleId,
     setSelectedVehicleId,
     selectedVehicle,
     selectedOdo,
     selectedDailyMileage,
+    droppedDeltas,
     selectedFuelSummary,
     selectedServiceWarning,
     odoLoading,

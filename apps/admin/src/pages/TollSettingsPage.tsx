@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Loader2 } from 'lucide-react';
+import { AlertTriangle, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Switch } from '../components/ui/switch';
 import {
@@ -16,12 +16,18 @@ import {
   updateTollDispatchSettings,
   type TollDispatchSettings,
 } from '../services/platform/ridesDispatchSettingsService';
+import { api } from '../services/api';
+import {
+  assessTollDetectionHealth,
+  type TollDetectionHealth,
+} from '../utils/tollDetectionHealth';
 
 const WRITE_ROLES = new Set(['platform_owner', 'superadmin', 'rides_admin', 'super_admin', 'super admin']);
 
 const SECTION_KEYS: (keyof TollDispatchSettings)[] = [
   'toll_detection_enabled',
   'toll_geofence_radius_m',
+  'toll_round_trip_cooldown_ms',
   'toll_detect_enroute',
   'route_toll_estimation_enabled',
 ];
@@ -30,7 +36,9 @@ const TOOLTIPS = {
   toll_detection_enabled:
     'Enable real-time toll detection during trips. Tolls are detected via geofence and added to the final fare.',
   toll_geofence_radius_m:
-    'Radius around toll plazas for geofence detection. Driver must pass within this distance for toll to be recorded.',
+    'Default radius around toll plazas for geofence detection. Used when a plaza has no per-plaza override.',
+  toll_round_trip_cooldown_ms:
+    'Minimum time between charging the same plaza again on one trip (round-trip / traffic jam guard).',
   toll_detect_enroute:
     'Also detect tolls crossed while en route to pickup (deadhead), not only during the trip. Keep off — deadhead is a driver expense.',
   route_toll_estimation_enabled:
@@ -42,19 +50,35 @@ function hasWriteAccess(role: string | undefined | null): boolean {
   return WRITE_ROLES.has(role);
 }
 
-export function TollSettingsPage() {
+type Props = {
+  onNavigate?: (page: string) => void;
+};
+
+export function TollSettingsPage({ onNavigate }: Props) {
   const { session, role } = useAuth();
   const token = session?.access_token;
   const canEdit = hasWriteAccess(role);
   const [loading, setLoading] = useState(true);
   const [settings, setSettings] = useState<TollDispatchSettings | null>(null);
+  const [health, setHealth] = useState<TollDetectionHealth | null>(null);
 
   const load = useCallback(async () => {
     if (!token) return;
     setLoading(true);
     try {
-      const next = await getTollDispatchSettings(token);
+      const [next, plazas, tollLogs] = await Promise.all([
+        getTollDispatchSettings(token),
+        api.getTollPlazas().catch(() => []),
+        api.getTollLogs({ limit: 500 }).catch(() => ({ data: [] })),
+      ]);
       setSettings(next);
+      setHealth(
+        assessTollDetectionHealth({
+          settings: next,
+          plazas,
+          tollLogRows: (tollLogs?.data || []) as Array<Record<string, unknown>>,
+        }),
+      );
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : 'Failed to load toll settings');
     } finally {
@@ -107,15 +131,42 @@ export function TollSettingsPage() {
   if (!formData) return null;
 
   const disabled = isSectionDisabled(canEdit, isEditing);
+  const showHealthAlarm = health?.verificationGateClosed || health?.zeroCrossingAlarm;
 
   return (
     <div className="max-w-3xl space-y-6">
       <div>
         <h1 className="text-xl font-semibold text-slate-900 dark:text-white">Toll Settings</h1>
         <p className="mt-1 text-sm text-slate-500">
-          Platform toll detection and quote estimation flags for Roam Rides.
+          Platform toll detection and quote estimation flags for Roam Rides and fleet route replay.
         </p>
       </div>
+
+      {showHealthAlarm && health && (
+        <div
+          role="alert"
+          className="flex gap-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950"
+        >
+          <AlertTriangle className="h-5 w-5 shrink-0 text-amber-600" />
+          <div className="space-y-1">
+            <p className="font-semibold">Toll detection health</p>
+            <p>{health.summary}</p>
+            {onNavigate && (
+              <button
+                type="button"
+                className="text-amber-900 underline font-medium"
+                onClick={() => onNavigate('toll-stations')}
+              >
+                Open Toll Database
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {health && !showHealthAlarm && (
+        <p className="text-xs text-slate-500">{health.summary}</p>
+      )}
 
       <SettingsSection
         title="Toll detection & quotes"
@@ -146,16 +197,9 @@ export function TollSettingsPage() {
 
         <label className="block space-y-1.5 mt-4">
           <SettingLabel
-            label="Toll geofence radius (meters)"
+            label="Default toll geofence radius (meters)"
             tooltip={TOOLTIPS.toll_geofence_radius_m}
           />
-          {/*
-            DEAD CONTROL (audit C5) until a UX pass wires this global fallback
-            correctly: matching prefers each plaza's own geofenceRadius (Add
-            Plaza always writes one, default 200m). This value only applies when
-            a plaza has geofenceRadius unset/0. Do not remove the dial without
-            replacing it with per-plaza radius editing in Toll Database.
-          */}
           <input
             type="number"
             min={50}
@@ -168,8 +212,31 @@ export function TollSettingsPage() {
             className={settingsInputClass}
           />
           <p className="text-xs text-slate-500">
-            Fallback only when a plaza has no radius set. Prefer editing each plaza&apos;s
-            geofence in Toll Database.
+            Applies to every plaza that uses the global default. Plazas with a per-plaza override in
+            Toll Database keep their own radius.
+          </p>
+        </label>
+
+        <label className="block space-y-1.5 mt-4">
+          <SettingLabel
+            label="Round-trip cooldown (seconds)"
+            tooltip={TOOLTIPS.toll_round_trip_cooldown_ms}
+          />
+          <input
+            type="number"
+            min={0}
+            max={3600}
+            step={30}
+            disabled={disabled || !formData.toll_detection_enabled}
+            value={Math.round((formData.toll_round_trip_cooldown_ms ?? 300_000) / 1000)}
+            onChange={(e) => {
+              const sec = Math.max(0, Math.min(3600, parseInt(e.target.value, 10) || 0));
+              updateField('toll_round_trip_cooldown_ms', sec * 1000);
+            }}
+            className={settingsInputClass}
+          />
+          <p className="text-xs text-slate-500">
+            Same plaza will not charge again within this window on one trip (default 300s).
           </p>
         </label>
 

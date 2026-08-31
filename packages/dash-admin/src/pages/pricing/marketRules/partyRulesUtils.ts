@@ -85,6 +85,18 @@ export function partyFormSeed(
         c.card_processing_fee_percent ?? effective.card_processing_fee_percent ?? 0.045,
       ),
       launch_promos: (c.launch_promos ?? effective.launch_promos) as PricingRulesPayload['launch_promos'],
+      promo_free_delivery: (() => {
+        const pfd = (
+          (effective as { promo_free_delivery?: Record<string, unknown> }).promo_free_delivery ??
+          (layer?.rules as { promo_free_delivery?: Record<string, unknown> } | undefined)
+            ?.promo_free_delivery ??
+          {}
+        ) as Record<string, unknown>;
+        return {
+          max_free_delivery_km: Number(pfd.max_free_delivery_km ?? 8),
+          monthly_subsidy_budget_jmd: Number(pfd.monthly_subsidy_budget_jmd ?? 1500),
+        };
+      })(),
     };
   }
 
@@ -213,6 +225,10 @@ export function partySavePayload(
       small_order_fee_jmd: form.small_order_fee_jmd,
       card_processing_fee_percent: form.card_processing_fee_percent,
       launch_promos: form.launch_promos,
+      promo_free_delivery: form.promo_free_delivery ?? {
+        max_free_delivery_km: 8,
+        monthly_subsidy_budget_jmd: 1500,
+      },
     };
   }
   if (party === 'rider') {

@@ -31,6 +31,7 @@ type Props = {
   onSelectVehicle: (id: string | null) => void;
   selectedVehicle: Vehicle | null;
   selectedDailyMileage: DailyMileage[];
+  droppedDeltas?: number;
   selectedFuelSummary: any;
   selectedServiceWarning: ServiceWarning;
   odoLoading: boolean;
@@ -43,6 +44,7 @@ export function AnalyticsVehicleHealthPanel({
   onSelectVehicle,
   selectedVehicle,
   selectedDailyMileage,
+  droppedDeltas = 0,
   selectedFuelSummary,
   selectedServiceWarning,
   odoLoading,
@@ -145,6 +147,9 @@ export function AnalyticsVehicleHealthPanel({
                 </ResponsiveContainer>
                 <p className="text-[11px] text-slate-400 mt-1">
                   Derived from consecutive odometer readings (resets and absurd jumps filtered out).
+                  {droppedDeltas > 0
+                    ? ` ${droppedDeltas} day jump${droppedDeltas === 1 ? '' : 's'} hidden — resets or >2,000 km.`
+                    : ''}
                 </p>
               </div>
             )}

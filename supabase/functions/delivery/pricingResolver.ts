@@ -31,6 +31,7 @@ import {
 import { resolvePricingLayers } from "./pricingLayers.ts";
 import { loadActiveRushPassMembership } from "./rushPassMembership.ts";
 import { loadRushPassSubsidyUsed } from "../_shared/rushPassSubsidyUsed.ts";
+import { loadPromoFreeDeliverySubsidyUsed } from "../_shared/promoFreeDeliverySubsidyUsed.ts";
 
 export type PricingResolverInput = {
   /** Real order / merchant preview. Omit for admin standalone calculator. */
@@ -417,8 +418,16 @@ export async function resolveDashOrderPricing(
   let rushPassSubsidyBudgetJmd: number | undefined;
   let rushPassSubsidyUsedJmd: number | undefined;
   let rushPassSubsidyRemainingJmd: number | undefined;
+  let promoFreeDeliveryDeniedReason: "distance" | "budget" | null = null;
+  let promoFreeDeliverySubsidyBudgetJmd: number | undefined;
+  let promoFreeDeliverySubsidyUsedJmd: number | undefined;
+  let promoFreeDeliverySubsidyRemainingJmd: number | undefined;
 
   const passDefaults = rules.rushPass ?? {
+    maxFreeDeliveryKm: 8,
+    monthlySubsidyBudgetJmd: 1500,
+  };
+  const promoFdDefaults = rules.promoFreeDelivery ?? {
     maxFreeDeliveryKm: 8,
     monthlySubsidyBudgetJmd: 1500,
   };
@@ -506,6 +515,41 @@ export async function resolveDashOrderPricing(
     }
   }
 
+  // Finding N: Pass members — Pass owns free delivery (clear promo leftover on Pass deny)
+  if (rushPassApplied && rushPassFreeDeliveryDeniedReason) {
+    freeDelivery = false;
+  } else if (!rushPassApplied && freeDelivery) {
+    // Promo / launch free delivery — same distance + monthly budget gate as Pass
+    const maxKm = promoFdDefaults.maxFreeDeliveryKm;
+    const budget = promoFdDefaults.monthlySubsidyBudgetJmd;
+    promoFreeDeliverySubsidyBudgetJmd = budget;
+    const spend = await loadPromoFreeDeliverySubsidyUsed(sb);
+    const usedForGate = spend.ok ? spend.usedJmd : budget;
+    promoFreeDeliverySubsidyUsedJmd = usedForGate;
+    if (!spend.ok) {
+      console.error(
+        "[pricingResolver] promo FD subsidy load failed — denying free delivery",
+        spend.error,
+      );
+    }
+    const fd = resolveRushPassFreeDelivery({
+      planAllowsFreeDelivery: true,
+      distanceKm,
+      maxFreeDeliveryKm: maxKm,
+      subsidyUsedJmd: usedForGate,
+      monthlyBudgetJmd: budget,
+    });
+    promoFreeDeliverySubsidyRemainingJmd = fd.remainingBudgetJmd;
+    if (fd.apply) {
+      freeDelivery = true;
+    } else {
+      freeDelivery = false;
+      if (fd.reason === "distance" || fd.reason === "budget") {
+        promoFreeDeliveryDeniedReason = fd.reason;
+      }
+    }
+  }
+
   const breakdown = buildOrderPricing({
     subtotal: input.subtotal,
     discount: input.discount,
@@ -527,6 +571,11 @@ export async function resolveDashOrderPricing(
     rushPassSubsidyBudgetJmd,
     rushPassSubsidyUsedJmd,
     rushPassSubsidyRemainingJmd,
+    promoFreeDeliveryDeniedReason,
+    promoFreeDeliverySubsidyBudgetJmd,
+    promoFreeDeliverySubsidyUsedJmd,
+    promoFreeDeliverySubsidyRemainingJmd,
+    promoFundedBy: freeDelivery && !rushPassApplied ? "platform" : undefined,
     taxRatePercent: gct.ratePercent,
     platformTaxRatePercent: gct.platformRatePercent,
     platformGctEnabled: gct.gctEnabled,
@@ -561,6 +610,53 @@ export async function resolveDashOrderPricing(
       rushPassSubsidyBudgetJmd,
       rushPassSubsidyUsedJmd,
       rushPassSubsidyRemainingJmd: 0,
+      taxRatePercent: gct.ratePercent,
+      platformTaxRatePercent: gct.platformRatePercent,
+      platformGctEnabled: gct.gctEnabled,
+      zoneSurchargeJmd,
+    });
+    return {
+      ...recalced,
+      taxRatePercent: gct.ratePercent,
+      platformTaxRatePercent: gct.platformRatePercent,
+      gctRegistered: gct.gctRegistered,
+      pricingProfileVersion: version,
+      marketId,
+      rules,
+      resolvedMarketId,
+      covered,
+      coverage,
+      marketOverrideApplied,
+    };
+  }
+
+  // Promo FD overspend — charge delivery
+  if (
+    !rushPassApplied &&
+    breakdown.freeDeliveryApplied &&
+    promoFreeDeliverySubsidyRemainingJmd != null &&
+    (breakdown.platformDeliverySubsidyJmd ?? 0) > promoFreeDeliverySubsidyRemainingJmd + 0.01
+  ) {
+    const recalced = buildOrderPricing({
+      subtotal: input.subtotal,
+      discount: input.discount,
+      tip: input.tip,
+      distanceKm,
+      distanceKmRaw,
+      rules,
+      tier: ctx.tier,
+      merchantCommissionRateOverride: ctx.merchantCommissionRateOverride,
+      serviceFeeOverride: ctx.serviceFeeOverride,
+      customerOrderCount,
+      freeDelivery: false,
+      paymentMethod: input.paymentMethod,
+      serviceFeeWaived: input.serviceFeeWaived,
+      serviceFeeMultiplier,
+      rushPassApplied: false,
+      promoFreeDeliveryDeniedReason: "budget",
+      promoFreeDeliverySubsidyBudgetJmd,
+      promoFreeDeliverySubsidyUsedJmd,
+      promoFreeDeliverySubsidyRemainingJmd: 0,
       taxRatePercent: gct.ratePercent,
       platformTaxRatePercent: gct.platformRatePercent,
       platformGctEnabled: gct.gctEnabled,

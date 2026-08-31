@@ -8,6 +8,7 @@ import { Badge } from "../ui/badge";
 import { Separator } from "../ui/separator";
 import { format } from "date-fns";
 import { MapPin, Calendar, Clock, CreditCard, User, Car, DollarSign, Navigation, XCircle } from "lucide-react";
+import { resolveTripTollCoverage } from "../../utils/tripTollCoverage";
 
 interface TripDetailsDialogProps {
   trip: Trip | null;
@@ -47,6 +48,20 @@ export function TripDetailsDialog({ trip, open, onOpenChange }: TripDetailsDialo
               {trip.status}
             </Badge>
           </div>
+          {(() => {
+            const coverage = resolveTripTollCoverage(trip);
+            const tone =
+              coverage.status === 'detected'
+                ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                : coverage.status === 'not_applicable'
+                  ? 'bg-slate-50 text-slate-600 border-slate-200'
+                  : 'bg-sky-50 text-sky-800 border-sky-200';
+            return (
+              <Badge variant="outline" className={`mt-2 w-fit text-xs ${tone}`}>
+                {coverage.label}
+              </Badge>
+            );
+          })()}
         </DialogHeader>
 
         <ScrollArea className="flex-1">

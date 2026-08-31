@@ -82,6 +82,13 @@ export default defineConfig({
     host: 'localhost',
     strictPort: true,
     open: true,
+    fs: {
+      allow: [repoRoot],
+    },
+    watch: {
+      // Admin aliases @fleet → apps/fleet/src; ensure those edits hot-reload.
+      ignored: ['**/node_modules/**', '**/dist/**'],
+    },
   },
   test: {
     environment: 'node',

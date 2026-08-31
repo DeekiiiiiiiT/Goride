@@ -407,6 +407,8 @@ app.get("/merchants", async (c) => {
     const paymentRaw = c.req.query("payment_method") ?? "wipay";
     const paymentMethod = paymentRaw === "cash" ? "cash" : "wipay";
     const tipQ = c.req.query("tip") ? Number(c.req.query("tip")) : 0;
+    const freeDeliveryQ = c.req.query("free_delivery") === "1" ||
+      c.req.query("free_delivery") === "true";
 
     let customerId: string | null = null;
     const authHeader = c.req.header("Authorization");
@@ -488,6 +490,7 @@ app.get("/merchants", async (c) => {
       paymentMethod,
       tip: tipQ > 0 ? tipQ : undefined,
       customerId,
+      freeDelivery: freeDeliveryQ,
       requireCoverage: true,
     });
 
@@ -542,6 +545,9 @@ app.get("/merchants", async (c) => {
       rush_pass_subsidy_budget_jmd: v2.rushPassSubsidyBudgetJmd ?? null,
       rush_pass_subsidy_used_jmd: v2.rushPassSubsidyUsedJmd ?? null,
       rush_pass_subsidy_remaining_jmd: v2.rushPassSubsidyRemainingJmd ?? null,
+      promo_free_delivery_denied_reason: v2.promoFreeDeliveryDeniedReason ?? null,
+      promo_free_delivery_subsidy_remaining_jmd:
+        v2.promoFreeDeliverySubsidyRemainingJmd ?? null,
       min_order_subtotal_jmd: v2.rules.minOrderSubtotalJmd ?? 0,
       small_order_threshold_jmd: v2.rules.smallOrderThresholdJmd ?? 0,
       card_processing_fee_percent: v2.rules.cardProcessingFeePercent ?? 0,

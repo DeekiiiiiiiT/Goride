@@ -63,7 +63,7 @@ export function AdminDashboard({ onNavigate }: AdminDashboardProps) {
     approved: 0,
     rejected: 0,
   });
-  const [platformName, setPlatformName] = useState('Roam Fleet');
+  const [platformName, setPlatformName] = useState('Roam Dominion');
   const [platformVersion, setPlatformVersion] = useState('1.0.0');
 
   useEffect(() => {
@@ -127,7 +127,7 @@ export function AdminDashboard({ onNavigate }: AdminDashboardProps) {
       if (res.ok) {
         const data = await res.json();
         if (data.settings) {
-          setPlatformName(data.settings.platformName || 'Roam Fleet');
+          setPlatformName(data.settings.platformName || 'Roam Dominion');
           setPlatformVersion(data.settings.platformVersion || '1.0.0');
         }
       }

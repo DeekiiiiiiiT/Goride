@@ -2340,21 +2340,82 @@ app.post(
     // Phase 4 fleet detection: post-trip replay of saved Trip.route through
     // the shared segment geofence matcher (no live GPS stream for fleet).
     try {
+      let fallbackRadiusM = 100;
+      let cooldownMs = 5 * 60 * 1000;
+      try {
+        const { data: ds } = await supabase
+          .from("rides_dispatch_settings")
+          .select("toll_geofence_radius_m, toll_round_trip_cooldown_ms")
+          .eq("id", 1)
+          .maybeSingle();
+        if (ds) {
+          const r = Number((ds as any).toll_geofence_radius_m);
+          const c = Number((ds as any).toll_round_trip_cooldown_ms);
+          if (Number.isFinite(r) && r > 0) fallbackRadiusM = Math.min(500, Math.max(50, r));
+          if (Number.isFinite(c) && c >= 0) cooldownMs = Math.min(3_600_000, c);
+        }
+      } catch {
+        /* settings optional — keep defaults */
+      }
+
+      const replayTrips = processedTrips.map((t: any) => ({
+        id: String(t.id || ""),
+        driverId: t.driverId ?? null,
+        driverName: t.driverName ?? null,
+        vehicleId: t.vehicleId ?? null,
+        vehiclePlate: t.vehiclePlate ?? null,
+        route: t.route,
+        organizationId: t.organizationId ?? writeOrgId,
+        date: t.date ?? t.completed_at ?? null,
+        isLiveRecorded: t.isLiveRecorded === true,
+      }));
+
       const replay = await replayFleetTripsWithRoutes({
         db: supabase,
-        trips: processedTrips.map((t: any) => ({
-          id: String(t.id || ""),
-          driverId: t.driverId ?? null,
-          driverName: t.driverName ?? null,
-          vehicleId: t.vehicleId ?? null,
-          vehiclePlate: t.vehiclePlate ?? null,
-          route: t.route,
-          organizationId: t.organizationId ?? writeOrgId,
-          date: t.date ?? t.completed_at ?? null,
-          isLiveRecorded: t.isLiveRecorded === true,
-        })),
+        trips: replayTrips,
         saveTollUsage: async (entry) => saveTollLedgerEntry(entry as any),
+        fallbackRadiusM,
+        cooldownMs,
       });
+
+      // Stamp tollDetection coverage onto saved trips (honest UI for imports).
+      const byId = new Map(replay.results.map((r) => [r.tripId, r]));
+      const stampKeys: string[] = [];
+      const stampVals: any[] = [];
+      for (const t of processedTrips) {
+        const id = String(t?.id || "").trim();
+        if (!id) continue;
+        const r = byId.get(id);
+        const pts = Array.isArray(t.route) ? t.route.length : 0;
+        let tollDetection: Record<string, unknown>;
+        if (pts < 2 || r?.reason === "no_route_polyline") {
+          tollDetection = {
+            status: "not_applicable",
+            crossingCount: 0,
+            reason: "no_route_polyline",
+          };
+        } else if (!r) {
+          tollDetection = { status: "eligible", crossingCount: 0 };
+        } else if (r.hits.length > 0) {
+          tollDetection = {
+            status: "detected",
+            crossingCount: r.hits.length,
+            written: r.written,
+          };
+        } else {
+          tollDetection = {
+            status: "no_plazas",
+            crossingCount: 0,
+            reason: r.reason,
+          };
+        }
+        stampKeys.push(`trip:${id}`);
+        stampVals.push(stampWriteOrg({ ...t, tollDetection }));
+      }
+      if (stampKeys.length > 0) {
+        await kv.mset(stampKeys, stampVals);
+      }
+
       if (replay.tripsScanned > 0) {
         console.log(
           `[FleetTollReplay] POST /trips: tripsScanned=${replay.tripsScanned} crossingsWritten=${replay.crossingsWritten}`,
@@ -10986,10 +11047,9 @@ app.get("/make-server-37f42386/team/members", requireAuth(), async (c) => {
     const members = orgUsers.map((u: any) => {
       const rawRole = authMetaRole(u) || 'enterprise_viewer';
       const isOwner = Boolean(ownerId && u.id === ownerId);
-      let role = rawRole;
-      if (isOwner && (role === 'admin' || role === 'fleet_owner' || !role)) {
-        role = 'enterprise_owner';
-      }
+      // Owner always displays/acts as fleet_owner in Team Management. Do not stamp
+      // enterprise_owner onto `role` — fleet UI falls that unknown key back to Fleet Viewer.
+      let role = isOwner ? 'fleet_owner' : rawRole;
       const seatRole = resolveEnterpriseSeatRole(isOwner ? 'enterprise_owner' : role);
       const sectionOverrides = parseSectionOverrides(
         u.app_metadata?.sectionOverrides ?? u.user_metadata?.sectionOverrides,

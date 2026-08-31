@@ -412,3 +412,155 @@ Implementation landed in-repo per Vehicle System Remediation Program:
 | 7 Polish | Done | Catalog match label on Vehicle Detail; TCO cost-per-km panel; schedule package `dueKind`/template id transparency |
 
 **Ops follow-up:** apply migration `20260826140000_vehicle_remediation_templates_parts_requests.sql` (template `archived_at` + `parts_sourcing_requests`) and redeploy `make-server-37f42386`.
+
+---
+
+# Verification pass & re-audit (2026-08-31)
+
+**Method:** every claim in the table above re-checked against current source, plus the live GoRide database (`csfllzzastacofsvcdsc`) for the migration/deploy follow-up, plus a fresh sweep for anything the original audit missed. No code changed.
+
+## V1 · What is genuinely done — all 8 phases verified
+
+Every phase claim above holds. Anchors for each, so this doesn't have to be re-derived:
+
+| Phase | Verified at |
+|---|---|
+| 0 | `requireAuth()` + `requirePermission("vehicles.edit")` on both inventory writes ([`index.tsx:13006`](supabase/functions/_fleet-server/index.tsx#L13006), [`:13028`](supabase/functions/_fleet-server/index.tsx#L13028)); `belongsToOrg` pre-check on both ([`:13016`](supabase/functions/_fleet-server/index.tsx#L13016), [`:13048`](supabase/functions/_fleet-server/index.tsx#L13048)); `DELETE /inventory/:id` exists ([`:13062`](supabase/functions/_fleet-server/index.tsx#L13062)); `belongsToOrg` on the vehicle update path ([`:2724`](supabase/functions/_fleet-server/index.tsx#L2724)) |
+| 1 | Edit/Delete wired to real handlers ([`FleetPage.tsx:252-253`](apps/fleet/src/components/fleet/FleetPage.tsx#L252)); `deleteStock` is a real DELETE call ([`inventoryService.ts:35-44`](apps/fleet/src/services/inventoryService.ts#L35)) — the AI monologue is gone; Seed behind an `AlertDialog` confirm ([`FleetPage.tsx:340`](apps/fleet/src/components/fleet/FleetPage.tsx#L340)) |
+| 2 | `getVehiclesPage` / `fetchAllVehicles` / paginated `getVehicles` ([`api.ts:789-826`](apps/fleet/src/services/api.ts#L789)); `apps/fleet/src/types/vehicle.ts` and `apps/admin/src/types/vehicle.ts` are now 2-line re-exports of `@roam/types/vehicle`; `vehicleCatalogPending.ts` and `partSourcing.ts` likewise |
+| 3 | `profitSpark` from `revenue - totalCost` ([`useVehicleAnalytics.ts:345`](apps/fleet/src/hooks/useVehicleAnalytics.ts#L345)); "Drove this period" ([`AnalyticsKpiGrid.tsx:96`](apps/fleet/src/components/vehicles/analytics/AnalyticsKpiGrid.tsx#L96), [`AnalyticsUtilizationSection.tsx:29`](apps/fleet/src/components/vehicles/analytics/AnalyticsUtilizationSection.tsx#L29)); `refresh()` now fires all ten refetches ([`:593-602`](apps/fleet/src/hooks/useVehicleAnalytics.ts#L593)); local-calendar date labels ([`:576-580`](apps/fleet/src/hooks/useVehicleAnalytics.ts#L576)) |
+| 4 | `apps/fleet/src/components/admin/` no longer contains `VehicleCatalogManager` / `PendingVehicleCatalogManager` / `PartsSourcingManager` — the 4,275 lines are gone; `maintenanceCatalogOptions.ts` now differs between fleet and admin by **one comment line only**; `PlatformMaintenanceSplash.tsx` renamed; Dominion gate fork carries an explicit CONTRACT block |
+| 5 | Template soft-archive + usage count in the response ([`maintenance_routes.ts:608-625`](supabase/functions/_fleet-server/maintenance_routes.ts#L608)); `slaBadgeClass` + age column ([`PendingVehicleCatalogManager.tsx:65`](apps/admin/src/components/admin/vehicle-catalog/PendingVehicleCatalogManager.tsx#L65), [`:279`](apps/admin/src/components/admin/vehicle-catalog/PendingVehicleCatalogManager.tsx#L279)); parts-request routes ([`part_sourcing_routes.ts:834`](supabase/functions/_fleet-server/part_sourcing_routes.ts#L834)) |
+| 6 | `extractor_miss` recorded on both null and empty extraction ([`vehicle_catalog_gate.ts:149-172`](supabase/functions/_fleet-server/vehicle_catalog_gate.ts#L149)); [`CatalogGateObservabilityPanel.tsx`](apps/admin/src/components/admin/vehicle-catalog/CatalogGateObservabilityPanel.tsx) exists |
+| 7 | [`VehicleTcoPanel.tsx`](apps/fleet/src/components/vehicles/analytics/VehicleTcoPanel.tsx) exists |
+
+**One correction to the phase-1 claim, in the fix's favour.** The audit said "stock decrement on equipment bulk-assign". The client only does a *pre-check* ([`FleetPage.tsx:139-145`](apps/fleet/src/components/fleet/FleetPage.tsx#L139)) — the actual decrement is **server-side**, in `POST /fleet/equipment/bulk` ([`index.tsx:12935-12972`](supabase/functions/_fleet-server/index.tsx#L12935)): it counts draws per `inventoryId`, verifies `belongsToOrg`, 409s on insufficient stock, then writes `quantity - draw` back to KV before creating the equipment rows. That is the stronger of the two possible implementations — the client pre-check is only a UX nicety and cannot be bypassed to overdraw. §D3 is properly closed.
+
+## V2 · Ops follow-up — half done, and the ledger is now inconsistent
+
+Checked directly against the live database and the deployed function.
+
+| Item | State |
+|---|---|
+| `maintenance_task_templates.archived_at` | **Exists** in the DB |
+| `public.parts_sourcing_requests` | **Exists** in the DB |
+| Row in `supabase_migrations.schema_migrations` for `20260826140000` | **Missing** |
+| `make-server-37f42386` redeploy | **Done** — v1792, updated ~2026-08-30, after the remediation |
+
+So the DDL was applied **out of band** — by hand or via MCP `apply_migration` under a different version — rather than through the checked-in migration file. Production works today; the ledger does not know why.
+
+### V2a · HIGH — The migration file is checked in but unrecorded
+`supabase/migrations/20260826140000_vehicle_remediation_templates_parts_requests.sql` sits in the repo describing objects that already exist in production, with no `schema_migrations` row. Two consequences:
+
+- The remote is at `20260830103321`; this file is dated `20260826140000`, i.e. **behind the head**. A `supabase db push` will treat it as pending and try to apply it out of order.
+- It would in fact succeed — every statement is `IF NOT EXISTS` / `DROP POLICY IF EXISTS … CREATE POLICY`, so re-running is harmless. The risk is not corruption, it is that **nobody can tell from the ledger whether Phase 5 shipped**, and the next person to rebuild an environment from migrations gets a different history than production has.
+
+The fix is a bookkeeping insert (the repo already has a `history_align` convention for exactly this — 20+ such migrations in the applied list), not a re-apply. Low effort, but it should not stay open.
+
+### V2b · LOW — `parts_sourcing_requests` has a SELECT policy and no write policy
+[`the migration:30-46`](supabase/migrations/20260826140000_vehicle_remediation_templates_parts_requests.sql#L30) enables RLS and creates only `parts_sourcing_requests_select_own`. Writes go through the edge service role, which bypasses RLS, so this is correct-by-design and the table is not anon-writable. Noting it because the table lives in `public` and is therefore PostgREST-exposed — worth carrying into the RLS exposure audit's inventory rather than rediscovering it there.
+
+## V3 · New findings the original audit missed
+
+The original audit scoped itself to `apps/fleet`, `apps/admin`, `packages/*` and `supabase/functions/*`. **It never looked at `apps/driver`** — which is a live consumer of the vehicle system. That omission is where all three new findings sit.
+
+### V3a · HIGH — `apps/driver` is a fourth divergent `Vehicle` type, and it is the one §F2 warned about
+Phase 2 consolidated fleet and admin onto `@roam/types/vehicle`. [`apps/driver/src/types/vehicle.ts`](apps/driver/src/types/vehicle.ts) was left as a standalone 253-line copy — 32 lines behind the 285-line canonical package.
+
+It is missing **exactly the fields §F2 flagged as the dangerous ones**:
+
+- the entire Uber sync block — `uberVehicleId`, `uberOwnerId`, `uberComplianceStatus`, `uberAssignedDriverIds`, `uberLastSyncedAt`
+- `driverAssignmentHistory[]` — *"who had this vehicle over time, used to attribute fuel fills on shared cars"*
+- `usageCategory`, `plateClass`, `fitnessFirstRegistration` — the Jamaica fitness/permit classification
+- `tollClassId`, `tollClassNeedsReview` — the link to Super Admin Toll Info
+- `lastBalanceSyncedAt`, plus the `@deprecated` annotation on `fuelScenarioId` that tells a reader to prefer `Driver.fuelScenarioId`
+
+This is not dormant. The driver app actively consumes the type in [`fuelCalculationService.ts:6`](apps/driver/src/services/fuelCalculationService.ts#L6), [`exportHelpers.ts:3`](apps/driver/src/utils/exportHelpers.ts#L3), [`odometerUtils.ts:1`](apps/driver/src/utils/odometerUtils.ts#L1) and [`vehicleCatalogGate.ts:1`](apps/driver/src/utils/vehicleCatalogGate.ts#L1), and `FuelWalletView` renders off `FuelCalculationService`.
+
+The sharpest edge: the server writes `driverAssignmentHistory` on every driver-assignment change ([`index.tsx:2756-2757`](supabase/functions/_fleet-server/index.tsx#L2756)), and the driver app — the app *closest to the driver* — is typed to believe the field does not exist. Any driver-side code that spreads a vehicle and writes it back drops the shared-car fuel attribution history silently.
+
+Good news: driver's `vehicleCatalog.ts`, `vehicleCatalogPending.ts` and `partSourcing.ts` are **byte-identical** to the package. Only `vehicle.ts` drifted, and it is a 2-line re-export away from being fixed like the other two apps.
+
+### V3b · MEDIUM — `vehicleCatalogGate.ts` has three client forks; the contract comment landed on only one
+Phase 4 documented the fork contract in the Dominion copy. There are three:
+
+| Copy | Contract comment | Types source |
+|---|---|---|
+| `apps/fleet/src/utils/vehicleCatalogGate.ts` | Local-unions rationale only | local unions (edge imports this) |
+| `apps/admin/src/utils/vehicleCatalogGate.ts` | **Full CONTRACT block** ✅ | `../types/vehicle` → `@roam/types` |
+| `apps/driver/src/utils/vehicleCatalogGate.ts` | **None** ❌ | `../types/vehicle` → **stale local copy** |
+
+The driver copy is the same shape as the admin copy — `import type { Vehicle, VehicleCatalogStatus, VehicleStatus }`, widened `deriveCatalogStatus(v: Vehicle | CatalogGateVehicleShape)` — but it carries no warning that it must stay behaviourally identical to the edge gate, *and* it resolves its unions through the stale type file in V3a. This is precisely the drift §F4 predicted, reproduced in the one app that didn't get the fix.
+
+### V3c · MEDIUM — The 500-vehicle ceiling became a silent 20,000-vehicle ceiling
+`fetchAllVehicles` computes `truncated` honestly ([`api.ts:807-820`](apps/fleet/src/services/api.ts#L807)) — but `getVehicles()` destructures `{ vehicles }` and **throws the flag away** ([`:823-826`](apps/fleet/src/services/api.ts#L823)), and every consumer calls `getVehicles()`. A grep for `truncated` across `apps/fleet/src` finds it surfaced for catalog candidates, pending requests and driver balances — never for vehicles.
+
+§A1's severity is genuinely reduced: the cap moved from 500 to 20,000 and no realistic fleet hits it. But the *class* of bug the finding named — a cap the user cannot see — is unchanged, and it is now the same shape as the §B3 criticism of `fetchAllPeriodTrips`. Wiring `truncated` into one banner would close both.
+
+## V4 · Carried forward — open items never claimed as fixed
+
+These were in §I but outside the 8 phases. Still open, correctly:
+
+- **§A3 — `VehicleDetail.tsx` is now 2,122 lines** (up 22 from the original 2,100; phase 7 added the catalog-match label and TCO wiring). §I item 20, never claimed. Still the highest-risk file in the section.
+- **§B6 — the 2,000 km/day odometer bound is still a magic number.** Phase 3 went halfway: `droppedDeltas` is now counted, then discarded with `void droppedDeltas; // available for future honesty badge` ([`useVehicleAnalytics.ts:571`](apps/fleet/src/hooks/useVehicleAnalytics.ts#L571)). The count exists; nothing renders it. Same shape as V3c — honesty computed, honesty dropped.
+- **§B3 — ten unconditional queries on mount, two of them 40-page loops.** Untouched, and phase 3's full-refresh fix made `refresh()` heavier by design (three refetches → ten). Correct for truth, worse for load. Not a regression to undo, but worth knowing the trade was made.
+- **§E1 — `VehicleCatalogManager.tsx` is still ~2,400 lines.** Never claimed.
+
+### V4a · LOW — theming leftover in the surviving Dominion catalog manager
+[`VehicleCatalogManager.tsx:867`](apps/admin/src/components/admin/vehicle-catalog/VehicleCatalogManager.tsx#L867) sets `text-slate-200` on the component's root container in an app whose shell is light. Most children set their own colour (`text-slate-900 dark:text-white` etc.), so it is largely masked — but any inherited text renders near-white on white. Likely a survivor of the dark-only fleet copy deleted in phase 4. Worth a visual check rather than a blind edit.
+
+## V5 · Revised state
+
+**Original findings:** 4 Critical · 10 High · 15 Medium · 7 Enhancement.
+
+| Original | Status |
+|---|---|
+| A1 silent 500 cap | Fixed → downgraded to V3c (MEDIUM, silent 20k cap) |
+| B1 profitSpark | **Closed** |
+| D1 dead Edit/Delete | **Closed** |
+| D2 `deleteStock` monologue | **Closed** |
+| D3 stock never decrements | **Closed** (server-side, stronger than claimed) |
+| F1 4,275 dead lines | **Closed** |
+| F2 divergent `Vehicle` types | Fixed for fleet + admin → **reopened as V3a for `apps/driver`** |
+| F4 gate fork undocumented | Fixed for admin → **reopened as V3b for `apps/driver`** |
+| G1 open inventory writes | **Closed** |
+| All 4 Criticals | **Closed** |
+
+**Now open:** 0 Critical · 2 High (V2a, V3a) · 4 Medium (V3b, V3c, A3, B6) · 3 Low (V2b, V4a, B3 load).
+
+**Order of work:**
+
+| # | Item | § | Effort |
+|---|---|---|---|
+| 1 | Point `apps/driver/src/types/vehicle.ts` at `@roam/types/vehicle` | V3a | 2 lines — the other two apps are the template |
+| 2 | Record `20260826140000` in `schema_migrations` via a `history_align` migration | V2a | Bookkeeping; do not re-apply the DDL |
+| 3 | Copy the CONTRACT block into the driver gate fork | V3b | Comment only |
+| 4 | Surface `truncated` from `getVehicles()`; render `droppedDeltas` | V3c, B6 | One banner each; both values already computed |
+| 5 | Split `VehicleDetail.tsx` | A3 | Large, unchanged from the original recommendation |
+
+Item 1 is the one to do today. It is a two-line change that closes the last live instance of the original audit's most consequential finding, in the app where `driverAssignmentHistory` and `tollClassId` matter most.
+
+---
+
+*Verification and re-audit: 2026-08-31. Audit only — no files were modified. Database and edge-deploy state read live from project `csfllzzastacofsvcdsc`. The 2026-08-26 remediation table above is accurate as written; the only correction is that phase 1's stock decrement is server-side rather than client-side, which is the better outcome.*
+
+---
+
+# Closure pass (2026-08-31)
+
+Full closure plan executed in-repo. All V5 open items closed.
+
+| Item | Status | Verify |
+|---|---|---|
+| V3a Driver `@roam/types` Vehicle | **Closed** | `apps/driver/src/types/vehicle.ts` re-exports `@roam/types/vehicle` |
+| V3b Driver gate CONTRACT | **Closed** | CONTRACT header on `apps/driver/src/utils/vehicleCatalogGate.ts` |
+| V2a `schema_migrations` for `20260826140000` | **Closed** | `20260831125346_vehicle_remediation_history_align.sql` + remote apply |
+| V4a Catalog root theme | **Closed** | `text-slate-900 dark:text-slate-200` on Motor Vehicles root |
+| V3c Silent 20k vehicle cap | **Closed** | `getVehiclesWithMeta` + amber banners on VehiclesPage + Vehicle Analytics |
+| B6 droppedDeltas honesty | **Closed** | Hook returns count; health panel renders when &gt; 0 |
+| A3 VehicleDetail split | **Closed** | `vehicles/detail/*` panels; shell ~1233 lines |
+| E1 Catalog Manager peel | **Closed** | Import/Edit/Table siblings; manager ~808 lines |
+| B3 Analytics mount load | **Closed** | Prior-period + maintenance logs `enabled` after coreReady |
+| V2b parts_sourcing_requests RLS note | **Closed** | Documented in `docs/rls-audit.md` G1 addendum + Notion |
+
+**Open severity after closure:** 0 Critical · 0 High · 0 Medium · 0 Low (for V5 backlog).

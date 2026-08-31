@@ -116,12 +116,9 @@ export function StationDatabaseView({
     try {
       // 1. Stations + (when standalone) fuel entries for visit/stats aggregation
       const [backendStations, fuelEntries] = await Promise.all([
-        fuelService.getStations(),
+        fuelService.getAllStations({ fields: 'list' }),
         logsFromParent === undefined
-          ? fuelService.getFuelEntries({ limit: 1500 }).catch((err) => {
-              console.error('[Stations] Failed to load fuel entries for station stats', err);
-              return [] as FuelEntry[];
-            })
+          ? fuelService.getFuelEntries({ limit: 1500 })
           : Promise.resolve(null),
       ]);
       if (fuelEntries) {
@@ -407,7 +404,7 @@ export function StationDatabaseView({
       
       // Re-fetch from backend to ensure local state is in sync with KV
       try {
-        const freshStations = await fuelService.getStations();
+        const freshStations = await fuelService.getAllStations({ fields: 'list' });
         const freshOverrides: Record<string, StationOverride> = {};
         freshStations.forEach(s => {
           freshOverrides[s.id] = s;

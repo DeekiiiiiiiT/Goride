@@ -39,10 +39,12 @@ export function VehicleAnalytics({ onNavigate }: { onNavigate?: (page: string) =
     maintenanceAlerts,
     periodMaintenanceLogs,
     vehicles,
+    vehiclesTruncated,
     selectedVehicleId,
     setSelectedVehicleId,
     selectedVehicle,
     selectedDailyMileage,
+    droppedDeltas,
     selectedFuelSummary,
     selectedServiceWarning,
     odoLoading,
@@ -81,6 +83,11 @@ export function VehicleAnalytics({ onNavigate }: { onNavigate?: (page: string) =
 
   return (
     <div className="space-y-4 md:space-y-6">
+      {vehiclesTruncated && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-800 px-4 py-3 text-sm text-amber-900 dark:text-amber-100">
+          Showing the first 20,000 vehicles — contact support if your fleet exceeds this limit.
+        </div>
+      )}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div className="flex items-center gap-3">
           <div className="p-2 bg-indigo-100 dark:bg-indigo-900/30 rounded-lg">
@@ -144,6 +151,7 @@ export function VehicleAnalytics({ onNavigate }: { onNavigate?: (page: string) =
         onSelectVehicle={setSelectedVehicleId}
         selectedVehicle={selectedVehicle}
         selectedDailyMileage={selectedDailyMileage}
+        droppedDeltas={droppedDeltas}
         selectedFuelSummary={selectedFuelSummary}
         selectedServiceWarning={selectedServiceWarning}
         odoLoading={odoLoading}

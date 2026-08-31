@@ -57,6 +57,8 @@ import {
 const FLEET_ROLE_CONFIG: Record<string, { label: string; description: string; color: string }> = {
   admin:            { label: 'Fleet Owner',      description: 'Full access to all features',           color: 'bg-purple-50 text-purple-700 border-purple-200' },
   fleet_owner:      { label: 'Fleet Owner',      description: 'Full access to all features',           color: 'bg-purple-50 text-purple-700 border-purple-200' },
+  // Legacy API stamped enterprise_owner on fleet owners — keep badge correct if any remain.
+  enterprise_owner: { label: 'Fleet Owner',      description: 'Full access to all features',           color: 'bg-purple-50 text-purple-700 border-purple-200' },
   fleet_manager:    { label: 'Fleet Manager',    description: 'Manage drivers, vehicles, and operations', color: 'bg-blue-50 text-blue-700 border-blue-200' },
   fleet_accountant: { label: 'Fleet Accountant', description: 'View financials, reports, and exports',  color: 'bg-amber-50 text-amber-700 border-amber-200' },
   fleet_viewer:     { label: 'Fleet Viewer',     description: 'Read-only dashboard access',            color: 'bg-slate-50 text-slate-600 border-slate-200' },

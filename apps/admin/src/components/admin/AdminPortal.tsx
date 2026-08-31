@@ -49,7 +49,6 @@ import { MatchingBrainPage } from './matching-brain/MatchingBrainPage';
 import { FuelBrainPage } from './fuel-brain/FuelBrainPage';
 import { FuelPricesPage } from './fuel-prices/FuelPricesPage';
 import { FuelCostAnalyticsPage } from './fuel-cost-analytics/FuelCostAnalyticsPage';
-import { FuelMoneyReadOnlyPage } from './fuel-money-readonly/FuelMoneyReadOnlyPage';
 import { EvidenceBridgeAnalytics } from './fuel-evidence-bridge/EvidenceBridgeAnalytics';
 import { AdminJaaGasCardsPage } from './fuel/AdminJaaGasCardsPage';
 import { TollBrainPage } from './toll-brain/TollBrainPage';
@@ -276,16 +275,6 @@ export function AdminPortal() {
           <FuelCostAnalyticsPage />
         </div>
       )}
-      {currentPage === 'fuel-reconciliation-overview' && (
-        <div className="rounded-xl border border-slate-200 bg-white overflow-hidden min-h-[560px] p-6 dark:border-slate-800 dark:bg-slate-900/40">
-          <FuelMoneyReadOnlyPage mode="reconciliation" logs={fuelLogs} loading={fuelLoading} />
-        </div>
-      )}
-      {currentPage === 'fuel-transaction-logs' && (
-        <div className="rounded-xl border border-slate-200 bg-white overflow-hidden min-h-[560px] p-6 dark:border-slate-800 dark:bg-slate-900/40">
-          <FuelMoneyReadOnlyPage mode="logs" logs={fuelLogs} loading={fuelLoading} />
-        </div>
-      )}
       {currentPage === 'fuel-evidence-bridge' && (
         <div className="bg-white rounded-xl shadow-sm overflow-hidden min-h-[600px] p-6 dark:bg-card">
           <EvidenceBridgeAnalytics />
@@ -329,14 +318,14 @@ export function AdminPortal() {
       {currentPage === 'toll-settings' && (
         <div className="bg-white rounded-xl shadow-sm overflow-hidden min-h-[600px] dark:bg-card p-4">
           <Suspense fallback={<div className="p-8 text-slate-500">Loading toll settings…</div>}>
-            <TollSettingsPage />
+            <TollSettingsPage onNavigate={setCurrentPage} />
           </Suspense>
         </div>
       )}
       {currentPage === 'toll-live-monitor' && (
         <div className="bg-white rounded-xl shadow-sm overflow-hidden min-h-[600px] dark:bg-card p-4">
           <Suspense fallback={<div className="p-8 text-slate-500">Loading toll monitor…</div>}>
-            <TollLiveMonitorPage />
+            <TollLiveMonitorPage onNavigate={setCurrentPage} />
           </Suspense>
         </div>
       )}

@@ -159,6 +159,8 @@ export function PromotionsPage() {
           </h2>
           <p className="text-sm text-slate-400 mt-1">
             Create and turn company or merchant promos on/off. Merchants can also manage their own in Partner.
+            Free-delivery promos are capped by Pricing Hub (max km + monthly platform subsidy budget) —
+            trips beyond the cap pay delivery.
           </p>
         </div>
         <Link to="/pricing" className="text-sm text-amber-400 hover:underline">

@@ -1,11 +1,10 @@
 name: Rush pricing cron jobs
 
-# Growth Guarantee (monthly) + Rush Pass renew (daily)
+# Rush Pass renew (daily). Growth Guarantee is manual-only until Dominant delivered month
+# (Finding P — do not schedule GG; workflow_dispatch only).
 
 on:
   schedule:
-    # 1st of month 15:00 UTC ≈ 10:00 Jamaica — prior calendar month GG
-    - cron: '0 15 1 * *'
     # Daily 13:00 UTC ≈ 08:00 Jamaica — Pass renew / past_due / expire
     - cron: '0 13 * * *'
   workflow_dispatch:
@@ -13,7 +12,7 @@ on:
       job:
         description: 'Which job to run'
         required: true
-        default: 'both'
+        default: 'rush_pass_renew'
         type: choice
         options:
           - both
@@ -27,15 +26,10 @@ jobs:
       - name: Resolve job flags
         id: flags
         run: |
-          JOB="${{ github.event.inputs.job || 'both' }}"
-          # On schedule: day-of-month 1 → GG; every day → Pass renew
+          JOB="${{ github.event.inputs.job || 'rush_pass_renew' }}"
+          # Finding P: schedule never runs GG — only workflow_dispatch can
           if [ "${{ github.event_name }}" = "schedule" ]; then
-            DAY="$(date -u +%d)"
-            if [ "$DAY" = "01" ]; then
-              echo "gg=true" >> "$GITHUB_OUTPUT"
-            else
-              echo "gg=false" >> "$GITHUB_OUTPUT"
-            fi
+            echo "gg=false" >> "$GITHUB_OUTPUT"
             echo "pass=true" >> "$GITHUB_OUTPUT"
           else
             case "$JOB" in

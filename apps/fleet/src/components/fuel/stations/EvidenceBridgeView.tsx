@@ -9,7 +9,7 @@ import { ForensicCertificate } from './ForensicCertificate';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../../ui/dialog';
 import { encodePlusCode, getPlusCodePrecision } from '../../../utils/plusCode';
 
-interface EvidenceBridgeViewProps {
+interface StationEvidenceBridgeViewProps {
   transactionId: string;
   stationLocation: { lat: number; lng: number };
   capturedLocation: { lat: number; lng: number; accuracy: number };
@@ -24,7 +24,8 @@ interface EvidenceBridgeViewProps {
   variance?: number;
 }
 
-export function EvidenceBridgeView({ 
+/** Station-detail GPS evidence panel (not Dominion Evidence Bridge Analytics). */
+export function StationEvidenceBridgeView({ 
   transactionId,
   stationLocation, 
   capturedLocation, 
@@ -37,7 +38,7 @@ export function EvidenceBridgeView({
   signature,
   signedAt,
   variance = 0
-}: EvidenceBridgeViewProps) {
+}: StationEvidenceBridgeViewProps) {
   const [showCertificate, setShowCertificate] = React.useState(false);
   const isWithinRadius = distance <= 75;
   const status = (isWithinRadius && variance <= 10) ? 'Verified' : 'Flagged';
@@ -211,3 +212,6 @@ export function EvidenceBridgeView({
     </div>
   );
 }
+
+/** @deprecated Use StationEvidenceBridgeView — name collision with Dominion EvidenceBridgeAnalytics. */
+export const EvidenceBridgeView = StationEvidenceBridgeView;

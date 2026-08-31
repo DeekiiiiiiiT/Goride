@@ -1,12 +1,12 @@
 /**
  * Fuel Brain Control Panel (Dominion → Fuel Management)
  * Rule cards: Ride Share / Company Ops / Deadhead (editable) / Personal residual / Misc.
+ * Runtime kill switch lives in fleet fuel-reconciliation settings (consumed by RoamFleet).
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import { projectId } from '../../../utils/supabase/info';
 import { useAuth } from '../../auth/AuthContext';
-import { fetchWithRetry } from '../../../services/api';
+import { api } from '../../../services/api';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../ui/card';
 import { Badge } from '../../ui/badge';
 import { Alert, AlertDescription, AlertTitle } from '../../ui/alert';
@@ -14,6 +14,7 @@ import { Button } from '../../ui/button';
 import { Input } from '../../ui/input';
 import { Label } from '../../ui/label';
 import { Checkbox } from '../../ui/checkbox';
+import { Switch } from '../../ui/switch';
 import {
   Brain,
   Fuel,
@@ -57,16 +58,9 @@ export function FuelBrainPage() {
   const [health, setHealth] = useState<BrainHealth | null>(null);
   const [policy, setPolicy] = useState<BrainPolicy | null>(null);
   const [policies, setPolicies] = useState<BrainPolicy[]>([]);
-
-  // Shared projectId falls back to the default project when VITE_* env is unset (local dev)
-  const baseUrl = `https://${projectId}.supabase.co`;
-
-  const headers = useCallback(() => {
-    return {
-      Authorization: `Bearer ${session?.access_token || ''}`,
-      'Content-Type': 'application/json',
-    };
-  }, [session]);
+  const [fuelBrainEnabled, setFuelBrainEnabled] = useState(true);
+  const [fuelBrainShadowCompare, setFuelBrainShadowCompare] = useState(false);
+  const [settingsBusy, setSettingsBusy] = useState(false);
 
   const fetchAll = useCallback(async () => {
     if (!session) {
@@ -76,58 +70,79 @@ export function FuelBrainPage() {
     setLoading(true);
     setError(null);
     try {
-      const [hRes, pRes] = await Promise.all([
-        fetchWithRetry(`${baseUrl}/functions/v1/fuel-brain/health`, { headers: headers() }),
-        fetchWithRetry(`${baseUrl}/functions/v1/fuel-brain/admin/policies`, { headers: headers() }),
+      const [h, p, settings] = await Promise.all([
+        api.getFuelBrainHealth().catch(() => null),
+        api.getFuelBrainPolicies().catch((e: any) => {
+          if (e?.status === 401 || e?.status === 403) {
+            throw new Error('Platform admin access required for Fuel Brain policies.');
+          }
+          return null;
+        }),
+        api.getFuelReconciliationSettings().catch(() => null),
       ]);
-      if (hRes.ok) setHealth(await hRes.json());
-      if (pRes.ok) {
-        const data = await pRes.json();
-        const list = (data.policies || []) as BrainPolicy[];
+      if (h) setHealth(h);
+      if (p) {
+        const list = (p.policies || []) as BrainPolicy[];
         setPolicies(list);
         setPolicy((prev) => {
-          if (prev && list.some((p) => p.id === prev.id)) {
-            return list.find((p) => p.id === prev.id) || list[0] || null;
+          if (prev && list.some((x) => x.id === prev.id)) {
+            return list.find((x) => x.id === prev.id) || list[0] || null;
           }
-          return list.find((p) => p.isDefault) || list[0] || null;
+          return list.find((x) => x.isDefault) || list[0] || null;
         });
-      } else if (pRes.status === 401 || pRes.status === 403) {
-        setError('Platform admin access required for Fuel Brain policies.');
+      }
+      if (settings) {
+        setFuelBrainEnabled(settings.fuelBrainEnabled !== false);
+        setFuelBrainShadowCompare(settings.fuelBrainShadowCompare === true);
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load Fuel Brain');
     } finally {
       setLoading(false);
     }
-  }, [session, baseUrl, headers]);
+  }, [session]);
 
   useEffect(() => {
     void fetchAll();
   }, [fetchAll]);
 
+  const saveRuntimeFlags = async () => {
+    setSettingsBusy(true);
+    setSuccess(null);
+    setError(null);
+    try {
+      const res = await api.updateFuelReconciliationSettings({
+        fuelBrainEnabled,
+        fuelBrainShadowCompare,
+      });
+      setFuelBrainEnabled(res.fuelBrainEnabled !== false);
+      setFuelBrainShadowCompare(res.fuelBrainShadowCompare === true);
+      setSuccess('Fleet Fuel Brain runtime flags saved (RoamFleet picks them up on next load)');
+      setTimeout(() => setSuccess(null), 3500);
+    } catch (e: any) {
+      setError(e?.message || 'Failed to save runtime flags');
+    } finally {
+      setSettingsBusy(false);
+    }
+  };
+
   const savePolicy = async () => {
     if (!policy || !session) return;
     setSuccess(null);
     setError(null);
-    const res = await fetchWithRetry(`${baseUrl}/functions/v1/fuel-brain/admin/policies`, {
-      method: 'PUT',
-      headers: headers(),
-      body: JSON.stringify(policy),
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      setError(err.message || 'Save failed');
-      return;
+    try {
+      const data = await api.putFuelBrainPolicy(policy as unknown as Record<string, unknown>);
+      setPolicy(data.policy);
+      setPolicies((prev) => {
+        const next = prev.map((p) => (p.id === data.policy?.id ? data.policy : p));
+        if (data.policy && !next.some((p) => p.id === data.policy.id)) next.push(data.policy);
+        return next;
+      });
+      setSuccess('Deadhead rules saved');
+      setTimeout(() => setSuccess(null), 2500);
+    } catch (e: any) {
+      setError(e?.message || 'Save failed');
     }
-    const data = await res.json();
-    setPolicy(data.policy);
-    setPolicies((prev) => {
-      const next = prev.map((p) => (p.id === data.policy?.id ? data.policy : p));
-      if (data.policy && !next.some((p) => p.id === data.policy.id)) next.push(data.policy);
-      return next;
-    });
-    setSuccess('Deadhead rules saved');
-    setTimeout(() => setSuccess(null), 2500);
   };
 
   if (loading) {
@@ -212,6 +227,35 @@ export function FuelBrainPage() {
             FUEL_BRAIN_ENABLED={health?.flags?.FUEL_BRAIN_ENABLED ?? '?'} · FLEET_USE_FUEL_BRAIN=
             {health?.flags?.FLEET_USE_FUEL_BRAIN ?? '?'}
           </p>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base">Fleet runtime kill switch</CardTitle>
+          <CardDescription>
+            Controls RoamFleet recon without a rebuild. Shadow-compare can run whether live consume is
+            on or off.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between gap-4 max-w-lg">
+            <div>
+              <p className="text-sm font-medium">Use Fuel Brain in recon</p>
+              <p className="text-xs text-slate-500">When off, Fleet uses the legacy residual path.</p>
+            </div>
+            <Switch checked={fuelBrainEnabled} onCheckedChange={setFuelBrainEnabled} />
+          </div>
+          <div className="flex items-center justify-between gap-4 max-w-lg">
+            <div>
+              <p className="text-sm font-medium">Shadow-compare</p>
+              <p className="text-xs text-slate-500">Log brain vs legacy without cutting over.</p>
+            </div>
+            <Switch checked={fuelBrainShadowCompare} onCheckedChange={setFuelBrainShadowCompare} />
+          </div>
+          <Button type="button" size="sm" disabled={settingsBusy} onClick={() => void saveRuntimeFlags()}>
+            {settingsBusy ? 'Saving…' : 'Save runtime flags'}
+          </Button>
         </CardContent>
       </Card>
 

@@ -40,7 +40,7 @@ import {
 import { cn } from '../../ui/utils';
 import { PriceHistoryChart } from './charts/PriceHistoryChart';
 import { VisitFrequencyChart } from './charts/VisitFrequencyChart';
-import { EvidenceBridgeView } from './EvidenceBridgeView';
+import { StationEvidenceBridgeView } from './EvidenceBridgeView';
 import { generateStationId, normalizeStationName, calculateDistance } from '../../../utils/stationUtils';
 import { encodePlusCode, getPlusCodePrecision } from '../../../utils/plusCode';
 import { AmenitiesSelector } from './ui/AmenitiesSelector';
@@ -711,7 +711,7 @@ export function StationDetailView({ station, onClose, logs, onTogglePreferred, o
                                  </div>
                                  {hasGPS && (
                                    <div id={`forensic-${log.id}`} className="hidden bg-slate-50 border-t border-slate-100 p-4 animate-in slide-in-from-top-2 duration-300">
-                                      <EvidenceBridgeView 
+                                      <StationEvidenceBridgeView 
                                         transactionId={log.id}
                                         stationLocation={station.location}
                                         capturedLocation={locationMetadata}

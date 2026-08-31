@@ -50,4 +50,28 @@ Schema guard: [`supabase/scripts/assert_rush_pass_subsidy_select_columns.sql`](.
 | Budget exhaustion (real budget) | **Pass** | After Finding L fix: cart showed “monthly free-delivery credit used” with prior used ≈ J$2,520. Persisted `RD-2026-000006` paid: `deny=budget`, `used_snap=2520`, `delivery_fee=930`, `free_del=false`. **Do not** treat forced `budget=0` as valid proof. |
 | Finding L accumulator | **Pass** | Shared `loadRushPassSubsidyUsed` — no top-level `promo_cost_jmd` select; fail-closed on query error; `delivery` redeployed. |
 
-Do **not** enable/schedule live Growth Guarantee cron against real merchants until ≥1 Jamaica calendar month of **delivered/completed** Dominant volume exists. Claw-back hooks stay armed.
+Do **not** re-enable Growth Guarantee in the live profile (`growth_guarantee.enabled`) or run
+`workflow_dispatch` → `growth_guarantee` against real merchants until ≥1 Jamaica calendar month of
+**delivered/completed** Dominant volume exists. The scheduled GG cron is removed (Finding P);
+Pass renew stays on the daily schedule. Claw-back hooks stay armed.
+
+## 5. Settlement proof — delivered / completed (Finding O)
+
+Pricing at place-time is proven above. Settlement and Growth Guarantee still need one order that
+reaches a terminal success status.
+
+1. Place a paid Growth (or Dominant) order with real pins.
+2. Advance through: `accepted` → `preparing` → `ready` → `assigned` → `picked_up` → `in_transit` → **`delivered`**.
+3. Prefer customer review → **`completed`** (or admin force-complete).
+4. Re-run [`supabase/scripts/reconcile_v2_money_split.sql`](../supabase/scripts/reconcile_v2_money_split.sql).
+5. Record: order id / `RD-…` code, final status, capture method (real WiPay webhook vs demo/SQL-sim).
+6. Optional: one Pass order with road km **>** live `max_free_delivery_km` (8) while doing this —
+   persists genuine beyond-cap evidence (not a temporary plan change).
+
+Operator script: [`docs/roam-rush-order-lifecycle-smoke-test.md`](roam-rush-order-lifecycle-smoke-test.md).
+
+| Check | Pass? | Evidence |
+|-------|-------|----------|
+| Order reached `delivered` / `completed` | **Pending PO/QA** | — |
+| Reconcile clean after delivery | **Pending** | — |
+| Capture note (webhook vs demo) | **Pending** | — |

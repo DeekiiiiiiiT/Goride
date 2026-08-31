@@ -125,6 +125,73 @@ describe('validatePricingConfig Pass bounds', () => {
   it('accepts default bounded Pass with real GCT', () => {
     expect(validatePricingConfig(RULES, [ECONOMY, GROWTH, DOMINANT])).toBeNull();
   });
+
+  // Finding M: plan-write overlay — same validator rejects runaway admin caps
+  it('rejects overlay of 25 km / J$1500 Pass caps (subsidy exceeds budget)', () => {
+    const overlaid: PricingRules = {
+      ...RULES,
+      rushPass: { maxFreeDeliveryKm: 25, monthlySubsidyBudgetJmd: 1500 },
+    };
+    const err = validatePricingConfig(overlaid, [GROWTH, DOMINANT]);
+    expect(err?.code).toBe('PASS_CONTRIBUTION_FLOOR');
+  });
+
+  it('accepts overlay of live 8 km / J$1500 Pass caps', () => {
+    const overlaid: PricingRules = {
+      ...RULES,
+      rushPass: { maxFreeDeliveryKm: 8, monthlySubsidyBudgetJmd: 1500 },
+    };
+    expect(validatePricingConfig(overlaid, [ECONOMY, GROWTH, DOMINANT])).toBeNull();
+  });
+});
+
+describe('validatePricingConfig promo free delivery (Finding N)', () => {
+  it('rejects unbounded promo FD caps', () => {
+    const bad: PricingRules = {
+      ...RULES,
+      promoFreeDelivery: { maxFreeDeliveryKm: 0, monthlySubsidyBudgetJmd: 1500 },
+    };
+    expect(validatePricingConfig(bad, [GROWTH])?.code).toBe('PROMO_FD_SUBSIDY_UNBOUNDED');
+  });
+
+  it('rejects promo FD max km where subsidy exceeds monthly budget', () => {
+    const bad: PricingRules = {
+      ...RULES,
+      promoFreeDelivery: { maxFreeDeliveryKm: 25, monthlySubsidyBudgetJmd: 1500 },
+    };
+    expect(validatePricingConfig(bad, [GROWTH])?.code).toBe('PROMO_FD_CONTRIBUTION_FLOOR');
+  });
+
+  it('accepts default 8 km / J$1500 promo FD', () => {
+    expect(validatePricingConfig(RULES, [ECONOMY, GROWTH, DOMINANT])).toBeNull();
+  });
+
+  it('promo free delivery at 5 km applies; beyond cap charges delivery', () => {
+    const near = buildOrderPricing({
+      subtotal: 2500,
+      distanceKm: 5,
+      rules: RULES,
+      tier: GROWTH,
+      taxRatePercent: 15,
+      paymentMethod: 'cash',
+      freeDelivery: true,
+      rushPassApplied: false,
+    });
+    expect(near.freeDeliveryApplied).toBe(true);
+    expect(near.promoFundedBy).toBe('platform');
+    const far = buildOrderPricing({
+      subtotal: 2500,
+      distanceKm: 12,
+      rules: RULES,
+      tier: GROWTH,
+      taxRatePercent: 15,
+      paymentMethod: 'cash',
+      freeDelivery: false,
+      rushPassApplied: false,
+    });
+    expect(far.freeDeliveryApplied).toBe(false);
+    expect(far.deliveryFee).toBeGreaterThan(0);
+  });
 });
 
 describe('growthGuaranteeCreditFromCommission', () => {

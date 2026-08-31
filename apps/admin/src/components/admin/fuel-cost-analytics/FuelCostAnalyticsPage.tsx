@@ -38,8 +38,7 @@ export function FuelCostAnalyticsPage() {
 
   const entriesQ = useQuery({
     queryKey: ['fuel-cost-analytics-entries'],
-    queryFn: () =>
-      fuelService.getFuelEntries({ limit: 1500 }).catch(() => [] as any[]),
+    queryFn: () => fuelService.getFuelEntries({ limit: 1500 }),
     staleTime: 2 * 60 * 1000,
   });
 

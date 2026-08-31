@@ -68,6 +68,7 @@ export default function CartPage({ onNavigate, session }: Props) {
           dropoffLat: savedAddress?.lat,
           dropoffLng: savedAddress?.lng,
           paymentMethod: 'wipay',
+          freeDelivery: appliedPromo?.type === 'free_delivery',
         });
         if (cancelled) return;
         setCheckoutPricing(pricing);
@@ -83,7 +84,7 @@ export default function CartPage({ onNavigate, session }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [merchantId, session?.access_token, subtotal, savedAddress?.lat, savedAddress?.lng]);
+  }, [merchantId, session?.access_token, subtotal, savedAddress?.lat, savedAddress?.lng, appliedPromo?.type]);
 
   const hasLivePricing = checkoutPricing != null && !pricingError;
   const { discount, deliveryFee, serviceFee, tax, processingFee, smallOrderFee, total } = hasLivePricing
@@ -408,6 +409,18 @@ export default function CartPage({ onNavigate, session }: Props) {
                     : checkoutPricing.rushPassFreeDeliveryDeniedReason === 'budget'
                       ? 'Rush Pass — lower service fee (monthly free-delivery credit used)'
                       : 'Rush Pass — lower service fee'}
+              </p>
+            )}
+            {!checkoutPricing?.rushPassApplied &&
+              checkoutPricing?.promoFreeDeliveryDeniedReason === 'distance' && (
+              <p className="text-body-sm text-on-surface-variant">
+                Promo free delivery is outside the free-delivery distance — delivery fee applies
+              </p>
+            )}
+            {!checkoutPricing?.rushPassApplied &&
+              checkoutPricing?.promoFreeDeliveryDeniedReason === 'budget' && (
+              <p className="text-body-sm text-on-surface-variant">
+                Monthly free-delivery credit used — delivery fee applies
               </p>
             )}
             {smallOrderFee > 0 && (

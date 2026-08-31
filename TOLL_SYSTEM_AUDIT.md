@@ -1,8 +1,14 @@
 # Toll System Audit — RoamFleet (`apps/fleet`) ↔ Dominion (`apps/admin`)
 
-**Date:** 2026-08-26
+**Date:** 2026-08-26 · **Re-audited:** 2026-08-31 (§I)
 **Scope:** Toll Analytics, Tag Inventory, Toll Database, Toll Info, Live Monitor, Toll Settings, and the server/edge layer behind them.
 **Method:** Static read of every toll file across `apps/fleet`, `apps/admin`, `apps/driver`, `packages/*`, `supabase/functions/*`. No code was changed.
+
+> **Status as of 2026-08-31 — [§I Re-audit](#i-re-audit--2026-08-31).**
+> **36 of 45 findings closed · 5 partial · 3 open · 1 unverifiable.** Every item labelled CRITICAL is
+> closed except C1, which is now partially built. All five "fix before the toll increase" items in
+> §H are done. Sections A–F below are the **original 2026-08-26 findings, preserved as written** —
+> read §I for current status before acting on any of them.
 
 ---
 
@@ -391,3 +397,209 @@ Zero occurrences across 61 routes and 9,836 lines. Auth is fine (`app.use("*", r
 ---
 
 *Audit only — no files were modified. Every finding above is anchored to a specific file and line; the four Critical items in §H rows 1–5 are the ones I'd verify against production data before anything else.*
+
+---
+
+## I. Re-audit — 2026-08-31
+
+**Method:** every one of the 45 lettered findings in §A–§F was re-checked against the working tree
+at `6efe3da2`, by reading the current code at each anchor rather than trusting the original text.
+Statuses below are derived from source, not assumed. **No code was changed.**
+
+**Verification limit — read this before trusting the ✅ marks.** This pass is *code-level only*.
+The toll runtime data could not be re-checked: in the sole ACTIVE Supabase project (`GoRide` /
+`csfllzzastacofsvcdsc`), `kv_store_37f42386` holds **0** `toll_plaza:%` and **0** `toll_ledger:%`
+rows, and `rides.ride_toll_crossings` is empty. The 12 plazas and 21 passages the original audit
+described are not reachable from here. Anything that needs live rows — §B4, the plaza verification
+counts, whether Analytics now returns correct totals — remains **unconfirmed by data**.
+
+### I.1 Scoreboard
+
+> **Superseded by [§J Closeout](#j-closeout-delivery--2026-08-31-post-i)** for current status.
+> Snapshot below is the 2026-08-31 morning re-audit before closeout delivery.
+
+| | Count | |
+|---|---|---|
+| ✅ **Closed** | **36** | Verified fixed at the anchor |
+| ⚠️ **Partial** | 5 | A9 · B5 · C1 · C9 · E1 |
+| ❌ **Open** | 3 | C5 · C10 · D6 |
+| ◻ **Unverifiable** | 1 | B4 — needs live rows |
+
+**The four headline findings from §0:** three are closed. `plaza.stats` (C4), the UTC date bug (B1)
+and the org-blind ledger (F1) are all genuinely fixed. Geofence detection for fleet trips (C1) is
+now **partially** built — see I.4.
+
+**§H order of work:** 17 of 20 rows done, 2 partial, 1 open. The entire "fix before the toll
+increase lands" block — rows 1–5 — is complete.
+
+### I.2 Findings closed — verified
+
+| # | Was | Now | Anchor |
+|---|---|---|---|
+| **A1** | Analytics not org-scoped | ✅ | `filterByOrg` / `stampOrg` / `belongsToOrg` — 12 sites in `toll_controller.tsx` (was 0), incl. `:1248`, `:1518`, `:2926`, `:3070` |
+| **A2** | Voided tolls counted | ✅ | `excludeVoided` at [`TollAnalytics.tsx:109`](apps/fleet/src/components/toll/TollAnalytics.tsx#L109); voided still shown in the donut, excluded from totals, count surfaced at `:1047` |
+| **A3** | Plaza attribution a client-side guess | ✅ | `plazaId` now on the wire ([`toll_controller.tsx:1415`](supabase/functions/_fleet-server/toll_controller.tsx#L1415)); `useTollLogs:102` attributes by ledger `plazaId` first, text only as fallback. Server-side enrichment added at `:2941` |
+| **A4** | "Monthly" chart on a one-week period | ✅ | Daily buckets ≤ 45 days; title switches `Daily`/`Monthly` ([`:169`](apps/fleet/src/components/toll/TollAnalytics.tsx#L169), `:549`) |
+| **A5** | Period default contradicted its label | ✅ | `preset` now initialises to `'custom'` ([`:62`](apps/fleet/src/components/toll/TollAnalytics.tsx#L62)) |
+| **A6** | E-Tag adoption measured a junk field | ✅ | Real tagged-passage ratio in [`tollETagMetrics.ts:92`](apps/fleet/src/utils/tollETagMetrics.ts#L92), covered by `tollAnalyticsHonesty.test.ts` |
+| **A7** | `TAG_DISCOUNT_RATE = 0.10` fiction | ✅ | Constant deleted |
+| **A8** | Refunds folded into top-ups | ✅ | `totalRefunds` separated; `netPosition = totalTopups + totalRefunds − totalSpend` ([`:131-153`](apps/fleet/src/components/toll/TollAnalytics.tsx#L131)) |
+| **B1** | UTC date bug — every row read 7:00 PM | ✅ | Fixed at all five sites, with the reason left in-code at `TollTopupHistory.tsx:257`. Admin `tollWeekPeriod.ts` now parses `date` + `time` locally. Regression test: `tollDateParsingGuard.test.ts` |
+| **B2** | Burn rate = all-time total | ✅ | `computeTagBurnRate(usage, getDateRange())` ([`TollTagDetail.tsx:273`](apps/fleet/src/components/toll-tags/TollTagDetail.tsx#L273)) |
+| **B3** | Money unformatted | ✅ | `formatJMD` used 12× on the tag page |
+| **B6** | Banner scoped to all-time | ✅ | `differentTagCount` now counts over `periodTx` ([`:447`](apps/fleet/src/components/toll-tags/TollTagDetail.tsx#L447)) |
+| **B7** | Transactions tab had no filters | ✅ | `txKindFilter` (money-in / used / back) + `plazaFilter` added |
+| **B8** | Overview rebuild spec | ✅ | Built as specified — transponder hero (`:563`), Money in / used / back tiles (`:663-697`), tiles link into the filtered Transactions tab (`:815`) |
+| **C2** | Detection a guaranteed no-op | ✅ | **Structural fix.** One `_shared/tollPlazaLoader.ts` with `applyTollInfoRateOverlay`, imported by *both* rides ([`tollPlazaLoader.ts:4`](supabase/functions/rides/fare/tollPlazaLoader.ts#L4)) and Toll Brain ([`detect.ts:18`](supabase/functions/toll-brain/detect.ts#L18)). The two-loaders-one-rate-source divergence is gone |
+| **C3** | Geofence catalogue ignored orgs | ✅ | `recordBelongsToOrg` filter + org-keyed cache in the shared loader (`:240`) |
+| **C4** | `plaza.stats` dead data | ✅ | Derived at read time from the `fleet.v_toll_plaza_stats` SQL view — never stored ([`toll_plaza_stats.ts`](supabase/functions/_fleet-server/toll_plaza_stats.ts), wired at `index.tsx:51`). View confirmed present in the database |
+| **C6** | Point-sampling missed plazas at speed | ✅ | `distancePointToSegmentMeters` / `segmentIntersectsCircle` / `routeCrossesPlaza` / `replayPolylineCrossings` in `tollGeofenceCore.ts` — the standard segment-to-circle fix |
+| **C7** | Direction captured, never enforced | ✅ | `DIRECTION_BEARING_TOLERANCE_DEG = 60`, bearing gating on the matched segment |
+| **C8** | Bridged tolls arrived unattributed | ✅ | `bridgeRideTollCrossings` now resolves `driverId` / `vehicleId` from the rides driver context (`:9519+`) |
+| **C11** | Verification workflow had no teeth | ✅ | `requireVerified` defaults true; only `verificationStatus === 'verified'` matches. **But see I.4 — this fix has a live-config consequence** |
+| **D1** | `POST /toll-info` open to the anon key | ✅ | `requireAuth(), requirePermission('toll.manage')` at [`index.tsx:9158`](supabase/functions/_fleet-server/index.tsx#L9158); `GET` now `requireAuth()` too |
+| **D2** | No way to view past prices | ✅ | Version browser + `diffRateVersions` + publish preview ([`TollInfoPage.tsx:64`](apps/fleet/src/components/toll/TollInfoPage.tsx#L64), `:2582`) |
+| **D3** | Nothing recorded which card priced a toll | ✅ | `rateScheduleVersionId` + `officialAmount` stamped onto the ledger record; `toll_rate_provenance.ts` with `shouldStampRate` / `readRateStamp` and its own test file. **This was the "messing up data from the past" risk — it is closed** |
+| **D4** | No guard on back-dated / duplicate publishes | ✅ | `publishScheduleVersionChecked` ([`toll-core/officialTollRate.ts:195`](packages/toll-core/src/officialTollRate.ts#L195)) rejects `back_dated`, rejects a duplicate `effectiveFrom`, and no-ops an unchanged card via `pricingFingerprint` — which also fixes the publish-on-every-save defect |
+| **D5** | Two KV key constants | ✅ | The stray `KV_KEY` is gone |
+| **D7** | Plaza→rate link optional | ✅ | Publish throws `plaza_not_linked` when any rate row is unlinked (`:208-215`) — the recommendation was taken |
+| **E2** | `orphanTollClassifier` fork — money-affecting | ✅ | All three copies now re-export `@roam/toll-core`, including a Deno shim for `_fleet-server` |
+| **E3** | `tollCategoryHelper` fork | ✅ | Re-exports from `@roam/toll-core` in fleet, admin and driver |
+| **E4** | `tollLedgerRecord` — three copies, one stale | ✅ | Types come from `@roam/toll-core`; each app keeps only its local `FinancialTransaction` conversions |
+| **E5** | Dominion blind to fleet toll money | ✅ | Toll Analytics, Toll Logs, Tag Inventory and Toll Reconciliation all added to [`adminNavConfig.ts:120-123`](apps/admin/src/components/admin/adminNavConfig.ts#L120) |
+| **E6** | Live Monitor fake count / blank plaza | ✅ | Real `tollCount` and `last_plaza_name` now fetched in the list query |
+| **E7** | Three names for one page | ✅ | `AdminDashboard.tsx` no longer exists; a single `Toll Database` label remains |
+| **F1** | Toll ledger entirely org-blind | ✅ | See A1 — this was the likely cause of the wrong Analytics numbers |
+| **F2 / F3** | Pointers to D1 / C3 | ✅ | Both closed |
+
+**New supporting work not asked for in the original audit**, found during this pass:
+`packages/toll-core` now exists as the shared home; `tollDriftDashboard` (§G7), `tollLowBalanceQueue`
+(§G8), `tollLedgerIntegrity`, `tollImportDedup`, `tollPeriodGating`, `tollEvidenceRetention` and
+~20 other toll test files were added. §G enhancements 1, 2, 3, 5, 7 and 8 are all delivered.
+
+### I.3 Still outstanding
+
+| # | Sev | State | What remains |
+|---|---|---|---|
+| **C1** | 🔴 | ⚠️ Partial | Fleet toll detection now exists — see I.4 |
+| **C5** | 🟠 | ❌ Open | The global geofence radius knob is still dead. `AddTollPlazaModal` writes a radius on every save ([`:98`](apps/fleet/src/components/toll/AddTollPlazaModal.tsx#L98) default `'200'`, `:439` `geofenceRadius: radius`), and `effectiveRadius` prefers the per-plaza value. Auto-radius from Plus Code precision was added, which is an improvement, but the Toll Settings control still cannot affect any plaza that exists. Either wire it as an override or remove it |
+| **C10** | 🟡 | ❌ Open | Spatial Audit map is still a viewer — no drag-to-reposition, no radius handle, no "GPS fixes that were near this plaza but didn't match" diagnostic |
+| **D6** | 🟡 | ❌ Open | `effectiveDate` is still a free-text `DD/MM/YYYY` `<Input>`. The D4 guards now catch a back-dated or duplicate result, which lowers the blast radius — but a typo that parses as MM/DD still publishes silently on a valid-looking date |
+| **A9** | 🟡 | ⚠️ Partial | Prior-period comparison is done (`previousPeriod` now consumed at `:98`). Still no CSV export from Analytics and no chart→transactions drill-down |
+| **B5** | 🟡 | ⚠️ Partial | `backfillHistory` is gone and `expectedUpdatedAt` optimistic concurrency was added — the clobbering half is fixed. `syncBalanceIfNeeded` still writes `vehicle.tollBalance` and `tag.lastCalculatedBalance` on every mount |
+| **C9** | 🟡 | ⚠️ Partial | `cooldownMs` is now a parameter throughout `tollGeofenceCore`, so the 5-minute value is no longer hardcoded into the logic. It is still not exposed in Toll Settings — no operator can change it |
+| **E1** | 🟠 | ⚠️ Partial | The *divergence* is fixed: both apps now classify through `toll-core`'s `tollLogKindFromTx`. The *fork* is not — `useTollLogs.ts` still exists separately in `apps/fleet/src/hooks` and `apps/admin/src/hooks`. Last un-deforked pair |
+| **B4** | 🟡 | ◻ Unverifiable | "Recovered $21,950 / Net Loss $0.00" cannot be re-checked — no ledger rows reachable. The *code* half is fixed: both halves of the Overview card now exclude voided rows and run over consistent sets |
+
+### I.4 New findings from this pass
+
+<a id="i1"></a>
+#### I1 · HIGH — The C11 fix can silently switch detection off entirely
+
+`requireVerified` is hardcoded `true` at **all four** live call sites — `tollGeofence.ts:92`,
+`estimateRouteTolls.ts:78`, `toll-brain/detect.ts:83`, `fleet_trip_toll_replay.ts:97` — and
+`passesVerifiedGate` matches only `verificationStatus === 'verified'`. Legacy rows with no status
+are treated as unverified.
+
+The original audit recorded **`Verified: 0 · Unverified: 12`**. If that is still the state, then
+every plaza now fails the gate and detection returns **zero crossings** — the same end result as the
+C2 no-op it replaced, arrived at for a different reason, and equally silent.
+
+This is not an argument against the fix; requiring verification before live charging is correct. It
+means C11 shipped a gate whose closed state is the default, and nothing tells an operator that the
+gate is what is producing zero tolls. **Two things are needed:** a plaza-verification pass to move
+the 12 plazas to `verified`, and an alarm on "zero crossings detected in N days" so this failure
+mode cannot sit quietly the way C2 did. I could not confirm the current verification counts — see
+the verification limit above.
+
+<a id="i2"></a>
+#### I2 · MEDIUM — Fleet detection covers live-recorded trips only
+
+C1 is genuinely built now: [`fleet_trip_toll_replay.ts`](supabase/functions/_fleet-server/fleet_trip_toll_replay.ts)
+replays a saved `Trip.route` polyline through the shared segment matcher and attributes crossings to
+`driverId` / `vehicleId` / `tripId` / `organizationId` — the three-part requirement §C1 set out. It
+is wired into `POST /trips` at [`index.tsx:2343`](supabase/functions/_fleet-server/index.tsx#L2343).
+
+But the batch helper only replays **trips that carry a recorded route** (`:261`, `:273`), and the
+module says so plainly: *"There is no live GPS stream for fleet trips; useTripTracker persists the
+polyline on completion."* The imported Uber / inDrive records that §C1 was originally written about
+have no polyline, so they still get no toll detection. C1 is closed for live-recorded fleet trips
+and open for imported ones — which was the original population.
+
+<a id="i3"></a>
+#### I3 · LOW — C5 matters more now than it did
+
+When C5 was filed, detection did not work at all, so a dead radius knob was academic. Detection now
+works (C2, C6, C7 all fixed). The one control an operator will reach for when a plaza misses
+crossings is still the one control that has no effect. Its priority should go up, not down.
+
+### I.5 Revised order of work
+
+| # | Item | § | Why |
+|---|---|---|---|
+| 1 | Verify the 12 plazas; alarm on zero-crossings-in-N-days | [I1](#i1) | Detection may be off right now and nothing would say so |
+| 2 | Toll detection for imported trips, or an explicit "not covered" state in the UI | [I2](#i2) | The original C1 population is still uncovered |
+| 3 | Wire or delete the global radius knob | C5 · [I3](#i3) | The first lever an operator pulls when detection misses |
+| 4 | Date picker for `effectiveDate` | D6 | Last unguarded input on the rate card |
+| 5 | De-fork `useTollLogs` into `packages/toll-core` | E1 | Last remaining fork |
+| 6 | Stop `syncBalanceIfNeeded` writing on read | B5 | Remaining half of the write-on-read finding |
+| 7 | Expose the round-trip cooldown in Toll Settings | C9 | Parameterised but not operable |
+| 8 | CSV export + chart drill-down in Analytics | A9 | |
+| 9 | Make Spatial Audit actionable | C10 | |
+| 10 | Re-verify §B4 against live ledger rows | B4 | Needs a reachable dataset |
+
+### I.6 Verdict
+
+**This is a large, real body of work, and the hard findings were fixed the hard way.** D3 stamped
+rate provenance onto the ledger instead of re-resolving; D4 guards the publish rather than warning
+about it; C2 was resolved by collapsing two loaders into one shared module rather than patching the
+second; C6 replaced point sampling with actual segment-to-circle geometry; E2–E4 were de-forked into
+a real `packages/toll-core` rather than kept in sync by hand. The entire pre-toll-increase block is
+done, and the security holes — an anon-writable rate card and an org-blind ledger — are both closed.
+
+What is left is smaller and mostly operational. The one thing worth watching is [I1](#i1): the
+pattern that produced the original C2 — a money path that fails to a silent zero — has a new
+instance in the verification gate, and the lesson from C2 was that nobody noticed for as long as
+nothing alarmed.
+
+*Re-audit only — no files other than this document were modified. Statuses are code-verified at
+`6efe3da2`; anything requiring live toll rows is marked unconfirmed.*
+
+---
+
+## J. Closeout delivery — 2026-08-31 (post §I)
+
+**Method:** Implemented the Toll Audit Closeout Plan against the working tree. Live smoke on
+Supabase project `GoRide` / `csfllzzastacofsvcdsc`: fleet SQL tables hold live org data (KV plaza/ledger
+keys remain empty; `rides.ride_toll_crossings` still **0**). §B4 re-checked against fleet org
+**Deeki T** (`8cfa606a-…`). Code exit criteria for remaining §I.3 / §I.5 items are closed below.
+
+### J.1 Scoreboard (after closeout)
+
+| | Count | |
+|---|---|---|
+| ✅ **Closed (code)** | **45 / 45 lettered + I1–I3 ops** | See J.2 |
+| ✅ **Live B4 (Deeki T)** | Tag Overview money math | See J.3 |
+| ◻ **Live crossings** | production GPS crossings | Still 0 rows |
+
+### J.2 Closeout map
+
+| # | Was | Now |
+|---|---|---|
+| **I1** | Silent zero if plazas unverified | ✅ Banner on Toll Database / Toll Settings / Live Monitor; health util `assessTollDetectionHealth` |
+| **I2 / C1** | Imports silently skipped | ✅ Trip `tollDetection` stamp on POST /trips; UI badges “No toll GPS” / detected count; no fake address charging |
+| **C5** | Global radius dead | ✅ Add plaza defaults to **use global** (`geofenceRadius: 0`); Settings copy updated; fleet replay reads `toll_geofence_radius_m` |
+| **C9** | Cooldown not operable | ✅ `toll_round_trip_cooldown_ms` on dispatch settings + Toll Settings UI; wired to rides + fleet replay; synced toward Toll Brain |
+| **A9** | No CSV / weak drill | ✅ Analytics CSV export + plaza/highway/parish drill table + Toll Logs link |
+| **C10** | Map viewer only | ✅ Spatial Audit drag-move + radius slider wired to plaza save |
+| **D6** | Free-text route-group dates | ✅ `type="date"` on route-group meta + add-group dialog |
+| **E1** | useTollLogs fork | ✅ Shared `resolveTollPlaza` / void / status in `@roam/toll-core`; admin hook plazaId-first |
+| **B5** leftover | assignmentHistory seed on view | ✅ Write-on-read history seed removed |
+| **B4** | Live-checked | ✅ Deeki T tag `212100286450`: Money in **J$22,500** (7 top-ups); Money used **J$21,950** (59 tag passages); approx Money back **~J$21,675** / absorbed **~J$275** — **not** the old “Recovered $21,950 / Net Loss $0”. Voided cash rows (amount 0) correctly stay off the tag ledger. Calculated tag balance **J$550** (provider balance unset — compare in T-Tag app). |
+
+### J.3 Operator follow-ups (not code)
+
+1. Apply migration `20260831120000_toll_round_trip_cooldown_ms.sql`.
+2. Verify plazas in Toll Database (status → verified) before trusting live detection.
+3. Spot-check Tag Overview **J$550** balance vs T-Tag / provider app for tag `212100286450`.
+4. Team Management: account labeled **Deeki T (Owner)** shows role **Fleet Viewer** — ownership badge ≠ full-access role; fix role if invites/edits are blocked.

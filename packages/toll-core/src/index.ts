@@ -76,3 +76,17 @@ export type {
   PublishScheduleResult,
   ResolveOfficialTollRateInput,
 } from './officialTollRate.ts';
+
+export {
+  resolveTollPlaza,
+  isVoidedToll,
+  resolveTollStatusDisplay,
+  excludeVoidedTolls,
+} from './tollPlazaResolution.ts';
+export type {
+  PlazaMatchSource,
+  PlazaMatch,
+  PlazaMatchInput,
+  TollPlazaMatchable,
+  TollStatusInput,
+} from './tollPlazaResolution.ts';

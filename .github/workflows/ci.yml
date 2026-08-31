@@ -35,6 +35,9 @@ jobs:
       - name: Check toll org-scope
         run: node scripts/check-toll-org-scope.mjs
 
+      - name: Check fuel org-scope
+        run: node scripts/check-fuel-org-scope.mjs
+
       - name: Test toll-core
         run: pnpm --filter @roam/toll-core test
 
@@ -67,6 +70,9 @@ jobs:
 
       - name: Typecheck rush-command
         run: pnpm --filter @roam/rush-command typecheck
+
+      - name: Typecheck fleet
+        run: pnpm --filter @roam/fleet typecheck
 
       - name: Build
         run: pnpm build

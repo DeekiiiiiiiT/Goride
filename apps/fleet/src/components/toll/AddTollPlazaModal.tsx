@@ -95,7 +95,7 @@ const INITIAL_FORM: FormState = {
   plusCode: '',
   parish: '',
   address: '',
-  geofenceRadius: '200',
+  geofenceRadius: '',
   status: 'unverified',
   operationalStatus: 'active',
   notes: '',
@@ -114,6 +114,8 @@ export function AddTollPlazaModal({ isOpen, onClose, onSaved, editingPlaza }: Ad
   const [isVerified, setIsVerified] = useState(false);
   const [plusCodeSynced, setPlusCodeSynced] = useState(false);
   const [geofenceRadiusNum, setGeofenceRadiusNum] = useState<number | null>(null);
+  /** When true, persist geofenceRadius=0 so detection uses Toll Settings global default (C5). */
+  const [useGlobalRadius, setUseGlobalRadius] = useState(true);
   const [showCopyField, setShowCopyField] = useState(false);
   const copyInputRef = React.useRef<HTMLInputElement>(null);
 
@@ -139,7 +141,9 @@ export function AddTollPlazaModal({ isOpen, onClose, onSaved, editingPlaza }: Ad
         plusCode: editingPlaza.plusCode || '',
         parish: editingPlaza.parish || '',
         address: editingPlaza.address || '',
-        geofenceRadius: editingPlaza.geofenceRadius != null ? String(editingPlaza.geofenceRadius) : '200',
+        geofenceRadius: editingPlaza.geofenceRadius != null && editingPlaza.geofenceRadius > 0
+          ? String(editingPlaza.geofenceRadius)
+          : '',
         status: editingPlaza.status || 'unverified',
         operationalStatus: editingPlaza.operationalStatus || 'active',
         notes: editingPlaza.notes || '',
@@ -147,12 +151,15 @@ export function AddTollPlazaModal({ isOpen, onClose, onSaved, editingPlaza }: Ad
       setPlusCodeValid(editingPlaza.plusCode ? true : null);
       setPlusCodeSynced(false);
       setIsVerified(false);
-      setGeofenceRadiusNum(editingPlaza.geofenceRadius ?? null);
+      const hasOverride = (editingPlaza.geofenceRadius ?? 0) > 0;
+      setUseGlobalRadius(!hasOverride);
+      setGeofenceRadiusNum(hasOverride ? editingPlaza.geofenceRadius ?? null : null);
     } else {
       setForm(INITIAL_FORM);
       setPlusCodeValid(null);
       setPlusCodeSynced(false);
       setIsVerified(false);
+      setUseGlobalRadius(true);
       setGeofenceRadiusNum(null);
     }
     setErrors({});
@@ -425,7 +432,10 @@ export function AddTollPlazaModal({ isOpen, onClose, onSaved, editingPlaza }: Ad
 
       // Auto-generate Plus Code if not provided but coordinates exist
       const finalPlusCode = form.plusCode.trim() || (lat !== 0 || lng !== 0 ? encodePlusCode(lat, lng, 11) : '');
-      const radius = geofenceRadiusNum ?? getDefaultGeofenceRadius(finalPlusCode || undefined);
+      // 0 = use Toll Settings global default (effectiveRadius fallback).
+      const radius = useGlobalRadius
+        ? 0
+        : (geofenceRadiusNum ?? getDefaultGeofenceRadius(finalPlusCode || undefined));
 
       const plaza: Partial<TollPlaza> = {
         name: form.name.trim(),
@@ -781,14 +791,31 @@ export function AddTollPlazaModal({ isOpen, onClose, onSaved, editingPlaza }: Ad
               />
             </div>
 
-            {/* ===== GEOFENCE RADIUS SLIDER ===== */}
+            {/* ===== GEOFENCE RADIUS ===== */}
             <div className="space-y-2">
               <div className="bg-gradient-to-r from-amber-50 to-orange-50 p-3 rounded-lg border border-amber-200">
+                <label className="flex items-start gap-2 mb-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    className="mt-0.5"
+                    checked={useGlobalRadius}
+                    onChange={(e) => {
+                      setUseGlobalRadius(e.target.checked);
+                      if (e.target.checked) setGeofenceRadiusNum(null);
+                    }}
+                  />
+                  <span className="text-xs text-amber-900">
+                    <span className="font-semibold">Use global default</span>
+                    {' '}from Toll Settings (recommended). Uncheck only to set a per-plaza override.
+                  </span>
+                </label>
+                {!useGlobalRadius && (
+                  <>
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-1.5">
                     <MapPin className="h-3.5 w-3.5 text-amber-600" />
                     <Label className="text-[10px] uppercase text-amber-700 font-bold tracking-wide">
-                      Geofence Radius
+                      Geofence Radius Override
                     </Label>
                     <TooltipProvider>
                       <Tooltip>
@@ -838,6 +865,8 @@ export function AddTollPlazaModal({ isOpen, onClose, onSaved, editingPlaza }: Ad
                   </span>
                   <span className="text-[8px] text-amber-400">500m (wide)</span>
                 </div>
+                  </>
+                )}
               </div>
             </div>
           </fieldset>

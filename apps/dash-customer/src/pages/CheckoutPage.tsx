@@ -121,6 +121,7 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
           dropoffLng: pinLng,
           paymentMethod: apiPaymentMethod,
           tip,
+          freeDelivery: appliedPromo?.type === 'free_delivery',
         });
         if (cancelled) return;
         setCheckoutPricing(pricing);
@@ -134,7 +135,7 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [merchantId, session?.access_token, subtotal, pinLat, pinLng, apiPaymentMethod, tip]);
+  }, [merchantId, session?.access_token, subtotal, pinLat, pinLng, apiPaymentMethod, tip, appliedPromo?.type]);
 
   useEffect(() => {
     const vertical = sessionStorage.getItem('roam_cart_vertical');
@@ -649,6 +650,18 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
                       : checkoutPricing.rushPassFreeDeliveryDeniedReason === 'budget'
                         ? 'Rush Pass — lower service fee (monthly free-delivery credit used)'
                         : 'Rush Pass — lower service fee'}
+                </p>
+              )}
+              {!checkoutPricing?.rushPassApplied &&
+                checkoutPricing?.promoFreeDeliveryDeniedReason === 'distance' && (
+                <p className="text-body-sm text-on-surface-variant">
+                  Promo free delivery is outside the free-delivery distance — delivery fee applies
+                </p>
+              )}
+              {!checkoutPricing?.rushPassApplied &&
+                checkoutPricing?.promoFreeDeliveryDeniedReason === 'budget' && (
+                <p className="text-body-sm text-on-surface-variant">
+                  Monthly free-delivery credit used — delivery fee applies
                 </p>
               )}
               <div className="space-y-1 text-body-sm text-on-surface-variant">

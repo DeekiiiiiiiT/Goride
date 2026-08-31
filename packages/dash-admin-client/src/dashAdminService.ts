@@ -1823,6 +1823,11 @@ export type PricingRulesPayload = {
   courier_min_pay_jmd?: number;
   cod?: { pause_threshold_jmd?: number };
   launch_promos?: { free_delivery_first_n_orders?: number };
+  /** Finding N — platform promo free-delivery caps */
+  promo_free_delivery?: {
+    max_free_delivery_km?: number;
+    monthly_subsidy_budget_jmd?: number;
+  };
   growth_guarantee?: {
     enabled?: boolean;
     tier_slugs?: string[];

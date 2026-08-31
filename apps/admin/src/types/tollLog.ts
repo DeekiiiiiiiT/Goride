@@ -31,6 +31,8 @@ export interface TollLogEntry {
   // --- Plaza / Location ---
   plazaId: string | null;             // Matched TollPlaza.id, or null
   plazaName: string | null;           // Matched TollPlaza.name, or null
+  /** How the plaza was attributed (id | name | gps | none). */
+  plazaSource?: 'id' | 'name' | 'gps' | 'none';
   highway: string | null;             // From matched plaza
   direction: string | null;           // From matched plaza
   parish: string | null;              // From matched plaza

@@ -88,6 +88,13 @@ function FuelManagementInner({ defaultTab = 'logs', onViewDriverLedger, onTabCha
     setActiveTab(defaultTab);
   }, [defaultTab]);
 
+  // Load recon settings once (org default JMD/L + Fuel Brain kill switch)
+  useEffect(() => {
+    void import('../services/fuelReconSettings').then((m) =>
+      m.loadFuelReconciliationSettings().catch(() => null),
+    );
+  }, []);
+
   const fleetTz = useFleetTimezone();
 
   // Shared active fuel week (Mon–Sun) — Logs / Recon / Reimbursements default from this.

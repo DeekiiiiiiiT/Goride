@@ -1,6 +1,6 @@
 # Roam Rush — Pricing Architecture
 
-**Date:** 2026-08-30 · **Implementation reviewed:** 2026-08-30
+**Date:** 2026-08-30 · **Implementation reviewed:** 2026-08-30 · **Re-audited:** 2026-08-31
 **Scope:** `delivery` schema pricing, `@roam/dash-pricing` engine, Model B money split, Merchant Tiers
 **Status:** ✅ **Architecture implemented; every audit defect closed, including the one filed as
 out-of-scope** ([§12](#12-remediation-verification), [§13](#13-follow-up-audit--ae02ac5e)).
@@ -9,6 +9,15 @@ out-of-scope** ([§12](#12-remediation-verification), [§13](#13-follow-up-audit
 `RD-2026-000001` reconciles to the cent.
 ✅ **Finding L closed 2026-08-30** — Pass subsidy accumulator fixed (fail-closed); real-budget
 deny `RD-2026-000006` and distance deny `RD-2026-000007` persisted. See [§14.4](#144-standing-position).
+⚠️ **Re-audit 2026-08-31 ([§16](#16-independent-re-audit--2026-08-31)):** all twelve closed findings
+independently re-confirmed against source and production rows. **Five new items** opened —
+[M](#m--the-pass-caps-are-validated-in-one-store-and-enforced-from-another) 🔴,
+[N](#n--promo-free-delivery-has-no-guardrail--and-one-is-live) 🟠,
+[O](#o--no-order-has-ever-been-delivered-so-settlement-is-unproven) 🟠,
+[P](#p--the-growth-guarantee-cron-is-scheduled-not-held) 🟡,
+[Q](#q--concurrent-pass-orders-can-both-clear-the-budget-gate) ⚪.
+**Closeout 2026-08-31 ([§16.6](#166-closeout-notes--2026-08-31)):** M, N, P, Q closed in code/ops;
+**O remains** (delivered lifecycle QA). `FREEDEL` paused; GG `enabled=false`; profile v8 explicit.
 **Context:** Pre-launch, no backwards compatibility required. GoRide ledger / fleet finance
 explicitly out of scope.
 
@@ -1160,3 +1169,223 @@ Pass marketing, and the Growth Guarantee cron held until a real Dominant month e
 The lesson worth carrying forward is §14's, and it survived the fix: the defect that mattered most
 was invisible to 45 green tests and a correct validator, and took five real orders to surface. Keep
 placing real orders.
+
+> **Amended by [§16](#16-independent-re-audit--2026-08-31).** Every closure above re-confirmed, but
+> "no open defects" was scoped to the findings already on the record. Five items outside that set are
+> open — one of them ([M](#m--the-pass-caps-are-validated-in-one-store-and-enforced-from-another)) is
+> Finding E's failure mode reachable through an admin route the E remediation never covered.
+
+---
+
+## 16. Independent re-audit — 2026-08-31
+
+Re-audited 2026-08-31 against the working tree at `6efe3da2` and the live database
+(`csfllzzastacofsvcdsc`). Method: every closed finding re-derived from source or from a direct query
+rather than carried forward from this document's own status column — §13.2 is the precedent, where
+H2 was marked closed because `maybeClawbackGrowthGuarantee` *existed* while nothing called it. The
+`@roam/dash-pricing` suite was re-run (**45 passing**) rather than quoted. **No code was changed and
+no configuration was touched.**
+
+| | |
+|---|---|
+| Confirmed closed | **12** |
+| New — high | **1** (M) |
+| New — medium | **2** (N, O) |
+| New — low | **2** (P, Q) |
+| Corrections to the record | **2** (both §10.3) |
+
+### 16.1 Closures re-confirmed
+
+| Finding | What it was | Status | How it was confirmed |
+|---|---|---|---|
+| **A** | Engine had never priced a real order | ✅ Closed | 7 rows in `delivery.orders`. `RD-2026-000001`: fee 930 − courier 630 = **+300** margin; `contribution_jmd` 792.75. *Amended by [O](#o--no-order-has-ever-been-delivered-so-settlement-is-unproven).* |
+| **B** | GCT passed as `0.15` (= 0.15%) not `15` | ✅ Closed | Zero `taxRatePercent: 0.15` in the tree; [engine.ts:797](packages/dash-pricing/src/engine.ts#L797) `const GCT = 15` |
+| **C** | Simulator Save not pre-gated client-side | ✅ Closed | [PricingHubPage.tsx:7](packages/dash-admin/src/pages/pricing/PricingHubPage.tsx#L7) imports `validatePricingConfig`, called at [:556](packages/dash-admin/src/pages/pricing/PricingHubPage.tsx#L556) |
+| **E** | Pass subsidy unbounded; validator asserted on the wrong quote | ✅ Closed | [engine.ts:837-912](packages/dash-pricing/src/engine.ts#L837-L912) asserts on `passFree.contributionJmd`, subsidy ≤ budget, and a beyond-cap quote clearing the floor. Runtime gate at [customerOrderRoutes.ts:345](supabase/functions/delivery/customerOrderRoutes.ts#L345). *Caveat in [M](#m--the-pass-caps-are-validated-in-one-store-and-enforced-from-another).* |
+| **F** | GG credit derived from raw subtotal | ✅ Closed | [growthGuarantee.ts:221](supabase/functions/delivery/growthGuarantee.ts#L221) and [:393](supabase/functions/delivery/growthGuarantee.ts#L393) both read `merchant_commission_amount` |
+| **G** | GG counted in-flight orders as completed | ✅ Closed | `GG_QUALIFYING_ORDER_STATUSES = {delivered, completed}`, used at :203 and :320 |
+| **H1** | 30.4375-day average month on a money gate | ✅ Closed | `jamaicaCalendarMonthsElapsed` at :180 and :379; no `monthsBetween` remains |
+| **H2** | Claw-back existed but was never called | ✅ Closed | 5 call sites: [orderRefund.ts:197](supabase/functions/delivery/admin/orderRefund.ts#L197), [orderRoutes.ts:223](supabase/functions/delivery/admin/orderRoutes.ts#L223), [index.ts:1245](supabase/functions/delivery/index.ts#L1245) / [:1349](supabase/functions/delivery/index.ts#L1349) / [:1425](supabase/functions/delivery/index.ts#L1425) |
+| **H3** | Uncapped guarantee credit | ✅ Closed | `max_credit_jmd_per_period = 50000` in the active global profile |
+| **J** | Pass activation without payment (verified safe) | — Unchanged | Superseded by K's fix — null-order intents now refused explicitly |
+| **K** | Client-declared payment status on `/wipay/complete` | ✅ Closed | [payments/index.ts:613+](supabase/functions/payments/index.ts#L613) poll-only; `wipayCompleteContract.test.ts` pins it |
+| **L** | Pass budget accumulator returned 0 — phantom column, fail-open | ✅ Closed | `promo_cost_jmd` **absent** from `delivery.orders` (`information_schema`) *and* from every select list. Fail-closed at [pricingResolver.ts:481](supabase/functions/delivery/pricingResolver.ts#L481) and [rushPassRoutes.ts:212](supabase/functions/delivery/rushPassRoutes.ts#L212). `RD-2026-000006` snapshot: used 2520, `deny=budget` |
+
+**Also holding up:**
+
+- **The validator really is on five write paths.** `assertValidPricingConfig` at
+  [pricingRoutes.ts:130](supabase/functions/delivery/pricingRoutes.ts#L130) covers global / parish /
+  market profile saves through one shared helper, plus :1008 and :1083. CI runs the suite at
+  `ci.yml:44`.
+- **The architecture reconciles in production.** At 7.07 km the courier ladder rounds to 8 km →
+  J$630; delivery fee 450 + 8×60 = J$930; margin **+J$300** — exactly the §3.2 steady state, matched
+  by persisted rows rather than by a unit test.
+- **No live pricing config drift.** Tier commissions 15/25/30, radii 6/10/15, guardrails 100 / 150,
+  Pass plan 8 km / J$1,500, GG ceiling J$50,000 — all as specified.
+
+### 16.2 New findings
+
+<a id="m--the-pass-caps-are-validated-in-one-store-and-enforced-from-another"></a>
+#### M — The Pass caps are validated in one store and enforced from another 🔴 High
+
+`validatePricingConfig` reads `rules.rushPass` out of the pricing-profile blob. **The runtime does
+not.** [pricingResolver.ts:465-472](supabase/functions/delivery/pricingResolver.ts#L465-L472) takes
+the caps from `pass.plan.max_free_delivery_km` and `pass.plan.monthly_subsidy_budget_jmd` — the
+`delivery.rush_pass_plans` row — and the profile values are only a fallback that never fires,
+because the plan row has both columns populated. **The validator guards a pair of numbers that
+production never reads.**
+
+The route that writes the numbers production *does* read is `PUT /admin/rush-pass/plan`
+([rushPassRoutes.ts:650-701](supabase/functions/delivery/rushPassRoutes.ts#L650-L701)). It checks
+`> 0` on the km cap and the budget, and nothing else. It never calls `validatePricingConfig`, never
+re-derives the subsidy at the new cap, and never re-checks the contribution floor.
+
+```
+accepted by the route:      { max_free_delivery_km: 25, monthly_subsidy_budget_jmd: 100000 }
+per-order subsidy at 25 km: max(150 + 25×60, 350) = J$1,650
+order-path check:           passFree branch → budget only; contribution floor bypassed
+validator sees:             nothing — it reads a different table
+```
+
+**Nothing is losing money today:** the plan row is 8 km / J$1,500 and matches the profile. This is a
+drift hazard, not a live exposure. But it is the same shape as finding L — *the path that is tested
+is not the path that executes* — and it sits on the money guard the whole E remediation was built
+around.
+
+**Closing it** means one of two things: make the plan write run the same validator against the values
+it is about to store, or delete the plan-row columns and let the profile blob be the single source
+the validator already covers.
+
+<a id="n--promo-free-delivery-has-no-guardrail--and-one-is-live"></a>
+#### N — Promo free delivery has no guardrail at all, and one is live 🟠 Medium
+
+§12.2 records that "the blanket `subsidyOk` bypass is gone." It was removed **for Rush Pass** and
+kept for promos. [customerOrderRoutes.ts:352](supabase/functions/delivery/customerOrderRoutes.ts#L352)
+reads `else if (!launchFree && minContribution > 0 && …)` — a non-Pass free-delivery promo skips the
+contribution floor entirely.
+
+Unlike Pass, this path has **no distance cap, no subsidy budget, no denial reason, and no validator
+coverage** — `validatePricingConfig` does not model promo free delivery at any point.
+
+```
+live promo:            FREEDEL · active · The Burger Spot (Growth, 10 km) · min order J$2,000
+window:                2026-08-15 → 2026-11-13 · redemptions 0 · no usage limit
+courier cost at 10 km: 150 + 10×60 = J$750, against J$0 delivery revenue
+guard that would catch it: minOrderContributionJmd = 150 — not evaluated on this branch
+```
+
+Only admins can create these ([financeRoutes.ts:302](supabase/functions/delivery/financeRoutes.ts#L302)
+is the sole insert), so it is a footgun rather than an open door. It still means the invariant §1
+opens with — *no admin configuration can make an order unprofitable* — is **false on this branch**.
+
+<a id="o--no-order-has-ever-been-delivered-so-settlement-is-unproven"></a>
+#### O — No order has ever been delivered, so settlement is still unproven 🟠 Medium
+
+Finding A is closed for **pricing**. It is not closed for **settlement**, and §14.1 / §15.5 read as
+though it were. Of the seven persisted orders, four are cancelled — including `RD-2026-000001`, the
+row cited as the reconciliation baseline — and the other three sit at `placed`.
+
+```
+RD-2026-000001 cancelled · 000002–000004 placed · 000005–000007 cancelled
+reached delivered / completed:  0
+payments.merchant_adjustments:  0 rows
+```
+
+Two of the seams finding A itself listed therefore remain unexercised:
+
+- **`computeDashCaptureSplit` against a real WiPay capture** — §13.4 already discloses the baseline
+  used a SQL-simulated transaction because the sandbox card iframe could not be driven.
+- **The entire Growth Guarantee path is unreachable by construction** — its qualifying set is
+  `delivered` / `completed` only, and no order has ever held either status.
+
+One order carried end to end — accepted, delivered, captured through the real webhook — closes both.
+Same argument §14 made for placing real orders, one lifecycle stage further along.
+
+<a id="p--the-growth-guarantee-cron-is-scheduled-not-held"></a>
+#### P — The Growth Guarantee cron is scheduled, not held 🟡 Low
+
+§15.5 states the GG cron is "held until a real Dominant month exists." **No such hold exists.**
+`.github/workflows/rush-pricing-cron.yml` is committed with a live schedule trigger, and
+`growth_guarantee.enabled` is `true` in the active profile.
+
+```
+cron:       '0 15 1 * *' → POST /internal/pricing/growth-guarantee/run
+next fire:  2026-09-01 15:00 UTC
+gated on a Dominant merchant existing:  no
+```
+
+Harmless in fact — GG requires `tier_slugs: ['dominant']`, all eight live merchants are `growth`, and
+it counts only delivered orders, of which there are none. The run will credit nothing. The finding is
+that **the control is held by the shape of the data, not by anything anyone configured**; the first
+Dominant merchant with twenty delivered orders removes it silently.
+
+<a id="q--concurrent-pass-orders-can-both-clear-the-budget-gate"></a>
+#### Q — Concurrent Pass orders can both clear the budget gate ⚪ Low
+
+`loadRushPassSubsidyUsed` reads spend at quote time; the order row that records that spend is
+inserted afterwards. There is no transaction spanning the two, no row lock, and no constraint on
+cumulative subsidy per membership period. Two orders placed on one membership in the same window both
+observe the same `used` figure and both clear the gate.
+
+Overspend is bounded to one order's subsidy — a rounding error next to the J$2,520 finding L let
+through. Worth a note in the ops runbook rather than a fix, unless Pass volume ever gets real.
+
+### 16.3 Two corrections to the record
+
+Neither changes a verdict. Both change what the evidence behind a verdict actually *is*, which
+matters the next time someone reads §10.3 as a baseline.
+
+**§10.3 — the "Live" column reports code defaults, not stored configuration.** The active global
+profile (version 6, `7cc7af82…`, the only row with `is_active = true`) stores `delivery: null`,
+`min_order_subtotal_jmd: null`, `small_order_threshold_jmd: null`. So `base_jmd 450`, `included_km 0`,
+`min_order 600` and `small_order_threshold 800` are **not configured anywhere in the database** — they
+come from `rulesBlob.ts` defaults. The table's verdict holds (the engine behaves that way and the
+persisted orders prove it); its evidence does not. The config is correct **by absence, not by
+configuration**, and a future write setting `delivery` to a partial object would change behaviour
+without anyone editing what looks like the source of truth.
+
+**§10.3 — four superseded profile versions still carry the pre-rebuild cap, and that is fine.**
+Global versions 1, 3, 4 and 5 still hold `max_fee_jmd: 1500` and `included_km: 2` — the two structural
+defects §2.2 was written about. Recorded here so it is not re-flagged by the next reader:
+
+- Profiles are **append-only forward**. `writeVersionedProfile`
+  ([pricingRoutes.ts:158-195](supabase/functions/delivery/pricingRoutes.ts#L158-L195)) deactivates the
+  current row and inserts `version + 1`; there is no reactivate, rollback or revert endpoint anywhere
+  in the admin surface.
+- Even a hand-reactivated old row is defanged on read: `sanitizeDelivery`
+  ([rulesBlob.ts:65-77](packages/dash-pricing/src/rulesBlob.ts#L65-L77)) strips `max_fee_jmd` and
+  `base_fee_jmd` during normalization.
+- `included_km: 2` is **not** stripped and would survive such a reactivation — the only residue worth
+  knowing about, and unreachable through the current API.
+
+### 16.4 Where this leaves you
+
+Ordered by what unblocks the most, not by severity alone.
+
+| # | Action | Status (2026-08-31 closeout) |
+|---|---|---|
+| 1 | 🔴 **Close M before Pass goes on sale.** | ✅ Closed — plan PUT runs `validatePricingConfig` + mirrors caps to profile blob; Hub Save pre-gated |
+| 2 | 🟠 **Decide what `FREEDEL` is meant to cost.** | ✅ Closed — platform `promo_free_delivery` caps (8 km / J$1,500); `FREEDEL` paused until re-enable |
+| 3 | 🟠 **Carry one order to `delivered` and captured.** | 🟠 Open — checklist §5 added; needs PO/QA lifecycle smoke |
+| 4 | 🟡 **Make the GG hold real.** | ✅ Closed — `enabled=false` in profile v8; schedule no longer runs GG |
+| 5 | ⚪ **Note Q in the ops runbook** | ✅ Closed — documented in `docs/RUSH_PASS_PRICING_OPS.md` |
+
+### 16.5 Standing position
+
+| Item | Status |
+|---|---|
+| Architecture (§3), validator, radius, floors, legacy removal | ✅ Correct in production |
+| Findings A, B, C, E, F, G, H1–H3, J, K, L | ✅ Closed — re-confirmed independently |
+| **M** — Pass caps validated in one store, enforced from another | ✅ **Closed 2026-08-31** |
+| **N** — promo free delivery unguarded (`FREEDEL` live) | ✅ **Closed 2026-08-31** (`FREEDEL` paused; caps shipped) |
+| **O** — settlement / GG unproven; nothing ever delivered | 🟠 **Open — PO/QA checklist §5** |
+| **P** — GG cron scheduled, not held | ✅ **Closed 2026-08-31** |
+| **Q** — concurrent Pass orders share one `used` read | ✅ **Closed (runbook)** |
+| §10.3 evidence corrections | ✅ Active profile v8 now stores explicit `delivery` / floors / `promo_free_delivery` |
+
+### 16.6 Closeout notes (2026-08-31)
+
+- Plan SoT unchanged; admin plan write overlays caps onto live rules for `validatePricingConfig`, then mirrors into the active global blob.
+- Promo/launch free delivery uses the same distance+budget gate as Pass; `promo_funded_by=platform` when promo FD applies; place-order no longer blanket-bypasses the contribution floor.
+- Pass marketing / `FREEDEL` re-enable remain PO-gated until checklist §5 (delivered order) is signed and you choose to turn sales back on.
+- Redeploy `delivery` after merge so plan-write + promo FD gates are live.

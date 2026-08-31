@@ -61,6 +61,15 @@ The counterweight: the actual root of the role system — `platform.user_roles`,
 
 Tenant scoping (`organization_id text NOT NULL` on maintenance tables) is enforced only by the edge function, not by any RLS policy (both tables are deny-all). Not exploitable via PostgREST today, but zero defense-in-depth if an edge function ever mishandles org filtering.
 
+### Exposure inventory addendum (2026-08-31 — Vehicle System Audit V2b)
+
+**`public.parts_sourcing_requests`** (migration `20260826140000_vehicle_remediation_templates_parts_requests.sql`):
+
+- RLS **enabled**.
+- Policy: `parts_sourcing_requests_select_own` — **SELECT only** for authenticated users (org JWT match or platform roles).
+- **No INSERT / UPDATE / DELETE policies** — writes go through the fleet edge service role (bypasses RLS). Correct-by-design.
+- Table lives in `public` and is therefore PostgREST-exposed; anon cannot write; authenticated can only read own-org rows.
+
 ---
 
 ## G2 — Delivery / payments / merchant core

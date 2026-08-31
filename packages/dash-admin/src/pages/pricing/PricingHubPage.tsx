@@ -1838,6 +1838,8 @@ export function PricingHubPage() {
           accessToken={session.access_token}
           canWrite={canWrite}
           revenue={revenue}
+          marketRules={marketRules}
+          tiers={tiers}
           onGoToSimulator={() => setTab('simulator')}
         />
       )}
@@ -3300,11 +3302,15 @@ function RushPassAdminPanel({
   accessToken,
   canWrite,
   revenue,
+  marketRules,
+  tiers,
   onGoToSimulator,
 }: {
   accessToken: string;
   canWrite: boolean;
   revenue?: PricingRevenueSummary | null;
+  marketRules: PricingRulesPayload;
+  tiers: MerchantTierRow[];
   onGoToSimulator?: () => void;
 }) {
   const [rows, setRows] = useState<Array<Record<string, unknown>>>([]);
@@ -3399,14 +3405,42 @@ function RushPassAdminPanel({
       toast.error('Pick at least one merchant tier where Pass applies');
       return;
     }
+    const nextKm = Number(maxKm);
+    const nextBudget = Number(budgetJmd);
+    // Finding M: client pre-gate — same validator the plan PUT uses
+    try {
+      const parsed = parsePricingRules({
+        ...(marketRules as Record<string, unknown>),
+        rush_pass: {
+          max_free_delivery_km: nextKm,
+          monthly_subsidy_budget_jmd: nextBudget,
+        },
+      });
+      const tierModels: MerchantTier[] = tiers
+        .filter((t) => t.is_active !== false)
+        .map((t) => ({
+          slug: String(t.slug),
+          name: String(t.name),
+          commissionRate: Number(t.commission_rate),
+          autoAds: Boolean(t.auto_ads),
+        }));
+      const configErr = validatePricingConfig(parsed, tierModels);
+      if (configErr) {
+        toast.error(`${configErr.code}: ${configErr.message}`);
+        return;
+      }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Pass pricing config invalid');
+      return;
+    }
     setPlanBusy(true);
     try {
       const res = await updateRushPassPlan(accessToken, {
         name: planName.trim() || undefined,
         price_jmd: Number(priceJmd),
         billing_period_days: Number(billingDays),
-        max_free_delivery_km: Number(maxKm),
-        monthly_subsidy_budget_jmd: Number(budgetJmd),
+        max_free_delivery_km: nextKm,
+        monthly_subsidy_budget_jmd: nextBudget,
         service_fee_multiplier: Number(sfMult),
         free_delivery: freeDelivery,
         eligible_tier_slugs: eligibleTiers,
@@ -3429,8 +3463,9 @@ function RushPassAdminPanel({
       <div>
         <h2 className="text-lg font-medium text-white">Rush Pass</h2>
         <p className="text-sm text-slate-400 mt-1">
-          Customer subscription: free delivery within km, monthly credit budget, and a cut service fee
-          at eligible merchant tiers. Customers buy under Account → Rush Pass.
+          Customer subscription: free delivery within the km cap, monthly credit budget, and a cut
+          service fee at eligible merchant tiers. Customers buy under Account → Rush Pass.
+          Marketing copy must say “free delivery within X km”, never unlimited free delivery.
           {onGoToSimulator ? (
             <>
               {' '}

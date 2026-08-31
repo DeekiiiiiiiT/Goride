@@ -192,7 +192,7 @@ export function AdminLoginPage() {
             <Shield className="w-8 h-8 text-amber-400" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight">Roam Fleet</h1>
+            <h1 className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight">Roam Dominion</h1>
             <p className="text-slate-600 dark:text-slate-400 text-sm">Super Admin Portal</p>
           </div>
         </div>
@@ -210,7 +210,7 @@ export function AdminLoginPage() {
               <Shield className="w-6 h-6 text-amber-400" />
             </div>
             <div>
-              <h1 className="text-xl font-bold text-slate-900 dark:text-white tracking-tight">Roam Fleet</h1>
+              <h1 className="text-xl font-bold text-slate-900 dark:text-white tracking-tight">Roam Dominion</h1>
               <p className="text-slate-400 text-xs">Super Admin Portal</p>
             </div>
           </div>
@@ -287,7 +287,7 @@ export function AdminLoginPage() {
                   type="email"
                   value={email}
                   onChange={e => setEmail(e.target.value)}
-                  placeholder="admin@roamfleet.co"
+                  placeholder="admin@roamdominion.co"
                   required
                   className="w-full px-3 py-2.5 bg-white border border-slate-300 rounded-lg text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500/50 text-sm dark:bg-slate-800 dark:border-slate-700 dark:text-white dark:placeholder:text-slate-500"
                 />
@@ -353,7 +353,7 @@ export function AdminLoginPage() {
                 href="/"
                 className="text-slate-500 hover:text-slate-300 text-sm transition-colors"
               >
-                Back to Fleet Dashboard
+                Back to home
               </a>
             </div>
           </div>

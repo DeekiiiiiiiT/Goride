@@ -78,6 +78,8 @@ function rangeKey(range: DateRange | undefined): string {
 
 export function EvidenceBridgeAnalytics() {
   const [entries, setEntries] = useState<any[]>([]);
+  const [entriesTruncated, setEntriesTruncated] = useState(false);
+  const [entriesTotalCount, setEntriesTotalCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState<'overview' | 'spatial' | 'forensic' | 'cryptographic'>('overview');
   // pickerRange updates while clicking; appliedRange only when from+to are both set (avoids mid-select reload)
@@ -116,7 +118,12 @@ export function EvidenceBridgeAnalytics() {
         opts.endDate = format(endOfDay(range.to), "yyyy-MM-dd'T'HH:mm:ss.SSS");
       }
       const entriesData = await fuelService.getFuelEntries(opts);
-      setEntries(entriesData || []);
+      const list = entriesData || [];
+      const total =
+        typeof (list as any).totalCount === 'number' ? (list as any).totalCount : list.length;
+      setEntries(list);
+      setEntriesTotalCount(total);
+      setEntriesTruncated(total > list.length);
     } catch (err) {
       console.error('Evidence Bridge Analytics Error:', err);
       toast.error('Failed to load integrity analytics');
@@ -302,6 +309,12 @@ export function EvidenceBridgeAnalytics() {
 
   return (
     <div className="space-y-6">
+      {entriesTruncated && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:bg-amber-950/30 dark:border-amber-800 dark:text-amber-100">
+          Showing {entries.length.toLocaleString()} of {entriesTotalCount.toLocaleString()} entries —
+          narrow the period for complete forensics.
+        </div>
+      )}
       <div className="flex flex-col gap-3 bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-2 flex-wrap">

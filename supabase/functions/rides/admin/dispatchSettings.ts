@@ -21,6 +21,7 @@ const WRITE_ROLES = new Set(["platform_owner", "superadmin", "rides_admin"]);
 const TOLL_SYNC_FIELDS = [
   "toll_detection_enabled",
   "toll_geofence_radius_m",
+  "toll_round_trip_cooldown_ms",
   "toll_detect_enroute",
   "route_toll_estimation_enabled",
 ] as const;
@@ -52,9 +53,24 @@ async function syncTollFieldsToMatchingPolicy(
     .eq("is_default", true);
   if (error) {
     console.warn(`[dispatch-settings] matching policy toll sync failed: ${error.message}`);
-    return;
+  } else {
+    invalidatePolicyCache();
   }
-  invalidatePolicyCache();
+
+  // Keep Toll Brain policy cooldown aligned (single operator dial in Toll Settings).
+  if (patch.toll_round_trip_cooldown_ms !== undefined) {
+    const { error: brainErr } = await db
+      .from("toll_brain_policies")
+      .update({
+        round_trip_cooldown_ms: patch.toll_round_trip_cooldown_ms,
+        updated_at: new Date().toISOString(),
+        updated_by: actorId,
+      })
+      .eq("is_default", true);
+    if (brainErr) {
+      console.warn(`[dispatch-settings] toll brain cooldown sync failed: ${brainErr.message}`);
+    }
+  }
 }
 
 function canWriteDispatchSettings(role: string): boolean {
@@ -212,6 +228,9 @@ function parsePatch(
 
   const tollRadiusCheck = intField("toll_geofence_radius_m", 50, 500);
   if (tollRadiusCheck) return tollRadiusCheck;
+
+  const cooldownCheck = intField("toll_round_trip_cooldown_ms", 0, 3_600_000);
+  if (cooldownCheck) return cooldownCheck;
 
   if (!Object.keys(patch).length) return { ok: false, error: "no_changes" };
 

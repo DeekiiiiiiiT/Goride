@@ -16,6 +16,8 @@ import {
   buildPriceSeries,
   buildFlaggedEvents,
   detectEfficiencyCrashes,
+  computePriceOutlierLoss,
+  buildPriceOutlierFlags,
   sparklineFromEntries,
   fleetTargetKmL,
   resolveEntryFuelType,
@@ -29,6 +31,10 @@ import {
   type FlaggedEvent,
 } from '../utils/fuelAnalyticsAggregates';
 import { filterFuelOpsLogEntries } from '../utils/fuelOpsEligibility';
+import {
+  listFleetPetrojamPrices,
+  listFleetRetailMarkupVersions,
+} from '../services/fuelRetailBenchmark';
 
 export type FuelAnalyticsKpis = {
   totalCost: number;
@@ -52,7 +58,8 @@ export type FuelAnalyticsKpis = {
 };
 
 export function useFuelAnalytics() {
-  const [preset, setPreset] = useState<PeriodPreset>('last_90_days');
+  // Match FuelAnalyticsToolbar week picker — not a silent 90-day window
+  const [preset, setPreset] = useState<PeriodPreset>('this_week');
   const [customStart, setCustomStart] = useState('');
   const [customEnd, setCustomEnd] = useState('');
   const [fuelTypeFilter, setFuelTypeFilter] = useState<string>('all');
@@ -68,7 +75,7 @@ export function useFuelAnalytics() {
   const clearPeriod = useCallback(() => {
     setCustomStart('');
     setCustomEnd('');
-    setPreset('last_90_days');
+    setPreset('this_week');
   }, []);
 
   // Wider fetch window for weekly trend / heatmap (8 weeks back)
@@ -84,12 +91,10 @@ export function useFuelAnalytics() {
     [period.endYmd],
   );
 
-  const { data: rawEntries = [], isLoading: entriesLoading, refetch: refetchEntries } = useQuery({
+  const { data: rawEntries = [], isLoading: entriesLoading, isError: entriesError, refetch: refetchEntries } = useQuery({
     queryKey: ['fuelAnalyticsEntries', fetchStart, fetchEndInclusive],
     queryFn: () =>
-      fuelService
-        .getFuelEntries({ limit: 1500, startDate: fetchStart, endDate: fetchEndInclusive })
-        .catch(() => []),
+      fuelService.getFuelEntries({ limit: 1500, startDate: fetchStart, endDate: fetchEndInclusive }),
     staleTime: 2 * 60 * 1000,
     refetchOnWindowFocus: false,
   });
@@ -99,14 +104,29 @@ export function useFuelAnalytics() {
       : rawEntries.length;
   const entriesTruncated = entriesTotalCount > rawEntries.length;
 
-  const { data: vehicles = [], isLoading: vehiclesLoading, refetch: refetchVehicles } = useQuery<Vehicle[]>({
+  const { data: vehicles = [], isLoading: vehiclesLoading, isError: vehiclesError, refetch: refetchVehicles } = useQuery<Vehicle[]>({
     queryKey: ['vehicles'],
-    queryFn: () => api.getVehicles().catch(() => []),
+    queryFn: () => api.getVehicles(),
     staleTime: 5 * 60 * 1000,
     refetchOnWindowFocus: false,
   });
 
+  const { data: petrojamPrices = [] } = useQuery({
+    queryKey: ['fleet-petrojam-prices'],
+    queryFn: () => listFleetPetrojamPrices(120).catch(() => []),
+    staleTime: 30 * 60 * 1000,
+    refetchOnWindowFocus: false,
+  });
+
+  const { data: retailMarkups = [] } = useQuery({
+    queryKey: ['fleet-retail-markups'],
+    queryFn: () => listFleetRetailMarkupVersions().catch(() => []),
+    staleTime: 30 * 60 * 1000,
+    refetchOnWindowFocus: false,
+  });
+
   const loading = entriesLoading || vehiclesLoading;
+  const loadError = entriesError || vehiclesError;
 
   const vehicleMap = useMemo(() => new Map(vehicles.map((v) => [v.id, v])), [vehicles]);
 
@@ -182,8 +202,22 @@ export function useFuelAnalytics() {
     const costPerKm = totalDist > 0 ? totalCost / totalDist : null;
     const priorCpk = priorDist > 0 ? priorCost / priorDist : null;
 
-    const potentialLoss = vehicleStats.reduce((s, r) => s + r.anomalyCost, 0);
-    const priorLoss = priorStats.reduce((s, r) => s + r.anomalyCost, 0);
+    const volumeLoss = vehicleStats.reduce((s, r) => s + r.anomalyCost, 0);
+    const priceLoss = computePriceOutlierLoss(
+      periodEntries,
+      vehicles,
+      petrojamPrices,
+      retailMarkups,
+    );
+    const potentialLoss = volumeLoss + priceLoss;
+    const priorVolumeLoss = priorStats.reduce((s, r) => s + r.anomalyCost, 0);
+    const priorPriceLoss = computePriceOutlierLoss(
+      priorEntries,
+      vehicles,
+      petrojamPrices,
+      retailMarkups,
+    );
+    const priorLoss = priorVolumeLoss + priorPriceLoss;
 
     const refuelCount = periodEntries.length;
     const priorRefuels = priorEntries.length;
@@ -222,7 +256,7 @@ export function useFuelAnalytics() {
         fuelOpsSpendAmount,
       ),
     };
-  }, [periodEntries, priorEntries, vehicleStats, priorStats, period]);
+  }, [periodEntries, priorEntries, vehicleStats, priorStats, period, vehicles, petrojamPrices, retailMarkups]);
 
   const dailyConsumption: DailyConsumptionPoint[] = useMemo(
     () => buildDailyConsumption(periodEntries, period),
@@ -252,14 +286,21 @@ export function useFuelAnalytics() {
   const flaggedEvents: FlaggedEvent[] = useMemo(() => {
     const feed = buildFlaggedEvents(periodEntries, vehicles, 6);
     const crashes = detectEfficiencyCrashes(applyFilters(rawEntries), vehicles);
-    const merged = [...crashes, ...feed];
+    const priceFlags = buildPriceOutlierFlags(
+      periodEntries,
+      vehicles,
+      petrojamPrices,
+      retailMarkups,
+      6,
+    );
+    const merged = [...priceFlags, ...crashes, ...feed];
     const seen = new Set<string>();
     return merged.filter((e) => {
       if (seen.has(e.id)) return false;
       seen.add(e.id);
       return true;
     }).slice(0, 8);
-  }, [periodEntries, vehicles, rawEntries, applyFilters]);
+  }, [periodEntries, vehicles, rawEntries, applyFilters, petrojamPrices, retailMarkups]);
 
   const leaderboard = useMemo(
     () =>
@@ -353,6 +394,7 @@ export function useFuelAnalytics() {
 
   return {
     loading,
+    loadError,
     hasData: rawEntries.length > 0 || vehicles.length > 0,
     entriesTruncated,
     entriesTotalCount,

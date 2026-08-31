@@ -8,6 +8,13 @@ import {
   parseISO,
   startOfWeek,
 } from 'date-fns';
+import {
+  resolveRetailEstimate,
+  isPriceOutlier,
+  type PetrojamWholesaleRow,
+  type RetailMarkupVersion,
+  type FuelGrade,
+} from '@roam/fuel-core';
 import type { FuelEntry } from '../types/fuel';
 import type { Vehicle } from '../types/vehicle';
 import type { BusinessFinancePeriod } from '../components/business-finance/types';
@@ -601,4 +608,107 @@ export function fleetTargetKmL(vehicles: Vehicle[]): number {
     .filter((n) => n > 0 && n < 50);
   if (vals.length === 0) return 12;
   return Number((vals.reduce((a, b) => a + b, 0) / vals.length).toFixed(1));
+}
+
+function paidPerLiter(e: FuelEntry): number | null {
+  const liters = fuelOpsLiters(e);
+  const amt = fuelOpsSpendAmount(e);
+  if (!(liters > 0) || !(amt > 0)) return null;
+  return amt / liters;
+}
+
+function gradeForEntry(e: FuelEntry, vehicle?: Vehicle | null): FuelGrade {
+  const raw = String(
+    (e as any).fuelType ||
+      e.metadata?.fuelType ||
+      vehicle?.fuelSettings?.fuelType ||
+      '',
+  ).toLowerCase();
+  if (raw.includes('87') || raw.includes('e10')) return 'gasolene87';
+  if (raw.includes('ulsd')) return 'ulsd';
+  if (raw.includes('diesel') || raw.includes('ado')) return 'autoDiesel';
+  return 'gasolene90';
+}
+
+function wholesaleForDate(
+  prices: PetrojamWholesaleRow[],
+  dateYmd: string,
+): PetrojamWholesaleRow | null {
+  const ymdKey = String(dateYmd).split('T')[0];
+  const eligible = prices
+    .filter((p) => String(p.priceDate).split('T')[0] <= ymdKey)
+    .sort((a, b) => String(b.priceDate).localeCompare(String(a.priceDate)));
+  return eligible[0] || null;
+}
+
+/**
+ * Excess spend vs retail estimate for price outliers (Potential Loss price leg).
+ * Prefers stamped metadata.retailEstimateJmd when present.
+ */
+export function computePriceOutlierLoss(
+  entries: FuelEntry[],
+  vehicles: Vehicle[],
+  prices: PetrojamWholesaleRow[],
+  markups: RetailMarkupVersion[],
+): number {
+  const vehicleMap = new Map(vehicles.map((v) => [v.id, v]));
+  let loss = 0;
+  for (const e of filterFuelOpsLogEntries(entries)) {
+    const paid = paidPerLiter(e);
+    if (paid == null) continue;
+    const liters = fuelOpsLiters(e);
+    let estimate = Number(e.metadata?.retailEstimateJmd);
+    if (!(estimate > 0)) {
+      const wholesale = wholesaleForDate(prices, entryDateYmd(e));
+      if (!wholesale) continue;
+      const grade = gradeForEntry(e, e.vehicleId ? vehicleMap.get(e.vehicleId) : null);
+      const resolved = resolveRetailEstimate({ wholesale, markupVersions: markups, grade });
+      if (!resolved) continue;
+      estimate = resolved.retailEstimateJmd;
+    }
+    if (!isPriceOutlier(paid, estimate)) continue;
+    loss += Math.max(0, (paid - estimate) * liters);
+  }
+  return Math.round(loss * 100) / 100;
+}
+
+export function buildPriceOutlierFlags(
+  entries: FuelEntry[],
+  vehicles: Vehicle[],
+  prices: PetrojamWholesaleRow[],
+  markups: RetailMarkupVersion[],
+  limit = 6,
+): FlaggedEvent[] {
+  const vehicleMap = new Map(vehicles.map((v) => [v.id, v]));
+  const flags: FlaggedEvent[] = [];
+  for (const e of filterFuelOpsLogEntries(entries)) {
+    const paid = paidPerLiter(e);
+    if (paid == null) continue;
+    let estimate = Number(e.metadata?.retailEstimateJmd);
+    if (!(estimate > 0)) {
+      const wholesale = wholesaleForDate(prices, entryDateYmd(e));
+      if (!wholesale) continue;
+      const grade = gradeForEntry(e, e.vehicleId ? vehicleMap.get(e.vehicleId) : null);
+      const resolved = resolveRetailEstimate({ wholesale, markupVersions: markups, grade });
+      if (!resolved) continue;
+      estimate = resolved.retailEstimateJmd;
+    }
+    if (!isPriceOutlier(paid, estimate)) continue;
+    const plate = e.vehicleId
+      ? vehicleLabel(vehicleMap.get(e.vehicleId), e.vehicleId)
+      : 'Unknown';
+    const overPct = Math.round(((paid - estimate) / estimate) * 100);
+    flags.push({
+      id: `price-${e.id}`,
+      date: entryDateYmd(e),
+      severity: overPct >= 30 ? 'critical' : 'warning',
+      title: `Price ${overPct}% above retail estimate`,
+      detail: `${plate} · paid $${paid.toFixed(2)}/L vs est $${estimate.toFixed(2)}/L`,
+      vehicleId: e.vehicleId,
+      plate,
+    });
+  }
+  return flags
+    .sort((a, b) => b.date.localeCompare(a.date))
+    .slice(0, limit);
 }

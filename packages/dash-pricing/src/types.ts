@@ -93,6 +93,7 @@ export type NestedRulesBlob = {
   guardrails?: Record<string, unknown>;
   growth_guarantee?: Record<string, unknown>;
   rush_pass?: Record<string, unknown>;
+  promo_free_delivery?: Record<string, unknown>;
 };
 
 /** Full market pricing profile rules blob — flat runtime shape for engine */
@@ -130,6 +131,14 @@ export type PricingRules = {
    * Both must be positive — unbounded Pass free delivery is rejected by validatePricingConfig.
    */
   rushPass?: {
+    maxFreeDeliveryKm: number;
+    monthlySubsidyBudgetJmd: number;
+  };
+  /**
+   * Platform promo / launch free-delivery bounds (Finding N).
+   * Same shape as Rush Pass — distance cap + monthly subsidy budget.
+   */
+  promoFreeDelivery?: {
     maxFreeDeliveryKm: number;
     monthlySubsidyBudgetJmd: number;
   };
@@ -173,6 +182,11 @@ export type PricingInput = {
   rushPassSubsidyBudgetJmd?: number;
   rushPassSubsidyUsedJmd?: number;
   rushPassSubsidyRemainingJmd?: number;
+  /** Promo/launch free delivery withheld (Finding N) */
+  promoFreeDeliveryDeniedReason?: 'distance' | 'budget' | null;
+  promoFreeDeliverySubsidyBudgetJmd?: number;
+  promoFreeDeliverySubsidyUsedJmd?: number;
+  promoFreeDeliverySubsidyRemainingJmd?: number;
 };
 
 export type PricingBreakdown = {
@@ -221,6 +235,10 @@ export type PricingBreakdown = {
   rushPassSubsidyBudgetJmd?: number;
   rushPassSubsidyUsedJmd?: number;
   rushPassSubsidyRemainingJmd?: number;
+  promoFreeDeliveryDeniedReason?: 'distance' | 'budget' | null;
+  promoFreeDeliverySubsidyBudgetJmd?: number;
+  promoFreeDeliverySubsidyUsedJmd?: number;
+  promoFreeDeliverySubsidyRemainingJmd?: number;
 };
 
 export type PricingConfigValidationError = {

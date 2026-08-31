@@ -1,5 +1,6 @@
 @import 'tailwindcss' source(none);
 @source './**/*.{js,ts,jsx,tsx}';
-@source '../fleet/src/**/*.{js,ts,jsx,tsx}';
+/* Must be ../../fleet — this file lives in apps/admin/src, so ../fleet points at apps/admin/fleet (missing). */
+@source '../../fleet/src/**/*.{js,ts,jsx,tsx}';
 @import 'tw-animate-css';
 @import './styles/globals.css';

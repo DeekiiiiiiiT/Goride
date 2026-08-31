@@ -11,6 +11,7 @@ export default defineConfig({
     extensions: ['.js', '.jsx', '.ts', '.tsx', '.json'],
     alias: {
       '@': path.resolve(__dirname, './src'),
+      '@fleet': path.resolve(__dirname, '../fleet/src'),
       '@roam/admin-core': path.resolve(__dirname, '../../packages/admin-core/src'),
       '@roam/hauler-dispatch': path.resolve(__dirname, '../../packages/hauler-dispatch/src'),
       '@roam/finance-core': path.resolve(__dirname, '../../packages/finance-core/src/index.ts'),

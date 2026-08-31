@@ -62,6 +62,7 @@ import { findConflictingGasCardAnchor } from "./gas_card_anchor_guard.ts";
 import { canReuseLinkedFuelEntry } from "./fuel_entry_link.ts";
 import { projectFromFuelEntry } from "./odometer_ledger.ts";
 import { stampOrg, getOrgId, filterByOrg, belongsToOrg } from "./org_scope.ts";
+import { stampFuelEntryRetailPrice } from "./fuel_retail_stamp.ts";
 import {
   postFuelFinalizedEventsFromReport,
   reverseFuelFinancialEventsAndRebuild,
@@ -78,6 +79,27 @@ app.use("*", requireAuth({ strict: true }));
 function isPlatformCaller(c: Context): boolean {
   const user = c.get("rbacUser") as RbacUser | undefined;
   return !!(user && PLATFORM_RESOLVED_ROLES.has(user.resolvedRole));
+}
+
+/** Per-caller ceiling for billed Google geocode proxies (60 calls / rolling minute). */
+const GEO_RATE_WINDOW_MS = 60_000;
+const GEO_RATE_MAX = 60;
+const geoRateBuckets = new Map<string, number[]>();
+
+function assertGeoRateLimit(c: Context): Response | null {
+  const user = c.get("rbacUser") as RbacUser | undefined;
+  const key = String(user?.id || user?.email || "anon");
+  const now = Date.now();
+  const prev = (geoRateBuckets.get(key) || []).filter((t) => now - t < GEO_RATE_WINDOW_MS);
+  if (prev.length >= GEO_RATE_MAX) {
+    return c.json(
+      { error: "rate_limit_exceeded", message: "Too many geocode requests — try again shortly." },
+      429,
+    );
+  }
+  prev.push(now);
+  geoRateBuckets.set(key, prev);
+  return null;
 }
 
 function stampFuelRecord<T extends Record<string, unknown>>(record: T, c: Context): T {
@@ -1866,6 +1888,14 @@ app.get(`${BASE_PATH}/fuel-reconciliation/settings`, async (c) => {
 app.patch(`${BASE_PATH}/fuel-reconciliation/settings`, requirePermission("fuel.edit_entry"), async (c) => {
   try {
     const body = await c.req.json().catch(() => ({}));
+    const priceRaw = body?.defaultPricePerLiterJmd;
+    let defaultPricePerLiterJmd: number | null | undefined = undefined;
+    if (priceRaw === null || priceRaw === "") {
+      defaultPricePerLiterJmd = null;
+    } else if (typeof priceRaw === "number" || typeof priceRaw === "string") {
+      const n = Number(priceRaw);
+      defaultPricePerLiterJmd = Number.isFinite(n) && n > 0 ? n : null;
+    }
     const settings = await updateFuelReconciliationSettings({
       fuelPnlOffsetEnabled:
         typeof body?.fuelPnlOffsetEnabled === "boolean" ? body.fuelPnlOffsetEnabled : undefined,
@@ -1873,6 +1903,7 @@ app.patch(`${BASE_PATH}/fuel-reconciliation/settings`, requirePermission("fuel.e
         typeof body?.fuelBrainEnabled === "boolean" ? body.fuelBrainEnabled : undefined,
       fuelBrainShadowCompare:
         typeof body?.fuelBrainShadowCompare === "boolean" ? body.fuelBrainShadowCompare : undefined,
+      defaultPricePerLiterJmd,
     });
     return c.json({ success: true, ...settings });
   } catch (e: any) {
@@ -1881,10 +1912,22 @@ app.patch(`${BASE_PATH}/fuel-reconciliation/settings`, requirePermission("fuel.e
 });
 
 /** Period health for Business Finance risk signals. */
-app.get(`${BASE_PATH}/fuel-reconciliation/periods-health`, async (c) => {
+app.get(`${BASE_PATH}/fuel-reconciliation/periods-health`, requirePermission("fuel.view"), async (c) => {
   try {
-    const snapshots = (await kv.getByPrefix("finalized_report:")) || [];
-    const allEntries = (await kv.getByPrefix("fuel_entry:")) || [];
+    const snapshotsRaw = (await kv.getByPrefix("finalized_report:")) || [];
+    const allEntriesRaw = (await kv.getByPrefix("fuel_entry:")) || [];
+    const snapshots = narrowPlatformOrg(
+      filterByOrg(snapshotsRaw as Record<string, unknown>[], c, {
+        endpoint: "/fuel-reconciliation/periods-health",
+      }),
+      c,
+    );
+    const allEntries = narrowPlatformOrg(
+      filterByOrg(allEntriesRaw as Record<string, unknown>[], c, {
+        endpoint: "/fuel-reconciliation/periods-health",
+      }),
+      c,
+    );
 
     let missingCanonicalExpenseCount = 0;
     let unresolvedLeakageVehicleWeeks = 0;
@@ -1895,7 +1938,7 @@ app.get(`${BASE_PATH}/fuel-reconciliation/periods-health`, async (c) => {
     cutoff.setUTCDate(cutoff.getUTCDate() - 90);
     const cutoffYmd = cutoff.toISOString().slice(0, 10);
 
-    for (const entry of allEntries) {
+    for (const entry of allEntries as any[]) {
       if (!entry?.id) continue;
       const d = String(entry.date || "").split("T")[0];
       if (!d || d < cutoffYmd) continue;
@@ -1907,13 +1950,13 @@ app.get(`${BASE_PATH}/fuel-reconciliation/periods-health`, async (c) => {
 
     // Unresolved leakage: finalized reports with misc > 0 still flagged, or
     // weeks with spend but no finalize ? approximate via snapshot misc + pending fills
-    for (const s of snapshots) {
+    for (const s of snapshots as any[]) {
       const misc = Math.abs(Number(s?.miscellaneousCost) || 0);
       if (misc > 0.005) unresolvedLeakageVehicleWeeks++;
     }
 
     // Pending fills (not finalized) with amount ? owner still needs to Finalize
-    for (const entry of allEntries) {
+    for (const entry of allEntries as any[]) {
       if (!entry?.id) continue;
       const status = entry.reconciliationStatus;
       if (status && status !== "Pending") continue;
@@ -2013,7 +2056,7 @@ async function findFuelPnlOffsetBackfillCandidates(): Promise<FuelPnlOffsetBackf
   return candidates;
 }
 
-app.get(`${BASE_PATH}/fuel-pnl-offset-backfill/status`, async (c) => {
+app.get(`${BASE_PATH}/fuel-pnl-offset-backfill/status`, requirePlatformStaff(), async (c) => {
   try {
     const candidates = await findFuelPnlOffsetBackfillCandidates();
     const totalAmount = Math.round(candidates.reduce((s, e) => s + e.amount, 0) * 100) / 100;
@@ -2370,11 +2413,14 @@ app.post(`${BASE_PATH}/admin/purge-synthetic`, requirePlatformStaff(), async (c)
 });
 
 // Phase 8 Step 4: Ledger Locking
-app.patch(`${BASE_PATH}/transactions/:id/lock`, async (c) => {
+app.patch(`${BASE_PATH}/transactions/:id/lock`, requirePermission("transactions.edit"), async (c) => {
     try {
         const id = c.req.param("id");
         const tx = await kv.get(`transaction:${id}`);
         if (!tx) return c.json({ error: "Transaction not found" }, 404);
+        if (!belongsToOrg(tx as Record<string, unknown>, c) && !isPlatformCaller(c)) {
+            return c.json({ error: "Forbidden" }, 403);
+        }
 
         tx.isLocked = true;
         tx.lockedAt = new Date().toISOString();
@@ -3143,7 +3189,7 @@ app.post(`${BASE_PATH}/stations/promote-learnt`, requirePermission("fuel.edit_en
                 verifiedAt: new Date().toISOString(),
                 verificationMethod: 'manual_promotion',
                 location: stationData?.location || learnt.location,
-                stats: { totalVisits: 1, lastVisited: new Date().toISOString() }
+                stats: { totalVisits: 1, lastUpdated: new Date().toISOString() }
             };
 
             await kv.set(`station:${newStationId}`, newStation);
@@ -3558,6 +3604,9 @@ app.post(`${BASE_PATH}/fuel-entries`, async (c: Context) => {
 
     // Org ownership: fleet JWT stamp; platform keeps explicit organizationId
     Object.assign(entry, stampFuelRecord(entry as Record<string, unknown>, c));
+
+    // Stamp retail markup version before persist (history-safe outlier baseline)
+    await stampFuelEntryRetailPrice(entry as Record<string, unknown>);
 
     // Persist top-level + metadata paymentSource; blank ? RideShare_Cash
     {
@@ -4315,7 +4364,7 @@ app.post(`${BASE_PATH}/admin/reconcile-ledger-orphans`, requirePlatformStaff(), 
 });
 
 // --- SPATIAL REVIEW QUEUE (ambiguous GPS ? multiple verified stations nearby) ---
-app.get(`${BASE_PATH}/admin/spatial-review-queue`, async (c) => {
+app.get(`${BASE_PATH}/admin/spatial-review-queue`, requirePlatformStaff(), async (c) => {
     try {
         const [fuelRaw, txRaw] = await Promise.all([
             kv.getByPrefix("fuel_entry:") || [],
@@ -5373,8 +5422,10 @@ app.delete(`${BASE_PATH}/stations/:id`, requirePermission("fuel.delete_entry"), 
 });
 
 // --- GEOCODING (Phase 9: Suggestion 2) ---
-app.post(`${BASE_PATH}/geo/geocode`, async (c) => {
+app.post(`${BASE_PATH}/geo/geocode`, requirePermission("fuel.edit_entry"), async (c) => {
     try {
+        const limited = assertGeoRateLimit(c);
+        if (limited) return limited;
         const { address } = await c.req.json();
         const apiKey = Deno.env.get("GOOGLE_MAPS_API_KEY");
         
@@ -5425,8 +5476,10 @@ app.post(`${BASE_PATH}/geo/geocode`, async (c) => {
 });
 
 // --- REVERSE GEOCODING (Plus Code ? Address resolution) ---
-app.post(`${BASE_PATH}/geo/reverse-geocode`, async (c) => {
+app.post(`${BASE_PATH}/geo/reverse-geocode`, requirePermission("fuel.edit_entry"), async (c) => {
     try {
+        const limited = assertGeoRateLimit(c);
+        if (limited) return limited;
         const { lat, lng } = await c.req.json();
         const apiKey = Deno.env.get("GOOGLE_MAPS_API_KEY");
         
@@ -6235,7 +6288,7 @@ app.post(`${BASE_PATH}/parent-companies`, requirePermission("fuel.edit_entry"), 
  * GET /fuel-audit/deadhead/fleet?periodStart=YYYY-MM-DD&periodEnd=YYYY-MM-DD
  * Returns { vehicles: DeadheadAttribution[], fleet: AggregatedDeadheadSummary }
  */
-app.get(`${BASE_PATH}/fuel-audit/deadhead/fleet`, async (c) => {
+app.get(`${BASE_PATH}/fuel-audit/deadhead/fleet`, requirePermission("fuel.view"), async (c) => {
   try {
     const startTime = Date.now(); // Phase 9 (Step 9.3): performance timing
     const periodStart = c.req.query("periodStart") || undefined;
@@ -6243,12 +6296,31 @@ app.get(`${BASE_PATH}/fuel-audit/deadhead/fleet`, async (c) => {
 
     // MUST use paginated kv.getByPrefix ? raw .select().like truncates at 1000 rows
     // (fleet has 2000+ trips; missing trips ? tripKm=0 ? industry fallback over-deadheads).
-    const [allEntries, vehicles, allTrips, brainPolicy] = await Promise.all([
+    const [allEntriesRaw, vehiclesRaw, allTripsRaw, brainPolicy] = await Promise.all([
       kv.getByPrefix("fuel_entry:"),
       kv.getByPrefix("vehicle:"),
       kv.getByPrefix("trip:"),
       loadDeadheadBrainPolicy(),
     ]);
+
+    const allEntries = narrowPlatformOrg(
+      filterByOrg(allEntriesRaw as Record<string, unknown>[], c, {
+        endpoint: "/fuel-audit/deadhead/fleet",
+      }),
+      c,
+    ) as any[];
+    const vehicles = narrowPlatformOrg(
+      filterByOrg(vehiclesRaw as Record<string, unknown>[], c, {
+        endpoint: "/fuel-audit/deadhead/fleet",
+      }),
+      c,
+    ) as any[];
+    const allTrips = narrowPlatformOrg(
+      filterByOrg(allTripsRaw as Record<string, unknown>[], c, {
+        endpoint: "/fuel-audit/deadhead/fleet",
+      }),
+      c,
+    ) as any[];
 
 
     // Per-vehicle deadhead attribution
@@ -6352,19 +6424,37 @@ app.get(`${BASE_PATH}/fuel-audit/deadhead/fleet`, async (c) => {
  * GET /fuel-audit/deadhead/:vehicleId?periodStart=YYYY-MM-DD&periodEnd=YYYY-MM-DD
  * Returns DeadheadAttribution
  */
-app.get(`${BASE_PATH}/fuel-audit/deadhead/:vehicleId`, async (c) => {
+app.get(`${BASE_PATH}/fuel-audit/deadhead/:vehicleId`, requirePermission("fuel.view"), async (c) => {
   try {
     const vehicleId = c.req.param("vehicleId");
     const periodStart = c.req.query("periodStart") || undefined;
     const periodEnd = c.req.query("periodEnd") || undefined;
 
     // Paginated KV load ? same trap as fleet route (raw like ? 1000-row truncate).
-    const [allEntries, allTrips, vehicle, brainPolicy] = await Promise.all([
+    const [allEntriesRaw, allTripsRaw, vehicle, brainPolicy] = await Promise.all([
       kv.getByPrefix("fuel_entry:"),
       kv.getByPrefix("trip:"),
       kv.get(`vehicle:${vehicleId}`),
       loadDeadheadBrainPolicy(),
     ]);
+
+    if (!vehicle) return c.json({ error: "Vehicle not found" }, 404);
+    if (!belongsToOrg(vehicle as Record<string, unknown>, c) && !isPlatformCaller(c)) {
+      return c.json({ error: "Forbidden" }, 403);
+    }
+
+    const allEntries = narrowPlatformOrg(
+      filterByOrg(allEntriesRaw as Record<string, unknown>[], c, {
+        endpoint: "/fuel-audit/deadhead/:vehicleId",
+      }),
+      c,
+    ) as any[];
+    const allTrips = narrowPlatformOrg(
+      filterByOrg(allTripsRaw as Record<string, unknown>[], c, {
+        endpoint: "/fuel-audit/deadhead/:vehicleId",
+      }),
+      c,
+    ) as any[];
 
     const vEntries = allEntries.filter((e: any) => e.vehicleId === vehicleId);
 

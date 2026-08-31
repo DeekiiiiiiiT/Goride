@@ -28,6 +28,7 @@ import { RouteAnalysis } from './RouteAnalysis';
 import { ReportGenerator } from './ReportGenerator';
 import { IntegrityDashboard } from './IntegrityDashboard';
 import { TripDetailsDialog } from './TripDetailsDialog';
+import { resolveTripTollCoverage } from '../../utils/tripTollCoverage';
 import { TripMapDialog } from './TripMapDialog';
 import { TripIssueDialog } from './TripIssueDialog';
 import { DeleteConfirmationDialog } from './DeleteConfirmationDialog';
@@ -466,6 +467,24 @@ export function TripLogsPage() {
                                             📦 Courier
                                         </Badge>
                                     )}
+                                    {(() => {
+                                      const coverage = resolveTripTollCoverage(trip);
+                                      if (coverage.status === 'detected') {
+                                        return (
+                                          <Badge variant="outline" className="w-fit text-[10px] h-5 px-1 bg-emerald-50 text-emerald-700 border-emerald-200">
+                                            Tolls: {coverage.crossingCount}
+                                          </Badge>
+                                        );
+                                      }
+                                      if (coverage.status === 'not_applicable') {
+                                        return (
+                                          <Badge variant="outline" className="w-fit text-[10px] h-5 px-1 bg-slate-50 text-slate-500 border-slate-200">
+                                            No toll GPS
+                                          </Badge>
+                                        );
+                                      }
+                                      return null;
+                                    })()}
                                 </div>
                               </TableCell>
 

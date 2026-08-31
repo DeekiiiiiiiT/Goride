@@ -12,9 +12,7 @@ import {
   parsePricingRules,
   serializePricingRules,
   validatePartyRules,
-  validatePricingConfig,
   validatePricingRules,
-  type MerchantTier,
   type PricingParty,
   type PricingRules,
 } from "../../_shared/dashPricing.ts";
@@ -26,6 +24,13 @@ import {
 } from "../pricingLayers.ts";
 import { recordCashSettlement } from "../courierCashLedger.ts";
 import { computeCodTrialBalance } from "../../_shared/dashPricing.ts";
+import {
+  assertValidPricingConfig,
+  loadActiveProfileRules,
+  loadActiveTiers,
+  rowToMerchantTier,
+} from "./pricingConfigHelpers.ts";
+import type { MerchantTier } from "../../_shared/dashPricing.ts";
 
 function adminFromCtx(c: { get: (k: string) => unknown }): ProductAdminUser {
   return c.get("adminUser") as ProductAdminUser;
@@ -35,55 +40,6 @@ const PRICING_PARTIES: PricingParty[] = ["customer", "rider", "partner", "platfo
 
 function isPricingParty(v: unknown): v is PricingParty {
   return typeof v === "string" && PRICING_PARTIES.includes(v as PricingParty);
-}
-
-function rowToMerchantTier(row: Record<string, unknown>): MerchantTier {
-  return {
-    slug: String(row.slug ?? ""),
-    name: String(row.name ?? ""),
-    commissionRate: Number(row.commission_rate ?? 0),
-    searchBoost: row.search_boost != null ? Number(row.search_boost) : undefined,
-    defaultDeliveryRadiusKm: row.default_delivery_radius_km != null
-      ? Number(row.default_delivery_radius_km)
-      : undefined,
-    promoEligible: row.promo_eligible != null ? Boolean(row.promo_eligible) : undefined,
-    autoAds: row.auto_ads != null ? Boolean(row.auto_ads) : undefined,
-  };
-}
-
-async function loadActiveTiers(
-  db: ReturnType<typeof getDb>,
-): Promise<MerchantTier[]> {
-  const { data } = await db
-    .from("merchant_tiers")
-    .select("slug, name, commission_rate, search_boost, default_delivery_radius_km, promo_eligible, auto_ads")
-    .eq("is_active", true)
-    .order("sort_order");
-  return (data ?? []).map((row) => rowToMerchantTier(row as Record<string, unknown>));
-}
-
-async function assertValidPricingConfig(
-  db: ReturnType<typeof getDb>,
-  rules: PricingRules,
-  tiersOverride?: MerchantTier[],
-): Promise<{ error: string; code: string } | null> {
-  const tiers = tiersOverride ?? await loadActiveTiers(db);
-  const err = validatePricingConfig(rules, tiers);
-  if (!err) return null;
-  return { error: err.message, code: err.code };
-}
-
-async function loadActiveProfileRules(opts: {
-  db: ReturnType<typeof getDb>;
-  table: "global_pricing_profiles" | "parish_pricing_profiles" | "market_pricing_profiles";
-  matchColumn?: "parish_id" | "market_id";
-  matchId?: string;
-}): Promise<Record<string, unknown>> {
-  const { db, table, matchColumn, matchId } = opts;
-  let query = db.from(table).select("rules").eq("is_active", true);
-  if (matchColumn && matchId) query = query.eq(matchColumn, matchId);
-  const { data } = await query.order("version", { ascending: false }).limit(1).maybeSingle();
-  return ((data?.rules ?? {}) as Record<string, unknown>);
 }
 
 /** Apply full or party-scoped rules update; returns serialized blob or error. */
@@ -115,6 +71,15 @@ async function prepareRulesForSave(opts: {
       mergedRaw = {
         ...mergedRaw,
         growth_guarantee: incomingRules.growth_guarantee as Record<string, unknown>,
+      };
+    }
+    if (
+      incomingRules.promo_free_delivery &&
+      typeof incomingRules.promo_free_delivery === "object"
+    ) {
+      mergedRaw = {
+        ...mergedRaw,
+        promo_free_delivery: incomingRules.promo_free_delivery as Record<string, unknown>,
       };
     }
   } else {

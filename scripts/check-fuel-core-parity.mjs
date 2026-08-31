@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Fails when fuel shims regain forked implementations instead of re-exporting
- * @roam/fuel-core (fleet-canonical). See packages/fuel-core/README.md.
+ * @roam/fuel-core / fleet-canonical. See packages/fuel-core/README.md.
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -20,6 +20,16 @@ const SHIMS = [
     mustMatch: /from\s+['"]@fleet\/services\/fuelCalculationService['"]/,
     forbidden: /FALLBACK_PRICE_PER_LITER\s*=\s*1\.50/,
   },
+  {
+    rel: 'apps/driver/src/services/fuelCalculationService.ts',
+    mustMatch: /from\s+['"]@fleet\/services\/fuelCalculationService['"]/,
+    forbidden: /FALLBACK_PRICE_PER_LITER\s*=\s*1\.50/,
+  },
+  {
+    rel: 'apps/admin/src/utils/fuelCycleEngine.ts',
+    mustMatch: /from\s+['"]@fleet\/utils\/fuelCycleEngine['"]/,
+    forbidden: /function calculateFuelCycles\s*\(/,
+  },
 ];
 
 let failed = false;
@@ -34,6 +44,10 @@ for (const shim of SHIMS) {
   const text = fs.readFileSync(abs, 'utf8');
   const size = Buffer.byteLength(text, 'utf8');
   if (size > 4000 && shim.rel.includes('fuelCalculationService')) {
+    failed = true;
+    console.error(`${shim.rel}: file too large (${size} bytes) — likely a full fork, not a re-export`);
+  }
+  if (size > 2000 && shim.rel.includes('fuelCycleEngine')) {
     failed = true;
     console.error(`${shim.rel}: file too large (${size} bytes) — likely a full fork, not a re-export`);
   }
@@ -70,6 +84,13 @@ for (const rel of [
     }
   };
   walk(abs);
+}
+
+// Dead packages/types fuel copy must stay deleted
+const staleTypes = path.join(ROOT, 'packages/types/src/fuel.ts');
+if (fs.existsSync(staleTypes)) {
+  failed = true;
+  console.error('packages/types/src/fuel.ts must remain deleted — use app-local or @roam/fuel-core types');
 }
 
 if (failed) {

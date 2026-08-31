@@ -108,6 +108,9 @@ export function normalizeRulesBlob(
   const rushPass: Record<string, unknown> = isPlainObject(raw.rush_pass)
     ? { ...raw.rush_pass }
     : {};
+  const promoFreeDelivery: Record<string, unknown> = isPlainObject(raw.promo_free_delivery)
+    ? { ...raw.promo_free_delivery }
+    : {};
 
   for (const { party, key } of FLAT_TO_PARTY) {
     if (raw[key] === undefined) continue;
@@ -137,6 +140,7 @@ export function normalizeRulesBlob(
     guardrails: Object.keys(guardrails).length ? guardrails : undefined,
     growth_guarantee: Object.keys(growthGuarantee).length ? growthGuarantee : undefined,
     rush_pass: Object.keys(rushPass).length ? rushPass : undefined,
+    promo_free_delivery: Object.keys(promoFreeDelivery).length ? promoFreeDelivery : undefined,
   };
 }
 
@@ -203,6 +207,10 @@ export function serializePricingRulesNested(rules: PricingRules): NestedRulesBlo
     rush_pass: {
       max_free_delivery_km: rules.rushPass?.maxFreeDeliveryKm ?? 8,
       monthly_subsidy_budget_jmd: rules.rushPass?.monthlySubsidyBudgetJmd ?? 1500,
+    },
+    promo_free_delivery: {
+      max_free_delivery_km: rules.promoFreeDelivery?.maxFreeDeliveryKm ?? 8,
+      monthly_subsidy_budget_jmd: rules.promoFreeDelivery?.monthlySubsidyBudgetJmd ?? 1500,
     },
   };
 }
@@ -271,6 +279,7 @@ export function flattenNestedToLegacy(blob: NestedRulesBlob): Record<string, unk
   if (blob.guardrails) out.guardrails = blob.guardrails;
   if (blob.growth_guarantee) out.growth_guarantee = blob.growth_guarantee;
   if (blob.rush_pass) out.rush_pass = blob.rush_pass;
+  if (blob.promo_free_delivery) out.promo_free_delivery = blob.promo_free_delivery;
 
   if (blob.platform) out.platform = blob.platform;
   if (blob.customer) out.customer = blob.customer;
