@@ -102,3 +102,10 @@ export type {
   EnrichTollTx,
   EnrichedTollLogEntry,
 } from './enrichTollLogEntries.ts';
+
+export { previewRateImpact } from './tollRateImpact.ts';
+export type {
+  ImpactTollRow,
+  ImpactPlazaLine,
+  RateImpactPreview,
+} from './tollRateImpact.ts';

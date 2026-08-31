@@ -17,11 +17,13 @@ import type {
   TollRateScheduleVersion,
 } from "../../../packages/toll-core/src/tollRateSchedule.ts";
 import { KV_TOLL_RATE_SCHEDULE } from "../../../packages/toll-core/src/tollRateSchedule.ts";
+// Deno cannot resolve bare @roam/* — import package source by relative path
+// (never via apps/fleet shims that re-export from @roam/toll-core).
 import {
   previewRateImpact,
   type ImpactTollRow,
   type RateImpactPreview,
-} from "../../../apps/fleet/src/utils/tollRateImpact.ts";
+} from "../../../packages/toll-core/src/tollRateImpact.ts";
 import { readRateStamp } from "./toll_rate_provenance.ts";
 
 export {

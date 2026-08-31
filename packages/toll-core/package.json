@@ -12,8 +12,10 @@
     "./tollRateSchedule": "./src/tollRateSchedule.ts",
     "./tollCategoryHelper": "./src/tollCategoryHelper.ts",
     "./tollDate": "./src/tollDate.ts",
-    "./tollLedgerRecord": "./src/tollLedgerRecord.ts"
+    "./tollLedgerRecord": "./src/tollLedgerRecord.ts",
+    "./tollRateImpact": "./src/tollRateImpact.ts"
   },
+
   "scripts": {
     "test": "vitest run"
   },
