@@ -243,50 +243,23 @@ export async function isFuelPnlOffsetEnabled(): Promise<boolean> {
 export type FuelReconciliationSettings = {
   /** @deprecated Always true — offsets are automatic. */
   fuelPnlOffsetEnabled: boolean;
-  /** Server kill switch for Fuel Brain category km in recon (default on). */
-  fuelBrainEnabled: boolean;
-  /** Shadow-compare brain vs legacy without requiring consumer off. */
-  fuelBrainShadowCompare: boolean;
-  /** Org-configured JMD/L when gas-card observed price cannot be computed. */
-  defaultPricePerLiterJmd: number | null;
 };
 
 const SETTINGS_KEY = "fuel_reconciliation_settings";
 
 export async function getFuelReconciliationSettings(): Promise<FuelReconciliationSettings> {
-  const raw = (await kv.get(SETTINGS_KEY)) as Partial<FuelReconciliationSettings> | null;
-  const price = Number(raw?.defaultPricePerLiterJmd);
+  // KV blob may still hold legacy fuelBrain* keys — ignore them; brain is always on.
+  await kv.get(SETTINGS_KEY);
   return {
     fuelPnlOffsetEnabled: true,
-    fuelBrainEnabled: raw?.fuelBrainEnabled !== false,
-    fuelBrainShadowCompare: raw?.fuelBrainShadowCompare === true,
-    defaultPricePerLiterJmd:
-      Number.isFinite(price) && price > 0 ? price : null,
   };
 }
 
 export async function updateFuelReconciliationSettings(
-  patch: Partial<FuelReconciliationSettings>,
+  _patch: Partial<FuelReconciliationSettings>,
 ): Promise<FuelReconciliationSettings> {
-  const current = await getFuelReconciliationSettings();
-  let nextPrice = current.defaultPricePerLiterJmd;
-  if (patch.defaultPricePerLiterJmd === null) {
-    nextPrice = null;
-  } else if (typeof patch.defaultPricePerLiterJmd === "number") {
-    const n = Number(patch.defaultPricePerLiterJmd);
-    nextPrice = Number.isFinite(n) && n > 0 ? n : null;
-  }
   const next: FuelReconciliationSettings = {
     fuelPnlOffsetEnabled: true,
-    fuelBrainEnabled:
-      typeof patch.fuelBrainEnabled === "boolean"
-        ? patch.fuelBrainEnabled
-        : current.fuelBrainEnabled,
-    fuelBrainShadowCompare:
-      typeof patch.fuelBrainShadowCompare === "boolean"
-        ? patch.fuelBrainShadowCompare
-        : current.fuelBrainShadowCompare,
-    defaultPricePerLiterJmd: nextPrice,
   };
   await kv.set(SETTINGS_KEY, next);
   return next;

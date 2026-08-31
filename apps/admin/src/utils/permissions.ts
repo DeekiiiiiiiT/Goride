@@ -474,12 +474,8 @@ export const PAGE_PERMISSION_MAP: Record<string, Permission> = {
   'fuel-reports':       'nav.fuel_reports',
   'fuel-configuration': 'nav.fuel_configuration',
 
-  // Toll Management
-  'toll-logs':          'nav.toll_logs',
-  'toll-tags':          'nav.toll_reconciliation',
-  'tag-inventory':      'nav.toll_tag_inventory',
+  // Toll Management (Dominion platform only — Fleet money/ops screens live in Roam Fleet)
   'claimable-loss':     'nav.toll_claimable_loss',
-  'toll-analytics':     'nav.toll_analytics',
 
   // Trips / Reports / Finance
   'trips':              'nav.trips',
@@ -543,10 +539,6 @@ export const PAGE_PERMISSIONS: Record<string, DominionPageSensitivity> = {
   'toll-brain': 'standard',
   'toll-stations': 'standard',
   'toll-info': 'standard',
-  'toll-analytics': 'standard',
-  'toll-logs': 'standard',
-  'tag-inventory': 'standard',
-  'toll-tags': 'standard',
   'toll-settings': 'standard',
   'toll-live-monitor': 'standard',
   'motor-vehicles': 'standard',

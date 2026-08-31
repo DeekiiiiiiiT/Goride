@@ -1,22 +1,20 @@
-export type FuelPriceSource = 'fuel_entries' | 'org_default' | 'unavailable';
+export type FuelPriceSource = 'fuel_entries' | 'unavailable';
 
 export type ResolvePricePerLiterInput = {
   totalLiters: number;
   totalGasCardCost: number;
-  /** Org-configured JMD/L when observed price cannot be computed. */
-  defaultPricePerLiterJmd?: number | null;
 };
 
 export type ResolvePricePerLiterResult = {
   pricePerLiter: number;
   priceSource: FuelPriceSource;
-  /** True when no observed or org default price — callers must not invent personal-usage JMD. */
+  /** True when no observed gas-card price — callers must not invent personal-usage JMD. */
   priceUnavailable: boolean;
 };
 
 /**
- * Resolve JMD per litre for recon / personal-usage charges.
- * Never falls back to a USD-era 1.50 constant.
+ * Resolve JMD per litre from real fill data only.
+ * Never invents a fallback / org default / USD-era constant.
  */
 export function resolvePricePerLiter(
   input: ResolvePricePerLiterInput,
@@ -27,14 +25,6 @@ export function resolvePricePerLiter(
     return {
       pricePerLiter: cost / liters,
       priceSource: 'fuel_entries',
-      priceUnavailable: false,
-    };
-  }
-  const orgDefault = Number(input.defaultPricePerLiterJmd);
-  if (Number.isFinite(orgDefault) && orgDefault > 0) {
-    return {
-      pricePerLiter: orgDefault,
-      priceSource: 'org_default',
       priceUnavailable: false,
     };
   }

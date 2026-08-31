@@ -11,6 +11,8 @@ import {
 import {
   resolveRetailEstimate,
   isPriceOutlier,
+  medianPositive,
+  DEFAULT_PRICE_OUTLIER_PCT,
   type PetrojamWholesaleRow,
   type RetailMarkupVersion,
   type FuelGrade,
@@ -101,7 +103,7 @@ export type VehicleFuelStats = {
 
 function vehicleLabel(v: Vehicle | undefined, id: string): string {
   if (!v) return id.slice(0, 8);
-  return v.licensePlate || v.name || id.slice(0, 8);
+  return (v as { licensePlate?: string }).licensePlate || id.slice(0, 8);
 }
 
 /** Per-vehicle odo span + spend for a set of entries (ops fills; spend excludes fees/declines). */
@@ -704,6 +706,108 @@ export function buildPriceOutlierFlags(
       severity: overPct >= 30 ? 'critical' : 'warning',
       title: `Price ${overPct}% above retail estimate`,
       detail: `${plate} · paid $${paid.toFixed(2)}/L vs est $${estimate.toFixed(2)}/L`,
+      vehicleId: e.vehicleId,
+      plate,
+    });
+  }
+  return flags
+    .sort((a, b) => b.date.localeCompare(a.date))
+    .slice(0, limit);
+}
+
+function stationKey(e: FuelEntry): string | null {
+  const id = String(
+    e.matchedStationId || (e as { stationId?: string }).stationId || e.metadata?.stationId || '',
+  ).trim();
+  return id || null;
+}
+
+function ymdMinusDays(endYmd: string, days: number): string {
+  const d = new Date(`${endYmd}T12:00:00`);
+  d.setDate(d.getDate() - days);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+/** Build stationId → median $/L from fills in the last 30 days of the period end. */
+export function buildStationMedianPerLiter(
+  entries: FuelEntry[],
+  periodEndYmd: string,
+  windowDays = 30,
+): Map<string, number> {
+  const startYmd = ymdMinusDays(periodEndYmd, windowDays);
+  const byStation = new Map<string, number[]>();
+  for (const e of filterFuelOpsLogEntries(entries)) {
+    const sid = stationKey(e);
+    if (!sid) continue;
+    const day = entryDateYmd(e);
+    if (day < startYmd || day > periodEndYmd) continue;
+    const paid = paidPerLiter(e);
+    if (paid == null) continue;
+    const arr = byStation.get(sid) || [];
+    arr.push(paid);
+    byStation.set(sid, arr);
+  }
+  const out = new Map<string, number>();
+  for (const [sid, prices] of byStation) {
+    // Need at least 2 fills so a single fill cannot flag itself as the median outlier.
+    if (prices.length < 2) continue;
+    const med = medianPositive(prices);
+    if (med != null) out.set(sid, med);
+  }
+  return out;
+}
+
+/**
+ * Excess spend vs this station's 30-day median $/L (Potential Loss station-price leg).
+ */
+export function computeStationMedianOutlierLoss(
+  entries: FuelEntry[],
+  periodEndYmd: string,
+  pct = DEFAULT_PRICE_OUTLIER_PCT,
+): number {
+  const medians = buildStationMedianPerLiter(entries, periodEndYmd);
+  let loss = 0;
+  for (const e of filterFuelOpsLogEntries(entries)) {
+    const sid = stationKey(e);
+    if (!sid) continue;
+    const median = medians.get(sid);
+    if (median == null) continue;
+    const paid = paidPerLiter(e);
+    if (paid == null) continue;
+    if (!isPriceOutlier(paid, median, pct)) continue;
+    loss += Math.max(0, (paid - median) * fuelOpsLiters(e));
+  }
+  return Math.round(loss * 100) / 100;
+}
+
+export function buildStationMedianOutlierFlags(
+  entries: FuelEntry[],
+  vehicles: Vehicle[],
+  periodEndYmd: string,
+  limit = 6,
+  pct = DEFAULT_PRICE_OUTLIER_PCT,
+): FlaggedEvent[] {
+  const medians = buildStationMedianPerLiter(entries, periodEndYmd);
+  const vehicleMap = new Map(vehicles.map((v) => [v.id, v]));
+  const flags: FlaggedEvent[] = [];
+  for (const e of filterFuelOpsLogEntries(entries)) {
+    const sid = stationKey(e);
+    if (!sid) continue;
+    const median = medians.get(sid);
+    if (median == null) continue;
+    const paid = paidPerLiter(e);
+    if (paid == null) continue;
+    if (!isPriceOutlier(paid, median, pct)) continue;
+    const overPct = Math.round(((paid - median) / median) * 100);
+    const plate = e.vehicleId
+      ? vehicleLabel(vehicleMap.get(e.vehicleId), e.vehicleId)
+      : 'Unknown';
+    flags.push({
+      id: `station-median-${e.id}`,
+      date: entryDateYmd(e),
+      severity: overPct >= 30 ? 'critical' : 'warning',
+      title: `Above this station’s 30-day median (+${overPct}%)`,
+      detail: `${plate} · paid $${paid.toFixed(2)}/L vs station median $${median.toFixed(2)}/L`,
       vehicleId: e.vehicleId,
       plate,
     });

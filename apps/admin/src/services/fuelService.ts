@@ -197,9 +197,18 @@ export const fuelService = {
   },
 
   // --- Fuel Entries ---
-  async getFuelEntries(options?: { limit?: number, startDate?: string, endDate?: string, organizationId?: string }): Promise<FuelEntry[]> {
+  async getFuelEntries(options?: {
+    limit?: number;
+    offset?: number;
+    startDate?: string;
+    endDate?: string;
+    organizationId?: string;
+  }): Promise<FuelEntry[]> {
     const query = new URLSearchParams();
     query.append("limit", (options?.limit || 2000).toString());
+    if (typeof options?.offset === 'number' && options.offset > 0) {
+      query.append("offset", String(options.offset));
+    }
     if (options?.startDate) query.append("startDate", options.startDate);
     if (options?.endDate) query.append("endDate", options.endDate);
     if (options?.organizationId) query.append("organizationId", options.organizationId);
@@ -214,6 +223,48 @@ export const fuelService = {
       (data as any).totalCount = parseInt(totalHeader, 10) || data.length;
     }
     return data;
+  },
+
+  async getAllFuelEntriesInRange(options: {
+    startDate?: string;
+    endDate?: string;
+    organizationId?: string;
+    pageSize?: number;
+    maxPages?: number;
+  }): Promise<FuelEntry[]> {
+    const pageSize = options.pageSize ?? 1500;
+    const maxPages = options.maxPages ?? 40;
+    const accumulated: FuelEntry[] = [];
+    let totalCount: number | undefined;
+    for (let page = 0; page < maxPages; page++) {
+      const batch = await this.getFuelEntries({
+        limit: pageSize,
+        offset: page * pageSize,
+        startDate: options.startDate,
+        endDate: options.endDate,
+        organizationId: options.organizationId,
+      });
+      if (typeof (batch as any).totalCount === 'number') {
+        totalCount = (batch as any).totalCount;
+      }
+      if (!Array.isArray(batch) || batch.length === 0) break;
+      accumulated.push(...batch);
+      if (totalCount != null && accumulated.length >= totalCount) break;
+      if (batch.length < pageSize) break;
+    }
+    if (
+      totalCount != null &&
+      accumulated.length < totalCount &&
+      accumulated.length >= pageSize * maxPages
+    ) {
+      throw new Error(
+        `Fuel entries safety ceiling: loaded ${accumulated.length} of ${totalCount}. Narrow the period.`,
+      );
+    }
+    if (totalCount != null) {
+      (accumulated as any).totalCount = totalCount;
+    }
+    return accumulated;
   },
 
   /**

@@ -74,5 +74,14 @@ jobs:
       - name: Typecheck rush-command
         run: pnpm --filter @roam/rush-command typecheck
 
+      - name: Typecheck fuel-core
+        run: pnpm --filter @roam/fuel-core typecheck
+
+      - name: Typecheck fleet money spine
+        run: pnpm --filter @roam/fleet typecheck:money
+
+      - name: Typecheck admin money spine
+        run: pnpm --filter @roam/admin typecheck:money
+
       - name: Build
         run: pnpm build

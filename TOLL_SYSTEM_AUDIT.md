@@ -5,10 +5,11 @@
 **Method:** Static read of every toll file across `apps/fleet`, `apps/admin`, `apps/driver`, `packages/*`, `supabase/functions/*`. No code was changed.
 
 > **Status as of 2026-08-31 — closeout + follow-up delivery. See [§J.4](#j4-independent-verification-of-the-closeout).**
-> **45 / 45 lettered findings closed in code.** E1 de-forked; cooldown migration recorded; KV plazas
-> backfilled (were empty while SQL had 12) + loader SQL fallback. Live detection still needs plaza
-> verify + one real trip ([§J.5](#j5-standing-position)). Sections A–F are the **original 2026-08-26
-> findings, preserved as written** — read §I / §J for current status before acting on any of them.
+> **45 / 45 lettered findings closed in code** (E5 **superseded** — do not host Fleet money/ops in
+> Dominion). Product rule: Dominion = Brain · Database · Info · Settings · Live Monitor; Fleet =
+> Analytics · Logs · Tag Inventory · Reconciliation. Live detection still needs plaza verify + one
+> real trip ([§J.5](#j5-standing-position)). Sections A–F are the **original 2026-08-26 findings** —
+> read §I / §J for current status before acting on any of them.
 
 ---
 
@@ -311,6 +312,7 @@ Dominion's toll nav ([`adminNavConfig.ts:106-110`](apps/admin/src/components/adm
 
 Missing entirely: **Toll Analytics, Toll Logs, Tag Inventory, Toll Reconciliation.** `TollAnalytics` is imported in exactly one place, `apps/fleet/src/App.tsx:29`. Dominion holds the toll *configuration* but cannot see the toll *money* it configures. A platform admin cannot answer "did my rate change land correctly?"
 
+> **Superseded 2026-08-31 (product boundary).** E5 assumed Dominion should host customer Fleet money/ops screens. That is wrong. **Dominion** = platform toll config + Live Monitor (Brain, Database, Info, Settings, Live Monitor). **Roam Fleet** = customer Analytics / Logs / Tag Inventory / Reconciliation. Closing E5 by re-exporting those four Fleet screens into Dominion was reversed; do not re-add them.
 ### E6 · MEDIUM — Live Toll Monitor shows a fake count and a permanent blank
 [`TollLiveMonitorPage.tsx:27-29`](apps/admin/src/pages/TollLiveMonitorPage.tsx#L27):
 ```js
@@ -390,7 +392,7 @@ Zero occurrences across 61 routes and 9,836 lines. Auth is fine (`app.use("*", r
 | # | Item | § |
 |---|---|---|
 | 17 | De-fork `orphanTollClassifier`, `tollCategoryHelper`, `useTollLogs`, `tollLedgerRecord` into `packages/` | E1–E4 |
-| 18 | Add Analytics / Logs / Tag Inventory to Dominion | E5 |
+| 18 | ~~Add Analytics / Logs / Tag Inventory to Dominion~~ | E5 | **Do not** — superseded product boundary |
 | 19 | Tag Overview redesign | B8 |
 | 20 | Real toll count + last plaza in Live Monitor | E6 |
 
@@ -466,7 +468,7 @@ increase lands" block — rows 1–5 — is complete.
 | **E2** | `orphanTollClassifier` fork — money-affecting | ✅ | All three copies now re-export `@roam/toll-core`, including a Deno shim for `_fleet-server` |
 | **E3** | `tollCategoryHelper` fork | ✅ | Re-exports from `@roam/toll-core` in fleet, admin and driver |
 | **E4** | `tollLedgerRecord` — three copies, one stale | ✅ | Types come from `@roam/toll-core`; each app keeps only its local `FinancialTransaction` conversions |
-| **E5** | Dominion blind to fleet toll money | ✅ | Toll Analytics, Toll Logs, Tag Inventory and Toll Reconciliation all added to [`adminNavConfig.ts:120-123`](apps/admin/src/components/admin/adminNavConfig.ts#L120) |
+| **E5** | Dominion blind to fleet toll money | ⛔ Superseded | Product mis-scope — do **not** host Fleet Analytics/Logs/Tags/Recon in Dominion. Dominion keeps Brain · Database · Info · Settings · Live Monitor only |
 | **E6** | Live Monitor fake count / blank plaza | ✅ | Real `tollCount` and `last_plaza_name` now fetched in the list query |
 | **E7** | Three names for one page | ✅ | `AdminDashboard.tsx` no longer exists; a single `Toll Database` label remains |
 | **F1** | Toll ledger entirely org-blind | ✅ | See A1 — this was the likely cause of the wrong Analytics numbers |

@@ -730,6 +730,7 @@ function DeleteCenterInner() {
     transactions: null, claims: null, equipment: null,
     inventory: null, service: null, odometer: null, checkins: null,
   });
+  const [vehiclesTruncated, setVehiclesTruncated] = useState(false);
 
   // ─── Import History batch state ───────────────────────────────────────
   const [batches, setBatches] = useState<ImportBatch[]>([]);
@@ -780,7 +781,11 @@ function DeleteCenterInner() {
     // Fire all counts in parallel
     safeCount('trips', () => api.getTripStats({}));
     safeCount('drivers', () => api.getDrivers());
-    safeCount('vehicles', () => api.getVehicles());
+    safeCount('vehicles', async () => {
+      const { vehicles, truncated } = await api.getVehiclesWithMeta();
+      if (!cancelled) setVehiclesTruncated(truncated);
+      return vehicles;
+    });
     safeCount('driverMetrics', () => api.getDriverMetrics());
     safeCount('vehicleMetrics', () => api.getVehicleMetrics());
     safeCount('transactions', () => api.getTransactions());
@@ -822,7 +827,7 @@ function DeleteCenterInner() {
           fuelResult, fuelCardsResult, learntResult, serviceResult, odoResult, checkinResult] = await Promise.all([
           api.getTripStats({}).catch(() => null),
           api.getDrivers().catch(() => null),
-          api.getVehicles().catch(() => null),
+          api.getVehiclesWithMeta().catch(() => null),
           api.getDriverMetrics().catch(() => null),
           api.getVehicleMetrics().catch(() => null),
           api.getStations().catch(() => null),
@@ -838,11 +843,14 @@ function DeleteCenterInner() {
           api.bulkDeletePreview({ prefix: 'checkin:', fields: ['id'] }).catch(() => null),
         ]);
         const tollMergedCount = await countTollTransactionsMerged().catch(() => null);
+        if (vehicles && typeof vehicles.truncated === 'boolean') {
+          setVehiclesTruncated(vehicles.truncated);
+        }
         setCounts(prev => ({
           ...prev,
           trips: tripStats ? (tripStats.totalTrips ?? tripStats.total ?? prev.trips) : prev.trips,
           drivers: Array.isArray(drivers) ? drivers.length : prev.drivers,
-          vehicles: Array.isArray(vehicles) ? vehicles.length : prev.vehicles,
+          vehicles: vehicles && Array.isArray(vehicles.vehicles) ? vehicles.vehicles.length : prev.vehicles,
           driverMetrics: Array.isArray(driverMetrics) ? driverMetrics.length : prev.driverMetrics,
           vehicleMetrics: Array.isArray(vehicleMetrics) ? vehicleMetrics.length : prev.vehicleMetrics,
           stations: Array.isArray(stations) ? stations.length : prev.stations,
@@ -1067,7 +1075,7 @@ function DeleteCenterInner() {
     // ═══ VEHICLES (Phase 5) ═══
     if (deleteGroup === 'vehicles') {
       return renderCardGrid([
-        { key: 'vehicles', title: 'Vehicle Records', description: 'Delete vehicle profiles with plate, VIN, and registration data', icon: <Car className="h-5 w-5" />, recordCount: counts.vehicles, modalId: 'deleteVehicleRecords' },
+        { key: 'vehicles', title: 'Vehicle Records', description: vehiclesTruncated ? 'Delete vehicle profiles with plate, VIN, and registration data. Count shows the first 20,000 only — contact support if your fleet exceeds this limit.' : 'Delete vehicle profiles with plate, VIN, and registration data', icon: <Car className="h-5 w-5" />, recordCount: counts.vehicles, badge: vehiclesTruncated ? 'Truncated at 20k' : undefined, modalId: 'deleteVehicleRecords' },
         { key: 'vehicleMetrics', title: 'Vehicle Metrics', description: 'Delete cached vehicle performance metrics (will regenerate from trip data)', icon: <Car className="h-5 w-5" />, badge: 'Regenerable', recordCount: counts.vehicleMetrics, modalId: 'deleteVehicleMetrics' },
       ]);
     }

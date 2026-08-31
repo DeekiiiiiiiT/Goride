@@ -797,3 +797,153 @@ The pattern is consistent and worth stating plainly: **the remediation scoped th
 ---
 
 *Re-audit 2026-08-31 — audit only, no files were modified. Every status above was verified by reading the shipped code, not the remediation plan. The one claim that did not survive verification is the Fleet Stations route (J-F4), which was reversed by a later product decision; the §I item list has been updated accordingly. Items 1–5 in §L are the ones that still behave in production like the bugs they were meant to fix.*
+
+---
+
+# M. Second verification pass — 2026-08-31 (later same day)
+
+**Method:** Re-ran every check behind §J–§L against the current working tree.
+
+## M0 · Result
+
+**§L is essentially complete: 19 of 20 items done, plus A3.** All 15 §K findings are closed. Every High is closed. The two remaining gaps are one half-item and one pre-existing item that was never in the top tier.
+
+Two items were resolved by **deletion rather than wiring** — a legitimate and in both cases simpler choice than the one §L recommended, but each converts a bug into a **product position that should be held deliberately**. They are called out in M2 because they will not show up as defects again; they will show up as someone asking "why is this driver charged zero?" or "why did my Dominion toggle do nothing?"
+
+| Tier | Items | Status |
+|---|---|---|
+| §L 1–5 — the loose wires | 5 | ✅ 5 done (one half-gap: CI typecheck) |
+| §L 6–11 — leaks & silent failures | 6 | ✅ 6 done |
+| §L 12–16 — parity & drift | 5 | ✅ 5 done |
+| §L 17–20 — Petrojam | 4 | ✅ 3 done · 1 unverifiable from code · H7 not started |
+| §K findings | 15 | ✅ 15 closed |
+
+## M1 · Item-by-item
+
+### Tier 1 — the loose wires
+
+| # | Item | Status | Evidence |
+|---|---|---|---|
+| 1 | `defaultPricePerLiterJmd` (K4) | ✅ **Resolved by removal** | [`resolvePricePerLiter.ts`](packages/fuel-core/src/resolvePricePerLiter.ts) is now two-tier — `FuelPriceSource = 'fuel_entries' \| 'unavailable'`, the `org_default` branch and the input field are gone. The unreachable tier can no longer be unreachable because it does not exist. See M2a. |
+| 2a | Price-health guard (K3) | ✅ **Fixed** | [`fuelCalculationService.ts:492`](apps/fleet/src/services/fuelCalculationService.ts#L492) now reads `efficiencySource === 'default_fallback' \|\| priceUnavailable \|\| priceSource === 'unavailable'`. The Amber downgrade fires. |
+| 2b | CI typecheck | 🔴 **Not done** | [`ci.yml:75`](.github/workflows/ci.yml#L75) still runs `typecheck` for `@roam/rush-command` only. `apps/fleet` has a `typecheck` script ([`package.json:12`](apps/fleet/package.json#L12)); **`apps/admin` has none**. See M3. |
+| 3 | Fuel Brain kill switch (K1) | ✅ **Resolved by removal** | [`fuelBrainFlags.ts`](apps/fleet/src/utils/fuelBrainFlags.ts) is now three hardcoded constants — `FLEET_USE_FUEL_BRAIN = true`, `FLEET_CYCLE_HEALTH = true`, `FUEL_BRAIN_SHADOW_COMPARE = false` — headed "Fuel Brain is always on for recon. No customer or Dominion kill switch." `applyFuelBrainServerSettings` is gone. See M2b. |
+| 4 | Lock route (K13) | ✅ **Fixed, thoroughly** | [`:2407-2413`](supabase/functions/_fleet-server/fuel_controller.tsx#L2407) — `requirePermission("transactions.edit")` **plus** an inline `belongsToOrg(tx, c) \|\| isPlatformCaller(c)` check on the fetched record. Both halves of the finding closed. |
+| 5 | `NO PRICE` badge (K5) | ✅ **Fixed** | [`ReconciliationTable.tsx:927-929`](apps/fleet/src/components/fuel/ReconciliationTable.tsx#L927) — `'fuel_entries' ? 'ACTUAL' : 'NO PRICE'`. The misleading "DEFAULT" is gone. |
+
+### Tier 2 — leaks and silent failures
+
+| # | Item | Status | Evidence |
+|---|---|---|---|
+| 6 | Four cross-tenant reads (K15) | ✅ **Fixed** | `/fuel-reconciliation/periods-health` → `fuel.view` + `filterByOrg` ×2 [`:1906-1918`](supabase/functions/_fleet-server/fuel_controller.tsx#L1906) · `/fuel-pnl-offset-backfill/status` → `requirePlatformStaff()` [`:2050`](supabase/functions/_fleet-server/fuel_controller.tsx#L2050) · `/admin/spatial-review-queue` → `requirePlatformStaff()` [`:4358`](supabase/functions/_fleet-server/fuel_controller.tsx#L4358) · `/fuel-audit/deadhead/fleet` → `fuel.view` + `filterByOrg` ×3 on entries/vehicles/trips [`:6282-6311`](supabase/functions/_fleet-server/fuel_controller.tsx#L6282) · `/fuel-audit/deadhead/:vehicleId` → same [`:6418-6445`](supabase/functions/_fleet-server/fuel_controller.tsx#L6418). Scoping the deadhead loads at the source (not post-filtering by vehicle id) is the right fix. |
+| 7 | Geo proxies (K14) | ✅ **Fixed** | Both now `requirePermission("fuel.edit_entry")` — [`:5416`](supabase/functions/_fleet-server/fuel_controller.tsx#L5416), [`:5470`](supabase/functions/_fleet-server/fuel_controller.tsx#L5470). `trackedProviderCall` metering retained. |
+| 8 | `.catch(() => [])` (K8) | ✅ **Fixed** | All three sites now let the query reject — [`useFuelAnalytics.ts:97`](apps/fleet/src/hooks/useFuelAnalytics.ts#L97), [`StationDatabaseView.tsx:121`](apps/fleet/src/components/fuel/stations/StationDatabaseView.tsx#L121), [`FuelCostAnalyticsPage.tsx:41`](apps/admin/src/components/admin/fuel-cost-analytics/FuelCostAnalyticsPage.tsx#L41). A dead API no longer renders as zero spend. |
+| 9 | Dominion truncation (E3) | ✅ **Fixed** | `apps/admin/.../fuelService.ts:212-214` reads `X-Total-Count`; [`EvidenceBridgeAnalytics.tsx:81,123-126`](apps/admin/src/components/admin/fuel-evidence-bridge/EvidenceBridgeAnalytics.tsx#L123) derives `entriesTruncated` and renders a banner at [`:312`](apps/admin/src/components/admin/fuel-evidence-bridge/EvidenceBridgeAnalytics.tsx#L312). The forensics surface now declares when it is seeing a subset. |
+| 10 | `getStations` pagination (B6) | ✅ **Fixed** | [`fuelService.ts`](apps/fleet/src/services/fuelService.ts) `getStations({limit=500, offset=0, fields='list'})` — passes all three and reads `X-Total-Count`. The server capability built in the first remediation is now actually used, and the default is the projected list shape rather than full records. |
+| 11 | `shouldShadowCompareFuelBrain` (K2) | ✅ **Fixed** | Both dead functions deleted; [`fuelBrainClient.ts`](apps/fleet/src/services/fuelBrainClient.ts) is down to `classifyWeekForRecon`. |
+
+### Tier 3 — parity and drift control
+
+| # | Item | Status | Evidence |
+|---|---|---|---|
+| 12 | Extend parity script (K10b, K6) | ✅ **Done** | [`check-fuel-core-parity.mjs`](scripts/check-fuel-core-parity.mjs) now asserts four shims: fleet `fuelBrainFlags`, **admin + driver** `fuelCalculationService`, admin `fuelCycleEngine`. `apps/driver/src/services/fuelCalculationService.ts` is a **17-line re-export** — the fourth fork (K6) is gone. |
+| 13 | `check-fuel-org-scope.mjs` (K10a) | ✅ **Done** | Script exists and runs in CI at [`ci.yml:38-39`](.github/workflows/ci.yml#L38), mirroring the toll check. This is the change that makes K15's class self-policing. |
+| 14 | De-fork `fuelCycleEngine` (F1) | ✅ **Done** | `apps/admin/src/utils/fuelCycleEngine.ts` is now 6 lines re-exporting `@fleet/utils/fuelCycleEngine`. The cycle spine is single-sourced. |
+| 15 | `packages/types/src/fuel.ts` (F2, K7) | ✅ **Done — deleted** | The file is gone; `packages/types/src/index.ts` no longer exports `./fuel` (only `./fuelBrain`, which has real consumers). The dead canonical-by-name copy is removed rather than left ambiguous. |
+| 16 | Pin admin Leaflet (K9) | ✅ **Done** | [`apps/admin/package.json:64`](apps/admin/package.json#L64) — `"leaflet": "1.9.4"`, matching fleet exactly. |
+
+### Tier 4 — Petrojam
+
+| # | Item | Status | Evidence |
+|---|---|---|---|
+| 17 | Stamp `priceVersionId` (K12) | ✅ **Done, correctly ordered** | [`supabase/functions/_fleet-server/fuel_retail_stamp.ts`](supabase/functions/_fleet-server/fuel_retail_stamp.ts) stamps `priceVersionId` + `retailEstimateJmd` onto entry metadata, and [`:78`](supabase/functions/_fleet-server/fuel_retail_stamp.ts#L78) explicitly refuses to overwrite an existing stamp ("history lock"). Imported by the controller at [`:65`](supabase/functions/_fleet-server/fuel_controller.tsx#L65). This landed **before** item 18, exactly as §L asked. |
+| 18 | Wire outlier detection into fleet (C2, A4) | ✅ **Done** | [`fuelAnalyticsAggregates.ts:12-13,646-696`](apps/fleet/src/utils/fuelAnalyticsAggregates.ts#L646) imports `resolveRetailEstimate` + `isPriceOutlier` and prefers the **stamped** `metadata.retailEstimateJmd`, falling back to live resolution only when absent. Petrojam is no longer an island — and because it reads the stamp first, historical judgments stay stable. |
+| 19 | Confirm a green Petrojam run | ⏳ **Not verifiable from code** | The workflow is correct. Whether `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` are set and the schedule has actually fired can only be seen in the Actions tab. |
+| 20 | Per-station price-outlier detection (H7) | 🔴 **Not started** | No per-station median / rolling-window comparison in `fuelAnalyticsAggregates.ts`. Never in the top tier; noted for completeness. |
+
+### Also fixed
+
+**A3** — the period preset defaulted to `last_90_days` against a week-shaped control since the first audit. [`useFuelAnalytics.ts:62`](apps/fleet/src/hooks/useFuelAnalytics.ts#L62) is now `useState<PeriodPreset>('this_week')`. This also materially reduces A1 exposure: the fetch window is now 8 weeks + the current week rather than 8 weeks + 90 days, so the 1,500-row cap is far harder to hit.
+
+## M2 · Two fixes that became product positions
+
+Neither is a defect. Both are decisions that now live in code and will resurface as questions rather than as bugs, so they are worth stating once, plainly.
+
+### M2a · A cash-only driver-week now charges zero, permanently and by design
+`resolvePricePerLiter` no longer has a middle tier. A week with liters but no gas-card cost — cash-only, a missing import, a new vehicle — resolves to `unavailable`, and [`:354-366`](apps/fleet/src/services/fuelCalculationService.ts#L354) zeroes ride-share, company-usage, deadhead **and personal-usage** cost.
+
+This is the correct engineering choice: it is deterministic, tagged at three levels (`priceSource`, `priceUnavailable`, the `NO PRICE` badge), health-downgraded (K3), and cannot be mistaken downstream for a real number. It is strictly safer than inventing a price.
+
+But the **business** outcome is that the driver is charged nothing for that week, and the fix is manual — someone must add the missing fill data and re-run. Worth confirming ops knows that is the intended handling, and that the `NO PRICE` badge is somewhere they actually look. If unbilled weeks accumulate, the answer is a reconciliation queue for `priceUnavailable` weeks, not a reinstated fallback constant.
+
+### M2b · The Fuel Brain server settings are now orphaned
+The client flags are hardcoded `true / true / false`. But the server still defines, persists and accepts them:
+- [`fuel_pnl_offset.ts:247-277`](supabase/functions/_fleet-server/fuel_pnl_offset.ts#L247) — `fuelBrainEnabled` / `fuelBrainShadowCompare` in the settings type, with defaults and patch merge logic.
+- [`fuel_controller.tsx:1894-1897`](supabase/functions/_fleet-server/fuel_controller.tsx#L1894) — `PATCH /fuel-reconciliation/settings` still accepts both booleans and writes them.
+
+So a settings write succeeds, persists, returns 200 — and changes nothing. That is a worse failure than no switch at all, because it looks like it worked. Either drop the two fields from the settings schema and the PATCH allow-list, or have the route reject them with an explicit "Fuel Brain is always on" message. Small cleanup, five minutes, prevents a genuinely confusing support ticket.
+
+## M3 · The one remaining gap
+
+**No `tsc` typecheck for `apps/fleet` or `apps/admin` in CI.** [`ci.yml:75`](.github/workflows/ci.yml#L75) typechecks `@roam/rush-command` alone. `pnpm build` runs `vite build`, which transpiles without typechecking — it will not catch this class of error.
+
+K3 was a TS2367 no-overlap comparison that silently disabled a money-health guard and survived an entire remediation cycle. It was found by reading, not by tooling. The same class of bug can land again tomorrow.
+
+`apps/fleet` already has the script. Two steps close this:
+
+```yaml
+- name: Typecheck fleet
+  run: pnpm --filter @roam/fleet typecheck
+- name: Typecheck admin
+  run: pnpm --filter @roam/admin typecheck
+```
+
+`apps/admin` needs the script added to its `package.json` first — it has `build` and `test` but no `typecheck`. Expect a backlog of pre-existing errors on the first run; gating on a clean fleet run and adding admin behind it is a reasonable staging.
+
+## M4 · Remaining fork inventory (unchanged, and now bounded)
+
+`fuelCalculationService` and `fuelCycleEngine` — the two that carried money logic — are single-sourced across all three apps and CI-enforced. What remains is service/type/hook surface:
+
+| File | fleet | admin | driver | covered by parity CI |
+|---|---|---|---|---|
+| `services/fuelService.ts` | 482 | 575 | 357 | ❌ |
+| `types/fuel.ts` | 458 | 389 | 339 | ❌ |
+| `services/settlementService.ts` | 466 | 445 | 470 | ❌ |
+| `utils/fuelCardMatch.ts` | 106 | 75 | 76 | ❌ |
+| `hooks/useFuelAnchors.ts` | 91 | 81 | — | ❌ |
+| `hooks/useFuelCycles.ts` | 34 | 11 | — | ❌ |
+| `services/fuelDisputeService.ts` | 77 | 77 | 77 | ❌ |
+
+`settlementService` is the one worth watching — three copies, all computing driver settlements, none asserted equal. It no longer forks the *engine* (§F1's actual danger, now closed), but it still forks the orchestration around it. Not urgent; worth a parity assertion when convenient.
+
+## M5 · Standing product decisions
+
+Unchanged from §L, restated so they are not mistaken for open defects:
+
+- **F4** — Station Database is Super-Admin-only by explicit decision ([`App.tsx:162`](apps/fleet/src/App.tsx#L162)). Fleet operators cannot correct station data they generate; that escalation load is accepted.
+- **F5** — Dominion has **no** customer money surfaces (no Reconciliation, Transaction Logs, Fuel Cards, Reimbursements, or Configuration). Nav is Stations, Prices, Brain, JAA, Evidence Bridge, Station Analytics, and Fuel Cost Analytics only.
+- **§G3** — stations / learnt-locations / parent-companies are intentionally platform-global.
+- **M2a** — unpriceable weeks charge zero; ops must watch **NO PRICE** badges / recon filter. Add fills and re-run recon — never invent JMD/L.
+- **M2b** — Fuel Brain is always on; server settings no longer accept runtime kill-switch fields (PATCH returns 400).
+- **A1** — closeout plan auto-pages past the 1,500-row ceiling; truncation banner only if a hard safety ceiling trips.
+
+### Ops brief — NO PRICE weeks
+A driver-week with liters but no gas-card spend shows **NO PRICE**, health Amber, and **$0** for all category costs until real fills exist and recon is re-run. Do not treat $0 as “no personal usage.”
+
+### Petrojam cron
+Confirm GitHub secrets `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` (optional `CRON_SECRET`), then run `.github/workflows/petrojam-weekly-sync.yml` via `workflow_dispatch` and keep one green run URL on file.
+
+**Ops status (closeout):** `gh` was not authenticated in the implementer environment — secrets/run must be confirmed from the Actions tab by a human with repo access.
+
+### Closeout implementation notes (2026-08-31)
+- M2b: brain runtime flags removed from settings; PATCH with those keys returns 400.
+- M3: CI runs `fuel-core` typecheck + fleet/admin **money-spine** typecheck (`typecheck:money`); full-app `tsc` still has UI/package backlog.
+- A1: `getAllFuelEntriesInRange` auto-pages past 1,500.
+- M2a UX: Reconciliation NO PRICE banner + filter chip.
+- H7: station 30-day median outliers in Fleet Potential Loss + Dominion Cost Analytics.
+- M4: settlement idempotency/date helpers in `@roam/fuel-core`; driver coverage uses canonical `getCategoryCoverageSplit`.
+- Phase 7 deferred: no persisted station median on `stats` (client median sufficient).
+
+---
+
+*Second verification pass, 2026-08-31 — audit only, no files were modified. §L is 19/20 complete and all 15 §K findings are closed, including every High. Remaining closeout work is tracked in the Fuel System Audit Closeout Plan (brain settings removal, fleet+admin typecheck in CI, analytics paging, NO PRICE queue UX, station median outliers, settlement shared core).*

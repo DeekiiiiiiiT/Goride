@@ -224,8 +224,6 @@ export const FuelCalculationService = {
             /** Skip allowance (multi-vehicle slices apply once after merge). */
             skipPersonalAllowance?: boolean;
             personalAllowance?: PersonalAllowanceReconContext;
-            /** Org-configured JMD/L when gas-card observed price cannot be computed. */
-            defaultPricePerLiterJmd?: number | null;
         }
     ): WeeklyFuelReport => {
         const startStr = FuelCalculationService.toLocalDateStr(weekStart);
@@ -300,11 +298,10 @@ export const FuelCalculationService = {
             }
         }
 
-        // 3c. JMD/L — observed, else org default, else fail-loud (never invent 1.50)
+        // 3c. JMD/L — observed gas-card fills only (never invent a default)
         const priceResolved = resolvePricePerLiter({
             totalLiters,
             totalGasCardCost,
-            defaultPricePerLiterJmd: options?.defaultPricePerLiterJmd,
         });
         const actualPricePerLiter = priceResolved.pricePerLiter;
         const priceUnavailable = priceResolved.priceUnavailable;
@@ -669,8 +666,6 @@ export const FuelCalculationService = {
         /** Key `${driverId}:${vehicleId}` → brain classification (consumer path only). */
         brainByDriverVehicle?: Map<string, FuelBrainClassificationInput>,
         personalAllowance?: PersonalAllowanceReconContext,
-        /** Org-configured JMD/L when gas-card observed price cannot be computed. */
-        defaultPricePerLiterJmd?: number | null,
     ): WeeklyFuelReport[] => {
         const startStr = FuelCalculationService.toLocalDateStr(weekStart);
         const endStr = FuelCalculationService.toLocalDateStr(weekEnd);
@@ -783,7 +778,6 @@ export const FuelCalculationService = {
                         personalAllowance: personalAllowance
                             ? { ...personalAllowance, driverWeekTrips: expandedTrips }
                             : undefined,
-                        defaultPricePerLiterJmd,
                     },
                 );
                 // Restore: pending from original entries
@@ -816,7 +810,6 @@ export const FuelCalculationService = {
                     reportId: `${driverId}_${startStr}`,
                     vehicleIds,
                     vehiclePlates: plates,
-                    defaultPricePerLiterJmd,
                 },
             );
             merged.totalGasCardCost = 0;
@@ -853,7 +846,6 @@ export const FuelCalculationService = {
                         fuelScenarioId: policyId,
                         brainClassification: brainByDriverVehicle?.get(`${driverId}:${vid}`),
                         skipPersonalAllowance: true,
-                        defaultPricePerLiterJmd,
                     },
                 );
                 if (!sliceMeta && slice.metadata?.rideShareCalc) sliceMeta = slice.metadata;

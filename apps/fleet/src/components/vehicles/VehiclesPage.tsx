@@ -122,9 +122,13 @@ export function VehiclesPage({
   });
 
   // Phase 8: React Query for vehicles (meta keeps 20k truncation honesty)
-  const { data: vehiclesMeta } = useQuery({
+  const {
+    data: vehiclesMeta,
+    isError: vehiclesLoadError,
+    refetch: refetchVehiclesMeta,
+  } = useQuery({
     queryKey: ['vehicles', 'withMeta'],
-    queryFn: () => api.getVehiclesWithMeta().catch(() => ({ vehicles: [], truncated: false })),
+    queryFn: () => api.getVehiclesWithMeta(),
     staleTime: 5 * 60 * 1000, // 5 minutes
     gcTime: 15 * 60 * 1000, // 15 minutes
     refetchOnWindowFocus: false,
@@ -136,7 +140,7 @@ export function VehiclesPage({
   // Phase 8: React Query for vehicle metrics
   const { data: vehicleMetrics = [] } = useQuery({
     queryKey: ['vehicleMetrics'],
-    queryFn: () => api.getVehicleMetrics().catch(() => []),
+    queryFn: () => api.getVehicleMetrics(),
     staleTime: 5 * 60 * 1000,
     gcTime: 15 * 60 * 1000,
     refetchOnWindowFocus: false,
@@ -475,6 +479,21 @@ export function VehiclesPage({
                   </Button>
                   )}
               </div>
+
+              {vehiclesLoadError && (
+                <div className="rounded-lg border border-red-200 bg-red-50 dark:bg-red-950/30 dark:border-red-800 px-4 py-3 text-sm text-red-900 dark:text-red-100 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <span>Could not load vehicles — this is not the same as an empty fleet. Retry or check your connection.</span>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="min-h-9 shrink-0 border-red-300 bg-white hover:bg-red-100 text-red-900"
+                    onClick={() => void refetchVehiclesMeta()}
+                  >
+                    Retry
+                  </Button>
+                </div>
+              )}
 
               {vehiclesTruncated && (
                 <div className="rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-800 px-4 py-3 text-sm text-amber-900 dark:text-amber-100">

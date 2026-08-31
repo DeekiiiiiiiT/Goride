@@ -36,7 +36,6 @@ import {
   ShieldCheck,
   DollarSign,
   CreditCard,
-  Tags,
   Scale,
   Percent,
   BadgeCheck,
@@ -115,10 +114,6 @@ export const TOLL_MANAGEMENT_CHILDREN: NavChild[] = [
   { id: 'toll-brain', label: 'Toll Brain', icon: Brain },
   { id: 'toll-stations', label: 'Toll Database', icon: MapPin },
   { id: 'toll-info', label: 'Toll Info', icon: Info },
-  { id: 'toll-analytics', label: 'Toll Analytics', icon: BarChart3 },
-  { id: 'toll-logs', label: 'Toll Logs', icon: Receipt },
-  { id: 'tag-inventory', label: 'Tag Inventory', icon: Tags },
-  { id: 'toll-tags', label: 'Toll Reconciliation', icon: Scale },
   { id: 'toll-settings', label: 'Toll Settings', icon: Settings },
   { id: 'toll-live-monitor', label: 'Live Toll Monitor', icon: Radio },
 ];
@@ -227,10 +222,6 @@ const SHARED_PLATFORM_PAGES = [
   'toll-brain',
   'toll-stations',
   'toll-info',
-  'toll-analytics',
-  'toll-logs',
-  'tag-inventory',
-  'toll-tags',
   'toll-settings',
   'toll-live-monitor',
   'motor-vehicles',
@@ -293,6 +284,11 @@ export const LEGACY_PAGE_REDIRECTS: Record<string, string> = {
   'settings-announcements': 'fleet-settings-announcements',
   'settings-danger': 'global-settings-danger',
   'expense-categories': 'vendor-database',
+  // Fleet customer screens removed from Dominion — send bookmarks to Live Monitor
+  'toll-analytics': 'toll-live-monitor',
+  'toll-logs': 'toll-live-monitor',
+  'tag-inventory': 'toll-live-monitor',
+  'toll-tags': 'toll-live-monitor',
 };
 
 export const SECTION_META = {

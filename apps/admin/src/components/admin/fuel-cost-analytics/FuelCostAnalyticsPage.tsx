@@ -8,6 +8,8 @@ import { fuelService } from '../../../services/fuelService';
 import {
   resolveRetailEstimate,
   isPriceOutlier,
+  medianPositive,
+  DEFAULT_PRICE_OUTLIER_PCT,
   type FuelGrade,
 } from '@roam/fuel-core';
 
@@ -38,7 +40,7 @@ export function FuelCostAnalyticsPage() {
 
   const entriesQ = useQuery({
     queryKey: ['fuel-cost-analytics-entries'],
-    queryFn: () => fuelService.getFuelEntries({ limit: 1500 }),
+    queryFn: () => fuelService.getAllFuelEntriesInRange({ pageSize: 1500 }),
     staleTime: 2 * 60 * 1000,
   });
 
@@ -64,18 +66,61 @@ export function FuelCostAnalyticsPage() {
     const rows = Array.isArray(entriesQ.data) ? entriesQ.data : [];
     let cost = 0;
     let liters = 0;
-    const outliers: { id: string; vendor?: string; paid: number; date?: string }[] = [];
+    const byStation = new Map<string, number[]>();
+    for (const e of rows) {
+      const p = paidPerLiter(e.amount, e.liters);
+      if (p == null) continue;
+      const sid = String(
+        (e as { matchedStationId?: string }).matchedStationId ||
+          (e as { stationId?: string }).stationId ||
+          '',
+      ).trim();
+      if (sid) {
+        const arr = byStation.get(sid) || [];
+        arr.push(p);
+        byStation.set(sid, arr);
+      }
+    }
+    const stationMedian = new Map<string, number>();
+    for (const [sid, prices] of byStation) {
+      if (prices.length < 2) continue;
+      const med = medianPositive(prices);
+      if (med != null) stationMedian.set(sid, med);
+    }
+
+    const outliers: {
+      id: string;
+      vendor?: string;
+      paid: number;
+      date?: string;
+      reason: string;
+    }[] = [];
     for (const e of rows) {
       const p = paidPerLiter(e.amount, e.liters);
       if (p == null) continue;
       cost += Number(e.amount) || 0;
       liters += Number(e.liters) || 0;
-      if (estimate && isPriceOutlier(p, estimate.retailEstimateJmd)) {
+      const sid = String(
+        (e as { matchedStationId?: string }).matchedStationId ||
+          (e as { stationId?: string }).stationId ||
+          '',
+      ).trim();
+      const median = sid ? stationMedian.get(sid) : undefined;
+      if (median != null && isPriceOutlier(p, median, DEFAULT_PRICE_OUTLIER_PCT)) {
         outliers.push({
           id: e.id,
-          vendor: e.vendor || e.location,
+          vendor: (e as { vendor?: string }).vendor || e.location,
           paid: p,
           date: e.date,
+          reason: 'Above this station’s 30-day median',
+        });
+      } else if (estimate && isPriceOutlier(p, estimate.retailEstimateJmd)) {
+        outliers.push({
+          id: e.id,
+          vendor: (e as { vendor?: string }).vendor || e.location,
+          paid: p,
+          date: e.date,
+          reason: 'Above Petrojam retail estimate',
         });
       }
     }
@@ -94,10 +139,10 @@ export function FuelCostAnalyticsPage() {
 
   const exportCsv = () => {
     const lines = [
-      'date,vendor,paid_jmd_per_l,estimate_jmd_per_l,gap',
+      'date,vendor,paid_jmd_per_l,estimate_jmd_per_l,gap,reason',
       ...fleetPaid.outliers.map(
         (o) =>
-          `${o.date || ''},"${(o.vendor || '').replace(/"/g, '""')}",${o.paid.toFixed(2)},${estimate?.retailEstimateJmd?.toFixed(2) || ''},${estimate ? (o.paid - estimate.retailEstimateJmd).toFixed(2) : ''}`,
+          `${o.date || ''},"${(o.vendor || '').replace(/"/g, '""')}",${o.paid.toFixed(2)},${estimate?.retailEstimateJmd?.toFixed(2) || ''},${estimate ? (o.paid - estimate.retailEstimateJmd).toFixed(2) : ''},"${o.reason}"`,
       ),
     ];
     const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
@@ -180,7 +225,7 @@ export function FuelCostAnalyticsPage() {
           <p className="text-xs uppercase tracking-wide text-slate-500">Gap (paid − estimate)</p>
           <p className="mt-2 text-2xl font-semibold tabular-nums">{fmt(gap)}</p>
           <p className="mt-1 text-xs text-slate-500">
-            {fleetPaid.outlierCount} fills ≥18% above estimate
+            {fleetPaid.outlierCount} fills above station median or Petrojam estimate (≥18%)
           </p>
         </div>
       </div>

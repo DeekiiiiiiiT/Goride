@@ -17,7 +17,7 @@ import { toast } from "sonner";
 import { sumTagUsageFinancials } from "../../utils/tollReconciliation";
 import { isTagLedgerTx, isTagUsage, isTagCredit, isVoidedTx } from "../../utils/tollTagLedger";
 import { getTollTransactionDate } from "../../utils/tollWeekPeriod";
-import { formatJMD, formatJMDDelta } from "../../utils/formatJMD";
+import { formatJMD } from "../../utils/formatJMD";
 import {
   computeTagBurnRate,
   avgCostPerPassage,
@@ -45,13 +45,6 @@ function isDifferentTagTx(tx: FinancialTransaction, tagNumber?: string) {
   const txTagId = String(tx.metadata?.tollTagId || tx.metadata?.tagId || tx.metadata?.tagNumber || '');
   if (!tagNumber || !txTagId) return false;
   return normalizeTag(txTagId) !== normalizeTag(tagNumber);
-}
-
-function daysAgo(iso?: string) {
-  if (!iso) return null;
-  const ms = Date.now() - new Date(iso).getTime();
-  if (!Number.isFinite(ms)) return null;
-  return Math.max(0, Math.floor(ms / 86400000));
 }
 
 function ringClasses(state: BalanceRingState) {
@@ -84,17 +77,11 @@ export function TollTagDetail({
   onNavigateToReconciliation,
   onRequestAssign,
 }: TollTagDetailProps) {
-  const [providerBalance, setProviderBalance] = useState<number | undefined>(tag.providerBalance);
-  const [providerBalanceDate, setProviderBalanceDate] = useState<string | undefined>(tag.providerBalanceDate);
-  const [isEditingProviderBalance, setIsEditingProviderBalance] = useState(false);
-  const [providerBalanceInput, setProviderBalanceInput] = useState('');
-  const [isSavingProviderBalance, setIsSavingProviderBalance] = useState(false);
   const [lowBalanceThreshold, setLowBalanceThreshold] = useState<number>(tag.lowBalanceThreshold ?? 500);
   const [isEditingThreshold, setIsEditingThreshold] = useState(false);
   const [thresholdInput, setThresholdInput] = useState('');
   const [isSavingThreshold, setIsSavingThreshold] = useState(false);
   const [showAlertSettings, setShowAlertSettings] = useState(false);
-  const [showRepairTools, setShowRepairTools] = useState(false);
   const [datePreset, setDatePreset] = useState<DatePreset>('all');
   const [customStartDate, setCustomStartDate] = useState('');
   const [customEndDate, setCustomEndDate] = useState('');
@@ -109,6 +96,7 @@ export function TollTagDetail({
   const [periodLoading, setPeriodLoading] = useState(false);
   const [historyRefresh, setHistoryRefresh] = useState(0);
   const [topupOpen, setTopupOpen] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   const getDateRange = (): { start: Date | null; end: Date | null } => {
     const now = new Date();
@@ -200,13 +188,14 @@ export function TollTagDetail({
       }
     } catch (error) {
       console.error("Failed to fetch tag stats", error);
+      throw error;
     } finally {
       setLedgerLoading(false);
     }
   };
 
   useEffect(() => {
-    void fetchLedger({ syncBalance: false });
+    void fetchLedger({ syncBalance: false }).catch(() => {});
   }, [tag.assignedVehicleId, tag.id]);
 
   const scopedLedger = useMemo(() => {
@@ -324,30 +313,16 @@ export function TollTagDetail({
     return () => window.clearTimeout(t);
   }, [datePreset, customStartDate, customEndDate, thisTagOnly, ledgerLoading]);
 
-  const handleProviderBalanceEdit = () => {
-    setIsEditingProviderBalance(true);
-    setProviderBalanceInput(providerBalance?.toString() || '');
-  };
-
-  const handleProviderBalanceSave = async () => {
-    setIsSavingProviderBalance(true);
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
     try {
-      const newBalance = parseFloat(providerBalanceInput);
-      if (isNaN(newBalance)) {
-        toast.error("Please enter a valid number");
-        return;
-      }
-      const now = new Date().toISOString();
-      await api.saveTollTag({ ...tag, providerBalance: newBalance, providerBalanceDate: now, expectedUpdatedAt: tag.updatedAt, updatedAt: now });
-      setProviderBalance(newBalance);
-      setProviderBalanceDate(now);
-      setIsEditingProviderBalance(false);
-      toast.success("Provider balance updated");
-    } catch (error) {
-      console.error("Failed to save provider balance:", error);
-      toast.error("Failed to save provider balance");
+      await fetchLedger({ syncBalance: true });
+      setHistoryRefresh((n) => n + 1);
+      toast.success('Tag data refreshed');
+    } catch {
+      toast.error('Could not refresh tag data');
     } finally {
-      setIsSavingProviderBalance(false);
+      setIsRefreshing(false);
     }
   };
 
@@ -410,10 +385,6 @@ export function TollTagDetail({
     setActiveTab('transactions');
   };
 
-  const discrepancy = providerBalance !== undefined ? (providerBalance - calculatedBalance) : null;
-  const isBalanced = discrepancy !== null && Math.abs(discrepancy) <= 1;
-  const hasDiscrepancy = discrepancy !== null && Math.abs(discrepancy) > 1;
-  const providerAge = daysAgo(providerBalanceDate);
   const differentTagCount = periodTx.filter((tx) => isDifferentTagTx(tx, tag.tagNumber)).length;
   const isLow = !ledgerLoading && (ringState === 'low' || ringState === 'empty');
   const fillPct =
@@ -448,6 +419,16 @@ export function TollTagDetail({
             </div>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void handleRefresh()}
+              disabled={ledgerLoading || isRefreshing || !tag.assignedVehicleId}
+              title="Refresh tag balance and transactions"
+            >
+              <RefreshCw className={cn('h-3.5 w-3.5 mr-1.5', (ledgerLoading || isRefreshing) && 'animate-spin')} />
+              Refresh
+            </Button>
             {tag.assignedVehicleId ? (
               <Button size="sm" onClick={() => setTopupOpen(true)}>
                 <PlusCircle className="h-3.5 w-3.5 mr-1.5" />
@@ -555,6 +536,9 @@ export function TollTagDetail({
                     ) : (
                       <p className="text-3xl font-bold tabular-nums tracking-tight">{formatJMD(calculatedBalance, 2)}</p>
                     )}
+                    <p className="mt-1 text-xs text-white/65">
+                      From imports (CSV / top-ups) — not live from {tag.provider}
+                    </p>
                     <p className="mt-1 text-sm text-white/80">
                       {ledgerLoading
                         ? '…'
@@ -678,68 +662,6 @@ export function TollTagDetail({
                     </button>
                   </div>
 
-                  {/* Reconciliation strip */}
-                  <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-                    <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-                      <p className="text-sm text-slate-700 flex-1">
-                        We calculate <span className="font-semibold tabular-nums">{formatJMD(calculatedBalance, 2)}</span>.
-                        {' '}What does the {tag.provider} app show?
-                      </p>
-                      {isEditingProviderBalance ? (
-                        <div className="flex items-center gap-2">
-                          <input
-                            type="number"
-                            step="0.01"
-                            value={providerBalanceInput}
-                            onChange={(e) => setProviderBalanceInput(e.target.value)}
-                            className="w-28 h-8 px-2 text-sm border border-slate-200 rounded bg-white"
-                            autoFocus
-                            placeholder="Amount"
-                          />
-                          <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-emerald-600" onClick={handleProviderBalanceSave} disabled={isSavingProviderBalance}><Check className="h-3.5 w-3.5" /></Button>
-                          <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => setIsEditingProviderBalance(false)}><XIcon className="h-3.5 w-3.5" /></Button>
-                        </div>
-                      ) : (
-                        <Button variant="outline" size="sm" onClick={handleProviderBalanceEdit}>
-                          {providerBalance === undefined ? 'Enter amount' : 'Update amount'}
-                        </Button>
-                      )}
-                    </div>
-                    {!isEditingProviderBalance && providerBalance !== undefined && (
-                      <div className="mt-2 flex items-center gap-2 flex-wrap text-xs">
-                        {isBalanced && (
-                          <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200">
-                            <Check className="h-2.5 w-2.5 mr-0.5" /> Matches
-                          </Badge>
-                        )}
-                        {hasDiscrepancy && (
-                          <Badge variant="outline" className="bg-amber-50 text-amber-800 border-amber-200">
-                            <AlertTriangle className="h-2.5 w-2.5 mr-0.5" />
-                            Off by {formatJMD(Math.abs(discrepancy!), 2)} — some transactions may be missing
-                          </Badge>
-                        )}
-                        <span className="text-slate-400">
-                          {providerAge == null ? 'Never checked' : providerAge === 0 ? 'Checked today' : `Checked ${providerAge} day${providerAge === 1 ? '' : 's'} ago`}
-                          {' · '}app shows {formatJMD(providerBalance, 2)}
-                          {hasDiscrepancy ? ` (${formatJMDDelta(discrepancy!, 2)})` : ''}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-
-                  <details
-                    className="rounded-lg border border-dashed border-slate-200 px-3 py-2 text-xs text-slate-500"
-                    open={showRepairTools}
-                    onToggle={(e) => setShowRepairTools((e.target as HTMLDetailsElement).open)}
-                  >
-                    <summary className="cursor-pointer select-none font-medium text-slate-600">Repair tools</summary>
-                    <div className="mt-2 flex items-center gap-2">
-                      <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => void fetchLedger({ syncBalance: true })}>
-                        <RefreshCw className="h-3 w-3 mr-1" /> Recalculate balance
-                      </Button>
-                      <span className="text-slate-400">Only needed if the balance looks stuck after an import.</span>
-                    </div>
-                  </details>
                 </div>
               </div>
             </>
@@ -826,7 +748,7 @@ export function TollTagDetail({
                   claimsList={claims}
                   disputeRefunds={disputeRefunds}
                   onTransactionChange={() => {
-                    void fetchLedger({ syncBalance: true });
+                    void fetchLedger({ syncBalance: true }).catch(() => {});
                     setHistoryRefresh((n) => n + 1);
                   }}
                 />
@@ -903,7 +825,7 @@ export function TollTagDetail({
           tollTagUuid={tag.id}
           onSuccess={() => {
             setTopupOpen(false);
-            void fetchLedger({ syncBalance: true });
+            void fetchLedger({ syncBalance: true }).catch(() => {});
             setHistoryRefresh((n) => n + 1);
           }}
         />

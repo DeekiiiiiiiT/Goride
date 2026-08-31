@@ -45,10 +45,6 @@ import {
   FLEET_USE_FUEL_BRAIN,
   FUEL_BRAIN_SHADOW_COMPARE,
 } from "../../utils/fuelBrainFlags";
-import {
-  getCachedDefaultPricePerLiterJmd,
-  loadFuelReconciliationSettings,
-} from "../../services/fuelReconSettings";
 
 import { Vehicle } from '../../types/vehicle';
 import { Trip } from '../../types/data';
@@ -123,21 +119,6 @@ export function ReconciliationTable({
     const [deadheadLoading, setDeadheadLoading] = useState(false);
     const [brainByDriverVehicle, setBrainByDriverVehicle] = useState<Map<string, FuelBrainClassificationInput>>(new Map());
     const [paContext, setPaContext] = useState<PersonalAllowanceReconContext | undefined>();
-    const [defaultPricePerLiterJmd, setDefaultPricePerLiterJmd] = useState<number | null>(
-      () => getCachedDefaultPricePerLiterJmd(),
-    );
-
-    useEffect(() => {
-        let cancelled = false;
-        loadFuelReconciliationSettings()
-            .then((s) => {
-                if (!cancelled) setDefaultPricePerLiterJmd(s.defaultPricePerLiterJmd);
-            })
-            .catch(() => {});
-        return () => {
-            cancelled = true;
-        };
-    }, []);
 
     useEffect(() => {
         if (skipLiveCompute || !weekStart || !weekEnd) return;
@@ -216,9 +197,8 @@ export function ReconciliationTable({
             fuelCards,
             FLEET_USE_FUEL_BRAIN ? brainByDriverVehicle : undefined,
             paContext,
-            defaultPricePerLiterJmd,
         );
-    }, [skipLiveCompute, vehicles, drivers, trips, fuelEntries, adjustments, weekStart, weekEnd, scenarios, deadheadMap, fuelCards, brainByDriverVehicle, paContext, defaultPricePerLiterJmd]);
+    }, [skipLiveCompute, vehicles, drivers, trips, fuelEntries, adjustments, weekStart, weekEnd, scenarios, deadheadMap, fuelCards, brainByDriverVehicle, paContext]);
 
     const reports = reportsOverride ?? computedReports;
 
@@ -288,20 +268,35 @@ export function ReconciliationTable({
     const hasBlockingWarnings = gate.hasBlockingWarnings;
 
     const [financeWarningAcknowledged, setFinanceWarningAcknowledged] = useState(false);
+    const [noPriceOnly, setNoPriceOnly] = useState(false);
+
+    const isNoPriceReport = (r: (typeof reports)[number]) =>
+      Boolean(r.metadata?.rideShareCalc?.priceUnavailable) ||
+      r.metadata?.rideShareCalc?.priceSource === 'unavailable';
+
+    const noPriceCount = useMemo(
+      () => reports.filter(isNoPriceReport).length,
+      [reports],
+    );
+
+    const displayReports = useMemo(
+      () => (noPriceOnly ? reports.filter(isNoPriceReport) : reports),
+      [reports, noPriceOnly],
+    );
 
     const [tableScrollTop, setTableScrollTop] = useState(0);
     const ROW_H = 56;
     const VIEW_H = 560;
     const overscan = 12;
-    const windowed = reports.length > 40;
+    const windowed = displayReports.length > 40;
     const start = windowed
       ? Math.max(0, Math.floor(tableScrollTop / ROW_H) - overscan)
       : 0;
-    const visibleCount = windowed ? Math.ceil(VIEW_H / ROW_H) + overscan * 2 : reports.length;
-    const end = Math.min(reports.length, start + visibleCount);
-    const visibleReports = reports.slice(start, end);
+    const visibleCount = windowed ? Math.ceil(VIEW_H / ROW_H) + overscan * 2 : displayReports.length;
+    const end = Math.min(displayReports.length, start + visibleCount);
+    const visibleReports = displayReports.slice(start, end);
     const padTop = start * ROW_H;
-    const padBottom = Math.max(0, (reports.length - end) * ROW_H);
+    const padBottom = Math.max(0, (displayReports.length - end) * ROW_H);
 
     if (!dateRange || !dateRange.from) {
         return <div className="p-8 text-center text-slate-500">Select a date range to view reconciliation reports.</div>;
@@ -428,6 +423,24 @@ export function ReconciliationTable({
             )}
 
             {/* Main Table */}
+            {noPriceCount > 0 && (
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                <p>
+                  <span className="font-medium">{noPriceCount}</span> driver
+                  {noPriceCount === 1 ? '' : 's'} this week have NO PRICE — personal and category $
+                  are $0 until fills exist.
+                </p>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={noPriceOnly ? 'default' : 'outline'}
+                  className={noPriceOnly ? '' : 'border-amber-300 bg-white'}
+                  onClick={() => setNoPriceOnly((v) => !v)}
+                >
+                  {noPriceOnly ? 'Show all' : 'No price'}
+                </Button>
+              </div>
+            )}
             <Card>
                 <CardContent className="p-0">
                     <div
@@ -942,14 +955,10 @@ export function ReconciliationTable({
                                                                             <span className={`ml-1 px-1 py-0.5 rounded text-[10px] ${
                                                                                 report.metadata.rideShareCalc.priceSource === 'fuel_entries'
                                                                                     ? 'bg-emerald-100 text-emerald-700'
-                                                                                    : report.metadata.rideShareCalc.priceSource === 'org_default'
-                                                                                    ? 'bg-amber-100 text-amber-700'
                                                                                     : 'bg-rose-100 text-rose-700'
                                                                             }`}>
                                                                                 {report.metadata.rideShareCalc.priceSource === 'fuel_entries'
                                                                                     ? 'ACTUAL'
-                                                                                    : report.metadata.rideShareCalc.priceSource === 'org_default'
-                                                                                    ? 'DEFAULT'
                                                                                     : 'NO PRICE'}
                                                                             </span>
                                                                         </span>
@@ -1100,7 +1109,7 @@ export function ReconciliationTable({
                                 );
                             })}
                             
-                            {reports.length === 0 && (
+                            {displayReports.length === 0 && (
                                 <TableRow>
                                     <TableCell colSpan={12} className="h-24 text-center text-slate-500">
                                         No vehicles this week.

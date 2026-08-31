@@ -4061,9 +4061,6 @@ export const api = {
   async getFuelReconciliationSettings(): Promise<{
     success: boolean;
     fuelPnlOffsetEnabled: boolean;
-    fuelBrainEnabled: boolean;
-    fuelBrainShadowCompare: boolean;
-    defaultPricePerLiterJmd: number | null;
   }> {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/fuel-reconciliation/settings`, {
       headers: await requireAuthHeaders(null),
@@ -4073,14 +4070,10 @@ export const api = {
   },
 
   async updateFuelReconciliationSettings(patch: {
-    fuelBrainEnabled?: boolean;
-    fuelBrainShadowCompare?: boolean;
-    defaultPricePerLiterJmd?: number | null;
+    fuelPnlOffsetEnabled?: boolean;
   }): Promise<{
     success: boolean;
-    fuelBrainEnabled: boolean;
-    fuelBrainShadowCompare: boolean;
-    defaultPricePerLiterJmd: number | null;
+    fuelPnlOffsetEnabled: boolean;
   }> {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/fuel-reconciliation/settings`, {
       method: 'PATCH',

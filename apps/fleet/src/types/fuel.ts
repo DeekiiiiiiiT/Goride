@@ -208,7 +208,7 @@ export interface WeeklyFuelReport {
   //   observedEfficiency: number - km/L from odometer or fallback
   //   actualPricePerLiter: number - $/L from fuel entries or fallback
   //   efficiencySource: 'odometer' | 'vehicle_settings' | 'default_fallback'
-  //   priceSource: 'fuel_entries' | 'org_default' | 'unavailable'
+  //   priceSource: 'fuel_entries' | 'unavailable'
   //   priceUnavailable?: boolean
   //   totalLitersInPeriod: number
   //   tripsIncluded: number - Total trips counted
@@ -251,7 +251,7 @@ export interface WeeklyFuelReport {
  * Snapshot shape frozen at Finalize time — extends WeeklyFuelReport with fields
  * that only exist once a period is settled and posted to the ledger.
  */
-export interface FinalizedFuelReport extends WeeklyFuelReport {
+export interface FinalizedFuelReport extends Omit<WeeklyFuelReport, 'status' | 'fuelCycles'> {
   status: 'Finalized';
   finalizedAt: string;
   finalizedByUser?: string;

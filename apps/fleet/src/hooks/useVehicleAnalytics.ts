@@ -136,110 +136,160 @@ export function useVehicleAnalytics() {
     setPreset('this_week');
   }, []);
 
-  const { data: trips = [], isLoading: tripsLoading, refetch: refetchTrips, isSuccess: tripsSuccess } = useQuery({
+  const {
+    data: trips = [],
+    isLoading: tripsLoading,
+    isError: tripsIsError,
+    isFetched: tripsFetched,
+    refetch: refetchTrips,
+  } = useQuery({
     queryKey: ['vehicleAnalyticsTrips', period.startYmd, period.endYmd],
-    queryFn: () => fetchAllPeriodTrips(period.startYmd, period.endYmd).catch(() => []),
+    queryFn: () => fetchAllPeriodTrips(period.startYmd, period.endYmd),
     staleTime: 2 * 60 * 1000,
     refetchOnWindowFocus: false,
   });
 
-  const { data: vehiclesMeta, isLoading: vehiclesLoading, refetch: refetchVehicles, isSuccess: vehiclesSuccess } = useQuery({
+  const {
+    data: vehiclesMeta,
+    isLoading: vehiclesLoading,
+    isError: vehiclesIsError,
+    isFetched: vehiclesFetched,
+    refetch: refetchVehicles,
+  } = useQuery({
     queryKey: ['vehicles', 'withMeta'],
-    queryFn: () =>
-      api.getVehiclesWithMeta().catch(() => ({ vehicles: [] as Vehicle[], truncated: false })),
+    queryFn: () => api.getVehiclesWithMeta(),
     staleTime: 5 * 60 * 1000,
     refetchOnWindowFocus: false,
   });
   const rawVehicles = (vehiclesMeta?.vehicles ?? []) as Vehicle[];
   const vehiclesTruncated = Boolean(vehiclesMeta?.truncated);
 
-  const { data: ledgerEvents = [], isLoading: ledgerLoading, refetch: refetchLedger, isSuccess: ledgerSuccess } = useQuery({
+  const {
+    data: ledgerEvents = [],
+    isLoading: ledgerLoading,
+    isError: ledgerIsError,
+    isFetched: ledgerFetched,
+    refetch: refetchLedger,
+  } = useQuery({
     queryKey: ['vehicleAnalyticsLedger', period.startYmd, period.endYmd],
-    queryFn: () => fetchAllCanonicalEvents(period.startYmd, period.endYmd).catch(() => []),
+    queryFn: () => fetchAllCanonicalEvents(period.startYmd, period.endYmd),
     staleTime: 2 * 60 * 1000,
     refetchOnWindowFocus: false,
   });
 
-  // Defer prior-period + maintenance logs until current-period core data has settled (B3).
-  const coreReady = tripsSuccess && vehiclesSuccess && ledgerSuccess;
+  // Defer prior-period + maintenance until core queries settle (success or error) — B3 + W2.
+  const coreReady = tripsFetched && vehiclesFetched && ledgerFetched;
+  const loadError = tripsIsError || vehiclesIsError || ledgerIsError;
 
-  const { data: priorTrips = [], refetch: refetchPriorTrips } = useQuery({
+  const {
+    data: priorTrips = [],
+    isError: priorTripsIsError,
+    refetch: refetchPriorTrips,
+  } = useQuery({
     queryKey: ['vehicleAnalyticsTripsPrior', prior.startYmd, prior.endYmd],
-    queryFn: () => fetchAllPeriodTrips(prior.startYmd, prior.endYmd).catch(() => []),
+    queryFn: () => fetchAllPeriodTrips(prior.startYmd, prior.endYmd),
     staleTime: 2 * 60 * 1000,
     refetchOnWindowFocus: false,
     enabled: coreReady,
   });
 
-  const { data: tripStats, refetch: refetchTripStats } = useQuery({
+  const {
+    data: tripStats,
+    isError: tripStatsIsError,
+    refetch: refetchTripStats,
+  } = useQuery({
     queryKey: ['vehicleAnalyticsTripStats', period.startYmd, period.endYmd],
     queryFn: () =>
-      api
-        .getTripStats({ startDate: period.startYmd, endDate: period.endYmd })
-        .catch(() => null),
+      api.getTripStats({ startDate: period.startYmd, endDate: period.endYmd }),
     staleTime: 2 * 60 * 1000,
     refetchOnWindowFocus: false,
   });
 
-  const { data: priorTripStats, refetch: refetchPriorTripStats } = useQuery({
+  const {
+    data: priorTripStats,
+    isError: priorTripStatsIsError,
+    refetch: refetchPriorTripStats,
+  } = useQuery({
     queryKey: ['vehicleAnalyticsTripStatsPrior', prior.startYmd, prior.endYmd],
     queryFn: () =>
-      api
-        .getTripStats({ startDate: prior.startYmd, endDate: prior.endYmd })
-        .catch(() => null),
+      api.getTripStats({ startDate: prior.startYmd, endDate: prior.endYmd }),
     staleTime: 2 * 60 * 1000,
     refetchOnWindowFocus: false,
     enabled: coreReady,
   });
 
-  const { data: vehicleMetrics = [], refetch: refetchVehicleMetrics } = useQuery<VehicleMetrics[]>({
+  const {
+    data: vehicleMetrics = [],
+    isError: vehicleMetricsIsError,
+    refetch: refetchVehicleMetrics,
+  } = useQuery<VehicleMetrics[]>({
     queryKey: ['vehicleMetrics'],
-    queryFn: () => api.getVehicleMetrics().catch(() => []),
+    queryFn: () => api.getVehicleMetrics(),
     staleTime: 5 * 60 * 1000,
     refetchOnWindowFocus: false,
   });
 
-  const { data: maintenanceSummary, refetch: refetchMaintenanceSummary } = useQuery({
+  const {
+    data: maintenanceSummary,
+    isError: maintenanceSummaryIsError,
+    refetch: refetchMaintenanceSummary,
+  } = useQuery({
     queryKey: ['maintenanceFleetSummary'],
-    queryFn: () => api.getMaintenanceFleetSummary().catch(() => ({ items: [] })),
+    queryFn: () => api.getMaintenanceFleetSummary(),
     staleTime: 5 * 60 * 1000,
     refetchOnWindowFocus: false,
   });
 
-  const { data: priorLedgerEvents = [], refetch: refetchPriorLedger } = useQuery({
+  const {
+    data: priorLedgerEvents = [],
+    isError: priorLedgerIsError,
+    refetch: refetchPriorLedger,
+  } = useQuery({
     queryKey: ['vehicleAnalyticsLedgerPrior', prior.startYmd, prior.endYmd],
-    queryFn: () => fetchAllCanonicalEvents(prior.startYmd, prior.endYmd).catch(() => []),
+    queryFn: () => fetchAllCanonicalEvents(prior.startYmd, prior.endYmd),
     staleTime: 2 * 60 * 1000,
     refetchOnWindowFocus: false,
     enabled: coreReady,
   });
 
-  const { data: maintenanceLogs = [], refetch: refetchMaintenanceLogs } = useQuery<MaintenanceLog[]>({
+  const {
+    data: maintenanceLogs = [],
+    isError: maintenanceLogsIsError,
+    refetch: refetchMaintenanceLogs,
+  } = useQuery<MaintenanceLog[]>({
     queryKey: ['allMaintenanceLogs'],
-    queryFn: () => api.getAllMaintenanceLogs().catch(() => []),
+    queryFn: () => api.getAllMaintenanceLogs(),
     staleTime: 5 * 60 * 1000,
     refetchOnWindowFocus: false,
     enabled: coreReady,
   });
 
   // Selected-vehicle health (lazy)
-  const { data: selectedOdo = [], isLoading: odoLoading } = useQuery({
+  const {
+    data: selectedOdo = [],
+    isLoading: odoLoading,
+    isError: odoIsError,
+  } = useQuery({
     queryKey: ['vehicleAnalyticsOdo', selectedVehicleId],
     queryFn: async () => {
       if (!selectedVehicleId) return [];
       const { odometerService } = await import('../services/odometerService');
-      return odometerService.getUnifiedHistory(selectedVehicleId).catch(() => []);
+      return odometerService.getUnifiedHistory(selectedVehicleId);
     },
     enabled: !!selectedVehicleId,
     staleTime: 5 * 60 * 1000,
     refetchOnWindowFocus: false,
   });
 
-  const { data: selectedFuelSummary, isLoading: fuelLoading } = useQuery({
+  const {
+    data: selectedFuelSummary,
+    isLoading: fuelLoading,
+    isError: fuelIsError,
+  } = useQuery({
     queryKey: ['vehicleAnalyticsFuel', selectedVehicleId],
     queryFn: () =>
       selectedVehicleId
-        ? api.getFuelAuditSummary(selectedVehicleId).catch(() => null)
+        ? api.getFuelAuditSummary(selectedVehicleId)
         : Promise.resolve(null),
     enabled: !!selectedVehicleId,
     staleTime: 5 * 60 * 1000,
@@ -247,6 +297,31 @@ export function useVehicleAnalytics() {
   });
 
   const loading = tripsLoading || vehiclesLoading || ledgerLoading;
+
+  const incompleteSources = useMemo(() => {
+    const sources: string[] = [];
+    if (tripStatsIsError) sources.push('Trip stats');
+    if (priorTripsIsError) sources.push('Prior-period trips');
+    if (priorTripStatsIsError) sources.push('Prior-period trip stats');
+    if (priorLedgerIsError) sources.push('Prior-period costs');
+    if (vehicleMetricsIsError) sources.push('Vehicle metrics');
+    if (maintenanceSummaryIsError) sources.push('Maintenance summary');
+    if (maintenanceLogsIsError) sources.push('Maintenance logs');
+    if (selectedVehicleId && odoIsError) sources.push('Odometer history');
+    if (selectedVehicleId && fuelIsError) sources.push('Fuel audit');
+    return sources;
+  }, [
+    tripStatsIsError,
+    priorTripsIsError,
+    priorTripStatsIsError,
+    priorLedgerIsError,
+    vehicleMetricsIsError,
+    maintenanceSummaryIsError,
+    maintenanceLogsIsError,
+    selectedVehicleId,
+    odoIsError,
+    fuelIsError,
+  ]);
 
   const metricsMap = useMemo(() => {
     const map = new Map<string, VehicleMetrics>();
@@ -616,6 +691,8 @@ export function useVehicleAnalytics() {
 
   return {
     loading,
+    loadError,
+    incompleteSources,
     hasTrips: periodTrips.length > 0,
     hasVehicles: rawVehicles.length > 0,
     period,

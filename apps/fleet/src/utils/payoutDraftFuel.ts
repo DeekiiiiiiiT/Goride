@@ -2,7 +2,6 @@ import { format, startOfMonth, endOfMonth } from 'date-fns';
 import type { Trip } from '../types/data';
 import type { PayoutPeriodRow, PayoutStatus } from '../types/driverPayoutPeriod';
 import { FuelCalculationService } from '../services/fuelCalculationService';
-import { getCachedDefaultPricePerLiterJmd } from '../services/fuelReconSettings';
 import type { FuelEntry, MileageAdjustment, FuelScenario } from '../types/fuel';
 import { computePeriodSettlement } from './driverPeriodSettlement';
 
@@ -35,8 +34,6 @@ export function buildDraftFuelByPeriod(params: {
           fuelEntries,
           adjustments,
           scenarios,
-          undefined,
-          { defaultPricePerLiterJmd: getCachedDefaultPricePerLiterJmd() },
         );
         deduction += report.driverShare || 0;
         fleetShare += report.companyShare || 0;

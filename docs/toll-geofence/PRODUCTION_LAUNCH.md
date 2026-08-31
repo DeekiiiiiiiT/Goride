@@ -30,8 +30,8 @@ Deploy as you normally do:
 
 - **Roam Rides** (`apps/rides-passenger`) — booking breakdown, live banner, receipt
 - **Roam Driver** (`apps/driver`) — toll toast, on-trip banner, cash card
-- **Roam Dominion** (`apps/admin`) — Live Toll Monitor
-- **Roam Fleet** (`apps/fleet`) — geofence badge on reconciliation
+- **Roam Dominion** (`apps/admin`) — Live Toll Monitor, Toll Settings, plaza Database / Info, Toll Brain
+- **Roam Fleet** (`apps/fleet`) — customer Toll Analytics / Logs / Tag Inventory / Reconciliation (not in Dominion)
 
 Run `pnpm install` at repo root before building (new `@roam/toll-ui` package).
 

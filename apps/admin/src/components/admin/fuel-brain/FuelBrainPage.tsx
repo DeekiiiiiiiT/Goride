@@ -1,7 +1,7 @@
 /**
  * Fuel Brain Control Panel (Dominion → Fuel Management)
  * Rule cards: Ride Share / Company Ops / Deadhead (editable) / Personal residual / Misc.
- * Runtime kill switch lives in fleet fuel-reconciliation settings (consumed by RoamFleet).
+ * Fleet recon always uses Fuel Brain — no kill switch.
  */
 
 import { useCallback, useEffect, useState } from 'react';
@@ -14,7 +14,6 @@ import { Button } from '../../ui/button';
 import { Input } from '../../ui/input';
 import { Label } from '../../ui/label';
 import { Checkbox } from '../../ui/checkbox';
-import { Switch } from '../../ui/switch';
 import {
   Brain,
   Fuel,
@@ -58,9 +57,6 @@ export function FuelBrainPage() {
   const [health, setHealth] = useState<BrainHealth | null>(null);
   const [policy, setPolicy] = useState<BrainPolicy | null>(null);
   const [policies, setPolicies] = useState<BrainPolicy[]>([]);
-  const [fuelBrainEnabled, setFuelBrainEnabled] = useState(true);
-  const [fuelBrainShadowCompare, setFuelBrainShadowCompare] = useState(false);
-  const [settingsBusy, setSettingsBusy] = useState(false);
 
   const fetchAll = useCallback(async () => {
     if (!session) {
@@ -70,7 +66,7 @@ export function FuelBrainPage() {
     setLoading(true);
     setError(null);
     try {
-      const [h, p, settings] = await Promise.all([
+      const [h, p] = await Promise.all([
         api.getFuelBrainHealth().catch(() => null),
         api.getFuelBrainPolicies().catch((e: any) => {
           if (e?.status === 401 || e?.status === 403) {
@@ -78,7 +74,6 @@ export function FuelBrainPage() {
           }
           return null;
         }),
-        api.getFuelReconciliationSettings().catch(() => null),
       ]);
       if (h) setHealth(h);
       if (p) {
@@ -91,10 +86,6 @@ export function FuelBrainPage() {
           return list.find((x) => x.isDefault) || list[0] || null;
         });
       }
-      if (settings) {
-        setFuelBrainEnabled(settings.fuelBrainEnabled !== false);
-        setFuelBrainShadowCompare(settings.fuelBrainShadowCompare === true);
-      }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load Fuel Brain');
     } finally {
@@ -105,26 +96,6 @@ export function FuelBrainPage() {
   useEffect(() => {
     void fetchAll();
   }, [fetchAll]);
-
-  const saveRuntimeFlags = async () => {
-    setSettingsBusy(true);
-    setSuccess(null);
-    setError(null);
-    try {
-      const res = await api.updateFuelReconciliationSettings({
-        fuelBrainEnabled,
-        fuelBrainShadowCompare,
-      });
-      setFuelBrainEnabled(res.fuelBrainEnabled !== false);
-      setFuelBrainShadowCompare(res.fuelBrainShadowCompare === true);
-      setSuccess('Fleet Fuel Brain runtime flags saved (RoamFleet picks them up on next load)');
-      setTimeout(() => setSuccess(null), 3500);
-    } catch (e: any) {
-      setError(e?.message || 'Failed to save runtime flags');
-    } finally {
-      setSettingsBusy(false);
-    }
-  };
 
   const savePolicy = async () => {
     if (!policy || !session) return;
@@ -165,8 +136,8 @@ export function FuelBrainPage() {
             </Badge>
           </div>
           <p className="mt-1 text-sm text-slate-600 dark:text-slate-400 max-w-2xl">
-            Automated km stack: Ride Share → Company Ops → Deadhead → Personal (leftover). No driver
-            toggles. Misc is cash leakage only.
+            Automated km stack: Ride Share → Company Ops → Deadhead → Personal (leftover). Always on
+            in Fleet recon. Misc is cash leakage only.
           </p>
         </div>
         <Button variant="outline" size="sm" onClick={() => void fetchAll()}>
@@ -217,45 +188,15 @@ export function FuelBrainPage() {
         </CardHeader>
         <CardContent className="text-sm space-y-1">
           <div>
-            Edge:{' '}
+            Classify edge:{' '}
             <Badge variant={health?.brain_enabled ? 'default' : 'secondary'}>
-              {health?.brain_enabled ? 'Classify on' : 'Classify off'}
+              {health?.brain_enabled ? 'On' : 'Off'}
             </Badge>{' '}
             <span className="text-xs text-slate-500">{health?.stack}</span>
           </div>
-          <p className="text-xs font-mono text-slate-500">
-            FUEL_BRAIN_ENABLED={health?.flags?.FUEL_BRAIN_ENABLED ?? '?'} · FLEET_USE_FUEL_BRAIN=
-            {health?.flags?.FLEET_USE_FUEL_BRAIN ?? '?'}
+          <p className="text-xs text-slate-500">
+            Fleet recon always consumes Fuel Brain. Edge flag is for classify service only.
           </p>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base">Fleet runtime kill switch</CardTitle>
-          <CardDescription>
-            Controls RoamFleet recon without a rebuild. Shadow-compare can run whether live consume is
-            on or off.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-center justify-between gap-4 max-w-lg">
-            <div>
-              <p className="text-sm font-medium">Use Fuel Brain in recon</p>
-              <p className="text-xs text-slate-500">When off, Fleet uses the legacy residual path.</p>
-            </div>
-            <Switch checked={fuelBrainEnabled} onCheckedChange={setFuelBrainEnabled} />
-          </div>
-          <div className="flex items-center justify-between gap-4 max-w-lg">
-            <div>
-              <p className="text-sm font-medium">Shadow-compare</p>
-              <p className="text-xs text-slate-500">Log brain vs legacy without cutting over.</p>
-            </div>
-            <Switch checked={fuelBrainShadowCompare} onCheckedChange={setFuelBrainShadowCompare} />
-          </div>
-          <Button type="button" size="sm" disabled={settingsBusy} onClick={() => void saveRuntimeFlags()}>
-            {settingsBusy ? 'Saving…' : 'Save runtime flags'}
-          </Button>
         </CardContent>
       </Card>
 

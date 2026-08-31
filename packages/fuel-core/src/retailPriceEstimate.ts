@@ -84,8 +84,24 @@ export function resolveRetailEstimate(input: {
   };
 }
 
-/** Flag when paid $/L is materially above retail estimate. */
-export function isPriceOutlier(paidPerLiter: number, retailEstimate: number, pct = 0.18): boolean {
+/** Default relative threshold for price outliers (18%). */
+export const DEFAULT_PRICE_OUTLIER_PCT = 0.18;
+
+/** Flag when paid $/L is materially above a benchmark (retail estimate or station median). */
+export function isPriceOutlier(
+  paidPerLiter: number,
+  retailEstimate: number,
+  pct = DEFAULT_PRICE_OUTLIER_PCT,
+): boolean {
   if (!(paidPerLiter > 0) || !(retailEstimate > 0)) return false;
   return (paidPerLiter - retailEstimate) / retailEstimate >= pct;
+}
+
+/** Median of positive numbers; null if empty. */
+export function medianPositive(values: number[]): number | null {
+  const sorted = values.filter((n) => Number.isFinite(n) && n > 0).sort((a, b) => a - b);
+  if (sorted.length === 0) return null;
+  const mid = Math.floor(sorted.length / 2);
+  if (sorted.length % 2 === 1) return sorted[mid]!;
+  return (sorted[mid - 1]! + sorted[mid]!) / 2;
 }

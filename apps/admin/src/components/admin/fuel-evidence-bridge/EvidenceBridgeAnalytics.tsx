@@ -110,20 +110,20 @@ export function EvidenceBridgeAnalytics() {
   const fetchData = async (range: DateRange | undefined) => {
     setLoading(true);
     try {
-      const opts: { limit?: number; startDate?: string; endDate?: string } = { limit: 5000 };
+      const opts: { startDate?: string; endDate?: string } = {};
       if (range?.from) {
         opts.startDate = format(startOfDay(range.from), "yyyy-MM-dd'T'HH:mm:ss");
       }
       if (range?.to) {
         opts.endDate = format(endOfDay(range.to), "yyyy-MM-dd'T'HH:mm:ss.SSS");
       }
-      const entriesData = await fuelService.getFuelEntries(opts);
+      const entriesData = await fuelService.getAllFuelEntriesInRange(opts);
       const list = entriesData || [];
       const total =
         typeof (list as any).totalCount === 'number' ? (list as any).totalCount : list.length;
       setEntries(list);
       setEntriesTotalCount(total);
-      setEntriesTruncated(total > list.length);
+      setEntriesTruncated(false);
     } catch (err) {
       console.error('Evidence Bridge Analytics Error:', err);
       toast.error('Failed to load integrity analytics');

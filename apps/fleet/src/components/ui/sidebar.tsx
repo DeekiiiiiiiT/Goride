@@ -54,7 +54,15 @@ type SidebarContextProps = {
   toggleSidebar: () => void;
 };
 
-const SidebarContext = React.createContext<SidebarContextProps | null>(null);
+/** Survive Vite HMR — duplicate module instances otherwise break provider/consumer pairing. */
+const SIDEBAR_CONTEXT_KEY = "__roam_fleet_sidebar_context__";
+const SidebarContext: React.Context<SidebarContextProps | null> =
+  (globalThis as unknown as Record<string, React.Context<SidebarContextProps | null>>)[
+    SIDEBAR_CONTEXT_KEY
+  ] ??
+  ((globalThis as unknown as Record<string, React.Context<SidebarContextProps | null>>)[
+    SIDEBAR_CONTEXT_KEY
+  ] = React.createContext<SidebarContextProps | null>(null));
 
 function useSidebar() {
   const context = React.useContext(SidebarContext);

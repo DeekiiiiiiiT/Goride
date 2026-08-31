@@ -267,16 +267,6 @@ describe('price fail-loud (no 1.50 invent)', () => {
     const r = resolvePricePerLiter({ totalLiters: 0, totalGasCardCost: 0 });
     expect(r.priceUnavailable).toBe(true);
     expect(r.pricePerLiter).toBe(0);
-  });
-
-  it('org default is used when observed price missing', async () => {
-    const { resolvePricePerLiter } = await import('@roam/fuel-core');
-    const r = resolvePricePerLiter({
-      totalLiters: 0,
-      totalGasCardCost: 0,
-      defaultPricePerLiterJmd: 200,
-    });
-    expect(r.pricePerLiter).toBe(200);
-    expect(r.priceUnavailable).toBe(false);
+    expect(r.priceSource).toBe('unavailable');
   });
 });

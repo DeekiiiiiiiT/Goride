@@ -1888,22 +1888,21 @@ app.get(`${BASE_PATH}/fuel-reconciliation/settings`, async (c) => {
 app.patch(`${BASE_PATH}/fuel-reconciliation/settings`, requirePermission("fuel.edit_entry"), async (c) => {
   try {
     const body = await c.req.json().catch(() => ({}));
-    const priceRaw = body?.defaultPricePerLiterJmd;
-    let defaultPricePerLiterJmd: number | null | undefined = undefined;
-    if (priceRaw === null || priceRaw === "") {
-      defaultPricePerLiterJmd = null;
-    } else if (typeof priceRaw === "number" || typeof priceRaw === "string") {
-      const n = Number(priceRaw);
-      defaultPricePerLiterJmd = Number.isFinite(n) && n > 0 ? n : null;
+    if (
+      typeof body?.fuelBrainEnabled === "boolean" ||
+      typeof body?.fuelBrainShadowCompare === "boolean"
+    ) {
+      return c.json(
+        {
+          error:
+            "Fuel Brain is always on; runtime flags are not configurable",
+        },
+        400,
+      );
     }
     const settings = await updateFuelReconciliationSettings({
       fuelPnlOffsetEnabled:
         typeof body?.fuelPnlOffsetEnabled === "boolean" ? body.fuelPnlOffsetEnabled : undefined,
-      fuelBrainEnabled:
-        typeof body?.fuelBrainEnabled === "boolean" ? body.fuelBrainEnabled : undefined,
-      fuelBrainShadowCompare:
-        typeof body?.fuelBrainShadowCompare === "boolean" ? body.fuelBrainShadowCompare : undefined,
-      defaultPricePerLiterJmd,
     });
     return c.json({ success: true, ...settings });
   } catch (e: any) {

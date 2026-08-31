@@ -1,3 +1,9 @@
+/**
+ * Fleet settlement orchestration — Finalize-only writer for Enterprise_Fuel_Sync.
+ * Money math comes from fuelCalculationService / @roam/fuel-core.
+ * Idempotency keys: enterpriseFuelSyncIdempotencyKey from @roam/fuel-core.
+ * processFuelSettlement is intentionally a no-op here (wallet posts only at Finalize).
+ */
 import { api, fetchWithRetry } from './api';
 import { FuelEntry, FuelScenario, WeeklyFuelReport, OdometerBucket } from '../types/fuel';
 import { FinancialTransaction } from '../types/data';
@@ -15,18 +21,16 @@ import {
 } from '../utils/fuelPaymentSource';
 import { FUEL_MONEY_EPS } from '../utils/fuelMoneyEpsilon';
 import { mapPool as mapPoolIndexed } from '../utils/fuelMapPool';
+import {
+  enterpriseFuelSyncIdempotencyKey,
+  fuelSettlementEntryYmd,
+} from '@roam/fuel-core';
 
-export function enterpriseFuelSyncIdempotencyKey(
-  reportId: string,
-  entryId: string,
-  kind: 'credit' | 'deduction',
-): string {
-  return `enterprise_fuel_sync:${reportId}:${entryId}:${kind}:v1`;
-}
+export { enterpriseFuelSyncIdempotencyKey } from '@roam/fuel-core';
 
 /** Calendar day YYYY-MM-DD from stored date/datetime strings. */
 function toYmd(d: string | undefined | null): string {
-  return toEntryYmd(d);
+  return toEntryYmd(d) || fuelSettlementEntryYmd(d);
 }
 
 async function mapPool<T>(

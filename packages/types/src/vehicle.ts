@@ -54,6 +54,7 @@ export interface VehicleDocument {
   uploadDate: string;
   url?: string;
   metadata?: {
+    // Valuation / identity
     valuationDate?: string;
     marketValue?: string;
     forcedSaleValue?: string;
@@ -62,6 +63,26 @@ export interface VehicleDocument {
     engineNumber?: string;
     color?: string;
     odometer?: string;
+    // Registration
+    laNumber?: string;
+    plateNumber?: string;
+    mvid?: string;
+    controlNumber?: string;
+    // Fitness certificate
+    make?: string;
+    model?: string;
+    year?: string;
+    bodyType?: string;
+    ccRating?: string;
+    // Insurance / upload form extras
+    issueDate?: string;
+    idv?: string;
+    policyPremium?: string;
+    excessDeductible?: string;
+    depreciationRate?: string;
+    authorizedDrivers?: string;
+    limitationsUse?: string;
+    policyNumber?: string;
   };
 }
 

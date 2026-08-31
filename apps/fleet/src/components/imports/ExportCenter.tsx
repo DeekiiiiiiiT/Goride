@@ -190,6 +190,7 @@ export function ExportCenter() {
     claims: null, equipment: null, inventory: null,
     tollTransactions: null,
   });
+  const [vehiclesTruncated, setVehiclesTruncated] = useState(false);
 
   // Export All / exclusive export busy lock
   const [isExportingAll, setIsExportingAll] = useState(false);
@@ -257,7 +258,11 @@ export function ExportCenter() {
     // Fire all counts in parallel
     safeCount('trips', () => api.getTripStats({}));
     safeCount('drivers', () => api.getDrivers());
-    safeCount('vehicles', () => api.getVehicles());
+    safeCount('vehicles', async () => {
+      const { vehicles, truncated } = await api.getVehiclesWithMeta();
+      if (!cancelled) setVehiclesTruncated(truncated);
+      return vehicles;
+    });
     safeCount('driverMetrics', () => api.getDriverMetrics());
     safeCount('vehicleMetrics', () => api.getVehicleMetrics());
     safeCount('transactions', () => api.getTransactions());
@@ -662,9 +667,14 @@ export function ExportCenter() {
             {isInActiveGroup('vehicles') && matchesSearch(CATEGORY_SEARCH_TERMS.vehicles) && (
             <ExportCategoryCard
               title="Vehicle Fleet"
-              description="Vehicle profiles with plate numbers, VIN, registration, insurance, and assignments."
+              description={
+                vehiclesTruncated
+                  ? 'Vehicle profiles with plate numbers, VIN, registration, insurance, and assignments. Count shows the first 20,000 only — contact support if your fleet exceeds this limit.'
+                  : 'Vehicle profiles with plate numbers, VIN, registration, insurance, and assignments.'
+              }
               icon={<Car className="h-5 w-5" />}
               recordCount={counts.vehicles}
+              badge={vehiclesTruncated ? 'Truncated at 20k' : undefined}
               onExport={exportVehicles}
               showFormatToggle
             />

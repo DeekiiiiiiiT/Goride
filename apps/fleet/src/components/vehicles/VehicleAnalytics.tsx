@@ -2,6 +2,7 @@ import React from 'react';
 import { BarChart3, Loader2, RefreshCw } from 'lucide-react';
 import { Button } from '../ui/button';
 import { useVehicleAnalytics } from '../../hooks/useVehicleAnalytics';
+import { IncompleteDataBanner } from '../business-finance/IncompleteDataBanner';
 import { AnalyticsPeriodToolbar } from './analytics/AnalyticsPeriodToolbar';
 import { AnalyticsKpiGrid } from './analytics/AnalyticsKpiGrid';
 import { AnalyticsFinancialSection } from './analytics/AnalyticsFinancialSection';
@@ -14,6 +15,8 @@ export function VehicleAnalytics({ onNavigate }: { onNavigate?: (page: string) =
   const analytics = useVehicleAnalytics();
   const {
     loading,
+    loadError,
+    incompleteSources,
     hasTrips,
     hasVehicles,
     period,
@@ -61,6 +64,23 @@ export function VehicleAnalytics({ onNavigate }: { onNavigate?: (page: string) =
     );
   }
 
+  if (loadError) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px] gap-4 text-center px-4">
+        <div className="space-y-1">
+          <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Could not load vehicle data</h3>
+          <p className="text-sm text-slate-500 dark:text-slate-400 max-w-md">
+            The vehicle API failed — this is not the same as zero activity. Retry or check your connection.
+          </p>
+        </div>
+        <Button variant="outline" className="min-h-11" onClick={refresh}>
+          <RefreshCw className="h-4 w-4 mr-2" />
+          Retry
+        </Button>
+      </div>
+    );
+  }
+
   if (!hasVehicles && !hasTrips) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[400px] gap-4 text-center px-4">
@@ -88,6 +108,7 @@ export function VehicleAnalytics({ onNavigate }: { onNavigate?: (page: string) =
           Showing the first 20,000 vehicles — contact support if your fleet exceeds this limit.
         </div>
       )}
+      {incompleteSources.length > 0 && <IncompleteDataBanner sources={incompleteSources} />}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div className="flex items-center gap-3">
           <div className="p-2 bg-indigo-100 dark:bg-indigo-900/30 rounded-lg">

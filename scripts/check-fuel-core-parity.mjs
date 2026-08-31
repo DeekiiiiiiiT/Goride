@@ -26,9 +26,19 @@ const SHIMS = [
     forbidden: /FALLBACK_PRICE_PER_LITER\s*=\s*1\.50/,
   },
   {
-    rel: 'apps/admin/src/utils/fuelCycleEngine.ts',
-    mustMatch: /from\s+['"]@fleet\/utils\/fuelCycleEngine['"]/,
-    forbidden: /function calculateFuelCycles\s*\(/,
+    rel: 'apps/fleet/src/services/settlementService.ts',
+    mustMatch: /enterpriseFuelSyncIdempotencyKey[\s\S]*from\s+['"]@roam\/fuel-core['"]/,
+    forbidden: /return `enterprise_fuel_sync:/,
+  },
+  {
+    rel: 'apps/admin/src/services/settlementService.ts',
+    mustMatch: /fuelSettlementEntryYmd[\s\S]*from\s+['"]@roam\/fuel-core['"]/,
+    forbidden: /duplicated from FuelCalculationService/,
+  },
+  {
+    rel: 'apps/driver/src/services/settlementService.ts',
+    mustMatch: /fuelSettlementEntryYmd[\s\S]*from\s+['"]@roam\/fuel-core['"]/,
+    forbidden: /duplicated from FuelCalculationService/,
   },
 ];
 

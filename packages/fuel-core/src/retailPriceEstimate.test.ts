@@ -3,6 +3,7 @@ import {
   resolveRetailEstimate,
   isPriceOutlier,
   pickMarkupForDate,
+  medianPositive,
 } from './retailPriceEstimate';
 
 describe('retailPriceEstimate', () => {
@@ -45,5 +46,13 @@ describe('retailPriceEstimate', () => {
   it('flags 18%+ over estimate as outlier', () => {
     expect(isPriceOutlier(300, 247, 0.18)).toBe(true);
     expect(isPriceOutlier(250, 247, 0.18)).toBe(false);
+  });
+
+  it('medianPositive handles empty, odd, even', () => {
+    expect(medianPositive([])).toBeNull();
+    expect(medianPositive([0, -1])).toBeNull();
+    expect(medianPositive([10])).toBe(10);
+    expect(medianPositive([10, 30, 20])).toBe(20);
+    expect(medianPositive([10, 20])).toBe(15);
   });
 });

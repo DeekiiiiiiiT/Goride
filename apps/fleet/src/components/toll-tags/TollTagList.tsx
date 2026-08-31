@@ -79,9 +79,10 @@ export function TollTagList({ tags, isLoading, onDelete, onAssign, onUnassign, o
                         </span>
                       </TooltipTrigger>
                       <TooltipContent>
-                        <p>Provider balance: {formatJMD(tag.providerBalance, 2)}</p>
+                        <p>Manual {tag.provider} app checkpoint: {formatJMD(tag.providerBalance, 2)}</p>
+                        <p className="text-xs text-slate-400">Not a live feed — last typed in from the provider app</p>
                         {tag.providerBalanceDate && (
-                          <p className="text-xs text-slate-400">Last checked: {new Date(tag.providerBalanceDate).toLocaleDateString()}</p>
+                          <p className="text-xs text-slate-400">Checked: {new Date(tag.providerBalanceDate).toLocaleDateString()}</p>
                         )}
                       </TooltipContent>
                     </Tooltip>

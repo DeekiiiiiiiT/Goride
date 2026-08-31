@@ -7,6 +7,8 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "typecheck:money": "node ../../scripts/typecheck-fuel-money.mjs admin",
     "test": "vitest run",
     "test:watch": "vitest"
   },

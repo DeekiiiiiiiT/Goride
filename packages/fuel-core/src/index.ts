@@ -22,8 +22,15 @@ export {
   resolveRetailEstimate,
   pickMarkupForDate,
   isPriceOutlier,
+  medianPositive,
+  DEFAULT_PRICE_OUTLIER_PCT,
   type FuelGrade,
   type PetrojamWholesaleRow,
   type RetailMarkupVersion,
   type RetailEstimateResult,
 } from './retailPriceEstimate';
+
+export {
+  enterpriseFuelSyncIdempotencyKey,
+  fuelSettlementEntryYmd,
+} from './settlementShared';

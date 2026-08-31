@@ -18,6 +18,8 @@ import {
   detectEfficiencyCrashes,
   computePriceOutlierLoss,
   buildPriceOutlierFlags,
+  computeStationMedianOutlierLoss,
+  buildStationMedianOutlierFlags,
   sparklineFromEntries,
   fleetTargetKmL,
   resolveEntryFuelType,
@@ -94,15 +96,16 @@ export function useFuelAnalytics() {
   const { data: rawEntries = [], isLoading: entriesLoading, isError: entriesError, refetch: refetchEntries } = useQuery({
     queryKey: ['fuelAnalyticsEntries', fetchStart, fetchEndInclusive],
     queryFn: () =>
-      fuelService.getFuelEntries({ limit: 1500, startDate: fetchStart, endDate: fetchEndInclusive }),
+      fuelService.getAllFuelEntriesInRange({
+        startDate: fetchStart,
+        endDate: fetchEndInclusive,
+      }),
     staleTime: 2 * 60 * 1000,
     refetchOnWindowFocus: false,
   });
-  const entriesTotalCount =
-    Array.isArray(rawEntries) && typeof (rawEntries as any).totalCount === 'number'
-      ? ((rawEntries as any).totalCount as number)
-      : rawEntries.length;
-  const entriesTruncated = entriesTotalCount > rawEntries.length;
+  // Pager loads the full window; truncation only if safety ceiling threw (query error).
+  const entriesTotalCount = rawEntries.length;
+  const entriesTruncated = false;
 
   const { data: vehicles = [], isLoading: vehiclesLoading, isError: vehiclesError, refetch: refetchVehicles } = useQuery<Vehicle[]>({
     queryKey: ['vehicles'],
@@ -209,7 +212,8 @@ export function useFuelAnalytics() {
       petrojamPrices,
       retailMarkups,
     );
-    const potentialLoss = volumeLoss + priceLoss;
+    const stationPriceLoss = computeStationMedianOutlierLoss(periodEntries, period.endYmd);
+    const potentialLoss = volumeLoss + priceLoss + stationPriceLoss;
     const priorVolumeLoss = priorStats.reduce((s, r) => s + r.anomalyCost, 0);
     const priorPriceLoss = computePriceOutlierLoss(
       priorEntries,
@@ -217,7 +221,8 @@ export function useFuelAnalytics() {
       petrojamPrices,
       retailMarkups,
     );
-    const priorLoss = priorVolumeLoss + priorPriceLoss;
+    const priorStationLoss = computeStationMedianOutlierLoss(priorEntries, prior.endYmd);
+    const priorLoss = priorVolumeLoss + priorPriceLoss + priorStationLoss;
 
     const refuelCount = periodEntries.length;
     const priorRefuels = priorEntries.length;
@@ -293,14 +298,20 @@ export function useFuelAnalytics() {
       retailMarkups,
       6,
     );
-    const merged = [...priceFlags, ...crashes, ...feed];
+    const stationFlags = buildStationMedianOutlierFlags(
+      periodEntries,
+      vehicles,
+      period.endYmd,
+      6,
+    );
+    const merged = [...stationFlags, ...priceFlags, ...crashes, ...feed];
     const seen = new Set<string>();
     return merged.filter((e) => {
       if (seen.has(e.id)) return false;
       seen.add(e.id);
       return true;
     }).slice(0, 8);
-  }, [periodEntries, vehicles, rawEntries, applyFilters, petrojamPrices, retailMarkups]);
+  }, [periodEntries, vehicles, rawEntries, applyFilters, petrojamPrices, retailMarkups, period.endYmd]);
 
   const leaderboard = useMemo(
     () =>

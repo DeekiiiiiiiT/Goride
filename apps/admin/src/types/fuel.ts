@@ -227,7 +227,7 @@ export interface WeeklyFuelReport {
   //   observedEfficiency: number - km/L from odometer or fallback
   //   actualPricePerLiter: number - $/L from fuel entries or fallback
   //   efficiencySource: 'odometer' | 'vehicle_settings' | 'default_fallback'
-  //   priceSource: 'fuel_entries' | 'org_default' | 'unavailable'
+  //   priceSource: 'fuel_entries' | 'unavailable'
   //   priceUnavailable?: boolean
   //   totalLitersInPeriod: number
   //   tripsIncluded: number - Total trips counted

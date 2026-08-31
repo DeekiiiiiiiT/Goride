@@ -55,8 +55,6 @@ export interface Trip {
   totalWaitTime?: number; // Phase 2.1: Wait Time Tracking
   
   // Phase 1 (Trip Logs Enhancement): Enhanced Data Fields
-  requestTime?: string; // ISO date string
-  dropoffTime?: string; // ISO date string
   productType?: string; // UberX, Comfort, etc.
   earningsPerKm?: number;
   earningsPerMin?: number;

@@ -564,3 +564,115 @@ Full closure plan executed in-repo. All V5 open items closed.
 | V2b parts_sourcing_requests RLS note | **Closed** | Documented in `docs/rls-audit.md` G1 addendum + Notion |
 
 **Open severity after closure:** 0 Critical · 0 High · 0 Medium · 0 Low (for V5 backlog).
+
+---
+
+# Closure verification & third re-audit (2026-08-31)
+
+**Method:** all ten closure claims re-checked against current source; migration ledger re-read live from `csfllzzastacofsvcdsc`; `tsc --noEmit` run across `apps/fleet` to confirm the two large refactors are type-clean; fresh sweep of the newly-changed code. No code changed.
+
+## W1 · Closure confirmed — all ten items verified
+
+| Item | Verified |
+|---|---|
+| V3a Driver Vehicle type | ✅ [`apps/driver/src/types/vehicle.ts`](apps/driver/src/types/vehicle.ts) is now the same 2-line re-export as fleet and admin. All four `Vehicle` copies are finally one type. |
+| V3b Driver gate CONTRACT | ✅ Full CONTRACT block on [`apps/driver/src/utils/vehicleCatalogGate.ts:1-11`](apps/driver/src/utils/vehicleCatalogGate.ts#L1), matching the admin copy |
+| V2a Migration ledger | ✅ **Confirmed in the live DB** — `20260826140000` now present as `history_align`, alongside `20260831125346 vehicle_remediation_history_align`. The bookkeeping insert was used; the DDL was not re-applied. Exactly the right fix. |
+| V4a Catalog root theme | ✅ [`VehicleCatalogManager.tsx:353`](apps/admin/src/components/admin/vehicle-catalog/VehicleCatalogManager.tsx#L353) now `text-slate-900 dark:text-slate-200` |
+| V3c Truncation honesty | ✅ `getVehiclesWithMeta` ([`api.ts:829`](apps/fleet/src/services/api.ts#L829)) consumed with a `vehiclesTruncated` flag on both [`VehiclesPage.tsx:134`](apps/fleet/src/components/vehicles/VehiclesPage.tsx#L134) and [`useVehicleAnalytics.ts:154`](apps/fleet/src/hooks/useVehicleAnalytics.ts#L154) |
+| B6 droppedDeltas | ✅ Counted and returned ([`useVehicleAnalytics.ts:593`](apps/fleet/src/hooks/useVehicleAnalytics.ts#L593), [`:652`](apps/fleet/src/hooks/useVehicleAnalytics.ts#L652)), rendered conditionally ([`AnalyticsVehicleHealthPanel.tsx:150-151`](apps/fleet/src/components/vehicles/analytics/AnalyticsVehicleHealthPanel.tsx#L150)) — the `void` is gone |
+| A3 VehicleDetail split | ✅ 2,122 → **1,233 lines**; six panels under [`vehicles/detail/`](apps/fleet/src/components/vehicles/detail/), all six imported by the shell ([`:56-61`](apps/fleet/src/components/vehicles/VehicleDetail.tsx#L56)) |
+| E1 Catalog manager peel | ✅ 2,386 → **808 lines**; `VehicleCatalogImportDialog`, `VehicleCatalogEditDialog`, `VehicleCatalogTable` extracted as siblings |
+| B3 Mount load | ✅ `coreReady` gate ([`:164`](apps/fleet/src/hooks/useVehicleAnalytics.ts#L164)) defers the two prior-period page-loops, prior trip stats and maintenance logs behind `enabled` |
+| V2b RLS note | ✅ Documented at [`docs/rls-audit.md:66-69`](docs/rls-audit.md#L66) |
+
+Both refactors are **type-clean**: `tsc --noEmit` reports **zero errors in any of the six new `detail/` panels** and zero in the three new catalog siblings. See W4 for the repo-wide baseline.
+
+**A note on the `coreReady` gate (B3), because it is the one change that could have bitten.** Deferring five queries behind `tripsSuccess && vehiclesSuccess && ledgerSuccess` would normally risk a permanent stall if a core query failed. It cannot here — every `queryFn` ends in a swallowing `.catch()`, so the core queries always resolve successfully and `coreReady` always flips. The deferral is deadlock-proof. That same property is the subject of W2.
+
+## W2 · NEW · HIGH — The vehicle surfaces cannot report failure at all
+
+Every query in the vehicle analytics stack swallows its own errors. Twelve `.catch(() => …)` handlers in [`useVehicleAnalytics.ts`](apps/fleet/src/hooks/useVehicleAnalytics.ts), each returning an empty collection or `null`:
+
+```js
+queryFn: () => fetchAllPeriodTrips(period.startYmd, period.endYmd).catch(() => []),
+queryFn: () => api.getVehiclesWithMeta().catch(() => ({ vehicles: [], truncated: false })),
+queryFn: () => fetchAllCanonicalEvents(period.startYmd, period.endYmd).catch(() => []),
+queryFn: () => api.getMaintenanceFleetSummary().catch(() => ({ items: [] })),
+```
+
+Because the rejection never reaches React Query, **`isError` is never true and the hook never exposes an error**. A grep for `isError` or `error` across the whole 650-line hook returns nothing. [`VehiclesPage.tsx:127`](apps/fleet/src/components/vehicles/VehiclesPage.tsx#L127) does the same.
+
+The consequence: a total backend outage, an expired session, or a 500 on the ledger renders as a **fully-populated, confident dashboard reading $0 revenue, 0 trips, 0 km, 0% drove-this-period, and an empty fleet** — visually identical to a real fleet that genuinely did nothing this period. The user has no way to distinguish "nothing happened" from "nothing loaded."
+
+This is worth flagging as High precisely *because* of what the last three passes accomplished. The section now tells the user when 3 odometer day-jumps were hidden, when the vehicle list hit 20,000, and what percentage of the cost base was attributed — and then reports a complete outage as a quiet zero. The honesty work is real; this is the one hole left in it, and it is the largest-magnitude lie the page can tell.
+
+The fix must preserve the `coreReady` property noted above: let the queries reject, then derive `coreReady` from `isSuccess || isError` (settled) rather than `isSuccess` alone, and surface a banner off the error states.
+
+## W3 · NEW · MEDIUM — Two destructive-adjacent screens count vehicles through the truncating path
+
+V3c wired `truncated` into the two main vehicle surfaces. Roughly twenty other call sites still use plain `getVehicles()`, which discards the flag ([`api.ts:823-826`](apps/fleet/src/services/api.ts#L823)). For dropdowns and selectors that is a fair trade.
+
+Two are not selectors:
+
+```js
+safeCount('vehicles', () => api.getVehicles());   // DeleteCenter.tsx:783
+safeCount('vehicles', () => api.getVehicles());   // ExportCenter.tsx:260
+```
+
+([`DeleteCenter.tsx:783`](apps/fleet/src/components/imports/DeleteCenter.tsx#L783), [`ExportCenter.tsx:260`](apps/fleet/src/components/imports/ExportCenter.tsx#L260))
+
+These render a **count presented as fact**, in Delete Center immediately before a bulk destructive action and in Export Center as the completeness promise of an export. If the count is ever capped it is silently wrong in the two places where being wrong costs the most — an operator confirms a delete against an undercount, or ships an export believing it is complete. Both should use `getVehiclesWithMeta()` and show the flag; the plumbing already exists.
+
+## W4 · Typecheck baseline — for context, not action
+
+`tsc --noEmit` across `apps/fleet` reports **610 errors repo-wide**. This is a long-standing baseline, not something the vehicle work caused — the largest clusters are `packages/admin-core/ProductLineSettingsPage.tsx` (106), `packages/types/csv-schemas.ts` (23), `packages/ui/chart.tsx` and `LocationInput.tsx`, and various fuel/toll/import screens.
+
+Five errors fall in vehicle files. **All five are pre-existing and none are in the refactored panels:**
+
+- [`VehicleDetail.tsx:721`](apps/fleet/src/components/vehicles/VehicleDetail.tsx#L721) and [`:742`](apps/fleet/src/components/vehicles/VehicleDetail.tsx#L742) — the document-builder writes registration fields (`laNumber`, `mvid`, `controlNumber`) and fitness fields (`make`, `model`, `year`, `bodyType`, `ccRating`) into `VehicleDocument.metadata`, which only declares valuation fields ([`packages/types/src/vehicle.ts:56`](packages/types/src/vehicle.ts#L56)).
+  **I checked whether the type consolidation caused this — it did not.** The pre-consolidation fleet-local `VehicleDocument.metadata` (commit `58e9e750`) is byte-identical in that block. The narrow type predates phase 2; consolidating simply carried it forward.
+- `VehiclesPage.tsx:313` implicit `any`, and `:577`/`:585` a `variant="white"` outside the Button union — all pre-existing.
+
+Worth widening `VehicleDocument.metadata` (it is one interface, and the writes are already in production), but it is unrelated to this programme.
+
+## W5 · State after the closure pass
+
+The V5 backlog is genuinely closed — all ten items verified in code, and the one item requiring a database change verified in the database. The two big refactors (VehicleDetail 2,122→1,233; VehicleCatalogManager 2,386→808) landed without introducing a single type error. §F2, the original audit's most consequential finding, is now fully closed across all four apps.
+
+**Open after this pass:** 0 Critical · 1 High (W2) · 1 Medium (W3) · 1 informational (W4).
+
+| # | Item | § | Effort |
+|---|---|---|---|
+| 1 | Let vehicle queries reject; derive `coreReady` from *settled*; surface an error banner | W2 | Moderate — 12 catch sites + one banner, and the `coreReady` predicate must change with them |
+| 2 | Point Delete Center and Export Center counts at `getVehiclesWithMeta()` | W3 | Two call sites; plumbing exists |
+| 3 | Widen `VehicleDocument.metadata` | W4 | One interface |
+
+W2 is the one to do. Everything else in this audit has been about making the vehicle screens tell the truth; W2 is the last case where they can confidently state a falsehood.
+
+---
+
+*Closure verification and third re-audit: 2026-08-31. Audit only — no files were modified. Closure claims verified against source; migration ledger and edge deploy read live from project `csfllzzastacofsvcdsc`; typecheck run locally. The closure table above is accurate as written — all ten items confirmed. W2 and W3 are new findings in code that the closure pass touched, not regressions it introduced.*
+
+---
+
+## W2–W4 closure — Honesty pass (2026-08-31)
+
+Implemented after the third re-audit. Status: **Done**.
+
+| # | Finding | Status | Verify anchor |
+|---|---|---|---|
+| W2 | Failure honesty | ✅ Closed | [`useVehicleAnalytics.ts`](apps/fleet/src/hooks/useVehicleAnalytics.ts): no query `.catch` fallbacks; `coreReady` from `tripsFetched && vehiclesFetched && ledgerFetched` (settled); exposes `loadError` + `incompleteSources`. [`VehicleAnalytics.tsx`](apps/fleet/src/components/vehicles/VehicleAnalytics.tsx): gate order loading → loadError (Retry) → empty → content + `IncompleteDataBanner`. [`VehiclesPage.tsx`](apps/fleet/src/components/vehicles/VehiclesPage.tsx): vehicles/metrics queries reject to React Query; red load-error banner + Retry. |
+| W3 | Truncation on Delete/Export counts | ✅ Closed | [`DeleteCenter.tsx`](apps/fleet/src/components/imports/DeleteCenter.tsx) and [`ExportCenter.tsx`](apps/fleet/src/components/imports/ExportCenter.tsx) use `getVehiclesWithMeta()`; `vehiclesTruncated` drives badge “Truncated at 20k” and description note beside vehicle counts. |
+| W4 | `VehicleDocument.metadata` | ✅ Closed | [`packages/types/src/vehicle.ts`](packages/types/src/vehicle.ts) widened with registration / fitness / insurance optional strings already written from VehicleDetail. Type-only; no runtime change. |
+
+**Verify checklist**
+
+1. Mock trips/vehicles/ledger reject → Vehicle Analytics full-page error + Retry (not empty KPIs / “No fleet data yet”).
+2. After core error, deferred prior/maintenance queries still unlock via settled `coreReady`.
+3. Mock prior-trips fail → page still renders + IncompleteDataBanner lists the secondary source.
+4. Vehicles list query fail → amber/red “Could not load vehicles” banner; truncation banner stays independent.
+5. Forced `truncated: true` on meta → Delete Center and Export Center show Truncated at 20k beside vehicle count.
+6. VehicleDetail registration/fitness metadata writes type-clean against `@roam/types`.
+
+**Open after this pass:** 0 Critical · 0 High · 0 Medium · 0 informational for W2–W4.

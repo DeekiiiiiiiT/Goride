@@ -80,12 +80,20 @@ export const fuelService = {
   },
 
   // --- Fuel Entries ---
-  async getFuelEntries(options?: { limit?: number, startDate?: string, endDate?: string }): Promise<FuelEntry[]> {
+  async getFuelEntries(options?: {
+    limit?: number;
+    offset?: number;
+    startDate?: string;
+    endDate?: string;
+  }): Promise<FuelEntry[]> {
     const fallback = currentFuelListWindow();
     const startDate = options?.startDate || fallback.startDate;
     const endDate = options?.endDate || fallback.endDate;
     const query = new URLSearchParams();
     query.append("limit", String(options?.limit || 500));
+    if (typeof options?.offset === 'number' && options.offset > 0) {
+      query.append("offset", String(options.offset));
+    }
     query.append("startDate", startDate);
     query.append("endDate", endDate);
 
@@ -100,6 +108,53 @@ export const fuelService = {
       (data as any).totalCount = totalCount;
     }
     return data;
+  },
+
+  /**
+   * Page through fuel-entries until the date window is fully loaded.
+   * Safety ceiling: 40 pages × 1500 = 60k rows — throws if exceeded.
+   */
+  async getAllFuelEntriesInRange(options: {
+    startDate: string;
+    endDate: string;
+    pageSize?: number;
+    maxPages?: number;
+  }): Promise<FuelEntry[]> {
+    const pageSize = options.pageSize ?? 1500;
+    const maxPages = options.maxPages ?? 40;
+    const accumulated: FuelEntry[] = [];
+    let totalCount: number | undefined;
+    for (let page = 0; page < maxPages; page++) {
+      const batch = await this.getFuelEntries({
+        limit: pageSize,
+        offset: page * pageSize,
+        startDate: options.startDate,
+        endDate: options.endDate,
+      });
+      if (typeof (batch as any).totalCount === 'number') {
+        totalCount = (batch as any).totalCount;
+      }
+      if (!Array.isArray(batch) || batch.length === 0) break;
+      accumulated.push(...batch);
+      if (totalCount != null && accumulated.length >= totalCount) break;
+      if (batch.length < pageSize) break;
+    }
+    if (
+      totalCount != null &&
+      accumulated.length < totalCount &&
+      accumulated.length >= pageSize * maxPages
+    ) {
+      const err = new Error(
+        `Fuel entries safety ceiling: loaded ${accumulated.length} of ${totalCount}. Narrow the period.`,
+      );
+      (err as any).partialCount = accumulated.length;
+      (err as any).totalCount = totalCount;
+      throw err;
+    }
+    if (totalCount != null) {
+      (accumulated as any).totalCount = totalCount;
+    }
+    return accumulated;
   },
 
   async getFuelEntry(id: string): Promise<FuelEntry | null> {

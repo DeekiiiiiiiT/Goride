@@ -1,3 +1,8 @@
+/**
+ * Admin settlement orchestration — older live processFuelSettlement path for Dominion tooling.
+ * Category splits use FuelCalculationService (fleet re-export). Date helpers from @roam/fuel-core.
+ * Do not reintroduce local fuel arithmetic here.
+ */
 import { api, fetchWithRetry } from './api';
 import { FuelEntry, FuelScenario, WeeklyFuelReport } from '../types/fuel';
 import { FinancialTransaction } from '../types/data';
@@ -5,18 +10,12 @@ import { FuelCalculationService } from './fuelCalculationService';
 import { format } from 'date-fns';
 import { API_ENDPOINTS } from './apiConfig';
 import { publicAnonKey } from '../utils/supabase/info';
+import { fuelSettlementEntryYmd } from '@roam/fuel-core';
 
 /** Calendar day YYYY-MM-DD from stored date/datetime strings. */
 function toYmd(d: string | undefined | null): string {
-  if (!d || typeof d !== 'string') return '';
-  return d.split('T')[0]?.split(' ')[0] || '';
+  return fuelSettlementEntryYmd(d);
 }
-
-/**
- * Service to handle automated financial settlements for fuel and other expenses.
- * Specifically handles the logic of crediting drivers for out-of-pocket expenses
- * paid with RideShare cash.
- */
 export const settlementService = {
   // --- Phase 4: Commit Weekly Statement ---
   async commitWeeklyStatement(report: WeeklyFuelReport, entries: FuelEntry[]): Promise<void> {

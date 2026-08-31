@@ -8,7 +8,6 @@ import type { FuelEntry, MileageAdjustment, FuelScenario } from "../../types/fue
 import { api } from "../../services/api";
 import { fuelService } from "../../services/fuelService";
 import { FuelCalculationService } from "../../services/fuelCalculationService";
-import { getCachedDefaultPricePerLiterJmd } from "../../services/fuelReconSettings";
 import {
   format,
   startOfDay, endOfDay, startOfMonth, endOfMonth,
@@ -308,9 +307,7 @@ export function DriverExpensesHistory({
       if (!isFinalized) {
         fuelDraftEstimate = driverVehicleList.reduce((sum, vehicle) => {
           const report = FuelCalculationService.calculateReconciliation(
-            vehicle, periodStart, periodEnd, trips, draftFuelEntries, draftAdjustments, draftScenarios,
-            undefined,
-            { defaultPricePerLiterJmd: getCachedDefaultPricePerLiterJmd() },
+            vehicle, periodStart, periodEnd, trips, draftFuelEntries, draftAdjustments, draftScenarios
           );
           return sum + (report.driverShare || 0);
         }, 0);

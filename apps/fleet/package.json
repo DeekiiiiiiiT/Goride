@@ -10,6 +10,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit -p tsconfig.json",
+    "typecheck:money": "node ../../scripts/typecheck-fuel-money.mjs fleet",
     "icons:generate": "node scripts/generate-pwa-icons.mjs"
   },
   "dependencies": {
