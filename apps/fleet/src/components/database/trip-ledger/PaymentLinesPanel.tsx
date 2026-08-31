@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Download, Loader2 } from 'lucide-react';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 import type { PaymentLedgerLine } from '@roam/types/paymentLedgerLine';
 import { api } from '../../../services/api';
 import { linesToUberCsv } from '../../../utils/exportUberPaymentLinesCsv';

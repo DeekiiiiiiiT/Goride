@@ -13,7 +13,7 @@ import { Input } from '../ui/input';
 import { EarningsPolicyCardPreview } from './EarningsPolicyCardPreview';
 import type { EarningsPolicy, EarningsPolicyVersion } from '../../types/earningsPolicy';
 import { upsertPolicyVersion } from '../../utils/earningsPolicyVersion';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 
 /** Create or rename a frozen version (content only — no dates/drivers). */
 export function EarningsPolicyVersionEditor({

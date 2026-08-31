@@ -21,7 +21,7 @@ import { EditTollModal } from '../components/toll-tags/reconciliation/EditTollMo
 import { TollLogEntry, TollLogFiltersState, DEFAULT_TOLL_LOG_FILTERS, TOLL_LOG_CSV_COLUMNS, tollLogNeedsReconciliationReset } from '../types/tollLog';
 import { isWithinInterval, parseISO, startOfDay, endOfDay, format } from 'date-fns';
 import { api } from '../services/api';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 import { jsonToCsv, downloadBlob } from '../utils/csv-helper';
 import { FleetBusyProvider, useFleetBusy } from '../components/shared/FleetBusyLock';
 

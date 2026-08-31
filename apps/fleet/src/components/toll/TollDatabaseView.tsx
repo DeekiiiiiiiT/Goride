@@ -21,7 +21,7 @@ import { TollSpatialAuditMap } from './TollSpatialAuditMap';
 import { TollPlazaDetailPanel } from './TollPlazaDetailPanel';
 import { LearntTollPlazasTab } from './LearntTollPlazasTab';
 import { TollPlazaAttributionDialog } from './TollPlazaAttributionDialog';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 import { Plus } from 'lucide-react';
 import { ErrorBoundary } from '@roam/roam-shared';
 

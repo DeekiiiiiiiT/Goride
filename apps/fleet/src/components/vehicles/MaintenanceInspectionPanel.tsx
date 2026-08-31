@@ -3,7 +3,7 @@ import { CheckCircle2, Loader2, AlertTriangle, XCircle, Ban } from "lucide-react
 import { Button } from "../ui/button";
 import { Label } from "../ui/label";
 import { Textarea } from "../ui/textarea";
-import { toast } from "sonner@2.0.3";
+import { toast } from "sonner";
 import { api } from "../../services/api";
 import type {
   MaintenanceInspectionItem,

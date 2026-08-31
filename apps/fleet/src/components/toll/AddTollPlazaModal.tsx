@@ -19,7 +19,7 @@ import {
   SelectValue,
 } from '../ui/select';
 import { Loader2, MapPin, Settings, FileText, Building2, Grid3X3, Navigation, Search, CheckCircle2, Info, Copy, Check } from 'lucide-react';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 import { api } from '../../services/api';
 import { TollPlaza, TollDirection, TollPlazaStatus } from '../../types/toll';
 import {

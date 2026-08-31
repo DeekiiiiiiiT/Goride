@@ -35,7 +35,7 @@ import {
   AlertDialogTitle,
 } from '../../ui/alert-dialog';
 import { Loader2, RefreshCw, MapPin, AlertCircle, ChevronDown, Eye, Link2, Copy, Trash2 } from 'lucide-react';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 import type { StationProfile } from '../../../types/station';
 
 export interface SpatialReviewItem {

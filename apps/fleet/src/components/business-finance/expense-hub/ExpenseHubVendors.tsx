@@ -4,7 +4,7 @@
  */
 import React from 'react';
 import { ListPlus, Loader2, MoreVertical, Pencil, Plus, Search, Store, Trash2, UserRoundPlus } from 'lucide-react';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 import { Badge } from '../../ui/badge';
 import { Button } from '../../ui/button';
 import { Card, CardContent } from '../../ui/card';

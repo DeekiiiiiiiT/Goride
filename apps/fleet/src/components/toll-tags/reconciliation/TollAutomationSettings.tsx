@@ -4,7 +4,7 @@ import { Button } from "../../ui/button";
 import { Switch } from "../../ui/switch";
 import { Settings2, Loader2, Bot, Wrench } from "lucide-react";
 import { api } from "../../../services/api";
-import { toast } from "sonner@2.0.3";
+import { toast } from "sonner";
 
 /**
  * Toll automation settings + ops actions (Phase 7).

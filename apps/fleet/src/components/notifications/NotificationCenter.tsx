@@ -25,7 +25,7 @@ import { Notification, NotificationType, NotificationSeverity } from '../../type
 import { api } from '../../services/api';
 import { Badge } from "../ui/badge";
 import { cn } from "../ui/utils";
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 
 export function NotificationCenter() {
   const [notifications, setNotifications] = useState<Notification[]>([]);

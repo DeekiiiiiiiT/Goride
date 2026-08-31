@@ -9,7 +9,7 @@ import { Switch } from "../ui/switch";
 import { Label } from "../ui/label";
 import { AlertRule } from '../../types/data';
 import { api } from '../../services/api';
-import { toast } from "sonner@2.0.3";
+import { toast } from "sonner";
 import { Plus, Trash2, Settings } from 'lucide-react';
 import { Badge } from "../ui/badge";
 

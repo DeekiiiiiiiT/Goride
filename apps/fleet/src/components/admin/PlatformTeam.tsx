@@ -28,7 +28,7 @@ import {
 import { useAuth } from '../auth/AuthContext';
 import { API_ENDPOINTS } from '../../services/apiConfig';
 import { recoveryRedirectForSurface } from '@roam/auth-client';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 import { ConfirmationModal } from './ConfirmationModal';
 import { SetPasswordModal } from './SetPasswordModal';
 

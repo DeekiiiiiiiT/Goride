@@ -45,7 +45,7 @@ import {
   Ship
 } from 'lucide-react';
 import { Badge } from '../ui/badge';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 import { InstallDesktopGuideCard } from '../pwa/PwaLifecycleHost';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../ui/dropdown-menu';
 import { UBER_FLEET_PORTAL } from '../../constants/uberFleetPortal';

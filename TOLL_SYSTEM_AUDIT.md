@@ -4,11 +4,11 @@
 **Scope:** Toll Analytics, Tag Inventory, Toll Database, Toll Info, Live Monitor, Toll Settings, and the server/edge layer behind them.
 **Method:** Static read of every toll file across `apps/fleet`, `apps/admin`, `apps/driver`, `packages/*`, `supabase/functions/*`. No code was changed.
 
-> **Status as of 2026-08-31 — [§I Re-audit](#i-re-audit--2026-08-31).**
-> **36 of 45 findings closed · 5 partial · 3 open · 1 unverifiable.** Every item labelled CRITICAL is
-> closed except C1, which is now partially built. All five "fix before the toll increase" items in
-> §H are done. Sections A–F below are the **original 2026-08-26 findings, preserved as written** —
-> read §I for current status before acting on any of them.
+> **Status as of 2026-08-31 — closeout + follow-up delivery. See [§J.4](#j4-independent-verification-of-the-closeout).**
+> **45 / 45 lettered findings closed in code.** E1 de-forked; cooldown migration recorded; KV plazas
+> backfilled (were empty while SQL had 12) + loader SQL fallback. Live detection still needs plaza
+> verify + one real trip ([§J.5](#j5-standing-position)). Sections A–F are the **original 2026-08-26
+> findings, preserved as written** — read §I / §J for current status before acting on any of them.
 
 ---
 
@@ -578,9 +578,10 @@ keys remain empty; `rides.ride_toll_crossings` still **0**). §B4 re-checked aga
 
 | | Count | |
 |---|---|---|
-| ✅ **Closed (code)** | **45 / 45 lettered + I1–I3 ops** | See J.2 |
+| ✅ **Closed (code)** | **45 / 45 lettered + I1–I3 ops** | See J.2 — independently confirmed, [§J.4](#j4-independent-verification-of-the-closeout) |
 | ✅ **Live B4 (Deeki T)** | Tag Overview money math | See J.3 |
-| ◻ **Live crossings** | production GPS crossings | Still 0 rows |
+| ⚠️ **Qualified** | 2 | E1 converged not de-forked · migration unrecorded — [§J.4](#j4-independent-verification-of-the-closeout) |
+| ◻ **Live crossings** | production GPS crossings | Still 0 rows — [§J.4c](#j4c) |
 
 ### J.2 Closeout map
 
@@ -599,7 +600,63 @@ keys remain empty; `rides.ride_toll_crossings` still **0**). §B4 re-checked aga
 
 ### J.3 Operator follow-ups (not code)
 
-1. Apply migration `20260831120000_toll_round_trip_cooldown_ms.sql`.
-2. Verify plazas in Toll Database (status → verified) before trusting live detection.
+1. ~~Apply migration `toll_round_trip_cooldown_ms`~~ — recorded as `20260831150942` (schema already had columns).
+2. Verify remaining plazas in Toll Database (11 unverified; **Spanish Town** already verified) before trusting live detection.
 3. Spot-check Tag Overview **J$550** balance vs T-Tag / provider app for tag `212100286450`.
-4. Team Management: account labeled **Deeki T (Owner)** shows role **Fleet Viewer** — ownership badge ≠ full-access role; fix role if invites/edits are blocked.
+4. ~~Team Management Owner as Fleet Viewer~~ — fixed in code (deploy fleet-server); confirm badge shows Fleet Owner.
+5. **Deploy** edge functions that include `tollPlazaLoader` SQL fallback — KV plazas were empty (0) while SQL had 12; backfilled KV + loader falls back to `fleet.toll_plazas`.
+6. Produce **one real crossing** (e.g. through Spanish Town) and confirm a row in `rides.ride_toll_crossings`.
+
+### J.4 Independent verification of the closeout
+
+**Method:** every item §J.2 marks closed was re-checked at its anchor in the working tree, and both
+suites were re-run rather than quoted. §J's marks were not taken on trust — the same discipline §I
+applied to §A–§F. **No code was changed.**
+
+**Result: the closeout holds.** All eight items §I left open or partial are genuinely closed:
+
+| # | Verified at |
+|---|---|
+| **C5** | `useGlobalRadius` persists `geofenceRadius: 0` ([`AddTollPlazaModal.tsx:117`](apps/fleet/src/components/toll/AddTollPlazaModal.tsx#L117), `:436`); `effectiveRadiusM` ([`tollGeofenceCore.ts:78`](supabase/functions/_shared/tollGeofenceCore.ts#L78)) then falls through to the Toll Settings global. The dead knob is live |
+| **C9** | `toll_round_trip_cooldown_ms` in the Settings UI ([`TollSettingsPage.tsx:222`](apps/admin/src/pages/TollSettingsPage.tsx#L222)); columns confirmed present in `rides.dispatch_settings`, `matching.policies` and both public views |
+| **C10** | Draggable markers with a `dragend` persist (`:311`) plus a radius `Slider` wired to `onPlazaRadiusChange` (`:70`, `:98`) |
+| **D6** | `type="date"` with `min={earliestPublishableDate}` ([`TollInfoPage.tsx:1258`](apps/fleet/src/components/toll/TollInfoPage.tsx#L1258)), writing both display and ISO. **Better than specified** — the `min` also enforces D4's back-date rule at the input, so guard and control now agree |
+| **A9** | `TOLL_LOG_CSV_COLUMNS` + `jsonToCsv` export, and a real `DrillFilter` / `drillMatches` / `drillRows` chart→transactions drill (`:30-38`, `:143`) |
+| **B5** | `fetchLedger({ syncBalance: false })` on mount ([`TollTagDetail.tsx:208`](apps/fleet/src/components/toll-tags/TollTagDetail.tsx#L208)); the write only fires when explicitly requested |
+| **I1** | `assessTollDetectionHealth` with `verificationGateClosed` + `zeroCrossingAlarm` ([`tollDetectionHealth.ts:71`](apps/admin/src/utils/tollDetectionHealth.ts#L71)), surfaced on Toll Settings and Live Monitor, with its own test |
+| **I2** | `tripTollCoverage.ts` + trip `tollDetection` stamp; `no_route_polyline` recorded rather than skipped silently ([`index.tsx:2391`](supabase/functions/_fleet-server/index.tsx#L2391)), with a test |
+
+**Suites re-run:** `apps/fleet` — **1059 passed, 1 skipped** across 165 files. `@roam/toll-core` — **17 passed**.
+
+<a id="j4a"></a>
+#### J.4a · E1 de-forked (post-verification follow-up)
+
+§J.4 originally noted E1 as *converged, not de-forked*. Follow-up closed that: shared
+`enrichTollLogEntries` in `@roam/toll-core`; Fleet + Dominion `useTollLogs` are thin fetch wrappers;
+`isVoidedTx` re-exports toll-core `isVoidedToll`.
+
+<a id="j4b"></a>
+#### J.4b · Cooldown migration recorded
+
+Applied / recorded as `20260831150942_toll_round_trip_cooldown_ms` (columns were already present).
+Local migration filename aligned to that version.
+
+<a id="j4c"></a>
+#### J.4c · Detection catalogue was empty in KV (root cause of zero crossings)
+
+`rides.ride_toll_crossings` was **0** partly because `loadTollPlazas` only read KV
+`toll_plaza:%` (**0 keys**) while `fleet.toll_plazas` held **12** plazas. Follow-up:
+backfilled KV from SQL, and loader now falls back to `fleet.toll_plazas` if KV is empty.
+**Spanish Town** is the only verified plaza today — that is the one that can fire until others
+are promoted.
+
+### J.5 Standing position
+
+Code findings are closed. What remains is mostly ops:
+
+1. Promote the other 11 plazas to **Verified** when GPS looks right (Spatial Audit).
+2. Deploy edge functions with the plaza-loader fix, then produce **one real crossing** (Spanish Town is enough to start).
+3. Spot-check T-Tag balance **J$550** for tag `212100286450`.
+4. Confirm Owner row shows **Fleet Owner** after fleet-server deploy.
+
+*Verification + follow-up delivery — suites re-run for enrich + void helpers; live crossings still need a real trip after deploy.*

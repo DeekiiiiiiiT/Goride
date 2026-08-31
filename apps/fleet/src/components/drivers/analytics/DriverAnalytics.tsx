@@ -6,7 +6,7 @@ import { DriverAnalyticsToolbar } from './DriverAnalyticsToolbar';
 import { DriverAnalyticsKpiGrid } from './DriverAnalyticsKpiGrid';
 import { DriverAnalyticsLeaderboard } from './DriverAnalyticsLeaderboard';
 import { DriverAnalyticsPanels } from './DriverAnalyticsPanels';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 
 export function DriverAnalytics({
   onNavigate,

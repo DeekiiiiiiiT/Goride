@@ -62,7 +62,7 @@ import {
 import { api } from "../../services/api";
 import { LedgerEntry, LedgerFilterParams, PaginatedLedgerResponse, LedgerEventType } from "../../types/data";
 import { format, subDays, startOfMonth, startOfWeek } from "date-fns";
-import { toast } from "sonner@2.0.3";
+import { toast } from "sonner";
 import { cn } from "../ui/utils";
 
 // ─── Constants ────────────────────────────────────────────────────────

@@ -7,7 +7,7 @@ import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
 import { Copy, Check, Clock, AlertTriangle, Car, DollarSign, MapPin, Calendar, MoreVertical, XCircle, CheckCircle, Archive } from "lucide-react";
-import { toast } from "sonner@2.0.3";
+import { toast } from "sonner";
 import { Claim } from "../../types/data";
 import { useAuth } from '../auth/AuthContext';
 import {

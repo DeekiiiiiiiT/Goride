@@ -69,7 +69,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Label } from "../ui/label";
 import { Input } from "../ui/input";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../ui/tooltip";
-import { toast } from "sonner@2.0.3";
+import { toast } from "sonner";
 import { BulkImportTollTransactionsModal } from '../vehicles/BulkImportTollTransactionsModal';
 import { ExportCenter } from './ExportCenter';
 import { DeleteCenter } from './DeleteCenter';

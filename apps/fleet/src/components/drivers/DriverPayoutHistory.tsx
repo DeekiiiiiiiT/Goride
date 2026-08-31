@@ -18,7 +18,7 @@ import { FinancialTransaction, Trip, DriverMetrics } from '../../types/data';
 import type { FuelEntry, MileageAdjustment, FuelScenario } from '../../types/fuel';
 import { format } from 'date-fns';
 import { exportToCSV } from '../../utils/csvHelpers';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '../ui/tooltip';
 import { PayoutPeriodDetail } from './PayoutPeriodDetail';
 import type { PayoutPeriodRow } from '../../types/driverPayoutPeriod';

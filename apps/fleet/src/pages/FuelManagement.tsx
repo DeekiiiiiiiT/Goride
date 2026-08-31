@@ -52,7 +52,7 @@ import {
 } from '../components/ui/alert-dialog';
 import { Checkbox } from '../components/ui/checkbox';
 import { Label } from '../components/ui/label';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 import { DateRange } from 'react-day-picker';
 import type { FuelCard, FuelEntry, FuelScenario, MileageAdjustment, FuelDispute, WeeklyFuelReport, FinalizedFuelReport, JaaProgram } from '../types/fuel';
 import type { FinancialTransaction } from '../types/data';

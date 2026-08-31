@@ -19,7 +19,7 @@ import {
   SelectValue 
 } from "../ui/select";
 import { RadioGroup, RadioGroupItem } from "../ui/radio-group";
-import { toast } from "sonner@2.0.3";
+import { toast } from "sonner";
 import { Loader2, DollarSign, Wallet, ArrowRightLeft, Calendar } from "lucide-react";
 import { FinancialTransaction } from '../../types/data';
 import { format } from "date-fns";

@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from 'react';
 import { api } from '../../../services/api';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 import { StationProfile } from '../../../types/station';
 import { calculateDistance } from '../../../utils/stationUtils';
 import type { LearntLocationDto, StationGateEvidenceRow, UnresolvedStopRow } from './resolutionQueueTypes';

@@ -13,7 +13,7 @@ import { Label } from '../ui/label';
 import { Textarea } from '../ui/textarea';
 import { Checkbox } from '../ui/checkbox';
 import { Loader2, Plus, Trash2, ChevronLeft, ChevronRight, Check } from 'lucide-react';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 import type { EarningsPolicy } from '../../types/earningsPolicy';
 import type { TierConfig, QuotaConfig, PersonalAllowanceTierConfig } from '../../types/data';
 import { QuotaConfigTab } from '../tiers/QuotaConfigTab';

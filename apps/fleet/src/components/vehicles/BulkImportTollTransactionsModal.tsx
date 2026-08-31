@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from ".
 import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
 import { Loader2, AlertCircle, CheckCircle2, ArrowUpRight, ArrowDownLeft, MinusCircle, Sparkles, UploadCloud, Copy } from "lucide-react";
 import { api } from "../../services/api";
-import { toast } from "sonner@2.0.3";
+import { toast } from "sonner";
 import Papa from 'papaparse';
 import { FleetBusyProvider, useFleetBusy } from '../shared/FleetBusyLock';
 import { useLockedDialog } from '../shared/useLockedDialog';

@@ -60,13 +60,12 @@ export function isTagLedgerTx(tx: TagTxLike): boolean {
   return !isOffTagToll(tx);
 }
 
-/** Soft-voided ledger rows — keep visible but exclude from balance / recovery math. */
-export function isVoidedTx(tx: TagTxLike): boolean {
-  const status = (tx.status || '').toLowerCase();
-  if (status === 'voided') return true;
-  if (tx.metadata?.voided === true) return true;
-  return false;
-}
+/**
+ * Soft-voided ledger rows — keep visible but exclude from balance / recovery math.
+ * Single source: @roam/toll-core (alias kept for existing fleet imports/tests).
+ */
+import { isVoidedToll } from '@roam/toll-core';
+export const isVoidedTx = isVoidedToll;
 
 /** Tag-balance deduction (a transponder read at a gantry). */
 export function isTagUsage(tx: TagTxLike): boolean {

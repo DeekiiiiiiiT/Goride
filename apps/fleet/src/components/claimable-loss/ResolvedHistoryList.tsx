@@ -10,7 +10,7 @@ import {
 import { Badge } from "../ui/badge";
 import { CheckCircle2, History, Trash2, MoreHorizontal, FileText, UserMinus } from "lucide-react";
 import { Claim, DisputeRefund, FinancialTransaction } from "../../types/data";
-import { toast } from "sonner@2.0.3";
+import { toast } from "sonner";
 import { Checkbox } from "../ui/checkbox";
 import { Button } from "../ui/button";
 import {

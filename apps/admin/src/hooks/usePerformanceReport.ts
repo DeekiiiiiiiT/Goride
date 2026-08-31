@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { api } from '../services/api';
 import { DriverPerformanceSummary } from '../types/performance';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 import { subDays, format } from 'date-fns';
 
 export interface UsePerformanceReportOptions {

@@ -46,7 +46,7 @@ import {
 import { Label } from "../ui/label";
 import { cn } from "../ui/utils";
 import { Search, MoreHorizontal, Pencil, Trash2, Fuel, CreditCard, Banknote, AlertCircle, AlertTriangle, Filter as FilterIcon, X, ListFilter, ShieldCheck, HelpCircle, History, RotateCcw, Gauge, ChevronRight, Calculator, Calendar, ArrowRight, Scissors, CheckCircle2, Link2, Eye, MapPin, Clock, Hash, FileText } from "lucide-react";
-import { toast } from "sonner@2.0.3";
+import { toast } from "sonner";
 import { projectId, publicAnonKey } from '../../utils/supabase/info';
 import { FuelEntry, FuelCard, FuelCycle } from '../../types/fuel';
 import { FinancialTransaction } from '../../types/data';

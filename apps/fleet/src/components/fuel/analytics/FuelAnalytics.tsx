@@ -8,7 +8,7 @@ import { FuelAnalyticsTrends } from './FuelAnalyticsTrends';
 import { FuelAnalyticsBreakdown } from './FuelAnalyticsBreakdown';
 import { FuelAnalyticsAnomalies } from './FuelAnalyticsAnomalies';
 import { FuelAnalyticsTables } from './FuelAnalyticsTables';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 
 export function FuelAnalytics({ onNavigate }: { onNavigate?: (page: string) => void }) {
   const analytics = useFuelAnalytics();

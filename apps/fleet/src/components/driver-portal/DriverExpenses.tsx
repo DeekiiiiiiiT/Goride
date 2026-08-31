@@ -31,7 +31,7 @@ import {
 import { format, isValid } from "date-fns";
 import { cn } from "../ui/utils";
 import { formatSafeDate, formatSafeTime } from '../../utils/timeUtils';
-import { toast } from "sonner@2.0.3";
+import { toast } from "sonner";
 import { useAuth } from '../auth/AuthContext';
 import { useCurrentDriver } from '../../hooks/useCurrentDriver';
 import { api } from '../../services/api';

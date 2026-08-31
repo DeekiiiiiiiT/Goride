@@ -22,7 +22,7 @@ import {
   TOLL_TRANSACTION_CSV_COLUMNS,
 } from '../../types/csv-schemas';
 import { api } from '../../services/api';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 import { Button } from '../ui/button';
 import { runBackgroundJobToast } from '../shared/runBackgroundJobToast';
 import {

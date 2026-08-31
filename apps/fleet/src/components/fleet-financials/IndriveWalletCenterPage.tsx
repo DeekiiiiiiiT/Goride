@@ -6,7 +6,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { endOfWeek, format, parseISO, startOfWeek } from 'date-fns';
 import { Loader2, RefreshCw, Trash2, Wallet } from 'lucide-react';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 import { api } from '../../services/api';
 import { buildIndriveWalletLoadTransaction } from '../../utils/indriveWalletLoad';
 import { usePermissions } from '../../hooks/usePermissions';

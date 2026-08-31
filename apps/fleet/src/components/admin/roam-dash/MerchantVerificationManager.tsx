@@ -19,7 +19,7 @@ import {
   TableRow,
 } from "../../ui/table";
 import { Badge } from "../../ui/badge";
-import { toast } from "sonner@2.0.3";
+import { toast } from "sonner";
 import { MerchantStatusBadge } from "./MerchantStatusBadge";
 import { MerchantDetailModal } from "./MerchantDetailModal";
 import {

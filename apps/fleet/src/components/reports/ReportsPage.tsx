@@ -4,7 +4,7 @@ import { Button } from "../ui/button";
 import { FileText, Download, BarChart3, Clock, Mail, CheckCircle2 } from "lucide-react";
 import { Switch } from "../ui/switch";
 import { Label } from "../ui/label";
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 import { AlertEngine } from '../../utils/alertEngine';
 import { api } from '../../services/api';
 import { fuelService } from '../../services/fuelService';

@@ -23,7 +23,7 @@ import { encodePlusCode, decodePlusCode, isValidPlusCode, isFullPlusCode, getPlu
 import { fuelService } from '../../../services/fuelService';
 import { Plus, Loader2, MapPin, Search, CheckCircle2, Info, Grid3X3, Navigation, Pencil, Check } from 'lucide-react';
 import { Slider } from '../../ui/slider';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 import { AlertTriangle, Merge, ShieldAlert, ShieldCheck as ShieldCheckIcon, Trash2 } from 'lucide-react';
 import { cn } from "../../ui/utils";
 

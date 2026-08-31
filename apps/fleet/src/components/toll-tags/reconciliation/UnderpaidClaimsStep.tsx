@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../ui/tabs";
-import { toast } from "sonner@2.0.3";
+import { toast } from "sonner";
 import { FileX, AlertCircle, Timer, Banknote } from "lucide-react";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,

@@ -5,7 +5,7 @@ import { Input } from "../ui/input";
 import { Label } from "../ui/label";
 import { Loader2, FileText, Check, Car, FileCheck, Sparkles, AlertTriangle, Tag, Image as ImageIcon } from 'lucide-react';
 import { api } from '../../services/api';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 import { Vehicle } from '../../types/vehicle';
 import { cn } from "../ui/utils";
 import { convertPdfToImage } from '../../utils/pdf-helper';

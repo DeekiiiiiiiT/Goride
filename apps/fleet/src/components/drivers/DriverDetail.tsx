@@ -126,7 +126,7 @@ import { DateRange } from "react-day-picker";
 import { cn } from "../ui/utils";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 import { Calendar } from "../ui/calendar";
-import { toast } from "sonner@2.0.3";
+import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "../ui/dialog";
 import { LogCashPaymentModal } from './LogCashPaymentModal';
 import { CashWriteOffModal, type CashWriteOffSavePayload } from './CashWriteOffModal';

@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { api } from '../services/api';
 import { FinancialTransaction, Trip, DisputeRefund } from '../types/data';
 import { MatchResult } from '../utils/tollReconciliation';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 
 /**
  * Phase 4: Server-driven toll reconciliation hook.

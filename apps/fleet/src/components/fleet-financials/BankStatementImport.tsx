@@ -4,7 +4,7 @@
 import React, { useMemo, useState } from 'react';
 import { format, parseISO, addDays } from 'date-fns';
 import { Loader2, Upload } from 'lucide-react';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 import { api } from '../../services/api';
 import type { FleetBankReceiveRow } from '../../utils/fleetBankReceive';
 import {

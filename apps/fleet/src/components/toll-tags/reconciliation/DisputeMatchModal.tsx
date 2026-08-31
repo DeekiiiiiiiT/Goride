@@ -6,7 +6,7 @@ import { Loader2, Search, LinkIcon, Sparkles, ChevronDown, ChevronUp, MapPin } f
 import { DisputeRefund } from "../../../types/data";
 import { formatStoredDateInFleetTz, useFleetTimezone } from '../../../utils/timezoneDisplay';
 import { api } from '../../../services/api';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 import { PeriodWeekDropdown } from "../../ui/PeriodWeekDropdown";
 import { ENTIRE_PERIOD_OPTION_ID, type PeriodWeekOption } from "../../../utils/periodWeekOptions";
 import { FleetBusyProvider, useFleetBusy } from '../../shared/FleetBusyLock';

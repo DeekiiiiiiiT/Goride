@@ -19,7 +19,7 @@ import {
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
 import { Calendar as CalendarIcon, Clock, User, Video, MapPin } from "lucide-react";
-import { toast } from "sonner@2.0.3";
+import { toast } from "sonner";
 
 export function MeetingSchedulerModal() {
   const [open, setOpen] = useState(false);

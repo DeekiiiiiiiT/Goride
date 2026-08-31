@@ -35,7 +35,7 @@ import {
 } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '../../ui/tabs';
 import { Checkbox } from '../../ui/checkbox';
-import { toast } from "sonner@2.0.3";
+import { toast } from "sonner";
 import { StationOverride, StationProfile } from '../../../types/station';
 import { processBatchWithRateLimit, geocodeAddress, searchPlace, GeocodedResult } from '../../../utils/geocoding';
 import { generateStationId, normalizeStationName } from '../../../utils/stationUtils';

@@ -17,7 +17,7 @@ import {
 } from "lucide-react";
 import { api } from "../../services/api";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "../ui/tooltip";
-import { toast } from "sonner@2.0.3";
+import { toast } from "sonner";
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend } from 'recharts';
 import { SafeResponsiveContainer as ResponsiveContainer } from '../ui/SafeResponsiveContainer';
 

@@ -13,7 +13,7 @@ import {
     Loader2, Wrench, AlertTriangle, CheckCircle, HelpCircle, ArrowLeft, ChevronDown,
     Scissors, Minimize2, Grid, Zap, Target, SearchX, Eye, Info 
 } from 'lucide-react';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 import { Label } from '../ui/label';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '../ui/collapsible';
 

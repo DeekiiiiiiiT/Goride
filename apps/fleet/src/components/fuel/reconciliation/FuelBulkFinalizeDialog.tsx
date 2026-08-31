@@ -12,7 +12,7 @@ import type { FuelReconciliationPeriod } from '../../../utils/fuelPeriodStatus';
 import type { FuelCard, FuelEntry, FuelScenario, MileageAdjustment, FinalizedFuelReport, WeeklyFuelReport } from '../../../types/fuel';
 import type { Trip } from '../../../types/data';
 import type { Vehicle } from '../../../types/vehicle';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 import { BulkWeekActionDialog, type BulkWeekActionResult } from './BulkWeekActionDialog';
 import { useFuelSettlementReopenGate } from './useFuelSettlementReopenGate';
 

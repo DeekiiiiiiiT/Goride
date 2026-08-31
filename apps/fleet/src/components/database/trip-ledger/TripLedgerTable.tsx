@@ -2,7 +2,7 @@ import React, { useState, useMemo, useCallback } from 'react';
 import { Trip } from '../../../types/data';
 import { Copy, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, ChevronsUpDown, AlertTriangle } from 'lucide-react';
 import { PaymentLinesPanel } from './PaymentLinesPanel';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 import type { ColumnDef } from './TripLedgerColumnToggle';
 
 // ── Formatters ──────────────────────────────────────────────────────────────

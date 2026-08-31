@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { EquipmentTemplate } from '../../services/templateService';
 import { EquipmentItem } from '../../types/equipment';
 import { Plus, Trash2, Package } from 'lucide-react';
-import { toast } from "sonner@2.0.3";
+import { toast } from "sonner";
 
 interface AddTemplateModalProps {
     isOpen: boolean;

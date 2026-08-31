@@ -13,7 +13,7 @@ import { Badge } from "../ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import { FuelPerformanceAnalytics } from './FuelPerformanceAnalytics';
 import { TabLoadingSkeleton } from '../ui/TabLoadingSkeleton';
-import { toast } from "sonner@2.0.3";
+import { toast } from "sonner";
 import { DateRange } from "react-day-picker";
 import { DatePickerWithRange } from "../ui/date-range-picker";
 import {

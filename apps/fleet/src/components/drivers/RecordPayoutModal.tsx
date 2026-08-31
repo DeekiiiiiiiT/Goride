@@ -22,7 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '../ui/select';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 import { Loader2, Banknote } from 'lucide-react';
 import { format } from 'date-fns';
 

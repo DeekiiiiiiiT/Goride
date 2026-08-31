@@ -10,7 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
 import { FuelEntry, FuelCard } from '../../types/fuel';
 import { StationProfile } from '../../types/station';
 import { Plus, X, History, Loader2, MapPin, Building2, Fuel } from 'lucide-react';
-import { toast } from "sonner@2.0.3";
+import { toast } from "sonner";
 import { fuelService } from '../../services/fuelService';
 import { FuelCalculationService } from '../../services/fuelCalculationService';
 import { useQuery } from '@tanstack/react-query';

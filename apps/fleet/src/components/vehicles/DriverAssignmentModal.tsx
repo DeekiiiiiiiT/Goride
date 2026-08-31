@@ -15,7 +15,7 @@ import { Badge } from "../ui/badge";
 import { Vehicle } from '../../types/vehicle';
 import { Trip, DriverMetrics } from '../../types/data';
 import { cn } from "../ui/utils";
-import { toast } from "sonner@2.0.3";
+import { toast } from "sonner";
 
 interface DriverAssignmentModalProps {
   isOpen: boolean;

@@ -17,7 +17,7 @@ import { getCurrentPosition, reverseGeocode, createStop, calculatePathDistance }
 import { useTripTracker } from '../../hooks/useTripTracker';
 import { LeafletMap } from '../maps/LeafletMap';
 import { StopList } from './StopList';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 import { mapMatchService } from '../../services/mapMatchService';
 import { useOffline } from '../providers/OfflineProvider';
 

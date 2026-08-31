@@ -3,6 +3,7 @@
 --
 -- NOTE: public.rides_dispatch_settings and public.matching_policies are VIEWS —
 -- never ALTER TABLE them. Alter the base tables, then refresh the views.
+-- Applied remotely as version 20260831150942 (columns already present; idempotent).
 
 ALTER TABLE rides.dispatch_settings
   ADD COLUMN IF NOT EXISTS toll_round_trip_cooldown_ms INTEGER NOT NULL DEFAULT 300000

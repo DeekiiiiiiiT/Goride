@@ -5,7 +5,7 @@ import { Plus, Loader2, Pencil, Trash2, Calendar, Repeat, Table as TableIcon, Li
 import { expenseService } from '../../../services/expenseService';
 import { useExpenseHubFlag } from '../../../hooks/useExpenseHub';
 import { FixedExpenseConfig } from '../../../types/expenses';
-import { toast } from "sonner@2.0.3";
+import { toast } from "sonner";
 import { AddFixedExpenseDialog } from './AddFixedExpenseDialog';
 import { Badge } from "../../ui/badge";
 import { calculateAnnualProjection, aggregateProjections, ProjectionViewBasis, calculateAmortizedProjection } from '../../../utils/expenseProjection';

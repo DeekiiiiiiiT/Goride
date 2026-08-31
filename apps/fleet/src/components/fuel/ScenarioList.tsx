@@ -4,7 +4,7 @@ import { Button } from "../ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../ui/card";
 import { Badge } from "../ui/badge";
 import { Loader2, Plus, Trash2, Edit2, Star, AlertTriangle, Users, Copy, CalendarRange } from 'lucide-react';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 import { fuelService } from '../../services/fuelService';
 import { api } from '../../services/api';
 import { FuelScenario, FuelRule, FuelEntry, FinalizedFuelReport } from '../../types/fuel';

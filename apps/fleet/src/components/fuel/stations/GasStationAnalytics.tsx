@@ -18,7 +18,7 @@ function shortestDistanceMeters(lat: number, lng: number, station: StationProfil
   return d;
 }
 import { fuelService } from '../../../services/fuelService';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 import { StationDashboard } from './StationDashboard';
 import { StationMap } from './StationMap';
 import { StationList } from './StationList';

@@ -13,7 +13,7 @@ import { Claim, DisputeRefund, FinancialTransaction } from "../../types/data";
 import { TollTopupHistory } from "../vehicles/TollTopupHistory";
 import { LogTollTopupModal } from "../vehicles/LogTollTopupModal";
 import { api } from "../../services/api";
-import { toast } from "sonner@2.0.3";
+import { toast } from "sonner";
 import { sumTagUsageFinancials } from "../../utils/tollReconciliation";
 import { isTagLedgerTx, isTagUsage, isTagCredit, isVoidedTx } from "../../utils/tollTagLedger";
 import { getTollTransactionDate } from "../../utils/tollWeekPeriod";

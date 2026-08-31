@@ -7,7 +7,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { format, parseISO, addDays } from 'date-fns';
 import { CalendarRange, ChevronRight, Landmark, Loader2, RefreshCw, Settings2, X } from 'lucide-react';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 import { api } from '../../services/api';
 import {
   aggregateExpectedBankByWeek,

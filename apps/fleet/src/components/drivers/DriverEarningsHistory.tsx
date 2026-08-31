@@ -8,7 +8,7 @@ import { TierConfig, QuotaConfig, Trip, FinancialTransaction } from "../../types
 import { deriveDriverFinancialDateRange } from "../../utils/driverFinancialDateRange";
 import { format, startOfDay, endOfDay } from "date-fns";
 import { exportToCSV } from "../../utils/csvHelpers";
-import { toast } from "sonner@2.0.3";
+import { toast } from "sonner";
 import { ScrollArea } from "../ui/scroll-area";
 import { api } from "../../services/api";
 interface DriverEarningsHistoryProps {

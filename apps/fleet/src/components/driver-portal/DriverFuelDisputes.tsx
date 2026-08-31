@@ -23,7 +23,7 @@ import {
 } from "lucide-react";
 import { api } from "../../services/api";
 import { format } from "date-fns";
-import { toast } from "sonner@2.0.3";
+import { toast } from "sonner";
 import { motion, AnimatePresence } from "motion/react";
 import { useAuth } from '../auth/AuthContext';
 import { FuelEntry } from '../../types/fuel';

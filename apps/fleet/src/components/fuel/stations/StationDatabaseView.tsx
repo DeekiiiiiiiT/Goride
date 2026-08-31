@@ -22,7 +22,7 @@ import { Star, Loader2, Upload, Trash2, Plus, ShieldCheck, ShieldOff, Map as Map
 import { SpatialIntegrityMap } from './SpatialIntegrityMap';
 import { fuelService } from '../../../services/fuelService';
 import { api } from '../../../services/api';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 import { AddStationModal } from './AddStationModal';
 
 interface StationDatabaseViewProps {

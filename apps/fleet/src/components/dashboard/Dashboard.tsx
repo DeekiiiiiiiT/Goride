@@ -49,7 +49,7 @@ import { PredictiveAnalyticsPanel } from './PredictiveAnalyticsPanel';
 import { AlertsConfigView } from './AlertsConfigView';
 import { CheckInReviewModal } from './CheckInReviewModal';
 import { useAdminCheckIn } from '../../hooks/useAdminCheckIn';
-import { toast } from "sonner@2.0.3";
+import { toast } from "sonner";
 export function Dashboard() {
   const queryClient = useQueryClient();
   const { v } = useVocab();

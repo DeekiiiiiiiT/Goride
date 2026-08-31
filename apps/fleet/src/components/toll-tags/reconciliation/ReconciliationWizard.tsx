@@ -31,7 +31,7 @@ import { computeUnderpaidPipelineCounts } from "../../../utils/underpaidPipeline
 import { listFullyCoveredPendingUnderpaid, listPeriodUnderpaidShortfallsForDispute } from "../../../utils/pendingUnderpaidListable";
 import { isRecommendedUnlinkedShortfall } from "../../../utils/unlinkedShortfallEligibility";
 import type { UnlinkedShortfallSuggestion } from "../../../hooks/useTollReconciliation";
-import { toast } from "sonner@2.0.3";
+import { toast } from "sonner";
 import { Trip as TripType } from "../../../types/data";
 import { api } from "../../../services/api";
 import { runBackgroundJobToast } from "../../shared/runBackgroundJobToast";

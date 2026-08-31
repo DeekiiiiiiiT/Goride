@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { Label } from '../ui/label';
 import { Badge } from '../ui/badge';
 import { Loader2, Plus, Pencil, Trash2, AlertTriangle, CheckCircle, HelpCircle, Wrench, Sparkles } from 'lucide-react';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 
 interface EquipmentManagerProps {
     vehicleId: string;

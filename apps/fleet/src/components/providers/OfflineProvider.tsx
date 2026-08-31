@@ -6,7 +6,7 @@ import { useAuth } from '../auth/AuthContext';
 import { api } from '../../services/api';
 import { createManualTrip } from '../../utils/tripFactory';
 import { mapMatchService } from '../../services/mapMatchService';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 
 interface OfflineContextType {
   isOnline: boolean;

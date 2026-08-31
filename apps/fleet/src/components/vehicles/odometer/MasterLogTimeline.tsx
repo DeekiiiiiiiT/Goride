@@ -54,7 +54,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "../../ui/dropdown-menu";
-import { toast } from "sonner@2.0.3";
+import { toast } from "sonner";
 import { OdometerReading, MileageReport } from '../../../types/vehicle';
 import { Trip } from '../../../types/data';
 import { odometerService } from '../../../services/odometerService';

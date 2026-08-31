@@ -12,7 +12,7 @@ import { LogMaintenanceServiceDialog } from './LogMaintenanceServiceDialog';
 import { AddVehicleModal } from './AddVehicleModal';
 import type { CatalogMaintenanceTaskOption, VehicleMaintenanceScheduleRowApi } from '../../types/maintenance';
 import { catalogOptionsFromScheduleRows } from '../../utils/maintenanceCatalogOptions';
-import { Toaster, toast } from 'sonner@2.0.3';
+import { Toaster, toast } from 'sonner';
 import { 
   Loader2, 
   Search, 

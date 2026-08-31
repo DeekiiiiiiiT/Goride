@@ -12,7 +12,7 @@ import {
   UploadCloud, ArrowLeft, CheckCircle, AlertCircle, AlertTriangle,
   FileText, Loader2, Info,
 } from 'lucide-react';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 import { validateImportFile, ValidationError } from '../../services/import-validator';
 import { importExecutor } from '../../services/data-import-executor';
 import { Trip } from '../../types/data';

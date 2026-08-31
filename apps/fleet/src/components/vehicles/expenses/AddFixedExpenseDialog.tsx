@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useForm } from 'react-hook-form@7.55.0';
+import { useForm } from 'react-hook-form';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "../../ui/dialog";
 import { Button } from "../../ui/button";
 import { Input } from "../../ui/input";
@@ -17,7 +17,7 @@ import {
     normalizeExpenseFrequency,
 } from '../../../types/expenses';
 import { expenseService } from '../../../services/expenseService';
-import { toast } from "sonner@2.0.3";
+import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 
 interface AddFixedExpenseDialogProps {

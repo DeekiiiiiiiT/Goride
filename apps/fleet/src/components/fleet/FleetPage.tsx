@@ -12,7 +12,7 @@ import { AddTemplateModal } from './AddTemplateModal';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
 import { Button } from "../ui/button";
 import { Plus, LayoutGrid, Settings, Database } from "lucide-react";
-import { toast } from "sonner@2.0.3";
+import { toast } from "sonner";
 import { EquipmentItem } from '../../types/equipment';
 import { InventoryItem } from '../../types/fleet';
 import { seederService } from '../../services/seederService';

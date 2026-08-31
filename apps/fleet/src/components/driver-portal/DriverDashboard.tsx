@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import { Trip, FuelLog, ServiceRequest, DriverMetrics, TierConfig, QuotaConfig, DriverGoals } from '../../types/data';
 import { RoutePoint, TripStop } from '../../types/tripSession';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 import { FuelLogForm } from './FuelLogForm';
 import { ServiceRequestForm } from './ServiceRequestForm';
 import { ManualTripForm } from '../trips/ManualTripForm';

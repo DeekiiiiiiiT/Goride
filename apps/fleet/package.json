@@ -91,6 +91,8 @@
     "@tailwindcss/vite": "4.1.12",
     "@types/leaflet": "*",
     "@types/node": "^20.10.0",
+    "@types/react": "^18.3.0",
+    "@types/react-dom": "^18.3.0",
     "@types/papaparse": "*",
     "@vitejs/plugin-react": "^4.7.0",
     "sharp": "^0.35.3",

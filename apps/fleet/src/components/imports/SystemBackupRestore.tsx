@@ -10,7 +10,7 @@ import {
   HardDrive, Download, Upload, ArrowLeft, CheckCircle, AlertCircle,
   AlertTriangle, Loader2, FileArchive, Shield, ShieldAlert, Info,
 } from 'lucide-react';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 import { generateFullBackup, parseBackupZip, BackupManifest, BACKUP_CATEGORIES } from '../../services/data-export';
 import { restoreFullBackup, FullRestoreResult } from '../../services/data-import-executor';
 import JSZip from 'jszip';

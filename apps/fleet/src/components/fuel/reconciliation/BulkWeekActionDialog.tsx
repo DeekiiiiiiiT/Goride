@@ -12,7 +12,7 @@ import { Button } from '../../ui/button';
 import { Checkbox } from '../../ui/checkbox';
 import { Input } from '../../ui/input';
 import { Label } from '../../ui/label';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 import { useLockedDialog } from '../../shared/useLockedDialog';
 import { useFuelReconBusy } from './fuelReconBusyLock';
 

@@ -14,7 +14,7 @@ import {
   startOfDay, endOfDay, startOfMonth, endOfMonth,
 } from "date-fns";
 import { exportToCSV } from "../../utils/csvHelpers";
-import { toast } from "sonner@2.0.3";
+import { toast } from "sonner";
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "../ui/tooltip";
 import { isTollCategory } from '../../utils/tollCategoryHelper';
 import { isCashPaidToll } from '../../utils/tollDisposition';

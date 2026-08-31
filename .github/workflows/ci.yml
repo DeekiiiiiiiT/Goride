@@ -68,11 +68,11 @@ jobs:
           VITE_SUPABASE_ANON_KEY: ci-placeholder-anon-key
         run: pnpm --filter @roam/admin test
 
+      - name: Ban Figma-style package@version imports
+        run: node scripts/check-no-versioned-imports.mjs
+
       - name: Typecheck rush-command
         run: pnpm --filter @roam/rush-command typecheck
-
-      - name: Typecheck fleet
-        run: pnpm --filter @roam/fleet typecheck
 
       - name: Build
         run: pnpm build

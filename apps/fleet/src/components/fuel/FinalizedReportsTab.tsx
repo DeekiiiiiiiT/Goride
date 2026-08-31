@@ -25,7 +25,7 @@ import {
 import { format, parseISO } from 'date-fns';
 import { reportWeekYmdBounds } from '../../utils/fuelWeekPeriod';
 import { api } from '../../services/api';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 import { downloadCSV } from '../../utils/export';
 import { useQueryClient } from '@tanstack/react-query';
 import { DRIVER_FINANCIAL_PERIODS_KEY } from '../../hooks/useDriverFinancialPeriods';

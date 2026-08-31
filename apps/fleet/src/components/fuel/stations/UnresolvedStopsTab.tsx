@@ -24,7 +24,7 @@ import {
   ArrowUpDown,
   Inbox,
 } from 'lucide-react';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 import { Tooltip, TooltipTrigger, TooltipContent } from '../../ui/tooltip';
 import {
   Dialog,

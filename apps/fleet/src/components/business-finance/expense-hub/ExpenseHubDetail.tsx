@@ -5,7 +5,7 @@
  */
 import React from 'react';
 import { Banknote, Check, ExternalLink, History, Loader2, ReceiptText } from 'lucide-react';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
 import { Button } from '../../ui/button';
 import {

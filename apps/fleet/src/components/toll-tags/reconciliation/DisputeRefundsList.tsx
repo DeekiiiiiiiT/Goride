@@ -19,7 +19,7 @@ import { groupDisputeRefundsByWeek } from "../../../utils/tollWeekPeriod";
 import { DisputeRefund } from "../../../types/data";
 import { formatInFleetTz, useFleetTimezone } from '../../../utils/timezoneDisplay';
 import { api } from '../../../services/api';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 import { DisputeMatchModal } from "./DisputeMatchModal";
 import { DisputeRefundDetailDialog } from "./DisputeRefundDetailDialog";
 import type { PeriodDisputeShortfall } from "../../../utils/pendingUnderpaidListable";

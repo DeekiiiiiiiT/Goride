@@ -11,7 +11,7 @@ import { Calendar as CalendarIcon, Download, Loader2, FileText } from "lucide-re
 import { cn } from "../ui/utils";
 import { api } from "../../services/api";
 import { exportToCSV } from "../../utils/csvHelpers";
-import { toast } from "sonner@2.0.3";
+import { toast } from "sonner";
 import { Trip, FinancialTransaction } from "../../types/data";
 
 interface ReportGeneratorModalProps {

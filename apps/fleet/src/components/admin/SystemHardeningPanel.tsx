@@ -26,7 +26,7 @@ import {
   AlertDialogTitle,
 } from "../ui/alert-dialog";
 import { api } from "../../services/api";
-import { toast } from "sonner@2.0.3";
+import { toast } from "sonner";
 import { FleetBusyProvider, useFleetBusy } from "../shared/FleetBusyLock";
 
 export function SystemHardeningPanel() {

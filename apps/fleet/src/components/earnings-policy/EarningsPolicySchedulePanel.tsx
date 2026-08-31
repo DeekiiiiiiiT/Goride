@@ -13,7 +13,7 @@ import {
   AlertDialogTitle,
 } from '../ui/alert-dialog';
 import { Loader2, Plus, CalendarRange, Info, Users, Trash2, Pencil, UserPlus } from 'lucide-react';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 import { earningsPolicyService } from '../../services/earningsPolicyService';
 import type {
   EarningsPolicy,

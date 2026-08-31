@@ -5,7 +5,7 @@
  */
 import React from 'react';
 import { Check, Loader2, Receipt, Search, X } from 'lucide-react';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 import { Badge } from '../../ui/badge';
 import { Button } from '../../ui/button';
 import { Card, CardContent } from '../../ui/card';

@@ -55,7 +55,7 @@ import {
 import { projectId } from '../../utils/supabase/info';
 import { requireAuthHeaders } from '../../utils/authHeaders';
 import { API_ENDPOINTS } from '../../services/apiConfig';
-import { toast } from "sonner@2.0.3";
+import { toast } from "sonner";
 import {
   Select,
   SelectContent,

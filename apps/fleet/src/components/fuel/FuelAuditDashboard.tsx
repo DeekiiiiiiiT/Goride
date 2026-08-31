@@ -35,7 +35,7 @@ import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "../ui/
 import { FleetBusyProvider, useFleetBusy } from "../shared/FleetBusyLock";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import { format } from "date-fns";
-import { toast } from "sonner@2.0.3";
+import { toast } from "sonner";
 import { trailingDaysWindow, FUEL_ALERTS_TRAILING_DAYS } from "../../utils/fuelWeekPeriod";
 import { motion, AnimatePresence } from "motion/react";
 import { TabLoadingSkeleton } from "../ui/TabLoadingSkeleton";

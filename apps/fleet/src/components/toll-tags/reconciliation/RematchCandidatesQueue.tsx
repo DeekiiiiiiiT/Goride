@@ -4,7 +4,7 @@ import { Button } from '../../ui/button';
 import { Badge } from '../../ui/badge';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '../../ui/collapsible';
 import { api } from '../../../services/api';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 
 /**
  * MOI-5: surfaces tolls flagged because a newly-imported trip now looks like

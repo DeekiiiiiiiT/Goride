@@ -26,7 +26,7 @@ import { LocationInput } from '../ui/LocationInput';
 import { calculateMultiLegRouteDistance, calculatePathDistance } from '../../utils/locationService';
 import { LeafletMap } from '../maps/LeafletMap';
 import { StopList } from './StopList';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 import { useOffline } from '../providers/OfflineProvider';
 
 interface ManualTripFormProps {

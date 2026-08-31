@@ -2,6 +2,7 @@
   "extends": "../../tsconfig.json",
   "compilerOptions": {
     "baseUrl": ".",
+    "allowImportingTsExtensions": true,
     "paths": {
       "@/*": ["./src/*"],
       "@roam/types": ["../../packages/types/src"],
@@ -12,6 +13,8 @@
       "@roam/api-client/*": ["../../packages/api-client/src/*"],
       "@roam/auth-client": ["../../packages/auth-client/src"],
       "@roam/auth-client/*": ["../../packages/auth-client/src/*"],
+      "@roam/admin-core": ["../../packages/admin-core/src"],
+      "@roam/admin-core/*": ["../../packages/admin-core/src/*"],
       "@roam/business-config": ["../../packages/business-config/src"],
       "@roam/business-config/*": ["../../packages/business-config/src/*"],
       "@roam/finance-core": ["../../packages/finance-core/src"],
@@ -19,5 +22,5 @@
     }
   },
   "include": ["src"],
-  "exclude": ["node_modules", "dist", "build"]
+  "exclude": ["node_modules", "dist", "build", "src/supabase", "**/*.test.ts", "**/*.test.tsx"]
 }

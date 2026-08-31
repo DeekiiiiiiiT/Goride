@@ -53,7 +53,7 @@ import {
 } from "../../ui/alert-dialog";
 import { OdometerReading, UnifiedOdometerEntry } from '../../../types/vehicle';
 import { odometerService } from '../../../services/odometerService';
-import { toast } from "sonner@2.0.3";
+import { toast } from "sonner";
 
 import { formatMasterLogExport, formatCheckInExport } from '../../../utils/odometerUtils';
 import { downloadCSV } from '../../../utils/export';

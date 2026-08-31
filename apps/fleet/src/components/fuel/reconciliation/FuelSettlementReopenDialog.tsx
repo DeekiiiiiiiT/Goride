@@ -14,7 +14,7 @@ import {
   AlertDialogPortal,
   AlertDialogTitle,
 } from '../../ui/alert-dialog';
-import * as AlertDialogPrimitive from '@radix-ui/react-alert-dialog@1.1.6';
+import * as AlertDialogPrimitive from '@radix-ui/react-alert-dialog';
 import { cn } from '../../ui/utils';
 import type { FuelSettlementReopenImpact } from '../../../utils/fuelFinalizeSettlementImpact';
 

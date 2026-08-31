@@ -43,7 +43,7 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "../ui/avatar";
 import { Badge } from "../ui/badge";
 import { UserPlus, MoreHorizontal, Loader2, Shield, Copy, Check, AlertTriangle } from 'lucide-react';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 import { TeamMember } from '../../types/data';
 import { api } from '../../services/api';
 import { usePermissions } from '../../hooks/usePermissions';

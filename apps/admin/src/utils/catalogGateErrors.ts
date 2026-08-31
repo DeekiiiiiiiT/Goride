@@ -1,4 +1,4 @@
-import { toast } from "sonner@2.0.3";
+import { toast } from "sonner";
 import { VEHICLE_PENDING_CATALOG_ERROR_CODE } from "./vehicleCatalogGate";
 
 type GateLikeError = {

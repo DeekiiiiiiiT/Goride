@@ -11,7 +11,7 @@ import {
   fuelWeekLabelFromYmd,
 } from '../../../utils/buildFuelWeekReportsForFinalize';
 import { reportWeekYmdBounds } from '../../../utils/fuelWeekPeriod';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
 import { DRIVER_FINANCIAL_PERIODS_KEY } from '../../../hooks/useDriverFinancialPeriods';
 import { BulkWeekActionDialog, type BulkWeekActionResult } from './BulkWeekActionDialog';

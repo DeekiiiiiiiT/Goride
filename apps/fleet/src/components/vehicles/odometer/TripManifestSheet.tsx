@@ -10,7 +10,7 @@ import {
 import { Badge } from "../../ui/badge";
 import { Button } from "../../ui/button";
 import { Gauge, ArrowRight, Download, Car, MapPin } from 'lucide-react';
-import { toast } from "sonner@2.0.3";
+import { toast } from "sonner";
 import { OdometerReading } from '../../../types/vehicle';
 import { Trip } from '../../../types/data';
 import { normalizePlatform } from '../../../utils/normalizePlatform';

@@ -5,7 +5,7 @@ import { EvidenceFromRecord } from '../evidence/EvidenceFromRecord';
 import { FinancialTransaction, ExpenseSplitRule } from "../../types/data";
 import { api } from "../../services/api";
 import { tierService } from "../../services/tierService";
-import { toast } from "sonner@2.0.3";
+import { toast } from "sonner";
 import { format } from "date-fns";
 import { formatSafeDate, formatSafeTime } from "../../utils/timeUtils";
 import {

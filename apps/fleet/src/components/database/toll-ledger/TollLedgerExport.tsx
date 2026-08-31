@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Download } from 'lucide-react';
 import { TollLedgerEntry } from '../../../types/toll-ledger';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 import type { RenderColumnDef } from './TollLedgerTable';
 
 // ── CSV value helpers ───────────────────────────────────────────────────────

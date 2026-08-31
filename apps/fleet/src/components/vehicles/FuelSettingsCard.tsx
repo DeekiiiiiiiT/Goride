@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { Fuel, Pencil, Check, X, Info } from 'lucide-react';
 import { Vehicle } from '../../types/vehicle';
 import { FuelType } from '../../types/fuel';
-import { toast } from "sonner@2.0.3";
+import { toast } from "sonner";
 import { api } from '../../services/api';
 
 interface FuelSettingsCardProps {

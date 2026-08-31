@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useCallback } from 'react';
 import { FuelEntry } from '../../../types/fuel';
 import { Copy, ChevronLeft, ChevronRight, Flag, ChevronUp, ChevronDown, ChevronsUpDown, AlertTriangle } from 'lucide-react';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 
 // ── Column definition type ──────────────────────────────────────────────────
 

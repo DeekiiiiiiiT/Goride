@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { format, parseISO } from 'date-fns';
 import { ArrowDownLeft, ArrowUpRight, Filter, Loader2, Trash2, Wallet } from 'lucide-react';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 import { api } from '../../services/api';
 import type { IndriveWalletDateRange } from '../../hooks/useIndriveWallet';
 import { useIndriveWallet } from '../../hooks/useIndriveWallet';

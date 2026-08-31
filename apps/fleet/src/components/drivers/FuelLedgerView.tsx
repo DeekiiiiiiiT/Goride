@@ -53,7 +53,7 @@ import { isFuelDebit, isFuelCredit, findBucketForEntry } from '../../utils/fuelG
 import { formatSafeDate, formatSafeTime } from '../../utils/timeUtils';
 import { Input } from '../ui/input';
 import { Button } from '../ui/button';
-import { toast } from "sonner@2.0.3";
+import { toast } from "sonner";
 import { settlementService } from '../../services/settlementService';
 import { fuelService } from '../../services/fuelService';
 import { api } from '../../services/api';

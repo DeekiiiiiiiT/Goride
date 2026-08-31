@@ -8,7 +8,7 @@ import { Textarea } from "../ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../ui/tooltip";
 import { Upload, X, Loader2, MapPin, Plus, Trash2, ListFilter, FileText, Copy, AlertTriangle, Clock, Sparkles, Wand2, Building2, Camera, CreditCard } from 'lucide-react';
-import { toast } from "sonner@2.0.3";
+import { toast } from "sonner";
 import { api } from '../../services/api';
 import { uploadEvidenceFile } from '../../services/uploadEvidence';
 import { EvidenceRetentionNotice } from '../evidence/EvidenceRetentionNotice';

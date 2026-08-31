@@ -1,5 +1,5 @@
 import React from 'react';
-import { Toaster } from 'sonner@2.0.3';
+import { Toaster } from 'sonner';
 import { SidebarProvider, SidebarTrigger } from '../ui/sidebar';
 import { Car } from 'lucide-react';
 import { NotificationCenter } from '../notifications/NotificationCenter';

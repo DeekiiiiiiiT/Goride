@@ -27,7 +27,7 @@ import {
   upsertPolicyVersion,
 } from '../../utils/fuelPolicyVersion';
 import { useFleetTimezone } from '../../utils/timezoneDisplay';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 import { Search } from 'lucide-react';
 
 function driverDisplayName(d: any): string {

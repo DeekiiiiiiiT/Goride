@@ -14,7 +14,7 @@ import {
   HardDrive, Search, ArrowLeft, X as XIcon, AlertTriangle, Trash2,
   FileText, Calendar, Loader2, RefreshCw, CheckSquare, Square, CheckCircle2,
 } from 'lucide-react';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 import {
   Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
 } from '../ui/dialog';

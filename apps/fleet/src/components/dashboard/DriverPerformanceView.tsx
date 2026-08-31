@@ -23,7 +23,7 @@ import { Button } from "../ui/button";
 import { Badge } from "../ui/badge";
 import { usePerformanceReport } from '../../hooks/usePerformanceReport';
 import { api } from '../../services/api';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 
 interface DriverPerformanceViewProps {
   trips?: Trip[];

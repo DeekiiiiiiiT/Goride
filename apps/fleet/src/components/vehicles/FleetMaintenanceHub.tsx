@@ -34,7 +34,7 @@ import type {
   MaintenanceLog,
   VehicleMaintenanceScheduleRowApi,
 } from "../../types/maintenance";
-import { toast } from "sonner@2.0.3";
+import { toast } from "sonner";
 import type { CompatiblePartsResponse } from "../../types/partSourcing";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
 

@@ -9,7 +9,7 @@ import { FuelScenario, FuelRule } from '../../types/fuel';
 import { Fuel } from 'lucide-react';
 import { normalizePercentageRule } from '../../utils/fuelCoverageSplit';
 import { applyPolicyTemplateSave } from '../../utils/fuelPolicyVersion';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 
 /**
  * Validates a Fuel rule before save. Blocks NaN/negative/>100% percentages and

@@ -210,6 +210,51 @@ async function loadRateScheduleValue(
   return (data as { value?: unknown } | null)?.value ?? null;
 }
 
+/** Read plazas from fleet.toll_plazas when KV `toll_plaza:%` is empty. */
+async function loadPlazasFromFleetSql(
+  db: SupabaseClient,
+  organizationId: string | null,
+): Promise<LoadedTollPlaza[]> {
+  try {
+    const { data, error } = await db
+      .schema("fleet")
+      .from("toll_plazas")
+      .select("id, legacy_kv_id, organization_id, payload_json")
+      .limit(500);
+    if (error) {
+      console.warn("[tollPlazaLoader] fleet.toll_plazas fallback failed:", error.message);
+      return [];
+    }
+
+    const plazas: LoadedTollPlaza[] = [];
+    for (const row of data ?? []) {
+      const payload = (row as { payload_json?: Record<string, unknown> }).payload_json;
+      if (!payload || typeof payload !== "object") continue;
+      const orgCol = (row as { organization_id?: string | null }).organization_id;
+      const raw: Record<string, unknown> = {
+        ...payload,
+        organizationId: orgCol ?? payload.organizationId,
+      };
+      if (!recordBelongsToOrg(raw, organizationId)) continue;
+      const id = String((row as { id?: string }).id || payload.id || "");
+      const legacy = String(
+        (row as { legacy_kv_id?: string | null }).legacy_kv_id || `toll_plaza:${id}`,
+      );
+      const parsed = parseKvTollPlaza(legacy, raw);
+      if (parsed && parsed.status === "active") plazas.push(parsed);
+    }
+    if (plazas.length > 0) {
+      console.log(
+        `[tollPlazaLoader] Loaded ${plazas.length} plazas from fleet.toll_plazas (KV empty)`,
+      );
+    }
+    return plazas;
+  } catch (e) {
+    console.warn("[tollPlazaLoader] fleet.toll_plazas fallback error:", e);
+    return [];
+  }
+}
+
 export async function loadTollPlazas(
   db: SupabaseClient,
   options?: LoadTollPlazasOptions,
@@ -233,7 +278,7 @@ export async function loadTollPlazas(
       return cached?.orgKey === orgKey ? cached.plazas : cached?.plazas ?? [];
     }
 
-    const plazas: LoadedTollPlaza[] = [];
+    let plazas: LoadedTollPlaza[] = [];
     for (const row of data ?? []) {
       const raw = row.value as Record<string, unknown> | null;
       if (!raw || typeof raw !== "object") continue;
@@ -242,6 +287,12 @@ export async function loadTollPlazas(
       if (parsed && parsed.status === "active") {
         plazas.push(parsed);
       }
+    }
+
+    // SQL is the migrated SSOT for fleet plazas. If KV was emptied after dual-write,
+    // fall back so detection does not silently run with an empty catalogue.
+    if (plazas.length === 0) {
+      plazas = await loadPlazasFromFleetSql(db, organizationId);
     }
 
     try {

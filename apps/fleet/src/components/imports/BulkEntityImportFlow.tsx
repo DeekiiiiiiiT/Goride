@@ -12,7 +12,7 @@ import {
   UploadCloud, ArrowLeft, CheckCircle, AlertCircle,
   FileText, Loader2, Info, Download,
 } from 'lucide-react';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 import { validateImportFile, ImportType, ValidationError } from '../../services/import-validator';
 import { importExecutor, RestoreResult } from '../../services/data-import-executor';
 import { downloadImportTemplate } from '../../services/data-export';

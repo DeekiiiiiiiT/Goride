@@ -13,7 +13,7 @@ import { getTollTransactionDate } from '../../utils/tollWeekPeriod';
 import { formatStoredDateInFleetTz, useFleetTimezone } from '../../utils/timezoneDisplay';
 import { DisputeRefund } from '../../types/data';
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
-import { toast } from "sonner@2.0.3";
+import { toast } from "sonner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
 import { TollTransactionDetailOverlay } from "./TollTransactionDetailOverlay";
 import { Label } from "../ui/label";

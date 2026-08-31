@@ -12,7 +12,7 @@ import { Textarea } from "../ui/textarea";
 import { Copy, Check, ExternalLink, Send } from "lucide-react";
 import { FinancialTransaction, Trip, Claim } from "../../types/data";
 import { MatchResult, TollFinancials } from "../../utils/tollReconciliation";
-import { toast } from "sonner@2.0.3";
+import { toast } from "sonner";
 
 interface DisputeModalProps {
   isOpen: boolean;

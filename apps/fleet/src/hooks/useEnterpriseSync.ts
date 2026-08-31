@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { projectId } from '../utils/supabase/info';
 import { requireAuthHeaders } from '../utils/authHeaders';
 import { useAuth } from '../components/auth/AuthContext';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 
 export function useEnterpriseSync() {
   const { user } = useAuth();

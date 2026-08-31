@@ -24,7 +24,7 @@ import { api } from '../../services/api';
 import { useFleetTimezone } from '../../utils/timezoneDisplay';
 import { TOLL_LOG_CSV_COLUMNS, type TollLogEntry } from '../../types/tollLog';
 import { jsonToCsv } from '../../utils/csv-helper';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 import { cn } from '../ui/utils';
 
 /** Chart → transaction drill filter (one active at a time). */

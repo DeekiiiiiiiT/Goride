@@ -14,7 +14,7 @@ import { Input } from '../../ui/input';
 import { Label } from '../../ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../ui/tabs';
 import { api } from '../../../services/api';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 import type { ReconciliationPeriod } from '../../../hooks/useTollReconciliationPeriods';
 import { useLockedDialog } from '../../shared/useLockedDialog';
 import { useTollReconBusy } from './tollReconBusyLock';

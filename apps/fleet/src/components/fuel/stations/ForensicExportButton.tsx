@@ -3,7 +3,7 @@ import { Button } from '../../ui/button';
 import { Download, FileText, ShieldCheck } from 'lucide-react';
 import { MapFeature } from '../../../utils/spatialNormalization';
 import { encodePlusCode } from '../../../utils/plusCode';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 import { formatDateJM } from '../../../utils/csv-helper';
 
 interface ForensicExportButtonProps {

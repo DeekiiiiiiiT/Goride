@@ -16,7 +16,7 @@ import { AlertTriangle, Loader2, ShieldCheck, MapPin, Search, History, Trash2, P
 import { Input } from '../../ui/input';
 import { StationProfile, StationAlias } from '../../../types/station';
 import { Button } from '../../ui/button';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 import { Checkbox } from '../../ui/checkbox';
 import { encodePlusCode, getDefaultGeofenceRadius } from '../../../utils/plusCode';
 import { Slider } from '../../ui/slider';

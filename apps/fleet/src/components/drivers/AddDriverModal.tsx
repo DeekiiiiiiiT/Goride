@@ -6,7 +6,7 @@ import { Label } from "../ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import { Loader2, Upload, FileText, Check, ShieldCheck, ArrowRight, ArrowLeft, Sparkles, ScanLine, CreditCard, Calendar, Hash, Car, Globe, Camera, Lock, AlertTriangle } from 'lucide-react';
 import { api } from '../../services/api';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 import { cn } from "../ui/utils";
 import { findMatchingDriver } from '../../utils/identityMatcher';
 

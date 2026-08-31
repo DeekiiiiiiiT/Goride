@@ -10,7 +10,7 @@ import {
 import { Button } from "../../components/ui/button";
 import { AlertTriangle, Trash2, CheckCircle2, User, Fuel, Car, Ticket, FileText } from "lucide-react";
 import { api } from "../../services/api";
-import { toast } from "sonner@2.0.3";
+import { toast } from "sonner";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
 import { RadioGroup, RadioGroupItem } from "../../components/ui/radio-group";

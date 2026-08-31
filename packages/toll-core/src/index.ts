@@ -90,3 +90,15 @@ export type {
   TollPlazaMatchable,
   TollStatusInput,
 } from './tollPlazaResolution.ts';
+
+export {
+  enrichTollLogEntries,
+  resolvePaymentMethodDisplay,
+} from './enrichTollLogEntries.ts';
+export type {
+  EnrichVehicle,
+  EnrichDriver,
+  EnrichPlaza,
+  EnrichTollTx,
+  EnrichedTollLogEntry,
+} from './enrichTollLogEntries.ts';

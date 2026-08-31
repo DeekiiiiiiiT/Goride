@@ -20,7 +20,7 @@ import {
 } from "../ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import { Checkbox } from "../ui/checkbox";
-import { toast } from "sonner@2.0.3";
+import { toast } from "sonner";
 import { api } from "../../services/api";
 import { uploadEvidenceFile } from "../../services/uploadEvidence";
 import { requireAuthHeaders } from "../../utils/authHeaders";

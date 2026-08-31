@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui
 import { useAuth } from '../auth/AuthContext';
 import { enableFleetOwnerDriver, fetchFleetOwnerStatus } from '../../services/fleetOwnerAuth';
 import { supabase } from '../../utils/supabase/client';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 
 export function FleetEnableDriverCard() {
   const { session, refreshSession } = useAuth();

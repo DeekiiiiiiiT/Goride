@@ -7,7 +7,7 @@ import { demoteSpuriousDeadheadMatch } from '../utils/deadheadMatchGuard';
 import { fleetCalendarDay, ymdToLocalDate } from '../utils/timezoneDisplay';
 import { TOLL_RECON_CAPS, type TollReconTruncation } from '../utils/tollReconCaps';
 import { getTollTransactionDate } from '../utils/tollDate';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 
 /** Shift yyyy-MM-dd by N days (local calendar). */
 function shiftYmd(ymd: string, days: number): string {

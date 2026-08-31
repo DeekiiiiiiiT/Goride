@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { FuelDisputeService } from '../../services/fuelDisputeService';
 import { DisputeReason, FuelDispute } from '../../types/fuel';
 import { Loader2 } from 'lucide-react';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 import { Badge } from "../ui/badge";
 
 interface DisputeModalProps {

@@ -13,7 +13,7 @@ import { Checkbox } from '../../ui/checkbox';
 import { Input } from '../../ui/input';
 import { Label } from '../../ui/label';
 import { api } from '../../../services/api';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 import type { ReconciliationPeriod } from '../../../hooks/useTollReconciliationPeriods';
 import { periodConfirmLabelsMatch } from '../../../utils/tollWeekPeriod';
 import { useLockedDialog } from '../../shared/useLockedDialog';
