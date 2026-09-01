@@ -37,6 +37,7 @@ export async function provisionFleetOwnerAccount(
     alsoDrive?: boolean;
     companyName?: string;
     serviceLines?: Array<'rideshare' | 'rush_delivery'>;
+    enabledModules?: Record<string, boolean>;
   } = {},
 ): Promise<{ success: boolean; organizationId?: string; error?: string }> {
   const res = await fetch(`${API_ENDPOINTS.admin}/fleet-owner/provision`, {
@@ -47,6 +48,7 @@ export async function provisionFleetOwnerAccount(
       alsoDrive: opts.alsoDrive !== false,
       companyName: opts.companyName,
       serviceLines: opts.serviceLines,
+      enabledModules: opts.enabledModules,
     }),
   });
   const data = await res.json().catch(() => ({}));

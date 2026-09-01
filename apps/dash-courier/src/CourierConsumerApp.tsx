@@ -51,7 +51,6 @@ function FleetInviteGate({
       onBack={onBack}
       onContinue={onContinue}
       accessToken={auth.token}
-      userId={auth.userId}
     />
   );
 }

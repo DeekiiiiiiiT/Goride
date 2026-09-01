@@ -2,52 +2,25 @@
  * Rush → fleet.trips projection helpers: synthetic live-sync batches + backfill.
  */
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
-import { deliveryOrderToFleetTrip, syncOrderToFleetKv } from "../_shared/orderToFleetTrip.ts";
+import {
+  deliveryOrderToFleetTrip,
+  syncOrderToFleetKv,
+} from "../_shared/orderToFleetTrip.ts";
+import {
+  ensureRushSyntheticBatch,
+  rushLiveSyncBatchId,
+  weekStartYmdFromIso,
+  RUSH_PLATFORM,
+} from "../_shared/ensureRushSyntheticBatch.ts";
 import { isFeatureEnabled, FEATURE_FLAGS } from "./feature_flags.ts";
-import * as kv from "./kv_store.tsx";
 
-const RUSH_PLATFORM = "Roam Rush";
-
-/** Stable weekly synthetic import batch id per org (mirrors live Roam ride sync). */
-export function rushLiveSyncBatchId(orgId: string, weekStartYmd: string): string {
-  return `rush-live-sync:${orgId}:${weekStartYmd}`;
-}
-
-/** Monday yyyy-MM-dd for a given ISO date string. */
-export function weekStartYmdFromIso(iso: string): string {
-  const d = new Date(iso);
-  const day = d.getUTCDay();
-  const diff = day === 0 ? -6 : 1 - day;
-  d.setUTCDate(d.getUTCDate() + diff);
-  return d.toISOString().slice(0, 10);
-}
-
-/** Ensure KV + Postgres import_batches row exists for live Rush sync week. */
-export async function ensureRushSyntheticBatch(
-  orgId: string,
-  eventIso: string,
-): Promise<string> {
-  const weekStart = weekStartYmdFromIso(eventIso);
-  const batchId = rushLiveSyncBatchId(orgId, weekStart);
-  const existing = await kv.get(`batch:${batchId}`);
-  if (existing) return batchId;
-
-  const batch = {
-    id: batchId,
-    organizationId: orgId,
-    platform: RUSH_PLATFORM,
-    type: "live_sync",
-    status: "completed",
-    uploadDate: new Date().toISOString(),
-    recordCount: 0,
-    dataPeriodStart: weekStart,
-    dataPeriodEnd: weekStart,
-    notes: "Auto-created live Rush delivery sync batch",
-    isSynthetic: true,
-  };
-  await kv.set(`batch:${batchId}`, batch);
-  return batchId;
-}
+export {
+  deliveryOrderToFleetTrip,
+  ensureRushSyntheticBatch,
+  rushLiveSyncBatchId,
+  weekStartYmdFromIso,
+  RUSH_PLATFORM,
+};
 
 export async function backfillRushOrdersToFleet(
   db: SupabaseClient,
@@ -60,36 +33,48 @@ export async function backfillRushOrdersToFleet(
   }
 
   const delivery = db.schema("delivery");
-  const { data: orders, error } = await delivery
-    .from("orders")
-    .select("*")
-    .eq("courier_fleet_id", fleetOrgId)
-    .in("status", ["delivered", "completed", "cancelled"])
-    .gte("updated_at", sinceIso)
-    .order("updated_at", { ascending: true })
-    .limit(500);
-
-  if (error) throw error;
-
   let synced = 0;
   let skipped = 0;
   let errors = 0;
+  let cursor: string | null = sinceIso;
+  const pageSize = 500;
 
-  for (const order of orders ?? []) {
-    try {
-      const batchId = await ensureRushSyntheticBatch(
-        fleetOrgId,
-        String(order.delivered_at ?? order.updated_at ?? new Date().toISOString()),
-      );
-      await syncOrderToFleetKv({ ...order, _syntheticBatchId: batchId });
-      synced++;
-    } catch (e) {
-      console.error("[rush_backfill] order sync failed:", order.id, e);
-      errors++;
+  while (cursor) {
+    const { data: orders, error } = await delivery
+      .from("orders")
+      .select("*")
+      .eq("courier_fleet_id", fleetOrgId)
+      .in("status", ["delivered", "completed", "cancelled"])
+      .gte("updated_at", sinceIso)
+      .order("updated_at", { ascending: true })
+      .limit(pageSize);
+
+    if (error) throw error;
+    if (!orders?.length) break;
+
+    for (const order of orders) {
+      try {
+        const batchId = await ensureRushSyntheticBatch(
+          fleetOrgId,
+          String(order.delivered_at ?? order.updated_at ?? new Date().toISOString()),
+        );
+        const result = await syncOrderToFleetKv({ ...order, _syntheticBatchId: batchId });
+        if (result.ok) synced++;
+        else skipped++;
+      } catch (e) {
+        console.error("[rush_backfill] order sync failed:", order.id, e);
+        errors++;
+      }
+    }
+
+    if (orders.length < pageSize) break;
+    cursor = String(orders[orders.length - 1]!.updated_at);
+    if (cursor === sinceIso && orders.length === pageSize) {
+      // Advance cursor to avoid infinite loop on same timestamp
+      cursor = new Date(new Date(cursor).getTime() + 1).toISOString();
     }
   }
 
-  skipped = (orders?.length ?? 0) - synced - errors;
   return { synced, skipped, errors };
 }
 
@@ -118,5 +103,3 @@ export async function runDailyRushTripRecon(
   }
   return results;
 }
-
-export { deliveryOrderToFleetTrip, RUSH_PLATFORM };

@@ -112,12 +112,13 @@ export function AppSidebar({
     canView('driver-payouts') ||
     canView('indrive-wallet') ||
     canView('transaction-list');
-  const canSeeFleetOps = rideshareVisible && (canSeeFuelDesk || canSeeTollDesk);
+  const hasSharedOps = rushVisible || rideshareVisible;
+  const canSeeFleetOps = hasSharedOps && (canSeeFuelDesk || canSeeTollDesk);
   const canSeeDriverOps =
     rideshareVisible &&
     (canView('drivers') || canView('driver-analytics') || canView('earnings-policy'));
   const canSeeVehicleOps =
-    rideshareVisible &&
+    hasSharedOps &&
     (canView('vehicles') ||
       canView('vehicle-analytics') ||
       canView('maintenance-hub') ||
@@ -133,8 +134,7 @@ export function AppSidebar({
     (isModuleEnabled('rush_couriers') ||
       isModuleEnabled('rush_deliveries') ||
       isModuleEnabled('rush_courier_settlements') ||
-      isModuleEnabled('rush_supply_health') ||
-      hasRushDeliveryLine);
+      isModuleEnabled('rush_supply_health'));
   const canSeeSystem = canView('user-management') || canView('settings');
 
   // Accordion only for Fleet Ops (has mid-level Fuel/Toll desks)
@@ -274,9 +274,8 @@ export function AppSidebar({
   ].filter(Boolean) as NavLeaf[];
 
   const courierItems: NavLeaf[] = [
-    (isModuleEnabled('rush_couriers') || hasRushDeliveryLine) &&
-      canView('couriers') && { id: 'couriers', label: 'Couriers' },
-    (isModuleEnabled('rush_couriers') || hasRushDeliveryLine) &&
+    isModuleEnabled('rush_couriers') && canView('couriers') && { id: 'couriers', label: 'Couriers' },
+    isModuleEnabled('rush_couriers') &&
       canView('courier-analytics') && {
         id: 'courier-analytics',
         label: 'Courier Analytics',
@@ -286,14 +285,13 @@ export function AppSidebar({
           </Badge>
         ),
       },
-    (isModuleEnabled('rush_deliveries') || hasRushDeliveryLine) &&
-      canView('deliveries') && { id: 'deliveries', label: 'Deliveries' },
-    (isModuleEnabled('rush_deliveries') || hasRushDeliveryLine) &&
+    isModuleEnabled('rush_deliveries') && canView('deliveries') && { id: 'deliveries', label: 'Deliveries' },
+    isModuleEnabled('rush_deliveries') &&
       canView('delivery-analytics') && {
         id: 'delivery-analytics',
         label: 'Delivery Analytics',
       },
-    (isModuleEnabled('rush_supply_health') || hasRushDeliveryLine) &&
+    isModuleEnabled('rush_supply_health') &&
       canView('supply-health') && { id: 'supply-health', label: 'Supply Health' },
   ].filter(Boolean) as NavLeaf[];
 

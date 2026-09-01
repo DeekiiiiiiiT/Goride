@@ -6,7 +6,7 @@ import { provisionFleetOwnerAccount } from '../../../services/fleetOwnerAuth';
 import { supabase } from '../../../utils/supabase/client';
 import type { ServiceLine } from '../BusinessConfigContext';
 
-type WizardStep = 'company' | 'service-lines' | 'owner';
+type WizardStep = 'company' | 'service-lines' | 'plan' | 'owner';
 
 const SERVICE_LINE_OPTIONS: { id: ServiceLine; label: string; description: string }[] = [
   {
@@ -26,6 +26,12 @@ export function FleetOwnerSignupComplete({ fromRoamdriver }: { fromRoamdriver?: 
   const [step, setStep] = useState<WizardStep>('company');
   const [companyName, setCompanyName] = useState('');
   const [serviceLines, setServiceLines] = useState<ServiceLine[]>(['rideshare']);
+  const [rushModules, setRushModules] = useState({
+    rush_couriers: true,
+    rush_deliveries: true,
+    rush_courier_settlements: false,
+    rush_supply_health: true,
+  });
   const [name, setName] = useState(
     (user?.user_metadata?.name as string) ||
       user?.email?.split('@')[0] ||
@@ -75,10 +81,11 @@ export function FleetOwnerSignupComplete({ fromRoamdriver }: { fromRoamdriver?: 
         window.dispatchEvent(new Event('fleetNameUpdated'));
       }
 
-      const result = await provisionFleetOwnerAccount(token, {
+      const result =       await provisionFleetOwnerAccount(token, {
         name: trimmedName || undefined,
         companyName: trimmedCompany || undefined,
         serviceLines,
+        enabledModules: serviceLines.includes('rush_delivery') ? rushModules : undefined,
         alsoDrive: true,
       });
       if (!result.success) throw new Error(result.error || 'Could not create fleet.');
@@ -93,7 +100,8 @@ export function FleetOwnerSignupComplete({ fromRoamdriver }: { fromRoamdriver?: 
     }
   };
 
-  const stepIndex = step === 'company' ? 0 : step === 'service-lines' ? 1 : 2;
+  const stepIndex =
+    step === 'company' ? 0 : step === 'service-lines' ? 1 : step === 'plan' ? 2 : 3;
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-slate-50 px-4 py-10 dark:bg-slate-900">
@@ -111,7 +119,7 @@ export function FleetOwnerSignupComplete({ fromRoamdriver }: { fromRoamdriver?: 
         </p>
 
         <div className="mt-6 flex justify-center gap-2">
-          {[0, 1, 2].map((i) => (
+          {[0, 1, 2, 3].map((i) => (
             <div
               key={i}
               className={`h-1.5 w-10 rounded-full transition-colors ${
@@ -193,8 +201,41 @@ export function FleetOwnerSignupComplete({ fromRoamdriver }: { fromRoamdriver?: 
               <Button
                 type="button"
                 className="flex-1 bg-indigo-600 hover:bg-indigo-700"
-                onClick={() => setStep('owner')}
+                onClick={() => setStep(serviceLines.includes('rush_delivery') ? 'plan' : 'owner')}
               >
+                Continue
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {step === 'plan' && serviceLines.includes('rush_delivery') && (
+          <div className="mt-6 space-y-4">
+            <p className="text-sm text-slate-600 dark:text-slate-300">
+              Rush Delivery modules — enable what you need. Settlement requires a paid add-on later.
+            </p>
+            {(
+              [
+                ['rush_couriers', 'Couriers & roster'],
+                ['rush_deliveries', 'Deliveries desk'],
+                ['rush_supply_health', 'Supply health'],
+                ['rush_courier_settlements', 'Courier settlements (paid add-on)'],
+              ] as const
+            ).map(([key, label]) => (
+              <label key={key} className="flex items-center justify-between rounded-lg border px-4 py-3">
+                <span className="text-sm font-medium">{label}</span>
+                <input
+                  type="checkbox"
+                  checked={rushModules[key]}
+                  onChange={(e) => setRushModules((m) => ({ ...m, [key]: e.target.checked }))}
+                />
+              </label>
+            ))}
+            <div className="flex gap-2">
+              <Button type="button" variant="outline" className="flex-1" onClick={() => setStep('service-lines')}>
+                Back
+              </Button>
+              <Button type="button" className="flex-1 bg-indigo-600 hover:bg-indigo-700" onClick={() => setStep('owner')}>
                 Continue
               </Button>
             </div>

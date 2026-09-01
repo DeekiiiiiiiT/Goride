@@ -1752,25 +1752,14 @@ app.post("/orders/:id/accept-delivery", async (c) => {
 
   const gate = await requireActiveCourier(serviceSb, user.id);
   if (!gate.ok) return c.json({ error: gate.error }, gate.status);
-  
-  // Atomic claim via service role + status predicates (race-safe)
-  const { data: courierProf } = await serviceSb
-    .schema("delivery")
-    .from("courier_profiles")
-    .select("fleet_id, mode")
-    .eq("user_id", user.id)
-    .maybeSingle();
 
-  const courierFleetId =
-    courierProf?.mode === "fleet" && courierProf?.fleet_id
-      ? String(courierProf.fleet_id)
-      : null;
+  const { courierAssignmentFields } = await import("./courierFleetAttribution.ts");
+  const assignment = await courierAssignmentFields(serviceSb, user.id);
 
   const { data: order, error } = await serviceSb
     .from("orders")
     .update({
-      courier_id: user.id,
-      courier_fleet_id: courierFleetId,
+      ...assignment,
       status: "assigned",
       assigned_at: new Date().toISOString(),
     })

@@ -1895,7 +1895,7 @@ app.post("/make-server-37f42386/trips/search", requireAuth({ requireOrg: true })
   try {
     let { 
         driverId, driverName, driverIds, startDate, endDate, status, limit, offset,
-        platform, tripType, vehicleId, anchorPeriodId, organizationId
+        platform, tripType, vehicleId, anchorPeriodId, organizationId, serviceLine
     } = await c.req.json();
     
     // Query JSONB value directly
@@ -1975,6 +1975,12 @@ app.post("/make-server-37f42386/trips/search", requireAuth({ requireOrg: true })
 
     if (vehicleId) {
         query = query.eq("value->>vehicleId", vehicleId);
+    }
+
+    if (serviceLine === 'rush_delivery') {
+        query = query.or('value->>serviceLine.eq.rush_delivery,value->>service_line.eq.rush_delivery,value->>platform.eq.Roam Rush');
+    } else if (serviceLine === 'rideshare') {
+        query = query.not('value->>platform', 'eq', 'Roam Rush');
     }
 
     if (tripType === 'manual' || tripType === 'platform') {
@@ -13816,6 +13822,10 @@ app.post("/make-server-37f42386/fleet-owner/provision", requireAuth(), async (c)
     const serviceLines = Array.isArray(body?.serviceLines)
       ? body.serviceLines.filter((s: unknown) => s === "rideshare" || s === "rush_delivery")
       : ["rideshare"];
+    const enabledModules =
+      body?.enabledModules && typeof body.enabledModules === "object"
+        ? body.enabledModules as Record<string, boolean>
+        : undefined;
 
     const result = await provisionFleetOwner(getProvisionDeps(), rbacUser.userId, {
       name,
@@ -13823,6 +13833,7 @@ app.post("/make-server-37f42386/fleet-owner/provision", requireAuth(), async (c)
       alsoDrive,
       productLine: "fleet",
       serviceLines: serviceLines.length ? serviceLines : ["rideshare"],
+      enabledModules,
     });
 
     if (!result.ok) {
@@ -14881,7 +14892,10 @@ app.post("/make-server-37f42386/rush/backfill-trips", requireAuth(), async (c) =
 app.post("/make-server-37f42386/rush/trip-recon/cron", async (c) => {
   const cronSecret = Deno.env.get("CRON_SECRET");
   const auth = c.req.header("Authorization") ?? "";
-  if (cronSecret && auth !== `Bearer ${cronSecret}`) {
+  if (!cronSecret) {
+    return c.json({ error: "CRON_SECRET not configured" }, 503);
+  }
+  if (auth !== `Bearer ${cronSecret}`) {
     return c.json({ error: "Unauthorized" }, 401);
   }
   try {
@@ -14954,15 +14968,7 @@ app.get("/make-server-37f42386/enterprise/me/modules", requireAuth(), async (c) 
       ...((settings?.enabledModules as Record<string, boolean>) || {}),
     };
     const orgOverrides = (org.enabled_modules as Record<string, boolean> | null) || null;
-    let effectiveModules = resolveEffectiveModules(productLineModules, orgOverrides);
-    // Belt-and-suspenders: explicit org Rush purchases always on.
-    if (orgOverrides) {
-      for (const [key, value] of Object.entries(orgOverrides)) {
-        if (key.startsWith('rush_') && value === true) {
-          effectiveModules = { ...effectiveModules, [key]: true };
-        }
-      }
-    }
+    const effectiveModules = resolveEffectiveModules(productLineModules, orgOverrides);
 
     return c.json({
       orgId,

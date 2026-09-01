@@ -2,27 +2,29 @@
  * Rush settlement read-only routes (COD balances, delivery trip summary).
  */
 import type { Hono } from "npm:hono";
+import type { Context } from "npm:hono";
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { isFeatureEnabled, FEATURE_FLAGS } from "./feature_flags.ts";
+import { getOrgId } from "./org_scope.ts";
 
 type AuthMiddleware = () => unknown;
-type GetOrgId = (c: { req: { header: (n: string) => string | undefined } }) => string | null;
 
 export function registerRushSettlementRoutes(
   app: Hono,
   deps: {
     supabase: SupabaseClient;
     requireAuth: AuthMiddleware;
-    getOrgId: GetOrgId;
+    getOrgId?: (c: Context) => string | null;
   },
 ) {
-  const { supabase, requireAuth, getOrgId } = deps;
+  const { supabase, requireAuth } = deps;
+  const resolveOrgId = deps.getOrgId ?? getOrgId;
   const BASE = "/make-server-37f42386";
 
   /** Read-only COD / cash owed to Roam for fleet couriers. */
-  app.get(`${BASE}/rush/courier-cash-balances`, requireAuth(), async (c) => {
+  app.get(`${BASE}/rush/courier-cash-balances`, requireAuth() as never, async (c) => {
     try {
-      const orgId = getOrgId(c);
+      const orgId = resolveOrgId(c);
       if (!orgId) return c.json({ error: "Organization required" }, 403);
 
       const settlementOn = await isFeatureEnabled(FEATURE_FLAGS.RUSH_SETTLEMENT, orgId);
@@ -42,7 +44,7 @@ export function registerRushSettlementRoutes(
 
       const { data: balances, error: balErr } = await delivery
         .from("courier_cash_balances")
-        .select("courier_id, balance_minor, updated_at")
+        .select("courier_id, balance_jmd, is_paused, updated_at")
         .in("courier_id", userIds);
 
       if (balErr) throw balErr;
@@ -54,8 +56,8 @@ export function registerRushSettlementRoutes(
       const rows = (balances ?? []).map((b) => ({
         courierId: String(b.courier_id),
         courierName: nameById.get(String(b.courier_id)) ?? "Courier",
-        owedToRoamMinor: Number(b.balance_minor ?? 0),
-        owedToRoam: Number(b.balance_minor ?? 0) / 100,
+        owedToRoam: Number(b.balance_jmd ?? 0),
+        isPaused: Boolean(b.is_paused),
         updatedAt: b.updated_at,
         readOnly: true,
       }));
@@ -68,9 +70,9 @@ export function registerRushSettlementRoutes(
   });
 
   /** Delivery revenue summary for courier settlements desk. */
-  app.get(`${BASE}/rush/delivery-settlement-summary`, requireAuth(), async (c) => {
+  app.get(`${BASE}/rush/delivery-settlement-summary`, requireAuth() as never, async (c) => {
     try {
-      const orgId = getOrgId(c);
+      const orgId = resolveOrgId(c);
       if (!orgId) return c.json({ error: "Organization required" }, 403);
 
       const since = c.req.query("since") ||
@@ -81,6 +83,7 @@ export function registerRushSettlementRoutes(
         .select("id, driver_id, amount, date, status, service_line")
         .eq("organization_id", orgId)
         .eq("service_line", "rush_delivery")
+        .eq("status", "Completed")
         .gte("date", since)
         .limit(2000);
 

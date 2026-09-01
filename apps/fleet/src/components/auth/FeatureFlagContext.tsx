@@ -40,12 +40,6 @@ const FeatureFlagContext = createContext<FeatureFlagContextValue>({
   refresh: () => {},
 });
 
-function rushModulesFromOrg(orgOverrides: Record<string, boolean>): Record<string, boolean> {
-  return Object.fromEntries(
-    Object.entries(orgOverrides).filter(([k, v]) => k.startsWith('rush_') && v === true),
-  );
-}
-
 function mergeWithLegacyFleetDefaults(effective: Record<string, boolean>): Record<string, boolean> {
   const withRush = mergeFleetEffectiveModules(effective);
   const out: Record<string, boolean> = { ...LEGACY_FLEET_DEFAULTS };
@@ -125,15 +119,12 @@ export function FeatureFlagProvider({ children }: { children: React.ReactNode })
         : ['rideshare'];
       if (lines.length) setServiceLines(lines as Array<'rideshare' | 'rush_delivery'>);
 
-      // Rush add-ons: org purchased modules must win over platform defaults (fail-closed catalog).
       const orgOverrides = (data.orgOverrides || {}) as Record<string, boolean>;
       orgOverridesRef.current = orgOverrides;
-      const rushPurchased = rushModulesFromOrg(orgOverrides);
 
       const next = mergeWithLegacyFleetDefaults({
         ...allModulesOff(),
         ...(data.effectiveModules || {}),
-        ...rushPurchased,
       });
       lastKnownRef.current = next;
       setEnabledModules(next);
@@ -158,9 +149,7 @@ export function FeatureFlagProvider({ children }: { children: React.ReactNode })
   const isModuleEnabled = useCallback(
     (module: FleetLegacyModuleKey | ModuleKey | string) => {
       if (module.startsWith('rush_')) {
-        if (enabledModules[module] === true) return true;
-        if (orgOverridesRef.current[module] === true) return true;
-        return false;
+        return enabledModules[module] === true;
       }
       return enabledModules[module] !== false;
     },

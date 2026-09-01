@@ -1,5 +1,6 @@
 import { BusinessType } from '../types/data';
 import { useBusinessConfig } from '../components/auth/BusinessConfigContext';
+import { useServiceLineScope } from '../contexts/ServiceLineScopeContext';
 
 /**
  * Vocabulary Mapping System
@@ -237,9 +238,19 @@ export function getVocab(businessType: BusinessType, key: VocabKey): string {
  *   <h1>{v('tripsPageTitle')}</h1>   // "Trip Logs" | "Delivery Logs" | etc.
  */
 export function useVocab() {
-  const { businessType } = useBusinessConfig();
+  const { businessType, serviceLines } = useBusinessConfig();
+  const { scope } = useServiceLineScope();
+
+  const effectiveType: BusinessType = (() => {
+    if (serviceLines.includes('rideshare') && serviceLines.includes('rush_delivery')) {
+      if (scope === 'rush_delivery') return 'delivery';
+      return 'rideshare';
+    }
+    return businessType;
+  })();
+
   return {
-    v: (key: VocabKey) => getVocab(businessType, key),
-    businessType,
+    v: (key: VocabKey) => getVocab(effectiveType, key),
+    businessType: effectiveType,
   };
 }

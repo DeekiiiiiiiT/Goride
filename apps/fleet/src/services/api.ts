@@ -52,6 +52,7 @@ export interface TripFilterParams {
     hasTip?: string;
     hasSurge?: string;
     organizationId?: string; // Super Admin: scope to specific customer org
+    serviceLine?: 'rideshare' | 'rush_delivery' | 'all';
 }
 
 export interface PaginatedTripResponse {

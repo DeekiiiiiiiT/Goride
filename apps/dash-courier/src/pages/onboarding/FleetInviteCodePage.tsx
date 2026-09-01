@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { OnboardingHeader } from '@/components/layout/OnboardingHeader';
 import { Button, Input, Label } from '@roam/ui';
 import { API_ENDPOINTS, publicAnonKey } from '@roam/api-client';
@@ -7,14 +7,17 @@ type Props = {
   onBack: () => void;
   onContinue: () => void;
   accessToken: string;
-  userId: string;
 };
 
-export function FleetInviteCodePage({ onBack, onContinue, accessToken, userId }: Props) {
+export function FleetInviteCodePage({ onBack, onContinue, accessToken }: Props) {
   const [code, setCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [skipped, setSkipped] = useState(false);
+
+  useEffect(() => {
+    if (skipped) onContinue();
+  }, [skipped, onContinue]);
 
   const accept = async () => {
     if (!code.trim()) {
@@ -31,7 +34,7 @@ export function FleetInviteCodePage({ onBack, onContinue, accessToken, userId }:
           Authorization: `Bearer ${accessToken}`,
           apikey: publicAnonKey,
         },
-        body: JSON.stringify({ inviteCode: code.trim().toUpperCase(), userId }),
+        body: JSON.stringify({ inviteCode: code.trim().toUpperCase() }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'Invalid invite code');
@@ -43,10 +46,7 @@ export function FleetInviteCodePage({ onBack, onContinue, accessToken, userId }:
     }
   };
 
-  if (skipped) {
-    onContinue();
-    return null;
-  }
+  if (skipped) return null;
 
   return (
     <div className="flex min-h-screen flex-col bg-background px-4 py-8">

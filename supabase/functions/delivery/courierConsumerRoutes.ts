@@ -10,6 +10,7 @@ import { courierDeliveryEarnings, courierTipEarnings } from "../_shared/dashMone
 import { isCourierCashPaused } from "./courierCashLedger.ts";
 import { resolvePeakPayBonus } from "../_shared/courierPeakPay.ts";
 import { ORDER_CUSTOMER_EMBED_MINIMAL } from "./orderSelectEmbeds.ts";
+import { courierAssignmentFields } from "./courierFleetAttribution.ts";
 
 type Sb = ReturnType<typeof createClient>;
 
@@ -578,10 +579,11 @@ export function registerCourierConsumerRoutes(app: Hono, deps: Deps) {
       avail?.current_lng != null ? Number(avail.current_lng) : null,
     );
 
+    const assignment = await courierAssignmentFields(serviceSb, auth.userId);
     const { data: order, error } = await serviceSb
       .from("orders")
       .update({
-        courier_id: auth.userId,
+        ...assignment,
         status: "assigned",
         assigned_at: new Date().toISOString(),
         peak_pay_amount: peak.bonus,
@@ -1293,10 +1295,11 @@ export function registerCourierConsumerRoutes(app: Hono, deps: Deps) {
         avail?.current_lng != null ? Number(avail.current_lng) : null,
       );
 
+      const assignment = await courierAssignmentFields(serviceSb, auth.userId);
       const { data: order, error } = await serviceSb
         .from("orders")
         .update({
-          courier_id: auth.userId,
+          ...assignment,
           status: "assigned",
           assigned_at: new Date().toISOString(),
           peak_pay_amount: peak.bonus,

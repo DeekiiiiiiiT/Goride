@@ -104,6 +104,7 @@ export type ProvisionFleetOwnerOpts = {
   productLine?: ProductLine;
   serviceLines?: string[];
   companyName?: string | null;
+  enabledModules?: Record<string, boolean>;
 };
 
 export type ProvisionFleetOwnerDeps = {
@@ -218,7 +219,11 @@ export async function provisionFleetOwner(
     });
     await deps.supabase
       .from("organizations")
-      .update({ service_lines: serviceLines, business_type: primaryBusinessType })
+      .update({
+        service_lines: serviceLines,
+        business_type: primaryBusinessType,
+        ...(opts.enabledModules ? { enabled_modules: opts.enabledModules } : {}),
+      })
       .eq("id", orgId);
   } catch (orgErr) {
     console.warn("[provisionFleetOwner] org service_lines update failed:", orgErr);

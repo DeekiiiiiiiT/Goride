@@ -20,6 +20,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
 import { api, TripFilterParams } from '../../services/api';
 import { Trip } from '../../types/data';
 import { useVocab } from '../../utils/vocabulary';
+import { useServiceLineScope } from '../../contexts/ServiceLineScopeContext';
+import { filterTripsByServiceLineScope } from '../../utils/serviceLineTripFilter';
 import { TripStatsCard } from './TripStatsCard';
 import { ManualTripForm } from './ManualTripForm';
 import { TripFilters, TripFilterState } from './TripFilters';
@@ -47,6 +49,7 @@ const parseLocalDate = (dateStr: string) => {
 export function TripLogsPage() {
   const queryClient = useQueryClient();
   const { v } = useVocab();
+  const { scope } = useServiceLineScope();
   const [viewMode, setViewMode] = useState<'details' | 'map' | 'issue' | null>(null);
   const [isManualTripOpen, setIsManualTripOpen] = useState(false);
   const [tripToDelete, setTripToDelete] = useState<Trip | null>(null);
@@ -150,8 +153,9 @@ export function TripLogsPage() {
         params.startDate = format(start, 'yyyy-MM-dd');
         params.endDate = format(end, 'yyyy-MM-dd');
     }
+    if (scope !== 'all') params.serviceLine = scope;
     return params;
-  }, [filters, page]);
+  }, [filters, page, scope]);
 
   // 3. Main Data Query
   const { 
@@ -164,7 +168,7 @@ export function TripLogsPage() {
     placeholderData: keepPreviousData,
   });
 
-  const trips = tripData?.data || [];
+  const trips = filterTripsByServiceLineScope(tripData?.data || [], scope);
   const hasMore = (tripData?.data?.length || 0) === pageSize;
 
   useTripAddressResolution(trips, queryClient, availableVehicles, availableDrivers);

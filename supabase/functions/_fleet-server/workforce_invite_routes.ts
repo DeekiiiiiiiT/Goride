@@ -3,13 +3,21 @@
  */
 import type { Hono } from "npm:hono";
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
+import type { RbacUser } from "./rbac_middleware.ts";
 import { isFeatureEnabled, FEATURE_FLAGS } from "./feature_flags.ts";
 
 function randomInviteCode(): string {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  const bytes = new Uint8Array(8);
+  crypto.getRandomValues(bytes);
   let out = "";
-  for (let i = 0; i < 8; i++) out += chars[Math.floor(Math.random() * chars.length)];
+  for (let i = 0; i < 8; i++) out += chars[bytes[i]! % chars.length];
   return out;
+}
+
+function rbacFromContext(c: { get: (k: string) => unknown }): RbacUser | null {
+  const user = c.get("rbacUser") as RbacUser | undefined;
+  return user?.userId ? user : null;
 }
 
 export function registerWorkforceInviteRoutes(
@@ -24,6 +32,9 @@ export function registerWorkforceInviteRoutes(
     try {
       const orgId = deps.getOrgId(c);
       if (!orgId) return c.json({ error: "Organization required" }, 403);
+
+      const rbacUser = rbacFromContext(c);
+      if (!rbacUser) return c.json({ error: "Unauthorized" }, 401);
 
       const enabled = await isFeatureEnabled(FEATURE_FLAGS.RUSH_COURIER_LINK, orgId);
       if (!enabled) return c.json({ error: "Workforce invites not enabled for this org" }, 403);
@@ -40,7 +51,7 @@ export function registerWorkforceInviteRoutes(
           invite_code: inviteCode,
           invited_email: body.invitedEmail ?? null,
           invited_phone: body.invitedPhone ?? null,
-          created_by: orgId,
+          created_by: rbacUser.userId,
         })
         .select()
         .single();
@@ -72,12 +83,15 @@ export function registerWorkforceInviteRoutes(
     }
   });
 
-  app.post("/make-server-37f42386/workforce/invites/accept", async (c) => {
+  app.post("/make-server-37f42386/workforce/invites/accept", deps.requireAuth() as never, async (c) => {
     try {
+      const rbacUser = rbacFromContext(c);
+      if (!rbacUser) return c.json({ error: "Unauthorized" }, 401);
+
+      const userId = rbacUser.userId;
       const body = await c.req.json();
       const code = String(body.inviteCode ?? body.code ?? "").trim().toUpperCase();
-      const userId = String(body.userId ?? "");
-      if (!code || !userId) return c.json({ error: "inviteCode and userId required" }, 400);
+      if (!code) return c.json({ error: "inviteCode required" }, 400);
 
       const { data: invite, error: invErr } = await deps.supabase
         .from("fleet_workforce_invites")
@@ -92,6 +106,19 @@ export function registerWorkforceInviteRoutes(
         return c.json({ error: "Invite expired" }, 410);
       }
 
+      const invitedEmail = invite.invited_email ? String(invite.invited_email).trim().toLowerCase() : null;
+      const invitedPhone = invite.invited_phone ? String(invite.invited_phone).replace(/\D/g, "") : null;
+      if (invitedEmail && rbacUser.email.trim().toLowerCase() !== invitedEmail) {
+        return c.json({ error: "Invite is bound to a different email address" }, 403);
+      }
+      if (invitedPhone) {
+        const { data: authUser } = await deps.supabase.auth.admin.getUserById(userId);
+        const userPhone = authUser?.user?.phone?.replace(/\D/g, "") ?? "";
+        if (userPhone && userPhone !== invitedPhone) {
+          return c.json({ error: "Invite is bound to a different phone number" }, 403);
+        }
+      }
+
       const fleetId = invite.organization_id as string;
       const serviceLine = String(invite.service_line);
 
@@ -102,7 +129,6 @@ export function registerWorkforceInviteRoutes(
           fleet_id: fleetId,
           fleet_joined_at: new Date().toISOString(),
           fleet_role: "courier",
-          status: "pending",
         }, { onConflict: "user_id" });
       } else {
         await deps.supabase.from("driver_profiles").upsert({
@@ -110,7 +136,6 @@ export function registerWorkforceInviteRoutes(
           mode: "fleet",
           fleet_id: fleetId,
           fleet_joined_at: new Date().toISOString(),
-          status: "pending",
         }, { onConflict: "user_id" });
       }
 

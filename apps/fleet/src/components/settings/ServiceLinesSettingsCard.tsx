@@ -127,6 +127,9 @@ export function ServiceLinesSettingsCard() {
           {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
           Save service lines
         </Button>
+        <p className="text-xs text-slate-500">
+          Rush paid modules (e.g. courier settlements) are enabled at signup or by Roam admin — billing integration pending.
+        </p>
       </CardContent>
     </Card>
   );

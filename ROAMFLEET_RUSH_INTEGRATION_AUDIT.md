@@ -1,9 +1,11 @@
 # RoamFleet × Roam Rush — Multi-Service-Line Integration Audit
 
-**Date:** 2026-08-31
+**Date:** 2026-08-31 (design audit) · **2026-09-01** (implementation verification — see [Part II](#part-ii--implementation-verification-2026-09-01))
 **Scope:** How to add the Roam Rush product family (`roamrush.app`, `courier.roamrush.app`, `partner.roamrush.app`) into `roamfleet.co` as a second service line, serving three customer shapes: rideshare-only, delivery-only, and both.
-**Method:** Static read of `apps/fleet` (1,081 TS/TSX files), `apps/dash-courier` (175), `apps/dash-customer` (163), `apps/rush-command` (277), `apps/enterprise` (196), `supabase/functions/_fleet-server`, `supabase/functions/delivery`, `supabase/functions/matching`, and 437 migrations. **No code was changed.**
+**Method:** Static read of `apps/fleet` (1,081 TS/TSX files), `apps/dash-courier` (175), `apps/dash-customer` (163), `apps/rush-command` (277), `apps/enterprise` (196), `supabase/functions/_fleet-server`, `supabase/functions/delivery`, `supabase/functions/matching`, and 437 migrations. **No code was changed by either pass.**
 **Companions:** [ROAMRUSH_SYSTEM_AUDIT.md](ROAMRUSH_SYSTEM_AUDIT.md) · [docs/FINANCIAL_INTEGRITY_AUDIT.md](docs/FINANCIAL_INTEGRITY_AUDIT.md) · [docs/MULTI_VERTICAL_COMPATIBILITY.md](docs/MULTI_VERTICAL_COMPATIBILITY.md) · [RUSH_MARKETPLACE_PRICING_MIGRATION.md](RUSH_MARKETPLACE_PRICING_MIGRATION.md)
+
+> **STATUS — 2026-09-01.** Parts 0–12 below are the original design audit and remain the target architecture. The integration has since been implemented across 16 commits. A verification pass found **3 Critical, 8 High and 13 Medium defects**; the Rush→Fleet projection pipeline does not currently work end to end, and one unauthenticated endpoint is exploitable against the live Rush product. **Do not enable the Rush flags for any org until the Criticals in [Part II §14](#14-critical) are closed.** Fixed-gap status per original finding is tracked in [§13.2](#132-original-gap-register--current-status).
 
 ---
 
@@ -630,6 +632,293 @@ What is genuinely missing is narrower than it looks and lands in four places: **
 
 Get those four right, in that order, and the remaining ~35 pages of RoamFleet work for couriers on day one — because a courier on a motorbike burns fuel, crosses tolls, needs maintenance, and gets settled on a Monday, exactly like a driver in a Toyota.
 
+> **Postscript (2026-09-01).** All four were subsequently built, and the architecture above was followed faithfully — Rush lands on `fleet.trips`, the marketplace split was left untouched, and no third app was forked. The defects found on verification are execution defects, not architectural ones: an unauthenticated invite endpoint, a projection that fires on one of three accept paths, a column name that does not exist, and a set of gates that confuse *service line* with *entitlement* with *view scope*. See [Part II](#part-ii--implementation-verification-2026-09-01).
+
 ---
 
-*Audit performed 2026-08-31 against the working tree at branch `main`. No code was modified. Re-run before Phase 2 if the delivery or fleet schemas change.*
+# Part II — Implementation verification (2026-09-01)
+
+**Reviewed:** 16 commits, `ce4e0d35..HEAD` on `main` (160 files, +8,218/−4,676). Rush-attributable subset only; a concurrent settlement-calculation program shares the range and was not re-audited here.
+**Checks run:** `pnpm --filter @roam/fleet typecheck` (exit 0) · `pnpm --filter @roam/fleet test` (171 files, 1,094 passed, 1 skipped, exit 0) · `deno check` on the four new Rush edge modules · full read of the four Rush migrations, the projector, the new routes, and the new UI surfaces.
+**Result:** the architecture was followed. The execution has defects that block rollout.
+
+---
+
+## 13. What was built, and what it closed
+
+### 13.1 Verified working
+
+| Area | Evidence |
+|---|---|
+| **WiPay Critical genuinely fixed** — the Phase 3 blocker | [`payments/index.ts:705-708`](supabase/functions/payments/index.ts#L705) now gates on `intent.status` (server state), not `body.status`. This was a real fix, not a cosmetic one. |
+| Build and tests green | fleet typecheck exit 0; 1,094 unit tests pass; no dangling imports left by the deletions |
+| Migrations additive and idempotent | all four Rush migrations use `IF NOT EXISTS`; `service_lines` defaults to `ARRAY['rideshare']` |
+| Rideshare-only data invariant holds | an org with no `service_lines` row change resolves to `['rideshare']` in both `BusinessConfigContext` and the server |
+| Historical fleet attribution designed correctly | `delivery.orders.courier_fleet_id` is denormalised and stamped at accept, not joined live — matches §5.1(C) |
+| COD framed correctly | `CourierSettlementsPage` is read-only and labelled "COD owed to Roam — Roam pays couriers directly", matching the §5.4 two-tier rule |
+| Platform split untouched | no fleet party was added to `computeDashCaptureSplit`; the fleet cut stays a tier-2 concern, exactly as §5.4 required |
+
+### 13.2 Original gap register — current status
+
+| # | Gap | Status |
+|---|---|---|
+| G1 | `business_type` scalar | **Closed** — `organizations.service_lines text[]` ([`20260901130000`](supabase/migrations/20260901130000_organizations_service_lines.sql)) |
+| G2 | No courier↔fleet relationship | **Closed at the schema layer** — `mode`/`fleet_id`/`fleet_joined_at`/`fleet_role` on `courier_profiles` ([`20260901130100`](supabase/migrations/20260901130100_rush_fleet_identity_phase1.sql)). Write path is unsafe — see V1. |
+| G3 | Business type pinned to rideshare | **Closed** — [`BusinessConfigContext.tsx`](apps/fleet/src/components/auth/BusinessConfigContext.tsx) now resolves from `service_lines` |
+| G4 | Delivery type could route to Enterprise | **Closed** — `inferClientProductLine` accepts `delivery` and any `serviceLines` array ([`App.tsx:82-89`](apps/fleet/src/App.tsx#L82)) |
+| G5 | Roster service-shaped | **Closed** — `fleet.drivers.service_lines` + `user_id` + `(organization_id, user_id)` unique index |
+| G6 | Tenancy impedance mismatch | **Partly** — bridge exists; RLS half of it is broken (V7) |
+| G7 | No per-org entitlement | **Closed server-side** — authenticated `GET /enterprise/me/modules` reads `organizations.enabled_modules`. Undermined at the nav layer (V4) and by the override bypass (V6). |
+| G8 | Flags fail open | **Closed for `rush_*`** — `allModulesOff()` base + explicit `false` default in `isModuleEnabled` |
+| G9 | No courier permissions | **Closed** — 9 new keys in [`packages/auth-client/src/permissions.ts`](packages/auth-client/src/permissions.ts) |
+| G10 | Duplicated permission catalog | **Closed** — [`apps/fleet/src/utils/permissions.ts`](apps/fleet/src/utils/permissions.ts) is now a re-export (487 lines deleted) |
+| G11 | No Rush→Fleet bridge | **Built but non-functional** — see V2 |
+| G12 | No Rush platform value | **Closed** — `platform: 'Roam Rush'`, `service_line` column on `fleet.trips` |
+| G13 | Batch model assumes uploads | **Not closed** — synthetic batches are never created on the live path (V11) |
+| G14 | Single-line settlement | **Not closed** — the `serviceLine` parameter is dead code (V12); no combined per-person statement exists |
+| G15 | COD has no bridge | **Built but broken** — wrong column name (V3) |
+| G16 | Single-line cost allocation | **Partly** — `service_line` columns added to `fuel_entries`, `expense_journal`, `toll_ledger`; nothing writes or allocates on them yet |
+| G17 | Risk of an 8th money engine | **Avoided** — Rush lands on `fleet.trips` as designed |
+| G18 | No router | **Closed** — [`navigation/pageRegistry.ts`](apps/fleet/src/navigation/pageRegistry.ts) + `pushState` + `popstate` |
+| G19 | Sidebar matrix stale for delivery | **Closed in the matrix, defeated in the shell** — `delivery` added to `toll-management`/`earnings-policy`/`performance`, but those desks are now gated on `rideshareVisible` (V5) |
+| G20 | Vocabulary not scope-aware | **Not closed** — a both-lines org derives `businessType = 'rideshare'` and gets rideshare labels everywhere |
+| G21 | Fleet owners can't approve couriers | **Partly** — the invite flow leaves `status: 'pending'` for Roam to approve, which is right; but it force-resets already-active couriers (V1) |
+| G22 | No supply visibility | **Closed** — `SupplyHealthPage` added, read-only |
+| G23 | Signup collects only a name | **Closed** — 3-step wizard (company → service lines → owner). The plan/entitlement step from §6.1 was not built. |
+
+---
+
+## 14. CRITICAL
+
+### V1 · `POST /workforce/invites/accept` is unauthenticated and trusts a body-supplied `userId`
+
+[`workforce_invite_routes.ts:73`](supabase/functions/_fleet-server/workforce_invite_routes.ts#L73)
+
+```ts
+app.post("/make-server-37f42386/workforce/invites/accept", async (c) => {   // ← no requireAuth()
+  const body = await c.req.json();
+  const code = String(body.inviteCode ?? body.code ?? "").trim().toUpperCase();
+  const userId = String(body.userId ?? "");                                  // ← caller-supplied identity
+  …
+  await deps.supabase.schema("delivery").from("courier_profiles").upsert({
+    user_id: userId, mode: "fleet", fleet_id: fleetId, status: "pending",    // ← forces status
+  }, { onConflict: "user_id" });
+```
+
+The other two routes in the same file carry `deps.requireAuth()`. This one does not. Three separate consequences:
+
+1. **Identity spoofing.** Anyone holding a valid code can attach *any* `auth.users` id to a fleet. That courier's deliveries then project into the attacker's books.
+2. **Unauthenticated denial of service against live couriers.** The upsert forces `status: 'pending'`, so calling it with a victim's id takes an **active** courier offline — they stop receiving offers. The same branch does this to `driver_profiles` for rideshare.
+3. **Weak token.** `randomInviteCode` uses `Math.random()`, not `crypto.getRandomValues`. There is no rate limiting on the endpoint.
+
+The client already sends a bearer token ([`FleetInviteCodePage.tsx:32`](apps/dash-courier/src/pages/onboarding/FleetInviteCodePage.tsx#L32)) — the server simply never checks it.
+
+**Also a plain functional bug:** an already-`active` courier who legitimately joins a fleet is knocked back to `pending`. Accepting an invite must not touch `status`, and must not clear an existing approval.
+
+**Fix:** add `deps.requireAuth()`; take the user id from `rbacUser`, never the body; drop `status` from the upsert payload; use `crypto.getRandomValues` for codes; bind the invite to `invited_email`/`invited_phone` when present.
+
+### V2 · Most fleet deliveries will never project — `courier_fleet_id` is stamped on only one of three accept paths
+
+`courier_fleet_id` is set in exactly one place, `POST /orders/:id/accept-delivery` ([`delivery/index.ts:1757-1773`](supabase/functions/delivery/index.ts#L1757)).
+
+The courier app has three accept paths ([`courierApi.ts:108, 120, 490`](apps/dash-courier/src/lib/courierApi.ts#L108)):
+
+| Path | Route | Stamps `courier_fleet_id`? |
+|---|---|---|
+| Direct claim | `POST /orders/:id/accept-delivery` | **yes** |
+| Single offer accept | `POST /courier/offers/:id/accept` — [`courierConsumerRoutes.ts:581`](supabase/functions/delivery/courierConsumerRoutes.ts#L581) | **no** |
+| Stacked offer accept | `POST /courier/offers/stack/accept` — [`courierConsumerRoutes.ts:1296`](supabase/functions/delivery/courierConsumerRoutes.ts#L1296) | **no** |
+
+The offer-based paths are the primary dispatch flow (`matching/dispatch/runMatchingWave` → `courier_offers` → accept). With `courier_fleet_id` null, `syncOrderToFleetKv` returns at its first guard ([`orderToFleetTrip.ts:77`](supabase/functions/_shared/orderToFleetTrip.ts#L77)) and the delivery silently never reaches the fleet books. Admin reassignment ([`delivery/admin/courierRoutes.ts:143`](supabase/functions/delivery/admin/courierRoutes.ts#L143)) has the same omission.
+
+**Fix:** extract the courier→fleet resolution into one helper and call it from every path that writes `orders.courier_id`. Add a CI guard (in the spirit of `check-projection-flags-wired.mjs`) asserting no `update({courier_id …})` without `courier_fleet_id`.
+
+### V3 · The COD balances route queries a column that does not exist
+
+[`rush_settlement_routes.ts:44`](supabase/functions/_fleet-server/rush_settlement_routes.ts#L44)
+
+```ts
+.select("courier_id, balance_minor, updated_at")   // ← no such column
+…
+owedToRoam: Number(b.balance_minor ?? 0) / 100,    // ← and the unit conversion is wrong too
+```
+
+`delivery.courier_cash_balances` defines **`balance_jmd numeric`** ([`20260823120000_dash_pricing_engine.sql:102`](supabase/migrations/20260823120000_dash_pricing_engine.sql#L102)); no later migration renames it, and [`courierCashLedger.ts`](supabase/functions/delivery/courierCashLedger.ts) reads `balance_jmd` throughout. PostgREST returns `42703` → the route throws → **500**. `GET /rush/courier-cash-balances` has never worked.
+
+Even after renaming, `/100` is wrong: `balance_jmd` is already in major units, so the fix is `balance_jmd`, no division. Getting this backwards understates a fleet's COD exposure by 100×.
+
+Not caught because there is no Deno typecheck in CI and no integration test hits the route.
+
+---
+
+## 15. HIGH
+
+### V4 · The paid-module gate on courier navigation is dead code
+
+[`AppSidebar.tsx`](apps/fleet/src/components/layout/AppSidebar.tsx#L123)
+
+```ts
+const canSeeCourierOps =
+  hasRushDeliveryLine &&
+  ( …canView() checks… ) &&
+  (isModuleEnabled('rush_couriers') ||
+   isModuleEnabled('rush_deliveries') ||
+   isModuleEnabled('rush_courier_settlements') ||
+   isModuleEnabled('rush_supply_health') ||
+   hasRushDeliveryLine);          // ← always true; the whole chain above is unreachable
+```
+
+`hasRushDeliveryLine` is already required by the leading `&&`, so the trailing `|| hasRushDeliveryLine` short-circuits the entire entitlement check. Any org whose `service_lines` contains `rush_delivery` sees the Rush nav regardless of what they have bought. This undoes G7/G8 at the only layer the customer experiences, and it violates §5.2's rule that Rush nav requires **both** the service line and the module.
+
+**Fix:** delete the trailing `|| hasRushDeliveryLine`.
+
+### V5 · Delivery-only orgs lose Vehicles, Fuel, Toll and Maintenance
+
+[`AppSidebar.tsx`](apps/fleet/src/components/layout/AppSidebar.tsx#L115)
+
+```ts
+const canSeeFleetOps   = rideshareVisible && (canSeeFuelDesk || canSeeTollDesk);
+const canSeeDriverOps  = rideshareVisible && (…);
+const canSeeVehicleOps = rideshareVisible && (…);
+```
+
+For `service_lines = ['rush_delivery']`, `rideshareVisible` is `false`, so the Fuel Desk, Toll Desk, Vehicle Ops and Maintenance Hub all disappear. A both-lines org loses them too whenever the scope switcher is set to Rush.
+
+This contradicts the delivery-only nav specified in §5.5 ("Dashboard, **Couriers**, Vehicles, **Deliveries**, Fuel Desk, Toll Desk, Business Finance, Reports, Settings"), and it makes the G19 matrix fix unreachable — `delivery` was correctly added to `toll-management` in [`businessTypes.ts:206`](packages/business-config/src/businessTypes.ts#L206), but the shell hides the desk before the matrix is ever consulted.
+
+The premise of the whole programme is that couriers burn fuel, cross tolls and need maintenance. **Fix:** gate shared infrastructure on `serviceLines.length > 0`, not on `rideshareVisible`. Only genuinely rideshare-specific surfaces (Imports, inDrive Wallet, Driver Settlements) should key off `rideshareVisible`.
+
+### V6 · The Rush kill switch is defeated in three places
+
+`resolveEffectiveModules` is contractually `lineOn && orgOn` — explicit `false` at *either* level wins. Three separate patches re-enable `rush_*` after that resolution:
+
+1. Server — [`index.tsx:14958-14965`](supabase/functions/_fleet-server/index.tsx#L14958): `if (key.startsWith('rush_') && value === true) effectiveModules[key] = true`
+2. Client merge — `rushModulesFromOrg` spread *after* `data.effectiveModules` in [`FeatureFlagContext.tsx`](apps/fleet/src/components/auth/FeatureFlagContext.tsx#L131)
+3. Client read — `isModuleEnabled` falls back to `orgOverridesRef.current[module] === true`
+
+Net effect: turning a Rush module off at the product-line level no longer turns it off for any org that has the override set. §8's rollback plan — "Phase 4–5: pure client rollback via flag" — does not work. The comment calls this "belt-and-suspenders"; it is the opposite, since it removes the only global brake.
+
+**Fix:** delete all three overrides. If a per-org purchase must survive a product-line default of `false`, model that as a distinct `rush_addon_purchased` field, not by inverting the module resolver.
+
+### V7 · The new RLS policies use the wrong JWT claim and match nothing
+
+[`20260901130300_rush_fleet_rls_phase6.sql:11`](supabase/migrations/20260901130300_rush_fleet_rls_phase6.sql#L11)
+
+```sql
+organization_id = COALESCE(
+  (auth.jwt() -> 'app_metadata' ->> 'organization_id'),   -- ← snake_case
+  (auth.jwt() -> 'user_metadata' ->> 'organization_id')
+)
+```
+
+The claim this codebase writes is **`organizationId`** — see [`fleet_owner_provision.ts`](supabase/functions/_fleet-server/fleet_owner_provision.ts#L51) and the existing precedent at [`20260826140000_vehicle_remediation_templates_parts_requests.sql:40`](supabase/migrations/20260826140000_vehicle_remediation_templates_parts_requests.sql#L40), which uses `'organizationId'`. The `user_metadata` fallback cannot rescue it either: [`custom-access-token/index.ts`](supabase/functions/custom-access-token/index.ts) strips both spellings from `user_metadata` as privileged claims.
+
+Both `SELECT` policies therefore evaluate `organization_id = NULL` and return zero rows for every authenticated client. Currently invisible because all reads go through service-role edge functions — which means this will surface the first time anything queries `fleet_delivery_details` or `fleet_workforce_invites` from the browser.
+
+**Secondary:** the `INSERT` policy on `fleet_workforce_invites` lets *any* authenticated principal with a matching org claim create invites — a `fleet_viewer` or a `driver`, not just an owner. Gate on role, or drop the policy and keep writes service-role-only.
+
+**Also check** the `public.fleet_delivery_details` / `public.fleet_workforce_invites` views created in [`20260901130200`](supabase/migrations/20260901130200_rush_fleet_bridge_phase2.sql): they are `CREATE OR REPLACE VIEW … SELECT *` without `security_invoker = true`, so they run as owner and bypass the underlying RLS. Grants are service-role-only today, but this repo already carries an inventory of anon-reachable `public` views (`docs/rls-audit.md`) — set `security_invoker` explicitly rather than relying on the grant.
+
+### V8 · The reconciliation job cannot detect drift for a both-lines org
+
+[`rush_trip_recon.ts:19-24`](supabase/functions/_fleet-server/rush_trip_recon.ts#L19)
+
+```ts
+const { count: tripCount } = await db
+  .from("fleet_trips")
+  .select("id", { count: "exact", head: true })
+  .eq("organization_id", fleetOrgId)      // ← no platform / service_line filter
+  .gte("date", sinceIso.slice(0, 10));    // ← no status filter
+```
+
+The order side filters `status IN ('delivered','completed')` and `courier_fleet_id`; the trip side counts **every** trip in the org. For a both-lines fleet, `drift = deliveries − (rides + deliveries)` — a large negative number on a healthy system, and structurally incapable of revealing a lossy projection. §4.4 made this job a hard prerequisite for shipping the bridge precisely so a silent loss could not happen; as written it cannot do that job.
+
+**Fix:** add `.eq("service_line", "rush_delivery")` (or `.eq("platform", "Roam Rush")`) and `.eq("status", "Completed")`, and compare per-courier as well as per-org so a single mis-attributed courier is visible.
+
+### V9 · The service-line scope switcher is cosmetic
+
+`filterTripsByServiceLineScope`, `tripMatchesServiceLineScope` and `inferTripServiceLine` ([`serviceLineTripFilter.ts`](apps/fleet/src/utils/serviceLineTripFilter.ts)) have **no production callers** — a repo-wide grep finds only `serviceLineTripFilter.test.ts`. `useServiceLineScope` is consumed by exactly two files: `AppSidebar` and the switcher itself.
+
+So selecting "Rideshare" or "Rush Delivery" changes which nav items render and nothing else. Trips, dashboards, Business Finance, driver settlements, reports and exports are unfiltered. §5.5 specified the switcher behaves "like a global date range: persisted per user, applied as a filter parameter to every query, reflected in every export."
+
+**Fix:** thread `scope` into the query keys and request params of the trip, dashboard, finance and report services. Until then the switcher is misleading and should arguably be hidden.
+
+### V10 · COD cash on the projected trip is the wrong number
+
+[`orderToFleetTrip.ts:60-70`](supabase/functions/_shared/orderToFleetTrip.ts#L60)
+
+```ts
+netPayout: amount,
+cashCollected: paymentMethod === "Cash" && !isCancelled ? amount : 0,   // ← courier's earning
+```
+
+versus, for the same order, [`orderToFleetTrip.ts:161`](supabase/functions/_shared/orderToFleetTrip.ts#L161):
+
+```ts
+cod_collected: order.payment_method === "cash" ? Number(order.total ?? 0) : 0,   // ← correct
+```
+
+On a COD delivery the courier physically collects **`order.total`**, of which they owe platform + merchant and retain their earning. Setting `cashCollected` to the earning understates fleet cash-in-hand by the entire merchant and platform portion, and puts `fleet.trips` and `fleet.delivery_details` in disagreement about the same order.
+
+It also breaks the documented invariant on the `Trip` type ([`types/data.ts:27-28`](apps/fleet/src/types/data.ts#L27)): `netPayout = amount − cashCollected`. Here both are set to `amount`.
+
+**Fix:** `cashCollected = order.total` for COD; let `netPayout` follow the existing formula rather than being hardcoded.
+
+### V11 · The live path never creates its synthetic batch
+
+`ensureRushSyntheticBatch` ([`rush_projection_helpers.ts:26`](supabase/functions/_fleet-server/rush_projection_helpers.ts#L26)) is called from **`backfillRushOrdersToFleet` only**. The live projector computes the id inline and posts it without creating the record:
+
+```ts
+const syntheticBatchId = order._syntheticBatchId ?? rushLiveSyncBatchId(fleetId, eventIso);
+```
+([`orderToFleetTrip.ts:99-102`](supabase/functions/_shared/orderToFleetTrip.ts#L99))
+
+Every live-projected trip therefore carries a `batchId` with no corresponding row in KV or `fleet.import_batches`. This is G13 landing exactly as predicted: `GET /batches/:id/delete-preview`, `TripReImportFlow`, quarantine and batch-scoped reconciliation all key on that id.
+
+Compounding it, `rushLiveSyncBatchId` is **duplicated with divergent signatures** — `(orgId, eventIso)` in `_shared/orderToFleetTrip.ts:17` and `(orgId, weekStartYmd)` in `rush_projection_helpers.ts:12`. They agree today only because each caller happens to pass the right thing.
+
+**Fix:** call `ensureRushSyntheticBatch` from the live path; delete one of the two copies and import the survivor.
+
+---
+
+## 16. MEDIUM
+
+| # | Finding | Evidence |
+|---|---|---|
+| V12 | **Per-service-line earnings policies are dead code.** No production caller passes `serviceLine` to `resolveActiveEarningsBundleForDriverWeek` — only the new test. The real callers (`buildPersonalAllowanceReconContext.ts:120`, `loadResolvedEarningsBundle.ts:46`, edge `driver_financial_periods.ts:687`, `index.tsx:5882`) omit it. The **edge mirror** [`earnings_policy_runtime.ts:141`](supabase/functions/_fleet-server/earnings_policy_runtime.ts#L141) never received the parameter, so client and edge have silently diverged despite `earningsPolicyRuntimeParity.test.ts`. G14 is not closed. |
+| V13 | **Week boundaries are computed in UTC.** `weekStartYmdFromIso` uses `getUTCDay`/`setUTCDate`. Jamaica is UTC−5, so a delivery completed Sunday evening local time lands in the *following* week's synthetic batch and settlement period. | `orderToFleetTrip.ts:9-14`, `rush_projection_helpers.ts:17-23` |
+| V14 | **Backfill over-reports success.** `synced++` runs even though `syncOrderToFleetKv` returns `void` and exits early on any of five conditions (no fleet id, wrong status, no courier, flag off, failed POST). `skipped = length − synced − errors` is therefore structurally always 0. Also `.limit(500)` with no pagination or cursor. | `rush_projection_helpers.ts:52-95` |
+| V15 | **No cron is scheduled for the daily recon.** The endpoint exists but, unlike the repo's four other cron jobs (`*_cron.sql` migrations), no `pg_cron` schedule was added. The "daily" reconciliation never runs. Separately `if (cronSecret && auth !== …)` leaves the endpoint **fully open when `CRON_SECRET` is unset**. | `index.tsx:14880-14894` |
+| V16 | **Deno type errors in new code, and no Deno check in CI.** `deno check` reports two `TS2769` in `rush_settlement_routes.ts` (the `requireAuth: () => unknown` typing) and a `getOrgId` signature that is declared incompatibly in the two new register functions (`{get}` vs `{req:{header}}` for what is a Hono `Context`). CI runs `typecheck` for Vite apps only — which is also why V3 shipped. | `rush_settlement_routes.ts:23,71`; `.github/workflows/ci.yml` |
+| V17 | **Customer PII is copied into the fleet tenant.** `payload_json: order` stores the entire order — line items, delivery address, `customer_id`, instructions — in `fleet.delivery_details`. A fleet owner needs the money and timing fields, not the customer's order contents. | `orderToFleetTrip.ts:170` |
+| V18 | **The `service_lines` backfill ignores `product_line`.** `delivery` is a valid **Enterprise** business type ([`businessTypes.ts:73`](packages/business-config/src/businessTypes.ts#L73)), so enterprise delivery orgs are backfilled to `['rush_delivery']`. Add `WHERE product_line = 'fleet'`. | `20260901130000_organizations_service_lines.sql:11-19` |
+| V19 | **Two of the five new tests are vacuous.** `rollbackFlags.test.ts` asserts `false && true === false` and that an array literal contains what was just written into it. `wipayPollOnly.test.ts` asserts over local variables, never touching the handler — **it would pass unchanged if the WiPay fix were reverted.** These create false assurance on the two things most worth verifying. | `apps/fleet/src/components/rush/__tests__/` |
+| V20 | **`e2e/fleet-rush-integration.spec.ts` is not an end-to-end test.** Three of its four cases are pure unit assertions over the page registry with no `page` fixture. None of the three customer shapes from §6.2 is exercised in a browser, which was the §7 Phase-6 exit criterion. | `e2e/fleet-rush-integration.spec.ts` |
+| V21 | **Unrelated deletions rode along in the same commits.** The 45-second `/health` keep-alive (cold-start protection, `App.tsx`) and the entire alerts/notifications system (`alertEngine`, `NotificationCenter`, `FleetAlertsPanel`, `AlertsConfigView`, `BroadcastMessageModal`, `useAlertPusher`) were removed across fleet, driver and admin. The removals are clean — no dangling imports — but they are not Rush work and were not reviewed as part of it. | `git diff ce4e0d35..HEAD` |
+| V22 | **The projector writes through an unauthenticated route using the anon key.** `syncOrderToFleetKv` POSTs to `/trips`, which carries only `requireCatalogMatched` — no `requireAuth` — and trusts `organizationId` from the body. The hole is **pre-existing**, not introduced here, but a production path now depends on it, so it can no longer be closed without breaking Rush projection. | `orderToFleetTrip.ts:112-127`; `index.tsx:2210-2225` |
+| V23 | **Scope selection is stored globally.** `localStorage['roam_fleet_service_line_scope']` is not namespaced by user or org, so it survives account switching on a shared browser. It degrades safely today only because `showScopeSwitcher` is false for single-line orgs. | `ServiceLineScopeContext.tsx:6` |
+| V24 | **`FleetInviteCodePage` calls `onContinue()` during render** (`if (skipped) { onContinue(); return null; }`), a state update in another component's render phase. | `FleetInviteCodePage.tsx:45-48` |
+| V25 | **Invite audit trail records the org, not the actor.** `created_by: orgId` should be the acting user id. | `workforce_invite_routes.ts:42` |
+| V26 | **`delivery-settlement-summary` counts cancelled trips** as deliveries (no status filter), inflating the per-courier delivery count. | `rush_settlement_routes.ts:78-96` |
+
+---
+
+## 17. Remediation order
+
+Sequenced by blast radius, not by file.
+
+1. **V1** — unauthenticated account takeover / courier DoS against a live product. Nothing else matters until this is closed.
+2. **V2 + V11** together — the projection is inert without both, and fixing either alone yields orphaned or missing data.
+3. **V3** — the COD surface has never returned a result.
+4. **V4, V5, V6** as one pass over gating — they are three symptoms of the same confusion between *service line*, *entitlement*, and *view scope*.
+5. **V7 and V8** before any pilot org is enabled. These are the two defects that would let a real error go unobserved.
+6. **V10, V13** before `rush_settlement` is enabled for anyone — both are money-correctness bugs.
+7. **V16** — add `deno check` for `supabase/functions/**` to CI. It would have caught V3 and V16 before review.
+8. **V19, V20** — replace the vacuous tests with ones that exercise the handlers, and build the three-customer-shape browser tests §7 Phase 6 asked for.
+9. Remainder as cleanup.
+
+**Do not enable `rush_trip_projection`, `rush_settlement` or `rush_ui` for any org until items 1–5 are closed.** The flags are correctly defaulted off today, and V6 means turning them back off later is not currently reliable.
+
+---
+
+*Design audit performed 2026-08-31; implementation verification 2026-09-01, both against branch `main`. No code was modified in either pass. Re-run the verification after the Criticals are closed, and re-run the design audit before Phase 2 if the `delivery` or `fleet` schemas change.*

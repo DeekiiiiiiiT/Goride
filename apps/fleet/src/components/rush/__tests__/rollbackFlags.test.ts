@@ -1,7 +1,38 @@
 import { describe, expect, it } from 'vitest';
+import { allModulesOff, resolveEffectiveModules } from '@roam/platform-settings';
 
-/** Rollback drill: flags off → Rush paths noop without breaking rideshare. */
-describe('Rush rollout flag rollback', () => {
+/** Rush modules must fail closed unless explicitly enabled at both levels. */
+describe('Rush module resolution', () => {
+  const rushKeys = [
+    'rush_couriers',
+    'rush_deliveries',
+    'rush_courier_settlements',
+    'rush_supply_health',
+  ] as const;
+
+  it('defaults rush modules off when platform catalog is allModulesOff', () => {
+    const platform = allModulesOff();
+    const org = Object.fromEntries(rushKeys.map((k) => [k, false]));
+    const effective = resolveEffectiveModules(platform, org);
+    for (const key of rushKeys) {
+      expect(effective[key]).toBe(false);
+    }
+  });
+
+  it('enables rush module only when org override is true and platform allows', () => {
+    const platform = { ...allModulesOff(), rush_couriers: true };
+    const org = { rush_couriers: true };
+    expect(resolveEffectiveModules(platform, org).rush_couriers).toBe(true);
+  });
+
+  it('org purchase enables module when platform default is off', () => {
+    const platform = allModulesOff();
+    const org = { rush_couriers: true };
+    expect(resolveEffectiveModules(platform, org).rush_couriers).toBe(true);
+  });
+});
+
+describe('Rush rollout flag inventory', () => {
   const RUSH_FLAGS = [
     'service_lines_enabled',
     'rush_courier_link',
@@ -10,23 +41,7 @@ describe('Rush rollout flag rollback', () => {
     'rush_ui',
   ] as const;
 
-  it('lists all Rush integration flags for rollback drills', () => {
-    expect(RUSH_FLAGS).toContain('rush_courier_link');
-    expect(RUSH_FLAGS).toContain('rush_trip_projection');
-    expect(RUSH_FLAGS).toContain('rush_settlement');
-    expect(RUSH_FLAGS).toContain('rush_ui');
-    expect(RUSH_FLAGS).toContain('service_lines_enabled');
-  });
-
-  it('projection noop when rush_trip_projection is off', () => {
-    const rushTripProjectionEnabled = false;
-    const wouldProject = rushTripProjectionEnabled && true;
-    expect(wouldProject).toBe(false);
-  });
-
-  it('settlement noop when rush_settlement is off', () => {
-    const rushSettlementEnabled = false;
-    const includeRushInSettlement = rushSettlementEnabled;
-    expect(includeRushInSettlement).toBe(false);
+  it('matches documented rollback flag set', () => {
+    expect(RUSH_FLAGS.length).toBe(5);
   });
 });

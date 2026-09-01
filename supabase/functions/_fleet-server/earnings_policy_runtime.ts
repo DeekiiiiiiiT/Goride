@@ -144,11 +144,17 @@ export function resolveActiveEarningsBundleForDriverWeek(
     driverId?: string | null;
     weekStartYmd: string;
     legacy: LegacyEarningsConfigEH;
+    /** When set, prefer policies tagged for this service line. Omit for combined settlement. */
+    serviceLine?: "rideshare" | "rush_delivery";
   },
 ): ResolvedEarningsBundleEH {
-  const { policies, driverId, weekStartYmd, legacy } = params;
+  const { policies, driverId, weekStartYmd, legacy, serviceLine } = params;
 
-  if (!policies || policies.length === 0) {
+  const scopedPolicies = serviceLine
+    ? policies.filter((p) => !p.serviceLine || p.serviceLine === serviceLine)
+    : policies;
+
+  if (!scopedPolicies || scopedPolicies.length === 0) {
     return {
       tiers: legacy.tiers,
       quotas: legacy.quotas,
@@ -157,7 +163,7 @@ export function resolveActiveEarningsBundleForDriverWeek(
     };
   }
 
-  const hit = resolveDriverVersionForWeekEH(policies, driverId, weekStartYmd);
+  const hit = resolveDriverVersionForWeekEH(scopedPolicies, driverId, weekStartYmd);
   if (hit) {
     const isDriverMember = !!hit.assignment;
     return {
@@ -171,7 +177,7 @@ export function resolveActiveEarningsBundleForDriverWeek(
     };
   }
 
-  const defaultPolicy = policies.find((p) => p.isDefault);
+  const defaultPolicy = scopedPolicies.find((p) => p.isDefault);
   if (defaultPolicy) {
     const normalized = normalizePolicyVersions(defaultPolicy);
     const version =

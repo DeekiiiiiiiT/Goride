@@ -1,10 +1,11 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { useBusinessConfig, type ServiceLine } from '../components/auth/BusinessConfigContext';
 import { useFeatureFlags } from '../components/auth/FeatureFlagContext';
+import { useAuth } from '../components/auth/AuthContext';
 
 export type ServiceLineScope = 'all' | 'rideshare' | 'rush_delivery';
 
-const STORAGE_KEY = 'roam_fleet_service_line_scope';
+const STORAGE_PREFIX = 'roam_fleet_service_line_scope';
 
 interface ServiceLineScopeContextValue {
   scope: ServiceLineScope;
@@ -24,9 +25,14 @@ const ServiceLineScopeContext = createContext<ServiceLineScopeContextValue>({
   rideshareVisible: true,
 });
 
-function readStoredScope(): ServiceLineScope | null {
+function storageKey(orgId: string | null, userId: string | null): string {
+  if (orgId && userId) return `${STORAGE_PREFIX}:${orgId}:${userId}`;
+  return STORAGE_PREFIX;
+}
+
+function readStoredScope(key: string): ServiceLineScope | null {
   try {
-    const stored = localStorage.getItem(STORAGE_KEY);
+    const stored = localStorage.getItem(key);
     if (stored === 'all' || stored === 'rideshare' || stored === 'rush_delivery') return stored;
   } catch {
     /* ignore */
@@ -34,10 +40,7 @@ function readStoredScope(): ServiceLineScope | null {
   return null;
 }
 
-function mergeServiceLines(
-  a: ServiceLine[],
-  b: ServiceLine[],
-): ServiceLine[] {
+function mergeServiceLines(a: ServiceLine[], b: ServiceLine[]): ServiceLine[] {
   const merged = new Set<ServiceLine>([...a, ...b]);
   return merged.size ? [...merged] : ['rideshare'];
 }
@@ -49,8 +52,14 @@ function defaultScopeForLines(lines: ServiceLine[]): ServiceLineScope {
 }
 
 export function ServiceLineScopeProvider({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth();
   const { serviceLines: configLines, isLoading: configLoading } = useBusinessConfig();
   const { serviceLines: moduleLines, loading: modulesLoading } = useFeatureFlags();
+  const orgId =
+    (user?.app_metadata?.organizationId as string | undefined) ??
+    (user?.user_metadata?.organizationId as string | undefined) ??
+    user?.id ??
+    null;
   const serviceLines = useMemo(
     () => mergeServiceLines(configLines, moduleLines),
     [configLines, moduleLines],
@@ -60,27 +69,32 @@ export function ServiceLineScopeProvider({ children }: { children: React.ReactNo
   const showScopeSwitcher =
     serviceLines.includes('rideshare') && serviceLines.includes('rush_delivery');
 
+  const scopeStorageKey = useMemo(
+    () => storageKey(orgId, user?.id ?? null),
+    [orgId, user?.id],
+  );
+
   const [scope, setScopeState] = useState<ServiceLineScope>(() => {
-    const stored = readStoredScope();
+    const stored = readStoredScope(scopeStorageKey);
     if (stored) return stored;
     return defaultScopeForLines(serviceLines);
   });
 
   useEffect(() => {
     if (isLoading) return;
-    const stored = readStoredScope();
+    const stored = readStoredScope(scopeStorageKey);
     if (!stored) {
       setScopeState(defaultScopeForLines(serviceLines));
     }
-  }, [isLoading, serviceLines]);
+  }, [isLoading, serviceLines, scopeStorageKey]);
 
   useEffect(() => {
     try {
-      localStorage.setItem(STORAGE_KEY, scope);
+      localStorage.setItem(scopeStorageKey, scope);
     } catch {
       /* ignore */
     }
-  }, [scope]);
+  }, [scope, scopeStorageKey]);
 
   const setScope = useCallback((next: ServiceLineScope) => {
     setScopeState(next);
