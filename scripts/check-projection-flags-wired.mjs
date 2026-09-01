@@ -43,7 +43,9 @@ for (const fn of wiredExports) {
 }
 
 for (const fn of reservedExports) {
-  const fnBlock = flagsSrc.match(new RegExp(`export function ${fn}[\\s\\S]*?\\n\\}`));
+  const fnBlock = flagsSrc.match(
+    new RegExp(`(?:/\\*\\*[\\s\\S]*?\\*/\\s*)?export function ${fn}\\([\\s\\S]*?\\n\\}`),
+  );
   if (!fnBlock || !fnBlock[0].includes("RESERVED")) {
     console.error(`[projection-flags] ${fn} must be marked RESERVED in docblock`);
     failed = true;
