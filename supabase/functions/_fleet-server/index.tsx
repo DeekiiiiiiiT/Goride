@@ -212,6 +212,10 @@ import { registerFleetAdminMaintenanceLedgerRoutes } from "./fleet_admin_mainten
 import { registerEnterpriseAdminRoutes } from "./enterprise_admin_routes.ts";
 import { registerEnterpriseIntakeAdminRoutes } from "./enterprise_intake_admin_routes.ts";
 import { registerWorkforceInviteRoutes } from "./workforce_invite_routes.ts";
+import {
+  linkDriverToFleet,
+  upsertDriverProfileFromServer as upsertDriverProfileOnServer,
+} from "./workforce_link.ts";
 import { reconcileRushTripProjection } from "./rush_trip_recon.ts";
 import {
   backfillRushOrdersToFleet,
@@ -392,27 +396,9 @@ async function upsertDriverProfileFromServer(opts: {
   displayName?: string | null;
   status?: string;
   onboardingComplete?: boolean;
-  /** When true and `fleetId` is set, sets `fleet_joined_at` to now (claim / join / invite). */
   markFleetJoined?: boolean;
 }) {
-  const now = new Date().toISOString();
-  const row: Record<string, unknown> = {
-    user_id: opts.userId,
-    mode: opts.mode,
-    display_name: opts.displayName ?? null,
-    status: opts.status ?? "active",
-    onboarding_complete: opts.onboardingComplete ?? false,
-    updated_at: now,
-  };
-  if (opts.mode === "fleet" && opts.fleetId) {
-    row.fleet_id = opts.fleetId;
-    if (opts.markFleetJoined) row.fleet_joined_at = now;
-  } else {
-    row.fleet_id = null;
-    row.fleet_joined_at = null;
-  }
-  const { error } = await supabase.from("driver_profiles").upsert(row, { onConflict: "user_id" });
-  if (error) console.warn("[driver_profiles] upsert failed:", error.message);
+  await upsertDriverProfileOnServer(supabase, opts);
 }
 
 /**
@@ -2214,7 +2200,27 @@ app.post("/make-server-37f42386/trips/stats", requireAuth({ requireOrg: true }),
 });
 
 app.post(
+  "/make-server-37f42386/internal/trips/project",
+  requireCatalogMatched({
+    label: "POST /internal/trips/project",
+    vehicleId: (_c, body) => {
+      if (!Array.isArray(body)) return null;
+      const ids = new Set<string>();
+      for (const t of body) {
+        if (t && typeof t === "object") {
+          const id = (t as { vehicleId?: unknown }).vehicleId;
+          if (typeof id === "string" && id.trim() && id !== "unknown") ids.add(id.trim());
+        }
+      }
+      return Array.from(ids);
+    },
+  }),
+  handleTripsImport,
+);
+
+app.post(
   "/make-server-37f42386/trips",
+  requireAuth({ requireOrg: true }),
   requireCatalogMatched({
     label: "POST /trips",
     vehicleId: (_c, body) => {
@@ -2229,7 +2235,10 @@ app.post(
       return Array.from(ids);
     },
   }),
-  async (c) => {
+  handleTripsImport,
+);
+
+async function handleTripsImport(c: any) {
   try {
     const trips = (c.get("__cachedRequestBody") as unknown) ?? (await c.req.json());
     if (!Array.isArray(trips)) {
@@ -2239,12 +2248,20 @@ app.post(
     const isRushProjection = trips.some(
       (t: { platform?: unknown }) => String(t?.platform ?? "") === "Roam Rush",
     );
-    if (isRushProjection) {
+    const isInternalProjection = c.req.path.includes("/internal/trips/project");
+
+    if (isRushProjection && !isInternalProjection) {
+      return c.json({ error: "Rush projection must use POST /internal/trips/project" }, 403);
+    }
+
+    if (isInternalProjection) {
       const auth = (c.req.header("Authorization") ?? "").replace(/^Bearer\s+/i, "").trim();
       const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
       if (!serviceKey || auth !== serviceKey) {
-        return c.json({ error: "Rush projection requires service role" }, 403);
+        return c.json({ error: "Forbidden" }, 403);
       }
+    } else if (isRushProjection) {
+      return c.json({ error: "Rush projection requires internal route" }, 403);
     }
     
     // Validation and processing
@@ -2327,6 +2344,16 @@ app.post(
         } catch {
           // Ignore lookup failures; we'll continue without org stamping.
         }
+      }
+    }
+
+    // V22: public POST /trips must not accept arbitrary organizationId from body.
+    if (!isInternalProjection && writeOrgId) {
+      for (const trip of processedTrips) {
+        if (trip.organizationId && String(trip.organizationId).trim() !== writeOrgId) {
+          return c.json({ error: "organizationId must match authenticated fleet" }, 403);
+        }
+        trip.organizationId = writeOrgId;
       }
     }
 
@@ -2496,7 +2523,7 @@ app.post(
     console.error("Error saving trips:", e);
     return c.json({ error: e.message || "Internal Server Error" }, 500);
   }
-});
+}
 
 // Trips GET — native fleet_trips only (KV fallback removed after cutover)
 app.get("/make-server-37f42386/trips", requireAuth({ requireOrg: true }), async (c) => {
@@ -12159,7 +12186,7 @@ app.post("/make-server-37f42386/team/drivers/:id/remove", requireAuth(), require
   }
 });
 
-// Driver app: self-serve link to a fleet by organization UUID (minimal hybrid onboarding).
+// Driver app: legacy self-serve link by org UUID (deprecated — use workforce invite codes).
 app.post("/make-server-37f42386/driver/join-fleet", requireAuth(), async (c) => {
   try {
     const rbacUser = c.get("rbacUser") as RbacUser | undefined;
@@ -12170,76 +12197,41 @@ app.post("/make-server-37f42386/driver/join-fleet", requireAuth(), async (c) => 
       return c.json({ error: "Only driver accounts can join a fleet from this endpoint" }, 403);
     }
 
+    const legacyEnabled = await isFeatureEnabled(FEATURE_FLAGS.LEGACY_DRIVER_JOIN, null);
     const body = await c.req.json();
     const fleetId = typeof body?.fleetId === "string" ? body.fleetId.trim() : "";
+    console.log("[JoinFleet] legacy call", {
+      userId: rbacUser.userId,
+      fleetId,
+      legacyEnabled,
+      at: new Date().toISOString(),
+    });
+
+    if (!legacyEnabled) {
+      return c.json({ error: "This join method is no longer available. Use your fleet invite code." }, 403);
+    }
+
     if (!fleetId) return c.json({ error: "fleetId is required" }, 400);
 
-    const { data: org, error: orgErr } = await supabase.from("organizations").select("id").eq("id", fleetId).maybeSingle();
-    if (orgErr || !org) return c.json({ error: "Fleet not found" }, 404);
-
-    const uid = rbacUser.userId;
-    const { data: authData, error: authErr } = await supabase.auth.admin.getUserById(uid);
-    if (authErr || !authData?.user) return c.json({ error: "User not found" }, 404);
-
-    const meta = (authData.user.user_metadata || {}) as Record<string, unknown>;
-    const { data: existingProf } = await supabase.from("driver_profiles").select("onboarding_complete, fleet_id").eq(
-      "user_id",
-      uid,
-    ).maybeSingle();
-
-    // Guard: never silently overwrite an existing fleet membership.
-    const currentOrg =
-      (typeof meta.organizationId === "string" && meta.organizationId.trim()) ||
-      (existingProf?.fleet_id ? String(existingProf.fleet_id) : "");
-    if (currentOrg && currentOrg !== fleetId) {
-      return c.json(
-        { error: "You are already linked to a fleet. Ask your current fleet owner to remove you first." },
-        409,
+    try {
+      const result = await linkDriverToFleet(
+        {
+          supabase,
+          kv,
+          upsertDriverProfile: upsertDriverProfileFromServer,
+          invalidateDriverCache,
+        },
+        rbacUser.userId,
+        fleetId,
       );
+      c.header("Deprecation", "true");
+      return c.json({ success: true, alreadyMember: result.alreadyMember ?? false });
+    } catch (e: unknown) {
+      const err = e as Error & { status?: number };
+      if (err.status === 409) return c.json({ error: err.message }, 409);
+      if (err.message === "Fleet not found") return c.json({ error: err.message }, 404);
+      throw e;
     }
-    if (currentOrg === fleetId) {
-      return c.json({ success: true, alreadyMember: true });
-    }
-
-    await supabase.auth.admin.updateUserById(uid, {
-      user_metadata: { ...meta, organizationId: fleetId },
-    });
-
-    const driverKv = await kv.get(`driver:${uid}`);
-    if (driverKv) {
-      await kv.set(`driver:${uid}`, { ...driverKv, organizationId: fleetId });
-    } else {
-      const email = authData.user.email || "";
-      const driverName =
-        (typeof meta.name === "string" && meta.name) || email.split("@")[0] || "Driver";
-      await kv.set(`driver:${uid}`, {
-        id: uid,
-        driverId: uid,
-        driverName,
-        email,
-        status: "active",
-        createdAt: new Date().toISOString(),
-        acceptanceRate: 0,
-        cancellationRate: 0,
-        completionRate: 0,
-        ratingLast500: 5.0,
-        totalEarnings: 0,
-        organizationId: fleetId,
-      });
-    }
-
-    await upsertDriverProfileFromServer({
-      userId: uid,
-      mode: "fleet",
-      fleetId,
-      displayName: typeof meta.name === "string" ? meta.name : null,
-      status: "active",
-      onboardingComplete: existingProf?.onboarding_complete === true,
-      markFleetJoined: true,
-    });
-    invalidateDriverCache();
-
-    return c.json({ success: true });
   } catch (e: any) {
     console.error("[JoinFleet] Error:", e);
     return c.json({ error: e.message }, 500);
@@ -14954,6 +14946,17 @@ registerWorkforceInviteRoutes(app, {
   supabase,
   requireAuth,
   getOrgId,
+  linkDriverToFleet: (userId, fleetId) =>
+    linkDriverToFleet(
+      {
+        supabase,
+        kv,
+        upsertDriverProfile: upsertDriverProfileFromServer,
+        invalidateDriverCache,
+      },
+      userId,
+      fleetId,
+    ),
 });
 
 app.get("/make-server-37f42386/rush/trip-recon", requireAuth(), async (c) => {

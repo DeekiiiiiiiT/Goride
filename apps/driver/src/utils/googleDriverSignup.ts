@@ -1,4 +1,5 @@
 import type { User } from '@supabase/supabase-js';
+import { roamFleetSignupUrl } from '@roam/api-client';
 import { userHasGoogleIdentity } from '@roam/auth-client';
 import type { DriverProfile } from '../contexts/DriverContext';
 
@@ -26,10 +27,5 @@ export function needsGoogleExtendedSignup(user: User | null, profile: DriverProf
 }
 
 export function defaultRoamFleetSignupUrl(): string {
-  const base =
-    typeof import.meta.env.VITE_ROAM_FLEET_SIGNUP_URL === 'string' &&
-    import.meta.env.VITE_ROAM_FLEET_SIGNUP_URL.trim()
-      ? import.meta.env.VITE_ROAM_FLEET_SIGNUP_URL.trim().replace(/\/$/, '')
-      : 'https://roamfleet.co';
-  return `${base}/signup?from=roamdriver`;
+  return roamFleetSignupUrl({ from: 'roamdriver' });
 }

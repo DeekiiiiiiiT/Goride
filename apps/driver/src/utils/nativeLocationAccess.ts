@@ -40,6 +40,129 @@ export async function ensureDriverLocationAccess(): Promise<DriverLocationAccess
   }
 }
 
+export type DriverGeolocationFix = {
+  lat: number | null;
+  lng: number | null;
+  accuracy: number | null;
+  timestamp: number | null;
+  error: string | null;
+};
+
+const FUEL_GPS_OPTIONS = {
+  /** Low accuracy is enough for station matching and avoids canopy timeouts. */
+  enableHighAccuracy: false,
+  timeout: 25000,
+  maximumAge: 120000,
+};
+
+function mapNativeGeoError(err: unknown): string {
+  const code = (err as { code?: string })?.code;
+  if (code === 'NOT_AUTHORIZED' || code === 'LOCATION_DISABLED') {
+    return 'Location permission denied';
+  }
+  if (code === 'POSITION_UNAVAILABLE') return 'Location information unavailable';
+  if (code === 'TIMEOUT') return 'Location request timed out';
+  return 'Failed to get location';
+}
+
+/** Native Capacitor path on device; browser geolocation on web. Used by fuel GPS lock. */
+export async function readDriverGeolocationFix(
+  options?: PositionOptions,
+): Promise<DriverGeolocationFix> {
+  const opts = { ...FUEL_GPS_OPTIONS, ...options };
+
+  if (isNativeCapacitorPlatform()) {
+    const Geo = await getNativeGeolocation();
+    if (!Geo) {
+      return {
+        lat: null,
+        lng: null,
+        accuracy: null,
+        timestamp: null,
+        error: 'Geolocation not supported',
+      };
+    }
+
+    let perm = await Geo.checkPermissions();
+    if (perm.location !== 'granted' && perm.location !== 'limited') {
+      perm = await Geo.requestPermissions();
+    }
+    if (perm.location !== 'granted' && perm.location !== 'limited') {
+      return {
+        lat: null,
+        lng: null,
+        accuracy: null,
+        timestamp: null,
+        error: 'Location permission denied',
+      };
+    }
+
+    try {
+      const pos = await Geo.getCurrentPosition(opts);
+      return {
+        lat: pos.coords.latitude,
+        lng: pos.coords.longitude,
+        accuracy: pos.coords.accuracy ?? null,
+        timestamp: Date.now(),
+        error: null,
+      };
+    } catch (err) {
+      return {
+        lat: null,
+        lng: null,
+        accuracy: null,
+        timestamp: null,
+        error: mapNativeGeoError(err),
+      };
+    }
+  }
+
+  if (typeof navigator === 'undefined' || !navigator.geolocation) {
+    return {
+      lat: null,
+      lng: null,
+      accuracy: null,
+      timestamp: null,
+      error: 'Geolocation not supported',
+    };
+  }
+
+  return new Promise((resolve) => {
+    navigator.geolocation.getCurrentPosition(
+      (position) =>
+        resolve({
+          lat: position.coords.latitude,
+          lng: position.coords.longitude,
+          accuracy: position.coords.accuracy,
+          timestamp: position.timestamp,
+          error: null,
+        }),
+      (error) => {
+        let errorMessage = 'Failed to get location';
+        switch (error.code) {
+          case error.PERMISSION_DENIED:
+            errorMessage = 'Location permission denied';
+            break;
+          case error.POSITION_UNAVAILABLE:
+            errorMessage = 'Location information unavailable';
+            break;
+          case error.TIMEOUT:
+            errorMessage = 'Location request timed out';
+            break;
+        }
+        resolve({
+          lat: null,
+          lng: null,
+          accuracy: null,
+          timestamp: null,
+          error: errorMessage,
+        });
+      },
+      opts,
+    );
+  });
+}
+
 export type DriverPosition = {
   lat: number;
   lng: number;

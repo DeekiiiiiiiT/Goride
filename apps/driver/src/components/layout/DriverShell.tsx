@@ -129,6 +129,7 @@ export function DriverShell({ forcePassengerRides = false }: { forcePassengerRid
       toast.success('Weekly check-in saved');
     } catch (e: any) {
       toast.error(e?.message || 'Failed to save check-in');
+      throw e;
     } finally {
       setCheckInSubmitting(false);
     }

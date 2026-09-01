@@ -65,6 +65,7 @@ import { SystemHardeningPanel } from '../admin/SystemHardeningPanel';
 import { SyncCenter } from '../sync/SyncCenter';
 import { FleetEnableDriverCard } from './FleetEnableDriverCard';
 import { ServiceLinesSettingsCard } from './ServiceLinesSettingsCard';
+import { FleetSetupChecklistCard } from './FleetSetupChecklistCard';
 
 export function SettingsPage() {
   return (
@@ -203,6 +204,7 @@ function GeneralPanel() {
   return (
     <div className="grid gap-6">
       <FleetEnableDriverCard />
+      <FleetSetupChecklistCard />
       <ServiceLinesSettingsCard />
       <Card>
         <CardHeader>

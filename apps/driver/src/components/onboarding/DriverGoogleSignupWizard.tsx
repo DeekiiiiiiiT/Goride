@@ -19,7 +19,7 @@ import { useIpDefaultCountry } from '../../hooks/useIpDefaultCountry';
 import { listenForSmsOtp } from '../../utils/webOtp';
 import { formatPhoneAuthError, getAuthErrorMessage } from '../../utils/supabaseAuthErrors';
 import { saveDriverOnboardingProfile } from '../../utils/saveDriverProfile';
-import { api } from '../../services/api';
+import { JoinFleetStep } from './shared/JoinFleetStep';
 import {
   GOOGLE_ONBOARDING_ARCHETYPE,
   GOOGLE_ONBOARDING_PHONE,
@@ -65,9 +65,6 @@ export function DriverGoogleSignupWizard() {
   const [otp, setOtp] = useState('');
   const [resendIn, setResendIn] = useState(0);
   const webOtpAbortRef = useRef<AbortController | null>(null);
-
-  const [fleetId, setFleetId] = useState('');
-  const [joinError, setJoinError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!geoReady || geoAppliedRef.current) return;
@@ -279,30 +276,21 @@ export function DriverGoogleSignupWizard() {
     }
   };
 
-  const handleJoinFleet = async () => {
-    setJoinError(null);
-    const id = fleetId.trim();
-    if (!id) {
-      setJoinError('Enter your fleet organization ID.');
-      return;
-    }
-    setLoading(true);
-    try {
-      await api.joinFleetByFleetId(id);
-      const { error: upErr } = await supabase
-        .from('driver_profiles')
-        .update({
-          onboarding_complete: true,
-          onboarding_step: null,
-        })
-        .eq('id', profile!.id);
-      if (upErr) console.warn('post-join onboarding flag:', upErr);
-      await refreshProfile();
-    } catch (e: unknown) {
-      setJoinError(e instanceof Error ? e.message : 'Could not join fleet.');
-    } finally {
-      setLoading(false);
-    }
+  const handleJoinFleetComplete = async () => {
+    await refreshProfile();
+  };
+
+  const markGoogleOnboardingComplete = async () => {
+    if (!profile?.id) return;
+    const { error: upErr } = await supabase
+      .from('driver_profiles')
+      .update({
+        onboarding_complete: true,
+        onboarding_step: null,
+      })
+      .eq('id', profile.id);
+    if (upErr) console.warn('post-join onboarding flag:', upErr);
+    await refreshProfile();
   };
 
   const shellHeader = (
@@ -367,7 +355,7 @@ export function DriverGoogleSignupWizard() {
             >
               <Building2 className="h-8 w-8 text-emerald-600 dark:text-emerald-400" />
               <span className="text-base font-semibold text-slate-900 dark:text-white">Join a fleet</span>
-              <span className="text-sm text-slate-600 dark:text-slate-300">I have a fleet organization ID.</span>
+              <span className="text-sm text-slate-600 dark:text-slate-300">I have a fleet invite code.</span>
             </button>
             <button
               type="button"
@@ -397,34 +385,12 @@ export function DriverGoogleSignupWizard() {
     return (
       <div className="flex min-h-screen flex-col bg-gradient-to-br from-slate-100 via-white to-slate-100 px-4 py-10 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900">
         {shellHeader}
-        <div className="mx-auto w-full max-w-sm">
-          <h1 className="text-center text-2xl font-bold tracking-tight text-slate-900 dark:text-white">Join your fleet</h1>
-          <p className="mt-2 text-center text-sm text-slate-600 dark:text-slate-300">Paste the organization ID your fleet admin shared.</p>
-          <div className="mt-8 rounded-2xl border border-slate-200 bg-white/90 p-6 shadow-xl dark:border-slate-700/60 dark:bg-slate-800/60">
-            {joinError && (
-              <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-200">
-                {joinError}
-              </div>
-            )}
-            <Label htmlFor="g-fleet-org">Fleet organization ID</Label>
-            <Input
-              id="g-fleet-org"
-              value={fleetId}
-              onChange={e => setFleetId(e.target.value)}
-              placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-              className="mt-2 font-mono text-sm"
-              autoComplete="off"
-            />
-            <div className="mt-6 flex flex-col gap-2">
-              <Button type="button" className="w-full" disabled={loading} onClick={() => void handleJoinFleet()}>
-                {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Join fleet'}
-              </Button>
-              <Button type="button" variant="ghost" className="w-full" disabled={loading} onClick={() => setUi('archetype')}>
-                Back
-              </Button>
-            </div>
-          </div>
-        </div>
+        <JoinFleetStep
+          onBack={() => setUi('archetype')}
+          onSuccess={handleJoinFleetComplete}
+          afterJoin={markGoogleOnboardingComplete}
+          disabled={loading}
+        />
       </div>
     );
   }

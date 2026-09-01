@@ -1,17 +1,17 @@
 # RoamFleet × Roam Rush — Multi-Service-Line Integration Audit
 
-**Date:** 2026-08-31 (design audit — [Part I](#0-executive-summary)) · **2026-09-01** ([Part II](#part-ii--implementation-verification-2026-09-01), [Part III](#part-iii--remediation-verification-2026-09-01), [Part IV](#part-iv--remediation-round-2--workforce-signup-architecture-2026-09-01))
+**Date:** 2026-08-31 (design audit — [Part I](#0-executive-summary)) · **2026-09-01** ([Part II](#part-ii--implementation-verification-2026-09-01), [Part III](#part-iii--remediation-verification-2026-09-01), [Part IV](#part-iv--remediation-round-2--workforce-signup-architecture-2026-09-01), [Part V](#part-v--x1--signup-remediation-verification-2026-09-01))
 **Scope:** How to add the Roam Rush product family (`roamrush.app`, `courier.roamrush.app`, `partner.roamrush.app`) into `roamfleet.co` as a second service line, serving three customer shapes: rideshare-only, delivery-only, and both.
 **Method:** Static read of `apps/fleet` (1,081 TS/TSX files), `apps/dash-courier` (175), `apps/dash-customer` (163), `apps/rush-command` (277), `apps/enterprise` (196), `supabase/functions/_fleet-server`, `supabase/functions/delivery`, `supabase/functions/matching`, and 437 migrations. **No code was changed by either pass.**
 **Companions:** [ROAMRUSH_SYSTEM_AUDIT.md](ROAMRUSH_SYSTEM_AUDIT.md) · [docs/FINANCIAL_INTEGRITY_AUDIT.md](docs/FINANCIAL_INTEGRITY_AUDIT.md) · [docs/MULTI_VERTICAL_COMPATIBILITY.md](docs/MULTI_VERTICAL_COMPATIBILITY.md) · [RUSH_MARKETPLACE_PRICING_MIGRATION.md](RUSH_MARKETPLACE_PRICING_MIGRATION.md)
 
-> **STATUS — 2026-09-01 (after remediation round 2).** Parts 0–12 are the original design audit and remain the target architecture. Part II is the first verification pass (3 Critical / 8 High / 13 Medium), Part III verifies commit `82853c0e`, **Part IV** verifies `b8cd5e7a…256e8c8c` and adds a **workforce signup architecture review** (Roam Driver vs Roam Rush Courier).
+> **STATUS — 2026-09-01 (after remediation round 3).** Parts 0–12 are the original design audit and remain the target architecture. Parts II–V are successive verification passes; **[Part V](#part-v--x1--signup-remediation-verification-2026-09-01) is current.**
 >
-> **The code is in good shape.** All 3 Criticals and all 8 Part III defects are fixed. Build is fully green: 174 test files / 1,103 tests, Rush-spine typecheck clean, `deno check` clean, all four CI guards pass.
+> **The Rush integration itself is now essentially done.** X1 is fixed and Rush nav is reachable; V9 (scope filtering) and V12 (per-service-line earnings) — open since Part II — are both closed. Build green: 175 test files / 1,105 tests, platform-settings 24, Rush-spine typecheck 0 errors, all guards pass.
 >
-> **One blocker remains, and it is a side effect of the correct fix.** Restoring the strict intersection in `resolveEffectiveModules` (W1) was right, but nothing sets the `rush_*` keys `true` at the **product-line** level — they default `false` — so `effective.rush_*` is now permanently `false`. Rush navigation is unreachable end to end no matter how the org is configured. Verified empirically in [§22](#22-x1--blocker-rush-modules-are-now-unreachable). One-line fix.
+> **The remaining risk has moved to the signup work.** The driver app's *hybrid* path was migrated to invite codes, but the **Google path was not** — it still joins fleets by pasting the org UUID — and `POST /driver/join-fleet` remains live and unflagged, so S1 is not closed. Separately, the new invite path writes only `driver_profiles`, so **a rideshare driver who joins by invite code never appears on the fleet owner's roster.**
 >
-> **Signup architecture:** the courier flow does **not** mirror the driver flow — and the sensible remedy is the opposite of the obvious one. See [§23](#23-workforce-signup-architecture--roam-driver-vs-roam-rush-courier).
+> **Gate: Rush flags are clear to enable. Do not retire the legacy driver-join path or announce invite-code onboarding for rideshare until [§26](#26-new-defects) Y1–Y3 are closed.**
 
 ---
 
@@ -1345,4 +1345,145 @@ Steps 1–4 are independent, ship in any order, and touch no existing driver beh
 
 ---
 
-*Design audit 2026-08-31; implementation verification, remediation verification, and remediation round 2 + signup architecture review 2026-09-01, against `256e8c8c` on branch `main`. No code was modified in any pass. Re-run Part IV after X1 is closed; re-run the design audit before Phase 2 if the `delivery` or `fleet` schemas change.*
+---
+
+# Part V — X1 + signup remediation verification (2026-09-01)
+
+**Reviewed:** `6fc3d15f`, `03768c4f`, `b5573dd1` (28 files, +576/−59) — the response to Part IV.
+**Checks run:** `pnpm --filter @roam/fleet test` → **175 files / 1,105 passed**, 1 skipped, exit 0 · `pnpm --filter @roam/platform-settings test` → **24 passed** · `node scripts/typecheck-fleet-rush.mjs` → **0 Rush-spine errors** · all three CI guards pass.
+
+---
+
+## 25. Fixed and verified
+
+### 25.1 X1 — closed, the right way
+
+Option (a) taken: `rush_*` now default `true` in both `DEFAULT_ENTERPRISE_ENABLED_MODULES` and the Deno mirror, leaving the real gates as the org's `service_lines`-derived overrides plus `rush_ui`. The composition test asked for in §22 was written, and it covers all three cases rather than just the happy path ([`modules.test.ts:84-131`](packages/platform-settings/src/modules.test.ts#L84)):
+
+- a both-lines org on default platform settings resolves `rush_couriers` **true** — the reachability case;
+- a product-line `rush_couriers: false` **defeats** the org's `true` — the kill switch still holds, pinning W1;
+- a rideshare-only org resolves every `rush_*` key **false** — the org-level derivation does the gating.
+
+Worth noting the Enterprise blast radius was considered: because `rushModuleOverridesForServiceLines` drives the org half off `service_lines`, and the V18 migration reset enterprise `delivery` orgs to `['rideshare']`, flipping the product-line default to `true` does **not** switch Rush modules on for Enterprise tenants. The third test case is what pins that.
+
+### 25.2 V9 — closed
+
+Scope filtering now reaches the full §5.5 surface, not just Trip Logs. A `useServiceLineScopeParam` hook and a `filterLedgerByServiceLineScope` helper (with tests) were added, and `scope` is consumed by:
+
+`Dashboard` · `fetchBusinessFinanceBundle` / `useBusinessFinanceBundle` · `DriverSettlementsPage` · `ReportsPage` · `DriversPage` · `DriverDetail` · `TripLogsPage` · `useVocab` · `AppSidebar`
+
+That is every surface §5.5 named. The switcher is no longer cosmetic.
+
+### 25.3 V12 — closed
+
+`serviceLineParam` is now actually passed: [`DriverDetail.tsx:722`](apps/fleet/src/components/drivers/DriverDetail.tsx#L722) → `loadResolvedEarningsBundleForDriverWeek(driverId, undefined, serviceLineParam)`, and `DriversPage.tsx:228`. The edge side gained matching trip filtering and a per-line participation check in [`driver_financial_periods.ts:210-231`](supabase/functions/_fleet-server/driver_financial_periods.ts#L210). Per-service-line earnings policies are live rather than plumbing.
+
+### 25.4 Signup findings
+
+| # | Fix | Evidence |
+|---|---|---|
+| **S2** | 409 guard mirrored onto the courier branch — accepting an invite for a different fleet is refused rather than silently re-pointing `fleet_id`. Added to the rideshare branch too. | [`workforce_invite_routes.ts:139-142, 156-159`](supabase/functions/_fleet-server/workforce_invite_routes.ts#L139) |
+| **S3** | `CourierWorkforceArchetypePage` adds the missing fleet-owner door, with `roamfleet.co/signup?line=rush_delivery`. | [`CourierWorkforceArchetypePage.tsx`](apps/dash-courier/src/pages/onboarding/CourierWorkforceArchetypePage.tsx) |
+| **S6** | Per-user rate limit on accept — 20 attempts / 15 min, returning 429. | [`workforce_invite_rate_limit.ts`](supabase/functions/_fleet-server/workforce_invite_rate_limit.ts) |
+| **S7** | Courier branch converted from blind upsert to select-then-update, returning **404** when no profile exists. No more nameless profiles. | `workforce_invite_routes.ts:131-138` |
+| **S8** | Archetype now asked **first** — `how-it-works → workforce-archetype → sign-up` — and the chosen path routes `profile-setup` to either `fleet-invite` or straight to `vehicle-setup`. Matches the driver ordering. | [`CourierConsumerApp.tsx:215-252`](apps/dash-courier/src/CourierConsumerApp.tsx#L215) |
+| **S1** | *Partial* — the hybrid driver path switched to `api.acceptWorkforceInvite(code)`, with `joinFleetByFleetId` marked `@deprecated`. See Y1/Y2. | `DriverHybridOnboarding.tsx`, `apps/driver/src/services/api.ts:672-691` |
+
+---
+
+## 26. NEW defects
+
+### Y1 · HIGH — the Google signup path still joins fleets by org UUID
+
+`DriverHybridOnboarding` was migrated. [`DriverGoogleSignupWizard.tsx`](apps/driver/src/components/onboarding/DriverGoogleSignupWizard.tsx) was not:
+
+```ts
+const [fleetId, setFleetId] = useState('');        // :69
+…
+const id = fleetId.trim();                          // :284
+await api.joinFleetByFleetId(id);                   // :291
+```
+
+Both components render the same three archetypes and [`App.tsx:48-56`](apps/driver/src/App.tsx#L48) picks between them by auth provider — so for every driver who signs up with Google, S1 is untouched: paste a non-secret org UUID, land on that fleet's roster, no invite, no owner consent, no expiry, no revocation.
+
+The two components have now **diverged**, which is worse than either state alone: the same product offers two "Join a fleet" screens with different credentials, different security properties, and different error copy. Whichever survives, they should share one component.
+
+### Y2 · HIGH — `POST /driver/join-fleet` is still live and unflagged
+
+The client-side migration does not close the hole — the endpoint is the vulnerability, and it is unchanged at [`index.tsx:12163`](supabase/functions/_fleet-server/index.tsx#L12163). Any authenticated driver can still POST an org UUID directly.
+
+§23.7 step 5 called for keeping it "alive behind a flag for one release". It is alive, but there is no flag, no deprecation header, and no telemetry to tell you when traffic reaches zero — so there is no signal that would ever let you retire it. And because Y1 means the Google path still depends on it, it cannot simply be deleted today.
+
+**Fix:** close Y1 first, then put the route behind `FEATURE_FLAGS.LEGACY_DRIVER_JOIN` defaulting off, with a log line on every call.
+
+### Y3 · HIGH — a driver who joins by invite code never reaches the fleet owner's roster
+
+The two join paths write different things.
+
+`/driver/join-fleet` (legacy) writes **three** places — `user_metadata.organizationId`, the `driver:{uid}` KV record (creating it with `organizationId` when absent), and `driver_profiles` via `upsertDriverProfileFromServer` ([`index.tsx:12203-12235`](supabase/functions/_fleet-server/index.tsx#L12203)).
+
+`/workforce/invites/accept` (new, now preferred) writes **one** — `driver_profiles` only:
+
+```ts
+await deps.supabase.from("driver_profiles").upsert({
+  user_id: userId, mode: "fleet", fleet_id: fleetId, fleet_joined_at: …,
+}, { onConflict: "user_id" });
+```
+([`workforce_invite_routes.ts:160-165`](supabase/functions/_fleet-server/workforce_invite_routes.ts#L160))
+
+But the fleet owner's roster does not read `driver_profiles`. `GET /drivers` resolves through `listByOrg("drivers", orgId)` against `fleet.drivers` ([`index.tsx:2915-2927`](supabase/functions/_fleet-server/index.tsx#L2915)) — the table fed by the `driver:{uid}` KV record. No KV record, no `fleet.drivers` row, **no driver on the roster**: not listed, not assignable to a vehicle, no trips attributed, no settlement.
+
+This is exactly the S5 finding (three sources of truth for driver membership) turning into a live bug: the new path picked the one source the fleet side does not consult. Note the courier branch has no equivalent problem — `courier_profiles` genuinely is the single source there, which is why the courier flow works.
+
+**Fix:** have the rideshare branch call the same `upsertDriverProfileFromServer` + KV write that `/driver/join-fleet` uses — ideally by extracting that block into one `linkDriverToFleet(userId, fleetId)` helper both routes call, which also fixes S5 by construction. Add an integration test asserting the driver appears in `GET /drivers` after accepting an invite.
+
+### Y4 · MEDIUM — the archetype choice is lost across email verification
+
+`workforceChoice` is component state (`useState`, [`CourierConsumerApp.tsx:79`](apps/dash-courier/src/CourierConsumerApp.tsx#L79)) and is never persisted, while the wizard already has a `signupDraft` module imported in the same file for exactly this purpose.
+
+The phase order is `workforce-archetype → sign-up → verify → profile-setup → (fleet-invite | vehicle-setup)`. Verification typically means leaving the app for an email or SMS link. On return the component remounts, `workforceChoice` resets to `'independent'`, and `profile-setup` routes straight past `fleet-invite`. The courier silently completes onboarding as independent — having explicitly chosen "Join a delivery company" three screens earlier.
+
+**Fix:** persist the choice into `signupDraft` alongside the other wizard fields.
+
+### Y5 · MEDIUM — still no way to join a fleet after onboarding
+
+S4 flagged that a courier who skips has no route back. The archetype screen improves discovery but does not fix the dead end: a repo-wide grep of `apps/dash-courier/src` for "join a fleet" / "invite code" outside the onboarding folder returns nothing. Combined with Y4 — which can drop a courier into the independent path against their stated choice — the missing settings entry is now load-bearing rather than a nicety.
+
+**Fix:** add a "Join a fleet" row in courier profile/settings that reuses `FleetInviteCodePage`.
+
+### Y6 · LOW — hardcoded production URL in the courier archetype screen
+
+```ts
+const FLEET_SIGNUP_URL = 'https://roamfleet.co/signup?line=rush_delivery';
+```
+
+The driver app resolves the same link through `defaultRoamFleetSignupUrl()` ([`utils/googleDriverSignup.ts`](apps/driver/src/utils/googleDriverSignup.ts)), so dev and staging builds point at their own environment. The courier constant sends every build to production. Use the shared helper and append the `line` parameter.
+
+### Y7 · LOW — the accept rate limit is per-isolate, not global
+
+`acceptAttempts` is a module-level `Map` in the edge function. Supabase edge functions scale horizontally and recycle isolates, so the effective limit is 20 attempts *per warm instance*, and it resets on cold start. As defence-in-depth behind auth, binding and expiry that is acceptable — but it should not be described as a global limit. If it ever needs to be one, back it with the KV store the way the other counters in `_fleet-server` are.
+
+---
+
+## 27. Current gate
+
+**Build:** 175 test files / 1,105 tests · platform-settings 24 tests · Rush-spine typecheck 0 errors · `check-courier-fleet-stamp`, `check-fleet-edge-duplicates`, `check-projection-flags-wired` all pass.
+
+| Action | Blocked on |
+|---|---|
+| Enable `rush_courier_link` for a pilot org | **clear** |
+| Enable `rush_ui` | **clear** — X1 closed, reachability pinned by test |
+| Enable `rush_trip_projection` | **clear** |
+| Enable `rush_settlement` | **clear** — V12 closed; still run one week of manual reconciliation per §7 Phase 3 exit criteria before trusting it |
+| Pilot with a both-lines customer | **clear** — V9 closed |
+| Announce invite-code onboarding for **rideshare** drivers | **Y1, Y3** — half the signups still use the UUID path, and invite-code joiners do not appear on the roster |
+| Retire `POST /driver/join-fleet` | **Y1, Y2** |
+| Rely on the courier archetype choice | **Y4, Y5** |
+
+Suggested order: **Y3** (it silently breaks the flow you just made preferred), then **Y1** (share one join component between the two driver wizards), then **Y2** (flag and instrument the legacy route), then Y4/Y5 together, then Y6/Y7.
+
+The Rush programme itself is done. What is left is finishing the workforce-signup unification that Part IV started — and the remaining items are all in the rideshare half, not the Rush half.
+
+---
+
+*Design audit 2026-08-31; verification passes II–V on 2026-09-01, the last against `b5573dd1` on branch `main`. No code was modified in any pass. Re-run Part V after Y1–Y3 are closed; re-run the design audit before Phase 2 if the `delivery` or `fleet` schemas change.*

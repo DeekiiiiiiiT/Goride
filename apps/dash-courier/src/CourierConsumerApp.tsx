@@ -15,7 +15,7 @@ import { LoginPage } from '@/pages/auth/LoginPage';
 import { CourierHomePage } from '@/pages/home/CourierHomePage';
 import { SessionExpiredSheet } from '@/components/auth/SessionExpiredSheet';
 import { isOnboardingComplete, markOnboardingComplete, resetOnboarding, syncOnboardingFromProfile, isProfilePending } from '@/lib/onboardingStorage';
-import { clearSignupDraft, saveSignupDraft } from '@/lib/signupDraft';
+import { clearSignupDraft, loadSignupDraft, saveSignupDraft, type WorkforceChoice } from '@/lib/signupDraft';
 import { clearCourierLocalState } from '@/lib/courierStorage';
 import { cancelCourierSettingsSave } from '@/lib/courierSettingsSync';
 import {
@@ -76,7 +76,14 @@ type AppPhase =
 export function CourierConsumerApp() {
   const [phase, setPhase] = useState<AppPhase>('splash');
   const [sessionExpired, setSessionExpired] = useState(false);
-  const [workforceChoice, setWorkforceChoice] = useState<'independent' | 'join_fleet'>('independent');
+  const [workforceChoice, setWorkforceChoice] = useState<WorkforceChoice>(
+    () => loadSignupDraft().workforceChoice ?? 'independent',
+  );
+
+  useEffect(() => {
+    const draft = loadSignupDraft();
+    if (draft.workforceChoice) setWorkforceChoice(draft.workforceChoice);
+  }, []);
 
   const finishOnboarding = useCallback(() => {
     void ensureCourierProfile({ markComplete: true }).finally(() => {
@@ -218,10 +225,12 @@ export function CourierConsumerApp() {
       <CourierWorkforceArchetypePage
         onIndependent={() => {
           setWorkforceChoice('independent');
+          saveSignupDraft({ workforceChoice: 'independent' });
           setPhase('sign-up');
         }}
         onJoinFleet={() => {
           setWorkforceChoice('join_fleet');
+          saveSignupDraft({ workforceChoice: 'join_fleet' });
           setPhase('sign-up');
         }}
       />
@@ -264,7 +273,7 @@ export function CourierConsumerApp() {
   if (phase === 'vehicle-setup') {
     return (
       <VehicleSetupPage
-        onBack={() => setPhase('fleet-invite')}
+        onBack={() => setPhase(workforceChoice === 'join_fleet' ? 'fleet-invite' : 'profile-setup')}
         onContinue={() => setPhase('documents')}
       />
     );

@@ -74,3 +74,32 @@ test.describe('RoamFleet Rush integration', () => {
     }
   });
 });
+
+test.describe('RoamFleet browser smoke (fleet project)', () => {
+  test('login shell loads', async ({ page }) => {
+    await page.goto('/');
+    await expect(page.locator('body')).toBeVisible();
+  });
+
+  test('rideshare-only org — drivers path registered', async () => {
+    expect(FLEET_PAGE_REGISTRY.drivers.path).toBe('/drivers');
+    expect(
+      canSeeCourierOps({
+        hasRushDeliveryLine: false,
+        rushModuleEnabled: true,
+        canViewAnyCourierPage: true,
+      }),
+    ).toBe(false);
+  });
+
+  test('delivery-only org — couriers path registered', async () => {
+    expect(FLEET_PAGE_REGISTRY.couriers.path).toBe('/couriers');
+    expect(hasSharedOps({ rushVisible: true, rideshareVisible: false })).toBe(true);
+  });
+
+  test('both-lines org — scope pages exist', async () => {
+    expect(FLEET_PAGE_REGISTRY.drivers).toBeTruthy();
+    expect(FLEET_PAGE_REGISTRY.couriers).toBeTruthy();
+    expect(FLEET_PAGE_REGISTRY.deliveries).toBeTruthy();
+  });
+});

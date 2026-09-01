@@ -55,6 +55,8 @@ export const FEATURE_FLAGS = {
   RUSH_TRIP_PROJECTION: "rush_trip_projection",
   RUSH_SETTLEMENT: "rush_settlement",
   RUSH_UI: "rush_ui",
+  /** Deprecated org-UUID join path on POST /driver/join-fleet */
+  LEGACY_DRIVER_JOIN: "legacy_driver_join",
 } as const;
 
 export type FeatureFlagName = typeof FEATURE_FLAGS[keyof typeof FEATURE_FLAGS];
@@ -392,6 +394,11 @@ export async function initializeDefaultFlags(): Promise<void> {
       name: FEATURE_FLAGS.RUSH_UI,
       enabled: false,
       description: "Rush navigation and pages in RoamFleet",
+    },
+    {
+      name: FEATURE_FLAGS.LEGACY_DRIVER_JOIN,
+      enabled: false,
+      description: "Deprecated POST /driver/join-fleet by org UUID (use invite codes)",
     },
   ];
 

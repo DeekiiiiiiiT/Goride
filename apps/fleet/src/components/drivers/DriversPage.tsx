@@ -139,6 +139,7 @@ import {
 } from "../ui/dialog";
 import { Label } from "../ui/label";
 import { Link2 } from 'lucide-react';
+import { WorkforceInvitePanel } from '../workforce/WorkforceInvitePanel';
 // Interface for our View Model
 interface DriverProfile {
   id: string;
@@ -791,6 +792,13 @@ export function DriversPage({ initialDriverId }: { initialDriverId?: string | nu
            </div>
            {can('drivers.create') && (
            <div className="flex items-center gap-2">
+             <WorkforceInvitePanel
+               variant="button"
+               serviceLine="rideshare"
+               inviteButtonLabel="Invite driver"
+               dialogTitle="Invite a driver"
+               dialogDescription="Generate a code for your driver to enter in the Roam Driver app during onboarding."
+             />
              <Button variant="outline" onClick={() => setIsClaimOpen(true)}>
                <Link2 className="h-4 w-4 mr-2" />
                Claim Driver

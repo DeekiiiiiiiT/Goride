@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { readDriverGeolocationFix } from '../utils/nativeLocationAccess';
 
 export interface GeoLocationState {
   lat: number | null;
@@ -20,62 +21,15 @@ export const useGeolocation = () => {
   });
 
   const getLocation = useCallback((options?: PositionOptions) => {
-    return new Promise<GeoLocationState>((resolve, reject) => {
-      if (!navigator.geolocation) {
-        const errorState = { ...state, error: 'Geolocation not supported', loading: false };
-        setState(errorState);
-        resolve(errorState);
-        return;
-      }
+    setState((prev) => ({ ...prev, loading: true, error: null }));
 
-      setState(prev => ({ ...prev, loading: true, error: null }));
-
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          const newState = {
-            lat: position.coords.latitude,
-            lng: position.coords.longitude,
-            accuracy: position.coords.accuracy,
-            timestamp: position.timestamp,
-            error: null,
-            loading: false,
-          };
-          setState(newState);
-          resolve(newState);
-        },
-        (error) => {
-          let errorMessage = 'Failed to get location';
-          switch (error.code) {
-            case error.PERMISSION_DENIED:
-              errorMessage = 'Location permission denied';
-              break;
-            case error.POSITION_UNAVAILABLE:
-              errorMessage = 'Location information unavailable';
-              break;
-            case error.TIMEOUT:
-              errorMessage = 'Location request timed out';
-              break;
-          }
-          const errorState = {
-            lat: null,
-            lng: null,
-            accuracy: null,
-            timestamp: null,
-            error: errorMessage,
-            loading: false,
-          };
-          setState(errorState);
-          resolve(errorState);
-        },
-        {
-          /** High accuracy forces GNSS cold fixes and often times out indoors / in parking structures. */
-          enableHighAccuracy: false,
-          timeout: 25000,
-          /** A recent cached fix is fine for matching a fill-up to a station. */
-          maximumAge: 120000,
-          ...options,
-        }
-      );
+    return readDriverGeolocationFix(options).then((fix) => {
+      const nextState: GeoLocationState = {
+        ...fix,
+        loading: false,
+      };
+      setState(nextState);
+      return nextState;
     });
   }, []);
 

@@ -669,7 +669,7 @@ export const api = {
     return response.json();
   },
 
-  /** Links the signed-in driver account to a fleet via invite code (preferred). */
+  /** Links the signed-in driver account to a fleet via invite code. */
   async acceptWorkforceInvite(inviteCode: string) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/workforce/invites/accept`, {
       method: 'POST',
@@ -689,25 +689,7 @@ export const api = {
     return response.json();
   },
 
-  /** @deprecated Use acceptWorkforceInvite — org UUID is not a secret credential. */
-  async joinFleetByFleetId(fleetId: string) {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/driver/join-fleet`, {
-      method: 'POST',
-      headers: await getHeaders(),
-      body: JSON.stringify({ fleetId }),
-    });
-    if (!response.ok) {
-      let msg = 'Failed to join fleet';
-      try {
-        const j = await response.json();
-        if (j && typeof j.error === 'string') msg = j.error;
-      } catch {
-        /* ignore */
-      }
-      throw new Error(msg);
-    }
-    return response.json();
-  },
+  // joinFleetByFleetId removed — use acceptWorkforceInvite
 
   async fetchPendingTollClaims(): Promise<FinancialTransaction[]> {
     const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/transactions`, {

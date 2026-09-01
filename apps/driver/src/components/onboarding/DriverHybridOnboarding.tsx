@@ -1,14 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { ArrowLeft, Briefcase, Building2, Car, Loader2 } from 'lucide-react';
 import { Button } from '@roam/ui';
-import { Input } from '@roam/ui';
-import { Label } from '@roam/ui';
 import { useAuth } from '../../contexts/AuthContext';
 import { useDriver } from '../../contexts/DriverContext';
 import { DriverOnboardingPage } from '../auth/DriverOnboardingPage';
 import { ThemeToggleButton } from '../layout/ThemeToggleButton';
-import { api } from '../../services/api';
 import { defaultRoamFleetSignupUrl } from '../../utils/googleDriverSignup';
+import { JoinFleetStep } from './shared/JoinFleetStep';
 
 function OnboardingShellHeader({ onBack }: { onBack?: () => void }) {
   const { signOut } = useAuth();
@@ -50,9 +48,6 @@ const archetypeCardClass =
 export function DriverHybridOnboarding() {
   const { profile, loading, refreshProfile } = useDriver();
   const [step, setStep] = useState<Step>('mode');
-  const [inviteCode, setInviteCode] = useState('');
-  const [joinError, setJoinError] = useState<string | null>(null);
-  const [joining, setJoining] = useState(false);
 
   useEffect(() => {
     if (loading) return;
@@ -62,25 +57,6 @@ export function DriverHybridOnboarding() {
   }, [loading, profile?.fleetId, profile?.mode]);
 
   const goProfile = () => setStep('profile');
-
-  const handleJoinFleet = async () => {
-    setJoinError(null);
-    const code = inviteCode.trim().toUpperCase();
-    if (!code) {
-      setJoinError('Enter the invite code your fleet gave you.');
-      return;
-    }
-    setJoining(true);
-    try {
-      await api.acceptWorkforceInvite(code);
-      await refreshProfile();
-      goProfile();
-    } catch (e: unknown) {
-      setJoinError(e instanceof Error ? e.message : 'Could not join fleet.');
-    } finally {
-      setJoining(false);
-    }
-  };
 
   if (loading) {
     return (
@@ -128,36 +104,14 @@ export function DriverHybridOnboarding() {
     return (
       <div className="flex min-h-screen flex-col bg-gradient-to-br from-slate-100 via-white to-slate-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900">
         <OnboardingShellHeader onBack={() => setStep('mode')} />
-        <div className="mx-auto w-full max-w-sm px-4 pb-10 pt-2">
-          <h1 className="text-center text-2xl font-bold tracking-tight text-slate-900 dark:text-white">Join a fleet</h1>
-          <p className="mt-2 text-center text-sm text-slate-600 dark:text-slate-300">
-            Enter the 8-character invite code your fleet admin gave you.
-          </p>
-          <div className="mt-8 rounded-2xl border border-slate-200 bg-white/90 p-6 shadow-xl dark:border-slate-700/60 dark:bg-slate-800/60">
-            {joinError && (
-              <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-200">
-                {joinError}
-              </div>
-            )}
-            <Label htmlFor="fleet-invite">Fleet invite code</Label>
-            <Input
-              id="fleet-invite"
-              value={inviteCode}
-              onChange={e => setInviteCode(e.target.value.toUpperCase())}
-              placeholder="ABCD1234"
-              className="mt-2 font-mono text-sm tracking-widest"
-              autoComplete="off"
-              maxLength={8}
-            />
-            <div className="mt-6 flex flex-col gap-2">
-              <Button type="button" className="w-full" disabled={joining} onClick={() => void handleJoinFleet()}>
-                {joining ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Join fleet'}
-              </Button>
-              <Button type="button" variant="ghost" className="w-full" disabled={joining} onClick={() => setStep('mode')}>
-                Back
-              </Button>
-            </div>
-          </div>
+        <div className="mx-auto w-full px-4 pb-10 pt-2">
+          <JoinFleetStep
+            onBack={() => setStep('mode')}
+            onSuccess={async () => {
+              await refreshProfile();
+              goProfile();
+            }}
+          />
         </div>
       </div>
     );
@@ -183,7 +137,7 @@ export function DriverHybridOnboarding() {
             <Building2 className="h-8 w-8 text-emerald-600 dark:text-emerald-400" />
             <span className="text-base font-semibold text-slate-900 dark:text-white">Join a fleet</span>
             <span className="text-sm text-slate-600 dark:text-slate-300">
-              Enter the fleet organization ID your fleet admin gave you.
+              Enter the invite code your fleet admin gave you.
             </span>
           </button>
           <button type="button" onClick={() => setStep('fleet_owner_cta')} className={archetypeCardClass}>

@@ -2957,6 +2957,25 @@ async function saveTollLedgerEntry(entry: TollLedgerRecord, c?: Context): Promis
   // was settled at.
   await stampTollRateProvenance(entry);
 
+  if (entry.tripId && !(entry as { service_line?: string }).service_line) {
+    try {
+      const trip = await kv.get(`trip:${entry.tripId}`);
+      if (trip && typeof trip === "object") {
+        const t = trip as Record<string, unknown>;
+        const explicit = t.serviceLine ?? t.service_line;
+        const sl =
+          explicit === "rush_delivery" || explicit === "rideshare"
+            ? explicit
+            : String(t.platform ?? "") === "Roam Rush"
+              ? "rush_delivery"
+              : "rideshare";
+        (entry as { service_line?: string }).service_line = sl;
+      }
+    } catch {
+      /* optional enrichment */
+    }
+  }
+
   ensureTollContentFingerprint(entry);
 
   const duplicate = findDuplicateTollLedgerEntry(entry, await getAllTollLedgerEntries(ctx));
@@ -2996,6 +3015,7 @@ async function saveTollLedgerEntry(entry: TollLedgerRecord, c?: Context): Promis
       organizationId: orgId,
       vehicleId: entry.vehicleId,
       date: entry.date,
+      serviceLine: (entry as { service_line?: string }).service_line,
     });
   } catch (e) {
     console.error("[TollLedgerStorage] unified dual-write failed:", e);

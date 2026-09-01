@@ -6,6 +6,7 @@ import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import type { RbacUser } from "./rbac_middleware.ts";
 import { isFeatureEnabled, FEATURE_FLAGS } from "./feature_flags.ts";
 import { checkAcceptRateLimit } from "./workforce_invite_rate_limit.ts";
+import type { LinkDriverResult } from "./workforce_link.ts";
 
 function randomInviteCode(): string {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -27,6 +28,7 @@ export function registerWorkforceInviteRoutes(
     supabase: SupabaseClient;
     requireAuth: () => unknown;
     getOrgId: (c: { get: (k: string) => unknown }) => string | null;
+    linkDriverToFleet: (userId: string, fleetId: string) => Promise<LinkDriverResult>;
   },
 ): void {
   app.post("/make-server-37f42386/workforce/invites", deps.requireAuth() as never, async (c) => {
@@ -37,11 +39,14 @@ export function registerWorkforceInviteRoutes(
       const rbacUser = rbacFromContext(c);
       if (!rbacUser) return c.json({ error: "Unauthorized" }, 401);
 
-      const enabled = await isFeatureEnabled(FEATURE_FLAGS.RUSH_COURIER_LINK, orgId);
-      if (!enabled) return c.json({ error: "Workforce invites not enabled for this org" }, 403);
-
       const body = await c.req.json();
       const serviceLine = body.serviceLine === "rush_delivery" ? "rush_delivery" : "rideshare";
+
+      if (serviceLine === "rush_delivery") {
+        const enabled = await isFeatureEnabled(FEATURE_FLAGS.RUSH_COURIER_LINK, orgId);
+        if (!enabled) return c.json({ error: "Courier workforce invites not enabled for this org" }, 403);
+      }
+
       const inviteCode = randomInviteCode();
 
       const { data, error } = await deps.supabase
@@ -90,7 +95,7 @@ export function registerWorkforceInviteRoutes(
       if (!rbacUser) return c.json({ error: "Unauthorized" }, 401);
 
       const userId = rbacUser.userId;
-      if (!checkAcceptRateLimit(userId)) {
+      if (!(await checkAcceptRateLimit(userId))) {
         return c.json({ error: "Too many invite attempts. Try again later." }, 429);
       }
 
@@ -149,19 +154,14 @@ export function registerWorkforceInviteRoutes(
           .eq("user_id", userId);
         if (courierErr) throw courierErr;
       } else {
-        const { data: existingDriver } = await deps.supabase.from("driver_profiles")
-          .select("user_id, mode, fleet_id")
-          .eq("user_id", userId)
-          .maybeSingle();
-        if (existingDriver?.mode === "fleet" && existingDriver.fleet_id && existingDriver.fleet_id !== fleetId) {
-          return c.json({ error: "Already linked to another fleet" }, 409);
+        try {
+          await deps.linkDriverToFleet(userId, fleetId);
+        } catch (e: unknown) {
+          const err = e as Error & { status?: number };
+          if (err.status === 409) return c.json({ error: err.message }, 409);
+          if (err.message === "Fleet not found") return c.json({ error: err.message }, 404);
+          throw e;
         }
-        await deps.supabase.from("driver_profiles").upsert({
-          user_id: userId,
-          mode: "fleet",
-          fleet_id: fleetId,
-          fleet_joined_at: new Date().toISOString(),
-        }, { onConflict: "user_id" });
       }
 
       await deps.supabase

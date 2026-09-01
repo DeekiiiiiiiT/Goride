@@ -16,6 +16,7 @@ import { auditLogic } from "./audit_logic.ts";
 import { projectFromFuelEntry } from "./odometer_ledger.ts";
 import { canReuseLinkedFuelEntry, fuelEntryBelongsToTransaction } from "./fuel_entry_link.ts";
 import { queryFleet } from "./repos/baseRepo.ts";
+import { stampServiceLineFromTripLink } from "./service_line_attribution.ts";
 
 export type FuelDecisionReason =
   | "AUTO_AI_STATION"
@@ -450,6 +451,12 @@ export async function ensureFuelEntryForApprovedTx(
   }
 
   const toSave = opts.stamp ? opts.stamp(fuelEntry) : fuelEntry;
+  const tripId =
+    (tx.metadata as Record<string, unknown> | undefined)?.tripId ??
+    (tx.metadata as Record<string, unknown> | undefined)?.linkedTripId;
+  await stampServiceLineFromTripLink(toSave as Record<string, unknown>, {
+    tripId: tripId ? String(tripId) : undefined,
+  });
   await kv.set(`fuel_entry:${fuelEntry.id}`, toSave);
   await syncLinkedExpenseTransaction(fuelEntry);
   try {

@@ -800,6 +800,9 @@ export function DriverSettlementsPage({
         projectionSources:
           ((d.metadata as Record<string, unknown>)?.financeCore as Record<string, unknown>)
             ?.projectionSources as Record<string, string> | undefined,
+        serviceLineBreakdown: (d.metadata as Record<string, unknown>)?.serviceLineBreakdown as
+          | Record<string, unknown>
+          | undefined,
       });
     } catch (e: any) {
       toast.error(e?.message || 'Could not load period detail');
@@ -837,6 +840,9 @@ export function DriverSettlementsPage({
           (row.metadata?.financeCore as Record<string, unknown> | undefined)?.projectionSources as
             | Record<string, string>
             | undefined,
+        serviceLineBreakdown: row.metadata?.serviceLineBreakdown as
+          | Record<string, unknown>
+          | undefined,
       });
     } finally {
       setReconciledDetailLoading(false);

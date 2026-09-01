@@ -40,6 +40,7 @@ export async function buildPersonalAllowanceReconContext(opts: {
   weekEndYmd: string;
   drivers: Array<{ id?: string; driverId?: string }>;
   seedIfMissing?: boolean;
+  serviceLine?: 'rideshare' | 'rush_delivery';
 }): Promise<PersonalAllowanceBootstrap> {
   const [pa, quotas, tiers, policies, prefs] = await Promise.all([
     tierService.getPersonalAllowanceSettings(),
@@ -122,6 +123,7 @@ export async function buildPersonalAllowanceReconContext(opts: {
         driverId,
         weekStartYmd: opts.weekStartYmd,
         legacy,
+        serviceLine: opts.serviceLine,
       });
       return {
         config: bundle.personalAllowance,

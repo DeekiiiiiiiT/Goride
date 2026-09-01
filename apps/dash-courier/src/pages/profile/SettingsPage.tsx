@@ -4,6 +4,7 @@ import { SubPageHeader } from '@/components/layout/SubPageHeader';
 import { ROAM_LEGAL, accountDeletionMailto } from '@roam/business-config/legalUrls';
 import { loadAppSettings, type CourierAppSettings } from '@/lib/courierStorage';
 import { saveAppSettingsSynced } from '@/lib/courierSettingsSync';
+import { JoinFleetFromSettings } from './JoinFleetFromSettings';
 
 type SettingsPageProps = {
   onBack: () => void;
@@ -67,6 +68,7 @@ function applyTheme(appearance: CourierAppSettings['appearance']) {
 
 export function SettingsPage({ onBack }: SettingsPageProps) {
   const [settings, setSettings] = useState<CourierAppSettings>(() => loadAppSettings());
+  const [showJoinFleet, setShowJoinFleet] = useState(false);
 
   useEffect(() => {
     applyTheme(settings.appearance);
@@ -80,9 +82,34 @@ export function SettingsPage({ onBack }: SettingsPageProps) {
 
   return (
     <div className="fixed inset-0 z-[70] bg-background flex flex-col overflow-hidden">
+      {showJoinFleet && (
+        <JoinFleetFromSettings onBack={() => setShowJoinFleet(false)} />
+      )}
       <SubPageHeader title="Settings" onBack={onBack} />
 
       <main className="flex-1 overflow-y-auto px-[var(--spacing-edge)] py-6 pb-8 space-y-8">
+        <section className="space-y-4">
+          <h2 className="text-xs font-semibold uppercase tracking-wider text-primary">Workforce</h2>
+          <div className="bg-surface rounded-xl shadow-soft overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setShowJoinFleet(true)}
+              className="flex w-full items-center justify-between p-4 hover:bg-surface-container-lowest transition-colors group border-b border-surface-variant"
+            >
+              <div className="flex items-center gap-4">
+                <div className="bg-surface-container p-2 rounded-full text-on-surface-variant group-hover:text-primary transition-colors">
+                  <MaterialIcon name="group_add" />
+                </div>
+                <div>
+                  <p className="text-base text-on-surface">Join a delivery company</p>
+                  <p className="text-sm text-muted">Enter a fleet invite code from your employer</p>
+                </div>
+              </div>
+              <MaterialIcon name="chevron_right" className="text-muted group-hover:text-primary transition-colors" />
+            </button>
+          </div>
+        </section>
+
         <section className="space-y-4">
           <h2 className="text-xs font-semibold uppercase tracking-wider text-primary">Preferences</h2>
           <div className="bg-surface rounded-xl shadow-soft overflow-hidden">

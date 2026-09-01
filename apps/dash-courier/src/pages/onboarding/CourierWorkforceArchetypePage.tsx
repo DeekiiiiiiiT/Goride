@@ -1,8 +1,9 @@
 import { Briefcase, Building2, Car } from 'lucide-react';
+import { roamFleetSignupUrl } from '@roam/api-client';
 import { Button } from '@roam/ui';
 import { OnboardingHeader } from '@/components/layout/OnboardingHeader';
 
-const FLEET_SIGNUP_URL = 'https://roamfleet.co/signup?line=rush_delivery';
+const FLEET_SIGNUP_URL = roamFleetSignupUrl({ line: 'rush_delivery', from: 'roamrushcourier' });
 
 const cardClass =
   'flex flex-col items-start gap-2 rounded-2xl border border-slate-200 bg-white p-5 text-left shadow-sm transition hover:border-emerald-500/40 hover:shadow-md dark:border-slate-700 dark:bg-slate-800/80';

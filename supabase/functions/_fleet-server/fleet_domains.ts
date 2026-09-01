@@ -206,6 +206,7 @@ export const FLEET_DOMAINS: FleetDomainDef[] = [
         resolution: str(v.resolution),
         is_reconciled: bool(v.isReconciled),
         trip_id: str(v.tripId),
+        service_line: str(v.service_line) ?? str(v.serviceLine),
         batch_id: str(v.batchId),
         audit_trail: Array.isArray(v.auditTrail) ? v.auditTrail : [],
         metadata: v.metadata && typeof v.metadata === "object" ? v.metadata : {},
@@ -255,6 +256,7 @@ export const FLEET_DOMAINS: FleetDomainDef[] = [
               ? (v.metadata as Record<string, unknown>).originalTransactionId
               : null,
           ),
+        service_line: str(v.service_line) ?? str(v.serviceLine),
       });
     },
   },
@@ -361,7 +363,9 @@ export const FLEET_DOMAINS: FleetDomainDef[] = [
     domain: "expense_journal",
     table: "expense_journal",
     prefixes: ["expense_journal:"],
-    mapRow: (key, v) => base(key, v, "expense_journal:", {}),
+    mapRow: (key, v) => base(key, v, "expense_journal:", {
+      service_line: str(v.service_line) ?? str(v.serviceLine),
+    }),
   },
   {
     domain: "bank_statements",

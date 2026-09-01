@@ -16,3 +16,5 @@ export {
   type SettingsSegment,
   type ProductLineSegment,
 } from './productLine';
+
+export { roamFleetSignupUrl, type RoamFleetSignupLine } from './roamFleetSignup';

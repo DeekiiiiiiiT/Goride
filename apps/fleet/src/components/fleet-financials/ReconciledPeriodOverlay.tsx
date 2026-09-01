@@ -51,6 +51,7 @@ export type ReconciledPeriodDetail = {
   cashSourceMismatch?: number;
   overpaidAmount?: number;
   projectionSources?: Record<string, string>;
+  serviceLineBreakdown?: Record<string, unknown>;
 };
 
 type Props = {
@@ -78,6 +79,42 @@ const SOURCE_LABELS: Record<string, string> = {
   table: 'Settlement mirror',
   kv: 'Transaction scan',
 };
+
+function ServiceLineBreakdownPanel({
+  breakdown,
+}: {
+  breakdown?: Record<string, unknown>;
+}) {
+  if (!breakdown || Object.keys(breakdown).length === 0) return null;
+  const labels: Record<string, string> = {
+    rideshare: 'Rideshare',
+    rush_delivery: 'Delivery',
+  };
+  return (
+    <div className="rounded-lg border border-slate-200 bg-slate-50/80 px-3 py-2">
+      <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 mb-1.5">
+        Per-line commission (combined statement)
+      </p>
+      <div className="space-y-2">
+        {Object.entries(breakdown).map(([line, raw]) => {
+          const row = raw as Record<string, unknown>;
+          const gross = Number(row.earningsGross) || 0;
+          const share = Number(row.driverShare) || 0;
+          const trips = Number(row.tripCount) || 0;
+          return (
+            <div key={line} className="text-[11px] border-b border-slate-100 last:border-0 pb-1.5 last:pb-0">
+              <p className="font-medium text-slate-800">{labels[line] || line}</p>
+              <p className="text-slate-600 tabular-nums">
+                {trips} trip{trips !== 1 ? 's' : ''} · gross {fmt(gross)} · driver {fmt(share)}
+                {row.tierName ? ` · ${String(row.tierName)}` : ''}
+              </p>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 function ProjectionSourcesPanel({ sources }: { sources?: Record<string, string> }) {
   if (!sources || Object.keys(sources).length === 0) return null;
@@ -226,6 +263,7 @@ export function ReconciledPeriodOverlay({
               </p>
             ) : null}
             <ProjectionSourcesPanel sources={detail.projectionSources} />
+            <ServiceLineBreakdownPanel breakdown={detail.serviceLineBreakdown} />
             <div className="rounded-lg bg-emerald-50 border border-emerald-100 px-4 py-3 flex items-center gap-3">
               <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0" />
               <div className="min-w-0">

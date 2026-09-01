@@ -32,6 +32,14 @@ export default defineConfig({
   },
   projects: [
     {
+      name: 'fleet',
+      testMatch: /fleet-rush-integration\.spec\.ts/,
+      use: {
+        ...devices['Desktop Chrome'],
+        baseURL: process.env.FLEET_BASE_URL?.trim() || 'http://localhost:5173',
+      },
+    },
+    {
       name: 'customer',
       testMatch: /rush-customer.*\.spec\.ts/,
       use: {

@@ -5,6 +5,14 @@ import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { Switch } from '../ui/switch';
 import { Label } from '../ui/label';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '../ui/dialog';
 import { toast } from 'sonner';
 import { useBusinessConfig } from '../auth/BusinessConfigContext';
 import { api } from '../../services/api';
@@ -28,17 +36,36 @@ export function ServiceLinesSettingsCard() {
   const { serviceLines, refreshConfig } = useBusinessConfig();
   const [draft, setDraft] = useState<ServiceLine[]>(serviceLines);
   const [saving, setSaving] = useState(false);
+  const [confirmRemoveDelivery, setConfirmRemoveDelivery] = useState(false);
 
   React.useEffect(() => {
     setDraft(serviceLines);
   }, [serviceLines]);
 
   const toggleLine = (line: ServiceLine, on: boolean) => {
+    if (line === 'rush_delivery' && !on && draft.includes('rush_delivery')) {
+      setConfirmRemoveDelivery(true);
+      return;
+    }
     setDraft((prev) => {
-      if (on) return prev.includes(line) ? prev : [...prev, line];
+      if (on) {
+        const next = prev.includes(line) ? prev : [...prev, line];
+        if (line === 'rush_delivery' && !prev.includes('rush_delivery')) {
+          toast.message('Delivery line added — see Setup checklist below.');
+        }
+        return next;
+      }
       const next = prev.filter((l) => l !== line);
       return next.length ? next : prev;
     });
+  };
+
+  const confirmRemoveRushDelivery = () => {
+    setDraft((prev) => {
+      const next = prev.filter((l) => l !== 'rush_delivery');
+      return next.length ? next : prev;
+    });
+    setConfirmRemoveDelivery(false);
   };
 
   const deliveryIncluded = draft.includes('rush_delivery');
@@ -123,6 +150,21 @@ export function ServiceLinesSettingsCard() {
           Save service lines
         </Button>
       </CardContent>
+      <Dialog open={confirmRemoveDelivery} onOpenChange={setConfirmRemoveDelivery}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Remove delivery line?</DialogTitle>
+            <DialogDescription>
+              Active couriers may still be linked to your fleet. Settlement and dispatch for delivery will stop after you save.
+              Confirm only if you intend to turn off Roam delivery for this organization.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmRemoveDelivery(false)}>Cancel</Button>
+            <Button variant="destructive" onClick={confirmRemoveRushDelivery}>Remove delivery</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }

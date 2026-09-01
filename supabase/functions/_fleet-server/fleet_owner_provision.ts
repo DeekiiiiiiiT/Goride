@@ -5,6 +5,7 @@ import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import * as kv from "./kv_store.tsx";
 import { ensureCustomerOrganization } from "./ensure_customer_org.ts";
 import { rushModuleOverridesForServiceLines } from "./enterprise_modules.ts";
+import { enableFlagForOrg, FEATURE_FLAGS } from "./feature_flags.ts";
 import { inferProductLineFromUser, type ProductLine } from "./product_line.ts";
 
 function readRolesArray(meta: Record<string, unknown> | undefined): string[] {
@@ -231,6 +232,23 @@ export async function provisionFleetOwner(
       .eq("id", orgId);
   } catch (orgErr) {
     console.warn("[provisionFleetOwner] org service_lines update failed:", orgErr);
+  }
+
+  if (serviceLines.includes("rush_delivery")) {
+    const rushFlags = [
+      FEATURE_FLAGS.SERVICE_LINES_ENABLED,
+      FEATURE_FLAGS.RUSH_COURIER_LINK,
+      FEATURE_FLAGS.RUSH_TRIP_PROJECTION,
+      FEATURE_FLAGS.RUSH_UI,
+      FEATURE_FLAGS.RUSH_SETTLEMENT,
+    ];
+    for (const flag of rushFlags) {
+      try {
+        await enableFlagForOrg(flag, orgId, "fleet_owner_provision");
+      } catch (flagErr) {
+        console.warn(`[provisionFleetOwner] enable ${flag} failed:`, flagErr);
+      }
+    }
   }
 
   try {

@@ -6,7 +6,7 @@ import { provisionFleetOwnerAccount } from '../../../services/fleetOwnerAuth';
 import { supabase } from '../../../utils/supabase/client';
 import type { ServiceLine } from '../BusinessConfigContext';
 
-type WizardStep = 'company' | 'service-lines' | 'plan' | 'owner';
+type WizardStep = 'company' | 'company-detail' | 'service-lines' | 'line-detail' | 'plan' | 'owner';
 
 const SERVICE_LINE_OPTIONS: { id: ServiceLine; label: string; description: string }[] = [
   {
@@ -25,6 +25,15 @@ export function FleetOwnerSignupComplete({ fromRoamdriver }: { fromRoamdriver?: 
   const { user, refreshSession } = useAuth();
   const [step, setStep] = useState<WizardStep>('company');
   const [companyName, setCompanyName] = useState('');
+  const [tradingName, setTradingName] = useState('');
+  const [parish, setParish] = useState('');
+  const [contactPhone, setContactPhone] = useState('');
+  const [trn, setTrn] = useState('');
+  const [ridesharePlatforms, setRidesharePlatforms] = useState('');
+  const [fleetSize, setFleetSize] = useState('');
+  const [deliveryParishes, setDeliveryParishes] = useState('');
+  const [courierCount, setCourierCount] = useState('');
+  const [vehicleTypes, setVehicleTypes] = useState('');
   const [serviceLines, setServiceLines] = useState<ServiceLine[]>(['rideshare']);
   const [name, setName] = useState(
     (user?.user_metadata?.name as string) ||
@@ -68,6 +77,17 @@ export function FleetOwnerSignupComplete({ fromRoamdriver }: { fromRoamdriver?: 
           companyName: trimmedCompany || undefined,
           serviceLines,
           businessType,
+          onboarding: {
+            tradingName: tradingName.trim() || undefined,
+            parish: parish.trim() || undefined,
+            contactPhone: contactPhone.trim() || undefined,
+            trn: trn.trim() || undefined,
+            ridesharePlatforms: ridesharePlatforms.trim() || undefined,
+            fleetSize: fleetSize.trim() || undefined,
+            deliveryParishes: deliveryParishes.trim() || undefined,
+            courierCount: courierCount.trim() || undefined,
+            vehicleTypes: vehicleTypes.trim() || undefined,
+          },
         },
       });
 
@@ -85,6 +105,7 @@ export function FleetOwnerSignupComplete({ fromRoamdriver }: { fromRoamdriver?: 
       if (!result.success) throw new Error(result.error || 'Could not create fleet.');
 
       await refreshSession();
+      localStorage.setItem('roam_fleet_show_checklist', '1');
       window.history.replaceState({}, '', '/');
       window.location.reload();
     } catch (err: unknown) {
@@ -95,7 +116,12 @@ export function FleetOwnerSignupComplete({ fromRoamdriver }: { fromRoamdriver?: 
   };
 
   const stepIndex =
-    step === 'company' ? 0 : step === 'service-lines' ? 1 : step === 'plan' ? 2 : 3;
+    step === 'company' ? 0
+    : step === 'company-detail' ? 1
+    : step === 'service-lines' ? 2
+    : step === 'line-detail' ? 3
+    : step === 'plan' ? 4
+    : 5;
   const needsPlanStep = serviceLines.includes('rush_delivery');
 
   return (
@@ -114,7 +140,7 @@ export function FleetOwnerSignupComplete({ fromRoamdriver }: { fromRoamdriver?: 
         </p>
 
         <div className="mt-6 flex justify-center gap-2">
-          {[0, 1, 2, 3].map((i) => (
+          {[0, 1, 2, 3, 4, 5].map((i) => (
             <div
               key={i}
               className={`h-1.5 w-8 rounded-full transition-colors ${
@@ -146,10 +172,35 @@ export function FleetOwnerSignupComplete({ fromRoamdriver }: { fromRoamdriver?: 
               type="button"
               className="w-full bg-indigo-600 hover:bg-indigo-700"
               disabled={!companyName.trim()}
-              onClick={() => setStep('service-lines')}
+              onClick={() => setStep('company-detail')}
             >
               Continue
             </Button>
+          </div>
+        )}
+
+        {step === 'company-detail' && (
+          <div className="mt-6 space-y-4">
+            <div>
+              <Label htmlFor="trading-name">Trading name (optional)</Label>
+              <Input id="trading-name" value={tradingName} onChange={(e) => setTradingName(e.target.value)} className="mt-1.5" />
+            </div>
+            <div>
+              <Label htmlFor="parish">Parish</Label>
+              <Input id="parish" value={parish} onChange={(e) => setParish(e.target.value)} placeholder="e.g. Kingston" className="mt-1.5" />
+            </div>
+            <div>
+              <Label htmlFor="contact-phone">Contact phone</Label>
+              <Input id="contact-phone" value={contactPhone} onChange={(e) => setContactPhone(e.target.value)} className="mt-1.5" />
+            </div>
+            <div>
+              <Label htmlFor="trn">TRN / GCT (optional)</Label>
+              <Input id="trn" value={trn} onChange={(e) => setTrn(e.target.value)} className="mt-1.5" />
+            </div>
+            <div className="flex gap-2">
+              <Button type="button" variant="outline" className="flex-1" onClick={() => setStep('company')}>Back</Button>
+              <Button type="button" className="flex-1 bg-indigo-600 hover:bg-indigo-700" onClick={() => setStep('service-lines')}>Continue</Button>
+            </div>
           </div>
         )}
 
@@ -195,16 +246,53 @@ export function FleetOwnerSignupComplete({ fromRoamdriver }: { fromRoamdriver?: 
               </p>
             )}
             <div className="flex gap-2">
-              <Button type="button" variant="outline" className="flex-1" onClick={() => setStep('company')}>
+              <Button type="button" variant="outline" className="flex-1" onClick={() => setStep('company-detail')}>
                 Back
               </Button>
               <Button
                 type="button"
                 className="flex-1 bg-indigo-600 hover:bg-indigo-700"
-                onClick={() => setStep(needsPlanStep ? 'plan' : 'owner')}
+                onClick={() => setStep('line-detail')}
               >
                 Continue
               </Button>
+            </div>
+          </div>
+        )}
+
+        {step === 'line-detail' && (
+          <div className="mt-6 space-y-4">
+            {serviceLines.includes('rideshare') && (
+              <>
+                <div>
+                  <Label htmlFor="platforms">Rideshare platforms</Label>
+                  <Input id="platforms" value={ridesharePlatforms} onChange={(e) => setRidesharePlatforms(e.target.value)} placeholder="Uber, inDrive, Roam…" className="mt-1.5" />
+                </div>
+                <div>
+                  <Label htmlFor="fleet-size">Fleet size (drivers)</Label>
+                  <Input id="fleet-size" value={fleetSize} onChange={(e) => setFleetSize(e.target.value)} className="mt-1.5" />
+                </div>
+              </>
+            )}
+            {serviceLines.includes('rush_delivery') && (
+              <>
+                <div>
+                  <Label htmlFor="delivery-parishes">Parishes served</Label>
+                  <Input id="delivery-parishes" value={deliveryParishes} onChange={(e) => setDeliveryParishes(e.target.value)} className="mt-1.5" />
+                </div>
+                <div>
+                  <Label htmlFor="courier-count">Courier count</Label>
+                  <Input id="courier-count" value={courierCount} onChange={(e) => setCourierCount(e.target.value)} className="mt-1.5" />
+                </div>
+                <div>
+                  <Label htmlFor="vehicle-types">Vehicle types</Label>
+                  <Input id="vehicle-types" value={vehicleTypes} onChange={(e) => setVehicleTypes(e.target.value)} placeholder="car, bike, bicycle" className="mt-1.5" />
+                </div>
+              </>
+            )}
+            <div className="flex gap-2">
+              <Button type="button" variant="outline" className="flex-1" onClick={() => setStep('service-lines')}>Back</Button>
+              <Button type="button" className="flex-1 bg-indigo-600 hover:bg-indigo-700" onClick={() => setStep(needsPlanStep ? 'plan' : 'owner')}>Continue</Button>
             </div>
           </div>
         )}

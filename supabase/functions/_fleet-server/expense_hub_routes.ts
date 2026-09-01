@@ -27,6 +27,7 @@ import {
   recordExpenseInputTax,
   reverseExpenseInputTax,
 } from "../_shared/gctInputLedger.ts";
+import { stampServiceLineFromTripLink } from "./service_line_attribution.ts";
 import type { FixedExpenseConfig } from "../../../apps/fleet/src/types/expenses.ts";
 import type {
   ExpenseDocument,
@@ -570,9 +571,16 @@ export function registerExpenseHubRoutes(app: {
         { ...next, status: "approved" },
         getOrgId(c) || "",
       );
+      const docTripId =
+        (next as Record<string, unknown>).tripId ??
+        ((next as Record<string, unknown>).metadata as Record<string, unknown> | undefined)?.tripId;
+      const stampedJournal = await stampServiceLineFromTripLink(
+        journal as unknown as Record<string, unknown>,
+        { tripId: docTripId ? String(docTripId) : undefined },
+      );
       await kv.set(
         `expense_journal:${journal.id}`,
-        stampOrg(journal as unknown as Record<string, unknown>, c),
+        stampOrg(stampedJournal as unknown as Record<string, unknown>, c),
       );
       await appendHubDocumentLedger(c, next);
       next.status = "posted";

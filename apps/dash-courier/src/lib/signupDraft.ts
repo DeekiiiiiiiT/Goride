@@ -1,3 +1,5 @@
+export type WorkforceChoice = 'independent' | 'join_fleet';
+
 export type SignupDraft = {
   countryCode: string;
   phone: string;
@@ -10,6 +12,7 @@ export type SignupDraft = {
   color: string;
   equipmentPhotoUrl?: string;
   profilePhotoUrl?: string;
+  workforceChoice?: WorkforceChoice;
 };
 
 const STORAGE_KEY = 'roam-dash-courier-signup-draft';

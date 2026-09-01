@@ -26,6 +26,10 @@ import {
 import { foldPayoutCashByWeek } from "../../../packages/finance-core/src/payoutCashDedupe.ts";
 import { periodKeyFor } from "../../../packages/finance-core/src/periodKey.ts";
 import {
+  inferTripServiceLine as inferTripServiceLineFromRecord,
+  allocateSharedCostsByTripMix,
+} from "./service_line_attribution.ts";
+import {
   STATUS_CASH_HELD_EPS,
 } from "../../../packages/finance-core/src/money.ts";
 import { derivePeriodStatus } from "./period_projector.ts";
@@ -55,6 +59,7 @@ import {
   projectionReadsEventsForFuel,
   projectionReadsEventsForTolls,
 } from "./period_projection_flags.ts";
+import { isFeatureEnabled, FEATURE_FLAGS } from "./feature_flags.ts";
 
 function sb() {
   return createClient(
@@ -207,10 +212,7 @@ type RebuildContext = {
 };
 
 function inferTripServiceLine(trip: Record<string, unknown>): "rideshare" | "rush_delivery" {
-  const explicit = trip.serviceLine ?? trip.service_line;
-  if (explicit === "rush_delivery" || explicit === "rideshare") return explicit;
-  if (String(trip.platform ?? "") === "Roam Rush") return "rush_delivery";
-  return "rideshare";
+  return inferTripServiceLineFromRecord(trip);
 }
 
 function filterTripsForServiceLine(
@@ -219,6 +221,193 @@ function filterTripsForServiceLine(
 ): any[] {
   if (!serviceLine) return trips;
   return trips.filter((t) => inferTripServiceLine(t) === serviceLine);
+}
+
+function buildTripServiceLineMap(trips: any[]): Map<string, "rideshare" | "rush_delivery"> {
+  const map = new Map<string, "rideshare" | "rush_delivery">();
+  for (const t of trips || []) {
+    const id = String(t?.id ?? "");
+    if (id) map.set(id, inferTripServiceLine(t));
+  }
+  return map;
+}
+
+function inferLedgerEntryServiceLine(
+  entry: Record<string, unknown>,
+  tripLineById: Map<string, "rideshare" | "rush_delivery">,
+): "rideshare" | "rush_delivery" {
+  const meta = (entry.metadata as Record<string, unknown>) || {};
+  const explicit = meta.serviceLine ?? meta.service_line ?? entry.serviceLine ?? entry.service_line;
+  if (explicit === "rush_delivery" || explicit === "rideshare") return explicit;
+  const platform = String(meta.platform ?? entry.platform ?? "");
+  if (platform.includes("Roam Rush")) return "rush_delivery";
+  const tripId = String(entry.sourceId ?? entry.tripId ?? meta.tripId ?? "");
+  if (tripId && tripLineById.has(tripId)) return tripLineById.get(tripId)!;
+  return "rideshare";
+}
+
+function filterLedgerEntriesByServiceLine(
+  entries: any[],
+  serviceLine: "rideshare" | "rush_delivery",
+  tripLineById: Map<string, "rideshare" | "rush_delivery">,
+): any[] {
+  return (entries || []).filter(
+    (e) => inferLedgerEntryServiceLine(e as Record<string, unknown>, tripLineById) === serviceLine,
+  );
+}
+
+type CommissionShareResult = ReturnType<typeof computeWeekCommissionShare>;
+
+function computeCommissionShareForRebuild(
+  context: RebuildContext,
+  driverId: string,
+  periodAnchor: string,
+  periodEnd: string,
+  timezone: string,
+  excludeRushDelivery: boolean,
+): { share: CommissionShareResult; serviceLineBreakdown: Record<string, unknown> } {
+  const tripLineById = buildTripServiceLineMap(context.scopedTrips || []);
+  const serviceLines: Array<"rideshare" | "rush_delivery"> = excludeRushDelivery
+    ? ["rideshare"]
+    : ["rideshare", "rush_delivery"];
+
+  if (context.filterServiceLine) {
+    const bundleEH = resolveActiveEarningsBundleForDriverWeek({
+      policies: context.earningsPolicies || [],
+      driverId,
+      weekStartYmd: periodAnchor,
+      legacy: context.legacyEarnings,
+      serviceLine: context.filterServiceLine,
+    });
+    const share = computeWeekCommissionShare({
+      fareEntries: context.fareEntries || [],
+      tipEntries: context.tipEntries || [],
+      periodAnchor,
+      periodEnd,
+      tiers: bundleEH.tiers || context.legacyEarnings.tiers,
+      quotaConfig: bundleEH.quotas || context.legacyEarnings.quotas,
+      timezone,
+    });
+    return {
+      share,
+      serviceLineBreakdown: {
+        [context.filterServiceLine]: {
+          earningsGross: share.earningsGross,
+          driverShare: share.driverShare,
+          fleetShare: share.fleetShare,
+          tripCount: share.tripCount,
+          tierName: share.tierName,
+          driverSharePercent: share.driverSharePercent,
+        },
+      },
+    };
+  }
+
+  const combined: CommissionShareResult = {
+    grossRevenue: 0,
+    tips: 0,
+    earningsGross: 0,
+    tripCount: 0,
+    driverShare: 0,
+    fleetShare: 0,
+    driverSharePercent: 0,
+    tierId: "combined",
+    tierName: "Combined",
+    quotaTarget: null,
+    quotaPercent: null,
+    quotaMet: false,
+    tipsPaidToDriver: 0,
+    tipsWithheld: 0,
+  };
+  const serviceLineBreakdown: Record<string, unknown> = {};
+
+  for (const line of serviceLines) {
+    const bundleEH = resolveActiveEarningsBundleForDriverWeek({
+      policies: context.earningsPolicies || [],
+      driverId,
+      weekStartYmd: periodAnchor,
+      legacy: context.legacyEarnings,
+      serviceLine: line,
+    });
+    const fares = filterLedgerEntriesByServiceLine(context.fareEntries || [], line, tripLineById);
+    const tips = filterLedgerEntriesByServiceLine(context.tipEntries || [], line, tripLineById);
+    const share = computeWeekCommissionShare({
+      fareEntries: fares,
+      tipEntries: tips,
+      periodAnchor,
+      periodEnd,
+      tiers: bundleEH.tiers || context.legacyEarnings.tiers,
+      quotaConfig: bundleEH.quotas || context.legacyEarnings.quotas,
+      timezone,
+    });
+
+    if (share.tripCount === 0 && share.earningsGross < 0.005) continue;
+
+    serviceLineBreakdown[line] = {
+      earningsGross: share.earningsGross,
+      driverShare: share.driverShare,
+      fleetShare: share.fleetShare,
+      tripCount: share.tripCount,
+      tierName: share.tierName,
+      driverSharePercent: share.driverSharePercent,
+    };
+
+    combined.grossRevenue = round2(combined.grossRevenue + share.grossRevenue);
+    combined.tips = round2(combined.tips + share.tips);
+    combined.earningsGross = round2(combined.earningsGross + share.earningsGross);
+    combined.tripCount += share.tripCount;
+    combined.driverShare = round2(combined.driverShare + share.driverShare);
+    combined.fleetShare = round2(combined.fleetShare + share.fleetShare);
+    combined.tipsPaidToDriver = round2(combined.tipsPaidToDriver + share.tipsPaidToDriver);
+    combined.tipsWithheld = round2(combined.tipsWithheld + share.tipsWithheld);
+  }
+
+  // Trip fallback when no ledger fare rows — per line with correct tiers
+  if (!projectionReadsEventsForFares() && combined.earningsGross < 0.005 && combined.tripCount === 0) {
+    for (const line of serviceLines) {
+      const bundleEH = resolveActiveEarningsBundleForDriverWeek({
+        policies: context.earningsPolicies || [],
+        driverId,
+        weekStartYmd: periodAnchor,
+        legacy: context.legacyEarnings,
+        serviceLine: line,
+      });
+      let tripGross = 0;
+      let nTrips = 0;
+      for (const t of context.scopedTrips) {
+        if (inferTripServiceLine(t) !== line) continue;
+        const d = String(t.date || "").slice(0, 10);
+        if (!(d >= periodAnchor && d <= periodEnd)) continue;
+        const status = String(t.status || "").toLowerCase();
+        if (status.includes("cancel")) continue;
+        tripGross += Math.abs(Number(t.amount) || 0);
+        nTrips++;
+      }
+      if (tripGross <= 0.005) continue;
+      const tier = (bundleEH.tiers || context.legacyEarnings.tiers || [])[0];
+      const pct = Number(tier?.sharePercentage) || 25;
+      const driverShare = round2(tripGross * (pct / 100));
+      const fleetShare = round2(tripGross - driverShare);
+      serviceLineBreakdown[line] = {
+        earningsGross: round2(tripGross),
+        driverShare,
+        fleetShare,
+        tripCount: nTrips,
+        tierName: String(tier?.name || "Default"),
+        driverSharePercent: pct,
+      };
+      combined.earningsGross = round2(combined.earningsGross + tripGross);
+      combined.tripCount += nTrips;
+      combined.driverShare = round2(combined.driverShare + driverShare);
+      combined.fleetShare = round2(combined.fleetShare + fleetShare);
+      combined.grossRevenue = round2(combined.grossRevenue + tripGross);
+      combined.driverSharePercent = pct;
+      combined.tierId = String(tier?.id || "tier_fallback");
+      combined.tierName = "Combined";
+    }
+  }
+
+  return { share: combined, serviceLineBreakdown };
 }
 
 function periodMetadataMatchesServiceLine(
@@ -714,23 +903,20 @@ export async function rebuildDriverFinancialPeriod(
     }
   }
 
-  // Commission Driver Share — same tier math as /ledger/driver-earnings-history
-  const bundleEH = resolveActiveEarningsBundleForDriverWeek({
-    policies: context.earningsPolicies || [],
+  // Commission Driver Share — per-line tiers merged into one combined statement (G14)
+  const rushSettlementOn = context.organizationId
+    ? await isFeatureEnabled(FEATURE_FLAGS.RUSH_SETTLEMENT, context.organizationId)
+    : false;
+  const excludeRushDelivery = !context.filterServiceLine && !rushSettlementOn;
+
+  const { share, serviceLineBreakdown } = computeCommissionShareForRebuild(
+    context,
     driverId,
-    weekStartYmd: periodAnchor,
-    legacy: context.legacyEarnings,
-    serviceLine: context.filterServiceLine,
-  });
-  const share = computeWeekCommissionShare({
-    fareEntries: context.fareEntries || [],
-    tipEntries: context.tipEntries || [],
     periodAnchor,
     periodEnd,
-    tiers: bundleEH.tiers || context.legacyEarnings.tiers,
-    quotaConfig: bundleEH.quotas || context.legacyEarnings.quotas,
     timezone,
-  });
+    excludeRushDelivery,
+  );
   let earningsGross = share.earningsGross;
   let driverShare = share.driverShare;
   let fleetShare = share.fleetShare;
@@ -738,31 +924,6 @@ export async function rebuildDriverFinancialPeriod(
   let tripCount = share.tripCount;
   let tierId: string | null = share.tierId;
   let tierName: string | null = share.tierName;
-
-  // Trip fallback when no ledger fare_earning rows yet — off when fares-events flag is on.
-  if (!projectionReadsEventsForFares() && earningsGross < 0.005 && tripCount === 0) {
-    let tripGross = 0;
-    let nTrips = 0;
-    for (const t of context.scopedTrips) {
-      const d = String(t.date || "").slice(0, 10);
-      if (!(d >= periodAnchor && d <= periodEnd)) continue;
-      const status = String(t.status || "").toLowerCase();
-      if (status.includes("cancel")) continue;
-      tripGross += Math.abs(Number(t.amount) || 0);
-      nTrips++;
-    }
-    if (tripGross > 0.005) {
-      earningsGross = round2(tripGross);
-      tripCount = nTrips;
-      const tier = (bundleEH.tiers || context.legacyEarnings.tiers || [])[0];
-      const pct = Number(tier?.sharePercentage) || 25;
-      driverSharePercent = pct;
-      driverShare = round2(tripGross * (pct / 100));
-      fleetShare = round2(tripGross - driverShare);
-      tierId = String(tier?.id || "tier_fallback");
-      tierName = String(tier?.name || "Default");
-    }
-  }
 
   // Settlement cash base — passenger cash + Settlement-Week Log Cash
   const cashBase = computeWeekCashBase({
@@ -861,6 +1022,13 @@ export async function rebuildDriverFinancialPeriod(
     else rideshareTripCount++;
   }
 
+  const sharedCostAllocation = allocateSharedCostsByTripMix(
+    (context.scopedTrips || []) as Record<string, unknown>[],
+    periodAnchor,
+    periodEnd,
+    (trip) => fleetCalendarDay(String(trip.dropoffTime || trip.date || ""), timezone),
+  );
+
   const periodMetadata = {
     ...buildPeriodMetadata({
     priorMeta,
@@ -903,6 +1071,8 @@ export async function rebuildDriverFinancialPeriod(
     }),
     rushTripCount,
     rideshareTripCount,
+    serviceLineBreakdown,
+    sharedCostAllocation,
   };
 
   const row: DriverFinancialPeriodRow = {
