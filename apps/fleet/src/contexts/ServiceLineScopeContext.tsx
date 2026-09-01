@@ -1,5 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import { useBusinessConfig } from '../components/auth/BusinessConfigContext';
+import { useBusinessConfig, type ServiceLine } from '../components/auth/BusinessConfigContext';
+import { useFeatureFlags } from '../components/auth/FeatureFlagContext';
 
 export type ServiceLineScope = 'all' | 'rideshare' | 'rush_delivery';
 
@@ -8,17 +9,16 @@ const STORAGE_KEY = 'roam_fleet_service_line_scope';
 interface ServiceLineScopeContextValue {
   scope: ServiceLineScope;
   setScope: (scope: ServiceLineScope) => void;
-  /** True when org runs both rideshare and rush delivery — show header switcher. */
+  serviceLines: ServiceLine[];
   showScopeSwitcher: boolean;
-  /** Rush nav/pages visible for current scope. */
   rushVisible: boolean;
-  /** Rideshare nav/pages visible for current scope. */
   rideshareVisible: boolean;
 }
 
 const ServiceLineScopeContext = createContext<ServiceLineScopeContextValue>({
   scope: 'rideshare',
   setScope: () => {},
+  serviceLines: ['rideshare'],
   showScopeSwitcher: false,
   rushVisible: false,
   rideshareVisible: true,
@@ -34,14 +34,29 @@ function readStoredScope(): ServiceLineScope | null {
   return null;
 }
 
-function defaultScopeForLines(lines: Array<'rideshare' | 'rush_delivery'>): ServiceLineScope {
+function mergeServiceLines(
+  a: ServiceLine[],
+  b: ServiceLine[],
+): ServiceLine[] {
+  const merged = new Set<ServiceLine>([...a, ...b]);
+  return merged.size ? [...merged] : ['rideshare'];
+}
+
+function defaultScopeForLines(lines: ServiceLine[]): ServiceLineScope {
   if (lines.includes('rideshare') && lines.includes('rush_delivery')) return 'all';
   if (lines.includes('rush_delivery')) return 'rush_delivery';
   return 'rideshare';
 }
 
 export function ServiceLineScopeProvider({ children }: { children: React.ReactNode }) {
-  const { serviceLines, isLoading } = useBusinessConfig();
+  const { serviceLines: configLines, isLoading: configLoading } = useBusinessConfig();
+  const { serviceLines: moduleLines, loading: modulesLoading } = useFeatureFlags();
+  const serviceLines = useMemo(
+    () => mergeServiceLines(configLines, moduleLines),
+    [configLines, moduleLines],
+  );
+  const isLoading = configLoading || modulesLoading;
+
   const showScopeSwitcher =
     serviceLines.includes('rideshare') && serviceLines.includes('rush_delivery');
 
@@ -84,8 +99,8 @@ export function ServiceLineScopeProvider({ children }: { children: React.ReactNo
   }, [serviceLines, showScopeSwitcher, scope]);
 
   const value = useMemo(
-    () => ({ scope, setScope, showScopeSwitcher, rushVisible, rideshareVisible }),
-    [scope, setScope, showScopeSwitcher, rushVisible, rideshareVisible],
+    () => ({ scope, setScope, serviceLines, showScopeSwitcher, rushVisible, rideshareVisible }),
+    [scope, setScope, serviceLines, showScopeSwitcher, rushVisible, rideshareVisible],
   );
 
   return (

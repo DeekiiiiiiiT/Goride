@@ -684,13 +684,13 @@ export default function App() {
             <AuthProvider>
               <OfflineProvider>
                 <BusinessConfigProvider>
-                  <ServiceLineScopeProvider>
-                    <PlatformConfigProvider>
-                      <FeatureFlagProvider>
+                  <PlatformConfigProvider>
+                    <FeatureFlagProvider>
+                      <ServiceLineScopeProvider>
                         <AppContent />
-                      </FeatureFlagProvider>
-                    </PlatformConfigProvider>
-                  </ServiceLineScopeProvider>
+                      </ServiceLineScopeProvider>
+                    </FeatureFlagProvider>
+                  </PlatformConfigProvider>
                 </BusinessConfigProvider>
               </OfflineProvider>
             </AuthProvider>

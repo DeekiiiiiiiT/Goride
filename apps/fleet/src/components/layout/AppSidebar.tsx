@@ -33,7 +33,6 @@ import { useVocab } from '../../utils/vocabulary';
 import { isSidebarItemVisible } from '../../utils/businessTypes';
 import { usePermissions } from '../../hooks/usePermissions';
 import { useFeatureFlags } from '../auth/FeatureFlagContext';
-import { useBusinessConfig } from '../auth/BusinessConfigContext';
 import { useServiceLineScope } from '../../contexts/ServiceLineScopeContext';
 import { NavItem } from './nav/NavItem';
 import { NavSection } from './nav/NavSection';
@@ -81,8 +80,7 @@ export function AppSidebar({
   const { v, businessType } = useVocab();
   const { canView, can } = usePermissions();
   const { isModuleEnabled } = useFeatureFlags();
-  const { serviceLines } = useBusinessConfig();
-  const { rushVisible, rideshareVisible } = useServiceLineScope();
+  const { serviceLines, rushVisible, rideshareVisible } = useServiceLineScope();
   const { isMobile, setOpenMobile } = useSidebar();
 
   const hasRushDeliveryLine = serviceLines.includes('rush_delivery');
@@ -125,18 +123,18 @@ export function AppSidebar({
       canView('maintenance-hub') ||
       canView('fleet'));
   const canSeeCourierOps =
-    rushVisible &&
     hasRushDeliveryLine &&
-    (isModuleEnabled('rush_couriers') ||
-      isModuleEnabled('rush_deliveries') ||
-      isModuleEnabled('rush_courier_settlements') ||
-      isModuleEnabled('rush_supply_health')) &&
     (canView('couriers') ||
       canView('courier-analytics') ||
       canView('deliveries') ||
       canView('delivery-analytics') ||
       canView('courier-settlements') ||
-      canView('supply-health'));
+      canView('supply-health')) &&
+    (isModuleEnabled('rush_couriers') ||
+      isModuleEnabled('rush_deliveries') ||
+      isModuleEnabled('rush_courier_settlements') ||
+      isModuleEnabled('rush_supply_health') ||
+      hasRushDeliveryLine);
   const canSeeSystem = canView('user-management') || canView('settings');
 
   // Accordion only for Fleet Ops (has mid-level Fuel/Toll desks)
@@ -260,7 +258,6 @@ export function AppSidebar({
       label: 'Driver Settlements',
     },
     canView('courier-settlements') &&
-      rushVisible &&
       hasRushDeliveryLine &&
       isModuleEnabled('rush_courier_settlements') && {
         id: 'courier-settlements',
@@ -277,9 +274,9 @@ export function AppSidebar({
   ].filter(Boolean) as NavLeaf[];
 
   const courierItems: NavLeaf[] = [
-    isModuleEnabled('rush_couriers') &&
+    (isModuleEnabled('rush_couriers') || hasRushDeliveryLine) &&
       canView('couriers') && { id: 'couriers', label: 'Couriers' },
-    isModuleEnabled('rush_couriers') &&
+    (isModuleEnabled('rush_couriers') || hasRushDeliveryLine) &&
       canView('courier-analytics') && {
         id: 'courier-analytics',
         label: 'Courier Analytics',
@@ -289,14 +286,14 @@ export function AppSidebar({
           </Badge>
         ),
       },
-    isModuleEnabled('rush_deliveries') &&
+    (isModuleEnabled('rush_deliveries') || hasRushDeliveryLine) &&
       canView('deliveries') && { id: 'deliveries', label: 'Deliveries' },
-    isModuleEnabled('rush_deliveries') &&
+    (isModuleEnabled('rush_deliveries') || hasRushDeliveryLine) &&
       canView('delivery-analytics') && {
         id: 'delivery-analytics',
         label: 'Delivery Analytics',
       },
-    isModuleEnabled('rush_supply_health') &&
+    (isModuleEnabled('rush_supply_health') || hasRushDeliveryLine) &&
       canView('supply-health') && { id: 'supply-health', label: 'Supply Health' },
   ].filter(Boolean) as NavLeaf[];
 

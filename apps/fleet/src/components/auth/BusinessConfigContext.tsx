@@ -5,6 +5,7 @@ import { api } from '../../services/api';
 import { supabase } from '../../utils/supabase/client';
 import { API_ENDPOINTS, publicAnonKey } from '@roam/api-client';
 import { withProductLineHeaders } from '../../config/productLine';
+import { useAuth } from './AuthContext';
 
 export type ServiceLine = 'rideshare' | 'rush_delivery';
 
@@ -38,6 +39,7 @@ function normalizeServiceLines(raw: unknown): ServiceLine[] {
 }
 
 export function BusinessConfigProvider({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth();
   const [businessType, setBusinessTypeState] = useState<BusinessType>(DEFAULT_BUSINESS_TYPE);
   const [serviceLines, setServiceLines] = useState<ServiceLine[]>(['rideshare']);
   const [isLoading, setIsLoading] = useState(true);
@@ -114,7 +116,7 @@ export function BusinessConfigProvider({ children }: { children: React.ReactNode
     }
 
     void loadBusinessConfig();
-  }, [reloadToken]);
+  }, [reloadToken, user?.id]);
 
   const setBusinessType = (type: BusinessType) => {
     if (isValidBusinessType(type)) {

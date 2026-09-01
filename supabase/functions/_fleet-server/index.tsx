@@ -14954,7 +14954,15 @@ app.get("/make-server-37f42386/enterprise/me/modules", requireAuth(), async (c) 
       ...((settings?.enabledModules as Record<string, boolean>) || {}),
     };
     const orgOverrides = (org.enabled_modules as Record<string, boolean> | null) || null;
-    const effectiveModules = resolveEffectiveModules(productLineModules, orgOverrides);
+    let effectiveModules = resolveEffectiveModules(productLineModules, orgOverrides);
+    // Belt-and-suspenders: explicit org Rush purchases always on.
+    if (orgOverrides) {
+      for (const [key, value] of Object.entries(orgOverrides)) {
+        if (key.startsWith('rush_') && value === true) {
+          effectiveModules = { ...effectiveModules, [key]: true };
+        }
+      }
+    }
 
     return c.json({
       orgId,

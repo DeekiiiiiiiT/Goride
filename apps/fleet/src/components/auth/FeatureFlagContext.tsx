@@ -2,7 +2,6 @@ import React, { createContext, useContext, useEffect, useState, useCallback, use
 import { API_ENDPOINTS, publicAnonKey } from '@roam/api-client';
 import {
   allModulesOff,
-  isModuleEnabled as checkModule,
   mergeFleetEffectiveModules,
   DEFAULT_FLEET_ENABLED_MODULES,
   type ModuleKey,
@@ -41,6 +40,12 @@ const FeatureFlagContext = createContext<FeatureFlagContextValue>({
   refresh: () => {},
 });
 
+function rushModulesFromOrg(orgOverrides: Record<string, boolean>): Record<string, boolean> {
+  return Object.fromEntries(
+    Object.entries(orgOverrides).filter(([k, v]) => k.startsWith('rush_') && v === true),
+  );
+}
+
 function mergeWithLegacyFleetDefaults(effective: Record<string, boolean>): Record<string, boolean> {
   const withRush = mergeFleetEffectiveModules(effective);
   const out: Record<string, boolean> = { ...LEGACY_FLEET_DEFAULTS };
@@ -64,6 +69,7 @@ export function FeatureFlagProvider({ children }: { children: React.ReactNode })
   const [serviceLines, setServiceLines] = useState<Array<'rideshare' | 'rush_delivery'>>(['rideshare']);
   const [loading, setLoading] = useState(true);
   const lastKnownRef = useRef<Record<string, boolean> | null>(null);
+  const orgOverridesRef = useRef<Record<string, boolean>>({});
   const userId = user?.id ?? null;
 
   const fetchPreLoginShell = useCallback(async () => {
@@ -118,9 +124,16 @@ export function FeatureFlagProvider({ children }: { children: React.ReactNode })
         ? data.serviceLines.filter((s: string) => s === 'rideshare' || s === 'rush_delivery')
         : ['rideshare'];
       if (lines.length) setServiceLines(lines as Array<'rideshare' | 'rush_delivery'>);
+
+      // Rush add-ons: org purchased modules must win over platform defaults (fail-closed catalog).
+      const orgOverrides = (data.orgOverrides || {}) as Record<string, boolean>;
+      orgOverridesRef.current = orgOverrides;
+      const rushPurchased = rushModulesFromOrg(orgOverrides);
+
       const next = mergeWithLegacyFleetDefaults({
         ...allModulesOff(),
         ...(data.effectiveModules || {}),
+        ...rushPurchased,
       });
       lastKnownRef.current = next;
       setEnabledModules(next);
@@ -145,7 +158,9 @@ export function FeatureFlagProvider({ children }: { children: React.ReactNode })
   const isModuleEnabled = useCallback(
     (module: FleetLegacyModuleKey | ModuleKey | string) => {
       if (module.startsWith('rush_')) {
-        return checkModule(enabledModules, module) === true;
+        if (enabledModules[module] === true) return true;
+        if (orgOverridesRef.current[module] === true) return true;
+        return false;
       }
       return enabledModules[module] !== false;
     },
