@@ -50,6 +50,8 @@ export type DriverFinancialPeriodClient = {
   settlementStatus: string;
   payoutStatus: string;
   tollStatus: string;
+  tipsPaidToDriver?: number;
+  tipsWithheld?: number;
   sourceEventHash?: string;
   projectionVersion?: number;
   projectedAt?: string;
@@ -86,10 +88,34 @@ export function useInvalidateDriverFinancialPeriods() {
 
 function mapPayoutStatus(p: DriverFinancialPeriodClient): PayoutStatus {
   const s = String(p.payoutStatus || '').toLowerCase();
+  const st = String(p.settlementStatus || '').toLowerCase();
+  if (st === 'overpaid') return 'Overpaid';
   if (s === 'finalized') return 'Finalized';
   if (s === 'awaiting_cash') return 'Awaiting Cash';
-  if (p.fuelFinalized) return Number(p.cashStillHeld) > 0.5 ? 'Awaiting Cash' : 'Finalized';
+  if (s === 'awaiting_tolls') return 'Awaiting Tolls';
+  const tollsClear =
+    (String(p.tollStatus || '').toLowerCase() === 'reconciled' ||
+      String(p.tollStatus || '').toLowerCase() === 'n/a') &&
+    Number(p.tollWorkflowActionable || 0) === 0 &&
+    Number(p.tollUnmatchedCount || 0) === 0;
+  const force =
+    !!(p.metadata as any)?.forceRelease?.at || !!(p.metadata as any)?.forceReleasedAt;
+  if (p.fuelFinalized && (tollsClear || force)) {
+    return Number(p.cashStillHeld) > 0.5 ? 'Awaiting Cash' : 'Finalized';
+  }
+  if (p.fuelFinalized && !tollsClear) return 'Awaiting Tolls';
   return 'Pending';
+}
+
+function periodMoneyUnlocked(p: DriverFinancialPeriodClient): boolean {
+  const tollsClear =
+    (String(p.tollStatus || '').toLowerCase() === 'reconciled' ||
+      String(p.tollStatus || '').toLowerCase() === 'n/a') &&
+    Number(p.tollWorkflowActionable || 0) === 0 &&
+    Number(p.tollUnmatchedCount || 0) === 0;
+  const force =
+    !!(p.metadata as any)?.forceRelease?.at || !!(p.metadata as any)?.forceReleasedAt;
+  return (!!p.fuelFinalized && tollsClear) || force;
 }
 
 /** Build Settlement/Payout weekly rows directly from the shared period projection. */
@@ -131,8 +157,8 @@ export function periodsToPayoutPeriodRows(
         totalDeductions: fuelDeduction,
         expenseDeductions,
         netPayout,
-        isFinalized: !!p.fuelFinalized,
-        isEstimate: !p.fuelFinalized,
+        isFinalized: periodMoneyUnlocked(p),
+        isEstimate: !periodMoneyUnlocked(p),
         tripCount: Number(p.tripCount) || 0,
         tierName: p.tierName || 'Default',
         cashOwed: passengerCash,
@@ -143,6 +169,9 @@ export function periodsToPayoutPeriodRows(
         personalTollCharge: tollPersonal,
         cashWrittenOff,
         settlementPaid,
+        tipsPaidToDriver: Number(p.tipsPaidToDriver) || Number((p.metadata as any)?.financeCore?.tipsPaidToDriver) || 0,
+        tipsWithheld: Number(p.tipsWithheld) || Number((p.metadata as any)?.financeCore?.tipsWithheld) || 0,
+        fleetShare: Number(p.fleetShare) || 0,
         bankSettled: 0,
         status: mapPayoutStatus(p),
         cashPaidBreakdown: {
@@ -210,18 +239,20 @@ export function overlaySharedPeriodsOntoPayoutRows<T extends {
       cashTollWash: Number(p.tollCashSpend) || 0,
       cashWrittenOff: Number(p.cashWrittenOff) || 0,
       settlementPaid: Number(p.settlementPaid) || 0,
-      fuelDeduction: Number(p.fuelDeduction) || row.fuelDeduction,
-      fuelCredits: Number(p.fuelFleetShare) || row.fuelCredits,
-      isFinalized: p.fuelFinalized ? true : row.isFinalized,
-      driverShare: Number(p.driverShare) || row.driverShare,
-      grossRevenue: Number(p.earningsGross) || row.grossRevenue,
-      netPayout: Number(p.payoutNet) || row.netPayout,
+      fuelDeduction: Number.isFinite(Number(p.fuelDeduction)) ? Number(p.fuelDeduction) : row.fuelDeduction,
+      fuelCredits: Number.isFinite(Number(p.fuelFleetShare)) ? Number(p.fuelFleetShare) : row.fuelCredits,
+      isFinalized: periodMoneyUnlocked(p) ? true : row.isFinalized,
+      driverShare: Number.isFinite(Number(p.driverShare)) ? Number(p.driverShare) : row.driverShare,
+      grossRevenue: Number.isFinite(Number(p.earningsGross)) ? Number(p.earningsGross) : row.grossRevenue,
+      netPayout: Number.isFinite(Number(p.payoutNet)) ? Number(p.payoutNet) : row.netPayout,
       cashOwed: passengerCash,
       cashPaid,
       cashBalance: Math.round((passengerCash - cashPaid) * 100) / 100,
       passengerCash,
-      tripCount: Number(p.tripCount) || row.tripCount,
-      driverSharePercent: Number(p.driverSharePercent) || row.driverSharePercent,
+      tripCount: Number.isFinite(Number(p.tripCount)) ? Number(p.tripCount) : row.tripCount,
+      driverSharePercent: Number.isFinite(Number(p.driverSharePercent))
+        ? Number(p.driverSharePercent)
+        : row.driverSharePercent,
       tierName: p.tierName || row.tierName,
     };
   });

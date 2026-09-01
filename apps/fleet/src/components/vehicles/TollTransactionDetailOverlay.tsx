@@ -41,7 +41,7 @@ export function TollTransactionDetailOverlay({
 
   // --- Derive transaction type label ---
   const isTopUp = transaction.category === 'Toll Top-up' || transaction.description?.toLowerCase().includes('top-up');
-  const isCashReceipt = transaction.receiptUrl || transaction.paymentMethod === 'Cash' || transaction.description?.toLowerCase().includes('receipt');
+  const isCashReceipt = String(transaction.paymentMethod || '').toLowerCase().includes('cash');
   const isUsage = transaction.category === 'Toll Usage';
   const isRefund = transaction.amount > 0 && !isTopUp;
 
@@ -195,6 +195,11 @@ export function TollTransactionDetailOverlay({
             <div className="grid grid-cols-2 gap-x-4">
               <DetailRow icon={FileText} label="Category" value={transaction.category} />
               <DetailRow icon={CreditCard} label="Payment Method" value={transaction.paymentMethod} />
+              {transaction.receiptUrl ? (
+                <p className="col-span-2 text-[11px] text-slate-500 mt-1 mb-2">
+                  Receipt is proof only — payment method controls settlement cash credit.
+                </p>
+              ) : null}
               <DetailRow icon={DollarSign} label="Amount" value={
                 <span className={`font-bold ${transaction.amount < 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
                   {transaction.amount < 0 ? '-' : '+'}${Math.abs(transaction.amount).toFixed(2)}

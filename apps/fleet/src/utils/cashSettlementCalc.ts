@@ -227,7 +227,7 @@ export function computeWeeklyCashSettlement(input: CashSettlementInput): CashWee
                 if (!t || !t.date) return false;
                 const tDate = new Date(t.date);
                 const isToll = t.category === 'Toll Usage' || t.category === 'Toll' || t.category === 'Tolls';
-                const isCash = t.paymentMethod === 'Cash' || !!t.receiptUrl;
+                const isCash = String(t.paymentMethod || '').toLowerCase().includes('cash');
                 const isResolved = t.status === 'Resolved' || t.status === 'Approved';
                 return isToll && isCash && isResolved && isWithinInterval(tDate, { start: weekStart, end: weekEnd });
             })

@@ -22,7 +22,14 @@ import {
 } from '../../utils/fleetBankReceive';
 import { useAuth } from '../auth/AuthContext';
 
-export type SettlementStatus = 'Settled' | 'Company Owes' | 'Driver Owes' | 'Pending' | 'No Activity';
+export type SettlementStatus =
+  | 'Settled'
+  | 'Company Owes'
+  | 'Driver Owes'
+  | 'Overpaid'
+  | 'Awaiting Tolls'
+  | 'Pending'
+  | 'No Activity';
 
 export interface SettlementRow {
   periodStart: Date;
@@ -57,7 +64,7 @@ export interface SettlementRow {
 }
 
 export function payoutToSettlementRow(row: PayoutPeriodRow): SettlementRow {
-  const { settlement, adjCashBalance } = getPeriodSettlementComponents(row);
+  const { settlement, adjCashBalance, overpaidAmount } = getPeriodSettlementComponents(row);
   const hasActivity =
     row.tripCount > 0 ||
     row.cashOwed > 0.01 ||
@@ -70,8 +77,10 @@ export function payoutToSettlementRow(row: PayoutPeriodRow): SettlementRow {
 
   let settlementStatus: SettlementStatus;
   if (!hasActivity) settlementStatus = 'No Activity';
+  else if (row.status === 'Awaiting Tolls') settlementStatus = 'Awaiting Tolls';
   else if (!row.isFinalized) settlementStatus = 'Pending';
-  else if (Math.abs(settlement) < 1) settlementStatus = 'Settled';
+  else if (overpaidAmount > 0.005 || row.status === 'Overpaid') settlementStatus = 'Overpaid';
+  else if (Math.abs(settlement) < 0.01) settlementStatus = 'Settled';
   else if (settlement > 0) settlementStatus = 'Company Owes';
   else settlementStatus = 'Driver Owes';
 
@@ -256,6 +265,18 @@ export function SettlementSummaryView({
         return (
           <span className="inline-flex items-center gap-1 rounded-full bg-rose-50 px-2 py-0.5 text-[10px] font-medium text-rose-700">
             <ArrowDownCircle className="h-3 w-3" /> Driver Owes
+          </span>
+        );
+      case 'Overpaid':
+        return (
+          <span className="inline-flex items-center gap-1 rounded-full bg-violet-50 px-2 py-0.5 text-[10px] font-medium text-violet-700">
+            <ArrowUpCircle className="h-3 w-3" /> Overpaid
+          </span>
+        );
+      case 'Awaiting Tolls':
+        return (
+          <span className="inline-flex items-center gap-1 rounded-full bg-orange-50 px-2 py-0.5 text-[10px] font-medium text-orange-800">
+            <Clock className="h-3 w-3" /> Awaiting Tolls
           </span>
         );
       case 'Pending':
@@ -590,8 +611,9 @@ export function SettlementSummaryView({
                             </span>
                           </TooltipTrigger>
                           <TooltipContent side="top" className="max-w-[300px] text-xs">
-                            Cash plaza tolls for the week — credits Cash Still Held. Shown separately so Cash
-                            Returned stays the true cash collected figure.
+                            Same dollars as Expenses Cash Tolls — plaza cash spend that credits Cash Still Held.
+                            Personal toll bills are Charged to Driver, not this credit. Synthetic / voided cash is
+                            excluded.
                           </TooltipContent>
                         </Tooltip>
                       </TooltipProvider>

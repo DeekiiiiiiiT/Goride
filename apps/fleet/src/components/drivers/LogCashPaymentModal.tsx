@@ -220,8 +220,23 @@ export function LogCashPaymentModal({
       });
       toast.success(initialTransaction ? "Transaction updated successfully" : "Transaction recorded successfully");
       onClose();
-    } catch (error) {
-      toast.error(initialTransaction ? "Failed to update transaction" : "Failed to record transaction");
+    } catch (error: any) {
+      const msg = String(error?.message || error || "");
+      if (/23514|cash_nonneg|check constraint/i.test(msg)) {
+        toast.error(
+          "Cash was saved in the ledger, but the week didn’t update (cash held can’t go negative). Refresh and check the settlement week.",
+        );
+      } else if (/cash sync|driver_financial|period/i.test(msg)) {
+        toast.error(
+          "Cash logged but the settlement week didn’t update. Refresh the Settlements desk and try again.",
+        );
+      } else {
+        toast.error(
+          initialTransaction
+            ? "Failed to update transaction"
+            : "Failed to record transaction — the week may not have moved.",
+        );
+      }
       console.error(error);
     } finally {
       setIsSubmitting(false);

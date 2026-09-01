@@ -13,8 +13,9 @@ export type PayoutCashLike = {
 
 /**
  * One payout_cash figure per remittance per week.
- * Distinct source keys (file-hash / batch line) are kept even if day+amount match.
- * Untagged same-day same-amount twins of a tagged row are still collapsed (C1 safety).
+ * Distinct source keys (file-hash / batch line / id) are always kept.
+ * Same-day same-amount collapse applies only when both rows lack an id key
+ * (and untagged no-id twins of an already-accepted amtKey are still collapsed).
  */
 export function foldPayoutCashByWeek(
   events: PayoutCashLike[],
@@ -42,10 +43,9 @@ export function foldPayoutCashByWeek(
     if (idKey) {
       if (seenId.has(idKey)) continue;
       seenId.add(idKey);
+    } else {
+      if (seenAmt.has(amtKey)) continue;
     }
-    const tagged = Boolean(String(e.driverId || '').trim());
-    if (seenAmt.has(amtKey) && !tagged) continue;
-    if (!idKey && seenAmt.has(amtKey)) continue;
     seenAmt.add(amtKey);
     const week = periodKeyFor(e, fleetTz);
     if (!week) continue;

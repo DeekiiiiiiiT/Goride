@@ -189,6 +189,55 @@ describe('tollLedgerIntegrity', () => {
     expect(isTollQuarantined(row)).toBe(false);
   });
 
+  it('does not quarantine real plaza when only merchantHighway is Transjam', () => {
+    const row = {
+      paymentMethod: 'cash',
+      batchId: null,
+      plaza: 'Portmore West',
+      vendor: 'Portmore West',
+      tripId: null,
+      metadata: {
+        plaza: 'Portmore West',
+        merchantHighway: 'Transjam Highways',
+        highway: 'TransJamaica Highways',
+      },
+    };
+    expect(matchesSyntheticCashTollSignature(row)).toBe(false);
+    expect(isTollIncludedInSpend(row)).toBe(true);
+  });
+
+  it('does not quarantine Aug-24-style cleaned cash with real plaza + receipt metadata', () => {
+    const row = {
+      paymentMethod: 'Cash',
+      batchId: null,
+      plaza: 'Vineyards East',
+      vendor: 'Vineyards East',
+      receiptUrl: 'https://example.com/receipt.jpg',
+      metadata: {
+        plaza: 'Vineyards East',
+        ledgerPlaza: 'Vineyards East',
+        merchantHighway: 'Transjam Highways',
+      },
+    };
+    expect(matchesSyntheticCashTollSignature(row)).toBe(false);
+    expect(isTollIncludedInSpend(row)).toBe(true);
+  });
+
+  it('still quarantines highway-as-display plaza with OCR Vineyards (Audit 1.1)', () => {
+    const row = {
+      paymentMethod: 'cash',
+      batchId: null,
+      plaza: 'Transjam Highways',
+      vendor: 'Transjam Highways',
+      metadata: {
+        plaza: 'Vineyards West',
+        ledgerPlaza: 'Transjam Highways',
+      },
+    };
+    expect(matchesSyntheticCashTollSignature(row)).toBe(true);
+    expect(isTollIncludedInSpend(row)).toBe(false);
+  });
+
   it('flags Vineyards cash OCR $850 vs tag $780', () => {
     expect(
       isSuspiciousVineyardsCashRate({

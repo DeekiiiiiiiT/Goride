@@ -30,7 +30,8 @@ export interface TollLedgerLike {
 
 export function classifyTollLedgerEntry(e: TollLedgerLike): TollDispositionClass {
   const pm = (e.paymentMethod || '').toLowerCase();
-  const isCash = pm === 'cash' || !!e.receiptUrl;
+  // Receipt image is documentation only — payment method controls cash wash.
+  const isCash = pm.includes('cash');
   // Cash plaza spend always washes — personal cash liability is Toll Charge rows.
   if (isCash) return 'cashWash';
 
@@ -46,10 +47,11 @@ export function classifyTollLedgerEntry(e: TollLedgerLike): TollDispositionClass
  * Payment-source split for Cash vs Tag spend columns.
  * Ignores settlement resolution (personal / business) — a cash plaza payment
  * stays Cash even when later charged to the driver as personal.
+ * Receipt URL alone never counts as cash paid.
  */
 export function isCashPaidToll(e: Pick<TollLedgerLike, 'paymentMethod' | 'receiptUrl'>): boolean {
   const pm = (e.paymentMethod || '').toLowerCase();
-  return pm === 'cash' || !!e.receiptUrl;
+  return pm.includes('cash');
 }
 
 export interface TollDisposition {

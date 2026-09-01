@@ -693,8 +693,10 @@ export function DriverExpensesHistory({
                                     <Info className="h-3 w-3 text-slate-400" />
                                   </span>
                                 </TooltipTrigger>
-                                <TooltipContent side="top" className="max-w-[240px] text-xs">
-                                  Tolls the driver paid in cash at the plaza.
+                                <TooltipContent side="top" className="max-w-[280px] text-xs">
+                                  Plaza cash spend that credits Cash Still Held on Settlement (Cash Toll Credit).
+                                  Personal bills show under Charged to Driver. Synthetic / voided cash is excluded
+                                  from this total.
                                 </TooltipContent>
                               </Tooltip>
                             </TooltipProvider>

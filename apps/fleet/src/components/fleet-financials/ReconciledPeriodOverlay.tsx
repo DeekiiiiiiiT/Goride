@@ -45,6 +45,8 @@ export type ReconciledPeriodDetail = {
   fuelFinalized?: boolean;
   settlementStatus?: string;
   tierName?: string | null;
+  tipsPaidToDriver?: number;
+  tipsWithheld?: number;
 };
 
 type Props = {
@@ -183,6 +185,17 @@ export function ReconciledPeriodOverlay({
                 Gross split
               </p>
               <Line label="Gross revenue" value={fmt(detail.earningsGross)} bold />
+              <Line
+                label="Tips paid to driver"
+                value={fmt(detail.tipsPaidToDriver || 0)}
+                tone={(detail.tipsPaidToDriver || 0) > 0.005 ? 'driver' : 'muted'}
+              />
+              <Line
+                label="Tips withheld (fleet)"
+                value={fmt(detail.tipsWithheld || 0)}
+                hint="Missed quota — retained in fleet share"
+                tone={(detail.tipsWithheld || 0) > 0.005 ? 'fleet' : 'muted'}
+              />
               <div className="mt-2 grid grid-cols-2 gap-3">
                 <div className="rounded-lg border border-indigo-100 bg-indigo-50/60 p-3">
                   <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-indigo-700 mb-2">

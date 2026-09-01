@@ -1,8 +1,13 @@
 import { computePeriodSettlement } from './driverPeriodSettlement.ts';
 import type { SettlementPeriodRow } from './types.ts';
 
-export function getAdjCashBalance(cashBalance: number, fuelCredits: number): number {
-  return cashBalance - (fuelCredits || 0);
+/** Still-held after fuel credits and write-offs (matches computePeriodSettlement adjCash). */
+export function getAdjCashBalance(
+  cashBalance: number,
+  fuelCredits: number,
+  cashWrittenOff = 0,
+): number {
+  return cashBalance - (fuelCredits || 0) - (cashWrittenOff || 0);
 }
 
 export function getPeriodSettlementComponents(
@@ -14,10 +19,10 @@ export function getPeriodSettlementComponents(
   settlement: number;
   grossSettlement: number;
   settlementPaid: number;
+  overpaidAmount: number;
 } {
   const netPayoutApplied =
     row.isFinalized || (opts?.includeEstimate && row.isEstimate) ? row.netPayout : 0;
-  const br = row.cashPaidBreakdown;
 
   const passengerCash =
     row.passengerCash != null && row.passengerCash > 0.005
@@ -25,9 +30,9 @@ export function getPeriodSettlementComponents(
       : row.cashOwed;
 
   const cashReturned = Math.max(0, row.cashPaid || 0);
-  const washAlreadyInPaid = Math.max(0, br?.tollCredits ?? 0);
-  const explicitWash = Math.max(0, row.cashTollWash ?? 0);
-  const tollCashWash = Math.max(0, explicitWash - washAlreadyInPaid);
+  // Row builders already produce cashTollWash as the settlement credit (single netting).
+  // Do not subtract cashPaidBreakdown.tollCredits again.
+  const tollCashWash = Math.max(0, row.cashTollWash ?? 0);
   const tollPersonal = Math.max(0, row.personalTollCharge ?? 0);
   const fuelCredits = Math.max(0, row.fuelCredits || 0);
   const cashWrittenOff = Math.max(0, row.cashWrittenOff || 0);
@@ -51,6 +56,7 @@ export function getPeriodSettlementComponents(
     settlement: r.settlement,
     grossSettlement: r.grossSettlement,
     settlementPaid: r.settlementPaid,
+    overpaidAmount: r.overpaidAmount,
   };
 }
 

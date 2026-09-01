@@ -14,6 +14,15 @@ deny `RD-2026-000006` and distance deny `RD-2026-000007` persisted. See [§14.4]
 ✅ **O closed 2026-08-31** — `RD-2026-000008` → `completed`; WIPAY_DEMO capture; reconcile
 delta **0.00**; delivery margin **+300**. See checklist §5.
 ⚪ **Q accepted / won’t-fix** — documented in ops runbook (not “closed”).
+✅ **§18 closeout independently verified** ([§19](#19-independent-verification-of-the-18-closeout--2026-08-31))
+at `0fd23f52`: R, S, T, U all confirmed closed at the executing layer; **51 vitest + 6 Deno passing**.
+`RD-2026-000010` at 0.59 km gives the §3.2 **worst case (+J$160)** its first production evidence.
+⚠️ **Three residuals:** [O's real-WiPay capture seam](#192-o--the-lifecycle-is-closed-the-capture-seam-is-not)
+(both terminal orders used `DEMO-…` transactions — disclosed, but the seam finding A named is still
+unexercised); [the GG money path has never executed](#193-the-growth-guarantee-money-path-has-still-never-run)
+(0 adjustments, `enabled=false` — correct per P, but F/G/H remain code-verified only); and
+[V](#v--the-two-subsidy-rpcs-are-security-definer-and-granted-to-authenticated) 🟡 — the two new
+subsidy RPCs are `SECURITY DEFINER` and granted to `authenticated` on an exposed schema.
 **Context:** Pre-launch, no backwards compatibility required. GoRide ledger / fleet finance
 explicitly out of scope.
 
@@ -1663,4 +1672,109 @@ Pass marketing / FREEDEL re-enable remain **PO product decisions** (engineering 
 | Q | Accepted — no code gate |
 
 `delivery` edge function redeployed to `csfllzzastacofsvcdsc` after this pass.
+
+---
+
+## 19. Independent verification of the §18 closeout — 2026-08-31
+
+Audited at `0fd23f52` against the working tree and the live database. Every §18 claim re-derived from
+source, migration, or a direct query. Suites re-run: **51 vitest** (`@roam/dash-pricing`) and **6
+Deno** (`rushPassSubsidyUsed.test.ts`, `pricingProfileWrite.test.ts`) — all passing. **No code was
+changed and no configuration was touched.**
+
+**Every §18 claim verifies.** R, S, T and U are closed at the layer that executes, and O's lifecycle
+half is real. Three things remain outstanding, one of them new.
+
+### 19.1 Confirmed closed
+
+| Finding | Verified how |
+|---|---|
+| **R** | Both RPCs exist in `pg_proc` (`sum_promo_fd_subsidy_used(timestamptz)`, `sum_rush_pass_subsidy_used(uuid, timestamptz)`, both `prosecdef`). Both loaders now call `sb.rpc(...)` and nothing else — `RUSH_PASS_SUBSIDY_ORDER_SELECT` is deleted, so the row-transport path cannot be reintroduced by accident. `free_delivery_applied` is a real column, correctly backfilled (`RD-2026-000002`–`000005` = `true`, matching their J$630 subsidies), and written on insert at [customerOrderRoutes.ts:518](supabase/functions/delivery/customerOrderRoutes.ts#L518) — the piece that would have made the whole fix inert had it been missed. Live RPC returns `0`, correct: no non-Pass free-delivery order exists. |
+| **S** | Field relabelled *"Platform-wide monthly free-delivery budget (JMD)"* with the denominator and the ≈2-deliveries arithmetic spelled out in the tip; the read-only view carries it too ([CustomerRulesForm.tsx](packages/dash-admin/src/pages/pricing/marketRules/CustomerRulesForm.tsx)). |
+| **T** | `insertThenActivateProfile` inserts the new active row **first**, then deactivates priors ([pricingConfigHelpers.ts:89-138](supabase/functions/delivery/admin/pricingConfigHelpers.ts#L89-L138)), and is used by both `mirrorRushPassCapsToGlobalProfile` and `writeVersionedProfile`. The Deno test drives the insert failure and asserts the prior row stays active. The plan PUT now returns **409 `pass_profile_mirror_failed`** ([rushPassRoutes.ts:814-821](supabase/functions/delivery/rushPassRoutes.ts#L814-L821)) instead of 200 + a cosmetic warning. Live: exactly **1** active global profile. |
+| **U** | `shouldApplyFreeDelivery` reduced to `return freeDeliveryFlag === true` ([engine.ts:270-276](packages/dash-pricing/src/engine.ts#L270-L276)); the validator range check and both admin fields are gone. `launch_promos` is `null` in profile v8, so nothing was configured to break. |
+| **Q** | Correctly reclassified as **accepted / won't-fix** in the header, §18.3 and the ops runbook. That was the §17.2 ask — the mechanism still does not exist, and now the doc no longer claims it does. |
+
+### 19.2 O — the lifecycle is closed; the capture seam is not
+
+`RD-2026-000010` is a genuine result and the §18.4 table is accurate: `delivered` through the real
+courier UI, money-split delta 0.00, `contribution_jmd` 535.
+
+**It also produces evidence this document has never had.** At 0.59 km the courier min-pay floor
+binds, so delivery fee J$510 − courier J$350 = **+J$160** — the §3.2 *worst-case* margin, which until
+now existed only as an assertion in a unit test. Every prior persisted order sat at 7.07 km on the
+J$300 steady state. The two ends of the margin curve are now both observed in production.
+
+**What is still open** is the sub-claim O actually named. Both terminal orders carry simulated
+captures:
+
+```
+RD-2026-000008  completed  provider_transaction_id = DEMO-RD-2026-000008-1788197918872
+RD-2026-000010  delivered  provider_transaction_id = DEMO-RD-2026-000010-1788202186503
+```
+
+§18.4 labels this **WIPAY_DEMO** — so it is disclosed, not hidden, and that is the right instinct.
+But `computeDashCaptureSplit` against a **real WiPay webhook capture** is the seam finding A listed
+and §13.4 flagged as the one caveat, and it remains unexercised. The header's flat *"O closed"* reads
+past that. Suggest: **O — lifecycle closed; real-capture seam open**, carried as a one-line residual
+the way §15.4 carried the >8 km Pass order.
+
+### 19.3 The Growth Guarantee money path has still never run
+
+Verified: `payments.merchant_adjustments` = **0 rows**, `growth_guarantee.enabled` = **`false`** in
+profile v8, cron is `workflow_dispatch`-only.
+
+This is now correct behaviour rather than a defect — it is exactly the control finding P asked for,
+and §18.5 gates it on a Dominant delivered month. Recording it so the next reader does not mistake
+the silence for coverage: **F, G, H1, H2 and H3 are all verified in code and none of them has ever
+executed against real data.** The claw-back in particular (§13.2, five call sites) has never fired.
+When the first Dominant month arrives, that run deserves to be watched, not assumed.
+
+<a id="v--the-two-subsidy-rpcs-are-security-definer-and-granted-to-authenticated"></a>
+### 19.4 V — The two subsidy RPCs are `SECURITY DEFINER` and granted to `authenticated` 🟡 Low
+
+New, introduced by the R fix. The migration ends:
+
+```sql
+GRANT EXECUTE ON FUNCTION delivery.sum_promo_fd_subsidy_used(timestamptz)  TO authenticated;
+GRANT EXECUTE ON FUNCTION delivery.sum_rush_pass_subsidy_used(uuid, timestamptz) TO authenticated;
+```
+
+Both are `SECURITY DEFINER` (confirmed `prosecdef = true`), and `delivery` is an exposed PostgREST
+schema (`supabase/config.toml:13`). So any authenticated customer can `POST /rest/v1/rpc/
+sum_rush_pass_subsidy_used` with **any** membership UUID, or `sum_promo_fd_subsidy_used` with any
+month, and read an aggregate that bypasses RLS on `delivery.orders` — another member's Pass spend, or
+Roam's platform-wide monthly promo subsidy.
+
+It is aggregate-only, so the disclosure is small, and both callers run under `service_role` from the
+edge function — **the `authenticated` grant is not needed by anything.** A `REVOKE … FROM
+authenticated` on both closes it. Same family as the anon-reachable ledger RPCs in
+[docs/rls-audit.md](docs/rls-audit.md); worth folding into that audit's next pass rather than
+treating as a pricing item.
+
+**One footnote on R, not a finding.** The two partial indexes use `status IS DISTINCT FROM
+'cancelled'` while the RPCs filter `lower(COALESCE(status,'')) NOT IN ('cancelled','rejected')`. The
+predicates are not equivalent, so the planner is unlikely to use those partial indexes. Correctness is
+unaffected — the RPC still returns the right number — and at current volume it is invisible. Worth
+matching the predicates the next time that migration is touched.
+
+### 19.5 Standing position
+
+| Item | Status |
+|---|---|
+| Architecture (§3), validator, radius, floors, legacy removal | ✅ Correct in production — both ends of the margin curve now observed |
+| Findings A, B, C, E, F, G, H1–H3, J, K, L, M, N, P | ✅ Closed |
+| **R, S, T, U** | ✅ **Closed — verified independently at `0fd23f52`** |
+| **O** | ✅ Lifecycle closed (`RD-2026-000010`) · ⚠️ **real WiPay capture seam still open** |
+| **Q** | ⚪ Accepted / won't-fix — correctly recorded |
+| GG money path (F, G, H1–H3) | ⚠️ Verified in code, **never executed**; held by P's control |
+| **V** — subsidy RPCs granted to `authenticated` | 🟡 **New, open** |
+
+Suites: **51 vitest + 6 Deno, all passing.** No open defect blocks the engineering gate.
+
+The R fix is the one worth noting for the pattern file. Findings L, M and R were the same defect three
+times — *the thing being verified is not the thing being executed* — and the fix finally attacks the
+shape rather than the instance: with the aggregation inside Postgres and the select-list constant
+deleted, there is no longer a row-transport path for a fourth instance to appear in. That is the first
+remediation in this document that removed a defect **class** rather than a defect.
 

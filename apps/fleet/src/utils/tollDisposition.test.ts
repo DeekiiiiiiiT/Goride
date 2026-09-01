@@ -8,7 +8,10 @@ import { classifyTollLedgerEntry, addToTollDisposition, emptyTollDisposition, is
 describe('classifyTollLedgerEntry — policy matrix', () => {
   it('cash toll (driver paid company cash) → cashWash', () => {
     expect(classifyTollLedgerEntry({ paymentMethod: 'cash' })).toBe('cashWash');
-    expect(classifyTollLedgerEntry({ paymentMethod: 'tag_balance', receiptUrl: 'r.jpg' })).toBe('cashWash');
+  });
+
+  it('tag toll with receipt only is NOT cashWash (receipt is documentation)', () => {
+    expect(classifyTollLedgerEntry({ paymentMethod: 'tag_balance', receiptUrl: 'r.jpg' })).toBe('unresolved');
   });
 
   it('tag toll resolved Personal → personal (billed to driver)', () => {
@@ -17,7 +20,12 @@ describe('classifyTollLedgerEntry — policy matrix', () => {
 
   it('cash toll stays cashWash even when resolution is personal (Charge Driver is the bill)', () => {
     expect(classifyTollLedgerEntry({ paymentMethod: 'cash', resolution: 'personal' })).toBe('cashWash');
-    expect(classifyTollLedgerEntry({ paymentMethod: 'tag_balance', receiptUrl: 'r.jpg', resolution: 'personal' })).toBe('cashWash');
+  });
+
+  it('tag+receipt with personal resolution → personal (not cash)', () => {
+    expect(
+      classifyTollLedgerEntry({ paymentMethod: 'tag_balance', receiptUrl: 'r.jpg', resolution: 'personal' }),
+    ).toBe('personal');
   });
 
   it('business / write_off / refunded → fleet (no driver effect)', () => {
@@ -38,11 +46,13 @@ describe('classifyTollLedgerEntry — policy matrix', () => {
 });
 
 describe('isCashPaidToll — payment source (Cash vs Tag column)', () => {
-  it('treats cash and receipt tolls as cash regardless of personal resolution', () => {
+  it('treats cash payment method as cash', () => {
     expect(isCashPaidToll({ paymentMethod: 'cash' })).toBe(true);
     expect(isCashPaidToll({ paymentMethod: 'Cash' })).toBe(true);
-    expect(isCashPaidToll({ paymentMethod: 'cash' })).toBe(true);
-    expect(isCashPaidToll({ paymentMethod: 'tag_balance', receiptUrl: 'r.jpg' })).toBe(true);
+  });
+
+  it('does not treat receipt-only tag tolls as cash', () => {
+    expect(isCashPaidToll({ paymentMethod: 'tag_balance', receiptUrl: 'r.jpg' })).toBe(false);
   });
 
   it('treats tag / fleet account as non-cash', () => {

@@ -1,4 +1,4 @@
-export { round2, MONEY_EPS } from './money.ts';
+export { round2, MONEY_EPS, STATUS_SETTLED_EPS, STATUS_CASH_HELD_EPS } from './money.ts';
 export {
   periodKeyFor,
   periodEndForAnchor,
@@ -40,6 +40,7 @@ export {
   computeWeekCommissionShare,
   computeWeekCashBase,
   resolveTipsAgainstQuota,
+  getTierForEarningsEH,
 } from './periodShareCash.ts';
 export type { LedgerFareLike, TripCashLike, QuotaConfigLike } from './periodShareCash.ts';
 export { foldPayoutCashByWeek } from './payoutCashDedupe.ts';

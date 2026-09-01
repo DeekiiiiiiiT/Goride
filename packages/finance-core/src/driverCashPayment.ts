@@ -29,7 +29,7 @@ export function isClearedCashWriteOff(
 ): boolean {
   if (!isCashWriteOffTransaction(t)) return false;
   const status = String(t!.status || '').toLowerCase().trim();
-  return status === 'completed' || status === 'verified' || status === '';
+  return status === 'completed' || status === 'verified';
 }
 
 export function isClearedDriverPayout(
@@ -39,8 +39,9 @@ export function isClearedDriverPayout(
   const status = String(t!.status || '').toLowerCase().trim();
   const pm = String(t!.paymentMethod || 'Cash').toLowerCase().trim();
   const cleared = status === 'completed' || status === 'verified';
+  // Blank status is unverified — never treat as cleared.
   if (pm === 'cash' || pm === '') {
-    return cleared || status === '';
+    return cleared;
   }
   return cleared;
 }
@@ -78,8 +79,9 @@ export function isClearedDriverCashPayment(
   const status = String(t!.status || '').toLowerCase().trim();
   const pm = String(t!.paymentMethod || 'Cash').toLowerCase().trim();
   const cleared = status === 'completed' || status === 'verified';
+  // Blank status is unverified — never treat as cleared.
   if (pm === 'cash' || pm === '') {
-    return cleared || status === '';
+    return cleared;
   }
   return cleared;
 }

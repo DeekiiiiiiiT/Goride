@@ -37,6 +37,8 @@ describe('computeWeekCommissionShare — D3 tips quota + D4 full week', () => {
     expect(r.tipsPaidToDriver).toBe(0);
     expect(r.tipsWithheld).toBe(500);
     expect(r.quotaPercent).toBe(50.5);
+    // Missed-quota tips belong to fleet share.
+    expect(r.fleetShare).toBe(r.grossRevenue - r.driverShare + 500);
   });
 
   it('pays tips when quota is disabled', () => {

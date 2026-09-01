@@ -2605,6 +2605,33 @@ export const api = {
     return response.json();
   },
 
+  /** Unlock Pay before tolls are clear — reason required (audited). */
+  async forceReleaseDriverFinancialPeriod(
+    driverId: string,
+    periodAnchor: string,
+    reason: string,
+  ) {
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.financial}/driver-financial-periods/force-release`,
+      {
+        method: "POST",
+        headers: await requireAuthHeaders(),
+        body: JSON.stringify({ driverId, periodAnchor, reason }),
+      },
+    );
+    if (!response.ok) {
+      let detail = "Failed to force-release period";
+      try {
+        const body = await response.json();
+        if (body?.error) detail = String(body.error);
+      } catch {
+        /* keep default */
+      }
+      throw new Error(detail);
+    }
+    return response.json();
+  },
+
   async backfillDriverFinancialPeriods(opts?: { driverId?: string; dryRun?: boolean }) {
     const response = await fetchWithRetry(
       `${API_ENDPOINTS.financial}/driver-financial-periods/backfill`,

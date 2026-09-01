@@ -192,12 +192,14 @@ export function buildLedgerPayoutPeriodRows(params: {
       const key = format(periodStart, 'yyyy-MM-dd');
       let cw = cashMap.get(key);
       if (!cw) {
-        const keyDate = periodStart;
+        // Exact key miss: pick nearest calendar day within ±2 (not first hash hit).
+        let bestDist = Infinity;
         for (const [ck, cv] of cashMap.entries()) {
           const ckDate = new Date(ck + 'T00:00:00');
-          if (Math.abs(differenceInCalendarDays(keyDate, ckDate)) <= 2) {
+          const dist = Math.abs(differenceInCalendarDays(periodStart, ckDate));
+          if (dist <= 2 && dist < bestDist) {
+            bestDist = dist;
             cw = cv;
-            break;
           }
         }
       }
@@ -269,12 +271,15 @@ export function buildLedgerPayoutPeriodRows(params: {
         cashPaidBreakdown,
       } = getCashForPeriod(periodStart, periodEnd);
 
-      // Prefer finalized fleet fuel share (companyShare) over partial Fuel Reimbursement
-      // txs — otherwise Kenny-style weeks credit ~$2k instead of ~$21k fleet fuel.
-      // Draft fleet share can preview credits for Payout estimates only.
+      // Prefer finalized fleet fuel share when present; add TX credits only when
+      // fleet share is absent (they are not interchangeable — never blind max of both).
       const effectiveFuelCredits = isFinalized
-        ? Math.max(txFuelCredits || 0, fleetShare || 0)
-        : Math.max(txFuelCredits || 0, draftFleetShare);
+        ? fleetShare > 0.005
+          ? fleetShare
+          : Math.max(0, txFuelCredits || 0)
+        : draftFleetShare > 0.005
+          ? draftFleetShare
+          : Math.max(0, txFuelCredits || 0);
 
       let displayTollExpenses = tollExpenses;
       let totalDeductions: number;
@@ -317,9 +322,9 @@ export function buildLedgerPayoutPeriodRows(params: {
       }
 
       const passengerCash = periodPassengerCash > 0.005 ? periodPassengerCash : baseCashOwed;
-      // Toll credits already inside Cash Returned (legacy weeklyExpenses path).
-      const washAlreadyInPaid = cashPaidBreakdown?.tollCredits ?? 0;
-      const cashTollWashExtra = Math.max(0, periodCashTollWash - washAlreadyInPaid);
+      // Single wash netting: cashTollWash is the settlement credit (breakdown.tollCredits
+      // is legacy and not inside amountPaid — do not subtract again in components).
+      const cashTollWashExtra = Math.max(0, periodCashTollWash);
 
       // Charged to Driver SSOT = Toll Charge wallet rows (same as Expenses + Toll Recon
       // "Charge Driver" claims). Do NOT use disposition.personal — that sums plaza
@@ -352,9 +357,16 @@ export function buildLedgerPayoutPeriodRows(params: {
       }
 
       // Still-held preview for status (same formula as getPeriodSettlementComponents).
+      const cashWrittenOffPreview = 0; // ledger fallback path — write-offs come from shared periods
       const stillHeldPreview =
         Math.round(
-          (passengerCash + tollPersonal - baseCashPaid - cashTollWashExtra - effectiveFuelCredits) * 100,
+          (passengerCash +
+            tollPersonal -
+            baseCashPaid -
+            cashTollWashExtra -
+            effectiveFuelCredits -
+            cashWrittenOffPreview) *
+            100,
         ) / 100;
 
       return {

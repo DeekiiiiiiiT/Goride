@@ -7,14 +7,11 @@
  *   - tag toll business / write_off / refunded / matched→ fleet (no driver effect)
  *   - otherwise                                          → unresolved (pending)
  *
+ * Receipt image is documentation only — paymentMethod controls cash wash.
+ *
  * Cash stays cashWash even when resolution is personal: the Charge Driver
  * wallet debit is the personal bill. Moving cash into disposition.personal
  * would drop the wash and double-count alongside that debit.
- *
- * Pure + dependency-free so it is unit-testable (Deno) and can be hand-mirrored
- * to the client. Consumed by the earnings-history endpoint (per-period
- * disposition) and /driver-toll-charges. Only surfaces when the
- * unifiedTollSettlementEnabled flag is ON.
  */
 
 export type TollDispositionClass = "cashWash" | "personal" | "fleet" | "unresolved";
@@ -30,18 +27,22 @@ export interface TollLedgerLike {
 
 /** Classify one toll_ledger entry into its settlement bucket. */
 export function classifyTollLedgerEntry(e: TollLedgerLike): TollDispositionClass {
-  // Cash plaza spend always washes — personal cash liability is Toll Charge rows.
   const pm = (e.paymentMethod || "").toLowerCase();
-  const isCash = pm === "cash" || !!e.receiptUrl;
+  const isCash = pm.includes("cash");
   if (isCash) return "cashWash";
 
   const res = (e.resolution || "").toLowerCase();
   if (res === "personal") return "personal";
   if (res === "business" || res === "write_off" || res === "refunded") return "fleet";
 
-  // Tag / fleet-account with no explicit resolution:
-  if (e.tripId || e.isReconciled) return "fleet"; // matched to a trip (platform reimbursed)
+  if (e.tripId || e.isReconciled) return "fleet";
   return "unresolved";
+}
+
+/** Payment-source split — receipt URL alone never counts as cash. */
+export function isCashPaidToll(e: Pick<TollLedgerLike, "paymentMethod" | "receiptUrl">): boolean {
+  const pm = (e.paymentMethod || "").toLowerCase();
+  return pm.includes("cash");
 }
 
 export interface TollDisposition {

@@ -278,6 +278,7 @@ export function PayoutPeriodDetail({
                     label="− Cash toll credit"
                     value={cashTollWash > 0.005 ? `−${fmt(cashTollWash)}` : '$0.00'}
                     valueColor={cashTollWash > 0.005 ? 'text-emerald-700' : 'text-slate-400'}
+                    sub="Same as Expenses Cash Tolls — plaza cash wash for this week"
                   />
                   {tollPersonal > 0.005 ? (
                     <LineItem

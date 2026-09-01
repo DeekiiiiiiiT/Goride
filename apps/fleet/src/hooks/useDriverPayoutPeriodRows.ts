@@ -223,11 +223,13 @@ export function useDriverPayoutPeriodRows(opts: {
       const key = format(week.start, 'yyyy-MM-dd');
       let bank = overviewMap[key]?.bank ?? 0;
       if (!(bank > 0.005)) {
+        let bestDist = Infinity;
         for (const [k, v] of Object.entries(overviewMap)) {
           const kd = new Date(`${k}T00:00:00`);
-          if (Math.abs(differenceInCalendarDays(week.start, kd)) <= 2 && v.bank > 0.005) {
+          const dist = Math.abs(differenceInCalendarDays(week.start, kd));
+          if (dist <= 2 && v.bank > 0.005 && dist < bestDist) {
+            bestDist = dist;
             bank = v.bank;
-            break;
           }
         }
       }

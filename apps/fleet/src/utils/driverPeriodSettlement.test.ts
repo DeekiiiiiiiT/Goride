@@ -191,7 +191,7 @@ describe('computePeriodSettlement', () => {
     expect(r.settlement).toBe(60);
   });
 
-  it('settlementPaid does not flip or reduce a driver_owes week', () => {
+  it('settlementPaid on a driver_owes week is preserved as overpaidAmount', () => {
     const r = computePeriodSettlement({
       driverShare: 25,
       fuelDeduction: 0,
@@ -202,7 +202,48 @@ describe('computePeriodSettlement', () => {
       settlementPaid: 50,
     });
     expect(r.grossSettlement).toBe(-75);
-    expect(r.settlementPaid).toBe(0); // ignored when company does not owe
-    expect(r.settlement).toBe(-75);
+    expect(r.settlementPaid).toBe(50); // raw paid kept
+    expect(r.overpaidAmount).toBe(50);
+    expect(r.settlement).toBe(-75); // driver still owes on cash side
+  });
+
+  it('overpay above gross leaves overpaidAmount and negative residual', () => {
+    const r = computePeriodSettlement({
+      driverShare: 10000,
+      fuelDeduction: 0,
+      baseCashOwed: 0,
+      baseCashPaid: 0,
+      tollCashWash: 0,
+      tollPersonal: 0,
+      settlementPaid: 10000,
+    });
+    // Late cash import drops gross to 7000-equivalent: recompute with lower share
+    const after = computePeriodSettlement({
+      driverShare: 7000,
+      fuelDeduction: 0,
+      baseCashOwed: 0,
+      baseCashPaid: 0,
+      tollCashWash: 0,
+      tollPersonal: 0,
+      settlementPaid: 10000,
+    });
+    expect(r.settlement).toBe(0);
+    expect(r.overpaidAmount).toBe(0);
+    expect(after.settlementPaid).toBe(10000);
+    expect(after.overpaidAmount).toBe(3000);
+    expect(after.settlement).toBe(-3000);
+  });
+
+  it('tipsPaidToDriver adds to net payout', () => {
+    const r = computePeriodSettlement({
+      driverShare: 1000,
+      fuelDeduction: 100,
+      baseCashOwed: 0,
+      baseCashPaid: 0,
+      tollCashWash: 0,
+      tollPersonal: 0,
+      tipsPaidToDriver: 580,
+    });
+    expect(r.netPayout).toBe(1480);
   });
 });

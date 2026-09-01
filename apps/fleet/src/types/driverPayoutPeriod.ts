@@ -1,8 +1,15 @@
 /** Shared types for Payout tab, Cash Wallet settlement, and period detail overlay. */
 
-export type PayoutStatus = 'Finalized' | 'Awaiting Cash' | 'Pending';
+export type PayoutStatus =
+  | 'Finalized'
+  | 'Awaiting Cash'
+  | 'Awaiting Tolls'
+  | 'Pending'
+  | 'Overpaid';
 
-/** Matches `CashWeekData.breakdown` + FIFO/surplus — components that sum to Cash Paid (amountPaid). */
+/** Matches `CashWeekData.breakdown` fields used for drill-down display.
+ * Note: tollCredits / fuelCreditsInCashPaid are informational — they are NOT
+ * inside Cash Returned (amountPaid = allocated Log Cash only). */
 export interface CashPaidBreakdown {
   allocatedPayments: number;
   tollCredits: number;
@@ -69,6 +76,12 @@ export interface PayoutPeriodRow {
    * Cleared Driver Payouts tagged to this Settlement Week — reduces company-owes residual.
    */
   settlementPaid?: number;
+  /** Tips paid to driver (quota met). */
+  tipsPaidToDriver?: number;
+  /** Tips withheld (quota miss) — fleet retained. */
+  tipsWithheld?: number;
+  /** Fleet commission share (includes retained tips when quota missed). */
+  fleetShare?: number;
   /** Uber bank settled for the period — informational; never part of cash risk. */
   bankSettled: number;
   status: PayoutStatus;

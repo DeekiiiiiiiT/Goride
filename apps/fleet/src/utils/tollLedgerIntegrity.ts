@@ -230,20 +230,13 @@ export function resolveTollBatchId(t: TollIntegrityLike): string | null {
 }
 
 /**
- * Names that may carry the fake highway (API shape hides ledger plaza in vendor /
- * ledgerPlaza after OCR metadata.plaza overwrites metadata.plaza).
+ * Display / ledger plaza fields only — NOT merchantHighway/highway.
+ * tollLedgerToTxShape stamps merchantHighway on legitimate OCR cash; those
+ * must not alone trigger Audit 1.1 quarantine (would wipe Expenses Cash Tolls).
  */
-function highwayNameCandidates(t: TollIntegrityLike): string[] {
+function displayPlazaCandidates(t: TollIntegrityLike): string[] {
   const meta = t.metadata || {};
-  return [
-    t.plaza,
-    t.vendor,
-    meta.ledgerPlaza,
-    meta.highway,
-    meta.merchantHighway,
-    meta.plaza,
-    meta.tollPlaza,
-  ]
+  return [t.plaza, t.vendor, meta.ledgerPlaza]
     .map((v) => (v == null ? '' : String(v).trim()))
     .filter(Boolean);
 }
@@ -259,6 +252,9 @@ function ocrPlazaName(t: TollIntegrityLike): string {
  * Audit 1.1 signature: cash, no batch, highway-as-plaza (Transjam spelling soup)
  * and/or fabricated manual_* trip ids — exclude from spend until deleted.
  * Must work on both ledger rows and tollLedgerToTxShape API rows.
+ *
+ * merchantHighway / highway alone do NOT quarantine when a real (non-Transjam)
+ * OCR or display plaza exists — that is normal SSOT metadata, not synthetic.
  */
 export function matchesSyntheticCashTollSignature(t: TollIntegrityLike): boolean {
   const pm = String(t.paymentMethod || '').toLowerCase();
@@ -267,22 +263,36 @@ export function matchesSyntheticCashTollSignature(t: TollIntegrityLike): boolean
   if (t.metadata?.quarantined === false) return false;
   if (t.metadata?.source === 'refund_resolution') return false;
 
-  const candidates = highwayNameCandidates(t);
-  const highwayLike = candidates.some((n) => looksLikeTransjamHighwayName(n));
-  const displayHighway = String(t.vendor || t.plaza || t.metadata?.ledgerPlaza || '').trim();
-  const ocr = ocrPlazaName(t);
-  const plazaMismatch =
-    Boolean(displayHighway) &&
-    Boolean(ocr) &&
-    displayHighway.toLowerCase() !== ocr.toLowerCase() &&
-    looksLikeTransjamHighwayName(displayHighway);
+  if (hasFabricatedManualTripId(t.tripId)) return true;
 
-  return (
-    highwayLike ||
-    plazaMismatch ||
-    hasFabricatedManualTripId(t.tripId) ||
-    (hasMigrationAuditSource(t) && highwayLike)
+  const displayFields = displayPlazaCandidates(t);
+  const displayIsHighway = displayFields.some((n) => looksLikeTransjamHighwayName(n));
+  const ocr = ocrPlazaName(t);
+  const displayPrimary = String(
+    t.vendor || t.plaza || t.metadata?.ledgerPlaza || '',
+  ).trim();
+  const plazaMismatch =
+    Boolean(displayPrimary) &&
+    Boolean(ocr) &&
+    displayPrimary.toLowerCase() !== ocr.toLowerCase() &&
+    looksLikeTransjamHighwayName(displayPrimary);
+
+  // Highway stuffed into plaza/vendor/ledgerPlaza (true synthetic / bad SSOT).
+  if (displayIsHighway || plazaMismatch) return true;
+
+  // Real plaza already known — merchantHighway is expected SSOT, not quarantine.
+  const hasNonHighwayDisplay = displayFields.some((n) => !looksLikeTransjamHighwayName(n));
+  if (ocr || hasNonHighwayDisplay) return false;
+
+  // No real plaza anchor: highway-only merchant meta or migration junk.
+  const meta = t.metadata || {};
+  const merchantHighwayLike = [meta.highway, meta.merchantHighway].some((n) =>
+    looksLikeTransjamHighwayName(n == null ? '' : String(n)),
   );
+  if (merchantHighwayLike) return true;
+  if (hasMigrationAuditSource(t) && merchantHighwayLike) return true;
+
+  return false;
 }
 
 export function isTollQuarantined(t: TollIntegrityLike): boolean {
@@ -298,12 +308,17 @@ export function quarantineReasonFor(t: TollIntegrityLike): string {
     return t.metadata.quarantineReason;
   }
   if (hasFabricatedManualTripId(t.tripId)) return 'fabricated_manual_trip_id';
-  if (highwayNameCandidates(t).some((n) => looksLikeTransjamHighwayName(n))) {
+  if (displayPlazaCandidates(t).some((n) => looksLikeTransjamHighwayName(n))) {
     return 'transjam_highway_as_plaza';
   }
-  const displayHighway = String(t.vendor || t.plaza || '').trim();
+  const displayHighway = String(t.vendor || t.plaza || t.metadata?.ledgerPlaza || '').trim();
   const ocr = ocrPlazaName(t);
-  if (displayHighway && ocr && displayHighway.toLowerCase() !== ocr.toLowerCase()) {
+  if (
+    displayHighway &&
+    ocr &&
+    displayHighway.toLowerCase() !== ocr.toLowerCase() &&
+    looksLikeTransjamHighwayName(displayHighway)
+  ) {
     return 'plaza_vs_metadata_plaza_mismatch';
   }
   return 'synthetic_cash_no_batch';

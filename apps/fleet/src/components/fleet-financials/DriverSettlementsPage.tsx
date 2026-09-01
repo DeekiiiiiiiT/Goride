@@ -124,6 +124,9 @@ type ReconciledListRow = PeriodRow & {
   tollCashSpend: number;
   cashWrittenOff: number;
   payoutNet: number;
+  tipsPaidToDriver?: number;
+  tipsWithheld?: number;
+  cashSourceMismatch?: number;
 };
 
 const MONEY = (n: number | null | undefined) => {
@@ -333,18 +336,33 @@ export function DriverSettlementsPage({
           const base = normalizePeriodRow(r);
           return {
             ...base,
-            earningsGross: Number(r.earningsGross) || 0,
-            driverShare: Number(r.driverShare) || 0,
-            fleetShare: Number(r.fleetShare) || 0,
-            driverSharePercent: Number(r.driverSharePercent) || 0,
-            fuelDeduction: Number(r.fuelDeduction) || 0,
-            fuelFleetShare: Number(r.fuelFleetShare) || 0,
-            tollChargedToDriver: Number(r.tollChargedToDriver) || 0,
-            tollCashSpend: Number(r.tollCashSpend) || 0,
-            cashWrittenOff: Number(r.cashWrittenOff) || 0,
-            payoutNet: Number((r as any).payoutNet) || 0,
-            cashReturned: Number(r.cashReturned) || 0,
-            settlementPaid: Number(r.settlementPaid) || 0,
+            earningsGross: Number.isFinite(Number(r.earningsGross)) ? Number(r.earningsGross) : 0,
+            driverShare: Number.isFinite(Number(r.driverShare)) ? Number(r.driverShare) : 0,
+            fleetShare: Number.isFinite(Number(r.fleetShare)) ? Number(r.fleetShare) : 0,
+            driverSharePercent: Number.isFinite(Number(r.driverSharePercent))
+              ? Number(r.driverSharePercent)
+              : 0,
+            fuelDeduction: Number.isFinite(Number(r.fuelDeduction)) ? Number(r.fuelDeduction) : 0,
+            fuelFleetShare: Number.isFinite(Number(r.fuelFleetShare)) ? Number(r.fuelFleetShare) : 0,
+            tollChargedToDriver: Number.isFinite(Number(r.tollChargedToDriver))
+              ? Number(r.tollChargedToDriver)
+              : 0,
+            tollCashSpend: Number.isFinite(Number(r.tollCashSpend)) ? Number(r.tollCashSpend) : 0,
+            cashWrittenOff: Number.isFinite(Number(r.cashWrittenOff)) ? Number(r.cashWrittenOff) : 0,
+            payoutNet: Number.isFinite(Number((r as any).payoutNet))
+              ? Number((r as any).payoutNet)
+              : 0,
+            cashReturned: Number.isFinite(Number(r.cashReturned)) ? Number(r.cashReturned) : 0,
+            settlementPaid: Number.isFinite(Number(r.settlementPaid)) ? Number(r.settlementPaid) : 0,
+            tipsPaidToDriver: Number.isFinite(Number((r as any).tipsPaidToDriver))
+              ? Number((r as any).tipsPaidToDriver)
+              : 0,
+            tipsWithheld: Number.isFinite(Number((r as any).tipsWithheld))
+              ? Number((r as any).tipsWithheld)
+              : 0,
+            cashSourceMismatch: Number.isFinite(Number((r as any).cashSourceMismatch))
+              ? Number((r as any).cashSourceMismatch)
+              : 0,
           } as ReconciledListRow;
         }),
         summary: res?.summary as { totalGross?: number; rowCount?: number; driverCount?: number },
@@ -658,25 +676,55 @@ export function DriverSettlementsPage({
         driverId: String(d.driverId || row.driverId),
         periodAnchor: String(d.periodAnchor || row.periodAnchor).slice(0, 10),
         periodEnd: String(d.periodEnd || row.periodEnd).slice(0, 10),
-        earningsGross: Number(d.earningsGross) || row.earningsGross || 0,
-        driverShare: Number(d.driverShare) || row.driverShare || 0,
-        fleetShare: Number(d.fleetShare) || row.fleetShare || 0,
-        driverSharePercent: Number(d.driverSharePercent) || row.driverSharePercent || 0,
-        fuelDeduction: Number(d.fuelDeduction) || row.fuelDeduction || 0,
-        fuelFleetShare: Number(d.fuelFleetShare) || row.fuelFleetShare || 0,
-        tollChargedToDriver: Number(d.tollChargedToDriver) || row.tollChargedToDriver || 0,
-        tollCashSpend: Number(d.tollCashSpend) || row.tollCashSpend || 0,
-        cashCollected: Number(d.cashCollected) || row.cashCollected || 0,
-        cashReturned: Number(d.cashReturned) || row.cashReturned || 0,
-        cashWrittenOff: Number(d.cashWrittenOff) || row.cashWrittenOff || 0,
-        settlementPaid: Number(d.settlementPaid) || row.settlementPaid || 0,
-        cashStillHeld: Number(d.cashStillHeld) || row.cashStillHeld || 0,
-        payoutNet: Number(d.payoutNet) || row.payoutNet || 0,
-        settlementAmount: Number(d.settlementAmount) || row.settlementAmount || 0,
-        tripCount: Number(d.tripCount) || row.tripCount || 0,
+        earningsGross: Number.isFinite(Number(d.earningsGross))
+          ? Number(d.earningsGross)
+          : row.earningsGross,
+        driverShare: Number.isFinite(Number(d.driverShare)) ? Number(d.driverShare) : row.driverShare,
+        fleetShare: Number.isFinite(Number(d.fleetShare)) ? Number(d.fleetShare) : row.fleetShare,
+        driverSharePercent: Number.isFinite(Number(d.driverSharePercent))
+          ? Number(d.driverSharePercent)
+          : row.driverSharePercent,
+        fuelDeduction: Number.isFinite(Number(d.fuelDeduction))
+          ? Number(d.fuelDeduction)
+          : row.fuelDeduction,
+        fuelFleetShare: Number.isFinite(Number(d.fuelFleetShare))
+          ? Number(d.fuelFleetShare)
+          : row.fuelFleetShare,
+        tollChargedToDriver: Number.isFinite(Number(d.tollChargedToDriver))
+          ? Number(d.tollChargedToDriver)
+          : row.tollChargedToDriver,
+        tollCashSpend: Number.isFinite(Number(d.tollCashSpend))
+          ? Number(d.tollCashSpend)
+          : row.tollCashSpend,
+        cashCollected: Number.isFinite(Number(d.cashCollected))
+          ? Number(d.cashCollected)
+          : row.cashCollected,
+        cashReturned: Number.isFinite(Number(d.cashReturned))
+          ? Number(d.cashReturned)
+          : row.cashReturned || 0,
+        cashWrittenOff: Number.isFinite(Number(d.cashWrittenOff))
+          ? Number(d.cashWrittenOff)
+          : row.cashWrittenOff,
+        settlementPaid: Number.isFinite(Number(d.settlementPaid))
+          ? Number(d.settlementPaid)
+          : row.settlementPaid || 0,
+        cashStillHeld: Number.isFinite(Number(d.cashStillHeld))
+          ? Number(d.cashStillHeld)
+          : row.cashStillHeld || 0,
+        payoutNet: Number.isFinite(Number(d.payoutNet)) ? Number(d.payoutNet) : row.payoutNet,
+        settlementAmount: Number.isFinite(Number(d.settlementAmount))
+          ? Number(d.settlementAmount)
+          : row.settlementAmount,
+        tripCount: Number.isFinite(Number(d.tripCount)) ? Number(d.tripCount) : row.tripCount,
         fuelFinalized: !!(d.fuelFinalized ?? row.fuelFinalized),
-        settlementStatus: String(d.settlementStatus || row.settlementStatus || 'settled'),
+        settlementStatus: String(d.settlementStatus || row.settlementStatus || 'pending'),
         tierName: (d.tierName as string | null | undefined) ?? null,
+        tipsPaidToDriver: Number.isFinite(Number(d.tipsPaidToDriver))
+          ? Number(d.tipsPaidToDriver)
+          : row.tipsPaidToDriver || 0,
+        tipsWithheld: Number.isFinite(Number(d.tipsWithheld))
+          ? Number(d.tipsWithheld)
+          : row.tipsWithheld || 0,
       });
     } catch (e: any) {
       toast.error(e?.message || 'Could not load period detail');
@@ -2040,6 +2088,8 @@ function ReconciledTable({
             <TableHead className="text-right">Gross</TableHead>
             <TableHead className="text-right">Fleet share</TableHead>
             <TableHead className="text-right">Driver share</TableHead>
+            <TableHead className="text-right">Tips paid</TableHead>
+            <TableHead className="text-right">Tips withheld</TableHead>
             <TableHead className="text-right">Net payout</TableHead>
             <TableHead className="text-right">Passenger cash</TableHead>
             <TableHead className="text-right">Cash returned</TableHead>
@@ -2050,14 +2100,14 @@ function ReconciledTable({
         <TableBody>
           {loading ? (
             <TableRow>
-              <TableCell colSpan={10} className="h-24 text-center text-slate-500">
+              <TableCell colSpan={12} className="h-24 text-center text-slate-500">
                 <Loader2 className="h-4 w-4 animate-spin inline mr-2" />
                 Loading…
               </TableCell>
             </TableRow>
           ) : rows.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={10} className="h-24 text-center text-slate-500">
+              <TableCell colSpan={12} className="h-24 text-center text-slate-500">
                 No reconciled weeks in this range.
               </TableCell>
             </TableRow>
@@ -2090,6 +2140,12 @@ function ReconciledTable({
                 <TableCell className="text-right tabular-nums text-emerald-700">
                   {MONEY(r.driverShare)}
                 </TableCell>
+                <TableCell className="text-right tabular-nums text-slate-700">
+                  {MONEY(r.tipsPaidToDriver || 0)}
+                </TableCell>
+                <TableCell className="text-right tabular-nums text-amber-800">
+                  {MONEY(r.tipsWithheld || 0)}
+                </TableCell>
                 <TableCell className="text-right tabular-nums font-medium">
                   {MONEY(r.payoutNet)}
                 </TableCell>
@@ -2101,12 +2157,19 @@ function ReconciledTable({
                   {r.tripCount}
                 </TableCell>
                 <TableCell>
-                  <Badge
-                    variant="secondary"
-                    className="font-normal bg-emerald-50 text-emerald-800 border border-emerald-100"
-                  >
-                    Reconciled
-                  </Badge>
+                  <div className="flex flex-col gap-1">
+                    <Badge
+                      variant="secondary"
+                      className="font-normal bg-emerald-50 text-emerald-800 border border-emerald-100"
+                    >
+                      {r.settlementStatus === 'overpaid' ? 'Overpaid' : 'Reconciled'}
+                    </Badge>
+                    {Math.abs(Number(r.cashSourceMismatch) || 0) > 0.5 ? (
+                      <span className="text-[10px] text-amber-700">
+                        Cash source mismatch {MONEY(r.cashSourceMismatch)}
+                      </span>
+                    ) : null}
+                  </div>
                 </TableCell>
               </TableRow>
             ))

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { buildLedgerPayoutPeriodRows } from './buildLedgerPayoutPeriodRows';
 import { getPeriodSettlementComponents } from './driverSettlementMath';
+import { computePeriodSettlement } from './driverPeriodSettlement';
 import type { CashWeekData } from './cashSettlementCalc';
 
 /**
@@ -89,5 +90,32 @@ describe('Kenny Jun 29 week settlement golden', () => {
     // 29,673.38 − 31,872.19 = −2,198.81 (driver owes)
     expect(adjCashBalance).toBeCloseTo(31872.19, 2);
     expect(settlement).toBeCloseTo(-2198.81, 2);
+  });
+});
+
+/**
+ * Golden B — audit fields that Kenny A zeroes: tips, wash already netted once,
+ * write-off, prior settlement paid, overpay, tolls not clear → not finalized for pay.
+ */
+describe('Settlement audit golden B — tips / overpay / write-off', () => {
+  it('tips add to net; overpay surfaces; write-off reduces still held', () => {
+    const r = computePeriodSettlement({
+      driverShare: 10000,
+      fuelDeduction: 500,
+      baseCashOwed: 8000,
+      baseCashPaid: 2000,
+      tollCashWash: 500,
+      tollPersonal: 0,
+      fuelCredits: 1000,
+      cashWrittenOff: 200,
+      settlementPaid: 12000,
+      tipsPaidToDriver: 580,
+    });
+    expect(r.netPayout).toBe(10080); // 10000 − 500 + 580
+    expect(r.adjCashBalance).toBe(4300); // 8000 − 2000 − 500 − 1000 − 200
+    expect(r.grossSettlement).toBe(5780);
+    expect(r.settlementPaid).toBe(12000);
+    expect(r.overpaidAmount).toBe(6220);
+    expect(r.settlement).toBe(-6220);
   });
 });

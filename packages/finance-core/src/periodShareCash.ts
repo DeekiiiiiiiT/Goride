@@ -6,6 +6,7 @@ import {
 } from './driverCashPayment.ts';
 import { normalizePlatform } from './normalizePlatform.ts';
 import { round2, MONEY_EPS } from './money.ts';
+import { fleetCalendarDay, DEFAULT_FLEET_TZ } from './periodKey.ts';
 
 export type LedgerFareLike = {
   date?: string;
@@ -18,7 +19,8 @@ export type QuotaConfigLike = {
   weekly?: { enabled?: boolean; amount?: number };
 } | null;
 
-function getTierForEarningsEH(cumulative: number, tiers: any[]): any {
+/** Exported for unit tests — tier lookup must fall back to highest band, not lowest. */
+export function getTierForEarningsEH(cumulative: number, tiers: any[]): any {
   const sorted = [...(tiers || [])].sort(
     (a, b) => (a.minEarnings ?? 0) - (b.minEarnings ?? 0),
   );
@@ -38,7 +40,8 @@ function getTierForEarningsEH(cumulative: number, tiers: any[]): any {
     }
     return cumulative >= t.minEarnings && cumulative < t.maxEarnings;
   });
-  return match || sorted[0];
+  // Past all finite ceilings → highest tier (not sorted[0]).
+  return match || sorted[sorted.length - 1];
 }
 
 export type TripCashLike = {
@@ -55,8 +58,8 @@ function fareGross(e: LedgerFareLike): number {
   return Math.abs(Number(e.netAmount) || 0);
 }
 
-function ymd(d: string | undefined): string {
-  return String(d || '').slice(0, 10);
+function dayKey(d: string | undefined, timezone: string): string {
+  return fleetCalendarDay(String(d || ''), timezone);
 }
 
 function monthStartYmd(periodAnchor: string): string {
@@ -107,6 +110,8 @@ export function computeWeekCommissionShare(params: {
     color?: string;
   }>;
   quotaConfig?: QuotaConfigLike;
+  /** Fleet calendar timezone for fare/tip day bucketing. */
+  timezone?: string;
 }): {
   grossRevenue: number;
   tips: number;
@@ -123,9 +128,16 @@ export function computeWeekCommissionShare(params: {
   tipsPaidToDriver: number;
   tipsWithheld: number;
 } {
-  const { fareEntries, tipEntries = [], periodAnchor, periodEnd, tiers } = params;
+  const {
+    fareEntries,
+    tipEntries = [],
+    periodAnchor,
+    periodEnd,
+    tiers,
+    timezone = DEFAULT_FLEET_TZ,
+  } = params;
   const weekFares = fareEntries.filter((e) => {
-    const d = ymd(e.date);
+    const d = dayKey(e.date, timezone);
     return d >= periodAnchor && d <= periodEnd;
   });
   const grossRevenue = round2(weekFares.reduce((s, e) => s + fareGross(e), 0));
@@ -134,7 +146,7 @@ export function computeWeekCommissionShare(params: {
   const tips = round2(
     tipEntries
       .filter((e) => {
-        const d = ymd(e.date);
+        const d = dayKey(e.date, timezone);
         return d >= periodAnchor && d <= periodEnd;
       })
       .reduce((s, e) => s + Math.abs(Number(e.netAmount) || fareGross(e)), 0),
@@ -143,7 +155,7 @@ export function computeWeekCommissionShare(params: {
   // D4: full-week cumulative — do not truncate at month-end.
   const mStart = monthStartYmd(periodAnchor);
   const cumulativeEarnings = fareEntries.reduce((s, e) => {
-    const d = ymd(e.date);
+    const d = dayKey(e.date, timezone);
     if (d >= mStart && d <= periodEnd) return s + fareGross(e);
     return s;
   }, 0);
@@ -151,14 +163,15 @@ export function computeWeekCommissionShare(params: {
   const tier = getTierForEarningsEH(cumulativeEarnings, tiers || []);
   const pct = Number(tier.sharePercentage) || 0;
   const driverShare = round2(grossRevenue * (pct / 100));
-  const fleetShare = round2(grossRevenue - driverShare);
-  const earningsGross = round2(grossRevenue + tips);
   const quotaProgress = round2(grossRevenue + tips);
   const quota = resolveTipsAgainstQuota({
     tips,
     quotaProgress,
     quotaConfig: params.quotaConfig,
   });
+  // Missed-quota tips belong to fleet (locked product decision).
+  const fleetShare = round2(grossRevenue - driverShare + quota.tipsWithheld);
+  const earningsGross = round2(grossRevenue + tips);
 
   return {
     grossRevenue,
@@ -189,6 +202,7 @@ export function computeWeekCashBase(params: {
     metadata?: { workPeriodStart?: string };
   }>;
   uberPayoutCash?: number;
+  timezone?: string;
 }): {
   passengerCash: number;
   cashReturned: number;
@@ -199,12 +213,19 @@ export function computeWeekCashBase(params: {
   uberTripCash: number;
   cashSourceMismatch: number;
 } {
-  const { periodAnchor, periodEnd, trips, transactions, uberPayoutCash = 0 } = params;
+  const {
+    periodAnchor,
+    periodEnd,
+    trips,
+    transactions,
+    uberPayoutCash = 0,
+    timezone = DEFAULT_FLEET_TZ,
+  } = params;
 
   let nonUberTripCash = 0;
   let uberTripCashFallback = 0;
   for (const t of trips || []) {
-    const d = ymd(t.date);
+    const d = dayKey(t.date, timezone);
     if (!(d >= periodAnchor && d <= periodEnd)) continue;
     const status = String(t.status || '').toLowerCase();
     if (status.includes('cancel')) continue;

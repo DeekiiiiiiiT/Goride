@@ -30,6 +30,7 @@ import {
   listCashHeldPeriods,
   listRecentlyPaidSettlementPeriods,
   listReconciledSettlementPeriods,
+  forceReleaseDriverPeriod,
   type DriverFinancialPeriodRow,
 } from "./driver_financial_periods.ts";
 import {
@@ -485,6 +486,30 @@ app.post(`${BASE}/rebuild`, requirePermission('transactions.edit'), async (c) =>
     const n = await rebuildAllPeriodsForDriver(driverId, { force: !!body.force });
     const periods = await listDriverFinancialPeriods(driverId);
     return c.json({ success: true, rebuilt: n.rebuilt, skippedSigned: n.skippedSigned, data: periods });
+  } catch (e: any) {
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+/** Unlock Pay before tolls clear — requires reason (audited in metadata). */
+app.post(`${BASE}/force-release`, requirePermission('transactions.edit'), async (c) => {
+  try {
+    const body = await c.req.json().catch(() => ({}));
+    const driverId = String(body.driverId || "").trim();
+    const periodAnchor = String(body.periodAnchor || "").trim();
+    const reason = String(body.reason || "").trim();
+    if (!driverId || !periodAnchor) {
+      return c.json({ error: "driverId and periodAnchor are required" }, 400);
+    }
+    if (!reason) return c.json({ error: "reason is required" }, 400);
+    const user = c.get("user") as RbacUser | undefined;
+    const row = await forceReleaseDriverPeriod({
+      driverId,
+      periodAnchor,
+      reason,
+      releasedBy: user?.userId || null,
+    });
+    return c.json({ success: true, data: row });
   } catch (e: any) {
     return c.json({ error: e.message }, 500);
   }
