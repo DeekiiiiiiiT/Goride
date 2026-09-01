@@ -91,11 +91,11 @@ jobs:
       - name: Deno check edge functions
         run: deno check supabase/functions/_shared/orderToFleetTrip.ts supabase/functions/_fleet-server/workforce_invite_routes.ts supabase/functions/_fleet-server/rush_settlement_routes.ts supabase/functions/delivery/courierFleetAttribution.ts
 
-      - name: Typecheck fleet
+      - name: Typecheck fleet Rush spine
         env:
           VITE_SUPABASE_URL: https://ci-placeholder.supabase.co
           VITE_SUPABASE_ANON_KEY: ci-placeholder-anon-key
-        run: pnpm --filter @roam/fleet typecheck
+        run: node scripts/typecheck-fleet-rush.mjs
 
       - name: Ban Figma-style package@version imports
         run: node scripts/check-no-versioned-imports.mjs

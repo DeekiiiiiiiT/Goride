@@ -30,7 +30,7 @@ export function FleetRushRolloutPanel({
   apiConfig,
   onUpdated,
 }: FleetRushRolloutPanelProps) {
-  const confirm = useAdminConfirm();
+  const { confirm } = useAdminConfirm();
   const [busyFlag, setBusyFlag] = useState<string | null>(null);
 
   const toggleFlag = async (flag: RushRolloutFlagStatus, nextOn: boolean) => {
