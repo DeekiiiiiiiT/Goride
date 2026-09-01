@@ -71,6 +71,9 @@ jobs:
       - name: Ban Figma-style package@version imports
         run: node scripts/check-no-versioned-imports.mjs
 
+      - name: Ban bare @roam imports in fleet edge graph
+        run: node scripts/check-fleet-edge-roam-imports.mjs
+
       - name: Typecheck rush-command
         run: pnpm --filter @roam/rush-command typecheck
 

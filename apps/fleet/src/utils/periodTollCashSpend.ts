@@ -48,9 +48,10 @@ export function isCashPaidTollRow(tx: PeriodTollLike): boolean {
  * Trip plaza cash that still belongs in Expenses/Settlement wash.
  * Pending unlinked refunds are reimbursements only — never inflate cash spend.
  */
-/** @deprecated Import from @roam/finance-core */
-export type { PeriodTripLike } from '@roam/finance-core';
-export { isTripCashWashSpend, isTripTollActionable } from '@roam/finance-core';
+export {
+  isTripCashWashSpend,
+  isTripTollActionable,
+} from '../../../../packages/finance-core/src/periodTollTrip.ts';
 
 export function sumExcludedCashFromWeek(
   weekTollsIncludingExcluded: PeriodTollLike[],
@@ -72,8 +73,5 @@ export function sumExcludedCashFromWeek(
   };
 }
 
-/**
- * Settlement wash credit for a period row.
- * @deprecated Import from @roam/finance-core — re-export for fleet callers.
- */
-export { resolvePeriodTollCashWash } from '@roam/finance-core';
+/** Settlement wash credit for a period row — re-export for fleet callers. */
+export { resolvePeriodTollCashWash } from '../../../../packages/finance-core/src/periodTollCashWash.ts';

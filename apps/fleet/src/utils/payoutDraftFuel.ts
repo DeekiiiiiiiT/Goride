@@ -110,7 +110,6 @@ const STATUS_RANK: Record<PayoutStatus, number> = {
   'Awaiting Tolls': 1,
   'Awaiting Cash': 2,
   Finalized: 3,
-  Overpaid: 3,
 };
 
 /** Roll weekly paycheck rows into calendar months (cash-aware). */
