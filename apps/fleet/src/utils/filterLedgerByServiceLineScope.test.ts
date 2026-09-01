@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { filterLedgerEventsByServiceLineScope } from '../filterLedgerByServiceLineScope';
+import { filterLedgerEventsByServiceLineScope } from './filterLedgerByServiceLineScope';
 
 describe('filterLedgerEventsByServiceLineScope', () => {
   const events = [
