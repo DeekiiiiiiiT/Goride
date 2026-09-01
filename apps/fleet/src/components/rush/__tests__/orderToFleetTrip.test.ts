@@ -17,6 +17,7 @@ describe('deliveryOrderToFleetTrip', () => {
     });
     expect(trip.cashCollected).toBe(5000);
     expect(trip.amount).toBeGreaterThan(0);
+    expect(trip.netToDriver).toBe(trip.amount);
     expect(trip.netPayout).toBe(Number(trip.amount) - 5000);
   });
 

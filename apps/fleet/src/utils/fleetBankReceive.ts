@@ -169,6 +169,7 @@ export function aggregateRoamCardExpectedByWeek(
     if (!trip || typeof trip !== 'object') continue;
     const platform = String(trip.platform || '').toLowerCase();
     if (!platform.includes('roam')) continue;
+    const isRushDelivery = platform.includes('rush');
     const method = String(trip.paymentMethod || '').toLowerCase();
     if (method !== 'card') continue;
     const status = String(trip.status || '').toLowerCase();
@@ -179,19 +180,21 @@ export function aggregateRoamCardExpectedByWeek(
     const weekStartYmd = payoutBankEventWeekKey(
       {
         eventType: 'payout_bank',
-        eventAt: rawDate,
+        date: String(rawDate).slice(0, 10),
         netAmount: 0,
         metadata: { platform: 'roam', recipient: 'org' },
       } as PayoutBankEventLike,
       timezone,
     );
     if (!weekStartYmd) continue;
-    const add = Math.abs(
-      Number(trip.bankTransferred) ||
-        Number(trip.netToDriver) ||
-        Number(trip.amount) ||
-        0,
-    );
+    const add = isRushDelivery
+      ? Number(trip.amount) || 0
+      : Math.abs(
+          Number(trip.bankTransferred) ||
+            Number(trip.netToDriver) ||
+            Number(trip.amount) ||
+            0,
+        );
     if (add < 1e-9) continue;
     byWeek.set(weekStartYmd, round2((byWeek.get(weekStartYmd) || 0) + add));
   }

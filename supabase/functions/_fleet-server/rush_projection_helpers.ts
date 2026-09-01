@@ -36,18 +36,24 @@ export async function backfillRushOrdersToFleet(
   let synced = 0;
   let skipped = 0;
   let errors = 0;
-  let cursor: string | null = sinceIso;
+  let cursor = sinceIso;
+  let isFirstPage = true;
   const pageSize = 500;
 
-  while (cursor) {
-    const { data: orders, error } = await delivery
+  for (;;) {
+    let query = delivery
       .from("orders")
       .select("*")
       .eq("courier_fleet_id", fleetOrgId)
       .in("status", ["delivered", "completed", "cancelled"])
-      .gte("updated_at", sinceIso)
       .order("updated_at", { ascending: true })
       .limit(pageSize);
+
+    query = isFirstPage
+      ? query.gte("updated_at", sinceIso)
+      : query.gt("updated_at", cursor);
+
+    const { data: orders, error } = await query;
 
     if (error) throw error;
     if (!orders?.length) break;
@@ -69,10 +75,7 @@ export async function backfillRushOrdersToFleet(
 
     if (orders.length < pageSize) break;
     cursor = String(orders[orders.length - 1]!.updated_at);
-    if (cursor === sinceIso && orders.length === pageSize) {
-      // Advance cursor to avoid infinite loop on same timestamp
-      cursor = new Date(new Date(cursor).getTime() + 1).toISOString();
-    }
+    isFirstPage = false;
   }
 
   return { synced, skipped, errors };

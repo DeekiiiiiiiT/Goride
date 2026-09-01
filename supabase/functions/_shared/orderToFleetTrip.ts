@@ -51,7 +51,7 @@ export function deliveryOrderToFleetTrip(
     driverId: String(order.courier_id ?? ""),
     amount,
     grossEarnings: amount,
-    netToDriver: netPayout,
+    netToDriver: amount,
     netPayout,
     status: isCancelled ? "Cancelled" : "Completed",
     pickupLocation: (order.merchant as { name?: string } | undefined)?.name ?? "Merchant",
@@ -112,9 +112,9 @@ export async function syncOrderToFleetKv(
   trip.batchId = syntheticBatchId;
 
   const base = Deno.env.get("SUPABASE_URL") ?? "";
-  const anon = Deno.env.get("SUPABASE_ANON_KEY") ?? Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
-  if (!base || !anon) {
-    console.warn("[orderToFleetTrip] Missing SUPABASE_URL or key — skip fleet sync");
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+  if (!base || !serviceKey) {
+    console.warn("[orderToFleetTrip] Missing SUPABASE_URL or service role key — skip fleet sync");
     return { ok: false, reason: "missing_supabase_config" };
   }
 
@@ -123,8 +123,8 @@ export async function syncOrderToFleetKv(
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${anon}`,
-      apikey: anon,
+      Authorization: `Bearer ${serviceKey}`,
+      apikey: serviceKey,
       "X-Roam-Product-Line": "fleet",
     },
     body: JSON.stringify([trip]),

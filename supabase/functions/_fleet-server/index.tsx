@@ -2235,6 +2235,17 @@ app.post(
     if (!Array.isArray(trips)) {
       return c.json({ error: "Expected array of trips" }, 400);
     }
+
+    const isRushProjection = trips.some(
+      (t: { platform?: unknown }) => String(t?.platform ?? "") === "Roam Rush",
+    );
+    if (isRushProjection) {
+      const auth = (c.req.header("Authorization") ?? "").replace(/^Bearer\s+/i, "").trim();
+      const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+      if (!serviceKey || auth !== serviceKey) {
+        return c.json({ error: "Rush projection requires service role" }, 403);
+      }
+    }
     
     // Validation and processing
     const processedTrips = trips.map((trip: any) => {
@@ -2290,8 +2301,18 @@ app.post(
     // Resolve organization scope for writes.
     // Priority:
     // 1) Auth-scoped org from request context
-    // 2) Driver record org (for legacy/anon import flows)
+    // 2) Trip.organizationId (Rush projection / service-role)
+    // 3) Driver record org (for legacy/anon import flows)
     let writeOrgId: string | null = getOrgId(c);
+    if (!writeOrgId && isRushProjection) {
+      for (const trip of trips) {
+        const candidate = typeof trip?.organizationId === "string" ? trip.organizationId.trim() : "";
+        if (candidate) {
+          writeOrgId = candidate;
+          break;
+        }
+      }
+    }
     if (!writeOrgId) {
       for (const trip of processedTrips) {
         const did = String(trip?.driverId || '').trim();
@@ -14919,14 +14940,27 @@ app.patch("/make-server-37f42386/org/service-lines", requireAuth(), async (c) =>
       : null;
     if (!lines?.length) return c.json({ error: "serviceLines required" }, 400);
     const primary = lines.includes("rush_delivery") && !lines.includes("rideshare") ? "delivery" : "rideshare";
+    const { data: existing } = await supabase
+      .from("organizations")
+      .select("enabled_modules")
+      .eq("id", orgId)
+      .maybeSingle();
+    const enabledModules = rushModuleOverridesForServiceLines(
+      lines,
+      (existing?.enabled_modules as Record<string, boolean> | null) ?? null,
+    );
     const { data, error } = await supabase
       .from("organizations")
-      .update({ service_lines: lines, business_type: primary })
+      .update({ service_lines: lines, business_type: primary, enabled_modules: enabledModules })
       .eq("id", orgId)
-      .select("service_lines, business_type")
+      .select("service_lines, business_type, enabled_modules")
       .single();
     if (error) throw error;
-    return c.json({ serviceLines: data.service_lines, businessType: data.business_type });
+    return c.json({
+      serviceLines: data.service_lines,
+      businessType: data.business_type,
+      enabledModules: data.enabled_modules,
+    });
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
     return c.json({ error: msg }, 500);
@@ -14936,6 +14970,8 @@ app.patch("/make-server-37f42386/org/service-lines", requireAuth(), async (c) =>
 import {
   DEFAULT_ENTERPRISE_MODULES,
   resolveEffectiveModules,
+  rushModuleOverridesForServiceLines,
+  RUSH_MODULE_KEYS,
 } from "./enterprise_modules.ts";
 
 // GET /enterprise/me/modules — tenant effective feature modules
@@ -14967,8 +15003,18 @@ app.get("/make-server-37f42386/enterprise/me/modules", requireAuth(), async (c) 
       ...DEFAULT_ENTERPRISE_MODULES,
       ...((settings?.enabledModules as Record<string, boolean>) || {}),
     };
-    const orgOverrides = (org.enabled_modules as Record<string, boolean> | null) || null;
-    const effectiveModules = resolveEffectiveModules(productLineModules, orgOverrides);
+    const orgOverrides = rushModuleOverridesForServiceLines(
+      (org.service_lines as string[] | null) ?? ["rideshare"],
+      (org.enabled_modules as Record<string, boolean> | null) || null,
+    );
+    let effectiveModules = resolveEffectiveModules(productLineModules, orgOverrides);
+
+    const rushUiOn = await isFeatureEnabled(FEATURE_FLAGS.RUSH_UI, orgId);
+    if (!rushUiOn) {
+      for (const key of RUSH_MODULE_KEYS) {
+        effectiveModules[key] = false;
+      }
+    }
 
     return c.json({
       orgId,

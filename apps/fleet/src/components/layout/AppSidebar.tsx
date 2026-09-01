@@ -1,4 +1,9 @@
-import React from 'react';
+import {
+  canSeeCourierOps as computeCanSeeCourierOps,
+  canSeeEarningsPolicy as computeCanSeeEarningsPolicy,
+  hasSharedOps as computeHasSharedOps,
+  rushModuleNavEnabled,
+} from './sidebarGating';
 import {
   Sidebar,
   SidebarContent,
@@ -112,29 +117,33 @@ export function AppSidebar({
     canView('driver-payouts') ||
     canView('indrive-wallet') ||
     canView('transaction-list');
-  const hasSharedOps = rushVisible || rideshareVisible;
+  const hasSharedOps = computeHasSharedOps({ rushVisible, rideshareVisible });
   const canSeeFleetOps = hasSharedOps && (canSeeFuelDesk || canSeeTollDesk);
   const canSeeDriverOps =
     rideshareVisible &&
-    (canView('drivers') || canView('driver-analytics') || canView('earnings-policy'));
+    (canView('drivers') || canView('driver-analytics'));
+  const canSeeEarningsPolicyNav = computeCanSeeEarningsPolicy({
+    hasSharedOps,
+    sidebarVisible: isSidebarItemVisible('earnings-policy', businessType),
+    canView: canView('earnings-policy'),
+  });
   const canSeeVehicleOps =
     hasSharedOps &&
     (canView('vehicles') ||
       canView('vehicle-analytics') ||
       canView('maintenance-hub') ||
       canView('fleet'));
-  const canSeeCourierOps =
-    hasRushDeliveryLine &&
-    (canView('couriers') ||
+  const canSeeCourierOps = computeCanSeeCourierOps({
+    hasRushDeliveryLine,
+    rushModuleEnabled: rushModuleNavEnabled(isModuleEnabled),
+    canViewAnyCourierPage:
+      canView('couriers') ||
       canView('courier-analytics') ||
       canView('deliveries') ||
       canView('delivery-analytics') ||
       canView('courier-settlements') ||
-      canView('supply-health')) &&
-    (isModuleEnabled('rush_couriers') ||
-      isModuleEnabled('rush_deliveries') ||
-      isModuleEnabled('rush_courier_settlements') ||
-      isModuleEnabled('rush_supply_health'));
+      canView('supply-health'),
+  });
   const canSeeSystem = canView('user-management') || canView('settings');
 
   // Accordion only for Fleet Ops (has mid-level Fuel/Toll desks)
@@ -226,11 +235,6 @@ export function AppSidebar({
         </Badge>
       ),
     },
-    isSidebarItemVisible('earnings-policy', businessType) &&
-      canView('earnings-policy') && {
-        id: 'earnings-policy',
-        label: 'Earnings Policy Configuration',
-      },
   ].filter(Boolean) as NavLeaf[];
 
   const vehicleItems: NavLeaf[] = [
@@ -388,6 +392,15 @@ export function AppSidebar({
               />
             )}
 
+            {canSeeEarningsPolicyNav && (
+              <NavItem
+                icon={<Receipt className="h-4 w-4" />}
+                label="Earnings Policy"
+                active={currentPage === 'earnings-policy'}
+                onClick={() => navigate('earnings-policy')}
+              />
+            )}
+
             {canSeeVehicleOps && vehicleItems.length > 0 && (
               <NavFlyout
                 id="vehicle-ops"
@@ -404,7 +417,7 @@ export function AppSidebar({
             {canSeeCourierOps && courierItems.length > 0 && (
               <NavFlyout
                 id="courier-ops"
-                label="Rush Operations"
+                label="Delivery Operations"
                 icon={<Package className="h-4 w-4" />}
                 items={courierItems}
                 currentPage={currentPage}

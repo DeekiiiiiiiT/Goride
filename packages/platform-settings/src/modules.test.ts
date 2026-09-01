@@ -4,6 +4,7 @@ import {
   allModulesOff,
   normalizeModuleKeyMap,
   resolveEffectiveModules,
+  rushModuleOverridesForServiceLines,
 } from './modules';
 import { DEFAULT_ENTERPRISE_ENABLED_MODULES } from './defaults';
 
@@ -77,6 +78,20 @@ describe('normalizeModuleKeyMap', () => {
       freight_shipments: false,
     });
     expect(out.freight_shipments).toBe(false);
+  });
+});
+
+describe('rushModuleOverridesForServiceLines', () => {
+  it('enables all rush modules when rush_delivery is in service_lines', () => {
+    const mods = rushModuleOverridesForServiceLines(['rideshare', 'rush_delivery'], {});
+    expect(mods.rush_couriers).toBe(true);
+    expect(mods.rush_deliveries).toBe(true);
+    expect(mods.rush_courier_settlements).toBe(true);
+  });
+
+  it('disables rush modules when only rideshare', () => {
+    const mods = rushModuleOverridesForServiceLines(['rideshare'], { rush_couriers: true });
+    expect(mods.rush_couriers).toBe(false);
   });
 });
 

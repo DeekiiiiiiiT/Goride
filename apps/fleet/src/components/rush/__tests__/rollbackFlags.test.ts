@@ -25,10 +25,10 @@ describe('Rush module resolution', () => {
     expect(resolveEffectiveModules(platform, org).rush_couriers).toBe(true);
   });
 
-  it('org purchase enables module when platform default is off', () => {
+  it('platform off defeats org true — kill switch must hold', () => {
     const platform = allModulesOff();
     const org = { rush_couriers: true };
-    expect(resolveEffectiveModules(platform, org).rush_couriers).toBe(true);
+    expect(resolveEffectiveModules(platform, org).rush_couriers).toBe(false);
   });
 });
 

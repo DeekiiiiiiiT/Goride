@@ -10,6 +10,8 @@ import {
   FileText
 } from "lucide-react";
 import { useVocab } from '../../utils/vocabulary';
+import { useServiceLineScope } from '../../contexts/ServiceLineScopeContext';
+import { filterTripsByServiceLineScope } from '../../utils/serviceLineTripFilter';
 import { 
   DropdownMenu, 
   DropdownMenuContent, 
@@ -43,6 +45,7 @@ import { toast } from "sonner";
 export function Dashboard() {
   const queryClient = useQueryClient();
   const { v } = useVocab();
+  const { scope } = useServiceLineScope();
   const [activeTab, setActiveTab] = useState('overview');
   const [viewMode, setViewMode] = useState('operations');
 
@@ -56,6 +59,10 @@ export function Dashboard() {
 
   const serverStats = initBundle?.stats ?? undefined;
   const trips: any[] = initBundle?.trips ?? [];
+  const scopedTrips = useMemo(
+    () => filterTripsByServiceLineScope(trips, scope),
+    [trips, scope],
+  );
   const driverMetrics: any[] = initBundle?.driverMetrics ?? [];
   const vehicleMetrics: any[] = initBundle?.vehicleMetrics ?? [];
 
@@ -101,11 +108,11 @@ export function Dashboard() {
         alertDetails: '',
         lastUpdateTime: new Date().toISOString()
       };
-    } else if (trips.length > 0) {
-       return DashboardMetricsEngine.calculateMetrics(trips, driverMetrics);
+    } else if (scopedTrips.length > 0) {
+       return DashboardMetricsEngine.calculateMetrics(scopedTrips, driverMetrics);
     }
     return null;
-  }, [serverStats, trips, driverMetrics, vehicleMetrics]);
+  }, [serverStats, scopedTrips, driverMetrics, vehicleMetrics]);
 
   const handleViewChange = (val: string) => {
       setViewMode(val);
@@ -125,7 +132,7 @@ export function Dashboard() {
 
   const handleExport = (type: 'trips' | 'financials' | 'drivers') => {
     if (type === 'trips') {
-      exportToCSV(trips, `trips_export_${new Date().toISOString().split('T')[0]}`);
+      exportToCSV(scopedTrips, `trips_export_${new Date().toISOString().split('T')[0]}`);
     } else if (type === 'drivers') {
       exportToCSV(driverMetrics, `driver_performance`);
     }

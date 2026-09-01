@@ -83,6 +83,11 @@ jobs:
       - name: Check fleet edge duplicates
         run: node scripts/check-fleet-edge-duplicates.mjs
 
+      - name: Setup Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
       - name: Deno check edge functions
         run: deno check supabase/functions/_shared/orderToFleetTrip.ts supabase/functions/_fleet-server/workforce_invite_routes.ts supabase/functions/_fleet-server/rush_settlement_routes.ts supabase/functions/delivery/courierFleetAttribution.ts
 

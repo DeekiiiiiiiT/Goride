@@ -41,6 +41,7 @@ export function resolveBundleFromContext(
   ctx: EarningsPolicyRuntimeContext,
   driverId: string | null | undefined,
   weekStartYmd?: string,
+  serviceLine?: 'rideshare' | 'rush_delivery',
 ): ResolvedEarningsBundle {
   const week = weekStartYmd || mondayYmdForDate(new Date());
   return resolveActiveEarningsBundleForDriverWeek({
@@ -48,6 +49,7 @@ export function resolveBundleFromContext(
     driverId,
     weekStartYmd: week,
     legacy: ctx.legacy,
+    serviceLine,
   });
 }
 
@@ -55,7 +57,8 @@ export function resolveBundleFromContext(
 export async function loadResolvedEarningsBundleForDriverWeek(
   driverId: string | null | undefined,
   weekStartYmd?: string,
+  serviceLine?: 'rideshare' | 'rush_delivery',
 ): Promise<ResolvedEarningsBundle> {
   const ctx = await loadEarningsPolicyRuntimeContext();
-  return resolveBundleFromContext(ctx, driverId, weekStartYmd);
+  return resolveBundleFromContext(ctx, driverId, weekStartYmd, serviceLine);
 }

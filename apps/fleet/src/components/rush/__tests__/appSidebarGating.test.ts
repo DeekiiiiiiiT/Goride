@@ -1,45 +1,50 @@
 import { describe, expect, it } from 'vitest';
+import {
+  canSeeCourierOps,
+  canSeeEarningsPolicy,
+  hasSharedOps,
+  rushModuleNavEnabled,
+} from '../../layout/sidebarGating';
 
-/** Sidebar gate matrix — entitlement must gate Rush nav, shared ops visible for delivery-only. */
-describe('AppSidebar rush gating contract', () => {
-  function canSeeCourierOps(input: {
-    hasRushDeliveryLine: boolean;
-    rushModules: boolean;
-    canViewCouriers: boolean;
-  }) {
-    return (
-      input.hasRushDeliveryLine &&
-      input.canViewCouriers &&
-      input.rushModules
-    );
-  }
-
-  function canSeeVehicleOps(input: { rushVisible: boolean; rideshareVisible: boolean }) {
-    const hasSharedOps = input.rushVisible || input.rideshareVisible;
-    return hasSharedOps;
-  }
-
+describe('sidebarGating', () => {
   it('hides Rush nav when modules are off', () => {
     expect(
       canSeeCourierOps({
         hasRushDeliveryLine: true,
-        rushModules: false,
-        canViewCouriers: true,
+        rushModuleEnabled: false,
+        canViewAnyCourierPage: true,
       }),
     ).toBe(false);
   });
 
   it('shows shared vehicle ops for delivery-only org', () => {
-    expect(canSeeVehicleOps({ rushVisible: true, rideshareVisible: false })).toBe(true);
+    expect(hasSharedOps({ rushVisible: true, rideshareVisible: false })).toBe(true);
   });
 
   it('rideshare-only org unchanged — no Rush nav without line', () => {
     expect(
       canSeeCourierOps({
         hasRushDeliveryLine: false,
-        rushModules: true,
-        canViewCouriers: true,
+        rushModuleEnabled: true,
+        canViewAnyCourierPage: true,
       }),
     ).toBe(false);
+  });
+
+  it('earnings policy visible for delivery-only when sidebar matrix allows', () => {
+    expect(
+      canSeeEarningsPolicy({
+        hasSharedOps: true,
+        sidebarVisible: true,
+        canView: true,
+      }),
+    ).toBe(true);
+  });
+
+  it('rushModuleNavEnabled requires at least one rush module', () => {
+    const allOff = () => false;
+    const couriersOn = (k: string) => k === 'rush_couriers';
+    expect(rushModuleNavEnabled(allOff)).toBe(false);
+    expect(rushModuleNavEnabled(couriersOn)).toBe(true);
   });
 });

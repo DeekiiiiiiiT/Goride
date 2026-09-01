@@ -4,6 +4,7 @@
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import * as kv from "./kv_store.tsx";
 import { ensureCustomerOrganization } from "./ensure_customer_org.ts";
+import { rushModuleOverridesForServiceLines } from "./enterprise_modules.ts";
 import { inferProductLineFromUser, type ProductLine } from "./product_line.ts";
 
 function readRolesArray(meta: Record<string, unknown> | undefined): string[] {
@@ -222,7 +223,10 @@ export async function provisionFleetOwner(
       .update({
         service_lines: serviceLines,
         business_type: primaryBusinessType,
-        ...(opts.enabledModules ? { enabled_modules: opts.enabledModules } : {}),
+        enabled_modules: rushModuleOverridesForServiceLines(
+          serviceLines,
+          opts.enabledModules ?? null,
+        ),
       })
       .eq("id", orgId);
   } catch (orgErr) {

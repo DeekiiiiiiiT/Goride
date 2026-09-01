@@ -19,8 +19,8 @@ const LINE_META: Record<ServiceLine, { label: string; description: string; icon:
     icon: Car,
   },
   rush_delivery: {
-    label: 'Rush Delivery',
-    description: 'Couriers, deliveries, and Rush revenue in your books.',
+    label: 'Deliveries',
+    description: 'Couriers, live delivery revenue, and weekly settlement.',
     icon: Package,
   },
 };

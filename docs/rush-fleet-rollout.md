@@ -14,7 +14,11 @@ Defined in `supabase/functions/_fleet-server/feature_flags.ts`:
 | `rush_settlement` | Delivery revenue in settlement + COD read APIs | off |
 | `rush_ui` | Rush navigation and pages in fleet app | off |
 
-**Prerequisite:** Module kill switch (V6) must be fixed before relying on flag rollback.
+**Prerequisite:** Module kill switch (W1) fixed — platform `false` defeats org override.
+
+## Entitlement model
+
+RoamFleet is the shared ops portal for rideshare and delivery. When an org's `service_lines` includes `rush_delivery`, all `rush_*` module keys are auto-provisioned in `enabled_modules`. KV flags (`rush_ui`, etc.) are **rollout controls only**, not paid SKUs.
 
 ## Pre-enable checklist
 

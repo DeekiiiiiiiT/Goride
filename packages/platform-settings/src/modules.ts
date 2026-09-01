@@ -248,6 +248,19 @@ export const RUSH_MODULE_KEYS = [
   'rush_merchant_link',
 ] as const;
 
+/** Sync rush_* module keys from service_lines — RoamFleet is shared, not a Rush upsell. */
+export function rushModuleOverridesForServiceLines(
+  serviceLines: string[] | null | undefined,
+  existing: Partial<Record<string, boolean>> | null | undefined = null,
+): Record<string, boolean> {
+  const merged: Record<string, boolean> = { ...(existing ?? {}) };
+  const hasRush = Array.isArray(serviceLines) && serviceLines.includes('rush_delivery');
+  for (const key of RUSH_MODULE_KEYS) {
+    merged[key] = hasRush;
+  }
+  return merged;
+}
+
 export function mergeFleetEffectiveModules(
   effective: Record<string, boolean>,
 ): Record<string, boolean> {
@@ -277,16 +290,9 @@ export function resolveEffectiveModules(
   const effective: Record<string, boolean> = {};
 
   for (const key of catalogKeys) {
-    // Paid add-ons: explicit org true turns module on even when product-line default is off.
-    if (org[key] === true) {
-      effective[key] = true;
-      continue;
-    }
-    if (org[key] === false) {
-      effective[key] = false;
-      continue;
-    }
-    effective[key] = pl[key] !== false;
+    const lineOn = pl[key] !== false;
+    const orgOn = org[key] !== false;
+    effective[key] = lineOn && orgOn;
   }
 
   return effective;

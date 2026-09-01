@@ -1100,6 +1100,31 @@ export const api = {
     return response.json();
   },
 
+  async createWorkforceInvite(payload: {
+    serviceLine?: 'rideshare' | 'rush_delivery';
+    invitedEmail?: string;
+    invitedPhone?: string;
+  }) {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/workforce/invites`, {
+      method: 'POST',
+      headers: await requireAuthHeaders(),
+      body: JSON.stringify(payload),
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err?.error || 'Failed to create invite');
+    }
+    return response.json();
+  },
+
+  async getWorkforceInvites() {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/workforce/invites`, {
+      headers: await requireAuthHeaders(null),
+    });
+    if (!response.ok) throw new Error('Failed to fetch workforce invites');
+    return response.json();
+  },
+
   // ── Toll Info ──────────────────────────────────────────────────────────
   async getTollInfo() {
     const response = await fetchWithRetry(`${API_ENDPOINTS.admin}/toll-info`, {
