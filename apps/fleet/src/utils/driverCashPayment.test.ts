@@ -10,7 +10,23 @@ import {
   isDriverPayoutTransaction,
   isPendingDriverPayoutForWeek,
   isSettlementPaidForWeek,
+  isSettlementParticipantTransaction,
+  isTollChargeTransaction,
 } from './driverCashPayment';
+
+describe('isSettlementParticipantTransaction', () => {
+  it('includes write-off and Toll Charge', () => {
+    expect(
+      isSettlementParticipantTransaction({
+        type: 'Cash_Write_Off',
+        category: 'Cash Write Off',
+        amount: 100,
+      }),
+    ).toBe(true);
+    expect(isTollChargeTransaction({ category: 'Toll Charge' })).toBe(true);
+    expect(isSettlementParticipantTransaction({ category: 'Toll Charge', amount: -50 })).toBe(true);
+  });
+});
 
 describe('isDriverCashPaymentTransaction', () => {
   it('accepts current Payment_Received rows', () => {

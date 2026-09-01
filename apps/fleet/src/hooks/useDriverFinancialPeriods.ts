@@ -49,6 +49,10 @@ export type DriverFinancialPeriodClient = {
   cashStillHeld: number;
   settlementAmount: number;
   payoutNet: number;
+  /** A-3: preferred when API dual-writes minors (client may ignore if majors already remapped). */
+  settlementAmountMinor?: number;
+  payoutNetMinor?: number;
+  cashStillHeldMinor?: number;
   settlementStatus: string;
   payoutStatus: string;
   tollStatus: string;

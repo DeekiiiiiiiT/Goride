@@ -18,9 +18,30 @@
 
 ## Enable indexed transaction reads (A-11)
 
-1. Backfill: `node scripts/backfill_settlement_transactions.mjs` (after deploy).
-2. Set `SETTLEMENT_TX_TABLE_READ=true` on fleet edge when backfill complete.
+**Backfill + parity completed 2026-09-01** (715/715, misses=0 from `fleet.transactions`).
+
+### Cutover checklist
+
+1. Deploy code that uses `isSettlementParticipantTransaction` (cash + payouts + write-offs + Toll Charge).
+2. Backfill (if re-running): `node scripts/backfill_settlement_transactions.mjs`  
+   Reads **`fleet.transactions`** (not KV). Requires `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY`.
+3. Parity: `node scripts/verify_settlement_tx_parity.mjs`  
+   Expect `misses=0`.
+4. Read path defaults **ON** after deploy. To force-enable: `SETTLEMENT_TX_TABLE_READ=true`.
+5. Spot-check one driver who has Cash Write Off and Toll Charge rows.
+
+### Rollback
+
+Set `SETTLEMENT_TX_TABLE_READ=false` on the fleet edge. Rebuild falls back to `getByPrefix("transaction:")` (fleet table scan).
 
 ## Nightly alerting
 
 Set `FINANCE_RECON_WEBHOOK_URL` for Slack/webhook on drift.
+
+## Cash source mismatch (§3.7)
+
+Amber badge only. Does **not** block Pay. Ledger passenger cash wins over trip CSV.
+
+## Toll reimbursed (§3.8)
+
+Display-only on Expenses until the live trace in `docs/settlement-toll-reimbursement-trace.md` is filled and decided.

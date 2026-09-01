@@ -5,6 +5,7 @@ export {
   periodEndForAnchor,
   dateWeekKey,
   fleetCalendarDay,
+  asWeekKey,
   DEFAULT_FLEET_TZ,
 } from './periodKey.ts';
 export type { WeekKey } from './periodKey.ts';
@@ -23,6 +24,8 @@ export {
   isClearedDriverPayout,
   isDriverCashPaymentTransaction,
   isClearedDriverCashPayment,
+  isTollChargeTransaction,
+  isSettlementParticipantTransaction,
   cashPaymentWeekKey,
   isCashReturnedForWeek,
   isCashWriteOffForWeek,

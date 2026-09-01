@@ -274,13 +274,15 @@ export function ReconciledPeriodOverlay({
                 Passenger cash → returns & credits → still held − net payout → residual
               </p>
               <p className="text-[11px] text-amber-700/80 mb-2 rounded-md bg-amber-50/80 px-2 py-1.5">
-                Platform toll reimbursement (tag credited) is display-only on Expenses until a live
-                reimbursed booking is confirmed — it does not change this week’s money residual.
+                Platform toll reimbursement (tag credited) is display-only on Expenses — it does not
+                change this week’s money residual. Confirmed via live sample (see
+                docs/settlement-toll-reimbursement-trace.md).
               </p>
               {detail.cashSourceMismatch != null && Math.abs(detail.cashSourceMismatch) > 0.5 ? (
                 <p className="text-[11px] text-amber-800 mb-2 rounded-md bg-amber-50 px-2 py-1.5">
-                  Cash source mismatch {fmt(detail.cashSourceMismatch)} — CSV Uber cash disagrees with
-                  ledger payout_cash; ledger wins. This does not block reconciliation.
+                  Cash source mismatch {fmt(detail.cashSourceMismatch)} — trip CSV Uber cash disagrees
+                  with ledger payout_cash; ledger already wins for passenger cash. Informational only —
+                  does not block Pay or reconciliation.
                 </p>
               ) : null}
               <Line label="Passenger cash" value={fmt(detail.cashCollected)} />

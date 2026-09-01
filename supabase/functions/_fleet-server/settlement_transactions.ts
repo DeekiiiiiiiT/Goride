@@ -3,20 +3,17 @@
  * Dual-write on KV persist; read path switches via SETTLEMENT_TX_TABLE_READ=true.
  */
 import { getServiceClientWithSchema } from "./service_client.ts";
-import { periodKeyFor } from "../../../packages/finance-core/src/periodKey.ts";
-import { DEFAULT_FLEET_TZ } from "../../../packages/finance-core/src/periodKey.ts";
+import { periodKeyFor, DEFAULT_FLEET_TZ } from "../../../packages/finance-core/src/periodKey.ts";
+import { isSettlementParticipantTransaction } from "../../../packages/finance-core/src/driverCashPayment.ts";
 import { getFleetTimezone } from "./timezone_helper.tsx";
-import {
-  isDriverCashPaymentTransaction,
-  isDriverPayoutTransaction,
-} from "../../../packages/finance-core/src/driverCashPayment.ts";
 
 function ledgerSb() {
   return getServiceClientWithSchema("ledger");
 }
 
+/** @deprecated use isSettlementParticipantTransaction — kept as alias for call sites */
 export function isSettlementMirrorTransaction(tx: Record<string, unknown>): boolean {
-  return isDriverCashPaymentTransaction(tx) || isDriverPayoutTransaction(tx);
+  return isSettlementParticipantTransaction(tx as Parameters<typeof isSettlementParticipantTransaction>[0]);
 }
 
 export function resolveTransactionPeriodAnchor(
@@ -37,7 +34,9 @@ export async function mirrorSettlementTransaction(
   timezone?: string,
 ): Promise<void> {
   if (!tx?.id || !tx?.driverId) return;
-  if (!isSettlementMirrorTransaction(tx)) return;
+  if (!isSettlementParticipantTransaction(tx as Parameters<typeof isSettlementParticipantTransaction>[0])) {
+    return;
+  }
   const tz = timezone || (await getFleetTimezone());
   const periodAnchor = resolveTransactionPeriodAnchor(tx, tz);
   if (!periodAnchor) return;
@@ -75,5 +74,8 @@ export async function loadMirroredDriverTransactions(
 }
 
 export function settlementTxTableReadEnabled(): boolean {
-  return Deno.env.get("SETTLEMENT_TX_TABLE_READ") === "true";
+  // Default ON after A-11 backfill+parity. Set SETTLEMENT_TX_TABLE_READ=false to roll back to fleet scan.
+  const raw = Deno.env.get("SETTLEMENT_TX_TABLE_READ");
+  if (raw === "false" || raw === "0") return false;
+  return true;
 }

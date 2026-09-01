@@ -5,6 +5,8 @@ export {
   isClearedDriverPayout,
   isDriverCashPaymentTransaction,
   isClearedDriverCashPayment,
+  isTollChargeTransaction,
+  isSettlementParticipantTransaction,
   cashPaymentWeekKey,
   isCashReturnedForWeek,
   isCashWriteOffForWeek,

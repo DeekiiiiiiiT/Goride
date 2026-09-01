@@ -5,7 +5,13 @@
 
 export const DEFAULT_FLEET_TZ = 'America/Jamaica';
 
-export type WeekKey = string; // yyyy-MM-dd Monday
+/** Branded Monday week key (yyyy-MM-dd). Mint only via periodKeyFor / dateWeekKey / asWeekKey. */
+export type WeekKey = string & { readonly __brand: 'WeekKey' };
+
+/** Trust a Monday YMD already known to be a week anchor. */
+export function asWeekKey(ymd: string): WeekKey {
+  return String(ymd || '').slice(0, 10) as WeekKey;
+}
 
 function calendarDayKey(input: string, timeZone: string): string | null {
   const raw = String(input || '').trim();
@@ -71,12 +77,12 @@ export function periodKeyFor(
       : event.date || event.effectiveAt || event.periodStart || '';
   const day = calendarDayKey(String(raw), fleetTz);
   if (!day || !/^\d{4}-\d{2}-\d{2}$/.test(day)) return null;
-  return mondayOfYmd(day);
+  return asWeekKey(mondayOfYmd(day));
 }
 
 /** Sunday of the Mon–Sun week starting at `anchor`. */
 export function periodEndForAnchor(anchorYmd: string): string {
-  return addDaysYmd(anchorYmd, 6);
+  return addDaysYmd(String(anchorYmd).slice(0, 10), 6);
 }
 
 /** Alias used by existing fleet week helpers. */

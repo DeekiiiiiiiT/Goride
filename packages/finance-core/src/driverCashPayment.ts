@@ -69,6 +69,31 @@ export function isDriverCashPaymentTransaction(
   return false;
 }
 
+/** Toll Charge rows feed tollChargedToDriver in the period rebuild (not via cash predicates). */
+export function isTollChargeTransaction(
+  t: Pick<CashPaymentLike, 'category'> | null | undefined,
+): boolean {
+  return String(t?.category || '') === 'Toll Charge';
+}
+
+/**
+ * Anything computeWeekCashBase or the Toll Charge filter reads.
+ * Mirror, backfill, and parity must all use this — one definition.
+ */
+export function isSettlementParticipantTransaction(
+  t:
+    | Pick<CashPaymentLike, 'amount' | 'category' | 'type' | 'description' | 'paymentMethod'>
+    | null
+    | undefined,
+): boolean {
+  if (!t) return false;
+  if (isTollChargeTransaction(t)) return true;
+  if (isCashWriteOffTransaction(t)) return true;
+  if (isDriverPayoutTransaction(t)) return true;
+  if (isDriverCashPaymentTransaction(t)) return true;
+  return false;
+}
+
 export function isClearedDriverCashPayment(
   t: Pick<
     CashPaymentLike,

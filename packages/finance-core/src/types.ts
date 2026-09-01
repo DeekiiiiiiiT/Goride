@@ -1,5 +1,7 @@
+import type { WeekKey } from './periodKey.ts';
+
 export type Money = number;
-export type WeekKey = string;
+export type { WeekKey };
 export type Basis = 'accrual' | 'cash';
 
 export const KNOWN_PLATFORMS = ['Uber', 'Roam', 'InDrive'] as const;

@@ -49,6 +49,11 @@ import {
   buildCashSettlementPersistFields,
   buildPeriodMetadata,
 } from "../../../packages/finance-core/src/periodPersistBody.ts";
+import {
+  projectionAllowsFuelSnapshotFallback,
+  projectionReadsEventsForFares,
+  projectionReadsEventsForFuel,
+} from "./period_projection_flags.ts";
 
 function sb() {
   return createClient(
@@ -627,9 +632,9 @@ export async function rebuildDriverFinancialPeriod(
     if (et === "fuel_finalized") fuelFinalized = true;
   }
 
-  // Fallback: finalized fuel reports when no fuel events yet (weekStart is SSOT).
-  // Dedupe by report id / weekStart so duplicate snapshots do not double-deduct.
-  if (!fuelFinalized) {
+  // Fallback: finalized fuel reports when events path empty AND snapshot opt-in.
+  // Prod had zero snapshot periods (2026-09-01) — do not silently reintroduce.
+  if (!fuelFinalized && (!projectionReadsEventsForFuel() || projectionAllowsFuelSnapshotFallback())) {
     fuelSource = "snapshot";
     const seenFuelKeys = new Set<string>();
     for (const r of context.fuelReports) {
@@ -675,8 +680,8 @@ export async function rebuildDriverFinancialPeriod(
   let tierId: string | null = share.tierId;
   let tierName: string | null = share.tierName;
 
-  // Trip fallback when no ledger fare_earning rows yet
-  if (earningsGross < 0.005 && tripCount === 0) {
+  // Trip fallback when no ledger fare_earning rows yet — off when fares-events flag is on.
+  if (!projectionReadsEventsForFares() && earningsGross < 0.005 && tripCount === 0) {
     let tripGross = 0;
     let nTrips = 0;
     for (const t of context.scopedTrips) {
@@ -810,7 +815,12 @@ export async function rebuildDriverFinancialPeriod(
       moneyUnlocked: derived.moneyUnlocked,
       cashHeldClamped: settled.adjCashBalance < -0.005,
       unclampedCashHeld: round2(settled.adjCashBalance),
-      projectionSources: { fuel: fuelSource, cash: "kv", tolls: "ledger" },
+      projectionSources: {
+        fuel: fuelSource,
+        cash: settlementTxTableReadEnabled() ? "table" : "kv",
+        tolls: "ledger",
+        fares: projectionReadsEventsForFares() ? "events" : "events_or_trips",
+      },
     },
     forceRelease: forceRelease
       ? {
@@ -1134,6 +1144,12 @@ export async function listDriverFinancialPeriods(
 }
 
 function mapDbPeriod(r: any): DriverFinancialPeriodRow {
+  const fromMinor = (minor: unknown, major: unknown): number => {
+    if (minor != null && Number.isFinite(Number(minor))) {
+      return round2(Number(minor) / 100);
+    }
+    return Number(major) || 0;
+  };
   return {
     id: r.id,
     driverId: r.driver_id,
@@ -1168,9 +1184,9 @@ function mapDbPeriod(r: any): DriverFinancialPeriodRow {
     cashReturned: Number(r.cash_returned) || 0,
     cashWrittenOff: Number(r.cash_written_off) || 0,
     settlementPaid: Number(r.settlement_paid) || 0,
-    cashStillHeld: Number(r.cash_still_held) || 0,
-    settlementAmount: Number(r.settlement_amount) || 0,
-    payoutNet: Number(r.payout_net) || 0,
+    cashStillHeld: fromMinor(r.cash_still_held_minor, r.cash_still_held),
+    settlementAmount: fromMinor(r.settlement_amount_minor, r.settlement_amount),
+    payoutNet: fromMinor(r.payout_net_minor, r.payout_net),
     tipsPaidToDriver:
       Number(r.tips_paid_to_driver) ||
       Number(r.metadata?.financeCore?.tipsPaidToDriver) ||

@@ -40,6 +40,12 @@ Independently re-derived, not taken on trust:
 
 **Three items shipped as scaffolds that are not yet load-bearing, and two reintroduced the §1.1 pattern:** the rebuild wipes `signedSnapshot` (**C-1**, high — A-7's audit trail survives only until the next background job); the A-3 `*_minor` columns are dual-written by the rebuild but not the cash sync (**C-2**, latent landmine at cutover); `driver_settlement_transactions` is a table with no code and both KV full-scans remain (**C-3**). Root cause of C-1 and C-2 is the same: **A-2 unified status derivation but not the persist body**, so each write path still assembles its own column set.
 
+### ✅ Fifth pass verified (2026-09-01, commit `f3eecf1d`) — see **Part VI**
+
+**C-1 through C-5 all fixed. A-2 is now genuinely complete** — `buildPeriodMetadata` + `buildCashSettlementPersistFields` mean both write paths share the persist body, removing the cause of C-1/C-2 rather than the instances. Tests green: **52 finance-core** + **1,081 fleet**; CI import guard clean on both rules. The architecture program (A-1, A-2, A-4, A-6, A-7, A-8, A-9, C-5) is done and load-bearing.
+
+**Two new latent defects, both in the A-11 flag path — production-safe while `SETTLEMENT_TX_TABLE_READ` is off, but blocking for cutover:** the mirror predicate omits `Cash Write Off` and `Toll Charge` (**D-1** — flipping the flag would underpay by every write-off and overpay by every toll charge), and the backfill script looks for `'Driver Payout'` / `'Driver_Payout'` while the data says `'Driver Payouts'` / `'Payout'`, so it would mirror zero payouts (**D-2**). Three disagreeing definitions of "settlement transaction" now exist; unify one predicate in `finance-core` and add a mirror-vs-KV parity check before flipping.
+
 ### Original findings — status
 
 | # | Finding | Status | Evidence |
@@ -62,8 +68,8 @@ Independently re-derived, not taken on trust:
 | 3.4 | `round2` asymmetric / loses `x.xx5` | ✅ **Resolved** | Reimplemented as half-away-from-zero via `toFixed(6)` on cents. Test pins `0.125→0.13`, `−0.125→−0.13`, `1.005→1.01`. |
 | 3.5 | `getAdjCashBalance` omits write-offs | ✅ **Resolved** | Third parameter added, defaults to 0. |
 | 3.6 | `openBalance` nets opposing weeks to zero | ✅ **Resolved** | Split into `openCompanyOwes` / `openDriverOwes`; `openBalance` is now their sum of absolutes. |
-| 3.7 | `cashSourceMismatch` computed then ignored | ⚠️ **Partial** | Now plumbed to `ReconciledPeriodRow` and badged in the desk at `> 0.5`. Still does not gate finalization — acceptable if that is the intent. |
-| 3.8 | `tollReimbursed` outside the formula | ⏸️ **Open (business question)** | Unchanged, as expected. Still needs confirmation against one real reimbursed toll — see Part III. |
+| 3.7 | `cashSourceMismatch` computed then ignored | ✅ **Resolved (intentional badge-only)** | Badge at `> 0.5`; does **not** gate Pay/finalization — ledger Uber cash already wins. See `docs/settlement-toll-reimbursement-trace.md` §3.7. |
+| 3.8 | `tollReimbursed` outside the formula | ✅ **Resolved (display-only intentional)** | Live sample 2026-08-24: plaza/tag reimbursement separate from fare; formula unchanged. See `docs/settlement-toll-reimbursement-trace.md`. |
 | 3.9 | Blank status counts as cleared | ✅ **Resolved** | Removed from cash payments, payouts and write-offs. Regression test pins it. |
 | 3.10 | `max()` of two fuel-credit concepts | ✅ **Resolved** | Now prefers fleet share when present, falls back to TX credits only when absent. |
 | 3.11 | Duplicate fuel reports double-deduct | ✅ **Resolved** | `seenFuelKeys` dedupe by report id / weekStart in the fallback loop. |
@@ -684,6 +690,130 @@ C-1 and C-2 are both the same lesson one more time: **A-2 unified the *status* d
 C-3 and the A-3 scaffold are unfinished rather than wrong. Neither is dangerous while unused; both should either be completed or reverted, because half-migrated state is its own liability.
 
 ---
+
+# PART VI — FIFTH VERIFICATION PASS (2026-09-01, commit `f3eecf1d`)
+
+**Tests green: 52 finance-core (up from 42) + 1,081 fleet. CI import guard passes both rules.**
+
+**All five Part V findings (C-1…C-5) are fixed, and A-2 is now properly finished** — which was the one structural item I said would prevent the next three bugs. Two new defects found, both latent behind the `SETTLEMENT_TX_TABLE_READ` flag; neither affects production while that flag is off.
+
+## Confirmed done
+
+| Item | Status | Evidence |
+|---|---|---|
+| **C-1** rebuild wipes `signedSnapshot` | ✅ | `periodSignedSnapshot.ts` — `resolveSignedSnapshot` stamps on payout increase and carries prior forward; `preservePeriodMetaKeys` allowlists it across rebuilds. Both paths call `buildPeriodMetadata` (rebuild `:789`, sync `:1450`). Backed by `driver_period_revisions` (migration `20260901120000`) + `period_revision.ts`. |
+| **C-2** `_minor` written by rebuild only | ✅ | `buildCashSettlementPersistFields` returns the `_minor` triple; rebuild consumes it at `:956-958`, sync passes the whole object to `updatePeriodCashWithVersion` at `:1466`. **And** `checkPeriodInvariants` now asserts `*_minor` against the NUMERIC columns (`:118-143`) — exactly the guard that keeps the dual-write honest through cutover. |
+| **C-3** A-11 dead table | ✅ (staged) | Now a real migration: dual-write hooked into `kv_store.tsx:66`, bounded read via `loadMirroredDriverTransactions`, flag defaulting off, backfill script. Both read sites collapsed into one `loadDriverTransactionsForSettlement` helper. |
+| **C-4** layering + wrong CI guard | ✅ | `tollLedgerIntegrity.ts` and `periodTollCashSpend.ts` moved into `finance-core`; zero `apps/` imports remain in `driver_financial_periods.ts`; `check-fleet-edge-roam-imports.mjs` gained a second rule that actually bans `apps/` imports in the settlement money path. Guard reports clean on both rules. |
+| **C-5** no projection↔ledger control total | ✅ | `periodLedgerRecon.ts` sums active `financial_events` by type and diffs against the projection; wired into `finance-recon`. |
+
+### A-2 is now genuinely complete
+
+This is the important one. `buildPeriodMetadata` + `buildCashSettlementPersistFields` mean **both write paths now share the persist body**, not just the status derivation. C-1 and C-2 were two instances of the same root cause — each path assembling its own column set — and the fix removes the cause rather than the instances. A future field added to `CashSettlementPersistFields` reaches both writers automatically.
+
+---
+
+## D-1 🟠 High (latent behind the flag) — the mirror omits two transaction types the settlement math depends on
+
+**Files:** [settlement_transactions.ts:18-20](supabase/functions/_fleet-server/settlement_transactions.ts#L18), [driver_financial_periods.ts:263-273, 305-307](supabase/functions/_fleet-server/driver_financial_periods.ts#L263)
+
+The mirror predicate is:
+
+```ts
+export function isSettlementMirrorTransaction(tx: Record<string, unknown>): boolean {
+  return isDriverCashPaymentTransaction(tx) || isDriverPayoutTransaction(tx);
+}
+```
+
+`isDriverCashPaymentTransaction` explicitly returns `false` for write-offs and payouts; `isDriverPayoutTransaction` matches only `type === 'Payout'` / `category === 'Driver Payouts'`. Neither matches `Cash Write Off` or `Toll Charge`.
+
+But `loadDriverTransactionsForSettlement` — the single helper both paths now use — feeds two consumers that need exactly those:
+
+```ts
+const driverTxAll = await loadDriverTransactionsForSettlement(driverId, idSet);
+const chargeTxAll = driverTxAll.filter((t) => String(t.category || "") === "Toll Charge");
+//                                                                          ↑ never mirrored
+// and computeWeekCashBase(…, transactions: driverTxAll) → isCashWriteOffForWeek
+//                                                          ↑ never mirrored
+```
+
+**Executed against the shipped predicate:**
+
+```
+  MIRRORED  Cash Collection  (cashReturned)
+  MIRRORED  Driver Payout    (settlementPaid)
+X MISSING   Cash Write Off   (cashWrittenOff)
+X MISSING   Toll Charge      (tollChargedToDriver)
+```
+
+With `SETTLEMENT_TX_TABLE_READ=true`:
+
+| Field | Becomes | Effect on settlement |
+|---|---|---|
+| `cashWrittenOff` | `0` | `adjCashBalance` rises → gross falls → **driver underpaid** by the write-off amount |
+| `tollChargedToDriver` | `0` | `cashOwed` falls → gross rises → **driver overpaid** by the charge amount |
+
+They move in opposite directions, so they will not cancel or present as a single clean delta. `checkPeriodInvariants` would not catch it either — the row would be internally consistent with its own (wrong) inputs.
+
+**Do not flip that flag until the predicate covers all four types.**
+
+## D-2 🟠 High (latent) — the backfill script would mirror zero payouts
+
+**File:** [backfill_settlement_transactions.mjs:17-23](scripts/backfill_settlement_transactions.mjs#L17)
+
+```js
+function isSettlementTx(tx) {
+  const cat = String(tx?.category || "");
+  const type = String(tx?.type || "");
+  if (cat === "Cash Collection" && type === "Payment_Received") return true;
+  if (cat === "Driver Payout" || type === "Driver_Payout") return true;
+  return false;
+}
+```
+
+`buildDriverPayoutTx` emits `category: 'Driver Payouts'` (plural) and `type: 'Payout'`. The script looks for `'Driver Payout'` and `'Driver_Payout'`. **Neither string exists in the data** — every historical payout would be skipped, so `settlementPaid` would read `0` for all backfilled weeks.
+
+The cash branch is also narrower than runtime: it requires category **and** type together, while `isDriverCashPaymentTransaction` accepts either, plus the description-based match (`'cash payment from driver'`) and the `type === 'revenue' && cat.includes('cash')` branch.
+
+So there are now **three different definitions of "a settlement transaction"** — the backfill's, the runtime mirror's, and what the settlement math actually consumes — and all three disagree.
+
+**Fix for both D-1 and D-2 is the same shape as A-1/A-2, one layer down:** export a single `isSettlementParticipantTransaction` from `finance-core`, defined as *anything `computeWeekCashBase` or the Toll Charge filter reads*, and have the mirror, the backfill and any future consumer call it. Then add it to `checkPeriodInvariants`' remit or a dedicated parity check: for a sample of drivers, assert the mirrored set equals the KV set. That parity check is what makes the cutover safe rather than hopeful.
+
+## D-3 🟢 Low — mirror and backfill bucket the period anchor differently
+
+`resolveTransactionPeriodAnchor` (runtime) falls back to `periodKeyFor(date, tz)` — fleet-calendar Monday. The backfill's `periodAnchor()` falls back to `String(tx.date).slice(0, 10)` — a raw date, not a week key, and not timezone-aware.
+
+This is the §2.2 lesson recurring in the new code. Impact is currently nil because `loadMirroredDriverTransactions` queries by `driver_id` alone and the real week filtering still happens inside `computeWeekCashBase`. But the column is indexed as if it were authoritative, and the moment anything reads `period_anchor` from this table the two writers will disagree. Use `periodKeyFor` in both.
+
+---
+
+## Where this leaves things
+
+The architecture work is essentially done. A-1 (control calls the formula), A-2 (one persist body), A-4 (property tests), A-6 (version guards), A-7 (revisions + preserved snapshot), A-8 (dual formula deleted), A-9 (boundary enforced in CI), and C-5 (ledger control total) are all real and load-bearing. The invariant suite now encodes eight checks, including the minor/NUMERIC parity that protects the in-flight A-3 migration.
+
+What remains is **finishing A-11 safely**. Everything about its staging is right — dual-write first, read behind a flag, backfill script, one read helper — but the predicate that decides *what* gets mirrored is wrong in two places and inconsistent in a third. That is a pre-cutover problem, not a production one, and D-1/D-2 are exactly the kind of thing this staged approach exists to catch before the flag flips.
+
+**Recommended order:** unify the predicate in `finance-core` → fix the backfill strings → add a mirror-vs-KV parity check → backfill → verify parity on real drivers → only then flip `SETTLEMENT_TX_TABLE_READ`.
+
+---
+
+# PART VII — FLAWLESS FINISH (2026-09-01)
+
+**Program complete in repo + data.**
+
+| Item | Status | Evidence |
+|---|---|---|
+| **D-1** mirror omits write-off / Toll Charge | ✅ | `isSettlementParticipantTransaction` in finance-core; mirror uses it |
+| **D-2** backfill wrong payout strings | ✅ | Scripts + SQL use `Driver Payouts` / `Payout`; source is `fleet.transactions` |
+| **D-3** week-key diverge | ✅ | `resolveTransactionPeriodAnchor` / `periodKeyFor` shared with scripts |
+| **A-11 cutover** | ✅ | Backfill 715 rows; parity misses=0; read path defaults ON (`SETTLEMENT_TX_TABLE_READ=false` to roll back) |
+| **§3.7** | ✅ | Intentional badge-only; overlay copy tightened |
+| **§3.8** | ✅ | Live sample 2026-08-24 — display-only locked (`docs/settlement-toll-reimbursement-trace.md`) |
+| **A-3** minors load-bearing | ✅ | `mapDbPeriod` prefers `*_minor` |
+| **A-10** branded WeekKey | ✅ | `WeekKey` + `asWeekKey` / `periodKeyFor` mint |
+| **A-5** snapshot retirement | ✅ | Fuel snapshot opt-in only (`PROJECTION_ALLOW_FUEL_SNAPSHOT`); fares trip fallback until `PROJECTION_EVENTS_FARES=true`; cash source `table` when mirror on |
+
+**Deploy:** ship fleet edge so default mirror reads and projection flags take effect.
 
 # PART I — ORIGINAL AUDIT (2026-08-31, pre-remediation)
 

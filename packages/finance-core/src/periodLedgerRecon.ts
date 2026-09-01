@@ -99,5 +99,11 @@ export function checkPeriodVsLedgerEvents(
     pushLedgerDrift(drifts, row, 'ledger_toll_reimbursed', tollReimbursedPersisted, tollReimbursedLedger);
   }
 
+  const tollChargedLedger = Math.abs(sums.toll_charged_to_driver || 0);
+  const tollChargedPersisted = Number((row as { toll_charged_to_driver?: number }).toll_charged_to_driver) || 0;
+  if (tollChargedLedger > 0 || tollChargedPersisted > 0) {
+    pushLedgerDrift(drifts, row, 'ledger_toll_charged_to_driver', tollChargedPersisted, tollChargedLedger);
+  }
+
   return drifts;
 }
