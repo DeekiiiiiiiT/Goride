@@ -20,6 +20,8 @@ Defined in `supabase/functions/_fleet-server/feature_flags.ts`:
 
 RoamFleet is the shared ops portal for rideshare and delivery. When an org's `service_lines` includes `rush_delivery`, all `rush_*` module keys are auto-provisioned in `enabled_modules`. KV flags (`rush_ui`, etc.) are **rollout controls only**, not paid SKUs.
 
+Fleet owners configure service lines in **RoamFleet → Settings**. Platform staff can override service lines and rollout flags in **Dominion → Roam Fleet → Customer Accounts → org detail**.
+
 ## Pre-enable checklist
 
 - [ ] Wave 1 gate: invite accept requires auth; RLS uses `organizationId` claim
@@ -30,32 +32,54 @@ RoamFleet is the shared ops portal for rideshare and delivery. When an org's `se
 
 ## Enable sequence (per pilot org)
 
-1. `service_lines_enabled` — org reads multi-line config
-2. `rush_courier_link` — invite couriers, verify roster
-3. `rush_trip_projection` — live delivery→trip sync; monitor recon daily
-4. `rush_ui` — Rush nav surfaces (after entitlement gating verified)
-5. PO sign-off on payout routing
-6. `rush_settlement` — COD + combined settlement
+### Dominion UI (preferred)
 
-## Admin API
+1. Log in to **Dominion** as `platform_owner`
+2. **Roam Fleet → Customer Accounts** → open the pilot org
+3. **Service lines** — confirm **Deliveries** is on (toggle and save if needed)
+4. **Delivery rollout** — enable flags in order (UI enforces dependencies):
+   - Service lines config
+   - Courier linking
+   - Trip projection
+   - Delivery UI
+   - Settlement (confirm modal — money impact)
+5. **Effective delivery modules** — read-only; should show all `rush_*` on when Deliveries is entitled
+
+**Permissions:** `platform_support` can view rollout status; only `platform_owner` can edit service lines or toggle flags.
+
+**Not in scope:** `roamfleet.co/admin` (fleet product admin) and Dominion **Roam Rush → Merchants** (marketplace merchants).
+
+### Manual pilot checklist (post-deploy)
+
+- [ ] Pilot org: service lines match expectation in Dominion org detail
+- [ ] Walk enable sequence 1→5; verify fleet app invites / projection / nav per flag
+- [ ] Control org (rideshare-only): delivery off, rollout flags inert
+- [ ] New signup with delivery: no module picker step; Settings shows “Delivery included”
+
+## Admin API (fallback / automation)
 
 ```bash
-# Check flags
-curl -X GET "$API/admin/feature-flags" -H "Authorization: Bearer $ADMIN_JWT"
+# Consolidated status for one org
+curl -X GET "$API/admin/organizations/ORG_UUID/rush-rollout" \
+  -H "Authorization: Bearer $ADMIN_JWT"
 
-# Enable for one org
+# Platform owner: set service lines
+curl -X PATCH "$API/admin/organizations/ORG_UUID/service-lines" \
+  -H "Authorization: Bearer $ADMIN_JWT" \
+  -H "Content-Type: application/json" \
+  -d '{"serviceLines":["rideshare","rush_delivery"]}'
+
+# Enable flag for one org (platform owner only for rush_* flags)
 curl -X POST "$API/admin/feature-flags/rush_trip_projection/enable-for-org" \
   -H "Authorization: Bearer $ADMIN_JWT" \
   -H "Content-Type: application/json" \
-  -d '{"organizationId":"ORG_UUID"}'
+  -d '{"orgId":"ORG_UUID"}'
 
-# Global enable (after pilot)
-curl -X POST "$API/admin/feature-flags/rush_trip_projection/enable" \
-  -H "Authorization: Bearer $ADMIN_JWT"
-
-# Emergency disable
-curl -X POST "$API/admin/feature-flags/rush_trip_projection/emergency-disable" \
-  -H "Authorization: Bearer $ADMIN_JWT"
+# Disable for org
+curl -X POST "$API/admin/feature-flags/rush_trip_projection/disable-for-org" \
+  -H "Authorization: Bearer $ADMIN_JWT" \
+  -H "Content-Type: application/json" \
+  -d '{"orgId":"ORG_UUID"}'
 ```
 
 ## Rollback

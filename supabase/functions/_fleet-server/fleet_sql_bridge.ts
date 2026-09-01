@@ -19,6 +19,26 @@ import type { FleetDomain as FD } from "./fleet_table_flags.ts";
 
 type Call = { method: string; args: unknown[] };
 
+export type KvStoreQueryResult = {
+  data: unknown;
+  error: unknown;
+  count?: number | null;
+};
+
+/** Chainable KV query builder returned by fromKvStore(). */
+export interface KvStoreQueryBuilder extends PromiseLike<KvStoreQueryResult> {
+  select(columns: string): KvStoreQueryBuilder;
+  like(column: string, pattern: string): KvStoreQueryBuilder;
+  eq(column: string, value: unknown): KvStoreQueryBuilder;
+  in(column: string, values: unknown[]): KvStoreQueryBuilder;
+  order(column: string, options?: unknown): KvStoreQueryBuilder;
+  range(from: number, to: number): KvStoreQueryBuilder;
+  limit(count: number): KvStoreQueryBuilder;
+  maybeSingle(): PromiseLike<KvStoreQueryResult>;
+  single(): PromiseLike<KvStoreQueryResult>;
+  delete(): KvStoreQueryBuilder;
+}
+
 function findDomainForPrefix(prefix: string) {
   return (
     FLEET_DOMAINS.find((d) => d.prefixes.some((p) => p === prefix)) ||
@@ -267,7 +287,7 @@ async function replayRaw(raw: SupabaseClient, calls: Call[]) {
   return await q;
 }
 
-function createBuilder(raw: SupabaseClient) {
+function createBuilder(raw: SupabaseClient): KvStoreQueryBuilder {
   const calls: Call[] = [];
 
   const run = async () => {
@@ -295,13 +315,14 @@ function createBuilder(raw: SupabaseClient) {
       return api;
     };
   }
-  (api as any).then = (onFulfilled: any, onRejected: any) => run().then(onFulfilled, onRejected);
+  (api as unknown as KvStoreQueryBuilder).then = (onFulfilled: any, onRejected: any) =>
+    run().then(onFulfilled, onRejected);
   (api as any).catch = (onRejected: any) => run().catch(onRejected);
-  return api;
+  return api as unknown as KvStoreQueryBuilder;
 }
 
 /** Explicit entry for legacy chained KV queries (SQL pushdown when mapped). */
-export function fromKvStore() {
+export function fromKvStore(): KvStoreQueryBuilder {
   return createBuilder(rawClient());
 }
 

@@ -28,6 +28,13 @@ import { recoveryRedirectForSurface } from '@roam/auth-client';
 import type { CrossProductStatus } from '../../services/platform/identityService';
 import { ConfirmationModal } from './ConfirmationModal';
 import { CrossProductStatusPanel } from './platform/CrossProductStatusPanel';
+import {
+  FleetServiceLinesPanel,
+  FleetRushRolloutPanel,
+  FleetRushModulesReadOnly,
+  fetchRushRollout,
+  type RushRolloutResponse,
+} from '@roam/admin-core';
 import { toast } from 'sonner';
 
 // -------------------------------------------------------------------
@@ -78,6 +85,8 @@ interface OrgSummary {
   stats: OrgStats;
   teamMembers: OrgTeamMember[];
   drivers: OrgDriver[];
+  serviceLines?: string[];
+  rushModules?: Record<string, boolean>;
 }
 
 interface Props {
@@ -190,6 +199,26 @@ export function OrganizationDetail({ orgId, onBack }: Props) {
     staleTime: 60 * 1000,
     enabled: !!accessToken && crossProductExpanded,
   });
+
+  const { data: rushRollout, isLoading: rushRolloutLoading } = useQuery<RushRolloutResponse>({
+    queryKey: ['adminRushRollout', orgId],
+    queryFn: () =>
+      fetchRushRollout(
+        { apiBaseUrl: API_ENDPOINTS.fleet, accessToken: accessToken! },
+        orgId,
+      ),
+    staleTime: 30 * 1000,
+    enabled: !!accessToken,
+  });
+
+  const refreshRushPanels = () => {
+    queryClient.invalidateQueries({ queryKey: ['adminRushRollout', orgId] });
+    queryClient.invalidateQueries({ queryKey: ['adminOrgDetail', orgId] });
+  };
+
+  const apiConfig = { apiBaseUrl: API_ENDPOINTS.fleet, accessToken: accessToken ?? '' };
+  const serviceLines = rushRollout?.serviceLines ?? data?.serviceLines ?? ['rideshare'];
+  const rushModules = rushRollout?.rushModulesEffective ?? data?.rushModules ?? {};
 
   const error = queryError ? (queryError as Error).message : null;
   const owner = data?.owner;
@@ -413,6 +442,32 @@ export function OrganizationDetail({ orgId, onBack }: Props) {
           </div>
         </div>
       </div>
+
+      {/* RoamFleet delivery entitlement + rollout (Dominion ops) */}
+      {!rushRolloutLoading && rushRollout && (
+        <div className="space-y-4">
+          <FleetServiceLinesPanel
+            orgId={orgId}
+            serviceLines={serviceLines}
+            canEdit={isPlatformOwner}
+            apiConfig={apiConfig}
+            onUpdated={refreshRushPanels}
+          />
+          <FleetRushRolloutPanel
+            orgId={orgId}
+            rollout={rushRollout}
+            canEdit={isPlatformOwner}
+            apiConfig={apiConfig}
+            onUpdated={refreshRushPanels}
+          />
+          <FleetRushModulesReadOnly rushModules={rushModules} />
+        </div>
+      )}
+      {rushRolloutLoading && (
+        <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white p-5 text-sm text-slate-500 dark:border-slate-800 dark:bg-slate-900/40">
+          <Loader2 className="h-4 w-4 animate-spin" /> Loading delivery rollout…
+        </div>
+      )}
 
       {/* Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">

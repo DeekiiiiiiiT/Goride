@@ -7,7 +7,6 @@ import { Switch } from '../ui/switch';
 import { Label } from '../ui/label';
 import { toast } from 'sonner';
 import { useBusinessConfig } from '../auth/BusinessConfigContext';
-import { useFeatureFlags } from '../auth/FeatureFlagContext';
 import { api } from '../../services/api';
 
 type ServiceLine = 'rideshare' | 'rush_delivery';
@@ -27,7 +26,6 @@ const LINE_META: Record<ServiceLine, { label: string; description: string; icon:
 
 export function ServiceLinesSettingsCard() {
   const { serviceLines, refreshConfig } = useBusinessConfig();
-  const { isModuleEnabled } = useFeatureFlags();
   const [draft, setDraft] = useState<ServiceLine[]>(serviceLines);
   const [saving, setSaving] = useState(false);
 
@@ -43,10 +41,7 @@ export function ServiceLinesSettingsCard() {
     });
   };
 
-  const rushAddonActive =
-    isModuleEnabled('rush_couriers') ||
-    isModuleEnabled('rush_deliveries') ||
-    isModuleEnabled('rush_courier_settlements');
+  const deliveryIncluded = draft.includes('rush_delivery');
 
   const handleSave = async () => {
     if (draft.length === 0) {
@@ -74,7 +69,7 @@ export function ServiceLinesSettingsCard() {
       <CardHeader>
         <CardTitle>Service lines</CardTitle>
         <CardDescription>
-          Add or hide Rush Delivery alongside rideshare. Removing a line hides nav only — your data stays.
+          Run rideshare, deliveries, or both from one portal. Removing a line hides nav only — your data stays.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -95,16 +90,16 @@ export function ServiceLinesSettingsCard() {
                 <div>
                   <div className="flex items-center gap-2">
                     <p className="font-medium text-slate-900 dark:text-slate-100">{meta.label}</p>
-                    {isRush && rushAddonActive && (
+                    {isRush && deliveryIncluded && (
                       <Badge variant="secondary" className="text-xs">
-                        Add-on active
+                        Delivery included
                       </Badge>
                     )}
                   </div>
                   <p className="mt-1 text-sm text-slate-500">{meta.description}</p>
                   {isRush && (
                     <p className="mt-2 text-xs text-slate-400">
-                      Roam approves couriers; you nominate and upload docs.
+                      Roam approves couriers; you nominate and upload docs. Features roll out gradually during pilot.
                     </p>
                   )}
                 </div>
@@ -127,9 +122,6 @@ export function ServiceLinesSettingsCard() {
           {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
           Save service lines
         </Button>
-        <p className="text-xs text-slate-500">
-          Rush paid modules (e.g. courier settlements) are enabled at signup or by Roam admin — billing integration pending.
-        </p>
       </CardContent>
     </Card>
   );

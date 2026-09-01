@@ -80,3 +80,6 @@ export * from './settings';
 
 // Customer / team account management
 export * from './customers';
+
+// RoamFleet delivery rollout (Dominion org detail)
+export * from './fleet';

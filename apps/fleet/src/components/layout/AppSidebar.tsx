@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import {
   canSeeCourierOps as computeCanSeeCourierOps,
   canSeeEarningsPolicy as computeCanSeeEarningsPolicy,
@@ -147,17 +148,17 @@ export function AppSidebar({
   const canSeeSystem = canView('user-management') || canView('settings');
 
   // Accordion only for Fleet Ops (has mid-level Fuel/Toll desks)
-  const [openSection, setOpenSection] = React.useState<SectionId | null>(() =>
+  const [openSection, setOpenSection] = useState<SectionId | null>(() =>
     fleetOpsActive(currentPage) ? 'fleet-ops' : null,
   );
   // Single-open horizontal fly-out across the whole nav
-  const [openFlyout, setOpenFlyout] = React.useState<FlyoutId | null>(null);
+  const [openFlyout, setOpenFlyout] = useState<FlyoutId | null>(null);
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (fleetOpsActive(currentPage)) setOpenSection('fleet-ops');
   }, [currentPage]);
 
-  React.useEffect(() => {
+  useEffect(() => {
     setOpenFlyout(null);
   }, [currentPage]);
 

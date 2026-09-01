@@ -3,6 +3,9 @@
   "version": "0.1.0",
   "main": "src/index.ts",
   "types": "src/index.ts",
+  "scripts": {
+    "test": "vitest run"
+  },
   "exports": {
     ".": "./src/index.ts",
     "./settings": "./src/settings/index.ts",
@@ -27,5 +30,8 @@
     "sonner": "^2.0.3",
     "clsx": "*",
     "tailwind-merge": "*"
+  },
+  "devDependencies": {
+    "vitest": "^3.2.4"
   }
 }

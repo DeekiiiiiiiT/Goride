@@ -11763,11 +11763,85 @@ app.get("/make-server-37f42386/admin/organizations/:orgId/summary", requireAuth(
       tollEntries: 0,
     };
 
+    const { data: orgRow } = await supabase
+      .from("organizations")
+      .select("service_lines, business_type, enabled_modules")
+      .eq("id", orgId)
+      .maybeSingle();
+
+    const serviceLines = (orgRow?.service_lines as string[] | null) ?? ["rideshare"];
+    const orgBusinessType = (orgRow?.business_type as string | null) ?? ownerData.businessType;
+    const enabledModules = orgRow?.enabled_modules as Record<string, boolean> | null;
+    const rushModules: Record<string, boolean> = {};
+    for (const k of ["rush_couriers", "rush_deliveries", "rush_courier_settlements", "rush_supply_health", "rush_merchant_link"]) {
+      rushModules[k] = enabledModules?.[k] === true;
+    }
+
     console.log(`[Admin Org Detail] Org ${orgId}: ${teamMembers.length} team, ${stats.drivers} drivers, ${vehicleCount} vehicles, ${fuelCount} fuel`);
-    return c.json({ owner: ownerData, stats, teamMembers, drivers });
+    return c.json({
+      owner: { ...ownerData, businessType: orgBusinessType },
+      stats,
+      teamMembers,
+      drivers,
+      serviceLines,
+      businessType: orgBusinessType,
+      rushModules,
+    });
   } catch (e: any) {
     console.error("[Admin Org Detail] Error:", e);
     return c.json({ error: e.message }, 500);
+  }
+});
+
+// PATCH /admin/organizations/:orgId/service-lines — platform owner sets fleet org service lines
+app.patch("/make-server-37f42386/admin/organizations/:orgId/service-lines", requireAuth(), async (c) => {
+  try {
+    const rbacUser = c.get("rbacUser") as RbacUser;
+    const { canEditOrgServiceLines, parseServiceLinesInput, applyOrgServiceLines } = await import("./rush_rollout_admin.ts");
+    if (!canEditOrgServiceLines(rbacUser)) {
+      return c.json({ error: "Forbidden — platform owner required" }, 403);
+    }
+
+    const orgId = c.req.param("orgId");
+    const body = await c.req.json();
+    const lines = parseServiceLinesInput(body?.serviceLines);
+    if (!lines) return c.json({ error: "serviceLines required" }, 400);
+
+    const result = await applyOrgServiceLines(supabase, orgId, lines);
+
+    await logAdminAction({
+      actorId: rbacUser.userId,
+      actorName: rbacUser.email || "Platform Admin",
+      action: "update_org_service_lines",
+      targetId: orgId,
+      targetEmail: "",
+      details: `Set service lines: ${lines.join(", ")}`,
+    });
+
+    return c.json(result);
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error("[Admin Org Service Lines] PATCH error:", msg);
+    return c.json({ error: msg }, 500);
+  }
+});
+
+// GET /admin/organizations/:orgId/rush-rollout — consolidated Rush rollout status for Dominion
+app.get("/make-server-37f42386/admin/organizations/:orgId/rush-rollout", requireAuth(), async (c) => {
+  try {
+    const rbacUser = c.get("rbacUser") as RbacUser;
+    const { canViewPlatformOrgAdmin, buildRushRolloutStatusWithOrg } = await import("./rush_rollout_admin.ts");
+    if (!canViewPlatformOrgAdmin(rbacUser)) {
+      return c.json({ error: "Forbidden — platform staff required" }, 403);
+    }
+
+    const orgId = c.req.param("orgId");
+    const status = await buildRushRolloutStatusWithOrg(supabase, orgId);
+    return c.json(status);
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error("[Admin Rush Rollout] GET error:", msg);
+    return c.json({ error: msg }, 500);
   }
 });
 
@@ -14935,31 +15009,14 @@ app.patch("/make-server-37f42386/org/service-lines", requireAuth(), async (c) =>
     const orgId = getOrgId(c);
     if (!orgId) return c.json({ error: "Organization required" }, 403);
     const body = await c.req.json();
-    const lines = Array.isArray(body?.serviceLines)
-      ? body.serviceLines.filter((s: unknown) => s === "rideshare" || s === "rush_delivery")
-      : null;
-    if (!lines?.length) return c.json({ error: "serviceLines required" }, 400);
-    const primary = lines.includes("rush_delivery") && !lines.includes("rideshare") ? "delivery" : "rideshare";
-    const { data: existing } = await supabase
-      .from("organizations")
-      .select("enabled_modules")
-      .eq("id", orgId)
-      .maybeSingle();
-    const enabledModules = rushModuleOverridesForServiceLines(
-      lines,
-      (existing?.enabled_modules as Record<string, boolean> | null) ?? null,
-    );
-    const { data, error } = await supabase
-      .from("organizations")
-      .update({ service_lines: lines, business_type: primary, enabled_modules: enabledModules })
-      .eq("id", orgId)
-      .select("service_lines, business_type, enabled_modules")
-      .single();
-    if (error) throw error;
+    const { parseServiceLinesInput, applyOrgServiceLines } = await import("./rush_rollout_admin.ts");
+    const lines = parseServiceLinesInput(body?.serviceLines);
+    if (!lines) return c.json({ error: "serviceLines required" }, 400);
+    const result = await applyOrgServiceLines(supabase, orgId, lines);
     return c.json({
-      serviceLines: data.service_lines,
-      businessType: data.business_type,
-      enabledModules: data.enabled_modules,
+      serviceLines: result.serviceLines,
+      businessType: result.businessType,
+      enabledModules: result.enabledModules,
     });
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
@@ -15096,11 +15153,13 @@ app.get("/make-server-37f42386/admin/feature-flags/:name", requireAuth(), async 
 app.post("/make-server-37f42386/admin/feature-flags/:name", requireAuth(), async (c) => {
   try {
     const rbacUser = c.get('rbacUser') as RbacUser;
-    if (!hasPlatformOwnerAccess(rbacUser) && rbacUser.resolvedRole !== 'fleet_owner') {
-      return c.json({ error: "Forbidden — platform owner or fleet owner required" }, 403);
+    const flagName = c.req.param("name");
+    const { canMutateFeatureFlag } = await import("./rush_rollout_admin.ts");
+    const auth = canMutateFeatureFlag(rbacUser, flagName);
+    if (!auth.allowed) {
+      return c.json({ error: auth.reason || "Forbidden" }, 403);
     }
 
-    const flagName = c.req.param("name");
     const body = await c.req.json();
     const { enabled, enabledForOrgs, disabledForOrgs, description } = body;
 
@@ -15136,15 +15195,17 @@ app.post("/make-server-37f42386/admin/feature-flags/:name", requireAuth(), async
 app.post("/make-server-37f42386/admin/feature-flags/:name/enable-for-org", requireAuth(), async (c) => {
   try {
     const rbacUser = c.get('rbacUser') as RbacUser;
-    if (!hasPlatformOwnerAccess(rbacUser) && rbacUser.resolvedRole !== 'fleet_owner') {
-      return c.json({ error: "Forbidden — platform owner or fleet owner required" }, 403);
-    }
-
     const flagName = c.req.param("name");
     const { orgId } = await c.req.json();
 
     if (!orgId) {
       return c.json({ error: "orgId is required" }, 400);
+    }
+
+    const { canMutateFeatureFlag } = await import("./rush_rollout_admin.ts");
+    const auth = canMutateFeatureFlag(rbacUser, flagName, orgId);
+    if (!auth.allowed) {
+      return c.json({ error: auth.reason || "Forbidden" }, 403);
     }
 
     await enableFlagForOrg(flagName, orgId, rbacUser.email || rbacUser.userId);
@@ -15169,15 +15230,17 @@ app.post("/make-server-37f42386/admin/feature-flags/:name/enable-for-org", requi
 app.post("/make-server-37f42386/admin/feature-flags/:name/disable-for-org", requireAuth(), async (c) => {
   try {
     const rbacUser = c.get('rbacUser') as RbacUser;
-    if (!hasPlatformOwnerAccess(rbacUser) && rbacUser.resolvedRole !== 'fleet_owner') {
-      return c.json({ error: "Forbidden — platform owner or fleet owner required" }, 403);
-    }
-
     const flagName = c.req.param("name");
     const { orgId } = await c.req.json();
 
     if (!orgId) {
       return c.json({ error: "orgId is required" }, 400);
+    }
+
+    const { canMutateFeatureFlag } = await import("./rush_rollout_admin.ts");
+    const auth = canMutateFeatureFlag(rbacUser, flagName, orgId);
+    if (!auth.allowed) {
+      return c.json({ error: auth.reason || "Forbidden" }, 403);
     }
 
     await disableFlagForOrg(flagName, orgId, rbacUser.email || rbacUser.userId);

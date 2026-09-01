@@ -2,6 +2,7 @@ import React, { useEffect } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthRecoveryGate, flashAdminLoginError } from '@roam/auth-client';
 import { AuthProvider, useAuth } from './components/auth/AuthContext';
+import { AdminConfirmProvider } from '@roam/admin-core';
 import { AdminLoginPage } from './components/admin/AdminLoginPage';
 import { AdminPortal } from './components/admin/AdminPortal';
 // Soft path rules shared with apps/admin/middleware.js (Vercel Edge cookie gate).
@@ -46,7 +47,11 @@ function AppContent() {
     return <AdminLoginPage />;
   }
 
-  return <AdminPortal />;
+  return (
+    <AdminConfirmProvider>
+      <AdminPortal />
+    </AdminConfirmProvider>
+  );
 }
 
 export default function App() {

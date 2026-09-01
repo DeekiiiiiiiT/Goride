@@ -233,9 +233,9 @@ export async function getAllFeatureFlags(): Promise<Record<string, FeatureFlagVa
     const result: Record<string, FeatureFlagValue> = {};
 
     // getByPrefix returns values only — query keys via fromKvStore for the map
-    const { data, error } = (await fromKvStore()
+    const { data, error } = await fromKvStore()
       .select("key, value")
-      .like("key", `${FLAG_PREFIX}%`)) as {
+      .like("key", `${FLAG_PREFIX}%`) as {
       data: Array<{ key: string; value: unknown }> | null;
       error: { message: string } | null;
     };
@@ -307,9 +307,9 @@ export async function getFeatureFlagStats(flagName: string): Promise<FeatureFlag
  */
 export async function getAllFeatureFlagStats(): Promise<Record<string, FeatureFlagStats>> {
   try {
-    const { data, error } = (await fromKvStore()
+    const { data, error } = await fromKvStore()
       .select("key, value")
-      .like("key", `${STATS_PREFIX}%`)) as {
+      .like("key", `${STATS_PREFIX}%`) as {
       data: Array<{ key: string; value: unknown }> | null;
       error: { message: string } | null;
     };
