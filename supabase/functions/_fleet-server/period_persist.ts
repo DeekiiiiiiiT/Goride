@@ -2,6 +2,7 @@
  * Optimistic-concurrency persist for driver_financial_periods (A-6).
  */
 import { getServiceClientWithSchema } from "./service_client.ts";
+import { appendPeriodRevisionIfNeeded } from "./period_revision.ts";
 
 function sb() {
   return getServiceClientWithSchema("ledger");
@@ -22,7 +23,7 @@ export async function persistPeriodRowWithVersion(
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     const { data: existing, error: loadErr } = await sb()
       .from("driver_financial_periods")
-      .select("id, projection_version")
+      .select("id, projection_version, settlement_paid, settlement_amount, payout_net")
       .eq("driver_id", driverId)
       .eq("period_anchor", periodAnchor)
       .maybeSingle();
@@ -40,6 +41,7 @@ export async function persistPeriodRowWithVersion(
         .maybeSingle();
       if (updErr) throw new Error(updErr.message);
       if (updated?.id) {
+        await appendPeriodRevisionIfNeeded(driverId, periodAnchor, nextVersion, body, existing);
         return { id: String(updated.id), projectionVersion: nextVersion };
       }
       continue;
@@ -69,7 +71,7 @@ export async function updatePeriodCashWithVersion(
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     const { data: existing, error: loadErr } = await sb()
       .from("driver_financial_periods")
-      .select("id, projection_version")
+      .select("id, projection_version, settlement_paid, settlement_amount, payout_net")
       .eq("driver_id", driverId)
       .eq("period_anchor", periodAnchor)
       .maybeSingle();
@@ -87,6 +89,7 @@ export async function updatePeriodCashWithVersion(
       .maybeSingle();
     if (updErr) throw new Error(updErr.message);
     if (updated?.id) {
+      await appendPeriodRevisionIfNeeded(driverId, periodAnchor, nextVersion, body, existing);
       return { id: String(updated.id), projectionVersion: nextVersion };
     }
   }

@@ -5,6 +5,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { requireInternalSecret } from "../_shared/requireInternalSecret.ts";
 import { checkPeriodInvariants } from "../../packages/finance-core/src/periodInvariants.ts";
+import { checkPeriodVsLedgerEvents } from "../../packages/finance-core/src/periodLedgerRecon.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -52,18 +53,54 @@ Deno.serve(async (req) => {
     const { data: periods, error } = await supabase
       .from("driver_financial_periods")
       .select(
-        "driver_id, period_anchor, cash_collected, cash_returned, cash_written_off, cash_still_held, settlement_amount, settlement_paid, organization_id, payout_net, driver_share, fleet_share, fuel_deduction, fuel_fleet_share, toll_cash_spend, toll_tag_spend, toll_spend, toll_charged_to_driver, earnings_gross, tips_paid_to_driver, metadata",
+        "driver_id, period_anchor, cash_collected, cash_returned, cash_written_off, cash_still_held, settlement_amount, settlement_paid, organization_id, payout_net, driver_share, fleet_share, fuel_deduction, fuel_fleet_share, fuel_driver_spend, fuel_gas_card_spend, toll_cash_spend, toll_tag_spend, toll_spend, toll_charged_to_driver, toll_reimbursed, earnings_gross, tips_paid_to_driver, metadata",
       )
       .gte("period_anchor", fromYmd)
       .order("period_anchor", { ascending: true });
     if (error) throw error;
 
     const rows = periods || [];
+
+    const { data: eventRows, error: evErr } = await supabase
+      .from("financial_events")
+      .select("id, driver_id, period_anchor, event_type, amount_minor, reverses_event_id, reversed_at")
+      .gte("period_anchor", fromYmd)
+      .lte("period_anchor", toYmd);
+    if (evErr) throw evErr;
+
+    const eventsByPeriod = new Map<string, Array<{ event_type: string; amount_minor: number }>>();
+    const reversedIds = new Set<string>();
+    for (const ev of eventRows || []) {
+      if (ev?.reverses_event_id) reversedIds.add(String(ev.reverses_event_id));
+    }
+    for (const ev of eventRows || []) {
+      if (!ev?.driver_id || !ev?.period_anchor) continue;
+      if (ev.reverses_event_id || ev.reversed_at) continue;
+      if (reversedIds.has(String(ev.id))) continue;
+      const key = `${ev.driver_id}|${String(ev.period_anchor).slice(0, 10)}`;
+      const list = eventsByPeriod.get(key) || [];
+      list.push({
+        event_type: String(ev.event_type || ""),
+        amount_minor: Number(ev.amount_minor) || 0,
+      });
+      eventsByPeriod.set(key, list);
+    }
+
     const drifts: Array<Record<string, unknown>> = [];
     let nullOrg = 0;
     for (const p of rows) {
       if (!p.organization_id) nullOrg++;
       for (const d of checkPeriodInvariants(p)) {
+        drifts.push({
+          driverId: d.driverId ?? p.driver_id,
+          week: d.week ?? p.period_anchor,
+          kind: d.kind,
+          persisted: d.persisted,
+          expected: d.expected,
+        });
+      }
+      const evKey = `${p.driver_id}|${String(p.period_anchor).slice(0, 10)}`;
+      for (const d of checkPeriodVsLedgerEvents(p, eventsByPeriod.get(evKey) || [])) {
         drifts.push({
           driverId: d.driverId ?? p.driver_id,
           week: d.week ?? p.period_anchor,
@@ -78,6 +115,18 @@ Deno.serve(async (req) => {
     if (!ok) {
       const summary = `[finance-recon] ${drifts.length} drift(s), nullOrg=${nullOrg}`;
       console.error(summary, drifts.slice(0, 5));
+      const webhook = Deno.env.get("FINANCE_RECON_WEBHOOK_URL");
+      if (webhook) {
+        try {
+          await fetch(webhook, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ text: summary, drifts: drifts.slice(0, 10) }),
+          });
+        } catch (whErr) {
+          console.error("[finance-recon] webhook failed:", whErr);
+        }
+      }
     }
 
     const { error: persistErr } = await supabase.from("finance_recon_runs").insert({

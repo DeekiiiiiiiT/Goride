@@ -262,7 +262,7 @@ export function LogCashPaymentModal({
   const getStatusEmoji = (period: SettlementPeriod): string => {
     switch (period.status) {
       case 'Paid': return '🟢';
-      case 'Overpaid': return '🟢';
+      case 'Over-collected': return '🟢';
       case 'Partial': return '🟡';
       case 'Unpaid': return '🔴';
       default: return '⚪';
@@ -270,7 +270,7 @@ export function LogCashPaymentModal({
   };
 
   const formatPeriodSublabel = (period: SettlementPeriod): string => {
-    if (period.status === 'Paid' || period.status === 'Overpaid') return 'Collected';
+    if (period.status === 'Paid' || period.status === 'Over-collected') return 'Collected';
     if (period.balance > 0.005) return `$${period.balance.toFixed(2)} collection gap`;
     return 'No gap';
   };
@@ -412,7 +412,7 @@ export function LogCashPaymentModal({
 
             {selectedPeriodObj ? (
               <div className={`rounded-lg border p-3 text-xs space-y-2 ${
-                selectedPeriodObj.status === 'Paid' || selectedPeriodObj.status === 'Overpaid'
+                selectedPeriodObj.status === 'Paid' || selectedPeriodObj.status === 'Over-collected'
                   ? 'bg-emerald-50/60 border-emerald-200'
                   : selectedPeriodObj.status === 'Partial'
                   ? 'bg-amber-50/60 border-amber-200'
@@ -421,7 +421,7 @@ export function LogCashPaymentModal({
                 <div className="flex items-center justify-between">
                   <span className="font-medium text-slate-700">{formatPeriodLabel(selectedPeriodObj)}</span>
                   <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold ${
-                    selectedPeriodObj.status === 'Paid' || selectedPeriodObj.status === 'Overpaid'
+                    selectedPeriodObj.status === 'Paid' || selectedPeriodObj.status === 'Over-collected'
                       ? 'bg-emerald-100 text-emerald-700'
                       : selectedPeriodObj.status === 'Partial'
                       ? 'bg-amber-100 text-amber-700'
@@ -451,7 +451,7 @@ export function LogCashPaymentModal({
                     <div className="w-full h-1.5 bg-slate-200 rounded-full overflow-hidden">
                       <div 
                         className={`h-full rounded-full transition-all ${
-                          selectedPeriodObj.status === 'Paid' || selectedPeriodObj.status === 'Overpaid'
+                          selectedPeriodObj.status === 'Paid' || selectedPeriodObj.status === 'Over-collected'
                             ? 'bg-emerald-500'
                             : selectedPeriodObj.status === 'Partial'
                             ? 'bg-amber-500'

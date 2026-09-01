@@ -26,6 +26,9 @@ export type PersistedPeriodRow = {
   earnings_gross?: number | null;
   tips_paid_to_driver?: number | null;
   tips_withheld?: number | null;
+  settlement_amount_minor?: number | null;
+  payout_net_minor?: number | null;
+  cash_still_held_minor?: number | null;
   metadata?: Record<string, unknown> | null;
 };
 
@@ -110,6 +113,37 @@ export function checkPeriodInvariants(row: PersistedPeriodRow): PeriodInvariantD
   );
   if (earningsGross > 0) {
     pushDrift(drifts, row, 'earnings_gross_identity', earningsGross, identityGross);
+  }
+
+  const settlementMinor = row.settlement_amount_minor;
+  if (settlementMinor != null && Number.isFinite(Number(settlementMinor))) {
+    pushDrift(
+      drifts,
+      row,
+      'settlement_amount_minor',
+      Number(settlementMinor),
+      Math.round((Number(row.settlement_amount) || 0) * 100),
+    );
+  }
+  const payoutMinor = row.payout_net_minor;
+  if (payoutMinor != null && Number.isFinite(Number(payoutMinor))) {
+    pushDrift(
+      drifts,
+      row,
+      'payout_net_minor',
+      Number(payoutMinor),
+      Math.round((Number(row.payout_net) || 0) * 100),
+    );
+  }
+  const heldMinor = row.cash_still_held_minor;
+  if (heldMinor != null && Number.isFinite(Number(heldMinor))) {
+    pushDrift(
+      drifts,
+      row,
+      'cash_still_held_minor',
+      Number(heldMinor),
+      Math.round((Number(row.cash_still_held) || 0) * 100),
+    );
   }
 
   return drifts;

@@ -3065,7 +3065,7 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
   );
 
   /**
-   * Daily overdue/due-soon digest → idempotent in-app alerts.
+   * Maintenance overdue scan (Fleet Inbox retired — no alert KV writes).
    * Authorize with X-Fleet-Cron-Secret or X-Rides-Cron-Secret.
    */
   route.post(
@@ -3087,96 +3087,45 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
           .neq("schedule_status", "fulfilled");
         if (schErr) throw schErr;
 
-        const templateIds = [
-          ...new Set(
-            (schedules || [])
-              .map((s) => (s.template_id != null ? String(s.template_id) : ""))
-              .filter(Boolean),
-          ),
-        ];
-        const { data: tplRows } = templateIds.length
-          ? await supabase.from("maintenance_task_templates").select("id, task_name").in("id", templateIds)
-          : { data: [] as { id: string; task_name?: string | null }[] };
-        const tplName: Record<string, string> = {};
-        for (const t of tplRows || []) {
-          tplName[String(t.id)] = String(t.task_name ?? "").trim() || "Service";
-        }
-
-        const orgVehicleIds = new Map<string, Set<string>>();
-        for (const s of schedules || []) {
-          const org = String(s.organization_id ?? "");
-          const vid = String(s.vehicle_id ?? "");
-          if (!org || !vid) continue;
-          if (!orgVehicleIds.has(org)) orgVehicleIds.set(org, new Set());
-          orgVehicleIds.get(org)!.add(vid);
-        }
-
-        const odoByOrgVehicle = new Map<string, number>();
-        for (const [orgId, vids] of orgVehicleIds) {
-          for (const vid of vids) {
-            const vehicle = await kv.get(`vehicle:${vid}`);
-            if (!vehicle || typeof vehicle !== "object") {
-              odoByOrgVehicle.set(`${orgId}:${vid}`, 0);
-              continue;
-            }
-            const v = vehicle as Record<string, unknown>;
-            const odo = Number(v.odometer ?? v.currentOdometer ?? 0);
-            odoByOrgVehicle.set(`${orgId}:${vid}`, Number.isFinite(odo) ? odo : 0);
-          }
-        }
-
-        let created = 0;
+        let overdue = 0;
+        let dueSoon = 0;
         let skipped = 0;
-        for (const s of schedules || []) {
-          const orgId = String(s.organization_id ?? "");
-          const vehicleId = String(s.vehicle_id ?? "");
-          const templateId = s.template_id != null ? String(s.template_id) : "";
-          if (!orgId || !vehicleId || !templateId) continue;
-
-          const odo = odoByOrgVehicle.get(`${orgId}:${vehicleId}`) ?? 0;
+        for (const row of schedules || []) {
+          const vehicleId = String(row.vehicle_id ?? "");
+          if (!vehicleId) {
+            skipped++;
+            continue;
+          }
+          const vehicle = await kv.get(`vehicle:${vehicleId}`);
+          const odo = vehicle && typeof vehicle === "object"
+            ? Number(
+              (vehicle as Record<string, unknown>).odometer ??
+                (vehicle as Record<string, unknown>).currentOdometer ??
+                0,
+            )
+            : 0;
           const analysis = analyzeMaintenanceScheduleRow(
-            odo,
+            Number.isFinite(odo) ? odo : 0,
             today,
-            s.next_due_miles != null ? Number(s.next_due_miles) : null,
-            s.next_due_miles_max != null ? Number(s.next_due_miles_max) : null,
-            s.next_due_date != null ? String(s.next_due_date) : null,
-            s.schedule_status != null ? String(s.schedule_status) : "active",
+            row.next_due_miles != null ? Number(row.next_due_miles) : null,
+            row.next_due_miles_max != null ? Number(row.next_due_miles_max) : null,
+            row.next_due_date != null ? String(row.next_due_date) : null,
+            row.schedule_status != null ? String(row.schedule_status) : "active",
           );
-          if (analysis.status !== "overdue" && analysis.status !== "pending") {
-            skipped++;
-            continue;
-          }
-
-          const alertId = `maint-overdue:${orgId}:${vehicleId}:${templateId}:${today}`;
-          const key = `alert:${alertId}`;
-          const existing = await kv.get(key);
-          if (existing) {
-            skipped++;
-            continue;
-          }
-
-          const taskName = tplName[templateId] || "Service";
-          const kind = analysis.status === "overdue" ? "overdue" : "due_soon";
-          const alert = {
-            id: alertId,
-            organizationId: orgId,
-            type: "maintenance_schedule",
-            severity: kind === "overdue" ? "high" : "medium",
-            title: kind === "overdue" ? `Overdue: ${taskName}` : `Due soon: ${taskName}`,
-            message: `${taskName} is ${kind === "overdue" ? "overdue" : "due soon"} for vehicle ${vehicleId}. Open Fleet Maintenance to schedule or log service.`,
-            vehicleId,
-            templateId,
-            taskName,
-            kind,
-            deepLink: "fleet-maintenance",
-            timestamp: new Date().toISOString(),
-            isRead: false,
-          };
-          await kv.set(key, alert);
-          created++;
+          if (analysis.status === "overdue") overdue++;
+          else if (analysis.status === "pending") dueSoon++;
+          else skipped++;
         }
 
-        return c.json({ success: true, today, created, skipped, scanned: (schedules || []).length });
+        return c.json({
+          success: true,
+          today,
+          overdue,
+          dueSoon,
+          skipped,
+          scanned: (schedules || []).length,
+          alertsWritten: 0,
+        });
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e);
         console.error("[maintenance overdue-digest]", e);

@@ -16,14 +16,12 @@ import {
   DialogTrigger 
 } from "../ui/dialog";
 import { Avatar, AvatarFallback, AvatarImage } from "../ui/avatar";
-import { AlertRule } from '../../types/data';
 import { BUSINESS_TYPES } from '../../utils/businessTypes';
 import { useBusinessConfig } from '../auth/BusinessConfigContext';
 import { api } from '../../services/api';
 import { 
   Trash2, 
   Plus, 
-  BellRing, 
   ShieldAlert, 
   Activity,
   Mail,
@@ -81,7 +79,6 @@ export function SettingsPage() {
         <div className="w-full overflow-x-auto pb-2">
           <TabsList>
             <TabsTrigger value="general">General</TabsTrigger>
-            <TabsTrigger value="alerts">Alert Rules</TabsTrigger>
             <TabsTrigger value="integrations">Integrations</TabsTrigger>
             <TabsTrigger value="hardening">System Hardening</TabsTrigger>
             <TabsTrigger value="maintenance">Maintenance</TabsTrigger>
@@ -91,10 +88,6 @@ export function SettingsPage() {
         
         <TabsContent value="general">
           <GeneralPanel />
-        </TabsContent>
-
-        <TabsContent value="alerts">
-          <AlertRulesPanel />
         </TabsContent>
 
         <TabsContent value="integrations">
@@ -553,217 +546,6 @@ function IntegrationsPanel() {
         </div>
       </CardFooter>
     </Card>
-  );
-}
-
-function AlertRulesPanel() {
-  const [rules, setRules] = useState<AlertRule[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [newRule, setNewRule] = useState<Partial<AlertRule>>({
-    name: '',
-    metric: 'cancellation_rate',
-    condition: 'gt',
-    threshold: 10,
-    severity: 'warning',
-    enabled: true
-  });
-
-  useEffect(() => {
-    fetchRules();
-  }, []);
-
-  const fetchRules = async () => {
-    try {
-      setLoading(true);
-      const data = await api.getAlertRules();
-      setRules(data);
-    } catch (error) {
-      console.error("Failed to fetch rules", error);
-      toast.error("Failed to load alert rules");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleSaveRule = async () => {
-    if (!newRule.name || !newRule.threshold) return;
-    try {
-      await api.saveAlertRule(newRule);
-      toast.success("Alert rule saved");
-      setIsDialogOpen(false);
-      fetchRules();
-      setNewRule({
-        name: '',
-        metric: 'cancellation_rate',
-        condition: 'gt',
-        threshold: 10,
-        severity: 'warning',
-        enabled: true
-      });
-    } catch (error) {
-        toast.error("Failed to save rule");
-    }
-  };
-
-  const handleDeleteRule = async (id: string) => {
-    try {
-      await api.deleteAlertRule(id);
-      setRules(prev => prev.filter(r => r.id !== id));
-      toast.success("Rule deleted");
-    } catch (error) {
-        toast.error("Failed to delete rule");
-    }
-  };
-
-  const toggleRule = async (rule: AlertRule) => {
-      try {
-          await api.saveAlertRule({ ...rule, enabled: !rule.enabled });
-          setRules(prev => prev.map(r => r.id === rule.id ? { ...r, enabled: !r.enabled } : r));
-      } catch (e) {
-          toast.error("Failed to update rule");
-      }
-  }
-
-  return (
-    <div className="space-y-4">
-      <div className="flex justify-between items-center">
-        <div>
-          <h3 className="text-lg font-medium">Alert Configuration</h3>
-          <p className="text-sm text-slate-500">Define when you want to be notified about anomalies.</p>
-        </div>
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogTrigger asChild>
-            <Button>
-              <Plus className="mr-2 h-4 w-4" />
-              New Rule
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Create Alert Rule</DialogTitle>
-              <DialogDescription>
-                Set up a new condition to trigger notifications.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="grid gap-4 py-4">
-              <div className="grid gap-2">
-                <Label htmlFor="name">Rule Name</Label>
-                <Input 
-                  id="name" 
-                  value={newRule.name} 
-                  onChange={e => setNewRule({ ...newRule, name: e.target.value })} 
-                  placeholder="e.g. High Cancellation Rate" 
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                 <div className="grid gap-2">
-                    <Label>Metric</Label>
-                    <Select 
-                        value={newRule.metric} 
-                        onValueChange={(v: any) => setNewRule({ ...newRule, metric: v })}
-                    >
-                        <SelectTrigger>
-                            <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="cancellation_rate">Cancellation Rate</SelectItem>
-                            <SelectItem value="revenue_drop">Revenue Drop</SelectItem>
-                            <SelectItem value="driver_inactive">Driver Inactive</SelectItem>
-                            <SelectItem value="high_wait_time">High Wait Time</SelectItem>
-                        </SelectContent>
-                    </Select>
-                 </div>
-                 <div className="grid gap-2">
-                    <Label>Severity</Label>
-                     <Select 
-                        value={newRule.severity} 
-                        onValueChange={(v: any) => setNewRule({ ...newRule, severity: v })}
-                    >
-                        <SelectTrigger>
-                            <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="info">Info</SelectItem>
-                            <SelectItem value="warning">Warning</SelectItem>
-                            <SelectItem value="critical">Critical</SelectItem>
-                        </SelectContent>
-                    </Select>
-                 </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                  <div className="grid gap-2">
-                    <Label>Condition</Label>
-                    <Select 
-                        value={newRule.condition} 
-                        onValueChange={(v: any) => setNewRule({ ...newRule, condition: v })}
-                    >
-                        <SelectTrigger>
-                            <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="gt">Greater Than</SelectItem>
-                            <SelectItem value="lt">Less Than</SelectItem>
-                        </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="grid gap-2">
-                    <Label>Threshold</Label>
-                    <Input 
-                        type="number" 
-                        value={newRule.threshold} 
-                        onChange={e => setNewRule({ ...newRule, threshold: parseFloat(e.target.value) })} 
-                    />
-                  </div>
-              </div>
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setIsDialogOpen(false)}>Cancel</Button>
-              <Button onClick={handleSaveRule}>Save Rule</Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-      </div>
-
-      <div className="grid gap-4">
-        {rules.map(rule => (
-          <Card key={rule.id}>
-            <CardContent className="p-4 flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <div className={`p-2 rounded-full ${rule.enabled ? 'bg-indigo-100 text-indigo-600' : 'bg-slate-100 text-slate-400'}`}>
-                    <BellRing className="h-5 w-5" />
-                </div>
-                <div>
-                  <h4 className="font-semibold text-slate-900">{rule.name}</h4>
-                  <p className="text-sm text-slate-500">
-                    Triggers when <span className="font-medium">{rule.metric.replace('_', ' ')}</span> is 
-                    <span className="font-medium"> {rule.condition === 'gt' ? '>' : '<'} {rule.threshold}</span>
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-center gap-4">
-                <Badge variant={rule.severity === 'critical' ? 'destructive' : rule.severity === 'warning' ? 'default' : 'secondary'}>
-                    {rule.severity}
-                </Badge>
-                <Switch 
-                    checked={rule.enabled} 
-                    onCheckedChange={() => toggleRule(rule)} 
-                />
-                <Button variant="ghost" size="icon" onClick={() => handleDeleteRule(rule.id)}>
-                  <Trash2 className="h-4 w-4 text-slate-400 hover:text-rose-500" />
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-        {rules.length === 0 && !loading && (
-            <div className="text-center py-12 border-2 border-dashed rounded-lg">
-                <ShieldAlert className="h-8 w-8 text-slate-300 mx-auto mb-2" />
-                <p className="text-slate-500">No alert rules configured.</p>
-            </div>
-        )}
-      </div>
-    </div>
   );
 }
 

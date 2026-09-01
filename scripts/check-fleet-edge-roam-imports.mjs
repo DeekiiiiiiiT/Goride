@@ -87,6 +87,34 @@ if (violations.length) {
   process.exit(1);
 }
 
+// A-9 / C-4: settlement money path must not import from apps/.
+const settlementMoneyFiles = [
+  path.join(edgeDir, '_fleet-server/driver_financial_periods.ts'),
+  path.join(edgeDir, '_fleet-server/settlement_audit_repair.ts'),
+  path.join(edgeDir, '_fleet-server/period_persist.ts'),
+  path.join(edgeDir, '_fleet-server/period_projector.ts'),
+  path.join(edgeDir, 'finance-recon/index.ts'),
+];
+const appsImportRe = /from ['"](?:\.\.\/)+apps\/[^'"]+['"]/g;
+const appsViolations = [];
+for (const f of settlementMoneyFiles) {
+  if (!fs.existsSync(f)) continue;
+  const txt = fs.readFileSync(f, 'utf8');
+  let m;
+  while ((m = appsImportRe.exec(txt))) {
+    appsViolations.push({ file: path.relative(root, f), line: m[0] });
+  }
+}
+if (appsViolations.length) {
+  console.error(
+    `Settlement money path has ${appsViolations.length} import(s) from apps/ (use packages/finance-core instead):`,
+  );
+  for (const v of appsViolations) {
+    console.error(`  ${v.file}: ${v.line}`);
+  }
+  process.exit(1);
+}
+
 console.log(
-  `Fleet edge import graph OK: ${seen.size} reachable fleet file(s), 0 bare @roam/* imports.`,
+  `Fleet edge import graph OK: ${seen.size} reachable fleet file(s), 0 bare @roam/* imports, settlement money path has 0 apps/ imports.`,
 );

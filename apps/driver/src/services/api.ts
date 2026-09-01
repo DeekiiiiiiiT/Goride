@@ -1,6 +1,6 @@
 import { projectId, publicAnonKey } from '../utils/supabase/info';
 import { supabase } from '../utils/supabase/client';
-import { Trip, Notification, ImportBatch, CanonicalBatchAuditSnapshot, DriverMetrics, VehicleMetrics, FinancialTransaction, LedgerEntry, LedgerFilterParams, PaginatedLedgerResponse, LedgerDriverOverview, IndriveWalletSummary, DisputeRefund } from '../types/data';
+import { Trip, ImportBatch, CanonicalBatchAuditSnapshot, DriverMetrics, VehicleMetrics, FinancialTransaction, LedgerEntry, LedgerFilterParams, PaginatedLedgerResponse, LedgerDriverOverview, IndriveWalletSummary, DisputeRefund } from '../types/data';
 import type { AppendCanonicalLedgerResult, CanonicalLedgerEventInput } from '../types/ledgerCanonical';
 import { OdometerReading } from '../types/vehicle';
 import { TollPlaza } from '../types/toll';
@@ -471,57 +471,6 @@ export const api = {
     return response.json();
   },
 
-  async getNotifications(): Promise<Notification[]> {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.admin}/notifications`, {
-      headers: {
-        'Authorization': `Bearer ${publicAnonKey}`
-      }
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Failed to fetch notifications: ${response.status} ${errorText}`);
-    }
-
-    return response.json();
-  },
-
-  // Persistent Alerts (Phase 1) — always capped; server also enforces limit/unreadOnly defaults.
-  async getPersistentAlerts(
-    userId?: string,
-    vehicleId?: string,
-    opts?: { limit?: number; unreadOnly?: boolean },
-  ): Promise<Notification[]> {
-    const url = new URL(`${API_ENDPOINTS.admin}/notifications/list`);
-    if (userId) url.searchParams.append('userId', userId);
-    if (vehicleId) url.searchParams.append('vehicleId', vehicleId);
-    url.searchParams.set('limit', String(opts?.limit ?? 50));
-    url.searchParams.set('unreadOnly', opts?.unreadOnly === false ? 'false' : 'true');
-
-    // Single attempt (no retries) — this is a background poll that retries every 30s anyway
-    const response = await fetch(url.toString(), {
-      headers: { 'Authorization': `Bearer ${publicAnonKey}` }
-    });
-    if (!response.ok) {
-      const errorText = await response.text().catch(() => 'unknown');
-      throw new Error(`Persistent alerts fetch failed: ${response.status} ${errorText}`);
-    }
-    return response.json();
-  },
-
-  async pushAlert(alert: Partial<Notification>) {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.admin}/notifications/push`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${publicAnonKey}`
-      },
-      body: JSON.stringify(alert)
-    });
-    if (!response.ok) throw new Error("Failed to push alert");
-    return response.json();
-  },
-
   // Audit Endpoints (Phase 4)
   async logAuditAction(payload: { 
     entityId: string, 
@@ -562,81 +511,6 @@ export const api = {
       body: JSON.stringify({ record, signature })
     });
     if (!response.ok) throw new Error("Failed to verify integrity");
-    return response.json();
-  },
-
-  async acknowledgeAlert(id: string, isDismissed: boolean = false) {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.admin}/notifications/acknowledge`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${publicAnonKey}`
-      },
-      body: JSON.stringify({ id, isDismissed })
-    });
-    if (!response.ok) throw new Error("Failed to acknowledge alert");
-    return response.json();
-  },
-
-  async markNotificationAsRead(id: string) {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.admin}/notifications/${id}/read`, {
-      method: 'PATCH',
-      headers: {
-        'Authorization': `Bearer ${publicAnonKey}`
-      }
-    });
-
-    if (!response.ok) {
-      throw new Error(`Failed to mark notification as read`);
-    }
-
-    return response.json();
-  },
-
-  async createNotification(notification: Partial<Notification>) {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.admin}/notifications`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${publicAnonKey}`
-      },
-      body: JSON.stringify(notification)
-    });
-
-    if (!response.ok) {
-      throw new Error(`Failed to create notification`);
-    }
-
-    return response.json();
-  },
-
-  async getAlertRules() {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.admin}/alert-rules`, {
-      headers: { 'Authorization': `Bearer ${publicAnonKey}` }
-    });
-    if (!response.ok) throw new Error("Failed to fetch alert rules");
-    return response.json();
-  },
-
-  async saveAlertRule(rule: any) {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.admin}/alert-rules`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${publicAnonKey}`
-      },
-      body: JSON.stringify(rule)
-    });
-    if (!response.ok) throw new Error("Failed to save alert rule");
-    return response.json();
-  },
-
-  async deleteAlertRule(id: string) {
-     const response = await fetchWithRetry(`${API_ENDPOINTS.admin}/alert-rules/${id}`, {
-      method: 'DELETE',
-      headers: { 'Authorization': `Bearer ${publicAnonKey}` }
-    });
-    if (!response.ok) throw new Error("Failed to delete alert rule");
     return response.json();
   },
 

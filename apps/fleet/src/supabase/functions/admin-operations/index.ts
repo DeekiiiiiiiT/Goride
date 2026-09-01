@@ -280,59 +280,6 @@ app.post("/admin-operations/delete-user", requirePlatformAdmin, async (c) => {
     }
 });
 
-// --- NOTIFICATIONS ---
-app.get("/admin-operations/notifications", requirePlatformAdmin, async (c) => {
-  try {
-    const notifications = await kv.getByPrefix("notification:");
-    if (Array.isArray(notifications)) {
-        notifications.sort((a: any, b: any) => new Date(b.timestamp || 0).getTime() - new Date(a.timestamp || 0).getTime());
-    }
-    return c.json(notifications || []);
-  } catch (e: any) { return safeAdminError(c, e, "AdminOps.notifications"); }
-});
-
-app.post("/admin-operations/notifications", requirePlatformAdmin, async (c) => {
-  try {
-    const n = await c.req.json();
-    if (!n.id) n.id = crypto.randomUUID();
-    if (!n.timestamp) n.timestamp = new Date().toISOString();
-    await kv.set(`notification:${n.id}`, n);
-    return c.json({ success: true, data: n });
-  } catch (e: any) { return safeAdminError(c, e, "AdminOps.notificationsPost"); }
-});
-
-app.patch("/admin-operations/notifications/:id/read", requirePlatformAdmin, async (c) => {
-  const id = c.req.param("id");
-  try {
-    const n = await kv.get(`notification:${id}`);
-    if (n) { n.read = true; await kv.set(`notification:${id}`, n); }
-    return c.json({ success: true, data: n });
-  } catch (e: any) { return safeAdminError(c, e, "AdminOps.notificationRead"); }
-});
-
-// --- ALERT RULES ---
-app.get("/admin-operations/alert-rules", requirePlatformAdmin, async (c) => {
-  try {
-    const rules = await kv.getByPrefix("alert_rule:");
-    return c.json(rules || []);
-  } catch (e: any) { return safeAdminError(c, e, "AdminOps.alertRules"); }
-});
-
-app.post("/admin-operations/alert-rules", requirePlatformAdmin, async (c) => {
-  try {
-    const rule = await c.req.json();
-    if (!rule.id) rule.id = crypto.randomUUID();
-    await kv.set(`alert_rule:${rule.id}`, rule);
-    return c.json({ success: true, data: rule });
-  } catch (e: any) { return safeAdminError(c, e, "AdminOps.alertRulesPost"); }
-});
-
-app.delete("/admin-operations/alert-rules/:id", requirePlatformAdmin, async (c) => {
-  const id = c.req.param("id");
-  try { await kv.del(`alert_rule:${id}`); return c.json({ success: true }); }
-  catch (e: any) { return safeAdminError(c, e, "AdminOps.alertRuleDelete"); }
-});
-
 // --- SETTINGS ---
 app.get("/admin-operations/settings/preferences", requirePlatformAdmin, async (c) => {
   try {

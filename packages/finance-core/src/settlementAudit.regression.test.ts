@@ -6,6 +6,9 @@ import { getTierForEarningsEH } from './periodShareCash.ts';
 import { isClearedDriverCashPayment } from './driverCashPayment.ts';
 import { foldPayoutCashByWeek } from './payoutCashDedupe.ts';
 import type { SettlementPeriodRow } from './types.ts';
+import { resolvePeriodTollCashWash } from './periodTollCashWash.ts';
+import { checkPeriodInvariants } from './periodInvariants.ts';
+import { deriveDirectionalSettlementStatus } from './settlementStatusRepair.ts';
 
 /** Phase 0 regression pins for SETTLEMENT_CALCULATION_AUDIT.md */
 describe('settlement audit regressions', () => {
@@ -199,7 +202,6 @@ describe('settlement audit regressions', () => {
   });
 
   it('NEW-3: pending trip toll wash stays 0 while actionable count would block Pay', () => {
-    // Formula only receives wash credit — pending trips must not inflate wash.
     const withWash = computePeriodSettlement({
       driverShare: 5000,
       fuelDeduction: 0,
@@ -220,5 +222,43 @@ describe('settlement audit regressions', () => {
     expect(pendingNoWash.tollCashWash).toBe(0);
     // Wash increases cashPaid → lowers held → raises grossSettlement
     expect(withWash.grossSettlement).toBeGreaterThan(pendingNoWash.grossSettlement);
+  });
+
+  it('P-1: legacy overpaid status maps to directional status from settlement_amount', () => {
+    expect(deriveDirectionalSettlementStatus(-7000)).toBe('driver_owes');
+    expect(deriveDirectionalSettlementStatus(0)).toBe('settled');
+    expect(deriveDirectionalSettlementStatus(50)).toBe('company_owes');
+  });
+
+  it('resolvePeriodTollCashWash uses smaller wash when toll_cash_spend exceeds eligible', () => {
+    const wash = resolvePeriodTollCashWash({
+      tollCashSpend: 3000,
+      metadata: { financeCore: { tollCashWashEligible: 1000 } },
+    });
+    expect(wash).toBe(1000);
+  });
+
+  it('checkPeriodInvariants flags stale _minor columns', () => {
+    const drifts = checkPeriodInvariants({
+      driver_id: 'd1',
+      period_anchor: '2026-08-04',
+      cash_collected: 10000,
+      cash_returned: 2000,
+      cash_written_off: 0,
+      cash_still_held: 7000,
+      settlement_amount: 500,
+      settlement_paid: 0,
+      payout_net: 500,
+      driver_share: 500,
+      fuel_deduction: 0,
+      fuel_fleet_share: 0,
+      toll_cash_spend: 0,
+      toll_charged_to_driver: 0,
+      settlement_amount_minor: 99999,
+      payout_net_minor: 50000,
+      cash_still_held_minor: 700000,
+      metadata: { financeCore: { tollCashWashEligible: 0 } },
+    });
+    expect(drifts.some((d) => d.kind === 'settlement_amount_minor')).toBe(true);
   });
 });

@@ -75,3 +75,14 @@ describe('periodInvariants property tests (A-4)', () => {
     }
   });
 });
+
+describe('minor unit invariants (A-3 scaffold)', () => {
+  it('toMoneyMinor round-trips major amounts', () => {
+    const rng = mulberry32(7);
+    for (let i = 0; i < 100; i++) {
+      const major = round2(randMoney(rng));
+      const minor = Math.round(major * 100);
+      expect(minor / 100).toBeCloseTo(major, 2);
+    }
+  });
+});

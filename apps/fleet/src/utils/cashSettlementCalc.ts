@@ -67,7 +67,7 @@ export interface CashWeekData {
     balance: number;        // amountOwed - amountPaid
     /** Uber bank settled for the week — informational; not debt. */
     bankSettled: number;
-    status: 'Paid' | 'Partial' | 'Unpaid' | 'Overpaid' | 'No Activity';
+    status: 'Paid' | 'Partial' | 'Unpaid' | 'Over-collected' | 'No Activity';
     tripCount: number;
     cashTripCount: number;
     isFromCsv: boolean;
@@ -332,12 +332,12 @@ export function computeWeeklyCashSettlement(input: CashSettlementInput): CashWee
 
         const cashTripCount = week.weekTrips.filter(t => getTripPhysicalCashCollected(t) > 0).length;
 
-        let status: 'Paid' | 'Partial' | 'Unpaid' | 'Overpaid' | 'No Activity' = 'Unpaid';
+        let status: 'Paid' | 'Partial' | 'Unpaid' | 'Over-collected' | 'No Activity' = 'Unpaid';
         if (week.amountOwed === 0 && amountPaid === 0) status = 'No Activity';
         else if (amountPaid >= week.amountOwed - STATUS_SETTLED_EPS) status = 'Paid';
         else if (amountPaid > 0) status = 'Partial';
 
-        if (amountPaid > week.amountOwed + STATUS_SETTLED_EPS) status = 'Overpaid';
+        if (amountPaid > week.amountOwed + STATUS_SETTLED_EPS) status = 'Over-collected';
 
         return {
             start: week.start,

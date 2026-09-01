@@ -21,6 +21,7 @@ import {
   isSettlementPaidForWeek,
 } from '../../utils/driverCashPayment';
 import { cn } from '../ui/utils';
+import { OVERPAID_BADGE_TOOLTIP, overpaidBadgeLabel } from '../../utils/settlementDeskUx';
 
 export type ReconciledPeriodDetail = {
   driverId: string;
@@ -48,6 +49,7 @@ export type ReconciledPeriodDetail = {
   tipsPaidToDriver?: number;
   tipsWithheld?: number;
   cashSourceMismatch?: number;
+  overpaidAmount?: number;
 };
 
 type Props = {
@@ -56,6 +58,7 @@ type Props = {
   driverName: string;
   detail: ReconciledPeriodDetail | null;
   loading?: boolean;
+  partialData?: boolean;
   transactions?: FinancialTransaction[];
 };
 
@@ -111,6 +114,7 @@ export function ReconciledPeriodOverlay({
   driverName,
   detail,
   loading,
+  partialData,
   transactions = [],
 }: Props) {
   const periodLabel = useMemo(() => {
@@ -162,6 +166,21 @@ export function ReconciledPeriodOverlay({
           </div>
         ) : (
           <div className="px-1 pb-8 space-y-5">
+            {partialData ? (
+              <p className="text-[11px] text-amber-800 rounded-md bg-amber-50 px-3 py-2 border border-amber-100">
+                Showing list-row data — live period detail could not be loaded. Amounts may be
+                incomplete.
+              </p>
+            ) : null}
+            {Number(detail.overpaidAmount) > 0.005 ? (
+              <p
+                className="text-[11px] text-violet-900 rounded-md bg-violet-50 px-3 py-2 border border-violet-100"
+                title={OVERPAID_BADGE_TOOLTIP}
+              >
+                {overpaidBadgeLabel(detail.overpaidAmount)} — fleet disbursed more than gross
+                entitlement this week. Recovery exposure is in Driver owes / settlement residual.
+              </p>
+            ) : null}
             <div className="rounded-lg bg-emerald-50 border border-emerald-100 px-4 py-3 flex items-center gap-3">
               <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0" />
               <div className="min-w-0">

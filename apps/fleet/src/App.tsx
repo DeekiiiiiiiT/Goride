@@ -38,13 +38,11 @@ import { BusinessFinancePage } from './components/business-finance/BusinessFinan
 import { ExpenseHubPage } from './components/business-finance/expense-hub/ExpenseHubPage';
 import type { ExpenseHubSubview } from './components/business-finance/expense-hub/ExpenseHubShell';
 
-import { useAlertPusher } from './hooks/useAlertPusher';
 import { OfflineProvider } from './components/providers/OfflineProvider';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ErrorBoundary } from './components/ui/ErrorBoundary';
 import { API_ENDPOINTS } from './services/apiConfig';
 import { withProductLineHeaders } from './config/productLine';
-import { publicAnonKey } from './utils/supabase/info';
 
 import { fuelService } from './services/fuelService';
 import { PermissionGate } from './components/auth/PermissionGate';
@@ -82,7 +80,6 @@ function inferClientProductLine(meta: Record<string, unknown> | undefined): 'fle
 
 function AppContent() {
   const { user, role, resolvedRole, loading, needsProvision, signOut } = useAuth();
-  // useAlertPusher(); // DISABLED: Was causing infinite loop feedback with Dashboard alert sync
   
   const [currentPage, setCurrentPage] = useState('dashboard');
   const [driverIdForDetail, setDriverIdForDetail] = useState<string | null>(null);
@@ -238,25 +235,6 @@ function AppContent() {
         // Fail-open: if we can't reach the status endpoint, allow access
         setMaintenanceStatus(prev => ({ ...prev, checked: true }));
       });
-  }, []);
-
-  // ── Fix 4: Keep-alive ping ────────────────────────────────────────────
-  // Sends a lightweight /health request every 45 seconds to keep at least
-  // one warm edge-function instance alive, preventing cold-start stampedes.
-  useEffect(() => {
-    const PING_INTERVAL_MS = 45_000;
-    const healthUrl = `${API_ENDPOINTS.fleet}/health`;
-    // ANON ALLOWLIST: /health is a public, unauthenticated warm-up ping (no data). Anon key is intentional.
-    const headers = { Authorization: `Bearer ${publicAnonKey}` };
-
-    // Fire one immediately on mount so the instance warms up right away
-    fetch(healthUrl, { headers }).catch(() => {});
-
-    const id = setInterval(() => {
-      fetch(healthUrl, { headers }).catch(() => {});
-    }, PING_INTERVAL_MS);
-
-    return () => clearInterval(id);
   }, []);
 
   // Phase 5: Prefetch parent companies on app load for instant dropdown population

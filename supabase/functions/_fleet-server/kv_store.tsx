@@ -61,6 +61,14 @@ export const set = async (key: string, value: any): Promise<void> => {
     }
   }
   await afterUpsert(key, value);
+  if (key.startsWith("transaction:") && value && typeof value === "object") {
+    try {
+      const { mirrorSettlementTransaction } = await import("./settlement_transactions.ts");
+      await mirrorSettlementTransaction(value as Record<string, unknown>);
+    } catch (e) {
+      console.error("[kv] settlement transaction mirror failed:", key, e);
+    }
+  }
 };
 
 // Get retrieves a key-value pair (fleet table first for mapped domains).

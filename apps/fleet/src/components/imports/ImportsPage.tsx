@@ -843,40 +843,6 @@ function ImportsPageInner({ onNavigate }: ImportsPageProps) {
               await api.saveFleetState(fleetState);
               setCommitProgress(40);
               
-              // Notifications from AI Insights
-              if (fleetState.insights) {
-                  const promises = [];
-                  if (fleetState.insights.alerts?.length > 0) {
-                      for (const alertMsg of fleetState.insights.alerts) {
-                           const isCritical = alertMsg.toLowerCase().includes('ghost') || alertMsg.toLowerCase().includes('fraud') || alertMsg.toLowerCase().includes('risk') || alertMsg.toLowerCase().includes('phantom');
-                           promises.push(api.createNotification({
-                              id: crypto.randomUUID(),
-                              type: 'alert',
-                              severity: isCritical ? 'critical' : 'warning',
-                              title: isCritical ? 'Critical Anomaly Detected' : 'Fleet Alert',
-                              message: alertMsg,
-                              timestamp: new Date().toISOString(),
-                              read: false
-                           }));
-                      }
-                  }
-                  // Trends
-                  if (fleetState.insights.trends?.length > 0) {
-                      for (const trendMsg of fleetState.insights.trends) {
-                          promises.push(api.createNotification({
-                              id: crypto.randomUUID(),
-                              type: 'update',
-                              severity: 'info',
-                              title: 'Performance Trend',
-                              message: trendMsg,
-                              timestamp: new Date().toISOString(),
-                              read: false
-                          }));
-                      }
-                  }
-                  await Promise.all(promises);
-              }
-              
           } else {
               // LEGACY FLOW (Fallback for standard merge)
               const tripsWithBatch = tripsForSave;

@@ -8,7 +8,6 @@ import {
   Activity, 
   TrendingUp, 
   TrendingDown, 
-  AlertTriangle,
   Award,
   Clock,
   MapPin,
@@ -35,8 +34,7 @@ import {
     DriverMetrics, 
     VehicleMetrics, 
     OrganizationMetrics, 
-    TripAnalytics, 
-    Notification
+    TripAnalytics
 } from '../../types/data';
 import { SafeResponsiveContainer as ResponsiveContainer } from '../ui/SafeResponsiveContainer';
 
@@ -46,7 +44,6 @@ interface ExecutiveDashboardProps {
   vehicleMetrics: VehicleMetrics[];
   organizationMetrics: OrganizationMetrics[];
   tripAnalytics?: TripAnalytics;
-  notifications?: Notification[];
   periodLabel?: string; // e.g., "Today", "Last 7 Days"
   // Phase 4: Ledger-sourced fleet summary (optional — falls back to trips if null)
   fleetSummary?: {
@@ -77,7 +74,6 @@ export function ExecutiveDashboard({
   vehicleMetrics,
   organizationMetrics,
   tripAnalytics,
-  notifications = [],
   periodLabel = "Today",
   fleetSummary = null
 }: ExecutiveDashboardProps) {
@@ -293,35 +289,10 @@ export function ExecutiveDashboard({
           </Card>
       </div>
 
-      {/* --- BOTTOM ROW: ALERTS & LISTS --- */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      {/* --- BOTTOM ROW --- */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           
-          {/* 1. Alerts List */}
-          <Card className="lg:col-span-1">
-              <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                      <AlertTriangle className="h-4 w-4 text-amber-500" />
-                      Priority Alerts
-                  </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                  {notifications.filter(n => n.type === 'alert').length > 0 ? (
-                      notifications.filter(n => n.type === 'alert').slice(0, 3).map(n => (
-                          <div key={n.id} className="flex gap-3 items-start p-2 rounded bg-amber-50 text-amber-900 border border-amber-100">
-                              <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
-                              <div>
-                                  <p className="text-sm font-semibold">{n.title}</p>
-                                  <p className="text-xs opacity-90">{n.message}</p>
-                              </div>
-                          </div>
-                      ))
-                  ) : (
-                      <div className="text-center py-6 text-slate-400 text-sm">No active alerts</div>
-                  )}
-              </CardContent>
-          </Card>
-
-          {/* 2. Cancellations (or Trip Analysis) */}
+          {/* Cancellations (or Trip Analysis) */}
           <Card className="lg:col-span-1">
               <CardHeader>
                   <CardTitle className="flex items-center gap-2">
@@ -352,7 +323,7 @@ export function ExecutiveDashboard({
               </CardContent>
           </Card>
 
-          {/* 3. Most Efficient Routes (Phase 4.4) */}
+          {/* Most Efficient Routes (Phase 4.4) */}
           <Card className="lg:col-span-1">
               <CardHeader>
                   <CardTitle className="flex items-center gap-2">

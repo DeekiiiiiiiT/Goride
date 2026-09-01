@@ -36,6 +36,11 @@ import {
 import { payOutstandingAmount } from '../../utils/driverSettlementsPayAmount';
 import { DRIVER_FINANCIAL_PERIODS_KEY } from '../../hooks/useDriverFinancialPeriods';
 import { resolvePeriodTollCashWash } from '../../utils/periodTollCashSpend';
+import {
+  OVERPAID_BADGE_TOOLTIP,
+  collectKindTooltip,
+  overpaidBadgeLabel,
+} from '../../utils/settlementDeskUx';
 import { BusinessFinanceDeskChrome } from '../business-finance/BusinessFinanceDeskChrome';
 import {
   RecordPayoutModal,
@@ -114,6 +119,8 @@ type PeriodRow = {
   collectKind?: 'driver_owes' | 'cash_held';
   /** Fleet overpay flag — badge only. */
   overpaidAmount?: number;
+  cashSourceMismatch?: number;
+  metadata?: Record<string, unknown> | null;
 };
 
 type ReconciledListRow = PeriodRow & {
@@ -141,6 +148,29 @@ const MONEY = (n: number | null | undefined) => {
   });
   return `${n < 0 ? '-' : ''}$${body}`;
 };
+
+function rowOverpaidAmount(r: {
+  overpaidAmount?: number;
+  metadata?: Record<string, unknown> | null;
+}): number {
+  const direct = Number(r.overpaidAmount) || 0;
+  if (direct > 0.005) return direct;
+  const fc = (r.metadata?.financeCore || {}) as Record<string, unknown>;
+  return Number(fc.overpaidAmount) || 0;
+}
+
+function OverpaidBadge({ amount }: { amount: number }) {
+  if (amount <= 0.005) return null;
+  return (
+    <Badge
+      variant="secondary"
+      className="font-normal bg-violet-50 text-violet-800"
+      title={OVERPAID_BADGE_TOOLTIP}
+    >
+      {overpaidBadgeLabel(amount)}
+    </Badge>
+  );
+}
 
 function weekLabel(anchor: string, end: string) {
   try {
@@ -277,6 +307,7 @@ export function DriverSettlementsPage({
     periodAnchor: string;
   }>({ open: false, driverId: '', driverName: '', periodAnchor: '' });
   const [reconciledDetail, setReconciledDetail] = useState<ReconciledPeriodDetail | null>(null);
+  const [reconciledDetailPartial, setReconciledDetailPartial] = useState(false);
   const [reconciledDetailLoading, setReconciledDetailLoading] = useState(false);
 
   const rangeOpts = {
@@ -373,6 +404,7 @@ export function DriverSettlementsPage({
             cashSourceMismatch: Number.isFinite(Number((r as any).cashSourceMismatch))
               ? Number((r as any).cashSourceMismatch)
               : 0,
+            overpaidAmount: rowOverpaidAmount(r as ReconciledListRow),
             metadata: (r as any).metadata ?? null,
           } as ReconciledListRow;
         }),
@@ -695,6 +727,7 @@ export function DriverSettlementsPage({
     });
     setReconciledDetailLoading(true);
     setReconciledDetail(null);
+    setReconciledDetailPartial(false);
     try {
       const res = await api.getDriverFinancialPeriodDetail(row.driverId, row.periodAnchor);
       const d = (res?.data || res) as Record<string, unknown>;
@@ -757,9 +790,14 @@ export function DriverSettlementsPage({
         cashSourceMismatch: Number.isFinite(Number((d as any).cashSourceMismatch))
           ? Number((d as any).cashSourceMismatch)
           : row.cashSourceMismatch || 0,
+        overpaidAmount: rowOverpaidAmount({
+          overpaidAmount: Number((d as any).overpaidAmount),
+          metadata: (d.metadata as Record<string, unknown>) || row.metadata,
+        }),
       });
     } catch (e: any) {
       toast.error(e?.message || 'Could not load period detail');
+      setReconciledDetailPartial(true);
       // Fall back to list-row fields so the overlay still opens.
       setReconciledDetail({
         driverId: row.driverId,
@@ -788,6 +826,7 @@ export function DriverSettlementsPage({
         settlementStatus: row.settlementStatus,
         tierName: null,
         cashSourceMismatch: row.cashSourceMismatch || 0,
+        overpaidAmount: rowOverpaidAmount(row),
       });
     } finally {
       setReconciledDetailLoading(false);
@@ -802,8 +841,8 @@ export function DriverSettlementsPage({
     }
     const header =
       direction === 'collect'
-        ? ['driver_id', 'driver_name', 'period_start', 'period_end', 'amount_owed', 'kind', 'passenger_cash']
-        : ['driver_id', 'driver_name', 'period_start', 'period_end', 'amount_owed', 'passenger_cash', 'already_paid'];
+        ? ['driver_id', 'driver_name', 'period_start', 'period_end', 'amount_owed', 'collect_kind', 'overpaid_amount', 'passenger_cash']
+        : ['driver_id', 'driver_name', 'period_start', 'period_end', 'amount_owed', 'overpaid_amount', 'passenger_cash', 'already_paid'];
     const lines = [
       header.join(','),
       ...rows.map((r) =>
@@ -815,6 +854,7 @@ export function DriverSettlementsPage({
               r.periodEnd,
               collectAmount(r).toFixed(2),
               r.collectKind || '',
+              rowOverpaidAmount(r).toFixed(2),
               Number(r.cashCollected || 0).toFixed(2),
             ].join(',')
           : [
@@ -823,6 +863,7 @@ export function DriverSettlementsPage({
               r.periodAnchor,
               r.periodEnd,
               payOutstandingAmount(r).toFixed(2),
+              rowOverpaidAmount(r).toFixed(2),
               Number(r.cashCollected || 0).toFixed(2),
               Number(r.settlementPaid || 0).toFixed(2),
             ].join(','),
@@ -1389,6 +1430,7 @@ export function DriverSettlementsPage({
           ) : (
             <DoneCollectTable
               rows={doneCollectRows}
+              overpaidByPeriodKey={overpaidByPeriodKey}
               onOpenDriver={onOpenDriver}
               onReverse={(tx) => setTxToReverse(tx)}
             />
@@ -1445,6 +1487,7 @@ export function DriverSettlementsPage({
         driverName={reconciledOverlay.driverName}
         detail={reconciledDetail}
         loading={reconciledDetailLoading}
+        partialData={reconciledDetailPartial}
         transactions={txsQuery.data || []}
       />
 
@@ -1668,13 +1711,20 @@ function OutstandingTable({
                     />
                   </TableCell>
                   <TableCell>
-                    <button
-                      type="button"
-                      className="text-left font-medium text-slate-900 hover:text-indigo-600"
-                      onClick={() => onOpenDriver?.(r.driverId)}
-                    >
-                      {r.driverName || r.driverId}
-                    </button>
+                    <div>
+                      <button
+                        type="button"
+                        className="text-left font-medium text-slate-900 hover:text-indigo-600"
+                        onClick={() => onOpenDriver?.(r.driverId)}
+                      >
+                        {r.driverName || r.driverId}
+                      </button>
+                      {Math.abs(Number(r.cashSourceMismatch) || 0) > 0.5 ? (
+                        <p className="text-[10px] text-amber-700 mt-0.5">
+                          Cash mismatch {MONEY(r.cashSourceMismatch)}
+                        </p>
+                      ) : null}
+                    </div>
                   </TableCell>
                   <TableCell className="text-sm text-slate-600">
                     {weekLabel(r.periodAnchor, r.periodEnd)}
@@ -1693,31 +1743,18 @@ function OutstandingTable({
                               ? 'bg-rose-50 text-rose-800'
                               : 'bg-amber-50 text-amber-800',
                           )}
+                          title={collectKindTooltip(r.collectKind)}
                         >
                           {r.collectKind === 'driver_owes' ? 'Driver owes' : 'Cash held'}
                         </Badge>
-                        {Number(r.overpaidAmount) > 0.005 ? (
-                          <Badge
-                            variant="secondary"
-                            className="font-normal bg-violet-50 text-violet-800"
-                          >
-                            Overpaid
-                          </Badge>
-                        ) : null}
+                        <OverpaidBadge amount={rowOverpaidAmount(r)} />
                       </div>
                     </TableCell>
                   ) : (
                     <TableCell className="text-right">
                       <div className="flex flex-col items-end gap-1">
                         <span className="tabular-nums text-slate-500">{MONEY(r.settlementPaid)}</span>
-                        {Number(r.overpaidAmount) > 0.005 ? (
-                          <Badge
-                            variant="secondary"
-                            className="font-normal bg-violet-50 text-violet-800"
-                          >
-                            Overpaid
-                          </Badge>
-                        ) : null}
+                        <OverpaidBadge amount={rowOverpaidAmount(r)} />
                       </div>
                     </TableCell>
                   )}
@@ -1942,12 +1979,13 @@ function DonePayTable({
                       <div className="flex flex-wrap items-center gap-1.5">
                         <span>{g.label}</span>
                         {groupIsOverpaid(g) ? (
-                          <Badge
-                            variant="secondary"
-                            className="font-normal bg-violet-50 text-violet-800"
-                          >
-                            Overpaid
-                          </Badge>
+                          <OverpaidBadge
+                            amount={
+                              overpaidByPeriodKey.get(
+                                `${g.rows[0]?.driverId}|${ymdKey(g.rows[0]?.metadata?.workPeriodStart)}`,
+                              ) || 0
+                            }
+                          />
                         ) : null}
                       </div>
                     </TableCell>
@@ -1997,12 +2035,13 @@ function DonePayTable({
                                 Paid
                               </Badge>
                               {isOverpaidTx(tx) ? (
-                                <Badge
-                                  variant="secondary"
-                                  className="font-normal bg-violet-50 text-violet-800"
-                                >
-                                  Overpaid
-                                </Badge>
+                                <OverpaidBadge
+                                  amount={
+                                    overpaidByPeriodKey.get(
+                                      `${tx.driverId}|${ymdKey(tx.metadata?.workPeriodStart)}`,
+                                    ) || 0
+                                  }
+                                />
                               ) : null}
                             </div>
                           </TableCell>
@@ -2037,10 +2076,12 @@ function DonePayTable({
 
 function DoneCollectTable({
   rows,
+  overpaidByPeriodKey,
   onOpenDriver,
   onReverse,
 }: {
   rows: FinancialTransaction[];
+  overpaidByPeriodKey: Map<string, number>;
   onOpenDriver?: (id: string) => void;
   onReverse: (tx: FinancialTransaction) => void;
 }) {
@@ -2093,7 +2134,16 @@ function DoneCollectTable({
                         <ChevronRight className="h-4 w-4 text-slate-500" />
                       )}
                     </TableCell>
-                    <TableCell className="font-medium text-slate-900">{g.label}</TableCell>
+                    <TableCell className="font-medium text-slate-900">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span>{g.label}</span>
+                        {(overpaidByPeriodKey.get(`${g.rows[0]?.driverId}|${g.key}`) || 0) > 0.005 ? (
+                          <OverpaidBadge
+                            amount={overpaidByPeriodKey.get(`${g.rows[0]?.driverId}|${g.key}`) || 0}
+                          />
+                        ) : null}
+                      </div>
+                    </TableCell>
                     <TableCell className="text-sm text-slate-500" colSpan={3}>
                       {g.rows.length} payment{g.rows.length !== 1 ? 's' : ''}
                     </TableCell>
@@ -2184,20 +2234,21 @@ function ReconciledTable({
             <TableHead className="text-right">Passenger cash</TableHead>
             <TableHead className="text-right">Cash returned</TableHead>
             <TableHead className="text-right">Trips</TableHead>
+            <TableHead className="text-right">Overpaid</TableHead>
             <TableHead>Status</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {loading ? (
             <TableRow>
-              <TableCell colSpan={12} className="h-24 text-center text-slate-500">
+              <TableCell colSpan={13} className="h-24 text-center text-slate-500">
                 <Loader2 className="h-4 w-4 animate-spin inline mr-2" />
                 Loading…
               </TableCell>
             </TableRow>
           ) : rows.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={12} className="h-24 text-center text-slate-500">
+              <TableCell colSpan={13} className="h-24 text-center text-slate-500">
                 No reconciled weeks in this range.
               </TableCell>
             </TableRow>
@@ -2246,6 +2297,9 @@ function ReconciledTable({
                 <TableCell className="text-right tabular-nums text-slate-500">
                   {r.tripCount}
                 </TableCell>
+                <TableCell className="text-right tabular-nums text-violet-800">
+                  {rowOverpaidAmount(r) > 0.005 ? MONEY(rowOverpaidAmount(r)) : '—'}
+                </TableCell>
                 <TableCell>
                   <div className="flex flex-col gap-1">
                     <Badge
@@ -2254,6 +2308,7 @@ function ReconciledTable({
                     >
                       Reconciled
                     </Badge>
+                    <OverpaidBadge amount={rowOverpaidAmount(r)} />
                     {Math.abs(Number(r.cashSourceMismatch) || 0) > 0.5 ? (
                       <span className="text-[10px] text-amber-700">
                         Cash source mismatch {MONEY(r.cashSourceMismatch)}

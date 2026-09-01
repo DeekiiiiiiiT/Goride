@@ -5,7 +5,6 @@ import { FileText, Download, BarChart3, Clock, Mail, CheckCircle2 } from "lucide
 import { Switch } from "../ui/switch";
 import { Label } from "../ui/label";
 import { toast } from 'sonner';
-import { AlertEngine } from '../../utils/alertEngine';
 import { api } from '../../services/api';
 import { fuelService } from '../../services/fuelService';
 import { ReportGenerator, ReportSummary } from '../../utils/ReportGenerator';
@@ -48,18 +47,9 @@ export function ReportsPage() {
               summary = ReportGenerator.generateMaintenanceLog(vehicles);
           }
 
-          // Real-time Notification for Admin (Phase 8 Refinement)
-          await api.createNotification({
-              type: 'success',
-              severity: 'success',
-              title: `${type} Ready`,
-              message: `The system has successfully generated the ${type} as requested.`,
-              read: false
-          });
-
           console.log("Generated Report:", summary);
           toast.success(`${type} exported successfully!`, {
-              description: "The file has been prepared for download and a system notification sent."
+              description: "The file has been prepared for download."
           });
       } catch (err) {
           console.error(err);

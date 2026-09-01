@@ -9,7 +9,6 @@ import {
   User, 
   Car,
   LogOut,
-  Bell,
   Receipt,
   Wrench,
   Fuel,
@@ -21,7 +20,6 @@ import {
 import { Button } from "../ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "../ui/avatar";
 import { Sheet, SheetContent, SheetTrigger, SheetHeader, SheetTitle, SheetDescription, SheetClose } from "../ui/sheet";
-import { NotificationCenter } from "../notifications/NotificationCenter";
 import { useAuth } from "../auth/AuthContext";
 import { OfflineStatusIndicator } from "../offline/OfflineStatusIndicator";
 import { useOffline } from "../providers/OfflineProvider";
@@ -76,9 +74,6 @@ export function DriverLayout({ children, currentPage, onNavigate, onLogout, isMe
         </div>
         <div className="flex items-center gap-3">
           <OfflineStatusIndicator />
-          <Button variant="ghost" size="icon" className={`rounded-full ${isOnline ? 'text-indigo-100 hover:bg-indigo-500 hover:text-white' : 'text-slate-300 hover:bg-slate-700'}`}>
-            <Bell className="h-5 w-5" />
-          </Button>
         </div>
       </header>
 

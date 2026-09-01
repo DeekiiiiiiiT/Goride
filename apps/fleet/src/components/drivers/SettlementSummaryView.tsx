@@ -658,7 +658,7 @@ export function SettlementSummaryView({
                             </span>
                           </TooltipTrigger>
                           <TooltipContent side="top" className="max-w-[300px] text-xs">
-                            Current state of this week's settlement. "Pending" = the ledger report hasn't been finalized yet so Net Payout can't be computed. "Company Owes" = the company owes the driver money. "Driver Owes" = the driver owes the company (usually due to un-returned cash). "Settled" = both sides are even (settlement is within $1). "No Activity" = no trips or cash activity.
+                            Current state of this week's settlement. "Pending" = the ledger report hasn't been finalized yet so Net Payout can't be computed. "Company Owes" = the company owes the driver money. "Driver Owes" = the driver owes the company (usually due to un-returned cash). "Settled" = both sides are even (settlement is within $0.01). "No Activity" = no trips or cash activity.
                           </TooltipContent>
                         </Tooltip>
                       </TooltipProvider>

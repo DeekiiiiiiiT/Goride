@@ -38,40 +38,16 @@ export function collectConfirmedLinkedTripIds(tolls: PeriodTollLike[]): Set<stri
   return ids;
 }
 
-export function isCashPaidTollRow(tx: PeriodTollLike): boolean {
-  const pm = String(tx?.paymentMethod || '').toLowerCase();
-  // Receipt is proof only — payment method controls settlement cash wash.
-  return pm.includes('cash');
-}
-
-/**
- * Trip plaza cash that still belongs in Expenses/Settlement wash.
- * Pending unlinked refunds are reimbursements only — never inflate cash spend.
- */
 export {
   isTripCashWashSpend,
   isTripTollActionable,
 } from '../../../../packages/finance-core/src/periodTollTrip.ts';
 
-export function sumExcludedCashFromWeek(
-  weekTollsIncludingExcluded: PeriodTollLike[],
-  isIncludedInSpend: (t: PeriodTollLike) => boolean,
-): { excludedCashSpend: number; excludedCashCount: number } {
-  let excludedCashSpend = 0;
-  let excludedCashCount = 0;
-  for (const tx of weekTollsIncludingExcluded || []) {
-    if (!isCashPaidTollRow(tx)) continue;
-    if (isIncludedInSpend(tx)) continue;
-    const amt = Math.abs(Number(tx.amount) || 0);
-    if (amt <= 0.005) continue;
-    excludedCashSpend += amt;
-    excludedCashCount += 1;
-  }
-  return {
-    excludedCashSpend: Math.round(excludedCashSpend * 100) / 100,
-    excludedCashCount,
-  };
-}
+export {
+  isCashPaidTollRow,
+  sumExcludedCashFromWeek,
+} from '../../../../packages/finance-core/src/periodTollCashSpend.ts';
+export type { PeriodTollLike } from '../../../../packages/finance-core/src/periodTollCashSpend.ts';
 
 /** Settlement wash credit for a period row — re-export for fleet callers. */
 export { resolvePeriodTollCashWash } from '../../../../packages/finance-core/src/periodTollCashWash.ts';

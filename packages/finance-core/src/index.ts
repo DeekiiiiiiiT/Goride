@@ -70,3 +70,33 @@ export {
   checkPeriodInvariants,
 } from './periodInvariants.ts';
 export type { PersistedPeriodRow, PeriodInvariantDrift } from './periodInvariants.ts';
+export {
+  resolveSignedSnapshot,
+  preservePeriodMetaKeys,
+  PRESERVED_PERIOD_META_KEYS,
+} from './periodSignedSnapshot.ts';
+export type { SignedSnapshot, ResolveSignedSnapshotInput } from './periodSignedSnapshot.ts';
+export {
+  buildPeriodMetadata,
+  buildCashSettlementPersistFields,
+} from './periodPersistBody.ts';
+export { deriveDirectionalSettlementStatus } from './settlementStatusRepair.ts';
+export {
+  checkPeriodVsLedgerEvents,
+  sumLedgerEventsByType,
+} from './periodLedgerRecon.ts';
+export type { LedgerEventSumRow, LedgerReconDrift } from './periodLedgerRecon.ts';
+export {
+  isTollIncludedInSpend,
+  isTollLedgerVoided,
+} from './tollLedgerIntegrity.ts';
+export type { TollIntegrityLike } from './tollLedgerIntegrity.ts';
+export { sumExcludedCashFromWeek, isCashPaidTollRow } from './periodTollCashSpend.ts';
+export type { PeriodTollLike } from './periodTollCashSpend.ts';
+export type {
+  DerivedPeriodStatusLike,
+  FinanceCoreMetaInput,
+  BuildPeriodMetadataInput,
+  CashSettlementPersistFields,
+  BuildCashSettlementPersistInput,
+} from './periodPersistBody.ts';

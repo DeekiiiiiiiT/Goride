@@ -2,7 +2,6 @@ import React from 'react';
 import { Toaster } from 'sonner';
 import { SidebarProvider, SidebarTrigger } from '../ui/sidebar';
 import { Car } from 'lucide-react';
-import { NotificationCenter } from '../notifications/NotificationCenter';
 import { AnnouncementBanner } from './AnnouncementBanner';
 import { AppSidebar } from './AppSidebar';
 
@@ -66,9 +65,6 @@ function AppHeader() {
             <span className="text-sm font-medium uppercase tracking-wide">{fleetName}</span>
           </div>
         )}
-      </div>
-      <div className="flex items-center gap-4">
-        <NotificationCenter />
       </div>
     </header>
   );

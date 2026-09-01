@@ -43,7 +43,7 @@ import {
   tollEventDate,
   type TollLedgerLikeEvent,
 } from "../../../apps/fleet/src/utils/tollFleetLossNetting.ts";
-import { isTollIncludedInSpend } from "../../../apps/fleet/src/utils/tollLedgerIntegrity.ts";
+import { isTollIncludedInSpend } from "../../../packages/finance-core/src/tollLedgerIntegrity.ts";
 import {
   loadTollLedgerWithTrips,
   isUnresolvedRefund,

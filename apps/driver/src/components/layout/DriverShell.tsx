@@ -21,7 +21,6 @@ import { ThemeToggleButton } from './ThemeToggleButton';
 import { cn } from '@roam/ui';
 import { AnnouncementBanner } from './AnnouncementBanner';
 import { OfflineStatusIndicator } from '../offline/OfflineStatusIndicator';
-import { NotificationCenter } from '../notifications/NotificationCenter';
 
 import { DriverMintHome } from '../home/DriverMintHome';
 import { IndependentEarningsPage } from '../independent/IndependentEarningsPage';
@@ -261,7 +260,6 @@ export function DriverShell({ forcePassengerRides = false }: { forcePassengerRid
                     {isFleetDriver && (
                       <>
                         <OfflineStatusIndicator />
-                        <NotificationCenter />
                       </>
                     )}
                     <ThemeToggleButton className="inline-flex h-10 w-10 items-center justify-center rounded-lg p-2 text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white" />
@@ -306,7 +304,6 @@ export function DriverShell({ forcePassengerRides = false }: { forcePassengerRid
                 {isFleetDriver && (
                   <>
                     <OfflineStatusIndicator />
-                    <NotificationCenter />
                   </>
                 )}
                 <div className="min-w-0 text-right hidden sm:block">

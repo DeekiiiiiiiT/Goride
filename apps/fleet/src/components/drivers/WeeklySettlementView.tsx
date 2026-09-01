@@ -111,7 +111,7 @@ export function WeeklySettlementView({
                         !readOnly &&
                         week.amountOwed > 0.005 &&
                         onLogPayment &&
-                        (cashOwed > 0.005 || (week.status !== 'Paid' && week.status !== 'Overpaid'));
+                        (cashOwed > 0.005 || (week.status !== 'Paid' && week.status !== 'Over-collected'));
                     const showWriteOff =
                         !readOnly &&
                         cashOwed > 0.005 &&

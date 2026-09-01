@@ -1,11 +1,9 @@
-import { DashboardMetrics, DashboardHistory, DashboardAlertDefinition, DashboardAlert } from '../types/data';
+import { DashboardMetrics, DashboardHistory } from '../types/data';
 
-// Mock Data for Phase 1 Infrastructure
+// Mock helpers retained for legacy dashboard scaffolding (live dashboard uses api.getDashboardInit).
 
 export const dashboardService = {
-  // 1.1 Dashboard Live Metrics
   getDashboardMetrics: async (): Promise<DashboardMetrics> => {
-    // Simulate API latency
     await new Promise(resolve => setTimeout(resolve, 500));
     
     const now = new Date();
@@ -30,18 +28,16 @@ export const dashboardService = {
       topDriverEarnings: 245.00,
       bottomDriverName: "John D.",
       
-      criticalAlertsCount: 2,
-      alertDetails: "2 Drivers below acceptance threshold",
+      criticalAlertsCount: 0,
+      alertDetails: "",
       
       lastUpdateTime: now.toISOString()
     };
   },
 
-  // 1.3 Historical Dashboard Archive
   getDashboardHistory: async (metricName: string = 'earnings'): Promise<DashboardHistory[]> => {
     await new Promise(resolve => setTimeout(resolve, 300));
     
-    // Return mock history for the last 24 hours
     const history: DashboardHistory[] = [];
     const today = new Date();
     
@@ -51,7 +47,7 @@ export const dashboardService = {
             date: d.toISOString().split('T')[0],
             hour: d.getHours(),
             metricName: metricName,
-            metricValue: Math.random() * 100 + 50, // Mock random values
+            metricValue: Math.random() * 100 + 50,
             changeVsLastHour: (Math.random() - 0.5) * 10,
             changeVsYesterday: (Math.random() - 0.5) * 20,
             changeVsLastWeek: (Math.random() - 0.5) * 15,
@@ -60,76 +56,4 @@ export const dashboardService = {
     
     return history;
   },
-
-  // 1.4 Alert Definitions
-  getAlertDefinitions: async (): Promise<DashboardAlertDefinition[]> => {
-    await new Promise(resolve => setTimeout(resolve, 300));
-    
-    return [
-      {
-        id: '1',
-        name: 'Low Acceptance Rate',
-        condition: 'acceptance_rate < 0.5',
-        threshold: 0.5,
-        severity: 'critical',
-        notificationType: 'dashboard',
-        actionRequired: 'Schedule meeting',
-        autoResolve: false,
-        checkFrequency: '15min',
-        active: true,
-        lastTriggered: new Date().toISOString()
-      },
-      {
-        id: '2',
-        name: 'High Cancellation Rate',
-        condition: 'cancellation_rate > 0.1',
-        threshold: 0.1,
-        severity: 'critical',
-        notificationType: 'email',
-        actionRequired: 'Review reasons',
-        autoResolve: false,
-        checkFrequency: '15min',
-        active: true
-      },
-      {
-        id: '3',
-        name: 'Low Vehicle Utilization',
-        condition: 'utilization < 0.4',
-        threshold: 0.4,
-        severity: 'medium',
-        notificationType: 'dashboard',
-        actionRequired: 'Reassign vehicle',
-        autoResolve: true,
-        checkFrequency: 'hourly',
-        active: true
-      }
-    ];
-  },
-  
-  // Fetch Active Alerts
-  getAlerts: async (): Promise<DashboardAlert[]> => {
-      await new Promise(resolve => setTimeout(resolve, 400));
-      return [
-          {
-              id: 'a1',
-              definitionId: '1',
-              timestamp: new Date(Date.now() - 1000 * 60 * 15).toISOString(), // 15 mins ago
-              severity: 'critical',
-              title: 'Driver Kenny has low acceptance (45%)',
-              description: 'Acceptance rate dropped below 50% threshold.',
-              status: 'new',
-              driverId: 'd1'
-          },
-          {
-              id: 'a2',
-              definitionId: '3',
-              timestamp: new Date(Date.now() - 1000 * 60 * 60).toISOString(), // 1 hour ago
-              severity: 'medium',
-              title: 'Vehicle 5179KZ underutilized (30%)',
-              description: 'Vehicle utilization is below 40% target.',
-              status: 'viewed',
-              vehicleId: 'v1'
-          }
-      ];
-  }
 };

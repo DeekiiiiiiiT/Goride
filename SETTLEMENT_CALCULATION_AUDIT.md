@@ -34,6 +34,12 @@ Independently re-derived, not taken on trust:
 
 **Delivery program (2026-09-01):** P-0 finance-recon uses `checkPeriodInvariants` + wash resolver; P-1 backfill migration `20260831220000`; P-2–P-5 quick wins; A-1/A-2/A-4 controls + single projector; A-6/A-7/A-8 durability; A-3/A-9/A-10/A-11 foundation migrations `20260831230000`.
 
+### ✅ Fourth pass verified (2026-09-01, commits `64d1641e` → `6353b6fd`) — see **Part V**
+
+**P-0 through P-5 fully closed. A-1, A-2, A-4, A-6, A-8 done.** Tests green: **42 finance-core** (now with property tests) + **1,081 fleet**. `periodInvariants.ts` is the structural win — the nightly control now calls `computePeriodSettlement` and cannot skew from it.
+
+**Three items shipped as scaffolds that are not yet load-bearing, and two reintroduced the §1.1 pattern:** the rebuild wipes `signedSnapshot` (**C-1**, high — A-7's audit trail survives only until the next background job); the A-3 `*_minor` columns are dual-written by the rebuild but not the cash sync (**C-2**, latent landmine at cutover); `driver_settlement_transactions` is a table with no code and both KV full-scans remain (**C-3**). Root cause of C-1 and C-2 is the same: **A-2 unified status derivation but not the persist body**, so each write path still assembles its own column set.
+
 ### Original findings — status
 
 | # | Finding | Status | Evidence |
@@ -531,6 +537,151 @@ Worth stating, because the list above is long and the foundation is genuinely go
 - **An audited ops override** (`forceReleaseDriverPeriod` with a mandatory reason recorded in metadata) rather than someone editing the database.
 
 The gap between where this is and enterprise-grade is narrower than the length of this list suggests. It is mostly **A-1, A-2 and A-4** — make the control call the formula, collapse the two write paths into one projector, and assert the invariants as properties. Those three are a few days of work and they convert "correct because we audited it" into "correct because it cannot be otherwise."
+
+---
+
+# PART V — FOURTH VERIFICATION PASS (2026-09-01, commits `64d1641e` → `6353b6fd`)
+
+**Tests green: 42 finance-core (up from 34, now including 3 property tests) + 1,081 fleet.**
+
+Every Part III and Part IV item was attempted. **P-0 through P-5 are fully closed. A-1, A-2, A-4, A-6 and A-8 are genuinely done.** Three architecture items shipped as scaffolds that are not yet load-bearing, and one of them reintroduced the §1.1 pattern. Details below.
+
+## Confirmed done
+
+| Item | Status | Evidence |
+|---|---|---|
+| **P-0** finance-recon false positives | ✅ | Now calls `checkPeriodInvariants(p)` instead of hand-coding the identity; selects the columns it needs; `console.error` on drift. |
+| **P-1** legacy `overpaid` rows orphaned | ✅ | Migration `20260831220000` re-derives directional status from `settlement_amount`. `scripts/pre_deploy_overpaid_count.sql` for the pre-check. |
+| **P-2** repair tool reloads context per week | ✅ | New `rebuildPeriodsForAnchors(driverId, anchors)` loads one context. |
+| **P-3** overlay error path shows raw spend as wash | ✅ | `catch` branch now calls `resolvePeriodTollCashWash`. |
+| **P-4** sub-dollar rows flooding the desks | ✅ | `minAmount` defaults to `'1'`. |
+| **P-5** epsilon + dead status leftovers | ✅ | `amountPaid > week.amountOwed + STATUS_SETTLED_EPS`. |
+| **A-1** control layer calls the formula | ✅ | `packages/finance-core/src/periodInvariants.ts` — `checkPeriodInvariants` recomputes via `computePeriodSettlement` and diffs field-by-field. This is exactly right: the check can no longer skew relative to the formula. |
+| **A-2** single projector | ✅ (scoped) | `period_projector.ts` — `derivePeriodStatus` is now the one place status/gate logic lives, called by both the rebuild and the cash sync. See the note below on what it does *not* cover. |
+| **A-4** property tests | ✅ | `periodInvariants.property.test.ts` (3 properties) alongside the example suite. |
+| **A-6** optimistic concurrency | ✅ | `period_persist.ts` — `persistPeriodRowWithVersion` / `updatePeriodCashWithVersion` guard on `.eq('projection_version', expected)` with bounded retry and 23505 handling. Correct. |
+| **A-8** dual pay formula | ✅ | `unifiedToll` is gone from `buildLedgerPayoutPeriodRows` entirely. |
+
+`checkPeriodInvariants` covers five identities: `cash_still_held`, `settlement_amount`, `payout_net`, `toll_spend_split`, `earnings_gross_identity`. That is the right set and it directly encodes four of this audit's findings as permanent checks.
+
+---
+
+## C-1 🟠 High — the full rebuild wipes `signedSnapshot`, destroying the A-7 audit trail
+
+**Files:** [driver_financial_periods.ts:811-845](supabase/functions/_fleet-server/driver_financial_periods.ts#L811) (rebuild), [driver_financial_periods.ts:1419-1434](supabase/functions/_fleet-server/driver_financial_periods.ts#L1419) (sync)
+
+A-7 was implemented — but in one write path only.
+
+`syncPeriodCashFromTransactions` correctly stamps a snapshot when `settlement_paid` increases, and carries a prior one forward:
+
+```ts
+const signedSnapshot =
+  settled.settlementPaid > prevPaid + 0.005
+    ? { at, settlement_amount, payout_net, settlement_paid, cash_still_held }
+    : (meta.signedSnapshot as Record<string, unknown> | undefined);
+
+const nextMeta = { ...meta, ...(signedSnapshot ? { signedSnapshot } : {}), financeCore: {...} };
+```
+
+`rebuildDriverFinancialPeriod` builds `metadata` from scratch. It reads `priorMeta` — but only to recover `forceRelease` — and never spreads it:
+
+```ts
+metadata: {
+  excludedCashSpend, excludedCashCount,
+  financeCore: { ... },
+  ...(forceRelease ? { forceRelease: {...} } : {}),
+},
+```
+
+**Consequence.** Any full rebuild erases the snapshot: a fuel re-finalize, an outbox event, a toll reconciliation, a `repairDriverSettlementWeeks` run. Those are the *most common* background operations on a week. And because the rebuild never creates a snapshot either, a payout whose projection lands via the rebuild path never gets one at all.
+
+The net effect is an audit trail that exists only until the next background job touches the week — which is worse than none, because it looks present. For a system that cuts payments, this is the record you would actually need in a dispute.
+
+**Fix:** spread `priorMeta` in the rebuild's metadata construction (preserving `signedSnapshot` and anything else added later), and move the snapshot-stamping logic into a shared helper the way `derivePeriodStatus` already is.
+
+---
+
+## C-2 🟡 Medium (latent) — the A-3 minor columns are dual-written by the rebuild only
+
+**Files:** [driver_financial_periods.ts:922-924](supabase/functions/_fleet-server/driver_financial_periods.ts#L922) vs the sync's `updatePeriodCashWithVersion` body at [:1445-1458](supabase/functions/_fleet-server/driver_financial_periods.ts#L1445)
+
+The rebuild writes the new minor-unit columns:
+
+```ts
+settlement_amount_minor: Math.round((Number(row.settlementAmount) || 0) * 100),
+payout_net_minor:        Math.round((Number(row.payoutNet) || 0) * 100),
+cash_still_held_minor:   Math.round((Number(row.cashStillHeld) || 0) * 100),
+```
+
+The cash sync writes `settlement_amount`, `payout_net` and `cash_still_held` — and none of their `_minor` twins.
+
+**This is the §1.1 pattern recurring, inside the scaffold built to fix the float problem.** After any Log Cash / Collect / Payout / Write-off, the `_minor` columns hold the previous rebuild's values while the NUMERIC columns hold the current ones. The two representations of the same money disagree, silently.
+
+It is harmless *today* because nothing reads the minor columns. It becomes a live incident at cutover: every week touched by a cash action since its last rebuild would read a stale settlement amount. A dual-write migration whose two writers disagree is worse than not having started.
+
+Two things close it:
+
+1. Write the minor columns in both paths — or better, per A-2, derive the persist body once so the question cannot arise.
+2. **Add `*_minor == round(numeric * 100)` to `checkPeriodInvariants`.** This is the check that keeps a dual-write honest for the whole duration of the migration, and it is the natural use of the invariant module you just built. Without it, nothing will tell you the scaffold has drifted until you cut over.
+
+---
+
+## C-3 🟡 Medium — A-11 shipped as a table with no code
+
+Migration `20260831230000` creates `ledger.driver_settlement_transactions` with a `(driver_id, period_anchor)` index. Nothing references it:
+
+```
+$ grep -rn "driver_settlement_transactions" supabase/functions apps packages
+(no matches)
+```
+
+Both unbounded scans remain:
+
+```
+driver_financial_periods.ts:272   kv.getByPrefix("transaction:")   // loadRebuildContext
+driver_financial_periods.ts:1348  kv.getByPrefix("transaction:")   // syncPeriodCashFromTransactions
+```
+
+So every rebuild and every cash sync still loads **every transaction in the system** and filters in memory. The stated goal — bounded reads in the money path — is not achieved, and the P-2 timeout risk it was meant to relieve is unchanged (P-2 was fixed by reusing context, which reduces the number of full scans but not their cost).
+
+The table and index are the right shape. What's missing is the dual-write on transaction create/update, a backfill, and switching the two read sites. Until then this is a migration that only adds a table to maintain.
+
+---
+
+## C-4 🟢 Low — A-9 partially done, and the new CI guard doesn't check what was raised
+
+Real progress: `periodTollCashWash.ts` and `periodTollTrip.ts` now live in `finance-core`, and `apps/fleet/src/utils/periodTollCashSpend.ts` has been reduced to mostly re-export shims. That is the right direction.
+
+But `driver_financial_periods.ts` still reaches into the frontend app for two things:
+
+```ts
+import { isTollIncludedInSpend, isTollLedgerVoided } from "../../../apps/fleet/src/utils/tollLedgerIntegrity.ts";
+import { sumExcludedCashFromWeek } from "../../../apps/fleet/src/utils/periodTollCashSpend.ts";
+```
+
+The new CI guard does not catch this. `check-fleet-edge-roam-imports.mjs` walks the edge graph looking for **bare `@roam/*` specifiers** — a Deno bundling concern, and a worthwhile check on its own — not for `apps/fleet/src` dependencies. It reports clean (`25 reachable fleet file(s), 0 bare @roam/* imports`) while the layering violation stands.
+
+If the intent is to enforce the boundary, the guard needs a second rule: no file under `supabase/functions/` may import from `apps/`. Today a refactor in the fleet UI package can still change what drivers are paid, with CI green.
+
+---
+
+## C-5 — note: A-1's sixth identity is still missing
+
+`checkPeriodInvariants` verifies the row against **itself** — five internal consistency identities, all correct and all valuable. What it does not do is verify the row against the posted ledger:
+
+> projection totals vs `financial_events` sums
+
+That was the one I called the real control total, and it is the only one that would catch the projection as a whole diverging from what was actually posted. Every current check would pass on a period that is internally perfect and completely disconnected from the ledger. Worth adding as a separate aggregate check rather than a per-row one.
+
+---
+
+## Where this leaves the architecture
+
+The three items that mattered most — **A-1 (control calls the formula), A-2 (shared derivation), A-4 (property tests)** — are done and done well. `periodInvariants.ts` is the piece that changes the system's character: a future §1.1 now has a nightly job that catches it, and `derivePeriodStatus` means status logic cannot drift between the two write paths again.
+
+C-1 and C-2 are both the same lesson one more time: **A-2 unified the *status* derivation but not the *persist body*.** The two write paths still each assemble their own column set, which is why the rebuild forgot `signedSnapshot` and the sync forgot the `_minor` columns — two new instances of the original bug, in the same week, from the same cause. Finishing A-2 properly (one function that produces the complete row, both paths differing only in how they build its inputs) closes C-1, C-2, and the next three of these before they are written.
+
+C-3 and the A-3 scaffold are unfinished rather than wrong. Neither is dangerous while unused; both should either be completed or reverted, because half-migrated state is its own liability.
 
 ---
 

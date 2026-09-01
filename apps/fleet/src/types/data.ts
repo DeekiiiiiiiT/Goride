@@ -314,31 +314,6 @@ export interface ParsedRow {
   [key: string]: string | number | undefined;
 }
 
-export type NotificationType = 'alert' | 'update' | 'reminder' | 'success';
-export type NotificationSeverity = 'info' | 'warning' | 'critical' | 'success';
-
-export interface Notification {
-  id: string;
-  type: NotificationType;
-  severity: NotificationSeverity;
-  title: string;
-  message: string;
-  timestamp: string;
-  read: boolean;
-  actionUrl?: string;
-  metadata?: Record<string, any>;
-}
-
-export interface AlertRule {
-  id: string;
-  name: string;
-  metric: 'cancellation_rate' | 'revenue_drop' | 'driver_inactive' | 'high_wait_time';
-  condition: 'gt' | 'lt';
-  threshold: number;
-  severity: NotificationSeverity;
-  enabled: boolean;
-}
-
 export interface TeamMember {
   id: string;
   name: string;
@@ -1030,36 +1005,7 @@ export interface DashboardHistory {
   notes?: string;
 }
 
-// 1.4 Alert Definitions (Enhanced)
-export interface DashboardAlertDefinition {
-  id: string;
-  name: string;
-  condition: string; // e.g., "acceptance_rate < 0.5"
-  threshold: number;
-  severity: 'low' | 'medium' | 'high' | 'critical';
-  notificationType: 'dashboard' | 'email' | 'sms' | 'call';
-  actionRequired: string;
-  autoResolve: boolean;
-  checkFrequency: '15min' | 'hourly' | 'daily';
-  lastTriggered?: string;
-  active: boolean;
-}
-
-export interface DashboardAlert {
-  id: string;
-  definitionId: string;
-  timestamp: string;
-  severity: 'low' | 'medium' | 'high' | 'critical';
-  title: string;
-  description: string;
-  status: 'new' | 'viewed' | 'acknowledged' | 'resolved';
-  driverId?: string;
-  vehicleId?: string;
-  routeId?: string;
-  metadata?: Record<string, any>;
-}
-
-// --- Phase 1: Budget Data Structure ---
+// 1.4 Historical archive helpers (alert definitions retired with Fleet Inbox)
 
 export interface Budget {
   id: string;
