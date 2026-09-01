@@ -277,9 +277,16 @@ export function resolveEffectiveModules(
   const effective: Record<string, boolean> = {};
 
   for (const key of catalogKeys) {
-    const lineOn = pl[key] !== false;
-    const orgOn = org[key] !== false;
-    effective[key] = lineOn && orgOn;
+    // Paid add-ons: explicit org true turns module on even when product-line default is off.
+    if (org[key] === true) {
+      effective[key] = true;
+      continue;
+    }
+    if (org[key] === false) {
+      effective[key] = false;
+      continue;
+    }
+    effective[key] = pl[key] !== false;
   }
 
   return effective;

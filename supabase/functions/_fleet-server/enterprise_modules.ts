@@ -146,9 +146,15 @@ export function resolveEffectiveModules(
   const org = normalizeModuleKeyMap(orgOverrides);
   const effective: Record<string, boolean> = {};
   for (const key of ENTERPRISE_MODULE_KEYS) {
-    const lineOn = pl[key] !== false;
-    const orgOn = org[key] !== false;
-    effective[key] = lineOn && orgOn;
+    if (org[key] === true) {
+      effective[key] = true;
+      continue;
+    }
+    if (org[key] === false) {
+      effective[key] = false;
+      continue;
+    }
+    effective[key] = pl[key] !== false;
   }
   return effective;
 }
