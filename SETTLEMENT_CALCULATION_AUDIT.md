@@ -11,7 +11,9 @@
 
 **14 of 14 original findings addressed. 11 fully resolved, 3 partial. Test suite green: 1,074 fleet tests + 31 finance-core tests, including a new 9-case regression file pinned to this audit.**
 
-**2 new defects were introduced by the §1.5 fix and 1 by the §1.4 fix.** They are documented in **Part II** below and are the only outstanding money-movers. One of them is critical: an overpaid week is routed to the *Reconciled* tab and is invisible to the Collect queue, so money the fleet is owed back has no recovery path.
+**Verification Part II (fixes):** 2026-08-31 — NEW-1…NEW-7 closed in code (continuous residual, Collect routing, pending trip actionable, spend≠wash, sync `status`, batched force-release meta, STATUS_* epsilons). §3.8 remains display-only pending live sample.
+
+**2 new defects were introduced by the §1.5 fix and 1 by the §1.4 fix.** They are documented in **Part II** below — **remediated in Settlement Verification Fixes** (see Notion tracker page 9).
 
 ### Original findings — status
 
@@ -20,8 +22,8 @@
 | 1.1 | Cash sync drops tips from payout | ✅ **Resolved** | `syncPeriodCashFromTransactions` now reads `tips_paid_to_driver` (column added in migration) and passes `tipsPaidToDriver`. Regression test pins the $580 delta. |
 | 1.2 | Sync writes unclamped `cash_still_held` vs `>= 0` constraint | ✅ **Resolved** | Sync now computes `cashStillHeld = round2(Math.max(0, adjCashBalance))` and writes that. |
 | 1.3 | Finalization gate is fuel-only | ✅ **Resolved** | New `tollsClear` + `moneyUnlocked` gate; `payoutStatus` gains `awaiting_tolls`; client `periodMoneyUnlocked()` mirrors it; `isFinalized` no longer maps from `fuelFinalized`. |
-| 1.4 | Pending trip tolls credited as cash wash | ⚠️ **Partial** | Credit correctly removed (`isTripCashWashSpend` accepts `cash_wash` only) — **but the rows also stopped counting as actionable.** See **NEW-3**. |
-| 1.5 | `settlementPaid` clamp hides overpayment | ⚠️ **Partial** | `settlementPaid` is no longer clamped and `overpaidAmount` is now returned, persisted and badged — **but the resulting status routes the week to the wrong desk and the formula is discontinuous at zero.** See **NEW-1** and **NEW-2**. |
+| 1.4 | Pending trip tolls credited as cash wash | ✅ **Resolved** | Wash = `cash_wash` only; pending/null trips use `isTripTollActionable` (block Pay, no wash). |
+| 1.5 | `settlementPaid` clamp hides overpayment | ✅ **Resolved** | Continuous `settlement = gross − paid`; directional status; Overpaid badge; Collect routing. |
 | 2.1 | Toll cash-wash double-netted | ✅ **Resolved** | Second netting removed from `getPeriodSettlementComponents`; builder does the single netting; regression test asserts `adjCashBalance === 3500` (would be 4000 if double-netted). |
 | 2.2 | Three week-bucketing rules | ✅ **Resolved** | `periodShareCash` now takes `timezone` and uses `fleetCalendarDay` for fares, tips, cumulative and trip cash; both server call sites pass it. `±2`-day fuzzy match now picks nearest, not first hash hit. |
 | 2.3 | `\|\|` reverts legitimate zeros | ✅ **Resolved** | All six overlay fields switched to `Number.isFinite(...) ? ... : fallback`. |
@@ -29,7 +31,7 @@
 | 2.5 | Withheld tips vanish from P&L | ✅ **Resolved** | `fleetShare = grossRevenue − driverShare + quota.tipsWithheld`; `tips_paid_to_driver` / `tips_withheld` persisted and surfaced. `Gross = Fleet share + Driver share` now holds. |
 | 2.6 | `receiptUrl` implies cash paid | ✅ **Resolved** | Removed server-side and in all three `cashSettlementCalc` copies; `isCashPaidTollRow` documents receipt as proof only. |
 | 2.7 | Signed-week immutability inconsistent | ✅ **Resolved** | `isSignedWeekRow` redefined as real money-lock (payout finalized, or settled/overpaid **with tolls clear**) — no longer mere `fuel_finalized`. Outbox now honours it unless `payload.force`. |
-| 3.1 | Four different epsilons | ⚠️ **Partial** | `STATUS_SETTLED_EPS` / `STATUS_CASH_HELD_EPS` added and exported, and the `< 1` settled band correctly tightened to `< 0.01` — **but no caller imports the constants.** Server still hardcodes `0.01` / `0.5`; `cashSettlementCalc` still uses `-0.01` / `+1`. Cosmetic only. |
+| 3.1 | Four different epsilons | ✅ **Resolved** | Callers import `STATUS_SETTLED_EPS` / `STATUS_CASH_HELD_EPS` on server status gates and fleet cash settlement Paid band. |
 | 3.2 | `foldPayoutCashByWeek` collapses real remittances | ✅ **Resolved** | Amount-collapse now applies only when both rows lack an id key; regression test asserts $2,000 total from two same-day $1,000 rows. |
 | 3.3 | Alias-ID mismatch in sync | ✅ **Resolved** | Sync now calls `resolveDriverAliasIds` and filters on the same id set as the rebuild. |
 | 3.4 | `round2` asymmetric / loses `x.xx5` | ✅ **Resolved** | Reimplemented as half-away-from-zero via `toFixed(6)` on cents. Test pins `0.125→0.13`, `−0.125→−0.13`, `1.005→1.01`. |
@@ -47,7 +49,9 @@
 
 # PART II — NEW FINDINGS (introduced by the remediation)
 
-## NEW-1 🔴 Critical — an overpaid week is filed as "Reconciled" and never reaches the Collect queue
+> **Status (2026-08-31):** NEW-1…NEW-7 remediated in Settlement Verification Fixes. Keep sections below as historical defect notes.
+
+## NEW-1 ✅ Fixed — was: overpaid week filed as "Reconciled" / invisible to Collect
 
 **Files:** [driverPeriodSettlement.ts:48-60](packages/finance-core/src/driverPeriodSettlement.ts#L48-L60), [driver_financial_periods.ts:1690-1700](supabase/functions/_fleet-server/driver_financial_periods.ts), [driver_financial_periods.ts:1563-1566](supabase/functions/_fleet-server/driver_financial_periods.ts)
 

@@ -30,6 +30,7 @@ import {
     isWithinInterval,
     format,
 } from 'date-fns';
+import { STATUS_SETTLED_EPS } from '@roam/finance-core';
 
 // ── Input ──
 
@@ -333,7 +334,7 @@ export function computeWeeklyCashSettlement(input: CashSettlementInput): CashWee
 
         let status: 'Paid' | 'Partial' | 'Unpaid' | 'Overpaid' | 'No Activity' = 'Unpaid';
         if (week.amountOwed === 0 && amountPaid === 0) status = 'No Activity';
-        else if (amountPaid >= week.amountOwed - 0.01) status = 'Paid';
+        else if (amountPaid >= week.amountOwed - STATUS_SETTLED_EPS) status = 'Paid';
         else if (amountPaid > 0) status = 'Partial';
 
         if (amountPaid > week.amountOwed + 1) status = 'Overpaid';

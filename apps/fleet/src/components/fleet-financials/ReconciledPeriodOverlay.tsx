@@ -253,6 +253,10 @@ export function ReconciledPeriodOverlay({
               <p className="text-[11px] text-slate-400 mb-2">
                 Passenger cash → returns & credits → still held − net payout → residual
               </p>
+              <p className="text-[11px] text-amber-700/80 mb-2 rounded-md bg-amber-50/80 px-2 py-1.5">
+                Platform toll reimbursement (tag credited) is display-only on Expenses until a live
+                reimbursed booking is confirmed — it does not change this week’s money residual.
+              </p>
               <Line label="Passenger cash" value={fmt(detail.cashCollected)} />
               <Line
                 label="− Cash returned"

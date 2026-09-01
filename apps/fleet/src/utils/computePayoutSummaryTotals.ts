@@ -32,7 +32,7 @@ export function computePayoutSummaryTotals(rows: PayoutPeriodRow[]): PayoutSumma
   const pending = rows.filter(
     (r) => r.status === 'Pending' || r.status === 'Awaiting Tolls',
   );
-  const closed = rows.filter((r) => r.status === 'Finalized' || r.status === 'Overpaid');
+  const closed = rows.filter((r) => r.status === 'Finalized');
 
   const netTakeHome = fuelLocked.reduce((s, r) => s + (r.netPayout || 0), 0);
   const fuelDeducted = fuelLocked.reduce((s, r) => s + (r.fuelDeduction || 0), 0);

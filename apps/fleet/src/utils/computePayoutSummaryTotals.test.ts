@@ -67,6 +67,39 @@ describe('computePayoutSummaryTotals', () => {
     expect(payoutStatusLabel('Awaiting Cash')).toBe('Cash Outstanding');
     expect(payoutStatusLabel('Finalized')).toBe('Closed');
   });
+
+  it('NEW-5: Overpaid is not counted as closed; residual stays open', () => {
+    const overpaidOpen = baseRow({
+      isFinalized: true,
+      isEstimate: false,
+      status: 'Awaiting Cash',
+      netPayout: 1000,
+      passengerCash: 0,
+      cashPaid: 0,
+      cashBalance: 0,
+      cashTollWash: 0,
+      personalTollCharge: 0,
+      settlementPaid: 5000,
+      fuelCredits: 0,
+      cashWrittenOff: 0,
+    });
+    const closed = baseRow({
+      periodStart: new Date('2026-04-06T00:00:00'),
+      periodEnd: new Date('2026-04-12T23:59:59'),
+      isFinalized: true,
+      isEstimate: false,
+      status: 'Finalized',
+      netPayout: 2000,
+      passengerCash: 0,
+      cashPaid: 0,
+      cashBalance: 0,
+      settlementPaid: 2000,
+    });
+    const totals = computePayoutSummaryTotals([overpaidOpen, closed]);
+    expect(totals.closedCount).toBe(1);
+    expect(totals.awaitingCashCount).toBe(1);
+    expect(totals.openBalance).toBeGreaterThan(0);
+  });
 });
 
 describe('applyDraftFuelToPayoutRows', () => {

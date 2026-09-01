@@ -25,6 +25,10 @@ import {
 } from "./period_share_cash.ts";
 import { foldPayoutCashByWeek } from "../../../packages/finance-core/src/payoutCashDedupe.ts";
 import { periodKeyFor } from "../../../packages/finance-core/src/periodKey.ts";
+import {
+  STATUS_CASH_HELD_EPS,
+  STATUS_SETTLED_EPS,
+} from "../../../packages/finance-core/src/money.ts";
 import { getServiceClientWithSchema } from "./service_client.ts";
 import { isPlatformReimbursedPlazaToll } from "./toll_platform_reimbursed.ts";
 import {
@@ -33,6 +37,7 @@ import {
 } from "../../../apps/fleet/src/utils/tollLedgerIntegrity.ts";
 import {
   isTripCashWashSpend,
+  isTripTollActionable,
   sumExcludedCashFromWeek,
 } from "../../../apps/fleet/src/utils/periodTollCashSpend.ts";
 
@@ -180,6 +185,8 @@ type RebuildContext = {
   persistLines?: boolean;
   /** Ops force-release: unlock money statuses without tolls clear. */
   forceRelease?: boolean;
+  /** Preloaded period metadata (force-release flags) keyed by period_anchor. */
+  periodMetaByAnchor?: Map<string, Record<string, unknown>>;
 };
 
 async function resolveDriverOrganizationId(driverId: string): Promise<string | null> {
@@ -313,6 +320,21 @@ async function loadRebuildContext(driverId: string): Promise<RebuildContext> {
     personalAllowance: prefs.personalAllowance || null,
   };
 
+  // Batch-load force-release metadata once (avoid per-week select in rebuild).
+  const periodMetaByAnchor = new Map<string, Record<string, unknown>>();
+  const { data: metaRows } = await sb()
+    .from("driver_financial_periods")
+    .select("period_anchor, metadata")
+    .eq("driver_id", driverId);
+  for (const r of metaRows || []) {
+    const a = String(r.period_anchor || "").slice(0, 10);
+    if (!a) continue;
+    periodMetaByAnchor.set(
+      a,
+      r.metadata && typeof r.metadata === "object" ? (r.metadata as Record<string, unknown>) : {},
+    );
+  }
+
   return {
     timezone,
     scopedTolls,
@@ -330,6 +352,7 @@ async function loadRebuildContext(driverId: string): Promise<RebuildContext> {
     earningsPolicies,
     legacyEarnings,
     persistLines: false,
+    periodMetaByAnchor,
   };
 }
 
@@ -364,6 +387,7 @@ export async function rebuildDriverFinancialPeriod(
   let tollSpend = 0;
   let tollCashSpend = 0;
   let tollTagSpend = 0;
+  let tollCashWashEligible = 0;
   let tollReconciledCount = 0;
   let tollUnmatchedCount = 0;
   let tollWorkflowActionable = 0;
@@ -374,10 +398,11 @@ export async function rebuildDriverFinancialPeriod(
     tollSpend += amt;
     const handled = isHandledToll(tx);
     const cash = isCashPaid(tx);
-    // Credit cash wash only for confirmed cash + handled/reconciled rows.
-    // Unmatched cash tolls stay actionable without reducing what the driver owes.
-    if (cash && handled) tollCashSpend += amt;
-    else if (!cash) tollTagSpend += amt;
+    // Spend classification by payment method only (invariant: spend = cash + tag).
+    if (cash) tollCashSpend += amt;
+    else tollTagSpend += amt;
+    // Settlement wash credit only for confirmed cash + handled/reconciled rows.
+    if (cash && handled) tollCashWashEligible += amt;
     if (isPlatformReimbursedPlazaToll(tx)) plazaReimbursed += amt;
     if (handled) tollReconciledCount++;
     else {
@@ -405,31 +430,57 @@ export async function rebuildDriverFinancialPeriod(
   }
 
   // Cash-wash trips with no linked tag = extra plaza cash (same as Toll Recon).
-  // Pending unlinked refunds are reimbursements only — do not inflate Cash Tolls.
+  // Pending unlinked trips block finalization without crediting wash.
   const linkedTripIds = collectLinkedTripIds(weekTolls);
   for (const trip of context.scopedTrips || []) {
-    if (!isTripCashWashSpend(trip, linkedTripIds)) continue;
-    const amt = Math.abs(Number(trip.tollCharges) || 0);
     const anchorDate = fleetCalendarDay(String(trip.dropoffTime || trip.date || ""), timezone);
     if (!anchorDate || anchorDate < periodAnchor || anchorDate > periodEnd) continue;
-    tollSpend += amt;
-    tollCashSpend += amt;
-    tollReconciledCount++;
-    if (persistLines) {
-      lines.push({
-        lineType: "toll_handled",
-        domain: "toll",
-        sourceSystem: "trip_cash_wash",
-        sourceId: String(trip.id),
-        description: `Cash wash · ${trip.platform || "trip"} toll`,
-        amount: -amt,
-        occurredAt: trip.dropoffTime || trip.date,
-        metadata: {
-          resolution: "cash_wash",
-          platform: trip.platform,
-          tollCharges: trip.tollCharges,
-        },
-      });
+
+    if (isTripCashWashSpend(trip, linkedTripIds)) {
+      const amt = Math.abs(Number(trip.tollCharges) || 0);
+      tollSpend += amt;
+      tollCashSpend += amt;
+      tollCashWashEligible += amt;
+      tollReconciledCount++;
+      if (persistLines) {
+        lines.push({
+          lineType: "toll_handled",
+          domain: "toll",
+          sourceSystem: "trip_cash_wash",
+          sourceId: String(trip.id),
+          description: `Cash wash · ${trip.platform || "trip"} toll`,
+          amount: -amt,
+          occurredAt: trip.dropoffTime || trip.date,
+          metadata: {
+            resolution: "cash_wash",
+            platform: trip.platform,
+            tollCharges: trip.tollCharges,
+          },
+        });
+      }
+      continue;
+    }
+
+    if (isTripTollActionable(trip, linkedTripIds)) {
+      tollUnmatchedCount++;
+      tollWorkflowActionable++;
+      if (persistLines) {
+        const amt = Math.abs(Number(trip.tollCharges) || 0);
+        lines.push({
+          lineType: "toll_unmatched",
+          domain: "toll",
+          sourceSystem: "trip_pending",
+          sourceId: String(trip.id),
+          description: `Pending trip toll · ${trip.platform || "trip"}`,
+          amount: -amt,
+          occurredAt: trip.dropoffTime || trip.date,
+          metadata: {
+            resolution: trip?.tollRefundResolution?.status || "pending",
+            platform: trip.platform,
+            tollCharges: trip.tollCharges,
+          },
+        });
+      }
     }
   }
 
@@ -650,7 +701,7 @@ export async function rebuildDriverFinancialPeriod(
     fuelDeduction,
     baseCashOwed: cashCollected,
     baseCashPaid: cashReturned,
-    tollCashWash: tollCashSpend,
+    tollCashWash: tollCashWashEligible,
     tollPersonal: Math.max(0, tollChargedToDriver),
     fuelCredits: fuelFleetShare,
     cashWrittenOff,
@@ -666,13 +717,9 @@ export async function rebuildDriverFinancialPeriod(
   // Persist outstanding after payouts so Driver Balances / chips stay correct.
   const settlementAmount = settled.settlement;
 
-  const { data: existingForGate } = await sb()
-    .from("driver_financial_periods")
-    .select("metadata")
-    .eq("driver_id", driverId)
-    .eq("period_anchor", periodAnchor)
-    .maybeSingle();
-  const priorMeta = (existingForGate?.metadata || {}) as Record<string, unknown>;
+  const priorMeta =
+    context.periodMetaByAnchor?.get(periodAnchor) ||
+    ({} as Record<string, unknown>);
   const forceMeta = (priorMeta.forceRelease || {}) as Record<string, unknown>;
   const forceRelease =
     !!(context as any).forceRelease ||
@@ -697,15 +744,15 @@ export async function rebuildDriverFinancialPeriod(
 
   let settlementStatus = "pending";
   if (moneyUnlocked) {
-    if (overpaidAmount > 0.005) settlementStatus = "overpaid";
-    else if (Math.abs(settlementAmount) < 0.01) settlementStatus = "settled";
+    // Directional status only — overpaidAmount is a badge/flag, not a status.
+    if (Math.abs(settlementAmount) < STATUS_SETTLED_EPS) settlementStatus = "settled";
     else if (settlementAmount > 0) settlementStatus = "company_owes";
     else settlementStatus = "driver_owes";
   }
 
   let payoutStatus = "pending";
   if (moneyUnlocked) {
-    payoutStatus = cashStillHeld > 0.5 ? "awaiting_cash" : "finalized";
+    payoutStatus = cashStillHeld > STATUS_CASH_HELD_EPS ? "awaiting_cash" : "finalized";
   } else if (fuelFinalized && !tollsClear) {
     payoutStatus = "awaiting_tolls";
   }
@@ -795,6 +842,9 @@ export async function rebuildDriverFinancialPeriod(
         cashHeldClamped: settled.adjCashBalance < -0.005,
         unclampedCashHeld: round2(settled.adjCashBalance),
         overpaidAmount: round2(overpaidAmount),
+        // Settlement wash credit (cash+handled / trip cash_wash). Distinct from
+        // toll_cash_spend column which is payment-method classification.
+        tollCashWashEligible: round2(tollCashWashEligible),
         tollsClear,
         moneyUnlocked,
       },
@@ -1291,7 +1341,7 @@ export async function syncPeriodCashFromTransactions(
   const { data: existing, error } = await sb()
     .from("driver_financial_periods")
     .select(
-      "id, period_end, cash_collected, driver_share, fuel_deduction, fuel_fleet_share, toll_cash_spend, toll_charged_to_driver, fuel_finalized, settlement_status, payout_status, toll_status, toll_workflow_actionable, toll_unmatched_count, tips_paid_to_driver, tips_withheld, metadata",
+      "id, period_end, cash_collected, driver_share, fuel_deduction, fuel_fleet_share, toll_cash_spend, toll_charged_to_driver, fuel_finalized, settlement_status, payout_status, toll_status, toll_workflow_actionable, toll_unmatched_count, tips_paid_to_driver, tips_withheld, metadata, status, closed_at",
     )
     .eq("driver_id", driverId)
     .eq("period_anchor", periodAnchor)
@@ -1334,12 +1384,22 @@ export async function syncPeriodCashFromTransactions(
     ),
   );
 
+  // Prefer explicit wash metadata; legacy rows stored wash in toll_cash_spend.
+  const hasWashMeta =
+    fc.tollCashWashEligible != null && Number.isFinite(Number(fc.tollCashWashEligible));
+  const tollCashWash = round2(
+    Math.max(
+      0,
+      hasWashMeta ? Number(fc.tollCashWashEligible) : Number(existing.toll_cash_spend) || 0,
+    ),
+  );
+
   const settled = computePeriodSettlement({
     driverShare: Number(existing.driver_share) || 0,
     fuelDeduction: Number(existing.fuel_deduction) || 0,
     baseCashOwed: Number(existing.cash_collected) || 0,
     baseCashPaid: cashReturned,
-    tollCashWash: Number(existing.toll_cash_spend) || 0,
+    tollCashWash,
     tollPersonal: Math.max(0, Number(existing.toll_charged_to_driver) || 0),
     fuelCredits: Number(existing.fuel_fleet_share) || 0,
     cashWrittenOff,
@@ -1361,11 +1421,11 @@ export async function syncPeriodCashFromTransactions(
   let settlementStatus = String(existing.settlement_status || "pending");
   let payoutStatus = String(existing.payout_status || "pending");
   if (moneyUnlocked) {
-    if (settled.overpaidAmount > 0.005) settlementStatus = "overpaid";
-    else if (Math.abs(settled.settlement) < 0.01) settlementStatus = "settled";
+    // Directional status only — overpaidAmount is a badge/flag, not a status.
+    if (Math.abs(settled.settlement) < STATUS_SETTLED_EPS) settlementStatus = "settled";
     else if (settled.settlement > 0) settlementStatus = "company_owes";
     else settlementStatus = "driver_owes";
-    payoutStatus = cashStillHeld > 0.5 ? "awaiting_cash" : "finalized";
+    payoutStatus = cashStillHeld > STATUS_CASH_HELD_EPS ? "awaiting_cash" : "finalized";
   } else if (fuelFinalized && !tollsClear) {
     settlementStatus = "pending";
     payoutStatus = "awaiting_tolls";
@@ -1373,6 +1433,15 @@ export async function syncPeriodCashFromTransactions(
     settlementStatus = "pending";
     payoutStatus = "pending";
   }
+
+  const tollWorkflowActionable = Number(existing.toll_workflow_actionable || 0);
+  const tollUnmatchedCount = Number(existing.toll_unmatched_count || 0);
+  const periodStatus: "open" | "closed" | "reopened" =
+    tollWorkflowActionable > 0 || tollUnmatchedCount > 0
+      ? "open"
+      : fuelFinalized && tollsClear
+        ? "closed"
+        : "open";
 
   const nextMeta = {
     ...meta,
@@ -1382,6 +1451,7 @@ export async function syncPeriodCashFromTransactions(
       cashHeldClamped: settled.adjCashBalance < -0.005,
       unclampedCashHeld: round2(settled.adjCashBalance),
       overpaidAmount: round2(settled.overpaidAmount),
+      tollCashWashEligible: tollCashWash,
       tollsClear,
       moneyUnlocked,
     },
@@ -1399,6 +1469,11 @@ export async function syncPeriodCashFromTransactions(
       payout_net: round2(settled.netPayout),
       settlement_status: settlementStatus,
       payout_status: payoutStatus,
+      status: periodStatus,
+      closed_at:
+        periodStatus === "closed"
+          ? existing.closed_at || now
+          : null,
       metadata: nextMeta,
       updated_at: now,
     })
@@ -1424,6 +1499,8 @@ export type CompanyOwesPeriodRow = {
   settlementStatus: string;
   fuelFinalized: boolean;
   tripCount: number;
+  /** Reporting flag — badge on desk; does not change queue routing. */
+  overpaidAmount?: number;
 };
 
 /** Org-wide company_owes queue — single SQL query (not N+1 per driver). */
@@ -1549,8 +1626,8 @@ export type ReconciledPeriodRow = CompanyOwesPeriodRow & {
 };
 
 /**
- * Settled (and overpaid) weeks in range — Driver Settlements → Reconciled tab.
- * Richer columns for Fleet vs Driver list + overlay.
+ * Settled weeks only — Driver Settlements → Reconciled tab.
+ * Overpaid recovery weeks stay on Collect via driver_owes residual.
  */
 export async function listReconciledSettlementPeriods(opts?: {
   periodStart?: string;
@@ -1565,7 +1642,7 @@ export async function listReconciledSettlementPeriods(opts?: {
     .select(
       "driver_id, period_anchor, period_end, settlement_amount, settlement_paid, cash_collected, cash_returned, cash_still_held, cash_written_off, payout_net, settlement_status, fuel_finalized, trip_count, earnings_gross, driver_share, fleet_share, driver_share_percent, fuel_deduction, fuel_fleet_share, toll_charged_to_driver, toll_cash_spend, tips_paid_to_driver, tips_withheld, metadata",
     )
-    .in("settlement_status", ["settled", "overpaid"])
+    .eq("settlement_status", "settled")
     .order("period_anchor", { ascending: false })
     .order("driver_id", { ascending: true })
     .limit(limit);
@@ -1664,7 +1741,7 @@ export async function listDriverOwesPeriods(opts?: {
   let q = sb()
     .from("driver_financial_periods")
     .select(
-      "driver_id, period_anchor, period_end, settlement_amount, settlement_paid, cash_collected, cash_returned, cash_still_held, payout_net, settlement_status, fuel_finalized, trip_count",
+      "driver_id, period_anchor, period_end, settlement_amount, settlement_paid, cash_collected, cash_returned, cash_still_held, payout_net, settlement_status, fuel_finalized, trip_count, metadata",
     )
     .eq("settlement_status", "driver_owes")
     .lt("settlement_amount", -0.005)
@@ -1684,7 +1761,12 @@ export async function listDriverOwesPeriods(opts?: {
   }
   return (data || []).map((r: any) => {
     const row = mapPeriodListRow(r);
-    return { ...row, amountOwed: Math.abs(row.settlementAmount) };
+    const oa = Number(r.metadata?.financeCore?.overpaidAmount);
+    return {
+      ...row,
+      amountOwed: Math.abs(row.settlementAmount),
+      overpaidAmount: Number.isFinite(oa) && oa > 0 ? oa : 0,
+    };
   });
 }
 
@@ -1706,7 +1788,7 @@ export async function listCashHeldPeriods(opts?: {
     .select(
       "driver_id, period_anchor, period_end, settlement_amount, settlement_paid, cash_collected, cash_returned, cash_still_held, payout_net, settlement_status, fuel_finalized, trip_count",
     )
-    .gt("cash_still_held", 0.5)
+    .gt("cash_still_held", STATUS_CASH_HELD_EPS)
     .or("settlement_status.eq.pending,fuel_finalized.eq.false")
     .order("period_anchor", { ascending: false })
     .order("driver_id", { ascending: true })
@@ -1875,8 +1957,10 @@ export async function forceReleaseDriverPeriod(params: {
     .eq("period_anchor", params.periodAnchor);
   if (updErr) throw new Error(updErr.message);
 
+  const ctx = await loadRebuildContext(params.driverId);
+  ctx.periodMetaByAnchor?.set(params.periodAnchor, nextMeta);
   return rebuildDriverFinancialPeriod(params.driverId, params.periodAnchor, {
-    ...(await loadRebuildContext(params.driverId)),
+    ...ctx,
     forceRelease: true,
     persistLines: true,
   } as RebuildContext);

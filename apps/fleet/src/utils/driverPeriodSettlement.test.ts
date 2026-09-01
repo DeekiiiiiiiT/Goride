@@ -191,7 +191,7 @@ describe('computePeriodSettlement', () => {
     expect(r.settlement).toBe(60);
   });
 
-  it('settlementPaid on a driver_owes week is preserved as overpaidAmount', () => {
+  it('settlementPaid on a driver_owes week folds into continuous residual', () => {
     const r = computePeriodSettlement({
       driverShare: 25,
       fuelDeduction: 0,
@@ -202,9 +202,62 @@ describe('computePeriodSettlement', () => {
       settlementPaid: 50,
     });
     expect(r.grossSettlement).toBe(-75);
-    expect(r.settlementPaid).toBe(50); // raw paid kept
+    expect(r.settlementPaid).toBe(50);
     expect(r.overpaidAmount).toBe(50);
-    expect(r.settlement).toBe(-75); // driver still owes on cash side
+    // Continuous: settlement = gross − paid = −75 − 50
+    expect(r.settlement).toBe(-125);
+  });
+
+  it('settlement residual is continuous across grossSettlement = 0', () => {
+    const paid = 5000;
+    const base = {
+      driverShare: 0,
+      fuelDeduction: 0,
+      baseCashOwed: 0,
+      baseCashPaid: 0,
+      tollCashWash: 0,
+      tollPersonal: 0,
+      settlementPaid: paid,
+    };
+    // gross = netPayout − adjCash = driverShare (with zero cash) — set via fuelCredits flip
+    const pos = computePeriodSettlement({
+      ...base,
+      driverShare: 0.01,
+    });
+    const zero = computePeriodSettlement({
+      ...base,
+      driverShare: 0,
+    });
+    const neg = computePeriodSettlement({
+      ...base,
+      driverShare: 0,
+      baseCashOwed: 0.01, // adjCash = 0.01 → gross = −0.01
+    });
+    expect(pos.grossSettlement).toBeCloseTo(0.01, 2);
+    expect(pos.settlement).toBeCloseTo(0.01 - paid, 2);
+    expect(zero.grossSettlement).toBe(0);
+    expect(zero.settlement).toBe(-paid);
+    expect(neg.grossSettlement).toBeCloseTo(-0.01, 2);
+    expect(neg.settlement).toBeCloseTo(-0.01 - paid, 2);
+    // Continuity: moving across zero only changes settlement by the gross delta
+    expect(Math.abs(pos.settlement - zero.settlement)).toBeCloseTo(0.01, 2);
+    expect(Math.abs(zero.settlement - neg.settlement)).toBeCloseTo(0.01, 2);
+  });
+
+  it('driver-owes plus prior payout exposes full Collect amount', () => {
+    // gross −2000, paid 5000 → settlement −7000 (Collect), overpaidAmount 5000
+    const r = computePeriodSettlement({
+      driverShare: 0,
+      fuelDeduction: 0,
+      baseCashOwed: 2000,
+      baseCashPaid: 0,
+      tollCashWash: 0,
+      tollPersonal: 0,
+      settlementPaid: 5000,
+    });
+    expect(r.grossSettlement).toBe(-2000);
+    expect(r.overpaidAmount).toBe(5000);
+    expect(r.settlement).toBe(-7000);
   });
 
   it('overpay above gross leaves overpaidAmount and negative residual', () => {

@@ -35,6 +35,7 @@ import {
 } from '../../utils/driverSettlementTx';
 import { payOutstandingAmount } from '../../utils/driverSettlementsPayAmount';
 import { DRIVER_FINANCIAL_PERIODS_KEY } from '../../hooks/useDriverFinancialPeriods';
+import { resolvePeriodTollCashWash } from '../../utils/periodTollCashSpend';
 import { BusinessFinanceDeskChrome } from '../business-finance/BusinessFinanceDeskChrome';
 import {
   RecordPayoutModal,
@@ -111,6 +112,8 @@ type PeriodRow = {
   fuelFinalized?: boolean;
   /** collect queue source */
   collectKind?: 'driver_owes' | 'cash_held';
+  /** Fleet overpay flag — badge only. */
+  overpaidAmount?: number;
 };
 
 type ReconciledListRow = PeriodRow & {
@@ -303,6 +306,7 @@ export function DriverSettlementsPage({
             ...r,
             collectKind: 'driver_owes' as const,
             amountOwed: Number(r.amountOwed) || Math.abs(Number(r.settlementAmount) || 0),
+            overpaidAmount: Number((r as any).overpaidAmount) || 0,
           }),
         ),
         summary: res?.summary as { totalOwed?: number; rowCount?: number; driverCount?: number },
@@ -693,9 +697,12 @@ export function DriverSettlementsPage({
         tollChargedToDriver: Number.isFinite(Number(d.tollChargedToDriver))
           ? Number(d.tollChargedToDriver)
           : row.tollChargedToDriver,
-        tollCashSpend: Number.isFinite(Number(d.tollCashSpend))
-          ? Number(d.tollCashSpend)
-          : row.tollCashSpend,
+        tollCashSpend: resolvePeriodTollCashWash({
+          tollCashSpend: Number.isFinite(Number(d.tollCashSpend))
+            ? Number(d.tollCashSpend)
+            : row.tollCashSpend,
+          metadata: (d.metadata as Record<string, unknown>) || null,
+        }),
         cashCollected: Number.isFinite(Number(d.cashCollected))
           ? Number(d.cashCollected)
           : row.cashCollected,
@@ -1647,17 +1654,27 @@ function OutstandingTable({
                   </TableCell>
                   {direction === 'collect' ? (
                     <TableCell>
-                      <Badge
-                        variant="secondary"
-                        className={cn(
-                          'font-normal',
-                          r.collectKind === 'driver_owes'
-                            ? 'bg-rose-50 text-rose-800'
-                            : 'bg-amber-50 text-amber-800',
-                        )}
-                      >
-                        {r.collectKind === 'driver_owes' ? 'Driver owes' : 'Cash held'}
-                      </Badge>
+                      <div className="flex flex-wrap items-center gap-1">
+                        <Badge
+                          variant="secondary"
+                          className={cn(
+                            'font-normal',
+                            r.collectKind === 'driver_owes'
+                              ? 'bg-rose-50 text-rose-800'
+                              : 'bg-amber-50 text-amber-800',
+                          )}
+                        >
+                          {r.collectKind === 'driver_owes' ? 'Driver owes' : 'Cash held'}
+                        </Badge>
+                        {Number(r.overpaidAmount) > 0.005 ? (
+                          <Badge
+                            variant="secondary"
+                            className="font-normal bg-violet-50 text-violet-800"
+                          >
+                            Overpaid
+                          </Badge>
+                        ) : null}
+                      </div>
                     </TableCell>
                   ) : (
                     <TableCell className="text-right tabular-nums text-slate-500">
@@ -2162,7 +2179,7 @@ function ReconciledTable({
                       variant="secondary"
                       className="font-normal bg-emerald-50 text-emerald-800 border border-emerald-100"
                     >
-                      {r.settlementStatus === 'overpaid' ? 'Overpaid' : 'Reconciled'}
+                      Reconciled
                     </Badge>
                     {Math.abs(Number(r.cashSourceMismatch) || 0) > 0.5 ? (
                       <span className="text-[10px] text-amber-700">

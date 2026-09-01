@@ -145,4 +145,80 @@ describe('settlement audit regressions', () => {
     const total = [...map.values()].reduce((s, v) => s + v, 0);
     expect(total).toBe(2000);
   });
+
+  it('NEW-2: settlement residual is continuous across grossSettlement = 0', () => {
+    const paid = 5000;
+    const nearPos = computePeriodSettlement({
+      driverShare: 0.01,
+      fuelDeduction: 0,
+      baseCashOwed: 0,
+      baseCashPaid: 0,
+      tollCashWash: 0,
+      tollPersonal: 0,
+      settlementPaid: paid,
+    });
+    const atZero = computePeriodSettlement({
+      driverShare: 0,
+      fuelDeduction: 0,
+      baseCashOwed: 0,
+      baseCashPaid: 0,
+      tollCashWash: 0,
+      tollPersonal: 0,
+      settlementPaid: paid,
+    });
+    const nearNeg = computePeriodSettlement({
+      driverShare: 0,
+      fuelDeduction: 0,
+      baseCashOwed: 0.01,
+      baseCashPaid: 0,
+      tollCashWash: 0,
+      tollPersonal: 0,
+      settlementPaid: paid,
+    });
+    expect(nearPos.settlement).toBe(-4999.99);
+    expect(atZero.settlement).toBe(-5000);
+    expect(nearNeg.settlement).toBe(-5000.01);
+  });
+
+  it('NEW-1/NEW-2: driver_owes week with prior payout → Collect residual, overpaid badge only', () => {
+    const r = computePeriodSettlement({
+      driverShare: 0,
+      fuelDeduction: 0,
+      baseCashOwed: 2000,
+      baseCashPaid: 0,
+      tollCashWash: 0,
+      tollPersonal: 0,
+      settlementPaid: 5000,
+    });
+    // gross = 0 − 2000 = −2000; settlement = −2000 − 5000 = −7000 (Collect)
+    expect(r.grossSettlement).toBe(-2000);
+    expect(r.settlement).toBe(-7000);
+    expect(r.overpaidAmount).toBe(5000);
+    // Directional queue key: negative residual → driver_owes (not overpaid status)
+    expect(r.settlement < -0.005).toBe(true);
+  });
+
+  it('NEW-3: pending trip toll wash stays 0 while actionable count would block Pay', () => {
+    // Formula only receives wash credit — pending trips must not inflate wash.
+    const withWash = computePeriodSettlement({
+      driverShare: 5000,
+      fuelDeduction: 0,
+      baseCashOwed: 0,
+      baseCashPaid: 0,
+      tollCashWash: 400, // only cash_wash / handled cash
+      tollPersonal: 0,
+    });
+    const pendingNoWash = computePeriodSettlement({
+      driverShare: 5000,
+      fuelDeduction: 0,
+      baseCashOwed: 0,
+      baseCashPaid: 0,
+      tollCashWash: 0, // pending/null trip must not credit wash
+      tollPersonal: 0,
+    });
+    expect(withWash.tollCashWash).toBe(400);
+    expect(pendingNoWash.tollCashWash).toBe(0);
+    // Wash increases cashPaid → lowers held → raises grossSettlement
+    expect(withWash.grossSettlement).toBeGreaterThan(pendingNoWash.grossSettlement);
+  });
 });

@@ -25,8 +25,9 @@ export interface PeriodSettlementResult {
   grossSettlement: number;
   /** Raw cleared Driver Payout sum tagged to the week (never silently clamped away). */
   settlementPaid: number;
-  /** max(0, settlementPaid − max(0, grossSettlement)) — fleet overpay vs current gross. */
+  /** max(0, settlementPaid − max(0, grossSettlement)) — reporting flag only. */
   overpaidAmount: number;
+  /** Continuous residual: grossSettlement − settlementPaid (same on both sides of zero). */
   settlement: number;
 }
 
@@ -45,19 +46,9 @@ export function computePeriodSettlement(i: PeriodSettlementInput): PeriodSettlem
   const adjCashBalance = round2(cashBalance - fuelCredits - cashWrittenOff);
   const grossSettlement = round2(netPayout - adjCashBalance);
 
-  let overpaidAmount = 0;
-  let settlement: number;
-  if (grossSettlement > 0.005) {
-    overpaidAmount = round2(Math.max(0, settlementPaid - grossSettlement));
-    settlement =
-      overpaidAmount > 0.005
-        ? round2(-overpaidAmount)
-        : round2(grossSettlement - settlementPaid);
-  } else {
-    // Driver owes / zero: any prior payout is excess vs current gross (do not zero paid).
-    overpaidAmount = settlementPaid > 0.005 ? settlementPaid : 0;
-    settlement = grossSettlement;
-  }
+  // Continuous across zero — do not branch settlement on the sign of gross.
+  const overpaidAmount = round2(Math.max(0, settlementPaid - Math.max(0, grossSettlement)));
+  const settlement = round2(grossSettlement - settlementPaid);
 
   return {
     netPayout,

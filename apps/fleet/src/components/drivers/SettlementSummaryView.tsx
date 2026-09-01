@@ -21,6 +21,7 @@ import {
   type BankSettledDisplay,
 } from '../../utils/fleetBankReceive';
 import { useAuth } from '../auth/AuthContext';
+import { STATUS_SETTLED_EPS } from '@roam/finance-core';
 
 export type SettlementStatus =
   | 'Settled'
@@ -61,7 +62,9 @@ export interface SettlementRow {
   cashStatus: string;
   settlement: number;
   settlementStatus: SettlementStatus;
-}
+  /** Fleet overpay flag — badge only; does not replace directional status. */
+  showOverpaidBadge?: boolean;
+};
 
 export function payoutToSettlementRow(row: PayoutPeriodRow): SettlementRow {
   const { settlement, adjCashBalance, overpaidAmount } = getPeriodSettlementComponents(row);
@@ -79,10 +82,11 @@ export function payoutToSettlementRow(row: PayoutPeriodRow): SettlementRow {
   if (!hasActivity) settlementStatus = 'No Activity';
   else if (row.status === 'Awaiting Tolls') settlementStatus = 'Awaiting Tolls';
   else if (!row.isFinalized) settlementStatus = 'Pending';
-  else if (overpaidAmount > 0.005 || row.status === 'Overpaid') settlementStatus = 'Overpaid';
-  else if (Math.abs(settlement) < 0.01) settlementStatus = 'Settled';
+  else if (Math.abs(settlement) < STATUS_SETTLED_EPS) settlementStatus = 'Settled';
   else if (settlement > 0) settlementStatus = 'Company Owes';
   else settlementStatus = 'Driver Owes';
+  // overpaidAmount is a badge flag — do not replace directional status
+  const showOverpaidBadge = overpaidAmount > 0.005 || row.status === 'Overpaid';
 
   let cashStatus = 'No Activity';
   if (Math.abs(adjCashBalance) > 0.01 || row.cashPaid > 0.01) {
@@ -131,6 +135,7 @@ export function payoutToSettlementRow(row: PayoutPeriodRow): SettlementRow {
     cashStatus,
     settlement,
     settlementStatus,
+    showOverpaidBadge,
   };
 }
 
@@ -789,6 +794,11 @@ export function SettlementSummaryView({
                         {/* Status */}
                         <TableCell className="text-xs text-center">
                           {renderStatusBadge(row.settlementStatus)}
+                          {row.showOverpaidBadge ? (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-violet-50 px-2 py-0.5 text-[10px] font-medium text-violet-700">
+                              Overpaid
+                            </span>
+                          ) : null}
                         </TableCell>
                       </TableRow>
                     );

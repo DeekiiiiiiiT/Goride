@@ -7,6 +7,8 @@ import { parseISO } from 'date-fns';
 import { api } from '../services/api';
 import type { PayoutPeriodRow, PayoutStatus } from '../types/driverPayoutPeriod';
 import { DRIVER_FINANCIAL_STALE_MS } from './useDriverFinancialBundle';
+import { resolvePeriodTollCashWash } from '../utils/periodTollCashSpend';
+import { STATUS_CASH_HELD_EPS } from '@roam/finance-core';
 
 export const DRIVER_FINANCIAL_PERIODS_KEY = 'driverFinancialPeriods';
 
@@ -88,8 +90,8 @@ export function useInvalidateDriverFinancialPeriods() {
 
 function mapPayoutStatus(p: DriverFinancialPeriodClient): PayoutStatus {
   const s = String(p.payoutStatus || '').toLowerCase();
-  const st = String(p.settlementStatus || '').toLowerCase();
-  if (st === 'overpaid') return 'Overpaid';
+  // Do not map settlement_status=overpaid → Overpaid as primary payout state
+  // (overpay is a badge; direction comes from residual / payout_status).
   if (s === 'finalized') return 'Finalized';
   if (s === 'awaiting_cash') return 'Awaiting Cash';
   if (s === 'awaiting_tolls') return 'Awaiting Tolls';
@@ -101,7 +103,7 @@ function mapPayoutStatus(p: DriverFinancialPeriodClient): PayoutStatus {
   const force =
     !!(p.metadata as any)?.forceRelease?.at || !!(p.metadata as any)?.forceReleasedAt;
   if (p.fuelFinalized && (tollsClear || force)) {
-    return Number(p.cashStillHeld) > 0.5 ? 'Awaiting Cash' : 'Finalized';
+    return Number(p.cashStillHeld) > STATUS_CASH_HELD_EPS ? 'Awaiting Cash' : 'Finalized';
   }
   if (p.fuelFinalized && !tollsClear) return 'Awaiting Tolls';
   return 'Pending';
@@ -136,7 +138,7 @@ export function periodsToPayoutPeriodRows(
       const cashWrittenOff = Number(p.cashWrittenOff) || 0;
       const settlementPaid = Number(p.settlementPaid) || 0;
       const tollPersonal = Number(p.tollChargedToDriver) || 0;
-      const cashTollWash = Number(p.tollCashSpend) || 0;
+      const cashTollWash = resolvePeriodTollCashWash(p);
       const netPayout = Number(p.payoutNet) || 0;
       const cashBalance = Math.round((passengerCash - cashPaid) * 100) / 100;
       const expenseDeductions = Math.round((fuelDeduction + tollPersonal) * 100) / 100;
@@ -236,7 +238,7 @@ export function overlaySharedPeriodsOntoPayoutRows<T extends {
       disputeRefundMatched: Number(p.disputeRefundMatched) || 0,
       disputeRefundUnmatched: Number(p.disputeRefundUnmatched) || 0,
       personalTollCharge: Number(p.tollChargedToDriver) || 0,
-      cashTollWash: Number(p.tollCashSpend) || 0,
+      cashTollWash: resolvePeriodTollCashWash(p),
       cashWrittenOff: Number(p.cashWrittenOff) || 0,
       settlementPaid: Number(p.settlementPaid) || 0,
       fuelDeduction: Number.isFinite(Number(p.fuelDeduction)) ? Number(p.fuelDeduction) : row.fuelDeduction,
