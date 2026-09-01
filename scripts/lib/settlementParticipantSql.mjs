@@ -12,7 +12,7 @@ export function sqlSettlementParticipantPredicate(row) {
 
   if (cat === "Toll Charge") return true;
   if ((typ === "Cash_Write_Off" || cat === "Cash Write Off") && amt > 0) return true;
-  if ((typ === "Payout" || cat === "Driver Payouts") && amt > 0) return true;
+  if (typ === "Payout" && cat === "Driver Payouts" && amt > 0) return true;
 
   if (pm === "Tag Balance") return false;
   if (descr.includes("top-up")) return false;

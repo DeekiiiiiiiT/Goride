@@ -20,7 +20,7 @@ export function isDriverPayoutTransaction(
   t: Pick<CashPaymentLike, 'amount' | 'category' | 'type'> | null | undefined,
 ): boolean {
   if (!t || !Number.isFinite(t.amount) || (t.amount as number) <= 0) return false;
-  if (t.type === 'Payout' || t.category === 'Driver Payouts') return true;
+  if (t.type === 'Payout' && t.category === 'Driver Payouts') return true;
   return false;
 }
 

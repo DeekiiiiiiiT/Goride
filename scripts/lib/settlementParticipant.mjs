@@ -11,7 +11,7 @@ export function isCashWriteOffTransaction(t) {
 
 export function isDriverPayoutTransaction(t) {
   if (!t || !Number.isFinite(t.amount) || t.amount <= 0) return false;
-  return t.type === "Payout" || t.category === "Driver Payouts";
+  return t.type === "Payout" && t.category === "Driver Payouts";
 }
 
 export function isDriverCashPaymentTransaction(t) {

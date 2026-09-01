@@ -34,7 +34,7 @@ classified AS (
   WHERE
     cat = 'Toll Charge'
     OR ((typ = 'Cash_Write_Off' OR cat = 'Cash Write Off') AND amt > 0)
-    OR ((typ = 'Payout' OR cat = 'Driver Payouts') AND amt > 0)
+    OR (typ = 'Payout' AND cat = 'Driver Payouts' AND amt > 0)
     OR (
       pm <> 'Tag Balance'
       AND lower(descr) NOT LIKE '%top-up%'
