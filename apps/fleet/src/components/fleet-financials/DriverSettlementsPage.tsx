@@ -290,7 +290,12 @@ export function DriverSettlementsPage({
     queryFn: async () => {
       const res = await api.getCompanyOwesPeriods(rangeOpts);
       return {
-        rows: ((res?.data || []) as PeriodRow[]).map(normalizePeriodRow),
+        rows: ((res?.data || []) as PeriodRow[]).map((r) =>
+          normalizePeriodRow({
+            ...r,
+            overpaidAmount: Number((r as any).overpaidAmount) || 0,
+          }),
+        ),
         summary: res?.summary as { totalOwed?: number; rowCount?: number; driverCount?: number },
       };
     },
@@ -453,6 +458,21 @@ export function DriverSettlementsPage({
   }, [owesQuery.data?.rows, search]);
 
   const outstandingRows = direction === 'collect' ? collectOutstanding : payOutstanding;
+
+  /** Week×driver → overpaid flag for Pay Done badges (same source as Collect). */
+  const overpaidByPeriodKey = useMemo(() => {
+    const m = new Map<string, number>();
+    const add = (rows: PeriodRow[] | undefined) => {
+      for (const r of rows || []) {
+        const oa = Number(r.overpaidAmount) || 0;
+        if (oa > 0.005) m.set(rowKey(r), oa);
+      }
+    };
+    add(driverOwesQuery.data?.rows);
+    add(owesQuery.data?.rows);
+    add(reconciledQuery.data?.rows);
+    return m;
+  }, [driverOwesQuery.data?.rows, owesQuery.data?.rows, reconciledQuery.data?.rows]);
 
   const awaitingRows = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -1353,6 +1373,7 @@ export function DriverSettlementsPage({
           {direction === 'pay' ? (
             <DonePayTable
               rows={donePayRows}
+              overpaidByPeriodKey={overpaidByPeriodKey}
               onOpenDriver={onOpenDriver}
               onReverse={(tx) => setTxToReverse(tx)}
             />
@@ -1677,8 +1698,18 @@ function OutstandingTable({
                       </div>
                     </TableCell>
                   ) : (
-                    <TableCell className="text-right tabular-nums text-slate-500">
-                      {MONEY(r.settlementPaid)}
+                    <TableCell className="text-right">
+                      <div className="flex flex-col items-end gap-1">
+                        <span className="tabular-nums text-slate-500">{MONEY(r.settlementPaid)}</span>
+                        {Number(r.overpaidAmount) > 0.005 ? (
+                          <Badge
+                            variant="secondary"
+                            className="font-normal bg-violet-50 text-violet-800"
+                          >
+                            Overpaid
+                          </Badge>
+                        ) : null}
+                      </div>
                     </TableCell>
                   )}
                   <TableCell
@@ -1830,10 +1861,12 @@ function groupDoneTxsByPeriod(rows: FinancialTransaction[]): Array<{
 
 function DonePayTable({
   rows,
+  overpaidByPeriodKey,
   onOpenDriver,
   onReverse,
 }: {
   rows: FinancialTransaction[];
+  overpaidByPeriodKey: Map<string, number>;
   onOpenDriver?: (id: string) => void;
   onReverse: (tx: FinancialTransaction) => void;
 }) {
@@ -1848,6 +1881,15 @@ function DonePayTable({
       return next;
     });
   };
+
+  const isOverpaidTx = (tx: FinancialTransaction) => {
+    const start = ymdKey(tx.metadata?.workPeriodStart);
+    if (!start || !tx.driverId) return false;
+    return (overpaidByPeriodKey.get(`${tx.driverId}|${start}`) || 0) > 0.005;
+  };
+
+  const groupIsOverpaid = (g: { rows: FinancialTransaction[] }) =>
+    g.rows.some((tx) => isOverpaidTx(tx));
 
   return (
     <div className="rounded-lg border border-slate-200 overflow-hidden bg-white">
@@ -1887,7 +1929,19 @@ function DonePayTable({
                         <ChevronRight className="h-4 w-4 text-slate-500" />
                       )}
                     </TableCell>
-                    <TableCell className="font-medium text-slate-900">{g.label}</TableCell>
+                    <TableCell className="font-medium text-slate-900">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span>{g.label}</span>
+                        {groupIsOverpaid(g) ? (
+                          <Badge
+                            variant="secondary"
+                            className="font-normal bg-violet-50 text-violet-800"
+                          >
+                            Overpaid
+                          </Badge>
+                        ) : null}
+                      </div>
+                    </TableCell>
                     <TableCell className="text-sm text-slate-500" colSpan={3}>
                       {g.rows.length} payout{g.rows.length !== 1 ? 's' : ''}
                     </TableCell>
@@ -1929,9 +1983,19 @@ function DonePayTable({
                             {MONEY(tx.amount)}
                           </TableCell>
                           <TableCell>
-                            <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200">
-                              Paid
-                            </Badge>
+                            <div className="flex flex-wrap items-center gap-1">
+                              <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200">
+                                Paid
+                              </Badge>
+                              {isOverpaidTx(tx) ? (
+                                <Badge
+                                  variant="secondary"
+                                  className="font-normal bg-violet-50 text-violet-800"
+                                >
+                                  Overpaid
+                                </Badge>
+                              ) : null}
+                            </div>
                           </TableCell>
                           <TableCell>
                             <Button

@@ -1516,7 +1516,7 @@ export async function listCompanyOwesPeriods(opts?: {
   let q = sb()
     .from("driver_financial_periods")
     .select(
-      "driver_id, period_anchor, period_end, settlement_amount, settlement_paid, cash_collected, cash_returned, cash_still_held, payout_net, settlement_status, fuel_finalized, trip_count",
+      "driver_id, period_anchor, period_end, settlement_amount, settlement_paid, cash_collected, cash_returned, cash_still_held, payout_net, settlement_status, fuel_finalized, trip_count, metadata",
     )
     .eq("settlement_status", "company_owes")
     .gt("settlement_amount", 0.005)
@@ -1547,20 +1547,24 @@ export async function listCompanyOwesPeriods(opts?: {
     console.error("[DriverFinancialPeriods] company_owes list:", error.message);
     throw new Error(error.message);
   }
-  return (data || []).map((r: any) => ({
-    driverId: String(r.driver_id),
-    periodAnchor: String(r.period_anchor).slice(0, 10),
-    periodEnd: String(r.period_end).slice(0, 10),
-    settlementAmount: Number(r.settlement_amount) || 0,
-    settlementPaid: Number(r.settlement_paid) || 0,
-    cashCollected: Number(r.cash_collected) || 0,
-    cashReturned: Number(r.cash_returned) || 0,
-    cashStillHeld: Number(r.cash_still_held) || 0,
-    payoutNet: Number(r.payout_net) || 0,
-    settlementStatus: String(r.settlement_status || ""),
-    fuelFinalized: !!r.fuel_finalized,
-    tripCount: Number(r.trip_count) || 0,
-  }));
+  return (data || []).map((r: any) => {
+    const oa = Number(r.metadata?.financeCore?.overpaidAmount);
+    return {
+      driverId: String(r.driver_id),
+      periodAnchor: String(r.period_anchor).slice(0, 10),
+      periodEnd: String(r.period_end).slice(0, 10),
+      settlementAmount: Number(r.settlement_amount) || 0,
+      settlementPaid: Number(r.settlement_paid) || 0,
+      cashCollected: Number(r.cash_collected) || 0,
+      cashReturned: Number(r.cash_returned) || 0,
+      cashStillHeld: Number(r.cash_still_held) || 0,
+      payoutNet: Number(r.payout_net) || 0,
+      settlementStatus: String(r.settlement_status || ""),
+      fuelFinalized: !!r.fuel_finalized,
+      tripCount: Number(r.trip_count) || 0,
+      overpaidAmount: Number.isFinite(oa) && oa > 0 ? oa : 0,
+    };
+  });
 }
 
 /** Recently paid company-owes weeks (settled with settlement_paid > 0). */
@@ -1573,7 +1577,7 @@ export async function listRecentlyPaidSettlementPeriods(opts?: {
   let q = sb()
     .from("driver_financial_periods")
     .select(
-      "driver_id, period_anchor, period_end, settlement_amount, settlement_paid, cash_collected, cash_returned, cash_still_held, payout_net, settlement_status, fuel_finalized, trip_count",
+      "driver_id, period_anchor, period_end, settlement_amount, settlement_paid, cash_collected, cash_returned, cash_still_held, payout_net, settlement_status, fuel_finalized, trip_count, metadata",
     )
     .eq("settlement_status", "settled")
     .gt("settlement_paid", 0.005)
@@ -1593,20 +1597,24 @@ export async function listRecentlyPaidSettlementPeriods(opts?: {
     console.error("[DriverFinancialPeriods] paid settlements list:", error.message);
     throw new Error(error.message);
   }
-  return (data || []).map((r: any) => ({
-    driverId: String(r.driver_id),
-    periodAnchor: String(r.period_anchor).slice(0, 10),
-    periodEnd: String(r.period_end).slice(0, 10),
-    settlementAmount: Number(r.settlement_amount) || 0,
-    settlementPaid: Number(r.settlement_paid) || 0,
-    cashCollected: Number(r.cash_collected) || 0,
-    cashReturned: Number(r.cash_returned) || 0,
-    cashStillHeld: Number(r.cash_still_held) || 0,
-    payoutNet: Number(r.payout_net) || 0,
-    settlementStatus: String(r.settlement_status || ""),
-    fuelFinalized: !!r.fuel_finalized,
-    tripCount: Number(r.trip_count) || 0,
-  }));
+  return (data || []).map((r: any) => {
+    const oa = Number(r.metadata?.financeCore?.overpaidAmount);
+    return {
+      driverId: String(r.driver_id),
+      periodAnchor: String(r.period_anchor).slice(0, 10),
+      periodEnd: String(r.period_end).slice(0, 10),
+      settlementAmount: Number(r.settlement_amount) || 0,
+      settlementPaid: Number(r.settlement_paid) || 0,
+      cashCollected: Number(r.cash_collected) || 0,
+      cashReturned: Number(r.cash_returned) || 0,
+      cashStillHeld: Number(r.cash_still_held) || 0,
+      payoutNet: Number(r.payout_net) || 0,
+      settlementStatus: String(r.settlement_status || ""),
+      fuelFinalized: !!r.fuel_finalized,
+      tripCount: Number(r.trip_count) || 0,
+      overpaidAmount: Number.isFinite(oa) && oa > 0 ? oa : 0,
+    };
+  });
 }
 
 /** Closed weeks (residual ≈ 0) — Driver Settlements → Reconciled tab. */
