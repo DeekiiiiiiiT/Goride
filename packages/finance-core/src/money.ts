@@ -12,3 +12,14 @@ export const MONEY_EPS = 0.005;
 /** Status bands: money compares use MONEY_EPS; settled residual may use STATUS_SETTLED_EPS. */
 export const STATUS_SETTLED_EPS = 0.01;
 export const STATUS_CASH_HELD_EPS = 0.5;
+
+/** Integer minor units (cents) — A-10 branded type for money paths. */
+export type MoneyMinor = number & { readonly __brand: 'MoneyMinor' };
+
+export function toMoneyMinor(amountMajor: number): MoneyMinor {
+  return Math.round((Number(amountMajor) || 0) * 100) as MoneyMinor;
+}
+
+export function fromMoneyMinor(minor: MoneyMinor): number {
+  return round2(Number(minor) / 100);
+}

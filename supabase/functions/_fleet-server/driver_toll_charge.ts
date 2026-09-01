@@ -53,8 +53,7 @@ export async function isDriverTollChargeSyncEnabled(): Promise<boolean> {
  * driverTollChargeSyncEnabled (the personal charge must reach the cash side).
  */
 export async function isUnifiedTollSettlementEnabled(): Promise<boolean> {
-  const rec = (await kv.get(SETTINGS_KEY)) as { unifiedTollSettlementEnabled?: boolean } | null;
-  return rec?.unifiedTollSettlementEnabled === true;
+  return true;
 }
 
 interface DriverTollChargeMarker {

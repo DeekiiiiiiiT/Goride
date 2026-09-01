@@ -9,7 +9,7 @@
  */
 import {
   rebuildAllPeriodsForDriver,
-  rebuildDriverFinancialPeriod,
+  rebuildPeriodsForAnchors,
   listDriverFinancialPeriods,
 } from './driver_financial_periods.ts';
 
@@ -25,12 +25,9 @@ export async function repairDriverSettlementWeeks(opts: {
   if (!driverId) throw new Error('driverId required');
 
   if (opts.anchors?.length) {
-    let rebuilt = 0;
-    for (const anchor of opts.anchors) {
-      await rebuildDriverFinancialPeriod(driverId, anchor);
-      rebuilt++;
-    }
-    return { rebuilt, skipped: 0, anchors: opts.anchors };
+    const anchors = opts.anchors.filter((a) => /^\d{4}-\d{2}-\d{2}$/.test(a));
+    const rebuilt = await rebuildPeriodsForAnchors(driverId, anchors);
+    return { rebuilt, skipped: 0, anchors };
   }
 
   if (opts.onlyOpenOrOwes) {
@@ -58,15 +55,12 @@ export async function repairDriverSettlementWeeks(opts: {
       );
       return identityGap > 1;
     });
-    let rebuilt = 0;
-    for (const p of targets) {
-      await rebuildDriverFinancialPeriod(driverId, p.periodAnchor);
-      rebuilt++;
-    }
+    const anchors = targets.map((t) => t.periodAnchor);
+    const rebuilt = await rebuildPeriodsForAnchors(driverId, anchors);
     return {
       rebuilt,
       skipped: periods.length - rebuilt,
-      anchors: targets.map((t) => t.periodAnchor),
+      anchors,
     };
   }
 

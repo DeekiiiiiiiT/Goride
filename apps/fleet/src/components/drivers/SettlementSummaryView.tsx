@@ -27,7 +27,6 @@ export type SettlementStatus =
   | 'Settled'
   | 'Company Owes'
   | 'Driver Owes'
-  | 'Overpaid'
   | 'Awaiting Tolls'
   | 'Pending'
   | 'No Activity';
@@ -86,7 +85,7 @@ export function payoutToSettlementRow(row: PayoutPeriodRow): SettlementRow {
   else if (settlement > 0) settlementStatus = 'Company Owes';
   else settlementStatus = 'Driver Owes';
   // overpaidAmount is a badge flag — do not replace directional status
-  const showOverpaidBadge = overpaidAmount > 0.005 || row.status === 'Overpaid';
+  const showOverpaidBadge = overpaidAmount > 0.005;
 
   let cashStatus = 'No Activity';
   if (Math.abs(adjCashBalance) > 0.01 || row.cashPaid > 0.01) {
@@ -270,12 +269,6 @@ export function SettlementSummaryView({
         return (
           <span className="inline-flex items-center gap-1 rounded-full bg-rose-50 px-2 py-0.5 text-[10px] font-medium text-rose-700">
             <ArrowDownCircle className="h-3 w-3" /> Driver Owes
-          </span>
-        );
-      case 'Overpaid':
-        return (
-          <span className="inline-flex items-center gap-1 rounded-full bg-violet-50 px-2 py-0.5 text-[10px] font-medium text-violet-700">
-            <ArrowUpCircle className="h-3 w-3" /> Overpaid
           </span>
         );
       case 'Awaiting Tolls':

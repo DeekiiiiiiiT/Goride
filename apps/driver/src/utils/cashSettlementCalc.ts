@@ -326,7 +326,7 @@ export function computeWeeklyCashSettlement(input: CashSettlementInput): CashWee
         else if (amountPaid >= week.amountOwed - 0.01) status = 'Paid';
         else if (amountPaid > 0) status = 'Partial';
 
-        if (amountPaid > week.amountOwed + 1) status = 'Overpaid';
+        if (amountPaid > week.amountOwed + 0.01) status = 'Overpaid';
 
         return {
             start: week.start,

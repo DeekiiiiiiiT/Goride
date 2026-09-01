@@ -27,8 +27,6 @@ export function buildLedgerPayoutPeriodRows(params: {
   finalizedReports: any[];
   disputeRefunds?: DisputeRefund[];
   periodType: PeriodType;
-  /** Unified toll settlement: tolls leave the payout deduction, settled on cash side. */
-  unifiedToll?: boolean;
   /** Fleet IANA tz — required so weekly Toll Status matches Toll Reconciliation buckets. */
   timezone?: string;
   /**
@@ -46,7 +44,6 @@ export function buildLedgerPayoutPeriodRows(params: {
     finalizedReports,
     disputeRefunds = [],
     periodType,
-    unifiedToll = false,
     timezone,
     draftFuelByPeriod,
   } = params;
@@ -331,30 +328,22 @@ export function buildLedgerPayoutPeriodRows(params: {
       // amounts marked personal and overstates vs the actual bill (e.g. $1995 vs $1075).
       const tollPersonal = tollCharged;
 
-      if (unifiedToll) {
-        // Keep Cash Returned = payments only; cash wash + personal applied in settlement math.
-        const r = computePeriodSettlement({
-          driverShare,
-          fuelDeduction,
-          baseCashOwed: passengerCash,
-          baseCashPaid,
-          tollCashWash: 0,
-          tollPersonal: 0,
-          fuelCredits: 0, // applied in getPeriodSettlementComponents
-        });
-        totalDeductions = fuelDeduction;
-        netPayout = r.netPayout;
-        cashOwed = passengerCash;
-        cashPaid = baseCashPaid;
-        cashBalance = passengerCash - baseCashPaid;
-        displayTollExpenses = tollPersonal;
-      } else {
-        totalDeductions = tollExpenses + fuelDeduction;
-        netPayout = driverShare - totalDeductions;
-        cashOwed = passengerCash;
-        cashPaid = baseCashPaid;
-        cashBalance = passengerCash - baseCashPaid;
-      }
+      // Unified toll settlement (A-8): single pay formula via computePeriodSettlement.
+      const r = computePeriodSettlement({
+        driverShare,
+        fuelDeduction,
+        baseCashOwed: passengerCash,
+        baseCashPaid,
+        tollCashWash: 0,
+        tollPersonal: 0,
+        fuelCredits: 0, // applied in getPeriodSettlementComponents
+      });
+      totalDeductions = fuelDeduction;
+      netPayout = r.netPayout;
+      cashOwed = passengerCash;
+      cashPaid = baseCashPaid;
+      cashBalance = passengerCash - baseCashPaid;
+      displayTollExpenses = tollPersonal;
 
       // Still-held preview for status (same formula as getPeriodSettlementComponents).
       const cashWrittenOffPreview = 0; // ledger fallback path — write-offs come from shared periods

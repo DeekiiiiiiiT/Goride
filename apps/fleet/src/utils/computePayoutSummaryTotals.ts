@@ -73,6 +73,5 @@ export function payoutStatusLabel(status: PayoutPeriodRow['status']): string {
   if (status === 'Pending') return 'Pending Fuel';
   if (status === 'Awaiting Tolls') return 'Awaiting Tolls';
   if (status === 'Awaiting Cash') return 'Cash Outstanding';
-  if (status === 'Overpaid') return 'Overpaid';
   return 'Closed';
 }

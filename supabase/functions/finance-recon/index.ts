@@ -1,19 +1,16 @@
 /**
- * Nightly finance recon: period projection vs posting identity checks.
+ * Nightly finance recon: period projection vs formula identity checks.
  * POST with X-Fleet-Cron-Secret.
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { requireInternalSecret } from "../_shared/requireInternalSecret.ts";
+import { checkPeriodInvariants } from "../../packages/finance-core/src/periodInvariants.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type, x-fleet-cron-secret, x-rides-cron-secret",
 };
-
-function round2(n: number): number {
-  return Math.round((Number(n) || 0) * 100) / 100;
-}
 
 function errMsg(e: unknown): string {
   if (e instanceof Error) return e.message;
@@ -55,7 +52,7 @@ Deno.serve(async (req) => {
     const { data: periods, error } = await supabase
       .from("driver_financial_periods")
       .select(
-        "driver_id, period_anchor, cash_collected, cash_returned, cash_written_off, cash_still_held, settlement_amount, organization_id, payout_net, driver_share, fuel_deduction, fuel_fleet_share, toll_cash_spend, toll_charged_to_driver",
+        "driver_id, period_anchor, cash_collected, cash_returned, cash_written_off, cash_still_held, settlement_amount, settlement_paid, organization_id, payout_net, driver_share, fleet_share, fuel_deduction, fuel_fleet_share, toll_cash_spend, toll_tag_spend, toll_spend, toll_charged_to_driver, earnings_gross, tips_paid_to_driver, metadata",
       )
       .gte("period_anchor", fromYmd)
       .order("period_anchor", { ascending: true });
@@ -66,32 +63,21 @@ Deno.serve(async (req) => {
     let nullOrg = 0;
     for (const p of rows) {
       if (!p.organization_id) nullOrg++;
-      const held = round2(Number(p.cash_still_held) || 0);
-      const expectedHeld = round2(
-        Math.max(
-          0,
-          (Number(p.cash_collected) || 0) +
-            (Number(p.toll_charged_to_driver) || 0) -
-            (Number(p.cash_returned) || 0) -
-            (Number(p.toll_cash_spend) || 0) -
-            (Number(p.fuel_fleet_share) || 0) -
-            (Number(p.cash_written_off) || 0),
-        ),
-      );
-      if (Math.abs(held - expectedHeld) > 0.01) {
+      for (const d of checkPeriodInvariants(p)) {
         drifts.push({
-          driverId: p.driver_id,
-          week: p.period_anchor,
-          kind: "cash_still_held",
-          held,
-          expectedHeld,
+          driverId: d.driverId ?? p.driver_id,
+          week: d.week ?? p.period_anchor,
+          kind: d.kind,
+          persisted: d.persisted,
+          expected: d.expected,
         });
       }
     }
 
     const ok = drifts.length === 0;
     if (!ok) {
-      console.warn(`[finance-recon] ${drifts.length} drift(s), nullOrg=${nullOrg}`);
+      const summary = `[finance-recon] ${drifts.length} drift(s), nullOrg=${nullOrg}`;
+      console.error(summary, drifts.slice(0, 5));
     }
 
     const { error: persistErr } = await supabase.from("finance_recon_runs").insert({

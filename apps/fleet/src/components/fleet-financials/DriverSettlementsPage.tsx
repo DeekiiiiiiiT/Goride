@@ -130,6 +130,7 @@ type ReconciledListRow = PeriodRow & {
   tipsPaidToDriver?: number;
   tipsWithheld?: number;
   cashSourceMismatch?: number;
+  metadata?: Record<string, unknown> | null;
 };
 
 const MONEY = (n: number | null | undefined) => {
@@ -207,7 +208,7 @@ export function DriverSettlementsPage({
     format(endOfWeek(new Date(), { weekStartsOn: 1 }), 'yyyy-MM-dd'),
   );
   const [search, setSearch] = useState('');
-  const [minAmount, setMinAmount] = useState('');
+  const [minAmount, setMinAmount] = useState('1');
   const [deskMode, setDeskMode] = useState<DeskMode>('collect');
   const direction: MoneyDirection = deskMode === 'pay' ? 'pay' : 'collect';
   const [deskTab, setDeskTab] = useState<DeskTab>('outstanding');
@@ -372,6 +373,7 @@ export function DriverSettlementsPage({
             cashSourceMismatch: Number.isFinite(Number((r as any).cashSourceMismatch))
               ? Number((r as any).cashSourceMismatch)
               : 0,
+            metadata: (r as any).metadata ?? null,
           } as ReconciledListRow;
         }),
         summary: res?.summary as { totalGross?: number; rowCount?: number; driverCount?: number },
@@ -752,6 +754,9 @@ export function DriverSettlementsPage({
         tipsWithheld: Number.isFinite(Number(d.tipsWithheld))
           ? Number(d.tipsWithheld)
           : row.tipsWithheld || 0,
+        cashSourceMismatch: Number.isFinite(Number((d as any).cashSourceMismatch))
+          ? Number((d as any).cashSourceMismatch)
+          : row.cashSourceMismatch || 0,
       });
     } catch (e: any) {
       toast.error(e?.message || 'Could not load period detail');
@@ -767,7 +772,10 @@ export function DriverSettlementsPage({
         fuelDeduction: row.fuelDeduction,
         fuelFleetShare: row.fuelFleetShare,
         tollChargedToDriver: row.tollChargedToDriver,
-        tollCashSpend: row.tollCashSpend,
+        tollCashSpend: resolvePeriodTollCashWash({
+          tollCashSpend: row.tollCashSpend,
+          metadata: row.metadata ?? null,
+        }),
         cashCollected: row.cashCollected,
         cashReturned: row.cashReturned || 0,
         cashWrittenOff: row.cashWrittenOff,
@@ -779,6 +787,7 @@ export function DriverSettlementsPage({
         fuelFinalized: row.fuelFinalized,
         settlementStatus: row.settlementStatus,
         tierName: null,
+        cashSourceMismatch: row.cashSourceMismatch || 0,
       });
     } finally {
       setReconciledDetailLoading(false);
@@ -1226,7 +1235,7 @@ export function DriverSettlementsPage({
                   type="number"
                   step="0.01"
                   className="h-9 w-[110px]"
-                  placeholder="0"
+                  placeholder="Min $1 (clear for all)"
                   value={minAmount}
                   onChange={(e) => setMinAmount(e.target.value)}
                 />
@@ -1276,7 +1285,7 @@ export function DriverSettlementsPage({
               type="number"
               step="0.01"
               className="h-9 w-[110px]"
-              placeholder="0"
+              placeholder="Min $1 (clear for all)"
               value={minAmount}
               onChange={(e) => setMinAmount(e.target.value)}
             />

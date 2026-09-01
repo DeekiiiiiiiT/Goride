@@ -47,6 +47,7 @@ export type ReconciledPeriodDetail = {
   tierName?: string | null;
   tipsPaidToDriver?: number;
   tipsWithheld?: number;
+  cashSourceMismatch?: number;
 };
 
 type Props = {
@@ -257,6 +258,12 @@ export function ReconciledPeriodOverlay({
                 Platform toll reimbursement (tag credited) is display-only on Expenses until a live
                 reimbursed booking is confirmed — it does not change this week’s money residual.
               </p>
+              {detail.cashSourceMismatch != null && Math.abs(detail.cashSourceMismatch) > 0.5 ? (
+                <p className="text-[11px] text-amber-800 mb-2 rounded-md bg-amber-50 px-2 py-1.5">
+                  Cash source mismatch {fmt(detail.cashSourceMismatch)} — CSV Uber cash disagrees with
+                  ledger payout_cash; ledger wins. This does not block reconciliation.
+                </p>
+              ) : null}
               <Line label="Passenger cash" value={fmt(detail.cashCollected)} />
               <Line
                 label="− Cash returned"

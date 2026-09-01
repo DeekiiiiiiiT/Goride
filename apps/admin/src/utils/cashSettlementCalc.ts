@@ -7,6 +7,7 @@
 // Pure function — no React, no side effects, no UI.
 // ════════════════════════════════════════════════════════════════════════════
 
+import { STATUS_SETTLED_EPS } from '@roam/finance-core';
 import { Trip, FinancialTransaction, DriverMetrics } from '../types/data';
 import { isDriverTollChargeRow, netDriverTollCharges } from './netDriverTollCharges';
 import {
@@ -323,10 +324,10 @@ export function computeWeeklyCashSettlement(input: CashSettlementInput): CashWee
         // Status Logic
         let status: 'Paid' | 'Partial' | 'Unpaid' | 'Overpaid' | 'No Activity' = 'Unpaid';
         if (week.amountOwed === 0 && amountPaid === 0) status = 'No Activity';
-        else if (amountPaid >= week.amountOwed - 0.01) status = 'Paid';
+        else if (amountPaid >= week.amountOwed - STATUS_SETTLED_EPS) status = 'Paid';
         else if (amountPaid > 0) status = 'Partial';
 
-        if (amountPaid > week.amountOwed + 1) status = 'Overpaid';
+        if (amountPaid > week.amountOwed + STATUS_SETTLED_EPS) status = 'Overpaid';
 
         return {
             start: week.start,

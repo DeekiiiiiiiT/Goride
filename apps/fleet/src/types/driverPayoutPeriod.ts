@@ -4,8 +4,7 @@ export type PayoutStatus =
   | 'Finalized'
   | 'Awaiting Cash'
   | 'Awaiting Tolls'
-  | 'Pending'
-  | 'Overpaid';
+  | 'Pending';
 
 /** Matches `CashWeekData.breakdown` fields used for drill-down display.
  * Note: tollCredits / fuelCreditsInCashPaid are informational — they are NOT

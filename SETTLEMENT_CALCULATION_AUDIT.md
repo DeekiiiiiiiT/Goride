@@ -15,6 +15,25 @@
 
 **2 new defects were introduced by the §1.5 fix and 1 by the §1.4 fix.** They are documented in **Part II** below — **remediated in Settlement Verification Fixes** (see Notion tracker page 9).
 
+### ✅ Third pass verified (2026-08-31, commits `0529e19b` → `58f0165a`)
+
+**All seven Part II findings confirmed fixed in code. No new money-moving defect found.** Tests green: **34 finance-core** (up from 31) + **1,080 fleet** (up from 1,074).
+
+Independently re-derived, not taken on trust:
+
+- **NEW-1** — `overpaid` is no longer a settlement status at all. Both write paths emit directional status only; `listReconciledSettlementPeriods` is back to `.eq("settled")`; `overpaidAmount` rides along as a reporting field on `listDriverOwesPeriods`, `listCompanyOwesPeriods` and `listRecentlyPaidSettlementPeriods`, and is badged on Collect rows, Pay→Done rows and the Reconciled tab. Re-running the original failure case under the shipped formula: `gross = −2000`, `paid = 5000` → `settlement = −7000`, status `driver_owes`, `amountOwed = 7000` — the **full** exposure, in the Collect queue. Correct.
+- **NEW-2** — `settlement = round2(grossSettlement − settlementPaid)` with no branch on sign; `overpaidAmount = max(0, paid − max(0, gross))` is derived. Continuous across zero.
+- **NEW-3** — `isTripTollActionable` added and wired; `pending` / null-status trips now increment `tollUnmatchedCount` and `tollWorkflowActionable` and emit a `trip_pending` line, while still contributing no wash credit. The §1.3 gate can see them again.
+- **NEW-4** — spend is classified by payment method only (`cash ? tollCashSpend : tollTagSpend`), restoring `tollSpend = tollCashSpend + tollTagSpend`; the settlement credit moved to a separate `tollCashWashEligible` accumulator, persisted in metadata and resolved client-side by `resolvePeriodTollCashWash`. The legacy fallback to `toll_cash_spend` is correct for rows written before the split.
+- **NEW-5** — `closed` no longer includes `'Overpaid'`.
+- **NEW-6** — force-release metadata batch-loaded once into `periodMetaByAnchor`; the per-week `select` is gone.
+- **NEW-7** — sync now writes `status` and `closed_at`.
+- **§3.1** — upgraded to Resolved: `STATUS_SETTLED_EPS` / `STATUS_CASH_HELD_EPS` are now imported by the server status gates, `cashSettlementCalc`, `mapPayoutStatus` and `SettlementSummaryView`.
+
+**One deployment prerequisite and four low-severity items remain — see Part III.**
+
+**Delivery program (2026-09-01):** P-0 finance-recon uses `checkPeriodInvariants` + wash resolver; P-1 backfill migration `20260831220000`; P-2–P-5 quick wins; A-1/A-2/A-4 controls + single projector; A-6/A-7/A-8 durability; A-3/A-9/A-10/A-11 foundation migrations `20260831230000`.
+
 ### Original findings — status
 
 | # | Finding | Status | Evidence |
@@ -105,7 +124,7 @@ The fleet is $7,000 down, the week reads as reconciled, and there is no queue th
 
 ---
 
-## NEW-2 🔴 Critical — the settlement formula is discontinuous at `grossSettlement = 0`
+## NEW-2 ✅ Fixed — was: settlement formula discontinuous at `grossSettlement = 0`
 
 **File:** [driverPeriodSettlement.ts:48-60](packages/finance-core/src/driverPeriodSettlement.ts#L48-L60)
 
@@ -140,7 +159,7 @@ The `else` branch is also internally inconsistent with its own comment: it says 
 
 ---
 
-## NEW-3 🟠 High — pending unlinked trip tolls no longer make a week actionable, so they no longer block finalization
+## NEW-3 ✅ Fixed — was: pending unlinked trip tolls no longer blocked finalization
 
 **Files:** [periodTollCashSpend.ts:51-61](apps/fleet/src/utils/periodTollCashSpend.ts#L51-L61), [driver_financial_periods.ts:407-420](supabase/functions/_fleet-server/driver_financial_periods.ts)
 
@@ -185,7 +204,7 @@ const moneyUnlocked = (fuelFinalized && tollsClear) || forceRelease;
 
 ---
 
-## NEW-4 🟡 Medium — `tollSpend ≠ tollCashSpend + tollTagSpend`
+## NEW-4 ✅ Fixed — was: `tollSpend ≠ tollCashSpend + tollTagSpend`
 
 **File:** [driver_financial_periods.ts:372-382](supabase/functions/_fleet-server/driver_financial_periods.ts)
 
@@ -203,7 +222,7 @@ A cash toll that is **not yet handled** adds to `tollSpend` but to neither bucke
 
 ---
 
-## NEW-5 🟡 Medium — `Overpaid` rows are counted as both closed and open
+## NEW-5 ✅ Fixed — was: `Overpaid` rows counted as both closed and open
 
 **File:** [computePayoutSummaryTotals.ts:35-45](apps/fleet/src/utils/computePayoutSummaryTotals.ts#L35-L45)
 
@@ -221,7 +240,7 @@ An `Overpaid` row increments `closedCount` and simultaneously contributes to `op
 
 ---
 
-## NEW-6 🟢 Low — force-release probe adds a serial query per week in the bulk path
+## NEW-6 ✅ Fixed — was: force-release probe added a serial query per week
 
 **File:** [driver_financial_periods.ts:665-676](supabase/functions/_fleet-server/driver_financial_periods.ts)
 
@@ -231,30 +250,287 @@ This is the same path whose own comment says line persistence is skipped "to sta
 
 ---
 
-## NEW-7 🟢 Low — `syncPeriodCashFromTransactions` still does not update `status`
+## NEW-7 ✅ Fixed — was: `syncPeriodCashFromTransactions` did not update `status`
 
 The sync now correctly maintains `settlement_status` and `payout_status`, but never writes the `open`/`closed`/`reopened` column. A week that settles through a cash action keeps a stale `status` until the next full rebuild. Since `isSignedWeekRow` no longer reads `status`, the blast radius is smaller than it was — but `periodStatus` is still what the Expenses and Reconciliation surfaces read.
 
 ---
 
-# PART III — Still open
+# PART III — Still open (as of third verification pass)
 
-1. **NEW-2** — make the settlement formula continuous. Do this first: it is a small change and it substantially defuses NEW-1.
-2. **NEW-1** — route `overpaid` weeks into the Collect queue.
-3. **NEW-3** — restore actionability for `pending` trip tolls without restoring their cash credit.
-4. **NEW-4 / NEW-5** — invariant and double-count cleanups.
-5. **§3.8 (unchanged, business question)** — `tollReimbursed` still does not enter the settlement formula. **If Uber's toll reimbursement arrives inside `fare_earning` gross, the driver is commissioned on it, credited the cash wash for the same toll, and not charged — a triple benefit.** If it is booked separately to the fleet, current treatment is correct. Verify against one real reimbursed toll; this is the last unquantified exposure in the chain.
-6. **§3.1 (cosmetic)** — `STATUS_SETTLED_EPS` and `STATUS_CASH_HELD_EPS` exist but nothing imports them. Either wire them into the server and `cashSettlementCalc` or drop them.
+One live defect (P-0), one **deployment prerequisite** (P-1), and four low-severity items.
 
-### Regression coverage
+## 🔴 P-0 — The nightly reconciliation job now false-positives on every week with unmatched cash tolls
 
-`packages/finance-core/src/settlementAudit.regression.test.ts` pins nine of the original findings and is the right pattern. Three gaps worth closing, matching the new findings:
+**File:** [finance-recon/index.ts:70-89](supabase/functions/finance-recon/index.ts#L70-L89)
 
-- `computePeriodSettlement` across the `grossSettlement = 0` boundary (NEW-2) — assert `settlement` is continuous for `gross ∈ {+0.01, 0, −0.01}` at fixed `paid`.
-- A driver-owes-plus-overpaid week reaching the Collect queue (NEW-1).
-- `isTripCashWashSpend` paired with an actionability assertion for `pending` (NEW-3).
+`finance-recon` re-implements the cash identity by hand instead of calling the shared formula, and it was not updated for the NEW-4 split:
 
-The existing `1.5 overpay is not silently absorbed` test only exercises the `gross > 0` branch (`gross = 7000`, `paid = 10000`), which is why the `else`-branch discontinuity passed CI.
+```ts
+const expectedHeld = round2(Math.max(0,
+  (Number(p.cash_collected) || 0) +
+  (Number(p.toll_charged_to_driver) || 0) -
+  (Number(p.cash_returned) || 0) -
+  (Number(p.toll_cash_spend) || 0) -        // ← wash credit is now tollCashWashEligible
+  (Number(p.fuel_fleet_share) || 0) -
+  (Number(p.cash_written_off) || 0)));
+```
+
+After NEW-4, `toll_cash_spend` is *all* cash tolls (payment-method classification) while the settlement credit is `metadata.financeCore.tollCashWashEligible`. The projection uses the latter; the recon uses the former.
+
+**Executed:** a week with $10,000 passenger cash, $2,000 returned, and $3,000 of cash tolls of which only $1,000 is handled →
+
+```
+projection cash_still_held : 7000
+finance-recon expectedHeld : 5000
+drift flagged              : 2000   ← false positive
+```
+
+Drift equals the unmatched-cash-toll amount, on every affected week, every night. `finance_recon_runs.ok` goes false and stays false, which trains everyone to ignore the one automated check that would catch a real drift. Fix by resolving the wash the same way the client does (`tollCashWashEligible ?? toll_cash_spend`) — or better, per **A-1** below, by calling `computePeriodSettlement` instead of re-deriving.
+
+## ⚠️ P-1 — Legacy `settlement_status = 'overpaid'` rows are orphaned from every queue until repaired
+
+**This is the one thing that must happen at deploy time.**
+
+The previous deploy (`ce4e0d35`) wrote `settlement_status = 'overpaid'` to real production rows. This deploy removed `overpaid` as a status but **shipped no backfill migration**. Every list endpoint now filters it out:
+
+| Endpoint | Filter | Legacy `overpaid` row |
+|---|---|---|
+| `listReconciledSettlementPeriods` | `.eq("settlement_status", "settled")` | excluded |
+| `listDriverOwesPeriods` | `.eq("settlement_status", "driver_owes")` | excluded |
+| `listCompanyOwesPeriods` | `.eq("settlement_status", "company_owes")` | excluded |
+| `listRecentlyPaidSettlementPeriods` | `.eq("settlement_status", "settled")` | excluded |
+| `listCashHeldPeriods` | `.or(status.eq.pending, fuel_finalized.eq.false)` | excluded once fuel is finalized |
+
+Any week still carrying `'overpaid'` is invisible on every desk. The CHECK constraint still permits the value, so nothing errors — the rows simply disappear.
+
+`repairDriverSettlementWeeks({ driverId, onlyOpenOrOwes: true })` does handle them (`settlement_audit_repair.ts:41` includes `'overpaid'` in its target list), but it is a manual, per-driver ops call. **Either run it across every driver as part of the deploy, or add a one-line backfill migration** — e.g. re-derive status from `settlement_amount` for rows where `settlement_status = 'overpaid'`. A migration is safer: it cannot be forgotten and does not depend on a full projection rebuild succeeding.
+
+## P-2 🟢 Low — `repairDriverSettlementWeeks` reloads the full context once per week
+
+**File:** [settlement_audit_repair.ts:30, 63](supabase/functions/_fleet-server/settlement_audit_repair.ts#L30)
+
+Both branches call `rebuildDriverFinancialPeriod(driverId, anchor)` without a context argument, so each iteration runs `loadRebuildContext` — the whole toll ledger, every `transaction:` KV row, finalized reports, claims, ledger events, and now the period-metadata batch query. A driver with 30 target weeks pays that cost 30 times.
+
+This is the tool that repairs the entire audit, including P-1. On a real driver it will be very slow and may exceed the edge function's CPU/wall limit, which would leave the repair half-applied. Load the context once and pass it into each call — the same pattern `rebuildAllPeriodsForDriver` already uses.
+
+## P-3 🟢 Low — overlay error path shows raw cash spend as the wash credit
+
+**File:** [DriverSettlementsPage.tsx:770](apps/fleet/src/components/fleet-financials/DriverSettlementsPage.tsx#L770)
+
+The success path correctly resolves the wash (`tollCashSpend: resolvePeriodTollCashWash({...})`, line 720). The `catch` fallback assigns `tollCashSpend: row.tollCashSpend` raw — which, after NEW-4, is *all* cash tolls rather than the wash-eligible subset.
+
+The overlay labels that field "Cash toll credit" / "Cash plaza wash" in both places it renders it, so on an API error the credit is overstated and the printed money flow (*passenger cash → returns & credits → still held − net payout → residual*) will not add up. Display-only, error path only. Apply `resolvePeriodTollCashWash` in the fallback too.
+
+## P-4 🟢 Low (operational, not a bug) — sub-dollar residuals now populate the desks
+
+Tightening the settled band from `< 1` to `< STATUS_SETTLED_EPS` (0.01) was correct. The consequence is that a week with a $0.40 residual now classifies as `company_owes` / `driver_owes` and clears the queue thresholds (`> 0.005` / `< -0.005`), where previously anything under $1.00 was absorbed as `settled`.
+
+Expect the Collect and Pay queues to gain trailing rows worth cents. The `minAmount` filter already exists on both endpoints — consider defaulting it to ~$1 on the desk so operators are not chasing rounding dust.
+
+## P-5 🟢 Cosmetic — two leftovers from the epsilon sweep
+
+- [cashSettlementCalc.ts:339](apps/fleet/src/utils/cashSettlementCalc.ts#L339) still hardcodes `amountPaid > week.amountOwed + 1` for the Overpaid band while the Paid band on the line above was converted to `STATUS_SETTLED_EPS`. Half-converted.
+- `'Overpaid'` is now dead in the `PayoutStatus` union: `mapPayoutStatus` no longer returns it, so `SettlementSummaryView`'s `row.status === 'Overpaid'` check and the `computePayoutSummaryTotals` filters can never see it. Harmless, but it will mislead the next reader into thinking a status exists that doesn't. The `showOverpaidBadge` flag is the live mechanism.
+
+## P-6 ⏸️ Open (business question, unchanged) — `tollReimbursed` outside the formula
+
+Still display-only, and the Reconciled overlay now says so explicitly in an amber callout — good interim handling. **The underlying question is unanswered: if Uber's toll reimbursement arrives inside `fare_earning` gross, the driver is commissioned on it, credited the cash wash for the same toll, and not charged — a triple benefit.** If it is booked separately to the fleet, the current treatment is correct.
+
+This is the last unquantified money exposure in the chain. It needs one real reimbursed toll traced end-to-end, not more code.
+
+---
+
+### Regression coverage — now good
+
+`settlementAudit.regression.test.ts` grew from 9 to 12 cases and the three gaps flagged in the previous pass are closed: the `grossSettlement = 0` boundary, overpay routing, and `pending` trip actionability. `periodTollCashSpend.test.ts` and `computePayoutSummaryTotals.test.ts` were extended alongside.
+
+Two cases still worth adding, matching the items above:
+
+- A legacy row with `settlement_status = 'overpaid'` surviving a repair pass into a directional status (P-1) — this is the regression that would have caught the missing backfill.
+- `resolvePeriodTollCashWash` on a row whose `toll_cash_spend` exceeds `tollCashWashEligible`, asserting the settlement credit uses the smaller value (guards the NEW-4 split from regressing through the legacy fallback).
+
+---
+
+# PART IV — ARCHITECTURE REVIEW
+
+*Added 2026-08-31, fourth pass. Not a bug list — a review of the structural properties that allowed 21 findings to exist, and what would stop the class from returning.*
+
+## Verdict
+
+**The bugs are fixed. The architecture that produced them is largely unchanged.**
+
+Every finding in this audit was fixed correctly and the test suite pins them. But look at the *shape* of the findings and a pattern is unmistakable:
+
+- §1.1, §1.2, NEW-7 — the partial write path forgot a field the full write path had.
+- §2.1, P-0 — an identity was re-implemented by hand in a second place and drifted.
+- §2.2 — the same concept (a week) was derived three different ways.
+- §2.3, §3.10 — a fallback silently substituted a different source.
+- §3.4 — float arithmetic needed a bandaid.
+
+None of these are hard bugs. They are all **duplication of a definition that should exist once.** The remediation fixed each instance; it did not remove the duplication. The next feature that adds a field to the projection will reintroduce the §1.1 class on day one, because nothing prevents it.
+
+P-0 is the proof: the NEW-4 fix was correct and complete in the projection, and it silently broke the control job that re-derives the same identity 200 lines away in another file. That happened *during this audit*, with the audit open.
+
+**Ship it** — after P-1 and P-0. Then work the list below, because right now the system is correct by inspection and vigilance rather than by construction.
+
+---
+
+## Tier 1 — Removes whole classes of bug
+
+### A-1. Make the control layer call the formula instead of re-deriving it
+
+`finance-recon` hand-codes the cash identity (that's P-0). The projection, the cash sync, the client components and the recon job each restate pieces of the same arithmetic.
+
+The recon job should import `computePeriodSettlement` from `finance-core`, feed it the persisted inputs, and compare its outputs field-by-field against the persisted outputs. Then drift detection **cannot** skew relative to the formula — if the formula changes, the check changes with it. That single change would have made P-0 impossible and would catch any future §1.1.
+
+Extend it beyond the one identity it checks today. The full set worth asserting nightly:
+
+| Identity | Currently checked |
+|---|---|
+| `cash_still_held == max(0, adjCashBalance)` | ✅ (incorrectly — P-0) |
+| `settlement == grossSettlement − settlementPaid` | ❌ |
+| `payout_net == driverShare − fuelDeduction + tipsPaid` | ❌ |
+| `earnings_gross == driver_share + fleet_share + tips_paid` | ❌ (only as an ad-hoc heuristic inside the repair tool) |
+| `toll_spend == toll_cash_spend + toll_tag_spend` | ❌ |
+| projection totals vs `financial_events` sums | ❌ |
+
+The last one is the real control total and the only one that would catch the projection diverging from the posted ledger. Nothing checks it today.
+
+Also: `finance-recon` reports drift by writing a row and calling `console.warn`. Nobody is paged. A control that nobody reads is not a control.
+
+### A-2. One projector, not two write paths
+
+`rebuildDriverFinancialPeriod` (full) and `syncPeriodCashFromTransactions` (partial) both compute and persist money on the same row. §1.1 (tips), §1.2 (clamp), NEW-7 (`status`) were all the same bug: the partial path lacked something the full path had. Three instances of one design flaw.
+
+The `syncPeriodCash` shortcut exists for a good reason — its comment says a full rebuild "was rewriting those inputs and making Driver owes jump on every collect action." That's a legitimate performance and stability concern. But the answer isn't a second formula; it's:
+
+```
+type PeriodInputs = { driverShare, fuelDeduction, cashCollected, tollCashWashEligible, ... }
+
+loadInputsFull(driverId, anchor)   → PeriodInputs   // recompute everything
+loadInputsCashOnly(existing, txs)  → PeriodInputs   // reuse persisted, refresh cash fields
+projectPeriod(inputs)              → PeriodRow      // ONE function, always
+```
+
+Both paths differ only in how they assemble `PeriodInputs`. Persisting is one function. A new field is added in one place and both paths get it for free. This is the highest-value refactor on the list.
+
+### A-3. Integer minor units end-to-end
+
+`financial_events.amount_minor` is `BIGINT` — correct. `driver_financial_periods.*` is `NUMERIC(14,2)` read into JS `number` — every settlement computation is IEEE754 floating point with `round2` applied defensively at each step.
+
+§3.4 existed because of this, and the fix was to rewrite `round2` with a `toFixed(6)` trick to dodge the `1.005 * 100 = 100.4999…` edge. That is a bandaid on a design choice. `round2` is currently called ~15 times inside one `computePeriodSettlement` call, each one a place where a representation error can be baked in.
+
+The standard for money is integers in minor units, converted only at the display boundary. The event layer already does this. Migrating the projection to `*_minor BIGINT` removes an entire error class permanently, makes the DB constraints exact, and lets `round2` disappear from the core formula. It is the largest change on this list and the one with the longest tail of benefit.
+
+### A-4. Property-based tests for the invariants
+
+`settlementAudit.regression.test.ts` is good work, but it is example-based: it pins the specific numbers that were wrong. It cannot catch the *next* violation of the same rule — which is exactly what happened with the `else`-branch discontinuity (NEW-2) passing CI under a test named "overpay is not silently absorbed."
+
+Four properties, fuzzed over random inputs (`fast-check` or equivalent), subsume most of this audit:
+
+```
+∀ inputs:  adjCashBalance == cashOwed − cashPaid − fuelCredits − cashWrittenOff
+∀ inputs:  settlement     == grossSettlement − settlementPaid          // catches NEW-2
+∀ inputs:  netPayout      == driverShare − fuelDeduction + tipsPaid     // catches §1.1
+∀ inputs:  settlement is continuous in grossSettlement                  // catches NEW-2 directly
+∀ tiers:   share% is monotonic non-decreasing in cumulative earnings     // catches §2.4
+```
+
+That last one is worth highlighting: §2.4 (tier fallback to the *lowest* band) is precisely a monotonicity violation, and a property test would have found it without anyone thinking to look.
+
+---
+
+## Tier 2 — Structural durability
+
+### A-5. Events only; retire snapshot sources from the money path
+
+The projection currently reads from five sources with three different mutability guarantees:
+
+| Source | Kind | Idempotent |
+|---|---|---|
+| `financial_events` | append-only, reversible | ✅ |
+| `finalized_report:` KV | mutable snapshot | ❌ — caused §3.11 |
+| `transaction:` KV | mutable rows | ❌ |
+| `toll_ledger` | mutable rows | ❌ |
+| `trips` | mutable rows | ❌ |
+
+§3.11 (duplicate fuel reports double-deducting) existed only in the *snapshot* fallback; the event path was immune because it has idempotency keys and generations. That is the pattern working exactly as intended in one place and absent in four others.
+
+Everything that moves money should post a `financial_event`; the projection should read events and nothing else. Operational tables stay operational. This also makes A-1's control total trivially expressible.
+
+### A-6. Optimistic concurrency on the money row
+
+`projection_version` is computed (`existing.projection_version + 1`) and written, but never used as a guard — the upsert has no version predicate:
+
+```ts
+.upsert(upsertBody, { onConflict: "driver_id,period_anchor" })
+```
+
+Four writers can touch the same row: the outbox drain, `syncPeriodCashFromTransactions`, `finalizeFuelWeek`, and `forceReleaseDriverPeriod`. A cash sync interleaved with a fuel finalize silently loses one of them, last-write-wins, with no trace. Add `.eq('projection_version', expectedVersion)` and retry on a zero-row result. The column already exists; it just isn't load-bearing.
+
+### A-7. An immutable record of what the driver was actually paid on
+
+`settlement_paid` is re-derived from live `transaction:` rows on every rebuild. Edit or void a payout transaction and the week's history silently changes — there is no "as-of" record of what the desk showed when someone clicked Pay.
+
+For a system that cuts payments, that is the gap that hurts in a dispute. `source_event_hash` is already computed and is exactly the right primitive, but nothing ever compares against it. Either stamp a `signed_snapshot` JSONB on the row at payout time, or add an append-only `driver_period_revisions` table. Combined with A-6, this gives a defensible audit trail.
+
+### A-8. Delete the dual pay formula
+
+`unifiedToll` defaults to `false`, and that branch in `buildLedgerPayoutPeriodRows` still computes `netPayout = driverShare − grossTolls − fuelDeduction` — a materially different pay formula from the unified path, selectable per tenant at runtime.
+
+The shared-period projection is now SSOT for weekly rows, so this branch is mostly unreachable — "mostly" being the problem. Two live formulas for what a driver is paid is not a state an enterprise finance system should be able to enter. Delete the legacy branch and the `unifiedTollSettlementEnabled` flag.
+
+---
+
+## Tier 3 — Hygiene worth doing
+
+### A-9. Stop the edge functions importing from `apps/fleet/src/`
+
+```ts
+// supabase/functions/_fleet-server/driver_financial_periods.ts
+import { isTollIncludedInSpend, isTollLedgerVoided } from "../../../apps/fleet/src/utils/tollLedgerIntegrity.ts";
+import { isTripCashWashSpend, isTripTollActionable } from "../../../apps/fleet/src/utils/periodTollCashSpend.ts";
+```
+
+Server money math depends on frontend app code. A refactor in the fleet UI package can change what drivers get paid, and nothing in the type system or CI flags it. `finance-core` and `toll-core` already exist and are the right home — `periodTollCashSpend.ts` in particular is pure domain logic with no UI concern. (This is not hypothetical: `canonical_from_ops.ts` and `make-server-37f42386/index.ts` do the same thing.)
+
+### A-10. Brand the domain types
+
+```ts
+export type WeekKey = string;    // today: any string passes
+export type Money = number;      // today: any number passes
+```
+
+§2.2 (three different week-bucketing rules) was possible because every candidate is `string`. A branded type makes it a compile error to pass a raw slice where a fleet-calendar week key is required:
+
+```ts
+type WeekKey = string & { readonly __brand: 'WeekKey' };   // only periodKeyFor() can mint one
+type Minor   = number & { readonly __brand: 'Minor' };     // pairs with A-3
+```
+
+Cheap, mechanical, and it makes the §2.2 class unrepresentable rather than merely fixed.
+
+### A-11. Bounded reads in the money path
+
+`kv.getByPrefix("transaction:")` loads **every transaction in the system** and filters by driver in memory — on every period rebuild, and again on every cash sync. No index, no pagination, unbounded growth. This is why P-2 (the repair tool reloading context per week) is slow enough to risk a timeout, and it will degrade linearly forever.
+
+Transactions that participate in settlement belong in a real table indexed on `(driver_id, period_anchor)`. This is also a prerequisite for A-5 being practical.
+
+---
+
+## What is already enterprise-grade
+
+Worth stating, because the list above is long and the foundation is genuinely good:
+
+- **One formula, one place**, re-exported to Deno rather than copied. This is the reason the audit's fixes were as clean as they were — most systems this size have three divergent copies.
+- **`financial_events` is a proper append-only ledger** with idempotency keys, close generations, reversal semantics (`reverses_event_id` / `reversed_at`), debit/credit account keys and allocations. The fuel finalize path is textbook.
+- **A projection/outbox pattern** with `financial_outbox`, retry with backoff, and a dead-letter state.
+- **Real DB constraints** on money columns (`cash_nonneg`, status CHECKs) — and §1.2 proves they work, because the constraint caught the bug rather than letting bad data land.
+- **A nightly control job exists at all** (`finance-recon`, `finance-doctor`, `checkProductBalances`). Most fleets this size have nothing. It needs A-1, not replacing.
+- **An audited ops override** (`forceReleaseDriverPeriod` with a mandatory reason recorded in metadata) rather than someone editing the database.
+
+The gap between where this is and enterprise-grade is narrower than the length of this list suggests. It is mostly **A-1, A-2 and A-4** — make the control call the formula, collapse the two write paths into one projector, and assert the invariants as properties. Those three are a few days of work and they convert "correct because we audited it" into "correct because it cannot be otherwise."
 
 ---
 

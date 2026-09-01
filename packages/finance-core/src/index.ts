@@ -1,4 +1,5 @@
-export { round2, MONEY_EPS, STATUS_SETTLED_EPS, STATUS_CASH_HELD_EPS } from './money.ts';
+export { round2, MONEY_EPS, STATUS_SETTLED_EPS, STATUS_CASH_HELD_EPS, toMoneyMinor, fromMoneyMinor } from './money.ts';
+export type { MoneyMinor } from './money.ts';
 export {
   periodKeyFor,
   periodEndForAnchor,
@@ -53,3 +54,19 @@ export {
   splitAmountByStatementWeeks,
 } from './statementWeekSplit.ts';
 export type { StatementWeekWeight, StatementWeekSlice } from './statementWeekSplit.ts';
+export {
+  resolvePeriodTollCashWash,
+  computeExpectedCashStillHeld,
+} from './periodTollCashWash.ts';
+export type { PeriodRowForCashHeld } from './periodTollCashWash.ts';
+export {
+  isTripCashWashSpend,
+  isTripTollActionable,
+} from './periodTollTrip.ts';
+export type { PeriodTripLike } from './periodTollTrip.ts';
+export {
+  mapPersistedRowToSettlementInput,
+  recomputePeriodSettlement,
+  checkPeriodInvariants,
+} from './periodInvariants.ts';
+export type { PersistedPeriodRow, PeriodInvariantDrift } from './periodInvariants.ts';

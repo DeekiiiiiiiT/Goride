@@ -148,7 +148,7 @@ export function useDriverFinancialBundle(
     vehicleIds,
     finalizedReports,
     disputeRefunds: disputeQuery.data?.data || [],
-    unifiedToll: settingsQuery.data?.data?.unifiedTollSettlementEnabled === true,
+    unifiedToll: true,
     isCoreLoading,
     isCoreError,
   };

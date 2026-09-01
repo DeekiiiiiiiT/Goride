@@ -85,6 +85,15 @@ describe('periodTollCashSpend', () => {
     expect(resolvePeriodTollCashWash({ tollCashSpend: 900, metadata: {} })).toBe(900);
   });
 
+  it('P-1 guard: when toll_cash_spend exceeds wash eligible, credit uses smaller value', () => {
+    const wash = resolvePeriodTollCashWash({
+      tollCashSpend: 3000,
+      metadata: { financeCore: { tollCashWashEligible: 1000 } },
+    });
+    expect(wash).toBe(1000);
+    expect(wash).toBeLessThan(3000);
+  });
+
   it('sums excluded highway-as-plaza cash and keeps clean cash', () => {
     const week = [
       {
