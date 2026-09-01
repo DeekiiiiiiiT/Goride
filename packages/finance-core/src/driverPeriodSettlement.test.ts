@@ -29,9 +29,9 @@ describe('computePeriodSettlementMinor (A-3)', () => {
 
   it('handles negative gross settlement continuously', () => {
     const input = {
-      driverShare: 1000,
-      fuelDeduction: 200,
-      baseCashOwed: 0,
+      driverShare: 0,
+      fuelDeduction: 0,
+      baseCashOwed: 2000,
       baseCashPaid: 0,
       tollCashWash: 0,
       tollPersonal: 0,
