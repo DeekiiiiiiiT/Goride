@@ -5,7 +5,7 @@ const acceptAttempts = new Map<string, { count: number; resetAt: number }>();
 const ACCEPT_LIMIT = 20;
 const ACCEPT_WINDOW_MS = 15 * 60 * 1000;
 
-function checkAcceptRateLimit(userId: string): boolean {
+export function checkAcceptRateLimit(userId: string): boolean {
   const now = Date.now();
   const entry = acceptAttempts.get(userId);
   if (!entry || now > entry.resetAt) {
