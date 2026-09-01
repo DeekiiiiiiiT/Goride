@@ -22,6 +22,8 @@ import type {
   BusinessFinanceOverview,
 } from './types';
 import { round2, formatMoney } from './money';
+import type { ServiceLineScope } from '../../contexts/ServiceLineScopeContext';
+import { filterLedgerEventsByServiceLineScope } from '../../utils/filterLedgerByServiceLineScope';
 
 const fetchAllCanonical = fetchAllCanonicalEvents;
 
@@ -52,20 +54,32 @@ function driverName(d: Record<string, unknown>): string {
 
 export async function fetchBusinessFinanceBundle(
   period: BusinessFinancePeriod,
-  opts: { organizationId?: string | null; fleetTimezone: string; basis?: 'accrual' | 'cash' },
+  opts: {
+    organizationId?: string | null;
+    fleetTimezone: string;
+    basis?: 'accrual' | 'cash';
+    serviceLineScope?: ServiceLineScope;
+  },
 ): Promise<BusinessFinanceBundle> {
   const incomplete: string[] = [];
+  const scope = opts.serviceLineScope ?? 'all';
 
   let ledgerEvents: Record<string, unknown>[] = [];
   try {
-    ledgerEvents = await fetchAllCanonical(period.startYmd, period.endYmd);
+    ledgerEvents = filterLedgerEventsByServiceLineScope(
+      await fetchAllCanonical(period.startYmd, period.endYmd),
+      scope,
+    );
   } catch {
     incomplete.push('Canonical ledger');
   }
 
   let bankExpectedEvents: Record<string, unknown>[] = [];
   try {
-    bankExpectedEvents = await fetchAllCanonical(period.startYmd, period.endYmd, 'payout_bank');
+    bankExpectedEvents = filterLedgerEventsByServiceLineScope(
+      await fetchAllCanonical(period.startYmd, period.endYmd, 'payout_bank'),
+      scope,
+    );
   } catch {
     incomplete.push('Bank expected (payout_bank)');
   }

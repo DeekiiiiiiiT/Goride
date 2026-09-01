@@ -71,6 +71,8 @@ import {
   resolveBundleFromContext,
   type EarningsPolicyRuntimeContext,
 } from '../../utils/loadResolvedEarningsBundle';
+import { useServiceLineScopeParam } from '../../hooks/useServiceLineScopeParam';
+import { filterTripsByServiceLineScope } from '../../utils/serviceLineTripFilter';
 import { TierCalculations } from '../../utils/tierCalculations';
 import { TierConfig } from '../../types/data';
 import { isSameMonth } from 'date-fns';
@@ -206,9 +208,11 @@ export function DriversPage({ initialDriverId }: { initialDriverId?: string | nu
   const [driverToRemove, setDriverToRemove] = useState<string | null>(null);
   const [isRemoving, setIsRemoving] = useState(false);
 
+  const { scope, serviceLineParam } = useServiceLineScopeParam();
+
   // Phase 7.1: React Query for trips data
-  const { data: trips = [], isLoading: tripsLoading } = useQuery({
-    queryKey: ['trips', 200],
+  const { data: tripsRaw = [], isLoading: tripsLoading } = useQuery({
+    queryKey: ['trips', 200, scope],
     queryFn: () => api.getTrips({ limit: 200 }),
     staleTime: 3 * 60 * 1000, // 3 minutes
     gcTime: 10 * 60 * 1000, // 10 minutes
@@ -216,7 +220,12 @@ export function DriversPage({ initialDriverId }: { initialDriverId?: string | nu
     refetchOnMount: false,
   });
 
-  // Phase 7.1: React Query for manual drivers
+  const trips = useMemo(
+    () => filterTripsByServiceLineScope(tripsRaw, scope),
+    [tripsRaw, scope],
+  );
+
+  const earningsServiceLine = serviceLineParam;
   const { data: manualDrivers = [], isError: driversLoadError, error: driversError } = useQuery({
     queryKey: ['drivers'],
     queryFn: () => api.getDrivers(),
@@ -547,6 +556,8 @@ export function DriversPage({ initialDriverId }: { initialDriverId?: string | nu
             const bundle = resolveBundleFromContext(
               earningsPolicyCtx as EarningsPolicyRuntimeContext,
               driver.id,
+              undefined,
+              earningsServiceLine,
             );
             const tier = TierCalculations.getTierForEarnings(
               driver.monthlyEarnings ?? 0,
@@ -595,6 +606,8 @@ export function DriversPage({ initialDriverId }: { initialDriverId?: string | nu
                  const bundle = resolveBundleFromContext(
                    earningsPolicyCtx as EarningsPolicyRuntimeContext,
                    d.id,
+                   undefined,
+                   earningsServiceLine,
                  );
                  const t = TierCalculations.getTierForEarnings(0, bundle.tiers);
                  tier = t?.name ?? 'Bronze';
@@ -627,6 +640,8 @@ export function DriversPage({ initialDriverId }: { initialDriverId?: string | nu
                     const bundle = resolveBundleFromContext(
                       earningsPolicyCtx as EarningsPolicyRuntimeContext,
                       orphan.id,
+                      undefined,
+                      earningsServiceLine,
                     );
                     const t = TierCalculations.getTierForEarnings(summary.monthlyEarnings, bundle.tiers);
                     orphan.tier = t?.name ?? 'Bronze';
@@ -637,7 +652,7 @@ export function DriversPage({ initialDriverId }: { initialDriverId?: string | nu
     });
 
     return [...processedDrivers, ...orphanedDrivers].map((d) => normalizeDriverProfile(d));
-  }, [trips, safeManualDrivers, safeImportedMetrics, earningsPolicyCtx, ledgerSummary, ledgerLoaded, ledgerError]);
+  }, [trips, safeManualDrivers, safeImportedMetrics, earningsPolicyCtx, ledgerSummary, ledgerLoaded, ledgerError, earningsServiceLine]);
 
   // Phase 5: Apply org validation first, then other filters
   const orgValidatedDrivers = useMemo(() => {

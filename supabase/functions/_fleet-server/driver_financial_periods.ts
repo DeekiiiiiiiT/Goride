@@ -202,7 +202,34 @@ type RebuildContext = {
   forceRelease?: boolean;
   /** Preloaded period metadata (force-release flags) keyed by period_anchor. */
   periodMetaByAnchor?: Map<string, Record<string, unknown>>;
+  /** When set, trips and fare entries are filtered to this line (omit for combined settlement). */
+  filterServiceLine?: "rideshare" | "rush_delivery";
 };
+
+function inferTripServiceLine(trip: Record<string, unknown>): "rideshare" | "rush_delivery" {
+  const explicit = trip.serviceLine ?? trip.service_line;
+  if (explicit === "rush_delivery" || explicit === "rideshare") return explicit;
+  if (String(trip.platform ?? "") === "Roam Rush") return "rush_delivery";
+  return "rideshare";
+}
+
+function filterTripsForServiceLine(
+  trips: any[],
+  serviceLine?: "rideshare" | "rush_delivery",
+): any[] {
+  if (!serviceLine) return trips;
+  return trips.filter((t) => inferTripServiceLine(t) === serviceLine);
+}
+
+function periodMetadataMatchesServiceLine(
+  metadata: Record<string, unknown> | null | undefined,
+  serviceLine: "rideshare" | "rush_delivery",
+): boolean {
+  const rush = Number(metadata?.rushTripCount ?? 0);
+  const ride = Number(metadata?.rideshareTripCount ?? 0);
+  if (rush === 0 && ride === 0) return true;
+  return serviceLine === "rush_delivery" ? rush > 0 : ride > 0;
+}
 
 async function resolveDriverOrganizationId(driverId: string): Promise<string | null> {
   try {
@@ -278,7 +305,10 @@ async function loadDriverTransactionsForSettlement(
   return (allTx || []).filter((t: any) => t && aliasIdSet.has(String(t.driverId || "")));
 }
 
-async function loadRebuildContext(driverId: string): Promise<RebuildContext> {
+async function loadRebuildContext(
+  driverId: string,
+  opts?: { serviceLine?: "rideshare" | "rush_delivery" },
+): Promise<RebuildContext> {
   const timezone = await getFleetTimezone();
   const driverIds = await resolveDriverAliasIds(driverId);
   const idSet = new Set(driverIds.map(String));
@@ -307,7 +337,7 @@ async function loadRebuildContext(driverId: string): Promise<RebuildContext> {
     (tx: any) => isReconcilableTollExpense(tx) && !isTopUpLike(tx),
   );
   const scopedTolls = allScopedTolls.filter((tx: any) => isTollIncludedInSpend(tx));
-  const scopedTrips = filterByDriver(trips, driverId);
+  const scopedTrips = filterTripsForServiceLine(filterByDriver(trips, driverId), opts?.serviceLine);
   const driverTxAll = await loadDriverTransactionsForSettlement(driverId, idSet);
   const chargeTxAll = driverTxAll.filter(
     (t: any) => String(t.category || "") === "Toll Charge",
@@ -376,6 +406,7 @@ async function loadRebuildContext(driverId: string): Promise<RebuildContext> {
     legacyEarnings,
     persistLines: false,
     periodMetaByAnchor,
+    filterServiceLine: opts?.serviceLine,
   };
 }
 
@@ -689,6 +720,7 @@ export async function rebuildDriverFinancialPeriod(
     driverId,
     weekStartYmd: periodAnchor,
     legacy: context.legacyEarnings,
+    serviceLine: context.filterServiceLine,
   });
   const share = computeWeekCommissionShare({
     fareEntries: context.fareEntries || [],
@@ -818,7 +850,19 @@ export async function rebuildDriverFinancialPeriod(
     .eq("period_anchor", periodAnchor)
     .maybeSingle();
 
-  const periodMetadata = buildPeriodMetadata({
+  let rushTripCount = 0;
+  let rideshareTripCount = 0;
+  for (const t of context.scopedTrips || []) {
+    const d = fleetCalendarDay(String(t.dropoffTime || t.date || ""), timezone);
+    if (!d || d < periodAnchor || d > periodEnd) continue;
+    const st = String(t.status || "").toLowerCase();
+    if (st.includes("cancel")) continue;
+    if (inferTripServiceLine(t) === "rush_delivery") rushTripCount++;
+    else rideshareTripCount++;
+  }
+
+  const periodMetadata = {
+    ...buildPeriodMetadata({
     priorMeta,
     prevSettlementPaid: Number(existing?.settlement_paid) || 0,
     settled,
@@ -856,7 +900,10 @@ export async function rebuildDriverFinancialPeriod(
           reason: (forceMeta.reason || priorMeta.forceReleaseReason || null) as string | null,
         }
       : undefined,
-  });
+    }),
+    rushTripCount,
+    rideshareTripCount,
+  };
 
   const row: DriverFinancialPeriodRow = {
     driverId,
@@ -1552,6 +1599,7 @@ export async function listCompanyOwesPeriods(opts?: {
   minAmount?: number;
   limit?: number;
   organizationId?: string | null;
+  serviceLine?: "rideshare" | "rush_delivery";
 }): Promise<CompanyOwesPeriodRow[]> {
   const limit = Math.min(Math.max(Number(opts?.limit) || 500, 1), 2000);
   let q = sb()
@@ -1588,7 +1636,7 @@ export async function listCompanyOwesPeriods(opts?: {
     console.error("[DriverFinancialPeriods] company_owes list:", error.message);
     throw new Error(error.message);
   }
-  return (data || []).map((r: any) => {
+  const mapped = (data || []).map((r: any) => {
     const oa = Number(r.metadata?.financeCore?.overpaidAmount);
     return {
       driverId: String(r.driver_id),
@@ -1606,6 +1654,10 @@ export async function listCompanyOwesPeriods(opts?: {
       overpaidAmount: Number.isFinite(oa) && oa > 0 ? oa : 0,
     };
   });
+  if (!opts?.serviceLine) return mapped;
+  return mapped.filter((_, i) =>
+    periodMetadataMatchesServiceLine((data as any[])?.[i]?.metadata, opts.serviceLine!),
+  );
 }
 
 /** Recently paid company-owes weeks (settled with settlement_paid > 0). */

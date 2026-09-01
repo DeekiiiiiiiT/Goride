@@ -76,6 +76,11 @@ async function loadDriverNameMap(): Promise<Map<string, string>> {
 }
 
 function queueListQuery(c: { req: { query: (k: string) => string | undefined } }) {
+  const serviceLineRaw = c.req.query("serviceLine");
+  const serviceLine =
+    serviceLineRaw === "rush_delivery" || serviceLineRaw === "rideshare"
+      ? serviceLineRaw
+      : undefined;
   return {
     periodAnchor: c.req.query("periodAnchor") || undefined,
     periodStart: c.req.query("periodStart") || undefined,
@@ -83,6 +88,7 @@ function queueListQuery(c: { req: { query: (k: string) => string | undefined } }
     minAmount: c.req.query("minAmount") ? Number(c.req.query("minAmount")) : undefined,
     limit: c.req.query("limit") ? Number(c.req.query("limit")) : undefined,
     organizationId: getOrgId(c as never) || undefined,
+    serviceLine,
   };
 }
 

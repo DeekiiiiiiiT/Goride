@@ -42,6 +42,7 @@ import {
   overpaidBadgeLabel,
 } from '../../utils/settlementDeskUx';
 import { BusinessFinanceDeskChrome } from '../business-finance/BusinessFinanceDeskChrome';
+import { useServiceLineScopeParam } from '../../hooks/useServiceLineScopeParam';
 import {
   RecordPayoutModal,
   type RecordPayoutSavePayload,
@@ -230,6 +231,7 @@ export function DriverSettlementsPage({
   onOpenDriver?: (driverId: string) => void;
 }) {
   const qc = useQueryClient();
+  const { scope, serviceLineParam } = useServiceLineScopeParam();
   const thisMonday = format(startOfWeek(new Date(), { weekStartsOn: 1 }), 'yyyy-MM-dd');
   const [weekFrom, setWeekFrom] = useState(
     format(subWeeks(startOfWeek(new Date(), { weekStartsOn: 1 }), 8), 'yyyy-MM-dd'),
@@ -315,10 +317,11 @@ export function DriverSettlementsPage({
     periodEnd: weekTo,
     minAmount: minAmount ? Number(minAmount) : undefined,
     limit: 1000,
+    ...(serviceLineParam ? { serviceLine: serviceLineParam } : {}),
   };
 
   const owesQuery = useQuery({
-    queryKey: ['companyOwesPeriods', weekFrom, weekTo, minAmount],
+    queryKey: ['companyOwesPeriods', weekFrom, weekTo, minAmount, scope],
     queryFn: async () => {
       const res = await api.getCompanyOwesPeriods(rangeOpts);
       return {
@@ -334,7 +337,7 @@ export function DriverSettlementsPage({
   });
 
   const driverOwesQuery = useQuery({
-    queryKey: ['driverOwesPeriods', weekFrom, weekTo, minAmount],
+    queryKey: ['driverOwesPeriods', weekFrom, weekTo, minAmount, scope],
     queryFn: async () => {
       const res = await api.getDriverOwesPeriods(rangeOpts);
       return {
@@ -352,7 +355,7 @@ export function DriverSettlementsPage({
   });
 
   const cashHeldQuery = useQuery({
-    queryKey: ['cashHeldPeriods', weekFrom, weekTo, minAmount],
+    queryKey: ['cashHeldPeriods', weekFrom, weekTo, minAmount, scope],
     queryFn: async () => {
       const res = await api.getCashHeldPeriods(rangeOpts);
       return {

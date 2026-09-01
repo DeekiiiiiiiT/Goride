@@ -10,9 +10,12 @@ import { fuelService } from '../../services/fuelService';
 import { ReportGenerator, ReportSummary } from '../../utils/ReportGenerator';
 import { Loader2 } from 'lucide-react';
 import { usePermissions } from '../../hooks/usePermissions';
+import { useServiceLineScopeParam } from '../../hooks/useServiceLineScopeParam';
+import { filterTripsLikeByServiceLineScope } from '../../utils/filterLedgerByServiceLineScope';
 
 export function ReportsPage() {
   const { can } = usePermissions();
+  const { scope } = useServiceLineScopeParam();
   const [autoEmail, setAutoEmail] = useState(true);
   const [autoWeekly, setAutoWeekly] = useState(false);
   const [isGenerating, setIsGenerating] = useState<string | null>(null);
@@ -25,13 +28,13 @@ export function ReportsPage() {
           let summary: ReportSummary;
           
           if (type.includes('Financial')) {
-              const trips = await api.getTrips();
+              const trips = filterTripsLikeByServiceLineScope(await api.getTrips(), scope);
               summary = ReportGenerator.generateFinancialSummary(trips);
           } else if (type.includes('Driver')) {
               const metrics = await api.getDriverMetrics();
               summary = ReportGenerator.generateDriverAudit(metrics);
           } else if (type.includes('Tax')) {
-              const trips = await api.getTrips();
+              const trips = filterTripsLikeByServiceLineScope(await api.getTrips(), scope);
               summary = ReportGenerator.generateTaxExport(trips);
           } else if (type.includes('Fuel')) {
               const { trailingDaysWindow, FUEL_ALERTS_TRAILING_DAYS } = await import('../../utils/fuelWeekPeriod');

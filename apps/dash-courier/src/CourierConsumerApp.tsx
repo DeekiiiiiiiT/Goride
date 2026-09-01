@@ -4,7 +4,9 @@ import { WelcomePage } from '@/pages/onboarding/WelcomePage';
 import { HowItWorksPage } from '@/pages/onboarding/HowItWorksPage';
 import { SignUpPage } from '@/pages/onboarding/SignUpPage';
 import { VerifyAccountPage } from '@/pages/onboarding/VerifyAccountPage';
+import { ProfileSetupPage } from '@/pages/onboarding/ProfileSetupPage';
 import { FleetInviteCodePage } from '@/pages/onboarding/FleetInviteCodePage';
+import { CourierWorkforceArchetypePage } from '@/pages/onboarding/CourierWorkforceArchetypePage';
 import { VehicleSetupPage } from '@/pages/onboarding/VehicleSetupPage';
 import { DocumentsPage } from '@/pages/onboarding/DocumentsPage';
 import { PermissionsPage } from '@/pages/onboarding/PermissionsPage';
@@ -59,6 +61,7 @@ type AppPhase =
   | 'splash'
   | 'welcome'
   | 'how-it-works'
+  | 'workforce-archetype'
   | 'sign-up'
   | 'verify'
   | 'profile-setup'
@@ -73,6 +76,7 @@ type AppPhase =
 export function CourierConsumerApp() {
   const [phase, setPhase] = useState<AppPhase>('splash');
   const [sessionExpired, setSessionExpired] = useState(false);
+  const [workforceChoice, setWorkforceChoice] = useState<'independent' | 'join_fleet'>('independent');
 
   const finishOnboarding = useCallback(() => {
     void ensureCourierProfile({ markComplete: true }).finally(() => {
@@ -203,15 +207,30 @@ export function CourierConsumerApp() {
   if (phase === 'how-it-works') {
     return (
       <HowItWorksPage
-        onComplete={() => setPhase('sign-up')}
-        onSkip={() => setPhase('sign-up')}
+        onComplete={() => setPhase('workforce-archetype')}
+        onSkip={() => setPhase('workforce-archetype')}
+      />
+    );
+  }
+
+  if (phase === 'workforce-archetype') {
+    return (
+      <CourierWorkforceArchetypePage
+        onIndependent={() => {
+          setWorkforceChoice('independent');
+          setPhase('sign-up');
+        }}
+        onJoinFleet={() => {
+          setWorkforceChoice('join_fleet');
+          setPhase('sign-up');
+        }}
       />
     );
   }
 
   if (phase === 'sign-up') {
     return (
-      <SignUpPage onBack={() => setPhase('how-it-works')} onContinue={() => setPhase('verify')} />
+      <SignUpPage onBack={() => setPhase('workforce-archetype')} onContinue={() => setPhase('verify')} />
     );
   }
 
@@ -228,7 +247,7 @@ export function CourierConsumerApp() {
     return (
       <ProfileSetupPage
         onBack={() => setPhase('verify')}
-        onContinue={() => setPhase('fleet-invite')}
+        onContinue={() => setPhase(workforceChoice === 'join_fleet' ? 'fleet-invite' : 'vehicle-setup')}
       />
     );
   }

@@ -53,6 +53,19 @@ test.describe('RoamFleet Rush integration', () => {
     ).toBe(true);
   });
 
+  test('composition: default platform + both-lines org enables rush_couriers', async () => {
+    const { resolveEffectiveModules, rushModuleOverridesForServiceLines, DEFAULT_ENTERPRISE_ENABLED_MODULES } =
+      await import('@roam/platform-settings');
+    const org = rushModuleOverridesForServiceLines(['rideshare', 'rush_delivery'], {});
+    const effective = resolveEffectiveModules({ ...DEFAULT_ENTERPRISE_ENABLED_MODULES }, org);
+    expect(effective.rush_couriers).toBe(true);
+    const killed = resolveEffectiveModules(
+      { ...DEFAULT_ENTERPRISE_ENABLED_MODULES, rush_couriers: false },
+      org,
+    );
+    expect(killed.rush_couriers).toBe(false);
+  });
+
   test('protected rush paths are registered for middleware', () => {
     const protectedPaths = ['/couriers', '/deliveries', '/courier-settlements', '/supply-health'];
     for (const path of protectedPaths) {

@@ -2,6 +2,7 @@ import React from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '../auth/AuthContext';
 import { useFleetTimezone } from '../../utils/timezoneDisplay';
+import { useServiceLineScopeParam } from '../../hooks/useServiceLineScopeParam';
 import { fetchBusinessFinanceBundle } from './fetchBusinessFinanceBundle';
 import { resolvePeriod } from './periodRange';
 import type { PeriodPreset } from './types';
@@ -14,6 +15,7 @@ export function useBusinessFinanceBundle(
 ) {
   const { organizationId } = useAuth();
   const fleetTz = useFleetTimezone();
+  const { scope } = useServiceLineScopeParam();
   const period = React.useMemo(
     () => resolvePeriod(preset, customStart, customEnd),
     [preset, customStart, customEnd],
@@ -27,12 +29,14 @@ export function useBusinessFinanceBundle(
       organizationId || null,
       fleetTz,
       basis,
+      scope,
     ],
     queryFn: () =>
       fetchBusinessFinanceBundle(period, {
         organizationId,
         fleetTimezone: fleetTz,
         basis,
+        serviceLineScope: scope,
       }),
     staleTime: 60_000,
   });

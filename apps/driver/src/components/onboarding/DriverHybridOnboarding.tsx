@@ -50,7 +50,7 @@ const archetypeCardClass =
 export function DriverHybridOnboarding() {
   const { profile, loading, refreshProfile } = useDriver();
   const [step, setStep] = useState<Step>('mode');
-  const [fleetId, setFleetId] = useState('');
+  const [inviteCode, setInviteCode] = useState('');
   const [joinError, setJoinError] = useState<string | null>(null);
   const [joining, setJoining] = useState(false);
 
@@ -65,14 +65,14 @@ export function DriverHybridOnboarding() {
 
   const handleJoinFleet = async () => {
     setJoinError(null);
-    const id = fleetId.trim();
-    if (!id) {
-      setJoinError('Enter your fleet organization ID.');
+    const code = inviteCode.trim().toUpperCase();
+    if (!code) {
+      setJoinError('Enter the invite code your fleet gave you.');
       return;
     }
     setJoining(true);
     try {
-      await api.joinFleetByFleetId(id);
+      await api.acceptWorkforceInvite(code);
       await refreshProfile();
       goProfile();
     } catch (e: unknown) {
@@ -131,7 +131,7 @@ export function DriverHybridOnboarding() {
         <div className="mx-auto w-full max-w-sm px-4 pb-10 pt-2">
           <h1 className="text-center text-2xl font-bold tracking-tight text-slate-900 dark:text-white">Join a fleet</h1>
           <p className="mt-2 text-center text-sm text-slate-600 dark:text-slate-300">
-            Enter the fleet organization ID your fleet admin gave you.
+            Enter the 8-character invite code your fleet admin gave you.
           </p>
           <div className="mt-8 rounded-2xl border border-slate-200 bg-white/90 p-6 shadow-xl dark:border-slate-700/60 dark:bg-slate-800/60">
             {joinError && (
@@ -139,14 +139,15 @@ export function DriverHybridOnboarding() {
                 {joinError}
               </div>
             )}
-            <Label htmlFor="fleet-org">Fleet organization ID</Label>
+            <Label htmlFor="fleet-invite">Fleet invite code</Label>
             <Input
-              id="fleet-org"
-              value={fleetId}
-              onChange={e => setFleetId(e.target.value)}
-              placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-              className="mt-2 font-mono text-sm"
+              id="fleet-invite"
+              value={inviteCode}
+              onChange={e => setInviteCode(e.target.value.toUpperCase())}
+              placeholder="ABCD1234"
+              className="mt-2 font-mono text-sm tracking-widest"
               autoComplete="off"
+              maxLength={8}
             />
             <div className="mt-6 flex flex-col gap-2">
               <Button type="button" className="w-full" disabled={joining} onClick={() => void handleJoinFleet()}>

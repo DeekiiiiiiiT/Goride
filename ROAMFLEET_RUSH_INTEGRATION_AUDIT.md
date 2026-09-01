@@ -1,15 +1,17 @@
 # RoamFleet × Roam Rush — Multi-Service-Line Integration Audit
 
-**Date:** 2026-08-31 (design audit) · **2026-09-01** (implementation verification — [Part II](#part-ii--implementation-verification-2026-09-01)) · **2026-09-01** (remediation verification — [Part III](#part-iii--remediation-verification-2026-09-01))
+**Date:** 2026-08-31 (design audit — [Part I](#0-executive-summary)) · **2026-09-01** ([Part II](#part-ii--implementation-verification-2026-09-01), [Part III](#part-iii--remediation-verification-2026-09-01), [Part IV](#part-iv--remediation-round-2--workforce-signup-architecture-2026-09-01))
 **Scope:** How to add the Roam Rush product family (`roamrush.app`, `courier.roamrush.app`, `partner.roamrush.app`) into `roamfleet.co` as a second service line, serving three customer shapes: rideshare-only, delivery-only, and both.
 **Method:** Static read of `apps/fleet` (1,081 TS/TSX files), `apps/dash-courier` (175), `apps/dash-customer` (163), `apps/rush-command` (277), `apps/enterprise` (196), `supabase/functions/_fleet-server`, `supabase/functions/delivery`, `supabase/functions/matching`, and 437 migrations. **No code was changed by either pass.**
 **Companions:** [ROAMRUSH_SYSTEM_AUDIT.md](ROAMRUSH_SYSTEM_AUDIT.md) · [docs/FINANCIAL_INTEGRITY_AUDIT.md](docs/FINANCIAL_INTEGRITY_AUDIT.md) · [docs/MULTI_VERTICAL_COMPATIBILITY.md](docs/MULTI_VERTICAL_COMPATIBILITY.md) · [RUSH_MARKETPLACE_PRICING_MIGRATION.md](RUSH_MARKETPLACE_PRICING_MIGRATION.md)
 
-> **STATUS — 2026-09-01 (after remediation).** Parts 0–12 are the original design audit and remain the target architecture. Part II is the first verification pass (3 Critical / 8 High / 13 Medium). Part III verifies the remediation commit `82853c0e`.
+> **STATUS — 2026-09-01 (after remediation round 2).** Parts 0–12 are the original design audit and remain the target architecture. Part II is the first verification pass (3 Critical / 8 High / 13 Medium), Part III verifies commit `82853c0e`, **Part IV** verifies `b8cd5e7a…256e8c8c` and adds a **workforce signup architecture review** (Roam Driver vs Roam Rush Courier).
 >
-> **All three Criticals are fixed.** 16 of the 24 Part II findings are closed. But the remediation introduced **4 new defects**, one of which is more serious than the bug it replaced: the module kill switch was not restored — it was moved into `resolveEffectiveModules` itself, which now lets an org override defeat a product-line `false` **for every module in the catalog, Enterprise included**. The backfill also gained an infinite loop, the recon cron never schedules on a fresh database, and the new CI Deno step fails.
+> **The code is in good shape.** All 3 Criticals and all 8 Part III defects are fixed. Build is fully green: 174 test files / 1,103 tests, Rush-spine typecheck clean, `deno check` clean, all four CI guards pass.
 >
-> **Current gate: do not enable `rush_trip_projection`, `rush_settlement` or `rush_ui` until [Part III §19](#19-new-defects-introduced-by-the-remediation) W1–W3 are closed.** W1 in particular means turning the flags back off is still not reliable.
+> **One blocker remains, and it is a side effect of the correct fix.** Restoring the strict intersection in `resolveEffectiveModules` (W1) was right, but nothing sets the `rush_*` keys `true` at the **product-line** level — they default `false` — so `effective.rush_*` is now permanently `false`. Rush navigation is unreachable end to end no matter how the org is configured. Verified empirically in [§22](#22-x1--blocker-rush-modules-are-now-unreachable). One-line fix.
+>
+> **Signup architecture:** the courier flow does **not** mirror the driver flow — and the sensible remedy is the opposite of the obvious one. See [§23](#23-workforce-signup-architecture--roam-driver-vs-roam-rush-courier).
 
 ---
 
@@ -1138,4 +1140,209 @@ Remediation order:
 
 ---
 
-*Design audit 2026-08-31; implementation verification 2026-09-01; remediation verification 2026-09-01 against commit `82853c0e` on branch `main`. No code was modified in any pass. Re-run Part III after W1–W5 are closed, and re-run the design audit before Phase 2 if the `delivery` or `fleet` schemas change.*
+---
+
+# Part IV — Remediation round 2 + workforce signup architecture (2026-09-01)
+
+**Reviewed:** `b8cd5e7a`, `29e75177`, `437c4a43`, `256e8c8c` (74 files, +2,931/−554) — the response to Part III — plus a new architecture review of workforce signup across Roam Driver and Roam Rush Courier.
+**Checks run:** `pnpm --filter @roam/fleet test` → **174 files / 1,103 passed**, 1 skipped, exit 0 · `node scripts/typecheck-fleet-rush.mjs` → **0 Rush-spine errors** · `deno check` on the four Rush edge modules → **exit 0** · `check-courier-fleet-stamp`, `check-fleet-edge-duplicates`, `check-projection-flags-wired` → all pass · `pnpm --filter @roam/platform-settings test` → 21 passed · plus a purpose-built reachability probe against the real `resolveEffectiveModules`.
+
+---
+
+## 21. Part III defects — disposition
+
+**All eight fixed.**
+
+| # | Fix | Evidence |
+|---|---|---|
+| **W1** | The strict intersection is restored in **both** copies — `effective[key] = lineOn && orgOn`, no short-circuit. The paid-add-on question was answered better than proposed: rather than a second override map, `rushModuleOverridesForServiceLines()` derives the org's `rush_*` overrides from `service_lines`, treating Rush as part of the shared product rather than an upsell that has to defeat the kill switch. `modules.test.ts` now pins the contract, including *"org cannot re-enable when product-line turns freight_dispatch off"* — the exact case the old test wrongly asserted. Enterprise semantics are restored. **But see X1.** | [`modules.ts:290-296`](packages/platform-settings/src/modules.ts#L290), [`enterprise_modules.ts:159-166`](supabase/functions/_fleet-server/enterprise_modules.ts#L159) |
+| **W2** | Keyset pagination corrected — `isFirstPage ? .gte(sinceIso) : .gt(cursor)`. The loop now advances and terminates. | [`rush_projection_helpers.ts:43-79`](supabase/functions/_fleet-server/rush_projection_helpers.ts#L43) |
+| **W3** | `cron.unschedule` wrapped in its own inner `BEGIN…EXCEPTION`, matching the house pattern, so first-run scheduling succeeds. The outer handler now `RAISE NOTICE`s instead of swallowing silently. | [`20260901150000_rush_trip_recon_cron_fix.sql`](supabase/migrations/20260901150000_rush_trip_recon_cron_fix.sql) |
+| **W4** | `denoland/setup-deno@v2` added, and the three pre-existing graph errors in `feature_flags.ts` / `kv_store.tsx` cleared. `deno check` now exits 0 locally. A `typecheck-fleet-rush.mjs` gate was added that filters `tsc` output to the Rush spine — a pragmatic way to gate new code without waiting on the 616-error full-app backlog, and honestly documented as such in the script header. | [`ci.yml:80-97`](.github/workflows/ci.yml#L80), [`scripts/typecheck-fleet-rush.mjs`](scripts/typecheck-fleet-rush.mjs) |
+| **W5** | `aggregateRoamCardExpectedByWeek` now branches on `platform.includes('rush')` and uses `amount` directly instead of `Math.abs(netToDriver)`. Covered by [`fleetBankReceive.rush.test.ts`](apps/fleet/src/utils/fleetBankReceive.rush.test.ts) with both the card case (J$300, not J$2,200) and the COD-excluded case. | `fleetBankReceive.ts:183-197` |
+| **W6** | `earnings-policy` promoted out of the rideshare-gated flyout onto `hasSharedOps`, so delivery-only orgs can configure courier earnings tiers. | `AppSidebar.tsx:127-133` |
+| **W7** | The whole-file `continue` removed from the guard; each `.update({…courier_id…})` block is now evaluated on its own. | [`check-courier-fleet-stamp.mjs:20-40`](scripts/check-courier-fleet-stamp.mjs#L20) |
+| **W8** | The gating predicates were extracted into [`sidebarGating.ts`](apps/fleet/src/components/layout/sidebarGating.ts) and are now imported by **both** `AppSidebar` and the tests — so the tests exercise the shipped logic rather than a copy. `e2e/fleet-rush-integration.spec.ts` was rewritten around those real predicates and now covers all three customer shapes (V20 substantially addressed, though still assertion-level rather than browser-level). | `sidebarGating.ts`, `e2e/fleet-rush-integration.spec.ts` |
+
+**Also shipped beyond the register:** a Dominion-side rollout console — `FleetRushRolloutPanel`, `FleetServiceLinesPanel`, `FleetRushModulesReadOnly`, `rushRolloutCatalog.ts` and `rush_rollout_admin.ts` with unit tests — giving flags, service lines and module state one operator surface. Plus six rollout/runbook docs. That is real Phase-6 work and it is the right shape.
+
+### 21.1 Still open from earlier rounds
+
+| # | Status |
+|---|---|
+| **V9** | Still partial. `scope` reaches `TripLogsPage` (with a real server-side filter) and `useVocab`. Dashboard, Business Finance, Driver Settlements, Reports and exports remain unfiltered. |
+| **V12** | Plumbing complete on all four layers — client resolver, edge mirror, and now `loadResolvedEarningsBundleForDriverWeek(driverId, weekStartYmd, serviceLine)`. **Still no caller passes it**: `DriverDetail.tsx:720`, `DriversPage.tsx:547/595`, `DriverDashboard`, `DriverEarnings` and edge `driver_financial_periods.ts` all omit the argument. G14 (one combined per-person statement) remains unimplemented. Acceptable only while `rush_settlement` is off. |
+| **V22** | `POST /trips` still unauthenticated; accepted as pre-existing. |
+
+---
+
+## 22. X1 · BLOCKER — Rush modules are now unreachable
+
+Restoring the intersection was correct. The missing half is that **nothing turns the `rush_*` keys on at the product-line level.**
+
+```
+DEFAULT_ENTERPRISE_MODULES.rush_couriers = false          ← defaults.ts:78, enterprise_modules.ts:133
+productLineModules = { ...DEFAULT_ENTERPRISE_MODULES, ...settings.enabledModules }
+effective = lineOn && orgOn                               ← lineOn is false ⇒ effective is false
+```
+
+`applyOrgServiceLines` writes `service_lines` and `enabled_modules` on the **organization** only ([`rush_rollout_admin.ts:138-150`](supabase/functions/_fleet-server/rush_rollout_admin.ts#L138)). Nothing in the repo writes `rush_*` into the fleet product-line platform settings. So the org override is always ANDed against a `false`.
+
+Verified empirically against the real functions — a fully configured both-lines org:
+
+```
+PRODUCT-LINE rush_couriers = false
+ORG override rush_couriers = true
+EFFECTIVE  rush_couriers   = false     ← expected true
+```
+
+`isModuleEnabled('rush_*')` returns `enabledModules[module] === true`, so `canSeeCourierOps` is false and **no Rush navigation ever renders** — regardless of `service_lines`, the org overrides, or the `rush_ui` flag. Every gate below it is dead code.
+
+This is invisible to the current tests: `modules.test.ts` checks `rushModuleOverridesForServiceLines` in isolation (org map only) and `resolveEffectiveModules` with hand-written product-line maps. Nothing composes the two against the real defaults, which is exactly the gap the probe above fills.
+
+**Fix — pick one:**
+- **(a) Recommended.** Default `rush_*` to `true` in `DEFAULT_ENTERPRISE_MODULES` / `DEFAULT_ENTERPRISE_ENABLED_MODULES`, and let the real gates be the org's `service_lines`-derived overrides plus the `rush_ui` flag. Both are already implemented, per-org, and fail closed — the product-line default is then the kill switch, which is what §8 wanted.
+- **(b)** Keep the `false` defaults and add a Dominion control that writes `rush_*` into fleet product-line platform settings, wired into `FleetRushRolloutPanel`.
+
+Either way, add the composition test: *"a both-lines org with default platform settings resolves `rush_couriers` true, and flipping the product-line key to false turns it off."* That single test pins both X1 and W1 at once.
+
+---
+
+## 23. Workforce signup architecture — Roam Driver vs Roam Rush Courier
+
+New review, requested 2026-09-01. Question: does Roam Rush Courier follow the same signup procedure as Roam Driver, and is the combined architecture enterprise-grade?
+
+**Short answer: no, they do not match — and the courier flow is the better of the two.** The instinct to align them is right; the direction should be reversed.
+
+### 23.1 Roam Driver — as built
+
+Two entry components, both presenting the **same three archetypes**: [`DriverHybridOnboarding.tsx:170-196`](apps/driver/src/components/onboarding/DriverHybridOnboarding.tsx#L170) (email/phone) and [`DriverGoogleSignupWizard.tsx:344-388`](apps/driver/src/components/onboarding/DriverGoogleSignupWizard.tsx#L344) (Google). Selection is routed in [`App.tsx:48-56`](apps/driver/src/App.tsx#L48).
+
+```
+Auth ─▶ "How do you drive?"
+         ├─ Independent driver   ─▶ profile wizard                     (mode = independent)
+         ├─ Join a fleet         ─▶ paste fleet org UUID ─▶ profile    (mode = fleet)
+         └─ Fleet operator/owner ─▶ CTA out to roamfleet.co/signup
+```
+
+Joining calls `POST /driver/join-fleet` ([`index.tsx:12163`](supabase/functions/_fleet-server/index.tsx#L12163)), which requires an authenticated `driver` role, checks the org exists, refuses to overwrite an existing membership (409), then writes `user_metadata.organizationId`, the `driver:{uid}` KV record, and `driver_profiles{mode:'fleet', fleet_id}`.
+
+### 23.2 Roam Rush Courier — as built
+
+No archetype screen. A linear wizard with a fleet step inserted between profile and vehicle ([`CourierConsumerApp.tsx:226-244`](apps/dash-courier/src/CourierConsumerApp.tsx#L226)):
+
+```
+Splash ─▶ Welcome ─▶ How it works ─▶ Sign up ─▶ Verify ─▶ Profile setup
+      ─▶ Fleet invite code  (enter code · or "Skip — I'm an independent courier")
+      ─▶ Vehicle ─▶ Documents ─▶ Permissions ─▶ Account pending
+```
+
+Joining calls `POST /workforce/invites/accept` with an **8-character invite code** minted by the fleet owner into `fleet.workforce_invites`, validated for expiry, single use, and email/phone binding, with identity taken from the JWT.
+
+### 23.3 Side by side
+
+| Dimension | Roam Driver | Roam Rush Courier |
+|---|---|---|
+| Archetype chooser | **Yes** — 3 options, both auth paths | **No** — linear wizard |
+| Fleet-owner CTA | **Yes** — deep link to `roamfleet.co/signup` | **None anywhere in the app** |
+| Join credential | Fleet **org UUID**, pasted | **8-char invite code** |
+| Credential issued by | Nobody — it is just the org id | Fleet owner, via `POST /workforce/invites` |
+| Owner consents to the join | **No** | **Yes** — they created the invite |
+| Expiry | None | 14 days |
+| Single use | No — reusable forever by anyone | Yes (`status='pending'` predicate) |
+| Bound to a person | No | Yes — `invited_email` / `invited_phone` |
+| Revocable | No | Yes — `status='revoked'` |
+| Audit trail | None | `created_by`, `accepted_by`, `accepted_at` |
+| Identity source | JWT (`rbacUser.userId`) | JWT (`rbacUser.userId`) |
+| Already-in-a-fleet guard | **Yes** — 409 | **No** — silently re-points `fleet_id` |
+| Step placement | Before profile | After profile, before vehicle |
+| Storage | `driver_profiles` + `user_metadata` + KV | `courier_profiles` only |
+| Feature-flagged | No | Yes — `rush_courier_link` |
+
+### 23.4 The finding that matters
+
+**S1 · HIGH — `POST /driver/join-fleet` treats a non-secret identifier as a bearer credential.**
+
+Any authenticated driver who obtains a fleet's organization UUID can attach themselves to that fleet. There is no invite, no owner approval, no expiry, no revocation, and no binding to a person. Org UUIDs are not secrets — they appear in admin screens, support threads, exports, and URLs, and a fleet hands the same one to every driver it recruits, forever.
+
+Consequences: an uninvited driver lands on the owner's roster, is eligible for vehicle assignment, and their trips flow into the owner's settlement and P&L. The owner's only remedy is to notice and detach them.
+
+The courier path — which was built *second*, as part of this Rush programme — has every control the driver path lacks. **So the correct remedy is not to make Courier look like Driver. It is to migrate Driver onto the courier's invite model**, and then unify both on one mechanism. `fleet.workforce_invites` was deliberately designed for exactly this: it already carries `service_line ∈ {rideshare, rush_delivery}` and the accept handler already branches to `driver_profiles` for the rideshare case ([`workforce_invite_routes.ts:132-140`](supabase/functions/_fleet-server/workforce_invite_routes.ts#L132)). **The rideshare half of the unified path is already written and simply unused.**
+
+### 23.5 The rest of the register
+
+| # | Sev | Finding |
+|---|---|---|
+| **S2** | **HIGH** | **No already-in-a-fleet guard on the courier accept path.** `/driver/join-fleet` returns 409 if the driver is already linked; the courier upsert silently overwrites `fleet_id`. A courier can be moved between fleets by accepting any invite — including mid-week, which re-points attribution while `orders.courier_fleet_id` keeps the old value on past orders (correct) but the roster and future orders switch (surprising). Mirror the 409. |
+| **S3** | **MEDIUM** | **Roam Rush Courier has no fleet-owner path.** A courier who wants to start a delivery company has nowhere to go — no "Fleet operator / owner" card, no link to `roamfleet.co/signup`, no mention of RoamFleet anywhere in the app (grep: one hit, the invite-code helper text). The whole premise of this programme is that delivery fleet owners are a customer segment; the courier app is the natural top of that funnel and it currently has no door. Driver has had `defaultRoamFleetSignupUrl()` since before this work. |
+| **S4** | **MEDIUM** | **The courier fleet step is unlabelled as a choice.** Driver asks "How do you drive?" and makes the archetype explicit; Courier shows a code box with a "Skip — I'm an independent courier" ghost button. Same three outcomes are reachable (independent / fleet / — ), but only two are visible and neither is framed as an identity. A courier who does not yet have a code from their employer will skip, land as independent, and there is no in-app way back — no "join a fleet" entry in courier settings. |
+| **S5** | **MEDIUM** | **Two divergent membership models for one concept.** Driver membership lives in three places (`driver_profiles`, `user_metadata.organizationId`, `driver:{uid}` KV) and must be kept in sync by hand; courier membership lives in one (`courier_profiles`). The driver triple-write is the source of the `currentOrg` reconciliation logic at `index.tsx:12190-12196`. Any unified flow should adopt the courier's single-source model, not spread it back out. |
+| **S6** | **MEDIUM** | **Invite acceptance is not rate-limited.** 32⁸ ≈ 1.1×10¹² makes blind guessing impractical, and codes are now `crypto`-random with binding and expiry, so this is defence in depth rather than an open hole — but an authenticated endpoint that probes a shared code space should have a per-user attempt limit. |
+| **S7** | **LOW** | **Courier invite upsert can create a nameless profile.** `/workforce/invites/accept` upserts `{user_id, mode, fleet_id, fleet_joined_at, fleet_role}` with `onConflict: user_id`. In the shipped wizard the row always exists first (profile-setup runs before the invite step), so this is latent — but a deep link or a failed profile step would insert a profile with no email, name or phone. Make the accept path an `update` that 404s when no profile exists. |
+| **S8** | **LOW** | **Step ordering differs for no reason.** Driver asks archetype *before* the profile wizard; Courier asks *after*. Asking first is better — it lets you branch the rest of the wizard (a fleet courier may not need to supply their own insurance, for instance). Align on archetype-first. |
+
+**Verified sound, no action needed:** `ensureCourierProfile` never writes `mode` or `fleet_id`, so later wizard steps cannot clobber an accepted invite — I checked this specifically because the call order (`profile-setup → fleet-invite → vehicle → documents → permissions`, with `ensureCourierProfile` firing at several of those) makes it a plausible failure. It also strips `status` on the existing-row branch, so it cannot undo an approval.
+
+### 23.6 Target architecture — one workforce onboarding contract
+
+```
+                    ┌──────────────────────────────────────────┐
+                    │  fleet.workforce_invites                 │
+                    │  service_line ∈ {rideshare, rush_delivery}│
+                    │  code · expiry · single-use · bound       │
+                    │  created_by · accepted_by · revocable     │
+                    └────────────────┬─────────────────────────┘
+                                     │  POST /workforce/invites/accept
+                     ┌───────────────┴───────────────┐
+                     ▼                               ▼
+              driver_profiles                 courier_profiles
+              mode · fleet_id                 mode · fleet_id
+```
+
+Both apps present the **same three archetypes**, in the same order, with the same words:
+
+| Archetype | Roam Driver | Roam Rush Courier |
+|---|---|---|
+| Independent | continue to profile | continue to profile |
+| Join a company | **invite code** (replacing the org UUID) | invite code *(already built)* |
+| Owner / operator | CTA → `roamfleet.co/signup?line=rideshare` | CTA → `roamfleet.co/signup?line=rush_delivery` |
+
+Four properties make this enterprise-grade, and three of the four already exist on the courier side:
+
+1. **Consent is explicit and mutual.** Joining requires an artefact the owner deliberately created. Today only Courier has this.
+2. **Membership is revocable and auditable.** Who invited whom, when, and who accepted. Today only Courier has this.
+3. **One join mechanism, two profile tables.** The accept handler already branches correctly; the rideshare branch just has no caller.
+4. **Both apps are funnel tops for RoamFleet.** Driver already links out; Courier must too — and the link should carry the service line so the fleet signup wizard pre-selects it (§6.1 Step 3 already accepts a multi-select).
+
+### 23.7 Migration — additive and reversible
+
+1. **Add the archetype screen to Roam Rush Courier**, reusing the driver copy and card styling, with the fleet-owner CTA carrying `?line=rush_delivery`. Closes S3, S4, S8. UI only — no schema change.
+2. **Add "Join a fleet" to courier settings** so a courier who skipped can join later without reinstalling. Closes the S4 dead end.
+3. **Mirror the 409 guard** into the courier accept handler; convert the upsert to an update-or-404. Closes S2, S7.
+4. **Issue invites for rideshare** — expose `serviceLine: 'rideshare'` in the fleet owner's invite UI. The server already supports it. No new code server-side.
+5. **Switch the driver app's "Join a fleet" step from org UUID to invite code**, pointing at `/workforce/invites/accept`. Keep `/driver/join-fleet` alive behind a flag for one release so in-flight signups do not break. Closes S1.
+6. **Deprecate `/driver/join-fleet`** once telemetry shows no traffic; keep the 409 guard logic by porting it into the shared accept handler.
+7. **Consolidate driver membership** onto `driver_profiles` as the single source, with `user_metadata.organizationId` and the KV record demoted to derived caches. Closes S5. Do this last — it touches the RBAC org resolution path.
+8. **Add per-user rate limiting** to the accept endpoint. Closes S6.
+
+Steps 1–4 are independent, ship in any order, and touch no existing driver behaviour. Step 5 is the one that needs a flag and a release window.
+
+---
+
+## 24. Current gate
+
+**Build:** 174 test files / 1,103 tests pass · Rush-spine typecheck 0 errors · `deno check` exit 0 · all four CI guards pass.
+
+| Action | Blocked on |
+|---|---|
+| Fix **X1** | — do this first; it is a one-line default change plus a composition test |
+| Enable `rush_courier_link` for a pilot org | nothing — V1/V2 closed, invite path is sound |
+| Enable `rush_ui` | **X1** (until then it renders nothing) |
+| Enable `rush_trip_projection` | nothing — W2 closed, recon cron scheduled |
+| Enable `rush_settlement` | **V12** — the `serviceLine` argument still has no caller, so there is no per-line tier resolution and no combined per-person statement |
+| Pilot with a both-lines customer | **V9** — the scope switcher still does not filter dashboards, Business Finance, settlements, reports or exports |
+| Ship the unified signup | **S1–S8**, sequenced in §23.7 |
+
+---
+
+*Design audit 2026-08-31; implementation verification, remediation verification, and remediation round 2 + signup architecture review 2026-09-01, against `256e8c8c` on branch `main`. No code was modified in any pass. Re-run Part IV after X1 is closed; re-run the design audit before Phase 2 if the `delivery` or `fleet` schemas change.*

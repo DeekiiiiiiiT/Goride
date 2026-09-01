@@ -81,6 +81,55 @@ describe('normalizeModuleKeyMap', () => {
   });
 });
 
+describe('rush module composition (X1)', () => {
+  const rushKeys = [
+    'rush_couriers',
+    'rush_deliveries',
+    'rush_courier_settlements',
+    'rush_supply_health',
+    'rush_merchant_link',
+  ] as const;
+
+  it('both-lines org with default platform settings resolves rush_couriers true', () => {
+    const orgOverrides = rushModuleOverridesForServiceLines(
+      ['rideshare', 'rush_delivery'],
+      {},
+    );
+    const effective = resolveEffectiveModules(
+      { ...DEFAULT_ENTERPRISE_ENABLED_MODULES },
+      orgOverrides,
+      rushKeys,
+    );
+    expect(effective.rush_couriers).toBe(true);
+    expect(effective.rush_deliveries).toBe(true);
+  });
+
+  it('product-line rush_couriers false defeats org true — kill switch holds', () => {
+    const orgOverrides = rushModuleOverridesForServiceLines(
+      ['rideshare', 'rush_delivery'],
+      {},
+    );
+    const effective = resolveEffectiveModules(
+      { ...DEFAULT_ENTERPRISE_ENABLED_MODULES, rush_couriers: false },
+      orgOverrides,
+      ['rush_couriers'],
+    );
+    expect(effective.rush_couriers).toBe(false);
+  });
+
+  it('rideshare-only org keeps rush modules off at org level', () => {
+    const orgOverrides = rushModuleOverridesForServiceLines(['rideshare'], {});
+    const effective = resolveEffectiveModules(
+      { ...DEFAULT_ENTERPRISE_ENABLED_MODULES },
+      orgOverrides,
+      rushKeys,
+    );
+    for (const key of rushKeys) {
+      expect(effective[key]).toBe(false);
+    }
+  });
+});
+
 describe('rushModuleOverridesForServiceLines', () => {
   it('enables all rush modules when rush_delivery is in service_lines', () => {
     const mods = rushModuleOverridesForServiceLines(['rideshare', 'rush_delivery'], {});

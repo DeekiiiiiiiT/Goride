@@ -152,6 +152,7 @@ import { api } from '../../services/api';
 import { TierCalculations } from '../../utils/tierCalculations';
 import { TierConfig } from '../../types/data';
 import { loadResolvedEarningsBundleForDriverWeek } from '../../utils/loadResolvedEarningsBundle';
+import { useServiceLineScopeParam } from '../../hooks/useServiceLineScopeParam';
 import { getEffectiveTripEarnings } from '../../utils/tripEarnings';
 import { normalizePlatform } from '../../utils/normalizePlatform';
 import { getTripPhysicalCashCollected, sumTripPhysicalCashCollected } from '../../utils/tripPhysicalCash';
@@ -326,6 +327,7 @@ interface DriverDetailProps {
 
 
 export function DriverDetail({ driverId, driverName, driver, trips, metrics: csvMetrics, vehicleMetrics, onBack }: DriverDetailProps) {
+  const { serviceLineParam } = useServiceLineScopeParam();
   const [activeTab, setActiveTab] = useState("overview");
   const [localLoading, setLocalLoading] = useState(true);
   const [selectedDocument, setSelectedDocument] = useState<DriverDocument | null>(null);
@@ -717,7 +719,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
 
   useEffect(() => {
     let cancelled = false;
-    loadResolvedEarningsBundleForDriverWeek(driverId)
+    loadResolvedEarningsBundleForDriverWeek(driverId, undefined, serviceLineParam)
       .then((bundle) => {
         if (cancelled) return;
         setTiers(bundle.tiers || []);
@@ -725,7 +727,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
       })
       .catch(console.error);
     return () => { cancelled = true; };
-  }, [driverId]);
+  }, [driverId, serviceLineParam]);
 
   // Calculate Monthly Earnings & Current Tier (Independent of Date Range Selection)
   const { monthlyEarnings, currentTier } = useMemo(() => {

@@ -6,7 +6,7 @@ import { provisionFleetOwnerAccount } from '../../../services/fleetOwnerAuth';
 import { supabase } from '../../../utils/supabase/client';
 import type { ServiceLine } from '../BusinessConfigContext';
 
-type WizardStep = 'company' | 'service-lines' | 'owner';
+type WizardStep = 'company' | 'service-lines' | 'plan' | 'owner';
 
 const SERVICE_LINE_OPTIONS: { id: ServiceLine; label: string; description: string }[] = [
   {
@@ -33,6 +33,7 @@ export function FleetOwnerSignupComplete({ fromRoamdriver }: { fromRoamdriver?: 
   );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [rushAddonAck, setRushAddonAck] = useState(false);
 
   const toggleServiceLine = (line: ServiceLine) => {
     setServiceLines((prev) => {
@@ -93,7 +94,9 @@ export function FleetOwnerSignupComplete({ fromRoamdriver }: { fromRoamdriver?: 
     }
   };
 
-  const stepIndex = step === 'company' ? 0 : step === 'service-lines' ? 1 : 2;
+  const stepIndex =
+    step === 'company' ? 0 : step === 'service-lines' ? 1 : step === 'plan' ? 2 : 3;
+  const needsPlanStep = serviceLines.includes('rush_delivery');
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-slate-50 px-4 py-10 dark:bg-slate-900">
@@ -111,10 +114,10 @@ export function FleetOwnerSignupComplete({ fromRoamdriver }: { fromRoamdriver?: 
         </p>
 
         <div className="mt-6 flex justify-center gap-2">
-          {[0, 1, 2].map((i) => (
+          {[0, 1, 2, 3].map((i) => (
             <div
               key={i}
-              className={`h-1.5 w-10 rounded-full transition-colors ${
+              className={`h-1.5 w-8 rounded-full transition-colors ${
                 i <= stepIndex ? 'bg-indigo-600' : 'bg-slate-200 dark:bg-slate-700'
               }`}
             />
@@ -198,6 +201,38 @@ export function FleetOwnerSignupComplete({ fromRoamdriver }: { fromRoamdriver?: 
               <Button
                 type="button"
                 className="flex-1 bg-indigo-600 hover:bg-indigo-700"
+                onClick={() => setStep(needsPlanStep ? 'plan' : 'owner')}
+              >
+                Continue
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {step === 'plan' && (
+          <div className="mt-6 space-y-4">
+            <p className="text-sm text-slate-600 dark:text-slate-300">
+              Deliveries is a paid add-on module. Roam enables features during pilot; billing follows your commercial agreement.
+            </p>
+            <label className="flex items-start gap-3 rounded-xl border border-slate-200 px-4 py-3 dark:border-slate-700">
+              <input
+                type="checkbox"
+                className="mt-1"
+                checked={rushAddonAck}
+                onChange={(e) => setRushAddonAck(e.target.checked)}
+              />
+              <span className="text-sm text-slate-700 dark:text-slate-300">
+                I understand delivery modules may be billed separately and roll out per org during pilot.
+              </span>
+            </label>
+            <div className="flex gap-2">
+              <Button type="button" variant="outline" className="flex-1" onClick={() => setStep('service-lines')}>
+                Back
+              </Button>
+              <Button
+                type="button"
+                className="flex-1 bg-indigo-600 hover:bg-indigo-700"
+                disabled={!rushAddonAck}
                 onClick={() => setStep('owner')}
               >
                 Continue
@@ -224,7 +259,7 @@ export function FleetOwnerSignupComplete({ fromRoamdriver }: { fromRoamdriver?: 
               {serviceLines.map((l) => (l === 'rideshare' ? 'Rideshare' : 'Deliveries')).join(' + ')}
             </div>
             <div className="flex gap-2">
-              <Button type="button" variant="outline" className="flex-1" onClick={() => setStep('service-lines')}>
+              <Button type="button" variant="outline" className="flex-1" onClick={() => setStep(needsPlanStep ? 'plan' : 'service-lines')}>
                 Back
               </Button>
               <Button

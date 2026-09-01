@@ -669,7 +669,27 @@ export const api = {
     return response.json();
   },
 
-  /** Links the signed-in driver account to a fleet organization by UUID (driver app hybrid onboarding). */
+  /** Links the signed-in driver account to a fleet via invite code (preferred). */
+  async acceptWorkforceInvite(inviteCode: string) {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/workforce/invites/accept`, {
+      method: 'POST',
+      headers: await getHeaders(),
+      body: JSON.stringify({ inviteCode: inviteCode.trim().toUpperCase() }),
+    });
+    if (!response.ok) {
+      let msg = 'Failed to join fleet';
+      try {
+        const j = await response.json();
+        if (j && typeof j.error === 'string') msg = j.error;
+      } catch {
+        /* ignore */
+      }
+      throw new Error(msg);
+    }
+    return response.json();
+  },
+
+  /** @deprecated Use acceptWorkforceInvite — org UUID is not a secret credential. */
   async joinFleetByFleetId(fleetId: string) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/driver/join-fleet`, {
       method: 'POST',

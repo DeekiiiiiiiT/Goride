@@ -5,6 +5,7 @@ import type { Hono } from "npm:hono";
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import type { RbacUser } from "./rbac_middleware.ts";
 import { isFeatureEnabled, FEATURE_FLAGS } from "./feature_flags.ts";
+import { checkAcceptRateLimit } from "./workforce_invite_rate_limit.ts";
 
 function randomInviteCode(): string {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -89,6 +90,10 @@ export function registerWorkforceInviteRoutes(
       if (!rbacUser) return c.json({ error: "Unauthorized" }, 401);
 
       const userId = rbacUser.userId;
+      if (!checkAcceptRateLimit(userId)) {
+        return c.json({ error: "Too many invite attempts. Try again later." }, 429);
+      }
+
       const body = await c.req.json();
       const code = String(body.inviteCode ?? body.code ?? "").trim().toUpperCase();
       if (!code) return c.json({ error: "inviteCode required" }, 400);
@@ -123,14 +128,34 @@ export function registerWorkforceInviteRoutes(
       const serviceLine = String(invite.service_line);
 
       if (serviceLine === "rush_delivery") {
-        await deps.supabase.schema("delivery").from("courier_profiles").upsert({
-          user_id: userId,
-          mode: "fleet",
-          fleet_id: fleetId,
-          fleet_joined_at: new Date().toISOString(),
-          fleet_role: "courier",
-        }, { onConflict: "user_id" });
+        const { data: existingCourier } = await deps.supabase.schema("delivery")
+          .from("courier_profiles")
+          .select("user_id, mode, fleet_id")
+          .eq("user_id", userId)
+          .maybeSingle();
+        if (!existingCourier) {
+          return c.json({ error: "Complete courier profile setup before joining a fleet" }, 404);
+        }
+        if (existingCourier.mode === "fleet" && existingCourier.fleet_id && existingCourier.fleet_id !== fleetId) {
+          return c.json({ error: "Already linked to another fleet" }, 409);
+        }
+        const { error: courierErr } = await deps.supabase.schema("delivery").from("courier_profiles")
+          .update({
+            mode: "fleet",
+            fleet_id: fleetId,
+            fleet_joined_at: new Date().toISOString(),
+            fleet_role: "courier",
+          })
+          .eq("user_id", userId);
+        if (courierErr) throw courierErr;
       } else {
+        const { data: existingDriver } = await deps.supabase.from("driver_profiles")
+          .select("user_id, mode, fleet_id")
+          .eq("user_id", userId)
+          .maybeSingle();
+        if (existingDriver?.mode === "fleet" && existingDriver.fleet_id && existingDriver.fleet_id !== fleetId) {
+          return c.json({ error: "Already linked to another fleet" }, 409);
+        }
         await deps.supabase.from("driver_profiles").upsert({
           user_id: userId,
           mode: "fleet",

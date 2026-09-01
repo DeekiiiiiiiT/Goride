@@ -2410,8 +2410,9 @@ export const api = {
   // ── Phase 4: Server-side Toll Reconciliation API ──────────────────────
 
   // ── Unified driver financial periods (Expenses / Settlement / Payout SSOT) ──
-  async getDriverFinancialPeriods(driverId: string) {
+  async getDriverFinancialPeriods(driverId: string, serviceLine?: 'rideshare' | 'rush_delivery') {
     const qs = new URLSearchParams({ driverId });
+    if (serviceLine) qs.set('serviceLine', serviceLine);
     const response = await fetchWithRetry(
       `${API_ENDPOINTS.financial}/driver-financial-periods?${qs.toString()}`,
       { headers: await requireAuthHeaders(null) },
@@ -2427,6 +2428,7 @@ export const api = {
     periodEnd?: string;
     minAmount?: number;
     limit?: number;
+    serviceLine?: 'rideshare' | 'rush_delivery';
   }) {
     const qs = new URLSearchParams();
     if (opts?.periodAnchor) qs.set("periodAnchor", opts.periodAnchor);
@@ -2434,6 +2436,7 @@ export const api = {
     if (opts?.periodEnd) qs.set("periodEnd", opts.periodEnd);
     if (opts?.minAmount != null) qs.set("minAmount", String(opts.minAmount));
     if (opts?.limit != null) qs.set("limit", String(opts.limit));
+    if (opts?.serviceLine) qs.set("serviceLine", opts.serviceLine);
     const response = await fetchWithRetry(
       `${API_ENDPOINTS.financial}/driver-financial-periods/company-owes?${qs.toString()}`,
       { headers: await requireAuthHeaders(null) },
@@ -2449,6 +2452,7 @@ export const api = {
     periodEnd?: string;
     minAmount?: number;
     limit?: number;
+    serviceLine?: 'rideshare' | 'rush_delivery';
   }) {
     const qs = new URLSearchParams();
     if (opts?.periodAnchor) qs.set("periodAnchor", opts.periodAnchor);
@@ -2456,6 +2460,7 @@ export const api = {
     if (opts?.periodEnd) qs.set("periodEnd", opts.periodEnd);
     if (opts?.minAmount != null) qs.set("minAmount", String(opts.minAmount));
     if (opts?.limit != null) qs.set("limit", String(opts.limit));
+    if (opts?.serviceLine) qs.set("serviceLine", opts.serviceLine);
     const response = await fetchWithRetry(
       `${API_ENDPOINTS.financial}/driver-financial-periods/driver-owes?${qs.toString()}`,
       { headers: await requireAuthHeaders(null) },
@@ -2471,6 +2476,7 @@ export const api = {
     periodEnd?: string;
     minAmount?: number;
     limit?: number;
+    serviceLine?: 'rideshare' | 'rush_delivery';
   }) {
     const qs = new URLSearchParams();
     if (opts?.periodAnchor) qs.set("periodAnchor", opts.periodAnchor);
@@ -2478,6 +2484,7 @@ export const api = {
     if (opts?.periodEnd) qs.set("periodEnd", opts.periodEnd);
     if (opts?.minAmount != null) qs.set("minAmount", String(opts.minAmount));
     if (opts?.limit != null) qs.set("limit", String(opts.limit));
+    if (opts?.serviceLine) qs.set("serviceLine", opts.serviceLine);
     const response = await fetchWithRetry(
       `${API_ENDPOINTS.financial}/driver-financial-periods/cash-held?${qs.toString()}`,
       { headers: await requireAuthHeaders(null) },
