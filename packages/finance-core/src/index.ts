@@ -32,8 +32,8 @@ export {
   isSettlementPaidForWeek,
   isPendingDriverPayoutForWeek,
 } from './driverCashPayment.ts';
-export { computePeriodSettlement } from './driverPeriodSettlement.ts';
-export type { PeriodSettlementInput, PeriodSettlementResult } from './driverPeriodSettlement.ts';
+export { computePeriodSettlement, computePeriodSettlementMinor } from './driverPeriodSettlement.ts';
+export type { PeriodSettlementInput, PeriodSettlementResult, PeriodSettlementMinorResult } from './driverPeriodSettlement.ts';
 export {
   getAdjCashBalance,
   getPeriodSettlementComponents,

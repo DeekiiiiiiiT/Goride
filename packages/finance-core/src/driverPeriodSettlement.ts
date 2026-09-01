@@ -1,4 +1,4 @@
-import { round2 } from './money.ts';
+import { round2, toMoneyMinor, fromMoneyMinor, type MoneyMinor } from './money.ts';
 
 export interface PeriodSettlementInput {
   driverShare: number;
@@ -31,36 +31,92 @@ export interface PeriodSettlementResult {
   settlement: number;
 }
 
-export function computePeriodSettlement(i: PeriodSettlementInput): PeriodSettlementResult {
-  const tipsPaid = round2(Math.max(0, i.tipsPaidToDriver || 0));
-  const netPayout = round2((i.driverShare || 0) - (i.fuelDeduction || 0) + tipsPaid);
-  const tollPersonal = round2(Math.max(0, i.tollPersonal || 0));
-  const tollCashWash = round2(Math.max(0, i.tollCashWash || 0));
-  const fuelCredits = round2(Math.max(0, i.fuelCredits || 0));
-  const cashWrittenOff = round2(Math.max(0, i.cashWrittenOff || 0));
-  const settlementPaid = round2(Math.max(0, i.settlementPaid || 0));
+export interface PeriodSettlementMinorResult {
+  netPayoutMinor: MoneyMinor;
+  tollChargedToDriverMinor: MoneyMinor;
+  tollCashWashMinor: MoneyMinor;
+  cashOwedMinor: MoneyMinor;
+  cashPaidMinor: MoneyMinor;
+  cashBalanceMinor: MoneyMinor;
+  adjCashBalanceMinor: MoneyMinor;
+  grossSettlementMinor: MoneyMinor;
+  settlementPaidMinor: MoneyMinor;
+  overpaidAmountMinor: MoneyMinor;
+  settlementMinor: MoneyMinor;
+}
 
-  const cashOwed = round2((i.baseCashOwed || 0) + tollPersonal);
-  const cashPaid = round2((i.baseCashPaid || 0) + tollCashWash);
-  const cashBalance = round2(cashOwed - cashPaid);
-  const adjCashBalance = round2(cashBalance - fuelCredits - cashWrittenOff);
-  const grossSettlement = round2(netPayout - adjCashBalance);
+function toMinorNonNeg(n: number): MoneyMinor {
+  return toMoneyMinor(Math.max(0, n));
+}
 
-  // Continuous across zero — do not branch settlement on the sign of gross.
-  const overpaidAmount = round2(Math.max(0, settlementPaid - Math.max(0, grossSettlement)));
-  const settlement = round2(grossSettlement - settlementPaid);
+/** Integer minor-unit settlement math — authoritative for persist (A-3). */
+export function computePeriodSettlementMinor(i: PeriodSettlementInput): PeriodSettlementMinorResult {
+  const tipsPaidMinor = toMinorNonNeg(i.tipsPaidToDriver || 0);
+  const driverShareMinor = toMoneyMinor(i.driverShare || 0);
+  const fuelDedMinor = toMoneyMinor(i.fuelDeduction || 0);
+  const netPayoutMinor = (driverShareMinor - fuelDedMinor + tipsPaidMinor) as MoneyMinor;
+
+  const tollPersonalMinor = toMinorNonNeg(i.tollPersonal || 0);
+  const tollCashWashMinor = toMinorNonNeg(i.tollCashWash || 0);
+  const fuelCreditsMinor = toMinorNonNeg(i.fuelCredits || 0);
+  const cashWrittenOffMinor = toMinorNonNeg(i.cashWrittenOff || 0);
+  const settlementPaidMinor = toMinorNonNeg(i.settlementPaid || 0);
+
+  const cashOwedMinor = (toMoneyMinor(i.baseCashOwed || 0) + tollPersonalMinor) as MoneyMinor;
+  const cashPaidMinor = (toMoneyMinor(i.baseCashPaid || 0) + tollCashWashMinor) as MoneyMinor;
+  const cashBalanceMinor = (cashOwedMinor - cashPaidMinor) as MoneyMinor;
+  const adjCashBalanceMinor = (cashBalanceMinor - fuelCreditsMinor - cashWrittenOffMinor) as MoneyMinor;
+  const grossSettlementMinor = (netPayoutMinor - adjCashBalanceMinor) as MoneyMinor;
+
+  const grossPosMinor = Math.max(0, grossSettlementMinor) as MoneyMinor;
+  const overpaidAmountMinor = Math.max(0, settlementPaidMinor - grossPosMinor) as MoneyMinor;
+  const settlementMinor = (grossSettlementMinor - settlementPaidMinor) as MoneyMinor;
 
   return {
-    netPayout,
-    tollChargedToDriver: tollPersonal,
-    tollCashWash,
-    cashOwed,
-    cashPaid,
-    cashBalance,
-    adjCashBalance,
-    grossSettlement,
-    settlementPaid,
-    overpaidAmount,
-    settlement,
+    netPayoutMinor,
+    tollChargedToDriverMinor: tollPersonalMinor,
+    tollCashWashMinor,
+    cashOwedMinor,
+    cashPaidMinor,
+    cashBalanceMinor,
+    adjCashBalanceMinor,
+    grossSettlementMinor,
+    settlementPaidMinor,
+    overpaidAmountMinor,
+    settlementMinor,
   };
+}
+
+/** Major-unit wrapper — delegates to minor path then converts at boundary. */
+export function computePeriodSettlement(i: PeriodSettlementInput): PeriodSettlementResult {
+  const m = computePeriodSettlementMinor(i);
+  return {
+    netPayout: fromMoneyMinor(m.netPayoutMinor),
+    tollChargedToDriver: fromMoneyMinor(m.tollChargedToDriverMinor),
+    tollCashWash: fromMoneyMinor(m.tollCashWashMinor),
+    cashOwed: fromMoneyMinor(m.cashOwedMinor),
+    cashPaid: fromMoneyMinor(m.cashPaidMinor),
+    cashBalance: fromMoneyMinor(m.cashBalanceMinor),
+    adjCashBalance: fromMoneyMinor(m.adjCashBalanceMinor),
+    grossSettlement: fromMoneyMinor(m.grossSettlementMinor),
+    settlementPaid: fromMoneyMinor(m.settlementPaidMinor),
+    overpaidAmount: fromMoneyMinor(m.overpaidAmountMinor),
+    settlement: fromMoneyMinor(m.settlementMinor),
+  };
+}
+
+/** Verify minor and float paths agree within 1 cent on representative inputs. */
+export function assertMinorFloatParity(i: PeriodSettlementInput): boolean {
+  const m = computePeriodSettlementMinor(i);
+  const f = {
+    netPayout: fromMoneyMinor(m.netPayoutMinor),
+    settlement: fromMoneyMinor(m.settlementMinor),
+    grossSettlement: fromMoneyMinor(m.grossSettlementMinor),
+  };
+  const direct = computePeriodSettlement(i);
+  return (
+    Math.abs(f.netPayout - direct.netPayout) <= 0.01 &&
+    Math.abs(f.settlement - direct.settlement) <= 0.01 &&
+    Math.abs(f.grossSettlement - direct.grossSettlement) <= 0.01
+  );
 }

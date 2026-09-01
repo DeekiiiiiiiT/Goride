@@ -50,6 +50,7 @@ export type ReconciledPeriodDetail = {
   tipsWithheld?: number;
   cashSourceMismatch?: number;
   overpaidAmount?: number;
+  projectionSources?: Record<string, string>;
 };
 
 type Props = {
@@ -68,6 +69,49 @@ const fmt = (n: number) =>
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
+
+const SOURCE_LABELS: Record<string, string> = {
+  events: 'Ledger events',
+  events_or_trips: 'Events + trip fallback',
+  ledger: 'Toll ledger',
+  snapshot: 'Fuel snapshot',
+  table: 'Settlement mirror',
+  kv: 'Transaction scan',
+};
+
+function ProjectionSourcesPanel({ sources }: { sources?: Record<string, string> }) {
+  if (!sources || Object.keys(sources).length === 0) return null;
+  const rows = [
+    { key: 'fares', label: 'Commission / fares' },
+    { key: 'fuel', label: 'Fuel' },
+    { key: 'tolls', label: 'Toll spend' },
+    { key: 'cash', label: 'Cash transactions' },
+  ];
+  return (
+    <div className="rounded-lg border border-slate-200 bg-slate-50/80 px-3 py-2">
+      <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 mb-1.5">
+        Data sources
+      </p>
+      <p className="text-[10px] text-slate-400 mb-2">
+        Where this week&apos;s numbers were loaded from — for ops troubleshooting only.
+      </p>
+      <div className="space-y-1">
+        {rows.map(({ key, label }) => {
+          const raw = sources[key];
+          if (!raw) return null;
+          return (
+            <div key={key} className="flex justify-between gap-2 text-[11px]">
+              <span className="text-slate-600">{label}</span>
+              <span className="text-slate-800 font-medium tabular-nums">
+                {SOURCE_LABELS[raw] || raw}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 function Line({
   label,
@@ -181,6 +225,7 @@ export function ReconciledPeriodOverlay({
                 entitlement this week. Recovery exposure is in Driver owes / settlement residual.
               </p>
             ) : null}
+            <ProjectionSourcesPanel sources={detail.projectionSources} />
             <div className="rounded-lg bg-emerald-50 border border-emerald-100 px-4 py-3 flex items-center gap-3">
               <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0" />
               <div className="min-w-0">

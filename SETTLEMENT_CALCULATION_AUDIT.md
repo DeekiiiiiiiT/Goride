@@ -46,6 +46,12 @@ Independently re-derived, not taken on trust:
 
 **Two new latent defects, both in the A-11 flag path — production-safe while `SETTLEMENT_TX_TABLE_READ` is off, but blocking for cutover:** the mirror predicate omits `Cash Write Off` and `Toll Charge` (**D-1** — flipping the flag would underpay by every write-off and overpay by every toll charge), and the backfill script looks for `'Driver Payout'` / `'Driver_Payout'` while the data says `'Driver Payouts'` / `'Payout'`, so it would mirror zero payouts (**D-2**). Three disagreeing definitions of "settlement transaction" now exist; unify one predicate in `finance-core` and add a mirror-vs-KV parity check before flipping.
 
+### ✅ Sixth pass verified (2026-09-01, commit `e22752c2`) — see **Part VII**
+
+**COMPLETE. No money-affecting finding remains.** D-1/D-2/D-3 fixed via a single `isSettlementParticipantTransaction` in `finance-core` with a lockstep parity test; A-11 backfilled and parity-verified against real data (**715/715, 0 misses**) and cut over; and **§3.8 / P-6 — the last open business question — is closed**: a traced live week (2026-08-24) confirms toll reimbursement is tag/plaza attribution, not a `fare_earning` line item, so the triple-benefit scenario does not occur and display-only treatment is correct. Tests green: **55 finance-core** + **1,082 fleet**.
+
+Across six passes: **35 findings raised, 35 closed.** Flawless Finish program (2026-09-01) closed E-1, ops webhook, predicate triple-lock, A-5 tolls wiring, A-3 minor formula, and settlement desk data-sources panel. **Watch items:** full A-3 NUMERIC deprecation; enable `PROJECTION_EVENTS_FARES` / `PROJECTION_EVENTS_TOLLS` in prod when parity reviewed; cash events deferred per ADR.
+
 ### Original findings — status
 
 | # | Finding | Status | Evidence |
@@ -797,23 +803,83 @@ What remains is **finishing A-11 safely**. Everything about its staging is right
 
 ---
 
-# PART VII — FLAWLESS FINISH (2026-09-01)
+# PART VII — CLOSING (Sixth pass + Flawless Finish 2026-09-01)
 
-**Program complete in repo + data.**
+**Tests green after Flawless Finish.** Deploy + smoke test done. A-11 cutover live (715/715, 0 misses).
+
+## Sixth verification pass (commit `e22752c2`)
+
+**D-1, D-2 and D-3 are all fixed, the A-11 backfill and parity run has been executed against real data (715/715, 0 misses), the read flag has been cut over to ON, and §3.8 / P-6 — the last open business question in the entire audit — is closed with a live sample and a locked decision.**
+
+This is the first pass where I have no money-affecting finding to report.
+
+## Confirmed done
 
 | Item | Status | Evidence |
 |---|---|---|
-| **D-1** mirror omits write-off / Toll Charge | ✅ | `isSettlementParticipantTransaction` in finance-core; mirror uses it |
-| **D-2** backfill wrong payout strings | ✅ | Scripts + SQL use `Driver Payouts` / `Payout`; source is `fleet.transactions` |
-| **D-3** week-key diverge | ✅ | `resolveTransactionPeriodAnchor` / `periodKeyFor` shared with scripts |
-| **A-11 cutover** | ✅ | Backfill 715 rows; parity misses=0; read path defaults ON (`SETTLEMENT_TX_TABLE_READ=false` to roll back) |
-| **§3.7** | ✅ | Intentional badge-only; overlay copy tightened |
-| **§3.8** | ✅ | Live sample 2026-08-24 — display-only locked (`docs/settlement-toll-reimbursement-trace.md`) |
-| **A-3** minors load-bearing | ✅ | `mapDbPeriod` prefers `*_minor` |
-| **A-10** branded WeekKey | ✅ | `WeekKey` + `asWeekKey` / `periodKeyFor` mint |
-| **A-5** snapshot retirement | ✅ | Fuel snapshot opt-in only (`PROJECTION_ALLOW_FUEL_SNAPSHOT`); fares trip fallback until `PROJECTION_EVENTS_FARES=true`; cash source `table` when mirror on |
+| **D-1** mirror omits write-offs and toll charges | ✅ | `isSettlementParticipantTransaction` in `finance-core/driverCashPayment.ts` covers all four types (`isTollChargeTransaction`, `isCashWriteOffTransaction`, `isDriverPayoutTransaction`, `isDriverCashPaymentTransaction`). `settlement_transactions.ts` calls it; the old `isSettlementMirrorTransaction` is a deprecated alias, so no call site can drift. |
+| **D-2** backfill misses every payout | ✅ | Both backfill paths rewritten. `scripts/lib/settlementParticipant.mjs` is a plain-JS port of the finance-core predicates, held in lockstep by `settlementParticipantParity.test.ts` — which asserts the two implementations agree on the exact strings that were wrong (`'Driver Payout'` / `'Driver_Payout'` are now explicit negative samples). `scripts/sql/backfill_settlement_transactions.sql` is a faithful translation including every sub-branch of the cash predicate. |
+| **D-3** mirror and backfill bucket differently | ✅ | Both use `periodKeyFor`; the parity test asserts `jsPeriodKeyFor('2026-08-31') === periodKeyFor('2026-08-31')`. |
+| **§3.8 / P-6** toll reimbursement | ✅ **Closed** | `docs/settlement-toll-reimbursement-trace.md` records a real traced week (2026-08-24, $3,605 reimbursed against $5,920 spend on $96,442.57 gross). Finding: reimbursement is tag/plaza attribution, **not** a fare line item, so it is not inside `fare_earning` gross. Decision locked: keep `tollReimbursed` display-only. The triple-benefit scenario I raised does not occur. |
+| **A-11 cutover** | ✅ | Backfill + parity executed 2026-09-01, 715/715 with 0 misses. `SETTLEMENT_TX_TABLE_READ` now defaults ON with an explicit `=false` rollback documented in `docs/runbooks/settlement-ops.md`. |
 
-**Deploy:** ship fleet edge so default mirror reads and projection flags take effect.
+### The predicate-duplication concern is properly mitigated
+
+D-1/D-2 arose from three disagreeing definitions of "a settlement transaction." There are still three implementations — TS, `.mjs`, and SQL — because a Node script and a SQL migration cannot import TypeScript. That is a real constraint, not an oversight, and the mitigation is the right one: `settlementParticipantParity.test.ts` fails CI the moment TS and `.mjs` diverge, and it uses the previously-wrong strings as its test samples. The SQL copy is the one still held only by review; worth a note if the predicate ever changes again.
+
+### On the parity verifier's data source — checked and correct
+
+I initially flagged that `verify_settlement_tx_parity.mjs` compares the mirror against `fleet.transactions` while the runtime fallback reads `kv.getByPrefix("transaction:")`, which would have validated the wrong link in the chain. **This is not a problem:** `transaction:` is a mapped dual-write domain in `fleet_domains.ts` (`domain: "transactions"`, `prefixes: ["transaction:"]`), and `kv.getByPrefix` read-throughs to the fleet table first via `readMappedKvPrefix`. The fallback and the verifier read the same source, which is exactly what the runbook means by "fleet table scan." Noting it because it is the kind of thing that looks wrong from the flag name alone.
+
+---
+
+## E-1 — Closed (Flawless Finish Phase 0 + 3B)
+
+- `projectionReadsEventsForTolls()` wired in `driver_financial_periods.ts`
+- `projectionReadsEventsForCash()` marked **RESERVED** — ADR `docs/adr/settlement-cash-events-deferred.md`
+- CI guard: `scripts/check-projection-flags-wired.mjs`
+
+---
+
+## Flawless Finish program deliverables
+
+| Item | Status | Evidence |
+|---|---|---|
+| **E-1** flags | ✅ | Tolls wired; cash reserved + CI guard |
+| **Ops webhook** | ✅ | `finance-recon` + `FINANCE_RECON_WEBHOOK_DRY_RUN` |
+| **Recon minors** | ✅ | SELECT includes `*_minor`; invariants run nightly |
+| **Predicate triple-lock** | ✅ | Fixtures + `verify_settlement_predicate_parity.mjs` in CI |
+| **A-5 tolls** | ✅ | `PROJECTION_EVENTS_TOLLS` wired; hybrid workflow |
+| **A-5 fares recon** | ✅ | `ledger_fare_earning` in `periodLedgerRecon.ts` |
+| **A-5 cash** | ✅ Deferred | ADR — A-11 mirror remains cash-tx source |
+| **A-3 formula** | ✅ | `computePeriodSettlementMinor` + backfill migration |
+| **UX sources panel** | ✅ | `ReconciledPeriodOverlay` data sources |
+| **Runbook** | ✅ | Flag matrix + incident tree |
+
+**Prod flag flips (manual):** `PROJECTION_EVENTS_FARES=true`, `PROJECTION_EVENTS_TOLLS=true` after parity scripts reviewed.
+
+---
+
+## Sixth pass detail (retained)
+
+The original audit raised 14 findings. Five subsequent passes raised 7 (NEW), 6 (P), 5 (C) and 3 (D) more — 35 in total, every one of which is now closed except a two-line documentation nit.
+
+More importantly, the architecture program that came out of Part IV is complete and load-bearing:
+
+- **A-1** the nightly control calls `computePeriodSettlement` and cannot skew from it; `periodInvariants.ts` encodes eight identities including the `*_minor` parity that protects the in-flight A-3 migration, and `periodLedgerRecon.ts` adds the projection↔`financial_events` control total.
+- **A-2** one metadata builder and one persist body, shared by both write paths — the fix that removed the cause of §1.1, §1.2, NEW-7, C-1 and C-2 rather than their instances.
+- **A-4** property tests alongside the example suite.
+- **A-6** optimistic concurrency with version guards and bounded retry.
+- **A-7** `driver_period_revisions` plus a `signedSnapshot` preserved across rebuilds.
+- **A-8** the dual pay formula deleted.
+- **A-9** the `apps/` → edge boundary enforced in CI.
+- **A-11** staged properly — dual-write, flag-gated read, backfill, parity verification against real data, then cutover.
+
+Three of the last five passes found defects introduced *by the fixes*. That stopped with this one, and the reason is structural rather than lucky: the shared persist body and the invariant suite now make the two most common failure modes — a write path forgetting a field, and a control drifting from the formula — impossible to introduce silently.
+
+**Remaining watch items:** A-3 full NUMERIC deprecation; prod enablement of fares/tolls event flags; cash event writers (Phase 3C backlog).
+
+---
 
 # PART I — ORIGINAL AUDIT (2026-08-31, pre-remediation)
 

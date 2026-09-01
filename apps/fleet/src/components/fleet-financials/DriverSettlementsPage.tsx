@@ -794,6 +794,9 @@ export function DriverSettlementsPage({
           overpaidAmount: Number((d as any).overpaidAmount),
           metadata: (d.metadata as Record<string, unknown>) || row.metadata,
         }),
+        projectionSources:
+          ((d.metadata as Record<string, unknown>)?.financeCore as Record<string, unknown>)
+            ?.projectionSources as Record<string, string> | undefined,
       });
     } catch (e: any) {
       toast.error(e?.message || 'Could not load period detail');
@@ -827,6 +830,10 @@ export function DriverSettlementsPage({
         tierName: null,
         cashSourceMismatch: row.cashSourceMismatch || 0,
         overpaidAmount: rowOverpaidAmount(row),
+        projectionSources:
+          (row.metadata?.financeCore as Record<string, unknown> | undefined)?.projectionSources as
+            | Record<string, string>
+            | undefined,
       });
     } finally {
       setReconciledDetailLoading(false);

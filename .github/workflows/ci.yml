@@ -29,6 +29,12 @@ jobs:
       - name: Check toll-core parity
         run: node scripts/check-toll-core-parity.mjs
 
+      - name: Check settlement predicate parity
+        run: node scripts/verify_settlement_predicate_parity.mjs
+
+      - name: Check projection flags wired
+        run: node scripts/check-projection-flags-wired.mjs
+
       - name: Check fuel-core parity
         run: node scripts/check-fuel-core-parity.mjs
 
@@ -43,6 +49,9 @@ jobs:
 
       - name: Test fuel-core
         run: pnpm --filter @roam/fuel-core test
+
+      - name: Test finance-core
+        run: pnpm --filter @roam/finance-core test
 
       - name: Test dash-pricing
         run: pnpm --filter @roam/dash-pricing test

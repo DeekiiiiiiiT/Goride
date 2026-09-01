@@ -1,0 +1,19 @@
+[
+  { "id": "cash_collection", "type": "Payment_Received", "category": "Cash Collection", "amount": 100, "expect": true },
+  { "id": "payout", "type": "Payout", "category": "Driver Payouts", "amount": 500, "expect": true },
+  { "id": "write_off", "type": "Cash_Write_Off", "category": "Cash Write Off", "amount": 50, "expect": true },
+  { "id": "toll_charge", "category": "Toll Charge", "amount": -200, "expect": true },
+  { "id": "fuel_reimb", "type": "Payment_Received", "category": "Fuel Reimbursement", "amount": 30, "expect": false },
+  { "id": "tag_balance", "type": "Payment_Received", "category": "Cash Collection", "amount": 10, "paymentMethod": "Tag Balance", "expect": false },
+  { "id": "top_up", "type": "Payment_Received", "category": "Cash Collection", "amount": 20, "description": "Tag top-up", "expect": false },
+  { "id": "toll_usage_cat", "type": "Payment_Received", "category": "Toll Usage", "amount": 15, "expect": false },
+  { "id": "revenue_cash", "type": "revenue", "category": "Cash Revenue", "amount": 75, "expect": true },
+  { "id": "desc_cash_payment", "description": "Cash payment from driver John", "amount": 40, "expect": true },
+  { "id": "desc_cash_collection", "description": "Cash collection from driver", "amount": 60, "expect": true },
+  { "id": "wrong_payout_type", "type": "Driver_Payout", "category": "Driver Payout", "amount": 100, "expect": false },
+  { "id": "wrong_payout_cat", "type": "Payout", "category": "Driver Payout", "amount": 100, "expect": false },
+  { "id": "zero_amount", "type": "Payment_Received", "category": "Cash Collection", "amount": 0, "expect": false },
+  { "id": "negative_payout", "type": "Payout", "category": "Driver Payouts", "amount": -100, "expect": false },
+  { "id": "fuel_in_desc", "type": "Payment_Received", "category": "Misc", "amount": 10, "description": "fuel advance", "expect": false },
+  { "id": "toll_charge_positive", "category": "Toll Charge", "amount": 200, "expect": true }
+]

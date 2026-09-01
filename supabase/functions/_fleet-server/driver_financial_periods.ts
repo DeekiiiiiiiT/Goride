@@ -53,6 +53,7 @@ import {
   projectionAllowsFuelSnapshotFallback,
   projectionReadsEventsForFares,
   projectionReadsEventsForFuel,
+  projectionReadsEventsForTolls,
 } from "./period_projection_flags.ts";
 
 function sb() {
@@ -415,16 +416,19 @@ export async function rebuildDriverFinancialPeriod(
   let tollWorkflowActionable = 0;
   let plazaReimbursed = 0;
 
+  const useTollEvents = projectionReadsEventsForTolls();
+
   for (const tx of weekTolls) {
     const amt = Math.abs(Number(tx.amount) || 0);
-    tollSpend += amt;
     const handled = isHandledToll(tx);
     const cash = isCashPaid(tx);
-    // Spend classification by payment method only (invariant: spend = cash + tag).
-    if (cash) tollCashSpend += amt;
-    else tollTagSpend += amt;
-    // Settlement wash credit only for confirmed cash + handled/reconciled rows.
-    if (cash && handled) tollCashWashEligible += amt;
+    // Spend from ledger unless PROJECTION_EVENTS_TOLLS (events aggregated after finEvents load).
+    if (!useTollEvents) {
+      tollSpend += amt;
+      if (cash) tollCashSpend += amt;
+      else tollTagSpend += amt;
+      if (cash && handled) tollCashWashEligible += amt;
+    }
     if (isPlatformReimbursedPlazaToll(tx)) plazaReimbursed += amt;
     if (handled) tollReconciledCount++;
     else {
@@ -615,6 +619,29 @@ export async function rebuildDriverFinancialPeriod(
   let fuelGasCardSpend = 0;
   let fuelFinalized = false;
   let fuelSource: "events" | "snapshot" = "events";
+
+  if (useTollEvents) {
+    for (const ev of activeFinEvents) {
+      if (String(ev.event_type || "") !== "toll_usage") continue;
+      const amt = Math.abs(minorToMajor(Number(ev.amount_minor) || 0));
+      if (amt < 0.005) continue;
+      const payload = (ev.payload && typeof ev.payload === "object"
+        ? ev.payload
+        : {}) as Record<string, unknown>;
+      const pm = String(payload.paymentMethod || "").toLowerCase();
+      const cash = pm.includes("cash");
+      const stage = String(payload.workflowStage || "");
+      const handled =
+        isTerminalStage(stage) ||
+        !!payload.isReconciled ||
+        !!payload.tripId ||
+        !!payload.resolution;
+      tollSpend = round2(tollSpend + amt);
+      if (cash) tollCashSpend = round2(tollCashSpend + amt);
+      else tollTagSpend = round2(tollTagSpend + amt);
+      if (cash && handled) tollCashWashEligible = round2(tollCashWashEligible + amt);
+    }
+  }
 
   for (const ev of activeFinEvents) {
     const major = minorToMajor(Number(ev.amount_minor) || 0);
@@ -818,7 +845,7 @@ export async function rebuildDriverFinancialPeriod(
       projectionSources: {
         fuel: fuelSource,
         cash: settlementTxTableReadEnabled() ? "table" : "kv",
-        tolls: "ledger",
+        tolls: useTollEvents ? "events" : "ledger",
         fares: projectionReadsEventsForFares() ? "events" : "events_or_trips",
       },
     },

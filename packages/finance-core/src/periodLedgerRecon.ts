@@ -105,5 +105,17 @@ export function checkPeriodVsLedgerEvents(
     pushLedgerDrift(drifts, row, 'ledger_toll_charged_to_driver', tollChargedPersisted, tollChargedLedger);
   }
 
+  const fareLedger = Math.abs(sums.fare_earning || 0);
+  const earningsPersisted = Number(row.earnings_gross) || 0;
+  if (fareLedger > 0 || earningsPersisted > 0) {
+    pushLedgerDrift(drifts, row, 'ledger_fare_earning', earningsPersisted, fareLedger);
+  }
+
+  const tollUsageLedger = Math.abs(sums.toll_usage || 0);
+  const tollSpendPersisted = Number((row as { toll_spend?: number }).toll_spend) || 0;
+  if (tollUsageLedger > 0 || tollSpendPersisted > 0) {
+    pushLedgerDrift(drifts, row, 'ledger_toll_usage_spend', tollSpendPersisted, tollUsageLedger);
+  }
+
   return drifts;
 }
