@@ -352,8 +352,8 @@ export interface TeamMember {
   invitedAt?: string | null;
 }
 
-export type { BusinessType } from '@roam/types';
-import type { BusinessType } from '@roam/types';
+import type { BusinessType } from '../../../../packages/types/src/data.ts';
+export type { BusinessType };
 
 export interface FleetConfig {
   fleetName: string;
