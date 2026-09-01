@@ -39,6 +39,7 @@ import { api } from '../services/api';
 import { FuelReconciliationDashboard } from '../components/fuel/reconciliation/FuelReconciliationDashboard';
 import { useFuelSettlementReopenGate } from '../components/fuel/reconciliation/useFuelSettlementReopenGate';
 import { deriveFuelReconciliationPeriods } from '../utils/fuelPeriodStatus';
+import { useFuelLandingLiveReports } from '../hooks/useFuelLandingLiveReports';
 import { mergeFuelCardWithAssignmentHistory } from '../utils/mergeFuelCardWithAssignmentHistory';
 import {
   AlertDialog,
@@ -256,6 +257,19 @@ function FuelManagementInner({ defaultTab = 'logs', onViewDriverLedger, onTabCha
     return buildFuelReconciliationWeekOptions(earliest, fleetTz || undefined);
   }, [activityMinDate, logs, finalizedReports, fleetTz]);
 
+  // Open weeks need live misc/shares (wizard engine). Completed weeks use finalized snapshots in derive.
+  const landingLiveReportsByWeek = useFuelLandingLiveReports({
+    weekOptions: reconciliationWeekOptions,
+    vehicles,
+    drivers,
+    fuelEntries: logs,
+    adjustments,
+    scenarios,
+    fuelCards: cards,
+    disputes,
+    finalizedReports,
+  });
+
   const fuelReconPeriods = useMemo(
     () =>
       deriveFuelReconciliationPeriods({
@@ -265,8 +279,17 @@ function FuelManagementInner({ defaultTab = 'logs', onViewDriverLedger, onTabCha
         disputes,
         finalizedReports,
         scenarios,
+        liveReportsByWeek: landingLiveReportsByWeek,
       }),
-    [reconciliationWeekOptions, vehicles, logs, disputes, finalizedReports, scenarios],
+    [
+      reconciliationWeekOptions,
+      vehicles,
+      logs,
+      disputes,
+      finalizedReports,
+      scenarios,
+      landingLiveReportsByWeek,
+    ],
   );
 
   const outstandingFuelPeriods = useMemo(

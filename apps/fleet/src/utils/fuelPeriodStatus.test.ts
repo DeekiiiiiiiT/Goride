@@ -106,6 +106,113 @@ describe('fuelPeriodStatus', () => {
     expect(periods[0].locked).toBe(true);
   });
 
+  it('uses finalized snapshot for Unexplained when live reports are omitted', () => {
+    const periods = deriveFuelReconciliationPeriods({
+      weekOptions,
+      vehicles: [{ id: 'v1', fuelScenarioId: 's1' } as any],
+      fuelEntries: [
+        {
+          id: 'e1',
+          vehicleId: 'v1',
+          date: '2026-07-07',
+          amount: 34996.6,
+          reconciliationStatus: 'Verified',
+        } as FuelEntry,
+      ],
+      disputes: [],
+      finalizedReports: [
+        {
+          vehicleId: 'v1',
+          weekStart: '2026-07-06',
+          weekEnd: '2026-07-12',
+          status: 'Finalized',
+          totalGasCardCost: 34996.6,
+          companyShare: 29211.62,
+          driverShare: 5784.98,
+          miscellaneousCost: 3063.23,
+        } as FinalizedFuelReport,
+      ],
+      scenarios: [],
+    });
+    expect(periods).toHaveLength(1);
+    expect(periods[0].status).toBe('completed');
+    expect(periods[0].netLeakage).toBeCloseTo(3063.23, 2);
+    expect(periods[0].companyShare).toBeCloseTo(29211.62, 2);
+    expect(periods[0].driverShare).toBeCloseTo(5784.98, 2);
+  });
+
+  it('drops empty unlocked weeks so they do not inflate Outstanding / Finalize weeks', () => {
+    const periods = deriveFuelReconciliationPeriods({
+      weekOptions: [
+        {
+          id: '2026-08-31',
+          label: 'Aug 31 – Sep 6, 2026',
+          startDate: '2026-08-31',
+          endDate: '2026-09-06',
+        },
+        {
+          id: '2026-07-06',
+          label: 'Jul 6 – Jul 12, 2026',
+          startDate: '2026-07-06',
+          endDate: '2026-07-12',
+        },
+      ],
+      vehicles: [{ id: 'v1', fuelScenarioId: 's1' } as any],
+      fuelEntries: [
+        {
+          id: 'e1',
+          vehicleId: 'v1',
+          date: '2026-07-07',
+          amount: 50,
+          reconciliationStatus: 'Pending',
+        } as FuelEntry,
+      ],
+      disputes: [],
+      finalizedReports: [],
+      scenarios: [],
+    });
+    expect(periods.map((p) => p.startDate)).toEqual(['2026-07-06']);
+    expect(periods.every((p) => p.vehicleCount > 0)).toBe(true);
+  });
+
+  it('marks unlocked week outstanding when live misc (unexplained) is open', () => {
+    const periods = deriveFuelReconciliationPeriods({
+      weekOptions,
+      vehicles: [{ id: 'v1', fuelScenarioId: 's1' } as any],
+      fuelEntries: [
+        {
+          id: 'e1',
+          vehicleId: 'v1',
+          date: '2026-07-07',
+          amount: 100,
+          reconciliationStatus: 'Pending',
+        } as FuelEntry,
+      ],
+      disputes: [],
+      finalizedReports: [],
+      scenarios: [],
+      liveReportsByWeek: new Map([
+        [
+          '2026-07-06',
+          [
+            {
+              vehicleId: 'v1',
+              totalGasCardCost: 100,
+              companyShare: 50,
+              driverShare: 20,
+              miscellaneousCost: 30,
+              healthStatus: 'Amber',
+              pendingCount: 1,
+            },
+          ],
+        ],
+      ]),
+    });
+    expect(periods[0].status).toBe('outstanding');
+    expect(periods[0].netLeakage).toBeCloseTo(30, 5);
+    expect(periods[0].counts['leakage-gap'].actionable).toBe(1);
+  });
+
   it('reset inventory lists snapshots for week', () => {
     const inv = buildFuelPeriodResetInventory(
       '2026-07-06',

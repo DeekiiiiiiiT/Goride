@@ -113,6 +113,9 @@ export function buildFuelStepCounts(input: BuildFuelStepCountsInput): Record<Fue
  * - outstanding: early review still open (exceptions / disputes / unexplained)
  * - in_progress: review clear, week not locked yet (ready to finalize)
  * - completed: locked
+ *
+ * Empty weeks (no spend vehicles) are not open work — callers must filter them
+ * out of landing lists (see deriveFuelReconciliationPeriods).
  */
 export function classifyFuelReconPeriodStatus(opts: {
   locked: boolean;
@@ -124,7 +127,11 @@ export function classifyFuelReconPeriodStatus(opts: {
   finalizeActionable: number;
 }): FuelPeriodStatus {
   if (opts.locked) return 'completed';
-  if (opts.withSpendCount <= 0) return 'outstanding';
+  // No spend yet — not Outstanding work (was inflating Finalize weeks for empty current week).
+  if (opts.withSpendCount <= 0) {
+    if (opts.exceptionCount > 0 || opts.openDisputeCount > 0) return 'outstanding';
+    return 'in_progress';
+  }
 
   const earlyOpen =
     opts.exceptionCount + opts.openDisputeCount + opts.leakageActionable;
@@ -190,19 +197,22 @@ export function deriveFuelReconciliationPeriods(input: DeriveFuelPeriodsInput): 
           r.vehicleId === vehicle.id ||
           (Array.isArray((r as any).vehicleIds) && (r as any).vehicleIds.includes(vehicle.id)),
       );
-      const vEntries = weekEntries.filter((e) => e.vehicleId === vehicle.id);
-      const totalSpend =
-        liveReport?.totalGasCardCost ??
-        vEntries.reduce((s, e) => s + fuelOpsSpendAmount(e), 0);
-      const pendingCount =
-        liveReport?.pendingCount ??
-        vEntries.filter((e) => e.reconciliationStatus === 'Pending').length;
-      const finalized = finalizedReports.some(
+      // Finalized snapshot is SSOT for locked weeks (and fallback when landing has no live calc).
+      const finalizedSnap = finalizedReports.find(
         (f) =>
           String(f.weekStart).split('T')[0] === startDate &&
           (f.vehicleId === vehicle.id ||
             (vehicle.currentDriverId && f.driverId === vehicle.currentDriverId)),
       );
+      const vEntries = weekEntries.filter((e) => e.vehicleId === vehicle.id);
+      const totalSpend =
+        liveReport?.totalGasCardCost ??
+        finalizedSnap?.totalGasCardCost ??
+        vEntries.reduce((s, e) => s + fuelOpsSpendAmount(e), 0);
+      const pendingCount =
+        liveReport?.pendingCount ??
+        (finalizedSnap ? 0 : vEntries.filter((e) => e.reconciliationStatus === 'Pending').length);
+      const finalized = Boolean(finalizedSnap);
       const hasOpenDispute = disputes.some(
         (d) => d.vehicleId === vehicle.id && disputeOpenInWeek(d, startDate, endDate),
       );
@@ -210,15 +220,16 @@ export function deriveFuelReconciliationPeriods(input: DeriveFuelPeriodsInput): 
       const hasScenarioAssigned =
         Boolean(vehicle.fuelScenarioId) ||
         Boolean(scenarios?.some((s) => s.isDefault)) ||
-        Boolean((liveReport as any)?.metadata?.scenarioId);
+        Boolean((liveReport as any)?.metadata?.scenarioId) ||
+        Boolean((finalizedSnap as any)?.metadata?.scenarioId);
 
       return {
         vehicleId: vehicle.id,
         totalSpend,
-        companyShare: liveReport?.companyShare ?? 0,
-        driverShare: liveReport?.driverShare ?? 0,
-        misc: liveReport?.miscellaneousCost ?? 0,
-        healthStatus: liveReport?.healthStatus,
+        companyShare: liveReport?.companyShare ?? finalizedSnap?.companyShare ?? 0,
+        driverShare: liveReport?.driverShare ?? finalizedSnap?.driverShare ?? 0,
+        misc: liveReport?.miscellaneousCost ?? finalizedSnap?.miscellaneousCost ?? 0,
+        healthStatus: liveReport?.healthStatus ?? finalizedSnap?.healthStatus,
         pendingCount,
         hasOpenDispute,
         hasScenarioAssigned,
@@ -275,15 +286,12 @@ export function deriveFuelReconciliationPeriods(input: DeriveFuelPeriodsInput): 
       exceptionCount,
       counts,
     };
-  }).filter((p, idx) => {
-    // Always keep the most recent week; drop older empty weeks
-    if (idx === 0) return true;
-    return (
-      p.vehicleCount > 0 ||
-      p.actionableTotal > 0 ||
-      p.status === 'completed' ||
-      p.status === 'in_progress'
-    );
+  }).filter((p) => {
+    // Locked/completed weeks stay on Completed.
+    if (p.locked || p.status === 'completed') return true;
+    // Drop empty unlocked weeks (incl. current week with $0 spend) — they are not recon work
+    // and were inflating Outstanding + Finalize weeks.
+    return p.vehicleCount > 0 || p.exceptionCount > 0 || p.actionableTotal > 0;
   });
 }
 
