@@ -4,6 +4,7 @@ import { SidebarProvider, SidebarTrigger } from '../ui/sidebar';
 import { Car } from 'lucide-react';
 import { AnnouncementBanner } from './AnnouncementBanner';
 import { AppSidebar } from './AppSidebar';
+import { ServiceLineScopeSwitcher } from './ServiceLineScopeSwitcher';
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -66,6 +67,7 @@ function AppHeader() {
           </div>
         )}
       </div>
+      <ServiceLineScopeSwitcher />
     </header>
   );
 }

@@ -2,7 +2,7 @@ import { RoutePoint, TripStop } from './tripSession.ts';
 
 export interface Trip {
   id: string;
-  platform: 'Uber' | 'Lyft' | 'Bolt' | 'InDrive' | 'Roam' | 'GoRide' | 'Private' | 'Cash' | 'Other';
+  platform: 'Uber' | 'Lyft' | 'Bolt' | 'InDrive' | 'Roam' | 'Roam Rush' | 'GoRide' | 'Private' | 'Cash' | 'Other';
   paymentMethod?: 'Cash' | 'Card' | 'Digital (card/Bank)'; // Cash vs platform-settled (Uber: braintree, etc.)
   date: string; // ISO date string
   requestTime?: string; // ISO date string

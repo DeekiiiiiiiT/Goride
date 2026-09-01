@@ -211,6 +211,13 @@ import { registerFleetAdminStorageRoutes } from "./fleet_admin_storage_routes.ts
 import { registerFleetAdminMaintenanceLedgerRoutes } from "./fleet_admin_maintenance_ledger_routes.ts";
 import { registerEnterpriseAdminRoutes } from "./enterprise_admin_routes.ts";
 import { registerEnterpriseIntakeAdminRoutes } from "./enterprise_intake_admin_routes.ts";
+import { registerWorkforceInviteRoutes } from "./workforce_invite_routes.ts";
+import { reconcileRushTripProjection } from "./rush_trip_recon.ts";
+import {
+  backfillRushOrdersToFleet,
+  runDailyRushTripRecon,
+} from "./rush_projection_helpers.ts";
+import { registerRushSettlementRoutes } from "./rush_settlement_routes.ts";
 import { ensureCustomerOrganization } from "./ensure_customer_org.ts";
 import {
   buildEphemeralStoragePath,
@@ -13804,12 +13811,18 @@ app.post("/make-server-37f42386/fleet-owner/provision", requireAuth(), async (c)
 
     const body = await c.req.json().catch(() => ({}));
     const name = typeof body?.name === "string" ? body.name.trim() : undefined;
+    const companyName = typeof body?.companyName === "string" ? body.companyName.trim() : undefined;
     const alsoDrive = body?.alsoDrive !== false;
+    const serviceLines = Array.isArray(body?.serviceLines)
+      ? body.serviceLines.filter((s: unknown) => s === "rideshare" || s === "rush_delivery")
+      : ["rideshare"];
 
     const result = await provisionFleetOwner(getProvisionDeps(), rbacUser.userId, {
       name,
+      companyName,
       alsoDrive,
       productLine: "fleet",
+      serviceLines: serviceLines.length ? serviceLines : ["rideshare"],
     });
 
     if (!result.ok) {
@@ -14831,6 +14844,81 @@ registerEnterpriseAdminRoutes(app, {
 });
 registerEnterpriseIntakeAdminRoutes(app);
 
+registerWorkforceInviteRoutes(app, {
+  supabase,
+  requireAuth,
+  getOrgId,
+});
+
+app.get("/make-server-37f42386/rush/trip-recon", requireAuth(), async (c) => {
+  try {
+    const orgId = getOrgId(c);
+    if (!orgId) return c.json({ error: "Organization required" }, 403);
+    const since = c.req.query("since") || new Date(Date.now() - 7 * 86400000).toISOString();
+    const result = await reconcileRushTripProjection(supabase, orgId, since);
+    return c.json(result);
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return c.json({ error: msg }, 500);
+  }
+});
+
+app.post("/make-server-37f42386/rush/backfill-trips", requireAuth(), async (c) => {
+  try {
+    const orgId = getOrgId(c);
+    if (!orgId) return c.json({ error: "Organization required" }, 403);
+    const body = await c.req.json().catch(() => ({}));
+    const since = body?.since || new Date(Date.now() - 30 * 86400000).toISOString();
+    const result = await backfillRushOrdersToFleet(supabase, orgId, since);
+    return c.json(result);
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return c.json({ error: msg }, 500);
+  }
+});
+
+/** Cron/service: daily recon across all Rush pilot orgs. */
+app.post("/make-server-37f42386/rush/trip-recon/cron", async (c) => {
+  const cronSecret = Deno.env.get("CRON_SECRET");
+  const auth = c.req.header("Authorization") ?? "";
+  if (cronSecret && auth !== `Bearer ${cronSecret}`) {
+    return c.json({ error: "Unauthorized" }, 401);
+  }
+  try {
+    const results = await runDailyRushTripRecon(supabase);
+    return c.json({ checked: results.length, results });
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return c.json({ error: msg }, 500);
+  }
+});
+
+registerRushSettlementRoutes(app, { supabase, requireAuth, getOrgId });
+
+app.patch("/make-server-37f42386/org/service-lines", requireAuth(), async (c) => {
+  try {
+    const orgId = getOrgId(c);
+    if (!orgId) return c.json({ error: "Organization required" }, 403);
+    const body = await c.req.json();
+    const lines = Array.isArray(body?.serviceLines)
+      ? body.serviceLines.filter((s: unknown) => s === "rideshare" || s === "rush_delivery")
+      : null;
+    if (!lines?.length) return c.json({ error: "serviceLines required" }, 400);
+    const primary = lines.includes("rush_delivery") && !lines.includes("rideshare") ? "delivery" : "rideshare";
+    const { data, error } = await supabase
+      .from("organizations")
+      .update({ service_lines: lines, business_type: primary })
+      .eq("id", orgId)
+      .select("service_lines, business_type")
+      .single();
+    if (error) throw error;
+    return c.json({ serviceLines: data.service_lines, businessType: data.business_type });
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return c.json({ error: msg }, 500);
+  }
+});
+
 import {
   DEFAULT_ENTERPRISE_MODULES,
   resolveEffectiveModules,
@@ -14850,7 +14938,7 @@ app.get("/make-server-37f42386/enterprise/me/modules", requireAuth(), async (c) 
 
     const { data: org, error } = await supabase
       .from("organizations")
-      .select("id, product_line, enabled_modules")
+      .select("id, product_line, enabled_modules, service_lines")
       .eq("id", orgId)
       .maybeSingle();
     if (error) throw error;
@@ -14871,6 +14959,7 @@ app.get("/make-server-37f42386/enterprise/me/modules", requireAuth(), async (c) 
     return c.json({
       orgId,
       productLine: org.product_line,
+      serviceLines: org.service_lines ?? ["rideshare"],
       orgOverrides,
       effectiveModules,
     });

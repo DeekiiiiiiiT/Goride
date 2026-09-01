@@ -53,6 +53,7 @@ import { registerDashHealthRoutes } from "./dashHealthRoutes.ts";
 import { registerStripeConnectRoutes } from "./stripeConnectRoutes.ts";
 import { notifyCustomerOrderStatus } from "../_shared/dashOrderSms.ts";
 import { handleOrderDelivered } from "./courierCashLedger.ts";
+import { syncOrderToFleetKv } from "../_shared/orderToFleetTrip.ts";
 import { maybeClawbackGrowthGuarantee } from "./growthGuarantee.ts";
 import {
   aggregateAnalyticsByDay,
@@ -1444,6 +1445,16 @@ app.put("/orders/:id/status", async (c) => {
       id,
       courierId ? String(courierId) : null,
     );
+    try {
+      const { data: fullOrder } = await serviceSb
+        .from("orders")
+        .select("*, merchant:merchants(id, name)")
+        .eq("id", id)
+        .maybeSingle();
+      if (fullOrder) await syncOrderToFleetKv(fullOrder as Record<string, unknown>);
+    } catch (syncErr) {
+      console.error("[delivery] syncOrderToFleetKv failed:", syncErr);
+    }
   }
 
   // Soft-launch: when merchant marks ready, fan out courier offers
@@ -1743,10 +1754,23 @@ app.post("/orders/:id/accept-delivery", async (c) => {
   if (!gate.ok) return c.json({ error: gate.error }, gate.status);
   
   // Atomic claim via service role + status predicates (race-safe)
+  const { data: courierProf } = await serviceSb
+    .schema("delivery")
+    .from("courier_profiles")
+    .select("fleet_id, mode")
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  const courierFleetId =
+    courierProf?.mode === "fleet" && courierProf?.fleet_id
+      ? String(courierProf.fleet_id)
+      : null;
+
   const { data: order, error } = await serviceSb
     .from("orders")
     .update({
       courier_id: user.id,
+      courier_fleet_id: courierFleetId,
       status: "assigned",
       assigned_at: new Date().toISOString(),
     })

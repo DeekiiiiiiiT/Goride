@@ -49,6 +49,12 @@ export const FEATURE_FLAGS = {
   CORRECT_TOLL_SETTLEMENT_ORDER: "correct_toll_settlement_order",
   /** Expense Hub writes + vehicle page read-only projection. */
   EXPENSE_HUB_V1: "expense_hub_v1",
+  /** RoamFleet × Roam Rush integration rollout flags */
+  SERVICE_LINES_ENABLED: "service_lines_enabled",
+  RUSH_COURIER_LINK: "rush_courier_link",
+  RUSH_TRIP_PROJECTION: "rush_trip_projection",
+  RUSH_SETTLEMENT: "rush_settlement",
+  RUSH_UI: "rush_ui",
 } as const;
 
 export type FeatureFlagName = typeof FEATURE_FLAGS[keyof typeof FEATURE_FLAGS];
@@ -355,6 +361,31 @@ export async function initializeDefaultFlags(): Promise<void> {
       enabled: true,
       description:
         "Expense Hub writes and vehicle Fixed Expenses read-only projection (roll out per org)",
+    },
+    {
+      name: FEATURE_FLAGS.SERVICE_LINES_ENABLED,
+      enabled: false,
+      description: "Read organizations.service_lines instead of business_type only",
+    },
+    {
+      name: FEATURE_FLAGS.RUSH_COURIER_LINK,
+      enabled: false,
+      description: "Courier↔fleet invite and membership",
+    },
+    {
+      name: FEATURE_FLAGS.RUSH_TRIP_PROJECTION,
+      enabled: false,
+      description: "Project Rush orders into fleet.trips",
+    },
+    {
+      name: FEATURE_FLAGS.RUSH_SETTLEMENT,
+      enabled: false,
+      description: "Include Rush delivery revenue in weekly settlement",
+    },
+    {
+      name: FEATURE_FLAGS.RUSH_UI,
+      enabled: false,
+      description: "Rush navigation and pages in RoamFleet",
     },
   ];
 

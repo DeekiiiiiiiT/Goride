@@ -232,7 +232,31 @@ export const ENTERPRISE_MODULE_CATALOG: readonly ModuleCatalogEntry[] = [
   { key: 'teamManagement', label: 'Team Management', description: 'Invite and manage org staff.', group: 'people' },
   { key: 'driverPortal', label: 'Driver Portal', description: 'Field driver portal access.', group: 'optional' },
   { key: 'performanceAnalytics', label: 'Performance Analytics', description: 'Safety and efficiency KPIs.', group: 'optional' },
+  { key: 'rush_couriers', label: 'Rush Couriers', description: 'Courier roster and analytics in RoamFleet.', group: 'optional' },
+  { key: 'rush_deliveries', label: 'Rush Deliveries', description: 'Live delivery trip logs from Roam Rush.', group: 'optional' },
+  { key: 'rush_courier_settlements', label: 'Rush Courier Settlements', description: 'Weekly courier settlement from Rush revenue.', group: 'money' },
+  { key: 'rush_supply_health', label: 'Rush Supply Health', description: 'Read-only courier online/compliance panel.', group: 'optional' },
+  { key: 'rush_merchant_link', label: 'Rush Merchant Link', description: 'Optional merchant linkage for fleet operators.', group: 'optional' },
 ] as const;
+
+/** Rush module keys default off — fail-closed at merge time. */
+export const RUSH_MODULE_KEYS = [
+  'rush_couriers',
+  'rush_deliveries',
+  'rush_courier_settlements',
+  'rush_supply_health',
+  'rush_merchant_link',
+] as const;
+
+export function mergeFleetEffectiveModules(
+  effective: Record<string, boolean>,
+): Record<string, boolean> {
+  const merged = { ...effective };
+  for (const key of RUSH_MODULE_KEYS) {
+    if (!(key in merged)) merged[key] = false;
+  }
+  return merged;
+}
 
 export const ENTERPRISE_MODULE_KEYS: readonly ModuleKey[] = ENTERPRISE_MODULE_CATALOG.map(
   (e) => e.key,

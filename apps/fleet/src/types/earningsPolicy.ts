@@ -33,6 +33,8 @@ export interface EarningsPolicy {
   id: string;
   name: string;
   description?: string;
+  /** When set, policy applies only to this service line; unset = all lines. */
+  serviceLine?: 'rideshare' | 'rush_delivery';
   /** Policy template bundle (Rules tab). New Schedule versions freeze a copy. */
   tiers: TierConfig[];
   quotas: QuotaConfig;

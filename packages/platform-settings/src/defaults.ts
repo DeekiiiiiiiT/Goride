@@ -75,6 +75,11 @@ export const DEFAULT_ENTERPRISE_ENABLED_MODULES: EnterpriseEnabledModules = {
   teamManagement: true,
   driverPortal: true,
   performanceAnalytics: true,
+  rush_couriers: false,
+  rush_deliveries: false,
+  rush_courier_settlements: false,
+  rush_supply_health: false,
+  rush_merchant_link: false,
 };
 
 /** @deprecated Use DEFAULT_FLEET_ENABLED_MODULES */

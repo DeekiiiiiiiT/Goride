@@ -231,6 +231,7 @@ export type Permission =
   | 'nav.imports'
   | 'nav.drivers'
   | 'nav.vehicles'
+  | 'nav.vehicle_analytics'
   | 'nav.maintenance'
   | 'nav.fleet'
   | 'nav.fuel_overview'
@@ -256,6 +257,16 @@ export type Permission =
   | 'nav.user_management'
   | 'nav.settings'
   | 'nav.database_management'
+  // Roam Rush fleet add-on pages
+  | 'nav.couriers'
+  | 'nav.courier_analytics'
+  | 'nav.deliveries'
+  | 'nav.delivery_analytics'
+  | 'nav.courier_settlements'
+  | 'nav.supply_health'
+  | 'courier.invite'
+  | 'courier.assign_vehicle'
+  | 'courier.view_cash_balance'
   // Drivers
   | 'drivers.create'
   | 'drivers.edit'
@@ -310,6 +321,7 @@ const ALL_CUSTOMER_PERMISSIONS: Permission[] = [
   'nav.imports',
   'nav.drivers',
   'nav.vehicles',
+  'nav.vehicle_analytics',
   'nav.maintenance',
   'nav.fleet',
   'nav.fuel_overview',
@@ -335,6 +347,15 @@ const ALL_CUSTOMER_PERMISSIONS: Permission[] = [
   'nav.user_management',
   'nav.settings',
   'nav.database_management',
+  'nav.couriers',
+  'nav.courier_analytics',
+  'nav.deliveries',
+  'nav.delivery_analytics',
+  'nav.courier_settlements',
+  'nav.supply_health',
+  'courier.invite',
+  'courier.assign_vehicle',
+  'courier.view_cash_balance',
   // Actions
   'drivers.create', 'drivers.edit', 'drivers.delete', 'drivers.view',
   'vehicles.create', 'vehicles.edit', 'vehicles.delete', 'vehicles.view',
@@ -515,19 +536,23 @@ export const PAGE_PERMISSION_MAP: Record<string, Permission> = {
   // Top-level
   'dashboard':          'nav.dashboard',
   'imports':            'nav.imports',
-
-  // Driver Operations
+  'fleet-financials':   'nav.financial_analytics',
+  'driver-settlements': 'nav.financial_analytics',
+  'driver-payouts':     'nav.financial_analytics',
+  'indrive-wallet':     'nav.financial_analytics',
   'drivers':            'nav.drivers',
+  'driver-analytics':   'nav.drivers',
+  'earnings-policy':    'nav.tier_config',
   'performance':        'nav.performance',
   'tier-config':        'nav.tier_config',
-  // Vehicles / Fleet
+  'tier-config-legacy': 'nav.tier_config',
   'vehicles':           'nav.vehicles',
+  'vehicle-analytics':  'nav.vehicle_analytics',
   'maintenance-hub':    'nav.maintenance',
   'fleet':              'nav.fleet',
-
-  // Fuel Management
-  'fuel-management':    'nav.fuel_overview',
-  'fuel-overview':      'nav.fuel_overview',
+  'fuel-management':    'nav.fuel_reports',
+  'fuel-overview':      'nav.fuel_reports',
+  'fuel-analytics':     'nav.fuel_reports',
   'fuel-reimbursements':'nav.fuel_review_queue',
   'fuel-audit':         'nav.fuel_audit',
   'fuel-integrity-gap': 'nav.fuel_integrity_gap',
@@ -536,21 +561,24 @@ export const PAGE_PERMISSION_MAP: Record<string, Permission> = {
   'fuel-logs':          'nav.fuel_logs',
   'fuel-reports':       'nav.fuel_reports',
   'fuel-configuration': 'nav.fuel_configuration',
-
-  // Toll Management
   'toll-logs':          'nav.toll_logs',
   'toll-tags':          'nav.toll_reconciliation',
   'tag-inventory':      'nav.toll_tag_inventory',
   'claimable-loss':     'nav.toll_claimable_loss',
   'toll-analytics':     'nav.toll_analytics',
-
-  // Trips / Reports / Finance
+  'toll-rate-drift':    'nav.toll_analytics',
+  'toll-low-balance':   'nav.toll_tag_inventory',
   'trips':              'nav.trips',
   'reports':            'nav.reports',
   'transactions':       'nav.financial_analytics',
+  'business-finance':   'nav.financial_analytics',
   'transaction-list':   'nav.transaction_list',
-
-  // System
+  'couriers':           'nav.couriers',
+  'courier-analytics':  'nav.courier_analytics',
+  'deliveries':         'nav.deliveries',
+  'delivery-analytics': 'nav.delivery_analytics',
+  'courier-settlements':'nav.courier_settlements',
+  'supply-health':      'nav.supply_health',
   'user-management':    'nav.user_management',
   'settings':           'nav.settings',
   'db-main-ledger':     'nav.database_management',

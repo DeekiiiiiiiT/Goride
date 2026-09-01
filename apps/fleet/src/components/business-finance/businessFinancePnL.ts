@@ -2,7 +2,7 @@
  * Pure P&L builder from canonical ledger events — read-only owner view.
  * Never feeds settlement math.
  */
-import type { BusinessFinancePeriod, BusinessFinancePnL, PnLLine, PlatformSplitRow } from './types';
+import type { BusinessFinancePeriod, BusinessFinancePnL, PnLLine, PlatformSplitRow, ServiceLineSplitRow } from './types';
 import { inPeriod } from './periodRange';
 import { round2 } from './money';
 import {
@@ -194,6 +194,25 @@ export function buildPnLFromCanonicalEvents(
     }))
     .sort((a, b) => b.gross - a.gross);
 
+  const byServiceLine = new Map<'rideshare' | 'rush_delivery', { gross: number; fees: number }>();
+  for (const row of platformSplit) {
+    const line: 'rideshare' | 'rush_delivery' =
+      row.platform === 'Roam Rush' ? 'rush_delivery' : 'rideshare';
+    const cur = byServiceLine.get(line) ?? { gross: 0, fees: 0 };
+    cur.gross += row.gross;
+    cur.fees += row.fees;
+    byServiceLine.set(line, cur);
+  }
+  const serviceLineSplit: ServiceLineSplitRow[] = [...byServiceLine.entries()].map(
+    ([serviceLine, v]) => ({
+      serviceLine,
+      label: serviceLine === 'rush_delivery' ? 'Rush Delivery' : 'Rideshare',
+      gross: round2(v.gross),
+      fees: round2(v.fees),
+      net: round2(v.gross - v.fees),
+    }),
+  );
+
   const noteParts: string[] = [];
   if (scoped.length === 0) {
     noteParts.push('No canonical ledger events in this period — import statements/trips to populate P&L.');
@@ -214,6 +233,7 @@ export function buildPnLFromCanonicalEvents(
     lines,
     operatingRatio,
     platformSplit,
+    serviceLineSplit,
     coverageNote: noteParts.length ? noteParts.join(' ') : undefined,
     tollsRecoveredWashed: recoveredMemo,
     tollBreakdown,

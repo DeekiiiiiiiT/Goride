@@ -32,7 +32,12 @@ export async function fetchFleetOwnerStatus(accessToken: string): Promise<{
 
 export async function provisionFleetOwnerAccount(
   accessToken: string,
-  opts: { name?: string; alsoDrive?: boolean } = {},
+  opts: {
+    name?: string;
+    alsoDrive?: boolean;
+    companyName?: string;
+    serviceLines?: Array<'rideshare' | 'rush_delivery'>;
+  } = {},
 ): Promise<{ success: boolean; organizationId?: string; error?: string }> {
   const res = await fetch(`${API_ENDPOINTS.admin}/fleet-owner/provision`, {
     method: 'POST',
@@ -40,6 +45,8 @@ export async function provisionFleetOwnerAccount(
     body: JSON.stringify({
       name: opts.name,
       alsoDrive: opts.alsoDrive !== false,
+      companyName: opts.companyName,
+      serviceLines: opts.serviceLines,
     }),
   });
   const data = await res.json().catch(() => ({}));

@@ -1060,6 +1060,45 @@ export const api = {
     return response.json();
   },
 
+  async updateOrgServiceLines(serviceLines: Array<'rideshare' | 'rush_delivery'>) {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/org/service-lines`, {
+      method: 'PATCH',
+      headers: await requireAuthHeaders(),
+      body: JSON.stringify({ serviceLines }),
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err?.error || 'Failed to update service lines');
+    }
+    return response.json();
+  },
+
+  async getRushCourierCashBalances() {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/rush/courier-cash-balances`, {
+      headers: await requireAuthHeaders(null),
+    });
+    if (!response.ok) throw new Error('Failed to fetch courier cash balances');
+    return response.json();
+  },
+
+  async getRushDeliverySettlementSummary(since?: string) {
+    const qs = since ? `?since=${encodeURIComponent(since)}` : '';
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/rush/delivery-settlement-summary${qs}`, {
+      headers: await requireAuthHeaders(null),
+    });
+    if (!response.ok) throw new Error('Failed to fetch delivery settlement summary');
+    return response.json();
+  },
+
+  async getRushTripRecon(since?: string) {
+    const qs = since ? `?since=${encodeURIComponent(since)}` : '';
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/rush/trip-recon${qs}`, {
+      headers: await requireAuthHeaders(null),
+    });
+    if (!response.ok) throw new Error('Failed to run trip recon');
+    return response.json();
+  },
+
   // ── Toll Info ──────────────────────────────────────────────────────────
   async getTollInfo() {
     const response = await fetchWithRetry(`${API_ENDPOINTS.admin}/toll-info`, {

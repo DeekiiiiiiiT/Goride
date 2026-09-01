@@ -59,6 +59,19 @@ export const ENTERPRISE_MODULE_KEYS = [
   "teamManagement",
   "driverPortal",
   "performanceAnalytics",
+  "rush_couriers",
+  "rush_deliveries",
+  "rush_courier_settlements",
+  "rush_supply_health",
+  "rush_merchant_link",
+] as const;
+
+export const RUSH_MODULE_KEYS = [
+  "rush_couriers",
+  "rush_deliveries",
+  "rush_courier_settlements",
+  "rush_supply_health",
+  "rush_merchant_link",
 ] as const;
 
 export type EnterpriseModuleKey = (typeof ENTERPRISE_MODULE_KEYS)[number];
@@ -104,6 +117,11 @@ export const DEFAULT_ENTERPRISE_MODULES: Record<EnterpriseModuleKey, boolean> = 
   teamManagement: true,
   driverPortal: true,
   performanceAnalytics: true,
+  rush_couriers: false,
+  rush_deliveries: false,
+  rush_courier_settlements: false,
+  rush_supply_health: false,
+  rush_merchant_link: false,
 };
 
 export function normalizeModuleKeyMap(

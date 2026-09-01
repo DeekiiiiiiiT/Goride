@@ -59,6 +59,14 @@ import { AuthRecoveryGate } from '@roam/auth-client';
 // Soft path rules shared with apps/fleet/middleware.js (Vercel Edge cookie gate).
 import { requiresSessionGate } from './middleware/sessionGate';
 import { PwaProvider } from './components/pwa/PwaProvider';
+import { ServiceLineScopeProvider } from './contexts/ServiceLineScopeContext';
+import { pathForPageId, resolvePageFromPathname } from './navigation/pageRegistry';
+import { CouriersPage } from './components/couriers/CouriersPage';
+import { CourierAnalyticsPage } from './components/couriers/CourierAnalyticsPage';
+import { CourierSettlementsPage } from './components/couriers/CourierSettlementsPage';
+import { SupplyHealthPage } from './components/couriers/SupplyHealthPage';
+import { DeliveriesPage } from './components/deliveries/DeliveriesPage';
+import { DeliveryAnalyticsPage } from './components/deliveries/DeliveryAnalyticsPage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -74,14 +82,17 @@ const queryClient = new QueryClient({
 function inferClientProductLine(meta: Record<string, unknown> | undefined): 'fleet' | 'enterprise' {
   const pl = meta?.productLine;
   if (pl === 'fleet' || pl === 'enterprise') return pl;
-  if (meta?.businessType === 'rideshare') return 'fleet';
+  if (meta?.businessType === 'rideshare' || meta?.businessType === 'delivery') return 'fleet';
+  if (Array.isArray(meta?.serviceLines) && meta.serviceLines.length > 0) return 'fleet';
   return 'enterprise';
 }
 
 function AppContent() {
   const { user, role, resolvedRole, loading, needsProvision, signOut } = useAuth();
   
-  const [currentPage, setCurrentPage] = useState('dashboard');
+  const [currentPage, setCurrentPage] = useState(() =>
+    typeof window !== 'undefined' ? resolvePageFromPathname(window.location.pathname) : 'dashboard',
+  );
   const [driverIdForDetail, setDriverIdForDetail] = useState<string | null>(null);
   const [businessFinanceTab, setBusinessFinanceTab] = useState<'overview' | 'workbench' | 'expenses'>('overview');
   /** Period handoff when leaving BF hub for Bank / Wallet */
@@ -163,6 +174,12 @@ function AppContent() {
       return;
     }
     setCurrentPage(page);
+    if (typeof window !== 'undefined') {
+      const nextPath = pathForPageId(page);
+      if (window.location.pathname !== nextPath) {
+        window.history.pushState({ page }, '', nextPath);
+      }
+    }
   };
 
   /** Vehicle page → Expense Hub Recurring expenses for hub-managed vehicles */
@@ -172,6 +189,15 @@ function AppContent() {
     setFinancePeriodHint(null);
     setCurrentPage('expense-hub');
   };
+
+  // Sync browser back/forward with in-app page state
+  useEffect(() => {
+    const onPopState = () => {
+      setCurrentPage(resolvePageFromPathname(window.location.pathname));
+    };
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, []);
 
   // Old Tier Config / legacy bookmarks → Earnings Policy Configuration
   useEffect(() => {
@@ -601,6 +627,36 @@ function AppContent() {
             <SettingsPage />
           </PermissionGate>
         )}
+        {currentPage === 'couriers' && (
+          <PermissionGate permission="nav.couriers" onNavigate={setCurrentPage}>
+            <CouriersPage />
+          </PermissionGate>
+        )}
+        {currentPage === 'courier-analytics' && (
+          <PermissionGate permission="nav.courier_analytics" onNavigate={setCurrentPage}>
+            <CourierAnalyticsPage />
+          </PermissionGate>
+        )}
+        {currentPage === 'deliveries' && (
+          <PermissionGate permission="nav.deliveries" onNavigate={setCurrentPage}>
+            <DeliveriesPage />
+          </PermissionGate>
+        )}
+        {currentPage === 'delivery-analytics' && (
+          <PermissionGate permission="nav.delivery_analytics" onNavigate={setCurrentPage}>
+            <DeliveryAnalyticsPage />
+          </PermissionGate>
+        )}
+        {currentPage === 'courier-settlements' && (
+          <PermissionGate permission="nav.courier_settlements" onNavigate={setCurrentPage}>
+            <CourierSettlementsPage />
+          </PermissionGate>
+        )}
+        {currentPage === 'supply-health' && (
+          <PermissionGate permission="nav.supply_health" onNavigate={setCurrentPage}>
+            <SupplyHealthPage />
+          </PermissionGate>
+        )}
       </ErrorBoundary>
     </AppLayout>
   );
@@ -628,11 +684,13 @@ export default function App() {
             <AuthProvider>
               <OfflineProvider>
                 <BusinessConfigProvider>
-                  <PlatformConfigProvider>
-                    <FeatureFlagProvider>
-                      <AppContent />
-                    </FeatureFlagProvider>
-                  </PlatformConfigProvider>
+                  <ServiceLineScopeProvider>
+                    <PlatformConfigProvider>
+                      <FeatureFlagProvider>
+                        <AppContent />
+                      </FeatureFlagProvider>
+                    </PlatformConfigProvider>
+                  </ServiceLineScopeProvider>
                 </BusinessConfigProvider>
               </OfflineProvider>
             </AuthProvider>

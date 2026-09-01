@@ -3,6 +3,7 @@
  */
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import * as kv from "./kv_store.tsx";
+import { ensureCustomerOrganization } from "./ensure_customer_org.ts";
 import { inferProductLineFromUser, type ProductLine } from "./product_line.ts";
 
 function readRolesArray(meta: Record<string, unknown> | undefined): string[] {
@@ -101,6 +102,8 @@ export type ProvisionFleetOwnerOpts = {
   /** When true (default), also grant driver role + driver profile linked to fleet org */
   alsoDrive?: boolean;
   productLine?: ProductLine;
+  serviceLines?: string[];
+  companyName?: string | null;
 };
 
 export type ProvisionFleetOwnerDeps = {
@@ -127,6 +130,12 @@ export async function provisionFleetOwner(
 > {
   const productLine = opts.productLine ?? "fleet";
   const alsoDrive = opts.alsoDrive !== false;
+  const serviceLines = (opts.serviceLines?.length
+    ? opts.serviceLines
+    : ["rideshare"]) as string[];
+  const primaryBusinessType = serviceLines.includes("rush_delivery") && !serviceLines.includes("rideshare")
+    ? "delivery"
+    : "rideshare";
 
   const { data: authData, error: authErr } = await deps.supabase.auth.admin.getUserById(userId);
   if (authErr || !authData?.user) {
@@ -180,7 +189,8 @@ export async function provisionFleetOwner(
     ...meta,
     name: displayName,
     productLine: "fleet",
-    businessType: "rideshare",
+    businessType: primaryBusinessType,
+    serviceLines,
   };
   delete nextUserMeta.role;
   delete nextUserMeta.organizationId;
@@ -198,7 +208,24 @@ export async function provisionFleetOwner(
   if (metaErr) return { ok: false, error: metaErr.message, status: 500 };
 
   try {
-    await kv.set(`preferences:${userId}`, { businessType: "rideshare" });
+    await ensureCustomerOrganization(deps.supabase, {
+      userId,
+      email: user.email ?? "",
+      name: opts.companyName?.trim() || displayName,
+      businessType: primaryBusinessType,
+      productLine: "fleet",
+      serviceLines,
+    });
+    await deps.supabase
+      .from("organizations")
+      .update({ service_lines: serviceLines, business_type: primaryBusinessType })
+      .eq("id", orgId);
+  } catch (orgErr) {
+    console.warn("[provisionFleetOwner] org service_lines update failed:", orgErr);
+  }
+
+  try {
+    await kv.set(`preferences:${userId}`, { businessType: primaryBusinessType, serviceLines });
     const existingGeneral = await kv.get("preferences:general") || {};
     await kv.set("preferences:general", { ...existingGeneral, businessType: "rideshare" });
   } catch (prefErr) {

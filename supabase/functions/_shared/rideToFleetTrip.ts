@@ -20,7 +20,9 @@ export function rideRequestToFleetTrip(
   const rawDriverNet = ride.driver_net_minor;
   const driverNetMinor = isCancelled
     ? 0
-    : (rawDriverNet != null ? Number(rawDriverNet) : Math.max(0, fareMinor - platformFeeMinor));
+    : (rawDriverNet != null && rawDriverNet !== ''
+      ? Number(rawDriverNet)
+      : Math.max(0, fareMinor - platformFeeMinor));
   const paymentMethod = ride.payment_method === "card" ? "Card" : "Cash";
   const eventAt = String(
     isCancelled
@@ -59,7 +61,7 @@ export function rideRequestToFleetTrip(
       paidToYouNet: driverNetMinor / 100,
       bankTransferred: paymentMethod === "Card" ? amount : 0,
       // Fix: dead ternary always returned 1; simplify to constant
-      paymentRowCount: 1,
+      paymentRowCount: ledgerLines.length > 0 ? ledgerLines.length : 1,
       reportingAt: eventAt,
     };
 

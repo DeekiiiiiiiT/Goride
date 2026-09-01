@@ -12,9 +12,15 @@ export async function ensureCustomerOrganization(
     name: string;
     businessType: string;
     productLine: "fleet" | "enterprise";
+    serviceLines?: string[];
   },
 ): Promise<void> {
   const { userId, email, name, businessType, productLine } = opts;
+  const serviceLines = opts.serviceLines?.length
+    ? opts.serviceLines
+    : businessType === "delivery"
+    ? ["rush_delivery"]
+    : ["rideshare"];
   const { data: existing, error: selErr } = await supabase
     .from("organizations")
     .select("id")
@@ -31,6 +37,7 @@ export async function ensureCustomerOrganization(
     name: name || `${email.split("@")[0]}'s Fleet`,
     product_line: productLine,
     business_type: businessType,
+    service_lines: serviceLines,
     contact_email: email,
     status: "active",
   });

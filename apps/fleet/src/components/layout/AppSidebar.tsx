@@ -27,18 +27,21 @@ import {
   Landmark,
   CarFront,
   FolderKanban,
+  Package,
 } from 'lucide-react';
 import { useVocab } from '../../utils/vocabulary';
 import { isSidebarItemVisible } from '../../utils/businessTypes';
 import { usePermissions } from '../../hooks/usePermissions';
 import { useFeatureFlags } from '../auth/FeatureFlagContext';
+import { useBusinessConfig } from '../auth/BusinessConfigContext';
+import { useServiceLineScope } from '../../contexts/ServiceLineScopeContext';
 import { NavItem } from './nav/NavItem';
 import { NavSection } from './nav/NavSection';
 import { NavFlyout } from './nav/NavFlyout';
 import type { NavLeaf } from './nav/types';
 
 type SectionId = 'fleet-ops';
-type FlyoutId = 'fuel' | 'toll' | 'driver-ops' | 'vehicle-ops' | 'business-finance';
+type FlyoutId = 'fuel' | 'toll' | 'driver-ops' | 'vehicle-ops' | 'business-finance' | 'courier-ops';
 
 const FUEL_PAGE_IDS = [
   'fuel-management',
@@ -59,6 +62,7 @@ const TOLL_PAGE_IDS = [
   'toll-low-balance',
 ];
 
+
 function fleetOpsActive(page: string) {
   return [...FUEL_PAGE_IDS, ...TOLL_PAGE_IDS].includes(page);
 }
@@ -77,7 +81,11 @@ export function AppSidebar({
   const { v, businessType } = useVocab();
   const { canView, can } = usePermissions();
   const { isModuleEnabled } = useFeatureFlags();
+  const { serviceLines } = useBusinessConfig();
+  const { rushVisible, rideshareVisible } = useServiceLineScope();
   const { isMobile, setOpenMobile } = useSidebar();
+
+  const hasRushDeliveryLine = serviceLines.includes('rush_delivery');
 
   const canSeeFuelDesk =
     isModuleEnabled('fuelManagement') &&
@@ -106,14 +114,29 @@ export function AppSidebar({
     canView('driver-payouts') ||
     canView('indrive-wallet') ||
     canView('transaction-list');
-  const canSeeFleetOps = canSeeFuelDesk || canSeeTollDesk;
+  const canSeeFleetOps = rideshareVisible && (canSeeFuelDesk || canSeeTollDesk);
   const canSeeDriverOps =
-    canView('drivers') || canView('driver-analytics') || canView('earnings-policy');
+    rideshareVisible &&
+    (canView('drivers') || canView('driver-analytics') || canView('earnings-policy'));
   const canSeeVehicleOps =
-    canView('vehicles') ||
-    canView('vehicle-analytics') ||
-    canView('maintenance-hub') ||
-    canView('fleet');
+    rideshareVisible &&
+    (canView('vehicles') ||
+      canView('vehicle-analytics') ||
+      canView('maintenance-hub') ||
+      canView('fleet'));
+  const canSeeCourierOps =
+    rushVisible &&
+    hasRushDeliveryLine &&
+    (isModuleEnabled('rush_couriers') ||
+      isModuleEnabled('rush_deliveries') ||
+      isModuleEnabled('rush_courier_settlements') ||
+      isModuleEnabled('rush_supply_health')) &&
+    (canView('couriers') ||
+      canView('courier-analytics') ||
+      canView('deliveries') ||
+      canView('delivery-analytics') ||
+      canView('courier-settlements') ||
+      canView('supply-health'));
   const canSeeSystem = canView('user-management') || canView('settings');
 
   // Accordion only for Fleet Ops (has mid-level Fuel/Toll desks)
@@ -139,7 +162,7 @@ export function AppSidebar({
   const handleFlyoutChange = (id: FlyoutId, nextOpen: boolean) => {
     setOpenFlyout(nextOpen ? id : null);
     // Opening a top-level fly-out collapses Fleet Ops accordion
-    if (nextOpen && (id === 'driver-ops' || id === 'vehicle-ops' || id === 'business-finance')) {
+    if (nextOpen && (id === 'driver-ops' || id === 'vehicle-ops' || id === 'business-finance' || id === 'courier-ops')) {
       setOpenSection(null);
     }
   };
@@ -232,10 +255,17 @@ export function AppSidebar({
       id: 'fleet-financials',
       label: 'Bank Deposits',
     },
-    canView('driver-settlements') && {
+    canView('driver-settlements') && rideshareVisible && {
       id: 'driver-settlements',
       label: 'Driver Settlements',
     },
+    canView('courier-settlements') &&
+      rushVisible &&
+      hasRushDeliveryLine &&
+      isModuleEnabled('rush_courier_settlements') && {
+        id: 'courier-settlements',
+        label: 'Courier Settlements',
+      },
     canView('indrive-wallet') && {
       id: 'indrive-wallet',
       label: 'InDrive Wallet',
@@ -244,6 +274,30 @@ export function AppSidebar({
       id: 'transaction-list',
       label: 'Transaction List',
     },
+  ].filter(Boolean) as NavLeaf[];
+
+  const courierItems: NavLeaf[] = [
+    isModuleEnabled('rush_couriers') &&
+      canView('couriers') && { id: 'couriers', label: 'Couriers' },
+    isModuleEnabled('rush_couriers') &&
+      canView('courier-analytics') && {
+        id: 'courier-analytics',
+        label: 'Courier Analytics',
+        badge: (
+          <Badge className="h-4 border-none bg-indigo-500 px-1 text-[8px] text-white">
+            New
+          </Badge>
+        ),
+      },
+    isModuleEnabled('rush_deliveries') &&
+      canView('deliveries') && { id: 'deliveries', label: 'Deliveries' },
+    isModuleEnabled('rush_deliveries') &&
+      canView('delivery-analytics') && {
+        id: 'delivery-analytics',
+        label: 'Delivery Analytics',
+      },
+    isModuleEnabled('rush_supply_health') &&
+      canView('supply-health') && { id: 'supply-health', label: 'Supply Health' },
   ].filter(Boolean) as NavLeaf[];
 
   return (
@@ -352,7 +406,20 @@ export function AppSidebar({
               />
             )}
 
-            {canView('trips') && (
+            {canSeeCourierOps && courierItems.length > 0 && (
+              <NavFlyout
+                id="courier-ops"
+                label="Rush Operations"
+                icon={<Package className="h-4 w-4" />}
+                items={courierItems}
+                currentPage={currentPage}
+                open={openFlyout === 'courier-ops'}
+                onOpenChange={(next) => handleFlyoutChange('courier-ops', next)}
+                onNavigate={navigate}
+              />
+            )}
+
+            {rideshareVisible && canView('trips') && (
               <NavItem
                 icon={<FileText className="h-4 w-4" />}
                 label={v('sidebarTrips')}

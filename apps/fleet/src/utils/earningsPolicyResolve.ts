@@ -27,11 +27,17 @@ export function resolveActiveEarningsBundleForDriverWeek(params: {
   driverId?: string | null;
   weekStartYmd: string;
   legacy: LegacyEarningsConfig;
+  /** Filter policies by service line when org runs both streams. */
+  serviceLine?: 'rideshare' | 'rush_delivery';
 }): ResolvedEarningsBundle {
-  const { policies, driverId, weekStartYmd, legacy } = params;
+  const { policies, driverId, weekStartYmd, legacy, serviceLine } = params;
+
+  const scopedPolicies = serviceLine
+    ? policies.filter((p) => !p.serviceLine || p.serviceLine === serviceLine)
+    : policies;
 
   // Empty policies → legacy
-  if (!policies || policies.length === 0) {
+  if (!scopedPolicies || scopedPolicies.length === 0) {
     return {
       tiers: legacy.tiers,
       quotas: legacy.quotas,
@@ -41,7 +47,7 @@ export function resolveActiveEarningsBundleForDriverWeek(params: {
   }
 
   // Try driver version membership
-  const hit = resolveDriverVersionForWeek(policies, driverId, weekStartYmd);
+  const hit = resolveDriverVersionForWeek(scopedPolicies, driverId, weekStartYmd);
   if (hit) {
     const isDriverMember = !!hit.assignment;
     return {
@@ -56,7 +62,7 @@ export function resolveActiveEarningsBundleForDriverWeek(params: {
   }
 
   // Try Default policy template (for drivers not on any version)
-  const defaultPolicy = policies.find((p) => p.isDefault);
+  const defaultPolicy = scopedPolicies.find((p) => p.isDefault);
   if (defaultPolicy) {
     const normalized = normalizePolicyVersions(defaultPolicy);
     const version = resolveVersionForWeek(normalized, weekStartYmd) || templateAsVersion(normalized);

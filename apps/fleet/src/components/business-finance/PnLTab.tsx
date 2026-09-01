@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '../ui/collapsible';
 import { cn } from '../ui/utils';
 import { formatMoney } from './money';
-import type { BusinessFinancePnL, PnLFuelBreakdown, PnLTollBreakdown, PlatformSplitRow } from './types';
+import type { BusinessFinancePnL, PnLFuelBreakdown, PnLTollBreakdown, PlatformSplitRow, ServiceLineSplitRow } from './types';
 
 function TollBreakdownPanel({ breakdown }: { breakdown: PnLTollBreakdown }) {
   const rows: Array<{ label: string; hint: string; amount: number; emphasize?: boolean }> = [
@@ -195,6 +195,28 @@ function PlatformGrossBreakdownPanel({ rows }: { rows: PlatformSplitRow[] }) {
   );
 }
 
+function ServiceLineSplitPanel({ rows }: { rows: ServiceLineSplitRow[] }) {
+  if (!rows.length) return null;
+  return (
+    <div className="mt-2 grid gap-2 sm:grid-cols-2">
+      {rows.map((row) => (
+        <div
+          key={row.serviceLine}
+          className="rounded-md border border-slate-100 bg-slate-50/80 px-3 py-2.5 dark:border-slate-800 dark:bg-slate-900/50"
+        >
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">{row.label}</p>
+          <p className="mt-1 text-lg font-semibold tabular-nums text-slate-900 dark:text-slate-100">
+            {formatMoney(row.net)}
+          </p>
+          <p className="mt-0.5 text-[11px] text-slate-500">
+            Gross {formatMoney(row.gross)} · Fees {formatMoney(row.fees)}
+          </p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function PnLTab({ pnl }: { pnl: BusinessFinancePnL }) {
   const [tollsOpen, setTollsOpen] = useState(false);
   const [fuelOpen, setFuelOpen] = useState(false);
@@ -320,6 +342,9 @@ export function PnLTab({ pnl }: { pnl: BusinessFinancePnL }) {
                       </CollapsibleTrigger>
                       <CollapsibleContent>
                         <PlatformGrossBreakdownPanel rows={splitRows} />
+                        {pnl.serviceLineSplit && pnl.serviceLineSplit.length > 1 ? (
+                          <ServiceLineSplitPanel rows={pnl.serviceLineSplit} />
+                        ) : null}
                       </CollapsibleContent>
                     </Collapsible>
                   </li>

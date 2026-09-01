@@ -6,7 +6,21 @@
  */
 
 export const config = {
-  matcher: ["/dashboard", "/dashboard/:path*", "/admin/:path*", "/app", "/app/:path*"],
+  matcher: [
+    "/dashboard",
+    "/dashboard/:path*",
+    "/admin/:path*",
+    "/app",
+    "/app/:path*",
+    "/couriers",
+    "/couriers/:path*",
+    "/deliveries",
+    "/deliveries/:path*",
+    "/courier-analytics",
+    "/delivery-analytics",
+    "/courier-settlements",
+    "/supply-health",
+  ],
 };
 
 function isPublicPath(pathname) {

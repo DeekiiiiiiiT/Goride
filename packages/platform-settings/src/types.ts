@@ -78,6 +78,12 @@ export interface EnterpriseEnabledModules {
   teamManagement: boolean;
   driverPortal: boolean;
   performanceAnalytics: boolean;
+  /** Roam Rush fleet add-on modules — off by default (fail-closed). */
+  rush_couriers: boolean;
+  rush_deliveries: boolean;
+  rush_courier_settlements: boolean;
+  rush_supply_health: boolean;
+  rush_merchant_link: boolean;
 }
 
 /** Merge compat: fleet keys + enterprise keys. */

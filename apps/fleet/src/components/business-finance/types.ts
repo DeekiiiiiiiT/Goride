@@ -57,6 +57,14 @@ export type PlatformSplitRow = {
   net: number;
 };
 
+export type ServiceLineSplitRow = {
+  serviceLine: 'rideshare' | 'rush_delivery';
+  label: string;
+  gross: number;
+  fees: number;
+  net: number;
+};
+
 /** Owner-facing Tolls accordion — same story as Toll Recon cards, P&L math. */
 export type PnLTollBreakdown = {
   /** All tag/trip toll charges in the period (gross). */
@@ -89,6 +97,8 @@ export type BusinessFinancePnL = {
   lines: PnLLine[];
   operatingRatio: number | null;
   platformSplit: PlatformSplitRow[];
+  /** Revenue segmented by service line (rideshare vs Rush delivery). */
+  serviceLineSplit?: ServiceLineSplitRow[];
   coverageNote?: string;
   /** Tolls that were recovered (refund) or washed out (cash_wash/phantom/personal) — NOT a fleet loss, excluded from the Tolls expense line but shown for transparency. */
   tollsRecoveredWashed?: number;

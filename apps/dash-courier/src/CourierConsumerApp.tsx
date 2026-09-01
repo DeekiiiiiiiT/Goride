@@ -4,7 +4,7 @@ import { WelcomePage } from '@/pages/onboarding/WelcomePage';
 import { HowItWorksPage } from '@/pages/onboarding/HowItWorksPage';
 import { SignUpPage } from '@/pages/onboarding/SignUpPage';
 import { VerifyAccountPage } from '@/pages/onboarding/VerifyAccountPage';
-import { ProfileSetupPage } from '@/pages/onboarding/ProfileSetupPage';
+import { FleetInviteCodePage } from '@/pages/onboarding/FleetInviteCodePage';
 import { VehicleSetupPage } from '@/pages/onboarding/VehicleSetupPage';
 import { DocumentsPage } from '@/pages/onboarding/DocumentsPage';
 import { PermissionsPage } from '@/pages/onboarding/PermissionsPage';
@@ -25,6 +25,37 @@ import { supabase } from '@/lib/supabase';
 import { ensureCourierProfile } from '@/lib/ensureCourierProfile';
 import { realDispatchProvider } from '@/services/courierDispatch/RealDispatchProvider';
 
+function FleetInviteGate({
+  onBack,
+  onContinue,
+}: {
+  onBack: () => void;
+  onContinue: () => void;
+}) {
+  const [auth, setAuth] = useState<{ token: string; userId: string } | null>(null);
+
+  useEffect(() => {
+    void supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.access_token && session.user?.id) {
+        setAuth({ token: session.access_token, userId: session.user.id });
+      } else {
+        onContinue();
+      }
+    });
+  }, [onContinue]);
+
+  if (!auth) return null;
+
+  return (
+    <FleetInviteCodePage
+      onBack={onBack}
+      onContinue={onContinue}
+      accessToken={auth.token}
+      userId={auth.userId}
+    />
+  );
+}
+
 type AppPhase =
   | 'splash'
   | 'welcome'
@@ -32,6 +63,7 @@ type AppPhase =
   | 'sign-up'
   | 'verify'
   | 'profile-setup'
+  | 'fleet-invite'
   | 'vehicle-setup'
   | 'documents'
   | 'permissions'
@@ -197,6 +229,15 @@ export function CourierConsumerApp() {
     return (
       <ProfileSetupPage
         onBack={() => setPhase('verify')}
+        onContinue={() => setPhase('fleet-invite')}
+      />
+    );
+  }
+
+  if (phase === 'fleet-invite') {
+    return (
+      <FleetInviteGate
+        onBack={() => setPhase('profile-setup')}
         onContinue={() => setPhase('vehicle-setup')}
       />
     );
@@ -205,7 +246,7 @@ export function CourierConsumerApp() {
   if (phase === 'vehicle-setup') {
     return (
       <VehicleSetupPage
-        onBack={() => setPhase('profile-setup')}
+        onBack={() => setPhase('fleet-invite')}
         onContinue={() => setPhase('documents')}
       />
     );
