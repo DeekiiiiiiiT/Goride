@@ -2,7 +2,7 @@
  * Fleet Rush module checkout — WiPay commercial entitlement.
  */
 import type { Hono } from "npm:hono";
-import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
+import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import type { RbacUser } from "./rbac_middleware.ts";
 import {
   createFleetWipayCheckout,
@@ -24,24 +24,43 @@ function parseServiceLines(body: unknown): string[] | null {
   return lines.length ? lines : null;
 }
 
-async function readWipayPayload(c: { req: { raw: () => Promise<unknown> } }): Promise<Record<string, string>> {
-  const raw = await c.req.raw();
-  const contentType = raw.headers.get("content-type") ?? "";
-  if (contentType.includes("application/json")) {
-    const json = await raw.json().catch(() => ({}));
-    const out: Record<string, string> = {};
-    for (const [k, v] of Object.entries(json as Record<string, unknown>)) {
+async function readWipayPayload(
+  c: {
+    req: {
+      method: string;
+      url: string;
+      header: (n: string) => string | undefined;
+      json: () => Promise<unknown>;
+      parseBody: () => Promise<Record<string, unknown>>;
+    };
+  },
+): Promise<Record<string, string>> {
+  const url = new URL(c.req.url);
+  const out: Record<string, string> = {};
+  url.searchParams.forEach((value, key) => {
+    if (key !== "secret") out[key] = value;
+  });
+  if (c.req.method === "GET" || c.req.method === "HEAD") return out;
+
+  const contentType = c.req.header("content-type") ?? "";
+  try {
+    if (contentType.includes("application/json")) {
+      const json = await c.req.json();
+      if (json && typeof json === "object") {
+        for (const [k, v] of Object.entries(json as Record<string, unknown>)) {
+          out[k] = String(v ?? "");
+        }
+      }
+      return out;
+    }
+    const form = await c.req.parseBody();
+    for (const [k, v] of Object.entries(form)) {
       out[k] = String(v ?? "");
     }
     return out;
+  } catch {
+    return out;
   }
-  const text = await raw.text();
-  const out: Record<string, string> = {};
-  for (const pair of text.split("&")) {
-    const [k, v] = pair.split("=");
-    if (k) out[decodeURIComponent(k)] = decodeURIComponent(v ?? "");
-  }
-  return out;
 }
 
 export async function completeFleetModulePurchase(
