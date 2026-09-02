@@ -211,3 +211,27 @@ export async function orchestrateOrderRefund(opts: {
     providerError,
   };
 }
+
+/** System/customer-initiated refund without admin JWT (queues via service role). */
+export async function orchestrateSystemOrderRefund(opts: {
+  orderId: string;
+  amount?: number | null;
+  reason: string;
+  initiatedBy: "customer" | "system";
+  actorId?: string | null;
+}): Promise<RefundOrchestratorResult> {
+  const syntheticAdmin = {
+    id: opts.actorId || "system",
+    email: opts.initiatedBy === "customer" ? "customer-self-serve" : "system-auto",
+    roles: [] as string[],
+  };
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+  const authHeader = `Bearer ${serviceKey}`;
+  return orchestrateOrderRefund({
+    orderId: opts.orderId,
+    amount: opts.amount,
+    reason: opts.reason,
+    admin: syntheticAdmin as ProductAdminUser,
+    authHeader,
+  });
+}

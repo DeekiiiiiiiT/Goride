@@ -182,12 +182,25 @@ export async function fetchCustomerOrders(): Promise<{
   return res.json();
 }
 
+export type IssueSubmissionResult = {
+  issue: { id: string; order_id: string; issue_type: string; status: string; created_at: string };
+  case?: { id: string } | null;
+  dispute?: { id: string } | null;
+  resolution?: {
+    status: string;
+    message: string;
+    refundAmount?: number;
+    caseId?: string;
+    autoResolved?: boolean;
+  };
+};
+
 export async function submitCustomerOrderIssue(input: {
   orderId: string;
   issueType: string;
   notes: string;
   photoPath?: string;
-}): Promise<void> {
+}): Promise<IssueSubmissionResult> {
   const headers = await authHeaders();
   if (!headers) throw new Error('Sign in required');
   const res = await fetch(`${API_ENDPOINTS.delivery}/orders/${input.orderId}/issue`, {
@@ -202,6 +215,41 @@ export async function submitCustomerOrderIssue(input: {
   if (!res.ok) {
     throw new Error((await res.json().catch(() => ({}))).error || 'Could not submit report');
   }
+  return res.json() as Promise<IssueSubmissionResult>;
+}
+
+export type CustomerSupportCase = {
+  id: string;
+  subject: string;
+  status: string;
+  priority?: string;
+  order_id?: string;
+  fault_attribution?: string;
+  resolution_action?: string;
+  auto_resolved?: boolean;
+  created_at: string;
+  updated_at?: string;
+};
+
+export async function fetchCustomerSupportCases(): Promise<CustomerSupportCase[]> {
+  const headers = await authHeaders();
+  if (!headers) return [];
+  const res = await fetch(`${API_ENDPOINTS.delivery}/customer/support/cases`, { headers });
+  if (!res.ok) throw new Error('Failed to load support cases');
+  const data = await res.json() as { cases: CustomerSupportCase[] };
+  return data.cases ?? [];
+}
+
+export async function fetchCustomerSupportCaseDetail(caseId: string) {
+  const headers = await authHeaders();
+  if (!headers) throw new Error('Sign in required');
+  const res = await fetch(`${API_ENDPOINTS.delivery}/customer/support/cases/${caseId}`, { headers });
+  if (!res.ok) throw new Error('Failed to load case');
+  return res.json() as Promise<{
+    case: CustomerSupportCase;
+    timeline: Array<{ status: string; notes?: string; created_at: string }>;
+    dispute: { status: string; refund_amount?: number } | null;
+  }>;
 }
 
 export async function uploadCustomerIssuePhoto(file: File): Promise<{ path: string; signedUrl: string }> {

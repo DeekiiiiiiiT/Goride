@@ -179,8 +179,10 @@ export function faqsForTopic(topic: string | null, query = ''): typeof FAQ_ITEMS
 }
 
 export const ISSUE_TYPES = [
+  { id: 'late_order', icon: 'schedule', label: 'Taking too long' },
   { id: 'missing', icon: 'shopping_bag', label: 'Missing items' },
   { id: 'wrong', icon: 'swap_horiz', label: 'Wrong items' },
+  { id: 'never_arrived', icon: 'cancel', label: 'Never arrived' },
   { id: 'quality', icon: 'restaurant', label: 'Food quality' },
   { id: 'payment', icon: 'credit_card', label: 'Payment' },
   { id: 'safety', icon: 'health_and_safety', label: 'Safety' },

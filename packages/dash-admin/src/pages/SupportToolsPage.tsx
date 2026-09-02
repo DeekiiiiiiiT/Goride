@@ -8,7 +8,9 @@ import {
   cancelOrder,
   createSupportCase,
   getOrderDetail,
+  getSupportCaseDetail,
   listSupportCases,
+  patchSupportCase,
   refundOrder,
   type SupportCaseRow,
 } from '@roam/dash-admin-client';
@@ -29,6 +31,9 @@ export function SupportToolsPage() {
   const [cases, setCases] = useState<SupportCaseRow[]>([]);
   const [casesLoading, setCasesLoading] = useState(true);
   const [caseStatus, setCaseStatus] = useState('open');
+  const [selectedCaseId, setSelectedCaseId] = useState<string | null>(null);
+  const [caseDetail, setCaseDetail] = useState<Record<string, unknown> | null>(null);
+  const [caseDetailLoading, setCaseDetailLoading] = useState(false);
 
   const loadCases = useCallback(async () => {
     setCasesLoading(true);
@@ -45,6 +50,50 @@ export function SupportToolsPage() {
   useEffect(() => {
     void loadCases();
   }, [loadCases]);
+
+  const loadCaseDetail = async (caseId: string) => {
+    setSelectedCaseId(caseId);
+    setCaseDetailLoading(true);
+    try {
+      const res = await getSupportCaseDetail(token, caseId);
+      setCaseDetail(res as unknown as Record<string, unknown>);
+    } catch {
+      setCaseDetail(null);
+      toast.error('Could not load case detail');
+    } finally {
+      setCaseDetailLoading(false);
+    }
+  };
+
+  const runResolveCase = async () => {
+    if (!selectedCaseId || !canWrite) return;
+    const values = await prompt({
+      title: 'Resolve case',
+      description: 'Optionally issue a refund. Leave amount blank to resolve without refund.',
+      confirmLabel: 'Resolve',
+      fields: [
+        { key: 'amount', label: 'Refund amount (optional)', required: false },
+        { key: 'fault', label: 'Fault (merchant_fault | customer_fault | undetermined)', placeholder: 'undetermined', required: false },
+        { key: 'notes', label: 'Resolution notes', required: true, multiline: true },
+      ],
+    });
+    if (!values) return;
+    const amountRaw = values.amount?.trim();
+    const amount = amountRaw ? Number(amountRaw) : undefined;
+    try {
+      await patchSupportCase(token, selectedCaseId, {
+        status: 'resolved',
+        resolution_notes: values.notes,
+        fault_attribution: values.fault?.trim() || 'undetermined',
+        ...(amount != null && amount > 0 ? { refund_amount: amount } : {}),
+      });
+      toast.success('Case resolved');
+      void loadCases();
+      void loadCaseDetail(selectedCaseId);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Resolve failed');
+    }
+  };
 
   const runCreateCase = async () => {
     if (!canWrite) return;
@@ -215,7 +264,7 @@ export function SupportToolsPage() {
           )}
         </div>
         <div className="flex gap-2">
-          {(['open', 'in_progress', 'resolved', ''] as const).map((s) => (
+          {(['open', 'pending', 'resolved', ''] as const).map((s) => (
             <button
               key={s || 'all'}
               type="button"
@@ -245,7 +294,11 @@ export function SupportToolsPage() {
               </thead>
               <tbody className="divide-y divide-slate-800">
                 {cases.map((c) => (
-                  <tr key={c.id}>
+                  <tr
+                    key={c.id}
+                    className="cursor-pointer hover:bg-slate-900/60"
+                    onClick={() => void loadCaseDetail(c.id)}
+                  >
                     <td className="px-4 py-3 text-white">{c.subject}</td>
                     <td className="px-4 py-3 text-slate-400 capitalize">{c.priority ?? '—'}</td>
                     <td className="px-4 py-3 text-slate-400 capitalize">{c.status.replace(/_/g, ' ')}</td>
@@ -254,6 +307,37 @@ export function SupportToolsPage() {
                 ))}
               </tbody>
             </table>
+          </div>
+        )}
+        {selectedCaseId && (
+          <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <h4 className="text-white font-medium">Case detail</h4>
+              {canWrite && (
+                <button type="button" onClick={() => void runResolveCase()} className="text-sm text-amber-400">
+                  Resolve
+                </button>
+              )}
+            </div>
+            {caseDetailLoading ? (
+              <Loader2 className="w-5 h-5 animate-spin text-amber-400" />
+            ) : caseDetail ? (
+              <>
+                <p className="text-sm text-slate-300">{String((caseDetail.case as Record<string, unknown>)?.body || '')}</p>
+                {(caseDetail.customer_issues as Array<Record<string, unknown>>)?.length ? (
+                  <p className="text-xs text-slate-500">
+                    Customer issue: {String((caseDetail.customer_issues as Array<Record<string, unknown>>)[0]?.issue_type)}
+                  </p>
+                ) : null}
+                {(caseDetail.wait_events as Array<Record<string, unknown>>)?.length ? (
+                  <p className="text-xs text-slate-500">
+                    Courier wait: {String((caseDetail.wait_events as Array<Record<string, unknown>>)[0]?.wait_minutes)} min
+                  </p>
+                ) : null}
+              </>
+            ) : (
+              <p className="text-sm text-slate-500">No detail loaded.</p>
+            )}
           </div>
         )}
       </section>

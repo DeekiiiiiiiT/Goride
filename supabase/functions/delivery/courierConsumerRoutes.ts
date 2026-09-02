@@ -11,6 +11,8 @@ import { isCourierCashPaused } from "./courierCashLedger.ts";
 import { resolvePeakPayBonus } from "../_shared/courierPeakPay.ts";
 import { ORDER_CUSTOMER_EMBED_MINIMAL } from "./orderSelectEmbeds.ts";
 import { courierAssignmentFields } from "./courierFleetAttribution.ts";
+import { processDispute, logCourierUnassignRedispatch } from "./disputeResolution/processDispute.ts";
+import { notifyCustomerOrderStatus } from "../_shared/dashOrderSms.ts";
 
 type Sb = ReturnType<typeof createClient>;
 
@@ -120,6 +122,59 @@ async function completeStackLeg(serviceSb: Sb, courierId: string, orderId: strin
     .eq("courier_id", courierId)
     .eq("order_id", orderId)
     .eq("leg_status", "active");
+}
+
+async function releaseCourierFromOrder(
+  serviceSb: Sb,
+  courierId: string,
+  orderId: string,
+): Promise<boolean> {
+  const { data: order } = await serviceSb
+    .from("orders")
+    .select("id, status, courier_id, picked_up_at")
+    .eq("id", orderId)
+    .maybeSingle();
+
+  if (!order || String(order.courier_id) !== courierId) return false;
+  if (order.picked_up_at) return false;
+  const status = String(order.status);
+  if (!["accepted", "preparing", "ready", "assigned"].includes(status)) return false;
+
+  await serviceSb
+    .from("courier_stack_legs")
+    .delete()
+    .eq("courier_id", courierId)
+    .eq("order_id", orderId);
+
+  await serviceSb
+    .from("orders")
+    .update({
+      courier_id: null,
+      status: "ready",
+      assigned_at: null,
+      peak_pay_amount: 0,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", orderId)
+    .eq("courier_id", courierId);
+
+  await serviceSb
+    .from("courier_offers")
+    .update({ status: "superseded", updated_at: new Date().toISOString() })
+    .eq("order_id", orderId)
+    .in("status", ["pending", "offered", "sent"]);
+
+  await serviceSb
+    .from("courier_availability")
+    .update({
+      active_order_id: null,
+      status: "online",
+      updated_at: new Date().toISOString(),
+    })
+    .eq("driver_id", courierId);
+
+  await dispatchOffersForOrder(serviceSb, orderId);
+  return true;
 }
 
 async function rollbackStackAccept(
@@ -752,12 +807,44 @@ export function registerCourierConsumerRoutes(app: Hono, deps: Deps) {
     return c.json({ ok: true });
   });
 
+  app.post("/orders/:id/unassign", async (c) => {
+    const auth = await requireCourierUser(c.req.header("Authorization"), getSupabase);
+    if (auth instanceof Response) return auth;
+    const orderId = c.req.param("id");
+    const serviceSb = getServiceSupabase();
+
+    const released = await releaseCourierFromOrder(serviceSb, auth.userId, orderId);
+    if (!released) {
+      return c.json({ error: "Cannot unassign from this order at its current stage" }, 400);
+    }
+
+    await serviceSb.from("order_events").insert({
+      order_id: orderId,
+      status: "courier_unassigned",
+      actor_type: "courier",
+      actor_id: auth.userId,
+      notes: "courier_unassign_redispatch",
+    });
+
+    await logCourierUnassignRedispatch(serviceSb, orderId, auth.userId);
+    await notifyCustomerOrderStatus(serviceSb, orderId, "accepted");
+
+    return c.json({ ok: true, redispatched: true });
+  });
+
   app.post("/orders/:id/courier-issue", async (c) => {
     const auth = await requireCourierUser(c.req.header("Authorization"), getSupabase);
     if (auth instanceof Response) return auth;
     const orderId = c.req.param("id");
     const body = await c.req.json().catch(() => ({}));
-    const issueType = String(body.issueType || body.issue_type || body.issueId || "");
+    const issueTypeRaw = String(body.issueType || body.issue_type || body.issueId || "");
+    const issueAliases: Record<string, string> = {
+      cant_find_address: "wrong_address",
+      unsafe_location: "unsafe",
+      vehicle_problem: "vehicle_issue",
+      accident_emergency: "accident",
+    };
+    const issueType = issueAliases[issueTypeRaw.toLowerCase()] || issueTypeRaw;
     const notes = body.notes ? String(body.notes) : null;
     const photoUrl = body.photoUrl || body.photo_url || null;
     if (!issueType) return c.json({ error: "issueType required" }, 400);
@@ -787,7 +874,6 @@ export function registerCourierConsumerRoutes(app: Hono, deps: Deps) {
 
     if (error) return c.json({ error: error.message }, 500);
 
-    // Abort-class issues must cancel the order and free the courier (clear active_order_id)
     const abortTypes = new Set([
       "customer_unavailable",
       "wrong_address",
@@ -795,12 +881,58 @@ export function registerCourierConsumerRoutes(app: Hono, deps: Deps) {
       "accident",
       "vehicle_issue",
       "unable_to_complete",
+      "restaurant_closed",
       "cancel",
       "cancelled",
     ]);
     const shouldAbort = abortTypes.has(issueType.toLowerCase()) ||
       String(body.abort || body.cancelOrder || "").toLowerCase() === "true";
 
+    // Structured wait logging for long_wait issues
+    if (issueType === "long_wait" && notes) {
+      const waitMatch = notes.match(/wait:(\d+)min/i);
+      const waitMinutes = waitMatch ? Number(waitMatch[1]) : 10;
+      if (waitMinutes > 0) {
+        await serviceSb.from("courier_wait_events").insert({
+          order_id: orderId,
+          courier_user_id: auth.userId,
+          wait_minutes: waitMinutes,
+          issue_id: data.id,
+        });
+      }
+    }
+
+    if (!shouldAbort) {
+      const { data: orderFull } = await serviceSb
+        .from("orders")
+        .select("customer_id")
+        .eq("id", orderId)
+        .maybeSingle();
+
+      let customerUserId: string | null = null;
+      if (orderFull?.customer_id) {
+        const { data: cust } = await serviceSb
+          .from("customers")
+          .select("user_id")
+          .eq("id", orderFull.customer_id)
+          .maybeSingle();
+        customerUserId = cust?.user_id as string | null;
+      }
+
+      await processDispute({
+        serviceSb,
+        orderId,
+        issueType,
+        notes: notes || issueType,
+        source: "courier_issue",
+        sourceId: data.id,
+        customerId: orderFull?.customer_id,
+        customerUserId,
+        createdBy: auth.userId,
+      });
+    }
+
+    // Abort-class issues cancel the order and free the courier
     if (shouldAbort) {
       await serviceSb
         .from("orders")
@@ -817,7 +949,6 @@ export function registerCourierConsumerRoutes(app: Hono, deps: Deps) {
 
       await completeStackLeg(serviceSb, auth.userId, orderId);
 
-      // Clear by active_order_id so a mismatched courier_id cannot leave the courier stuck
       await serviceSb
         .from("courier_availability")
         .update({

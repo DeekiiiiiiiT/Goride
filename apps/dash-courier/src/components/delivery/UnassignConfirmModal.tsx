@@ -34,8 +34,10 @@ export function UnassignConfirmModal({
             <MaterialIcon name="warning" className="text-[32px] text-error" filled />
           </div>
           <div className="space-y-2">
-            <h2 className="text-xl font-semibold text-on-surface">Are you sure you want to unassign?</h2>
-            <p className="text-sm text-muted">This will negatively impact your standing.</p>
+            <h2 className="text-xl font-semibold text-on-surface">Release this delivery?</h2>
+            <p className="text-sm text-muted">
+              The order goes back to the queue for another courier. Your completion rate may drop.
+            </p>
           </div>
           <div className="w-full bg-surface-container-low rounded-xl p-4 border border-surface-variant flex flex-col items-center gap-1">
             <span className="text-[11px] text-muted uppercase tracking-wider">
@@ -49,7 +51,7 @@ export function UnassignConfirmModal({
               onClick={onConfirm}
               className="w-full min-h-14 flex items-center justify-center bg-error text-on-error text-xs font-semibold uppercase tracking-wide rounded-xl active:scale-95 transition-transform shadow-[0_6px_12px_rgba(186,26,26,0.15)]"
             >
-              Yes, unassign me
+              Yes, release delivery
             </button>
             <button
               type="button"

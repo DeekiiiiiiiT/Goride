@@ -485,6 +485,7 @@ export function registerOrderChatRoutes(app: Hono, deps: OrderChatDeps) {
       customer_id: order.customer_id,
       order_id: orderId,
       created_by: auth.user.id,
+      source: "chat_sos",
     }).select("id").single();
 
     if (error) return c.json({ error: error.message }, 500);

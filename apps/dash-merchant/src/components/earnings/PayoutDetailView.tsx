@@ -77,6 +77,12 @@ export default function PayoutDetailView({ payout, onBack }: PayoutDetailViewPro
                 {formatSignedJmd(payout.adjustments)}
               </span>
             </div>
+            {(payout.adjustmentLineItems ?? []).map((line) => (
+              <div key={`${line.createdAt}-${line.reason}`} className="flex items-center justify-between py-inset-xs pl-inset-sm">
+                <span className="text-body-sm text-on-surface-variant line-clamp-1">{line.reason}</span>
+                <span className="text-body-sm text-error">{formatSignedJmd(line.amount)}</span>
+              </div>
+            ))}
             <div className="flex items-center justify-between py-inset-xs">
               <span className="text-body-sm text-on-surface">
                 Platform fees ({payout.platformFeePercent}%)

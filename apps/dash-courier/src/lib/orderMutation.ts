@@ -2,6 +2,7 @@ import {
   submitCourierProof,
   updateCourierOrderStatus,
   submitCourierNotes,
+  unassignFromOrder,
 } from '@/lib/courierApi';
 
 export type MutationResult = { ok: true } | { ok: false; error: string };
@@ -80,6 +81,11 @@ export async function commitDelivered(
   }
 
   return commitOrderStatus(orderId, 'delivered');
+}
+
+export async function commitUnassign(orderId: string): Promise<MutationResult> {
+  if (!orderId) return { ok: false, error: 'Missing order id' };
+  return withRetry(() => unassignFromOrder(orderId));
 }
 
 export async function commitCancel(

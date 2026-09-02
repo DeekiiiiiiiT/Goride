@@ -19,6 +19,8 @@ import { resolveMerchantFoodGctRate } from "../_shared/gctRate.ts";
 import { reverseOrderOutputTax } from "../_shared/gctLedger.ts";
 import { assertMerchantAcceptingOrders } from "./merchantOpenCheck.ts";
 import { ORDER_CUSTOMER_EMBED_WITH_USER } from "./orderSelectEmbeds.ts";
+import { processDispute } from "./disputeResolution/processDispute.ts";
+import { orchestrateSystemOrderRefund } from "./admin/orderRefund.ts";
 
 function asCoord(value: unknown): number | null {
   if (value == null || value === "") return null;
@@ -859,40 +861,15 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
       .update({ active_order_id: null })
       .eq("active_order_id", id);
 
-    // Queue refund for paid orders (provider call may be pending if WiPay refund URL unset)
     let refundQueued = false;
     if (String(order.payment_status || "") === "paid") {
-      const paymentsSb = createClient(
-        Deno.env.get("SUPABASE_URL")!,
-        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-        { db: { schema: "payments" } },
-      );
-      const { data: txn } = await paymentsSb
-        .from("transactions")
-        .select("id, amount, currency")
-        .eq("order_id", id)
-        .eq("status", "completed")
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      if (txn?.id) {
-        const { error: refundErr } = await paymentsSb.from("refunds").insert({
-          transaction_id: txn.id,
-          order_id: id,
-          amount: Number(txn.amount),
-          currency: txn.currency || "JMD",
-          reason,
-          status: "pending",
-        });
-        if (!refundErr) {
-          refundQueued = true;
-          await serviceSb
-            .from("orders")
-            .update({ payment_status: "refund_pending" })
-            .eq("id", id);
-        }
-      }
+      const refundResult = await orchestrateSystemOrderRefund({
+        orderId: id,
+        reason,
+        initiatedBy: "customer",
+        actorId: user.id,
+      });
+      refundQueued = refundResult.ok;
     }
 
     return c.json({ order: updated, refundQueued });
@@ -905,6 +882,8 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
     "payment",
     "safety",
     "account",
+    "late_order",
+    "never_arrived",
     "other",
   ]);
 
@@ -968,27 +947,6 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
 
     if (insertError) return c.json({ error: insertError.message }, 500);
 
-    const issueLabels: Record<string, string> = {
-      missing: "Missing items",
-      wrong: "Wrong items",
-      quality: "Food quality",
-      payment: "Payment issue",
-      safety: "Safety issue",
-      account: "Account issue",
-      other: "Order issue",
-    };
-    const orderRef = String(order.order_number || order.id);
-    await serviceSb.from("support_cases").insert({
-      subject: `${issueLabels[issueType] ?? "Order issue"} — ${orderRef}`,
-      body: photoPath ? `${notes}\n\nPhoto attached.` : notes,
-      status: "open",
-      priority: issueType === "quality" || issueType === "missing" || issueType === "safety" ? "high" : "normal",
-      customer_id: customer.id,
-      order_id: order.id,
-      contact_email: (customer.email as string | null) || user.email || null,
-      created_by: user.id,
-    });
-
     await serviceSb.from("order_events").insert({
       order_id: order.id,
       status: "issue_reported",
@@ -997,7 +955,26 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
       notes: `issue:${issueType}`,
     });
 
-    return c.json({ issue });
+    const resolution = await processDispute({
+      serviceSb,
+      orderId: order.id,
+      issueType,
+      notes,
+      source: "customer_issue",
+      sourceId: issue.id,
+      customerId: customer.id,
+      customerUserId: user.id,
+      contactEmail: (customer.email as string | null) || user.email || null,
+      createdBy: user.id,
+      photoPath: photoPath || null,
+    });
+
+    return c.json({
+      issue,
+      case: resolution.caseId ? { id: resolution.caseId } : null,
+      dispute: resolution.disputeId ? { id: resolution.disputeId } : null,
+      resolution,
+    });
   });
 
   // Customer approve/reject grocery substitute proposal
@@ -1079,5 +1056,79 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
     });
 
     return c.json({ substitution: updated, subtotal: newSubtotal, total: newTotal });
+  });
+
+  app.get("/customer/support/cases", async (c) => {
+    const authHeader = c.req.header("Authorization");
+    if (!authHeader) return c.json({ error: "Unauthorized" }, 401);
+
+    const supabase = getSupabase(authHeader);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return c.json({ error: "Unauthorized" }, 401);
+
+    const serviceSb = getServiceSupabase();
+    const { data: customer } = await serviceSb
+      .from("customers")
+      .select("id")
+      .eq("user_id", user.id)
+      .single();
+    if (!customer) return c.json({ error: "Customer not found" }, 404);
+
+    const { data: cases, error } = await serviceSb
+      .from("support_cases")
+      .select("id, subject, status, priority, order_id, fault_attribution, resolution_action, auto_resolved, created_at, updated_at")
+      .eq("customer_id", customer.id)
+      .order("created_at", { ascending: false })
+      .limit(50);
+
+    if (error) return c.json({ error: error.message }, 500);
+    return c.json({ cases: cases ?? [] });
+  });
+
+  app.get("/customer/support/cases/:id", async (c) => {
+    const authHeader = c.req.header("Authorization");
+    if (!authHeader) return c.json({ error: "Unauthorized" }, 401);
+
+    const supabase = getSupabase(authHeader);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return c.json({ error: "Unauthorized" }, 401);
+
+    const serviceSb = getServiceSupabase();
+    const { data: customer } = await serviceSb
+      .from("customers")
+      .select("id")
+      .eq("user_id", user.id)
+      .single();
+    if (!customer) return c.json({ error: "Customer not found" }, 404);
+
+    const caseId = c.req.param("id");
+    const { data: caseRow, error } = await serviceSb
+      .from("support_cases")
+      .select("*")
+      .eq("id", caseId)
+      .eq("customer_id", customer.id)
+      .maybeSingle();
+
+    if (error) return c.json({ error: error.message }, 500);
+    if (!caseRow) return c.json({ error: "Case not found" }, 404);
+
+    const { data: events } = await serviceSb
+      .from("order_events")
+      .select("status, notes, created_at, actor_type")
+      .eq("order_id", caseRow.order_id)
+      .in("status", ["issue_reported", "dispute_case_created", "dispute_case_resolved", "dispute_refund_issued", "dispute_redispatch", "refund"])
+      .order("created_at", { ascending: true });
+
+    let dispute: Record<string, unknown> | null = null;
+    if (caseRow.order_id) {
+      const { data: d } = await serviceSb
+        .from("order_disputes")
+        .select("id, status, refund_amount, fault_attribution, resolution_notes")
+        .eq("support_case_id", caseId)
+        .maybeSingle();
+      dispute = d as Record<string, unknown> | null;
+    }
+
+    return c.json({ case: caseRow, timeline: events ?? [], dispute });
   });
 }

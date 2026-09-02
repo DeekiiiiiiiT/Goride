@@ -32,7 +32,7 @@ import { DeliveryDetailPage } from '@/pages/earnings/DeliveryDetailPage';
 import { hydrateCourierSettingsFromCloud } from '@/lib/courierSettingsSync';
 import { buildStackedRouteFromLegs, buildStackedOfferFromPending } from '@/lib/stackedRouteBuilder';
 import { isCourierStackedEnabled } from '@/lib/courierFeatureFlags';
-import { commitCancel, commitDelivered, commitPickup } from '@/lib/orderMutation';
+import { commitCancel, commitDelivered, commitPickup, commitUnassign } from '@/lib/orderMutation';
 import { loadOnlineSince, persistOnlineSince } from '@/lib/courierStorage';
 import { supabase } from '@/lib/supabase';
 import type { StackedRouteStop } from '@/lib/mockStackedRoute';
@@ -498,7 +498,7 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
     setReportIssueOpen(false);
     const orderId = realDispatchProvider.activeOrderId || delivery.orderId;
     setMutationSubmitting(true);
-    const result = await commitCancel(orderId, 'courier_unassign');
+    const result = await commitUnassign(orderId);
     setMutationSubmitting(false);
     if (!result.ok) {
       toast.error('Unassign failed', result.error);

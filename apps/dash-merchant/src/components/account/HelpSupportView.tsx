@@ -12,6 +12,7 @@ import {
 } from '../../lib/help-support-data';
 import { PartnerTab } from '../../lib/partner-utils';
 import { AccountSection } from './AccountSettingsHub';
+import MerchantIssuesInbox from '../support/MerchantIssuesInbox';
 
 interface HelpSupportViewProps {
   onBack: () => void;
@@ -123,6 +124,10 @@ export default function HelpSupportView({
             placeholder="How can we help?"
             className={searchInputClass}
           />
+        </div>
+
+        <div className="mb-inset-lg">
+          <MerchantIssuesInbox />
         </div>
 
         <div className="mb-inset-lg flex flex-col items-start justify-between gap-4 rounded-lg border border-error bg-error-container/20 p-inset-md sm:flex-row sm:items-center">

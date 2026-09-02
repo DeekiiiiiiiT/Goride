@@ -5,6 +5,9 @@ import { Hono } from "https://deno.land/x/hono@v4.3.11/mod.ts";
 import { requireProductAdmin, type ProductAdminUser } from "../../_shared/productAdmin.ts";
 import { requireDashWrite } from "./dashPermissions.ts";
 import { getDb, writeKvAudit } from "./merchantAdminShared.ts";
+import { orchestrateOrderRefund } from "./orderRefund.ts";
+import { applyMerchantFaultDebit } from "../disputeResolution/merchantDebit.ts";
+import { notifyCaseStatusChange } from "../disputeResolution/notifications.ts";
 
 const CASE_STATUSES = new Set(["open", "pending", "resolved", "closed"]);
 const CASE_PRIORITIES = new Set(["low", "normal", "high", "urgent"]);
@@ -78,13 +81,123 @@ export function registerSupportAdminRoutes(app: Hono) {
     if (body.priority != null && CASE_PRIORITIES.has(String(body.priority))) updates.priority = String(body.priority);
     if (body.assigned_to !== undefined) updates.assigned_to = body.assigned_to ? String(body.assigned_to) : null;
     if (body.resolution_notes != null) updates.resolution_notes = String(body.resolution_notes);
+    if (body.fault_attribution != null) updates.fault_attribution = String(body.fault_attribution);
+    if (body.resolution_action != null) updates.resolution_action = String(body.resolution_action);
 
     const db = getDb();
+    const caseId = c.req.param("id");
+
+    const { data: existing } = await db.from("support_cases").select("*").eq("id", caseId).maybeSingle();
+    if (!existing) return c.json({ error: "Case not found" }, 404);
+
+    const refundAmount = body.refund_amount != null ? Number(body.refund_amount) : null;
+    let refundResult: Record<string, unknown> | null = null;
+
+    if (refundAmount != null && refundAmount > 0 && existing.order_id) {
+      const authHeader = c.req.header("Authorization") || "";
+      const result = await orchestrateOrderRefund({
+        orderId: String(existing.order_id),
+        amount: refundAmount,
+        reason: String(body.resolution_notes || existing.resolution_notes || "Support case refund"),
+        admin: adminUser,
+        authHeader,
+      });
+      if (!result.ok) {
+        return c.json({ error: result.error, message: "Refund failed — case not updated" }, result.status);
+      }
+      refundResult = {
+        payment_status: result.payment_status,
+        providerCompleted: result.providerCompleted,
+        refund: result.refund,
+      };
+      updates.status = "resolved";
+      updates.resolution_action = "full_refund";
+
+      const fault = String(body.fault_attribution || existing.fault_attribution || "undetermined");
+      if (fault === "merchant_fault") {
+        const { data: order } = await db
+          .from("orders")
+          .select("merchant_id")
+          .eq("id", existing.order_id)
+          .maybeSingle();
+        if (order?.merchant_id) {
+          await applyMerchantFaultDebit(db, {
+            merchantId: String(order.merchant_id),
+            orderId: String(existing.order_id),
+            amount: refundAmount,
+            reason: `Support refund: case ${caseId}`,
+            createdBy: adminUser.id,
+          });
+        }
+      }
+
+      await db.from("order_disputes")
+        .update({
+          status: "refunded",
+          refund_amount: refundAmount,
+          resolution_notes: String(body.resolution_notes || ""),
+          handled_by: adminUser.id,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("support_case_id", caseId);
+    }
+
     const { data, error } = await db.from("support_cases")
-      .update(updates).eq("id", c.req.param("id")).select().single();
+      .update(updates).eq("id", caseId).select().single();
     if (error) return c.json({ error: error.message }, 500);
-    await writeKvAudit(adminUser, "roam_dash.support_case_updated", c.req.param("id"), "", JSON.stringify(updates));
-    return c.json({ case: data });
+
+    if (updates.status === "resolved" || updates.status === "closed") {
+      await db.from("customer_order_issues")
+        .update({ status: "resolved", resolved_at: new Date().toISOString() })
+        .eq("support_case_id", caseId);
+      await db.from("courier_delivery_issues")
+        .update({ status: "resolved", resolved_at: new Date().toISOString() })
+        .eq("support_case_id", caseId);
+    }
+
+    await writeKvAudit(adminUser, "roam_dash.support_case_updated", caseId, "", JSON.stringify(updates));
+    await notifyCaseStatusChange(db, data as Record<string, unknown>, String(data.status));
+
+    return c.json({ case: data, refund: refundResult });
+  });
+
+  support.get("/cases/:id/detail", async (c) => {
+    const db = getDb();
+    const caseId = c.req.param("id");
+    const { data: caseRow, error } = await db.from("support_cases").select("*").eq("id", caseId).maybeSingle();
+    if (error) return c.json({ error: error.message }, 500);
+    if (!caseRow) return c.json({ error: "Case not found" }, 404);
+
+    const { data: customerIssues } = await db
+      .from("customer_order_issues")
+      .select("*")
+      .eq("support_case_id", caseId);
+    const { data: courierIssues } = await db
+      .from("courier_delivery_issues")
+      .select("*")
+      .eq("support_case_id", caseId);
+    const { data: dispute } = await db
+      .from("order_disputes")
+      .select("*")
+      .eq("support_case_id", caseId)
+      .maybeSingle();
+
+    let waitEvents: unknown[] = [];
+    if (caseRow.order_id) {
+      const { data: waits } = await db
+        .from("courier_wait_events")
+        .select("*")
+        .eq("order_id", caseRow.order_id);
+      waitEvents = waits ?? [];
+    }
+
+    return c.json({
+      case: caseRow,
+      customer_issues: customerIssues ?? [],
+      courier_issues: courierIssues ?? [],
+      dispute,
+      wait_events: waitEvents,
+    });
   });
 
   app.route("/admin/support", support);

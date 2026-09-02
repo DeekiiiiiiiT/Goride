@@ -22,6 +22,7 @@ export interface PayoutDetail {
   orderEarnings: number;
   tips: number;
   adjustments: number;
+  adjustmentLineItems?: Array<{ amount: number; reason: string; createdAt: string }>;
   platformFeePercent: number;
   platformFee: number;
   netAmount: number;

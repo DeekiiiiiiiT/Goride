@@ -136,6 +136,13 @@ export default function HelpPage({ onNavigate }: Props) {
           ) : null}
           <button
             type="button"
+            onClick={() => onNavigate('my-issues')}
+            className="w-full max-w-sm border border-outline-variant text-on-surface font-semibold text-label-md py-4 px-6 rounded-lg"
+          >
+            My Issues
+          </button>
+          <button
+            type="button"
             onClick={() =>
               onNavigate('report-issue', {
                 issueType: cta?.reportType ?? 'other',

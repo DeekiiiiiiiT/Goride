@@ -37,6 +37,7 @@ import {
 import { assertMerchantAcceptingOrders } from "./merchantOpenCheck.ts";
 import { registerMerchantInventoryRoutes } from "./merchantInventoryRoutes.ts";
 import { registerCustomerOrderRoutes } from "./customerOrderRoutes.ts";
+import { registerMerchantSupportRoutes } from "./merchantSupportRoutes.ts";
 import { reverseOrderOutputTax } from "../_shared/gctLedger.ts";
 import { registerCustomerAccountRoutes } from "./customerAccountRoutes.ts";
 import { registerCustomerDiscoveryRoutes } from "./customerDiscoveryRoutes.ts";
@@ -2424,7 +2425,27 @@ app.get("/merchant/earnings/payouts/:id", async (c) => {
     ? periodOrders.reduce((sum, o) => sum + Number(o.platform_fee || 0), 0)
     : Number(row.fee || 0);
   const netAmount = Number(row.net_amount || 0);
-  const adjustments = orderEarnings + tips - platformFee - netAmount;
+
+  const { data: adjustmentRows } = await paymentsSb
+    .from("merchant_adjustments")
+    .select("amount, reason, created_at")
+    .eq("merchant_id", merchantId)
+    .order("created_at", { ascending: false })
+    .limit(50);
+
+  const periodAdjustments = (adjustmentRows ?? []).filter((adj) => {
+    if (!row.period_start || !row.period_end) return true;
+    const created = String(adj.created_at || "");
+    return created >= `${row.period_start}T00:00:00.000Z` &&
+      created <= `${row.period_end}T23:59:59.999Z`;
+  });
+  const adjustmentsFromTable = periodAdjustments.reduce(
+    (sum, adj) => sum + Number(adj.amount || 0),
+    0,
+  );
+  const adjustments = periodAdjustments.length > 0
+    ? adjustmentsFromTable
+    : orderEarnings + tips - platformFee - netAmount;
 
   const status = String(row.status || "pending");
   const payoutStatus = status === "completed"
@@ -2447,6 +2468,11 @@ app.get("/merchant/earnings/payouts/:id", async (c) => {
     platformFeePercent,
     platformFee,
     netAmount,
+    adjustmentLineItems: periodAdjustments.map((adj) => ({
+      amount: Number(adj.amount || 0),
+      reason: String(adj.reason || ""),
+      createdAt: String(adj.created_at || ""),
+    })),
   });
 });
 
@@ -2811,7 +2837,30 @@ app.post("/internal/pricing/rush-pass/renew", async (c) => {
     return c.json({ error: e instanceof Error ? e.message : "rush_pass_renew_failed" }, 500);
   }
 });
+app.post("/internal/disputes/refresh-merchant-performance", async (c) => {
+  const auth = await authorizeCronOrServiceRole(c.req.raw);
+  if (!auth.ok) return c.json({ error: auth.error }, auth.status);
+  try {
+    const { refreshMerchantPerformanceSnapshots } = await import("./disputeResolution/merchantPerformance.ts");
+    const result = await refreshMerchantPerformanceSnapshots(getServiceSupabase());
+    return c.json(result);
+  } catch (e) {
+    return c.json({ error: e instanceof Error ? e.message : "merchant_performance_failed" }, 500);
+  }
+});
+app.post("/internal/disputes/process-pending-refunds", async (c) => {
+  const auth = await authorizeCronOrServiceRole(c.req.raw);
+  if (!auth.ok) return c.json({ error: auth.error }, auth.status);
+  try {
+    const { processPendingRefunds } = await import("./disputeResolution/notifications.ts");
+    const result = await processPendingRefunds(getServiceSupabase());
+    return c.json(result);
+  } catch (e) {
+    return c.json({ error: e instanceof Error ? e.message : "pending_refunds_failed" }, 500);
+  }
+});
 registerCustomerDiscoveryRoutes(app, { getServiceSupabase, getSupabase });
+registerMerchantSupportRoutes(app, { getSupabase, getServiceSupabase });
 registerCourierConsumerRoutes(app, { getSupabase, getServiceSupabase });
 registerDashHealthRoutes(app, { getServiceSupabase });
 registerBankPayoutRoutes(app, { getSupabase });

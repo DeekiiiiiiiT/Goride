@@ -49,6 +49,9 @@ export default function ReportIssuePage({
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [submissionResult, setSubmissionResult] = useState<Awaited<
+    ReturnType<typeof submitCustomerOrderIssue>
+  > | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const { data, isLoading } = useQuery({
@@ -100,12 +103,13 @@ export default function ReportIssuePage({
     }
     setSubmitting(true);
     try {
-      await submitCustomerOrderIssue({
+      const result = await submitCustomerOrderIssue({
         orderId: selectedOrder,
         issueType,
         notes: details.trim(),
         photoPath: photoPath || undefined,
       });
+      setSubmissionResult(result);
       setSubmitted(true);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Could not submit report');
@@ -138,17 +142,47 @@ export default function ReportIssuePage({
   };
 
   if (submitted) {
+    const autoResolved = submissionResult?.resolution?.status === 'AUTO_RESOLVED';
+    const caseRef = submissionResult?.case?.id?.slice(0, 8).toUpperCase() ??
+      submissionResult?.resolution?.caseId?.slice(0, 8).toUpperCase();
+    const refundAmount = submissionResult?.resolution?.refundAmount;
+
     return (
       <div className="min-h-dvh flex flex-col items-center justify-center px-4 bg-background">
-        <MaterialIcon name="check_circle" className="text-primary text-[64px] mb-4" filled />
-        <h2 className="text-headline-md font-semibold mb-2">Report submitted</h2>
-        <p className="text-body-md text-on-surface-variant text-center mb-6">
-          We saved this against your order. Support will follow up.
+        <MaterialIcon
+          name={autoResolved ? 'check_circle' : 'schedule'}
+          className={`${autoResolved ? 'text-primary' : 'text-amber-600'} text-[64px] mb-4`}
+          filled
+        />
+        <h2 className="text-headline-md font-semibold mb-2">
+          {autoResolved ? 'We fixed this' : 'Report submitted'}
+        </h2>
+        <p className="text-body-md text-on-surface-variant text-center mb-2">
+          {submissionResult?.resolution?.message ?? 'Support will follow up on this order.'}
         </p>
+        {caseRef ? (
+          <p className="text-body-sm text-on-surface-variant text-center mb-4">
+            Reference #{caseRef}
+          </p>
+        ) : null}
+        {autoResolved && refundAmount != null && refundAmount > 0 ? (
+          <p className="text-headline-sm font-semibold text-primary mb-6">
+            Refunded J${refundAmount.toFixed(2)}
+          </p>
+        ) : (
+          <div className="mb-6" />
+        )}
+        <button
+          type="button"
+          onClick={() => onNavigate('my-issues')}
+          className="text-primary font-semibold mb-2"
+        >
+          View my issues
+        </button>
         <button
           type="button"
           onClick={goBack}
-          className="text-primary font-semibold"
+          className="text-on-surface-variant font-medium"
         >
           Back to {returnTo === 'help' || !returnTo ? 'Help' : 'order'}
         </button>

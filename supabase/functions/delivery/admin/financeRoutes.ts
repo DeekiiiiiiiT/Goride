@@ -7,6 +7,7 @@ import { requireProductAdmin, type ProductAdminUser } from "../../_shared/produc
 import { dualWriteDashPayment } from "../../_shared/unifiedLedger/dualWriteDash.ts";
 import { requireDashWrite } from "./dashPermissions.ts";
 import { getDb } from "./merchantAdminShared.ts";
+import { applyMerchantFaultDebit } from "../disputeResolution/merchantDebit.ts";
 
 function getPaymentsDb() {
   return createClient(
@@ -157,11 +158,13 @@ export function registerFinanceAdminRoutes(app: Hono) {
     if (denied) return denied;
     const body = await c.req.json().catch(() => ({}));
     const merchantId = body.merchant_id as string;
-    const amount = Number(body.amount);
+    const rawAmount = Number(body.amount);
     const reason = String(body.reason || "").trim();
-    if (!merchantId || !reason || Number.isNaN(amount)) {
+    const type = String(body.type || "credit").toLowerCase();
+    if (!merchantId || !reason || Number.isNaN(rawAmount)) {
       return c.json({ error: "merchant_id, amount, and reason required" }, 400);
     }
+    const amount = type === "debit" ? -Math.abs(rawAmount) : Math.abs(rawAmount);
     const pdb = getPaymentsDb();
     const { data, error } = await pdb.from("merchant_adjustments").insert({
       merchant_id: merchantId,
@@ -171,6 +174,20 @@ export function registerFinanceAdminRoutes(app: Hono) {
     }).select().single();
     if (error) return c.json({ error: error.message }, 500);
     return c.json({ adjustment: data }, 201);
+  });
+
+  admin.get("/adjustments", async (c) => {
+    const merchantId = c.req.query("merchant_id");
+    const pdb = getPaymentsDb();
+    let query = pdb.from("merchant_adjustments").select("*").order("created_at", { ascending: false });
+    if (merchantId) query = query.eq("merchant_id", merchantId);
+    const { data, error } = await query.limit(100);
+    if (error) return c.json({ error: error.message }, 500);
+    const adjustments = (data ?? []).map((row) => ({
+      ...row,
+      type: Number(row.amount) < 0 ? "debit" : "credit",
+    }));
+    return c.json({ adjustments });
   });
 
   admin.get("/disputes", async (c) => {
@@ -225,6 +242,24 @@ export function registerFinanceAdminRoutes(app: Hono) {
         providerError: result.providerError ?? null,
         refund: result.refund,
       };
+
+      const fault = String(body.fault_attribution || existing.fault_attribution || "undetermined");
+      if (fault === "merchant_fault") {
+        const { data: order } = await db
+          .from("orders")
+          .select("merchant_id")
+          .eq("id", existing.order_id)
+          .maybeSingle();
+        if (order?.merchant_id) {
+          await applyMerchantFaultDebit(db, {
+            merchantId: String(order.merchant_id),
+            orderId: String(existing.order_id),
+            amount: refundAmount,
+            reason: `Dispute refund: ${c.req.param("id")}`,
+            createdBy: adminUser.id,
+          });
+        }
+      }
     }
 
     const updates: Record<string, unknown> = {

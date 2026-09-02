@@ -1467,6 +1467,34 @@ export function createSupportCase(
   });
 }
 
+export function patchSupportCase(
+  accessToken: string,
+  caseId: string,
+  payload: {
+    status?: string;
+    resolution_notes?: string;
+    refund_amount?: number;
+    fault_attribution?: string;
+    priority?: string;
+  },
+) {
+  return deliveryFetch<{ case: SupportCaseRow; refund?: Record<string, unknown> | null }>(
+    accessToken,
+    `/admin/support/cases/${caseId}`,
+    { method: 'PATCH', body: JSON.stringify(payload) },
+  );
+}
+
+export function getSupportCaseDetail(accessToken: string, caseId: string) {
+  return deliveryFetch<{
+    case: SupportCaseRow;
+    customer_issues: Array<Record<string, unknown>>;
+    courier_issues: Array<Record<string, unknown>>;
+    dispute: Record<string, unknown> | null;
+    wait_events: Array<Record<string, unknown>>;
+  }>(accessToken, `/admin/support/cases/${caseId}/detail`);
+}
+
 // ---------------------------------------------------------------------------
 // Finance adjustments
 // ---------------------------------------------------------------------------

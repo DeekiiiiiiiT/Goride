@@ -26,6 +26,7 @@ import FavoritesPage from './pages/FavoritesPage';
 import NotificationSettingsPage from './pages/NotificationSettingsPage';
 import HelpPage from './pages/HelpPage';
 import ReportIssuePage from './pages/ReportIssuePage';
+import MyIssuesPage from './pages/MyIssuesPage';
 import DealsPage from './pages/DealsPage';
 import CategoryPage from './pages/CategoryPage';
 import RestaurantReviewsPage from './pages/RestaurantReviewsPage';
@@ -87,6 +88,7 @@ type StackPage =
   | 'help'
   | 'about'
   | 'report-issue'
+  | 'my-issues'
   | 'restaurant-reviews'
   | 'out-of-delivery'
   | 'connection-error'
@@ -117,6 +119,7 @@ const IMMERSIVE_STACK_PAGES: StackPage[] = [
   'payment-methods',
   'rate-order',
   'report-issue',
+  'my-issues',
   'edit-profile',
   'out-of-delivery',
   'saved-addresses',
@@ -821,6 +824,8 @@ function DashCustomerShell() {
             returnTo={pageData?.returnTo as string | undefined}
           />
         );
+      case 'my-issues':
+        return <MyIssuesPage onNavigate={navigate} />;
       case 'restaurant-reviews':
         return (
           <RestaurantReviewsPage

@@ -241,6 +241,17 @@ export async function submitCourierNotes(
   return { ok: true };
 }
 
+export async function unassignFromOrder(orderId: string): Promise<{ ok: boolean; error?: string }> {
+  const headers = await authHeaders();
+  if (!headers) return { ok: false, error: 'Not signed in' };
+  const res = await fetch(`${BASE}/orders/${orderId}/unassign`, {
+    method: 'POST',
+    headers,
+  });
+  if (!res.ok) return { ok: false, error: await parseError(res) };
+  return { ok: true };
+}
+
 export async function submitCourierIssue(
   orderId: string,
   issueType: string,
