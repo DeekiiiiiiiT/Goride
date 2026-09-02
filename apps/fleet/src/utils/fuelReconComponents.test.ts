@@ -3,7 +3,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { shouldAutoClosePeriod } from './fuelAutoClose';
-import { needsSecondApprover, FUEL_SECOND_APPROVER_THRESHOLD } from './fuelDualApproval';
+import { needsSecondApprover, FUEL_SECOND_APPROVER_THRESHOLD, hasDistinctSecondApprove } from './fuelDualApproval';
 import { unexplainedLabel } from './fuelReconGlossary';
 import type { FuelSettlementRow } from '../components/fuel/reconciliation/FuelSettlementTable';
 
@@ -17,8 +17,15 @@ describe('fuel recon product helpers', () => {
   it('second approver threshold + glossary', () => {
     expect(needsSecondApprover(FUEL_SECOND_APPROVER_THRESHOLD - 1)).toBe(false);
     expect(needsSecondApprover(FUEL_SECOND_APPROVER_THRESHOLD + 1)).toBe(true);
+    expect(needsSecondApprover(99_999, 0)).toBe(false);
     expect(unexplainedLabel(10)).toBe('Unexplained');
     expect(unexplainedLabel(-10)).toBe('Over-explained');
+  });
+
+  it('distinct second approve rejects same identity', () => {
+    expect(hasDistinctSecondApprove(['user-a'], 'user-a')).toBe(false);
+    expect(hasDistinctSecondApprove(['user-b'], 'user-a')).toBe(true);
+    expect(hasDistinctSecondApprove(['user-b'], null)).toBe(true);
   });
 
   it('settlement row shape stays exportable', () => {

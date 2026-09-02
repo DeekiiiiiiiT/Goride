@@ -74,6 +74,9 @@ export function useFuelPeriodMutations() {
       periodId: string;
       version: number;
       idempotencyKey: string;
+      snapshots?: any[];
+      totalSpend?: number;
+      secondApproverThreshold?: number;
     }) => api.enqueueFuelPeriodFinalize(args),
     onSuccess: invalidate,
   });
@@ -95,7 +98,7 @@ export function useFuelPeriodMutations() {
   });
 
   const updateStep = useMutation({
-    mutationFn: async (args: { periodId: string; step: string }) =>
+    mutationFn: async (args: { periodId: string; step: string; note?: string }) =>
       api.updateFuelPeriodStep(args),
     onSuccess: invalidate,
   });

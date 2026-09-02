@@ -27,7 +27,9 @@ import {
   buildFuelVehicleSnapshots,
   liveReportsToPrimaryClaimedSlices,
 } from '../../../utils/fuelPeriodDerive';
-
+import { fuelPeriodFinalizeIdempotencyKey } from '../../../utils/fuelPeriodIdempotency';
+import { FUEL_SECOND_APPROVER_THRESHOLD } from '../../../utils/fuelDualApproval';
+import { FUEL_PERIODS_KEY } from '../../../hooks/useFuelPeriods';
 type PreparedWeek = {
   period: FuelReconciliationPeriod;
   label: string;
@@ -256,6 +258,7 @@ export function FuelBulkFinalizeDialog({
               {
                 priorReports,
                 skipCacheInvalidation: true,
+                deferSnapshotPersist: true,
                 onProgress: (msg) => onProgress(`${formatFuelBulkProgress(i + 1, prepared.length, label)} ${msg}`),
               },
             );
@@ -275,12 +278,39 @@ export function FuelBulkFinalizeDialog({
                 message: result.failures?.[0]?.error || result.message || 'Partial failure',
               });
             } else {
-              weekResults.push({
-                id: period.id,
-                label,
-                status: 'ok',
-                message: `${result.successCount} posted · ${result.snapshotCount} locked`,
+              const weekStart = period.startDate;
+              const weekEnd = period.endDate;
+              const periodRow = await api.ensureFuelReconciliationPeriod({ weekStart, weekEnd });
+              const totalSpend = (result.snapshots || []).reduce(
+                (s, r) => s + (Number(r.totalGasCardCost) || 0),
+                0,
+              );
+              const jobRes = await api.enqueueFuelPeriodFinalize({
+                periodId: periodRow.id,
+                version: periodRow.version || 1,
+                idempotencyKey: fuelPeriodFinalizeIdempotencyKey(
+                  periodRow.id,
+                  periodRow.version || 1,
+                ),
+                snapshots: result.snapshots || [],
+                totalSpend,
+                secondApproverThreshold: FUEL_SECOND_APPROVER_THRESHOLD,
               });
+              if (jobRes?.state === 'failed') {
+                weekResults.push({
+                  id: period.id,
+                  label,
+                  status: 'failed',
+                  message: jobRes.error || 'Server finalize failed',
+                });
+              } else {
+                weekResults.push({
+                  id: period.id,
+                  label,
+                  status: 'ok',
+                  message: `${result.successCount} posted · ${result.snapshotCount} locked`,
+                });
+              }
             }
           } catch (e: any) {
             console.error('[FuelBulkFinalize] week failed', period.id, e);
@@ -301,6 +331,7 @@ export function FuelBulkFinalizeDialog({
 
         await queryClient.invalidateQueries({ queryKey: ['finalizedReports'] });
         await queryClient.invalidateQueries({ queryKey: ['driverFinancialPeriods'] });
+        await queryClient.invalidateQueries({ queryKey: [FUEL_PERIODS_KEY] });
         onComplete();
         return weekResults;
       }}

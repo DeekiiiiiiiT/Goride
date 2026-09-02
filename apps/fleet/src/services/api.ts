@@ -4021,6 +4021,9 @@ export const api = {
     periodId: string;
     version: number;
     idempotencyKey: string;
+    snapshots?: any[];
+    totalSpend?: number;
+    secondApproverThreshold?: number;
   }) {
     const response = await fetchWithRetry(
       `${API_ENDPOINTS.fuel}/fuel/periods/${encodeURIComponent(args.periodId)}/finalize`,
@@ -4031,7 +4034,11 @@ export const api = {
           'Idempotency-Key': args.idempotencyKey,
           'If-Match': String(args.version),
         },
-        body: JSON.stringify({}),
+        body: JSON.stringify({
+          snapshots: args.snapshots || [],
+          totalSpend: args.totalSpend,
+          secondApproverThreshold: args.secondApproverThreshold,
+        }),
       },
     );
     if (response.status === 409) {
@@ -4044,6 +4051,47 @@ export const api = {
     if (!response.ok) {
       const errText = await response.text().catch(() => '');
       throw new Error(errText || 'Finalize job failed');
+    }
+    return response.json();
+  },
+
+  async ensureFuelReconciliationPeriod(args: { weekStart: string; weekEnd: string }) {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/fuel/periods/ensure`, {
+      method: 'POST',
+      headers: await requireAuthHeaders(),
+      body: JSON.stringify(args),
+    });
+    if (!response.ok) {
+      const errText = await response.text().catch(() => '');
+      throw new Error(errText || 'Ensure period failed');
+    }
+    return response.json();
+  },
+
+  async secondApproveFuelPeriod(args: { periodId: string; note?: string }) {
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.fuel}/fuel/periods/${encodeURIComponent(args.periodId)}/second-approve`,
+      {
+        method: 'POST',
+        headers: await requireAuthHeaders(),
+        body: JSON.stringify({ note: args.note }),
+      },
+    );
+    if (!response.ok) {
+      const errText = await response.text().catch(() => '');
+      throw new Error(errText || 'Second approve failed');
+    }
+    return response.json();
+  },
+
+  async getFuelPeriodEvidencePack(periodId: string) {
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.fuel}/fuel/periods/${encodeURIComponent(periodId)}/evidence-pack`,
+      { headers: await requireAuthHeaders(null) },
+    );
+    if (!response.ok) {
+      const errText = await response.text().catch(() => '');
+      throw new Error(errText || 'Evidence pack failed');
     }
     return response.json();
   },
@@ -4096,13 +4144,13 @@ export const api = {
     return response.json();
   },
 
-  async updateFuelPeriodStep(args: { periodId: string; step: string }) {
+  async updateFuelPeriodStep(args: { periodId: string; step: string; note?: string }) {
     const response = await fetchWithRetry(
       `${API_ENDPOINTS.fuel}/fuel/periods/${encodeURIComponent(args.periodId)}/step`,
       {
         method: 'PATCH',
         headers: await requireAuthHeaders(),
-        body: JSON.stringify({ step: args.step }),
+        body: JSON.stringify({ step: args.step, note: args.note }),
       },
     );
     if (!response.ok) {

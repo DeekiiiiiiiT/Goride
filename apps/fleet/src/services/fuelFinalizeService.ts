@@ -1,7 +1,7 @@
 /**
  * Shared Finalize engine for single-week and bulk Consumption Reconciliation.
- * Settlement stays client-side; each driver-week snapshot is saved immediately
- * after its settlement so a mid-batch failure cannot orphan money.
+ * When deferSnapshotPersist is set, the browser only builds snapshots — the period
+ * job owns wallet settle + KV + ledger (C4).
  */
 import { addDays, format, parseISO } from 'date-fns';
 import { api } from './api';
@@ -39,6 +39,8 @@ export type FuelFinalizeOptions = {
   priorReports?: FinalizedFuelReport[];
   skipCacheInvalidation?: boolean;
   onProgress?: (message: string) => void;
+  /** Settle + build snapshots only; server period job posts wallet + KV + ledger (C4). */
+  deferSnapshotPersist?: boolean;
 };
 
 export type FuelFinalizeFailure = {
@@ -54,6 +56,7 @@ export type FuelFinalizeWeekResult = {
   snapshotCount: number;
   message?: string;
   failures: FuelFinalizeFailure[];
+  snapshots?: FinalizedFuelReport[];
 };
 
 function parseSaveResponse(res: { success?: boolean; saved?: number; failures?: string[] } | void) {
@@ -85,7 +88,9 @@ export async function finalizeFuelWeekReports(
   const { vehicles, drivers, fuelCards, fuelEntries, scenarios, trips } = deps;
   const attrCtx = { vehicles, fuelCards, trips };
 
-  const settlementDeps = await settlementService.loadSettlementDeps().catch(() => null);
+  const settlementDeps = opts.deferSnapshotPersist
+    ? null
+    : await settlementService.loadSettlementDeps().catch(() => null);
 
   for (const report of reports) {
     const { start: rStart } = reportWeekYmdBounds(report);
@@ -114,7 +119,9 @@ export async function finalizeFuelWeekReports(
         continue;
       }
 
-      if (prior) {
+      const skipClientMoney = Boolean(opts.deferSnapshotPersist);
+
+      if (!skipClientMoney && prior) {
         opts.onProgress?.(`Reversing prior settlement for ${report.driverId}…`);
         await settlementService.reverseEnterpriseFuelSyncForReport(report);
       }
@@ -132,12 +139,16 @@ export async function finalizeFuelWeekReports(
           const weekEnd = format(parseISO(reportWeekYmdBounds(report).end), 'yyyy-MM-dd');
           await api.closeFuelWeekCycles(report.vehicleId, weekEnd).catch(() => undefined);
         }
-        opts.onProgress?.(`Posting ${relevantEntries.length} fill(s)…`);
-        await settlementService.commitWeeklyStatement(report, relevantEntries, settlementDeps || undefined);
-        settlementCommitted = true;
-        successCount++;
+        if (!skipClientMoney) {
+          opts.onProgress?.(`Posting ${relevantEntries.length} fill(s)…`);
+          await settlementService.commitWeeklyStatement(report, relevantEntries, settlementDeps || undefined);
+          settlementCommitted = true;
+          successCount++;
+        } else {
+          opts.onProgress?.(`Prepared ${relevantEntries.length} fill(s) for server settle…`);
+          successCount++;
+        }
       }
-
       const vehicle = vehicles.find((v: any) => v.id === report.vehicleId);
       const driver = drivers.find((d: any) => d.id === report.driverId || d.driverId === report.driverId);
       const driverSpend = sumPaidByDriverForReport(fuelEntries, report, vehicles, attrCtx);
@@ -189,10 +200,12 @@ export async function finalizeFuelWeekReports(
 
       opts.onProgress?.(`Saving snapshot for ${report.driverId}…`);
       try {
-        const saveRes = await api.saveFinalizedReports([snapshot]);
-        const parsed = parseSaveResponse(saveRes);
-        if (!parsed.success) {
-          throw new Error(parsed.failures[0] || 'Snapshot save reported failure');
+        if (!opts.deferSnapshotPersist) {
+          const saveRes = await api.saveFinalizedReports([snapshot]);
+          const parsed = parseSaveResponse(saveRes);
+          if (!parsed.success) {
+            throw new Error(parsed.failures[0] || 'Snapshot save reported failure');
+          }
         }
         snapshotCount++;
         snapshots.push(snapshot);
@@ -260,6 +273,7 @@ export async function finalizeFuelWeekReports(
     successCount,
     snapshotCount,
     failures,
+    snapshots,
     message: failures.length ? `${failures.length} driver-week(s) failed` : undefined,
   };
 }

@@ -6,6 +6,7 @@ import { Info } from 'lucide-react';
 import { ScenarioList } from './ScenarioList';
 import { PolicySchedulePanel } from './PolicySchedulePanel';
 import { FuelPnlSettingsPanel } from './FuelPnlSettingsPanel';
+import { FuelDualApprovalSettingsPanel } from './FuelDualApprovalSettingsPanel';
 import type { FuelScenario } from '../../types/fuel';
 
 export function FuelConfiguration({
@@ -43,6 +44,7 @@ export function FuelConfiguration({
                 </Alert>
 
                 <FuelPnlSettingsPanel />
+                <FuelDualApprovalSettingsPanel />
 
                 <Tabs
                     value={tab}

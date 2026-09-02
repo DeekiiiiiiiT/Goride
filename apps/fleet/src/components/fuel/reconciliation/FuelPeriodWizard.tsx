@@ -21,7 +21,6 @@ import {
   type FuelExceptionBlocker,
 } from '../../../utils/fuelFinalizeGating';
 import { FUEL_SPEND_EPS } from '../../../utils/fuelMoneyEpsilon';
-import { Checkbox } from '../../ui/checkbox';
 import {
   canAdvanceFuelStep,
   computeFuelGatedStepStates,
@@ -37,14 +36,22 @@ import {
   buildFuelVehicleSnapshots,
   liveReportsToPrimaryClaimedSlices,
 } from '../../../utils/fuelPeriodDerive';
-import { FuelSettlementTable } from './FuelSettlementTable';
 import { FuelSettlementPreviewStep } from './FuelSettlementPreviewStep';
 import { FuelGapAttribution } from './FuelGapAttribution';
+import { FuelFinalizeStep } from './FuelFinalizeStep';
 import { unexplainedLabel } from '../../../utils/fuelReconGlossary';
-import { needsSecondApprover, FUEL_SECOND_APPROVER_THRESHOLD } from '../../../utils/fuelDualApproval';
+import {
+  hasDistinctSecondApprove,
+  needsSecondApprover,
+  FUEL_SECOND_APPROVER_THRESHOLD,
+  resolveFuelSecondApproverThreshold,
+} from '../../../utils/fuelDualApproval';
 import { downloadFuelEvidencePack } from '../../../utils/fuelEvidencePack';
 import { downloadCSV } from '../../../utils/export';
 import { api } from '../../../services/api';
+import { toast } from 'sonner';
+import { useAuth } from '../../auth/AuthContext';
+import { formatFuelMoney } from '../../../utils/formatFuelMoney';
 
 /**
  * Period wizard — production Consumption Reconciliation walkthrough.
@@ -61,7 +68,6 @@ import type {
 import { UNASSIGNED_FUEL_DRIVER_ID } from '../../../types/fuel';
 import type { Trip } from '../../../types/data';
 import type { Vehicle } from '../../../types/vehicle';
-import { formatFuelMoney } from '../../../utils/formatFuelMoney';
 import { FUEL_STEP_ICONS } from '../../../utils/fuelStepIcons';
 import {
   loadFuelLeakageReview,
@@ -252,6 +258,7 @@ function FuelPeriodWizardInner({
   sessionKey = 0,
   initialStepId,
 }: FuelPeriodWizardProps) {
+  const { user } = useAuth();
   const [leakageReviewed, setLeakageReviewed] = useState(() =>
     Boolean(loadFuelLeakageReview(period.startDate)),
   );
@@ -262,13 +269,19 @@ function FuelPeriodWizardInner({
   const [progressIndex, setProgressIndex] = useState(0);
   const [finalizing, setFinalizing] = useState(false);
   const [financeWarningAcknowledged, setFinanceWarningAcknowledged] = useState(false);
-  const [secondApproverConfirmed, setSecondApproverConfirmed] = useState(false);
+  const [secondApproveActors, setSecondApproveActors] = useState<string[]>([]);
+  const [secondApproveBusy, setSecondApproveBusy] = useState(false);
+  const [serverPeriodId, setServerPeriodId] = useState<string | null>(null);
+  const [secondApproverThreshold, setSecondApproverThreshold] = useState(
+    FUEL_SECOND_APPROVER_THRESHOLD,
+  );
   const [exceptionBusyId, setExceptionBusyId] = useState<string | null>(null);
   const [stepNoteDraft, setStepNoteDraft] = useState('');
   const [stepNotes, setStepNotes] = useState<Array<{ step: string; note: string; at: string }>>([]);
   const [queueIndex, setQueueIndex] = useState(0);
 
   const periodLocked = period.locked;
+  const secondApproverConfirmed = hasDistinctSecondApprove(secondApproveActors, user?.id);
 
   // Parent trips are for the selected recon week — only reuse when they overlap this period.
   const tripsOverlapThisWeek = useMemo(
@@ -407,6 +420,50 @@ function FuelPeriodWizardInner({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [period.id, sessionKey, initialStepId]);
 
+  // H8/H9 + NEW-6: server period is SoT for leakage review + second approval
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const prefs = await api.getPreferences().catch(() => null);
+        if (!cancelled && prefs) {
+          setSecondApproverThreshold(
+            resolveFuelSecondApproverThreshold((prefs as any)?.fuelSecondApproverThreshold),
+          );
+        }
+        const rows = await api.listFuelReconciliationPeriods({
+          from: period.startDate,
+          to: period.startDate,
+        });
+        const hit = rows.find((r) => String(r.weekStart).split('T')[0] === period.startDate);
+        if (cancelled || !hit?.id) return;
+        setServerPeriodId(hit.id);
+        if (hit.leakageReviewedAt) setLeakageReviewed(true);
+        const pack = await api.getFuelPeriodEvidencePack(hit.id);
+        if (cancelled) return;
+        const actors = ((pack?.audit || []) as Array<{ action?: string; actor_id?: string }>)
+          .filter((a) => a.action === 'second_approve')
+          .map((a) => String(a.actor_id || ''))
+          .filter(Boolean);
+        setSecondApproveActors(actors);
+        if (pack?.period?.leakageReviewedAt) setLeakageReviewed(true);
+      } catch {
+        /* offline — local leakage cache still applies */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [period.startDate, period.endDate, sessionKey]);
+
+  const refreshSecondApprovals = async (periodId: string) => {
+    const pack = await api.getFuelPeriodEvidencePack(periodId);
+    const actors = ((pack?.audit || []) as Array<{ action?: string; actor_id?: string }>)
+      .filter((a) => a.action === 'second_approve')
+      .map((a) => String(a.actor_id || ''))
+      .filter(Boolean);
+    setSecondApproveActors(actors);
+  };
   useEffect(() => {
     const current = gatedStates.find((s) => s.id === activeStepId);
     if (current?.locked) {
@@ -538,10 +595,11 @@ function FuelPeriodWizardInner({
 
   const handleContinue = () => {
     if (!canContinue || isLast) return;
-    if (stepNoteDraft.trim()) {
+    const noteForStep = stepNoteDraft.trim();
+    if (noteForStep) {
       setStepNotes((prev) => [
         ...prev,
-        { step: activeStepId, note: stepNoteDraft.trim(), at: new Date().toISOString() },
+        { step: activeStepId, note: noteForStep, at: new Date().toISOString() },
       ]);
       setStepNoteDraft('');
     }
@@ -554,7 +612,14 @@ function FuelPeriodWizardInner({
         .listFuelReconciliationPeriods({ from: period.startDate, to: period.startDate })
         .then((rows) => {
           const hit = rows.find((r) => String(r.weekStart).split('T')[0] === period.startDate);
-          if (hit?.id) return api.updateFuelPeriodStep({ periodId: hit.id, step: next });
+          if (hit?.id) {
+            setServerPeriodId(hit.id);
+            return api.updateFuelPeriodStep({
+              periodId: hit.id,
+              step: next,
+              note: noteForStep || undefined,
+            });
+          }
         })
         .catch(() => undefined);
     }
@@ -572,17 +637,80 @@ function FuelPeriodWizardInner({
       ]);
       setStepNoteDraft('');
     }
-    // Soft server persist when period row exists (Wave C H8)
-    void api
-      .listFuelReconciliationPeriods({ from: period.startDate, to: period.startDate })
-      .then((rows) => {
-        const hit = rows.find((r) => String(r.weekStart).split('T')[0] === period.startDate);
-        if (hit?.id) return api.reviewFuelPeriodLeakage({ periodId: hit.id, note });
-      })
-      .catch(() => undefined);
+    void (async () => {
+      try {
+        const ensured =
+          serverPeriodId
+            ? { id: serverPeriodId }
+            : await api.ensureFuelReconciliationPeriod({
+                weekStart: period.startDate,
+                weekEnd: period.endDate,
+              });
+        if (ensured?.id) {
+          setServerPeriodId(ensured.id);
+          await api.reviewFuelPeriodLeakage({ periodId: ensured.id, note });
+        }
+      } catch (e: any) {
+        toast.message('Saved on this device — server sync failed. Retry when online.');
+      }
+    })();
     const settlementIdx = FUEL_STEP_ORDER.indexOf('settlement-preview');
     setProgressIndex(Math.max(progressIndex, settlementIdx));
     setActiveStepId('settlement-preview');
+  };
+
+  const handleRecordSecondApproval = async () => {
+    setSecondApproveBusy(true);
+    try {
+      const ensured =
+        serverPeriodId
+          ? { id: serverPeriodId }
+          : await api.ensureFuelReconciliationPeriod({
+              weekStart: period.startDate,
+              weekEnd: period.endDate,
+            });
+      if (!ensured?.id) throw new Error('Period missing');
+      setServerPeriodId(ensured.id);
+      await api.secondApproveFuelPeriod({
+        periodId: ensured.id,
+        note: stepNoteDraft.trim() || undefined,
+      });
+      await refreshSecondApprovals(ensured.id);
+      toast.success('Second approval recorded for your identity.');
+    } catch (e: any) {
+      toast.error(e?.message || 'Could not record second approval');
+    } finally {
+      setSecondApproveBusy(false);
+    }
+  };
+
+  const handleDownloadEvidencePack = async () => {
+    try {
+      if (serverPeriodId) {
+        const pack = await api.getFuelPeriodEvidencePack(serverPeriodId);
+        const blob = new Blob([JSON.stringify(pack, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `fuel-evidence-${period.startDate}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+        return;
+      }
+    } catch {
+      /* fall through to client pack */
+    }
+    downloadFuelEvidencePack({
+      weekLabel: period.label,
+      weekStart: period.startDate,
+      weekEnd: period.endDate,
+      strip,
+      settlementRows,
+      openDisputeCount: openDisputes.length,
+      leakageReviewed,
+      stepNotes,
+      secondApproverConfirmed,
+    });
   };
 
   // Always re-gate from live fuelEntries. Preferring weekReports.gateResult left
@@ -646,7 +774,7 @@ function FuelPeriodWizardInner({
     if (gate.hasBlockingWarnings && !financeWarningAcknowledged) {
       return;
     }
-    if (needsSecondApprover(strip.totalSpend) && !secondApproverConfirmed) {
+    if (needsSecondApprover(strip.totalSpend, secondApproverThreshold) && !secondApproverConfirmed) {
       return;
     }
     if (stepNoteDraft.trim()) {
@@ -659,22 +787,7 @@ function FuelPeriodWizardInner({
     setFinalizing(true);
     try {
       const ok = await onFinalize(liveReports);
-      if (ok) {
-        // Soft lock period record of truth when server row exists
-        void api
-          .listFuelReconciliationPeriods({ from: period.startDate, to: period.startDate })
-          .then((rows) => {
-            const hit = rows.find((r) => String(r.weekStart).split('T')[0] === period.startDate);
-            if (!hit?.id) return;
-            return api.enqueueFuelPeriodFinalize({
-              periodId: hit.id,
-              version: hit.version || 1,
-              idempotencyKey: `finalize:${hit.id}:${Date.now()}`,
-            });
-          })
-          .catch(() => undefined);
-        onBack();
-      }
+      if (ok) onBack();
     } finally {
       setFinalizing(false);
     }
@@ -783,7 +896,8 @@ function FuelPeriodWizardInner({
                   liveReports.length === 0 ||
                   !!gateResult.hasExceptionBlockers ||
                   (!!gateResult.hasBlockingWarnings && !financeWarningAcknowledged) ||
-                  (needsSecondApprover(strip.totalSpend) && !secondApproverConfirmed),
+                  (needsSecondApprover(strip.totalSpend, secondApproverThreshold) &&
+                    !secondApproverConfirmed),
               };
       default:
         return { title: '', body: '' };
@@ -1169,73 +1283,36 @@ function FuelPeriodWizardInner({
         )}
 
         {activeStepId === 'finalize' && (
-          <div className="space-y-3">
-            <div className="flex flex-wrap justify-end gap-2">
-              <Button type="button" variant="outline" className="min-h-11" onClick={exportSettlementCsv}>
-                Export CSV
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                className="min-h-11"
-                onClick={() =>
-                  downloadFuelEvidencePack({
-                    weekLabel: period.label,
-                    weekStart: period.startDate,
-                    weekEnd: period.endDate,
-                    strip,
-                    settlementRows,
-                    openDisputeCount: openDisputes.length,
-                    leakageReviewed,
-                    stepNotes,
-                    secondApproverConfirmed,
-                  })
-                }
-              >
-                Download evidence pack
-              </Button>
-            </div>
-            <FuelExceptionBlockersPanel
-              blockers={exceptionBlockers}
-              plateByVehicleId={plateByVehicleId}
-              busyId={exceptionBusyId}
-              onAcceptException={
-                onAcceptFuelException
-                  ? handleAcceptException
-                  : async () => undefined
-              }
-              onEditFill={
-                onEditFuelEntry
-                  ? (b) => onEditFuelEntry(b.id)
-                  : onOpenTransactionLogs
-                    ? openExceptionInLogs
-                    : undefined
-              }
-            />
-            {gateResult.hasBlockingWarnings && !gateResult.hasExceptionBlockers && (
-              <label className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-                <Checkbox
-                  checked={financeWarningAcknowledged}
-                  onCheckedChange={(v) => setFinanceWarningAcknowledged(!!v)}
-                  className="mt-0.5"
-                />
-                I reviewed data-quality and re-finalize warnings for this week.
-              </label>
-            )}
-            {needsSecondApprover(strip.totalSpend) && !periodLocked && (
-              <label className="flex items-start gap-2 rounded-md border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm text-indigo-950">
-                <Checkbox
-                  checked={secondApproverConfirmed}
-                  onCheckedChange={(v) => setSecondApproverConfirmed(!!v)}
-                  className="mt-0.5"
-                />
-                Second approver confirmed (spend above {formatFuelMoney(FUEL_SECOND_APPROVER_THRESHOLD)} threshold).
-              </label>
-            )}
-            {settlementRows.length > 0 && (
-              <FuelSettlementTable rows={settlementRows} showStatus />
-            )}
-          </div>
+          <FuelFinalizeStep
+            periodLocked={periodLocked}
+            exceptionBlockers={exceptionBlockers}
+            plateByVehicleId={plateByVehicleId}
+            exceptionBusyId={exceptionBusyId}
+            onAcceptException={
+              onAcceptFuelException
+                ? handleAcceptException
+                : async () => undefined
+            }
+            onEditFill={
+              onEditFuelEntry
+                ? (b) => onEditFuelEntry(b.id)
+                : onOpenTransactionLogs
+                  ? openExceptionInLogs
+                  : undefined
+            }
+            hasBlockingWarnings={gateResult.hasBlockingWarnings}
+            hasExceptionBlockers={gateResult.hasExceptionBlockers}
+            financeWarningAcknowledged={financeWarningAcknowledged}
+            onFinanceWarningChange={setFinanceWarningAcknowledged}
+            needsSecondApprover={needsSecondApprover(strip.totalSpend, secondApproverThreshold)}
+            secondApproverThreshold={secondApproverThreshold}
+            secondApproverConfirmed={secondApproverConfirmed}
+            secondApproveBusy={secondApproveBusy}
+            onRecordSecondApproval={() => void handleRecordSecondApproval()}
+            onExportCsv={exportSettlementCsv}
+            onDownloadEvidencePack={() => void handleDownloadEvidencePack()}
+            settlementRows={settlementRows}
+          />
         )}
       </div>
 
