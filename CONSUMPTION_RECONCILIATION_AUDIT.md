@@ -13,6 +13,20 @@
 
 **Trust this table for current state.** Historical pass-2 / pass-3 sections below stay as archaeology; they are not the live backlog.
 
+### Program freeze (Flawless Close-Out — Wave 0)
+
+**Code backlog = Phase 6 only.** **Ops backlog = Wave F (F1–F8) + Wave G.** Do not reopen closed Criticals/Highs unless a cert case fails.
+
+| Program DoD | Status |
+|---|---|
+| Deno imports `_shared/fuelCore` twin; no local coverage/ratio math in `fuel_week_engine.ts` | ✅ Wave 1 done |
+| One fixture week: dual-path `weekSnapshotMoneyDelta` &lt; 0.01 (NEW-13) | ✅ Wave 2 done |
+| CI mounts landing + wizard shell + bulk + reset without live creds (M15) | ✅ Wave 3 done |
+| F1–F8 signed on staging | ⏳ Ops — runbook ready ([certification](docs/fuel-period-auto-close-certification.md)); `gh auth` required |
+| First production cron night reviewed; digest healthy; dual mode stays `skip` | ⏳ Ops — [Wave G monitoring](docs/fuel-period-wave-g-monitoring.md) |
+
+**Rollback:** `FUEL_BUILD_SNAPSHOTS_ENGINE=entries` emergency path; cron dual mode `skip`; disable [`.github/workflows/fuel-period-auto-close-cron.yml`](.github/workflows/fuel-period-auto-close-cron.yml) if digest fails.
+
 | Item | Status |
 |---|---|
 | **NEW-5** stable idempotency + real aggregates | ✅ Closed |
@@ -27,17 +41,87 @@
 | **M1/M2** landing scale | ✅ M2 no silent week-8 cap; **M1** hook SoT `serverSkipWeekStarts` + page filter; materialize to SQL |
 | **Auto-close scheduler** | ✅ [`.github/workflows/fuel-period-auto-close-cron.yml`](.github/workflows/fuel-period-auto-close-cron.yml) + **NEW-9** `skip_needs_approval` + cursor threshold |
 | **Evidence pack canonical CSV** | ✅ Server pack → accountant CSV; client fallback offline |
-| **M15** render / smoke tests | ✅ Close-out smoke + jsdom render tests (disputes/leakage/landing/finalize) |
+| **M15** render / smoke tests | ✅ Smoke + jsdom (landing/wizard shell/bulk/reset/disputes/leakage/finalize) |
 | **NEW-9** auto-close dual approval | ✅ Closed — skip above threshold; threshold on cursor |
 | **NEW-10** dispute type | ✅ Closed — `FuelDisputesStep` uses `FuelDispute` |
 | **NEW-11** landing skip SoT | ✅ Closed — `serverSkipWeekStarts` in hook |
 | **Landing sparkline** | ✅ Unexplained series from landing periods + shared `Sparkline` |
-| **Server build-snapshots** | ✅ Full week engine (scenario shares + settledEntries); entry assembler fallback via `FUEL_BUILD_SNAPSHOTS_ENGINE=entries` |
+| **Server build-snapshots** | ✅ fuel-core via `_shared/fuelCore`; entries fallback `FUEL_BUILD_SNAPSHOTS_ENGINE=entries` |
 | **Org-scoped preferences** | ✅ `preferences:org:{orgId}` + general fallback; auto-close loads per org |
 | **Auto-close dual mode** | ✅ `skip` (default) \| `service_approve` (system approver ≠ finalizer) |
 | **UI dual mode** | ✅ `human` (default) \| `service_only` (system approve + human finalizer) |
-| **Fleet wizard E2E** | ✅ Playwright + deep-link `?week=&step=` + fleet auth helper |
+| **Fleet wizard E2E** | ✅ Playwright + deep-link `?week=&step=` + fleet auth helper (staging smoke; not CI gate) |
 | **Rush customer/partner E2E** | ✅ Critical-path authenticated specs |
+| **NEW-12** third money engine | ✅ Closed — Deno uses fuel-core assembler |
+| **NEW-13** parity cannot fail | ✅ Closed — dual-path fixture + `weekSnapshotMoneyDelta` |
+
+---
+
+## STATUS — pass 5, verified 2026-09-02 (commit `92355181`)
+
+Fifth pass: 51 files, **+4,012 / −639**. **1,046/1,046 fleet tests pass** (172 files, 1 skipped). All three pass-4 findings closed.
+
+### What closed
+
+| Item | Verification |
+|---|---|
+| **NEW-9** auto-close bypassed dual approval | ✅ **Fixed, and designed well.** [`fuel_org_preferences.ts`](supabase/functions/_fleet-server/fuel_org_preferences.ts) supplies the org threshold to the auto-close loop, and the policy is now an explicit two-mode choice: **`skip` (default)** → high-value weeks are never auto-closed (`skip_needs_approval`), or **`service_approve`** → a distinct system approver id records the approval, with a `skip_service_actor_misconfigured` guard if approver == finalizer. Defaulting to `skip` is the right call. |
+| **NEW-10** wizard-split type error | ✅ `FuelPeriodWizard.tsx:1177` is gone. |
+| **NEW-11 / M1** browser week-engines | ✅ **Fixed.** `serverSkipWeekStarts` is threaded from `serverComputedWeekStarts()` into `useFuelLandingLiveReports`, and `weekNeedsLiveCalc` returns `false` for any week with a fresh server row. Weeks the server has computed no longer run a browser engine at all. |
+| **5.4** auto-close did nothing on money weeks | ✅ Addressed — `POST /fuel/periods/:id/build-snapshots` plus a Deno week engine so a never-finalized money week can be snapshotted and closed. |
+| **M15** no render tests | 🟡 **Partly.** Playwright e2e added ([`e2e/fuel-recon-wizard.spec.ts`](e2e/fuel-recon-wizard.spec.ts)) covering sign-in → landing → wizard shell. It `test.skip`s without `E2E_FLEET_EMAIL`/`E2E_FLEET_PASSWORD`, so it is **not** protection in CI by default. Still no component/render tests. |
+
+### Scoreboard (pass 5)
+
+| ID | Pass 4 | Pass 5 |
+|---|---|---|
+| **C1–C5, H1–H10** | ✅ | ✅ Fixed |
+| **M1 / M2** | 🟡 / ✅ | ✅ **Both fixed** |
+| **M15** | 🟡 | 🟡 e2e added, gated on creds |
+| **NEW-9 / NEW-10 / NEW-11** | new | ✅ **All closed** |
+
+**Totals: 35 fixed · 2 partial · 0 open · 2 new.**
+
+**Every original finding is now closed or explicitly partial. Nothing from the initial audit remains open.**
+
+---
+
+## STATUS — new findings from pass 5
+
+Both concern the same thing: **the money engine has been forked a third time**, and the tests written to catch that cannot.
+
+### NEW-12 🟠 — A third money engine now exists, and it is not shared
+
+The original audit's §F1 warned that `fuelCalculationService.ts` was forked between fleet and Dominion. Pass 5 adds a third fork, on a new axis:
+
+| Implementation | Lines | Used by |
+|---|---|---|
+| `FuelCalculationService` (`apps/fleet`) | ~1,100 | The client — wizard, bulk, landing live calc |
+| [`fuel_week_engine.ts`](supabase/functions/_fleet-server/fuel_week_engine.ts) (Deno) | 297 | The server `build-snapshots` route → **auto-close and money-week finalize** |
+| [`weekSnapshotEngine.ts`](packages/fuel-core/src/weekSnapshotEngine.ts) (`@roam/fuel-core`) | 195 | **Nothing but tests** |
+
+Verified by grep: `@roam/fuel-core` is imported across `apps/fleet`, `apps/admin`, `apps/driver` — and **never once inside `supabase/functions/`**. The Deno engine imports only relative `.ts` modules. So the package that exists to be the shared engine is shared with everything except the one consumer that motivated writing it.
+
+This matters because the two engines now produce money for the **same week** by different routes: the client engine feeds an operator-driven finalize, the Deno engine feeds auto-close. Coverage rules, blended ratios, cycle handling and scenario resolution can drift apart, and the first symptom would be a driver charged one amount by the UI and a different amount by the cron.
+
+**Fix:** make the Deno route call the `fuel-core` engine (vendor it into `supabase/functions/_shared/` via the existing build step, or publish it as a `.ts` module Deno can import), and delete `fuel_week_engine.ts`'s independent math. There is already precedent in the repo — `scripts/check-fuel-core-parity.mjs` exists for exactly this class of problem and should be extended to cover the Deno engine.
+
+### NEW-13 🟡 — The parity tests cannot detect drift
+
+Two files were added to guard the above. Neither can fail for the reason it exists.
+
+[`fuelPeriodBuildSnapshots.parity.test.ts`](apps/fleet/src/utils/fuelPeriodBuildSnapshots.parity.test.ts) opens with:
+
+```ts
+/** Mirrors supabase/functions/_fleet-server/fuel_period_build_snapshots.ts settle pool mapping. */
+function assembleFromEntries(entries, weekStart, weekEnd, orgId) { …hand-copied logic… }
+```
+
+It reimplements the Deno logic **inside the test** and asserts against that copy. If `fuel_period_build_snapshots.ts` changes, the test still passes — it is testing a transcription, not the code.
+
+[`fuelWeekSnapshotParity.test.ts`](apps/fleet/src/utils/fuelWeekSnapshotParity.test.ts) exercises `@roam/fuel-core`'s `assembleWeekSnapshotsFromCalcInput` against fixtures. That is a fine unit test of the package, but since neither the client nor the Deno engine imports that function, it proves nothing about either.
+
+**Fix:** a real parity test runs *both* engines over one fixture week and asserts `weekSnapshotMoneyDelta` is within epsilon. That requires NEW-12's consolidation first — which is the honest reason to do NEW-12.
 
 ---
 
@@ -403,15 +487,16 @@ That single architectural choice is the root cause of most findings below. It is
 **After pass 1 (`c386d265`):** 15 fixed · 7 partial · 10 open · 4 new.
 **After pass 2 (`16a9eb08`):** 26 fixed · 5 partial · 3 open · 1 new.
 **After pass 3 (`a7e0f6e9`):** 29 fixed · 4 partial · 3 open · 2 new.
-**After pass 4 (`b5ebcbe3`):** **32 fixed · 3 partial · 1 open · 3 new.**
+**After pass 4 (`b5ebcbe3`):** 32 fixed · 3 partial · 1 open · 3 new.
+**After pass 5 (`92355181`):** **35 fixed · 2 partial · 0 open · 2 new.**
 
-> **Where the risk sits now.** **All five Criticals and all ten Highs are closed and verified.** Pass 4 + Phase 5 close-out closed NEW-7/8/9/10/11, H8/H9, M1/M2, and auto-close honesty. There is no longer a known path by which this section reports success while money did not move, and auto-close cannot bypass dual approval.
+> **Where the risk sits now.** **All five Criticals and all ten Highs are closed and verified**, and **no finding from the original audit remains open.** Passes 4–5 closed NEW-7 through NEW-11, H8/H9, M1/M2, and auto-close dual-approval honesty. There is no longer a known path by which this section reports success while money did not move, and auto-close cannot bypass dual approval — it defaults to skipping high-value weeks entirely.
 >
-> **What remains is ops certification, not code:**
-> - Staging manual checklist: [`docs/fuel-period-auto-close-certification.md`](docs/fuel-period-auto-close-certification.md) (F1–F8).
-> - Production cron trust only after Wave A is deployed and F1–F3 pass.
+> **The one thing I would not sign off yet is engine consolidation.** Pass 5 introduced a **third** money engine ([`fuel_week_engine.ts`](supabase/functions/_fleet-server/fuel_week_engine.ts), Deno, 297 lines) that does not share code with the client, and the two parity tests added alongside it **cannot detect drift** — one hand-copies the logic it tests, the other exercises a `fuel-core` function neither engine imports. See **NEW-12 / NEW-13**.
 >
-> Verification has moved from *"is the code right"* to *"has it been exercised against a live stack"* — see the ⚠️ rows in §9.
+> This is the same failure mode as the original audit's §F1, and it now sits on the path that auto-close uses to move money. It is not urgent — auto-close defaults to skipping the risky weeks — but it should be closed before the cron is trusted in production.
+>
+> Everything else is ops certification: [`docs/fuel-period-auto-close-certification.md`](docs/fuel-period-auto-close-certification.md) (F1–F8) and the ⚠️ rows in §9.
 
 ### What is genuinely good — do not rewrite
 
@@ -1080,12 +1165,23 @@ Split `FuelPeriodWizard` into `FuelPeriodWizardShell` + six step components, eac
 **5.2 · Actually retire the browser week-engines** *(M1, NEW-11)* — ✅ `useFuelLandingLiveReports` takes `serverSkipWeekStarts`; page filter retained as belt.
 **5.3 · Fix the wizard-split type error** *(NEW-10)* — ✅ `FuelDisputesStep` imports `FuelDispute`.
 **5.4 · Decide what auto-close should do on money weeks** — ✅ **v1 intentional:** keep `skip_missing_snapshots`; docs + landing badge (“Finalize once before auto-close”) + `skipByReason` observability.
-**5.5 · Render tests** *(M15)* — ✅ Contract/smoke expanded for NEW-9 / M1 skip / dispute props (no jsdom).
+**5.5 · Render tests** *(M15)* — 🟡 Contract/smoke expanded, plus Playwright e2e. **Still no component/render tests**, and the e2e suite `test.skip`s without `E2E_FLEET_EMAIL`/`E2E_FLEET_PASSWORD` — so it is not CI protection by default. Carried to 6.3.
 
 ### Phase 4 — Product polish
-✅ Gap attribution · settlement export · balance proof · server-canonical evidence CSV · step notes · real dual approval · bulk uses org threshold · variance-first landing · portfolio/aging · median deltas · keyboard j/k/a/e/Enter · wizard step extraction (disputes/policy/leakage/compact list).
-✅ Auto-close scheduled (GitHub Actions daily 14:00 UTC) + eligibility aligned + in-app alert — **but see NEW-9 and 5.4 before enabling it.**
-🟡 Landing sparkline not built (explicitly skipped — would need a new analytics pipeline).
+✅ Gap attribution · settlement export · balance proof · server-canonical evidence CSV · step notes · real dual approval · bulk uses org threshold · variance-first landing · portfolio/aging · median deltas · keyboard j/k/a/e/Enter · wizard step extraction (disputes/policy/leakage/compact list) · unexplained spark series.
+✅ Auto-close scheduled (GitHub Actions daily 14:00 UTC), dual-approval-safe by default (`skip` mode), with `skipByReason` observability.
+
+### Phase 6 — Engine consolidation ← **complete (code); Wave F/G ops pending signer**
+
+**6.1 · Collapse the third money engine** *(NEW-12)* — ✅ `_shared/fuelCore.ts` twin; `fuel_week_engine` + entries path call `assembleWeekSnapshotsFromRawEntries`; parity script bans local coverage/ratio math.
+
+**6.2 · Make the parity tests able to fail** *(NEW-13)* — ✅ dual-path fixture in `fuelPeriodBuildSnapshots.parity.test.ts` via `weekSnapshotMoneyDelta`.
+
+**6.3 · CI-runnable render coverage** *(M15)* — ✅ wizard shell, bulk, reset, landing empty/locked jsdom tests (no live creds).
+
+**6.4 · Deferred cleanup** — ✅ `fuelFinalizeGating` legacy `vendor` typed via intersection; wizard derived rows → `useFuelWizardDerived`.
+
+Ops: [certification](docs/fuel-period-auto-close-certification.md) · [Wave G](docs/fuel-period-wave-g-monitoring.md).
 
 ---
 
@@ -1123,6 +1219,12 @@ Status after close-out program. Items marked ⚠️ need a **manual** pass again
 - [ ] ⚠️ Staging certification runbook: [`docs/fuel-period-auto-close-certification.md`](docs/fuel-period-auto-close-certification.md).
 - [ ] ⚠️ Production cron monitoring after first live night (Wave G).
 
+### Checks added by pass 5 / Flawless Waves 1–3
+- [x] **One money engine.** `supabase/functions/_shared/fuelCore.ts` twin + `fuel_week_engine.ts` imports it; local coverage/ratio math removed *(NEW-12)*.
+- [x] **The parity test can fail.** Dual-path fixture asserts `weekSnapshotMoneyDelta` *(NEW-13)*.
+- [x] Recon has render coverage that runs in CI without live credentials *(M15)*.
+- [ ] Fixture week on **staging**: client finalize and auto-close finalize produce identical shares *(manual F3)*.
+
 ---
 
 ## 10. Change log
@@ -1134,5 +1236,5 @@ Status after close-out program. Items marked ⚠️ need a **manual** pass again
 | 2026-09-02 | `16a9eb08` | **Pass 2** (Waves A–D) — 29 files, +2,113/−508. 26 fixed · 5 partial · 3 open · 1 new. All four NEW findings closed; Phase 1 complete; C3, C5, H4, H6, M6, M7, M12, M14, M16, M17 closed. `buildFuelVehicleSnapshots` single source of truth, trip pagination, currency sweep, pure derive, RLS policies, SQL period routes + job worker + `If-Match` 409. 32/32 tests pass; recon files typecheck clean. |
 | 2026-09-02 | `a7e0f6e9` | **Pass 3** — 21 files, +1,745/−239. **29 fixed · 4 partial · 3 open · 2 new.** **C4 closed**: `fuel_enterprise_settlement.ts` ports wallet settle/reverse to Deno; `persistFinalizedSnapshot` runs reverse → settle → KV snapshot → ledger inside a cursor-resumable job; both client call sites cut over to `deferSnapshotPersist: true` with no double-post window. NEW-5 and NEW-6 closed — stable idempotency keys, honest aggregates, and real distinct-identity dual approval with an org-configurable threshold. H10 closed. 41/41 tests pass. **All five Criticals now closed.** Remaining: M1/M2 landing scale, H8/H9 device-local state, NEW-7 silent partial-failure lock, NEW-8 one type error. |
 | 2026-09-02 | `b5ebcbe3` | **Pass 4** (Close-out Waves 0–G) — 22 files, +1,395/−401. **32 fixed · 3 partial · 1 open · 3 new.** NEW-7 closed on both sides (server holds at `ready` + `finalize_partial` audit; client surfaces failures and returns `false`). NEW-8 closed. **H8/H9 now server-owned** (`/leakage-review`, `updateFuelPeriodStep`). **M2 closed** — week-8 cap removed. Auto-close is a real GitHub Actions cron through the same finalize job. Wizard split into 4 more step components (1,276 lines). 51/51 tests pass. **All Criticals and all Highs closed.** New: **NEW-9** auto-close bypasses dual approval 🟠, **NEW-10** one type error from the split, **NEW-11** M1 not done — removing the cap raised total browser work. Correction: 3.2's "skip `computedAt` weeks" is not implemented; `useFuelLandingLiveReports` still receives no server-period data. |
-| 2026-09-02 | — | **Deferred ops backlog** — org-scoped prefs; auto-close `skip`/`service_approve`; UI `human`/`service_only`; Deno full week snapshot engine + golden parity; fleet wizard Playwright + Rush critical-path E2E. |
+| 2026-09-02 | `92355181` | **Pass 5** — 51 files, +4,012/−639. **35 fixed · 2 partial · 0 open · 2 new.** **NEW-9 closed** — org-scoped prefs feed the auto-close threshold; explicit `skip` (default) / `service_approve` modes with distinct system actor ids and a misconfiguration guard. **NEW-10 closed.** **NEW-11 / M1 closed** — `serverSkipWeekStarts` means server-computed weeks no longer run a browser engine. Build-snapshots route + Deno week engine so money weeks can auto-close. Playwright e2e for the wizard. 1,046/1,046 fleet tests pass. **No original finding remains open.** New: **NEW-12** a third money engine now exists in Deno and `@roam/fuel-core` is never imported by `supabase/functions/` 🟠; **NEW-13** the two parity tests cannot detect drift — one hand-copies the logic it tests, the other exercises a function neither engine imports. |
 

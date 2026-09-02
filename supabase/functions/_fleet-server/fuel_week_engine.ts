@@ -1,12 +1,18 @@
 /**
- * Full week snapshot engine for Deno build-snapshots (Program 5).
- * Loads org week context → scenario-aware shares + settledEntries → optional cycle close.
+ * Full week snapshot engine for Deno build-snapshots (Program 5 / Flawless Wave 1).
+ * Loads org week context → scenario pick → shared @roam/fuel-core assembler → optional cycle close.
  * Falls back to entry-only assembler when FUEL_BUILD_SNAPSHOTS_ENGINE=entries.
+ * Coverage / ratio math lives only in packages/fuel-core (via _shared/fuelCore twin).
  */
 import * as kv from "./kv_store.tsx";
 import { filterByOrg } from "./org_scope.ts";
 import { classifyFuelWeek } from "../fuel-brain/classify.ts";
 import { closeOpenCyclesForWeek } from "./fuel_cycle_stamp.ts";
+import {
+  assembleWeekSnapshotsFromRawEntries,
+  type BuiltWeekSnapshot,
+  type WeekSnapFuelRule,
+} from "../_shared/fuelCore.ts";
 import {
   assembleSnapshotsFromEntries,
   loadWeekFuelEntries,
@@ -33,30 +39,11 @@ function resolveDriverId(e: Record<string, unknown>): string {
   return String(e.driverId || e.driver_id || e.currentDriverId || "").trim();
 }
 
-function pickFuelRule(scenario: Record<string, unknown> | null): Record<string, unknown> | null {
+function pickFuelRule(scenario: Record<string, unknown> | null): WeekSnapFuelRule | null {
   if (!scenario) return null;
   const rules = Array.isArray(scenario.rules) ? scenario.rules : [];
   const fuel = rules.find((r: any) => String(r?.category || "").toLowerCase() === "fuel");
-  return (fuel as Record<string, unknown>) || null;
-}
-
-function companyCoveragePercent(rule: Record<string, unknown> | null): number {
-  if (!rule) return 50;
-  if (String(rule.coverageType) === "Full") return 100;
-  if (String(rule.coverageType) === "Fixed_Amount") return 50;
-  const pct = Number(rule.rideShareCoverage ?? rule.coverageValue ?? 50);
-  if (!Number.isFinite(pct)) return 50;
-  return Math.min(100, Math.max(0, pct));
-}
-
-function driverRatio(rule: Record<string, unknown> | null, entry: Record<string, unknown>): number {
-  const meta = (entry.metadata && typeof entry.metadata === "object" ? entry.metadata : {}) as Record<
-    string,
-    unknown
-  >;
-  const stamped = Number(meta.driverShareRatio ?? meta.driver_share_ratio);
-  if (Number.isFinite(stamped) && stamped >= 0 && stamped <= 1) return stamped;
-  return 1 - companyCoveragePercent(rule) / 100;
+  return (fuel as WeekSnapFuelRule) || null;
 }
 
 async function loadOrgScenarios(orgId: string): Promise<Record<string, unknown>[]> {
@@ -86,8 +73,46 @@ function resolveScenarioForDriver(
   return scenarios.find((s) => Boolean(s.isDefault)) || scenarios[0] || null;
 }
 
+function entryDriverShareRatio(e: Record<string, unknown>): number | null {
+  const meta = (e.metadata && typeof e.metadata === "object" ? e.metadata : {}) as Record<
+    string,
+    unknown
+  >;
+  const stamped = Number(meta.driverShareRatio ?? meta.driver_share_ratio);
+  if (Number.isFinite(stamped) && stamped >= 0 && stamped <= 1) return stamped;
+  return null;
+}
+
+function toRawEntries(entries: Record<string, unknown>[]) {
+  return entries.map((e) => ({
+    id: String(e.id),
+    amount: entryAmount(e),
+    date: ymd(e.date),
+    driverId: resolveDriverId(e),
+    vehicleId: String(e.vehicleId || e.vehicle_id || ""),
+    reconciliationStatus: String(e.reconciliationStatus || e.reconciliation_status || "Pending"),
+    driverShareRatio: entryDriverShareRatio(e),
+  }));
+}
+
+function withScenarioMetadata(
+  snaps: BuiltWeekSnapshot[],
+  scenarioByDriver: Map<string, Record<string, unknown> | null>,
+): BuiltSnapshot[] {
+  return snaps.map((snap) => {
+    const scenario = scenarioByDriver.get(snap.driverId) || null;
+    return {
+      ...snap,
+      metadata: {
+        ...snap.metadata,
+        appliedScenario: scenario ? { id: scenario.id, name: scenario.name } : null,
+      },
+    };
+  });
+}
+
 /**
- * Scenario-aware snapshot assembly (primary path).
+ * Scenario-aware snapshot assembly — orchestration only; money math via fuel-core.
  */
 export function assembleSnapshotsWithScenarios(input: {
   entries: Record<string, unknown>[];
@@ -100,83 +125,29 @@ export function assembleSnapshotsWithScenarios(input: {
   brainByDriver?: Map<string, Record<string, unknown>>;
 }): BuiltSnapshot[] {
   const { entries, weekStart, weekEnd, orgId, scenarios, drivers, brainByDriver } = input;
-  const byDriver = new Map<string, Record<string, unknown>[]>();
-  for (const e of entries) {
-    const driverId = resolveDriverId(e) || `vehicle:${String(e.vehicleId || e.vehicle_id || "unknown")}`;
-    const list = byDriver.get(driverId) || [];
-    list.push(e);
-    byDriver.set(driverId, list);
-  }
+  const fuelRuleByDriver = new Map<string, WeekSnapFuelRule | null>();
+  const scenarioByDriver = new Map<string, Record<string, unknown> | null>();
 
-  const snapshots: BuiltSnapshot[] = [];
-  for (const [driverId, weekEntries] of byDriver) {
-    const pending = weekEntries.filter((e) => {
-      const status = String(e.reconciliationStatus || e.reconciliation_status || "Pending");
-      return status === "Pending" || status === "Verified";
-    });
-    const settlePool = pending.length ? pending : weekEntries;
-    if (!settlePool.length) continue;
-
+  const driverIds = new Set(
+    entries.map((e) => resolveDriverId(e) || `vehicle:${String(e.vehicleId || e.vehicle_id || "unknown")}`),
+  );
+  for (const driverId of driverIds) {
     const driver = drivers.find((d) => String(d.id) === driverId || String(d.driverId) === driverId);
     const scenario = resolveScenarioForDriver(scenarios, driver);
-    const rule = pickFuelRule(scenario);
-
-    const totalGasCardCost = settlePool.reduce((s, e) => s + entryAmount(e), 0);
-    if (totalGasCardCost <= EPS) continue;
-
-    let driverShare = 0;
-    for (const e of settlePool) {
-      driverShare += entryAmount(e) * driverRatio(rule, e);
-    }
-    const companyShare = Math.max(0, totalGasCardCost - driverShare);
-    const vehicleId = String(settlePool[0].vehicleId || settlePool[0].vehicle_id || "");
-    const vehicleIds = [
-      ...new Set(
-        settlePool.map((e) => String(e.vehicleId || e.vehicle_id || "")).filter(Boolean),
-      ),
-    ];
-    const blendedRatio = totalGasCardCost > 0 ? driverShare / totalGasCardCost : 0;
-
-    snapshots.push({
-      weekStart,
-      weekEnd,
-      driverId,
-      vehicleId: vehicleId || vehicleIds[0] || "",
-      vehicleIds,
-      totalGasCardCost,
-      gasCardSpend: totalGasCardCost,
-      driverSpend: 0,
-      companyShare,
-      driverShare,
-      miscellaneousCost: 0,
-      pendingCount: settlePool.length,
-      status: "Finalized",
-      finalizedAt: new Date().toISOString(),
-      postedDriverShare: driverShare,
-      postedCompanyShare: companyShare,
-      netPay: 0 - driverShare,
-      fuelCycles: [],
-      orgId,
-      org_id: orgId,
-      metadata: {
-        builtBy: "fuel_week_engine",
-        settledEntries: settlePool.map((e) => ({
-          id: String(e.id),
-          amount: entryAmount(e),
-          date: ymd(e.date),
-          driverId: resolveDriverId(e) || driverId,
-          vehicleId: String(e.vehicleId || e.vehicle_id || vehicleId),
-        })),
-        blendedRatio,
-        appliedFuelRule: rule,
-        appliedScenario: scenario
-          ? { id: scenario.id, name: scenario.name }
-          : null,
-        brain: brainByDriver?.get(driverId) || null,
-      },
-    });
+    scenarioByDriver.set(driverId, scenario);
+    fuelRuleByDriver.set(driverId, pickFuelRule(scenario));
   }
-  return snapshots;
+
+  const snaps = assembleWeekSnapshotsFromRawEntries({
+    weekStart,
+    weekEnd,
+    orgId,
+    entries: toRawEntries(entries),
+    fuelRuleByDriver,
+    brainByDriver,
+    builtBy: "fuel_week_engine",
+  });
+  return withScenarioMetadata(snaps, scenarioByDriver);
 }
 
 async function attachBrainHints(input: {
@@ -186,7 +157,6 @@ async function attachBrainHints(input: {
   driverIds: string[];
 }): Promise<Map<string, Record<string, unknown>>> {
   const map = new Map<string, Record<string, unknown>>();
-  // Lightweight: classify with odometer=0 when no trip payload — still stamps method for audit.
   for (const driverId of input.driverIds) {
     try {
       const result = classifyFuelWeek({
@@ -249,12 +219,10 @@ export async function buildFuelPeriodSnapshotsFull(input: {
       brainByDriver,
     });
 
-    // Emergency fallback if scenario path produced nothing for money week
     if (snapshots.length === 0 && entries.length > 0) {
       snapshots = assembleSnapshotsFromEntries(entries, weekStart, weekEnd, input.orgId);
     }
 
-    // Side effect: close open tank cycles (same intent as client finalize)
     const vehicleIds = [
       ...new Set(
         snapshots.flatMap((s) => (Array.isArray(s.vehicleIds) ? s.vehicleIds : [s.vehicleId])),
@@ -274,7 +242,6 @@ export async function buildFuelPeriodSnapshotsFull(input: {
     }
     return { ok: true, snapshots, totalSpend };
   } catch (e: any) {
-    // Hard fail → entry assembler emergency path
     try {
       const entries = await loadWeekFuelEntries(input.orgId, weekStart, weekEnd);
       const snapshots = assembleSnapshotsFromEntries(entries, weekStart, weekEnd, input.orgId);

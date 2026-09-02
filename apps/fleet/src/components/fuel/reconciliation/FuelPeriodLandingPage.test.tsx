@@ -75,4 +75,42 @@ describe('FuelPeriodLandingPage auto-close badges', () => {
     );
     expect(screen.getByText(/eligible for auto-close \(system approval\)/i)).toBeTruthy();
   });
+
+  it('empty portfolio shows no-activity copy', () => {
+    render(
+      <FuelPeriodLandingPage
+        outstanding={[]}
+        inProgress={[]}
+        completed={[]}
+        loading={false}
+        onSelectPeriod={() => undefined}
+      />,
+    );
+    expect(screen.getByText(/no fuel activity in recent weeks/i)).toBeTruthy();
+  });
+
+  it('locked completed week shows on Completed tab', () => {
+    render(
+      <FuelPeriodLandingPage
+        outstanding={[]}
+        inProgress={[]}
+        completed={[
+          period({
+            status: 'completed',
+            locked: true,
+            label: 'Jun 29 – Jul 5',
+            startDate: '2026-06-29',
+            endDate: '2026-07-05',
+            id: 'w-locked',
+          }),
+        ]}
+        loading={false}
+        onSelectPeriod={() => undefined}
+      />,
+    );
+    // Default tab may be outstanding when empty open work — click Completed if needed
+    const completedTab = screen.queryByRole('tab', { name: /completed/i });
+    if (completedTab) completedTab.click();
+    expect(screen.getByText(/Jun 29/i)).toBeTruthy();
+  });
 });

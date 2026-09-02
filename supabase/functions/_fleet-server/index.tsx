@@ -6279,6 +6279,16 @@ app.post("/make-server-37f42386/expenses/approve", requireAuth(), requirePermiss
                 422,
             );
         }
+        if (!approveResult.fuelEntry) {
+            return c.json(
+                {
+                    error:
+                        'Cannot approve: fill-up could not be posted to Transaction Logs. Try again or contact support.',
+                    code: 'FUEL_ENTRY_MISSING',
+                },
+                500,
+            );
+        }
 
         tx.status = 'Approved';
         tx.isReconciled = true;

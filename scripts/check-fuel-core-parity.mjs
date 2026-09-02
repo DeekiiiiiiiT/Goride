@@ -103,6 +103,37 @@ if (fs.existsSync(staleTypes)) {
   console.error('packages/types/src/fuel.ts must remain deleted — use app-local or @roam/fuel-core types');
 }
 
+// Deno twin must re-export packages/fuel-core (Flawless Wave 1 / NEW-12)
+const fuelCoreTwin = path.join(ROOT, 'supabase/functions/_shared/fuelCore.ts');
+if (!fs.existsSync(fuelCoreTwin)) {
+  failed = true;
+  console.error('missing supabase/functions/_shared/fuelCore.ts Deno twin');
+} else {
+  const twinText = fs.readFileSync(fuelCoreTwin, 'utf8');
+  if (!/from\s+['"]\.\.\/\.\.\/\.\.\/packages\/fuel-core\/src\/index\.ts['"]/.test(twinText)) {
+    failed = true;
+    console.error('supabase/functions/_shared/fuelCore.ts must re-export packages/fuel-core/src/index.ts');
+  }
+}
+
+// Deno week engine must not reintroduce local coverage / ratio math
+const weekEngine = path.join(ROOT, 'supabase/functions/_fleet-server/fuel_week_engine.ts');
+if (fs.existsSync(weekEngine)) {
+  const eng = fs.readFileSync(weekEngine, 'utf8');
+  if (!/from\s+['"]\.\.\/_shared\/fuelCore\.ts['"]/.test(eng)) {
+    failed = true;
+    console.error('fuel_week_engine.ts must import from ../_shared/fuelCore.ts');
+  }
+  if (
+    /function\s+companyCoveragePercent\s*\(/.test(eng) ||
+    /function\s+driverRatio\s*\(/.test(eng) ||
+    /function\s+companyCoveragePercentFromFuelRule\s*\(/.test(eng)
+  ) {
+    failed = true;
+    console.error('fuel_week_engine.ts must not define local coverage/ratio math — use fuel-core');
+  }
+}
+
 if (failed) {
   console.error('fuel-core parity check failed');
   process.exit(1);

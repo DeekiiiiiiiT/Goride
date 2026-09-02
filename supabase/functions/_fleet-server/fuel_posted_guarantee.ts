@@ -268,14 +268,16 @@ export async function ensureFuelEntryForApprovedTx(
       };
       return { fuelEntry: patched, created: false, blockedNoVehicle: false };
     }
-    if (existing) {
-      console.warn(
-        `[ensureFuelEntryForApprovedTx] stale fuelEntryId ${linkedId} on tx ${tx.id} (owned by ${existing.transactionId || "none"}) — creating a new log line`,
-      );
-      const nextMeta = { ...(tx.metadata || {}) };
-      delete nextMeta.fuelEntryId;
-      tx.metadata = nextMeta;
-    }
+    // Phantom or wrong-owner link — clear before creating a real fill-up row
+    console.warn(
+      `[ensureFuelEntryForApprovedTx] clearing fuelEntryId ${linkedId} on tx ${tx.id}` +
+        (existing
+          ? ` (owned by ${existing.transactionId || "none"})`
+          : " (missing row)"),
+    );
+    const nextMeta = { ...(tx.metadata || {}) };
+    delete nextMeta.fuelEntryId;
+    tx.metadata = nextMeta;
   }
 
   const byTx = await findFuelEntryByTransactionId(tx.id);
@@ -499,11 +501,10 @@ export async function healApprovedFuelEntriesMissingLog(
     if (tx.metadata?.fuelEntryId) {
       const exists = await kv.get(`fuel_entry:${tx.metadata.fuelEntryId}`);
       if (canReuseLinkedFuelEntry(exists, tx.id)) continue;
-      if (exists) {
-        const nextMeta = { ...(tx.metadata || {}) };
-        delete nextMeta.fuelEntryId;
-        tx.metadata = nextMeta;
-      }
+      // Phantom or wrong-owner — clear so ensureFuelEntry creates a real row
+      const nextMeta = { ...(tx.metadata || {}) };
+      delete nextMeta.fuelEntryId;
+      tx.metadata = nextMeta;
     }
     const existing = await findFuelEntryByTransactionId(tx.id);
     if (existing) {
@@ -511,20 +512,25 @@ export async function healApprovedFuelEntriesMissingLog(
       await kv.set(`transaction:${tx.id}`, stamp ? stamp(tx) : tx);
       continue;
     }
-    const result = await ensureFuelEntryForApprovedTx(tx, {
-      source: "Heal Ensure",
-      decisionReason: "ADMIN_APPROVED",
-      stamp,
-    });
-    if (result.blockedNoVehicle) {
+    try {
+      const result = await ensureFuelEntryForApprovedTx(tx, {
+        source: "Heal Ensure",
+        decisionReason: "ADMIN_APPROVED",
+        stamp,
+      });
+      if (result.blockedNoVehicle) {
+        blocked++;
+        continue;
+      }
+      if (result.created) {
+        healed++;
+        await kv.set(`transaction:${tx.id}`, stamp ? stamp(tx) : tx);
+      } else if (result.fuelEntry) {
+        await kv.set(`transaction:${tx.id}`, stamp ? stamp(tx) : tx);
+      }
+    } catch (e) {
+      console.error(`[HealEnsure] failed for tx ${tx.id}:`, e);
       blocked++;
-      continue;
-    }
-    if (result.created) {
-      healed++;
-      await kv.set(`transaction:${tx.id}`, stamp ? stamp(tx) : tx);
-    } else if (result.fuelEntry) {
-      await kv.set(`transaction:${tx.id}`, stamp ? stamp(tx) : tx);
     }
   }
   return { healed, blocked };

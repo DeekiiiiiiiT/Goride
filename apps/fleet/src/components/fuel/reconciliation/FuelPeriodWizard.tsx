@@ -5,26 +5,18 @@ import { FuelWeekMoneyStrip } from './FuelWeekMoneyStrip';
 import { FuelDataQualityStep } from './FuelDataQualityStep';
 import { FuelExceptionBlockersPanel } from './FuelExceptionBlockersPanel';
 import { useFuelWeekReports } from '../../../hooks/useFuelWeekReports';
-import {
-  evaluateFuelFinalizeGating,
-  type FuelExceptionBlocker,
-} from '../../../utils/fuelFinalizeGating';
+import { type FuelWizardDriver } from './buildFuelWizardRows';
+import { useFuelWizardDerived } from './useFuelWizardDerived';
+import { type FuelExceptionBlocker } from '../../../utils/fuelFinalizeGating';
 import { FUEL_SPEND_EPS } from '../../../utils/fuelMoneyEpsilon';
 import {
-  canAdvanceFuelStep,
-  computeFuelGatedStepStates,
   FUEL_STEP_LABELS,
   FUEL_STEP_ORDER,
   pickInitialFuelStep,
   type FuelStepId,
 } from '../../../utils/fuelPeriodGating';
-import { buildFuelStepCounts, type FuelReconciliationPeriod } from '../../../utils/fuelPeriodStatus';
+import { type FuelReconciliationPeriod } from '../../../utils/fuelPeriodStatus';
 import { isEntryInInclusiveYmdRange } from '../../../utils/fuelWeekPeriod';
-import { sumGasCardSpendForReport, sumPaidByDriverForReport } from '../../../utils/fuelPaidByDriver';
-import {
-  buildFuelVehicleSnapshots,
-  liveReportsToPrimaryClaimedSlices,
-} from '../../../utils/fuelPeriodDerive';
 import { FuelSettlementPreviewStep } from './FuelSettlementPreviewStep';
 import { FuelFinalizeStep } from './FuelFinalizeStep';
 import { FuelDisputesStep } from './FuelDisputesStep';
@@ -46,16 +38,6 @@ import {
   refreshSecondApproveActors,
   settlementPreviewStepIndex,
 } from './useFuelWizardActions';
-import {
-  buildBreakdownRows,
-  buildLeakageRows,
-  buildMoneyStrip,
-  buildPolicyRows,
-  buildPriorMedian,
-  buildQualityRows,
-  buildSettlementRows,
-  type FuelWizardDriver,
-} from './buildFuelWizardRows';
 import {
   hasDistinctSecondApprove,
   needsHumanSecondApprover,
@@ -211,79 +193,43 @@ function FuelPeriodWizardInner({
   const liveReports = weekReports.reports;
   const weekTrips = weekReports.trips.length ? weekReports.trips : trips;
 
-  const { vehicleSnaps, openDisputes } = useMemo(() => {
-    const liveSlices = liveReportsToPrimaryClaimedSlices(liveReports);
-    const built = buildFuelVehicleSnapshots({
-      vehicles,
-      weekStartYmd: period.startDate,
-      weekEndYmd: period.endDate,
-      fuelEntries,
-      disputes,
-      finalizedReports,
-      scenarios,
-      liveSlices,
-    });
-    const paidByDriverCtx = { vehicles, trips: weekTrips, fuelCards };
-    const enriched = built.snapshots.map((snap) => {
-      const vehicle = vehicles.find((x) => x.id === snap.vehicleId);
-      const report = liveReports.find(
-        (r) =>
-          r.vehicleId === snap.vehicleId ||
-          (Array.isArray(r.vehicleIds) && r.vehicleIds.includes(snap.vehicleId)),
-      );
-      const driverSpend =
-        snap.totalSpend > FUEL_SPEND_EPS && report
-          ? sumPaidByDriverForReport(fuelEntries, report, vehicles, paidByDriverCtx)
-          : 0;
-      return {
-        ...snap,
-        plate: vehicle?.licensePlate || snap.vehicleId,
-        driverSpend,
-        netPay: driverSpend - snap.driverShare,
-        odometerIncomplete: !!report?.dataQuality?.odometerIncomplete,
-        report: snap.totalSpend > FUEL_SPEND_EPS ? report : undefined,
-      };
-    });
-    return { vehicleSnaps: enriched, openDisputes: built.openDisputes };
-  }, [
+  const {
+    vehicleSnaps,
+    openDisputes,
+    settlementRows,
+    counts,
+    gatedStates,
+    strip,
+    qualityRows,
+    breakdownRows,
+    leakageRows,
+    policyRows,
+    priorMedian,
+    gateResult,
+    exceptionBlockers,
+    plateByVehicleId,
+    canContinue,
+    stepIndex,
+    isLast,
+    weekIsEmpty,
+  } = useFuelWizardDerived({
+    periodStart: period.startDate,
+    periodEnd: period.endDate,
+    periodLocked,
+    activeStepId,
+    leakageReviewed,
     vehicles,
-    liveReports,
+    drivers,
     fuelEntries,
     disputes,
-    finalizedReports,
-    period.startDate,
-    period.endDate,
     scenarios,
-    weekTrips,
     fuelCards,
-  ]);
-
-  // Enrich settlement columns from live reports (cash from earnings vs driver share)
-  const settlementRows = useMemo(
-    () =>
-      buildSettlementRows({
-        liveReports,
-        vehicles,
-        fuelEntries,
-        fuelCards,
-        weekTrips,
-        periodLocked,
-      }),
-    [liveReports, vehicles, fuelEntries, periodLocked, weekTrips, fuelCards],
-  );
-
-  const counts = useMemo(
-    () =>
-      buildFuelStepCounts({
-        vehicles: vehicleSnaps.filter(
-          (v) => v.totalSpend > FUEL_SPEND_EPS || v.pendingCount > 0 || v.hasOpenDispute || v.isFinalized,
-        ),
-        leakageReviewed: leakageReviewed || periodLocked,
-      }),
-    [vehicleSnaps, leakageReviewed, periodLocked],
-  );
-
-  const gatedStates = useMemo(() => computeFuelGatedStepStates(counts), [counts]);
+    finalizedReports,
+    liveReports,
+    weekTrips,
+    weekLoading: weekReports.loading,
+    weekError: Boolean(weekReports.error),
+  });
 
   // Fresh walkthrough on period open or after Reopen week
   useEffect(() => {
@@ -418,55 +364,6 @@ function FuelPeriodWizardInner({
     });
   }, [gatedStates, progressIndex, periodLocked]);
 
-  const strip = useMemo(
-    () =>
-      buildMoneyStrip({
-        liveReports,
-        fuelEntries,
-        vehicles,
-        fuelCards,
-        weekTrips,
-        sumGasCard: sumGasCardSpendForReport,
-        sumPaidByDriver: sumPaidByDriverForReport,
-      }),
-    [liveReports, fuelEntries, vehicles, fuelCards, weekTrips],
-  );
-
-  const qualityRows = useMemo(
-    () => buildQualityRows(vehicleSnaps as any, vehicles, drivers),
-    [vehicleSnaps, vehicles, drivers],
-  );
-
-  const breakdownRows = useMemo(
-    () => buildBreakdownRows(vehicleSnaps as any, vehicles, drivers),
-    [vehicleSnaps, vehicles, drivers],
-  );
-
-  // openDisputes comes from buildFuelVehicleSnapshots (same matcher as landing/bulk)
-
-  const leakageRows = useMemo(() => buildLeakageRows(vehicleSnaps as any), [vehicleSnaps]);
-
-  const policyRows = useMemo(
-    () =>
-      buildPolicyRows({
-        vehicles,
-        vehicleSnaps: vehicleSnaps as any,
-        liveReports,
-        scenarios,
-        weekStart: period.startDate,
-      }),
-    [vehicles, scenarios, vehicleSnaps, period.startDate, liveReports],
-  );
-
-  const canContinue = canAdvanceFuelStep(activeStepId, counts);
-  const stepIndex = FUEL_STEP_ORDER.indexOf(activeStepId);
-  const isLast = stepIndex === FUEL_STEP_ORDER.length - 1;
-  const weekIsEmpty =
-    !weekReports.loading &&
-    !weekReports.error &&
-    liveReports.length === 0 &&
-    vehicleSnaps.every((v) => v.totalSpend <= FUEL_SPEND_EPS);
-
   const handleContinue = () => {
     if (!canContinue || isLast) return;
     const noteForStep = stepNoteDraft.trim();
@@ -550,35 +447,7 @@ function FuelPeriodWizardInner({
     });
   };
 
-  // Always re-gate from live fuelEntries. Preferring weekReports.gateResult left
-  // exception blockers stuck after Accept (query cache / same entry count key).
-  const gateResult = useMemo(() => {
-    return evaluateFuelFinalizeGating({
-      reports: liveReports,
-      disputes,
-      fuelEntries,
-      finalizedReports,
-      weekStartYmd: period.startDate,
-      weekEndYmd: period.endDate,
-    });
-  }, [
-    liveReports,
-    disputes,
-    fuelEntries,
-    finalizedReports,
-    period.startDate,
-    period.endDate,
-  ]);
-
-  const exceptionBlockers: FuelExceptionBlocker[] = gateResult.exceptionBlockers || [];
-
-  const plateByVehicleId = useMemo(() => {
-    const map: Record<string, string> = {};
-    for (const v of vehicles) {
-      map[v.id] = v.licensePlate || v.id;
-    }
-    return map;
-  }, [vehicles]);
+  // Always re-gate from live fuelEntries via useFuelWizardDerived (not weekReports.gateResult cache).
 
   const openExceptionInLogs = (blocker: FuelExceptionBlocker) => {
     onOpenTransactionLogs?.({
@@ -753,11 +622,6 @@ function FuelPeriodWizardInner({
         return { title: '', body: '' };
     }
   })();
-
-  const priorMedian = useMemo(
-    () => buildPriorMedian(finalizedReports, period.startDate),
-    [finalizedReports, period.startDate],
-  );
 
   const exportSettlementCsv = () => {
     void downloadCSV(

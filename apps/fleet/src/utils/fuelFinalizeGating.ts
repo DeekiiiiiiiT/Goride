@@ -85,7 +85,8 @@ function resolveEntryPaymentRaw(entry: FuelEntry): string | undefined {
 }
 
 function resolveEntryLocation(entry: FuelEntry): string {
-  const loc = String(entry.location || entry.vendor || '').trim();
+  const legacyVendor = (entry as FuelEntry & { vendor?: string }).vendor;
+  const loc = String(entry.location || legacyVendor || '').trim();
   if (loc) return loc;
   const meta = entry.metadata as Record<string, unknown> | undefined;
   const station = String(meta?.jaaStation || meta?.station || '').trim();

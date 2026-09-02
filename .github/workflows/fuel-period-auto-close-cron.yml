@@ -2,8 +2,12 @@ name: Fuel period auto-close cron
 
 # Closes eligible Consumption Reconciliation weeks (zero actionables, unexplained
 # under epsilon or gap accepted). Uses the same finalize job path as the UI.
-# NEW-9: skips weeks above fuelSecondApproverThreshold (skip_needs_approval).
-# v1: money weeks without finalized_report snapshots are skipped (skip_missing_snapshots).
+# NEW-9: skips weeks above fuelSecondApproverThreshold when dual mode is `skip`
+# (`skip_needs_approval`), or system-approves when mode is `service_approve`.
+# Money weeks without snaps: server build-snapshots (fuel-core) then finalize;
+# `skip_missing_snapshots` / `skip_build_failed` only when nothing settleable.
+# Trust gate: docs/fuel-period-auto-close-certification.md F1–F3 before production reliance.
+# Wave G monitoring: docs/fuel-period-wave-g-monitoring.md
 
 on:
   schedule:

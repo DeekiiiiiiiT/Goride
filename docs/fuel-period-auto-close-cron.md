@@ -62,3 +62,9 @@ Per-period `auto_close` audit + `alert:fuel-autoclose:…`, plus daily digest `a
 
 - Fleet wizard: `e2e/fuel-recon-wizard.spec.ts` — `E2E_FLEET_EMAIL` / `E2E_FLEET_PASSWORD` (+ optional `E2E_FUEL_WEEK`, `E2E_FUEL_ALLOW_FINALIZE=1`)
 - Customer / partner critical paths: `rush-*-ui-critical.spec.ts`
+
+## Certification & go-live
+
+- Staging F1–F8: [fuel-period-auto-close-certification.md](./fuel-period-auto-close-certification.md)
+- Production Wave G: [fuel-period-wave-g-monitoring.md](./fuel-period-wave-g-monitoring.md)
+- Share math: Deno `_shared/fuelCore.ts` → `@roam/fuel-core` `assembleWeekSnapshotsFromRawEntries`

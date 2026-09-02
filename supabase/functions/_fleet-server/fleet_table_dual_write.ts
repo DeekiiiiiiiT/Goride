@@ -1,6 +1,6 @@
 /**
- * Best-effort dual-write from KV writes into fleet.* tables (via public.fleet_* views).
- * Called from kv_store set/mset/del/mdel (non-blocking on failure).
+ * Dual-write from KV writes into fleet.* tables (via public.fleet_* views).
+ * Failures must throw — silent drops caused Approved fuel expenses with no Transaction Log row.
  */
 import { getServiceClient } from "./service_client.ts";
 import { resolveDomain } from "./fleet_domains.ts";
@@ -37,45 +37,40 @@ export async function dualWriteFleetKvUpsert(key: string, value: unknown): Promi
   if (!isFleetTableWriteEnabled(def.domain)) return;
   if (!value || typeof value !== "object" || Array.isArray(value)) return;
 
-  try {
-    const row = def.mapRow(key, value as Record<string, unknown>);
-    if (!row) {
-      await logMetric(def.domain, "skip", "map_null", key);
-      return;
-    }
-    if (row.organization_id == null || row.organization_id === "") {
-      console.warn(
-        `[fleetDualWrite] mapRow produced null organization_id for key=${key} domain=${def.domain}`,
-      );
-    }
-    const { error } = await fleetClient().from(tableName(def.table)).upsert(row, { onConflict: "id" });
-    if (error) {
-      console.error(`[fleetDualWrite] upsert ${def.domain} ${key}:`, error.message);
-      await logMetric(def.domain, "fail", error.message, key);
-      return;
-    }
-    await logMetric(def.domain, "ok", "upserted", key);
-  } catch (e) {
-    console.error(`[fleetDualWrite] upsert ${def.domain} ${key}:`, e);
-    await logMetric(def.domain, "fail", e instanceof Error ? e.message : String(e), key);
+  const row = def.mapRow(key, value as Record<string, unknown>);
+  if (!row) {
+    await logMetric(def.domain, "skip", "map_null", key);
+    return;
   }
+  if (row.organization_id == null || row.organization_id === "") {
+    console.warn(
+      `[fleetDualWrite] mapRow produced null organization_id for key=${key} domain=${def.domain}`,
+    );
+  }
+  const { error } = await fleetClient().from(tableName(def.table)).upsert(row, { onConflict: "id" });
+  if (error) {
+    console.error(`[fleetDualWrite] upsert ${def.domain} ${key}:`, error.message);
+    await logMetric(def.domain, "fail", error.message, key);
+    throw new Error(`[fleetDualWrite] upsert ${def.domain} failed: ${error.message}`);
+  }
+  await logMetric(def.domain, "ok", "upserted", key);
 }
 
 export async function dualWriteFleetKvDelete(key: string): Promise<void> {
   const def = resolveDomain(key);
   if (!def) return;
   if (!isFleetTableWriteEnabled(def.domain)) return;
-  try {
-    const { error } = await fleetClient().from(tableName(def.table)).delete().eq("legacy_kv_id", key);
-    if (error) {
-      const id = key.includes(":") ? key.slice(key.indexOf(":") + 1) : key;
-      await fleetClient().from(tableName(def.table)).delete().eq("id", id);
+  const { error } = await fleetClient().from(tableName(def.table)).delete().eq("legacy_kv_id", key);
+  if (error) {
+    const id = key.includes(":") ? key.slice(key.indexOf(":") + 1) : key;
+    const { error: byIdErr } = await fleetClient().from(tableName(def.table)).delete().eq("id", id);
+    if (byIdErr) {
+      console.error(`[fleetDualWrite] delete ${def.domain} ${key}:`, byIdErr.message);
+      await logMetric(def.domain, "fail", byIdErr.message, key);
+      throw new Error(`[fleetDualWrite] delete ${def.domain} failed: ${byIdErr.message}`);
     }
-    await logMetric(def.domain, "ok", "deleted", key);
-  } catch (e) {
-    console.error(`[fleetDualWrite] delete ${def.domain} ${key}:`, e);
-    await logMetric(def.domain, "fail", e instanceof Error ? e.message : String(e), key);
   }
+  await logMetric(def.domain, "ok", "deleted", key);
 }
 
 /** Gate whether the KV body write should happen for this key's domain. */

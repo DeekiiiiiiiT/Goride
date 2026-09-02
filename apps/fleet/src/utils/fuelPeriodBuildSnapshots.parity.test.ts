@@ -1,55 +1,144 @@
 /**
- * Golden shape for server-built finalize snapshots (mirrors Deno assembleSnapshotsFromEntries).
+ * NEW-13 — real dual-path parity (Flawless Wave 2).
+ * Path A: assembleWeekSnapshotsFromCalcInput (low-level)
+ * Path B: assembleWeekSnapshotsFromRawEntries (Deno build-snapshots / emergency path)
+ * Both live in @roam/fuel-core — if either drifts, weekSnapshotMoneyDelta fails CI.
  */
 import { describe, expect, it } from 'vitest';
+import {
+  assembleWeekSnapshotsFromCalcInput,
+  assembleWeekSnapshotsFromRawEntries,
+  weekSnapshotMoneyDelta,
+  type WeekSnapEntry,
+  type WeekSnapFuelRule,
+} from '@roam/fuel-core';
 
-/** Mirrors supabase/functions/_fleet-server/fuel_period_build_snapshots.ts settle pool mapping. */
-function assembleFromEntries(
-  entries: Array<Record<string, unknown>>,
-  weekStart: string,
-  weekEnd: string,
-  orgId: string,
-) {
-  const byDriver = new Map<string, Record<string, unknown>[]>();
-  for (const e of entries) {
-    const driverId = String(e.driverId || `vehicle:${e.vehicleId}`);
-    const list = byDriver.get(driverId) || [];
-    list.push(e);
-    byDriver.set(driverId, list);
-  }
-  const snaps = [];
-  for (const [driverId, pool] of byDriver) {
-    const total = pool.reduce((s, e) => s + (Number(e.amount) || 0), 0);
-    snaps.push({
-      weekStart,
-      weekEnd,
-      driverId,
-      totalGasCardCost: total,
-      driverShare: total * 0.5,
-      companyShare: total * 0.5,
-      orgId,
-      metadata: {
-        settledEntries: pool.map((e) => ({
-          id: e.id,
-          amount: Number(e.amount) || 0,
-          date: String(e.date).split('T')[0],
-          driverId,
-          vehicleId: e.vehicleId,
-        })),
+const WEEK_START = '2026-08-25';
+const WEEK_END = '2026-08-31';
+const ORG = 'org-parity';
+
+/** Golden fixture: 2 drivers, shared-car edge, stamped ratio + rule-derived ratio. */
+const RAW_ENTRIES = [
+  {
+    id: 'e-a1',
+    amount: 10_000,
+    date: '2026-08-25',
+    driverId: 'driver-a',
+    vehicleId: 'veh-shared',
+    reconciliationStatus: 'Pending',
+    driverShareRatio: null as number | null,
+  },
+  {
+    id: 'e-a2',
+    amount: 5_000,
+    date: '2026-08-26',
+    driverId: 'driver-a',
+    vehicleId: 'veh-2',
+    reconciliationStatus: 'Pending',
+    driverShareRatio: 0.35,
+  },
+  {
+    id: 'e-b1',
+    amount: 8_000,
+    date: '2026-08-27',
+    driverId: 'driver-b',
+    vehicleId: 'veh-shared',
+    reconciliationStatus: 'Verified',
+    driverShareRatio: null as number | null,
+  },
+];
+
+const RULE_A: WeekSnapFuelRule = { coverageType: 'Percentage', rideShareCoverage: 60 };
+const RULE_B: WeekSnapFuelRule = { coverageType: 'Percentage', rideShareCoverage: 50 };
+
+function pathA_CalcInput() {
+  const entriesByDriver = new Map<string, WeekSnapEntry[]>();
+  const driverContexts = new Map([
+    [
+      'driver-a',
+      {
+        driverId: 'driver-a',
+        vehicleId: 'veh-shared',
+        vehicleIds: ['veh-shared', 'veh-2'],
+        fuelRule: RULE_A,
       },
+    ],
+    [
+      'driver-b',
+      {
+        driverId: 'driver-b',
+        vehicleId: 'veh-shared',
+        vehicleIds: ['veh-shared'],
+        fuelRule: RULE_B,
+      },
+    ],
+  ]);
+  for (const e of RAW_ENTRIES) {
+    const list = entriesByDriver.get(e.driverId) || [];
+    list.push({
+      id: e.id,
+      amount: e.amount,
+      date: e.date,
+      driverId: e.driverId,
+      vehicleId: e.vehicleId,
+      driverShareRatio: e.driverShareRatio,
     });
+    entriesByDriver.set(e.driverId, list);
   }
-  return snaps;
+  return assembleWeekSnapshotsFromCalcInput({
+    weekStart: WEEK_START,
+    weekEnd: WEEK_END,
+    orgId: ORG,
+    entriesByDriver,
+    driverContexts,
+    builtBy: 'parity-path-a',
+  });
 }
 
-describe('Program 4 snapshot enrich parity (shape)', () => {
-  it('builds settledEntries per driver for settle path', () => {
-    const snaps = assembleFromEntries(
-      [
+function pathB_RawEntries() {
+  const fuelRuleByDriver = new Map<string, WeekSnapFuelRule | null>([
+    ['driver-a', RULE_A],
+    ['driver-b', RULE_B],
+  ]);
+  return assembleWeekSnapshotsFromRawEntries({
+    weekStart: WEEK_START,
+    weekEnd: WEEK_END,
+    orgId: ORG,
+    entries: RAW_ENTRIES,
+    fuelRuleByDriver,
+    builtBy: 'parity-path-b',
+  });
+}
+
+describe('fuelPeriodBuildSnapshots dual-path parity (NEW-13)', () => {
+  it('Path A and Path B money match within EPS for golden fixture week', () => {
+    const a = pathA_CalcInput().sort((x, y) => x.driverId.localeCompare(y.driverId));
+    const b = pathB_RawEntries().sort((x, y) => x.driverId.localeCompare(y.driverId));
+    expect(a).toHaveLength(2);
+    expect(b).toHaveLength(2);
+    for (let i = 0; i < a.length; i++) {
+      expect(a[i].driverId).toBe(b[i].driverId);
+      const delta = weekSnapshotMoneyDelta(a[i], b[i]);
+      expect(delta.spend).toBeLessThan(0.01);
+      expect(delta.driver).toBeLessThan(0.01);
+      expect(delta.company).toBeLessThan(0.01);
+      expect(delta.misc).toBeLessThan(0.01);
+      expect(a[i].metadata.settledEntries.map((e) => e.id).sort()).toEqual(
+        b[i].metadata.settledEntries.map((e) => e.id).sort(),
+      );
+    }
+  });
+
+  it('emergency 50% path matches explicit null-rule assembly', () => {
+    const emergency = assembleWeekSnapshotsFromRawEntries({
+      weekStart: WEEK_START,
+      weekEnd: WEEK_END,
+      orgId: ORG,
+      entries: [
         {
           id: 'e1',
-          amount: 100,
-          date: '2026-07-07',
+          amount: 150,
+          date: '2026-08-25',
           driverId: 'd1',
           vehicleId: 'v1',
           reconciliationStatus: 'Pending',
@@ -57,19 +146,40 @@ describe('Program 4 snapshot enrich parity (shape)', () => {
         {
           id: 'e2',
           amount: 50,
-          date: '2026-07-08',
+          date: '2026-08-26',
           driverId: 'd1',
           vehicleId: 'v1',
           reconciliationStatus: 'Pending',
         },
       ],
-      '2026-07-06',
-      '2026-07-12',
-      'org1',
-    );
-    expect(snaps).toHaveLength(1);
-    expect(snaps[0].totalGasCardCost).toBe(150);
-    expect((snaps[0].metadata as any).settledEntries).toHaveLength(2);
-    expect((snaps[0].metadata as any).settledEntries[0].id).toBe('e1');
+      builtBy: 'fuel_period_build_snapshots',
+    });
+    expect(emergency).toHaveLength(1);
+    expect(emergency[0].totalGasCardCost).toBe(200);
+    expect(emergency[0].driverShare).toBeCloseTo(100, 5);
+    expect(emergency[0].companyShare).toBeCloseTo(100, 5);
+    expect(emergency[0].metadata.settledEntries).toHaveLength(2);
+  });
+
+  it('stamped ratio wins over rule on Path B (Deno scenario path)', () => {
+    const snaps = assembleWeekSnapshotsFromRawEntries({
+      weekStart: WEEK_START,
+      weekEnd: WEEK_END,
+      orgId: ORG,
+      entries: [
+        {
+          id: 'stamped',
+          amount: 1_000,
+          date: '2026-08-25',
+          driverId: 'd1',
+          vehicleId: 'v1',
+          reconciliationStatus: 'Pending',
+          driverShareRatio: 0.25,
+        },
+      ],
+      fuelRuleByDriver: new Map([['d1', { coverageType: 'Percentage', rideShareCoverage: 90 }]]),
+    });
+    expect(snaps[0].driverShare).toBeCloseTo(250, 5);
+    expect(snaps[0].companyShare).toBeCloseTo(750, 5);
   });
 });

@@ -4,19 +4,19 @@ export {
   SEVERE_GAP_PCT,
   TANK_OVERFLOW_MULT,
   UNACCOUNTED_DISTANCE_DEDUCTION_KM,
-} from './constants';
+} from './constants.ts';
 
 export {
   resolvePricePerLiter,
   type FuelPriceSource,
   type ResolvePricePerLiterInput,
   type ResolvePricePerLiterResult,
-} from './resolvePricePerLiter';
+} from './resolvePricePerLiter.ts';
 
 export {
   resolveFuelBrainFlags,
   type FuelBrainRuntimeFlags,
-} from './fuelBrainFlags';
+} from './fuelBrainFlags.ts';
 
 export {
   resolveRetailEstimate,
@@ -28,21 +28,23 @@ export {
   type PetrojamWholesaleRow,
   type RetailMarkupVersion,
   type RetailEstimateResult,
-} from './retailPriceEstimate';
+} from './retailPriceEstimate.ts';
 
 export {
   enterpriseFuelSyncIdempotencyKey,
   fuelSettlementEntryYmd,
-} from './settlementShared';
+} from './settlementShared.ts';
 
 export {
   assembleWeekSnapshotsFromCalcInput,
+  assembleWeekSnapshotsFromRawEntries,
   companyCoveragePercentFromFuelRule,
   driverShareRatioFromFuelRule,
+  pickSettlePoolEntries,
   resolveEntryDriverRatio,
   weekSnapshotMoneyDelta,
   type BuiltWeekSnapshot,
   type WeekSnapDriverContext,
   type WeekSnapEntry,
   type WeekSnapFuelRule,
-} from './weekSnapshotEngine';
+} from './weekSnapshotEngine.ts';

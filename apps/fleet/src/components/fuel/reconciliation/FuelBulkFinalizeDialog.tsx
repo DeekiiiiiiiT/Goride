@@ -58,7 +58,7 @@ export type FuelBulkFinalizeDialogProps = {
 };
 
 /** H3: same early hard gates as the single-week wizard — checkbox cannot override. */
-function bulkEarlyGateFailure(
+export function bulkEarlyGateFailure(
   period: FuelReconciliationPeriod,
   reports: WeeklyFuelReport[],
   fuelEntries: FuelEntry[],

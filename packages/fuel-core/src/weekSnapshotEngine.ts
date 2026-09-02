@@ -184,12 +184,99 @@ export function assembleWeekSnapshotsFromCalcInput(input: {
 
 /** Compare browser vs Deno money fields within tolerance. */
 export function weekSnapshotMoneyDelta(
-  a: { totalGasCardCost?: number; driverShare?: number; companyShare?: number },
-  b: { totalGasCardCost?: number; driverShare?: number; companyShare?: number },
-): { spend: number; driver: number; company: number } {
+  a: {
+    totalGasCardCost?: number;
+    driverShare?: number;
+    companyShare?: number;
+    miscellaneousCost?: number;
+  },
+  b: {
+    totalGasCardCost?: number;
+    driverShare?: number;
+    companyShare?: number;
+    miscellaneousCost?: number;
+  },
+): { spend: number; driver: number; company: number; misc: number } {
   return {
     spend: Math.abs((Number(a.totalGasCardCost) || 0) - (Number(b.totalGasCardCost) || 0)),
     driver: Math.abs((Number(a.driverShare) || 0) - (Number(b.driverShare) || 0)),
     company: Math.abs((Number(a.companyShare) || 0) - (Number(b.companyShare) || 0)),
+    misc: Math.abs((Number(a.miscellaneousCost) || 0) - (Number(b.miscellaneousCost) || 0)),
   };
+}
+
+/** Pending/Verified pool, else all entries (matches Deno settle semantics). */
+export function pickSettlePoolEntries<T extends { reconciliationStatus?: string }>(
+  weekEntries: T[],
+): T[] {
+  const pending = weekEntries.filter((e) => {
+    const status = String(e.reconciliationStatus || 'Pending');
+    return status === 'Pending' || status === 'Verified';
+  });
+  return pending.length ? pending : weekEntries;
+}
+
+/**
+ * Map raw week fills + optional per-driver fuel rules into snapshots via the shared assembler.
+ * Used by Deno build-snapshots (scenario path + 50% emergency path) and Node parity tests.
+ */
+export function assembleWeekSnapshotsFromRawEntries(input: {
+  weekStart: string;
+  weekEnd: string;
+  orgId: string;
+  entries: Array<{
+    id: string;
+    amount: number;
+    date: string;
+    driverId: string;
+    vehicleId: string;
+    reconciliationStatus?: string;
+    driverShareRatio?: number | null;
+  }>;
+  /** Per-driver fuel rule; omit / null → 50% company default. */
+  fuelRuleByDriver?: Map<string, WeekSnapFuelRule | null>;
+  brainByDriver?: Map<string, Record<string, unknown>>;
+  builtBy?: string;
+}): BuiltWeekSnapshot[] {
+  const byDriver = new Map<string, typeof input.entries>();
+  for (const e of input.entries) {
+    const driverId = String(e.driverId || '').trim() || `vehicle:${e.vehicleId || 'unknown'}`;
+    const list = byDriver.get(driverId) || [];
+    list.push({ ...e, driverId });
+    byDriver.set(driverId, list);
+  }
+
+  const entriesByDriver = new Map<string, WeekSnapEntry[]>();
+  const driverContexts = new Map<string, WeekSnapDriverContext>();
+
+  for (const [driverId, weekEntries] of byDriver) {
+    const settlePool = pickSettlePoolEntries(weekEntries);
+    if (!settlePool.length) continue;
+    const snapEntries: WeekSnapEntry[] = settlePool.map((e) => ({
+      id: String(e.id),
+      amount: Number(e.amount) || 0,
+      date: String(e.date || '').split('T')[0],
+      driverId: e.driverId || driverId,
+      vehicleId: String(e.vehicleId || ''),
+      driverShareRatio: e.driverShareRatio,
+    }));
+    entriesByDriver.set(driverId, snapEntries);
+    const vehicleIds = [...new Set(snapEntries.map((e) => e.vehicleId).filter(Boolean))];
+    driverContexts.set(driverId, {
+      driverId,
+      vehicleId: vehicleIds[0] || '',
+      vehicleIds,
+      fuelRule: input.fuelRuleByDriver?.get(driverId) ?? null,
+    });
+  }
+
+  return assembleWeekSnapshotsFromCalcInput({
+    weekStart: input.weekStart,
+    weekEnd: input.weekEnd,
+    orgId: input.orgId,
+    entriesByDriver,
+    driverContexts,
+    brainByDriver: input.brainByDriver,
+    builtBy: input.builtBy,
+  });
 }

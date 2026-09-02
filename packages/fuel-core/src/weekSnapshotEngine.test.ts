@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   assembleWeekSnapshotsFromCalcInput,
+  assembleWeekSnapshotsFromRawEntries,
   driverShareRatioFromFuelRule,
   weekSnapshotMoneyDelta,
 } from './weekSnapshotEngine';
@@ -56,10 +57,33 @@ describe('weekSnapshotEngine', () => {
 
   it('golden parity helper stays within EPS for identical money', () => {
     const delta = weekSnapshotMoneyDelta(
-      { totalGasCardCost: 100, driverShare: 40, companyShare: 60 },
-      { totalGasCardCost: 100.005, driverShare: 40.004, companyShare: 59.996 },
+      { totalGasCardCost: 100, driverShare: 40, companyShare: 60, miscellaneousCost: 0 },
+      { totalGasCardCost: 100.005, driverShare: 40.004, companyShare: 59.996, miscellaneousCost: 0 },
     );
     expect(delta.spend).toBeLessThan(0.01);
     expect(delta.driver).toBeLessThan(0.01);
+    expect(delta.misc).toBeLessThan(0.01);
+  });
+
+  it('assembleWeekSnapshotsFromRawEntries matches calc-input path', () => {
+    const raw = assembleWeekSnapshotsFromRawEntries({
+      weekStart: '2026-08-25',
+      weekEnd: '2026-08-31',
+      orgId: 'org1',
+      entries: [
+        {
+          id: 'e1',
+          amount: 1000,
+          date: '2026-08-25',
+          driverId: 'd1',
+          vehicleId: 'v1',
+          reconciliationStatus: 'Pending',
+        },
+      ],
+      fuelRuleByDriver: new Map([
+        ['d1', { coverageType: 'Percentage', rideShareCoverage: 60 }],
+      ]),
+    });
+    expect(raw[0].driverShare).toBeCloseTo(400, 5);
   });
 });

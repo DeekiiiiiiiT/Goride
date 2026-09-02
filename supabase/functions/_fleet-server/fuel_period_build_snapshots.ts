@@ -1,15 +1,11 @@
 /**
- * Server-side FinalizedFuelReport snapshot builder for auto-close (Program 4).
- * Builds settleable snapshots from org-scoped pending fuel entries when none exist.
- *
- * Shares: prefer entry metadata driverShareRatio; else blended from scenario-less 50% default
- * matching settle path needs (settledEntries amounts drive wallet posts).
+ * Server-side FinalizedFuelReport snapshot builder for auto-close.
+ * Emergency / entries-mode path: shared fuel-core assembler with explicit 50% default rule
+ * (stamped entry ratios still win via resolveEntryDriverRatio).
  */
 import * as kv from "./kv_store.tsx";
 import { filterByOrg } from "./org_scope.ts";
-import { blendedDriverShareRatio } from "./fuel_blended_ratio.ts";
-
-const EPS = 0.009;
+import { assembleWeekSnapshotsFromRawEntries } from "../_shared/fuelCore.ts";
 
 function ymd(v: unknown): string {
   return String(v || "").split("T")[0];
@@ -36,6 +32,16 @@ function resolveDriverId(e: Record<string, unknown>): string {
   return String(e.driverId || e.driver_id || e.currentDriverId || "").trim();
 }
 
+function entryDriverShareRatio(e: Record<string, unknown>): number | null {
+  const meta = (e.metadata && typeof e.metadata === "object" ? e.metadata : {}) as Record<
+    string,
+    unknown
+  >;
+  const stamped = Number(meta.driverShareRatio ?? meta.driver_share_ratio);
+  if (Number.isFinite(stamped) && stamped >= 0 && stamped <= 1) return stamped;
+  return null;
+}
+
 /** Org-scoped week entries eligible for settlement. */
 export async function loadWeekFuelEntries(
   orgId: string,
@@ -54,7 +60,7 @@ export async function loadWeekFuelEntries(
 
 /**
  * Build one FinalizedFuelReport-shaped snapshot per driver with pending fills.
- * This is the Deno settle input shape expected by persistFinalizedSnapshot.
+ * Money math via @roam/fuel-core (50% company default when no stamped ratio / rule).
  */
 export function assembleSnapshotsFromEntries(
   entries: Record<string, unknown>[],
@@ -62,96 +68,25 @@ export function assembleSnapshotsFromEntries(
   weekEnd: string,
   orgId: string,
 ): BuiltSnapshot[] {
-  const byDriver = new Map<string, Record<string, unknown>[]>();
-  for (const e of entries) {
-    const driverId = resolveDriverId(e) || `vehicle:${String(e.vehicleId || e.vehicle_id || "unknown")}`;
-    const list = byDriver.get(driverId) || [];
-    list.push(e);
-    byDriver.set(driverId, list);
-  }
-
-  const snapshots: BuiltSnapshot[] = [];
-  for (const [driverId, weekEntries] of byDriver) {
-    const pending = weekEntries.filter((e) => {
-      const status = String(e.reconciliationStatus || e.reconciliation_status || "Pending");
-      return status === "Pending" || status === "Verified";
-    });
-    const settlePool = pending.length ? pending : weekEntries;
-    if (!settlePool.length) continue;
-
-    const totalGasCardCost = settlePool.reduce((s, e) => s + entryAmount(e), 0);
-    if (totalGasCardCost <= EPS) continue;
-
-    // Prefer per-entry ratio metadata; else default half share (safe settle denominator).
-    let weightedDriver = 0;
-    for (const e of settlePool) {
-      const amt = entryAmount(e);
-      const meta = (e.metadata && typeof e.metadata === "object" ? e.metadata : {}) as Record<
-        string,
-        unknown
-      >;
-      const ratioRaw = Number(meta.driverShareRatio ?? meta.driver_share_ratio);
-      const ratio = Number.isFinite(ratioRaw) && ratioRaw >= 0 && ratioRaw <= 1 ? ratioRaw : 0.5;
-      weightedDriver += amt * ratio;
-    }
-    const driverShare = weightedDriver;
-    const companyShare = Math.max(0, totalGasCardCost - driverShare);
-    const vehicleId = String(settlePool[0].vehicleId || settlePool[0].vehicle_id || "");
-    const vehicleIds = [
-      ...new Set(
-        settlePool.map((e) => String(e.vehicleId || e.vehicle_id || "")).filter(Boolean),
-      ),
-    ];
-
-    const postedDriverShare = settlePool.reduce((sum, e) => {
-      const amt = entryAmount(e);
-      const meta = (e.metadata && typeof e.metadata === "object" ? e.metadata : {}) as Record<
-        string,
-        unknown
-      >;
-      const ratioRaw = Number(meta.driverShareRatio ?? meta.driver_share_ratio);
-      const ratio = Number.isFinite(ratioRaw) && ratioRaw >= 0 && ratioRaw <= 1 ? ratioRaw : 0.5;
-      return sum + amt * ratio;
-    }, 0);
-
-    snapshots.push({
-      weekStart,
-      weekEnd,
-      driverId,
-      vehicleId: vehicleId || vehicleIds[0] || "",
-      vehicleIds,
-      totalGasCardCost,
-      gasCardSpend: totalGasCardCost,
-      driverSpend: 0,
-      companyShare,
-      driverShare,
-      miscellaneousCost: 0,
-      pendingCount: settlePool.length,
-      status: "Finalized",
-      finalizedAt: new Date().toISOString(),
-      postedDriverShare,
-      postedCompanyShare: Math.max(0, totalGasCardCost - postedDriverShare),
-      netPay: 0 - driverShare,
-      fuelCycles: [],
-      orgId,
-      org_id: orgId,
-      metadata: {
-        builtBy: "fuel_period_build_snapshots",
-        settledEntries: settlePool.map((e) => ({
-          id: String(e.id),
-          amount: entryAmount(e),
-          date: ymd(e.date),
-          driverId: resolveDriverId(e) || driverId,
-          vehicleId: String(e.vehicleId || e.vehicle_id || vehicleId),
-        })),
-        blendedRatio: blendedDriverShareRatio(driverShare, totalGasCardCost),
-      },
-    });
-  }
-  return snapshots;
+  const snaps = assembleWeekSnapshotsFromRawEntries({
+    weekStart,
+    weekEnd,
+    orgId,
+    entries: entries.map((e) => ({
+      id: String(e.id),
+      amount: entryAmount(e),
+      date: ymd(e.date),
+      driverId: resolveDriverId(e),
+      vehicleId: String(e.vehicleId || e.vehicle_id || ""),
+      reconciliationStatus: String(e.reconciliationStatus || e.reconciliation_status || "Pending"),
+      driverShareRatio: entryDriverShareRatio(e),
+    })),
+    builtBy: "fuel_period_build_snapshots",
+  });
+  return snaps as BuiltSnapshot[];
 }
 
-/** Full build for a period week — used by route + auto-close (Program 5 full engine). */
+/** Full build for a period week — used by route + auto-close. */
 export async function buildFuelPeriodSnapshots(input: {
   orgId: string;
   weekStart: string;
