@@ -34,6 +34,8 @@ export function buildLedgerPayoutPeriodRows(params: {
    * Used for Payout estimates when no finalized fuel report overlaps the period.
    */
   draftFuelByPeriod?: Record<string, { deduction: number; fleetShare?: number }>;
+  /** Monday keys locked in Consumption Reconciliation — gates isFinalized. */
+  lockedWeekStarts?: Set<string> | string[];
 }): PayoutPeriodRow[] {
   const {
     ledgerLoaded,
@@ -46,10 +48,13 @@ export function buildLedgerPayoutPeriodRows(params: {
     periodType,
     timezone,
     draftFuelByPeriod,
+    lockedWeekStarts,
   } = params;
 
   const getDeductionForPeriod = (periodStart: Date, periodEnd: Date) =>
-    getFuelDeductionForPeriod(finalizedReports, periodStart, periodEnd, periodType);
+    getFuelDeductionForPeriod(finalizedReports, periodStart, periodEnd, periodType, {
+      lockedWeekStarts,
+    });
 
   // Include toll-category rows regardless of `type` — toll_ledger-sourced rows
   // (merged in from GET /toll-logs) carry type:'Usage', which the plain
@@ -245,15 +250,17 @@ export function buildLedgerPayoutPeriodRows(params: {
       } = computeDisputeRefundCounts(disputeRefunds, periodStart, periodEnd);
 
       const {
-        deduction: finalizedFuelDeduction,
+        deduction: reportFuelDeduction,
         fleetShare,
         finalized: isFinalized,
+        hasReport,
       } = getDeductionForPeriod(periodStart, periodEnd);
 
       const periodKey = format(periodStart, 'yyyy-MM-dd');
       const draft = !isFinalized ? draftFuelByPeriod?.[periodKey] : undefined;
-      const fuelDeduction = isFinalized
-        ? finalizedFuelDeduction
+      // Amounts from overlapping reports even when recon week is not locked yet.
+      const fuelDeduction = hasReport
+        ? reportFuelDeduction
         : Math.max(0, Number(draft?.deduction) || 0);
       const isEstimate = !isFinalized;
       const draftFleetShare = Math.max(0, Number(draft?.fleetShare) || 0);
@@ -268,9 +275,9 @@ export function buildLedgerPayoutPeriodRows(params: {
         cashPaidBreakdown,
       } = getCashForPeriod(periodStart, periodEnd);
 
-      // Prefer finalized fleet fuel share when present; add TX credits only when
+      // Prefer report fleet fuel share when present; add TX credits only when
       // fleet share is absent (they are not interchangeable — never blind max of both).
-      const effectiveFuelCredits = isFinalized
+      const effectiveFuelCredits = hasReport
         ? fleetShare > 0.005
           ? fleetShare
           : Math.max(0, txFuelCredits || 0)

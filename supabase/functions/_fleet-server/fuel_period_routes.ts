@@ -77,6 +77,20 @@ function ymd(v: unknown): string {
   return String(v || "").split("T")[0];
 }
 
+/** Expenses Fuel Status reads driver_financial_periods — refresh after recon lock/reopen. */
+async function rebuildExpensesForFuelWeek(weekStart: string, driverIds: Iterable<string>) {
+  const anchor = ymd(weekStart);
+  if (!anchor) return;
+  const { rebuildPeriodsForAnchors } = await import("./driver_financial_periods.ts");
+  for (const driverId of new Set([...driverIds].map(String).filter(Boolean))) {
+    try {
+      await rebuildPeriodsForAnchors(driverId, [anchor], true);
+    } catch (e) {
+      console.warn("[fuel_period] expenses rebuild failed", driverId, anchor, e);
+    }
+  }
+}
+
 function periodIdFor(orgId: string, weekStart: string): string {
   return `${orgId}:${weekStart}`;
 }
@@ -347,12 +361,20 @@ async function processJobRow(job: Record<string, unknown>) {
       },
       actor,
     );
+    // Post-lock rebuild so Expenses fuelStatus flips to finalized (events rebuild runs pre-lock).
+    await rebuildExpensesForFuelWeek(ymd(period.week_start), [
+      ...done,
+      ...snapshots.map((s: any) => String(s?.driverId || "")),
+    ]);
   } else if (kind === "reopen") {
     const reason = String(cursor.reason || "");
     const weekStart = ymd(period.week_start);
     const snaps = ((await kv.getByPrefix(`finalized_report:${weekStart}:`)) || []) as any[];
+    const reopenDriverIds: string[] = [];
     for (const snap of snaps) {
       if (snap?.orgId && snap.orgId !== orgId && snap.org_id && snap.org_id !== orgId) continue;
+      const did = String(snap?.driverId || "");
+      if (did) reopenDriverIds.push(did);
       try {
         await reverseEnterpriseFuelSyncForSnapshot(snap);
         await reverseFuelFinancialEventsForWeek(
@@ -384,6 +406,7 @@ async function processJobRow(job: Record<string, unknown>) {
       .eq("id", periodId)
       .eq("org_id", orgId);
     await insertAudit(orgId, periodId, "reopen", { reason, version: nextVersion }, actor);
+    await rebuildExpensesForFuelWeek(weekStart, reopenDriverIds);
   } else if (kind === "recompute") {
     await sb
       .from("fuel_reconciliation_period")

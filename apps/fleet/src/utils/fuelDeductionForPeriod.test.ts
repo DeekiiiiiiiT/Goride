@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { getFuelDeductionForPeriod } from './fuelDeductionForPeriod';
+import { fuelExpenseStatusLabel } from '@roam/fuel-core';
 
 const weeklyReport = {
   vehicleId: 'v1',
@@ -18,18 +19,34 @@ const weeklyReport = {
 };
 
 describe('getFuelDeductionForPeriod', () => {
-  it('sums driverShare/companyShare/driverSpend/netPay for a weekly period that fully overlaps', () => {
+  it('sums amounts for overlapping week but does not finalize without lock set', () => {
     const periodStart = new Date('2026-07-06T00:00:00');
     const periodEnd = new Date('2026-07-12T23:59:59');
 
     const r = getFuelDeductionForPeriod([weeklyReport], periodStart, periodEnd, 'weekly');
 
-    expect(r.finalized).toBe(true);
+    expect(r.hasReport).toBe(true);
+    expect(r.finalized).toBe(false);
     expect(r.deduction).toBe(140);
     expect(r.fleetShare).toBe(60);
     expect(r.driverSpend).toBe(100);
     expect(r.gasCardSpend).toBe(250);
     expect(r.netPay).toBe(-40);
+  });
+
+  it('finalized only when overlapping week is in lockedWeekStarts', () => {
+    const periodStart = new Date('2026-07-06T00:00:00');
+    const periodEnd = new Date('2026-07-12T23:59:59');
+    const unlocked = getFuelDeductionForPeriod([weeklyReport], periodStart, periodEnd, 'weekly', {
+      lockedWeekStarts: ['2026-07-13'],
+    });
+    expect(unlocked.hasReport).toBe(true);
+    expect(unlocked.finalized).toBe(false);
+
+    const locked = getFuelDeductionForPeriod([weeklyReport], periodStart, periodEnd, 'weekly', {
+      lockedWeekStarts: new Set(['2026-07-06']),
+    });
+    expect(locked.finalized).toBe(true);
   });
 
   it('infers gasCardSpend for legacy snapshots without the field (total − driverSpend)', () => {
@@ -52,6 +69,7 @@ describe('getFuelDeductionForPeriod', () => {
     const r = getFuelDeductionForPeriod([weeklyReport], periodStart, periodEnd, 'weekly');
 
     expect(r.finalized).toBe(false);
+    expect(r.hasReport).toBe(false);
     expect(r.deduction).toBe(0);
     expect(r.driverSpend).toBe(0);
     expect(r.netPay).toBe(0);
@@ -60,7 +78,9 @@ describe('getFuelDeductionForPeriod', () => {
   it('apportions the weekly totals evenly across days in daily mode', () => {
     // 7-day week: 2026-07-06 (Mon) through 2026-07-12 (Sun)
     const day = new Date('2026-07-08T00:00:00');
-    const r = getFuelDeductionForPeriod([weeklyReport], day, day, 'daily');
+    const r = getFuelDeductionForPeriod([weeklyReport], day, day, 'daily', {
+      lockedWeekStarts: ['2026-07-06'],
+    });
 
     expect(r.finalized).toBe(true);
     expect(r.deduction).toBeCloseTo(140 / 7, 10);
@@ -84,7 +104,9 @@ describe('getFuelDeductionForPeriod', () => {
     const monthStart = new Date('2026-07-01T00:00:00');
     const monthEnd = new Date('2026-07-31T23:59:59');
 
-    const r = getFuelDeductionForPeriod([weeklyReport, secondWeekReport], monthStart, monthEnd, 'monthly');
+    const r = getFuelDeductionForPeriod([weeklyReport, secondWeekReport], monthStart, monthEnd, 'monthly', {
+      lockedWeekStarts: ['2026-07-06', '2026-07-13'],
+    });
 
     expect(r.finalized).toBe(true);
     expect(r.deduction).toBe(200);
@@ -96,6 +118,22 @@ describe('getFuelDeductionForPeriod', () => {
   it('tolerates a missing/empty finalizedReports array', () => {
     const r = getFuelDeductionForPeriod([], new Date(), new Date(), 'weekly');
     expect(r.finalized).toBe(false);
+    expect(r.hasReport).toBe(false);
     expect(r.deduction).toBe(0);
+  });
+
+  it('Expenses Fuel Status CSV strings never Finalized for Outstanding (unlocked) weeks', () => {
+    // Regression: snapshot alone must not paint Finalized — Outstanding recon ⇒ Pending/In Progress.
+    const periodStart = new Date('2026-08-24T00:00:00');
+    const periodEnd = new Date('2026-08-30T23:59:59');
+    const snap = {
+      ...weeklyReport,
+      weekStart: '2026-08-24T00:00:00.000Z',
+      weekEnd: '2026-08-30T00:00:00.000Z',
+    };
+    const r = getFuelDeductionForPeriod([snap], periodStart, periodEnd, 'weekly');
+    expect(r.hasReport).toBe(true);
+    expect(r.finalized).toBe(false);
+    expect(fuelExpenseStatusLabel(r.finalized ? 'finalized' : 'pending')).toBe('Pending');
   });
 });

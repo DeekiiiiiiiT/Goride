@@ -39,7 +39,8 @@ interface ExpensePeriodRow {
   fuelGasCardSpend: number;    // Company gas-card charges for fills (finalized)
   fuelNetPay: number;          // fuelDriverSpend - fuelDeduction; positive = company owes the driver
   fuelDraftEstimate: number;   // Live/unfinalized estimate for periods with no finalized report yet
-  isFinalized: boolean;        // true if this period has finalized fuel data
+  isFinalized: boolean;        // true when Consumption Reconciliation week is locked
+  fuelStatus: 'n/a' | 'pending' | 'in_progress' | 'finalized' | string;
   totalExpenses: number;
   transactionCount: number;
   tollReconciled: number;      // Phase 6: count of reconciled toll txns in this period
@@ -206,7 +207,9 @@ export function DriverExpensesHistory({
           fuelGasCardSpend: Number(p.fuelGasCardSpend) || 0,
           fuelNetPay: Number(p.fuelNetPay) || 0,
           fuelDraftEstimate: 0,
-          isFinalized: !!p.fuelFinalized,
+          // SoT is fuelStatus from recon lock — do not trust legacy fuelFinalized alone.
+          isFinalized: String(p.fuelStatus || '').toLowerCase() === 'finalized',
+          fuelStatus: String(p.fuelStatus || 'n/a'),
           totalExpenses:
             Math.max(0, (Number(p.tollSpend) || 0) - (Number(p.tollReimbursed) || 0)) +
             (Number(p.fuelDeduction) || 0) +
@@ -295,16 +298,22 @@ export function DriverExpensesHistory({
       // ── Fuel: from finalized reports (canonical shared aggregator — same
       // logic used by SettlementSummaryView/PayoutPeriodDetail so all three
       // surfaces agree) ──
-      const { deduction, fleetShare, driverSpend, gasCardSpend, netPay, finalized } =
+      const { deduction, fleetShare, driverSpend, gasCardSpend, netPay, finalized, hasReport } =
         getFuelDeductionForPeriod(finalizedReports, periodStart, periodEnd, periodType);
       const fuelDeduction = deduction;
       const isFinalized = finalized;
+      // Fallback path has no recon lock map — never paint Finalized from snapshots alone.
+      const fuelStatus = isFinalized
+        ? 'finalized'
+        : hasReport || fuelDeduction > 0.005
+          ? 'pending'
+          : 'n/a';
 
       // ── Draft estimate: for periods with no finalized report yet, compute a
       // live reconciliation so unresolved weeks are never silently shown as $0.
       // Never counted into totalExpenses — unconfirmed estimate only. ──
       let fuelDraftEstimate = 0;
-      if (!isFinalized) {
+      if (!hasReport && !isFinalized) {
         fuelDraftEstimate = driverVehicleList.reduce((sum, vehicle) => {
           const report = FuelCalculationService.calculateReconciliation(
             vehicle, periodStart, periodEnd, trips, draftFuelEntries, draftAdjustments, draftScenarios
@@ -330,6 +339,7 @@ export function DriverExpensesHistory({
         fuelNetPay: netPay,
         fuelDraftEstimate,
         isFinalized,
+        fuelStatus,
         totalExpenses,
         transactionCount: periodTx.length,
         tollReconciled,
@@ -423,7 +433,14 @@ export function DriverExpensesHistory({
         'Paid by Driver (Cash)': row.fuelDriverSpend.toFixed(2),
         'Driver Fuel Net': row.fuelNetPay.toFixed(2),
         'Fuel Draft Estimate (not yet finalized)': row.fuelDraftEstimate.toFixed(2),
-        'Fuel Status': row.isFinalized ? 'Finalized' : 'Pending',
+        'Fuel Status':
+          row.fuelStatus === 'finalized'
+            ? 'Finalized'
+            : row.fuelStatus === 'in_progress'
+              ? 'In Progress'
+              : row.fuelStatus === 'pending' || row.fuelDraftEstimate > 0.005 || row.fuelDeduction > 0.005
+                ? 'Pending'
+                : '—',
         'Total Expenses': row.totalExpenses.toFixed(2),
       };
     });
@@ -881,7 +898,7 @@ export function DriverExpensesHistory({
                                   </span>
                                 </TooltipTrigger>
                                 <TooltipContent side="top" className="max-w-[300px] text-xs">
-                                  Fuel report lock only — not toll reconciliation. &quot;Finalized&quot; means the fuel report for this period is reviewed and locked (fuel deduction is final). &quot;Pending&quot; means fuel may still change.
+                                  Consumption Reconciliation week lock. &quot;Finalized&quot; means that Monday week is locked in Consumption Reconciliation. &quot;In Progress&quot; means the recon period is open. &quot;Pending&quot; means fuel activity exists but no recon period row yet.
                                 </TooltipContent>
                               </Tooltip>
                             </TooltipProvider>
@@ -890,14 +907,14 @@ export function DriverExpensesHistory({
                       </TableHeader>
                       <TableBody>
                         {visibleRows.map((row, idx) => (
-                          <TableRow key={`fuel-${idx}`} className={!row.isFinalized ? 'bg-amber-50/30' : 'hover:bg-slate-50/60'}>
+                          <TableRow key={`fuel-${idx}`} className={row.fuelStatus !== 'finalized' && row.fuelStatus !== 'n/a' ? 'bg-amber-50/30' : 'hover:bg-slate-50/60'}>
                             <TableCell className="px-3 font-medium text-xs whitespace-nowrap">
                               {formatPeriodLabel(row)}
                             </TableCell>
-                            <TableCell className={`px-3 text-right tabular-nums ${row.isFinalized ? 'text-red-600' : 'text-slate-300'}`}>
-                              {row.isFinalized && row.fuelDeduction > 0 ? (
+                            <TableCell className={`px-3 text-right tabular-nums ${row.fuelDeduction > 0.005 ? 'text-red-600' : 'text-slate-300'}`}>
+                              {row.fuelDeduction > 0.005 ? (
                                 `$${row.fuelDeduction.toLocaleString(undefined, { minimumFractionDigits: 2 })}`
-                              ) : !row.isFinalized && row.fuelDraftEstimate > 0.005 ? (
+                              ) : row.fuelStatus !== 'finalized' && row.fuelDraftEstimate > 0.005 ? (
                                 <TooltipProvider>
                                   <Tooltip>
                                     <TooltipTrigger asChild>
@@ -906,45 +923,51 @@ export function DriverExpensesHistory({
                                       </span>
                                     </TooltipTrigger>
                                     <TooltipContent side="top" className="max-w-[260px] text-xs">
-                                      Pending reconciliation — this fuel report has not been finalized yet. Estimate based on current data; the posted amount may change until an admin finalizes this week.
+                                      Pending reconciliation — this fuel week is not locked in Consumption Reconciliation yet. Estimate based on current data; the posted amount may change until an admin locks this week.
                                     </TooltipContent>
                                   </Tooltip>
                                 </TooltipProvider>
-                              ) : !row.isFinalized && fuelDraftLoading ? (
+                              ) : row.fuelStatus !== 'finalized' && fuelDraftLoading ? (
                                 <Loader2 className="h-3.5 w-3.5 animate-spin text-slate-300 ml-auto" />
                               ) : <span className="text-slate-300">-</span>}
                             </TableCell>
                             <TableCell className="px-3 text-right tabular-nums text-slate-700">
-                              {row.isFinalized && row.fuelFleetShare > 0.005
+                              {row.fuelFleetShare > 0.005
                                 ? `$${row.fuelFleetShare.toLocaleString(undefined, { minimumFractionDigits: 2 })}`
                                 : <span className="text-slate-300">-</span>}
                             </TableCell>
                             <TableCell className="px-3 text-right tabular-nums text-slate-600">
-                              {row.isFinalized && row.fuelGasCardSpend > 0.005
+                              {row.fuelGasCardSpend > 0.005
                                 ? `$${row.fuelGasCardSpend.toLocaleString(undefined, { minimumFractionDigits: 2 })}`
                                 : <span className="text-slate-300">-</span>}
                             </TableCell>
                             <TableCell className="px-3 text-right tabular-nums text-slate-600">
-                              {row.isFinalized && row.fuelDriverSpend > 0.005
+                              {row.fuelDriverSpend > 0.005
                                 ? `$${row.fuelDriverSpend.toLocaleString(undefined, { minimumFractionDigits: 2 })}`
                                 : <span className="text-slate-300">-</span>}
                             </TableCell>
                             <TableCell className="px-3 text-right tabular-nums">
-                              {row.isFinalized && (row.fuelDeduction > 0 || row.fuelDriverSpend > 0.005) ? (
+                              {(row.fuelDeduction > 0 || row.fuelDriverSpend > 0.005) ? (
                                 <span className={`font-medium ${row.fuelNetPay >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
                                   {row.fuelNetPay >= 0 ? '+' : '-'}${Math.abs(row.fuelNetPay).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                                 </span>
                               ) : <span className="text-slate-300">-</span>}
                             </TableCell>
                             <TableCell className="px-3 text-xs text-center">
-                              {row.isFinalized ? (
+                              {row.fuelStatus === 'finalized' ? (
                                 <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-700">
                                   <CheckCircle className="h-3 w-3" /> Finalized
                                 </span>
-                              ) : (
+                              ) : row.fuelStatus === 'in_progress' ? (
+                                <span className="inline-flex items-center gap-1 rounded-full bg-sky-50 px-2 py-0.5 text-[10px] font-medium text-sky-700">
+                                  <Clock className="h-3 w-3" /> In Progress
+                                </span>
+                              ) : row.fuelStatus === 'pending' || row.fuelDraftEstimate > 0.005 || row.fuelDeduction > 0.005 ? (
                                 <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-700">
                                   <Clock className="h-3 w-3" /> Pending
                                 </span>
+                              ) : (
+                                <span className="text-slate-300">—</span>
                               )}
                             </TableCell>
                           </TableRow>

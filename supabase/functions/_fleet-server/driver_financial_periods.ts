@@ -26,6 +26,11 @@ import {
 import { foldPayoutCashByWeek } from "../../../packages/finance-core/src/payoutCashDedupe.ts";
 import { periodKeyFor } from "../../../packages/finance-core/src/periodKey.ts";
 import {
+  deriveFuelExpenseStatus,
+  type FuelExpenseStatus,
+  type FuelReconPeriodLockRow,
+} from "../../../packages/fuel-core/src/fuelReconPeriodStatus.ts";
+import {
   inferTripServiceLine as inferTripServiceLineFromRecord,
   allocateSharedCostsByTripMix,
 } from "./service_line_attribution.ts";
@@ -145,6 +150,8 @@ export type DriverFinancialPeriodRow = {
   fuelFleetShare: number;
   fuelNetPay: number;
   fuelFinalized: boolean;
+  /** n/a | pending | in_progress | finalized — SoT is fuel_reconciliation_period lock */
+  fuelStatus: string;
   earningsGross: number;
   driverShare: number;
   fleetShare: number;
@@ -191,6 +198,8 @@ type RebuildContext = {
   driverTxAll: any[];
   disputes: any[];
   fuelReports: any[];
+  /** org fuel_reconciliation_period by week_start YYYY-MM-DD */
+  fuelReconByWeekStart: Map<string, FuelReconPeriodLockRow>;
   claims: any[];
   fareEntries: any[];
   tipEntries: any[];
@@ -552,6 +561,22 @@ async function loadRebuildContext(
   );
   const organizationId = await resolveDriverOrganizationId(driverId);
 
+  const fuelReconByWeekStart = new Map<string, FuelReconPeriodLockRow>();
+  if (organizationId) {
+    const { data: reconRows } = await sb()
+      .from("fuel_reconciliation_period")
+      .select("week_start, status, locked_at")
+      .eq("org_id", organizationId);
+    for (const r of reconRows || []) {
+      const ws = String(r.week_start || "").slice(0, 10);
+      if (!ws) continue;
+      fuelReconByWeekStart.set(ws, {
+        status: r.status,
+        lockedAt: r.locked_at,
+      });
+    }
+  }
+
   const prefs: any = prefsEH || {};
   const earningsPolicies = (Array.isArray(policyItemsRaw) ? policyItemsRaw : []).filter(
     (p: any) => p && typeof p === "object" && p.id,
@@ -586,6 +611,7 @@ async function loadRebuildContext(
     driverTxAll,
     disputes,
     fuelReports,
+    fuelReconByWeekStart,
     claims,
     fareEntries,
     tipEntries,
@@ -837,7 +863,7 @@ export async function rebuildDriverFinancialPeriod(
   let fuelFleetShare = 0;
   let fuelDriverSpend = 0;
   let fuelGasCardSpend = 0;
-  let fuelFinalized = false;
+  let fuelHasPostedMoney = false;
   let fuelSource: "events" | "snapshot" = "events";
 
   if (useTollEvents) {
@@ -871,17 +897,25 @@ export async function rebuildDriverFinancialPeriod(
     }
     if (et === "fuel_deduction") {
       fuelDeduction = round2(fuelDeduction + Math.abs(major));
-      fuelFinalized = true;
+      fuelHasPostedMoney = true;
     }
     if (et === "fuel_fleet_share") fuelFleetShare = round2(fuelFleetShare + Math.abs(major));
-    if (et === "fuel_driver_spend") fuelDriverSpend = round2(fuelDriverSpend + Math.abs(major));
-    if (et === "fuel_gas_card_spend") fuelGasCardSpend = round2(fuelGasCardSpend + Math.abs(major));
-    if (et === "fuel_finalized") fuelFinalized = true;
+    if (et === "fuel_driver_spend") {
+      fuelDriverSpend = round2(fuelDriverSpend + Math.abs(major));
+      fuelHasPostedMoney = true;
+    }
+    if (et === "fuel_gas_card_spend") {
+      fuelGasCardSpend = round2(fuelGasCardSpend + Math.abs(major));
+      fuelHasPostedMoney = true;
+    }
+    if (et === "fuel_finalized") fuelHasPostedMoney = true;
   }
 
-  // Fallback: finalized fuel reports when events path empty AND snapshot opt-in.
-  // Prod had zero snapshot periods (2026-09-01) — do not silently reintroduce.
-  if (!fuelFinalized && (!projectionReadsEventsForFuel() || projectionAllowsFuelSnapshotFallback())) {
+  // Fallback: finalized fuel reports for amounts only (status still from recon lock).
+  if (
+    !fuelHasPostedMoney &&
+    (!projectionReadsEventsForFuel() || projectionAllowsFuelSnapshotFallback())
+  ) {
     fuelSource = "snapshot";
     const seenFuelKeys = new Set<string>();
     for (const r of context.fuelReports) {
@@ -899,9 +933,22 @@ export async function rebuildDriverFinancialPeriod(
           ),
       );
       fuelGasCardSpend = round2(fuelGasCardSpend + Math.abs(Number(r.gasCardSpend) || 0));
-      fuelFinalized = true;
+      fuelHasPostedMoney = true;
     }
   }
+
+  const hasFuelActivity =
+    fuelHasPostedMoney ||
+    fuelDeduction > 0.005 ||
+    fuelFleetShare > 0.005 ||
+    fuelDriverSpend > 0.005 ||
+    fuelGasCardSpend > 0.005;
+  const reconRow =
+    context.fuelReconByWeekStart?.get(periodAnchor) ||
+    context.fuelReconByWeekStart?.get(String(periodAnchor).slice(0, 10)) ||
+    null;
+  const fuelStatus: FuelExpenseStatus = deriveFuelExpenseStatus(hasFuelActivity, reconRow);
+  const fuelFinalized = fuelStatus === "finalized";
 
   // Commission Driver Share — per-line tiers merged into one combined statement (G14)
   const rushSettlementOn = context.organizationId
@@ -1097,6 +1144,7 @@ export async function rebuildDriverFinancialPeriod(
     fuelFleetShare: round2(fuelFleetShare),
     fuelNetPay,
     fuelFinalized,
+    fuelStatus,
     earningsGross: round2(earningsGross),
     driverShare: round2(driverShare),
     fleetShare: round2(fleetShare),
@@ -1127,7 +1175,7 @@ export async function rebuildDriverFinancialPeriod(
   const hasSettlementActivity =
     weekTolls.length > 0 ||
     chargeTx.length > 0 ||
-    fuelFinalized ||
+    hasFuelActivity ||
     disputeRefundMatched > 0 ||
     disputeRefundUnmatched > 0 ||
     driverShare > 0.005 ||
@@ -1191,6 +1239,7 @@ export async function rebuildDriverFinancialPeriod(
     fuel_fleet_share: row.fuelFleetShare,
     fuel_net_pay: row.fuelNetPay,
     fuel_finalized: row.fuelFinalized,
+    fuel_status: row.fuelStatus,
     earnings_gross: row.earningsGross,
     driver_share: row.driverShare,
     fleet_share: row.fleetShare,
@@ -1417,6 +1466,7 @@ function mapDbPeriod(r: any): DriverFinancialPeriodRow {
     fuelFleetShare: Number(r.fuel_fleet_share) || 0,
     fuelNetPay: Number(r.fuel_net_pay) || 0,
     fuelFinalized: !!r.fuel_finalized,
+    fuelStatus: String(r.fuel_status || (r.fuel_finalized ? "finalized" : "n/a")),
     earningsGross: Number(r.earnings_gross) || 0,
     driverShare: Number(r.driver_share) || 0,
     fleetShare: Number(r.fleet_share) || 0,

@@ -70,6 +70,7 @@ describe('Kenny Jun 29 week settlement golden', () => {
           status: 'Finalized',
         },
       ],
+      lockedWeekStarts: ['2026-06-29'],
       periodType: 'weekly',
       unifiedToll: true,
       timezone: 'America/Jamaica',

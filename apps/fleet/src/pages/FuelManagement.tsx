@@ -24,6 +24,7 @@ import {
   resolveFuelActivityEarliestMonday,
   buildFuelReconciliationWeekOptions,
   fuelListWindow,
+  generateFuelWeekOptions,
 } from '../utils/fuelWeekPeriod';
 import { useFleetTimezone } from '../utils/timezoneDisplay';
 import { type PeriodWeekOption } from '../utils/periodWeekOptions';
@@ -42,12 +43,9 @@ import { deriveFuelReconciliationPeriods } from '../utils/fuelPeriodStatus';
 import { listFuelLeakageReviewedWeeks } from '../utils/fuelLeakageReviewStore';
 import { fetchTripsForFuelWeekPaged } from '../utils/fetchTripsForFuelWeek';
 import { useFuelPeriods, FUEL_PERIODS_KEY } from '../hooks/useFuelPeriods';
-import { useFuelLandingLiveReports } from '../hooks/useFuelLandingLiveReports';
 import {
-  overlayServerFuelPeriods,
-  serverComputedWeekStarts,
+  mergeServerFirstLandingPeriods,
   serverLeakageReviewedWeekStarts,
-  serverLockedWeekStarts,
   weekStartYmd,
 } from '../utils/fuelPeriodServerMerge';
 import { fuelPeriodFinalizeIdempotencyKey } from '../utils/fuelPeriodIdempotency';
@@ -260,6 +258,8 @@ function FuelManagementInner({ defaultTab = 'logs', onViewDriverLedger, onTabCha
   const [isResolutionModalOpen, setIsResolutionModalOpen] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
+  /** First fuel-logs fetch finished (even if empty) — avoids empty-state flash on recon. */
+  const [fuelLogsHydrated, setFuelLogsHydrated] = useState(false);
   const [secondApproverThreshold, setSecondApproverThreshold] = useState(
     FUEL_SECOND_APPROVER_THRESHOLD,
   );
@@ -286,88 +286,27 @@ function FuelManagementInner({ defaultTab = 'logs', onViewDriverLedger, onTabCha
     return buildFuelReconciliationWeekOptions(earliest, fleetTz || undefined);
   }, [activityMinDate, logs, finalizedReports, fleetTz]);
 
-  // Wave G: SQL periods are landing SoT for money/lock; live engines only for unlocked weeks.
-  const serverPeriodFrom = reconciliationWeekOptions[reconciliationWeekOptions.length - 1]?.startDate;
-  const serverPeriodTo = reconciliationWeekOptions[0]?.startDate;
-  const { data: serverFuelPeriods = [] } = useFuelPeriods({
-    from: serverPeriodFrom,
-    to: serverPeriodTo,
-    enabled: Boolean(serverPeriodFrom && serverPeriodTo),
-  });
-
-  const lockedServerWeeks = useMemo(
-    () => serverLockedWeekStarts(serverFuelPeriods),
-    [serverFuelPeriods],
-  );
-  const computedServerWeeks = useMemo(
-    () => serverComputedWeekStarts(serverFuelPeriods),
-    [serverFuelPeriods],
-  );
-
-  // Live engines only for unlocked weeks that do not yet have server money (M1/M2 cutover).
-  const openWeekOptionsForLive = useMemo(
-    () =>
-      reconciliationWeekOptions.filter(
-        (w) => !lockedServerWeeks.has(w.startDate) && !computedServerWeeks.has(w.startDate),
-      ),
-    [reconciliationWeekOptions, lockedServerWeeks, computedServerWeeks],
-  );
-
-  const landingLiveReportsByWeek = useFuelLandingLiveReports({
-    weekOptions: openWeekOptionsForLive,
-    serverSkipWeekStarts: computedServerWeeks,
-    vehicles,
-    drivers,
-    fuelEntries: logs,
-    adjustments,
-    scenarios,
-    fuelCards: cards,
-    disputes,
-    finalizedReports,
-  });
-
-  // Push client-built open-week money to SQL so next landing skips those engines.
-  useEffect(() => {
-    if (landingLiveReportsByWeek.size === 0) return;
-    let cancelled = false;
-    void (async () => {
-      for (const [weekStart, slices] of landingLiveReportsByWeek) {
-        if (cancelled || computedServerWeeks.has(weekStart)) continue;
-        const weekEnd =
-          reconciliationWeekOptions.find((w) => w.startDate === weekStart)?.endDate || weekStart;
-        const totalSpend = slices.reduce((s, v) => s + (Number(v.totalGasCardCost) || 0), 0);
-        const companyShare = slices.reduce((s, v) => s + (Number(v.companyShare) || 0), 0);
-        const driverShare = slices.reduce((s, v) => s + (Number(v.driverShare) || 0), 0);
-        const unexplained = slices.reduce((s, v) => s + (Number(v.miscellaneousCost) || 0), 0);
-        try {
-          const ensured = await api.ensureFuelReconciliationPeriod({ weekStart, weekEnd });
-          if (!ensured?.id) continue;
-          await api.materializeFuelPeriod({
-            periodId: ensured.id,
-            weekStart,
-            weekEnd,
-            totalSpend,
-            companyShare,
-            driverShare,
-            unexplained,
-            vehicleCount: slices.filter((v) => (Number(v.totalGasCardCost) || 0) > 0).length,
-            computedFromHash: `landing:${slices.length}:${totalSpend}`,
-          });
-        } catch {
-          /* offline — overlay still uses live map this session */
-        }
-      }
-      if (!cancelled) {
-        void queryClient.invalidateQueries({ queryKey: [FUEL_PERIODS_KEY] });
-      }
-    })();
-    return () => {
-      cancelled = true;
+  // Instant landing: query last ~52 weeks from "now" — do not wait for activity bounds.
+  const landingPeriodRange = useMemo(() => {
+    const opts = generateFuelWeekOptions(52, fleetTz || undefined);
+    return {
+      from: opts[opts.length - 1]?.startDate,
+      to: opts[0]?.startDate,
     };
-  }, [landingLiveReportsByWeek, computedServerWeeks, reconciliationWeekOptions, queryClient]);
+  }, [fleetTz]);
 
+  const {
+    data: serverFuelPeriods = [],
+    isPending: serverPeriodsPending,
+  } = useFuelPeriods({
+    from: landingPeriodRange.from,
+    to: landingPeriodRange.to,
+    enabled: Boolean(landingPeriodRange.from && landingPeriodRange.to),
+  });
+
+  // No browser week-engines on landing mount (was N engines × trips/PA/brain → multi-second trickle).
+  // Money/chips: SQL periods first; entry-derived snapshots fill gaps (provisional unexplained).
   const fuelReconPeriods = useMemo(() => {
-    // H8: localStorage may fill gaps only for weeks with no server period row.
     const serverByWeek = new Map(
       serverFuelPeriods.map((r) => [weekStartYmd(r.weekStart), r] as const),
     );
@@ -375,17 +314,20 @@ function FuelManagementInner({ defaultTab = 'logs', onViewDriverLedger, onTabCha
     for (const w of listFuelLeakageReviewedWeeks()) {
       if (!serverByWeek.has(w)) leakageReviewedWeeks.add(w);
     }
-    const derived = deriveFuelReconciliationPeriods({
-      weekOptions: reconciliationWeekOptions,
-      vehicles,
-      fuelEntries: logs,
-      disputes,
-      finalizedReports,
-      scenarios,
-      liveReportsByWeek: landingLiveReportsByWeek,
-      leakageReviewedWeeks,
-    });
-    return overlayServerFuelPeriods(derived, serverFuelPeriods);
+    const derived =
+      vehicles.length > 0 || logs.length > 0
+        ? deriveFuelReconciliationPeriods({
+            weekOptions: reconciliationWeekOptions,
+            vehicles,
+            fuelEntries: logs,
+            disputes,
+            finalizedReports,
+            scenarios,
+            liveReportsByWeek: undefined,
+            leakageReviewedWeeks,
+          })
+        : [];
+    return mergeServerFirstLandingPeriods(serverFuelPeriods, derived);
   }, [
     reconciliationWeekOptions,
     vehicles,
@@ -393,9 +335,12 @@ function FuelManagementInner({ defaultTab = 'logs', onViewDriverLedger, onTabCha
     disputes,
     finalizedReports,
     scenarios,
-    landingLiveReportsByWeek,
     serverFuelPeriods,
   ]);
+
+  const reconLandingLoading =
+    fuelReconPeriods.length === 0 &&
+    (serverPeriodsPending || !fuelLogsHydrated);
 
   const outstandingFuelPeriods = useMemo(
     () => fuelReconPeriods.filter((p) => p.status === 'outstanding' && !p.locked),
@@ -410,16 +355,17 @@ function FuelManagementInner({ defaultTab = 'logs', onViewDriverLedger, onTabCha
     [fuelReconPeriods],
   );
 
-  // Wave G: keep open-week SQL money fresh (not 8 client engines for locked weeks)
+  // Keep finalized-week SQL rows fresh (does not run open-week browser engines)
   useEffect(() => {
-    if (!serverPeriodFrom || !serverPeriodTo) return;
+    if (!landingPeriodRange.from || !landingPeriodRange.to) return;
     void api
-      .recomputeFuelReconciliationPeriods({ from: serverPeriodFrom, to: serverPeriodTo })
-      .then(() =>
-        queryClient.invalidateQueries({ queryKey: [FUEL_PERIODS_KEY] }),
-      )
+      .recomputeFuelReconciliationPeriods({
+        from: landingPeriodRange.from,
+        to: landingPeriodRange.to,
+      })
+      .then(() => queryClient.invalidateQueries({ queryKey: [FUEL_PERIODS_KEY] }))
       .catch(() => undefined);
-  }, [serverPeriodFrom, serverPeriodTo, queryClient]);
+  }, [landingPeriodRange.from, landingPeriodRange.to, queryClient]);
 
   // Dual-approval prefs for landing badges + finalize gate (org-scoped)
   useEffect(() => {
@@ -501,8 +447,10 @@ function FuelManagementInner({ defaultTab = 'logs', onViewDriverLedger, onTabCha
       setFuelDataTruncated(Array.isArray(logsData) && logsData.length >= 1500);
       setTransactions(txData);
       lastFuelDataLoadAtRef.current = Date.now();
+      setFuelLogsHydrated(true);
     } catch (e) {
       console.error('[FuelManagement] Dated fuel/tx load failed', e);
+      setFuelLogsHydrated(true);
     }
   }, [fuelFetchWindow]);
 
@@ -1391,7 +1339,7 @@ function FuelManagementInner({ defaultTab = 'logs', onViewDriverLedger, onTabCha
           outstanding={outstandingFuelPeriods}
           inProgress={inProgressFuelPeriods}
           completed={completedFuelPeriods}
-          loading={isRefreshing && fuelReconPeriods.length === 0}
+          loading={reconLandingLoading}
           vehicles={vehicles}
           trips={trips}
           fuelEntries={logs}

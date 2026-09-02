@@ -35,6 +35,8 @@ export type DriverFinancialPeriodClient = {
   fuelFleetShare: number;
   fuelNetPay: number;
   fuelFinalized: boolean;
+  /** n/a | pending | in_progress | finalized — from fuel_reconciliation_period lock */
+  fuelStatus: string;
   earningsGross: number;
   driverShare: number;
   fleetShare: number;
@@ -106,11 +108,20 @@ function mapPayoutStatus(p: DriverFinancialPeriodClient): PayoutStatus {
     Number(p.tollUnmatchedCount || 0) === 0;
   const force =
     !!(p.metadata as any)?.forceRelease?.at || !!(p.metadata as any)?.forceReleasedAt;
-  if (p.fuelFinalized && (tollsClear || force)) {
+  const fuelLocked = periodFuelWeekLocked(p);
+  if (fuelLocked && (tollsClear || force)) {
     return Number(p.cashStillHeld) > STATUS_CASH_HELD_EPS ? 'Awaiting Cash' : 'Finalized';
   }
-  if (p.fuelFinalized && !tollsClear) return 'Awaiting Tolls';
+  if (fuelLocked && !tollsClear) return 'Awaiting Tolls';
   return 'Pending';
+}
+
+/** True only when Consumption Reconciliation week is locked (fuelStatus), not money-posted events. */
+export function periodFuelWeekLocked(p: DriverFinancialPeriodClient): boolean {
+  const fs = String(p.fuelStatus || '').toLowerCase();
+  if (fs === 'finalized') return true;
+  if (fs === 'n/a' || fs === 'pending' || fs === 'in_progress') return false;
+  return !!p.fuelFinalized;
 }
 
 function periodMoneyUnlocked(p: DriverFinancialPeriodClient): boolean {
@@ -121,7 +132,7 @@ function periodMoneyUnlocked(p: DriverFinancialPeriodClient): boolean {
     Number(p.tollUnmatchedCount || 0) === 0;
   const force =
     !!(p.metadata as any)?.forceRelease?.at || !!(p.metadata as any)?.forceReleasedAt;
-  return (!!p.fuelFinalized && tollsClear) || force;
+  return (periodFuelWeekLocked(p) && tollsClear) || force;
 }
 
 /** Build Settlement/Payout weekly rows directly from the shared period projection. */

@@ -1,4 +1,4 @@
-import { differenceInCalendarDays } from 'date-fns';
+import { differenceInCalendarDays, format } from 'date-fns';
 import { resolveReportGasCardSpend } from './fuelPaidByDriver';
 
 /**
@@ -6,12 +6,9 @@ import { resolveReportGasCardSpend } from './fuelPaidByDriver';
  * Sums driverShare/companyShare/driverSpend/gasCardSpend/netPay for every finalized report whose
  * week overlaps a given period, with optional daily apportionment.
  *
- * This replaces three independently-drifted copies of the same logic that used to
- * live in DriverExpensesHistory.tsx, SettlementSummaryView.tsx, and
- * buildLedgerPayoutPeriodRows.ts — each summed driverShare slightly differently
- * (weekly-only vs daily-apportioned, with/without fleetShare, with/without
- * driverSpend/netPay). Every consumer of finalized-report period totals should call
- * this instead of re-deriving it.
+ * `finalized` follows Consumption Reconciliation week lock — not merely “a snapshot exists.”
+ * Pass `lockedWeekStarts` (Monday YYYY-MM-DD) when the caller knows which weeks are locked;
+ * without that set, finalized stays false so Expenses cannot paint Finalized from stale KV alone.
  */
 
 export type PeriodType = 'daily' | 'weekly' | 'monthly';
@@ -27,22 +24,42 @@ export interface PeriodDeductionResult {
   gasCardSpend: number;
   /** Sum of netPay (driverSpend − driverShare; positive = company owes the driver) for reports overlapping the period. */
   netPay: number;
-  /** True if at least one finalized report overlaps this period. */
+  /** True only when overlapping report week(s) are in lockedWeekStarts (recon lock). */
   finalized: boolean;
+  /** True if at least one overlapping report contributed amounts (regardless of lock). */
+  hasReport: boolean;
+}
+
+export type FuelDeductionForPeriodOpts = {
+  /** Monday week keys locked in fuel_reconciliation_period. */
+  lockedWeekStarts?: Set<string> | string[];
+};
+
+function asLockedSet(locked?: Set<string> | string[]): Set<string> | null {
+  if (!locked) return null;
+  if (locked instanceof Set) return locked;
+  return new Set(locked.map((w) => String(w).slice(0, 10)));
+}
+
+function reportWeekKey(report: any): string {
+  return String(report.weekStart ?? report.periodStart ?? report.startDate ?? '').slice(0, 10);
 }
 
 export function getFuelDeductionForPeriod(
   finalizedReports: any[],
   periodStart: Date,
   periodEnd: Date,
-  periodType: PeriodType
+  periodType: PeriodType,
+  opts?: FuelDeductionForPeriodOpts,
 ): PeriodDeductionResult {
   let totalDeduction = 0;
   let totalFleetShare = 0;
   let totalDriverSpend = 0;
   let totalGasCardSpend = 0;
   let totalNetPay = 0;
-  let hasFinalized = false;
+  let hasReport = false;
+  let anyLockedOverlap = false;
+  const locked = asLockedSet(opts?.lockedWeekStarts);
 
   for (const report of finalizedReports || []) {
     const rStartRaw = report.weekStart ?? report.periodStart ?? '';
@@ -67,7 +84,9 @@ export function getFuelDeductionForPeriod(
         totalGasCardSpend += gasCard;
         totalNetPay += report.netPay ?? 0;
       }
-      hasFinalized = true;
+      hasReport = true;
+      const wk = reportWeekKey(report) || format(rStart, 'yyyy-MM-dd');
+      if (locked?.has(wk)) anyLockedOverlap = true;
     }
   }
 
@@ -77,6 +96,8 @@ export function getFuelDeductionForPeriod(
     driverSpend: totalDriverSpend,
     gasCardSpend: totalGasCardSpend,
     netPay: totalNetPay,
-    finalized: hasFinalized,
+    hasReport,
+    // Without an explicit lock set, never claim Finalized (avoids Expenses false green).
+    finalized: locked != null && hasReport && anyLockedOverlap,
   };
 }

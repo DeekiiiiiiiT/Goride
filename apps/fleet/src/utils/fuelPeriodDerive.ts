@@ -235,6 +235,18 @@ export function buildFuelVehicleSnapshots(
       moneyFromFinalized?.totalGasCardCost ??
       (liveReport ? 0 : vEntries.reduce((s, e) => s + fuelOpsSpendAmount(e), 0));
 
+    const companyShare =
+      Number(moneyFromLive?.companyShare ?? moneyFromFinalized?.companyShare ?? 0) || 0;
+    const driverShare =
+      Number(moneyFromLive?.driverShare ?? moneyFromFinalized?.driverShare ?? 0) || 0;
+    // Landing fast path (no week engine): treat unallocated spend as unexplained so chips
+    // match operator expectation without waiting for trips/PA/brain.
+    const miscFromSource = moneyFromLive?.miscellaneousCost ?? moneyFromFinalized?.miscellaneousCost;
+    const misc =
+      miscFromSource != null
+        ? Number(miscFromSource) || 0
+        : Math.max(0, (Number(totalSpend) || 0) - companyShare - driverShare);
+
     const pendingCount =
       liveReport?.pendingCount ??
       (finalizedSnap ? 0 : vEntries.filter((e) => e.reconciliationStatus === 'Pending').length);
@@ -252,14 +264,9 @@ export function buildFuelVehicleSnapshots(
     return {
       vehicleId: vehicle.id,
       totalSpend: Number(totalSpend) || 0,
-      companyShare:
-        Number(moneyFromLive?.companyShare ?? moneyFromFinalized?.companyShare ?? 0) || 0,
-      driverShare:
-        Number(moneyFromLive?.driverShare ?? moneyFromFinalized?.driverShare ?? 0) || 0,
-      misc:
-        Number(
-          moneyFromLive?.miscellaneousCost ?? moneyFromFinalized?.miscellaneousCost ?? 0,
-        ) || 0,
+      companyShare,
+      driverShare,
+      misc,
       healthStatus: liveReport?.healthStatus ?? finalizedSnap?.healthStatus,
       pendingCount: Number(pendingCount) || 0,
       hasOpenDispute,

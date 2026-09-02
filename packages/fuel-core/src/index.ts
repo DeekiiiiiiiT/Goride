@@ -48,3 +48,12 @@ export {
   type WeekSnapEntry,
   type WeekSnapFuelRule,
 } from './weekSnapshotEngine.ts';
+
+export {
+  deriveFuelExpenseStatus,
+  fuelExpenseStatusIsFinalized,
+  fuelExpenseStatusLabel,
+  isFuelReconPeriodLocked,
+  type FuelExpenseStatus,
+  type FuelReconPeriodLockRow,
+} from './fuelReconPeriodStatus.ts';
