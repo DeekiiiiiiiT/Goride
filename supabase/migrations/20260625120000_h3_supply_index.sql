@@ -70,7 +70,7 @@ BEGIN
 END;
 $$;
 
-GRANT EXECUTE ON FUNCTION public.rides_upsert_driver_presence TO service_role;
+GRANT EXECUTE ON FUNCTION public.rides_upsert_driver_presence(UUID, DOUBLE PRECISION, DOUBLE PRECISION, DOUBLE PRECISION, BOOLEAN, TEXT, TEXT) TO service_role;
 
 --------------------------------------------------------------------------------
 -- 3. Update public view to include h3_cell

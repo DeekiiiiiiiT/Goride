@@ -212,6 +212,7 @@ import { registerFleetAdminMaintenanceLedgerRoutes } from "./fleet_admin_mainten
 import { registerEnterpriseAdminRoutes } from "./enterprise_admin_routes.ts";
 import { registerEnterpriseIntakeAdminRoutes } from "./enterprise_intake_admin_routes.ts";
 import { registerWorkforceInviteRoutes } from "./workforce_invite_routes.ts";
+import { registerFleetModuleCheckoutRoutes } from "./fleet_module_checkout.ts";
 import {
   linkDriverToFleet,
   upsertDriverProfileFromServer as upsertDriverProfileOnServer,
@@ -2349,10 +2350,12 @@ async function handleTripsImport(c: any) {
 
     // V22: public POST /trips must not accept arbitrary organizationId from body.
     if (!isInternalProjection && writeOrgId) {
+      const { assertTripOrgScopeMatches } = await import("./trips_org_scope.ts");
+      const scopeCheck = assertTripOrgScopeMatches(processedTrips, writeOrgId);
+      if (!scopeCheck.ok) {
+        return c.json({ error: scopeCheck.error }, scopeCheck.status);
+      }
       for (const trip of processedTrips) {
-        if (trip.organizationId && String(trip.organizationId).trim() !== writeOrgId) {
-          return c.json({ error: "organizationId must match authenticated fleet" }, 403);
-        }
         trip.organizationId = writeOrgId;
       }
     }
@@ -14957,6 +14960,12 @@ registerWorkforceInviteRoutes(app, {
       userId,
       fleetId,
     ),
+});
+
+registerFleetModuleCheckoutRoutes(app, {
+  supabase,
+  requireAuth,
+  getOrgId,
 });
 
 app.get("/make-server-37f42386/rush/trip-recon", requireAuth(), async (c) => {

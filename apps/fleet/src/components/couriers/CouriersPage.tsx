@@ -15,6 +15,7 @@ import {
 } from '../ui/table';
 import { Card, CardContent } from '../ui/card';
 import { WorkforceInvitePanel, WorkforcePendingInvites } from '../workforce/WorkforceInvitePanel';
+import { CourierDetailSheet } from './CourierDetailSheet';
 
 export interface CourierProfile {
   id: string;
@@ -54,6 +55,7 @@ function normalizeCourier(row: Record<string, unknown>): CourierProfile {
 
 export function CouriersPage() {
   const [search, setSearch] = useState('');
+  const [selectedCourier, setSelectedCourier] = useState<CourierProfile | null>(null);
 
   const { data: couriers = [], isLoading, isError } = useQuery({
     queryKey: ['couriers', 'rush'],
@@ -144,7 +146,11 @@ export function CouriersPage() {
               </TableHeader>
               <TableBody>
                 {filtered.map((courier) => (
-                  <TableRow key={courier.id}>
+                  <TableRow
+                    key={courier.id}
+                    className="cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50"
+                    onClick={() => setSelectedCourier(courier)}
+                  >
                     <TableCell className="font-medium">{courier.name}</TableCell>
                     <TableCell>
                       <Badge variant={courier.status === 'Active' ? 'default' : 'secondary'}>
@@ -176,6 +182,13 @@ export function CouriersPage() {
         </Card>
       )}
 
+      <CourierDetailSheet
+        courier={selectedCourier}
+        open={selectedCourier !== null}
+        onOpenChange={(open) => {
+          if (!open) setSelectedCourier(null);
+        }}
+      />
     </div>
   );
 }

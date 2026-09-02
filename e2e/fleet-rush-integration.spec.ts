@@ -97,6 +97,13 @@ test.describe('RoamFleet browser smoke (fleet project)', () => {
     expect(hasSharedOps({ rushVisible: true, rideshareVisible: false })).toBe(true);
   });
 
+  test('signup deep link ?line=rush_delivery loads', async ({ page }) => {
+    await page.goto('/signup?line=rush_delivery');
+    await expect(page.locator('body')).toBeVisible();
+    const url = page.url();
+    expect(url).toContain('line=rush_delivery');
+  });
+
   test('both-lines org — scope pages exist', async () => {
     expect(FLEET_PAGE_REGISTRY.drivers).toBeTruthy();
     expect(FLEET_PAGE_REGISTRY.couriers).toBeTruthy();

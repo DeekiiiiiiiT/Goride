@@ -3,7 +3,7 @@
 ## Load test (projector)
 
 - Target: peak Rush order volume (estimate from matching metrics)
-- Script: batch deliver N orders with `courier_fleet_id` set; measure projection latency
+- Script: `node scripts/load-test-trip-projector.mjs 100` (set `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`)
 - Pass: p95 sync < 30s; zero recon drift after run
 
 ## Rollback drills

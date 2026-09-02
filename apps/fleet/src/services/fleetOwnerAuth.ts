@@ -58,6 +58,41 @@ export async function provisionFleetOwnerAccount(
   return { success: true, organizationId: data.organizationId };
 }
 
+export async function startFleetModuleCheckout(
+  accessToken: string,
+  opts: {
+    serviceLines: Array<'rideshare' | 'rush_delivery'>;
+    returnOrigin?: string;
+  },
+): Promise<{
+  success: boolean;
+  purchaseId?: string;
+  paymentRedirectUrl?: string;
+  demoPaid?: boolean;
+  amountJmd?: number;
+  error?: string;
+}> {
+  const res = await fetch(`${API_ENDPOINTS.admin}/fleet/module-checkout`, {
+    method: 'POST',
+    headers: await authHeaders(accessToken),
+    body: JSON.stringify({
+      serviceLines: opts.serviceLines,
+      returnOrigin: opts.returnOrigin,
+    }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    return { success: false, error: data?.error || `Checkout failed (${res.status})` };
+  }
+  return {
+    success: true,
+    purchaseId: data.purchaseId,
+    paymentRedirectUrl: data.paymentRedirectUrl,
+    demoPaid: data.demoPaid,
+    amountJmd: data.amountJmd,
+  };
+}
+
 export async function enableFleetOwnerDriver(accessToken: string): Promise<{ success: boolean; error?: string }> {
   const res = await fetch(`${API_ENDPOINTS.admin}/fleet-owner/enable-driver`, {
     method: 'POST',

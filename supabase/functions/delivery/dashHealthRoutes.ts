@@ -45,7 +45,9 @@ export function registerDashHealthRoutes(
     const idempotencyTableOk = !idempotencyTableError;
 
     const vapidOk = Boolean(Deno.env.get("VAPID_PUBLIC_KEY") && Deno.env.get("VAPID_PRIVATE_KEY"));
-    const stripeOk = Boolean(Deno.env.get("STRIPE_SECRET_KEY"));
+    const wipayOk = Boolean(
+      Deno.env.get("WIPAY_ACCOUNT_NUMBER") && Deno.env.get("WIPAY_API_KEY"),
+    );
     const smsOk = Boolean(
       (Deno.env.get("DIGICEL_SMS_API_URL") && Deno.env.get("DIGICEL_SMS_API_KEY")) ||
         (Deno.env.get("FLOW_SMS_API_URL") && Deno.env.get("FLOW_SMS_API_KEY")),
@@ -66,7 +68,7 @@ export function registerDashHealthRoutes(
         stuckOrders: stuckCount ?? 0,
         readyWithoutCourier: readyNoCourier ?? 0,
         vapidConfigured: vapidOk,
-        stripeConfigured: stripeOk,
+        wipayConfigured: wipayOk,
         smsConfigured: smsOk,
         orderIdempotencyTable: idempotencyTableOk,
         stuckThresholdMinutes: STUCK_ORDER_MINUTES,

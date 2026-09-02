@@ -6742,6 +6742,13 @@
           ]
         }
       },
+      "packages/payment-gateways": {
+        "packageJson": {
+          "dependencies": [
+            "npm:vitest@^3.2.4"
+          ]
+        }
+      },
       "packages/platform-settings": {
         "packageJson": {
           "dependencies": [

@@ -7,6 +7,7 @@ import { ensureCustomerOrganization } from "./ensure_customer_org.ts";
 import { rushModuleOverridesForServiceLines } from "./enterprise_modules.ts";
 import { enableFlagForOrg, FEATURE_FLAGS } from "./feature_flags.ts";
 import { inferProductLineFromUser, type ProductLine } from "./product_line.ts";
+import { isWipayDemoMode } from "../_shared/wipayDemo.ts";
 
 function readRolesArray(meta: Record<string, unknown> | undefined): string[] {
   const raw = meta?.roles;
@@ -155,6 +156,25 @@ export async function provisionFleetOwner(
     return { ok: true, alreadyProvisioned: true, organizationId: orgId };
   }
 
+  if (serviceLines.includes("rush_delivery") && !isWipayDemoMode()) {
+    const { data: paidPurchase } = await deps.supabase
+      .schema("fleet")
+      .from("module_purchases")
+      .select("id")
+      .eq("user_id", userId)
+      .eq("status", "completed")
+      .order("completed_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (!paidPurchase) {
+      return {
+        ok: false,
+        error: "Complete WiPay checkout for the Deliveries module before finishing signup.",
+        status: 402,
+      };
+    }
+  }
+
   const meta = (user.user_metadata || {}) as Record<string, unknown>;
   const appMetaExisting = (user.app_metadata || {}) as Record<string, unknown>;
   const legacyRole =
@@ -230,6 +250,13 @@ export async function provisionFleetOwner(
         ),
       })
       .eq("id", orgId);
+    await deps.supabase
+      .schema("fleet")
+      .from("module_purchases")
+      .update({ organization_id: orgId })
+      .eq("user_id", userId)
+      .eq("status", "completed")
+      .is("organization_id", null);
   } catch (orgErr) {
     console.warn("[provisionFleetOwner] org service_lines update failed:", orgErr);
   }

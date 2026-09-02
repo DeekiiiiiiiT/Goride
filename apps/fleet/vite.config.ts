@@ -97,7 +97,6 @@ export default defineConfig({
             // Live backend only — never cache auth or business payloads.
             urlPattern: ({ url }) =>
               url.hostname.endsWith('supabase.co') ||
-              url.hostname.includes('stripe.com') ||
               url.hostname.includes('paypal.com') ||
               url.hostname.includes('wipayfinancial.com') ||
               url.hostname.includes('mapbox.com'),

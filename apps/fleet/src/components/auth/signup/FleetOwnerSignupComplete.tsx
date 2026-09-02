@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Car, Check, Loader2 } from 'lucide-react';
 import { Button, Input, Label } from '@roam/ui';
 import { useAuth } from '../AuthContext';
-import { provisionFleetOwnerAccount } from '../../../services/fleetOwnerAuth';
+import { provisionFleetOwnerAccount, startFleetModuleCheckout } from '../../../services/fleetOwnerAuth';
 import { supabase } from '../../../utils/supabase/client';
 import type { ServiceLine } from '../BusinessConfigContext';
 
@@ -21,7 +21,13 @@ const SERVICE_LINE_OPTIONS: { id: ServiceLine; label: string; description: strin
   },
 ];
 
-export function FleetOwnerSignupComplete({ fromRoamdriver }: { fromRoamdriver?: boolean }) {
+export function FleetOwnerSignupComplete({
+  fromRoamdriver,
+  initialLine,
+}: {
+  fromRoamdriver?: boolean;
+  initialLine?: ServiceLine;
+}) {
   const { user, refreshSession } = useAuth();
   const [step, setStep] = useState<WizardStep>('company');
   const [companyName, setCompanyName] = useState('');
@@ -34,7 +40,11 @@ export function FleetOwnerSignupComplete({ fromRoamdriver }: { fromRoamdriver?: 
   const [deliveryParishes, setDeliveryParishes] = useState('');
   const [courierCount, setCourierCount] = useState('');
   const [vehicleTypes, setVehicleTypes] = useState('');
-  const [serviceLines, setServiceLines] = useState<ServiceLine[]>(['rideshare']);
+  const [serviceLines, setServiceLines] = useState<ServiceLine[]>(() => {
+    if (initialLine === 'rush_delivery') return ['rush_delivery'];
+    if (initialLine === 'rideshare') return ['rideshare'];
+    return ['rideshare'];
+  });
   const [name, setName] = useState(
     (user?.user_metadata?.name as string) ||
       user?.email?.split('@')[0] ||
@@ -43,6 +53,8 @@ export function FleetOwnerSignupComplete({ fromRoamdriver }: { fromRoamdriver?: 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [rushAddonAck, setRushAddonAck] = useState(false);
+  const [modulePaid, setModulePaid] = useState(false);
+  const [checkoutLoading, setCheckoutLoading] = useState(false);
 
   const toggleServiceLine = (line: ServiceLine) => {
     setServiceLines((prev) => {
@@ -300,8 +312,13 @@ export function FleetOwnerSignupComplete({ fromRoamdriver }: { fromRoamdriver?: 
         {step === 'plan' && (
           <div className="mt-6 space-y-4">
             <p className="text-sm text-slate-600 dark:text-slate-300">
-              Deliveries is a paid add-on module. Roam enables features during pilot; billing follows your commercial agreement.
+              Deliveries is a paid add-on. Pay with WiPay (JMD) to unlock courier modules for your fleet.
             </p>
+            {modulePaid && (
+              <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-200">
+                Payment confirmed — continue to finish setup.
+              </div>
+            )}
             <label className="flex items-start gap-3 rounded-xl border border-slate-200 px-4 py-3 dark:border-slate-700">
               <input
                 type="checkbox"
@@ -310,17 +327,60 @@ export function FleetOwnerSignupComplete({ fromRoamdriver }: { fromRoamdriver?: 
                 onChange={(e) => setRushAddonAck(e.target.checked)}
               />
               <span className="text-sm text-slate-700 dark:text-slate-300">
-                I understand delivery modules may be billed separately and roll out per org during pilot.
+                I understand delivery modules are billed separately and require WiPay checkout.
               </span>
             </label>
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full"
+              disabled={!rushAddonAck || checkoutLoading || modulePaid}
+              onClick={async () => {
+                if (!user) return;
+                setCheckoutLoading(true);
+                setError(null);
+                try {
+                  const { data: { session } } = await supabase.auth.getSession();
+                  const token = session?.access_token;
+                  if (!token) throw new Error('Session expired.');
+                  const result = await startFleetModuleCheckout(token, {
+                    serviceLines,
+                    returnOrigin: window.location.origin,
+                  });
+                  if (!result.success) throw new Error(result.error || 'Checkout failed');
+                  if (result.demoPaid) {
+                    setModulePaid(true);
+                    return;
+                  }
+                  if (result.paymentRedirectUrl) {
+                    window.location.href = result.paymentRedirectUrl;
+                  }
+                } catch (err: unknown) {
+                  setError(err instanceof Error ? err.message : 'Checkout failed');
+                } finally {
+                  setCheckoutLoading(false);
+                }
+              }}
+            >
+              {checkoutLoading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Starting WiPay…
+                </>
+              ) : modulePaid ? (
+                'Paid'
+              ) : (
+                'Pay with WiPay'
+              )}
+            </Button>
             <div className="flex gap-2">
-              <Button type="button" variant="outline" className="flex-1" onClick={() => setStep('service-lines')}>
+              <Button type="button" variant="outline" className="flex-1" onClick={() => setStep('line-detail')}>
                 Back
               </Button>
               <Button
                 type="button"
                 className="flex-1 bg-indigo-600 hover:bg-indigo-700"
-                disabled={!rushAddonAck}
+                disabled={!rushAddonAck || !modulePaid}
                 onClick={() => setStep('owner')}
               >
                 Continue

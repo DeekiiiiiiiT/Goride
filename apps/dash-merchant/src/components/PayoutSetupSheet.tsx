@@ -187,8 +187,8 @@ export default function PayoutSetupSheet({
             <MaterialIcon name="lock" size={16} className="mt-0.5 shrink-0" />
             <p className="text-body-sm">
               We store only the last 4 digits of your account for display. Full bank details are not
-              kept in our database. Payouts will move through Stripe Connect once your account is
-              fully onboarded — until then, this form only confirms payout contact details.
+              kept in our database. Payouts are sent to your Jamaican bank account via Roam&apos;s
+              WiPay and local bank rails after orders are delivered.
             </p>
           </div>
         </form>

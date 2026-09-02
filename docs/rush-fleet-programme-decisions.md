@@ -9,7 +9,7 @@
 | # | Topic | Decision | Rationale |
 |---|--------|----------|-----------|
 | 1 | Payout routing | **Roam pays couriers directly**; fleet owner invoices/collects fleet cut separately (Uber model) | Lowest regulatory risk for v1; fleet cut stays tier-2 settlement on `fleet.trips` |
-| 2 | Commercial packaging | **Paid add-on modules** via `enabled_modules` (`rush_*` keys), with org `service_lines` gating what they operate | Separates entitlement from configuration; supports trial/grace on modules later |
+| 2 | Commercial packaging | **Paid add-on modules** via WiPay checkout → `enabled_modules` (`rush_*` keys), with org `service_lines` gating what they operate | Jamaica rails; no Stripe subscriptions |
 | 3 | Courier history on fleet join | **Join date onward** only | Avoids retroactive settlement changes |
 | 4 | Merchant-as-fleet-owner | **Blocked commercially for v1** | Data model allows it; commercial model does not support dual role yet |
 | 5 | Fleet-preference dispatch | **Out of scope v1** | Marketplace fairness / antitrust; read-only Supply Health only |

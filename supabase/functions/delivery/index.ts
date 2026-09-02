@@ -50,7 +50,7 @@ import {
   completeStackLeg,
 } from "./courierConsumerRoutes.ts";
 import { registerDashHealthRoutes } from "./dashHealthRoutes.ts";
-import { registerStripeConnectRoutes } from "./stripeConnectRoutes.ts";
+import { registerBankPayoutRoutes } from "./bankPayoutRoutes.ts";
 import { notifyCustomerOrderStatus } from "../_shared/dashOrderSms.ts";
 import { handleOrderDelivered } from "./courierCashLedger.ts";
 import { syncOrderToFleetKv } from "../_shared/orderToFleetTrip.ts";
@@ -2814,7 +2814,7 @@ app.post("/internal/pricing/rush-pass/renew", async (c) => {
 registerCustomerDiscoveryRoutes(app, { getServiceSupabase, getSupabase });
 registerCourierConsumerRoutes(app, { getSupabase, getServiceSupabase });
 registerDashHealthRoutes(app, { getServiceSupabase });
-registerStripeConnectRoutes(app, { getSupabase, getServiceSupabase });
+registerBankPayoutRoutes(app, { getSupabase });
 registerMerchantApplicationRoutes(app);
 registerMerchantAssetsRoutes(app);
 registerMerchantTeamRoutes(app, { getSupabase, getServiceSupabase });

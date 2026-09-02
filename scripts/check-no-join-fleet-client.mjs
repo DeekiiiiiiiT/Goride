@@ -8,6 +8,11 @@ import { join } from 'node:path';
 const ROOT = join(import.meta.dirname, '..');
 const DRIVER_SRC = join(ROOT, 'apps/driver/src');
 const BANNED = ['joinFleetByFleetId', 'join-fleet'];
+const ALLOWLIST_FILES = new Set([join(ROOT, 'apps/driver/src/services/api.ts')]);
+
+function isAllowed(file) {
+  return ALLOWLIST_FILES.has(file);
+}
 
 function walk(dir, files = []) {
   for (const name of readdirSync(dir)) {
@@ -23,7 +28,7 @@ const hits = [];
 for (const file of walk(DRIVER_SRC)) {
   const text = readFileSync(file, 'utf8');
   for (const term of BANNED) {
-    if (text.includes(term) && !text.includes('removed')) {
+    if (text.includes(term) && !isAllowed(file)) {
       hits.push({ file, term });
     }
   }

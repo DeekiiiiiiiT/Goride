@@ -26,7 +26,20 @@ Migration `20260901150000_rush_trip_recon_cron_fix.sql` schedules `rush_trip_rec
 
 Rush orders POST to `POST /internal/trips/project` (service-role only). Public `POST /trips` requires authenticated org — cannot cross-org inject.
 
-Pre-launch: run projector load test against staging with peak order fixture; document p95 ingest latency in ops notes.
+Pre-launch: run `node scripts/load-test-trip-projector.mjs 100` against staging; record p95 in ops notes.
+
+## Z1 migration (service_line backfill)
+
+Migration `20260901160000_service_line_backfill.sql` backfills toll via `trip_id`; fuel/expense via `transaction_id` / `payload_json`. CI: `node scripts/validate-migration-sql.mjs`.
+
+## Reconciliation week
+
+Complete [rush-fleet-reconciliation-week.md](./rush-fleet-reconciliation-week.md) before enabling `rush_settlement` for both-lines orgs.
+
+## Payments
+
+- Fleet Rush module purchase: WiPay checkout at signup plan step → `fleet.module_purchases` webhook.
+- Stripe Connect removed; merchant/courier payouts use bank details + WiPay/local rails.
 
 ## Verification checklist
 
@@ -34,9 +47,12 @@ Pre-launch: run projector load test against staging with peak order fixture; doc
 - [ ] `GET /drivers` lists invite joiners
 - [ ] Combined weekly statement shows `serviceLineBreakdown` in settlement overlay
 - [ ] `node scripts/check-no-join-fleet-client.mjs` passes
-- [ ] `deno test` green for `workforce_link`, `service_line_attribution`, `rush_fleet_finish`
+- [ ] `node scripts/validate-migration-sql.mjs` passes
+- [ ] `deno test` green for `workforce_link`, `service_line_attribution`, `rush_fleet_finish`, `trips_org_scope`
 - [ ] Playwright `fleet` project smoke (three customer shapes)
+- [ ] No `js.stripe.com` in fleet CSP
 
-## Notion
+## RLS cross-schema
 
-Update [Audit Tracker](https://app.notion.com/p/bf2b52b6b24f46378908de6fe97375b5) — RoamFleet × Rush integration → **Done** with link to this runbook.
+Phase 6: review cross-schema paths in [rls-audit.md](./rls-audit.md) — fleet.trips, fleet.module_purchases, delivery orders projection.
+

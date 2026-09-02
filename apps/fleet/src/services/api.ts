@@ -410,12 +410,15 @@ export const api = {
     return response.json();
   },
 
-  async getTrips(options?: { limit?: number, offset?: number }): Promise<Trip[]> {
+  async getTrips(options?: { limit?: number; offset?: number; serviceLine?: string }): Promise<Trip[]> {
     // Default to a reasonable limit to prevent connection resets on large datasets
     const limit = options?.limit ?? 200;
     const offset = options?.offset ?? 0;
     
     let url = `${API_ENDPOINTS.fleet}/trips?limit=${limit}&offset=${offset}`;
+    if (options?.serviceLine === 'rideshare' || options?.serviceLine === 'rush_delivery') {
+      url += `&serviceLine=${options.serviceLine}`;
+    }
 
     // Phase 1: Use JWT for proper org scoping
     const response = await fetchWithRetry(url, {

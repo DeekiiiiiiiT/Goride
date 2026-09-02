@@ -1,17 +1,17 @@
 # RoamFleet × Roam Rush — Multi-Service-Line Integration Audit
 
-**Date:** 2026-08-31 (design audit — [Part I](#0-executive-summary)) · **2026-09-01** ([Part II](#part-ii--implementation-verification-2026-09-01), [Part III](#part-iii--remediation-verification-2026-09-01), [Part IV](#part-iv--remediation-round-2--workforce-signup-architecture-2026-09-01), [Part V](#part-v--x1--signup-remediation-verification-2026-09-01))
+**Date:** 2026-08-31 (design audit — [Part I](#0-executive-summary)) · **2026-09-01** ([Part II](#part-ii--implementation-verification-2026-09-01), [Part III](#part-iii--remediation-verification-2026-09-01), [Part IV](#part-iv--remediation-round-2--workforce-signup-architecture-2026-09-01), [Part V](#part-v--x1--signup-remediation-verification-2026-09-01), [Part VI](#part-vi--signup-unification-verification-2026-09-01))
 **Scope:** How to add the Roam Rush product family (`roamrush.app`, `courier.roamrush.app`, `partner.roamrush.app`) into `roamfleet.co` as a second service line, serving three customer shapes: rideshare-only, delivery-only, and both.
 **Method:** Static read of `apps/fleet` (1,081 TS/TSX files), `apps/dash-courier` (175), `apps/dash-customer` (163), `apps/rush-command` (277), `apps/enterprise` (196), `supabase/functions/_fleet-server`, `supabase/functions/delivery`, `supabase/functions/matching`, and 437 migrations. **No code was changed by either pass.**
 **Companions:** [ROAMRUSH_SYSTEM_AUDIT.md](ROAMRUSH_SYSTEM_AUDIT.md) · [docs/FINANCIAL_INTEGRITY_AUDIT.md](docs/FINANCIAL_INTEGRITY_AUDIT.md) · [docs/MULTI_VERTICAL_COMPATIBILITY.md](docs/MULTI_VERTICAL_COMPATIBILITY.md) · [RUSH_MARKETPLACE_PRICING_MIGRATION.md](RUSH_MARKETPLACE_PRICING_MIGRATION.md)
 
-> **STATUS — 2026-09-01 (after remediation round 3).** Parts 0–12 are the original design audit and remain the target architecture. Parts II–V are successive verification passes; **[Part V](#part-v--x1--signup-remediation-verification-2026-09-01) is current.**
+> **STATUS — 2026-09-01 (after remediation round 4).** Parts 0–12 are the original design audit and remain the target architecture. Parts II–VI are successive verification passes; **[Part VI](#part-vi--signup-unification-verification-2026-09-01) is current.**
 >
-> **The Rush integration itself is now essentially done.** X1 is fixed and Rush nav is reachable; V9 (scope filtering) and V12 (per-service-line earnings) — open since Part II — are both closed. Build green: 175 test files / 1,105 tests, platform-settings 24, Rush-spine typecheck 0 errors, all guards pass.
+> **Both programmes are functionally complete.** The Rush integration closed out in Part V. The workforce-signup unification closed out here: Y1–Y7 all fixed, both driver wizards share one invite-code component, the legacy org-UUID route is flagged off with telemetry, and one `linkDriverToFleet()` contract now serves both join paths. Build green: 175 test files / 1,105 tests, platform-settings 24, Rush-spine typecheck 0 errors, `deno check` clean, all four guards pass.
 >
-> **The remaining risk has moved to the signup work.** The driver app's *hybrid* path was migrated to invite codes, but the **Google path was not** — it still joins fleets by pasting the org UUID — and `POST /driver/join-fleet` remains live and unflagged, so S1 is not closed. Separately, the new invite path writes only `driver_profiles`, so **a rideshare driver who joins by invite code never appears on the fleet owner's roster.**
+> **One deploy blocker.** Migration `20260901160000_service_line_backfill.sql` updates `fleet.fuel_entries` and `fleet.expense_journal` on a `trip_id` column that **neither table has**. It will abort on apply and block every migration behind it. Only `fleet.toll_ledger` has that column. See [§29](#29-new-defects) Z1.
 >
-> **Gate: Rush flags are clear to enable. Do not retire the legacy driver-join path or announce invite-code onboarding for rideshare until [§26](#26-new-defects) Y1–Y3 are closed.**
+> **Gate: fix Z1 before the next deploy. Everything else is clear to ship.**
 
 ---
 
@@ -1486,4 +1486,104 @@ The Rush programme itself is done. What is left is finishing the workforce-signu
 
 ---
 
-*Design audit 2026-08-31; verification passes II–V on 2026-09-01, the last against `b5573dd1` on branch `main`. No code was modified in any pass. Re-run Part V after Y1–Y3 are closed; re-run the design audit before Phase 2 if the `delivery` or `fleet` schemas change.*
+---
+
+# Part VI — Signup unification verification (2026-09-01)
+
+**Reviewed:** commit `8a5aecea` (47 files, +1,912/−513) — the response to Part V.
+**Checks run:** `pnpm --filter @roam/fleet test` → **175 files / 1,105 passed**, 1 skipped, exit 0 · `pnpm --filter @roam/platform-settings test` → **24 passed** · `node scripts/typecheck-fleet-rush.mjs` → **0 Rush-spine errors** · all four guards pass · `deno check` on `workforce_link.ts`, `workforce_invite_routes.ts`, `service_line_attribution.ts` → exit 0 · manual schema trace of the new backfill migration against every prior migration.
+
+---
+
+## 28. Part V defects — all fixed
+
+| # | Fix | Evidence |
+|---|---|---|
+| **Y3** | A single `linkDriverToFleet()` contract now writes all three places — `user_metadata.organizationId`, the `driver:{uid}` KV roster record (created from auth when absent), and `driver_profiles` — with the 409 guard and `alreadyMember` short-circuit built in. **Both** join paths call it: the invite accept handler at `workforce_invite_routes.ts:158` and the legacy route at `index.tsx:12217`. This is the fix I recommended, done the way I recommended it, and it closes S5 by construction — there is now one write contract instead of two divergent ones. Covered by `workforce_link.test.ts` (116 lines). | [`workforce_link.ts`](supabase/functions/_fleet-server/workforce_link.ts) |
+| **Y1** | The duplicated join screens collapsed into one shared [`JoinFleetStep`](apps/driver/src/components/onboarding/shared/JoinFleetStep.tsx), imported by **both** `DriverHybridOnboarding:108` and `DriverGoogleSignupWizard:388`. `joinFleetByFleetId` was deleted from `apps/driver/src/services/api.ts` outright rather than left deprecated. The two wizards can no longer drift. | `shared/JoinFleetStep.tsx` |
+| **Y2** | `FEATURE_FLAGS.LEGACY_DRIVER_JOIN`, **defaulting `false`** (`feature_flags.ts:399-401`), returns 403 with a "use your fleet invite code" message when off. Every call — allowed or refused — logs `userId`, `fleetId`, `legacyEnabled` and timestamp, so there is finally a signal for when traffic reaches zero. Successful responses carry `Deprecation: true`. The route was also refactored onto `linkDriverToFleet`, so it can no longer drift from the invite path. | [`index.tsx:12200-12235`](supabase/functions/_fleet-server/index.tsx#L12200) |
+| **Y4** | `workforceChoice` persisted into `signupDraft` (typed as `WorkforceChoice`), written on selection and rehydrated on mount — so the choice survives the email/SMS verification round trip. The `vehicle-setup` back button was also corrected to skip `fleet-invite` for independents. | `CourierConsumerApp.tsx:79-86, 225-235` |
+| **Y5** | `JoinFleetFromSettings` added and wired into the courier `SettingsPage`, reusing `FleetInviteCodePage` rather than duplicating it. The dead end is closed. | [`JoinFleetFromSettings.tsx`](apps/dash-courier/src/pages/profile/JoinFleetFromSettings.tsx) |
+| **Y6** | `roamFleetSignupUrl({ line, from })` added to `@roam/api-client`, env-aware via `VITE_ROAM_FLEET_SIGNUP_URL` with a production fallback. Both apps now use it — the courier archetype page and the driver app's `defaultRoamFleetSignupUrl`. | [`packages/api-client/src/roamFleetSignup.ts`](packages/api-client/src/roamFleetSignup.ts) |
+| **Y7** | Rate limiter moved to KV with the per-isolate `Map` kept as an explicit fallback, and the fallback's weaker guarantee documented in a comment rather than glossed. | [`workforce_invite_rate_limit.ts`](supabase/functions/_fleet-server/workforce_invite_rate_limit.ts) |
+
+**Caught independently, not in the register — good find:** the `RUSH_COURIER_LINK` flag was gating `POST /workforce/invites` for **both** service lines, so rideshare invites were blocked by a Rush flag. It is now scoped to `serviceLine === 'rush_delivery'` only (`workforce_invite_routes.ts:44-47`). That was the unstated blocker on §23.7 step 4, and it was found and fixed without being flagged.
+
+Also shipped: `service_line_attribution.ts` (+ tests), the fleet-side `WorkforceInvitePanel`, `FleetSetupChecklistCard`, an expanded 6-step signup wizard matching §6.1 (company → company-detail → service-lines → line-detail → plan → owner), and a launch runbook.
+
+---
+
+## 29. NEW defects
+
+### Z1 · HIGH (deploy blocker) — the backfill migration references columns that do not exist
+
+[`20260901160000_service_line_backfill.sql`](supabase/migrations/20260901160000_service_line_backfill.sql) contains three near-identical `UPDATE … FROM fleet.trips` statements joined on `trip_id`:
+
+```sql
+UPDATE fleet.fuel_entries fe SET service_line = … FROM fleet.trips t
+WHERE fe.trip_id IS NOT NULL AND fe.trip_id = t.id AND fe.service_line IS NULL;
+```
+
+**`fleet.fuel_entries` has no `trip_id` column.** Its definition ([`20260811200000_fleet_schema_foundation.sql:267-283`](supabase/migrations/20260811200000_fleet_schema_foundation.sql#L267)) is `id, organization_id, date, vehicle_id, driver_id, card_id, amount, liters, type, entry_mode, payment_source, legacy_kv_id, payload_json, created_at, updated_at`. The only later `ALTER`s on it add odometer fields, `transaction_id`, and `service_line`.
+
+**`fleet.expense_journal` has no `trip_id` column either** — it is `id, organization_id, legacy_kv_id, payload_json, created_at, updated_at` ([`:418-426`](supabase/migrations/20260811200000_fleet_schema_foundation.sql#L418)), and its only later `ALTER` adds `service_line`.
+
+A repo-wide grep for `ADD COLUMN.*trip_id` returns **nothing**. Only `fleet.toll_ledger` has the column (`trip_id text`, [`:226`](supabase/migrations/20260811200000_fleet_schema_foundation.sql#L226)) — so statement 1 is valid and statements 2 and 3 are not.
+
+On apply this raises `ERROR: column fe.trip_id does not exist`, the migration aborts, and because migrations run in order **every migration behind it is blocked too**. Nothing in CI catches it: there is no migration dry-run step, and the unit tests never touch SQL.
+
+**Fix — pick one:**
+- **(a) Recommended.** Drop the two invalid statements. Fuel and expense rows are vehicle/driver/date-scoped, not trip-scoped, so the honest attribution is *"resolve the service line from the vehicle's trips in the same period"*, which is a different query, not a join on a column that was never there.
+- **(b)** Derive from the JSON: `payload_json->>'tripId'` if these rows carry one — worth checking before writing it, since `payload_json` shape varies.
+
+Either way, add a `supabase db lint` or dry-run apply step to CI. This class of bug — SQL referencing a column that does not exist — has now shipped twice in this programme (V3 was `balance_minor`), and both times the unit suite was fully green.
+
+### Z2 · MEDIUM — the new CI guard was written but never wired in
+
+`scripts/check-no-join-fleet-client.mjs` is the regression protection for Y1/Y2: it fails the build if the driver app ever calls `joinFleetByFleetId` or `/driver/join-fleet` again. It works — I ran it, it passes.
+
+But it is **the only `check-*.mjs` on disk that is absent from `.github/workflows/ci.yml`**. The other nine are all wired. So the guard never runs, and the regression it exists to prevent would land silently.
+
+**Fix:** add the step next to `check-courier-fleet-stamp` at [`ci.yml:81`](.github/workflows/ci.yml#L81).
+
+### Z3 · LOW — the guard's escape hatch is file-wide
+
+```js
+if (text.includes(term) && !text.includes('removed')) hits.push({ file, term });
+```
+([`check-no-join-fleet-client.mjs:27`](scripts/check-no-join-fleet-client.mjs#L27))
+
+Any driver-app file containing the word "removed" *anywhere* is exempted from the whole check. Today that is deliberate — `api.ts` carries the comment `// joinFleetByFleetId removed — use acceptWorkforceInvite` — but "removed" is an ordinary word in a driver app ("trip removed", "vehicle removed"), so the exemption will spread.
+
+This is the same shape as W7, which was already fixed once in this programme. **Fix:** match on the exact comment marker, or exempt by explicit file allowlist.
+
+### Z4 · LOW — the `?line=` funnel parameter is never read
+
+Both funnel CTAs now build proper URLs — the courier archetype page sends `?line=rush_delivery&from=roamrushcourier`, the driver app sends `?from=roamdriver`. But nothing in `apps/fleet` reads `line`. `App.tsx:336-338` reads `?from=` (`fromRoamdriver`) and passes it into the signup page; there is no equivalent for `line`, and the signup wizard contains no `URLSearchParams` at all.
+
+So a courier who taps "Fleet operator / owner" lands on a wizard defaulting to rideshare and has to find and tick Rush Delivery themselves — the intent §23.6 asked the link to carry is dropped at the door. The `?from=` handling proves the pattern is already there; `line` just was not wired to it.
+
+**Fix:** read `line` alongside `from` in `App.tsx` and seed `serviceLines` in `FleetOwnerSignupComplete` from it.
+
+---
+
+## 30. Current gate
+
+**Build:** 175 test files / 1,105 tests · platform-settings 24 · Rush-spine typecheck 0 errors · `deno check` exit 0 · `check-courier-fleet-stamp`, `check-fleet-edge-duplicates`, `check-projection-flags-wired`, `check-no-join-fleet-client` all pass when run.
+
+| Action | Blocked on |
+|---|---|
+| **Deploy anything** | **Z1** — the migration aborts and blocks every migration behind it |
+| Enable any Rush flag (`rush_courier_link`, `rush_ui`, `rush_trip_projection`, `rush_settlement`) | clear |
+| Pilot with a both-lines customer | clear |
+| Announce invite-code onboarding for rideshare drivers | clear — Y1/Y3 closed, both wizards share one component, roster write verified |
+| Retire `POST /driver/join-fleet` | clear to flip the flag off (it already defaults off); wait for the telemetry log to show zero calls before deleting the route |
+| Trust the Y1/Y2 regression guard | **Z2** |
+
+Order: **Z1** first and alone — it is a deploy blocker and a five-minute fix. Then **Z2** (one CI line), then Z3 and Z4 as cleanup.
+
+After Z1, both programmes are done. What remains across the whole audit is operational rather than structural: run the §7 Phase 3 manual reconciliation week before trusting `rush_settlement`, and add the migration dry-run step that would have caught Z1 and V3.
+
+---
+
+*Design audit 2026-08-31; verification passes II–VI on 2026-09-01, the last against `8a5aecea` on branch `main`. No code was modified in any pass. Re-run Part VI after Z1 is closed; re-run the design audit before Phase 2 if the `delivery` or `fleet` schemas change.*

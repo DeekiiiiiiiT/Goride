@@ -32,6 +32,7 @@ import {
 } from 'lucide-react';
 import { Input } from '../ui/input';
 import { CategoryGroupCard, CategoryGroup } from './CategoryGroupCard';
+import { useServiceLineScopeParam } from '../../hooks/useServiceLineScopeParam';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Types
@@ -176,6 +177,9 @@ async function handleGenericExport<T>(
 // ═══════════════════════════════════════════════════════════════════════════
 
 export function ExportCenter() {
+  const { scope } = useServiceLineScopeParam();
+  const scopedLine =
+    scope === 'rideshare' || scope === 'rush_delivery' ? scope : 'all';
   // Date ranges for date-filterable categories
   const [tripDates, setTripDates] = useState<DateRange>({ start: '', end: '' });
   const [txnDates, setTxnDates] = useState<DateRange>({ start: '', end: '' });
@@ -300,7 +304,7 @@ export function ExportCenter() {
 
   const exportTrips = useCallback((fmt?: ExportFormat) =>
     handleGenericExport('trips',
-      () => fetchAllTrips(tripDates.start || undefined, tripDates.end || undefined),
+      () => fetchAllTrips(tripDates.start || undefined, tripDates.end || undefined, undefined, scopedLine),
       TRIP_CSV_COLUMNS, 'trips',
       (tripDates.start || tripDates.end) ? tripDates : undefined,
       fmt,
@@ -309,7 +313,7 @@ export function ExportCenter() {
   // Platform-specific trip export handlers
   const exportTripsUber = useCallback((fmt?: ExportFormat) =>
     handleGenericExport('Uber trips',
-      () => fetchAllTrips(tripDates.start || undefined, tripDates.end || undefined, 'Uber'),
+      () => fetchAllTrips(tripDates.start || undefined, tripDates.end || undefined, 'Uber', scopedLine),
       TRIP_CSV_COLUMNS, 'trips_uber',
       (tripDates.start || tripDates.end) ? tripDates : undefined,
       fmt,
@@ -317,7 +321,7 @@ export function ExportCenter() {
 
   const exportTripsInDrive = useCallback((fmt?: ExportFormat) =>
     handleGenericExport('InDrive trips',
-      () => fetchAllTrips(tripDates.start || undefined, tripDates.end || undefined, 'InDrive'),
+      () => fetchAllTrips(tripDates.start || undefined, tripDates.end || undefined, 'InDrive', scopedLine),
       TRIP_CSV_COLUMNS, 'trips_indrive',
       (tripDates.start || tripDates.end) ? tripDates : undefined,
       fmt,
@@ -325,7 +329,7 @@ export function ExportCenter() {
 
   const exportTripsRoam = useCallback((fmt?: ExportFormat) =>
     handleGenericExport('Roam trips',
-      () => fetchAllTrips(tripDates.start || undefined, tripDates.end || undefined, 'Roam'),
+      () => fetchAllTrips(tripDates.start || undefined, tripDates.end || undefined, 'Roam', scopedLine),
       TRIP_CSV_COLUMNS, 'trips_roam',
       (tripDates.start || tripDates.end) ? tripDates : undefined,
       fmt,
@@ -402,7 +406,7 @@ export function ExportCenter() {
     await runBackgroundJobToast(
       async () => {
         const categories = [
-          { label: 'trips', fn: () => handleGenericExport('trips', () => fetchAllTrips(), TRIP_CSV_COLUMNS, 'trips', undefined, 'csv', { nested: true }) },
+          { label: 'trips', fn: () => handleGenericExport('trips', () => fetchAllTrips(undefined, undefined, undefined, scopedLine), TRIP_CSV_COLUMNS, 'trips', undefined, 'csv', { nested: true }) },
           { label: 'drivers', fn: () => handleGenericExport('driver profiles', fetchAllDrivers, DRIVER_CSV_COLUMNS, 'drivers', undefined, 'csv', { nested: true }) },
           { label: 'driver metrics', fn: () => handleGenericExport('driver metrics', fetchAllDriverMetrics, DRIVER_METRICS_CSV_COLUMNS, 'driver_metrics', undefined, 'csv', { nested: true }) },
           { label: 'vehicles', fn: () => handleGenericExport('vehicle profiles', fetchAllVehicles, VEHICLE_CSV_COLUMNS, 'vehicles', undefined, 'csv', { nested: true }) },

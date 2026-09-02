@@ -336,13 +336,26 @@ function AppContent() {
   const fromRoamdriver =
     typeof window !== 'undefined' &&
     new URLSearchParams(window.location.search).get('from') === 'roamdriver';
+  const signupLineParam =
+    typeof window !== 'undefined'
+      ? new URLSearchParams(window.location.search).get('line')
+      : null;
+  const initialSignupLine =
+    signupLineParam === 'rush_delivery' || signupLineParam === 'rideshare'
+      ? signupLineParam
+      : undefined;
 
   if (signupPath) {
     if (!user) {
-      return <FleetOwnerSignupPage fromRoamdriver={fromRoamdriver} />;
+      return <FleetOwnerSignupPage fromRoamdriver={fromRoamdriver} initialLine={initialSignupLine} />;
     }
     if (needsProvision) {
-      return <FleetOwnerSignupComplete fromRoamdriver={fromRoamdriver} />;
+      return (
+        <FleetOwnerSignupComplete
+          fromRoamdriver={fromRoamdriver}
+          initialLine={initialSignupLine}
+        />
+      );
     }
     if (isFleetPortalUser(user) && !needsProvision) {
       window.location.replace('/');
@@ -366,7 +379,12 @@ function AppContent() {
   }
 
   if (needsProvision) {
-    return <FleetOwnerSignupComplete fromRoamdriver={fromRoamdriver} />;
+    return (
+      <FleetOwnerSignupComplete
+        fromRoamdriver={fromRoamdriver}
+        initialLine={initialSignupLine}
+      />
+    );
   }
 
   const ownerProductLine = inferClientProductLine(user.user_metadata as Record<string, unknown>);

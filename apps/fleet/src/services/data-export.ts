@@ -124,7 +124,12 @@ async function fetchAllServiceLogs(): Promise<ServiceRequest[]> {
  * Uses paginated API to handle large datasets safely.
  * Exported for use by ExportCenter.
  */
-export async function fetchAllTrips(startDate?: string, endDate?: string, platform?: string): Promise<Trip[]> {
+export async function fetchAllTrips(
+  startDate?: string,
+  endDate?: string,
+  platform?: string,
+  serviceLine?: 'rideshare' | 'rush_delivery' | 'all',
+): Promise<Trip[]> {
     const PAGE_SIZE = 500;
     const allTrips: Trip[] = [];
 
@@ -155,7 +160,14 @@ export async function fetchAllTrips(startDate?: string, endDate?: string, platfo
             let hasMore = true;
 
             while (hasMore) {
-                const trips = await api.getTrips({ limit: PAGE_SIZE, offset });
+                const trips = await api.getTrips({
+                  limit: PAGE_SIZE,
+                  offset,
+                  serviceLine:
+                    serviceLine === 'rideshare' || serviceLine === 'rush_delivery'
+                      ? serviceLine
+                      : undefined,
+                });
                 allTrips.push(...trips);
 
                 hasMore = trips.length === PAGE_SIZE;
