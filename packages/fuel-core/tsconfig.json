@@ -4,7 +4,9 @@
     "noEmit": true,
     "rootDir": "src",
     "skipLibCheck": true,
-    "types": ["vitest/globals"]
+    "types": ["vitest/globals"],
+    // Deno twin imports use .ts suffixes; allow them under noEmit (TS5097).
+    "allowImportingTsExtensions": true
   },
   "include": ["src/**/*.ts"],
   "exclude": ["src/**/*.test.ts", "node_modules"]

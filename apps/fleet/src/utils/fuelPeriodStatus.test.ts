@@ -32,8 +32,9 @@ describe('fuelPeriodStatus', () => {
       finalizedReports: [],
       scenarios: [],
     });
-    // No early blockers → ready to close → In Progress
-    expect(periods[0].status).toBe('in_progress');
+    // Entry-only fast path: unallocated spend counts as unexplained → Outstanding
+    expect(periods[0].status).toBe('outstanding');
+    expect(periods[0].counts['leakage-gap'].actionable).toBe(1);
     expect(periods[0].counts.finalize.actionable).toBe(1);
     expect(periods[0].counts['data-quality'].informational).toBeGreaterThan(0);
   });
