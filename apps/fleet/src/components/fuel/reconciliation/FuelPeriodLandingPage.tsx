@@ -8,7 +8,12 @@ import type { FuelReconciliationPeriod } from '../../../utils/fuelPeriodStatus';
 import { FUEL_STEP_LABELS, FUEL_STEP_ORDER, type FuelStepId } from '../../../utils/fuelPeriodGating';
 import { FUEL_STEP_ICONS } from '../../../utils/fuelStepIcons';
 import { formatFuelMoney } from '../../../utils/formatFuelMoney';
-import { shouldAutoClosePeriod } from '../../../utils/fuelAutoClose';
+import { autoCloseStatusBadge } from '../../../utils/fuelAutoClose';
+import { Sparkline } from '../../ui/Sparkline';
+import {
+  buildUnexplainedSparkSeries,
+  unexplainedWowDelta,
+} from '../../../utils/fuelUnexplainedSparkSeries';
 
 /** Labeled step cell — clear at a glance; click opens that step (M3/M5). */
 function StepStatusCell({
@@ -71,12 +76,40 @@ function PeriodCard({
   onSelect,
   onReset,
   onSelectStep,
+  secondApproverThreshold,
+  autoCloseDualApprovalMode,
+  hasSettlementSnapshots,
+  unexplainedSeries,
 }: {
   period: FuelReconciliationPeriod;
   onSelect: () => void;
   onReset?: () => void;
   onSelectStep?: (period: FuelReconciliationPeriod, stepId: FuelStepId) => void;
+  secondApproverThreshold?: number;
+  autoCloseDualApprovalMode?: string;
+  hasSettlementSnapshots?: boolean;
+  unexplainedSeries?: number[];
 }) {
+  const autoCloseBadge = autoCloseStatusBadge({
+    locked: period.locked,
+    actionableTotal: period.actionableTotal,
+    netLeakage: period.netLeakage,
+    // Server leakage review zeros actionable; treat clear leakage step as reviewed for badge.
+    leakageReviewed: period.counts['leakage-gap']?.actionable === 0,
+    totalSpend: period.totalSpend,
+    secondApproverThreshold,
+    hasSettlementSnapshots,
+    autoCloseDualApprovalMode,
+  });
+  const wow = unexplainedWowDelta(unexplainedSeries || []);
+  const sparkLabel =
+    unexplainedSeries && unexplainedSeries.length >= 2
+      ? `Unexplained trend: latest ${formatFuelMoney(period.netLeakage)}${
+          wow === null
+            ? ''
+            : `, ${wow >= 0 ? 'up' : 'down'} ${formatFuelMoney(Math.abs(wow))} vs prior week`
+        }`
+      : undefined;
   const isOutstanding = period.status === 'outstanding';
   const isInProgress = period.status === 'in_progress';
   const age = daysOpen(period.startDate);
@@ -109,15 +142,31 @@ function PeriodCard({
                 </span>
               )}
             </div>
-            <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-slate-500">
+            <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-slate-500">
               <span>{period.vehicleCount} vehicle{period.vehicleCount === 1 ? '' : 's'}</span>
               <span>Spend {formatFuelMoney(period.totalSpend)}</span>
-              <span className={period.netLeakage !== 0 ? 'text-rose-600' : ''}>
+              <span
+                className={`inline-flex items-center gap-1.5 ${period.netLeakage !== 0 ? 'text-rose-600' : ''}`}
+                aria-label={sparkLabel}
+              >
                 Unexplained {formatFuelMoney(period.netLeakage)}
+                {unexplainedSeries && unexplainedSeries.length >= 2 && (
+                  <Sparkline
+                    values={unexplainedSeries}
+                    stroke={period.netLeakage !== 0 ? '#e11d48' : '#64748b'}
+                  />
+                )}
               </span>
-              {shouldAutoClosePeriod(period) && (
-                <Badge variant="outline" className="border-emerald-200 text-[10px] text-emerald-700">
-                  Eligible for auto-close
+              {autoCloseBadge && (
+                <Badge
+                  variant="outline"
+                  className={
+                    autoCloseBadge.tone === 'eligible'
+                      ? 'border-emerald-200 text-[10px] text-emerald-700'
+                      : 'border-amber-200 text-[10px] text-amber-800'
+                  }
+                >
+                  {autoCloseBadge.label}
                 </Badge>
               )}
               {period.exceptionCount > 0 && (
@@ -177,18 +226,26 @@ function sortByAbsUnexplained(periods: FuelReconciliationPeriod[]): FuelReconcil
 
 function PeriodList({
   periods,
+  allPeriodsForSpark,
   emptyLabel,
   onSelectPeriod,
   onResetPeriod,
   onSelectStep,
   varianceFirst,
+  secondApproverThreshold,
+  autoCloseDualApprovalMode,
+  weeksWithSnapshots,
 }: {
   periods: FuelReconciliationPeriod[];
+  allPeriodsForSpark: FuelReconciliationPeriod[];
   emptyLabel: string;
   onSelectPeriod: (period: FuelReconciliationPeriod) => void;
   onResetPeriod?: (period: FuelReconciliationPeriod) => void;
   onSelectStep?: (period: FuelReconciliationPeriod, stepId: FuelStepId) => void;
   varianceFirst?: boolean;
+  secondApproverThreshold?: number;
+  autoCloseDualApprovalMode?: string;
+  weeksWithSnapshots?: Set<string>;
 }) {
   const ordered = varianceFirst ? sortByAbsUnexplained(periods) : periods;
   if (ordered.length === 0) {
@@ -198,6 +255,10 @@ function PeriodList({
       </div>
     );
   }
+  const sparkPoints = allPeriodsForSpark.map((p) => ({
+    startDate: p.startDate,
+    unexplained: p.netLeakage,
+  }));
   return (
     <div className="space-y-3">
       {ordered.map((p) => (
@@ -206,6 +267,10 @@ function PeriodList({
           period={p}
           onSelect={() => onSelectPeriod(p)}
           onSelectStep={onSelectStep}
+          secondApproverThreshold={secondApproverThreshold}
+          autoCloseDualApprovalMode={autoCloseDualApprovalMode}
+          hasSettlementSnapshots={weeksWithSnapshots?.has(p.startDate) ?? undefined}
+          unexplainedSeries={buildUnexplainedSparkSeries(sparkPoints, p.startDate)}
           onReset={
             p.status === 'completed' && onResetPeriod
               ? () => onResetPeriod(p)
@@ -228,6 +293,12 @@ interface FuelPeriodLandingPageProps {
   onBulkFinalize?: () => void;
   onBulkReopen?: () => void;
   dataTruncated?: boolean;
+  /** Org dual-approval threshold for auto-close badge honesty (NEW-9). */
+  secondApproverThreshold?: number;
+  /** Org auto-close dual mode — affects badge when spend is high. */
+  autoCloseDualApprovalMode?: string;
+  /** Week starts that already have finalized_report snapshots (v1 auto-close gate). */
+  weeksWithSnapshots?: Set<string>;
 }
 
 export function FuelPeriodLandingPage({
@@ -241,6 +312,9 @@ export function FuelPeriodLandingPage({
   onBulkFinalize,
   onBulkReopen,
   dataTruncated,
+  secondApproverThreshold,
+  autoCloseDualApprovalMode,
+  weeksWithSnapshots,
 }: FuelPeriodLandingPageProps) {
   const openWorkCount = outstanding.length + inProgress.length;
   const preferredTab =
@@ -385,29 +459,41 @@ export function FuelPeriodLandingPage({
           <TabsContent value="outstanding" className="mt-4">
             <PeriodList
               periods={outstanding}
+              allPeriodsForSpark={[...outstanding, ...inProgress, ...completed]}
               emptyLabel="No outstanding periods — check In Progress or Completed."
               onSelectPeriod={(p) => onSelectPeriod(p)}
               onSelectStep={(p, step) => onSelectPeriod(p, step)}
               varianceFirst
+              secondApproverThreshold={secondApproverThreshold}
+              autoCloseDualApprovalMode={autoCloseDualApprovalMode}
+              weeksWithSnapshots={weeksWithSnapshots}
             />
           </TabsContent>
 
           <TabsContent value="in_progress" className="mt-4">
             <PeriodList
               periods={inProgress}
+              allPeriodsForSpark={[...outstanding, ...inProgress, ...completed]}
               emptyLabel="No weeks in progress."
               onSelectPeriod={(p) => onSelectPeriod(p)}
               onSelectStep={(p, step) => onSelectPeriod(p, step)}
+              secondApproverThreshold={secondApproverThreshold}
+              autoCloseDualApprovalMode={autoCloseDualApprovalMode}
+              weeksWithSnapshots={weeksWithSnapshots}
             />
           </TabsContent>
 
           <TabsContent value="completed" className="mt-4">
             <PeriodList
               periods={completed}
+              allPeriodsForSpark={[...outstanding, ...inProgress, ...completed]}
               emptyLabel="No completed periods yet."
               onSelectPeriod={(p) => onSelectPeriod(p)}
               onSelectStep={(p, step) => onSelectPeriod(p, step)}
               onResetPeriod={onResetPeriod}
+              secondApproverThreshold={secondApproverThreshold}
+              autoCloseDualApprovalMode={autoCloseDualApprovalMode}
+              weeksWithSnapshots={weeksWithSnapshots}
             />
           </TabsContent>
         </Tabs>

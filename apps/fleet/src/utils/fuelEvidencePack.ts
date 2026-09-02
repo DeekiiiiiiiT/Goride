@@ -111,11 +111,24 @@ export function downloadFuelEvidencePackFromServer(args: {
   };
   const stepNotes = (args.pack.audit || [])
     .filter((a) => a.action === 'step' || a.action === 'leakage_review' || a.action === 'second_approve')
-    .map((a) => ({
-      step: String(a.action || ''),
-      note: String((a.payload as any)?.note || a.payload || ''),
-      at: String(a.at || ''),
-    }));
+    .map((a) => {
+      const payload = (a.payload && typeof a.payload === 'object' ? a.payload : {}) as Record<
+        string,
+        unknown
+      >;
+      const source = String(payload.source || '');
+      const systemLabel =
+        source === 'ui_service_approve'
+          ? ' [system: ui_service_approve]'
+          : source === 'auto_close_service'
+            ? ' [system: auto_close_service]'
+            : '';
+      return {
+        step: String(a.action || ''),
+        note: `${String(payload.note || a.payload || '')}${systemLabel}`.trim() || systemLabel.trim(),
+        at: String(a.at || ''),
+      };
+    });
   downloadFuelEvidencePack({
     weekLabel: args.weekLabel,
     weekStart: args.weekStart,

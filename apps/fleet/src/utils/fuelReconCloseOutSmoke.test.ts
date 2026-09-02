@@ -4,11 +4,16 @@
 import { describe, expect, it } from 'vitest';
 import { interpretFuelFinalizeJobResult } from './fuelFinalizeJobResult';
 import { buildFuelEvidenceCsvRows } from './fuelEvidencePack';
-import { shouldAutoClosePeriod } from './fuelAutoClose';
+import {
+  evaluateAutoCloseEligibility,
+  shouldAutoClosePeriod,
+} from './fuelAutoClose';
 import { serverComputedWeekStarts } from './fuelPeriodServerMerge';
+import { selectLandingLiveWeeks } from '../hooks/useFuelLandingLiveReports';
 import type { FuelDisputesStepProps } from '../components/fuel/reconciliation/FuelDisputesStep';
 import type { FuelLeakageStepProps } from '../components/fuel/reconciliation/FuelLeakageStep';
 import type { FuelFinalizeStepProps } from '../components/fuel/reconciliation/FuelFinalizeStep';
+import type { FuelDispute } from '../types/fuel';
 
 describe('recon close-out smoke contracts', () => {
   it('NEW-7 toast path: partial job never looks like success', () => {
@@ -60,6 +65,20 @@ describe('recon close-out smoke contracts', () => {
     ).toBe(true);
   });
 
+  it('NEW-9: auto-close cursor policy — high spend needs approval skip', () => {
+    expect(
+      evaluateAutoCloseEligibility({
+        locked: false,
+        actionableTotal: 0,
+        leakageReviewed: true,
+        netLeakage: 0,
+        totalSpend: 80_000,
+        hasSettlementSnapshots: true,
+        secondApproverThreshold: 50_000,
+      }).reason,
+    ).toBe('needs_approval');
+  });
+
   it('M1/M2: computed weeks are skipped for live engines', () => {
     expect(
       [
@@ -86,11 +105,38 @@ describe('recon close-out smoke contracts', () => {
     ).toEqual(['2026-07-06']);
   });
 
+  it('NEW-11: selectLandingLiveWeeks honors serverSkipWeekStarts', () => {
+    const scheduled = selectLandingLiveWeeks(
+      [
+        { startDate: '2026-07-06', endDate: '2026-07-12' },
+        { startDate: '2026-07-13', endDate: '2026-07-19' },
+      ],
+      [
+        {
+          id: 'e1',
+          vehicleId: 'v1',
+          date: '2026-07-14',
+          amount: 100,
+          liters: 10,
+          odometer: 1,
+          station: 'x',
+          reconciliationStatus: 'Pending',
+        } as any,
+      ],
+      [{ id: 'v1' } as any],
+      [],
+      new Set(['2026-07-06']),
+    );
+    expect(scheduled.map((w) => w.startDate)).toEqual(['2026-07-13']);
+  });
+
   it('extracted step prop contracts stay stable', () => {
+    const onResolveDispute: FuelDisputesStepProps['onResolveDispute'] = (_d: FuelDispute) =>
+      undefined;
     const disputes: FuelDisputesStepProps = {
       openDisputes: [],
       periodLocked: false,
-      onResolveDispute: () => undefined,
+      onResolveDispute,
       onAddAdjustment: () => undefined,
     };
     expect(disputes.openDisputes).toEqual([]);

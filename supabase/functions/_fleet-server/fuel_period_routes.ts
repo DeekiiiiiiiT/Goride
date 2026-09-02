@@ -13,6 +13,15 @@ import {
   reverseEnterpriseFuelSyncForSnapshot,
   settleEnterpriseFuelFromSnapshot,
 } from "./fuel_enterprise_settlement.ts";
+import { buildFuelPeriodSnapshots } from "./fuel_period_build_snapshots.ts";
+import {
+  fuelAutoCloseApproverId,
+  fuelAutoCloseFinalizerId,
+  loadOrgPreferences,
+  resolveAutoCloseDualApprovalMode,
+  resolveDualApprovalUiMode,
+  secondApproverThresholdFromPrefs,
+} from "./fuel_org_preferences.ts";
 
 const BASE = "/make-server-37f42386";
 const CRON_SECRET = () => Deno.env.get("FLEET_CRON_SECRET") || Deno.env.get("CRON_SECRET") || "";
@@ -675,6 +684,25 @@ export function registerFuelPeriodRoutes(app: Hono) {
         );
       }
       const actor = actorId(c);
+      // Program 4: UI service_only — record system second_approve before finalize if needed
+      const orgPrefs = await loadOrgPreferences(orgId);
+      const uiMode = resolveDualApprovalUiMode(orgPrefs.fuelDualApprovalUiMode);
+      const thr =
+        Number(body.secondApproverThreshold) ||
+        secondApproverThresholdFromPrefs(orgPrefs);
+      const spend = Number(body.totalSpend) || Number(period.total_spend) || 0;
+      if (uiMode === "service_only" && thr > 0 && spend > thr && actor) {
+        const approver = fuelAutoCloseApproverId();
+        if (approver !== actor) {
+          await insertAudit(
+            orgId,
+            periodId,
+            "second_approve",
+            { source: "ui_service_approve", totalSpend: spend, secondApproverThreshold: thr },
+            approver,
+          );
+        }
+      }
       const { data: job, error } = await sb
         .from("fuel_period_job")
         .insert({
@@ -689,7 +717,7 @@ export function registerFuelPeriodRoutes(app: Hono) {
             completedDriverIds: [],
             failures: [],
             totalSpend: body.totalSpend,
-            secondApproverThreshold: body.secondApproverThreshold,
+            secondApproverThreshold: body.secondApproverThreshold ?? thr,
           },
           progress_total: snapshots.length,
           created_by: actor,
@@ -888,6 +916,42 @@ export function registerFuelPeriodRoutes(app: Hono) {
     },
   );
 
+  // Cron/service: build FinalizedFuelReport snapshots from pending entries when none exist.
+  app.post(`${BASE}/fuel/periods/:id/build-snapshots`, async (c: Context) => {
+    const secret = c.req.header("X-Fleet-Cron-Secret") || c.req.header("x-fleet-cron-secret") || "";
+    const expected = CRON_SECRET();
+    const orgFromAuth = getOrgId(c);
+    const cronOk = Boolean(expected && secret === expected);
+    if (!cronOk && !orgFromAuth) {
+      return c.json({ error: "unauthorized" }, 401);
+    }
+    const periodId = c.req.param("id");
+    const sb = getServiceClient();
+    const { data: row } = await sb
+      .from("fuel_reconciliation_period")
+      .select("*")
+      .eq("id", periodId)
+      .maybeSingle();
+    if (!row) return c.json({ error: "not_found" }, 404);
+    const orgId = String(row.org_id);
+    if (!cronOk && orgFromAuth && orgFromAuth !== orgId) {
+      return c.json({ error: "forbidden" }, 403);
+    }
+    const built = await buildFuelPeriodSnapshots({
+      orgId,
+      weekStart: ymd(row.week_start),
+      weekEnd: ymd(row.week_end),
+    });
+    if (!built.ok) {
+      return c.json({ ok: false, error: built.error || "build_failed", snapshots: [] }, 422);
+    }
+    return c.json({
+      ok: true,
+      snapshots: built.snapshots,
+      totalSpend: built.totalSpend,
+    });
+  });
+
   app.post(`${BASE}/fuel/periods/auto-close`, async (c: Context) => {
     const secret = c.req.header("X-Fleet-Cron-Secret") || c.req.header("x-fleet-cron-secret") || "";
     const expected = CRON_SECRET();
@@ -913,9 +977,24 @@ export function registerFuelPeriodRoutes(app: Hono) {
     const EPS = 0.009; // match FUEL_SPEND_EPS client badge
     let enqueued = 0;
     let skipped = 0;
+    const skipByReason: Record<string, number> = {};
     const details: Array<{ orgId: string; periodId: string; result: string }> = [];
 
+    const bumpSkip = (orgId: string, periodId: string, result: string) => {
+      skipped += 1;
+      skipByReason[result] = (skipByReason[result] || 0) + 1;
+      details.push({ orgId, periodId, result });
+    };
+
+    // Prefs loaded per org inside the loop (org-scoped + general fallback).
+
     for (const orgId of orgIds) {
+      const orgPrefs = await loadOrgPreferences(orgId);
+      const secondApproverThreshold = secondApproverThresholdFromPrefs(orgPrefs);
+      const dualMode = resolveAutoCloseDualApprovalMode(
+        orgPrefs.fuelAutoCloseDualApprovalMode,
+      );
+
       const { data: rows } = await sb
         .from("fuel_reconciliation_period")
         .select("*")
@@ -928,8 +1007,7 @@ export function registerFuelPeriodRoutes(app: Hono) {
         const unexplained = Math.abs(Number(row.unexplained) || 0);
         const leakageOk = unexplained <= EPS || Boolean(row.leakage_reviewed_at);
         if (!leakageOk) {
-          skipped += 1;
-          details.push({ orgId, periodId, result: "skip_leakage" });
+          bumpSkip(orgId, periodId, "skip_leakage");
           continue;
         }
         // Mirror client actionableTotal when counts jsonb is present
@@ -942,8 +1020,7 @@ export function registerFuelPeriodRoutes(app: Hono) {
           actionable += Number(v?.actionable) || 0;
         }
         if (actionable > 0) {
-          skipped += 1;
-          details.push({ orgId, periodId, result: "skip_actionables" });
+          bumpSkip(orgId, periodId, "skip_actionables");
           continue;
         }
 
@@ -956,21 +1033,58 @@ export function registerFuelPeriodRoutes(app: Hono) {
           .eq("idempotency_key", idempotencyKey)
           .maybeSingle();
         if (existing) {
-          skipped += 1;
-          details.push({ orgId, periodId, result: `skip_existing_${existing.state}` });
+          bumpSkip(orgId, periodId, `skip_existing_${existing.state}`);
           continue;
         }
 
         const weekStart = ymd(row.week_start);
-        const snaps = ((await kv.getByPrefix(`finalized_report:${weekStart}:`)) || []).filter(
+        let snaps = ((await kv.getByPrefix(`finalized_report:${weekStart}:`)) || []).filter(
           (s: any) => !s.orgId || s.orgId === orgId || !s.org_id || s.org_id === orgId,
         ) as any[];
-        const totalSpend = Number(row.total_spend) || 0;
-        // Money weeks need snapshots to settle; clean zero-spend weeks may lock empty.
+        let totalSpend = Number(row.total_spend) || 0;
+        // Money weeks: build settleable snapshots server-side when none exist yet (Program 4).
         if (totalSpend > EPS && snaps.length === 0) {
-          skipped += 1;
-          details.push({ orgId, periodId, result: "skip_missing_snapshots" });
-          continue;
+          const built = await buildFuelPeriodSnapshots({
+            orgId,
+            weekStart,
+            weekEnd: ymd(row.week_end),
+          });
+          if (!built.ok || built.snapshots.length === 0) {
+            bumpSkip(
+              orgId,
+              periodId,
+              built.error === "no_settleable_entries"
+                ? "skip_missing_snapshots"
+                : "skip_build_failed",
+            );
+            continue;
+          }
+          snaps = built.snapshots as any[];
+          if (built.totalSpend > totalSpend) totalSpend = built.totalSpend;
+        }
+
+        const needsDual =
+          secondApproverThreshold > 0 && totalSpend > secondApproverThreshold;
+        let createdBy: string | null = null;
+        if (needsDual) {
+          if (dualMode === "skip") {
+            bumpSkip(orgId, periodId, "skip_needs_approval");
+            continue;
+          }
+          // service_approve: system approver ≠ system finalizer (SoD)
+          const approver = fuelAutoCloseApproverId();
+          createdBy = fuelAutoCloseFinalizerId();
+          if (approver === createdBy) {
+            bumpSkip(orgId, periodId, "skip_service_actor_misconfigured");
+            continue;
+          }
+          await insertAudit(
+            orgId,
+            periodId,
+            "second_approve",
+            { source: "auto_close_service", totalSpend, secondApproverThreshold },
+            approver,
+          );
         }
 
         const { data: job } = await sb
@@ -988,15 +1102,15 @@ export function registerFuelPeriodRoutes(app: Hono) {
               failures: [],
               autoClose: true,
               totalSpend,
+              secondApproverThreshold,
             },
             progress_total: Math.max(snaps.length, 1),
-            created_by: null,
+            created_by: createdBy,
           })
           .select("*")
           .single();
         if (!job) {
-          skipped += 1;
-          details.push({ orgId, periodId, result: "insert_failed" });
+          bumpSkip(orgId, periodId, "insert_failed");
           continue;
         }
         const result = await processJobRow(job as any);
@@ -1008,8 +1122,10 @@ export function registerFuelPeriodRoutes(app: Hono) {
             ok: result.ok,
             error: (result as any).error || null,
             failures: (result as any).failures || [],
+            secondApproverThreshold,
+            dualMode,
           },
-          null,
+          createdBy,
         );
         // In-app alert for operators (same pattern as maintenance digest — pull-based).
         try {
@@ -1032,7 +1148,11 @@ export function registerFuelPeriodRoutes(app: Hono) {
           /* non-fatal */
         }
         if (result.ok) enqueued += 1;
-        else skipped += 1;
+        else {
+          const failKey = `failed:${(result as any).error || "unknown"}`;
+          skipByReason[failKey] = (skipByReason[failKey] || 0) + 1;
+          skipped += 1;
+        }
         details.push({
           orgId,
           periodId,
@@ -1040,6 +1160,33 @@ export function registerFuelPeriodRoutes(app: Hono) {
         });
       }
     }
-    return c.json({ ok: true, enqueued, skipped, orgs: orgIds.length, details });
+
+    // Run-level digest so cron logs / operators can see why nothing locked.
+    try {
+      const digestId = `fuel-autoclose-digest:${new Date().toISOString().slice(0, 10)}`;
+      await kv.set(`alert:${digestId}`, {
+        id: digestId,
+        type: "fuel_period_auto_close_digest",
+        severity: enqueued > 0 ? "info" : "info",
+        title: `Fuel auto-close: ${enqueued} locked, ${skipped} skipped`,
+        body: `skipByReason=${JSON.stringify(skipByReason)}`,
+        skipByReason,
+        enqueued,
+        skipped,
+        createdAt: new Date().toISOString(),
+        read: false,
+      });
+    } catch {
+      /* non-fatal */
+    }
+
+    return c.json({
+      ok: true,
+      enqueued,
+      skipped,
+      skipByReason,
+      orgs: orgIds.length,
+      details,
+    });
   });
 }

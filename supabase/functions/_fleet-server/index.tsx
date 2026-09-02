@@ -9116,10 +9116,11 @@ app.post("/make-server-37f42386/budgets", requireAuth(), requirePermission('sett
   }
 });
 
-// General Preferences Endpoints
+// General Preferences Endpoints — org-scoped with preferences:general fallback
 app.get("/make-server-37f42386/settings/preferences", async (c) => {
   try {
-    const preferences = ((await kv.get("preferences:general")) || {}) as Record<string, unknown>;
+    const { loadPreferencesForRequest } = await import("./fuel_org_preferences.ts");
+    const preferences = await loadPreferencesForRequest(c);
     // Normalize legacy est-jam → America/Jamaica; currency locked to jmd for Fleet Jamaica
     const tz = String(preferences.timezone || "");
     return c.json({
@@ -9134,16 +9135,13 @@ app.get("/make-server-37f42386/settings/preferences", async (c) => {
 
 app.post("/make-server-37f42386/settings/preferences", requireAuth(), requirePermission('settings.edit'), async (c) => {
   try {
+    const { savePreferencesForRequest } = await import("./fuel_org_preferences.ts");
     const body = await c.req.json();
-    // Locked Fleet Jamaica defaults — ignore client attempts to set other codes
-    const currency = "jmd";
+    const preferences = await savePreferencesForRequest(
+      c,
+      body && typeof body === "object" ? body : {},
+    );
     const timezone = "America/Jamaica";
-    const preferences = {
-      ...(body && typeof body === "object" ? body : {}),
-      currency,
-      timezone,
-    };
-    await kv.set("preferences:general", preferences);
 
     // Keep platform settings in sync so getFleetTimezone / money defaults cannot drift
     try {

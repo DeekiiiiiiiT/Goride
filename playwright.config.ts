@@ -12,9 +12,11 @@ import { defineConfig, devices } from '@playwright/test';
  * Partner desktop only: pnpm test:e2e:rush:partner:desktop
  *
  * Env:
- *   RUSH_BASE_URL / PARTNER_BASE_URL
- *   RUSH_CUSTOMER_EMAIL / RUSH_CUSTOMER_PASSWORD
- *   RUSH_PARTNER_EMAIL / RUSH_PARTNER_PASSWORD
+ *   RUSH_BASE_URL / PARTNER_BASE_URL / FLEET_BASE_URL
+ *   RUSH_CUSTOMER_EMAIL / RUSH_CUSTOMER_PASSWORD (or E2E_CUSTOMER_*)
+ *   RUSH_PARTNER_EMAIL / RUSH_PARTNER_PASSWORD (or E2E_PARTNER_*)
+ *   E2E_FLEET_EMAIL / E2E_FLEET_PASSWORD — fleet wizard E2E
+ *   E2E_FUEL_WEEK / E2E_FUEL_ALLOW_FINALIZE=1 — optional deep-link / destructive finalize
  */
 export default defineConfig({
   testDir: './e2e',
@@ -33,7 +35,7 @@ export default defineConfig({
   projects: [
     {
       name: 'fleet',
-      testMatch: /fleet-rush-integration\.spec\.ts/,
+      testMatch: /fleet-rush-integration\.spec\.ts|fuel-recon-wizard\.spec\.ts/,
       use: {
         ...devices['Desktop Chrome'],
         baseURL: process.env.FLEET_BASE_URL?.trim() || 'http://localhost:5173',

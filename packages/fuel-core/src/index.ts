@@ -34,3 +34,15 @@ export {
   enterpriseFuelSyncIdempotencyKey,
   fuelSettlementEntryYmd,
 } from './settlementShared';
+
+export {
+  assembleWeekSnapshotsFromCalcInput,
+  companyCoveragePercentFromFuelRule,
+  driverShareRatioFromFuelRule,
+  resolveEntryDriverRatio,
+  weekSnapshotMoneyDelta,
+  type BuiltWeekSnapshot,
+  type WeekSnapDriverContext,
+  type WeekSnapEntry,
+  type WeekSnapFuelRule,
+} from './weekSnapshotEngine';

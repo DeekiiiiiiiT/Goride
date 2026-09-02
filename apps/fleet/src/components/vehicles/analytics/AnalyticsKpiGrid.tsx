@@ -4,23 +4,9 @@ import { Card, CardContent } from '../../ui/card';
 import { CarFront, Gauge, Route } from 'lucide-react';
 import type { AnalyticsKpis } from '../../../hooks/useVehicleAnalytics';
 import { formatJMD } from '../../../utils/formatJMD';
+import { Sparkline } from '../../ui/Sparkline';
 
-export { formatJMD };
-
-export function Sparkline({ values, stroke }: { values: number[]; stroke: string }) {
-  if (values.length < 2 || values.every((v) => v === 0)) return null;
-  const max = Math.max(...values);
-  const min = Math.min(...values);
-  const range = max - min || 1;
-  const points = values
-    .map((v, i) => `${(i / (values.length - 1)) * 100},${36 - ((v - min) / range) * 32}`)
-    .join(' ');
-  return (
-    <svg className="w-20 h-9 shrink-0" viewBox="0 0 100 40" preserveAspectRatio="none" aria-hidden="true">
-      <polyline points={points} fill="none" stroke={stroke} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
+export { formatJMD, Sparkline };
 
 export function DeltaBadge({ delta }: { delta: number | null }) {
   if (delta === null) return null;

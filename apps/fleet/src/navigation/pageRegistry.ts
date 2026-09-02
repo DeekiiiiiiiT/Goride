@@ -22,6 +22,23 @@ export const FLEET_PAGE_REGISTRY: Record<string, FleetPageDef> = {
   'delivery-analytics': { id: 'delivery-analytics', path: '/delivery-analytics', permission: 'nav.delivery_analytics' },
   'courier-settlements': { id: 'courier-settlements', path: '/courier-settlements', permission: 'nav.courier_settlements' },
   'supply-health': { id: 'supply-health', path: '/supply-health', permission: 'nav.supply_health' },
+  'fuel-reconciliation': {
+    id: 'fuel-reconciliation',
+    path: '/fuel-reconciliation',
+    permission: 'nav.fuel_overview',
+  },
+  'fuel-logs': { id: 'fuel-logs', path: '/fuel-logs', permission: 'nav.fuel_overview' },
+  'fuel-cards': { id: 'fuel-cards', path: '/fuel-cards', permission: 'nav.fuel_overview' },
+  'fuel-configuration': {
+    id: 'fuel-configuration',
+    path: '/fuel-configuration',
+    permission: 'nav.fuel_overview',
+  },
+  'fuel-reimbursements': {
+    id: 'fuel-reimbursements',
+    path: '/fuel-reimbursements',
+    permission: 'nav.fuel_overview',
+  },
 };
 
 const PATH_TO_PAGE = Object.values(FLEET_PAGE_REGISTRY)

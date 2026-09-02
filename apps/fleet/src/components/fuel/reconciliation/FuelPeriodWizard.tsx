@@ -1,16 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import {
-  ArrowLeft,
-  Flag,
-  RotateCcw,
-} from 'lucide-react';
-import { Button } from '../../ui/button';
-import { Card, CardContent } from '../../ui/card';
-import { Badge } from '../../ui/badge';
 import { DateRange } from 'react-day-picker';
 import { FuelPeriodStepper } from './FuelPeriodStepper';
 import { FuelWeekMoneyStrip } from './FuelWeekMoneyStrip';
-import { FuelDataQualityStep, type FuelQualityRow } from './FuelDataQualityStep';
+import { FuelDataQualityStep } from './FuelDataQualityStep';
 import { FuelExceptionBlockersPanel } from './FuelExceptionBlockersPanel';
 import { useFuelWeekReports } from '../../../hooks/useFuelWeekReports';
 import {
@@ -38,13 +30,41 @@ import { FuelFinalizeStep } from './FuelFinalizeStep';
 import { FuelDisputesStep } from './FuelDisputesStep';
 import { FuelPolicyCheckStep } from './FuelPolicyCheckStep';
 import { FuelLeakageStep } from './FuelLeakageStep';
+import { FuelWizardStepHero } from './FuelWizardStepHero';
+import {
+  FuelPeriodWizardBodyGate,
+  FuelPeriodWizardContinueFooter,
+  FuelPeriodWizardHeader,
+} from './FuelPeriodWizardShell';
+import { useFuelWizardKeyboard } from './useFuelWizardKeyboard';
+import {
+  applyLocalLeakageReview,
+  downloadWizardEvidencePack,
+  persistLeakageReviewToServer,
+  persistWizardStep,
+  recordWizardSecondApproval,
+  refreshSecondApproveActors,
+  settlementPreviewStepIndex,
+} from './useFuelWizardActions';
+import {
+  buildBreakdownRows,
+  buildLeakageRows,
+  buildMoneyStrip,
+  buildPolicyRows,
+  buildPriorMedian,
+  buildQualityRows,
+  buildSettlementRows,
+  type FuelWizardDriver,
+} from './buildFuelWizardRows';
 import {
   hasDistinctSecondApprove,
+  needsHumanSecondApprover,
   needsSecondApprover,
   FUEL_SECOND_APPROVER_THRESHOLD,
+  resolveFuelDualApprovalUiMode,
   resolveFuelSecondApproverThreshold,
+  type FuelDualApprovalUiMode,
 } from '../../../utils/fuelDualApproval';
-import { downloadFuelEvidencePack, downloadFuelEvidencePackFromServer } from '../../../utils/fuelEvidencePack';
 import { downloadCSV } from '../../../utils/export';
 import { api } from '../../../services/api';
 import { toast } from 'sonner';
@@ -63,77 +83,12 @@ import type {
   MileageAdjustment,
   WeeklyFuelReport,
 } from '../../../types/fuel';
-import { UNASSIGNED_FUEL_DRIVER_ID } from '../../../types/fuel';
 import type { Trip } from '../../../types/data';
 import type { Vehicle } from '../../../types/vehicle';
 import { FUEL_STEP_ICONS } from '../../../utils/fuelStepIcons';
-import {
-  loadFuelLeakageReview,
-  saveFuelLeakageReview,
-} from '../../../utils/fuelLeakageReviewStore';
-import { pickScenarioForDriverMembership, resolveDriverVersionForWeek } from '../../../utils/fuelPolicyVersion';
+import { loadFuelLeakageReview } from '../../../utils/fuelLeakageReviewStore';
 
-/** Fleet driver row — typed for wizard display (M16). */
-export type FuelWizardDriver = {
-  id: string;
-  driverId?: string;
-  name?: string;
-  firstName?: string;
-  lastName?: string;
-  fuelScenarioId?: string;
-};
-
-function resolveDriverDisplayName(
-  report: WeeklyFuelReport | undefined,
-  vehicle: Vehicle | undefined,
-  drivers: FuelWizardDriver[],
-): string {
-  if (report?.driverId === UNASSIGNED_FUEL_DRIVER_ID) return 'Unassigned fills';
-  const driverId = report?.driverId;
-  const reportDriver = driverId
-    ? drivers.find((d) => d.id === driverId || d.driverId === driverId)
-    : null;
-  return (
-    reportDriver?.name ||
-    [reportDriver?.firstName, reportDriver?.lastName].filter(Boolean).join(' ') ||
-    vehicle?.currentDriverName ||
-    'Unknown driver'
-  );
-}
-
-/** Stitch-style instruction hero — one job per step. */
-function StepHero({
-  title,
-  body,
-  actionLabel,
-  onAction,
-  actionDisabled,
-}: {
-  title: string;
-  body: string;
-  actionLabel?: string;
-  onAction?: () => void;
-  actionDisabled?: boolean;
-}) {
-  return (
-    <div className="flex flex-col gap-4 rounded-lg border border-slate-200 border-l-4 border-l-[#3525cd] bg-white p-4 sm:flex-row sm:items-center sm:justify-between">
-      <div className="min-w-0 space-y-1">
-        <h3 className="text-base font-semibold text-slate-900">{title}</h3>
-        <p className="text-sm text-slate-600">{body}</p>
-      </div>
-      {actionLabel && onAction && (
-        <Button
-          type="button"
-          className="min-h-11 shrink-0 bg-[#3525cd] text-white hover:bg-[#2a1ea4] sm:min-h-11"
-          disabled={actionDisabled}
-          onClick={onAction}
-        >
-          {actionLabel}
-        </Button>
-      )}
-    </div>
-  );
-}
+export type { FuelWizardDriver };
 
 interface FuelPeriodWizardProps {
   period: FuelReconciliationPeriod;
@@ -219,6 +174,8 @@ function FuelPeriodWizardInner({
   const [secondApproverThreshold, setSecondApproverThreshold] = useState(
     FUEL_SECOND_APPROVER_THRESHOLD,
   );
+  const [dualApprovalUiMode, setDualApprovalUiMode] =
+    useState<FuelDualApprovalUiMode>('human');
   const [exceptionBusyId, setExceptionBusyId] = useState<string | null>(null);
   const [stepNoteDraft, setStepNoteDraft] = useState('');
   const [stepNotes, setStepNotes] = useState<Array<{ step: string; note: string; at: string }>>([]);
@@ -302,27 +259,18 @@ function FuelPeriodWizardInner({
   ]);
 
   // Enrich settlement columns from live reports (cash from earnings vs driver share)
-  const settlementRows = useMemo(() => {
-    return liveReports
-      .filter((r) => r.totalGasCardCost > FUEL_SPEND_EPS)
-      .map((r) => {
-        const v = vehicles.find((x) => x.id === r.vehicleId);
-        const cashFromEarnings = sumPaidByDriverForReport(fuelEntries, r, vehicles, {
-          vehicles,
-          fuelCards,
-          trips: weekTrips,
-        });
-        return {
-          id: r.driverId || r.vehicleId,
-          plate: v?.licensePlate || r.vehicleId,
-          cashFromEarnings,
-          driverShare: r.driverShare,
-          netPay: cashFromEarnings - r.driverShare,
-          pending: r.pendingCount || 0,
-          status: periodLocked ? 'Locked' : (r.pendingCount || 0) > 0 ? 'Pending' : 'Draft',
-        };
-      });
-  }, [liveReports, vehicles, fuelEntries, periodLocked, weekTrips, fuelCards]);
+  const settlementRows = useMemo(
+    () =>
+      buildSettlementRows({
+        liveReports,
+        vehicles,
+        fuelEntries,
+        fuelCards,
+        weekTrips,
+        periodLocked,
+      }),
+    [liveReports, vehicles, fuelEntries, periodLocked, weekTrips, fuelCards],
+  );
 
   const counts = useMemo(
     () =>
@@ -372,27 +320,14 @@ function FuelPeriodWizardInner({
   }, [period.id, sessionKey, initialStepId]);
 
   const persistStep = (step: FuelStepId, note?: string) => {
-    void (async () => {
-      try {
-        let pid = serverPeriodId;
-        if (!pid) {
-          const ensured = await api.ensureFuelReconciliationPeriod({
-            weekStart: period.startDate,
-            weekEnd: period.endDate,
-          });
-          pid = ensured?.id || null;
-          if (pid) setServerPeriodId(pid);
-        }
-        if (!pid) return;
-        await api.updateFuelPeriodStep({
-          periodId: pid,
-          step,
-          note: note || undefined,
-        });
-      } catch {
-        /* offline — step stays local until next sync */
-      }
-    })();
+    void persistWizardStep({
+      serverPeriodId,
+      weekStart: period.startDate,
+      weekEnd: period.endDate,
+      setServerPeriodId,
+      step,
+      note,
+    });
   };
 
   // H8/H9 + NEW-6: server period is SoT for leakage review, step resume, second approval
@@ -404,6 +339,9 @@ function FuelPeriodWizardInner({
         if (!cancelled && prefs) {
           setSecondApproverThreshold(
             resolveFuelSecondApproverThreshold((prefs as any)?.fuelSecondApproverThreshold),
+          );
+          setDualApprovalUiMode(
+            resolveFuelDualApprovalUiMode((prefs as any)?.fuelDualApprovalUiMode),
           );
         }
         const rows = await api.listFuelReconciliationPeriods({
@@ -439,20 +377,16 @@ function FuelPeriodWizardInner({
           setProgressIndex(Math.max(0, FUEL_STEP_ORDER.indexOf(step)));
         }
 
-        const pack = await api.getFuelPeriodEvidencePack(hit.id);
+        const actors = await refreshSecondApproveActors(hit.id);
         if (cancelled) return;
-        const actors = ((pack?.audit || []) as Array<{ action?: string; actor_id?: string }>)
-          .filter((a) => a.action === 'second_approve')
-          .map((a) => String(a.actor_id || ''))
-          .filter(Boolean);
         setSecondApproveActors(actors);
-        if (pack?.period?.leakageReviewedAt) {
+        if (hit.leakageReviewedAt) {
           setLeakageReviewed(true);
-          setLeakageReviewMeta((prev) => ({
-            at: pack.period.leakageReviewedAt || prev.at,
-            by: pack.period.leakageReviewedBy || prev.by,
-            note: pack.period.leakageReviewedNote || prev.note,
-          }));
+          setLeakageReviewMeta({
+            at: hit.leakageReviewedAt,
+            by: hit.leakageReviewedBy,
+            note: hit.leakageReviewedNote,
+          });
         }
       } catch {
         /* offline — local leakage cache still applies */
@@ -463,14 +397,6 @@ function FuelPeriodWizardInner({
     };
   }, [period.startDate, period.endDate, sessionKey, periodLocked, initialStepId]);
 
-  const refreshSecondApprovals = async (periodId: string) => {
-    const pack = await api.getFuelPeriodEvidencePack(periodId);
-    const actors = ((pack?.audit || []) as Array<{ action?: string; actor_id?: string }>)
-      .filter((a) => a.action === 'second_approve')
-      .map((a) => String(a.actor_id || ''))
-      .filter(Boolean);
-    setSecondApproveActors(actors);
-  };
   useEffect(() => {
     const current = gatedStates.find((s) => s.id === activeStepId);
     if (current?.locked) {
@@ -492,104 +418,45 @@ function FuelPeriodWizardInner({
     });
   }, [gatedStates, progressIndex, periodLocked]);
 
-  const strip = useMemo(() => {
-    // C3: money strip aggregates from driver-week reports (once each), never per-vehicle snaps
-    const paidByDriverCtx = { vehicles, fuelCards, trips: weekTrips };
-    let gasCard = 0;
-    let cashFromEarnings = 0;
-    let totalSpend = 0;
-    let company = 0;
-    let driver = 0;
-    let leakage = 0;
-    for (const r of liveReports) {
-      gasCard += sumGasCardSpendForReport(fuelEntries, r, vehicles, paidByDriverCtx);
-      cashFromEarnings += sumPaidByDriverForReport(fuelEntries, r, vehicles, paidByDriverCtx);
-      totalSpend += Number(r.totalGasCardCost) || 0;
-      company += Number(r.companyShare) || 0;
-      driver += Number(r.driverShare) || 0;
-      leakage += Number(r.miscellaneousCost) || 0;
-    }
-    return { totalSpend, gasCard, cashFromEarnings, company, driver, leakage };
-  }, [liveReports, fuelEntries, vehicles, fuelCards, weekTrips]);
+  const strip = useMemo(
+    () =>
+      buildMoneyStrip({
+        liveReports,
+        fuelEntries,
+        vehicles,
+        fuelCards,
+        weekTrips,
+        sumGasCard: sumGasCardSpendForReport,
+        sumPaidByDriver: sumPaidByDriverForReport,
+      }),
+    [liveReports, fuelEntries, vehicles, fuelCards, weekTrips],
+  );
 
-  const toQualityRow = (v: (typeof vehicleSnaps)[number]): FuelQualityRow => {
-    const vehicle = vehicles.find((x) => x.id === v.vehicleId);
-    return {
-      id: v.vehicleId,
-      plate: v.plate,
-      driverName: resolveDriverDisplayName(v.report, vehicle, drivers),
-      healthStatus: (v.healthStatus as FuelQualityRow['healthStatus']) || undefined,
-      pendingCount: v.pendingCount,
-      totalSpend: v.totalSpend,
-      companyShare: v.companyShare,
-      driverShare: v.driverShare,
-      cashFromEarnings: v.driverSpend,
-      netPay: v.netPay,
-      misc: v.misc,
-      subtitle: [
-        v.healthStatus && v.healthStatus !== 'Emerald' ? v.healthStatus : null,
-        v.pendingCount > 0 ? `${v.pendingCount} pending log(s)` : null,
-        v.odometerIncomplete ? 'Incomplete odometer data — unexplained fuel may be inflated' : null,
-      ]
-        .filter(Boolean)
-        .join(' · '),
-    };
-  };
+  const qualityRows = useMemo(
+    () => buildQualityRows(vehicleSnaps as any, vehicles, drivers),
+    [vehicleSnaps, vehicles, drivers],
+  );
 
-  const qualityRows: FuelQualityRow[] = vehicleSnaps
-    .filter(
-      (v) =>
-        v.pendingCount > 0 ||
-        (v.healthStatus && v.healthStatus !== 'Emerald') ||
-        v.odometerIncomplete,
-    )
-    .map(toQualityRow);
-
-  const breakdownRows: FuelQualityRow[] = vehicleSnaps
-    .filter((v) => v.totalSpend > FUEL_SPEND_EPS)
-    .map(toQualityRow);
+  const breakdownRows = useMemo(
+    () => buildBreakdownRows(vehicleSnaps as any, vehicles, drivers),
+    [vehicleSnaps, vehicles, drivers],
+  );
 
   // openDisputes comes from buildFuelVehicleSnapshots (same matcher as landing/bulk)
 
-  const leakageRows = vehicleSnaps
-    .filter((v) => Math.abs(v.misc) > FUEL_SPEND_EPS)
-    .map((v) => ({
-      id: v.vehicleId,
-      title: v.plate,
-      subtitle:
-        v.misc < 0
-          ? 'Over-explained — categorized km exceed fuel bought'
-          : v.odometerIncomplete
-            ? 'Incomplete odometer data — unexplained fuel may be inflated'
-            : v.healthStatus && v.healthStatus !== 'Emerald'
-              ? String(v.healthStatus)
-              : 'Unexplained fuel',
-      right: formatFuelMoney(v.misc),
-      badge: v.misc < 0 ? 'Over-explained' : 'Unexplained',
-      warn: true,
-    }));
+  const leakageRows = useMemo(() => buildLeakageRows(vehicleSnaps as any), [vehicleSnaps]);
 
-  const policyRows = useMemo(() => {
-    return vehicles
-      .filter((v) => vehicleSnaps.some((s) => s.vehicleId === v.id && s.totalSpend > FUEL_SPEND_EPS))
-      .map((v) => {
-        const live = liveReports.find(
-          (r) => r.vehicleId === v.id || (r.vehicleIds || []).includes(v.id),
-        );
-        const driverId = live?.driverId;
-        const hit = resolveDriverVersionForWeek(scenarios, driverId, period.startDate);
-        const scenario = hit
-          ? { ...hit.scenario, rules: hit.version.rules }
-          : pickScenarioForDriverMembership(scenarios, driverId, period.startDate);
-        const fuelRule = scenario?.rules?.find((r) => r.category === 'Fuel');
-        return {
-          vehicle: v,
-          scenario,
-          fuelRule,
-          effectiveFrom: hit?.version.effectiveFrom,
-        };
-      });
-  }, [vehicles, scenarios, vehicleSnaps, period.startDate, liveReports]);
+  const policyRows = useMemo(
+    () =>
+      buildPolicyRows({
+        vehicles,
+        vehicleSnaps: vehicleSnaps as any,
+        liveReports,
+        scenarios,
+        weekStart: period.startDate,
+      }),
+    [vehicles, scenarios, vehicleSnaps, period.startDate, liveReports],
+  );
 
   const canContinue = canAdvanceFuelStep(activeStepId, counts);
   const stepIndex = FUEL_STEP_ORDER.indexOf(activeStepId);
@@ -622,16 +489,14 @@ function FuelPeriodWizardInner({
   const handleMarkLeakageReviewed = () => {
     const note =
       stepNoteDraft.trim() || 'Accepted unexplained / over-explained fuel for this week';
-    saveFuelLeakageReview(period.startDate, {
+    const meta = applyLocalLeakageReview({
+      weekStart: period.startDate,
       note,
       actorLabel: user?.email || user?.id || undefined,
+      actorId: user?.id || user?.email || null,
     });
     setLeakageReviewed(true);
-    setLeakageReviewMeta({
-      at: new Date().toISOString(),
-      by: user?.id || user?.email || null,
-      note,
-    });
+    setLeakageReviewMeta(meta);
     if (stepNoteDraft.trim()) {
       setStepNotes((prev) => [
         ...prev,
@@ -639,30 +504,14 @@ function FuelPeriodWizardInner({
       ]);
       setStepNoteDraft('');
     }
-    void (async () => {
-      try {
-        const ensured =
-          serverPeriodId
-            ? { id: serverPeriodId }
-            : await api.ensureFuelReconciliationPeriod({
-                weekStart: period.startDate,
-                weekEnd: period.endDate,
-              });
-        if (ensured?.id) {
-          setServerPeriodId(ensured.id);
-          await api.reviewFuelPeriodLeakage({ periodId: ensured.id, note });
-          await api.updateFuelPeriodStep({
-            periodId: ensured.id,
-            step: 'settlement-preview',
-            note,
-          });
-          toast.success('Gap acceptance saved for the org.');
-        }
-      } catch {
-        toast.message('Saved on this device — server sync failed. Retry when online.');
-      }
-    })();
-    const settlementIdx = FUEL_STEP_ORDER.indexOf('settlement-preview');
+    void persistLeakageReviewToServer({
+      serverPeriodId,
+      weekStart: period.startDate,
+      weekEnd: period.endDate,
+      setServerPeriodId,
+      note,
+    });
+    const settlementIdx = settlementPreviewStepIndex();
     setProgressIndex(Math.max(progressIndex, settlementIdx));
     setActiveStepId('settlement-preview');
   };
@@ -670,21 +519,14 @@ function FuelPeriodWizardInner({
   const handleRecordSecondApproval = async () => {
     setSecondApproveBusy(true);
     try {
-      const ensured =
-        serverPeriodId
-          ? { id: serverPeriodId }
-          : await api.ensureFuelReconciliationPeriod({
-              weekStart: period.startDate,
-              weekEnd: period.endDate,
-            });
-      if (!ensured?.id) throw new Error('Period missing');
-      setServerPeriodId(ensured.id);
-      await api.secondApproveFuelPeriod({
-        periodId: ensured.id,
+      await recordWizardSecondApproval({
+        serverPeriodId,
+        weekStart: period.startDate,
+        weekEnd: period.endDate,
+        setServerPeriodId,
         note: stepNoteDraft.trim() || undefined,
+        setActors: setSecondApproveActors,
       });
-      await refreshSecondApprovals(ensured.id);
-      toast.success('Second approval recorded for your identity.');
     } catch (e: any) {
       toast.error(e?.message || 'Could not record second approval');
     } finally {
@@ -693,35 +535,12 @@ function FuelPeriodWizardInner({
   };
 
   const handleDownloadEvidencePack = async () => {
-    try {
-      let pid = serverPeriodId;
-      if (!pid) {
-        const ensured = await api.ensureFuelReconciliationPeriod({
-          weekStart: period.startDate,
-          weekEnd: period.endDate,
-        });
-        pid = ensured?.id || null;
-        if (pid) setServerPeriodId(pid);
-      }
-      if (pid) {
-        const pack = await api.getFuelPeriodEvidencePack(pid);
-        downloadFuelEvidencePackFromServer({
-          weekLabel: period.label,
-          weekStart: period.startDate,
-          weekEnd: period.endDate,
-          pack,
-          fallbackStrip: strip,
-          secondApproverConfirmed,
-        });
-        return;
-      }
-    } catch {
-      /* fall through to client pack */
-    }
-    downloadFuelEvidencePack({
-      weekLabel: period.label,
+    await downloadWizardEvidencePack({
+      serverPeriodId,
       weekStart: period.startDate,
       weekEnd: period.endDate,
+      weekLabel: period.label,
+      setServerPeriodId,
       strip,
       settlementRows,
       openDisputeCount: openDisputes.length,
@@ -792,7 +611,10 @@ function FuelPeriodWizardInner({
     if (gate.hasBlockingWarnings && !financeWarningAcknowledged) {
       return;
     }
-    if (needsSecondApprover(strip.totalSpend, secondApproverThreshold) && !secondApproverConfirmed) {
+    if (
+      needsHumanSecondApprover(strip.totalSpend, secondApproverThreshold, dualApprovalUiMode) &&
+      !secondApproverConfirmed
+    ) {
       return;
     }
     if (stepNoteDraft.trim()) {
@@ -920,7 +742,11 @@ function FuelPeriodWizardInner({
                   liveReports.length === 0 ||
                   !!gateResult.hasExceptionBlockers ||
                   (!!gateResult.hasBlockingWarnings && !financeWarningAcknowledged) ||
-                  (needsSecondApprover(strip.totalSpend, secondApproverThreshold) &&
+                  (needsHumanSecondApprover(
+                    strip.totalSpend,
+                    secondApproverThreshold,
+                    dualApprovalUiMode,
+                  ) &&
                     !secondApproverConfirmed),
               };
       default:
@@ -928,26 +754,10 @@ function FuelPeriodWizardInner({
     }
   })();
 
-  const priorMedian = useMemo(() => {
-    const byWeek = new Map<string, { spend: number; unexplained: number }>();
-    for (const f of finalizedReports) {
-      const wk = String(f.weekStart || '').split('T')[0];
-      if (!wk || wk >= period.startDate) continue;
-      const cur = byWeek.get(wk) || { spend: 0, unexplained: 0 };
-      cur.spend += Number(f.totalGasCardCost) || 0;
-      cur.unexplained += Number(f.miscellaneousCost) || 0;
-      byWeek.set(wk, cur);
-    }
-    const weeks = [...byWeek.entries()].sort((a, b) => b[0].localeCompare(a[0])).slice(0, 4);
-    if (!weeks.length) return undefined;
-    const spends = weeks.map(([, v]) => v.spend).sort((a, b) => a - b);
-    const unex = weeks.map(([, v]) => v.unexplained).sort((a, b) => a - b);
-    const mid = Math.floor(spends.length / 2);
-    return {
-      totalSpend: spends.length % 2 ? spends[mid] : (spends[mid - 1] + spends[mid]) / 2,
-      unexplained: unex.length % 2 ? unex[mid] : (unex[mid - 1] + unex[mid]) / 2,
-    };
-  }, [finalizedReports, period.startDate]);
+  const priorMedian = useMemo(
+    () => buildPriorMedian(finalizedReports, period.startDate),
+    [finalizedReports, period.startDate],
+  );
 
   const exportSettlementCsv = () => {
     void downloadCSV(
@@ -963,138 +773,53 @@ function FuelPeriodWizardInner({
   };
 
   // Keyboard queue: j/k navigate, a accept unexplained, Enter continue
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      const tag = (e.target as HTMLElement)?.tagName;
-      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || (e.target as HTMLElement)?.isContentEditable) {
-        return;
-      }
-      const queueLen =
-        activeStepId === 'data-quality'
-          ? qualityRows.length
-          : activeStepId === 'adjustments-disputes'
-            ? openDisputes.length
-            : activeStepId === 'leakage-gap'
-              ? leakageRows.length
-              : settlementRows.length;
-      if (e.key === 'j' && queueLen > 0) {
-        e.preventDefault();
-        setQueueIndex((i) => (i + 1) % queueLen);
-      } else if (e.key === 'k' && queueLen > 0) {
-        e.preventDefault();
-        setQueueIndex((i) => (i - 1 + queueLen) % queueLen);
-      } else if (e.key === 'a' && activeStepId === 'leakage-gap' && !periodLocked && !leakageReviewed) {
-        e.preventDefault();
-        handleMarkLeakageReviewed();
-      } else if (e.key === 'e' && activeStepId === 'data-quality') {
-        e.preventDefault();
-        if (exceptionBlockers.length > 0 && onEditFuelEntry) {
-          const b = exceptionBlockers[queueIndex % exceptionBlockers.length];
-          if (b?.id) onEditFuelEntry(b.id);
-        } else if (onOpenTransactionLogs) {
-          const row = qualityRows[queueIndex];
-          if (row?.id) onOpenTransactionLogs({ vehicleId: row.id });
-        }
-      } else if (e.key === 'Enter' && canContinue && !isLast) {
-        e.preventDefault();
-        handleContinue();
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- queue handlers use latest closures via active step
-  }, [
+  useFuelWizardKeyboard({
     activeStepId,
-    qualityRows.length,
-    openDisputes.length,
-    leakageRows.length,
-    settlementRows.length,
+    qualityRowCount: qualityRows.length,
+    openDisputeCount: openDisputes.length,
+    leakageRowCount: leakageRows.length,
+    settlementRowCount: settlementRows.length,
+    exceptionBlockerCount: exceptionBlockers.length,
     periodLocked,
     leakageReviewed,
     canContinue,
     isLast,
-  ]);
+    setQueueIndex,
+    onMarkLeakageReviewed: handleMarkLeakageReviewed,
+    onContinue: handleContinue,
+    onEditExceptionAt: (qi) => {
+      if (exceptionBlockers.length > 0 && onEditFuelEntry) {
+        const b = exceptionBlockers[qi % exceptionBlockers.length];
+        if (b?.id) onEditFuelEntry(b.id);
+      }
+    },
+    onOpenQualityRowLogs: (qi) => {
+      if (onOpenTransactionLogs) {
+        const row = qualityRows[qi];
+        if (row?.id) onOpenTransactionLogs({ vehicleId: row.id });
+      }
+    },
+  });
 
   const continueLabel =
     activeStepId === 'leakage-gap' ? 'Continue to Settlement' : 'Continue';
 
   return (
     <div className="space-y-4 pb-24">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <button
-            type="button"
-            onClick={onBack}
-            className="mb-2 flex min-h-11 items-center text-sm font-medium text-slate-500 transition-colors hover:text-[#3525cd]"
-          >
-            <ArrowLeft className="mr-1 h-4 w-4" />
-            Back to Periods
-          </button>
-          <div className="flex flex-wrap items-center gap-3">
-            <h2 className="text-lg font-bold text-slate-900">{period.label}</h2>
-            <Badge
-              variant={periodLocked ? 'secondary' : 'outline'}
-              className="uppercase tracking-wider"
-            >
-              {periodLocked ? 'Locked' : 'Draft'}
-            </Badge>
-          </div>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {onResetPeriod && (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="min-h-11 border-rose-200 text-rose-700 hover:bg-rose-50 sm:min-h-11"
-              onClick={onResetPeriod}
-            >
-              <RotateCcw className="mr-1 h-4 w-4" />
-              Reopen week
-            </Button>
-          )}
-        </div>
-      </div>
+      <FuelPeriodWizardHeader
+        period={period}
+        periodLocked={periodLocked}
+        onBack={onBack}
+        onResetPeriod={onResetPeriod}
+      />
 
-      {/* M11: error/empty replace the wizard body — never show $0.00 beside a failure */}
-      {weekReports.loading ? (
-        <div
-          className="rounded-lg border border-slate-200 bg-white px-4 py-16 text-center"
-          role="status"
-          aria-live="polite"
-        >
-          <div className="mx-auto mb-3 h-10 w-10 animate-spin rounded-full border-4 border-slate-200 border-t-[#3525cd]" />
-          <p className="text-sm text-slate-500">Loading week data…</p>
-        </div>
-      ) : weekReports.error ? (
-        <div
-          className="flex flex-col gap-3 rounded-lg border border-rose-200 bg-rose-50 px-4 py-10 text-center sm:flex-row sm:items-center sm:justify-between sm:text-left"
-          role="alert"
-        >
-          <p className="text-sm text-rose-800">
-            Couldn’t load this week’s reconciliation. Figures are hidden until load succeeds — check your connection and try again.
-          </p>
-          <Button
-            type="button"
-            variant="outline"
-            className="min-h-11 border-rose-200 bg-white text-rose-800 hover:bg-rose-50"
-            onClick={handleRetryWeek}
-          >
-            Retry
-          </Button>
-        </div>
-      ) : weekIsEmpty ? (
-        <div className="rounded-lg border border-dashed border-slate-200 bg-white px-4 py-16 text-center text-sm text-slate-500">
-          No fuel spend for this week yet. Refresh after new fills post, or pick another period.
-        </div>
-      ) : (
-        <>
-      {weekReports.updating && (
-        <p className="text-xs text-slate-500" role="status" aria-live="polite">
-          Updating week figures…
-        </p>
-      )}
-
+      <FuelPeriodWizardBodyGate
+        loading={weekReports.loading}
+        error={Boolean(weekReports.error)}
+        empty={weekIsEmpty}
+        updating={weekReports.updating}
+        onRetry={handleRetryWeek}
+      >
       <FuelWeekMoneyStrip
         gasCard={strip.gasCard}
         cashFromEarnings={strip.cashFromEarnings}
@@ -1130,7 +855,7 @@ function FuelPeriodWizardInner({
           placeholder="Judgement call for this step — included in evidence pack"
         />
       </label>
-      <StepHero
+      <FuelWizardStepHero
         title={stepHero.title}
         body={stepHero.body}
         actionLabel={stepHero.actionLabel}
@@ -1233,6 +958,7 @@ function FuelPeriodWizardInner({
             secondApproverThreshold={secondApproverThreshold}
             secondApproverConfirmed={secondApproverConfirmed}
             secondApproveBusy={secondApproveBusy}
+            dualApprovalUiMode={dualApprovalUiMode}
             onRecordSecondApproval={() => void handleRecordSecondApproval()}
             onExportCsv={exportSettlementCsv}
             onDownloadEvidencePack={() => void handleDownloadEvidencePack()}
@@ -1242,31 +968,15 @@ function FuelPeriodWizardInner({
       </div>
 
         {/* Sticky footer — always visible Continue (Finalize uses hero CTA) */}
-      {!isLast && (
-        <div className="fixed bottom-0 left-0 right-0 z-40 border-t border-slate-200 bg-white/95 px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur sm:static sm:rounded-lg sm:border sm:bg-white sm:pb-3 sm:backdrop-blur-none">
-          <div className="mx-auto flex max-w-6xl flex-col items-end gap-1">
-            {!canContinue && (
-              <p className="text-right text-xs text-amber-700">
-                {activeStepId === 'adjustments-disputes'
-                  ? 'Resolve open disputes before continuing.'
-                  : activeStepId === 'leakage-gap' && !leakageReviewed
-                    ? 'Use “Mark reviewed & continue” above, or finish gap review.'
-                    : 'Finish remaining items on this step to continue.'}
-              </p>
-            )}
-            <Button
-              type="button"
-              disabled={!canContinue}
-              className="min-h-11 bg-[#3525cd] text-white hover:bg-[#2a1ea4] disabled:bg-slate-300 sm:min-h-11"
-              onClick={handleContinue}
-            >
-              {continueLabel}
-            </Button>
-          </div>
-        </div>
-      )}
-        </>
-      )}
+      <FuelPeriodWizardContinueFooter
+        isLast={isLast}
+        canContinue={canContinue}
+        activeStepId={activeStepId}
+        leakageReviewed={leakageReviewed}
+        continueLabel={continueLabel}
+        onContinue={handleContinue}
+      />
+      </FuelPeriodWizardBodyGate>
     </div>
   );
 }

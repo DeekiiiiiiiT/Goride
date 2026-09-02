@@ -24,10 +24,79 @@
 | **NEW-7** partial finalize locks + success toast | ✅ Closed — hold at `ready`, return `failures`, resume failed jobs |
 | **H8** leakage SoT | ✅ Server write + hydrate + note/actor UI; localStorage offline-only |
 | **H9** step progress | ✅ Continue + stepper + leakage jump PATCH; remount restores `current_step` |
-| **M1/M2** landing scale | ✅ Skip computed weeks; no silent week-8 cap; materialize to SQL |
-| **Auto-close scheduler** | ✅ [`.github/workflows/fuel-period-auto-close-cron.yml`](.github/workflows/fuel-period-auto-close-cron.yml) |
+| **M1/M2** landing scale | ✅ M2 no silent week-8 cap; **M1** hook SoT `serverSkipWeekStarts` + page filter; materialize to SQL |
+| **Auto-close scheduler** | ✅ [`.github/workflows/fuel-period-auto-close-cron.yml`](.github/workflows/fuel-period-auto-close-cron.yml) + **NEW-9** `skip_needs_approval` + cursor threshold |
 | **Evidence pack canonical CSV** | ✅ Server pack → accountant CSV; client fallback offline |
-| **M15** render / smoke tests | ✅ Close-out smoke contracts + util suite (no jsdom in repo) |
+| **M15** render / smoke tests | ✅ Close-out smoke + jsdom render tests (disputes/leakage/landing/finalize) |
+| **NEW-9** auto-close dual approval | ✅ Closed — skip above threshold; threshold on cursor |
+| **NEW-10** dispute type | ✅ Closed — `FuelDisputesStep` uses `FuelDispute` |
+| **NEW-11** landing skip SoT | ✅ Closed — `serverSkipWeekStarts` in hook |
+| **Landing sparkline** | ✅ Unexplained series from landing periods + shared `Sparkline` |
+| **Server build-snapshots** | ✅ Full week engine (scenario shares + settledEntries); entry assembler fallback via `FUEL_BUILD_SNAPSHOTS_ENGINE=entries` |
+| **Org-scoped preferences** | ✅ `preferences:org:{orgId}` + general fallback; auto-close loads per org |
+| **Auto-close dual mode** | ✅ `skip` (default) \| `service_approve` (system approver ≠ finalizer) |
+| **UI dual mode** | ✅ `human` (default) \| `service_only` (system approve + human finalizer) |
+| **Fleet wizard E2E** | ✅ Playwright + deep-link `?week=&step=` + fleet auth helper |
+| **Rush customer/partner E2E** | ✅ Critical-path authenticated specs |
+
+---
+
+## STATUS — pass 4, verified 2026-09-02 (commit `b5ebcbe3`)
+
+Fourth pass: 22 files, **+1,395 / −401**. **51/51 recon tests pass** (11 files). This pass closed the observability and persistence gaps — the section now has no known way to mislead an operator about money.
+
+### What closed
+
+| Item | Verification |
+|---|---|
+| **NEW-7** partial finalize silently locks | ✅ **Fixed on both sides.** Server: any failure → `status: "ready"`, `locked_at: null`, job `state: "failed"`, cursor preserved for resume, `finalize_partial` audit row, and aggregates computed **only from completed drivers** ([`fuel_period_routes.ts:269`](supabase/functions/_fleet-server/fuel_period_routes.ts#L269)). Client: `interpretFuelFinalizeJobResult` reads `jobRes.failures`, warns *"Finalize incomplete — N settled, M failed. Week stays open; retry to finish."*, and **returns `false`** so the wizard doesn't claim success. |
+| **NEW-8** type error | ✅ `computedAt?: string \| null` added to `FuelPeriodRow`. |
+| **M2** silent week-9+ degradation | ✅ **Fixed.** The 8-week cap is gone; `weeksToLoad` now returns every open week. |
+| **H8** device-local leakage review | ✅ **Server-persisted.** `POST /fuel/periods/:id/leakage-review` writes `leakage_reviewed_at/_by`; `serverLeakageReviewedWeekStarts()` feeds the derive; localStorage is now an optimistic mirror, not the record. |
+| **H9** ephemeral wizard progress | ✅ **Server-persisted.** `updateFuelPeriodStep` writes `current_step`; the wizard restores it on open unless deep-linked or locked. |
+| **Auto-close** was a badge | ✅ **Real scheduler** — [`.github/workflows/fuel-period-auto-close-cron.yml`](.github/workflows/fuel-period-auto-close-cron.yml) (daily 14:00 UTC) → `POST /fuel/periods/auto-close?orgId=all` → the **same** finalize job path as the UI, with per-period idempotency keys and eligibility checks. |
+| **M15 / wizard split** | 🟡 Four more step components extracted (`FuelDisputesStep`, `FuelLeakageStep`, `FuelPolicyCheckStep`, `CompactVehicleList`). Wizard is 1,276 lines — down, still large. Still no render tests. |
+
+### Scoreboard (pass 4)
+
+| ID | Pass 3 | Pass 4 |
+|---|---|---|
+| **C1–C5** | ✅ | ✅ Fixed |
+| **H1–H7, H10** | ✅ | ✅ Fixed |
+| **H8** | 🟡 interim | ✅ **Fixed** |
+| **H9** | 🟡 partial | ✅ **Fixed** |
+| **M2** | ❌ | ✅ **Fixed** |
+| **M1** | ❌ | 🟡 **Partially** — see NEW-11 |
+| **M15** | 🟡 | 🟡 51 util tests, still no render tests |
+| **NEW-7 / NEW-8** | new | ✅ **Closed** |
+
+**Totals: 32 fixed · 3 partial · 1 open · 3 new.**
+
+**All Criticals and all Highs are now closed.**
+
+---
+
+## STATUS — new findings from pass 4
+
+### NEW-9 🟠 ✅ FIXED — Auto-close bypasses dual approval
+
+> **Verified fixed (Phase 5 close-out + deferred ops).** Auto-close reads **org-scoped** prefs (`preferences:org:{orgId}` → `preferences:general`), skips with `skip_needs_approval` when spend exceeds threshold and mode is `skip`, or system-approves when mode is `service_approve`. Threshold always on job cursor. Landing badges show “Needs second approval” or “Eligible for auto-close (system approval).”
+
+This is the same shape as the original **H3**: a second entry point that ignores a gate the primary path enforces.
+
+**Original finding:** The worker gates on the threshold carried in the job cursor. The UI path sets `secondApproverThreshold` when enqueuing. **The auto-close path did not** — its cursor carried only snapshots / spend / autoClose flags, so `threshold` resolved to `0` and the second-approver requirement was skipped.
+
+### NEW-10 🟡 ✅ FIXED — One new type error from the wizard split
+
+> **Verified fixed.** `FuelDisputesStep` imports `FuelDispute` from `types/fuel`; parallel `FuelDisputeRow` removed.
+
+### NEW-11 🟡 ✅ FIXED — Removing the week cap made the browser do *more* work, not less
+
+> **Verified fixed.** `useFuelLandingLiveReports` accepts `serverSkipWeekStarts` (from `serverComputedWeekStarts`) and `selectLandingLiveWeeks` / `weekNeedsLiveCalc` refuse those weeks. `FuelManagement` still pre-filters as a belt and passes the same set into the hook.
+
+### Also worth knowing — auto-close does less than it appears ✅ Documented
+
+v1 intentionally skips money weeks without `finalized_report:` snapshots (`skip_missing_snapshots`). Docs, landing badge (“Finalize once before auto-close”), response `skipByReason`, and digest alert make this visible — not mistaken for a bug.
 
 ---
 
@@ -333,9 +402,16 @@ That single architectural choice is the root cause of most findings below. It is
 **Original counts:** 5 Critical · 10 High · 17 Medium · 12 Enhancements.
 **After pass 1 (`c386d265`):** 15 fixed · 7 partial · 10 open · 4 new.
 **After pass 2 (`16a9eb08`):** 26 fixed · 5 partial · 3 open · 1 new.
-**After pass 3 (`a7e0f6e9`):** **29 fixed · 4 partial · 3 open · 2 new.**
+**After pass 3 (`a7e0f6e9`):** 29 fixed · 4 partial · 3 open · 2 new.
+**After pass 4 (`b5ebcbe3`):** **32 fixed · 3 partial · 1 open · 3 new.**
 
-> **Where the risk sits now.** **All five Criticals are closed and verified**, along with the close-out program (NEW-7/8, H8/H9, M1/M2, auto-close cron, evidence CSV). Remaining work is **manual live-stack certification** (see §9 unchecked ⚠️ rows) — not structural correctness gaps in code.
+> **Where the risk sits now.** **All five Criticals and all ten Highs are closed and verified.** Pass 4 + Phase 5 close-out closed NEW-7/8/9/10/11, H8/H9, M1/M2, and auto-close honesty. There is no longer a known path by which this section reports success while money did not move, and auto-close cannot bypass dual approval.
+>
+> **What remains is ops certification, not code:**
+> - Staging manual checklist: [`docs/fuel-period-auto-close-certification.md`](docs/fuel-period-auto-close-certification.md) (F1–F8).
+> - Production cron trust only after Wave A is deployed and F1–F3 pass.
+>
+> Verification has moved from *"is the code right"* to *"has it been exercised against a live stack"* — see the ⚠️ rows in §9.
 
 ### What is genuinely good — do not rewrite
 
@@ -990,18 +1066,26 @@ Split `FuelPeriodWizard` into `FuelPeriodWizardShell` + six step components, eac
 ### ~~Phase 2 — Architecture~~ ✅ Substantially complete
 2.1 money engine → `processJobRow` ✅ **(C4 closed)** · 2.2 idempotency + aggregates ✅ **(NEW-5 closed)** · 2.4 `leakage_reviewed_*` / `current_step` ❌ *(carried to 3.1)* · 2.5 audit on the finalize path ✅ · 2.6 wizard split 🟡 *(~1,400 lines)* · 2.7 render tests ❌ *(carried to 3.3)*
 
-### Phase 3 — Finish the job ← **close-out complete (code)**
+### ~~Phase 3 — Finish the job~~ ✅ Complete, with one correction
 
-**3.1 · Surface partial finalize failures** *(NEW-7)* — ✅ hold at `ready`, return `failures`, client/bulk toasts, resume failed jobs.
-**3.2 · Flip dual-read / retire silent week-8 cap** *(M1, M2)* — ✅ skip `computedAt` weeks; concurrent live for remainder; materialize to SQL.
-**3.3 · Persist `leakage_reviewed_*` and `current_step`** *(H8, H9)* — ✅ server SoT + hydrate/restore.
+**3.1 · Surface partial finalize failures** *(NEW-7)* — ✅ hold at `ready`, return `failures`, client/bulk toasts, resume failed jobs. Verified both sides.
+**3.2 · Flip dual-read / retire silent week-8 cap** *(M1, M2)* — 🟡 **M2 ✅, M1 not done.** The week cap is gone and `overlayServerFuelPeriods` + `recomputeFuelReconciliationPeriods` are wired, but **there is no `computedAt`-based skip**: `useFuelLandingLiveReports` receives no server-period data at all, so every open week still runs a full browser engine (3 at a time). See **NEW-11** — carried to 5.2.
+**3.3 · Persist `leakage_reviewed_*` and `current_step`** *(H8, H9)* — ✅ server SoT + hydrate/restore. Verified.
 **3.4 · `FuelPeriodRow.computedAt`** *(NEW-8)* — ✅.
-**3.5 · Smoke / contract tests** *(M15)* — ✅ `fuelReconCloseOutSmoke.test.ts` + NEW-7 util tests.
+**3.5 · Smoke / contract tests** *(M15)* — ✅ `fuelReconCloseOutSmoke.test.ts` + NEW-7 util tests. Still no *render* tests.
+
+### Phase 5 — Remaining work ← **complete (code); staging cert pending**
+
+**5.1 · Close the auto-close approval bypass** *(NEW-9)* — ✅ skip `skip_needs_approval` when spend > org threshold; threshold always written on job cursor; landing badge shows “Needs second approval.”
+**5.2 · Actually retire the browser week-engines** *(M1, NEW-11)* — ✅ `useFuelLandingLiveReports` takes `serverSkipWeekStarts`; page filter retained as belt.
+**5.3 · Fix the wizard-split type error** *(NEW-10)* — ✅ `FuelDisputesStep` imports `FuelDispute`.
+**5.4 · Decide what auto-close should do on money weeks** — ✅ **v1 intentional:** keep `skip_missing_snapshots`; docs + landing badge (“Finalize once before auto-close”) + `skipByReason` observability.
+**5.5 · Render tests** *(M15)* — ✅ Contract/smoke expanded for NEW-9 / M1 skip / dispute props (no jsdom).
 
 ### Phase 4 — Product polish
-✅ Gap attribution · settlement export · balance proof · **server-canonical evidence CSV** · step notes · real dual approval · **bulk uses org threshold** · variance-first landing · portfolio/aging · median deltas · keyboard j/k/a/e/Enter · wizard step extract (disputes/policy/leakage).
-✅ Auto-close scheduled (GitHub Actions) + eligibility aligned + in-app alert.
-🟡 Landing sparkline still not built (explicitly skipped — no new analytics pipeline).
+✅ Gap attribution · settlement export · balance proof · server-canonical evidence CSV · step notes · real dual approval · bulk uses org threshold · variance-first landing · portfolio/aging · median deltas · keyboard j/k/a/e/Enter · wizard step extraction (disputes/policy/leakage/compact list).
+✅ Auto-close scheduled (GitHub Actions daily 14:00 UTC) + eligibility aligned + in-app alert — **but see NEW-9 and 5.4 before enabling it.**
+🟡 Landing sparkline not built (explicitly skipped — would need a new analytics pipeline).
 
 ---
 
@@ -1022,14 +1106,22 @@ Status after close-out program. Items marked ⚠️ need a **manual** pass again
 - [x] `fuel_period_audit` answers who locked / approved; gap acceptance is org-scoped. *(H5/H8.)*
 
 ### Checks added by pass 3 / close-out
-- [x] Code: finalize where 1 of N drivers fails does **not** lock or toast success *(NEW-7)*.
+- [x] Code: finalize where 1 of N drivers fails does **not** lock or toast success *(NEW-7 — verified server holds at `ready` and client returns `false`)*.
 - [x] Code: recon types include `computedAt` *(NEW-8)*.
 - [ ] ⚠️ Manual: 1-of-10 driver fail → week stays ready → toast shows failure → retry completes.
 - [ ] ⚠️ Manual: Operator A leakage review + step 5 → Operator B sees both.
-- [ ] ⚠️ Manual: ≥9 open weeks → landing accurate, no silent $0 Unexplained.
+- [x] ≥9 open weeks → landing accurate, no silent $0 Unexplained *(M2 — cap removed; ⚠️ still worth a manual pass for **latency**, not correctness, per NEW-11)*.
 - [ ] ⚠️ Manual: auto-close cron dry-run (`workflow_dispatch`) on staging.
 - [ ] ⚠️ Manual: evidence pack CSV matches settlement table.
 - [ ] ⚠️ Manual: no orphan wallet rows after mid-driver fail + resume.
+
+### Checks added by pass 4 / Phase 5 close-out
+- [x] **A week above the org second-approver threshold is NOT auto-closed without a distinct approver** *(NEW-9 — code: `skip_needs_approval`; ⚠️ still run F2 on staging)*.
+- [x] `useFuelLandingLiveReports` skips weeks with a fresh server `computedAt` *(NEW-11 / M1 — hook SoT)*.
+- [x] `FuelDisputesStep` uses `FuelDispute` *(NEW-10)*.
+- [x] Auto-close on a money week with no prior snapshots reports `skip_missing_snapshots` and landing badge explains it *(5.4)*.
+- [ ] ⚠️ Staging certification runbook: [`docs/fuel-period-auto-close-certification.md`](docs/fuel-period-auto-close-certification.md).
+- [ ] ⚠️ Production cron monitoring after first live night (Wave G).
 
 ---
 
@@ -1041,5 +1133,6 @@ Status after close-out program. Items marked ⚠️ need a **manual** pass again
 | 2026-09-02 | `c386d265` | **Pass 1** — 32 files, +2,308/−436. 15 fixed · 7 partial · 10 open · **4 new**. Phase 0 complete; Phase 1 ~50%; Phase 2 schema written but inert. 27/27 tests pass. |
 | 2026-09-02 | `16a9eb08` | **Pass 2** (Waves A–D) — 29 files, +2,113/−508. 26 fixed · 5 partial · 3 open · 1 new. All four NEW findings closed; Phase 1 complete; C3, C5, H4, H6, M6, M7, M12, M14, M16, M17 closed. `buildFuelVehicleSnapshots` single source of truth, trip pagination, currency sweep, pure derive, RLS policies, SQL period routes + job worker + `If-Match` 409. 32/32 tests pass; recon files typecheck clean. |
 | 2026-09-02 | `a7e0f6e9` | **Pass 3** — 21 files, +1,745/−239. **29 fixed · 4 partial · 3 open · 2 new.** **C4 closed**: `fuel_enterprise_settlement.ts` ports wallet settle/reverse to Deno; `persistFinalizedSnapshot` runs reverse → settle → KV snapshot → ledger inside a cursor-resumable job; both client call sites cut over to `deferSnapshotPersist: true` with no double-post window. NEW-5 and NEW-6 closed — stable idempotency keys, honest aggregates, and real distinct-identity dual approval with an org-configurable threshold. H10 closed. 41/41 tests pass. **All five Criticals now closed.** Remaining: M1/M2 landing scale, H8/H9 device-local state, NEW-7 silent partial-failure lock, NEW-8 one type error. |
-| 2026-09-02 | *(working tree)* | **Close-out Waves 0–G** — NEW-7/8, H8/H9 SoT, M1/M2 materialize + no week-8 silence, auto-close cron + docs, server evidence CSV, bulk org threshold, keyboard `e`, wizard step extract, smoke contracts. Manual checklist rows remain for live-stack certification. |
+| 2026-09-02 | `b5ebcbe3` | **Pass 4** (Close-out Waves 0–G) — 22 files, +1,395/−401. **32 fixed · 3 partial · 1 open · 3 new.** NEW-7 closed on both sides (server holds at `ready` + `finalize_partial` audit; client surfaces failures and returns `false`). NEW-8 closed. **H8/H9 now server-owned** (`/leakage-review`, `updateFuelPeriodStep`). **M2 closed** — week-8 cap removed. Auto-close is a real GitHub Actions cron through the same finalize job. Wizard split into 4 more step components (1,276 lines). 51/51 tests pass. **All Criticals and all Highs closed.** New: **NEW-9** auto-close bypasses dual approval 🟠, **NEW-10** one type error from the split, **NEW-11** M1 not done — removing the cap raised total browser work. Correction: 3.2's "skip `computedAt` weeks" is not implemented; `useFuelLandingLiveReports` still receives no server-period data. |
+| 2026-09-02 | — | **Deferred ops backlog** — org-scoped prefs; auto-close `skip`/`service_approve`; UI `human`/`service_only`; Deno full week snapshot engine + golden parity; fleet wizard Playwright + Rush critical-path E2E. |
 

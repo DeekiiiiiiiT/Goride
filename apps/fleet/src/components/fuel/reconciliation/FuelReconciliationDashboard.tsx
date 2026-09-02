@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { FuelPeriodLandingPage } from './FuelPeriodLandingPage';
 import { FuelPeriodWizard } from './FuelPeriodWizard';
 import { FuelPeriodResetDialog } from './FuelPeriodResetDialog';
@@ -6,7 +6,7 @@ import { FuelBulkFinalizeDialog } from './FuelBulkFinalizeDialog';
 import { FuelBulkResetDialog, finalizedWeekOptionsFromGroups } from './FuelBulkResetDialog';
 import { FinalizedReportsTab } from '../FinalizedReportsTab';
 import type { FuelReconciliationPeriod } from '../../../utils/fuelPeriodStatus';
-import type { FuelStepId } from '../../../utils/fuelPeriodGating';
+import { FUEL_STEP_ORDER, type FuelStepId } from '../../../utils/fuelPeriodGating';
 import type {
   FinalizedFuelReport,
   FuelCard,
@@ -20,6 +20,7 @@ import type { Trip } from '../../../types/data';
 import type { Vehicle } from '../../../types/vehicle';
 import { ymdToLocalDate } from '../../../utils/timezoneDisplay';
 import type { DateRange } from 'react-day-picker';
+import type { FuelAutoCloseDualApprovalMode } from '../../../utils/fuelDualApproval';
 
 export const FUEL_RECON_WIZARD_PRIMARY =
   import.meta.env.VITE_FUEL_RECON_WIZARD_PRIMARY !== '0';
@@ -28,6 +29,12 @@ type View =
   | { kind: 'landing' }
   | { kind: 'wizard'; period: FuelReconciliationPeriod; initialStepId?: FuelStepId }
   | { kind: 'archive' };
+
+function parseDeepLinkStep(raw: string | null): FuelStepId | undefined {
+  if (!raw) return undefined;
+  const step = raw.trim() as FuelStepId;
+  return FUEL_STEP_ORDER.includes(step) ? step : undefined;
+}
 
 export function FuelReconciliationDashboard({
   outstanding,
@@ -54,6 +61,8 @@ export function FuelReconciliationDashboard({
   onAcceptFuelException,
   onEditFuelEntry,
   dataTruncated,
+  secondApproverThreshold,
+  autoCloseDualApprovalMode,
 }: {
   outstanding: FuelReconciliationPeriod[];
   inProgress: FuelReconciliationPeriod[];
@@ -86,12 +95,44 @@ export function FuelReconciliationDashboard({
   ) => Promise<boolean | void> | boolean | void;
   onEditFuelEntry?: (entryId: string) => void;
   dataTruncated?: boolean;
+  secondApproverThreshold?: number;
+  autoCloseDualApprovalMode?: FuelAutoCloseDualApprovalMode;
 }) {
   const [view, setView] = useState<View>({ kind: 'landing' });
   const [resetPeriod, setResetPeriod] = useState<FuelReconciliationPeriod | null>(null);
   const [bulkFinalizeOpen, setBulkFinalizeOpen] = useState(false);
   const [bulkReopenOpen, setBulkReopenOpen] = useState(false);
   const [wizardSession, setWizardSession] = useState(0);
+  const [deepLinkConsumed, setDeepLinkConsumed] = useState(false);
+
+  const allPeriods = useMemo(
+    () => [...outstanding, ...inProgress, ...completed],
+    [outstanding, inProgress, completed],
+  );
+
+  // Deep-link: /fuel-reconciliation?week=YYYY-MM-DD&step=finalize
+  useEffect(() => {
+    if (deepLinkConsumed || loading || allPeriods.length === 0) return;
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const week = String(params.get('week') || '').split('T')[0];
+    if (!week) return;
+    const period = allPeriods.find((p) => p.startDate === week);
+    if (!period) return;
+    const stepId = parseDeepLinkStep(params.get('step'));
+    onSelectPeriodWeek?.(period);
+    setView({ kind: 'wizard', period, initialStepId: stepId });
+    setDeepLinkConsumed(true);
+  }, [allPeriods, deepLinkConsumed, loading, onSelectPeriodWeek]);
+
+  const weeksWithSnapshots = useMemo(() => {
+    const set = new Set<string>();
+    for (const f of finalizedReports) {
+      const w = String(f.weekStart || '').split('T')[0];
+      if (w) set.add(w);
+    }
+    return set;
+  }, [finalizedReports]);
 
   const openPeriod = (period: FuelReconciliationPeriod, stepId?: FuelStepId) => {
     onSelectPeriodWeek?.(period);
@@ -194,6 +235,9 @@ export function FuelReconciliationDashboard({
         onBulkFinalize={() => setBulkFinalizeOpen(true)}
         onBulkReopen={() => setBulkReopenOpen(true)}
         dataTruncated={dataTruncated}
+        secondApproverThreshold={secondApproverThreshold}
+        autoCloseDualApprovalMode={autoCloseDualApprovalMode}
+        weeksWithSnapshots={weeksWithSnapshots}
       />
       <FuelBulkFinalizeDialog
         open={bulkFinalizeOpen}

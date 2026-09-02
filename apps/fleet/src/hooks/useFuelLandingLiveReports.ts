@@ -46,6 +46,8 @@ export const FUEL_LANDING_LIVE_CONCURRENCY = 3;
 
 export type FuelLandingLiveReportsInput = {
   weekOptions: Array<{ startDate: string; endDate: string }>;
+  /** Server-computed / locked weeks — never schedule browser week engines (M1 / NEW-11). */
+  serverSkipWeekStarts?: Set<string>;
   vehicles: Vehicle[];
   drivers: Array<{ id: string; fuelScenarioId?: string; name?: string; driverId?: string }>;
   fuelEntries: FuelEntry[];
@@ -56,13 +58,16 @@ export type FuelLandingLiveReportsInput = {
   finalizedReports: FinalizedFuelReport[];
 };
 
-function weekNeedsLiveCalc(
+export function weekNeedsLiveCalc(
   startDate: string,
   endDate: string,
   fuelEntries: FuelEntry[],
   vehicles: Vehicle[],
   finalizedReports: FinalizedFuelReport[],
+  serverSkipWeekStarts?: Set<string>,
 ): boolean {
+  if (serverSkipWeekStarts?.has(startDate)) return false;
+
   const weekEntries = fuelEntries.filter((e) => isYmdInFuelWeek(e.date, startDate, endDate));
   if (weekEntries.length === 0) return false;
 
@@ -82,9 +87,30 @@ function weekNeedsLiveCalc(
   return false;
 }
 
+/** Pure scheduler used by the hook and contract tests. */
+export function selectLandingLiveWeeks(
+  weekOptions: Array<{ startDate: string; endDate: string }>,
+  fuelEntries: FuelEntry[],
+  vehicles: Vehicle[],
+  finalizedReports: FinalizedFuelReport[],
+  serverSkipWeekStarts?: Set<string>,
+): Array<{ startDate: string; endDate: string }> {
+  return weekOptions.filter((w) =>
+    weekNeedsLiveCalc(
+      w.startDate,
+      w.endDate,
+      fuelEntries,
+      vehicles,
+      finalizedReports,
+      serverSkipWeekStarts,
+    ),
+  );
+}
+
 export function useFuelLandingLiveReports(input: FuelLandingLiveReportsInput) {
   const {
     weekOptions,
+    serverSkipWeekStarts,
     vehicles,
     drivers,
     fuelEntries,
@@ -95,12 +121,17 @@ export function useFuelLandingLiveReports(input: FuelLandingLiveReportsInput) {
     finalizedReports,
   } = input;
 
-  const weeksToLoad = useMemo(() => {
-    // All open weeks that still need live misc/shares — no silent week-9+ drop (M2).
-    return weekOptions.filter((w) =>
-      weekNeedsLiveCalc(w.startDate, w.endDate, fuelEntries, vehicles, finalizedReports),
-    );
-  }, [weekOptions, fuelEntries, vehicles, finalizedReports]);
+  const weeksToLoad = useMemo(
+    () =>
+      selectLandingLiveWeeks(
+        weekOptions,
+        fuelEntries,
+        vehicles,
+        finalizedReports,
+        serverSkipWeekStarts,
+      ),
+    [weekOptions, fuelEntries, vehicles, finalizedReports, serverSkipWeekStarts],
+  );
 
   const [liveReportsByWeek, setLiveReportsByWeek] = useState<
     Map<string, FuelLandingLiveSlice[]>
@@ -115,7 +146,10 @@ export function useFuelLandingLiveReports(input: FuelLandingLiveReportsInput) {
     vehicles.map((v) => `${v.id}:${v.fuelScenarioId || ''}`).join(','),
     drivers.map((d) => `${d.id || d.driverId}:${d.fuelScenarioId || ''}`).join(','),
     fuelCards.map((c) => c.id).join(','),
-    finalizedReports.map((f) => `${f.driverId}:${f.weekStart}:${Number(f.miscellaneousCost) || 0}`).join(','),
+    finalizedReports
+      .map((f) => `${f.driverId}:${f.weekStart}:${Number(f.miscellaneousCost) || 0}`)
+      .join(','),
+    serverSkipWeekStarts ? [...serverSkipWeekStarts].sort().join('|') : '',
   ]);
 
   useEffect(() => {

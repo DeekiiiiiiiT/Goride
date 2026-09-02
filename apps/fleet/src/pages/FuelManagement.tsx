@@ -54,7 +54,9 @@ import { fuelPeriodFinalizeIdempotencyKey } from '../utils/fuelPeriodIdempotency
 import { interpretFuelFinalizeJobResult } from '../utils/fuelFinalizeJobResult';
 import {
   hasDistinctSecondApprove,
-  needsSecondApprover,
+  needsHumanSecondApprover,
+  resolveFuelAutoCloseDualApprovalMode,
+  resolveFuelDualApprovalUiMode,
   resolveFuelSecondApproverThreshold,
   FUEL_SECOND_APPROVER_THRESHOLD,
 } from '../utils/fuelDualApproval';
@@ -258,6 +260,13 @@ function FuelManagementInner({ defaultTab = 'logs', onViewDriverLedger, onTabCha
   const [isResolutionModalOpen, setIsResolutionModalOpen] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [secondApproverThreshold, setSecondApproverThreshold] = useState(
+    FUEL_SECOND_APPROVER_THRESHOLD,
+  );
+  const [autoCloseDualApprovalMode, setAutoCloseDualApprovalMode] = useState<
+    'skip' | 'service_approve'
+  >('skip');
+  const [dualApprovalUiMode, setDualApprovalUiMode] = useState<'human' | 'service_only'>('human');
 
 
   // Assignment Data
@@ -306,6 +315,7 @@ function FuelManagementInner({ defaultTab = 'logs', onViewDriverLedger, onTabCha
 
   const landingLiveReportsByWeek = useFuelLandingLiveReports({
     weekOptions: openWeekOptionsForLive,
+    serverSkipWeekStarts: computedServerWeeks,
     vehicles,
     drivers,
     fuelEntries: logs,
@@ -410,6 +420,32 @@ function FuelManagementInner({ defaultTab = 'logs', onViewDriverLedger, onTabCha
       )
       .catch(() => undefined);
   }, [serverPeriodFrom, serverPeriodTo, queryClient]);
+
+  // Dual-approval prefs for landing badges + finalize gate (org-scoped)
+  useEffect(() => {
+    let cancelled = false;
+    void api
+      .getPreferences()
+      .then((prefs) => {
+        if (cancelled) return;
+        const p = prefs as {
+          fuelSecondApproverThreshold?: number;
+          fuelAutoCloseDualApprovalMode?: string;
+          fuelDualApprovalUiMode?: string;
+        };
+        setSecondApproverThreshold(
+          resolveFuelSecondApproverThreshold(p?.fuelSecondApproverThreshold),
+        );
+        setAutoCloseDualApprovalMode(
+          resolveFuelAutoCloseDualApprovalMode(p?.fuelAutoCloseDualApprovalMode),
+        );
+        setDualApprovalUiMode(resolveFuelDualApprovalUiMode(p?.fuelDualApprovalUiMode));
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // If selection falls outside activity-based options (e.g. old Dec weeks), snap to current week
   useEffect(() => {
@@ -1166,15 +1202,17 @@ function FuelManagementInner({ defaultTab = 'logs', onViewDriverLedger, onTabCha
             weekEnd,
           });
           let threshold = FUEL_SECOND_APPROVER_THRESHOLD;
+          let uiMode: 'human' | 'service_only' = dualApprovalUiMode;
           try {
             const prefs = await api.getPreferences();
             threshold = resolveFuelSecondApproverThreshold(
               (prefs as any)?.fuelSecondApproverThreshold,
             );
+            uiMode = resolveFuelDualApprovalUiMode((prefs as any)?.fuelDualApprovalUiMode);
           } catch {
             /* default */
           }
-          if (needsSecondApprover(spendEstimate, threshold)) {
+          if (needsHumanSecondApprover(spendEstimate, threshold, uiMode)) {
             const pack = await api.getFuelPeriodEvidencePack(periodRow.id);
             const actors = ((pack?.audit || []) as Array<{ action?: string; actor_id?: string }>)
               .filter((a) => a.action === 'second_approve')
@@ -1365,6 +1403,8 @@ function FuelManagementInner({ defaultTab = 'logs', onViewDriverLedger, onTabCha
           finalizedReports={finalizedReports}
           isRefreshing={isRefreshing}
           dataTruncated={fuelDataTruncated}
+          secondApproverThreshold={secondApproverThreshold}
+          autoCloseDualApprovalMode={autoCloseDualApprovalMode}
           onRefresh={() => loadData(true)}
           onFinalize={handleFinalize}
           onAddAdjustment={() => { setAdjustmentDefaults({}); setIsAdjustmentModalOpen(true); }}

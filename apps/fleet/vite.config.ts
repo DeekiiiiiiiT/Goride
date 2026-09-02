@@ -196,6 +196,7 @@ export default defineConfig({
   },
   test: {
     environment: 'node',
+    setupFiles: ['./src/test/setup.ts'],
     // Pure utils import @roam/roam-shared which re-exports ErrorBoundary → api-client,
     // and that module throws at import time without these. CI has no .env file.
     env: {

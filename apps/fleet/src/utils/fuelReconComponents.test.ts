@@ -3,7 +3,8 @@
  */
 import { describe, expect, it } from 'vitest';
 import { shouldAutoClosePeriod } from './fuelAutoClose';
-import { needsSecondApprover, FUEL_SECOND_APPROVER_THRESHOLD, hasDistinctSecondApprove } from './fuelDualApproval';
+import { needsSecondApprover, FUEL_SECOND_APPROVER_THRESHOLD, hasDistinctSecondApprove, needsHumanSecondApprover } from './fuelDualApproval';
+
 import { unexplainedLabel } from './fuelReconGlossary';
 import type { FuelSettlementRow } from '../components/fuel/reconciliation/FuelSettlementTable';
 
@@ -18,6 +19,8 @@ describe('fuel recon product helpers', () => {
     expect(needsSecondApprover(FUEL_SECOND_APPROVER_THRESHOLD - 1)).toBe(false);
     expect(needsSecondApprover(FUEL_SECOND_APPROVER_THRESHOLD + 1)).toBe(true);
     expect(needsSecondApprover(99_999, 0)).toBe(false);
+    expect(needsHumanSecondApprover(60_000, 50_000, 'human')).toBe(true);
+    expect(needsHumanSecondApprover(60_000, 50_000, 'service_only')).toBe(false);
     expect(unexplainedLabel(10)).toBe('Unexplained');
     expect(unexplainedLabel(-10)).toBe('Over-explained');
   });

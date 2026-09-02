@@ -5,17 +5,12 @@ import React from 'react';
 import { Button } from '../../ui/button';
 import { Card, CardContent } from '../../ui/card';
 import { CompactVehicleList } from './CompactVehicleList';
-
-export type FuelDisputeRow = {
-  id: string;
-  reason?: string | null;
-  vehicleId?: string | null;
-};
+import type { FuelDispute } from '../../../types/fuel';
 
 export type FuelDisputesStepProps = {
-  openDisputes: FuelDisputeRow[];
+  openDisputes: FuelDispute[];
   periodLocked: boolean;
-  onResolveDispute: (d: FuelDisputeRow) => void;
+  onResolveDispute: (d: FuelDispute) => void;
   onAddAdjustment: () => void;
 };
 

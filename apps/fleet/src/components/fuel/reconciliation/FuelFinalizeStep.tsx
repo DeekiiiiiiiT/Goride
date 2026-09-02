@@ -25,6 +25,8 @@ export type FuelFinalizeStepProps = {
   secondApproverConfirmed: boolean;
   secondApproveBusy: boolean;
   onRecordSecondApproval: () => void;
+  /** human = distinct admin CTA; service_only = system stamps approve on Finalize. */
+  dualApprovalUiMode?: 'human' | 'service_only';
   onExportCsv: () => void;
   onDownloadEvidencePack: () => void;
   settlementRows: FuelSettlementRow[];
@@ -47,10 +49,12 @@ export function FuelFinalizeStep(props: FuelFinalizeStepProps) {
     secondApproverConfirmed,
     secondApproveBusy,
     onRecordSecondApproval,
+    dualApprovalUiMode = 'human',
     onExportCsv,
     onDownloadEvidencePack,
     settlementRows,
   } = props;
+  const serviceOnly = dualApprovalUiMode === 'service_only';
 
   return (
     <div className="space-y-3">
@@ -79,27 +83,34 @@ export function FuelFinalizeStep(props: FuelFinalizeStepProps) {
           I reviewed data-quality and re-finalize warnings for this week.
         </label>
       )}
-      {needsSecondApprover && !periodLocked && (
-        <div className="space-y-2 rounded-md border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm text-indigo-950">
-          <p>
-            Spend is above {formatFuelMoney(secondApproverThreshold)}. A{' '}
-            <strong>different</strong> admin must record second approval before lock.
-          </p>
-          {secondApproverConfirmed ? (
-            <p className="text-emerald-800">Distinct second approval is on file.</p>
-          ) : (
-            <Button
-              type="button"
-              variant="outline"
-              className="min-h-11"
-              disabled={secondApproveBusy}
-              onClick={onRecordSecondApproval}
-            >
-              {secondApproveBusy ? 'Recording…' : 'Record my second approval'}
-            </Button>
-          )}
-        </div>
-      )}
+      {needsSecondApprover && !periodLocked ? (
+        serviceOnly ? (
+          <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800">
+            Spend is above {formatFuelMoney(secondApproverThreshold)}. This organization uses{' '}
+            <strong>system second approval</strong> on Finalize (you stay the finalizer).
+          </div>
+        ) : (
+          <div className="space-y-2 rounded-md border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm text-indigo-950">
+            <p>
+              Spend is above {formatFuelMoney(secondApproverThreshold)}. A{' '}
+              <strong>different</strong> admin must record second approval before lock.
+            </p>
+            {secondApproverConfirmed ? (
+              <p className="text-emerald-800">Distinct second approval is on file.</p>
+            ) : (
+              <Button
+                type="button"
+                variant="outline"
+                className="min-h-11"
+                disabled={secondApproveBusy}
+                onClick={onRecordSecondApproval}
+              >
+                {secondApproveBusy ? 'Recording…' : 'Record my second approval'}
+              </Button>
+            )}
+          </div>
+        )
+      ) : null}
       {settlementRows.length > 0 && <FuelSettlementTable rows={settlementRows} showStatus />}
     </div>
   );
