@@ -48,6 +48,7 @@ import {
 
 import { Vehicle } from '../../types/vehicle';
 import { Trip } from '../../types/data';
+import { formatFuelMoney } from '../../utils/formatFuelMoney';
 import { FuelEntry, MileageAdjustment, WeeklyFuelReport, FuelDispute, FuelScenario, OdometerBucket, FinalizedFuelReport, FuelCard, UNASSIGNED_FUEL_DRIVER_ID } from '../../types/fuel';
 import { FuelCalculationService, type VehicleDeadheadInput, type FuelBrainClassificationInput, type PersonalAllowanceReconContext } from '../../services/fuelCalculationService';
 import { downloadCSV } from '../../utils/export';
@@ -306,9 +307,7 @@ export function ReconciliationTable({
         return <div className="p-8 text-center text-slate-500">Loading week data…</div>;
     }
 
-    const formatCurrency = (val: number) => {
-        return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(val);
-    };
+    const formatCurrency = (val: number) => formatFuelMoney(val);
 
     const leakageIcon = (kind: ReturnType<typeof getLeakageDisplay>['icon']) => {
         if (kind === 'alert') return <AlertTriangle className="h-3 w-3" />;

@@ -21,6 +21,7 @@ import {
   evaluateFuelFinalizeGating,
   type FuelFinalizeGateResult,
 } from './fuelFinalizeGating';
+import { fetchTripsForFuelWeekPaged } from './fetchTripsForFuelWeek';
 import type {
   FuelCard,
   FuelDispute,
@@ -51,13 +52,15 @@ export type BuildFuelWeekReportsInput = {
 };
 
 export async function fetchTripsForFuelWeek(weekStartYmd: string, weekEndYmd: string): Promise<Trip[]> {
-  const response = await api.getTripsFiltered({
-    startDate: weekStartYmd,
-    endDate: weekEndYmd,
-    limit: 1500,
-    offset: 0,
-  });
-  return Array.isArray(response?.data) ? (response.data as Trip[]) : [];
+  const { trips } = await fetchTripsForFuelWeekPaged(weekStartYmd, weekEndYmd);
+  return trips;
+}
+
+export async function fetchTripsForFuelWeekWithMeta(
+  weekStartYmd: string,
+  weekEndYmd: string,
+): Promise<{ trips: Trip[]; tripsTruncated: boolean }> {
+  return fetchTripsForFuelWeekPaged(weekStartYmd, weekEndYmd);
 }
 
 /** Soft deadline so wizard open never hangs on one slow dependency. */

@@ -1,6 +1,6 @@
 /**
- * Interim durable leakage review (H8) until fuel_reconciliation_period table ships.
- * Keyed by org-agnostic week Monday YMD in localStorage (fleet browser session).
+ * Interim device-local leakage review until server period row owns H8.
+ * Keyed by week Monday YMD in localStorage (not org-scoped; not cross-device).
  */
 const PREFIX = 'fuel.leakageReviewed.';
 
@@ -21,6 +21,22 @@ export function loadFuelLeakageReview(weekStartYmd: string): FuelLeakageReviewRe
   } catch {
     return null;
   }
+}
+
+/** All week starts marked reviewed on this device — for pure derive input. */
+export function listFuelLeakageReviewedWeeks(): Set<string> {
+  const out = new Set<string>();
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (!key || !key.startsWith(PREFIX)) continue;
+      const week = key.slice(PREFIX.length);
+      if (week && loadFuelLeakageReview(week)) out.add(week);
+    }
+  } catch {
+    /* ignore */
+  }
+  return out;
 }
 
 export function saveFuelLeakageReview(

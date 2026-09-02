@@ -22,8 +22,11 @@ import { BulkWeekActionDialog, type BulkWeekActionResult } from './BulkWeekActio
 import { useFuelSettlementReopenGate } from './useFuelSettlementReopenGate';
 import { FUEL_SPEND_EPS } from '../../../utils/fuelMoneyEpsilon';
 import { isYmdInFuelWeek } from '../../../utils/fuelWeekPeriod';
-import { fuelOpsSpendAmount } from '../../../utils/fuelOpsEligibility';
 import { isFuelExceptionAcknowledged } from '../../../utils/fuelFinalizeGating';
+import {
+  buildFuelVehicleSnapshots,
+  liveReportsToPrimaryClaimedSlices,
+} from '../../../utils/fuelPeriodDerive';
 
 type PreparedWeek = {
   period: FuelReconciliationPeriod;
@@ -67,49 +70,19 @@ function bulkEarlyGateFailure(
     return `Blocked — ${exceptionCount} exception fill(s) still need review`;
   }
 
-  const claimedReportIds = new Set<string>();
-  const vehicleSnaps = vehicles
-    .map((vehicle) => {
-      const report = reports.find(
-        (r) =>
-          r.vehicleId === vehicle.id ||
-          (Array.isArray((r as any).vehicleIds) && (r as any).vehicleIds.includes(vehicle.id)),
-      );
-      const reportKey = report ? `${report.driverId || report.vehicleId}:${period.startDate}` : '';
-      const ownsMoney = Boolean(report) && reportKey && !claimedReportIds.has(reportKey);
-      if (ownsMoney && reportKey) claimedReportIds.add(reportKey);
-      const vEntries = weekEntries.filter((e) => e.vehicleId === vehicle.id);
-      const hasOpenDispute = disputes.some(
-        (d) =>
-          d.status === 'Open' &&
-          d.vehicleId === vehicle.id &&
-          String(d.weekStart || '').split('T')[0] === period.startDate,
-      );
-      const finalized = finalizedReports.some(
-        (f) =>
-          String(f.weekStart).split('T')[0] === period.startDate &&
-          (f.vehicleId === vehicle.id ||
-            (vehicle.currentDriverId && f.driverId === vehicle.currentDriverId)),
-      );
-      return {
-        vehicleId: vehicle.id,
-        totalSpend: ownsMoney && report
-          ? Number(report.totalGasCardCost) || 0
-          : vEntries.reduce((s, e) => s + fuelOpsSpendAmount(e), 0),
-        companyShare: ownsMoney && report ? Number(report.companyShare) || 0 : 0,
-        driverShare: ownsMoney && report ? Number(report.driverShare) || 0 : 0,
-        misc: ownsMoney && report ? Number(report.miscellaneousCost) || 0 : 0,
-        healthStatus: report?.healthStatus,
-        pendingCount: ownsMoney ? report?.pendingCount ?? 0 : 0,
-        hasOpenDispute,
-        hasScenarioAssigned:
-          Boolean(vehicle.fuelScenarioId) ||
-          Boolean(scenarios?.some((s) => s.isDefault)) ||
-          Boolean((report as any)?.metadata?.scenarioId),
-        isFinalized: finalized,
-      };
-    })
-    .filter((v) => v.totalSpend > FUEL_SPEND_EPS || v.pendingCount > 0 || v.hasOpenDispute || v.isFinalized);
+  const { snapshots } = buildFuelVehicleSnapshots({
+    vehicles,
+    weekStartYmd: period.startDate,
+    weekEndYmd: period.endDate,
+    fuelEntries,
+    disputes,
+    finalizedReports,
+    scenarios,
+    liveSlices: liveReportsToPrimaryClaimedSlices(reports),
+  });
+  const vehicleSnaps = snapshots.filter(
+    (v) => v.totalSpend > FUEL_SPEND_EPS || v.pendingCount > 0 || v.hasOpenDispute || v.isFinalized,
+  );
 
   const counts = buildFuelStepCounts({ vehicles: vehicleSnaps });
   if (counts['adjustments-disputes'].actionable > 0) {

@@ -8,6 +8,7 @@ import type { FuelReconciliationPeriod } from '../../../utils/fuelPeriodStatus';
 import { FUEL_STEP_LABELS, FUEL_STEP_ORDER, type FuelStepId } from '../../../utils/fuelPeriodGating';
 import { FUEL_STEP_ICONS } from '../../../utils/fuelStepIcons';
 import { formatFuelMoney } from '../../../utils/formatFuelMoney';
+import { shouldAutoClosePeriod } from '../../../utils/fuelAutoClose';
 
 /** Labeled step cell — clear at a glance; click opens that step (M3/M5). */
 function StepStatusCell({
@@ -114,6 +115,11 @@ function PeriodCard({
               <span className={period.netLeakage !== 0 ? 'text-rose-600' : ''}>
                 Unexplained {formatFuelMoney(period.netLeakage)}
               </span>
+              {shouldAutoClosePeriod(period) && (
+                <Badge variant="outline" className="border-emerald-200 text-[10px] text-emerald-700">
+                  Eligible for auto-close
+                </Badge>
+              )}
               {period.exceptionCount > 0 && (
                 <span className="font-medium text-rose-700">
                   {period.exceptionCount} exception{period.exceptionCount === 1 ? '' : 's'}

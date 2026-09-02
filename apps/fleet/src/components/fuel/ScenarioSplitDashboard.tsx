@@ -12,6 +12,7 @@ import {
 } from '../../utils/personalAllowance';
 import { resolveActiveFuelPolicyForDriverWeek } from '../../utils/fuelPolicyVersion';
 import { reportWeekYmdBounds } from '../../utils/fuelWeekPeriod';
+import { formatFuelMoney } from '../../utils/formatFuelMoney';
 import {
   addPlatformAmounts,
   allocateAmountByKmShare,
@@ -201,8 +202,7 @@ export function ScenarioSplitDashboard({
         return Object.values(groups);
     }, [reports, scenarios, trips]);
 
-    const formatCurrency = (val: number) =>
-        new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(val);
+    const formatCurrency = (val: number) => formatFuelMoney(val);
 
     if (scenarioGroups.length === 0) return null;
 
@@ -327,8 +327,7 @@ function CategoryTile({ title, icon: Icon, companyAmount, driverAmount, tooltip 
     const companyPct = total > 0 ? (companyAmount / total) * 100 : 0;
     const driverPct = total > 0 ? (driverAmount / total) * 100 : 0;
 
-    const formatCurrency = (val: number) =>
-        new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(val);
+    const formatCurrency = (val: number) => formatFuelMoney(val);
 
     return (
         <Card>
@@ -409,8 +408,7 @@ function PersonalAllowanceTile({
     const kmTotal = Math.max(0, earnedKm) + Math.max(0, overageKm);
     const earnedPct = kmTotal > 0 ? (earnedKm / kmTotal) * 100 : 0;
     const overagePct = kmTotal > 0 ? (overageKm / kmTotal) * 100 : 0;
-    const formatCurrency = (val: number) =>
-        new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(val);
+    const formatCurrency = (val: number) => formatFuelMoney(val);
     const formatKm = (val: number) =>
         `${val.toLocaleString(undefined, { maximumFractionDigits: 0 })} km`;
 
@@ -474,8 +472,7 @@ function PlatformCategoryTile({
 }: PlatformCategoryTileProps) {
     const platformTotal = platformAmountsTotal(amounts);
     const total = platformTotal > 0.01 ? platformTotal : fallbackTotal;
-    const formatCurrency = (val: number) =>
-        new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(val);
+    const formatCurrency = (val: number) => formatFuelMoney(val);
 
     const mainPlatforms: RideshareInsightPlatform[] = ['Roam', 'Uber', 'InDrive'];
     const showOther = Math.abs(amounts.Other) > 0.01;

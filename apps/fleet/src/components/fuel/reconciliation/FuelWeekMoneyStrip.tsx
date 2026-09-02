@@ -48,6 +48,7 @@ export function FuelWeekMoneyStrip({
   company,
   driver,
   leakage,
+  priorMedian,
 }: {
   gasCard: number;
   cashFromEarnings: number;
@@ -55,9 +56,14 @@ export function FuelWeekMoneyStrip({
   company: number;
   driver: number;
   leakage: number;
+  priorMedian?: { totalSpend: number; unexplained: number };
 }) {
   const sourcesTie = Math.abs(gasCard + cashFromEarnings - totalSpend) <= FUEL_SPEND_EPS;
   const splitTie = Math.abs(company + driver + leakage - totalSpend) <= FUEL_SPEND_EPS;
+  const spendDelta =
+    priorMedian != null ? totalSpend - priorMedian.totalSpend : null;
+  const unexplainedDelta =
+    priorMedian != null ? leakage - priorMedian.unexplained : null;
 
   return (
     <div className="flex flex-col gap-8">
@@ -75,6 +81,12 @@ export function FuelWeekMoneyStrip({
           <MoneyStatCard label="Cash from earnings (credit)" value={cashFromEarnings} />
           <MoneyStatCard label="Total fuel bought" value={totalSpend} emphasize />
         </div>
+        {spendDelta != null && (
+          <p className="text-xs text-slate-500">
+            vs 4-week median: {spendDelta >= 0 ? '+' : ''}
+            {formatFuelMoney(spendDelta)}
+          </p>
+        )}
         <p
           className={`text-xs font-medium ${sourcesTie ? 'text-emerald-700' : 'text-rose-700'}`}
           role="status"
@@ -101,6 +113,12 @@ export function FuelWeekMoneyStrip({
             warn={Math.abs(leakage) > FUEL_SPEND_EPS}
           />
         </div>
+        {unexplainedDelta != null && (
+          <p className="text-xs text-slate-500">
+            Unexplained vs median: {unexplainedDelta >= 0 ? '+' : ''}
+            {formatFuelMoney(unexplainedDelta)}
+          </p>
+        )}
         <p
           className={`text-xs font-medium ${splitTie ? 'text-emerald-700' : 'text-rose-700'}`}
           role="status"

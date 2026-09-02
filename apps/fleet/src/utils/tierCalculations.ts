@@ -2,6 +2,8 @@ import { TierConfig, Trip, MonthlyPerformance } from '../types/data';
 import { getDriverPortalTripEarnings } from './tripEarnings';
 import { startOfMonth, endOfMonth, isWithinInterval, parseISO, format } from 'date-fns';
 
+import { formatJMD } from './formatJMD';
+
 export const TierCalculations = {
   calculateMonthlyEarnings(trips: Trip[], referenceDate: Date = new Date()): number {
       if (!trips || trips.length === 0) return 0;
@@ -66,7 +68,7 @@ export const TierCalculations = {
   },
 
   formatCurrency(amount: number): string {
-      return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(amount);
+      return formatJMD(Number(amount) || 0, 0);
   },
 
   getMonthlyHistory(trips: Trip[], tiers: TierConfig[]): MonthlyPerformance[] {

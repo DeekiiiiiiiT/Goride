@@ -47,6 +47,7 @@ import { MasterLogTimeline } from '../vehicles/odometer/MasterLogTimeline';
 import { bucketClosesInFuelWeek, toEntryYmd } from '../../utils/fuelWeekPeriod';
 import { ymdToLocalDate } from '../../utils/timezoneDisplay';
 import { getVehicleWeekFuelKpis } from '../../utils/fuelAnalyticsAggregates';
+import { formatFuelMoney } from '../../utils/formatFuelMoney';
 
 /** Calendar day label without UTC date-only shift (yyyy-MM-dd must not parse as UTC midnight). */
 function formatBucketDay(value: string): string {
@@ -262,9 +263,7 @@ export function BucketReconciliationView({
         }
     };
 
-    const formatCurrency = (val: number) => {
-        return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(val);
-    };
+    const formatCurrency = (val: number) => formatFuelMoney(val);
 
     const getVarianceColor = (percent: number) => {
         if (Math.abs(percent) > 20) return "text-red-600 font-bold";

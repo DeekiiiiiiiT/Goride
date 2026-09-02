@@ -1,6 +1,5 @@
 /**
- * Client hooks for server-owned fuel reconciliation periods (Phase 2).
- * Falls back gracefully when the edge routes are not yet deployed.
+ * Client hooks for server-owned fuel reconciliation periods (Phase 2 / Wave C).
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../services/api';
@@ -30,26 +29,16 @@ export type FuelPeriodRow = {
   lockedAt?: string | null;
 };
 
-async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
-  // Prefer dedicated API helpers when present; otherwise soft-fail for progressive rollout
-  const anyApi = api as any;
-  if (typeof anyApi.getFuelReconciliationPeriods === 'function' && path.includes('?')) {
-    return anyApi.getFuelReconciliationPeriods(Object.fromEntries(new URLSearchParams(path.split('?')[1])));
-  }
-  throw new Error('Fuel period API not available yet');
-}
-
 export function useFuelPeriods(opts: { from?: string; to?: string; enabled?: boolean }) {
   return useQuery({
     queryKey: [FUEL_PERIODS_KEY, opts.from, opts.to],
     enabled: opts.enabled !== false && Boolean(opts.from && opts.to),
     queryFn: async (): Promise<FuelPeriodRow[]> => {
       try {
-        const anyApi = api as any;
-        if (typeof anyApi.listFuelReconciliationPeriods === 'function') {
-          return await anyApi.listFuelReconciliationPeriods({ from: opts.from, to: opts.to });
-        }
-        return [];
+        return (await api.listFuelReconciliationPeriods({
+          from: opts.from,
+          to: opts.to,
+        })) as FuelPeriodRow[];
       } catch {
         return [];
       }
@@ -63,11 +52,12 @@ export function useFuelPeriod(periodId: string | null) {
     queryKey: [FUEL_PERIOD_KEY, periodId],
     enabled: Boolean(periodId),
     queryFn: async (): Promise<FuelPeriodRow | null> => {
-      const anyApi = api as any;
-      if (typeof anyApi.getFuelReconciliationPeriod === 'function') {
-        return await anyApi.getFuelReconciliationPeriod(periodId);
+      if (!periodId) return null;
+      try {
+        return (await api.getFuelReconciliationPeriod(periodId)) as FuelPeriodRow | null;
+      } catch {
+        return null;
       }
-      return null;
     },
   });
 }
@@ -84,13 +74,7 @@ export function useFuelPeriodMutations() {
       periodId: string;
       version: number;
       idempotencyKey: string;
-    }) => {
-      const anyApi = api as any;
-      if (typeof anyApi.enqueueFuelPeriodFinalize !== 'function') {
-        throw new Error('Finalize job API not deployed yet');
-      }
-      return anyApi.enqueueFuelPeriodFinalize(args);
-    },
+    }) => api.enqueueFuelPeriodFinalize(args),
     onSuccess: invalidate,
   });
 
@@ -100,29 +84,21 @@ export function useFuelPeriodMutations() {
       version: number;
       reason: string;
       idempotencyKey: string;
-    }) => {
-      const anyApi = api as any;
-      if (typeof anyApi.enqueueFuelPeriodReopen !== 'function') {
-        throw new Error('Reopen job API not deployed yet');
-      }
-      return anyApi.enqueueFuelPeriodReopen(args);
-    },
+    }) => api.enqueueFuelPeriodReopen(args),
     onSuccess: invalidate,
   });
 
   const reviewLeakage = useMutation({
-    mutationFn: async (args: { periodId: string; note?: string }) => {
-      const anyApi = api as any;
-      if (typeof anyApi.reviewFuelPeriodLeakage === 'function') {
-        return anyApi.reviewFuelPeriodLeakage(args);
-      }
-      return { ok: false };
-    },
+    mutationFn: async (args: { periodId: string; note?: string }) =>
+      api.reviewFuelPeriodLeakage(args),
     onSuccess: invalidate,
   });
 
-  return { finalize, reopen, reviewLeakage, invalidate };
-}
+  const updateStep = useMutation({
+    mutationFn: async (args: { periodId: string; step: string }) =>
+      api.updateFuelPeriodStep(args),
+    onSuccess: invalidate,
+  });
 
-// silence unused until routes land
-void fetchJson;
+  return { finalize, reopen, reviewLeakage, updateStep, invalidate };
+}

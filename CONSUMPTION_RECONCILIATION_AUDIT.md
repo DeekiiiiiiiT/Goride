@@ -1,11 +1,139 @@
 # Consumption Reconciliation — Deep Audit
 
-**Date:** 2026-09-02
+**Date:** 2026-09-02 · **Remediation pass verified:** 2026-09-02 (commit `c386d265`)
 **Scope:** The Fuel → Consumption Reconciliation surface only — landing page, week wizard, all six steps, finalize, reopen, bulk operations, and the server routes and calculation paths behind them.
-**Method:** Static read of every file in the reconciliation dependency graph. **No code was changed.**
+**Method:** Static read of every file in the reconciliation dependency graph. Remediation verified by reading the post-fix source, not the diff summary; `vitest` and `tsc` run against the touched files.
 **Companion docs:** [FUEL_SYSTEM_AUDIT.md](FUEL_SYSTEM_AUDIT.md) (whole fuel domain, 2026-08-26), [TOLL_SYSTEM_AUDIT.md](TOLL_SYSTEM_AUDIT.md).
 
 > This audit deliberately overlaps very little with the August fuel audit. That one surveyed the domain; this one pulls apart one section down to the line.
+
+---
+
+## STATUS — remediation pass, verified 2026-09-02
+
+Commit `c386d265` touched 32 files (+2,308 / −436). **27/27 recon unit tests pass**; `tsc` reports **no new type errors** in any touched reconciliation file (the remaining errors in `ReconciliationTable.tsx` and `toll-tags/reconciliation/*` are pre-existing and out of scope).
+
+This is a strong pass. Phase 0 is essentially complete, most of Phase 1 landed, and the Phase 2 database schema is written. The gap is that **Phase 2 is scaffolding that nothing calls yet**, and a handful of Phase 0/1 items are partially applied — fixed at the aggregate level but not in the per-row tables that sit right beside them.
+
+### Scoreboard
+
+| ID | Finding | Status |
+|---|---|---|
+| **C1** | `reset-period` cross-tenant destruction | ✅ **Fixed** — verified thorough |
+| **C2** | Re-finalize reverses money it never re-posts | ✅ **Fixed** |
+| **C3** | Shared-car double-counting | 🟡 **Partial** — aggregates fixed, per-vehicle tables still double |
+| **C4** | Browser-driven distributed transaction | 🟡 **Scaffolded, not wired** — finalize still runs in the tab |
+| **C5** | Unbounded / silently capped data | 🟡 **Partial** — snapshots + entries done, trips untouched |
+| **H1** | Amber chips on Completed weeks | ✅ **Fixed** |
+| **H2** | Negative Unexplained invisible | ✅ **Fixed** |
+| **H3** | Bulk Finalize bypasses dispute gate | ✅ **Fixed** — hard reject, not checkbox-overridable |
+| **H4** | Hardcoded USD | 🟡 **Partial** — 2 files rendered *by this section* still USD |
+| **H5** | No actor attribution | ✅ **Fixed** — server-stamped + reopen audit + reason |
+| **H6** | Dead branch in status classifier | 🟡 **Partial** — branch removed, dead params remain |
+| **H7** | Stale landing figures | ✅ **Fixed** — content hashing |
+| **H8** | "Mark reviewed" not persisted | ❌ **Not fixed** — localStorage is not persistence |
+| **H9** | Wizard progress ephemeral | ❌ **Not fixed** |
+| **H10** | No cross-user concurrency control | ❌ **Not fixed** — `If-Match` read but never compared |
+| **M1** | 8 sequential week engines on mount | ❌ Not fixed |
+| **M2** | Week cap 8 degrades silently | ❌ Not fixed |
+| **M3** | Step grid one button | ✅ Fixed — per-step deep link |
+| **M4** | Default tab never moves | ✅ Fixed — controlled tabs |
+| **M5** | A11y on status chips | ✅ Fixed — real `aria-label`, `role="group"` |
+| **M6** | Two divergent derivations | 🔴 **Regressed to four** — see NEW-1 |
+| **M7** | Dispute matcher inconsistency | 🟡 **Partial** — 2 of 4 call sites migrated |
+| **M8** | Length-only cache key | ✅ Fixed |
+| **M9** | Reset fallback double-delete | ✅ Fixed |
+| **M10** | No dry-run preview | ✅ **Fixed** — real server dry-run |
+| **M11** | Empty/error beside `$0.00` | ✅ Fixed |
+| **M12** | Sticky footer layout | ❌ Not fixed |
+| **M13** | No balance proof | ✅ **Fixed** — both identities, tie/untie states |
+| **M14** | Export buried | ❌ Not fixed |
+| **M15** | No component tests | 🟡 Partial — 4 new util tests, still no component tests |
+| **M16** | `drivers: any[]` | ❌ Not fixed |
+| **M17** | Four names for one concept | ❌ Not fixed |
+
+**Phase 3 (product enhancements 1–12):** not started, as expected.
+
+---
+
+## STATUS — new findings introduced by the remediation
+
+Four issues that did not exist before this commit. None are catastrophic, but NEW-1 and NEW-2 will cost real money in review time if they settle in.
+
+### NEW-1 🟠 — M6 regressed: the vehicle-snapshot derivation now exists **four** times
+
+The commit created [`fuelPeriodDerive.ts`](apps/fleet/src/utils/fuelPeriodDerive.ts) as the shared home for this logic — the right move — but only the landing adopted it. There are now four independent implementations of "build vehicle snapshots for a week":
+
+| # | Location | Uses shared helpers? | Dispute matcher |
+|---|---|---|---|
+| 1 | [`fuelPeriodStatus.ts:196`](apps/fleet/src/utils/fuelPeriodStatus.ts#L196) (landing) | ✅ yes | `isFuelDisputeOpenInWeek` ✅ |
+| 2 | [`FuelPeriodWizard.tsx:286`](apps/fleet/src/components/fuel/reconciliation/FuelPeriodWizard.tsx#L286) (`vehicleSnaps`) | ❌ no | inline `reportWeekYmdBounds` |
+| 3 | [`FuelPeriodWizard.tsx:468`](apps/fleet/src/components/fuel/reconciliation/FuelPeriodWizard.tsx#L468) (`openDisputes`) | ✅ yes | `isFuelDisputeOpenInWeek` ✅ |
+| 4 | [`FuelBulkFinalizeDialog.tsx:51`](apps/fleet/src/components/fuel/reconciliation/FuelBulkFinalizeDialog.tsx#L51) (`bulkEarlyGateFailure`) | ❌ no | **the original M7-buggy `String(d.weekStart).split('T')[0]`** |
+
+Copy #4 is new — written to fix H3, which it does correctly, but by re-deriving everything from scratch rather than calling copy #1. It reintroduces the exact raw-string dispute comparison M7 flagged, so **the bulk gate can miss an open dispute on a legacy-format record that the wizard catches.**
+
+Worse, inside the *same file* [`FuelPeriodWizard.tsx`](apps/fleet/src/components/fuel/reconciliation/FuelPeriodWizard.tsx), `vehicleSnaps.hasOpenDispute` (copy #2) and `openDisputes` (copy #3) use different matchers — so the step-2 *count* and the step-2 *list* are computed by different rules.
+
+**Fix:** export one `buildFuelVehicleSnapshots(...)` from `fuelPeriodDerive.ts` and have all four call it. This is the single highest-leverage cleanup left.
+
+---
+
+### NEW-2 🟠 — C3 fixed in the totals, still broken in the tables beneath them
+
+The two aggregate paths are now correct:
+- landing slices zero out secondary vehicles ([`useFuelLandingLiveReports.ts:155-168`](apps/fleet/src/hooks/useFuelLandingLiveReports.ts#L155))
+- the wizard money strip sums `liveReports` directly ([`FuelPeriodWizard.tsx:411-428`](apps/fleet/src/components/fuel/reconciliation/FuelPeriodWizard.tsx#L411))
+
+But the wizard's `vehicleSnaps` was **not** touched. [`:288-290`](apps/fleet/src/components/fuel/reconciliation/FuelPeriodWizard.tsx#L288) still binds a report to a vehicle by `r.vehicleId === vehicle.id || (r.vehicleIds || []).includes(vehicle.id)`, and [`:313-316`](apps/fleet/src/components/fuel/reconciliation/FuelPeriodWizard.tsx#L313) still copies the **full driver-week** `totalGasCardCost` / `companyShare` / `driverShare` / `miscellaneousCost` onto every matched vehicle.
+
+Everything downstream of `vehicleSnaps` therefore still double-counts on shared-car weeks:
+
+- `breakdownRows` → the "Show full cost breakdown" table on Data Quality
+- `qualityRows` → the flagged-vehicle cards
+- `leakageRows` → the same gap listed twice on the Unexplained step
+- `counts` → `buildFuelStepCounts` sees the leakage twice, so the step chip reads `2 to review` for one gap
+
+**The new balance-proof line (M13) makes this visible rather than hidden** — `Company + Driver + Unexplained ≠ Total — shared-car or calc mismatch` will fire correctly, because the strip is right and the rows are wrong. That's an improvement, but the underlying inconsistency is still there.
+
+**Fix:** apply the same primary-vehicle claiming to `vehicleSnaps` — ideally via the shared helper from NEW-1.
+
+---
+
+### NEW-3 🟡 — H8 "fixed" with `localStorage`, which does not satisfy the finding
+
+[`fuelLeakageReviewStore.ts`](apps/fleet/src/utils/fuelLeakageReviewStore.ts) writes `fuel.leakageReviewed.<weekStart>` to `localStorage`. The original finding was:
+
+> *"That decision is stored nowhere: not on the period, not on the snapshot, not in an audit log… There is no record of who accepted a $2,055 gap, when, or why."*
+
+`localStorage` addresses none of that. It is per-browser, per-device, has no actor, no org scoping, and is invisible to every other user. Concretely:
+
+- Operator A accepts a gap; Operator B on another machine still sees it actionable — correct behaviour is now inconsistent between users.
+- Clearing site data silently reverts every accepted gap across all weeks.
+- The `note` and `actorLabel` fields are written but never read back or displayed anywhere.
+- One browser's localStorage now **suppresses a financial control** for that browser only.
+
+There is also a **purity regression**: [`fuelPeriodStatus.ts:253-264`](apps/fleet/src/utils/fuelPeriodStatus.ts#L253) reads `localStorage` inside `deriveFuelReconciliationPeriods`, which was a pure, unit-tested function. It is now environment-dependent, and the read runs once per week per derive on every unmemoized render.
+
+**Fix:** this needs the `fuel_reconciliation_period.leakage_reviewed_at/_by/_note` columns the migration already defines. Until then it is honest to call H8 open — the columns exist, nothing writes them.
+
+---
+
+### NEW-4 🟡 — Phase 2 is inert: dead client hook, stub routes, no worker
+
+The scaffolding is well-shaped but **nothing is connected end to end**:
+
+| Artifact | State |
+|---|---|
+| [`useFuelPeriods.ts`](apps/fleet/src/hooks/useFuelPeriods.ts) (128 lines) | **Zero consumers.** Every method probes `api as any` for `listFuelReconciliationPeriods` / `getFuelReconciliationPeriod` / `enqueueFuelPeriodFinalize` / `enqueueFuelPeriodReopen` / `reviewFuelPeriodLeakage` — **none of which exist in `api.ts`**. `fetchJson` is dead (`void fetchJson` at [`:128`](apps/fleet/src/hooks/useFuelPeriods.ts#L128)). |
+| [`fuel_period_routes.ts`](supabase/functions/_fleet-server/fuel_period_routes.ts) | `GET /fuel/periods` reads KV prefix `fuel_reconciliation_period:<org>:` — **not the SQL table the migration creates**, and nothing ever writes those KV rows. Always returns `{ periods: [] }`. |
+| `POST /fuel/periods/:id/finalize` | Writes a `state: "queued"` job row and returns `202`. **No worker exists.** The job never transitions. If wired today, Finalize would silently no-op. |
+| `If-Match` / optimistic concurrency (H10) | Header is read into `periodVersion` at [`:41`](supabase/functions/_fleet-server/fuel_period_routes.ts#L41) but **never compared to anything**. No `409` path. |
+| Reopen job route | Not implemented, though `useFuelPeriodMutations().reopen` expects it. |
+| [`FuelSettlementTable.tsx`](apps/fleet/src/components/fuel/reconciliation/FuelSettlementTable.tsx) (55 lines) | **Dead code** — created to dedupe the two settlement tables (§5), never imported. Both inline tables remain. |
+| Migration RLS | All three tables get `enable row level security` with **zero policies**. Correct for service-role edge access, but any future PostgREST/anon read is a silent lockout. Add explicit org policies before anything else touches these tables. |
+
+None of this breaks production — the dead code is genuinely inert, which is the safe way to land scaffolding. But **C4 and H10 must not be recorded as fixed**, and the dead files should either be wired or removed so the next person doesn't assume they work.
 
 ---
 
@@ -19,17 +147,20 @@ That single architectural choice is the root cause of most findings below. It is
 
 ### The seven findings that matter most
 
-| # | Finding | Severity |
-|---|---|---|
-| **C1** | `reset-period` ("Reopen week") is **not org-scoped** — it deletes snapshots, resets fuel entries, and deletes transactions for **every tenant** that shares the same Monday. | 🔴 Critical |
-| **C2** | Re-finalize reverses the prior settlement, then `continue`s without re-posting when no entries qualify — **money is reversed and never restored**, while the snapshot still claims it. | 🔴 Critical |
-| **C3** | Shared-car (multi-vehicle) driver weeks are **counted once per vehicle** on the landing card and in the wizard money strip — spend, shares and Unexplained are inflated N×. | 🔴 Critical |
-| **C4** | Finalize is a **non-atomic, non-resumable, non-idempotent distributed transaction driven by a browser `for` loop**. A closed tab mid-loop leaves the fleet half-settled. | 🔴 Critical |
-| **C5** | Every data source is **unbounded or silently capped** — `getFinalizedReports()` full-prefix scan, `getFuelEntries({limit:1500})` over all history, `getTripsFiltered({limit:1500})` per week. Past the caps the money is simply wrong, with no error. | 🔴 Critical |
-| **H1** | Completed weeks still render an amber **"Unexplained fuel — 1 to review"** chip (visible in the current UI). Locked weeks report open work forever. | 🟠 High |
-| **H3** | **Bulk Finalize bypasses the open-dispute hard gate** the single-week wizard enforces. | 🟠 High |
+| # | Finding | Severity | Status |
+|---|---|---|---|
+| **C1** | `reset-period` ("Reopen week") is **not org-scoped** — it deletes snapshots, resets fuel entries, and deletes transactions for **every tenant** that shares the same Monday. | 🔴 Critical | ✅ Fixed |
+| **C2** | Re-finalize reverses the prior settlement, then `continue`s without re-posting when no entries qualify — **money is reversed and never restored**, while the snapshot still claims it. | 🔴 Critical | ✅ Fixed |
+| **C3** | Shared-car (multi-vehicle) driver weeks are **counted once per vehicle** on the landing card and in the wizard money strip — spend, shares and Unexplained are inflated N×. | 🔴 Critical | 🟡 Partial |
+| **C4** | Finalize is a **non-atomic, non-resumable, non-idempotent distributed transaction driven by a browser `for` loop**. A closed tab mid-loop leaves the fleet half-settled. | 🔴 Critical | 🟡 Scaffolded |
+| **C5** | Every data source is **unbounded or silently capped** — `getFinalizedReports()` full-prefix scan, `getFuelEntries({limit:1500})` over all history, `getTripsFiltered({limit:1500})` per week. Past the caps the money is simply wrong, with no error. | 🔴 Critical | 🟡 Partial |
+| **H1** | Completed weeks still render an amber **"Unexplained fuel — 1 to review"** chip (visible in the current UI). Locked weeks report open work forever. | 🟠 High | ✅ Fixed |
+| **H3** | **Bulk Finalize bypasses the open-dispute hard gate** the single-week wizard enforces. | 🟠 High | ✅ Fixed |
 
-**Counts:** 5 Critical · 10 High · 17 Medium · 12 Enhancements.
+**Original counts:** 5 Critical · 10 High · 17 Medium · 12 Enhancements.
+**After the 2026-09-02 pass:** 15 fixed · 7 partial · 10 open · 4 new (see STATUS sections above).
+
+> **Where the risk now sits.** The cross-tenant data-loss bug and the money-reversal bug are gone, which were the two that could destroy records. What remains is *correctness at scale* (C4, C5c, M1, M2) and *one consistent derivation* (NEW-1, NEW-2) — the section is now safe, but not yet trustworthy above a few dozen vehicles.
 
 ### What is genuinely good — do not rewrite
 
@@ -107,7 +238,11 @@ WeeklyFuelReport[]  →  finalizeFuelWeekReports()  ← ALSO runs in the browser
 
 ## 2. Critical findings
 
-### C1 🔴 — `reset-period` destroys other tenants' data
+### C1 🔴 ✅ FIXED — `reset-period` destroys other tenants' data
+
+> **Verified fixed (`c386d265`).** `filterByOrg` + `narrowPlatformOrg` now wrap all three prefix scans; a `belongsToOrg` guard sits on every iteration *and* re-checks the live record immediately before each `kv.del` / `kv.set`; non-platform callers without an org context get a `403` up front. The `driverIds` / `vehicleIds` blind-delete loops at the end — the most dangerous part — now `kv.get` each key and skip foreign records. Entries are re-stamped with `stampOrg` on write. This is a thorough fix, not a patch.
+
+**Original finding:**
 
 [`fuel_controller.tsx:1481-1740`](supabase/functions/_fleet-server/fuel_controller.tsx#L1481)
 
@@ -139,7 +274,11 @@ A fleet admin at Org A reopening *their* week silently wipes Org B's and Org C's
 
 ---
 
-### C2 🔴 — Re-finalize reverses money it never re-posts
+### C2 🔴 ✅ FIXED — Re-finalize reverses money it never re-posts
+
+> **Verified fixed (`c386d265`).** The reversal block moved *below* the `relevantEntries` computation, so the `if (relevantEntries.length === 0 && prior) continue;` guard now fires **before** anything is reversed. A prior locked week with nothing re-postable leaves both the settlement and the snapshot untouched. Covered by `fuelFinalizeService.test.ts` (5 tests passing).
+
+**Original finding:**
 
 [`fuelFinalizeService.ts:96-118`](apps/fleet/src/services/fuelFinalizeService.ts#L96)
 
@@ -170,7 +309,11 @@ Net result: the settlement is reversed, the prior `finalized_report:` KV row is 
 
 ---
 
-### C3 🔴 — Shared-car weeks are counted once per vehicle
+### C3 🔴 🟡 PARTIAL — Shared-car weeks are counted once per vehicle
+
+> **Partially fixed (`c386d265`).** The landing slices and the wizard money strip are both correct now. **The wizard's `vehicleSnaps` is unchanged**, so the Data Quality breakdown table, the flagged-vehicle cards, the leakage rows, and the step counts still double on shared-car weeks. See **NEW-2** above for the detail.
+
+**Original finding:**
 
 Three files, one bug.
 
@@ -215,7 +358,13 @@ Meanwhile `settlementRows` at [`:335-355`](apps/fleet/src/components/fuel/reconc
 
 ---
 
-### C4 🔴 — Finalize is a browser-driven distributed transaction
+### C4 🔴 🟡 SCAFFOLDED — Finalize is a browser-driven distributed transaction
+
+> **Not yet fixed (`c386d265`).** The SQL schema (`fuel_period_job` with `idempotency_key`, `period_version`, `cursor`, `failures`) and a `202`-returning enqueue route exist, but **no worker processes the job and no client calls it** — `finalizeFuelWeekReports` still runs the `for` loop in the tab. `H5` (actor attribution) *was* fixed independently and server-side, so one row of the table below now passes. See **NEW-4**.
+>
+> One thing did improve: `finalizedByUser` is now stamped from the session on the server and can no longer be spoofed by the client body.
+
+**Original finding:**
 
 [`fuelFinalizeService.ts:65-263`](apps/fleet/src/services/fuelFinalizeService.ts#L65)
 
@@ -238,7 +387,14 @@ The compensating-transaction logic at [`:197-236`](apps/fleet/src/services/fuelF
 
 ---
 
-### C5 🔴 — Every data source is unbounded or silently capped
+### C5 🔴 🟡 PARTIAL — Every data source is unbounded or silently capped
+
+> **Partially fixed (`c386d265`).**
+> - ✅ **Finalized snapshots** — `GET /finalized-reports` accepts `weekStartFrom` / `weekStartTo`, and `FuelManagement` now passes the activity window instead of calling with no arguments. No more all-history payload.
+> - ✅ **Fuel entries** — a `fuelDataTruncated` flag is set when `logsData.length >= 1500` and surfaces as a `role="alert"` banner on the landing. Truncation is no longer silent.
+> - ❌ **Trips — untouched.** Both `buildFuelWeekReportsForFinalize.ts:57` and `FuelManagement.tsx:335` still hardcode `limit: 1500` with `offset: 0`, no pagination, and no truncation flag. This is the one that **over-charges drivers** when it trips, because lost ride-share km fall into personal/deadhead. It is now the highest-value unfixed money bug in the section.
+
+**Original finding:**
 
 | Source | Call site | Cap | What happens past it |
 |---|---|---|---|
@@ -253,7 +409,11 @@ Truncation that silently changes money is worse than an error. **Every one of th
 
 ## 3. High findings
 
-### H1 🟠 — Completed weeks show permanent amber "1 to review"
+### H1 🟠 ✅ FIXED — Completed weeks show permanent amber "1 to review"
+
+> **Verified fixed (`c386d265`).** Once `locked` is known, `deriveFuelReconciliationPeriods` moves every `actionable` count into `informational` and zeroes `actionableTotal` / `exceptionCount` on the returned period. Completed cards render all-green. Covered by new cases in `fuelPeriodStatus.test.ts`.
+
+**Original finding:**
 
 Visible in the current UI: `Aug 17 – Aug 23` is **Completed**, every other chip is green "Done", and the *Unexplained fuel* chip is amber **"1 to review"**. Same on Aug 10, Jul 27, Jul 20, Jul 13.
 
@@ -273,7 +433,11 @@ The wizard passes `leakageReviewed: leakageReviewed || periodLocked` ([`FuelPeri
 
 ---
 
-### H2 🟠 — Negative Unexplained fuel is invisible and unreviewable
+### H2 🟠 ✅ FIXED — Negative Unexplained fuel is invisible and unreviewable
+
+> **Verified fixed (`c386d265`).** `buildFuelStepCounts` now gates on `Math.abs(misc) > EPS` and routes negatives to **data-quality** as actionable (the right step — an over-explained week is a data problem, not a leakage decision). The wizard adds distinct copy throughout: an "Over-explained — categorized km exceed fuel bought" subtitle, an `Over-explained` badge, and a dedicated hero. The money strip warns on `Math.abs(leakage)`. This was implemented more thoroughly than the finding asked for.
+
+**Original finding:**
 
 Visible in the current UI: `Aug 3 – Aug 9` shows **Unexplained −$3,294.72** and the Unexplained chip is green "Done".
 
@@ -292,7 +456,13 @@ The landing card does colour it — `className={period.netLeakage > 0 ? 'text-ro
 
 ---
 
-### H3 🟠 — Bulk Finalize bypasses the dispute hard gate
+### H3 🟠 ✅ FIXED — Bulk Finalize bypasses the dispute hard gate
+
+> **Verified fixed (`c386d265`).** `bulkEarlyGateFailure()` runs the same `buildFuelStepCounts` gates in bulk prepare and returns a named rejection reason for exceptions, open disputes, unexplained fuel, and any other early-step actionable. Weeks are marked `status: 'failed'` with the reason — the acknowledgement checkbox cannot override it, and its label was corrected to say so.
+>
+> ⚠️ It achieves this by re-deriving vehicle snapshots a fourth time, with the M7-buggy dispute matcher. See **NEW-1**.
+
+**Original finding:**
 
 Single-week: an open dispute puts `actionable: 1` on step 2 → `computeFuelGatedStepStates` locks steps 3–6 → the Finalize step is **unreachable**.
 
@@ -306,7 +476,15 @@ So a week the wizard refuses to let you walk past can be locked by ticking one b
 
 ---
 
-### H4 🟠 — Currency is hardcoded USD in a JMD business
+### H4 🟠 🟡 PARTIAL — Currency is hardcoded USD in a JMD business
+
+> **Partially fixed (`c386d265`).** [`formatFuelMoney.ts`](apps/fleet/src/utils/formatFuelMoney.ts) now wraps `formatJMD`, and every file under `components/fuel/reconciliation/` uses it. **But two components this section renders directly were missed:**
+> - [`BucketReconciliationView.tsx:266`](apps/fleet/src/components/fuel/BucketReconciliationView.tsx#L266) — the stop-to-stop gap detail *inside the Unexplained fuel step*
+> - [`FinalizedReportsTab.tsx:50`](apps/fleet/src/components/fuel/FinalizedReportsTab.tsx#L50) — the "Finalized archive" view of this section
+>
+> So a user can now open the Unexplained step and see JMD in the money strip and USD in the panel below it — arguably a worse read than uniform USD was. Also still USD: `ReconciliationTable.tsx:310`, `ScenarioSplitDashboard.tsx` (×4), `tierCalculations.ts:69`.
+
+**Original finding:**
 
 19 occurrences of `new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' })` across `components/fuel` and `utils`, including every money surface in this section: [`FuelPeriodLandingPage.tsx:19`](apps/fleet/src/components/fuel/reconciliation/FuelPeriodLandingPage.tsx#L19), [`FuelPeriodWizard.tsx:70`](apps/fleet/src/components/fuel/reconciliation/FuelPeriodWizard.tsx#L70), [`FuelWeekMoneyStrip.tsx:3`](apps/fleet/src/components/fuel/reconciliation/FuelWeekMoneyStrip.tsx#L3), [`FuelDataQualityStep.tsx:8`](apps/fleet/src/components/fuel/reconciliation/FuelDataQualityStep.tsx#L8), [`FuelExceptionBlockersPanel.tsx:8`](apps/fleet/src/components/fuel/reconciliation/FuelExceptionBlockersPanel.tsx#L8), [`FuelBulkFinalizeDialog.tsx:20`](apps/fleet/src/components/fuel/reconciliation/FuelBulkFinalizeDialog.tsx#L20) (plus a raw `$${amount.toFixed(2)}` at [`:134`](apps/fleet/src/components/fuel/reconciliation/FuelBulkFinalizeDialog.tsx#L134)).
 
@@ -316,7 +494,13 @@ The repo already has [`utils/formatJMD.ts`](apps/fleet/src/utils/formatJMD.ts), 
 
 ---
 
-### H5 🟠 — No actor attribution on the money-locking action
+### H5 🟠 ✅ FIXED — No actor attribution on the money-locking action
+
+> **Verified fixed (`c386d265`).** `POST /finalized-reports` now derives `finalizedByUser` / `finalizedByUserId` from `c.get("rbacUser")` and `stampOrg`s the record — the client's `'admin'` string is ignored, which is the right trust boundary. Reopen additionally requires a reason (`reasonOk` = 3+ chars, enforced client-side and echoed back by the server) and writes an append-only `fuel_period_audit:<org>:<id>` KV record with actor, action, reason, and the reversal counts.
+>
+> Remaining gap: the audit rows go to KV, not the `fuel_period_audit` table the migration defines, and **only reopen is audited — finalize writes no audit row.**
+
+**Original finding:**
 
 [`fuelFinalizeService.ts:157`](apps/fleet/src/services/fuelFinalizeService.ts#L157): `finalizedByUser: 'admin'`.
 
@@ -328,7 +512,11 @@ For a workflow whose whole purpose is charging drivers money, this fails basic a
 
 ---
 
-### H6 🟠 — `classifyFuelReconPeriodStatus` has dead branches and doesn't do what it says
+### H6 🟠 🟡 PARTIAL — `classifyFuelReconPeriodStatus` has dead branches and doesn't do what it says
+
+> **Partially fixed (`c386d265`).** The duplicated branch is gone and locked weeks now pass zeroed counts, so Completed classifies cleanly. **But `actionableTotal` and `finalizeActionable` remain in the function signature and are still passed by both call sites while being read by nothing** — dead parameters now rather than a dead branch. The underlying semantic issue also stands: with `leakageActionable` still inside `earlyOpen`, any week with a gap is Outstanding, so *In Progress* remains effectively unreachable until H8/H9 give it a real definition. The JSDoc above the function still describes the old three-way behaviour.
+
+**Original finding:**
 
 [`fuelPeriodStatus.ts:136-141`](apps/fleet/src/utils/fuelPeriodStatus.ts#L136):
 
@@ -347,7 +535,11 @@ That explains the current tab distribution: Outstanding `1`, In Progress `0`, Co
 
 ---
 
-### H7 🟠 — Landing figures go stale on policy, adjustment, and dispute edits
+### H7 🟠 ✅ FIXED — Landing figures go stale on policy, adjustment, and dispute edits
+
+> **Verified fixed (`c386d265`).** [`fuelContentSig.ts`](apps/fleet/src/utils/fuelContentSig.ts) hashes ids + amounts + `updatedAt` + status + exception-ack flags across entries, adjustments, scenarios, disputes, vehicles, drivers, cards, and finalized snapshots (FNV-1a). Both `useFuelLandingLiveReports` and `useFuelWeekReports` key off it, so editing a fill's amount now invalidates correctly. This also closes **M8**.
+
+**Original finding:**
 
 [`useFuelLandingLiveReports.ts:164`](apps/fleet/src/hooks/useFuelLandingLiveReports.ts#L164):
 
@@ -369,7 +561,11 @@ Only adding/removing a record refreshes the numbers. "Refresh Data" re-fetches b
 
 ---
 
-### H8 🟠 — "Mark reviewed" is throwaway component state
+### H8 🟠 ❌ NOT FIXED — "Mark reviewed" is throwaway component state
+
+> **Not fixed (`c386d265`).** A `localStorage` store was added, which survives a refresh but satisfies none of what this finding asked for — no actor, no org, no cross-user visibility, no audit record, and it introduces a purity regression in `deriveFuelReconciliationPeriods`. See **NEW-3**. The `fuel_reconciliation_period.leakage_reviewed_at/_by/_note` columns needed to close this now exist in the migration; nothing writes them.
+
+**Original finding:**
 
 [`FuelPeriodWizard.tsx:244`](apps/fleet/src/components/fuel/reconciliation/FuelPeriodWizard.tsx#L244): `const [leakageReviewed, setLeakageReviewed] = useState(false);`, reset to `false` on every `period.id`/`sessionKey` change ([`:372`](apps/fleet/src/components/fuel/reconciliation/FuelPeriodWizard.tsx#L372)).
 
@@ -381,7 +577,11 @@ The exception-resolve path gets this right — it writes `reconExceptionAck`, `e
 
 ---
 
-### H9 🟠 — Wizard progress is ephemeral
+### H9 🟠 ❌ NOT FIXED — Wizard progress is ephemeral
+
+> **Not fixed (`c386d265`).** `progressIndex` / `activeStepId` are still component state reset on mount. Two things improved around the edges: the landing can now deep-link into a specific step via `initialStepId` (M3), and locked weeks restore `leakageReviewed`. But there is still no persisted `current_step`, no hand-off between operators, and `pickInitialFuelStep` still drops you at the first non-complete step rather than where you left off. The `fuel_reconciliation_period.current_step` column exists and is unwritten.
+
+**Original finding:**
 
 `progressIndex` and `activeStepId` are component state, reset on mount ([`:371-388`](apps/fleet/src/components/fuel/reconciliation/FuelPeriodWizard.tsx#L371)). The landing card's step chips are derived from *counts*, not from where the operator actually got to.
 
@@ -391,7 +591,11 @@ Compounding it: `pickInitialFuelStep` returns the *first non-complete* step. Sin
 
 ---
 
-### H10 🟠 — No cross-user concurrency control
+### H10 🟠 ❌ NOT FIXED — No cross-user concurrency control
+
+> **Not fixed (`c386d265`).** `fuel_reconciliation_period.version` exists in the migration and the enqueue route reads the `If-Match` header — but **never compares it to anything**, and there is no `409` path. Since the finalize job is inert anyway (NEW-4), two admins can still finalize the same week concurrently through the live browser path.
+
+**Original finding:**
 
 `FuelReconBusyProvider` ([`fuelReconBusyLock.tsx`](apps/fleet/src/components/fuel/reconciliation/fuelReconBusyLock.tsx)) re-exports the shared `FleetBusyLock` — a React context. It serialises actions *within one browser tab*.
 
@@ -586,56 +790,84 @@ Split `FuelPeriodWizard` into `FuelPeriodWizardShell` + six step components, eac
 
 ---
 
-## 8. Remediation plan
+## 8. Remediation plan — **updated after the 2026-09-02 pass**
 
-### Phase 0 — Stop the bleeding (days, no redesign)
-| | Finding | Change |
+### ~~Phase 0 — Stop the bleeding~~ ✅ Complete (2 items carried forward)
+| | Finding | Status |
 |---|---|---|
-| 1 | **C1** | Add `filterByOrg` + per-record `belongsToOrg` to `reset-period`'s three prefix scans. **Ship first.** |
-| 2 | **C2** | Move the reversal after `relevantEntries`; re-post before `continue`. Add a regression test. |
-| 3 | **C3** | Aggregate from `liveReports`, never sum driver-week figures across vehicles. Golden test with a two-car driver. |
-| 4 | **H3** | Run the full gate in bulk prepare; fail disputed weeks. |
-| 5 | **H1 / H2** | `leakageReviewed: locked` on the landing; switch every leakage gate to `Math.abs(misc) > EPS`. |
-| 6 | **H4** | One `formatFuelMoney`; delete 19 copies. |
-| 7 | **C5(a)** | `getFinalizedReports({ weekStartFrom, weekStartTo })` — stop shipping all history. |
-| 8 | **M11** | Error and empty states must *replace* the wizard, never sit above `$0.00`. |
+| 1 | **C1** org-scope `reset-period` | ✅ Done — thorough |
+| 2 | **C2** reversal ordering | ✅ Done + test |
+| 3 | **C3** aggregate from `liveReports` | 🟡 Aggregates done → **carried to 1.1** |
+| 4 | **H3** bulk gate | ✅ Done |
+| 5 | **H1 / H2** lock-zeroing + `Math.abs` | ✅ Done |
+| 6 | **H4** `formatFuelMoney` | 🟡 Recon dir done → **carried to 1.2** |
+| 7 | **C5a** windowed snapshots | ✅ Done |
+| 8 | **M11** error/empty replace body | ✅ Done |
 
-### Phase 1 — Correctness & consistency (1–2 sprints)
-9. One shared period-derivation module for landing + wizard (**M6, M7**).
-10. Content-hash query keys; delete the `entrySig` workaround (**H7, M8**).
-11. Real pagination on entries and trips, with a visible banner if a cap is ever hit (**C5b/c**).
-12. Server-stamped `finalizedByUser` + `fuel_period_audit` writes (**H5**).
-13. Server-side dry-run preview for Reopen; delete the client fallback (**M10, M9**).
-14. Split `FuelPeriodWizard` into shell + six steps; collapse the duplicate tables (**§5**).
-15. Component/integration tests for landing, wizard, bulk, reset (**M15**).
+### Phase 1 — Correctness & consistency ← **you are here**
 
-### Phase 2 — Architecture (1–2 months)
-16. `fuel_reconciliation_period` + `fuel_period_audit` tables; backfill from existing snapshots.
-17. Server-side recompute endpoint; retire `useFuelLandingLiveReports` (**M1, M2**).
-18. Idempotent, resumable, version-checked finalize/reopen jobs (**C4, H10**).
-19. Persist workflow state: current step, leakage review, notes (**H8, H9, H6**).
-20. Rewire the client to the four hooks in §6.4.
+**1.1 · One derivation, four call sites** *(NEW-1, NEW-2, C3, M6, M7)* — the highest-leverage item left.
+Export `buildFuelVehicleSnapshots()` from [`fuelPeriodDerive.ts`](apps/fleet/src/utils/fuelPeriodDerive.ts), with primary-vehicle money claiming built in, and route all four consumers through it:
+`fuelPeriodStatus.ts` · `FuelPeriodWizard.vehicleSnaps` · `FuelPeriodWizard.openDisputes` · `FuelBulkFinalizeDialog.bulkEarlyGateFailure`.
+This single change closes NEW-1, finishes C3/NEW-2, and finishes M7. Golden test: one driver, two vehicles, one week — landing total == strip total == Σ settlement rows == Σ breakdown rows, and the M13 balance line reads `✓`.
 
-### Phase 3 — Product
-21. Variance-first landing, aging, portfolio header.
-22. Gap attribution on the Unexplained step.
-23. Balance proof, deltas vs trailing median.
-24. Keyboard queue, approvals, evidence pack, scheduled auto-close.
+**1.2 · Finish the currency sweep** *(H4)* — `BucketReconciliationView.tsx:266` and `FinalizedReportsTab.tsx:50` are rendered *by this section* and still print USD next to JMD. Then `ReconciliationTable.tsx`, `ScenarioSplitDashboard.tsx` (×4), `tierCalculations.ts`.
+
+**1.3 · Trip pagination** *(C5c)* — the last silently-wrong money input. Page `getTripsFiltered` past 1,500 in `buildFuelWeekReportsForFinalize.ts:53` and `FuelManagement.tsx:335`, or set a `tripsTruncated` flag and reuse the banner pattern already built for entries.
+
+**1.4 · Decide H8 properly** — either write `leakage_reviewed_*` server-side (preferred; the columns exist) or accept localStorage as an explicit interim and *say so in the UI* ("reviewed on this device"). Either way, remove the `localStorage` read from `deriveFuelReconciliationPeriods` so it is pure again — pass `leakageReviewedWeeks: Set<string>` in as an argument.
+
+**1.5 · Clean up the scaffolding** *(NEW-4)* — either wire or delete: `useFuelPeriods.ts`, `FuelSettlementTable.tsx`. If keeping, add the five missing `api.ts` methods; if not, remove so the next reader isn't misled. Add RLS policies to the three new tables before anything reads them via PostgREST.
+
+**1.6 · Tidy H6** — drop the now-unused `actionableTotal` / `finalizeActionable` params and update the stale JSDoc.
+
+**1.7 · Split `FuelPeriodWizard`** (still 1,100+ lines) into shell + six steps; use the already-written `FuelSettlementTable` for both tables (**§5**).
+
+**1.8 · Component tests** *(M15)* — landing, wizard, bulk, reset. Still zero.
+
+### Phase 2 — Architecture (schema done, behaviour not started)
+- ✅ `fuel_reconciliation_period` + `fuel_period_audit` + `fuel_period_job` tables written.
+- ❌ Backfill job from existing `finalized_report:*` snapshots.
+- ❌ Make `GET /fuel/periods` read the **SQL table**, not an empty KV prefix.
+- ❌ Server-side recompute endpoint; retire `useFuelLandingLiveReports` (**M1, M2**).
+- ❌ A **worker** that actually processes `fuel_period_job`, plus `If-Match` → `409` (**C4, H10**).
+- ❌ Persist `current_step` and leakage review (**H8, H9**).
+- ❌ Audit row on **finalize**, not just reopen (**H5**).
+- ❌ Rewire the client to the four hooks in §6.4.
+
+### Phase 3 — Product (not started)
+Variance-first landing · gap attribution · deltas vs trailing median · keyboard queue · approvals · evidence pack · scheduled auto-close · **M12** footer · **M14** export · **M16** `drivers` typing · **M17** naming.
 
 ---
 
 ## 9. Verification checklist
 
-Before calling this remediated:
+Status as of the 2026-09-02 pass. Items marked ⚠️ are **code-verified but not yet exercised against a running stack** — they need a manual pass before you trust them.
 
-- [ ] Two orgs, same Monday. Org A reopens. Org B's snapshots, entries, and transactions are **byte-identical** afterwards.
-- [ ] Re-finalize a week whose entries are all `Archived`. Ledger net movement is **zero**; snapshot and settlement agree.
-- [ ] One driver, two vehicles, one week. Landing `totalSpend` == strip `Total fuel bought` == Σ settlement rows.
-- [ ] Kill the browser mid-finalize. Resume. No driver is settled twice; no driver is left unsettled.
-- [ ] Two admins finalize the same week concurrently. One succeeds, one gets `409`.
-- [ ] A locked week shows **zero** amber chips.
-- [ ] A week with −$3,294 unexplained raises an actionable.
-- [ ] A week with an open dispute is rejected by Bulk Finalize with a named reason.
-- [ ] 10,000 fuel entries / 5,000 trips in a week. Figures are correct, or a visible banner says they can't be trusted. Never silently wrong.
-- [ ] Every money figure renders in the org's currency.
-- [ ] `fuel_period_audit` answers "who locked this week, when, and who accepted the $2,055 gap" for every closed week.
+- [x] ⚠️ Two orgs, same Monday. Org A reopens. Org B's snapshots, entries, and transactions are **byte-identical** afterwards. *(C1 — code path verified; needs a live two-org test, this is the one to actually run.)*
+- [x] Re-finalize a week whose entries are all `Archived`. Ledger net movement is **zero**; snapshot and settlement agree. *(C2 — covered by `fuelFinalizeService.test.ts`.)*
+- [ ] **One driver, two vehicles, one week. Landing `totalSpend` == strip `Total fuel bought` == Σ settlement rows == Σ breakdown rows.** *(C3/NEW-2 — first three now agree; the breakdown table still doubles. The M13 balance line will show `≠` when this is wrong, so it is at least self-reporting.)*
+- [ ] Kill the browser mid-finalize. Resume. No driver is settled twice; no driver is left unsettled. *(C4 — job table exists, no worker.)*
+- [ ] Two admins finalize the same week concurrently. One succeeds, one gets `409`. *(H10 — `If-Match` read, never compared.)*
+- [x] A locked week shows **zero** amber chips. *(H1 — tested.)*
+- [x] A week with −$3,294 unexplained raises an actionable. *(H2 — routed to data-quality, tested.)*
+- [x] A week with an open dispute is rejected by Bulk Finalize with a named reason. *(H3 — ⚠️ but see NEW-1: a legacy-format `weekStart` can still slip past the bulk matcher.)*
+- [ ] 10,000 fuel entries / 5,000 trips in a week. Figures are correct, or a visible banner says they can't be trusted. *(Entries ✅ banner; **trips still silently truncate** — C5c.)*
+- [ ] Every money figure renders in the org's currency. *(H4 — recon dir ✅; `BucketReconciliationView` and `FinalizedReportsTab` still USD **inside this section's own screens**.)*
+- [ ] `fuel_period_audit` answers "who locked this week, when, and who accepted the $2,055 gap" for every closed week. *(Reopen ✅ to KV with actor + reason; **finalize writes no audit row**, and gap acceptance lives only in one browser's localStorage.)*
+
+### New checks added by this pass
+- [ ] `deriveFuelReconciliationPeriods` is pure — no `localStorage` read inside it *(NEW-3)*.
+- [ ] Exactly **one** `buildFuelVehicleSnapshots` implementation exists *(NEW-1)*.
+- [ ] `grep -rn "useFuelPeriods\|FuelSettlementTable" apps/fleet/src` returns consumers, or the files are deleted *(NEW-4)*.
+- [ ] The three new tables have RLS **policies**, not just `enable row level security` *(NEW-4)*.
+
+---
+
+## 10. Change log
+
+| Date | Commit | What |
+|---|---|---|
+| 2026-09-02 | — | Initial audit. 5 Critical · 10 High · 17 Medium · 12 Enhancements. |
+| 2026-09-02 | — | Flawless program Waves A–D: `buildFuelVehicleSnapshots` (NEW-1/C3), trip pagination (C5c), currency sweep (H4), pure derive + device H8 label (NEW-3), RLS policies, SQL period routes + jobs + If-Match 409, client API/hooks, product UX (glossary, gap attribution, keyboard, dual approval, evidence pack, export, auto-close). |
+

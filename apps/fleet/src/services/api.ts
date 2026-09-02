@@ -3985,6 +3985,171 @@ export const api = {
 
   // --- Finalized Reports ---
 
+  async listFuelReconciliationPeriods(opts: {
+    from?: string;
+    to?: string;
+  }): Promise<any[]> {
+    const qs = new URLSearchParams();
+    if (opts.from) qs.set('from', opts.from);
+    if (opts.to) qs.set('to', opts.to);
+    const suffix = qs.toString() ? `?${qs.toString()}` : '';
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/fuel/periods${suffix}`, {
+      headers: await requireAuthHeaders(null),
+    });
+    if (!response.ok) {
+      const errText = await response.text().catch(() => '');
+      throw new Error(errText || 'Failed to list fuel periods');
+    }
+    const data = await response.json();
+    return Array.isArray(data?.periods) ? data.periods : [];
+  },
+
+  async getFuelReconciliationPeriod(periodId: string): Promise<any | null> {
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.fuel}/fuel/periods/${encodeURIComponent(periodId)}`,
+      { headers: await requireAuthHeaders(null) },
+    );
+    if (response.status === 404) return null;
+    if (!response.ok) {
+      const errText = await response.text().catch(() => '');
+      throw new Error(errText || 'Failed to get fuel period');
+    }
+    return response.json();
+  },
+
+  async enqueueFuelPeriodFinalize(args: {
+    periodId: string;
+    version: number;
+    idempotencyKey: string;
+  }) {
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.fuel}/fuel/periods/${encodeURIComponent(args.periodId)}/finalize`,
+      {
+        method: 'POST',
+        headers: {
+          ...(await requireAuthHeaders()),
+          'Idempotency-Key': args.idempotencyKey,
+          'If-Match': String(args.version),
+        },
+        body: JSON.stringify({}),
+      },
+    );
+    if (response.status === 409) {
+      const body = await response.json().catch(() => ({}));
+      const err = new Error('version_conflict') as Error & { status?: number; body?: unknown };
+      err.status = 409;
+      err.body = body;
+      throw err;
+    }
+    if (!response.ok) {
+      const errText = await response.text().catch(() => '');
+      throw new Error(errText || 'Finalize job failed');
+    }
+    return response.json();
+  },
+
+  async enqueueFuelPeriodReopen(args: {
+    periodId: string;
+    version: number;
+    reason: string;
+    idempotencyKey: string;
+  }) {
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.fuel}/fuel/periods/${encodeURIComponent(args.periodId)}/reopen`,
+      {
+        method: 'POST',
+        headers: {
+          ...(await requireAuthHeaders()),
+          'Idempotency-Key': args.idempotencyKey,
+          'If-Match': String(args.version),
+        },
+        body: JSON.stringify({ reason: args.reason }),
+      },
+    );
+    if (response.status === 409) {
+      const body = await response.json().catch(() => ({}));
+      const err = new Error('version_conflict') as Error & { status?: number; body?: unknown };
+      err.status = 409;
+      err.body = body;
+      throw err;
+    }
+    if (!response.ok) {
+      const errText = await response.text().catch(() => '');
+      throw new Error(errText || 'Reopen job failed');
+    }
+    return response.json();
+  },
+
+  async reviewFuelPeriodLeakage(args: { periodId: string; note?: string }) {
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.fuel}/fuel/periods/${encodeURIComponent(args.periodId)}/leakage-review`,
+      {
+        method: 'POST',
+        headers: await requireAuthHeaders(),
+        body: JSON.stringify({ note: args.note }),
+      },
+    );
+    if (!response.ok) {
+      const errText = await response.text().catch(() => '');
+      throw new Error(errText || 'Leakage review failed');
+    }
+    return response.json();
+  },
+
+  async updateFuelPeriodStep(args: { periodId: string; step: string }) {
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.fuel}/fuel/periods/${encodeURIComponent(args.periodId)}/step`,
+      {
+        method: 'PATCH',
+        headers: await requireAuthHeaders(),
+        body: JSON.stringify({ step: args.step }),
+      },
+    );
+    if (!response.ok) {
+      const errText = await response.text().catch(() => '');
+      throw new Error(errText || 'Step update failed');
+    }
+    return response.json();
+  },
+
+  async backfillFuelReconciliationPeriods() {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/fuel/periods/backfill`, {
+      method: 'POST',
+      headers: await requireAuthHeaders(),
+      body: JSON.stringify({}),
+    });
+    if (!response.ok) {
+      const errText = await response.text().catch(() => '');
+      throw new Error(errText || 'Backfill failed');
+    }
+    return response.json();
+  },
+
+  async recomputeFuelReconciliationPeriods(opts?: { from?: string; to?: string }) {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/fuel/periods/recompute`, {
+      method: 'POST',
+      headers: await requireAuthHeaders(),
+      body: JSON.stringify(opts || {}),
+    });
+    if (!response.ok) {
+      const errText = await response.text().catch(() => '');
+      throw new Error(errText || 'Recompute failed');
+    }
+    return response.json();
+  },
+
+  async getFuelPeriodJob(jobId: string) {
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.fuel}/fuel/jobs/${encodeURIComponent(jobId)}`,
+      { headers: await requireAuthHeaders(null) },
+    );
+    if (!response.ok) {
+      const errText = await response.text().catch(() => '');
+      throw new Error(errText || 'Job not found');
+    }
+    return response.json();
+  },
+
   async getFinalizedReports(opts?: {
     vehicleId?: string;
     vehicleIds?: string[];

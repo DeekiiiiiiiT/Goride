@@ -17,10 +17,14 @@ import {
   isYmdInFuelWeek,
   type PeriodWeekOption,
 } from './fuelWeekPeriod';
-import { fuelOpsSpendAmount } from './fuelOpsEligibility';
 import { FUEL_SPEND_EPS } from './fuelMoneyEpsilon';
 import { isFuelExceptionAcknowledged } from './fuelFinalizeGating';
-import { findFinalizedSnapForVehicle, isFuelDisputeOpenInWeek } from './fuelPeriodDerive';
+import {
+  buildFuelVehicleSnapshots,
+  type FuelPeriodVehicleSnapshot,
+} from './fuelPeriodDerive';
+
+export type { FuelPeriodVehicleSnapshot } from './fuelPeriodDerive';
 
 export type FuelPeriodStatus = 'outstanding' | 'in_progress' | 'completed';
 
@@ -39,21 +43,6 @@ export interface FuelReconciliationPeriod {
   actionableTotal: number;
   exceptionCount: number;
   counts: Record<FuelStepId, FuelStepCounts>;
-}
-
-export interface FuelPeriodVehicleSnapshot {
-  vehicleId: string;
-  totalSpend: number;
-  companyShare: number;
-  driverShare: number;
-  misc: number;
-  healthStatus?: 'Emerald' | 'Amber' | 'Red' | string;
-  pendingCount: number;
-  hasOpenDispute: boolean;
-  hasScenarioAssigned: boolean;
-  isFinalized: boolean;
-  /** Shared-car presence without owning the driver-week money row */
-  hasWeekActivity?: boolean;
 }
 
 export interface BuildFuelStepCountsInput {
@@ -131,11 +120,9 @@ export function buildFuelStepCounts(input: BuildFuelStepCountsInput): Record<Fue
 export function classifyFuelReconPeriodStatus(opts: {
   locked: boolean;
   withSpendCount: number;
-  actionableTotal: number;
   exceptionCount: number;
   openDisputeCount: number;
   leakageActionable: number;
-  finalizeActionable: number;
 }): FuelPeriodStatus {
   if (opts.locked) return 'completed';
   // No spend yet — not Outstanding work (was inflating Finalize weeks for empty current week).
@@ -169,8 +156,12 @@ export interface DeriveFuelPeriodsInput {
       miscellaneousCost: number;
       healthStatus?: string;
       pendingCount?: number;
+      sourceReportKey?: string;
+      metadata?: { scenarioId?: string };
     }>
   >;
+  /** Week starts (YMD) where unexplained fuel was accepted — pass from store; keep derive pure. */
+  leakageReviewedWeeks?: Set<string>;
 }
 
 function entryInWeek(e: FuelEntry, start: string, end: string): boolean {
@@ -181,8 +172,16 @@ function entryInWeek(e: FuelEntry, start: string, end: string): boolean {
  * Build Outstanding / In Progress / Completed period cards for recent weeks.
  */
 export function deriveFuelReconciliationPeriods(input: DeriveFuelPeriodsInput): FuelReconciliationPeriod[] {
-  const { weekOptions, vehicles, fuelEntries, disputes, finalizedReports, scenarios, liveReportsByWeek } =
-    input;
+  const {
+    weekOptions,
+    vehicles,
+    fuelEntries,
+    disputes,
+    finalizedReports,
+    scenarios,
+    liveReportsByWeek,
+    leakageReviewedWeeks,
+  } = input;
 
   return weekOptions.map((week) => {
     const id = fuelPeriodIdFromWeekStart(week.startDate);
@@ -193,68 +192,15 @@ export function deriveFuelReconciliationPeriods(input: DeriveFuelPeriodsInput): 
       (e) => e.metadata?.signalTier === 'exception' && !isFuelExceptionAcknowledged(e),
     ).length;
 
-    // C3: each driver-week finalized/live money row may only attach to one vehicle snap
-    const claimedFinalizedKeys = new Set<string>();
-    const claimedLiveKeys = new Set<string>();
-
-    const vehicleSnaps: FuelPeriodVehicleSnapshot[] = vehicles.map((vehicle) => {
-      const liveReport = live?.find((r) => r.vehicleId === vehicle.id);
-      const liveKey = liveReport
-        ? `live:${liveReport.vehicleId}:${Number(liveReport.totalGasCardCost) || 0}:${Number(liveReport.miscellaneousCost) || 0}`
-        : '';
-      const finalizedSnap = findFinalizedSnapForVehicle({
-        finalizedReports,
-        vehicle,
-        weekStartYmd: startDate,
-        claimedKeys: claimedFinalizedKeys,
-      });
-      const finalizedKey = finalizedSnap
-        ? `fin:${finalizedSnap.driverId || finalizedSnap.vehicleId}:${startDate}`
-        : '';
-
-      const ownsLiveMoney =
-        Boolean(liveReport) &&
-        (Number(liveReport!.totalGasCardCost) || 0) > FUEL_SPEND_EPS &&
-        !claimedLiveKeys.has(liveKey);
-      if (ownsLiveMoney && liveKey) claimedLiveKeys.add(liveKey);
-
-      const ownsFinalizedMoney = Boolean(finalizedSnap) && Boolean(finalizedKey);
-      // findFinalizedSnapForVehicle already claims
-
-      const vEntries = weekEntries.filter((e) => e.vehicleId === vehicle.id);
-      const moneyFromLive = ownsLiveMoney ? liveReport : undefined;
-      const moneyFromFinalized = !moneyFromLive && ownsFinalizedMoney ? finalizedSnap : undefined;
-      const totalSpend =
-        moneyFromLive?.totalGasCardCost ??
-        moneyFromFinalized?.totalGasCardCost ??
-        (liveReport ? 0 : vEntries.reduce((s, e) => s + fuelOpsSpendAmount(e), 0));
-      const pendingCount =
-        liveReport?.pendingCount ??
-        (finalizedSnap ? 0 : vEntries.filter((e) => e.reconciliationStatus === 'Pending').length);
-      const finalized = Boolean(finalizedSnap);
-      const hasWeekActivity = vEntries.length > 0 || Boolean(liveReport) || Boolean(finalizedSnap);
-      const hasOpenDispute = disputes.some((d) =>
-        d.vehicleId === vehicle.id && isFuelDisputeOpenInWeek(d, startDate, endDate),
-      );
-      const hasScenarioAssigned =
-        Boolean(vehicle.fuelScenarioId) ||
-        Boolean(scenarios?.some((s) => s.isDefault)) ||
-        Boolean((liveReport as any)?.metadata?.scenarioId) ||
-        Boolean((finalizedSnap as any)?.metadata?.scenarioId);
-
-      return {
-        vehicleId: vehicle.id,
-        totalSpend,
-        companyShare: moneyFromLive?.companyShare ?? moneyFromFinalized?.companyShare ?? 0,
-        driverShare: moneyFromLive?.driverShare ?? moneyFromFinalized?.driverShare ?? 0,
-        misc: moneyFromLive?.miscellaneousCost ?? moneyFromFinalized?.miscellaneousCost ?? 0,
-        healthStatus: liveReport?.healthStatus ?? finalizedSnap?.healthStatus,
-        pendingCount,
-        hasOpenDispute,
-        hasScenarioAssigned,
-        isFinalized: finalized,
-        hasWeekActivity,
-      };
+    const { snapshots: vehicleSnaps } = buildFuelVehicleSnapshots({
+      vehicles,
+      weekStartYmd: startDate,
+      weekEndYmd: endDate,
+      fuelEntries,
+      disputes,
+      finalizedReports,
+      scenarios,
+      liveSlices: live || [],
     });
 
     // Only vehicles with activity matter for period presence
@@ -269,24 +215,12 @@ export function deriveFuelReconciliationPeriods(input: DeriveFuelPeriodsInput): 
 
     const counts = buildFuelStepCounts({
       vehicles: active.length ? active : vehicleSnaps.filter((v) => v.totalSpend > 0),
-      // H8 interim: persisted accept-gap OR locked week
-      leakageReviewed: Boolean(
-        (typeof window !== 'undefined' &&
-          (() => {
-            try {
-              return localStorage.getItem(`fuel.leakageReviewed.${startDate}`);
-            } catch {
-              return null;
-            }
-          })()) ||
-          false,
-      ),
+      leakageReviewed: Boolean(leakageReviewedWeeks?.has(startDate)),
     });
     // Exception fills hard-block Finalize — surface on data-quality chips
     if (exceptionCount > 0) {
       counts['data-quality'].actionable += exceptionCount;
     }
-    const actionableTotal = fuelActionableTotal(counts);
     const withSpend = active.filter((v) => v.totalSpend > FUEL_SPEND_EPS || v.isFinalized);
     const allFinalized =
       withSpend.length > 0 && withSpend.every((v) => v.isFinalized);
@@ -306,11 +240,9 @@ export function deriveFuelReconciliationPeriods(input: DeriveFuelPeriodsInput): 
     const status = classifyFuelReconPeriodStatus({
       locked,
       withSpendCount: withSpend.length,
-      actionableTotal: locked ? 0 : actionableTotal,
       exceptionCount: locked ? 0 : exceptionCount,
       openDisputeCount: locked ? 0 : openDisputeCount,
       leakageActionable: locked ? 0 : counts['leakage-gap'].actionable,
-      finalizeActionable: locked ? 0 : counts.finalize.actionable,
     });
 
     const totalSpend = withSpend.reduce((s, v) => s + v.totalSpend, 0);

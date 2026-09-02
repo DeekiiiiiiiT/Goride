@@ -20,6 +20,7 @@ import {
   fuelScenariosContentSig,
   hashFuelContentSig,
 } from '../utils/fuelContentSig';
+import { liveReportsToPrimaryClaimedSlices } from '../utils/fuelPeriodDerive';
 import type {
   FinalizedFuelReport,
   FuelCard,
@@ -144,31 +145,7 @@ export function useFuelLandingLiveReports(input: FuelLandingLiveReportsInput) {
         };
         try {
           const { reports } = await buildFuelWeekReportsWithGating(buildInput);
-          const slices: FuelLandingLiveSlice[] = [];
-          for (const r of reports) {
-            const vehicleIds =
-              Array.isArray((r as any).vehicleIds) && (r as any).vehicleIds.length > 0
-                ? ((r as any).vehicleIds as string[])
-                : r.vehicleId
-                  ? [r.vehicleId]
-                  : [];
-            // C3: one driver-week report → money once on primary vehicle only.
-            // Secondary shared-car vehicles get a presence slice (zeros) so they stay visible.
-            const primaryId = r.vehicleId || vehicleIds[0];
-            const uniq = [...new Set(vehicleIds.length ? vehicleIds : primaryId ? [primaryId] : [])];
-            for (const vehicleId of uniq) {
-              const isPrimary = vehicleId === primaryId;
-              slices.push({
-                vehicleId,
-                totalGasCardCost: isPrimary ? Number(r.totalGasCardCost) || 0 : 0,
-                companyShare: isPrimary ? Number(r.companyShare) || 0 : 0,
-                driverShare: isPrimary ? Number(r.driverShare) || 0 : 0,
-                miscellaneousCost: isPrimary ? Number(r.miscellaneousCost) || 0 : 0,
-                healthStatus: isPrimary ? r.healthStatus : undefined,
-                pendingCount: isPrimary ? r.pendingCount : 0,
-              });
-            }
-          }
+          const slices: FuelLandingLiveSlice[] = liveReportsToPrimaryClaimedSlices(reports);
           next.set(week.startDate, slices);
         } catch (e) {
           console.warn('[useFuelLandingLiveReports] week calc failed', week.startDate, e);

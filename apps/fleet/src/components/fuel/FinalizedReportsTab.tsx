@@ -40,15 +40,11 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '../ui/alert-dialog';
+import { formatFuelMoney } from '../../utils/formatFuelMoney';
 import {
   FuelBulkResetDialog,
   finalizedWeekOptionsFromGroups,
 } from './reconciliation/FuelBulkResetDialog';
-
-const currency = new Intl.NumberFormat('en-US', {
-  style: 'currency',
-  currency: 'USD',
-});
 
 interface WeekGroup {
   key: string;
@@ -321,19 +317,19 @@ export function FinalizedReportsTab() {
                       <div className="text-right">
                         <span className="text-slate-400 text-xs block">Total Spend</span>
                         <span className="font-semibold text-slate-700">
-                          {currency.format(group.totalSpend)}
+                          {formatFuelMoney(group.totalSpend)}
                         </span>
                       </div>
                       <div className="text-right">
                         <span className="text-slate-400 text-xs block">Deduction</span>
                         <span className="font-semibold text-red-600">
-                          {currency.format(group.totalDeduction)}
+                          {formatFuelMoney(group.totalDeduction)}
                         </span>
                       </div>
                       <div className="text-right">
                         <span className="text-slate-400 text-xs block">Net Pay</span>
                         <span className="font-semibold text-slate-700">
-                          {currency.format(group.totalNetPay)}
+                          {formatFuelMoney(group.totalNetPay)}
                         </span>
                       </div>
                     </div>
@@ -377,31 +373,31 @@ export function FinalizedReportsTab() {
                             </div>
                           </TableCell>
                           <TableCell className="text-right font-medium">
-                            {currency.format(r.totalGasCardCost || 0)}
+                            {formatFuelMoney(r.totalGasCardCost || 0)}
                           </TableCell>
                           <TableCell className="text-right text-sm">
-                            {currency.format(r.rideShareCost || 0)}
+                            {formatFuelMoney(r.rideShareCost || 0)}
                           </TableCell>
                           <TableCell className="text-right text-sm">
-                            {currency.format(r.companyUsageCost ?? 0)}
+                            {formatFuelMoney(r.companyUsageCost ?? 0)}
                           </TableCell>
                           <TableCell className="text-right text-sm text-amber-600">
-                            {currency.format(r.deadheadCost || 0)}
+                            {formatFuelMoney(r.deadheadCost || 0)}
                           </TableCell>
                           <TableCell className="text-right text-sm">
-                            {currency.format(r.personalUsageCost ?? 0)}
+                            {formatFuelMoney(r.personalUsageCost ?? 0)}
                           </TableCell>
                           <TableCell className="text-right text-sm">
-                            {currency.format(r.miscellaneousCost ?? 0)}
+                            {formatFuelMoney(r.miscellaneousCost ?? 0)}
                           </TableCell>
                           <TableCell className="text-right text-sm">
-                            {currency.format(r.driverSpend || 0)}
+                            {formatFuelMoney(r.driverSpend || 0)}
                           </TableCell>
                           <TableCell className="text-right font-medium text-red-600">
-                            {currency.format(r.driverShare || 0)}
+                            {formatFuelMoney(r.driverShare || 0)}
                           </TableCell>
                           <TableCell className="text-right font-medium">
-                            {currency.format(r.netPay || 0)}
+                            {formatFuelMoney(r.netPay || 0)}
                           </TableCell>
                           <TableCell>
                             <Button
@@ -429,43 +425,43 @@ export function FinalizedReportsTab() {
                       <TableRow className="bg-slate-50 font-semibold">
                         <TableCell>Totals ({group.reports.length} vehicles)</TableCell>
                         <TableCell className="text-right">
-                          {currency.format(group.totalSpend)}
+                          {formatFuelMoney(group.totalSpend)}
                         </TableCell>
                         <TableCell className="text-right">
-                          {currency.format(
+                          {formatFuelMoney(
                             group.reports.reduce((s: number, r: any) => s + (r.rideShareCost || 0), 0)
                           )}
                         </TableCell>
                         <TableCell className="text-right">
-                          {currency.format(
+                          {formatFuelMoney(
                             group.reports.reduce((s: number, r: any) => s + (r.companyUsageCost ?? 0), 0)
                           )}
                         </TableCell>
                         <TableCell className="text-right text-amber-600">
-                          {currency.format(
+                          {formatFuelMoney(
                             group.reports.reduce((s: number, r: any) => s + (r.deadheadCost || 0), 0)
                           )}
                         </TableCell>
                         <TableCell className="text-right">
-                          {currency.format(
+                          {formatFuelMoney(
                             group.reports.reduce((s: number, r: any) => s + (r.personalUsageCost ?? 0), 0)
                           )}
                         </TableCell>
                         <TableCell className="text-right">
-                          {currency.format(
+                          {formatFuelMoney(
                             group.reports.reduce((s: number, r: any) => s + (r.miscellaneousCost ?? 0), 0)
                           )}
                         </TableCell>
                         <TableCell className="text-right">
-                          {currency.format(
+                          {formatFuelMoney(
                             group.reports.reduce((s: number, r: any) => s + (r.driverSpend || 0), 0)
                           )}
                         </TableCell>
                         <TableCell className="text-right text-red-600">
-                          {currency.format(group.totalDeduction)}
+                          {formatFuelMoney(group.totalDeduction)}
                         </TableCell>
                         <TableCell className="text-right">
-                          {currency.format(group.totalNetPay)}
+                          {formatFuelMoney(group.totalNetPay)}
                         </TableCell>
                         <TableCell />
                       </TableRow>

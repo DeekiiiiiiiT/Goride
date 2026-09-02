@@ -39,6 +39,9 @@ import { api } from '../services/api';
 import { FuelReconciliationDashboard } from '../components/fuel/reconciliation/FuelReconciliationDashboard';
 import { useFuelSettlementReopenGate } from '../components/fuel/reconciliation/useFuelSettlementReopenGate';
 import { deriveFuelReconciliationPeriods } from '../utils/fuelPeriodStatus';
+import { listFuelLeakageReviewedWeeks } from '../utils/fuelLeakageReviewStore';
+import { fetchTripsForFuelWeekPaged } from '../utils/fetchTripsForFuelWeek';
+import { useFuelPeriods } from '../hooks/useFuelPeriods';
 import { useFuelLandingLiveReports } from '../hooks/useFuelLandingLiveReports';
 import { mergeFuelCardWithAssignmentHistory } from '../utils/mergeFuelCardWithAssignmentHistory';
 import {
@@ -271,6 +274,15 @@ function FuelManagementInner({ defaultTab = 'logs', onViewDriverLedger, onTabCha
     finalizedReports,
   });
 
+  // Wave C dual-read: server period rows (after backfill) sit beside browser derive
+  const serverPeriodFrom = reconciliationWeekOptions[reconciliationWeekOptions.length - 1]?.startDate;
+  const serverPeriodTo = reconciliationWeekOptions[0]?.startDate;
+  useFuelPeriods({
+    from: serverPeriodFrom,
+    to: serverPeriodTo,
+    enabled: Boolean(serverPeriodFrom && serverPeriodTo),
+  });
+
   const fuelReconPeriods = useMemo(
     () =>
       deriveFuelReconciliationPeriods({
@@ -281,6 +293,7 @@ function FuelManagementInner({ defaultTab = 'logs', onViewDriverLedger, onTabCha
         finalizedReports,
         scenarios,
         liveReportsByWeek: landingLiveReportsByWeek,
+        leakageReviewedWeeks: listFuelLeakageReviewedWeeks(),
       }),
     [
       reconciliationWeekOptions,
@@ -326,15 +339,14 @@ function FuelManagementInner({ defaultTab = 'logs', onViewDriverLedger, onTabCha
     const fetchTripsForRange = async () => {
         if (!reconciliationDateRange?.from) return;
         try {
-            // Using getTripsFiltered is more efficient and accurate for reconciliation than raw getTrips
             const startDate = toEntryYmd(reconciliationDateRange.from);
             const endDate = toEntryYmd(reconciliationDateRange.to || reconciliationDateRange.from);
-            const response = await api.getTripsFiltered({
-                startDate,
-                endDate,
-                limit: 1500 // Cap at 1500 to prevent browser lag, but cover the week
-            });
-            setTrips(response.data || []);
+            const { trips: weekTrips, tripsTruncated } = await fetchTripsForFuelWeekPaged(
+              startDate,
+              endDate,
+            );
+            setTrips(weekTrips);
+            if (tripsTruncated) setFuelDataTruncated(true);
         } catch (e) {
             console.error("Failed to fetch trips for range", e);
             // Don't toast error here to avoid spamming on mount if it fails silently
