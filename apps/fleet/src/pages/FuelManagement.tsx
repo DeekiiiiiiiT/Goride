@@ -216,6 +216,7 @@ function FuelManagementInner({ defaultTab = 'logs', onViewDriverLedger, onTabCha
 
   // Fuel Log State
   const [logs, setLogs] = useState<FuelEntry[]>([]);
+  const [fuelDataTruncated, setFuelDataTruncated] = useState(false);
   const [isLogModalOpen, setIsLogModalOpen] = useState(false);
   const [editingLog, setEditingLog] = useState<FuelEntry | null>(null);
 
@@ -357,6 +358,7 @@ function FuelManagementInner({ defaultTab = 'logs', onViewDriverLedger, onTabCha
         }),
       ]);
       setLogs(logsData);
+      setFuelDataTruncated(Array.isArray(logsData) && logsData.length >= 1500);
       setTransactions(txData);
       lastFuelDataLoadAtRef.current = Date.now();
     } catch (e) {
@@ -400,7 +402,14 @@ function FuelManagementInner({ defaultTab = 'logs', onViewDriverLedger, onTabCha
           );
           const adjsP = fuelService.getMileageAdjustments().catch(() => []);
           const disputesP = FuelDisputeService.getAllDisputes().catch(() => []);
-          const finalizedP = api.getFinalizedReports().catch(() => []);
+          const finalizedFrom = activityMinDate || fuelFetchWindow.startDate;
+          const finalizedTo = fuelFetchWindow.endDate;
+          const finalizedP = api
+            .getFinalizedReports({
+              weekStartFrom: finalizedFrom,
+              weekStartTo: finalizedTo,
+            })
+            .catch(() => []);
           const programsP = fuelService.getJaaPrograms().catch(() => [] as JaaProgram[]);
           const boundsP = fuelService.getFuelActivityBounds().catch(() => ({ minDate: null as string | null }));
 
@@ -1190,6 +1199,7 @@ function FuelManagementInner({ defaultTab = 'logs', onViewDriverLedger, onTabCha
           fuelCards={cards}
           finalizedReports={finalizedReports}
           isRefreshing={isRefreshing}
+          dataTruncated={fuelDataTruncated}
           onRefresh={() => loadData(true)}
           onFinalize={handleFinalize}
           onAddAdjustment={() => { setAdjustmentDefaults({}); setIsAdjustmentModalOpen(true); }}

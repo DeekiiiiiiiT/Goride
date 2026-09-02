@@ -3990,12 +3990,17 @@ export const api = {
     vehicleIds?: string[];
     driverId?: string;
     driverIds?: string[];
+    /** Inclusive Monday YMD — C5a window */
+    weekStartFrom?: string;
+    weekStartTo?: string;
   }): Promise<any[]> {
     const qs = new URLSearchParams();
     if (opts?.vehicleId) qs.set('vehicleId', opts.vehicleId);
     if (opts?.vehicleIds?.length) qs.set('vehicleIds', opts.vehicleIds.join(','));
     if (opts?.driverId) qs.set('driverId', opts.driverId);
     if (opts?.driverIds?.length) qs.set('driverIds', opts.driverIds.join(','));
+    if (opts?.weekStartFrom) qs.set('weekStartFrom', opts.weekStartFrom);
+    if (opts?.weekStartTo) qs.set('weekStartTo', opts.weekStartTo);
     const suffix = qs.toString() ? `?${qs.toString()}` : '';
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/finalized-reports${suffix}`, {
       headers: await requireAuthHeaders(null)
@@ -4129,13 +4134,20 @@ export const api = {
   },
 
   /** Re-open a consumption week: wipe snapshots, reverse settlements, return logs to Pending. */
-  async resetFuelPeriod(weekStart: string): Promise<{
+  async resetFuelPeriod(
+    weekStart: string,
+    opts?: { dryRun?: boolean; reopenReason?: string },
+  ): Promise<{
     success: boolean;
+    dryRun?: boolean;
     snapshotsDeleted?: number;
+    snapshots?: number;
     deletedTransactions?: number;
     resetFuelEntries?: number;
     eventsReversed?: number;
     periodsRebuilt?: number;
+    driverIds?: string[];
+    vehicleIds?: string[];
     error?: string;
   }> {
     const weekKey = String(weekStart).split('T')[0];
@@ -4144,7 +4156,11 @@ export const api = {
       {
         method: 'POST',
         headers: await requireAuthHeaders(),
-        body: JSON.stringify({ weekStart: weekKey }),
+        body: JSON.stringify({
+          weekStart: weekKey,
+          dryRun: opts?.dryRun === true,
+          reopenReason: opts?.reopenReason || undefined,
+        }),
       },
     );
     const data = await response.json().catch(() => ({}));

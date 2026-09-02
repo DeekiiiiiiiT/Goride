@@ -4,10 +4,7 @@ import { parseISO, format } from 'date-fns';
 import { Button } from '../../ui/button';
 import type { FuelExceptionBlocker } from '../../../utils/fuelFinalizeGating';
 import { FuelExceptionResolveDialog } from './FuelExceptionResolveDialog';
-
-function formatMoney(n: number) {
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(n || 0);
-}
+import { formatFuelMoney } from '../../../utils/formatFuelMoney';
 
 function formatFillDate(ymd: string): string {
   try {
@@ -69,7 +66,7 @@ export function FuelExceptionBlockersPanel({
             >
               <div className="min-w-0 space-y-0.5">
                 <div className="text-sm font-semibold text-slate-900">
-                  {formatFillDate(b.dateYmd)} · {formatMoney(b.amount)} · {b.paymentLabel}
+                  {formatFillDate(b.dateYmd)} · {formatFuelMoney(b.amount)} · {b.paymentLabel}
                 </div>
                 <div className="text-xs text-slate-600">
                   {plateFor(b)} · {b.location}

@@ -3,6 +3,13 @@ import {
   buildFuelWeekReportsWithGating,
   type BuildFuelWeekReportsInput,
 } from '../utils/buildFuelWeekReportsForFinalize';
+import {
+  fuelAdjustmentsContentSig,
+  fuelDisputesContentSig,
+  fuelEntriesContentSig,
+  fuelScenariosContentSig,
+  hashFuelContentSig,
+} from '../utils/fuelContentSig';
 
 export const FUEL_WEEK_REPORTS_KEY = 'fuelWeekReports';
 
@@ -10,27 +17,33 @@ export function useFuelWeekReports(
   input: BuildFuelWeekReportsInput | null,
   enabled = true,
 ) {
+  const contentKey = input
+    ? hashFuelContentSig([
+        input.weekStartYmd,
+        input.weekEndYmd,
+        fuelEntriesContentSig(input.fuelEntries || []),
+        fuelAdjustmentsContentSig(input.adjustments || []),
+        fuelScenariosContentSig(input.scenarios || []),
+        fuelDisputesContentSig(input.disputes || []),
+        (input.vehicles || []).map((v) => `${v.id}:${v.fuelScenarioId || ''}`).join(','),
+        (input.drivers || [])
+          .map((d: any) => `${d.id || d.driverId}:${d.fuelScenarioId || ''}`)
+          .join(','),
+        (input.finalizedReports || [])
+          .map((f) => `${f.driverId}:${f.weekStart}:${f.miscellaneousCost}`)
+          .join(','),
+      ])
+    : 'none';
+
   const query = useQuery({
-    queryKey: [
-      FUEL_WEEK_REPORTS_KEY,
-      input?.weekStartYmd,
-      input?.weekEndYmd,
-      input?.vehicles?.length,
-      input?.fuelEntries?.length,
-      input?.adjustments?.length,
-      input?.trips?.length ?? 0,
-      input?.drivers?.length,
-      input?.scenarios?.length,
-    ],
+    queryKey: [FUEL_WEEK_REPORTS_KEY, input?.weekStartYmd, input?.weekEndYmd, contentKey],
     queryFn: () => {
       if (!input) throw new Error('Missing fuel week input');
       return buildFuelWeekReportsWithGating(input);
     },
     enabled: enabled && !!input?.weekStartYmd && !!input?.weekEndYmd,
     staleTime: 30_000,
-    // Don't leave the wizard stuck on "Loading…" if one dependency call hangs.
     networkMode: 'always',
-    // Soft-timeouts inside the builder; this is a hard backstop for the UI.
     gcTime: 60_000,
   });
 
@@ -38,7 +51,6 @@ export function useFuelWeekReports(
     reports: query.data?.reports ?? [],
     trips: query.data?.trips ?? input?.trips ?? [],
     gateResult: query.data?.gateResult,
-    // Initial open only — background refetch must not blank the step UI.
     loading: query.isLoading && !query.data,
     updating: query.isFetching && !!query.data,
     error: query.error,

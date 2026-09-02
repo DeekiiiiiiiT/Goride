@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { AlertTriangle, Loader2, RotateCcw } from 'lucide-react';
 import {
   Dialog,
@@ -11,10 +11,9 @@ import {
 import { Button } from '../../ui/button';
 import { Input } from '../../ui/input';
 import { Label } from '../../ui/label';
+import { Textarea } from '../../ui/textarea';
 import { toast } from 'sonner';
 import { api } from '../../../services/api';
-import type { FuelEntry, FinalizedFuelReport } from '../../../types/fuel';
-import { buildFuelPeriodResetInventory } from '../../../utils/fuelPeriodStatus';
 import { periodConfirmLabelsMatch } from '../../../utils/fuelWeekPeriod';
 import type { FuelReconciliationPeriod } from '../../../utils/fuelPeriodStatus';
 import { useLockedDialog } from '../../shared/useLockedDialog';
@@ -27,43 +26,87 @@ interface FuelPeriodResetDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   period: FuelReconciliationPeriod;
-  finalizedReports: FinalizedFuelReport[];
-  fuelEntries: FuelEntry[];
+  /** @deprecated preview comes from server dry-run — kept for call-site compat */
+  finalizedReports?: unknown;
+  fuelEntries?: unknown;
   onComplete: () => void;
 }
+
+type ServerPreview = {
+  snapshots: number;
+  resetFuelEntries: number;
+  deletedTransactions: number;
+  driverIds: string[];
+  vehicleIds: string[];
+};
 
 export function FuelPeriodResetDialog({
   open,
   onOpenChange,
   period,
-  finalizedReports,
-  fuelEntries,
   onComplete,
 }: FuelPeriodResetDialogProps) {
   const queryClient = useQueryClient();
   const { runExclusive, busy: fleetBusy } = useFuelReconBusy();
   const [confirmText, setConfirmText] = useState('');
+  const [reopenReason, setReopenReason] = useState('');
   const [executing, setExecuting] = useState(false);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [preview, setPreview] = useState<ServerPreview | null>(null);
+  const [previewError, setPreviewError] = useState<string | null>(null);
   const lockBusy = executing || fleetBusy;
   const {
     onOpenChange: lockedOpenChange,
     contentProps: lockedContentProps,
   } = useLockedDialog(open, onOpenChange, lockBusy);
 
-  const inventory = useMemo(
-    () => buildFuelPeriodResetInventory(period.id, finalizedReports, fuelEntries),
-    [period.id, finalizedReports, fuelEntries],
-  );
-
   const labelOk = periodConfirmLabelsMatch(confirmText, period.label);
+  const reasonOk = reopenReason.trim().length >= 3;
 
   useEffect(() => {
-    if (!open) setConfirmText('');
-  }, [open]);
+    if (!open) {
+      setConfirmText('');
+      setReopenReason('');
+      setPreview(null);
+      setPreviewError(null);
+      return;
+    }
+    let cancelled = false;
+    setPreviewLoading(true);
+    setPreviewError(null);
+    const weekKey = period.startDate || period.id;
+    void api
+      .resetFuelPeriod(weekKey, { dryRun: true })
+      .then((data) => {
+        if (cancelled) return;
+        setPreview({
+          snapshots: Number(data.snapshots ?? data.snapshotsDeleted ?? 0),
+          resetFuelEntries: Number(data.resetFuelEntries ?? 0),
+          deletedTransactions: Number(data.deletedTransactions ?? 0),
+          driverIds: Array.isArray(data.driverIds) ? data.driverIds : [],
+          vehicleIds: Array.isArray(data.vehicleIds) ? data.vehicleIds : [],
+        });
+      })
+      .catch((e: any) => {
+        if (cancelled) return;
+        setPreviewError(e?.message || 'Could not load reopen preview');
+        setPreview(null);
+      })
+      .finally(() => {
+        if (!cancelled) setPreviewLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, period.startDate, period.id]);
 
   const handleExecute = async () => {
     if (!labelOk) {
       toast.error('Week label does not match — use the Fill button or copy it exactly');
+      return;
+    }
+    if (!reasonOk) {
+      toast.error('Add a short reason for reopening this week');
       return;
     }
     setExecuting(true);
@@ -71,46 +114,10 @@ export function FuelPeriodResetDialog({
     try {
       const result = await runExclusive('Reopening week…', async () => {
         const weekKey = period.startDate || period.id;
-        try {
-          return await api.resetFuelPeriod(weekKey);
-        } catch {
-          // Fallback when reset-period unavailable: wipe by driver (preferred) then vehicle
-          const driverIds = [
-            ...new Set(
-              (finalizedReports || [])
-                .filter((r: any) => String(r.weekStart || '').split('T')[0] === weekKey)
-                .map((r: any) => r.driverId)
-                .filter(Boolean),
-            ),
-          ] as string[];
-          const vehicleIds =
-            inventory.vehicleIds.length > 0
-              ? inventory.vehicleIds
-              : [
-                  ...new Set(
-                    fuelEntries
-                      .filter((e) => {
-                        const d = String(e.date || '').split('T')[0];
-                        return d >= period.startDate && d <= period.endDate;
-                      })
-                      .map((e) => e.vehicleId)
-                      .filter(Boolean),
-                  ),
-                ];
-          for (const id of [...driverIds, ...vehicleIds]) {
-            try {
-              await api.deleteFinalizedReport(weekKey, id);
-            } catch (e: any) {
-              if (!/404|not found/i.test(String(e?.message || ''))) throw e;
-            }
-          }
-          return {
-            success: true,
-            snapshotsDeleted: inventory.snapshots.length,
-            resetFuelEntries: inventory.postedEntryCount,
-            deletedTransactions: 0,
-          };
-        }
+        // Single org-scoped server path — no client fallback (M9/M10)
+        return await api.resetFuelPeriod(weekKey, {
+          reopenReason: reopenReason.trim(),
+        });
       });
       if (result === undefined) {
         toast.dismiss(toastId);
@@ -120,30 +127,16 @@ export function FuelPeriodResetDialog({
       const snaps = result.snapshotsDeleted ?? 0;
       const entries = result.resetFuelEntries ?? 0;
       const txs = result.deletedTransactions ?? 0;
-      if (snaps === 0 && entries === 0 && txs === 0 && !inventory.hasActivity) {
-        toast.success(`Restarted ${period.label} from Data quality`, { id: toastId });
-      } else if (snaps === 0 && entries === 0 && txs === 0) {
-        toast.success(`Restarted ${period.label} from Data quality (no settlements to reverse)`, {
-          id: toastId,
-        });
-      } else {
-        toast.success(
-          `Reset ${period.label}: ${entries} log(s), ${txs} settlement row(s), ${snaps} snapshot(s) — back to Data quality`,
-          { id: toastId },
-        );
-      }
-      // Expenses Fuel Status — invalidate + rebuild touched drivers (toll parity).
+      toast.success(
+        `Reset ${period.label}: ${entries} log(s), ${txs} settlement row(s), ${snaps} snapshot(s) — back to Data quality`,
+        { id: toastId },
+      );
       void queryClient.invalidateQueries({ queryKey: [DRIVER_FINANCIAL_PERIODS_KEY] });
-      const weekKey = period.startDate || period.id;
-      const driverIds = [
-        ...new Set(
-          (finalizedReports || [])
-            .filter((r: any) => String(r.weekStart || '').split('T')[0] === weekKey)
-            .map((r: any) => r.driverId)
-            .filter(Boolean) as string[],
-        ),
-      ];
+      const driverIds = preview?.driverIds?.length
+        ? preview.driverIds
+        : [];
       if (driverIds.length > 0) {
+        const weekKey = period.startDate || period.id;
         void runBackgroundJobToast(
           async () => {
             for (const id of driverIds) {
@@ -177,79 +170,83 @@ export function FuelPeriodResetDialog({
             Reopen week
           </DialogTitle>
           <DialogDescription>
-            Re-open <strong>{period.label}</strong>
-            {inventory.canReset
-              ? ' by removing finalized snapshots and reversing linked settlements.'
-              : '. This week has no posted settlements — Reopen still clears wizard progress and returns you to the period list.'}{' '}
-            This cannot be undone.
+            Re-open <strong>{period.label}</strong> by removing finalized snapshots and reversing
+            linked settlements for <em>your organization only</em>. This cannot be undone.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-3 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
           <div className="flex items-start gap-2">
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-            <div>
-              <p className="font-semibold">Will reverse</p>
-              <ul className="mt-1 list-inside list-disc text-xs">
-                <li>{inventory.snapshots.length} finalized snapshot(s)</li>
-                <li>{inventory.postedEntryCount} posted fuel log(s) returned to Pending</li>
-                <li>
-                  {inventory.weekEntryCount} fuel log(s) in this week
-                  {inventory.pendingEntryCount > 0
-                    ? ` (${inventory.pendingEntryCount} still Pending)`
-                    : ''}
-                </li>
-                <li>Linked wallet / settlement rows for this week (if any)</li>
-              </ul>
+            <div className="min-w-0 flex-1">
+              <p className="font-semibold">Will reverse (server preview)</p>
+              {previewLoading ? (
+                <p className="mt-1 flex items-center gap-2 text-xs">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading exact inventory…
+                </p>
+              ) : previewError ? (
+                <p className="mt-1 text-xs text-rose-700">{previewError}</p>
+              ) : preview ? (
+                <ul className="mt-1 list-inside list-disc text-xs">
+                  <li>{preview.snapshots} finalized snapshot(s)</li>
+                  <li>{preview.resetFuelEntries} posted fuel log(s) returned to Pending</li>
+                  <li>{preview.deletedTransactions} settlement transaction(s)</li>
+                  <li>
+                    {preview.driverIds.length} driver(s) · {preview.vehicleIds.length} vehicle(s)
+                  </li>
+                </ul>
+              ) : (
+                <p className="mt-1 text-xs">No preview available.</p>
+              )}
             </div>
           </div>
         </div>
 
         <div className="space-y-2">
-          <div className="flex items-center justify-between gap-2">
-            <Label htmlFor="fuel-reset-confirm">
-              Type <span className="font-mono text-xs">{period.label}</span> to confirm
-            </Label>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="h-8 text-xs"
-              onClick={() => setConfirmText(period.label)}
-            >
-              Fill label
-            </Button>
-          </div>
-          <Input
-            id="fuel-reset-confirm"
-            value={confirmText}
-            onChange={(e) => setConfirmText(e.target.value)}
-            placeholder={period.label}
-            autoComplete="off"
+          <Label htmlFor="reopen-reason">Reason for reopen</Label>
+          <Textarea
+            id="reopen-reason"
+            value={reopenReason}
+            onChange={(e) => setReopenReason(e.target.value)}
+            placeholder="e.g. Corrected odometer gap for plate 5179KZ"
+            className="min-h-[72px]"
+            disabled={lockBusy}
           />
-          {confirmText.length > 0 && !labelOk && (
-            <p className="text-xs text-rose-600">Label does not match yet — click Fill label.</p>
-          )}
         </div>
 
-        <DialogFooter className="gap-2">
-          <Button type="button" variant="outline" onClick={() => lockedOpenChange(false)} disabled={lockBusy}>
+        <div className="space-y-2">
+          <Label htmlFor="confirm-week">Type the week label to confirm</Label>
+          <div className="flex gap-2">
+            <Input
+              id="confirm-week"
+              value={confirmText}
+              onChange={(e) => setConfirmText(e.target.value)}
+              placeholder={period.label}
+              disabled={lockBusy}
+            />
+            <Button
+              type="button"
+              variant="outline"
+              disabled={lockBusy}
+              onClick={() => setConfirmText(period.label)}
+            >
+              Fill
+            </Button>
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button type="button" variant="ghost" disabled={lockBusy} onClick={() => lockedOpenChange(false)}>
             Cancel
           </Button>
           <Button
             type="button"
             variant="destructive"
-            disabled={lockBusy || !labelOk}
-            onClick={handleExecute}
+            disabled={lockBusy || !labelOk || !reasonOk || !!previewError || previewLoading}
+            onClick={() => void handleExecute()}
           >
-            {executing ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Reopening…
-              </>
-            ) : (
-              'Reopen week'
-            )}
+            {executing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+            Reopen week
           </Button>
         </DialogFooter>
       </DialogContent>

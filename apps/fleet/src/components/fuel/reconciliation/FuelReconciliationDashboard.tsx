@@ -3,8 +3,10 @@ import { FuelPeriodLandingPage } from './FuelPeriodLandingPage';
 import { FuelPeriodWizard } from './FuelPeriodWizard';
 import { FuelPeriodResetDialog } from './FuelPeriodResetDialog';
 import { FuelBulkFinalizeDialog } from './FuelBulkFinalizeDialog';
+import { FuelBulkResetDialog, finalizedWeekOptionsFromGroups } from './FuelBulkResetDialog';
 import { FinalizedReportsTab } from '../FinalizedReportsTab';
 import type { FuelReconciliationPeriod } from '../../../utils/fuelPeriodStatus';
+import type { FuelStepId } from '../../../utils/fuelPeriodGating';
 import type {
   FinalizedFuelReport,
   FuelCard,
@@ -22,7 +24,10 @@ import type { DateRange } from 'react-day-picker';
 export const FUEL_RECON_WIZARD_PRIMARY =
   import.meta.env.VITE_FUEL_RECON_WIZARD_PRIMARY !== '0';
 
-type View = { kind: 'landing' } | { kind: 'wizard'; period: FuelReconciliationPeriod } | { kind: 'archive' };
+type View =
+  | { kind: 'landing' }
+  | { kind: 'wizard'; period: FuelReconciliationPeriod; initialStepId?: FuelStepId }
+  | { kind: 'archive' };
 
 export function FuelReconciliationDashboard({
   outstanding,
@@ -48,6 +53,7 @@ export function FuelReconciliationDashboard({
   onOpenTransactionLogs,
   onAcceptFuelException,
   onEditFuelEntry,
+  dataTruncated,
 }: {
   outstanding: FuelReconciliationPeriod[];
   inProgress: FuelReconciliationPeriod[];
@@ -79,15 +85,17 @@ export function FuelReconciliationDashboard({
     note: string,
   ) => Promise<boolean | void> | boolean | void;
   onEditFuelEntry?: (entryId: string) => void;
+  dataTruncated?: boolean;
 }) {
   const [view, setView] = useState<View>({ kind: 'landing' });
   const [resetPeriod, setResetPeriod] = useState<FuelReconciliationPeriod | null>(null);
   const [bulkFinalizeOpen, setBulkFinalizeOpen] = useState(false);
+  const [bulkReopenOpen, setBulkReopenOpen] = useState(false);
   const [wizardSession, setWizardSession] = useState(0);
 
-  const openPeriod = (period: FuelReconciliationPeriod) => {
+  const openPeriod = (period: FuelReconciliationPeriod, stepId?: FuelStepId) => {
     onSelectPeriodWeek?.(period);
-    setView({ kind: 'wizard', period });
+    setView({ kind: 'wizard', period, initialStepId: stepId });
   };
 
   if (view.kind === 'archive') {
@@ -114,7 +122,7 @@ export function FuelReconciliationDashboard({
     return (
       <>
         <FuelPeriodWizard
-          key={`${period.id}-${wizardSession}`}
+          key={`${period.id}-${wizardSession}-${view.initialStepId || ''}`}
           period={period}
           vehicles={vehicles}
           trips={trips}
@@ -128,6 +136,7 @@ export function FuelReconciliationDashboard({
           dateRange={dateRange}
           isRefreshing={isRefreshing}
           sessionKey={wizardSession}
+          initialStepId={view.initialStepId}
           onBack={() => {
             setView({ kind: 'landing' });
             onRefresh();
@@ -160,6 +169,18 @@ export function FuelReconciliationDashboard({
     );
   }
 
+  const bulkReopenWeeks = finalizedWeekOptionsFromGroups(
+    completed.map((p) => ({
+      weekStart: p.startDate,
+      weekEnd: p.endDate,
+      vehicleCount: p.vehicleCount,
+      totalSpend: p.totalSpend,
+      reports: finalizedReports.filter(
+        (f) => String(f.weekStart || '').split('T')[0] === p.startDate,
+      ),
+    })),
+  );
+
   return (
     <>
       <FuelPeriodLandingPage
@@ -171,6 +192,8 @@ export function FuelReconciliationDashboard({
         onResetPeriod={(p) => setResetPeriod(p)}
         onOpenArchive={() => setView({ kind: 'archive' })}
         onBulkFinalize={() => setBulkFinalizeOpen(true)}
+        onBulkReopen={() => setBulkReopenOpen(true)}
+        dataTruncated={dataTruncated}
       />
       <FuelBulkFinalizeDialog
         open={bulkFinalizeOpen}
@@ -184,6 +207,12 @@ export function FuelReconciliationDashboard({
         fuelCards={fuelCards}
         disputes={disputes}
         finalizedReports={finalizedReports}
+        onComplete={onRefresh}
+      />
+      <FuelBulkResetDialog
+        open={bulkReopenOpen}
+        onOpenChange={setBulkReopenOpen}
+        weeks={bulkReopenWeeks}
         onComplete={onRefresh}
       />
       {resetPeriod && (

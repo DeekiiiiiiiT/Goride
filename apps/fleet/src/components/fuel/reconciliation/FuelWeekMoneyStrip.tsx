@@ -1,8 +1,5 @@
 import { FUEL_SPEND_EPS } from '../../../utils/fuelMoneyEpsilon';
-
-function formatMoney(n: number) {
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(n || 0);
-}
+import { formatFuelMoney } from '../../../utils/formatFuelMoney';
 
 function MoneyStatCard({
   label,
@@ -37,7 +34,7 @@ function MoneyStatCard({
           warn ? 'text-[#684000]' : emphasize ? 'text-[#3525cd]' : 'text-slate-900'
         }`}
       >
-        {formatMoney(value)}
+        {formatFuelMoney(value)}
       </p>
     </div>
   );
@@ -59,6 +56,9 @@ export function FuelWeekMoneyStrip({
   driver: number;
   leakage: number;
 }) {
+  const sourcesTie = Math.abs(gasCard + cashFromEarnings - totalSpend) <= FUEL_SPEND_EPS;
+  const splitTie = Math.abs(company + driver + leakage - totalSpend) <= FUEL_SPEND_EPS;
+
   return (
     <div className="flex flex-col gap-8">
       <section className="flex flex-col gap-4">
@@ -75,6 +75,12 @@ export function FuelWeekMoneyStrip({
           <MoneyStatCard label="Cash from earnings (credit)" value={cashFromEarnings} />
           <MoneyStatCard label="Total fuel bought" value={totalSpend} emphasize />
         </div>
+        <p
+          className={`text-xs font-medium ${sourcesTie ? 'text-emerald-700' : 'text-rose-700'}`}
+          role="status"
+        >
+          Gas card + Cash {sourcesTie ? '=' : '≠'} Total {sourcesTie ? '✓' : '— check attribution'}
+        </p>
       </section>
 
       <section className="flex flex-col gap-4">
@@ -92,9 +98,16 @@ export function FuelWeekMoneyStrip({
           <MoneyStatCard
             label="Unexplained fuel"
             value={leakage}
-            warn={leakage > FUEL_SPEND_EPS}
+            warn={Math.abs(leakage) > FUEL_SPEND_EPS}
           />
         </div>
+        <p
+          className={`text-xs font-medium ${splitTie ? 'text-emerald-700' : 'text-rose-700'}`}
+          role="status"
+        >
+          Company + Driver + Unexplained {splitTie ? '=' : '≠'} Total{' '}
+          {splitTie ? '✓' : '— shared-car or calc mismatch'}
+        </p>
       </section>
     </div>
   );

@@ -116,6 +116,27 @@ describe('finalizeFuelWeekReports', () => {
     expect(mocks.commitWeeklyStatement).toHaveBeenCalled();
   });
 
+  // C2: Archived fills without finalizedByReport must not reverse-then-skip
+  it('does not reverse prior settlement when no entries are re-postable', async () => {
+    const archivedOnly = {
+      ...pendingEntry,
+      reconciliationStatus: 'Archived' as const,
+      metadata: {},
+    };
+    const prior = { ...report({ status: 'Finalized' }), finalizedAt: '2026-08-16T12:00:00.000Z' };
+    const result = await finalizeFuelWeekReports([report({ pendingCount: 0 })], {
+      ...deps,
+      fuelEntries: [archivedOnly],
+    }, { priorReports: [prior as any] });
+
+    expect(mocks.reverseEnterpriseFuelSyncForReport).not.toHaveBeenCalled();
+    expect(mocks.commitWeeklyStatement).not.toHaveBeenCalled();
+    expect(mocks.saveFinalizedReports).not.toHaveBeenCalled();
+    expect(result.snapshotCount).toBe(0);
+    expect(result.ok).toBe(true);
+    expect(result.message).toMatch(/nothing to finalize/i);
+  });
+
   it('compensates settlement when snapshot save fails', async () => {
     mocks.saveFinalizedReports.mockRejectedValue(new Error('KV write failed'));
     const result = await finalizeFuelWeekReports([report()], deps);

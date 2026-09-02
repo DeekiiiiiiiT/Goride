@@ -4,10 +4,7 @@ import { Button } from '../../ui/button';
 import { FUEL_SPEND_EPS } from '../../../utils/fuelMoneyEpsilon';
 import { downloadCSV } from '../../../utils/export';
 import type { WeeklyFuelReport } from '../../../types/fuel';
-
-function formatMoney(n: number) {
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(n || 0);
-}
+import { formatFuelMoney } from '../../../utils/formatFuelMoney';
 
 export type FuelQualityRow = {
   id: string;
@@ -114,14 +111,14 @@ export function FuelDataQualityStep({
                 )}
                 <div className="text-right">
                   <div className="text-sm font-semibold tabular-nums text-slate-900">
-                    {formatMoney(r.totalSpend)}
+                    {formatFuelMoney(r.totalSpend)}
                   </div>
                   <div className="text-[11px] text-slate-500">Total fuel bought</div>
                 </div>
                 {r.misc > FUEL_SPEND_EPS && (
                   <div className="text-right">
                     <div className="text-sm font-semibold tabular-nums text-[#684000]">
-                      {formatMoney(r.misc)}
+                      {formatFuelMoney(r.misc)}
                     </div>
                     <div className="text-[11px] text-slate-500">Unexplained</div>
                   </div>
@@ -167,19 +164,19 @@ export function FuelDataQualityStep({
                       '—'
                     )}
                   </td>
-                  <td className="px-3 py-3 text-right tabular-nums">{formatMoney(r.totalSpend)}</td>
-                  <td className="px-3 py-3 text-right tabular-nums">{formatMoney(r.companyShare)}</td>
+                  <td className="px-3 py-3 text-right tabular-nums">{formatFuelMoney(r.totalSpend)}</td>
+                  <td className="px-3 py-3 text-right tabular-nums">{formatFuelMoney(r.companyShare)}</td>
                   <td className="px-3 py-3 text-right tabular-nums text-amber-700">
-                    {formatMoney(r.driverShare)}
+                    {formatFuelMoney(r.driverShare)}
                   </td>
-                  <td className="px-3 py-3 text-right tabular-nums">{formatMoney(r.cashFromEarnings)}</td>
-                  <td className="px-3 py-3 text-right tabular-nums font-semibold">{formatMoney(r.netPay)}</td>
+                  <td className="px-3 py-3 text-right tabular-nums">{formatFuelMoney(r.cashFromEarnings)}</td>
+                  <td className="px-3 py-3 text-right tabular-nums font-semibold">{formatFuelMoney(r.netPay)}</td>
                   <td
                     className={`px-3 py-3 text-right tabular-nums ${
                       r.misc > FUEL_SPEND_EPS ? 'text-[#684000] font-semibold' : ''
                     }`}
                   >
-                    {formatMoney(r.misc)}
+                    {formatFuelMoney(r.misc)}
                   </td>
                 </tr>
               ))}

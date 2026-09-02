@@ -845,6 +845,20 @@ app.get(`${BASE_PATH}/finalized-reports`, requirePermission('transactions.view')
 
     let scoped = filterByOrg(all as Record<string, unknown>[], c, { endpoint: "/finalized-reports" });
     scoped = narrowPlatformOrg(scoped, c);
+
+    // C5a: optional week window so clients stop shipping all-history payloads
+    const weekStartFrom = (c.req.query("weekStartFrom") || "").split("T")[0];
+    const weekStartTo = (c.req.query("weekStartTo") || "").split("T")[0];
+    if (/^\d{4}-\d{2}-\d{2}$/.test(weekStartFrom) || /^\d{4}-\d{2}-\d{2}$/.test(weekStartTo)) {
+      scoped = scoped.filter((s: any) => {
+        const wk = String(s?.weekStart || "").split("T")[0];
+        if (!wk) return false;
+        if (/^\d{4}-\d{2}-\d{2}$/.test(weekStartFrom) && wk < weekStartFrom) return false;
+        if (/^\d{4}-\d{2}-\d{2}$/.test(weekStartTo) && wk > weekStartTo) return false;
+        return true;
+      });
+    }
+
     return c.json(scoped);
   } catch (e: any) {
     console.log(`[FinalizedReports] GET error: ${e.message}`);
@@ -896,7 +910,23 @@ app.post(`${BASE_PATH}/finalized-reports`, requirePermission('transactions.edit'
 
       const key = finalizedReportKey(weekKey, report.driverId);
       try {
-      const stamped = { ...report, status: report.status || "Finalized" };
+      const rbacFull = c.get("rbacUser") as RbacUser | undefined;
+      const actorId = rbacFull?.userId || null;
+      const actorName =
+        (rbacFull as any)?.email ||
+        (rbacFull as any)?.name ||
+        (actorId ? String(actorId) : "unknown");
+      const stamped = stampOrg(
+        {
+          ...report,
+          status: report.status || "Finalized",
+          finalizedAt: report.finalizedAt || new Date().toISOString(),
+          // H5: never trust client 'admin' — stamp from session
+          finalizedByUser: actorName,
+          finalizedByUserId: actorId,
+        } as Record<string, unknown>,
+        c,
+      );
       await kv.set(key, stamped);
       // Drop legacy vehicle-keyed duplicate if present (last-writer-wins on shared cars)
       if (report.vehicleId && report.vehicleId !== report.driverId) {
@@ -1485,13 +1515,27 @@ app.post(`${BASE_PATH}/finalized-reports/reset-period`, requirePermission('trans
     if (!/^\d{4}-\d{2}-\d{2}$/.test(weekKey)) {
       return c.json({ error: "weekStart (YYYY-MM-DD Monday) is required" }, 400);
     }
+    const dryRun = body.dryRun === true;
+    const reopenReason = String(body.reopenReason || body.reason || "").trim();
+
+    // C1: fleet callers must have an org — never scan/delete across tenants
+    if (!isPlatformCaller(c) && !getOrgId(c)) {
+      return c.json({ error: "Forbidden — organization context required to reopen a week" }, 403);
+    }
 
     const startUtc = new Date(`${weekKey}T12:00:00.000Z`);
     const endUtc = new Date(startUtc);
     endUtc.setUTCDate(endUtc.getUTCDate() + 6);
     const endDate = endUtc.toISOString().slice(0, 10);
 
-    const snapshots = ((await kv.getByPrefix("finalized_report:")) || []).filter(
+    const snapshots = narrowPlatformOrg(
+      filterByOrg(
+        ((await kv.getByPrefix("finalized_report:")) || []) as Record<string, unknown>[],
+        c,
+        { endpoint: "/finalized-reports/reset-period" },
+      ),
+      c,
+    ).filter(
       (s: any) => s?.weekStart && String(s.weekStart).split("T")[0] === weekKey,
     );
 
@@ -1499,6 +1543,7 @@ app.post(`${BASE_PATH}/finalized-reports/reset-period`, requirePermission('trans
     const vehicleIds = new Set<string>();
     const driverIds = new Set<string>();
     for (const s of snapshots) {
+      if (!belongsToOrg(s as Record<string, unknown>, c) && !isPlatformCaller(c)) continue;
       if (s?.id) reportIdCandidates.add(String(s.id));
       if (s?.driverId) {
         driverIds.add(String(s.driverId));
@@ -1510,12 +1555,20 @@ app.post(`${BASE_PATH}/finalized-reports/reset-period`, requirePermission('trans
       }
     }
 
-    const allFuelEntries = (await kv.getByPrefix("fuel_entry:")) || [];
+    const allFuelEntries = narrowPlatformOrg(
+      filterByOrg(
+        ((await kv.getByPrefix("fuel_entry:")) || []) as Record<string, unknown>[],
+        c,
+        { endpoint: "/finalized-reports/reset-period" },
+      ),
+      c,
+    );
     const entriesToReset: any[] = [];
     const weekFillIds = new Set<string>();
 
     for (const entry of allFuelEntries) {
       if (!entry?.id) continue;
+      if (!belongsToOrg(entry as Record<string, unknown>, c) && !isPlatformCaller(c)) continue;
       const d = String(entry.date || "").split("T")[0];
       if (!d || d < weekKey || d > endDate) continue;
 
@@ -1545,11 +1598,19 @@ app.post(`${BASE_PATH}/finalized-reports/reset-period`, requirePermission('trans
       entriesToReset.push(entry);
     }
 
-    const allTransactions = (await kv.getByPrefix("transaction:")) || [];
+    const allTransactions = narrowPlatformOrg(
+      filterByOrg(
+        ((await kv.getByPrefix("transaction:")) || []) as Record<string, unknown>[],
+        c,
+        { endpoint: "/finalized-reports/reset-period" },
+      ),
+      c,
+    );
     const txIdsToDelete = new Set<string>();
 
     for (const tx of allTransactions) {
       if (!tx?.id) continue;
+      if (!belongsToOrg(tx as Record<string, unknown>, c) && !isPlatformCaller(c)) continue;
 
       const rid = tx.metadata?.reportId;
       if (rid && reportIdCandidates.has(String(rid))) {
@@ -1600,6 +1661,7 @@ app.post(`${BASE_PATH}/finalized-reports/reset-period`, requirePermission('trans
     // Paired wallet credits by source id
     for (const tx of allTransactions) {
       if (!tx?.id) continue;
+      if (!belongsToOrg(tx as Record<string, unknown>, c) && !isPlatformCaller(c)) continue;
       if (tx.category !== "Fuel Reimbursement Credit") continue;
       const src = tx.metadata?.fuelCreditSourceId;
       if (src && (txIdsToDelete.has(String(src)) || weekFillIds.has(String(src)))) {
@@ -1607,16 +1669,38 @@ app.post(`${BASE_PATH}/finalized-reports/reset-period`, requirePermission('trans
       }
     }
 
+    // M10: server dry-run preview — same inventory the destructive path will use
+    if (dryRun) {
+      return c.json({
+        success: true,
+        dryRun: true,
+        weekStart: weekKey,
+        endDate,
+        snapshots: snapshots.length,
+        snapshotIds: snapshots.map((s: any) => s.id || `${s.driverId}_${weekKey}`),
+        resetFuelEntries: entriesToReset.length,
+        deletedTransactions: txIdsToDelete.size,
+        driverIds: [...driverIds],
+        vehicleIds: [...vehicleIds],
+      });
+    }
+
     const ledgerTransactionIds = new Set<string>(txIdsToDelete);
     for (const txId of txIdsToDelete) {
       try {
         const fc = await kv.get(`transaction:fuel-credit-${txId}`);
-        if (fc?.id) ledgerTransactionIds.add(String(fc.id));
-        await kv.del(`transaction:fuel-credit-${txId}`);
+        if (fc?.id && (belongsToOrg(fc as Record<string, unknown>, c) || isPlatformCaller(c))) {
+          ledgerTransactionIds.add(String(fc.id));
+          await kv.del(`transaction:fuel-credit-${txId}`);
+        }
       } catch {
         /* ignore */
       }
       try {
+        const existingTx = await kv.get(`transaction:${txId}`);
+        if (existingTx && !belongsToOrg(existingTx as Record<string, unknown>, c) && !isPlatformCaller(c)) {
+          continue;
+        }
         await kv.del(`transaction:${txId}`);
       } catch (delErr: any) {
         console.log(`[FuelResetPeriod] Failed to delete tx ${txId}: ${delErr?.message}`);
@@ -1642,6 +1726,7 @@ app.post(`${BASE_PATH}/finalized-reports/reset-period`, requirePermission('trans
 
     let entriesReset = 0;
     for (const entry of entriesToReset) {
+      if (!belongsToOrg(entry as Record<string, unknown>, c) && !isPlatformCaller(c)) continue;
       const meta = { ...(entry.metadata || {}) };
       delete meta.finalizedAt;
       delete meta.finalizedByReport;
@@ -1656,18 +1741,23 @@ app.post(`${BASE_PATH}/finalized-reports/reset-period`, requirePermission('trans
         delete (updated as { transactionId?: string }).transactionId;
       }
 
-      await kv.set(`fuel_entry:${entry.id}`, updated);
+      await kv.set(`fuel_entry:${entry.id}`, stampOrg(updated, c));
       entriesReset++;
     }
 
     let snapshotsDeleted = 0;
     for (const s of snapshots) {
+      if (!belongsToOrg(s as Record<string, unknown>, c) && !isPlatformCaller(c)) continue;
       const keys = [
         s?.driverId ? finalizedReportKey(weekKey, s.driverId) : null,
         s?.vehicleId ? `finalized_report:${weekKey}:${s.vehicleId}` : null,
       ].filter(Boolean) as string[];
       for (const key of keys) {
         try {
+          const existing = await kv.get(key);
+          if (existing && !belongsToOrg(existing as Record<string, unknown>, c) && !isPlatformCaller(c)) {
+            continue;
+          }
           await kv.del(key);
           snapshotsDeleted++;
         } catch {
@@ -1677,14 +1767,24 @@ app.post(`${BASE_PATH}/finalized-reports/reset-period`, requirePermission('trans
     }
     for (const driverId of driverIds) {
       try {
-        await kv.del(finalizedReportKey(weekKey, driverId));
+        const key = finalizedReportKey(weekKey, driverId);
+        const existing = await kv.get(key);
+        if (existing && !belongsToOrg(existing as Record<string, unknown>, c) && !isPlatformCaller(c)) {
+          continue;
+        }
+        await kv.del(key);
       } catch {
         /* ignore */
       }
     }
     for (const vehicleId of vehicleIds) {
       try {
-        await kv.del(`finalized_report:${weekKey}:${vehicleId}`);
+        const key = `finalized_report:${weekKey}:${vehicleId}`;
+        const existing = await kv.get(key);
+        if (existing && !belongsToOrg(existing as Record<string, unknown>, c) && !isPlatformCaller(c)) {
+          continue;
+        }
+        await kv.del(key);
       } catch {
         /* ignore */
       }
@@ -1718,6 +1818,34 @@ app.post(`${BASE_PATH}/finalized-reports/reset-period`, requirePermission('trans
       syncErrors.push(String(syncErr?.message || syncErr));
     }
 
+    // H5: append-only reopen audit (KV until fuel_period_audit table ships)
+    try {
+      const rbacFull = c.get("rbacUser") as RbacUser | undefined;
+      const auditId = `${weekKey}:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`;
+      await kv.set(
+        `fuel_period_audit:${getOrgId(c) || "platform"}:${auditId}`,
+        stampOrg(
+          {
+            id: auditId,
+            periodId: weekKey,
+            at: new Date().toISOString(),
+            actorId: rbacFull?.userId || null,
+            actorName: (rbacFull as any)?.email || (rbacFull as any)?.name || null,
+            action: "reopened",
+            payload: {
+              reopenReason: reopenReason || null,
+              snapshotsDeleted,
+              deletedTransactions: txIdsToDelete.size,
+              resetFuelEntries: entriesReset,
+            },
+          } as Record<string, unknown>,
+          c,
+        ),
+      );
+    } catch (auditErr: any) {
+      console.warn("[FuelResetPeriod] audit write failed (non-fatal):", auditErr?.message);
+    }
+
     return c.json({
       success: true,
       weekStart: weekKey,
@@ -1727,6 +1855,7 @@ app.post(`${BASE_PATH}/finalized-reports/reset-period`, requirePermission('trans
       resetFuelEntries: entriesReset,
       eventsReversed,
       periodsRebuilt,
+      reopenReason: reopenReason || null,
       ...(syncErrors.length ? { syncErrors } : {}),
     });
   } catch (e: any) {
@@ -6539,5 +6668,9 @@ function deadheadFilterByDateRange(records: any[], periodStart?: string, periodE
     return ms >= startMs && ms <= endMs;
   });
 }
+
+import { registerFuelPeriodRoutes } from "./fuel_period_routes.ts";
+
+registerFuelPeriodRoutes(app);
 
 export default app;

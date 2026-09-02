@@ -8,17 +8,22 @@ import {
   fuelBulkConfirmPhrase,
   formatFuelBulkProgress,
 } from '../../../utils/buildFuelWeekReportsForFinalize';
-import type { FuelReconciliationPeriod } from '../../../utils/fuelPeriodStatus';
+import {
+  buildFuelStepCounts,
+  type FuelReconciliationPeriod,
+} from '../../../utils/fuelPeriodStatus';
+import { fuelActionableTotal } from '../../../utils/fuelPeriodGating';
+import { formatFuelMoney } from '../../../utils/formatFuelMoney';
 import type { FuelCard, FuelEntry, FuelScenario, MileageAdjustment, FinalizedFuelReport, WeeklyFuelReport } from '../../../types/fuel';
 import type { Trip } from '../../../types/data';
 import type { Vehicle } from '../../../types/vehicle';
 import { toast } from 'sonner';
 import { BulkWeekActionDialog, type BulkWeekActionResult } from './BulkWeekActionDialog';
 import { useFuelSettlementReopenGate } from './useFuelSettlementReopenGate';
-
-function formatMoney(n: number) {
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(n || 0);
-}
+import { FUEL_SPEND_EPS } from '../../../utils/fuelMoneyEpsilon';
+import { isYmdInFuelWeek } from '../../../utils/fuelWeekPeriod';
+import { fuelOpsSpendAmount } from '../../../utils/fuelOpsEligibility';
+import { isFuelExceptionAcknowledged } from '../../../utils/fuelFinalizeGating';
 
 type PreparedWeek = {
   period: FuelReconciliationPeriod;
@@ -41,6 +46,87 @@ export type FuelBulkFinalizeDialogProps = {
   finalizedReports?: FinalizedFuelReport[];
   onComplete: () => void;
 };
+
+/** H3: same early hard gates as the single-week wizard — checkbox cannot override. */
+function bulkEarlyGateFailure(
+  period: FuelReconciliationPeriod,
+  reports: WeeklyFuelReport[],
+  fuelEntries: FuelEntry[],
+  disputes: import('../../../types/fuel').FuelDispute[],
+  vehicles: Vehicle[],
+  scenarios: FuelScenario[],
+  finalizedReports: FinalizedFuelReport[],
+): string | null {
+  const weekEntries = fuelEntries.filter((e) =>
+    isYmdInFuelWeek(e.date, period.startDate, period.endDate),
+  );
+  const exceptionCount = weekEntries.filter(
+    (e) => e.metadata?.signalTier === 'exception' && !isFuelExceptionAcknowledged(e),
+  ).length;
+  if (exceptionCount > 0) {
+    return `Blocked — ${exceptionCount} exception fill(s) still need review`;
+  }
+
+  const claimedReportIds = new Set<string>();
+  const vehicleSnaps = vehicles
+    .map((vehicle) => {
+      const report = reports.find(
+        (r) =>
+          r.vehicleId === vehicle.id ||
+          (Array.isArray((r as any).vehicleIds) && (r as any).vehicleIds.includes(vehicle.id)),
+      );
+      const reportKey = report ? `${report.driverId || report.vehicleId}:${period.startDate}` : '';
+      const ownsMoney = Boolean(report) && reportKey && !claimedReportIds.has(reportKey);
+      if (ownsMoney && reportKey) claimedReportIds.add(reportKey);
+      const vEntries = weekEntries.filter((e) => e.vehicleId === vehicle.id);
+      const hasOpenDispute = disputes.some(
+        (d) =>
+          d.status === 'Open' &&
+          d.vehicleId === vehicle.id &&
+          String(d.weekStart || '').split('T')[0] === period.startDate,
+      );
+      const finalized = finalizedReports.some(
+        (f) =>
+          String(f.weekStart).split('T')[0] === period.startDate &&
+          (f.vehicleId === vehicle.id ||
+            (vehicle.currentDriverId && f.driverId === vehicle.currentDriverId)),
+      );
+      return {
+        vehicleId: vehicle.id,
+        totalSpend: ownsMoney && report
+          ? Number(report.totalGasCardCost) || 0
+          : vEntries.reduce((s, e) => s + fuelOpsSpendAmount(e), 0),
+        companyShare: ownsMoney && report ? Number(report.companyShare) || 0 : 0,
+        driverShare: ownsMoney && report ? Number(report.driverShare) || 0 : 0,
+        misc: ownsMoney && report ? Number(report.miscellaneousCost) || 0 : 0,
+        healthStatus: report?.healthStatus,
+        pendingCount: ownsMoney ? report?.pendingCount ?? 0 : 0,
+        hasOpenDispute,
+        hasScenarioAssigned:
+          Boolean(vehicle.fuelScenarioId) ||
+          Boolean(scenarios?.some((s) => s.isDefault)) ||
+          Boolean((report as any)?.metadata?.scenarioId),
+        isFinalized: finalized,
+      };
+    })
+    .filter((v) => v.totalSpend > FUEL_SPEND_EPS || v.pendingCount > 0 || v.hasOpenDispute || v.isFinalized);
+
+  const counts = buildFuelStepCounts({ vehicles: vehicleSnaps });
+  if (counts['adjustments-disputes'].actionable > 0) {
+    return `Blocked — ${counts['adjustments-disputes'].actionable} open dispute(s)`;
+  }
+  if (counts['leakage-gap'].actionable > 0) {
+    return `Blocked — unexplained fuel still needs review (${counts['leakage-gap'].actionable})`;
+  }
+  if (counts['data-quality'].actionable > 0) {
+    return `Blocked — ${counts['data-quality'].actionable} data-quality item(s) still need review`;
+  }
+  const leftover = fuelActionableTotal(counts) - counts.finalize.actionable;
+  if (leftover > 0) {
+    return `Blocked — ${leftover} early step item(s) still open`;
+  }
+  return null;
+}
 
 export function FuelBulkFinalizeDialog({
   open,
@@ -76,11 +162,11 @@ export function FuelBulkFinalizeDialog({
       executingLabel="Finalizing…"
       busyMessage="Bulk finalizing weeks…"
       extraAck
-      extraAckLabel="I reviewed data-quality, disputes, and re-finalize warnings. Exception-tier weeks will still be blocked."
+      extraAckLabel="I reviewed data-quality, disputes, and re-finalize warnings. Hard-blocked weeks (exceptions, open disputes, unexplained fuel) will still be rejected."
       icon={<Flag className="h-5 w-5 text-indigo-600" />}
       renderItemMeta={(p) => {
         const actionable = p.counts?.finalize?.actionable ?? 0;
-        return `${p.vehicleCount} vehicle${p.vehicleCount === 1 ? '' : 's'} · Spend ${formatMoney(p.totalSpend)}${actionable > 0 ? ` · ${actionable} ready to lock` : ''}`;
+        return `${p.vehicleCount} vehicle${p.vehicleCount === 1 ? '' : 's'} · Spend ${formatFuelMoney(p.totalSpend)}${actionable > 0 ? ` · ${actionable} ready to lock` : ''}`;
       }}
       renderSelectionHint={(selected) => (
         <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600 space-y-1">
@@ -97,9 +183,14 @@ export function FuelBulkFinalizeDialog({
         const weekResults: BulkWeekActionResult[] = [];
         const prepared: PreparedWeek[] = [];
         onProgress('Loading prior finalized snapshots…');
-        const priorReports = (await api.getFinalizedReports().catch(() => [])) as FinalizedFuelReport[];
+        const from = sorted[0]?.startDate;
+        const to = sorted[sorted.length - 1]?.startDate;
+        const priorReports = (await api
+          .getFinalizedReports(
+            from && to ? { weekStartFrom: from, weekStartTo: to } : undefined,
+          )
+          .catch(() => [])) as FinalizedFuelReport[];
 
-        // Pass 1 — build + gate; collect reports for one settlement-reopen confirm.
         for (let i = 0; i < sorted.length; i++) {
           const period = sorted[i];
           const label = period.label || period.startDate;
@@ -131,7 +222,7 @@ export function FuelBulkFinalizeDialog({
                   ? ` (+${gateResult.exceptionBlockers.length - 1} more)`
                   : '';
               const detail = first
-                ? `${first.dateYmd} ${first.paymentLabel} $${first.amount.toFixed(2)} @ ${first.location}${extra}`
+                ? `${first.dateYmd} ${first.paymentLabel} ${formatFuelMoney(first.amount)} @ ${first.location}${extra}`
                 : 'exception fills';
               weekResults.push({
                 id: period.id,
@@ -139,6 +230,20 @@ export function FuelBulkFinalizeDialog({
                 status: 'failed',
                 message: `Blocked — resolve exception fill(s): ${detail}`,
               });
+              continue;
+            }
+
+            const earlyFail = bulkEarlyGateFailure(
+              period,
+              reports,
+              fuelEntries,
+              disputes,
+              vehicles,
+              scenarios,
+              priorReports.length ? priorReports : finalizedReports,
+            );
+            if (earlyFail) {
+              weekResults.push({ id: period.id, label, status: 'failed', message: earlyFail });
               continue;
             }
 
@@ -166,7 +271,6 @@ export function FuelBulkFinalizeDialog({
           }
         }
 
-        // Pass 2 — finalize prepared weeks.
         for (let i = 0; i < prepared.length; i++) {
           const item = prepared[i];
           const { period, label, reports, trips } = item;

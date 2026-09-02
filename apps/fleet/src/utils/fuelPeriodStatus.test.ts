@@ -256,4 +256,66 @@ describe('fuelPeriodStatus', () => {
     expect(inv.canReset).toBe(true);
     expect(inv.vehicleIds).toEqual(['v1']);
   });
+
+  it('counts shared-car driver-week money once across two vehicles', () => {
+    const periods = deriveFuelReconciliationPeriods({
+      weekOptions,
+      vehicles: [
+        { id: 'v1', fuelScenarioId: 's1', currentDriverId: 'd1' } as any,
+        { id: 'v2', fuelScenarioId: 's1', currentDriverId: 'd1' } as any,
+      ],
+      fuelEntries: [
+        {
+          id: 'e1',
+          vehicleId: 'v1',
+          driverId: 'd1',
+          date: '2026-07-07',
+          amount: 60,
+          reconciliationStatus: 'Pending',
+        } as FuelEntry,
+        {
+          id: 'e2',
+          vehicleId: 'v2',
+          driverId: 'd1',
+          date: '2026-07-08',
+          amount: 40,
+          reconciliationStatus: 'Pending',
+        } as FuelEntry,
+      ],
+      disputes: [],
+      finalizedReports: [],
+      scenarios: [],
+      liveReportsByWeek: new Map([
+        [
+          '2026-07-06',
+          [
+            // Primary owns full driver-week totals (landing fan-out contract)
+            {
+              vehicleId: 'v1',
+              totalGasCardCost: 100,
+              companyShare: 40,
+              driverShare: 30,
+              miscellaneousCost: 30,
+              healthStatus: 'Emerald',
+              pendingCount: 2,
+            },
+            // Secondary presence only
+            {
+              vehicleId: 'v2',
+              totalGasCardCost: 0,
+              companyShare: 0,
+              driverShare: 0,
+              miscellaneousCost: 0,
+              pendingCount: 0,
+            },
+          ],
+        ],
+      ]),
+    });
+    expect(periods[0].totalSpend).toBeCloseTo(100, 5);
+    expect(periods[0].netLeakage).toBeCloseTo(30, 5);
+    expect(periods[0].companyShare).toBeCloseTo(40, 5);
+    expect(periods[0].driverShare).toBeCloseTo(30, 5);
+    expect(periods[0].counts['leakage-gap'].actionable).toBe(1);
+  });
 });

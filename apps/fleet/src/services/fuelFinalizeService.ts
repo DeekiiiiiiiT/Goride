@@ -93,11 +93,7 @@ export async function finalizeFuelWeekReports(
     let settlementCommitted = false;
 
     try {
-      if (prior) {
-        opts.onProgress?.(`Reversing prior settlement for ${report.driverId}…`);
-        await settlementService.reverseEnterpriseFuelSyncForReport(report);
-      }
-
+      // C2: decide what will re-post BEFORE reversing — never reverse then continue empty
       const weekEntries = entriesBelongingToDriverWeekReport(fuelEntries, report, attrCtx);
       const relevantEntries = prior
         ? weekEntries
@@ -114,7 +110,13 @@ export async function finalizeFuelWeekReports(
         : weekEntries.filter((entry) => entry.reconciliationStatus === 'Pending');
 
       if (relevantEntries.length === 0 && prior) {
+        // Prior locked week with nothing re-postable — leave settlement + snapshot untouched
         continue;
+      }
+
+      if (prior) {
+        opts.onProgress?.(`Reversing prior settlement for ${report.driverId}…`);
+        await settlementService.reverseEnterpriseFuelSyncForReport(report);
       }
 
       const ratio = FuelCalculationService.getBlendedDriverShareRatio(report);

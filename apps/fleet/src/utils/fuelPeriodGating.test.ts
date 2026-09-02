@@ -91,6 +91,21 @@ describe('buildFuelStepCounts', () => {
     expect(after['leakage-gap'].actionable).toBe(0);
   });
 
+  it('flags negative misc as data-quality actionable until reviewed', () => {
+    const before = buildFuelStepCounts({
+      vehicles: [{ ...base, misc: -50, healthStatus: 'Emerald' }],
+    });
+    expect(before['data-quality'].actionable).toBe(1);
+    expect(before['leakage-gap'].actionable).toBe(0);
+
+    const after = buildFuelStepCounts({
+      vehicles: [{ ...base, misc: -50, healthStatus: 'Emerald' }],
+      leakageReviewed: true,
+    });
+    expect(after['data-quality'].actionable).toBe(0);
+    expect(after['data-quality'].informational).toBe(1);
+  });
+
   it('finalize actionable for unfinalized spend', () => {
     const counts = buildFuelStepCounts({
       vehicles: [{ ...base, isFinalized: false, healthStatus: 'Emerald' }],

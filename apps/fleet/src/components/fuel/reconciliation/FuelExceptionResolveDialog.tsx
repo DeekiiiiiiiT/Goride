@@ -13,10 +13,7 @@ import { Button } from '../../ui/button';
 import { Textarea } from '../../ui/textarea';
 import type { FuelExceptionBlocker } from '../../../utils/fuelFinalizeGating';
 import { FUEL_FLAG_GLOSSARY } from '../analytics/fuelFlagGlossary';
-
-function formatMoney(n: number) {
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(n || 0);
-}
+import { formatFuelMoney } from '../../../utils/formatFuelMoney';
 
 function formatFillDate(ymd: string): string {
   try {
@@ -90,7 +87,7 @@ export function FuelExceptionResolveDialog({
 
         <div className="space-y-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-3">
           <div className="text-sm font-semibold text-slate-900">
-            {formatFillDate(blocker.dateYmd)} · {formatMoney(blocker.amount)} · {blocker.paymentLabel}
+            {formatFillDate(blocker.dateYmd)} · {formatFuelMoney(blocker.amount)} · {blocker.paymentLabel}
           </div>
           <div className="text-xs text-slate-600">
             {plate || blocker.vehicleId || 'Vehicle'} · {blocker.location}

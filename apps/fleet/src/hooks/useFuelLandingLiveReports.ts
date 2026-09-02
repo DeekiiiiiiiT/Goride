@@ -13,6 +13,13 @@ import {
 import { isYmdInFuelWeek } from '../utils/fuelWeekPeriod';
 import { FUEL_SPEND_EPS } from '../utils/fuelMoneyEpsilon';
 import { fuelOpsSpendAmount } from '../utils/fuelOpsEligibility';
+import {
+  fuelAdjustmentsContentSig,
+  fuelDisputesContentSig,
+  fuelEntriesContentSig,
+  fuelScenariosContentSig,
+  hashFuelContentSig,
+} from '../utils/fuelContentSig';
 import type {
   FinalizedFuelReport,
   FuelCard,
@@ -100,7 +107,16 @@ export function useFuelLandingLiveReports(input: FuelLandingLiveReportsInput) {
   >(() => new Map());
 
   const weekKey = weeksToLoad.map((w) => w.startDate).join('|');
-  const entrySig = `${fuelEntries.length}:${finalizedReports.length}:${vehicles.length}`;
+  const entrySig = hashFuelContentSig([
+    fuelEntriesContentSig(fuelEntries),
+    fuelAdjustmentsContentSig(adjustments),
+    fuelScenariosContentSig(scenarios),
+    fuelDisputesContentSig(disputes),
+    vehicles.map((v) => `${v.id}:${v.fuelScenarioId || ''}`).join(','),
+    drivers.map((d) => `${d.id || d.driverId}:${d.fuelScenarioId || ''}`).join(','),
+    fuelCards.map((c) => c.id).join(','),
+    finalizedReports.map((f) => `${f.driverId}:${f.weekStart}:${Number(f.miscellaneousCost) || 0}`).join(','),
+  ]);
 
   useEffect(() => {
     let cancelled = false;
@@ -136,15 +152,20 @@ export function useFuelLandingLiveReports(input: FuelLandingLiveReportsInput) {
                 : r.vehicleId
                   ? [r.vehicleId]
                   : [];
-            for (const vehicleId of vehicleIds) {
+            // C3: one driver-week report → money once on primary vehicle only.
+            // Secondary shared-car vehicles get a presence slice (zeros) so they stay visible.
+            const primaryId = r.vehicleId || vehicleIds[0];
+            const uniq = [...new Set(vehicleIds.length ? vehicleIds : primaryId ? [primaryId] : [])];
+            for (const vehicleId of uniq) {
+              const isPrimary = vehicleId === primaryId;
               slices.push({
                 vehicleId,
-                totalGasCardCost: Number(r.totalGasCardCost) || 0,
-                companyShare: Number(r.companyShare) || 0,
-                driverShare: Number(r.driverShare) || 0,
-                miscellaneousCost: Number(r.miscellaneousCost) || 0,
-                healthStatus: r.healthStatus,
-                pendingCount: r.pendingCount,
+                totalGasCardCost: isPrimary ? Number(r.totalGasCardCost) || 0 : 0,
+                companyShare: isPrimary ? Number(r.companyShare) || 0 : 0,
+                driverShare: isPrimary ? Number(r.driverShare) || 0 : 0,
+                miscellaneousCost: isPrimary ? Number(r.miscellaneousCost) || 0 : 0,
+                healthStatus: isPrimary ? r.healthStatus : undefined,
+                pendingCount: isPrimary ? r.pendingCount : 0,
               });
             }
           }

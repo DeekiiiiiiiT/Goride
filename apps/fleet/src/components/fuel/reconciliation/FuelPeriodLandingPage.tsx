@@ -1,53 +1,85 @@
-import { Check, AlertTriangle, Scale, Shield, Droplets, ClipboardList, Flag, Loader2, type LucideIcon } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { Check, Flag, Loader2 } from 'lucide-react';
 import { Card, CardContent } from '../../ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../ui/tabs';
 import { Button } from '../../ui/button';
 import { Badge } from '../../ui/badge';
 import type { FuelReconciliationPeriod } from '../../../utils/fuelPeriodStatus';
-import { FUEL_STEP_ORDER, type FuelStepId } from '../../../utils/fuelPeriodGating';
+import { FUEL_STEP_LABELS, FUEL_STEP_ORDER, type FuelStepId } from '../../../utils/fuelPeriodGating';
+import { FUEL_STEP_ICONS } from '../../../utils/fuelStepIcons';
+import { formatFuelMoney } from '../../../utils/formatFuelMoney';
 
-const STEP_ICONS: Record<FuelStepId, LucideIcon> = {
-  'data-quality': AlertTriangle,
-  'adjustments-disputes': Scale,
-  'policy-check': Shield,
-  'leakage-gap': Droplets,
-  'settlement-preview': ClipboardList,
-  finalize: Flag,
-};
-
-function formatMoney(n: number) {
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(n || 0);
-}
-
-function StepChip({ stepId, counts }: { stepId: FuelStepId; counts: FuelReconciliationPeriod['counts'] }) {
-  const Icon = STEP_ICONS[stepId];
+/** Labeled step cell — clear at a glance; click opens that step (M3/M5). */
+function StepStatusCell({
+  stepId,
+  counts,
+  onOpenStep,
+}: {
+  stepId: FuelStepId;
+  counts: FuelReconciliationPeriod['counts'];
+  onOpenStep: (stepId: FuelStepId) => void;
+}) {
+  const Icon = FUEL_STEP_ICONS[stepId];
+  const label = FUEL_STEP_LABELS[stepId];
   const { actionable } = counts[stepId];
   const isClear = actionable === 0;
+  const statusText = isClear ? 'Done' : `${actionable} to review`;
+
   return (
-    <span
-      className={`inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[10px] font-medium ${
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        onOpenStep(stepId);
+      }}
+      className={`flex min-h-11 min-w-0 items-center gap-2 rounded-lg border px-2.5 py-2 text-left transition-colors hover:ring-2 hover:ring-indigo-200 ${
         isClear
-          ? 'border-emerald-200 bg-emerald-50 text-emerald-600'
-          : 'border-amber-200 bg-amber-50 text-amber-700'
+          ? 'border-emerald-100 bg-emerald-50/60'
+          : 'border-amber-200 bg-amber-50'
       }`}
+      aria-label={`${label}: ${statusText}. Open step.`}
     >
-      {isClear ? <Check className="h-3 w-3" /> : <Icon className="h-3 w-3" />}
-      {!isClear && actionable}
-    </span>
+      <span
+        className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full ${
+          isClear ? 'bg-emerald-500 text-white' : 'bg-amber-500 text-white'
+        }`}
+        aria-hidden
+      >
+        {isClear ? <Check className="h-3.5 w-3.5" strokeWidth={2.5} /> : <Icon className="h-3.5 w-3.5" />}
+      </span>
+      <div className="min-w-0 flex-1">
+        <div className={`truncate text-xs font-semibold leading-tight ${isClear ? 'text-emerald-800' : 'text-amber-900'}`}>
+          {label}
+        </div>
+        <div className={`text-[11px] leading-tight ${isClear ? 'text-emerald-600' : 'font-medium text-amber-700'}`}>
+          {statusText}
+        </div>
+      </div>
+    </button>
   );
+}
+
+function daysOpen(startDate: string): number {
+  const start = new Date(`${startDate}T12:00:00`);
+  if (Number.isNaN(start.getTime())) return 0;
+  return Math.max(0, Math.floor((Date.now() - start.getTime()) / 86_400_000));
 }
 
 function PeriodCard({
   period,
   onSelect,
   onReset,
+  onSelectStep,
 }: {
   period: FuelReconciliationPeriod;
   onSelect: () => void;
   onReset?: () => void;
+  onSelectStep?: (period: FuelReconciliationPeriod, stepId: FuelStepId) => void;
 }) {
   const isOutstanding = period.status === 'outstanding';
   const isInProgress = period.status === 'in_progress';
+  const age = daysOpen(period.startDate);
+  const aging = !period.locked && age >= 14;
   const ctaClass = isOutstanding
     ? 'bg-amber-500 text-white'
     : isInProgress
@@ -64,54 +96,77 @@ function PeriodCard({
       : 'Completed';
 
   return (
-    <Card className="transition-colors hover:border-indigo-300 hover:shadow-sm">
-      <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
-        <button type="button" onClick={onSelect} className="min-w-0 flex-1 text-left">
-          <div className="font-semibold text-slate-900">{period.label}</div>
-          <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-slate-500">
-            <span>{period.vehicleCount} vehicle{period.vehicleCount === 1 ? '' : 's'}</span>
-            <span>Spend {formatMoney(period.totalSpend)}</span>
-            <span className={period.netLeakage > 0 ? 'text-rose-600' : ''}>
-              Unexplained {formatMoney(period.netLeakage)}
-            </span>
-            {period.exceptionCount > 0 && (
-              <span className="font-medium text-rose-700">
-                {period.exceptionCount} exception{period.exceptionCount === 1 ? '' : 's'}
+    <Card className={`transition-colors hover:border-indigo-300 hover:shadow-sm ${aging ? 'border-amber-300' : ''}`}>
+      <CardContent className="flex flex-col gap-3 p-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <button type="button" onClick={onSelect} className="min-w-0 flex-1 text-left">
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="font-semibold text-slate-900">{period.label}</div>
+              {!period.locked && (
+                <span className={`text-[11px] font-medium ${aging ? 'text-amber-700' : 'text-slate-400'}`}>
+                  {age}d open
+                </span>
+              )}
+            </div>
+            <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-slate-500">
+              <span>{period.vehicleCount} vehicle{period.vehicleCount === 1 ? '' : 's'}</span>
+              <span>Spend {formatFuelMoney(period.totalSpend)}</span>
+              <span className={period.netLeakage !== 0 ? 'text-rose-600' : ''}>
+                Unexplained {formatFuelMoney(period.netLeakage)}
               </span>
-            )}
-          </div>
-          <div className="mt-1.5 flex flex-wrap gap-1">
-            {FUEL_STEP_ORDER.map((stepId) => (
-              <StepChip key={stepId} stepId={stepId} counts={period.counts} />
-            ))}
-          </div>
-        </button>
-        <div className="flex shrink-0 items-center gap-2">
-          {period.status === 'completed' && onReset && (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="min-h-11 border-rose-200 text-rose-700 hover:bg-rose-50 sm:min-h-9"
-              onClick={(e) => {
-                e.stopPropagation();
-                onReset();
-              }}
-            >
-              Reopen week
-            </Button>
-          )}
-          <button
-            type="button"
-            onClick={onSelect}
-            className={`min-h-11 rounded-full px-2.5 py-1 text-xs font-bold sm:min-h-0 ${ctaClass}`}
-          >
-            {ctaLabel}
+              {period.exceptionCount > 0 && (
+                <span className="font-medium text-rose-700">
+                  {period.exceptionCount} exception{period.exceptionCount === 1 ? '' : 's'}
+                </span>
+              )}
+            </div>
           </button>
+          <div className="flex shrink-0 items-center gap-2 self-start">
+            {period.status === 'completed' && onReset && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="min-h-11 border-rose-200 text-rose-700 hover:bg-rose-50 sm:min-h-9"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onReset();
+                }}
+              >
+                Reopen week
+              </Button>
+            )}
+            <button
+              type="button"
+              onClick={onSelect}
+              className={`min-h-11 rounded-full px-2.5 py-1 text-xs font-bold sm:min-h-0 ${ctaClass}`}
+            >
+              {ctaLabel}
+            </button>
+          </div>
+        </div>
+
+        <div
+          className="grid w-full grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6"
+          role="group"
+          aria-label={`Week steps for ${period.label}`}
+        >
+          {FUEL_STEP_ORDER.map((stepId) => (
+            <StepStatusCell
+              key={stepId}
+              stepId={stepId}
+              counts={period.counts}
+              onOpenStep={(id) => (onSelectStep ? onSelectStep(period, id) : onSelect())}
+            />
+          ))}
         </div>
       </CardContent>
     </Card>
   );
+}
+
+function sortByAbsUnexplained(periods: FuelReconciliationPeriod[]): FuelReconciliationPeriod[] {
+  return [...periods].sort((a, b) => Math.abs(b.netLeakage) - Math.abs(a.netLeakage));
 }
 
 function PeriodList({
@@ -119,13 +174,18 @@ function PeriodList({
   emptyLabel,
   onSelectPeriod,
   onResetPeriod,
+  onSelectStep,
+  varianceFirst,
 }: {
   periods: FuelReconciliationPeriod[];
   emptyLabel: string;
   onSelectPeriod: (period: FuelReconciliationPeriod) => void;
   onResetPeriod?: (period: FuelReconciliationPeriod) => void;
+  onSelectStep?: (period: FuelReconciliationPeriod, stepId: FuelStepId) => void;
+  varianceFirst?: boolean;
 }) {
-  if (periods.length === 0) {
+  const ordered = varianceFirst ? sortByAbsUnexplained(periods) : periods;
+  if (ordered.length === 0) {
     return (
       <div className="rounded-md border border-dashed border-slate-200 py-12 text-center text-slate-500">
         {emptyLabel}
@@ -133,12 +193,13 @@ function PeriodList({
     );
   }
   return (
-    <div className="space-y-2">
-      {periods.map((p) => (
+    <div className="space-y-3">
+      {ordered.map((p) => (
         <PeriodCard
           key={p.id}
           period={p}
           onSelect={() => onSelectPeriod(p)}
+          onSelectStep={onSelectStep}
           onReset={
             p.status === 'completed' && onResetPeriod
               ? () => onResetPeriod(p)
@@ -155,10 +216,12 @@ interface FuelPeriodLandingPageProps {
   inProgress: FuelReconciliationPeriod[];
   completed: FuelReconciliationPeriod[];
   loading: boolean;
-  onSelectPeriod: (period: FuelReconciliationPeriod) => void;
+  onSelectPeriod: (period: FuelReconciliationPeriod, stepId?: FuelStepId) => void;
   onResetPeriod?: (period: FuelReconciliationPeriod) => void;
   onOpenArchive?: () => void;
   onBulkFinalize?: () => void;
+  onBulkReopen?: () => void;
+  dataTruncated?: boolean;
 }
 
 export function FuelPeriodLandingPage({
@@ -170,7 +233,37 @@ export function FuelPeriodLandingPage({
   onResetPeriod,
   onOpenArchive,
   onBulkFinalize,
+  onBulkReopen,
+  dataTruncated,
 }: FuelPeriodLandingPageProps) {
+  const openWorkCount = outstanding.length + inProgress.length;
+  const preferredTab =
+    outstanding.length > 0
+      ? 'outstanding'
+      : inProgress.length > 0
+        ? 'in_progress'
+        : 'completed';
+  const [tab, setTab] = useState(preferredTab);
+
+  // M4: keep tab aligned when finalize drains Outstanding
+  useEffect(() => {
+    setTab(preferredTab);
+  }, [preferredTab]);
+
+  const portfolio = useMemo(() => {
+    const open = [...outstanding, ...inProgress];
+    const totalUnexplained = open.reduce((s, p) => s + p.netLeakage, 0);
+    const oldest = open
+      .slice()
+      .sort((a, b) => a.startDate.localeCompare(b.startDate))[0];
+    return {
+      openWeeks: open.length,
+      totalUnexplained,
+      oldestLabel: oldest?.label || null,
+      oldestDays: oldest ? daysOpen(oldest.startDate) : 0,
+    };
+  }, [outstanding, inProgress]);
+
   if (loading) {
     return (
       <div className="flex h-64 items-center justify-center">
@@ -180,17 +273,38 @@ export function FuelPeriodLandingPage({
     );
   }
 
-  const openWorkCount = outstanding.length + inProgress.length;
   const isEmpty = openWorkCount === 0 && completed.length === 0;
-  const defaultTab =
-    outstanding.length > 0
-      ? 'outstanding'
-      : inProgress.length > 0
-        ? 'in_progress'
-        : 'completed';
 
   return (
     <div className="space-y-6">
+      {dataTruncated && (
+        <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800" role="alert">
+          Fuel entry or trip data hit a fetch cap — week money may be incomplete. Narrow the date range or raise the limit before finalizing.
+        </div>
+      )}
+
+      {openWorkCount > 0 && (
+        <section className="grid gap-3 rounded-xl border border-indigo-100 bg-indigo-50/60 p-4 sm:grid-cols-3">
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Open weeks</p>
+            <p className="text-2xl font-bold tabular-nums text-slate-900">{portfolio.openWeeks}</p>
+          </div>
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Unexplained (open)</p>
+            <p className={`text-2xl font-bold tabular-nums ${portfolio.totalUnexplained !== 0 ? 'text-rose-700' : 'text-slate-900'}`}>
+              {formatFuelMoney(portfolio.totalUnexplained)}
+            </p>
+          </div>
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Oldest unclosed</p>
+            <p className="text-sm font-semibold text-slate-900">{portfolio.oldestLabel || '—'}</p>
+            {portfolio.oldestDays > 0 && (
+              <p className="text-xs text-slate-500">{portfolio.oldestDays} days open</p>
+            )}
+          </div>
+        </section>
+      )}
+
       <div className="flex flex-wrap items-center justify-end gap-2">
           {onBulkFinalize && (
             <Button
@@ -210,6 +324,18 @@ export function FuelPeriodLandingPage({
               )}
             </Button>
           )}
+          {onBulkReopen && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="self-start min-h-10"
+              disabled={completed.length === 0}
+              onClick={onBulkReopen}
+            >
+              Reopen weeks
+            </Button>
+          )}
           {onOpenArchive && (
             <Button type="button" variant="ghost" size="sm" className="self-start text-slate-600" onClick={onOpenArchive}>
               Finalized archive
@@ -222,7 +348,7 @@ export function FuelPeriodLandingPage({
           No fuel activity in recent weeks yet.
         </div>
       ) : (
-        <Tabs defaultValue={defaultTab} className="w-full">
+        <Tabs value={tab} onValueChange={setTab} className="w-full">
           <TabsList className="grid w-full grid-cols-3 sm:max-w-lg">
             <TabsTrigger value="outstanding" className="gap-1.5 min-h-11 sm:min-h-9">
               Outstanding
@@ -254,7 +380,9 @@ export function FuelPeriodLandingPage({
             <PeriodList
               periods={outstanding}
               emptyLabel="No outstanding periods — check In Progress or Completed."
-              onSelectPeriod={onSelectPeriod}
+              onSelectPeriod={(p) => onSelectPeriod(p)}
+              onSelectStep={(p, step) => onSelectPeriod(p, step)}
+              varianceFirst
             />
           </TabsContent>
 
@@ -262,7 +390,8 @@ export function FuelPeriodLandingPage({
             <PeriodList
               periods={inProgress}
               emptyLabel="No weeks in progress."
-              onSelectPeriod={onSelectPeriod}
+              onSelectPeriod={(p) => onSelectPeriod(p)}
+              onSelectStep={(p, step) => onSelectPeriod(p, step)}
             />
           </TabsContent>
 
@@ -270,7 +399,8 @@ export function FuelPeriodLandingPage({
             <PeriodList
               periods={completed}
               emptyLabel="No completed periods yet."
-              onSelectPeriod={onSelectPeriod}
+              onSelectPeriod={(p) => onSelectPeriod(p)}
+              onSelectStep={(p, step) => onSelectPeriod(p, step)}
               onResetPeriod={onResetPeriod}
             />
           </TabsContent>
