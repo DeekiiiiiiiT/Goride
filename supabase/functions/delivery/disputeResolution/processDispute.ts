@@ -4,9 +4,7 @@ import { applyMerchantFaultDebit } from "./merchantDebit.ts";
 import { notifyDisputeResolution } from "./notifications.ts";
 import { createLinkedSupportCase, createOrderDispute } from "./supportCase.ts";
 import type { FaultAttribution, ProcessDisputeResult, ResolutionAction } from "./types.ts";
-
-const FORGOTTEN_ISSUE_TYPES = new Set(["never_arrived", "late_order", "other"]);
-const MIN_COURIER_WAIT_MINUTES = 20;
+import { isForgottenOrderCandidate, shouldEvaluateForgottenRule } from "./forgottenOrderRule.ts";
 
 function autoRefundCapJmd(): number {
   const raw = Deno.env.get("DASH_AUTO_DISPUTE_MAX_REFUND_JMD");
@@ -115,15 +113,11 @@ export async function processDispute(input: ProcessDisputeInput): Promise<Proces
   const body = input.photoPath ? `${notes}\n\nPhoto: ${input.photoPath}` : notes;
 
   // R1: Forgotten / never fulfilled order with courier wait evidence
-  if (
-    isAutoDisputeEnabled() &&
-    FORGOTTEN_ISSUE_TYPES.has(issueType) &&
-    ["preparing", "accepted", "placed"].includes(String(order.status))
-  ) {
+  if (isAutoDisputeEnabled() && isForgottenOrderCandidate(issueType, String(order.status))) {
     const waitMinutes = await getMaxCourierWaitMinutes(serviceSb, orderId);
     const ruleId = "R1_forgotten_order";
 
-    if (waitMinutes >= MIN_COURIER_WAIT_MINUTES && !await hasRuleRun(serviceSb, orderId, ruleId)) {
+    if (shouldEvaluateForgottenRule(issueType, String(order.status), waitMinutes) && !await hasRuleRun(serviceSb, orderId, ruleId)) {
       const refundAmount = Number(order.total || 0);
       const cap = autoRefundCapJmd();
       if (refundAmount > 0 && refundAmount <= cap && String(order.payment_status) === "paid") {
