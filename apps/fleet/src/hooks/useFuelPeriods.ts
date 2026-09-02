@@ -26,7 +26,10 @@ export type FuelPeriodRow = {
   unexplained: number;
   counts?: Record<string, { actionable: number; informational: number }>;
   leakageReviewedAt?: string | null;
+  leakageReviewedBy?: string | null;
+  leakageReviewedNote?: string | null;
   lockedAt?: string | null;
+  computedAt?: string | null;
 };
 
 export function useFuelPeriods(opts: { from?: string; to?: string; enabled?: boolean }) {

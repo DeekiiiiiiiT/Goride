@@ -1,4 +1,5 @@
 import { Flag } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { api } from '../../../services/api';
 import { finalizeFuelWeekReports } from '../../../services/fuelFinalizeService';
@@ -28,7 +29,11 @@ import {
   liveReportsToPrimaryClaimedSlices,
 } from '../../../utils/fuelPeriodDerive';
 import { fuelPeriodFinalizeIdempotencyKey } from '../../../utils/fuelPeriodIdempotency';
-import { FUEL_SECOND_APPROVER_THRESHOLD } from '../../../utils/fuelDualApproval';
+import { interpretFuelFinalizeJobResult } from '../../../utils/fuelFinalizeJobResult';
+import {
+  FUEL_SECOND_APPROVER_THRESHOLD,
+  resolveFuelSecondApproverThreshold,
+} from '../../../utils/fuelDualApproval';
 import { FUEL_PERIODS_KEY } from '../../../hooks/useFuelPeriods';
 type PreparedWeek = {
   period: FuelReconciliationPeriod;
@@ -121,6 +126,20 @@ export function FuelBulkFinalizeDialog({
   const { confirmIfNeeded: confirmSettlementReopen, dialog: settlementReopenDialog } =
     useFuelSettlementReopenGate();
   const outstanding = periods.filter((p) => !p.locked && (p.status === 'outstanding' || p.status === 'in_progress'));
+  const [secondApproverThreshold, setSecondApproverThreshold] = useState(
+    FUEL_SECOND_APPROVER_THRESHOLD,
+  );
+  useEffect(() => {
+    if (!open) return;
+    void api
+      .getPreferences()
+      .then((prefs) => {
+        setSecondApproverThreshold(
+          resolveFuelSecondApproverThreshold((prefs as any)?.fuelSecondApproverThreshold),
+        );
+      })
+      .catch(() => undefined);
+  }, [open]);
 
   return (
     <>
@@ -294,14 +313,15 @@ export function FuelBulkFinalizeDialog({
                 ),
                 snapshots: result.snapshots || [],
                 totalSpend,
-                secondApproverThreshold: FUEL_SECOND_APPROVER_THRESHOLD,
+                secondApproverThreshold,
               });
-              if (jobRes?.state === 'failed') {
+              const jobInterp = interpretFuelFinalizeJobResult(jobRes);
+              if (jobInterp.incomplete) {
                 weekResults.push({
                   id: period.id,
                   label,
                   status: 'failed',
-                  message: jobRes.error || 'Server finalize failed',
+                  message: jobInterp.toastMessage || jobRes.error || 'Server finalize failed',
                 });
               } else {
                 weekResults.push({

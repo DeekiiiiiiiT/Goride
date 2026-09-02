@@ -26,6 +26,17 @@ export function serverLockedWeekStarts(rows: FuelPeriodRow[]): Set<string> {
   return set;
 }
 
+/** Weeks whose landing money can come from SQL (skip client week engines). */
+export function serverComputedWeekStarts(rows: FuelPeriodRow[]): Set<string> {
+  const set = new Set<string>();
+  for (const r of rows) {
+    if (r.computedAt || r.status === 'locked' || r.lockedAt) {
+      set.add(weekStartYmd(r.weekStart));
+    }
+  }
+  return set;
+}
+
 export function overlayServerFuelPeriods(
   derived: FuelReconciliationPeriod[],
   serverRows: FuelPeriodRow[],

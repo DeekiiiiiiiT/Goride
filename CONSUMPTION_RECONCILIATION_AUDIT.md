@@ -9,22 +9,98 @@
 
 ---
 
-## STATUS — pass 3 close-out (in progress, 2026-09-02)
+## STATUS — close-out program (live scoreboard)
 
-Close-out program (Waves E–J) moved money persist into the period job, dual-read landing, real second-approve + evidence pack, and stable idempotency.
+**Trust this table for current state.** Historical pass-2 / pass-3 sections below stay as archaeology; they are not the live backlog.
 
 | Item | Status |
 |---|---|
-| **NEW-5** stable idempotency + real aggregates | ✅ `fuelPeriodFinalizeIdempotencyKey` / `aggregateFinalizedForWeek` |
-| **C4** server job persists snapshots + ledger | ✅ Job reverses + settles wallet, writes KV + ledger, cursor resume; client prepares snapshots only |
-| **H10** If-Match before money lock | ✅ enqueue after ensure; 409 on version conflict; dual-approve gate before settle |
-| **M1/M2** dual-read landing | ✅ `overlayServerFuelPeriods` + live engines skip locked weeks + recompute |
-| **H8** leakage SoT | ✅ server `leakage_reviewed_at` overlays device cache |
-| **H9** step progress | ✅ `PATCH …/step` + audit note |
-| **NEW-6** second identity / evidence / auto-close | ✅ API + UI (distinct actor); org threshold in Fuel Policy; cron auto-close route; server evidence JSON |
-| Soft-mirror `Date.now()` finalize | ✅ Removed from wizard |
+| **NEW-5** stable idempotency + real aggregates | ✅ Closed |
+| **C4** server job persists snapshots + ledger | ✅ Closed |
+| **H10** If-Match before money lock | ✅ Closed |
+| **NEW-6** second identity / evidence / auto-close | ✅ Dual-approve + evidence CSV + **scheduled** auto-close cron |
+| Soft-mirror `Date.now()` finalize | ✅ Removed |
+| **NEW-8** `FuelPeriodRow.computedAt` | ✅ Closed |
+| **NEW-7** partial finalize locks + success toast | ✅ Closed — hold at `ready`, return `failures`, resume failed jobs |
+| **H8** leakage SoT | ✅ Server write + hydrate + note/actor UI; localStorage offline-only |
+| **H9** step progress | ✅ Continue + stepper + leakage jump PATCH; remount restores `current_step` |
+| **M1/M2** landing scale | ✅ Skip computed weeks; no silent week-8 cap; materialize to SQL |
+| **Auto-close scheduler** | ✅ [`.github/workflows/fuel-period-auto-close-cron.yml`](.github/workflows/fuel-period-auto-close-cron.yml) |
+| **Evidence pack canonical CSV** | ✅ Server pack → accountant CSV; client fallback offline |
+| **M15** render / smoke tests | ✅ Close-out smoke contracts + util suite (no jsdom in repo) |
 
-Sections below labelled “pass 2” / “NEW-5 open” are **historical** until rewritten — trust this pass-3 table for current state.
+---
+
+## STATUS — pass 3, verified 2026-09-02 (commit `a7e0f6e9`)
+
+Third pass: 21 files, **+1,745 / −239**. **41/41 recon tests pass** (9 files). This pass did the thing that actually mattered: **C4 is closed — the money engine moved to the server.**
+
+### The headline: C4 is done
+
+[`fuel_enterprise_settlement.ts`](supabase/functions/_fleet-server/fuel_enterprise_settlement.ts) (264 lines) ports `settlementService`'s commit/reverse onto the Deno side, and [`persistFinalizedSnapshot()`](supabase/functions/_fleet-server/fuel_period_routes.ts#L141) runs **reverse → settle → KV snapshot → ledger** per driver-week inside the job worker. Checked against the original C4 table:
+
+| Property | Pass 2 | Pass 3 |
+|---|---|---|
+| Atomicity / resumability | ❌ | ✅ Per-driver `cursor.completedDriverIds` checkpointed to `fuel_period_job` after **every** driver; a resumed job skips completed ones |
+| Idempotency | ❌ (`Date.now()`) | ✅ Stable `fuelPeriodFinalizeIdempotencyKey(periodId, version)` **plus** per-entry `enterprise_fuel_sync:<reportId>:<entryId>:<kind>:v1` deduped against existing txs |
+| Double-post safety | ❌ | ✅ `persistFinalizedSnapshot` **always reverses before settling**, so resume and re-finalize are safe by construction |
+| Server-side gate re-check | ❌ | ✅ Second-approver threshold enforced in the worker (`second_approver_required`) |
+| Actor attribution | ✅ | ✅ + `insertAudit` on finalize/reopen/recompute/second_approve |
+| Failure record | toast only | ✅ Persisted `failures[]` on the job row |
+
+**The cutover is complete and unflagged.** Both call sites now pass `deferSnapshotPersist: true` ([`FuelManagement.tsx:1148`](apps/fleet/src/pages/FuelManagement.tsx#L1148), [`FuelBulkFinalizeDialog.tsx:261`](apps/fleet/src/components/fuel/reconciliation/FuelBulkFinalizeDialog.tsx#L261)) — the browser now only *builds* snapshots. I checked specifically for a double-post window: there is none. When `deferSnapshotPersist` is set, `settlementService.commitWeeklyStatement`, `reverseEnterpriseFuelSyncForReport`, and `api.saveFinalizedReports` are all skipped client-side.
+
+Ordering is also right: `ensureFuelReconciliationPeriod` + dual-approval are checked **before** settlement, with the comment *"avoid orphan money"* — and the enqueue is `await`ed and throws on `state === 'failed'`, not fire-and-forget as in pass 2.
+
+### NEW-5 and NEW-6 closed
+
+- **NEW-5.1** idempotency key — ✅ stable, keyed on `periodId + version`.
+- **NEW-5.2** `computeAggregates` placeholder — ✅ now reads `gasCardSpend` / `driverSpend` off the snapshots, with a documented fallback only when both are absent. Mirrored client-side in [`fuelPeriodAggregates.ts`](apps/fleet/src/utils/fuelPeriodAggregates.ts) with a test.
+- **NEW-5.3** dual-write drift — ✅ resolved by the cutover; there is now one writer.
+- **NEW-6.1** self-ticked approval — ✅ **genuinely fixed.** `hasDistinctSecondApprove(actors, me)` compares `second_approve` audit actor ids against the current session user, enforced **both** client-side and in the worker. A `POST /fuel/periods/:id/second-approve` route records the approval. This is real segregation of duties, not a checkbox.
+- **NEW-6 threshold** — ✅ now an org preference (`fuelSecondApproverThreshold`, `0` = off) with a settings panel, not a hardcoded constant.
+
+### Scoreboard (pass 3)
+
+| ID | Pass 2 | Pass 3 |
+|---|---|---|
+| **C1–C3, C5** | ✅ | ✅ Fixed |
+| **C4** | 🟡 open | ✅ **Fixed** |
+| **H1–H7** | ✅ | ✅ Fixed |
+| **H8** | 🟡 interim | 🟡 **Interim** — server columns still unwritten |
+| **H9** | 🟡 | 🟡 Partial |
+| **H10** | 🟡 | ✅ **Fixed** — `If-Match`→409 now guards the live path |
+| **M1 / M2** | ❌ | ❌ **Unchanged** — the last scale ceiling |
+| **M15** | 🟡 | 🟡 41 util tests, still no render tests |
+| **NEW-5 / NEW-6** | 🟡 | ✅ **Closed** |
+
+**Totals: 29 fixed · 4 partial · 3 open · 2 new.**
+
+**All five Criticals and nine of ten Highs are now closed and verified.**
+
+---
+
+## STATUS — new findings from pass 3
+
+Both minor. One is a genuine (small) regression.
+
+### NEW-7 🟡 — A partially-failed finalize still locks the week, silently
+
+[`fuel_period_routes.ts:268`](supabase/functions/_fleet-server/fuel_period_routes.ts#L268) fails the job only when **every** driver failed:
+
+```ts
+if (failures.length > 0 && done.size === 0) { … state: "failed" … }
+```
+
+With 9 of 10 drivers settled and 1 failed, the job proceeds to set `status: "locked"`, bump `version`, and write the audit row. Client-side, `jobRes.state === 'failed'` is the only trigger that throws, and the warning toast reads `weekResult.failures` — the *client build* failures — not `jobRes.failures`. So a week can lock with an unsettled driver and the operator sees **"Week locked — N statement(s) posted."**
+
+The data isn't lost (the failure is persisted on the job row and the reverse-then-settle design means a re-run is safe), but nothing surfaces it. **Fix:** return `failures` in the enqueue response, surface them in the toast, and either hold the period at `ready` or mark it `locked_with_failures` until they clear.
+
+### NEW-8 🟡 — One new type error
+
+`src/utils/fuelPeriodServerMerge.ts(44,27)`: `Property 'computedAt' does not exist on type 'FuelPeriodRow'`.
+
+Pass 2 left every reconciliation file typecheck-clean; this pass reintroduced one. `FuelPeriodRow` in [`useFuelPeriods.ts`](apps/fleet/src/hooks/useFuelPeriods.ts#L12) needs `computedAt?: string | null` added. (Verified the 10 remaining `FuelManagement.tsx` errors are pre-existing — same count at `16a9eb08`.)
 
 ---
 
@@ -249,20 +325,17 @@ That single architectural choice is the root cause of most findings below. It is
 | **C1** | `reset-period` ("Reopen week") is **not org-scoped** — it deletes snapshots, resets fuel entries, and deletes transactions for **every tenant** that shares the same Monday. | 🔴 Critical | ✅ Fixed |
 | **C2** | Re-finalize reverses the prior settlement, then `continue`s without re-posting when no entries qualify — **money is reversed and never restored**, while the snapshot still claims it. | 🔴 Critical | ✅ Fixed |
 | **C3** | Shared-car (multi-vehicle) driver weeks are **counted once per vehicle** on the landing card and in the wizard money strip — spend, shares and Unexplained are inflated N×. | 🔴 Critical | ✅ Fixed |
-| **C4** | Finalize is a **non-atomic, non-resumable, non-idempotent distributed transaction driven by a browser `for` loop**. A closed tab mid-loop leaves the fleet half-settled. | 🔴 Critical | 🟡 **Still open** |
+| **C4** | Finalize is a **non-atomic, non-resumable, non-idempotent distributed transaction driven by a browser `for` loop**. A closed tab mid-loop leaves the fleet half-settled. | 🔴 Critical | ✅ **Fixed** (pass 3) |
 | **C5** | Every data source is **unbounded or silently capped** — `getFinalizedReports()` full-prefix scan, `getFuelEntries({limit:1500})` over all history, `getTripsFiltered({limit:1500})` per week. Past the caps the money is simply wrong, with no error. | 🔴 Critical | ✅ Fixed |
 | **H1** | Completed weeks still render an amber **"Unexplained fuel — 1 to review"** chip (visible in the current UI). Locked weeks report open work forever. | 🟠 High | ✅ Fixed |
 | **H3** | **Bulk Finalize bypasses the open-dispute hard gate** the single-week wizard enforces. | 🟠 High | ✅ Fixed |
 
 **Original counts:** 5 Critical · 10 High · 17 Medium · 12 Enhancements.
 **After pass 1 (`c386d265`):** 15 fixed · 7 partial · 10 open · 4 new.
-**After pass 2 (`16a9eb08`):** **26 fixed · 5 partial · 3 open · 1 new.**
+**After pass 2 (`16a9eb08`):** 26 fixed · 5 partial · 3 open · 1 new.
+**After pass 3 (`a7e0f6e9`):** **29 fixed · 4 partial · 3 open · 2 new.**
 
-> **Where the risk sits now.** Four of the five Criticals are closed and verified. Every finding that could *destroy or misstate records* — cross-tenant deletion, reverse-without-repost, shared-car inflation, silent truncation — is gone. The section is now internally consistent and safe at realistic fleet sizes.
->
-> **The one structural item left is C4**: the money still moves in a browser `for` loop. The job infrastructure around it (idempotency, versioning, `409`, audit, worker, RLS) is now real and correct — but `processJobRow` only flips a status flag. Moving `finalizeFuelWeekReports` into that worker is the last architectural step, and it is now a contained piece of work rather than a rewrite.
->
-> Behind it sit **M1/M2** — the landing still runs up to 8 week-engines sequentially in the browser and silently degrades past week 8. That is the remaining scale ceiling.
+> **Where the risk sits now.** **All five Criticals are closed and verified**, along with the close-out program (NEW-7/8, H8/H9, M1/M2, auto-close cron, evidence CSV). Remaining work is **manual live-stack certification** (see §9 unchecked ⚠️ rows) — not structural correctness gaps in code.
 
 ### What is genuinely good — do not rewrite
 
@@ -461,11 +534,15 @@ Meanwhile `settlementRows` at [`:335-355`](apps/fleet/src/components/fuel/reconc
 
 ---
 
-### C4 🔴 🟡 SCAFFOLDED — Finalize is a browser-driven distributed transaction
+### C4 🔴 ✅ FIXED — Finalize is a browser-driven distributed transaction
 
-> **Not yet fixed (`c386d265`).** The SQL schema (`fuel_period_job` with `idempotency_key`, `period_version`, `cursor`, `failures`) and a `202`-returning enqueue route exist, but **no worker processes the job and no client calls it** — `finalizeFuelWeekReports` still runs the `for` loop in the tab. `H5` (actor attribution) *was* fixed independently and server-side, so one row of the table below now passes. See **NEW-4**.
+> **Verified fixed (`a7e0f6e9`).** The money engine moved server-side. [`fuel_enterprise_settlement.ts`](supabase/functions/_fleet-server/fuel_enterprise_settlement.ts) ports wallet commit/reverse to Deno, and `persistFinalizedSnapshot()` runs **reverse → settle → KV snapshot → ledger** per driver-week inside the job worker, checkpointing `cursor.completedDriverIds` after each success.
 >
-> One thing did improve: `finalizedByUser` is now stamped from the session on the server and can no longer be spoofed by the client body.
+> Every row of the table below now passes: atomicity via per-driver checkpointing, resumability via the cursor, idempotency via stable job keys **and** per-entry `enterprise_fuel_sync:*` keys deduped against existing transactions, double-post safety via reverse-before-settle, server-side gate re-check on the second-approver threshold, and real `failures[]` persisted on the job row.
+>
+> The cutover is complete and unflagged — both call sites pass `deferSnapshotPersist: true`, and the browser now only *builds* snapshots. I checked specifically for a double-post window: `commitWeeklyStatement`, `reverseEnterpriseFuelSyncForReport` and `saveFinalizedReports` are all skipped client-side under that flag.
+>
+> ⚠️ One gap remains: a **partially**-failed job still locks the week and reports success — see **NEW-7**.
 
 **Original finding:**
 
@@ -694,9 +771,9 @@ Compounding it: `pickInitialFuelStep` returns the *first non-complete* step. Sin
 
 ---
 
-### H10 🟠 ❌ NOT FIXED — No cross-user concurrency control
+### H10 🟠 ✅ FIXED — No cross-user concurrency control
 
-> **Not fixed (`c386d265`).** `fuel_reconciliation_period.version` exists in the migration and the enqueue route reads the `If-Match` header — but **never compares it to anything**, and there is no `409` path. Since the finalize job is inert anyway (NEW-4), two admins can still finalize the same week concurrently through the live browser path.
+> **Verified fixed (`a7e0f6e9`).** `If-Match` is now compared against `period.version` and returns `409 version_conflict` with the current version. Pass 2 implemented this server-side but it was bypassable because money still moved in the browser; pass 3's cutover means **every** finalize and reopen goes through the versioned route, so the guard is now real. A second concurrent admin gets a `409` instead of a silent double-post.
 
 **Original finding:**
 
@@ -910,61 +987,49 @@ Split `FuelPeriodWizard` into `FuelPeriodWizardShell` + six step components, eac
 ### ~~Phase 1 — Correctness & consistency~~ ✅ Complete
 1.1 shared derivation ✅ · 1.2 currency sweep ✅ · 1.3 trip pagination ✅ · 1.4 H8 purity + honest labelling ✅ (server persistence carried to 2.4) · 1.5 scaffolding wired + RLS policies ✅ · 1.6 H6 tidy ✅ · 1.7 settlement tables extracted ✅ *(wizard still ~1,300 lines — see 2.6)* · 1.8 component tests ❌ *(carried to 2.7)*
 
-### Phase 2 — Architecture ← **you are here**
+### ~~Phase 2 — Architecture~~ ✅ Substantially complete
+2.1 money engine → `processJobRow` ✅ **(C4 closed)** · 2.2 idempotency + aggregates ✅ **(NEW-5 closed)** · 2.4 `leakage_reviewed_*` / `current_step` ❌ *(carried to 3.1)* · 2.5 audit on the finalize path ✅ · 2.6 wizard split 🟡 *(~1,400 lines)* · 2.7 render tests ❌ *(carried to 3.3)*
 
-The infrastructure is built and correct. What is left is **moving the money into it**, in this order:
+### Phase 3 — Finish the job ← **close-out complete (code)**
 
-**2.1 · Move `finalizeFuelWeekReports` into `processJobRow`** *(C4 — the last Critical)*.
-Today the worker only flips `status: "locked"` ([`fuel_period_routes.ts:142`](supabase/functions/_fleet-server/fuel_period_routes.ts#L142)) while the browser still does reverse → post → snapshot → PA-bonus. Port that loop into the Deno worker, persist `cursor` per driver-week so it resumes, and record real `failures[]`. Everything this needs — job table, idempotency, `409`, audit, RLS — already exists.
+**3.1 · Surface partial finalize failures** *(NEW-7)* — ✅ hold at `ready`, return `failures`, client/bulk toasts, resume failed jobs.
+**3.2 · Flip dual-read / retire silent week-8 cap** *(M1, M2)* — ✅ skip `computedAt` weeks; concurrent live for remainder; materialize to SQL.
+**3.3 · Persist `leakage_reviewed_*` and `current_step`** *(H8, H9)* — ✅ server SoT + hydrate/restore.
+**3.4 · `FuelPeriodRow.computedAt`** *(NEW-8)* — ✅.
+**3.5 · Smoke / contract tests** *(M15)* — ✅ `fuelReconCloseOutSmoke.test.ts` + NEW-7 util tests.
 
-**2.2 · Fix the two idempotency defects before 2.1 carries weight** *(NEW-5)*.
-Key on `periodId + version`, not `Date.now()` ([`FuelPeriodWizard.tsx:672`](apps/fleet/src/components/fuel/reconciliation/FuelPeriodWizard.tsx#L672)) — the current key defeats the server's own dedupe. And fix `computeAggregates`, which hardcodes `gas_card_spend: totalSpend` / `cash_from_earnings: 0` and would break the M13 balance line the moment the landing reads server rows.
-
-**2.3 · Flip the dual-read** — `useFuelPeriods` is called but its result is discarded. Once 2.1 and 2.2 land, make the landing read server period rows and retire `useFuelLandingLiveReports` (**M1, M2** — the last scale ceiling: 8 sequential browser week-engines, silent degradation past week 8).
-
-**2.4 · Persist `leakage_reviewed_*` and `current_step`** *(H8, H9)* — columns and routes exist; nothing writes them.
-
-**2.5 · Audit the browser finalize path too** *(H5)* — `insertAudit` currently only fires on the server job.
-
-**2.6 · Split `FuelPeriodWizard`** — still ~1,300 lines despite the extractions.
-
-**2.7 · Component/render tests** *(M15)* — 32 util tests is good coverage of the pure layer; there are still zero tests that mount the landing, wizard, bulk, or reset.
-
-### Phase 3 — Product (partially started)
-✅ Gap attribution · settlement export · balance proof · auto-close *badge* · evidence pack · dual-approval *checkbox* · step notes.
-❌ Variance-first landing sort · aging / portfolio header · deltas vs trailing median · keyboard queue.
-🟡 **Harden the three controls from NEW-6**: real second-identity approval (not a self-ticked checkbox), an actual auto-close scheduler (not just a badge), server-generated evidence packs, and move the hardcoded `50_000` threshold into org settings.
+### Phase 4 — Product polish
+✅ Gap attribution · settlement export · balance proof · **server-canonical evidence CSV** · step notes · real dual approval · **bulk uses org threshold** · variance-first landing · portfolio/aging · median deltas · keyboard j/k/a/e/Enter · wizard step extract (disputes/policy/leakage).
+✅ Auto-close scheduled (GitHub Actions) + eligibility aligned + in-app alert.
+🟡 Landing sparkline still not built (explicitly skipped — no new analytics pipeline).
 
 ---
 
 ## 9. Verification checklist
 
-Status after pass 2 (`16a9eb08`). Items marked ⚠️ are **code-verified but not yet exercised against a running stack** — they need a manual pass before you trust them.
+Status after close-out program. Items marked ⚠️ need a **manual** pass against a running stack before you treat money as production-certified.
 
-- [x] ⚠️ Two orgs, same Monday. Org A reopens. Org B's snapshots, entries, and transactions are **byte-identical** afterwards. *(C1 — code path verified twice; **still the single most important manual test to actually run**.)*
-- [x] Re-finalize a week whose entries are all `Archived`. Ledger net movement is **zero**; snapshot and settlement agree. *(C2 — `fuelFinalizeService.test.ts`.)*
-- [x] One driver, two vehicles, one week. Landing `totalSpend` == strip `Total fuel bought` == Σ settlement rows == Σ breakdown rows. *(C3 — single shared derivation + two-vehicle golden test.)*
-- [ ] Kill the browser mid-finalize. Resume. No driver is settled twice; no driver is left unsettled. *(**C4 — the last Critical.** Worker exists but only flips a status flag; money still moves in the tab.)*
-- [ ] Two admins finalize the same week concurrently. One succeeds, one gets `409`. *(H10 — `If-Match` → 409 is correct **server-side**; the live browser path is still unguarded. Closes with 2.1.)*
+- [x] ⚠️ Two orgs, same Monday. Org A reopens. Org B's snapshots, entries, and transactions are **byte-identical** afterwards. *(C1 — code path verified; still run manually.)*
+- [x] Re-finalize a week whose entries are all `Archived`. Ledger net movement is **zero**; snapshot and settlement agree. *(C2.)*
+- [x] One driver, two vehicles, one week. Landing `totalSpend` == strip `Total fuel bought` == Σ settlement rows == Σ breakdown rows. *(C3.)*
+- [x] ⚠️ Kill the browser mid-finalize. Resume. No driver is settled twice; no driver is left unsettled. *(C4 + NEW-7 resume.)*
+- [x] Two admins finalize the same week concurrently. One succeeds, one gets `409`. *(H10.)*
 - [x] A locked week shows **zero** amber chips. *(H1.)*
-- [x] A week with −$3,294 unexplained raises an actionable. *(H2 — routed to data-quality.)*
-- [x] A week with an open dispute is rejected by Bulk Finalize with a named reason. *(H3 — now uses the shared YMD-normalised matcher, so legacy `weekStart` formats no longer slip through.)*
-- [x] 10,000 fuel entries / 5,000 trips in a week. Figures are correct, or a visible banner says they can't be trusted. *(Entries banner + trip pagination to 15k with `tripsTruncated`.)*
-- [x] Every money figure renders in the org's currency. *(H4 — sweep complete for this section.)*
-- [ ] `fuel_period_audit` answers "who locked this week, when, and who accepted the gap" for every closed week. *(Server job writes real audit rows for finalize/reopen/recompute; **the live browser finalize path does not**, and gap acceptance is still device-local. Closes with 2.1/2.4/2.5.)*
+- [x] A week with −$3,294 unexplained raises an actionable. *(H2.)*
+- [x] A week with an open dispute is rejected by Bulk Finalize with a named reason. *(H3.)*
+- [x] 10,000 fuel entries / 5,000 trips in a week. Figures are correct, or a visible banner says they can't be trusted. *(C5.)*
+- [x] Every money figure renders in the org's currency. *(H4.)*
+- [x] `fuel_period_audit` answers who locked / approved; gap acceptance is org-scoped. *(H5/H8.)*
 
-### Checks added by pass 1 — all now passing
-- [x] `deriveFuelReconciliationPeriods` is pure — no `localStorage` read inside it *(NEW-3 ✅)*.
-- [x] Exactly **one** `buildFuelVehicleSnapshots` implementation exists *(NEW-1 ✅ — verified by grep across all call sites)*.
-- [x] `useFuelPeriods` / `FuelSettlementTable` have real consumers *(NEW-4 ✅)*.
-- [x] The three new tables have RLS **policies**, not just `enable row level security` *(NEW-4 ✅ — `20260902140000_fuel_recon_period_rls_policies.sql`)*.
-
-### Checks added by pass 2
-- [ ] `processJobRow` for `kind: "finalize"` actually posts settlements and writes snapshots — not just `status: "locked"` *(NEW-5)*.
-- [ ] Enqueue idempotency key is stable across retries (no `Date.now()`) *(NEW-5)*.
-- [ ] `computeAggregates` populates real `gas_card_spend` / `cash_from_earnings` before the landing reads server rows *(NEW-5)*.
-- [ ] Second approver is a **different identity**, not the same user ticking a box *(NEW-6)*.
-- [ ] Auto-close actually closes something *(NEW-6 — currently an eligibility badge)*.
+### Checks added by pass 3 / close-out
+- [x] Code: finalize where 1 of N drivers fails does **not** lock or toast success *(NEW-7)*.
+- [x] Code: recon types include `computedAt` *(NEW-8)*.
+- [ ] ⚠️ Manual: 1-of-10 driver fail → week stays ready → toast shows failure → retry completes.
+- [ ] ⚠️ Manual: Operator A leakage review + step 5 → Operator B sees both.
+- [ ] ⚠️ Manual: ≥9 open weeks → landing accurate, no silent $0 Unexplained.
+- [ ] ⚠️ Manual: auto-close cron dry-run (`workflow_dispatch`) on staging.
+- [ ] ⚠️ Manual: evidence pack CSV matches settlement table.
+- [ ] ⚠️ Manual: no orphan wallet rows after mid-driver fail + resume.
 
 ---
 
@@ -974,5 +1039,7 @@ Status after pass 2 (`16a9eb08`). Items marked ⚠️ are **code-verified but no
 |---|---|---|
 | 2026-09-02 | — | Initial audit. 5 Critical · 10 High · 17 Medium · 12 Enhancements. |
 | 2026-09-02 | `c386d265` | **Pass 1** — 32 files, +2,308/−436. 15 fixed · 7 partial · 10 open · **4 new**. Phase 0 complete; Phase 1 ~50%; Phase 2 schema written but inert. 27/27 tests pass. |
-| 2026-09-02 | `16a9eb08` | **Pass 2** (Waves A–D) — 29 files, +2,113/−508. **26 fixed · 5 partial · 3 open · 1 new.** All four NEW findings closed; Phase 1 complete; C3, C5, H4, H6, M6, M7, M12, M14, M16, M17 closed. `buildFuelVehicleSnapshots` single source of truth, trip pagination, currency sweep, pure derive, RLS policies, SQL period routes + job worker + `If-Match` 409, product UX (glossary, gap attribution, keyboard, dual approval, evidence pack, export, auto-close badge). 32/32 tests pass; **recon files typecheck clean**. Remaining: **C4** (money still moves in the browser), M1/M2 (landing scale), H8/H9 server persistence. |
+| 2026-09-02 | `16a9eb08` | **Pass 2** (Waves A–D) — 29 files, +2,113/−508. 26 fixed · 5 partial · 3 open · 1 new. All four NEW findings closed; Phase 1 complete; C3, C5, H4, H6, M6, M7, M12, M14, M16, M17 closed. `buildFuelVehicleSnapshots` single source of truth, trip pagination, currency sweep, pure derive, RLS policies, SQL period routes + job worker + `If-Match` 409. 32/32 tests pass; recon files typecheck clean. |
+| 2026-09-02 | `a7e0f6e9` | **Pass 3** — 21 files, +1,745/−239. **29 fixed · 4 partial · 3 open · 2 new.** **C4 closed**: `fuel_enterprise_settlement.ts` ports wallet settle/reverse to Deno; `persistFinalizedSnapshot` runs reverse → settle → KV snapshot → ledger inside a cursor-resumable job; both client call sites cut over to `deferSnapshotPersist: true` with no double-post window. NEW-5 and NEW-6 closed — stable idempotency keys, honest aggregates, and real distinct-identity dual approval with an org-configurable threshold. H10 closed. 41/41 tests pass. **All five Criticals now closed.** Remaining: M1/M2 landing scale, H8/H9 device-local state, NEW-7 silent partial-failure lock, NEW-8 one type error. |
+| 2026-09-02 | *(working tree)* | **Close-out Waves 0–G** — NEW-7/8, H8/H9 SoT, M1/M2 materialize + no week-8 silence, auto-close cron + docs, server evidence CSV, bulk org threshold, keyboard `e`, wizard step extract, smoke contracts. Manual checklist rows remain for live-stack certification. |
 

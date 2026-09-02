@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   overlayServerFuelPeriods,
+  serverComputedWeekStarts,
   serverLeakageReviewedWeekStarts,
   serverLockedWeekStarts,
 } from './fuelPeriodServerMerge';
@@ -96,5 +97,44 @@ describe('fuelPeriodServerMerge (Wave G)', () => {
     ];
     expect([...serverLeakageReviewedWeekStarts(rows)]).toEqual(['2026-07-06']);
     expect([...serverLockedWeekStarts(rows)]).toEqual(['2026-07-13']);
+  });
+
+  it('collects computed week starts when computedAt or locked', () => {
+    const rows = [
+      {
+        id: 'a',
+        orgId: 'o',
+        weekStart: '2026-07-06',
+        weekEnd: '2026-07-12',
+        status: 'open' as const,
+        version: 1,
+        vehicleCount: 0,
+        driverCount: 0,
+        totalSpend: 10,
+        gasCardSpend: 10,
+        cashFromEarnings: 0,
+        companyShare: 0,
+        driverShare: 0,
+        unexplained: 1,
+        computedAt: '2026-07-10T00:00:00Z',
+      },
+      {
+        id: 'b',
+        orgId: 'o',
+        weekStart: '2026-07-13',
+        weekEnd: '2026-07-19',
+        status: 'open' as const,
+        version: 1,
+        vehicleCount: 0,
+        driverCount: 0,
+        totalSpend: 0,
+        gasCardSpend: 0,
+        cashFromEarnings: 0,
+        companyShare: 0,
+        driverShare: 0,
+        unexplained: 0,
+      },
+    ];
+    expect([...serverComputedWeekStarts(rows)]).toEqual(['2026-07-06']);
   });
 });

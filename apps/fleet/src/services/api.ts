@@ -4160,6 +4160,35 @@ export const api = {
     return response.json();
   },
 
+  async materializeFuelPeriod(args: {
+    periodId: string;
+    weekStart: string;
+    weekEnd: string;
+    totalSpend: number;
+    gasCardSpend?: number;
+    cashFromEarnings?: number;
+    companyShare: number;
+    driverShare: number;
+    unexplained: number;
+    vehicleCount?: number;
+    driverCount?: number;
+    computedFromHash?: string;
+  }) {
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.fuel}/fuel/periods/${encodeURIComponent(args.periodId)}/materialize`,
+      {
+        method: 'POST',
+        headers: await requireAuthHeaders(),
+        body: JSON.stringify(args),
+      },
+    );
+    if (!response.ok) {
+      const errText = await response.text().catch(() => '');
+      throw new Error(errText || 'Materialize failed');
+    }
+    return response.json();
+  },
+
   async backfillFuelReconciliationPeriods() {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/fuel/periods/backfill`, {
       method: 'POST',

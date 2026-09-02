@@ -45,10 +45,13 @@ import { useFuelPeriods, FUEL_PERIODS_KEY } from '../hooks/useFuelPeriods';
 import { useFuelLandingLiveReports } from '../hooks/useFuelLandingLiveReports';
 import {
   overlayServerFuelPeriods,
+  serverComputedWeekStarts,
   serverLeakageReviewedWeekStarts,
   serverLockedWeekStarts,
+  weekStartYmd,
 } from '../utils/fuelPeriodServerMerge';
 import { fuelPeriodFinalizeIdempotencyKey } from '../utils/fuelPeriodIdempotency';
+import { interpretFuelFinalizeJobResult } from '../utils/fuelFinalizeJobResult';
 import {
   hasDistinctSecondApprove,
   needsSecondApprover,
@@ -287,10 +290,18 @@ function FuelManagementInner({ defaultTab = 'logs', onViewDriverLedger, onTabCha
     () => serverLockedWeekStarts(serverFuelPeriods),
     [serverFuelPeriods],
   );
+  const computedServerWeeks = useMemo(
+    () => serverComputedWeekStarts(serverFuelPeriods),
+    [serverFuelPeriods],
+  );
 
+  // Live engines only for unlocked weeks that do not yet have server money (M1/M2 cutover).
   const openWeekOptionsForLive = useMemo(
-    () => reconciliationWeekOptions.filter((w) => !lockedServerWeeks.has(w.startDate)),
-    [reconciliationWeekOptions, lockedServerWeeks],
+    () =>
+      reconciliationWeekOptions.filter(
+        (w) => !lockedServerWeeks.has(w.startDate) && !computedServerWeeks.has(w.startDate),
+      ),
+    [reconciliationWeekOptions, lockedServerWeeks, computedServerWeeks],
   );
 
   const landingLiveReportsByWeek = useFuelLandingLiveReports({
@@ -305,11 +316,55 @@ function FuelManagementInner({ defaultTab = 'logs', onViewDriverLedger, onTabCha
     finalizedReports,
   });
 
+  // Push client-built open-week money to SQL so next landing skips those engines.
+  useEffect(() => {
+    if (landingLiveReportsByWeek.size === 0) return;
+    let cancelled = false;
+    void (async () => {
+      for (const [weekStart, slices] of landingLiveReportsByWeek) {
+        if (cancelled || computedServerWeeks.has(weekStart)) continue;
+        const weekEnd =
+          reconciliationWeekOptions.find((w) => w.startDate === weekStart)?.endDate || weekStart;
+        const totalSpend = slices.reduce((s, v) => s + (Number(v.totalGasCardCost) || 0), 0);
+        const companyShare = slices.reduce((s, v) => s + (Number(v.companyShare) || 0), 0);
+        const driverShare = slices.reduce((s, v) => s + (Number(v.driverShare) || 0), 0);
+        const unexplained = slices.reduce((s, v) => s + (Number(v.miscellaneousCost) || 0), 0);
+        try {
+          const ensured = await api.ensureFuelReconciliationPeriod({ weekStart, weekEnd });
+          if (!ensured?.id) continue;
+          await api.materializeFuelPeriod({
+            periodId: ensured.id,
+            weekStart,
+            weekEnd,
+            totalSpend,
+            companyShare,
+            driverShare,
+            unexplained,
+            vehicleCount: slices.filter((v) => (Number(v.totalGasCardCost) || 0) > 0).length,
+            computedFromHash: `landing:${slices.length}:${totalSpend}`,
+          });
+        } catch {
+          /* offline — overlay still uses live map this session */
+        }
+      }
+      if (!cancelled) {
+        void queryClient.invalidateQueries({ queryKey: [FUEL_PERIODS_KEY] });
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [landingLiveReportsByWeek, computedServerWeeks, reconciliationWeekOptions, queryClient]);
+
   const fuelReconPeriods = useMemo(() => {
-    const leakageReviewedWeeks = new Set([
-      ...listFuelLeakageReviewedWeeks(),
-      ...serverLeakageReviewedWeekStarts(serverFuelPeriods),
-    ]);
+    // H8: localStorage may fill gaps only for weeks with no server period row.
+    const serverByWeek = new Map(
+      serverFuelPeriods.map((r) => [weekStartYmd(r.weekStart), r] as const),
+    );
+    const leakageReviewedWeeks = serverLeakageReviewedWeekStarts(serverFuelPeriods);
+    for (const w of listFuelLeakageReviewedWeeks()) {
+      if (!serverByWeek.has(w)) leakageReviewedWeeks.add(w);
+    }
     const derived = deriveFuelReconciliationPeriods({
       weekOptions: reconciliationWeekOptions,
       vehicles,
@@ -1170,8 +1225,11 @@ function FuelManagementInner({ defaultTab = 'logs', onViewDriverLedger, onTabCha
             totalSpend,
             secondApproverThreshold: threshold,
           });
-          if (jobRes?.state === 'failed') {
-            throw new Error(jobRes.error || 'Server finalize job failed');
+          const jobInterp = interpretFuelFinalizeJobResult(jobRes);
+          if (jobInterp.incomplete) {
+            toast.warning(jobInterp.toastMessage);
+            await queryClient.invalidateQueries({ queryKey: [FUEL_PERIODS_KEY] });
+            return false;
           }
 
           await queryClient.invalidateQueries({ queryKey: ['finalizedReports'] });
@@ -1180,7 +1238,7 @@ function FuelManagementInner({ defaultTab = 'logs', onViewDriverLedger, onTabCha
 
           if (weekResult.failures?.length) {
             toast.warning(
-              `Finalize finished with issues — ${weekResult.snapshotCount} locked, ${weekResult.failures.length} failed.`,
+              `Finalize finished with issues — ${weekResult.snapshotCount} prepared, ${weekResult.failures.length} client build failed.`,
             );
           } else if (weekResult.successCount > 0) {
               toast.success(`Week locked — ${weekResult.successCount} statement(s) posted. This period is now Completed.`);

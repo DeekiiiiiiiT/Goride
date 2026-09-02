@@ -1,0 +1,39 @@
+name: Fuel period auto-close cron
+
+# Closes eligible Consumption Reconciliation weeks (zero actionables, unexplained
+# under epsilon or gap accepted). Uses the same finalize job path as the UI.
+
+on:
+  schedule:
+    # Daily 14:00 UTC ≈ 09:00 Jamaica
+    - cron: '0 14 * * *'
+  workflow_dispatch:
+
+jobs:
+  auto-close:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Auto-close eligible fuel periods
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          FLEET_CRON_SECRET: ${{ secrets.FLEET_CRON_SECRET }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          set -euo pipefail
+          SUPABASE_URL="$(printf '%s' "$SUPABASE_URL" | tr -d '\r\n' | sed 's/[[:space:]]*$//;s/^[[:space:]]*//')"
+          SERVICE_KEY="$(printf '%s' "$SUPABASE_SERVICE_ROLE_KEY" | tr -d '\r\n' | sed 's/[[:space:]]*$//;s/^[[:space:]]*//')"
+          CRON_VAL="$(printf '%s' "${FLEET_CRON_SECRET:-${CRON_SECRET:-}}" | tr -d '\r\n' | sed 's/[[:space:]]*$//;s/^[[:space:]]*//')"
+          if [ -z "$SUPABASE_URL" ] || [ -z "$SERVICE_KEY" ] || [ -z "$CRON_VAL" ]; then
+            echo "Missing SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, or FLEET_CRON_SECRET"
+            exit 1
+          fi
+          RESP="$(curl -sS -w "\nHTTP_CODE:%{http_code}\n" -X POST \
+            "${SUPABASE_URL}/functions/v1/make-server-37f42386/fuel/periods/auto-close?orgId=all" \
+            -H "Authorization: Bearer ${SERVICE_KEY}" \
+            -H "apikey: ${SERVICE_KEY}" \
+            -H "Content-Type: application/json" \
+            -H "X-Fleet-Cron-Secret: ${CRON_VAL}" \
+            -d '{}')"
+          echo "$RESP"
+          echo "$RESP" | grep -q 'HTTP_CODE:200' || exit 1

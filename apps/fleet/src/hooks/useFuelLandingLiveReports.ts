@@ -41,8 +41,8 @@ export type FuelLandingLiveSlice = {
   pendingCount?: number;
 };
 
-/** Cap concurrent open-week calcs so landing refresh stays responsive. */
-export const FUEL_LANDING_LIVE_WEEK_CAP = 8;
+/** Cap concurrent open-week calcs so landing refresh stays responsive. No hard week ceiling (M2). */
+export const FUEL_LANDING_LIVE_CONCURRENCY = 3;
 
 export type FuelLandingLiveReportsInput = {
   weekOptions: Array<{ startDate: string; endDate: string }>;
@@ -96,11 +96,10 @@ export function useFuelLandingLiveReports(input: FuelLandingLiveReportsInput) {
   } = input;
 
   const weeksToLoad = useMemo(() => {
-    const open = weekOptions.filter((w) =>
+    // All open weeks that still need live misc/shares — no silent week-9+ drop (M2).
+    return weekOptions.filter((w) =>
       weekNeedsLiveCalc(w.startDate, w.endDate, fuelEntries, vehicles, finalizedReports),
     );
-    // Newest first (weekOptions are typically newest-first from generateWeekOptions).
-    return open.slice(0, FUEL_LANDING_LIVE_WEEK_CAP);
   }, [weekOptions, fuelEntries, vehicles, finalizedReports]);
 
   const [liveReportsByWeek, setLiveReportsByWeek] = useState<
@@ -128,36 +127,43 @@ export function useFuelLandingLiveReports(input: FuelLandingLiveReportsInput) {
 
     (async () => {
       const next = new Map<string, FuelLandingLiveSlice[]>();
-      for (const week of weeksToLoad) {
-        if (cancelled) return;
-        const buildInput: BuildFuelWeekReportsInput = {
-          weekStartYmd: week.startDate,
-          weekEndYmd: week.endDate,
-          vehicles,
-          drivers,
-          fuelEntries,
-          adjustments,
-          scenarios,
-          fuelCards,
-          disputes,
-          finalizedReports,
-          seedPersonalAllowance: false,
-        };
-        try {
-          const { reports } = await buildFuelWeekReportsWithGating(buildInput);
-          const slices: FuelLandingLiveSlice[] = liveReportsToPrimaryClaimedSlices(reports);
-          next.set(week.startDate, slices);
-        } catch (e) {
-          console.warn('[useFuelLandingLiveReports] week calc failed', week.startDate, e);
-        }
-      }
+      let cursor = 0;
+      const workers = Array.from(
+        { length: Math.min(FUEL_LANDING_LIVE_CONCURRENCY, weeksToLoad.length) },
+        async () => {
+          while (cursor < weeksToLoad.length) {
+            if (cancelled) return;
+            const i = cursor++;
+            const week = weeksToLoad[i];
+            const buildInput: BuildFuelWeekReportsInput = {
+              weekStartYmd: week.startDate,
+              weekEndYmd: week.endDate,
+              vehicles,
+              drivers,
+              fuelEntries,
+              adjustments,
+              scenarios,
+              fuelCards,
+              disputes,
+              finalizedReports,
+              seedPersonalAllowance: false,
+            };
+            try {
+              const { reports } = await buildFuelWeekReportsWithGating(buildInput);
+              next.set(week.startDate, liveReportsToPrimaryClaimedSlices(reports));
+            } catch (e) {
+              console.warn('[useFuelLandingLiveReports] week calc failed', week.startDate, e);
+            }
+          }
+        },
+      );
+      await Promise.all(workers);
       if (!cancelled) setLiveReportsByWeek(new Map(next));
     })();
 
     return () => {
       cancelled = true;
     };
-    // weekKey + entrySig capture the meaningful inputs without thrashing on array identity.
     // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional signature deps
   }, [weekKey, entrySig]);
 

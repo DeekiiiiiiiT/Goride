@@ -4,11 +4,13 @@ export type AutoClosePeriodLike = {
   locked?: boolean;
   actionableTotal?: number;
   netLeakage?: number;
+  leakageReviewed?: boolean;
 };
 
-/** Weeks with no open actionables and unexplained under epsilon are auto-close eligible. */
+/** Weeks with no open actionables and unexplained under epsilon (or reviewed) are auto-close eligible. */
 export function shouldAutoClosePeriod(period: AutoClosePeriodLike): boolean {
   if (period.locked) return false;
   if ((period.actionableTotal || 0) > 0) return false;
+  if (period.leakageReviewed) return true;
   return Math.abs(Number(period.netLeakage) || 0) <= FUEL_SPEND_EPS;
 }

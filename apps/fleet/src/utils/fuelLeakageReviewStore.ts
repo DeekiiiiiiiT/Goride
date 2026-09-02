@@ -1,6 +1,7 @@
 /**
- * Interim device-local leakage review until server period row owns H8.
- * Keyed by week Monday YMD in localStorage (not org-scoped; not cross-device).
+ * Offline cache for leakage review when the server period row is unreachable.
+ * Server `leakage_reviewed_at` is source of truth whenever a period row exists;
+ * this store must not suppress gaps for other users / devices.
  */
 const PREFIX = 'fuel.leakageReviewed.';
 
