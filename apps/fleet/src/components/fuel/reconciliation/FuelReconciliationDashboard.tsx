@@ -41,6 +41,7 @@ export function FuelReconciliationDashboard({
   inProgress,
   completed,
   loading,
+  periodsLoadError,
   vehicles,
   trips,
   fuelEntries,
@@ -67,7 +68,9 @@ export function FuelReconciliationDashboard({
   outstanding: FuelReconciliationPeriod[];
   inProgress: FuelReconciliationPeriod[];
   completed: FuelReconciliationPeriod[];
-  loading: boolean;
+  loading?: boolean;
+  /** SQL period list failed — do not treat empty Completed as authoritative. */
+  periodsLoadError?: boolean;
   vehicles: Vehicle[];
   trips: Trip[];
   fuelEntries: FuelEntry[];
@@ -224,6 +227,11 @@ export function FuelReconciliationDashboard({
 
   return (
     <>
+      {periodsLoadError && (
+        <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          Could not load locked weeks from the server. Completed tab may be incomplete — refresh and try again.
+        </div>
+      )}
       <FuelPeriodLandingPage
         outstanding={outstanding}
         inProgress={inProgress}

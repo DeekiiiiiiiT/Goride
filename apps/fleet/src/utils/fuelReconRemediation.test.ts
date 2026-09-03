@@ -5,6 +5,7 @@ import {
   isFuelDisputeOpenInWeek,
   liveReportsToPrimaryClaimedSlices,
 } from './fuelPeriodDerive';
+import { serverRowsToLandingPeriods } from './fuelPeriodServerMerge';
 import { hashFuelContentSig, fuelEntriesContentSig } from './fuelContentSig';
 import type { FuelEntry } from '../types/fuel';
 import { FUEL_SPEND_EPS } from './fuelMoneyEpsilon';
@@ -34,41 +35,33 @@ describe('fuel recon remediation regressions', () => {
     ).toBe(false);
   });
 
-  it('locked weeks clear actionable chips after derive (H1)', () => {
-    const periods = deriveFuelReconciliationPeriods({
-      weekOptions: [
-        {
-          id: '2026-07-06',
-          label: 'Jul 6 – Jul 12, 2026',
-          startDate: '2026-07-06',
-          endDate: '2026-07-12',
-        },
-      ],
-      vehicles: [{ id: 'v1', fuelScenarioId: 's1' } as any],
-      fuelEntries: [
-        {
-          id: 'e1',
-          vehicleId: 'v1',
-          date: '2026-07-07',
-          amount: 100,
-          reconciliationStatus: 'Verified',
-        } as FuelEntry,
-      ],
-      disputes: [],
-      finalizedReports: [
-        {
-          vehicleId: 'v1',
-          weekStart: '2026-07-06',
-          weekEnd: '2026-07-12',
-          status: 'Finalized',
-          totalGasCardCost: 100,
-          miscellaneousCost: 40,
+  it('locked weeks clear actionable chips via SQL lock (H1), not snapshots', () => {
+    const cards = serverRowsToLandingPeriods([
+      {
+        id: 'org:2026-07-06',
+        orgId: 'org',
+        weekStart: '2026-07-06',
+        weekEnd: '2026-07-12',
+        status: 'locked',
+        lockedAt: '2026-07-13T00:00:00Z',
+        version: 1,
+        vehicleCount: 1,
+        driverCount: 1,
+        totalSpend: 100,
+        gasCardSpend: 100,
+        cashFromEarnings: 0,
+        companyShare: 60,
+        driverShare: 40,
+        unexplained: 40,
+        counts: {
+          'leakage-gap': { actionable: 1, informational: 0 },
+          finalize: { actionable: 1, informational: 0 },
         } as any,
-      ],
-      scenarios: [],
-    });
-    expect(periods[0].status).toBe('completed');
-    expect(periods[0].counts['leakage-gap'].actionable).toBe(0);
+      },
+    ]);
+    expect(cards[0].locked).toBe(true);
+    expect(cards[0].status).toBe('completed');
+    expect(cards[0].counts['leakage-gap'].actionable).toBe(0);
   });
 
   it('negative misc raises data-quality actionable (H2)', () => {

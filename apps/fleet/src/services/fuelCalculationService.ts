@@ -7,7 +7,6 @@ import { Vehicle } from '../types/vehicle';
 import { Trip } from '../types/data';
 import {
   getCategoryCoverageSplit as splitCategory,
-  splitAllCategoryCosts,
   type FuelCoverageCategory,
 } from '../utils/fuelCoverageSplit';
 import {
@@ -42,6 +41,9 @@ import {
   TANK_OVERFLOW_MULT,
   UNACCOUNTED_DISTANCE_DEDUCTION_KM,
   resolvePricePerLiter,
+  assembleLeftoverWeekMoney,
+  computeMiscellaneousCost,
+  splitAllCategoryCosts,
 } from '@roam/fuel-core';
 
 export {
@@ -364,8 +366,13 @@ export const FuelCalculationService = {
             ? 0
             : (personalDistance / observedEfficiency) * actualPricePerLiter;
 
-        // 6. Misc = Spend − (all four category $) — cash leakage, not a km type
-        const miscellaneousCost = totalGasCardCost - (rideShareCost + companyUsageCost + deadheadCost + personalUsageCost);
+        // 6. Misc leftover via fuel-core (same math as Deno weekSnapshotEngine)
+        const miscellaneousCost = computeMiscellaneousCost(totalGasCardCost, {
+            rideShare: rideShareCost,
+            companyUsage: companyUsageCost,
+            deadhead: deadheadCost,
+            personal: personalUsageCost,
+        });
 
         // 6b. Personal Allowance (Option 2): company absorbs earned; overage → personal split
         let personalForSplit = personalUsageCost;
@@ -401,25 +408,66 @@ export const FuelCalculationService = {
             }
         }
 
-        // 7. Split Costs dynamically using Scenario Rules (shared contract)
-        const weekSplit = splitAllCategoryCosts(
-            {
-                rideShare: rideShareCost,
-                companyUsage: companyUsageCost,
-                deadhead: deadheadCost,
-                personal: personalForSplit,
-                misc: miscellaneousCost,
-            },
-            fuelRule,
-        );
-        const rideShareSplit = { company: weekSplit.company.rideShare, driver: weekSplit.driver.rideShare };
-        const companyUsageSplit = { company: weekSplit.company.companyUsage, driver: weekSplit.driver.companyUsage };
-        const deadheadSplit = { company: weekSplit.company.deadhead, driver: weekSplit.driver.deadhead };
-        const personalSplit = { company: weekSplit.company.personal, driver: weekSplit.driver.personal };
-        const miscSplit = { company: weekSplit.company.misc, driver: weekSplit.driver.misc };
-
-        const companyShare = rideShareSplit.company + companyUsageSplit.company + deadheadSplit.company + personalSplit.company + miscSplit.company + earnedAbsorbCompany;
-        const driverShare = rideShareSplit.driver + companyUsageSplit.driver + deadheadSplit.driver + personalSplit.driver + miscSplit.driver;
+        // 7. Split via fuel-core — PA adjusts personal only; leftover misc stays intact
+        let rideShareSplit: { company: number; driver: number };
+        let companyUsageSplit: { company: number; driver: number };
+        let deadheadSplit: { company: number; driver: number };
+        let personalSplit: { company: number; driver: number };
+        let miscSplit: { company: number; driver: number };
+        let companyShare: number;
+        let driverShare: number;
+        if (earnedAbsorbCompany === 0 && personalForSplit === personalUsageCost) {
+            const money = assembleLeftoverWeekMoney({
+                totalSpend: totalGasCardCost,
+                rideShareCost,
+                companyUsageCost,
+                deadheadCost,
+                personalUsageCost,
+                rule: fuelRule || null,
+            });
+            rideShareSplit = { company: money.split.company.rideShare, driver: money.split.driver.rideShare };
+            companyUsageSplit = {
+                company: money.split.company.companyUsage,
+                driver: money.split.driver.companyUsage,
+            };
+            deadheadSplit = { company: money.split.company.deadhead, driver: money.split.driver.deadhead };
+            personalSplit = { company: money.split.company.personal, driver: money.split.driver.personal };
+            miscSplit = { company: money.split.company.misc, driver: money.split.driver.misc };
+            companyShare = money.companyShare;
+            driverShare = money.driverShare;
+        } else {
+            const weekSplit = splitAllCategoryCosts(
+                {
+                    rideShare: rideShareCost,
+                    companyUsage: companyUsageCost,
+                    deadhead: deadheadCost,
+                    personal: personalForSplit,
+                    misc: miscellaneousCost,
+                },
+                fuelRule || undefined,
+            );
+            rideShareSplit = { company: weekSplit.company.rideShare, driver: weekSplit.driver.rideShare };
+            companyUsageSplit = {
+                company: weekSplit.company.companyUsage,
+                driver: weekSplit.driver.companyUsage,
+            };
+            deadheadSplit = { company: weekSplit.company.deadhead, driver: weekSplit.driver.deadhead };
+            personalSplit = { company: weekSplit.company.personal, driver: weekSplit.driver.personal };
+            miscSplit = { company: weekSplit.company.misc, driver: weekSplit.driver.misc };
+            companyShare =
+                rideShareSplit.company +
+                companyUsageSplit.company +
+                deadheadSplit.company +
+                personalSplit.company +
+                miscSplit.company +
+                earnedAbsorbCompany;
+            driverShare =
+                rideShareSplit.driver +
+                companyUsageSplit.driver +
+                deadheadSplit.driver +
+                personalSplit.driver +
+                miscSplit.driver;
+        }
 
         // 8. Health Status — cycle spine when FLEET_CYCLE_HEALTH (default ON)
         const efficiencySource: 'odometer' | 'vehicle_settings' | 'default_fallback' =

@@ -86,8 +86,8 @@ export function FuelLeakageStep(props: FuelLeakageStepProps) {
         })}
       </div>
       <p className="text-[11px] text-slate-400">
-        Gap acceptance is saved for the org when online. Keys: j/k queue · a accept · e edit · Enter
-        continue
+        Accept acknowledges leftover fuel spend; the unexplained amount stays on the week (not zeroed).
+        Gap acceptance is saved for the org when online. Keys: j/k queue · a accept · e edit · Enter continue
       </p>
       {leakageRows.length > 0 && (
         <Button type="button" variant="outline" className="min-h-11" onClick={onToggleGapDetail}>

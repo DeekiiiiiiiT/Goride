@@ -37,14 +37,11 @@ export function useFuelPeriods(opts: { from?: string; to?: string; enabled?: boo
     queryKey: [FUEL_PERIODS_KEY, opts.from, opts.to],
     enabled: opts.enabled !== false && Boolean(opts.from && opts.to),
     queryFn: async (): Promise<FuelPeriodRow[]> => {
-      try {
-        return (await api.listFuelReconciliationPeriods({
-          from: opts.from,
-          to: opts.to,
-        })) as FuelPeriodRow[];
-      } catch {
-        return [];
-      }
+      // Do not swallow errors into [] — that forced snapshot-only Completed dual SoT.
+      return (await api.listFuelReconciliationPeriods({
+        from: opts.from,
+        to: opts.to,
+      })) as FuelPeriodRow[];
     },
     staleTime: 15_000,
   });

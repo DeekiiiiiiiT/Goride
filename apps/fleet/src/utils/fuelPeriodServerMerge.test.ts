@@ -75,4 +75,107 @@ describe('fuelPeriodServerMerge landing SoT', () => {
     expect(merged).toHaveLength(1);
     expect(merged[0].startDate).toBe('2026-08-31');
   });
+
+  it('merge does not Complete from derived lock when SQL is ready/reopened', () => {
+    const derived: FuelReconciliationPeriod[] = [
+      {
+        id: '2026-08-17',
+        startDate: '2026-08-17',
+        endDate: '2026-08-23',
+        label: 'Aug 17 – Aug 23',
+        status: 'completed',
+        locked: true,
+        vehicleCount: 1,
+        totalSpend: 36_500,
+        netLeakage: 2_055,
+        companyShare: 0,
+        driverShare: 0,
+        actionableTotal: 0,
+        exceptionCount: 0,
+        counts: emptyFuelStepCounts(),
+      },
+    ];
+    const ready = mergeServerFirstLandingPeriods(
+      [row({ weekStart: '2026-08-17', weekEnd: '2026-08-23', status: 'ready', lockedAt: null })],
+      derived,
+    );
+    expect(ready[0].locked).toBe(false);
+    expect(ready[0].status).not.toBe('completed');
+
+    const reopened = mergeServerFirstLandingPeriods(
+      [
+        row({
+          weekStart: '2026-08-17',
+          weekEnd: '2026-08-23',
+          status: 'reopened',
+          lockedAt: null,
+        }),
+      ],
+      derived,
+    );
+    expect(reopened[0].locked).toBe(false);
+    expect(reopened[0].status).not.toBe('completed');
+  });
+
+  it('SQL locked week is Completed regardless of derive', () => {
+    const derived: FuelReconciliationPeriod[] = [
+      {
+        id: '2026-08-17',
+        startDate: '2026-08-17',
+        endDate: '2026-08-23',
+        label: 'Aug 17 – Aug 23',
+        status: 'outstanding',
+        locked: false,
+        vehicleCount: 1,
+        totalSpend: 36_500,
+        netLeakage: 2_055,
+        companyShare: 0,
+        driverShare: 0,
+        actionableTotal: 2,
+        exceptionCount: 0,
+        counts: emptyFuelStepCounts(),
+      },
+    ];
+    const merged = mergeServerFirstLandingPeriods(
+      [
+        row({
+          weekStart: '2026-08-17',
+          weekEnd: '2026-08-23',
+          status: 'locked',
+          lockedAt: '2026-08-24T00:00:00Z',
+          unexplained: 0,
+        }),
+      ],
+      derived,
+    );
+    expect(merged[0].locked).toBe(true);
+    expect(merged[0].status).toBe('completed');
+  });
+
+  it('marks leakageReviewed when leakageReviewedAt set or week locked', () => {
+    const open = serverRowsToLandingPeriods([
+      row({
+        weekStart: '2026-08-24',
+        weekEnd: '2026-08-30',
+        status: 'ready',
+        unexplained: 2_055,
+        leakageReviewedAt: '2026-08-30T12:00:00Z',
+      }),
+    ]);
+    expect(open[0].leakageReviewed).toBe(true);
+    expect(open[0].locked).toBe(false);
+
+    const locked = serverRowsToLandingPeriods([
+      row({
+        weekStart: '2026-08-17',
+        weekEnd: '2026-08-23',
+        status: 'locked',
+        lockedAt: '2026-08-24T00:00:00Z',
+        unexplained: 2_055,
+        leakageReviewedAt: null,
+      }),
+    ]);
+    expect(locked[0].locked).toBe(true);
+    expect(locked[0].leakageReviewed).toBe(true);
+  });
 });

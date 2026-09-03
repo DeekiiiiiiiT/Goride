@@ -298,6 +298,7 @@ function FuelManagementInner({ defaultTab = 'logs', onViewDriverLedger, onTabCha
   const {
     data: serverFuelPeriods = [],
     isPending: serverPeriodsPending,
+    isError: serverPeriodsError,
   } = useFuelPeriods({
     from: landingPeriodRange.from,
     to: landingPeriodRange.to,
@@ -351,7 +352,7 @@ function FuelManagementInner({ defaultTab = 'logs', onViewDriverLedger, onTabCha
     [fuelReconPeriods],
   );
   const completedFuelPeriods = useMemo(
-    () => fuelReconPeriods.filter((p) => p.status === 'completed' || p.locked),
+    () => fuelReconPeriods.filter((p) => p.locked || p.status === 'completed'),
     [fuelReconPeriods],
   );
 
@@ -1340,6 +1341,7 @@ function FuelManagementInner({ defaultTab = 'logs', onViewDriverLedger, onTabCha
           inProgress={inProgressFuelPeriods}
           completed={completedFuelPeriods}
           loading={reconLandingLoading}
+          periodsLoadError={serverPeriodsError}
           vehicles={vehicles}
           trips={trips}
           fuelEntries={logs}

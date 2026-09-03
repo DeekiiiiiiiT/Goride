@@ -94,17 +94,18 @@ function PeriodCard({
     locked: period.locked,
     actionableTotal: period.actionableTotal,
     netLeakage: period.netLeakage,
-    // Server leakage review zeros actionable; treat clear leakage step as reviewed for badge.
-    leakageReviewed: period.counts['leakage-gap']?.actionable === 0,
+    leakageReviewed:
+      Boolean(period.leakageReviewed) || period.counts['leakage-gap']?.actionable === 0,
     totalSpend: period.totalSpend,
     secondApproverThreshold,
     hasSettlementSnapshots,
     autoCloseDualApprovalMode,
   });
+  const unexplainedAccepted = Boolean(period.locked || period.leakageReviewed);
   const wow = unexplainedWowDelta(unexplainedSeries || []);
   const sparkLabel =
     unexplainedSeries && unexplainedSeries.length >= 2
-      ? `Unexplained trend: latest ${formatFuelMoney(period.netLeakage)}${
+      ? `${unexplainedAccepted ? 'Accepted unexplained' : 'Unexplained'} trend: latest ${formatFuelMoney(period.netLeakage)}${
           wow === null
             ? ''
             : `, ${wow >= 0 ? 'up' : 'down'} ${formatFuelMoney(Math.abs(wow))} vs prior week`
@@ -146,14 +147,22 @@ function PeriodCard({
               <span>{period.vehicleCount} vehicle{period.vehicleCount === 1 ? '' : 's'}</span>
               <span>Spend {formatFuelMoney(period.totalSpend)}</span>
               <span
-                className={`inline-flex items-center gap-1.5 ${period.netLeakage !== 0 ? 'text-rose-600' : ''}`}
+                className={`inline-flex items-center gap-1.5 ${
+                  period.netLeakage !== 0 && !unexplainedAccepted
+                    ? 'text-rose-600'
+                    : 'text-slate-500'
+                }`}
                 aria-label={sparkLabel}
               >
-                Unexplained {formatFuelMoney(period.netLeakage)}
-                {unexplainedSeries && unexplainedSeries.length >= 2 && (
+                {period.netLeakage === 0
+                  ? null
+                  : unexplainedAccepted
+                    ? `Accepted unexplained ${formatFuelMoney(period.netLeakage)}`
+                    : `Unexplained ${formatFuelMoney(period.netLeakage)}`}
+                {period.netLeakage !== 0 && unexplainedSeries && unexplainedSeries.length >= 2 && (
                   <Sparkline
                     values={unexplainedSeries}
-                    stroke={period.netLeakage !== 0 ? '#e11d48' : '#64748b'}
+                    stroke={unexplainedAccepted ? '#64748b' : '#e11d48'}
                   />
                 )}
               </span>
@@ -487,7 +496,7 @@ export function FuelPeriodLandingPage({
             <PeriodList
               periods={completed}
               allPeriodsForSpark={[...outstanding, ...inProgress, ...completed]}
-              emptyLabel="No completed periods yet."
+              emptyLabel="No locked weeks yet."
               onSelectPeriod={(p) => onSelectPeriod(p)}
               onSelectStep={(p, step) => onSelectPeriod(p, step)}
               onResetPeriod={onResetPeriod}

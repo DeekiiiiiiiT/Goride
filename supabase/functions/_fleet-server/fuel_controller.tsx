@@ -916,6 +916,23 @@ app.post(`${BASE_PATH}/finalized-reports`, requirePermission('transactions.edit'
         (rbacFull as any)?.email ||
         (rbacFull as any)?.name ||
         (actorId ? String(actorId) : "unknown");
+      const orgId = getOrgId(c) || String((report as any).orgId || (report as any).organizationId || "");
+      // Money posts only when the recon week is already locked (heal). Otherwise stage snap only.
+      let weekLocked = false;
+      if (orgId) {
+        try {
+          const { data: periodRow } = await supabase
+            .from("fuel_reconciliation_period")
+            .select("status,locked_at")
+            .eq("org_id", orgId)
+            .eq("week_start", weekKey)
+            .maybeSingle();
+          weekLocked =
+            String(periodRow?.status || "") === "locked" || Boolean(periodRow?.locked_at);
+        } catch {
+          weekLocked = false;
+        }
+      }
       const stamped = stampOrg(
         {
           ...report,
@@ -924,6 +941,8 @@ app.post(`${BASE_PATH}/finalized-reports`, requirePermission('transactions.edit'
           // H5: never trust client 'admin' — stamp from session
           finalizedByUser: actorName,
           finalizedByUserId: actorId,
+          moneyCommitted: weekLocked,
+          stagedAt: weekLocked ? undefined : new Date().toISOString(),
         } as Record<string, unknown>,
         c,
       );
@@ -935,6 +954,11 @@ app.post(`${BASE_PATH}/finalized-reports`, requirePermission('transactions.edit'
         } catch {
           /* ignore */
         }
+      }
+      if (!weekLocked) {
+        // Stage-only: wallet/ledger commit happens on period lock (fuel_period finalize job).
+        saved++;
+        continue;
       }
       // Unified financial ledger + Expenses projection — must succeed or roll back KV.
       try {
@@ -1928,9 +1952,38 @@ app.post(
         ),
       );
 
-      // Every snapshot goes through post ? matches when fresh, reverse+reposts when stale,
-      // and fills missing fuel_driver_spend after the driverSpend field-name fix.
-      const toPost: any[] = [...snapshots];
+      // Post ledger only for weeks already locked (money-on-lock). Staged snaps stay KV-only.
+      const lockedWeekCache = new Map<string, boolean>();
+      async function isWeekLocked(orgId: string, weekKey: string): Promise<boolean> {
+        const cacheKey = `${orgId}|${weekKey}`;
+        if (lockedWeekCache.has(cacheKey)) return Boolean(lockedWeekCache.get(cacheKey));
+        if (!orgId) {
+          lockedWeekCache.set(cacheKey, false);
+          return false;
+        }
+        try {
+          const { data: periodRow } = await supabase
+            .from("fuel_reconciliation_period")
+            .select("status,locked_at")
+            .eq("org_id", orgId)
+            .eq("week_start", weekKey)
+            .maybeSingle();
+          const locked =
+            String(periodRow?.status || "") === "locked" || Boolean(periodRow?.locked_at);
+          lockedWeekCache.set(cacheKey, locked);
+          return locked;
+        } catch {
+          lockedWeekCache.set(cacheKey, false);
+          return false;
+        }
+      }
+
+      const toPost: any[] = [];
+      for (const s of snapshots) {
+        const wk = String(s.weekStart || "").split("T")[0];
+        const orgId = String(s.orgId || s.org_id || getOrgId(c) || "");
+        if (await isWeekLocked(orgId, wk)) toPost.push(s);
+      }
       const toReverse: Array<{ driverId: string; weekKey: string }> = [];
 
       for (const key of eventKeys) {
@@ -1948,6 +2001,7 @@ app.post(
         posted: 0,
         reversed: 0,
         periodsRebuilt: 0,
+        skippedUnlockedSnaps: Math.max(0, snapshots.length - toPost.length),
         errors: [] as string[],
         samplePost: toPost.slice(0, 10).map((s: any) => ({
           driverId: s.driverId,

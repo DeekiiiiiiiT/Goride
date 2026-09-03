@@ -44,10 +44,24 @@ export {
   resolveEntryDriverRatio,
   weekSnapshotMoneyDelta,
   type BuiltWeekSnapshot,
+  type WeekSnapCategoryCosts,
   type WeekSnapDriverContext,
   type WeekSnapEntry,
   type WeekSnapFuelRule,
 } from './weekSnapshotEngine.ts';
+
+export {
+  assembleLeftoverWeekMoney,
+  computeMiscellaneousCost,
+  getCategoryCoverageSplit,
+  getCompanyCoveragePercent,
+  splitAllCategoryCosts,
+  sumCategoryShare,
+  type CategoryCosts,
+  type CategorySplit,
+  type FuelCoverageCategory,
+  type FuelCoverageRule,
+} from './fuelCoverageSplit.ts';
 
 export {
   deriveFuelExpenseStatus,

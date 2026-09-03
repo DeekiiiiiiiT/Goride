@@ -162,8 +162,8 @@ function aggregateFinalizedForWeek(snaps: any[]) {
   };
 }
 
-/** Persist one driver-week: reverse prior wallet → settle → KV snapshot → ledger. */
-async function persistFinalizedSnapshot(
+/** Persist staged driver-week snapshot only — no wallet / ledger money until week lock. */
+async function stageFinalizedSnapshot(
   report: Record<string, any>,
   orgId: string,
   actor: string | null,
@@ -172,19 +172,53 @@ async function persistFinalizedSnapshot(
   const driverId = String(report.driverId || "");
   if (!weekKey || !driverId) throw new Error("snapshot missing weekStart/driverId");
   const key = finalizedReportKey(weekKey, driverId);
-  // Always reverse then settle so job resume / re-finalize cannot double-post wallet txs.
-  await reverseEnterpriseFuelSyncForSnapshot(report);
-  await settleEnterpriseFuelFromSnapshot(report, orgId);
   const stamped = {
     ...report,
     orgId,
     org_id: orgId,
     status: report.status || "Finalized",
+    stagedAt: new Date().toISOString(),
+    moneyCommitted: false,
     finalizedAt: report.finalizedAt || new Date().toISOString(),
     finalizedByUserId: actor,
   };
   await kv.set(key, stamped);
-  await postFuelFinalizedEventsFromReport(stamped);
+}
+
+/** Commit wallet + ledger for staged snaps, then used at lock. */
+async function commitFinalizedSnapshotMoney(
+  report: Record<string, any>,
+  orgId: string,
+): Promise<void> {
+  await reverseEnterpriseFuelSyncForSnapshot(report);
+  await settleEnterpriseFuelFromSnapshot(report, orgId);
+  await postFuelFinalizedEventsFromReport({
+    ...report,
+    orgId,
+    org_id: orgId,
+    moneyCommitted: true,
+  });
+  const weekKey = ymd(report.weekStart);
+  const driverId = String(report.driverId || "");
+  if (weekKey && driverId) {
+    const key = finalizedReportKey(weekKey, driverId);
+    await kv.set(key, {
+      ...report,
+      orgId,
+      org_id: orgId,
+      moneyCommitted: true,
+      moneyCommittedAt: new Date().toISOString(),
+    });
+  }
+}
+
+/** @deprecated name — stages only; money commits on lock. */
+async function persistFinalizedSnapshot(
+  report: Record<string, any>,
+  orgId: string,
+  actor: string | null,
+): Promise<void> {
+  await stageFinalizedSnapshot(report, orgId, actor);
 }
 
 async function processJobRow(job: Record<string, unknown>) {
@@ -336,6 +370,40 @@ async function processJobRow(job: Record<string, unknown>) {
     }
 
     const money = aggregateFinalizedForWeek(snapshots.length ? snapshots : []);
+    // Commit wallet + ledger only after every driver staged successfully.
+    for (const snap of snapshots) {
+      try {
+        await commitFinalizedSnapshotMoney(snap, orgId);
+      } catch (e: any) {
+        console.error("[fuel_period] money commit failed", snap?.driverId, e);
+        await sb
+          .from("fuel_reconciliation_period")
+          .update({
+            status: "ready",
+            locked_at: null,
+            locked_by: null,
+            updated_at: now,
+            computed_at: now,
+          })
+          .eq("id", periodId)
+          .eq("org_id", orgId);
+        await sb
+          .from("fuel_period_job")
+          .update({
+            state: "failed",
+            failures: [
+              {
+                driverId: String(snap?.driverId || ""),
+                error: e?.message || String(e),
+                phase: "money_commit",
+              },
+            ],
+            updated_at: now,
+          })
+          .eq("id", job.id);
+        return { ok: false, error: "money_commit_failure" };
+      }
+    }
     await sb
       .from("fuel_reconciliation_period")
       .update({
@@ -358,10 +426,11 @@ async function processJobRow(job: Record<string, unknown>) {
         driversDone: [...done],
         failures,
         gapAccepted: Boolean(period.leakage_reviewed_at),
+        moneyCommittedOnLock: true,
       },
       actor,
     );
-    // Post-lock rebuild so Expenses fuelStatus flips to finalized (events rebuild runs pre-lock).
+    // Post-lock rebuild so Expenses fuelStatus flips to finalized.
     await rebuildExpensesForFuelWeek(ymd(period.week_start), [
       ...done,
       ...snapshots.map((s: any) => String(s?.driverId || "")),
@@ -497,6 +566,14 @@ export function registerFuelPeriodRoutes(app: Hono) {
     async (c: Context) => {
       const orgId = getOrgId(c);
       if (!orgId) return c.json({ error: "org required" }, 400);
+      const body = await c.req.json().catch(() => ({}));
+      const onlyWeeks = Array.isArray(body.weekStarts)
+        ? new Set(
+            (body.weekStarts as unknown[])
+              .map((w) => ymd(w))
+              .filter((w) => /^\d{4}-\d{2}-\d{2}$/.test(w)),
+          )
+        : null;
       const sb = getServiceClient();
       const all = ((await kv.getByPrefix("finalized_report:")) || []) as any[];
       const byWeek = new Map<string, any[]>();
@@ -505,11 +582,13 @@ export function registerFuelPeriodRoutes(app: Hono) {
         if (snapOrg && snapOrg !== orgId) continue;
         const wk = ymd(snap.weekStart || snap.week_start);
         if (!wk) continue;
+        if (onlyWeeks && !onlyWeeks.has(wk)) continue;
         const list = byWeek.get(wk) || [];
         list.push(snap);
         byWeek.set(wk, list);
       }
       let upserted = 0;
+      const rebuiltDriverIds = new Set<string>();
       for (const [weekStart, snaps] of byWeek) {
         const weekEnd = ymd(snaps[0]?.weekEnd || snaps[0]?.week_end) || weekStart;
         const money = aggregateFinalizedForWeek(snaps);
@@ -529,9 +608,20 @@ export function registerFuelPeriodRoutes(app: Hono) {
           },
           { onConflict: "id" },
         );
-        if (!error) upserted += 1;
+        if (!error) {
+          upserted += 1;
+          const driverIds = snaps.map((s) => String(s?.driverId || "")).filter(Boolean);
+          await rebuildExpensesForFuelWeek(weekStart, driverIds);
+          for (const d of driverIds) rebuiltDriverIds.add(d);
+        }
       }
-      return c.json({ ok: true, upserted, weeks: byWeek.size });
+      return c.json({
+        ok: true,
+        upserted,
+        weeks: byWeek.size,
+        driversRebuilt: rebuiltDriverIds.size,
+        filtered: Boolean(onlyWeeks),
+      });
     },
   );
 
@@ -574,7 +664,7 @@ export function registerFuelPeriodRoutes(app: Hono) {
             org_id: orgId,
             week_start: weekStart,
             week_end: weekEnd,
-            status: existing?.status || "locked",
+            status: existing?.status || "open",
             ...money,
             computed_at: new Date().toISOString(),
             computed_from_hash: `finalized:${snaps.length}`,

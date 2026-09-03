@@ -3,6 +3,11 @@
  * Aligns settleable spend/shares with scenario Fuel rules (not a raw 50% default).
  */
 
+import {
+  assembleLeftoverWeekMoney,
+  type FuelCoverageRule,
+} from './fuelCoverageSplit.ts';
+
 export type WeekSnapFuelRule = {
   coverageType?: string;
   coverageValue?: number;
@@ -24,11 +29,22 @@ export type WeekSnapEntry = {
   driverShareRatio?: number | null;
 };
 
+export type WeekSnapCategoryCosts = {
+  rideShareCost: number;
+  companyUsageCost: number;
+  deadheadCost: number;
+  personalUsageCost: number;
+};
+
 export type WeekSnapDriverContext = {
   driverId: string;
   vehicleId?: string;
   vehicleIds?: string[];
   fuelRule?: WeekSnapFuelRule | null;
+  /** When set, leftover + shares use category math (browser parity). */
+  categoryCosts?: WeekSnapCategoryCosts | null;
+  /** Explicit residual when categories omitted (must not silently wipe). */
+  miscellaneousCost?: number | null;
 };
 
 export type BuiltWeekSnapshot = {
@@ -121,15 +137,39 @@ export function assembleWeekSnapshotsFromCalcInput(input: {
     const ctx = driverContexts.get(driverId) || { driverId };
     const rule = ctx.fuelRule || null;
     let totalGasCardCost = 0;
-    let driverShare = 0;
     for (const e of entries) {
       const amt = Number(e.amount) || 0;
       if (amt <= 0) continue;
       totalGasCardCost += amt;
-      driverShare += amt * resolveEntryDriverRatio(e, rule);
     }
     if (totalGasCardCost <= EPS) continue;
-    const companyShare = Math.max(0, totalGasCardCost - driverShare);
+    let companyShare: number;
+    let driverShare: number;
+    let miscellaneousCost: number;
+
+    if (ctx.categoryCosts) {
+      const money = assembleLeftoverWeekMoney({
+        totalSpend: totalGasCardCost,
+        rideShareCost: Number(ctx.categoryCosts.rideShareCost) || 0,
+        companyUsageCost: Number(ctx.categoryCosts.companyUsageCost) || 0,
+        deadheadCost: Number(ctx.categoryCosts.deadheadCost) || 0,
+        personalUsageCost: Number(ctx.categoryCosts.personalUsageCost) || 0,
+        rule: rule as FuelCoverageRule | null,
+      });
+      companyShare = money.companyShare;
+      driverShare = money.driverShare;
+      miscellaneousCost = money.miscellaneousCost;
+    } else {
+      driverShare = 0;
+      for (const e of entries) {
+        const amt = Number(e.amount) || 0;
+        if (amt <= 0) continue;
+        driverShare += amt * resolveEntryDriverRatio(e, rule);
+      }
+      companyShare = Math.max(0, totalGasCardCost - driverShare);
+      const explicitMisc = Number(ctx.miscellaneousCost);
+      miscellaneousCost = Number.isFinite(explicitMisc) ? explicitMisc : 0;
+    }
     const vehicleIds = [
       ...new Set(
         [
@@ -153,7 +193,7 @@ export function assembleWeekSnapshotsFromCalcInput(input: {
       driverSpend: 0,
       companyShare,
       driverShare,
-      miscellaneousCost: 0,
+      miscellaneousCost,
       pendingCount: entries.length,
       status: 'Finalized',
       finalizedAt: new Date().toISOString(),

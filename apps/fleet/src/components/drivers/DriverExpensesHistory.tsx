@@ -911,19 +911,28 @@ export function DriverExpensesHistory({
                             <TableCell className="px-3 font-medium text-xs whitespace-nowrap">
                               {formatPeriodLabel(row)}
                             </TableCell>
-                            <TableCell className={`px-3 text-right tabular-nums ${row.fuelDeduction > 0.005 ? 'text-red-600' : 'text-slate-300'}`}>
-                              {row.fuelDeduction > 0.005 ? (
+                            <TableCell className={`px-3 text-right tabular-nums ${
+                              row.fuelStatus === 'finalized' && row.fuelDeduction > 0.005
+                                ? 'text-red-600'
+                                : 'text-slate-300'
+                            }`}>
+                              {row.fuelStatus === 'finalized' && row.fuelDeduction > 0.005 ? (
                                 `$${row.fuelDeduction.toLocaleString(undefined, { minimumFractionDigits: 2 })}`
-                              ) : row.fuelStatus !== 'finalized' && row.fuelDraftEstimate > 0.005 ? (
+                              ) : row.fuelStatus !== 'finalized' &&
+                                (row.fuelDraftEstimate > 0.005 || row.fuelDeduction > 0.005) ? (
                                 <TooltipProvider>
                                   <Tooltip>
                                     <TooltipTrigger asChild>
                                       <span className="text-amber-600 font-medium cursor-help">
-                                        ~${row.fuelDraftEstimate.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                        ~$
+                                        {(row.fuelDraftEstimate > 0.005
+                                          ? row.fuelDraftEstimate
+                                          : row.fuelDeduction
+                                        ).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                                       </span>
                                     </TooltipTrigger>
                                     <TooltipContent side="top" className="max-w-[260px] text-xs">
-                                      Pending reconciliation — this fuel week is not locked in Consumption Reconciliation yet. Estimate based on current data; the posted amount may change until an admin locks this week.
+                                      Estimate / staged only — solid fuel dollars post when this week is locked in Consumption Reconciliation.
                                     </TooltipContent>
                                   </Tooltip>
                                 </TooltipProvider>
@@ -932,22 +941,23 @@ export function DriverExpensesHistory({
                               ) : <span className="text-slate-300">-</span>}
                             </TableCell>
                             <TableCell className="px-3 text-right tabular-nums text-slate-700">
-                              {row.fuelFleetShare > 0.005
+                              {row.fuelStatus === 'finalized' && row.fuelFleetShare > 0.005
                                 ? `$${row.fuelFleetShare.toLocaleString(undefined, { minimumFractionDigits: 2 })}`
                                 : <span className="text-slate-300">-</span>}
                             </TableCell>
                             <TableCell className="px-3 text-right tabular-nums text-slate-600">
-                              {row.fuelGasCardSpend > 0.005
+                              {row.fuelStatus === 'finalized' && row.fuelGasCardSpend > 0.005
                                 ? `$${row.fuelGasCardSpend.toLocaleString(undefined, { minimumFractionDigits: 2 })}`
                                 : <span className="text-slate-300">-</span>}
                             </TableCell>
                             <TableCell className="px-3 text-right tabular-nums text-slate-600">
-                              {row.fuelDriverSpend > 0.005
+                              {row.fuelStatus === 'finalized' && row.fuelDriverSpend > 0.005
                                 ? `$${row.fuelDriverSpend.toLocaleString(undefined, { minimumFractionDigits: 2 })}`
                                 : <span className="text-slate-300">-</span>}
                             </TableCell>
                             <TableCell className="px-3 text-right tabular-nums">
-                              {(row.fuelDeduction > 0 || row.fuelDriverSpend > 0.005) ? (
+                              {row.fuelStatus === 'finalized' &&
+                              (row.fuelDeduction > 0 || row.fuelDriverSpend > 0.005) ? (
                                 <span className={`font-medium ${row.fuelNetPay >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
                                   {row.fuelNetPay >= 0 ? '+' : '-'}${Math.abs(row.fuelNetPay).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                                 </span>

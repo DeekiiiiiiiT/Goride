@@ -1,4 +1,5 @@
 -- Org RLS policies for fuel reconciliation period tables (NEW-4).
+-- Re-versioned with 20260902210000 (past 20260902120000 collision).
 -- Edge/service-role bypasses RLS; authenticated JWT org_id scoped for PostgREST.
 
 CREATE POLICY fuel_recon_period_org_select ON public.fuel_reconciliation_period

@@ -43,6 +43,8 @@ export interface FuelReconciliationPeriod {
   actionableTotal: number;
   exceptionCount: number;
   counts: Record<FuelStepId, FuelStepCounts>;
+  /** True when leakage_reviewed_at set (or locked with residual treated as accepted). */
+  leakageReviewed?: boolean;
 }
 
 export interface BuildFuelStepCountsInput {
@@ -112,7 +114,7 @@ export function buildFuelStepCounts(input: BuildFuelStepCountsInput): Record<Fue
  * Align with Toll Reconciliation landing:
  * - outstanding: early review still open (exceptions / disputes / unexplained)
  * - in_progress: review clear, week not locked yet (ready to finalize)
- * - completed: locked
+ * - completed: SQL fuel_reconciliation_period locked only (not KV snapshots)
  *
  * Empty weeks (no spend vehicles) are not open work — callers must filter them
  * out of landing lists (see deriveFuelReconciliationPeriods).
@@ -222,27 +224,16 @@ export function deriveFuelReconciliationPeriods(input: DeriveFuelPeriodsInput): 
       counts['data-quality'].actionable += exceptionCount;
     }
     const withSpend = active.filter((v) => v.totalSpend > FUEL_SPEND_EPS || v.isFinalized);
-    const allFinalized =
-      withSpend.length > 0 && withSpend.every((v) => v.isFinalized);
-    const locked = allFinalized;
-
-    // After lock is known: zero actionable chip noise on Completed (H1)
-    if (locked) {
-      for (const stepId of Object.keys(counts) as FuelStepId[]) {
-        if (counts[stepId].actionable > 0) {
-          counts[stepId].informational += counts[stepId].actionable;
-          counts[stepId].actionable = 0;
-        }
-      }
-    }
+    // Period lock is SQL-only (fuel_reconciliation_period). Snapshots = money posted, not Completed.
+    const locked = false;
 
     const openDisputeCount = withSpend.filter((v) => v.hasOpenDispute).length;
     const status = classifyFuelReconPeriodStatus({
       locked,
       withSpendCount: withSpend.length,
-      exceptionCount: locked ? 0 : exceptionCount,
-      openDisputeCount: locked ? 0 : openDisputeCount,
-      leakageActionable: locked ? 0 : counts['leakage-gap'].actionable,
+      exceptionCount,
+      openDisputeCount,
+      leakageActionable: counts['leakage-gap'].actionable,
     });
 
     const totalSpend = withSpend.reduce((s, v) => s + v.totalSpend, 0);
@@ -265,6 +256,7 @@ export function deriveFuelReconciliationPeriods(input: DeriveFuelPeriodsInput): 
       actionableTotal: locked ? 0 : fuelActionableTotal(counts),
       exceptionCount: locked ? 0 : exceptionCount,
       counts,
+      leakageReviewed: Boolean(leakageReviewedWeeks?.has(startDate)),
     };
   }).filter((p) => {
     // Locked/completed weeks stay on Completed.

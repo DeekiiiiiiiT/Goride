@@ -57,6 +57,92 @@
 
 ---
 
+## STATUS — pass 6, verified 2026-09-02 (commits `338023cc` → `036e156f`)
+
+> ### 🔴 STOP — `pnpm test` in `apps/fleet` is currently RED
+>
+> ```
+> Test Files  4 failed | 191 passed (195)
+>      Tests  9 failed | 1163 passed | 1 skipped (1173)
+> ```
+>
+> The seven new reconciliation render tests are a real improvement, but **four of them fail**, and they are inside the default `include` glob (`src/**/*.test.tsx`) — so this breaks CI. See **NEW-14**. Fix before merging anything else.
+>
+> *(My pass-5 run showed 1,046 green because I scoped it to `src/utils/`. Running the suite as CI does surfaces the failures.)*
+
+Sixth pass: engine consolidation + render coverage. **NEW-12 closed properly. NEW-13 partially. One new blocker.**
+
+### What closed
+
+| Item | Verification |
+|---|---|
+| **NEW-12** third money engine | ✅ **Closed, and done the right way.** [`supabase/functions/_shared/fuelCore.ts`](supabase/functions/_shared/fuelCore.ts) is a one-line Deno twin re-exporting `packages/fuel-core/src/index.ts`, and **both** Deno files now import `assembleWeekSnapshotsFromRawEntries` from it. The duplicated math is genuinely gone, not just wrapped: `fuel_period_build_snapshots.ts` shrank 162 → **97** lines and `fuel_week_engine.ts` 297 → **264**, with the surviving local helper (`entryDriverShareRatio`) only *reading* a stamped ratio, not computing coverage. |
+| **Drift guard** | ✅ [`scripts/check-fuel-core-parity.mjs`](scripts/check-fuel-core-parity.mjs) was extended to assert the twin exists, that it re-exports `packages/fuel-core/src/index.ts`, and that `fuel_week_engine.ts` imports from `../_shared/fuelCore.ts`. That is a structural CI guard against the fork reappearing — exactly the right mechanism. |
+| **M15** render coverage | ✅ **in intent** — seven test files added covering landing, wizard shell, disputes, leakage, finalize, reset dialog, and bulk. ❌ **in practice** — four fail (NEW-14). |
+| Pre-existing type error | ✅ `fuelFinalizeGating.ts:88` (`entry.vendor`) is gone. **Every reconciliation file now typechecks clean**; the only remaining `apps/fleet` errors are in `toll-tags/`, out of scope. |
+
+### Scoreboard (pass 6)
+
+| ID | Pass 5 | Pass 6 |
+|---|---|---|
+| **C1–C5, H1–H10, M1–M17** | ✅ | ✅ Fixed |
+| **NEW-12** | new 🟠 | ✅ **Closed** |
+| **NEW-13** | new 🟡 | 🟡 **Partial** — hand-copy gone, client engine still uncompared |
+| **M15** | 🟡 | 🟡 Tests written, 4 failing |
+| **NEW-14** | — | 🔴 **New — CI red** |
+
+**Totals: 36 fixed · 2 partial · 0 open · 1 new (blocking).**
+
+---
+
+## STATUS — new finding from pass 6
+
+### NEW-14 🔴 — Four of the seven new render tests fail (duplicate React)
+
+Running the suite the way CI does:
+
+```
+ ✓ FuelPeriodWizardShell.test.tsx  (4 tests)
+ ✓ FuelDisputesStep.test.tsx       (1 test)
+ ✓ FuelLeakageStep.test.tsx
+ × FuelPeriodLandingPage.test.tsx  (5 tests)  TypeError: Cannot read properties of null (reading 'useState')
+ × FuelFinalizeStep.test.tsx       (2 tests)  TypeError: Cannot read properties of null (reading 'useState')
+ × FuelPeriodResetDialog.test.tsx  (1 test)   TypeError: Cannot read properties of null (reading 'useEffect')
+ × FuelBulkFinalizeDialog.test.tsx (1 test)   TypeError: Cannot read properties of null (reading 'useEffect')
+```
+
+**Root cause is a second React instance, not the tests themselves.** The stack frames point at `node_modules/.deno/react-dom@18.3.1/…`, while [`vite.config.ts:11-12,125-128`](apps/fleet/vite.config.ts#L125) aliases `react`/`react-dom` to the paths `require.resolve` finds and sets `resolve.dedupe`. Under Vitest that dedupe is not winning, so a component tree renders against one React while the hook dispatcher lives in another — the classic `null` dispatcher symptom.
+
+The split confirms it: the three **passing** files render plain markup and `Button`; all four **failing** files render versioned-alias Radix primitives — `Tabs` (landing), `Checkbox` (finalize), `Dialog` (reset, bulk). Those aliases (`@radix-ui/react-tabs@1.1.3` → `@radix-ui/react-tabs`, etc.) resolve through a different node_modules edge than the top-level React alias.
+
+**Fix options, cheapest first:**
+1. Mirror the `resolve.alias` / `dedupe` block into `test.alias` — Vitest does not always inherit `resolve.alias` for transformed deps.
+2. Add `test.server.deps.inline: [/@radix-ui\/.*/]` so Radix is transformed through the same module graph.
+3. Set `test.environment: 'jsdom'` for `*.test.tsx` (currently `'node'` globally) — these tests only pass today because the three simple ones don't need a DOM.
+
+Until this is fixed, `pnpm test` fails in `apps/fleet`, and the render coverage added for M15 provides no protection.
+
+### Housekeeping — uncommitted `deno.lock`
+
+`git status` shows `deno.lock` modified (+340/−9) but not committed. It should go in with the `_shared/fuelCore.ts` twin, or the Deno import will not resolve reproducibly in CI.
+
+### NEW-13 update 🟡 — better, but still not comparing the two engines that matter
+
+The hand-copied logic is gone — that was the worst part, and [`fuelPeriodBuildSnapshots.parity.test.ts`](apps/fleet/src/utils/fuelPeriodBuildSnapshots.parity.test.ts) now genuinely compares two real `@roam/fuel-core` entry points (`assembleWeekSnapshotsFromCalcInput` vs `assembleWeekSnapshotsFromRawEntries`) and will fail if either drifts.
+
+But I checked which of them the apps actually use:
+
+```
+$ grep -rn "assembleWeekSnapshotsFromCalcInput|assembleWeekSnapshotsFromRawEntries" apps/ --exclude=*.test.*
+(no results)
+```
+
+Path B is the real Deno consumer. **Path A has no production consumer** — the client still computes money through `FuelCalculationService`. So the test proves fuel-core is internally consistent; it still does not prove that *the UI finalize and the cron finalize charge a driver the same amount*, which was the point of NEW-12/13.
+
+That is now a smaller gap than before (one engine, one shared assembler), but closing it means routing the client's snapshot assembly through the same fuel-core function.
+
+---
+
 ## STATUS — pass 5, verified 2026-09-02 (commit `92355181`)
 
 Fifth pass: 51 files, **+4,012 / −639**. **1,046/1,046 fleet tests pass** (172 files, 1 skipped). All three pass-4 findings closed.
@@ -488,13 +574,14 @@ That single architectural choice is the root cause of most findings below. It is
 **After pass 2 (`16a9eb08`):** 26 fixed · 5 partial · 3 open · 1 new.
 **After pass 3 (`a7e0f6e9`):** 29 fixed · 4 partial · 3 open · 2 new.
 **After pass 4 (`b5ebcbe3`):** 32 fixed · 3 partial · 1 open · 3 new.
-**After pass 5 (`92355181`):** **35 fixed · 2 partial · 0 open · 2 new.**
+**After pass 5 (`92355181`):** 35 fixed · 2 partial · 0 open · 2 new.
+**After pass 6 (`036e156f`):** **36 fixed · 2 partial · 0 open · 1 new (blocking).**
 
-> **Where the risk sits now.** **All five Criticals and all ten Highs are closed and verified**, and **no finding from the original audit remains open.** Passes 4–5 closed NEW-7 through NEW-11, H8/H9, M1/M2, and auto-close dual-approval honesty. There is no longer a known path by which this section reports success while money did not move, and auto-close cannot bypass dual approval — it defaults to skipping high-value weeks entirely.
+> **Where the risk sits now.** **All five Criticals, all ten Highs and all Mediums are closed.** No finding from the original audit remains open. Pass 6 also closed **NEW-12** properly — there is now one money engine, shared into Deno via `_shared/fuelCore.ts`, with a CI script that fails the build if the fork reappears. That was the last architectural concern.
 >
-> **The one thing I would not sign off yet is engine consolidation.** Pass 5 introduced a **third** money engine ([`fuel_week_engine.ts`](supabase/functions/_fleet-server/fuel_week_engine.ts), Deno, 297 lines) that does not share code with the client, and the two parity tests added alongside it **cannot detect drift** — one hand-copies the logic it tests, the other exercises a `fuel-core` function neither engine imports. See **NEW-12 / NEW-13**.
+> **One blocker, introduced by this pass:** 🔴 **`pnpm test` in `apps/fleet` is red** — four of the seven new render tests fail on a duplicate-React resolution issue (**NEW-14**). The tests themselves look right; the Vitest module graph is wrong. Fix this first; it is config, not logic.
 >
-> This is the same failure mode as the original audit's §F1, and it now sits on the path that auto-close uses to move money. It is not urgent — auto-close defaults to skipping the risky weeks — but it should be closed before the cron is trusted in production.
+> **One gap that keeps shrinking but isn't closed:** the parity test now compares two real fuel-core assemblers instead of a hand-copy, but neither is used by the *client* — so it still doesn't prove UI-finalize and cron-finalize charge a driver identically (**NEW-13**). Routing the client's snapshot assembly through the same fuel-core function closes it.
 >
 > Everything else is ops certification: [`docs/fuel-period-auto-close-certification.md`](docs/fuel-period-auto-close-certification.md) (F1–F8) and the ⚠️ rows in §9.
 
@@ -1175,11 +1262,19 @@ Split `FuelPeriodWizard` into `FuelPeriodWizardShell` + six step components, eac
 
 **6.1 · Collapse the third money engine** *(NEW-12)* — ✅ `_shared/fuelCore.ts` twin; `fuel_week_engine` + entries path call `assembleWeekSnapshotsFromRawEntries`; parity script bans local coverage/ratio math.
 
-**6.2 · Make the parity tests able to fail** *(NEW-13)* — ✅ dual-path fixture in `fuelPeriodBuildSnapshots.parity.test.ts` via `weekSnapshotMoneyDelta`.
+**6.2 · Make the parity tests able to fail** *(NEW-13)* — 🟡 **Partly.** The hand-copy is gone and `fuelPeriodBuildSnapshots.parity.test.ts` now compares two real fuel-core assemblers via `weekSnapshotMoneyDelta`. But `assembleWeekSnapshotsFromCalcInput` has **no production consumer** — the client still assembles through `FuelCalculationService` — so UI-finalize vs cron-finalize remains uncompared. Carried to 7.2.
 
-**6.3 · CI-runnable render coverage** *(M15)* — ✅ wizard shell, bulk, reset, landing empty/locked jsdom tests (no live creds).
+**6.3 · CI-runnable render coverage** *(M15)* — 🟡 **Written, not passing.** Seven files added; **four fail** (`FuelPeriodLandingPage`, `FuelFinalizeStep`, `FuelPeriodResetDialog`, `FuelBulkFinalizeDialog`) on duplicate-React. See **NEW-14**. Carried to 7.1.
 
-**6.4 · Deferred cleanup** — ✅ `fuelFinalizeGating` legacy `vendor` typed via intersection; wizard derived rows → `useFuelWizardDerived`.
+**6.4 · Deferred cleanup** — ✅ `fuelFinalizeGating` legacy `vendor` typed via intersection; wizard derived rows → `useFuelWizardDerived`. Recon files now typecheck fully clean.
+
+### Phase 7 — Unblock and finish ← **you are here**
+
+**7.1 · Fix the failing render tests** *(NEW-14)* — 🔴 **blocking; do first.** `pnpm test` is red in `apps/fleet`. The four failures are all components rendering versioned-alias Radix primitives (`Tabs`, `Checkbox`, `Dialog`), pulling a second React through `node_modules/.deno/react-dom@18.3.1`. Try, in order: mirror `resolve.alias` + `dedupe` into `test.alias`; add `test.server.deps.inline: [/@radix-ui\/.*/]`; set `test.environment: 'jsdom'` for `*.test.tsx` (it is globally `'node'` today).
+
+**7.2 · Close the last parity gap** *(NEW-13)* — route the client's snapshot assembly through `assembleWeekSnapshotsFromCalcInput` so the parity fixture compares the two paths that actually charge drivers. Then extend `check-fuel-core-parity.mjs` to assert the client imports it, the same way it already guards the Deno side.
+
+**7.3 · Commit `deno.lock`** — modified (+340/−9) but uncommitted; it belongs with the `_shared/fuelCore.ts` twin or Deno resolution is not reproducible in CI.
 
 Ops: [certification](docs/fuel-period-auto-close-certification.md) · [Wave G](docs/fuel-period-wave-g-monitoring.md).
 
@@ -1220,10 +1315,15 @@ Status after close-out program. Items marked ⚠️ need a **manual** pass again
 - [ ] ⚠️ Production cron monitoring after first live night (Wave G).
 
 ### Checks added by pass 5 / Flawless Waves 1–3
-- [x] **One money engine.** `supabase/functions/_shared/fuelCore.ts` twin + `fuel_week_engine.ts` imports it; local coverage/ratio math removed *(NEW-12)*.
-- [x] **The parity test can fail.** Dual-path fixture asserts `weekSnapshotMoneyDelta` *(NEW-13)*.
-- [x] Recon has render coverage that runs in CI without live credentials *(M15)*.
+- [x] **One money engine.** `supabase/functions/_shared/fuelCore.ts` twin + both Deno paths import it; local coverage/ratio math removed and CI-guarded by `check-fuel-core-parity.mjs` *(NEW-12 ✅)*.
+- [x] **The parity test can fail** on fuel-core drift. Dual-path fixture asserts `weekSnapshotMoneyDelta` *(NEW-13 — hand-copy removed)*.
+- [ ] **The parity test covers the *client* engine.** `assembleWeekSnapshotsFromCalcInput` has no production consumer; `FuelCalculationService` is still a separate path *(NEW-13 remainder → 7.2)*.
+- [ ] Recon render coverage **passes** in CI without live credentials *(M15 / NEW-14 — 4 of 7 files currently fail)*.
 - [ ] Fixture week on **staging**: client finalize and auto-close finalize produce identical shares *(manual F3)*.
+
+### Checks added by pass 6
+- [ ] 🔴 `cd apps/fleet && pnpm test` exits 0 *(NEW-14 — currently 4 failed files / 9 failed tests)*.
+- [ ] `deno.lock` is committed alongside the `_shared/fuelCore.ts` twin *(7.3)*.
 
 ---
 
@@ -1237,4 +1337,5 @@ Status after close-out program. Items marked ⚠️ need a **manual** pass again
 | 2026-09-02 | `a7e0f6e9` | **Pass 3** — 21 files, +1,745/−239. **29 fixed · 4 partial · 3 open · 2 new.** **C4 closed**: `fuel_enterprise_settlement.ts` ports wallet settle/reverse to Deno; `persistFinalizedSnapshot` runs reverse → settle → KV snapshot → ledger inside a cursor-resumable job; both client call sites cut over to `deferSnapshotPersist: true` with no double-post window. NEW-5 and NEW-6 closed — stable idempotency keys, honest aggregates, and real distinct-identity dual approval with an org-configurable threshold. H10 closed. 41/41 tests pass. **All five Criticals now closed.** Remaining: M1/M2 landing scale, H8/H9 device-local state, NEW-7 silent partial-failure lock, NEW-8 one type error. |
 | 2026-09-02 | `b5ebcbe3` | **Pass 4** (Close-out Waves 0–G) — 22 files, +1,395/−401. **32 fixed · 3 partial · 1 open · 3 new.** NEW-7 closed on both sides (server holds at `ready` + `finalize_partial` audit; client surfaces failures and returns `false`). NEW-8 closed. **H8/H9 now server-owned** (`/leakage-review`, `updateFuelPeriodStep`). **M2 closed** — week-8 cap removed. Auto-close is a real GitHub Actions cron through the same finalize job. Wizard split into 4 more step components (1,276 lines). 51/51 tests pass. **All Criticals and all Highs closed.** New: **NEW-9** auto-close bypasses dual approval 🟠, **NEW-10** one type error from the split, **NEW-11** M1 not done — removing the cap raised total browser work. Correction: 3.2's "skip `computedAt` weeks" is not implemented; `useFuelLandingLiveReports` still receives no server-period data. |
 | 2026-09-02 | `92355181` | **Pass 5** — 51 files, +4,012/−639. **35 fixed · 2 partial · 0 open · 2 new.** **NEW-9 closed** — org-scoped prefs feed the auto-close threshold; explicit `skip` (default) / `service_approve` modes with distinct system actor ids and a misconfiguration guard. **NEW-10 closed.** **NEW-11 / M1 closed** — `serverSkipWeekStarts` means server-computed weeks no longer run a browser engine. Build-snapshots route + Deno week engine so money weeks can auto-close. Playwright e2e for the wizard. 1,046/1,046 fleet tests pass. **No original finding remains open.** New: **NEW-12** a third money engine now exists in Deno and `@roam/fuel-core` is never imported by `supabase/functions/` 🟠; **NEW-13** the two parity tests cannot detect drift — one hand-copies the logic it tests, the other exercises a function neither engine imports. |
+| 2026-09-02 | `338023cc`→`036e156f` | **Pass 6** — engine consolidation + render coverage. **36 fixed · 2 partial · 0 open · 1 new (blocking).** **NEW-12 closed properly** — `_shared/fuelCore.ts` Deno twin re-exports `packages/fuel-core/src/index.ts`; both Deno paths import `assembleWeekSnapshotsFromRawEntries`; duplicated math genuinely removed (`fuel_period_build_snapshots.ts` 162→97, `fuel_week_engine.ts` 297→264); `check-fuel-core-parity.mjs` extended to fail the build if the fork returns. `fuelReconPeriodStatus` moved into fuel-core. Pre-existing `fuelFinalizeGating.ts:88` error fixed — **all recon files typecheck clean**. **NEW-13 partial** — hand-copy removed, but `assembleWeekSnapshotsFromCalcInput` still has no production consumer, so client-vs-cron money is uncompared. 🔴 **NEW-14** — seven render tests added for M15, **four fail** (`FuelPeriodLandingPage`, `FuelFinalizeStep`, `FuelPeriodResetDialog`, `FuelBulkFinalizeDialog`) on a duplicate-React resolution issue via versioned-alias Radix primitives; **`pnpm test` in `apps/fleet` is red** (4 files / 9 tests). Also: `deno.lock` modified but uncommitted. |
 

@@ -4189,11 +4189,11 @@ export const api = {
     return response.json();
   },
 
-  async backfillFuelReconciliationPeriods() {
+  async backfillFuelReconciliationPeriods(opts?: { weekStarts?: string[] }) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/fuel/periods/backfill`, {
       method: 'POST',
       headers: await requireAuthHeaders(),
-      body: JSON.stringify({}),
+      body: JSON.stringify(opts || {}),
     });
     if (!response.ok) {
       const errText = await response.text().catch(() => '');

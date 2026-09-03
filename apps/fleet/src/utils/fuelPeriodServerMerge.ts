@@ -9,6 +9,7 @@ import { emptyFuelStepCounts, fuelActionableTotal, type FuelStepId } from './fue
 import { fuelWeekBoundsFromPeriodId, formatWeekPeriodLabel } from './fuelWeekPeriod';
 import { FUEL_SPEND_EPS } from './fuelMoneyEpsilon';
 import { endOfWeek, parseISO, format } from 'date-fns';
+import { isFuelReconPeriodLocked } from '@roam/fuel-core';
 
 export function weekStartYmd(v: unknown): string {
   return String(v || '').split('T')[0];
@@ -25,7 +26,9 @@ export function serverLeakageReviewedWeekStarts(rows: FuelPeriodRow[]): Set<stri
 export function serverLockedWeekStarts(rows: FuelPeriodRow[]): Set<string> {
   const set = new Set<string>();
   for (const r of rows) {
-    if (r.status === 'locked' || r.lockedAt) set.add(weekStartYmd(r.weekStart));
+    if (isFuelReconPeriodLocked({ status: r.status, lockedAt: r.lockedAt })) {
+      set.add(weekStartYmd(r.weekStart));
+    }
   }
   return set;
 }
@@ -81,7 +84,7 @@ export function serverRowsToLandingPeriods(rows: FuelPeriodRow[]): FuelReconcili
   for (const s of rows) {
     const startDate = weekStartYmd(s.weekStart);
     if (!startDate) continue;
-    const locked = s.status === 'locked' || Boolean(s.lockedAt);
+    const locked = isFuelReconPeriodLocked({ status: s.status, lockedAt: s.lockedAt });
     const totalSpend = Number(s.totalSpend) || 0;
     const unexplained = Number(s.unexplained) || 0;
     const vehicleCount = Number(s.vehicleCount) || 0;
@@ -130,6 +133,7 @@ export function serverRowsToLandingPeriods(rows: FuelPeriodRow[]): FuelReconcili
       actionableTotal: locked ? 0 : fuelActionableTotal(counts),
       exceptionCount: locked ? 0 : counts['data-quality']?.actionable || 0,
       counts,
+      leakageReviewed: locked || Boolean(s.leakageReviewedAt),
     });
   }
   return out;
@@ -164,13 +168,14 @@ export function mergeServerFirstLandingPeriods(
       counts: serverHadCounts ? existing.counts : d.counts,
       actionableTotal: serverHadCounts ? existing.actionableTotal : d.actionableTotal,
       exceptionCount: serverHadCounts ? existing.exceptionCount : d.exceptionCount,
-      // Derived may know lock from finalized snaps before SQL mirrors
-      locked: existing.locked || d.locked,
-      status:
-        existing.locked || d.locked
-          ? 'completed'
-          : existing.status === 'outstanding' || d.status === 'outstanding'
-            ? 'outstanding'
+      // SQL lock only — never promote derived snapshot "lock" to Completed.
+      locked: existing.locked,
+      status: existing.locked
+        ? 'completed'
+        : existing.status === 'outstanding' || d.status === 'outstanding'
+          ? 'outstanding'
+          : existing.status === 'in_progress' || d.status === 'in_progress'
+            ? 'in_progress'
             : existing.status,
     });
   }

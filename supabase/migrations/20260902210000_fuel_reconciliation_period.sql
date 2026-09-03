@@ -1,4 +1,5 @@
 -- Phase 2: server-owned Consumption Reconciliation periods + append-only audit
+-- Re-versioned past 20260902120000 collision with dispute_resolution_unification.
 -- Backfill from finalized_report KV is a separate edge job.
 
 create table if not exists public.fuel_reconciliation_period (

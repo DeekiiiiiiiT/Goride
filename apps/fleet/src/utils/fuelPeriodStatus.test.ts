@@ -62,7 +62,7 @@ describe('fuelPeriodStatus', () => {
     expect(periods[0].counts['data-quality'].actionable).toBeGreaterThan(0);
   });
 
-  it('marks week completed when finalized and clear', () => {
+  it('snapshots alone do not mark week completed or locked (SQL lock SoT)', () => {
     const periods = deriveFuelReconciliationPeriods({
       weekOptions,
       vehicles: [{ id: 'v1', fuelScenarioId: 's1' } as any],
@@ -103,8 +103,8 @@ describe('fuelPeriodStatus', () => {
         ],
       ]),
     });
-    expect(periods[0].status).toBe('completed');
-    expect(periods[0].locked).toBe(true);
+    expect(periods[0].locked).toBe(false);
+    expect(periods[0].status).not.toBe('completed');
   });
 
   it('uses finalized snapshot for Unexplained when live reports are omitted', () => {
@@ -136,8 +136,10 @@ describe('fuelPeriodStatus', () => {
       scenarios: [],
     });
     expect(periods).toHaveLength(1);
-    expect(periods[0].status).toBe('completed');
-    expect(periods[0].netLeakage).toBeCloseTo(3063.23, 2);
+    expect(periods[0].locked).toBe(false);
+    expect(periods[0].status).not.toBe('completed');
+    expect(periods[0].netLeakage).toBeCloseTo(3063.23, 1);
+    expect(periods[0].totalSpend).toBeCloseTo(34996.6, 1);
     expect(periods[0].companyShare).toBeCloseTo(29211.62, 2);
     expect(periods[0].driverShare).toBeCloseTo(5784.98, 2);
   });
