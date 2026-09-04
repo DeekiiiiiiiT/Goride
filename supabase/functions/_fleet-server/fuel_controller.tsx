@@ -67,6 +67,10 @@ import {
   postFuelFinalizedEventsFromReport,
   reverseFuelFinancialEventsAndRebuild,
 } from "./fuel_financial_reset.ts";
+import {
+  reverseEnterpriseFuelSyncForSnapshot,
+  settleEnterpriseFuelFromSnapshot,
+} from "./fuel_enterprise_settlement.ts";
 import { periodAnchorFor, periodEndForAnchor } from "./financial_ledger.ts";
 import { getFleetTimezone } from "./timezone_helper.tsx";
 
@@ -960,9 +964,22 @@ app.post(`${BASE_PATH}/finalized-reports`, requirePermission('transactions.edit'
         saved++;
         continue;
       }
-      // Unified financial ledger + Expenses projection — must succeed or roll back KV.
+      // Heal path for already-locked weeks: wallet settle + ledger (same as commitFinalizedSnapshotMoney).
       try {
-        await postFuelFinalizedEventsFromReport(stamped);
+        const healOrg = orgId || String((stamped as any).orgId || (stamped as any).org_id || "");
+        if (healOrg) {
+          await reverseEnterpriseFuelSyncForSnapshot(stamped);
+          await settleEnterpriseFuelFromSnapshot(stamped, healOrg);
+        }
+        await postFuelFinalizedEventsFromReport({
+          ...stamped,
+          moneyCommitted: true,
+        });
+        await kv.set(key, {
+          ...stamped,
+          moneyCommitted: true,
+          moneyCommittedAt: new Date().toISOString(),
+        });
       } catch (finErr: any) {
         const msg = finErr?.message || String(finErr);
         console.error(`[FinalizedReports] financial ledger post failed: ${msg}`);

@@ -567,6 +567,8 @@ export function registerFuelPeriodRoutes(app: Hono) {
       const orgId = getOrgId(c);
       if (!orgId) return c.json({ error: "org required" }, 400);
       const body = await c.req.json().catch(() => ({}));
+      // Wave 4 SoT: never blind-lock every snapshot week — require weekStarts (or explicit forceAll).
+      const forceAll = body.forceAll === true;
       const onlyWeeks = Array.isArray(body.weekStarts)
         ? new Set(
             (body.weekStarts as unknown[])
@@ -574,6 +576,15 @@ export function registerFuelPeriodRoutes(app: Hono) {
               .filter((w) => /^\d{4}-\d{2}-\d{2}$/.test(w)),
           )
         : null;
+      if (!forceAll && (!onlyWeeks || onlyWeeks.size === 0)) {
+        return c.json(
+          {
+            error:
+              "weekStarts required (YYYY-MM-DD Mondays). Pass forceAll:true only for emergency mass backfill.",
+          },
+          400,
+        );
+      }
       const sb = getServiceClient();
       const all = ((await kv.getByPrefix("finalized_report:")) || []) as any[];
       const byWeek = new Map<string, any[]>();
@@ -588,9 +599,32 @@ export function registerFuelPeriodRoutes(app: Hono) {
         byWeek.set(wk, list);
       }
       let upserted = 0;
+      let moneyCommitted = 0;
       const rebuiltDriverIds = new Set<string>();
       for (const [weekStart, snaps] of byWeek) {
         const weekEnd = ymd(snaps[0]?.weekEnd || snaps[0]?.week_end) || weekStart;
+        // Commit wallet+ledger for staged snaps before painting Expenses Finalized.
+        for (const snap of snaps) {
+          if (snap?.moneyCommitted === true) continue;
+          try {
+            await commitFinalizedSnapshotMoney(snap, orgId);
+            moneyCommitted += 1;
+          } catch (err) {
+            console.error(
+              `[fuel/periods/backfill] money commit failed ${snap?.driverId}/${weekStart}:`,
+              err,
+            );
+            return c.json(
+              {
+                error: `money commit failed for ${snap?.driverId || "?"} @ ${weekStart}`,
+                detail: String((err as Error)?.message || err),
+                upserted,
+                moneyCommitted,
+              },
+              500,
+            );
+          }
+        }
         const money = aggregateFinalizedForWeek(snaps);
         const id = periodIdFor(orgId, weekStart);
         const { error } = await sb.from("fuel_reconciliation_period").upsert(
@@ -618,9 +652,11 @@ export function registerFuelPeriodRoutes(app: Hono) {
       return c.json({
         ok: true,
         upserted,
+        moneyCommitted,
         weeks: byWeek.size,
         driversRebuilt: rebuiltDriverIds.size,
         filtered: Boolean(onlyWeeks),
+        forceAll,
       });
     },
   );

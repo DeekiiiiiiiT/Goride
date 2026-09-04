@@ -2,12 +2,15 @@
 
 **Do not start Wave G until F1–F3 are signed** in [fuel-period-auto-close-certification.md](./fuel-period-auto-close-certification.md).
 
+**Engineering ready (2026-09-04):** Cron workflow + dual mode default `skip` confirmed in code (`resolveAutoCloseDualApprovalMode`). Do not flip to `service_approve` until three clean nights below are signed.
+
 ## Pre-flight
 
 1. Confirm workflow secrets exist in the GitHub repo (do not print values): `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `FLEET_CRON_SECRET` (or `CRON_SECRET`).
-2. Confirm edge env has the same cron secret and latest functions (fuel-core twin + auto-close NEW-9).
+2. Confirm edge env has the same cron secret and latest functions (fuel-core twin + auto-close NEW-9 + finalize adapter).
 3. Leave org dual-approval mode at **`skip`** for the first week of nights.
 4. Confirm schedule: daily **14:00 UTC** ≈ 09:00 Jamaica ([`.github/workflows/fuel-period-auto-close-cron.yml`](../.github/workflows/fuel-period-auto-close-cron.yml)).
+5. Confirm F1–F3 signed in the certification doc.
 
 ## Night 1 checklist
 

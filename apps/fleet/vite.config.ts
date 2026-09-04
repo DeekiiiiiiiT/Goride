@@ -126,6 +126,9 @@ export default defineConfig({
     alias: {
       react: reactRoot,
       'react-dom': reactDomRoot,
+      'react/jsx-runtime': path.join(reactRoot, 'jsx-runtime.js'),
+      'react/jsx-dev-runtime': path.join(reactRoot, 'jsx-dev-runtime.js'),
+      'react-dom/client': path.join(reactDomRoot, 'client.js'),
       'vaul@1.1.2': 'vaul',
       'sonner@2.0.3': 'sonner',
       'react-resizable-panels@2.1.7': 'react-resizable-panels',
@@ -208,5 +211,23 @@ export default defineConfig({
       /** Deno edge-function tests (Deno.test + https: imports) run via `deno test`, not Vitest. */
       '**/supabase/functions/**',
     ],
+    // NEW-14: fleet @testing-library/* is junctioned to node_modules/.deno, which
+    // nests a second react-dom. Pin + inline so hooks share one React with pnpm.
+    alias: {
+      react: reactRoot,
+      'react-dom': reactDomRoot,
+      'react/jsx-runtime': path.join(reactRoot, 'jsx-runtime.js'),
+      'react/jsx-dev-runtime': path.join(reactRoot, 'jsx-dev-runtime.js'),
+      'react-dom/client': path.join(reactDomRoot, 'client.js'),
+    },
+    server: {
+      deps: {
+        inline: [
+          /@radix-ui\/.*/,
+          /@testing-library\/.*/,
+          /@tanstack\/react-query/,
+        ],
+      },
+    },
   },
 });

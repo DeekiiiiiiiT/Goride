@@ -15,15 +15,16 @@
 
 ### Program freeze (Flawless Close-Out — Wave 0)
 
-**Code backlog = Phase 6 only.** **Ops backlog = Wave F (F1–F8) + Wave G.** Do not reopen closed Criticals/Highs unless a cert case fails.
+**Do not reopen closed Criticals/Highs unless a cert case fails.** Live backlog below — historical pass sections stay archaeology.
 
 | Program DoD | Status |
 |---|---|
-| Deno imports `_shared/fuelCore` twin; no local coverage/ratio math in `fuel_week_engine.ts` | ✅ Wave 1 done |
-| One fixture week: dual-path `weekSnapshotMoneyDelta` &lt; 0.01 (NEW-13) | ✅ Wave 2 done |
-| CI mounts landing + wizard shell + bulk + reset without live creds (M15) | ✅ Wave 3 done |
-| F1–F8 signed on staging | ⏳ Ops — runbook ready ([certification](docs/fuel-period-auto-close-certification.md)); `gh auth` required |
-| First production cron night reviewed; digest healthy; dual mode stays `skip` | ⏳ Ops — [Wave G monitoring](docs/fuel-period-wave-g-monitoring.md) |
+| Deno imports `_shared/fuelCore` twin; no local coverage/ratio math in `fuel_week_engine.ts` | ✅ Done |
+| **NEW-14** fleet `pnpm test` green (Vitest single React for Radix render tests) | ✅ Wave 1 done |
+| **NEW-13** client finalize freezes via `assembleWeekSnapshotsFromCalcInput` + CI guard | ✅ Wave 2 done |
+| Week-lock SoT: Recon Completed = Expenses Finalized = SQL `fuel_reconciliation_period` locked | ✅ Wave 3–4 done (GoRide table live; backfill hardened) |
+| F1–F8 signed on staging | ⏳ Wave 5 — code ready; needs `gh auth login` + signer ([certification](docs/fuel-period-auto-close-certification.md)) |
+| First production cron nights reviewed; dual mode stays `skip` | ⏳ Wave 6 — package ready after F1–F3 ([Wave G monitoring](docs/fuel-period-wave-g-monitoring.md)) |
 
 **Rollback:** `FUEL_BUILD_SNAPSHOTS_ENGINE=entries` emergency path; cron dual mode `skip`; disable [`.github/workflows/fuel-period-auto-close-cron.yml`](.github/workflows/fuel-period-auto-close-cron.yml) if digest fails.
 
@@ -41,7 +42,7 @@
 | **M1/M2** landing scale | ✅ M2 no silent week-8 cap; **M1** hook SoT `serverSkipWeekStarts` + page filter; materialize to SQL |
 | **Auto-close scheduler** | ✅ [`.github/workflows/fuel-period-auto-close-cron.yml`](.github/workflows/fuel-period-auto-close-cron.yml) + **NEW-9** `skip_needs_approval` + cursor threshold |
 | **Evidence pack canonical CSV** | ✅ Server pack → accountant CSV; client fallback offline |
-| **M15** render / smoke tests | ✅ Smoke + jsdom (landing/wizard shell/bulk/reset/disputes/leakage/finalize) |
+| **M15** render / smoke tests | ✅ Smoke + jsdom render tests green (NEW-14 closed) |
 | **NEW-9** auto-close dual approval | ✅ Closed — skip above threshold; threshold on cursor |
 | **NEW-10** dispute type | ✅ Closed — `FuelDisputesStep` uses `FuelDispute` |
 | **NEW-11** landing skip SoT | ✅ Closed — `serverSkipWeekStarts` in hook |
@@ -53,7 +54,9 @@
 | **Fleet wizard E2E** | ✅ Playwright + deep-link `?week=&step=` + fleet auth helper (staging smoke; not CI gate) |
 | **Rush customer/partner E2E** | ✅ Critical-path authenticated specs |
 | **NEW-12** third money engine | ✅ Closed — Deno uses fuel-core assembler |
-| **NEW-13** parity cannot fail | ✅ Closed — dual-path fixture + `weekSnapshotMoneyDelta` |
+| **NEW-13** client vs cron money | ✅ Closed — `fuelFinalizeWeekSnapAdapter` + CI guard |
+| **NEW-14** duplicate React in Vitest | ✅ Closed — test alias + inline + pnpm RTL links |
+| **Week-lock SoT** | ✅ Closed — SQL Completed/Expenses unify; backfill requires weekStarts + money commit ([docs/fuel-week-lock-sot.md](docs/fuel-week-lock-sot.md)) |
 
 ---
 

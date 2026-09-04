@@ -6,11 +6,11 @@
 import { addDays, format, parseISO } from 'date-fns';
 import { api } from './api';
 import { settlementService } from './settlementService';
-import { FuelCalculationService } from './fuelCalculationService';
 import { tierService } from './tierService';
 import { resolveActiveFuelPolicyForDriverWeek } from '../utils/fuelPolicyVersion';
 import { toSlimFuelCycles } from '../utils/slimFuelCycles';
 import { reportWeekYmdBounds } from '../utils/fuelWeekPeriod';
+import { freezeReportMoneyThroughAssembler } from '../utils/fuelFinalizeWeekSnapAdapter';
 import {
   sumPaidByDriverForReport,
   sumGasCardSpendForReport,
@@ -126,13 +126,6 @@ export async function finalizeFuelWeekReports(
         await settlementService.reverseEnterpriseFuelSyncForReport(report);
       }
 
-      const ratio = FuelCalculationService.getBlendedDriverShareRatio(report);
-      const newlyPostedDriverShare = relevantEntries.reduce((sum, e) => sum + e.amount * ratio, 0);
-      const newlyPostedCompanyShare = relevantEntries.reduce(
-        (sum, e) => sum + (e.amount - e.amount * ratio),
-        0,
-      );
-
       if (relevantEntries.length > 0) {
         opts.onProgress?.(`Closing open tank cycles…`);
         if (report.vehicleId) {
@@ -163,6 +156,15 @@ export async function finalizeFuelWeekReports(
       const appliedFuelRule = activeScenario?.rules.find((r) => r.category === 'Fuel');
       const appliedVersion = policy?.version;
 
+      // NEW-13: freeze shares through fuel-core assembler (same math Deno build-snapshots uses).
+      const settleForSnap = relevantEntries.length ? relevantEntries : weekEntries;
+      const frozen = freezeReportMoneyThroughAssembler({
+        report,
+        settleEntries: settleForSnap,
+        fuelRule: appliedFuelRule || null,
+        builtBy: 'fuel_finalize_client',
+      });
+
       const snapshot: FinalizedFuelReport = {
         ...report,
         status: 'Finalized',
@@ -170,22 +172,28 @@ export async function finalizeFuelWeekReports(
         finalizedByUser: 'admin',
         driverSpend,
         gasCardSpend,
-        netPay: driverSpend - report.driverShare,
+        driverShare: frozen.driverShare,
+        companyShare: frozen.companyShare,
+        miscellaneousCost: frozen.miscellaneousCost,
+        totalGasCardCost: frozen.totalGasCardCost || report.totalGasCardCost,
+        netPay: driverSpend - frozen.driverShare,
         vehiclePlate: vehicle?.licensePlate || 'Unknown',
         vehicleModel: (vehicle as any)?.model || '',
         driverName: driver?.name || 'Unknown',
-        postedDriverShare: newlyPostedDriverShare,
-        postedCompanyShare: newlyPostedCompanyShare,
+        postedDriverShare: frozen.postedDriverShare,
+        postedCompanyShare: frozen.postedCompanyShare,
         fuelCycles: toSlimFuelCycles(report.fuelCycles),
         metadata: {
           ...report.metadata,
-          settledEntries: (relevantEntries.length ? relevantEntries : weekEntries).map((e) => ({
+          settledEntries: settleForSnap.map((e) => ({
             id: e.id,
             amount: e.amount,
             date: String(e.date || '').split('T')[0],
             driverId: e.driverId || report.driverId,
             vehicleId: e.vehicleId || report.vehicleId,
           })),
+          blendedRatio: frozen.blendedRatio,
+          freezeBuiltBy: frozen.built.metadata.builtBy,
           appliedScenario: activeScenario
             ? {
                 id: activeScenario.id,

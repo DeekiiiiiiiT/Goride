@@ -26,9 +26,10 @@ Consumption Reconciliation **Completed** and Expenses **Fuel Status Finalized** 
 
 ## Wave 4 catch-up (GoRide)
 
-- `fuel_reconciliation_period` created (migration collision fixed).
-- Aug 17–23 locked in SQL; driver week `fuel_status = finalized`.
-- Do **not** blind-lock every `finalized_report` week (Outstanding weeks can still have snaps). Prefer `POST /fuel/periods/backfill` with `{ weekStarts: ["YYYY-MM-DD"] }` for closed weeks only.
+- `fuel_reconciliation_period` created (migration collision fixed) — **applied on GoRide** (`20260903001041` / `20260903001129`).
+- Code: backfill requires `weekStarts` (or explicit `forceAll`); commits money before lock; Expenses `fuel_status` never invents Finalized from legacy `fuel_finalized`.
+- Targeted backfill only: `POST /fuel/periods/backfill` with `{ weekStarts: ["YYYY-MM-DD"] }` for closed weeks only.
+- Cert: Aug 17–23 Finalized in Expenses; Outstanding weeks not Finalized.
 
 ---
 

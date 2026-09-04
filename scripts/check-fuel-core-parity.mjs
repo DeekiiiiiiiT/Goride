@@ -134,6 +134,38 @@ if (fs.existsSync(weekEngine)) {
   }
 }
 
+// NEW-13: client finalize must freeze through assembleWeekSnapshotsFromCalcInput
+const finalizeAdapter = path.join(ROOT, 'apps/fleet/src/utils/fuelFinalizeWeekSnapAdapter.ts');
+const finalizeService = path.join(ROOT, 'apps/fleet/src/services/fuelFinalizeService.ts');
+if (!fs.existsSync(finalizeAdapter)) {
+  failed = true;
+  console.error('missing apps/fleet/src/utils/fuelFinalizeWeekSnapAdapter.ts (NEW-13)');
+} else {
+  const adapterText = fs.readFileSync(finalizeAdapter, 'utf8');
+  if (!/assembleWeekSnapshotsFromCalcInput/.test(adapterText)) {
+    failed = true;
+    console.error('fuelFinalizeWeekSnapAdapter.ts must call assembleWeekSnapshotsFromCalcInput');
+  }
+  if (!/from\s+['"]@roam\/fuel-core['"]/.test(adapterText)) {
+    failed = true;
+    console.error('fuelFinalizeWeekSnapAdapter.ts must import from @roam/fuel-core');
+  }
+}
+if (!fs.existsSync(finalizeService)) {
+  failed = true;
+  console.error('missing apps/fleet/src/services/fuelFinalizeService.ts');
+} else {
+  const finText = fs.readFileSync(finalizeService, 'utf8');
+  if (!/freezeReportMoneyThroughAssembler/.test(finText)) {
+    failed = true;
+    console.error('fuelFinalizeService.ts must freeze via freezeReportMoneyThroughAssembler');
+  }
+  if (/FuelCalculationService\.getBlendedDriverShareRatio/.test(finText)) {
+    failed = true;
+    console.error('fuelFinalizeService.ts must not freeze shares via getBlendedDriverShareRatio');
+  }
+}
+
 if (failed) {
   console.error('fuel-core parity check failed');
   process.exit(1);

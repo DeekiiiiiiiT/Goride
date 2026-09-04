@@ -2,7 +2,9 @@
 
 Run against **staging** after Waves A–E **and Flawless Waves 1–3** are deployed. Do **not** treat production cron as trusted until F1–F3 pass.
 
-**Code readiness (2026-09-02):** NEW-12/13 engine consolidation + CI render coverage landed. Dual mode default remains `skip`. Edge twin: `supabase/functions/_shared/fuelCore.ts`.
+**Code readiness (2026-09-04):** Flawless Waves 1–4 code complete — NEW-14 green, NEW-13 client freeze via `assembleWeekSnapshotsFromCalcInput`, week-lock SoT hardened (backfill requires `weekStarts`, money commit before lock). Dual mode default remains `skip`. Edge twin: `supabase/functions/_shared/fuelCore.ts`. GoRide has `fuel_reconciliation_period` (1 locked / 28 open at last check).
+
+**Ops blocker:** `gh auth login` required before F1 `workflow_dispatch`. Until F1–F3 are signed, leave production cron dual mode at `skip` and treat cron as untrusted.
 
 ## Prerequisites
 
@@ -74,10 +76,21 @@ Record pass date and who signed off below:
 
 | Item | Pass date | Signer |
 |---|---|---|
-| F1 | | |
+| Engineering pre-check (NEW-13/14, week-lock SoT, dual mode `skip`) | 2026-09-04 | Auto (code) |
+| F1 | | **blocked on `gh auth login`** |
 | F2 | | |
 | F3 | | |
 | F4–F8 (full cert) | | |
+
+### PO next commands (after `gh auth login`)
+
+```bash
+gh auth login
+gh workflow run fuel-period-auto-close-cron.yml
+gh run list --workflow=fuel-period-auto-close-cron.yml --limit 1
+```
+
+Then walk F2–F8 on staging/GoRide and fill the sign-off table.
 
 ## Abort
 

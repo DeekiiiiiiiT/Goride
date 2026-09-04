@@ -91,6 +91,18 @@ export function DriverExpensesHistory({
   const sharedPeriodsQuery = useDriverFinancialPeriods(driverId);
   const sharedPeriods = sharedPeriodsQuery.isError ? null : (sharedPeriodsQuery.data ?? null);
 
+  /** Monday keys locked via recon (fuel_status=finalized) — used for daily/monthly fallback. */
+  const lockedWeekStarts = useMemo(() => {
+    const set = new Set<string>();
+    for (const p of sharedPeriods || []) {
+      if (String(p.fuelStatus || '').toLowerCase() === 'finalized') {
+        const anchor = String(p.periodAnchor || '').slice(0, 10);
+        if (/^\d{4}-\d{2}-\d{2}$/.test(anchor)) set.add(anchor);
+      }
+    }
+    return set;
+  }, [sharedPeriods]);
+
   // Draft estimates — only when Fuel view selected (not on toll-first paint).
   const [fuelDraftLoading, setFuelDraftLoading] = useState(false);
   const [draftFuelEntries, setDraftFuelEntries] = useState<FuelEntry[]>([]);
@@ -299,10 +311,12 @@ export function DriverExpensesHistory({
       // logic used by SettlementSummaryView/PayoutPeriodDetail so all three
       // surfaces agree) ──
       const { deduction, fleetShare, driverSpend, gasCardSpend, netPay, finalized, hasReport } =
-        getFuelDeductionForPeriod(finalizedReports, periodStart, periodEnd, periodType);
+        getFuelDeductionForPeriod(finalizedReports, periodStart, periodEnd, periodType, {
+          lockedWeekStarts,
+        });
       const fuelDeduction = deduction;
       const isFinalized = finalized;
-      // Fallback path has no recon lock map — never paint Finalized from snapshots alone.
+      // Finalized only when overlapping weeks are SQL-locked (via lockedWeekStarts).
       const fuelStatus = isFinalized
         ? 'finalized'
         : hasReport || fuelDeduction > 0.005
@@ -362,6 +376,7 @@ export function DriverExpensesHistory({
   }, [
     transactions, trips, timeBuckets, finalizedReports, disputeRefunds, periodType, fleetTz,
     driverVehicleList, draftFuelEntries, draftAdjustments, draftScenarios, sharedPeriods,
+    lockedWeekStarts,
   ]);
 
   // ────────────────────────────────────────────────────────────

@@ -12,6 +12,8 @@ import {
   type WeekSnapEntry,
   type WeekSnapFuelRule,
 } from '@roam/fuel-core';
+import { freezeReportMoneyThroughAssembler } from './fuelFinalizeWeekSnapAdapter';
+import type { FuelEntry, WeeklyFuelReport } from '../types/fuel';
 
 const WEEK_START = '2026-08-25';
 const WEEK_END = '2026-08-31';
@@ -181,5 +183,102 @@ describe('fuelPeriodBuildSnapshots dual-path parity (NEW-13)', () => {
     });
     expect(snaps[0].driverShare).toBeCloseTo(250, 5);
     expect(snaps[0].companyShare).toBeCloseTo(750, 5);
+  });
+
+  it('client finalize adapter (FCS-shaped report) matches CalcInput with categoryCosts', () => {
+    const report = {
+      id: 'driver-a_2026-08-25',
+      weekStart: WEEK_START,
+      weekEnd: WEEK_END,
+      vehicleId: 'veh-shared',
+      driverId: 'driver-a',
+      vehicleIds: ['veh-shared', 'veh-2'],
+      totalGasCardCost: 15_000,
+      totalTripDistance: 0,
+      rideShareCost: 9_000,
+      companyMiscDistance: 0,
+      companyUsageCost: 0,
+      personalDistance: 0,
+      personalUsageCost: 0,
+      deadheadDistance: 0,
+      deadheadCost: 0,
+      miscellaneousCost: 6_000,
+      companyShare: 0,
+      driverShare: 0,
+      status: 'Draft',
+    } as WeeklyFuelReport;
+
+    const entries = RAW_ENTRIES.filter((e) => e.driverId === 'driver-a').map(
+      (e) =>
+        ({
+          id: e.id,
+          amount: e.amount,
+          date: e.date,
+          driverId: e.driverId,
+          vehicleId: e.vehicleId,
+          reconciliationStatus: e.reconciliationStatus,
+          driverShareRatio: e.driverShareRatio,
+        }) as FuelEntry,
+    );
+
+    const frozen = freezeReportMoneyThroughAssembler({
+      report,
+      settleEntries: entries,
+      fuelRule: RULE_A,
+      orgId: ORG,
+      builtBy: 'parity-client-finalize',
+    });
+
+    const viaCalc = assembleWeekSnapshotsFromCalcInput({
+      weekStart: WEEK_START,
+      weekEnd: WEEK_END,
+      orgId: ORG,
+      entriesByDriver: new Map([
+        [
+          'driver-a',
+          entries.map((e) => ({
+            id: e.id,
+            amount: Number(e.amount) || 0,
+            date: String(e.date).split('T')[0],
+            driverId: e.driverId || 'driver-a',
+            vehicleId: e.vehicleId || 'veh-shared',
+            driverShareRatio: (e as { driverShareRatio?: number | null }).driverShareRatio ?? null,
+          })),
+        ],
+      ]),
+      driverContexts: new Map([
+        [
+          'driver-a',
+          {
+            driverId: 'driver-a',
+            vehicleId: 'veh-shared',
+            vehicleIds: ['veh-shared', 'veh-2'],
+            fuelRule: RULE_A,
+            categoryCosts: {
+              rideShareCost: 9_000,
+              companyUsageCost: 0,
+              deadheadCost: 0,
+              personalUsageCost: 0,
+            },
+          },
+        ],
+      ]),
+      builtBy: 'parity-calc-with-costs',
+    })[0];
+
+    const delta = weekSnapshotMoneyDelta(
+      {
+        totalGasCardCost: frozen.totalGasCardCost,
+        driverShare: frozen.driverShare,
+        companyShare: frozen.companyShare,
+        miscellaneousCost: frozen.miscellaneousCost,
+      },
+      viaCalc,
+    );
+    expect(delta.spend).toBeLessThan(0.01);
+    expect(delta.driver).toBeLessThan(0.01);
+    expect(delta.company).toBeLessThan(0.01);
+    expect(delta.misc).toBeLessThan(0.01);
+    expect(frozen.built.metadata.builtBy).toBe('parity-client-finalize');
   });
 });

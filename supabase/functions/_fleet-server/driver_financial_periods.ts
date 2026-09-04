@@ -1466,7 +1466,8 @@ function mapDbPeriod(r: any): DriverFinancialPeriodRow {
     fuelFleetShare: Number(r.fuel_fleet_share) || 0,
     fuelNetPay: Number(r.fuel_net_pay) || 0,
     fuelFinalized: !!r.fuel_finalized,
-    fuelStatus: String(r.fuel_status || (r.fuel_finalized ? "finalized" : "n/a")),
+    // SoT: fuel_status from recon lock rebuild — never invent finalized from legacy fuel_finalized.
+    fuelStatus: String(r.fuel_status || "n/a"),
     earningsGross: Number(r.earnings_gross) || 0,
     driverShare: Number(r.driver_share) || 0,
     fleetShare: Number(r.fleet_share) || 0,
