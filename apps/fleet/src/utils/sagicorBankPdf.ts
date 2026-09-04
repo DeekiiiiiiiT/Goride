@@ -35,8 +35,8 @@ export function isUberVisaAchDeposit(text: string): boolean {
   const n = text.replace(/\s+/g, ' ').toUpperCase();
   if (!n.includes('ACH') || !n.includes('CLEARING') || !n.includes('DEPOSIT')) return false;
   if (!n.includes('VISA') || !n.includes('PAYMENT')) return false;
-  // UBER BV or U BER BV
-  return /\bU\s*BER\b/.test(n) && /\bBV\b/.test(n);
+  // UBER BV / U BER BV / U BER B V (pdfjs often splits BV)
+  return /\bU\s*BER\b/.test(n) && /\bB\s*V\b/.test(n);
 }
 
 export function detectSagicorFormat(text: string): SagicorPdfFormat {

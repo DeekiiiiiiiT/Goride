@@ -26,6 +26,14 @@ export type BankMatchSuggestion = {
   reasons: string[];
 };
 
+/** Statement line that already matches a confirmed fleet bank receive (re-upload guard). */
+export type AlreadyConfirmedBankHit = {
+  line: BankStatementLine;
+  target: FleetBankReceiveRow;
+  score: number;
+  reasons: string[];
+};
+
 /** Naive CSV split (handles quoted commas). */
 export function parseCsvText(text: string): string[][] {
   const rows: string[][] = [];
@@ -171,6 +179,8 @@ export function suggestBankMatches(
   for (const line of lines) {
     for (const target of expected) {
       if (target.status === 'confirmed') continue;
+      // Sagicor Uber ACH never settles Roam card expected rows.
+      if (target.platform === 'roam') continue;
       const amtDiff = Math.abs(line.amount - target.expected);
       if (amtDiff > amountTol) continue;
       const weekDist = daysBetween(line.dateYmd, target.weekStartYmd);
@@ -195,7 +205,67 @@ export function suggestBankMatches(
   const usedTargets = new Set<string>();
   const out: BankMatchSuggestion[] = [];
   for (const c of candidates) {
-    const tKey = c.target.weekStartYmd;
+    const tKey = `${c.target.weekStartYmd}|${c.target.platform || 'uber'}`;
+    if (usedLines.has(c.line.lineIndex) || usedTargets.has(tKey)) continue;
+    usedLines.add(c.line.lineIndex);
+    usedTargets.add(tKey);
+    out.push(c);
+  }
+  return out;
+}
+
+/**
+ * Flag statement lines already recorded on a confirmed week (amount + bank date).
+ * Prevents re-Accept / manual match duplicates when the same PDF is uploaded again.
+ * One confirmed week and one line each used at most once (greedy by score).
+ */
+export function findAlreadyConfirmedBankLines(
+  lines: BankStatementLine[],
+  expected: FleetBankReceiveRow[],
+  options?: { amountTolerance?: number; dateWindowDays?: number },
+): AlreadyConfirmedBankHit[] {
+  const amountTol = options?.amountTolerance ?? 0.01;
+  const dateWindow = options?.dateWindowDays ?? 10;
+  const candidates: AlreadyConfirmedBankHit[] = [];
+
+  for (const line of lines) {
+    for (const target of expected) {
+      if (target.status !== 'confirmed') continue;
+      const received = target.amountReceived;
+      if (received == null) continue;
+      const amtDiff = Math.abs(line.amount - received);
+      if (amtDiff > amountTol) continue;
+
+      const reasons: string[] = [`Amount already confirmed`];
+      let score = 100 - amtDiff * 100;
+
+      if (target.bankDateYmd) {
+        const bankDist = daysBetween(line.dateYmd, target.bankDateYmd);
+        if (bankDist > dateWindow) continue;
+        if (bankDist === 0) {
+          score += 50;
+          reasons.push('Same bank date already recorded');
+        } else {
+          score += 30 - bankDist;
+          reasons.push(`Bank date ${Math.round(bankDist)}d apart`);
+        }
+      } else {
+        const weekDist = daysBetween(line.dateYmd, target.weekStartYmd);
+        if (weekDist > dateWindow) continue;
+        score += 10 - weekDist;
+        reasons.push(`Date ${Math.round(weekDist)}d from confirmed week start`);
+      }
+
+      candidates.push({ line, target, score, reasons });
+    }
+  }
+
+  candidates.sort((a, b) => b.score - a.score);
+  const usedLines = new Set<number>();
+  const usedTargets = new Set<string>();
+  const out: AlreadyConfirmedBankHit[] = [];
+  for (const c of candidates) {
+    const tKey = `${c.target.weekStartYmd}|${c.target.platform || 'uber'}`;
     if (usedLines.has(c.line.lineIndex) || usedTargets.has(tKey)) continue;
     usedLines.add(c.line.lineIndex);
     usedTargets.add(tKey);

@@ -6,10 +6,6 @@ import { FuelEntry, MileageAdjustment, WeeklyFuelReport, FuelScenario, FuelRule,
 import { Vehicle } from '../types/vehicle';
 import { Trip } from '../types/data';
 import {
-  getCategoryCoverageSplit as splitCategory,
-  type FuelCoverageCategory,
-} from '../utils/fuelCoverageSplit';
-import {
   pickScenarioForDriverMembership,
   pickScenarioForDriverWeek,
   resolveDriverVersionForWeek,
@@ -44,6 +40,8 @@ import {
   assembleLeftoverWeekMoney,
   computeMiscellaneousCost,
   splitAllCategoryCosts,
+  getCategoryCoverageSplit as splitCategory,
+  type FuelCoverageCategory,
 } from '@roam/fuel-core';
 
 export {

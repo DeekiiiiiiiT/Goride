@@ -13,10 +13,16 @@ const fixture = (name: string) =>
   readFileSync(join(__dirname, '__fixtures__', name), 'utf8');
 
 describe('sagicorBankPdf', () => {
-  it('detects Uber VISA ACH fingerprint with split U BER', () => {
+  it('detects Uber VISA ACH fingerprint with split U BER and B V', () => {
     expect(
       isUberVisaAchDeposit(
         'ACH Clearing Deposit VISA PAYMENTS LI 075DCOO26153 2683 U BER BV CREDIT',
+      ),
+    ).toBe(true);
+    // Official/online PDFs sometimes insert a space inside BV
+    expect(
+      isUberVisaAchDeposit(
+        'ACH Clearing Deposit VISA PAYMENTS LI 075DCOO26229 1583 U BER B V CREDIT',
       ),
     ).toBe(true);
     expect(isUberVisaAchDeposit('ACH Clearing Deposit JMMB ADMIN')).toBe(false);

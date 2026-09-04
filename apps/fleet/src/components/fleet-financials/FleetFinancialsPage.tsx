@@ -17,6 +17,7 @@ import {
   fleetBankDisplayStatus,
   fleetBankDisplayStatusLabel,
   fleetBankPlatformLabel,
+  fleetBankReceiveRowKey,
   type FleetBankDisplayStatus,
   type FleetBankReceiveRow,
 } from '../../utils/fleetBankReceive';
@@ -152,7 +153,7 @@ function BankReceiveTable({
             </TableRow>
           ) : (
             rows.map((row) => {
-              const key = row.weekStartYmd;
+              const key = fleetBankReceiveRowKey(row.weekStartYmd, row.platform);
               const weekEnd = addDays(parseISO(row.weekStartYmd), 6);
               const busy = savingKey === key;
               return (
@@ -382,7 +383,7 @@ export function FleetFinancialsPage({
     amountReceived: number,
     method: 'manual' | 'statement' = 'manual',
   ) {
-    const key = row.weekStartYmd;
+    const key = fleetBankReceiveRowKey(row.weekStartYmd, row.platform);
     setSavingKey(key);
     // Editing a statement-matched row keeps statement audit trail unless ops forces manual.
     const effectiveMethod =
@@ -413,12 +414,13 @@ export function FleetFinancialsPage({
   }
 
   async function unconfirm(row: FleetBankReceiveRow) {
-    const key = row.weekStartYmd;
+    const key = fleetBankReceiveRowKey(row.weekStartYmd, row.platform);
     setSavingKey(key);
     try {
       await api.deleteFleetBankConfirm({
         organizationId: organizationId || undefined,
         weekStartYmd: row.weekStartYmd,
+        platform: row.platform,
       });
       await queryClient.invalidateQueries({ queryKey: ['fleet-bank-confirms'] });
       toast.success('Moved back to Outstanding');

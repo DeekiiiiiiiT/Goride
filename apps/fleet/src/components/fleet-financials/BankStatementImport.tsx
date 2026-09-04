@@ -12,11 +12,17 @@ import {
   guessColumnMap,
   mapCsvRowsToLines,
   suggestBankMatches,
+  findAlreadyConfirmedBankLines,
   type BankCsvColumnMap,
   type BankMatchSuggestion,
+  type AlreadyConfirmedBankHit,
   type BankStatementLine,
 } from '../../utils/bankStatementMatch';
 import { parseSagicorBankPdf } from '../../utils/sagicorBankPdf';
+import {
+  fleetBankPlatformLabel,
+  fleetBankReceiveRowKey,
+} from '../../utils/fleetBankReceive';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
@@ -67,7 +73,8 @@ type PendingAccept = { mode: 'one'; suggestion: BankMatchSuggestion } | { mode: 
 /** Manual match picker for a bank line the auto-matcher skipped. */
 type PendingManualMatch = {
   line: BankStatementLine;
-  weekStartYmd: string;
+  /** `weekStartYmd|platform` */
+  targetKey: string;
 };
 
 type Props = {
@@ -100,6 +107,7 @@ function BankStatementImportInner({ expectedRows, organizationId, onConfirmed }:
   const [hasHeader, setHasHeader] = useState(true);
   const [colMap, setColMap] = useState<BankCsvColumnMap>({ date: 0, amount: 1, description: 2 });
   const [suggestions, setSuggestions] = useState<BankMatchSuggestion[]>([]);
+  const [alreadyConfirmed, setAlreadyConfirmed] = useState<AlreadyConfirmedBankHit[]>([]);
   const [unmatched, setUnmatched] = useState<BankStatementLine[]>([]);
   const [dismissed, setDismissed] = useState<Set<number>>(new Set());
   const [busy, setBusy] = useState(false);
@@ -124,15 +132,24 @@ function BankStatementImportInner({ expectedRows, organizationId, onConfirmed }:
 
   /** Open weeks still available for manual match (not already in suggestions). */
   const openWeeksForManual = useMemo(() => {
-    const claimed = new Set(suggestions.map((s) => s.target.weekStartYmd));
+    const claimed = new Set(
+      suggestions.map((s) => fleetBankReceiveRowKey(s.target.weekStartYmd, s.target.platform)),
+    );
     return expectedRows
-      .filter((r) => r.status === 'unconfirmed' && !claimed.has(r.weekStartYmd))
+      .filter(
+        (r) =>
+          r.status === 'unconfirmed' &&
+          r.platform !== 'roam' &&
+          !claimed.has(fleetBankReceiveRowKey(r.weekStartYmd, r.platform)),
+      )
       .slice()
       .sort((a, b) => a.weekStartYmd.localeCompare(b.weekStartYmd));
   }, [expectedRows, suggestions]);
 
   const manualTarget = pendingManual
-    ? openWeeksForManual.find((r) => r.weekStartYmd === pendingManual.weekStartYmd) ?? null
+    ? openWeeksForManual.find(
+        (r) => fleetBankReceiveRowKey(r.weekStartYmd, r.platform) === pendingManual.targetKey,
+      ) ?? null
     : null;
   const manualVariance =
     pendingManual && manualTarget
@@ -141,6 +158,7 @@ function BankStatementImportInner({ expectedRows, organizationId, onConfirmed }:
 
   function resetMatchState() {
     setSuggestions([]);
+    setAlreadyConfirmed([]);
     setUnmatched([]);
     setDismissed(new Set());
     setStatementId(null);
@@ -166,11 +184,12 @@ function BankStatementImportInner({ expectedRows, organizationId, onConfirmed }:
 
   function pickClosestWeek(line: BankStatementLine): string {
     if (openWeeksForManual.length === 0) return '';
-    return [...openWeeksForManual].sort(
+    const best = [...openWeeksForManual].sort(
       (a, b) =>
         daysBetweenYmd(line.dateYmd, a.weekStartYmd) -
         daysBetweenYmd(line.dateYmd, b.weekStartYmd),
-    )[0].weekStartYmd;
+    )[0];
+    return fleetBankReceiveRowKey(best.weekStartYmd, best.platform);
   }
 
   function openManualMatch(line: BankStatementLine) {
@@ -178,7 +197,7 @@ function BankStatementImportInner({ expectedRows, organizationId, onConfirmed }:
       toast.error('No open Expected weeks in this date range — widen Week from/to or refresh');
       return;
     }
-    setPendingManual({ line, weekStartYmd: pickClosestWeek(line) });
+    setPendingManual({ line, targetKey: pickClosestWeek(line) });
   }
 
   function applyMatch(lines: BankStatementLine[]) {
@@ -186,11 +205,20 @@ function BankStatementImportInner({ expectedRows, organizationId, onConfirmed }:
       toast.error('No Uber deposit lines found to match');
       return;
     }
-    const sug = suggestBankMatches(lines, expectedRows);
+    const already = findAlreadyConfirmedBankLines(lines, expectedRows);
+    const alreadyIdx = new Set(already.map((h) => h.line.lineIndex));
+    const openLines = lines.filter((l) => !alreadyIdx.has(l.lineIndex));
+    const sug = suggestBankMatches(openLines, expectedRows);
     const used = new Set(sug.map((s) => s.line.lineIndex));
+    setAlreadyConfirmed(already);
     setSuggestions(sug);
-    setUnmatched(lines.filter((l) => !used.has(l.lineIndex)));
-    toast.message(`${sug.length} suggested · ${lines.length - sug.length} unmatched`);
+    setUnmatched(openLines.filter((l) => !used.has(l.lineIndex)));
+    const parts = [
+      `${sug.length} suggested`,
+      already.length > 0 ? `${already.length} already in system` : null,
+      `${openLines.length - sug.length} unmatched`,
+    ].filter(Boolean);
+    toast.message(parts.join(' · '));
   }
 
   async function onCsvFile(file: File | null) {
@@ -250,7 +278,14 @@ function BankStatementImportInner({ expectedRows, organizationId, onConfirmed }:
     setDismissed((prev) => new Set(prev).add(line.lineIndex));
     const nextUnmatched = unmatched.filter((l) => l.lineIndex !== line.lineIndex);
     setUnmatched(nextUnmatched);
-    maybeClearImport(suggestions.length, nextUnmatched.length);
+    maybeClearImport(suggestions.length, alreadyConfirmed.length, nextUnmatched.length);
+  }
+
+  function dismissAlreadyConfirmed(hit: AlreadyConfirmedBankHit) {
+    setDismissed((prev) => new Set(prev).add(hit.line.lineIndex));
+    const nextAlready = alreadyConfirmed.filter((h) => h.line.lineIndex !== hit.line.lineIndex);
+    setAlreadyConfirmed(nextAlready);
+    maybeClearImport(suggestions.length, nextAlready.length, unmatched.length);
   }
 
   async function persistStatement(lines: BankStatementLine[]) {
@@ -282,9 +317,15 @@ function BankStatementImportInner({ expectedRows, organizationId, onConfirmed }:
     });
   }
 
-  /** Keep statement loaded if unmatched lines still need attention. */
-  function maybeClearImport(remainingSuggestions: number, remainingUnmatched: number) {
-    if (remainingSuggestions === 0 && remainingUnmatched === 0) clearImport();
+  /** Keep statement loaded if unmatched / already-confirmed lines still need attention. */
+  function maybeClearImport(
+    remainingSuggestions: number,
+    remainingAlready: number,
+    remainingUnmatched: number,
+  ) {
+    if (remainingSuggestions === 0 && remainingAlready === 0 && remainingUnmatched === 0) {
+      clearImport();
+    }
   }
 
   async function acceptOne(s: BankMatchSuggestion) {
@@ -296,7 +337,7 @@ function BankStatementImportInner({ expectedRows, organizationId, onConfirmed }:
       setSuggestions(remaining);
       onConfirmed();
       toast.success('Match accepted — bank received saved (Cash Returned unchanged)');
-      maybeClearImport(remaining.length, unmatched.length);
+      maybeClearImport(remaining.length, alreadyConfirmed.length, unmatched.length);
     } catch (e: any) {
       toast.error(e?.message || 'Accept failed');
     } finally {
@@ -307,7 +348,9 @@ function BankStatementImportInner({ expectedRows, organizationId, onConfirmed }:
 
   async function acceptManualMatch() {
     if (!pendingManual) return;
-    const target = openWeeksForManual.find((r) => r.weekStartYmd === pendingManual.weekStartYmd);
+    const target = openWeeksForManual.find(
+      (r) => fleetBankReceiveRowKey(r.weekStartYmd, r.platform) === pendingManual.targetKey,
+    );
     if (!target) {
       toast.error('Selected week is no longer available');
       return;
@@ -327,7 +370,7 @@ function BankStatementImportInner({ expectedRows, organizationId, onConfirmed }:
       onConfirmed();
       toast.success('Deposit matched — bank received saved (Cash Returned unchanged)');
       setPendingManual(null);
-      maybeClearImport(suggestions.length, nextUnmatched.length);
+      maybeClearImport(suggestions.length, alreadyConfirmed.length, nextUnmatched.length);
     } catch (e: any) {
       toast.error(e?.message || 'Match failed');
     } finally {
@@ -354,7 +397,7 @@ function BankStatementImportInner({ expectedRows, organizationId, onConfirmed }:
       toast.success(
         `Accepted ${ok} match${ok === 1 ? '' : 'es'} — bank received saved (Cash Returned unchanged)`,
       );
-      maybeClearImport(0, unmatched.length);
+      maybeClearImport(0, alreadyConfirmed.length, unmatched.length);
       return true;
     } catch (e: any) {
       if (ok > 0) {
@@ -583,6 +626,9 @@ function BankStatementImportInner({ expectedRows, organizationId, onConfirmed }:
                   </TableCell>
                   <TableCell className="text-sm whitespace-nowrap">
                     {formatWeekPeriod(s.target.weekStartYmd)}
+                    <span className="block text-xs text-slate-400">
+                      {fleetBankPlatformLabel(s.target.platform)}
+                    </span>
                   </TableCell>
                   <TableCell className="text-right tabular-nums text-sm">
                     {MONEY(s.target.expected)}
@@ -600,6 +646,65 @@ function BankStatementImportInner({ expectedRows, organizationId, onConfirmed }:
                       Accept
                     </Button>
                     <Button size="sm" variant="ghost" disabled={busy} onClick={() => dismissSuggestion(s)}>
+                      Dismiss
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      )}
+
+      {hasImport && alreadyConfirmed.length > 0 && (
+        <div className="space-y-2">
+          <h3 className="text-xs font-medium text-slate-500 uppercase tracking-wide flex items-center gap-2">
+            Already in system
+            <Badge variant="secondary">{alreadyConfirmed.length}</Badge>
+          </h3>
+          <p className="text-xs text-slate-500">
+            These deposits match weeks you already confirmed — do not match them again.
+          </p>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Statement</TableHead>
+                <TableHead>Linked period</TableHead>
+                <TableHead className="text-right">Recorded</TableHead>
+                <TableHead>Why</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {alreadyConfirmed.map((h) => (
+                <TableRow key={h.line.lineIndex} className="bg-slate-50/60 dark:bg-slate-900/40">
+                  <TableCell className="text-sm">
+                    {h.line.dateYmd}
+                    {h.line.description ? (
+                      <span className="block text-xs text-slate-400 truncate max-w-[220px]">
+                        {h.line.description}
+                      </span>
+                    ) : null}
+                  </TableCell>
+                  <TableCell className="text-sm whitespace-nowrap">
+                    {formatWeekPeriod(h.target.weekStartYmd)}
+                    <span className="block text-xs text-emerald-700 dark:text-emerald-400">
+                      Already confirmed · {fleetBankPlatformLabel(h.target.platform)}
+                    </span>
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums text-sm">
+                    {MONEY(h.target.amountReceived ?? h.line.amount)}
+                  </TableCell>
+                  <TableCell className="text-xs text-slate-500 max-w-[220px]">
+                    {h.reasons.join(' · ')}
+                  </TableCell>
+                  <TableCell className="text-right whitespace-nowrap">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      disabled={busy}
+                      onClick={() => dismissAlreadyConfirmed(h)}
+                    >
                       Dismiss
                     </Button>
                   </TableCell>
@@ -682,9 +787,9 @@ function BankStatementImportInner({ expectedRows, organizationId, onConfirmed }:
               <div className="space-y-1.5">
                 <label className="text-xs text-slate-500">Expected week</label>
                 <Select
-                  value={pendingManual.weekStartYmd}
+                  value={pendingManual.targetKey}
                   onValueChange={(v) =>
-                    setPendingManual((prev) => (prev ? { ...prev, weekStartYmd: v } : prev))
+                    setPendingManual((prev) => (prev ? { ...prev, targetKey: v } : prev))
                   }
                 >
                   <SelectTrigger className="w-full">
@@ -692,14 +797,16 @@ function BankStatementImportInner({ expectedRows, organizationId, onConfirmed }:
                   </SelectTrigger>
                   <SelectContent>
                     {openWeeksForManual.map((row) => {
+                      const key = fleetBankReceiveRowKey(row.weekStartYmd, row.platform);
                       const variance = pendingManual.line.amount - row.expected;
                       const varianceLabel =
                         Math.abs(variance) < 0.005
                           ? 'exact'
                           : `${variance > 0 ? '+' : ''}${MONEY(variance)} vs expected`;
                       return (
-                        <SelectItem key={row.weekStartYmd} value={row.weekStartYmd}>
-                          {formatWeekPeriod(row.weekStartYmd)} · Expected {MONEY(row.expected)} (
+                        <SelectItem key={key} value={key}>
+                          {formatWeekPeriod(row.weekStartYmd)} ·{' '}
+                          {fleetBankPlatformLabel(row.platform)} · Expected {MONEY(row.expected)} (
                           {varianceLabel})
                         </SelectItem>
                       );
@@ -742,7 +849,7 @@ function BankStatementImportInner({ expectedRows, organizationId, onConfirmed }:
               Cancel
             </Button>
             <Button
-              disabled={busy || !pendingManual?.weekStartYmd}
+              disabled={busy || !pendingManual?.targetKey}
               onClick={() => void acceptManualMatch()}
             >
               {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-2" /> : null}

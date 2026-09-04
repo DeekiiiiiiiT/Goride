@@ -7245,7 +7245,7 @@ app.put("/make-server-37f42386/fleet-bank-confirms", requireAuth(), requirePermi
     if (orgId) {
       const record = stampOrg(
         {
-          id: `org:${orgId}:${weekStartYmd}`,
+          id: `org:${orgId}:${weekStartYmd}:${platform}`,
           organizationId: orgId,
           weekStartYmd,
           recipient: "org" as const,
@@ -7264,7 +7264,12 @@ app.put("/make-server-37f42386/fleet-bank-confirms", requireAuth(), requirePermi
         },
         c,
       );
-      await kv.set(`fleet_bank_confirm:org:${orgId}:${weekStartYmd}`, record);
+      // Platform-scoped key so Uber wire + Roam card can confirm the same week independently.
+      await kv.set(`fleet_bank_confirm:org:${orgId}:${weekStartYmd}:${platform}`, record);
+      // Uber also dual-writes legacy week-only key for Settlement readers not yet platform-aware.
+      if (platform === "uber") {
+        await kv.set(`fleet_bank_confirm:org:${orgId}:${weekStartYmd}`, record);
+      }
       return c.json({ success: true, data: record });
     }
 
@@ -7309,8 +7314,19 @@ app.delete("/make-server-37f42386/fleet-bank-confirms", requireAuth(), requirePe
     }
     const orgId = String(c.req.query("organizationId") || getOrgId(c) || "").trim();
     const legacyDriverId = String(c.req.query("driverId") || "").trim();
+    const platformRaw = String(c.req.query("platform") || "uber").toLowerCase();
+    const platform =
+      platformRaw === "indrive" || platformRaw === "roam" || platformRaw === "uber"
+        ? platformRaw
+        : "uber";
     const keys: string[] = [];
-    if (orgId) keys.push(`fleet_bank_confirm:org:${orgId}:${weekStartYmd}`);
+    if (orgId) {
+      keys.push(`fleet_bank_confirm:org:${orgId}:${weekStartYmd}:${platform}`);
+      // Uber unconfirm also clears legacy week-only key.
+      if (platform === "uber") {
+        keys.push(`fleet_bank_confirm:org:${orgId}:${weekStartYmd}`);
+      }
+    }
     if (legacyDriverId) keys.push(`fleet_bank_confirm:${legacyDriverId}:${weekStartYmd}`);
     if (keys.length === 0) {
       return c.json({ error: "organizationId (or legacy driverId) is required" }, 400);
@@ -7323,7 +7339,7 @@ app.delete("/make-server-37f42386/fleet-bank-confirms", requireAuth(), requirePe
       if (existing) await kv.del(key);
     }
     // Also clear any legacy driver-keyed confirms for this week in-org (dual-write cleanup).
-    if (orgId && !legacyDriverId) {
+    if (orgId && !legacyDriverId && platform === "uber") {
       const all = (await kv.getByPrefix("fleet_bank_confirm:")) || [];
       const scoped = filterByOrg(all, c) as Array<Record<string, unknown>>;
       for (const row of scoped) {

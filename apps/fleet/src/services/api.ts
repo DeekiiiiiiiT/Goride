@@ -5065,6 +5065,7 @@ export const api = {
   async deleteFleetBankConfirm(payload: {
     organizationId?: string;
     weekStartYmd: string;
+    platform?: 'uber' | 'indrive' | 'roam';
     /** @deprecated Legacy driver-keyed confirms. */
     driverId?: string;
   }): Promise<{ success: boolean }> {
@@ -5073,6 +5074,7 @@ export const api = {
     });
     if (payload.organizationId) params.set('organizationId', payload.organizationId);
     if (payload.driverId) params.set('driverId', payload.driverId);
+    if (payload.platform) params.set('platform', payload.platform);
     const response = await fetchWithRetry(
       `${API_ENDPOINTS.financial}/fleet-bank-confirms?${params.toString()}`,
       {

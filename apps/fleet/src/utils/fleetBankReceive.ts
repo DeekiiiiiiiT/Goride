@@ -113,7 +113,16 @@ export function isDriverBankShareEvent(raw: PayoutBankEventLike): boolean {
   return true;
 }
 
-export function fleetBankOrgConfirmKey(organizationId: string, weekStartYmd: string): string {
+export function fleetBankOrgConfirmKey(
+  organizationId: string,
+  weekStartYmd: string,
+  platform?: FleetBankPlatform | string | null,
+): string {
+  const p = String(platform || '').toLowerCase();
+  if (p === 'indrive' || p === 'roam' || p === 'uber') {
+    return `org|${organizationId}|${weekStartYmd}|${p}`;
+  }
+  // Legacy week-only key (pre platform split) — treat as uber when resolving.
   return `org|${organizationId}|${weekStartYmd}`;
 }
 
@@ -207,33 +216,26 @@ export function aggregateRoamCardExpectedByWeek(
     .sort((a, b) => b.weekStartYmd.localeCompare(a.weekStartYmd));
 }
 
-/** Merge Uber/InDrive expected weeks with Roam card expected (same week → sum, prefer roam label if only roam). */
+/** Merge Uber/InDrive expected weeks with Roam card expected as separate rows (never sum). */
 export function mergeFleetBankExpectedRows(
   primary: ReturnType<typeof aggregateExpectedBankByWeek>,
   roamRows: ReturnType<typeof aggregateRoamCardExpectedByWeek>,
 ): ReturnType<typeof aggregateExpectedBankByWeek> {
-  const map = new Map<string, { expected: number; platform: FleetBankPlatform }>();
-  for (const row of primary) {
-    map.set(row.weekStartYmd, { expected: row.expected, platform: row.platform });
-  }
-  for (const row of roamRows) {
-    const prev = map.get(row.weekStartYmd);
-    if (!prev) {
-      map.set(row.weekStartYmd, { expected: row.expected, platform: 'roam' });
-    } else {
-      map.set(row.weekStartYmd, {
-        expected: round2(prev.expected + row.expected),
-        platform: prev.platform === 'roam' ? 'roam' : prev.platform,
-      });
-    }
-  }
-  return [...map.entries()]
-    .map(([weekStartYmd, v]) => ({
-      weekStartYmd,
-      expected: v.expected,
-      platform: v.platform,
-    }))
-    .sort((a, b) => b.weekStartYmd.localeCompare(a.weekStartYmd));
+  // Same Mon–Sun can have Uber wire + Roam card — keep apart so Sagicor ACH can match Uber only.
+  return [...primary, ...roamRows].sort((a, b) => {
+    if (a.weekStartYmd !== b.weekStartYmd) return b.weekStartYmd.localeCompare(a.weekStartYmd);
+    return a.platform.localeCompare(b.platform);
+  });
+}
+
+/** Stable UI / confirm key for one platform-week expected row. */
+export function fleetBankReceiveRowKey(
+  weekStartYmd: string,
+  platform: FleetBankPlatform | string | null | undefined,
+): string {
+  const p = String(platform || 'uber').toLowerCase();
+  const norm = p === 'indrive' || p === 'roam' || p === 'uber' ? p : 'uber';
+  return `${weekStartYmd}|${norm}`;
 }
 
 export function aggregateExpectedBankByWeek(
@@ -330,26 +332,46 @@ export function aggregateExpectedBankByDriverWeek(
     });
 }
 
+function normalizeFleetBankPlatform(
+  raw: string | null | undefined,
+): FleetBankPlatform | null {
+  const p = String(raw || '').toLowerCase();
+  if (p === 'indrive' || p === 'roam' || p === 'uber') return p;
+  return null;
+}
+
+function confirmMatchesPlatform(
+  conf: FleetBankConfirmRecord,
+  platform: FleetBankPlatform,
+): boolean {
+  const confPlat = normalizeFleetBankPlatform(conf.platform);
+  // Legacy confirms (no platform) apply to Uber org wires only.
+  if (!confPlat) return platform === 'uber';
+  return confPlat === platform;
+}
+
 /** Resolve confirmed receive for a week: prefer org confirm, else any legacy driver confirm. */
 export function resolveWeekBankConfirm(
   weekStartYmd: string,
   confirms: FleetBankConfirmRecord[] | undefined,
   organizationId?: string | null,
+  platform?: FleetBankPlatform | string | null,
 ): FleetBankConfirmRecord | null {
   const list = confirms || [];
   const orgId = String(organizationId || '').trim();
+  const wantPlat = normalizeFleetBankPlatform(platform) || 'uber';
 
   if (orgId) {
-    const orgHit = list.find(
+    const orgHits = list.filter(
       (c) =>
         c?.weekStartYmd === weekStartYmd &&
         c.status === 'confirmed' &&
         (c.recipient === 'org' ||
           String(c.organizationId || '') === orgId ||
-          // New KV key uses orgId in the former driverId slot when recipient=org
           (c.recipient === 'org' && String(c.driverId || '') === orgId)),
     );
-    if (orgHit) return orgHit;
+    const platHit = orgHits.find((c) => confirmMatchesPlatform(c, wantPlat));
+    if (platHit) return platHit;
   }
 
   // Dual-read: any confirmed driver-keyed row for this week counts as fleet week confirmed.
@@ -359,7 +381,8 @@ export function resolveWeekBankConfirm(
       c.status === 'confirmed' &&
       c.recipient !== 'org' &&
       String(c.driverId || '').trim() !== '' &&
-      (!orgId || String(c.organizationId || orgId) === orgId || !c.organizationId),
+      (!orgId || String(c.organizationId || orgId) === orgId || !c.organizationId) &&
+      confirmMatchesPlatform(c, wantPlat),
   );
   if (legacy.length === 0) return null;
   if (legacy.length === 1) return legacy[0];
@@ -373,6 +396,7 @@ export function resolveWeekBankConfirm(
     amountReceived,
     weekStartYmd,
     status: 'confirmed',
+    platform: wantPlat,
   };
 }
 
@@ -381,17 +405,23 @@ export function isFleetWeekBankConfirmed(
   confirms: FleetBankConfirmRecord[] | undefined,
   organizationId?: string | null,
 ): boolean {
-  return resolveWeekBankConfirm(weekStartYmd, confirms, organizationId)?.status === 'confirmed';
+  // Settlement gates on Uber/org wire for the week (not Roam card rows).
+  return resolveWeekBankConfirm(weekStartYmd, confirms, organizationId, 'uber')?.status === 'confirmed';
 }
 
-/** Merge confirms onto org-week expected rows. */
+/** Merge confirms onto org-week expected rows (platform-aware). */
 export function mergeBankReceiveConfirms(
   expectedRows: ReturnType<typeof aggregateExpectedBankByWeek>,
   confirms: FleetBankConfirmRecord[] | undefined,
   organizationId?: string | null,
 ): FleetBankReceiveRow[] {
   return expectedRows.map((row) => {
-    const conf = resolveWeekBankConfirm(row.weekStartYmd, confirms, organizationId);
+    const conf = resolveWeekBankConfirm(
+      row.weekStartYmd,
+      confirms,
+      organizationId,
+      row.platform,
+    );
     if (!conf || conf.status !== 'confirmed') {
       return {
         ...row,
@@ -408,7 +438,7 @@ export function mergeBankReceiveConfirms(
       conf.confirmMethod === 'statement' ? 'statement' : 'manual';
     return {
       ...row,
-      platform: conf.platform || row.platform,
+      platform: row.platform,
       amountReceived,
       variance: round2(amountReceived - row.expected),
       status: 'confirmed' as const,
@@ -421,7 +451,7 @@ export function mergeBankReceiveConfirms(
   });
 }
 
-/** Week → confirmed record (org preferred, legacy dual-read). */
+/** Week → confirmed record (org preferred, legacy dual-read). Uber wire for Settlement. */
 export function buildFleetWeekConfirmLookup(
   confirms: FleetBankConfirmRecord[] | undefined,
   organizationId?: string | null,
@@ -432,7 +462,7 @@ export function buildFleetWeekConfirmLookup(
   }
   const map = new Map<string, FleetBankConfirmRecord>();
   for (const week of weeks) {
-    const conf = resolveWeekBankConfirm(week, confirms, organizationId);
+    const conf = resolveWeekBankConfirm(week, confirms, organizationId, 'uber');
     if (conf) map.set(week, conf);
   }
   return map;
@@ -446,7 +476,10 @@ export function buildFleetBankConfirmLookup(
   for (const c of confirms || []) {
     if (!c?.weekStartYmd) continue;
     if (c.recipient === 'org' && c.organizationId) {
-      byKey.set(fleetBankOrgConfirmKey(c.organizationId, c.weekStartYmd), c);
+      byKey.set(
+        fleetBankOrgConfirmKey(c.organizationId, c.weekStartYmd, c.platform),
+        c,
+      );
     }
     if (c.driverId) {
       byKey.set(fleetBankConfirmKey(c.driverId, c.weekStartYmd), c);

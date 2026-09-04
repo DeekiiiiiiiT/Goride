@@ -236,7 +236,7 @@ export function FuelReconciliationDashboard({
         outstanding={outstanding}
         inProgress={inProgress}
         completed={completed}
-        loading={loading}
+        loading={loading ?? false}
         onSelectPeriod={openPeriod}
         onResetPeriod={(p) => setResetPeriod(p)}
         onOpenArchive={() => setView({ kind: 'archive' })}

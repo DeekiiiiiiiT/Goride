@@ -40,6 +40,13 @@ const SHIMS = [
     mustMatch: /fuelSettlementEntryYmd[\s\S]*from\s+['"]@roam\/fuel-core['"]/,
     forbidden: /duplicated from FuelCalculationService/,
   },
+  // NEW-16: fleet coverage-split must re-export shared money math from fuel-core
+  {
+    rel: 'apps/fleet/src/utils/fuelCoverageSplit.ts',
+    mustMatch: /from\s+['"]@roam\/fuel-core['"]/,
+    forbidden:
+      /function\s+getCategoryCoverageSplit\s*\(|function\s+splitAllCategoryCosts\s*\(|function\s+getCompanyCoveragePercent\s*\(/,
+  },
 ];
 
 let failed = false;

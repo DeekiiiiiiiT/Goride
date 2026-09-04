@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest';
 import {
   aggregateExpectedBankByDriverWeek,
   aggregateExpectedBankByWeek,
+  aggregateRoamCardExpectedByWeek,
+  mergeFleetBankExpectedRows,
   mergeBankReceiveConfirms,
   resolveBankSettledDisplay,
   isOrgBankEvent,
@@ -188,5 +190,91 @@ describe('fleetBankReceive', () => {
         metadata: { bankRole: 'driver_share' },
       }),
     ).toBe(false);
+  });
+
+  it('keeps Uber wire and Roam card as separate Expected rows (no sum)', () => {
+    const uber = aggregateExpectedBankByWeek([
+      {
+        eventType: 'payout_bank',
+        date: '2026-06-08',
+        netAmount: 13689.21,
+        metadata: { source: 'payments_organization', recipient: 'org' },
+      },
+      {
+        eventType: 'payout_bank',
+        date: '2026-06-15',
+        netAmount: 35957.56,
+        metadata: { source: 'payments_organization', recipient: 'org' },
+      },
+    ]);
+    const roam = aggregateRoamCardExpectedByWeek([
+      {
+        platform: 'Roam',
+        paymentMethod: 'Card',
+        status: 'Completed',
+        date: '2026-06-11',
+        amount: 595.32,
+        bankTransferred: 595.32,
+      },
+      {
+        platform: 'Roam',
+        paymentMethod: 'Card',
+        status: 'Completed',
+        date: '2026-06-12',
+        amount: 653.66,
+        bankTransferred: 653.66,
+      },
+      {
+        platform: 'Roam',
+        paymentMethod: 'Card',
+        status: 'Completed',
+        date: '2026-06-15',
+        amount: 1953.58,
+        bankTransferred: 1953.58,
+      },
+      {
+        platform: 'Roam',
+        paymentMethod: 'Card',
+        status: 'Completed',
+        date: '2026-06-17',
+        amount: 2068.09,
+        bankTransferred: 2068.09,
+      },
+    ]);
+    const merged = mergeFleetBankExpectedRows(uber, roam);
+    expect(
+      merged.map((r) => [r.weekStartYmd, r.platform, r.expected]),
+    ).toEqual([
+      ['2026-06-15', 'roam', 4021.67],
+      ['2026-06-15', 'uber', 35957.56],
+      ['2026-06-08', 'roam', 1248.98],
+      ['2026-06-08', 'uber', 13689.21],
+    ]);
+
+    const withConfirms = mergeBankReceiveConfirms(
+      merged,
+      [
+        {
+          organizationId: 'roam-org-1',
+          weekStartYmd: '2026-06-08',
+          status: 'confirmed',
+          amountReceived: 13689.21,
+          recipient: 'org',
+          platform: 'uber',
+          confirmMethod: 'statement',
+          bankDateYmd: '2026-06-16',
+        },
+      ],
+      'roam-org-1',
+    );
+    const jun8Uber = withConfirms.find(
+      (r) => r.weekStartYmd === '2026-06-08' && r.platform === 'uber',
+    );
+    const jun8Roam = withConfirms.find(
+      (r) => r.weekStartYmd === '2026-06-08' && r.platform === 'roam',
+    );
+    expect(jun8Uber?.status).toBe('confirmed');
+    expect(jun8Uber?.variance).toBeCloseTo(0, 2);
+    expect(jun8Roam?.status).toBe('unconfirmed');
   });
 });
