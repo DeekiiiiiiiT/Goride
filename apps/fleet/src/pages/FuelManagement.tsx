@@ -543,7 +543,9 @@ function FuelManagementInner({ defaultTab = 'logs', onViewDriverLedger, onTabCha
           const scenariosP = fuelService.getFuelScenarios().catch(() => []);
           const adjsP = fuelService.getMileageAdjustments().catch(() => []);
           const disputesP = FuelDisputeService.getAllDisputes().catch(() => []);
-          const finalizedFrom = activityMinDate || fuelFetchWindow.startDate;
+          // Finalized window stays on the selected week pad — activity-bounds is deferred
+          // (see effect below) so it does not join the recon mount HTTP/1.1 storm (ROAM-FLEET-10).
+          const finalizedFrom = fuelFetchWindow.startDate;
           const finalizedTo = fuelFetchWindow.endDate;
           const finalizedP = api
             .getFinalizedReports({
@@ -551,10 +553,9 @@ function FuelManagementInner({ defaultTab = 'logs', onViewDriverLedger, onTabCha
               weekStartTo: finalizedTo,
             })
             .catch(() => []);
-          const boundsP = fuelService.getFuelActivityBounds().catch(() => ({ minDate: null as string | null }));
 
           if (scope === 'recon') {
-              const [vData, dData, scenariosData, adjsData, disputesData, finalizedData, boundsData] =
+              const [vData, dData, scenariosData, adjsData, disputesData, finalizedData] =
                   await Promise.all([
                       vehiclesP,
                       driversP,
@@ -562,7 +563,6 @@ function FuelManagementInner({ defaultTab = 'logs', onViewDriverLedger, onTabCha
                       adjsP,
                       disputesP,
                       finalizedP,
-                      boundsP,
                   ]);
               setVehicles(vData);
               setDrivers(dData);
@@ -570,7 +570,6 @@ function FuelManagementInner({ defaultTab = 'logs', onViewDriverLedger, onTabCha
               setAdjustments(adjsData);
               setDisputes(disputesData);
               setFinalizedReports(Array.isArray(finalizedData) ? finalizedData : []);
-              setActivityMinDate(boundsData.minDate);
               setCardsLoading(false);
               coreLoadedRef.current = true;
               reconLoadedRef.current = true;
@@ -611,14 +610,13 @@ function FuelManagementInner({ defaultTab = 'logs', onViewDriverLedger, onTabCha
               // Keep previous cards if any — never pretend the inventory was empty
           }
 
-          const [scenariosData, adjsData, disputesData, finalizedData, boundsData] =
-              await Promise.all([scenariosP, adjsP, disputesP, finalizedP, boundsP]);
+          const [scenariosData, adjsData, disputesData, finalizedData] =
+              await Promise.all([scenariosP, adjsP, disputesP, finalizedP]);
 
           setScenarios(scenariosData);
           setAdjustments(adjsData);
           setDisputes(disputesData);
           setFinalizedReports(Array.isArray(finalizedData) ? finalizedData : []);
-          setActivityMinDate(boundsData.minDate);
           coreLoadedRef.current = true;
           reconLoadedRef.current = true;
           fullLoadedRef.current = true;
@@ -631,7 +629,48 @@ function FuelManagementInner({ defaultTab = 'logs', onViewDriverLedger, onTabCha
       } finally {
           setIsRefreshing(false);
       }
-  }, [activeTab, activityMinDate, fuelFetchWindow.endDate, fuelFetchWindow.startDate]);
+  }, [activeTab, fuelFetchWindow.endDate, fuelFetchWindow.startDate]);
+
+  // Defer activity-bounds until after recon periods are armed (or immediately on cards/config).
+  // Keeps GET /fuel-entries/activity-bounds out of the mount parallel wave (ROAM-FLEET-10).
+  useEffect(() => {
+    if (activeTab === 'logs' || activeTab === 'reimbursements') return;
+    if (activeTab === 'reconciliation' && !periodsQueryReady) return;
+    let cancelled = false;
+    const delayMs = activeTab === 'reconciliation' ? 750 : 0;
+    const timer = window.setTimeout(() => {
+      void fuelService
+        .getFuelActivityBounds()
+        .then((bounds) => {
+          if (cancelled || !bounds.minDate) return;
+          setActivityMinDate((prev) => (prev === bounds.minDate ? prev : bounds.minDate));
+        })
+        .catch(() => undefined);
+    }, delayMs);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [activeTab, periodsQueryReady]);
+
+  // Once earliest activity is known, expand finalized coverage for older weeks in the dropdown.
+  useEffect(() => {
+    if (!activityMinDate) return;
+    if (activeTab !== 'reconciliation' && activeTab !== 'configuration') return;
+    let cancelled = false;
+    void api
+      .getFinalizedReports({
+        weekStartFrom: activityMinDate,
+        weekStartTo: fuelFetchWindow.endDate,
+      })
+      .then((data) => {
+        if (!cancelled) setFinalizedReports(Array.isArray(data) ? data : []);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [activityMinDate, activeTab, fuelFetchWindow.endDate]);
 
   // Tab-scoped bootstrap — logs stay light; recon skips cards; cards tab loads full bundle.
   useEffect(() => {
