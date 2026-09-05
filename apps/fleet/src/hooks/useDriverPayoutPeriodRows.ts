@@ -51,6 +51,11 @@ export function useDriverPayoutPeriodRows(opts: {
   endDate?: string;
   /** Draft fuel by period start key — Payout estimates for non-finalized weeks. */
   draftFuelByPeriod?: Record<string, { deduction: number; fleetShare?: number }>;
+  /**
+   * Skip money pipeline when user is on Overview only (lazy load).
+   * When false, returns empty ready=false without fetching.
+   */
+  enabled?: boolean;
 }): {
   periodData: PayoutPeriodRow[];
   cashWeeks: CashWeekData[];
@@ -76,13 +81,14 @@ export function useDriverPayoutPeriodRows(opts: {
     startDate: startDateProp,
     endDate: endDateProp,
     draftFuelByPeriod,
+    enabled = true,
   } = opts;
   const fleetTz = useFleetTimezone();
   const useSharedWeekly = Boolean(sharedWeekly?.periodData) && periodType === 'weekly';
 
-  const localBundle = useDriverFinancialBundle(driverId, driver);
+  const localBundle = useDriverFinancialBundle(driverId, driver, { enabled });
   const financialBundle = bundleProp ?? localBundle;
-  const sharedPeriodsQuery = useDriverFinancialPeriods(driverId);
+  const sharedPeriodsQuery = useDriverFinancialPeriods(driverId, { enabled });
 
   const {
     finalizedReports,
@@ -98,6 +104,8 @@ export function useDriverPayoutPeriodRows(opts: {
   const startDate = startDateProp || activityRange?.startDate;
   const endDate = endDateProp || activityRange?.endDate;
 
+  // Phase 1: require a date range (default last 7 days when omitted) so we never auto-load full lifetime.
+  // Phase 2: mode=periods for weekly; ledger for daily/monthly.
   const ledgerQuery = useQuery({
     queryKey: ['ledgerEarningsHistory', driverId, periodType, startDate || '', endDate || ''],
     queryFn: () =>
@@ -106,12 +114,13 @@ export function useDriverPayoutPeriodRows(opts: {
         periodType,
         startDate,
         endDate,
+        mode: periodType === 'weekly' ? 'periods' : 'ledger',
       }),
     staleTime: DRIVER_FINANCIAL_STALE_MS,
-    enabled: Boolean(driverId) && !useSharedWeekly,
+    enabled: enabled && Boolean(driverId) && !useSharedWeekly && Boolean(startDate && endDate),
   });
 
-  const ledgerLoaded = !ledgerQuery.isLoading && (ledgerQuery.isSuccess || ledgerQuery.isError);
+  const ledgerLoaded = enabled && !ledgerQuery.isLoading && (ledgerQuery.isSuccess || ledgerQuery.isError);
   const ledgerError = ledgerQuery.isError;
   const ledgerRows = ledgerQuery.data?.success && ledgerQuery.data?.data ? ledgerQuery.data.data : [];
 
@@ -133,7 +142,7 @@ export function useDriverPayoutPeriodRows(opts: {
       });
     },
     staleTime: DRIVER_FINANCIAL_STALE_MS,
-    enabled: Boolean(driverId) && !useSharedWeekly,
+    enabled: enabled && Boolean(driverId) && !useSharedWeekly,
   });
 
   const payoutBankEvents = payoutBankQuery.data ?? [];
@@ -301,18 +310,23 @@ export function useDriverPayoutPeriodRows(opts: {
   ]);
 
   // Progressive: weekly paints from shared periods; otherwise wait for ledger.
+  // When disabled (Overview only), keep empty ready=false so UI does not paint money data.
   const isReady =
-    periodType === 'weekly'
-      ? Boolean(sharedPeriodsQuery.data) || ledgerLoaded || useSharedWeekly
-      : useSharedWeekly
-        ? true
-        : ledgerLoaded;
+    !enabled
+      ? false
+      : periodType === 'weekly'
+        ? Boolean(sharedPeriodsQuery.data) || ledgerLoaded || useSharedWeekly
+        : useSharedWeekly
+          ? true
+          : ledgerLoaded;
   const isFullyReady =
-    periodType === 'weekly'
-      ? !fuelDataLoading && (Boolean(sharedPeriodsQuery.data?.length) || ledgerLoaded)
-      : useSharedWeekly
-        ? !fuelDataLoading
-        : ledgerLoaded && !fuelDataLoading;
+    !enabled
+      ? false
+      : periodType === 'weekly'
+        ? !fuelDataLoading && (Boolean(sharedPeriodsQuery.data?.length) || ledgerLoaded)
+        : useSharedWeekly
+          ? !fuelDataLoading
+          : ledgerLoaded && !fuelDataLoading;
 
   const tiers: TierConfig[] = useMemo(() => {
     const seen = new Map<string, TierConfig>();

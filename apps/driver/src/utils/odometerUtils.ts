@@ -29,17 +29,37 @@ export const sortOdometerEntries = (entries: UnifiedOdometerEntry[]): UnifiedOdo
 };
 
 /**
+ * Clock identity for soft-dup collapse.
+ * Prefer recordedAt (full clock); fall back to date.
+ * Floor to the minute so re-submit variants that differ by seconds still collapse.
+ */
+const clockKeyMs = (entry: UnifiedOdometerEntry): number => {
+    const raw = String(entry.recordedAt || entry.createdAt || entry.date || '');
+    if (!raw) return normalizeDate(entry.date);
+    // Floor to minute so re-submit variants that differ by seconds still collapse
+    const ms = raw.includes('T') ? new Date(raw).getTime() : normalizeDate(raw);
+    if (!Number.isFinite(ms)) return normalizeDate(entry.date);
+    return Math.floor(ms / 60000) * 60000;
+};
+
+/**
+ * Soft-collapse: same odometer within a short window on the same day.
+ * Matches gas-card re-submits that land a few minutes apart (see SUPER LUBE pattern).
+ */
+const SOFT_WINDOW_MS = 15 * 60 * 1000;
+
+/**
  * Detects and merges duplicate odometer entries.
- * A duplicate is defined as an entry with the exact same timestamp (down to the minute) and odometer value.
- * Priority for retention: Fuel > Service > Check-in > Manual.
+ * A duplicate is defined as an entry with the exact same timestamp (down to the minute)
+ * and odometer value. Priority for retention: Fuel > Service > Check-in > Manual.
+ * Also collapses same-odo re-submits within a 15-minute soft window.
  */
 export const deduplicateEntries = (entries: UnifiedOdometerEntry[]): UnifiedOdometerEntry[] => {
     const uniqueMap = new Map<string, UnifiedOdometerEntry>();
     const PRIORITY = { 'fuel': 4, 'service': 3, 'checkin': 2, 'manual': 1 };
 
     entries.forEach(entry => {
-        const time = normalizeDate(entry.date);
-        const key = `${time}-${entry.value}`;
+        const key = `${clockKeyMs(entry)}-${entry.value}`;
 
         if (uniqueMap.has(key)) {
             const existing = uniqueMap.get(key)!;
@@ -65,7 +85,36 @@ export const deduplicateEntries = (entries: UnifiedOdometerEntry[]): UnifiedOdom
         }
     });
 
-    return Array.from(uniqueMap.values());
+    // Soft-collapse same-odo re-submits within 15 minutes (same day)
+    const sorted = sortOdometerEntries(Array.from(uniqueMap.values()));
+    const collapsed: UnifiedOdometerEntry[] = [];
+    for (let i = 0; i < sorted.length; i++) {
+        const cur = sorted[i];
+        let keep = true;
+        for (let j = 0; j < collapsed.length; j++) {
+            const prev = collapsed[j];
+            const sameDay =
+                String(prev.date || prev.recordedAt || '').slice(0, 10) ===
+                String(cur.date || cur.recordedAt || '').slice(0, 10);
+            if (!sameDay) continue;
+            const prevMs = clockKeyMs(prev);
+            const curMs = clockKeyMs(cur);
+            if (Math.abs(prevMs - curMs) > SOFT_WINDOW_MS) continue;
+            if ((Number(prev.value) || 0) !== (Number(cur.value) || 0)) continue;
+
+            const PRIORITY = { 'fuel': 4, 'service': 3, 'checkin': 2, 'manual': 1 };
+            const prevP = PRIORITY[prev.source] || 0;
+            const curP = PRIORITY[cur.source] || 0;
+            if (curP > prevP) {
+                collapsed[j] = cur;
+            }
+            keep = false;
+            break;
+        }
+        if (keep) collapsed.push(cur);
+    }
+
+    return collapsed;
 };
 
 /**

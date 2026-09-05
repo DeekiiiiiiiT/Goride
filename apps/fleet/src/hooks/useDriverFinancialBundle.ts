@@ -61,8 +61,10 @@ export type DriverFinancialBundle = {
 
 export function useDriverFinancialBundle(
   driverId: string,
-  driver?: DriverLike | null
+  driver?: DriverLike | null,
+  options?: { enabled?: boolean }
 ): DriverFinancialBundle {
+  const enabled = options?.enabled !== false;
   const nativeIds = useMemo(
     () => Array.from(nativeDriverIdSet(driver, driverId)).sort(),
     [driver, driverId]
@@ -76,6 +78,7 @@ export function useDriverFinancialBundle(
     queryKey: ['vehicles'],
     queryFn: () => api.getVehicles(),
     staleTime: DRIVER_FINANCIAL_STALE_MS,
+    enabled: enabled && !!driverId,
   });
 
   const driverVehicles = useMemo(
@@ -96,7 +99,7 @@ export function useDriverFinancialBundle(
             driverIds: nativeIds,
             vehicleIds: vehicleIds.length ? vehicleIds : undefined,
           }),
-    enabled: !vehiclesQuery.isLoading,
+    enabled: enabled && !vehiclesQuery.isLoading,
     staleTime: DRIVER_FINANCIAL_STALE_MS,
   });
 
@@ -107,12 +110,14 @@ export function useDriverFinancialBundle(
         ? Promise.resolve({ data: [] as DisputeRefund[], total: 0 })
         : api.getDisputeRefunds({ driverIds: expandedIds }),
     staleTime: DRIVER_FINANCIAL_STALE_MS,
+    enabled: enabled && expandedIds.length > 0,
   });
 
   const settingsQuery = useQuery({
     queryKey: ['tollAutomationSettings'],
     queryFn: () => api.getTollAutomationSettings(),
     staleTime: DRIVER_FINANCIAL_STALE_MS,
+    enabled,
   });
 
   const finalizedReports = useMemo(() => {
@@ -129,10 +134,11 @@ export function useDriverFinancialBundle(
   }, [finalizedQuery.data, nativeIds, vehicleIds]);
 
   const isCoreLoading =
-    vehiclesQuery.isLoading ||
-    finalizedQuery.isLoading ||
-    disputeQuery.isLoading ||
-    settingsQuery.isLoading;
+    enabled &&
+    (vehiclesQuery.isLoading ||
+      finalizedQuery.isLoading ||
+      disputeQuery.isLoading ||
+      settingsQuery.isLoading);
 
   const isCoreError =
     vehiclesQuery.isError ||

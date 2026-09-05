@@ -218,7 +218,8 @@ export function SettlementSummaryView({
   // gross cash balance from ALL weeks (including unfinalized ones, since
   // outstanding cash matters regardless of finalization), and does not net
   // fuel credits. It is not expected to equal summing the per-row Settlement
-  // column.
+  // column. Shared period SSOT is useDriverPayoutPeriodRows (parent-provided
+  // weeklyPeriodData preferred; otherwise rebuilds from ledger/periods).
   const summaryTotals = useMemo(() => {
     const finalized = settlementRows.filter(r => r.isFinalized);
     return {

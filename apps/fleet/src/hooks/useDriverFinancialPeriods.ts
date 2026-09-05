@@ -71,14 +71,14 @@ export function driverFinancialPeriodsQueryKey(driverId: string) {
   return [DRIVER_FINANCIAL_PERIODS_KEY, driverId] as const;
 }
 
-export function useDriverFinancialPeriods(driverId: string) {
+export function useDriverFinancialPeriods(driverId: string, options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: driverFinancialPeriodsQueryKey(driverId),
     queryFn: async (): Promise<DriverFinancialPeriodClient[]> => {
       const res = await api.getDriverFinancialPeriods(driverId);
       return Array.isArray(res?.data) ? (res.data as DriverFinancialPeriodClient[]) : [];
     },
-    enabled: Boolean(driverId),
+    enabled: options?.enabled !== false && Boolean(driverId),
     staleTime: DRIVER_FINANCIAL_STALE_MS,
   });
 }

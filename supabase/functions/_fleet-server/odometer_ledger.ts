@@ -234,7 +234,19 @@ export async function listOdometerLedger(
     rows[i].deltaKm = older != null ? newer - older : null;
   }
 
-  return { data: rows, total: count ?? rows.length };
+  // Soft-collapse exact same clock+value re-submits before returning.
+  // Client also floors to the minute; here we keep first occurrence of exact match.
+  const collapsed: Record<string, unknown>[] = [];
+  const seen = new Set<string>();
+  for (const row of rows) {
+    const recAt = String(row.recordedAt || row.date || "");
+    const key = `${recAt}-${row.value}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    collapsed.push(row);
+  }
+
+  return { data: collapsed, total: count ?? rows.length };
 }
 
 export async function projectOdometerReading(
@@ -408,6 +420,25 @@ export async function projectFromFuelEntry(
   if (!vehicleId || vehicleId === "unknown") return null;
   const id = String(entry.id || "").trim();
   if (!id) return null;
+
+  // Gas-card CSV statements never carry real Roam odometer — only issuer noise.
+  // Never project those into the odometer ledger (no false anchors).
+  const meta = (entry.metadata && typeof entry.metadata === "object"
+    ? entry.metadata as Record<string, unknown>
+    : {}) as Record<string, unknown>;
+  const importSrc = String(meta.importSource || "");
+  const entrySource = String(
+    meta.entrySource || (entry as any).entrySource || (entry as any).source || "",
+  ).toLowerCase();
+  if (
+    importSrc === "jaa_raw" ||
+    importSrc === "fuel_statement" ||
+    importSrc === "jaa_statement_details" ||
+    entrySource.includes("fuel-card")
+  ) {
+    return null;
+  }
+
   return projectOdometerReading({
     organizationId: organizationId || (entry.organizationId as string) || null,
     vehicleId,

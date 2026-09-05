@@ -3016,12 +3016,24 @@ export const api = {
     periodType?: 'daily' | 'weekly' | 'monthly';
     startDate?: string;
     endDate?: string;
-  }): Promise<{ success: boolean; data: any[]; durationMs: number; readModel?: string }> {
+    cursor?: string;
+    mode?: 'periods' | 'ledger';
+  }): Promise<{
+    success: boolean;
+    data: any[];
+    durationMs: number;
+    readModel?: string;
+    hasMore?: boolean;
+    nextCursor?: string | null;
+    truncated?: boolean;
+  }> {
     const qp = new URLSearchParams();
     qp.set('driverId', params.driverId);
     if (params.periodType) qp.set('periodType', params.periodType);
     if (params.startDate) qp.set('startDate', params.startDate);
     if (params.endDate) qp.set('endDate', params.endDate);
+    if (params.cursor) qp.set('cursor', params.cursor);
+    if (params.mode) qp.set('mode', params.mode);
 
     const response = await fetchWithRetry(
       `${API_ENDPOINTS.financial}/ledger/driver-earnings-history?${qp.toString()}`,

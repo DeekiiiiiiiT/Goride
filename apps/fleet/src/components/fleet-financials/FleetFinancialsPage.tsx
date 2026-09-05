@@ -452,9 +452,9 @@ export function FleetFinancialsPage({
           <div>
             <h1 className="text-2xl font-semibold text-slate-900 dark:text-slate-100">Bank Deposits</h1>
             <p className="mt-1 text-sm text-slate-500 max-w-xl">
-              Confirm Uber bank deposits into the fleet account (org week). Drivers do not receive this wire —
-              Cash Wallet stays collection-only; who owes whom stays on Business Finance → Driver Balances /
-              Drivers Settlement.
+              Confirm bank deposits into the fleet account (org week). Each summary card includes
+              Uber, Roam, and InDrive allocation. Drivers do not receive this wire — Cash Wallet stays
+              collection-only.
             </p>
           </div>
         </div>

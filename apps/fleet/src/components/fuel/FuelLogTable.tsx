@@ -65,8 +65,11 @@ import { usePermissions } from '../../hooks/usePermissions';
 import { isEntryInInclusiveYmdRange, toEntryYmd } from '../../utils/fuelWeekPeriod';
 import { resolveFuelEntrySource } from '../../utils/fuelEntrySource';
 import { isJaaStatementLedgerRow } from '../../utils/jaaFuelStatementMatcher';
-import { countsInFuelLogSpend } from '../../utils/fuelOpsEligibility';
 import { resolveGasCardLedgerIntegrity } from '../../utils/fuelLedgerIntegrity';
+import {
+  buildCycleKpis,
+  buildTransactionKpis,
+} from '../../utils/fuelLogKpiMetrics';
 
 /** Sort/display timestamp: live ISO `date` or admin `date` + `time`. */
 function fuelEntrySortMs(e: { date?: string; time?: string | null }): number {
@@ -291,48 +294,6 @@ export function FuelLogTable({
         return integrityMap;
     }, [entries, transactions]);
 
-    const stats = useMemo(() => {
-        const auditScopeEntries = entries.filter(entry => {
-            if (isJaaStatementLedgerRow(entry)) return false;
-            if (!dateRange?.from && !dateRange?.to) return true;
-            const startYmd = dateRange.from ? toEntryYmd(dateRange.from) : '0000-01-01';
-            const endYmd = dateRange.to ? toEntryYmd(dateRange.to) : (dateRange.from ? toEntryYmd(dateRange.from) : '9999-12-31');
-            return isEntryInInclusiveYmdRange(entry.date, startYmd, endYmd);
-        });
-        const adminEntries = auditScopeEntries.filter(e => resolveEntrySource(e) === 'admin-manual');
-        const adminEdits = auditScopeEntries.filter(e => resolveEntrySource(e) === 'admin-edit');
-        const portalEntries = auditScopeEntries.filter(e => resolveEntrySource(e) === 'driver-portal');
-        // Mutually exclusive volume chips: Portal / Admin / Anchors (admin-edit counted under Admin volume)
-        const manualVolume = portalEntries.length;
-        const adminVolume = adminEntries.length + adminEdits.length;
-        const anchorEntries = auditScopeEntries.filter(e => validAnchorIds.has(e.id));
-        const cycleScope = allCycles.filter(c => {
-            if (!dateRange?.from && !dateRange?.to) return true;
-            const startYmd = dateRange.from ? toEntryYmd(dateRange.from) : '0000-01-01';
-            const endYmd = dateRange.to ? toEntryYmd(dateRange.to) : (dateRange.from ? toEntryYmd(dateRange.from) : '9999-12-31');
-            return isEntryInInclusiveYmdRange(c.endDate, startYmd, endYmd);
-        });
-        const manualEntries = auditScopeEntries.filter(e => isManualEntry(e));
-        return {
-            manualCount: manualVolume,
-            adminCount: adminVolume,
-            adminEditCount: adminEdits.length,
-            anchorCount: anchorEntries.length,
-            totalSpend: auditScopeEntries
-                .filter(countsInFuelLogSpend)
-                .reduce((sum, e) => sum + (Number(e.amount) || 0), 0),
-            anchorTotalSpent: anchorEntries
-                .filter(countsInFuelLogSpend)
-                .reduce((sum, e) => sum + (Number(e.amount) || 0), 0),
-            imbalancedCount: manualEntries.filter(e => ledgerIntegrity.get(e.id) !== 'Complete' && ledgerIntegrity.get(e.id) !== 'Pending').length,
-            completedCycles: cycleScope.filter(c => c.status === 'Complete').length,
-            anomalyCycles: cycleScope.filter(
-                (c) => c.signalTier === 'exception' || (c.status === 'Anomaly' && c.signalTier !== 'review'),
-            ).length,
-            activeCycles: cycleScope.filter(c => c.status === 'Active').length
-        };
-    }, [entries, validAnchorIds, dateRange, ledgerIntegrity, allCycles]);
-
     // Build per-vehicle timeline to compute previous odometer for each entry.
     // Skip JAA statement ledger rows (fees/declines/statement-only) — they have no
     // odo and must not blank out Δ Prev for real portal/admin fills.
@@ -387,6 +348,38 @@ export function FuelLogTable({
             return getVehicleName(c.vehicleId).toLowerCase().includes(searchTerm.toLowerCase());
         });
     }, [allCycles, filterVehicle, filterStatus, dateRange, searchTerm, getVehicleName]);
+
+    // Tab-specific KPIs — Transactions vs Full Tanks never share the same metrics
+    const transactionKpis = useMemo(() => {
+        const integrityById = new Map<string, string>();
+        for (const [id, status] of ledgerIntegrity.entries()) integrityById.set(id, status);
+        return buildTransactionKpis(filteredEntries, {
+            dateRange: dateRange ? { from: dateRange.from, to: dateRange.to } : undefined,
+            vehicleId: filterVehicle === 'all' ? undefined : filterVehicle,
+            driverId: filterDriver === 'all' ? undefined : filterDriver,
+            source: filterSource === 'all' ? undefined : filterSource,
+            searchTerm: searchTerm || undefined,
+            validAnchorIds,
+            integrityById,
+        });
+    }, [
+        filteredEntries,
+        dateRange,
+        filterVehicle,
+        filterDriver,
+        filterSource,
+        searchTerm,
+        validAnchorIds,
+        ledgerIntegrity,
+    ]);
+
+    const cycleKpis = useMemo(() => {
+        return buildCycleKpis(filteredCycles, {
+            dateRange: dateRange ? { from: dateRange.from, to: dateRange.to } : undefined,
+            vehicleId: filterVehicle === 'all' ? undefined : filterVehicle,
+            searchTerm: searchTerm || undefined,
+        });
+    }, [filteredCycles, dateRange, filterVehicle, searchTerm]);
 
     const getTypeIcon = (label: string) => {
         switch(label) {
@@ -479,93 +472,147 @@ export function FuelLogTable({
 
     return (
         <div className="space-y-4">
+            {/* Section tabs — primary view switch for Transaction Logs */}
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <Tabs value={activeView} onValueChange={(v: any) => setActiveView(v)} className="w-full sm:w-fit">
+                    <TabsList className="w-full sm:w-auto bg-slate-100 p-1 h-11">
+                        <TabsTrigger value="transactions" className="gap-2 flex-1 sm:flex-none px-5 py-2 text-sm font-semibold data-[state=active]:bg-white data-[state=active]:shadow-sm">
+                            <History className="h-4 w-4" />
+                            <span>Transactions</span>
+                        </TabsTrigger>
+                        <TabsTrigger value="cycles" className="gap-2 flex-1 sm:flex-none px-5 py-2 text-sm font-semibold data-[state=active]:bg-white data-[state=active]:shadow-sm">
+                            <RotateCcw className="h-4 w-4" />
+                            <span>Full Tanks</span>
+                        </TabsTrigger>
+                    </TabsList>
+                </Tabs>
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-2">
-                <div className="bg-white p-4 rounded-lg border border-slate-200 shadow-sm flex items-center gap-4">
-                    <div className="h-10 w-10 bg-blue-50 rounded-full flex items-center justify-center shrink-0">
-                        <ListFilter className="h-5 w-5 text-blue-500" />
-                    </div>
-                    <div className="flex-1">
-                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Log Volume</p>
-                        <div className="flex items-baseline gap-3">
-                            <div><p className="text-xl font-bold text-slate-700">{stats.manualCount}</p><p className="text-[10px] text-slate-500">Portal</p></div>
-                            <div className="h-8 w-px bg-slate-100 mx-1"></div>
-                            <div><p className="text-xl font-bold text-emerald-600">{stats.anchorCount}</p><p className="text-[10px] text-slate-500">Anchors</p></div>
-                            {stats.adminCount > 0 && (<>
-                                <div className="h-8 w-px bg-slate-100 mx-1"></div>
-                                <div><p className="text-xl font-bold text-amber-600">{stats.adminCount}</p><p className="text-[10px] text-slate-500">Admin</p></div>
-                            </>)}
-                        </div>
-                    </div>
-                </div>
-                <div className="bg-white p-4 rounded-lg border border-slate-200 shadow-sm flex items-center gap-4">
-                    <div className={cn(
-                        "h-10 w-10 rounded-full flex items-center justify-center shrink-0",
-                        stats.anomalyCycles > 0 ? "bg-rose-50" : "bg-emerald-50"
-                    )}>
-                        <RotateCcw className={cn(
-                            "h-5 w-5",
-                            stats.anomalyCycles > 0 ? "text-rose-500" : "text-emerald-500"
-                        )} />
-                    </div>
-                    <div className="flex-1">
-                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Fuel Integrity</p>
-                        <div className="flex items-baseline gap-3">
-                            <div><p className="text-xl font-bold text-emerald-600">{stats.completedCycles}</p><p className="text-[10px] text-slate-500">Verified Cycles</p></div>
-                            <div className="h-8 w-px bg-slate-100 mx-1"></div>
-                            <div>
-                                <Tooltip>
-                                    <TooltipTrigger asChild>
-                                        <p className={cn("text-xl font-bold cursor-help", stats.anomalyCycles > 0 ? "text-rose-600 underline decoration-dotted" : "text-slate-400")}>
-                                            {stats.anomalyCycles}
-                                        </p>
-                                    </TooltipTrigger>
-                                    <TooltipContent>
-                                      <p className="text-[10px] max-w-[220px]">
-                                        Real exceptions only (odometer regression, ledger imbalance, unmatched duplicates). Review-tier items are not counted here.
-                                      </p>
-                                    </TooltipContent>
-                                </Tooltip>
-                                <p className="text-[10px] text-slate-500">Exceptions</p>
+                {activeView === 'transactions' ? (
+                    <>
+                        {/* Transactions tab — fill-up KPIs */}
+                        <div className="bg-white p-4 rounded-lg border border-slate-200 shadow-sm flex items-center gap-4">
+                            <div className="h-10 w-10 bg-blue-50 rounded-full flex items-center justify-center shrink-0">
+                                <ListFilter className="h-5 w-5 text-blue-500" />
+                            </div>
+                            <div className="flex-1">
+                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total fills</p>
+                                <div className="flex items-baseline gap-3">
+                                    <p className="text-xl font-bold text-slate-700">{transactionKpis.totalFills}</p>
+                                    <span className="text-[10px] text-slate-500">
+                                        {transactionKpis.sourcePortal} portal · {transactionKpis.sourceAdmin} admin · {transactionKpis.sourceAnchors} anchors
+                                    </span>
+                                </div>
+                                <p className={cn(
+                                    "text-[11px] mt-1",
+                                    transactionKpis.imbalancedCount > 0 ? "text-red-600" : "text-slate-500",
+                                )}>
+                                    {transactionKpis.imbalancedCount > 0
+                                        ? `${transactionKpis.imbalancedCount} imbalanced`
+                                        : 'Ledger healthy'}
+                                </p>
                             </div>
                         </div>
-                    </div>
-                </div>
-                <div className="bg-white p-4 rounded-lg border border-slate-200 shadow-sm flex items-center gap-4">
-                    <div className="h-10 w-10 bg-indigo-50 rounded-full flex items-center justify-center shrink-0">
-                        <Banknote className="h-5 w-5 text-indigo-500" />
-                    </div>
-                    <div className="flex-1">
-                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total Spend</p>
-                        <p className="text-xl font-bold text-slate-700">${stats.totalSpend.toFixed(0)}</p>
-                    </div>
-                </div>
-                <div className="bg-white p-4 rounded-lg border border-slate-200 shadow-sm flex items-center gap-4">
-                    <div className={cn("h-10 w-10 rounded-full flex items-center justify-center", stats.imbalancedCount > 0 ? "bg-red-50" : "bg-emerald-50")}>
-                        {stats.imbalancedCount > 0 ? <AlertCircle className="h-5 w-5 text-red-500" /> : <ShieldCheck className="h-5 w-5 text-emerald-500" />}
-                    </div>
-                    <div className="flex-1">
-                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Ledger Health</p>
-                        <p className={cn("text-xl font-bold", stats.imbalancedCount > 0 ? "text-red-600" : "text-emerald-600")}>
-                            {stats.imbalancedCount > 0 ? `${stats.imbalancedCount} Imbalanced` : 'Healthy'}
-                        </p>
-                    </div>
-                </div>
+                        <div className="bg-white p-4 rounded-lg border border-slate-200 shadow-sm flex items-center gap-4">
+                            <div className="h-10 w-10 bg-indigo-50 rounded-full flex items-center justify-center shrink-0">
+                                <Banknote className="h-5 w-5 text-indigo-500" />
+                            </div>
+                            <div className="flex-1">
+                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total spend</p>
+                                <p className="text-xl font-bold text-slate-700">${transactionKpis.totalSpend.toFixed(0)}</p>
+                            </div>
+                        </div>
+                        <div className="bg-white p-4 rounded-lg border border-slate-200 shadow-sm flex items-center gap-4">
+                            <div className="h-10 w-10 bg-emerald-50 rounded-full flex items-center justify-center shrink-0">
+                                <Fuel className="h-5 w-5 text-emerald-500" />
+                            </div>
+                            <div className="flex-1">
+                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total volume</p>
+                                <p className="text-xl font-bold text-slate-700">
+                                    {transactionKpis.totalVolume.toLocaleString(undefined, { maximumFractionDigits: 1 })} L
+                                </p>
+                            </div>
+                        </div>
+                        <div className="bg-white p-4 rounded-lg border border-slate-200 shadow-sm flex items-center gap-4">
+                            <div className="h-10 w-10 bg-violet-50 rounded-full flex items-center justify-center shrink-0">
+                                <MapPinned className="h-5 w-5 text-violet-500" />
+                            </div>
+                            <div className="flex-1">
+                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total km</p>
+                                <p className="text-xl font-bold text-slate-700">
+                                    {transactionKpis.totalKm.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                                </p>
+                                <p className="text-[10px] text-slate-500 mt-0.5">
+                                    Odometer deltas between consecutive fills
+                                </p>
+                            </div>
+                        </div>
+                    </>
+                ) : (
+                    <>
+                        {/* Full Tanks tab — cycle KPIs */}
+                        <div className="bg-white p-4 rounded-lg border border-slate-200 shadow-sm flex items-center gap-4">
+                            <div className="h-10 w-10 bg-indigo-50 rounded-full flex items-center justify-center shrink-0">
+                                <RotateCcw className="h-5 w-5 text-indigo-500" />
+                            </div>
+                            <div className="flex-1">
+                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total cycles</p>
+                                <div className="flex items-baseline gap-3">
+                                    <p className="text-xl font-bold text-slate-700">{cycleKpis.totalCycles}</p>
+                                    <span className="text-[10px] text-slate-500">
+                                        {cycleKpis.completed} done · {cycleKpis.active} active
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="bg-white p-4 rounded-lg border border-slate-200 shadow-sm flex items-center gap-4">
+                            <div className="h-10 w-10 bg-violet-50 rounded-full flex items-center justify-center shrink-0">
+                                <MapPinned className="h-5 w-5 text-violet-500" />
+                            </div>
+                            <div className="flex-1">
+                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total distance</p>
+                                <p className="text-xl font-bold text-slate-700">
+                                    {cycleKpis.totalDistance.toLocaleString(undefined, { maximumFractionDigits: 0 })} km
+                                </p>
+                            </div>
+                        </div>
+                        <div className="bg-white p-4 rounded-lg border border-slate-200 shadow-sm flex items-center gap-4">
+                            <div className="h-10 w-10 bg-emerald-50 rounded-full flex items-center justify-center shrink-0">
+                                <Fuel className="h-5 w-5 text-emerald-500" />
+                            </div>
+                            <div className="flex-1">
+                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total fuel</p>
+                                <p className="text-xl font-bold text-slate-700">
+                                    {cycleKpis.totalFuel.toLocaleString(undefined, { maximumFractionDigits: 1 })} L
+                                </p>
+                            </div>
+                        </div>
+                        <div className="bg-white p-4 rounded-lg border border-slate-200 shadow-sm flex items-center gap-4">
+                            <div className={cn(
+                                "h-10 w-10 rounded-full flex items-center justify-center shrink-0",
+                                cycleKpis.exceptions > 0 ? "bg-rose-50" : "bg-emerald-50"
+                            )}>
+                                {cycleKpis.exceptions > 0
+                                    ? <AlertCircle className="h-5 w-5 text-rose-500" />
+                                    : <ShieldCheck className="h-5 w-5 text-emerald-500" />}
+                            </div>
+                            <div className="flex-1">
+                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Exceptions</p>
+                                <p className={cn(
+                                    "text-xl font-bold",
+                                    cycleKpis.exceptions > 0 ? "text-rose-600" : "text-emerald-600",
+                                )}>
+                                    {cycleKpis.exceptions}
+                                </p>
+                            </div>
+                        </div>
+                    </>
+                )}
             </div>
 
             <div className="flex items-center justify-between gap-4">
                 <div className="flex items-center gap-2 flex-1">
-                    <Tabs value={activeView} onValueChange={(v: any) => setActiveView(v)} className="w-fit">
-                        <TabsList className="bg-slate-100/50 p-1">
-                            <TabsTrigger value="transactions" className="gap-2 px-4 py-1.5 data-[state=active]:bg-white data-[state=active]:shadow-sm">
-                                <History className="h-4 w-4" />
-                                <span className="text-xs font-semibold">Transactions</span>
-                            </TabsTrigger>
-                            <TabsTrigger value="cycles" className="gap-2 px-4 py-1.5 data-[state=active]:bg-white data-[state=active]:shadow-sm">
-                                <RotateCcw className="h-4 w-4" />
-                                <span className="text-xs font-semibold">Full Tanks</span>
-                            </TabsTrigger>
-                        </TabsList>
-                    </Tabs>
                     <div className="relative w-64">
                         <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
                         <Input placeholder="Search..." className="pl-8 h-9 text-xs" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />

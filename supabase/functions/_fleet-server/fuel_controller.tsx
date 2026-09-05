@@ -61,6 +61,7 @@ import { healAdminCashFuelLedgerDebits } from "./fuel_transaction_normalize.ts";
 import { findConflictingGasCardAnchor } from "./gas_card_anchor_guard.ts";
 import { canReuseLinkedFuelEntry } from "./fuel_entry_link.ts";
 import { projectFromFuelEntry } from "./odometer_ledger.ts";
+import { findSoftDuplicateFuelEntry } from "./fuel_soft_dedup.ts";
 import { stampOrg, getOrgId, filterByOrg, belongsToOrg } from "./org_scope.ts";
 import { stampFuelEntryRetailPrice } from "./fuel_retail_stamp.ts";
 import {
@@ -3840,6 +3841,15 @@ app.post(`${BASE_PATH}/fuel-entries`, async (c: Context) => {
           },
           409,
         );
+      }
+      // Soft-dedup: same vehicle + odo + clock-minute → reuse existing row (no second ledger row)
+      const softDup = await findSoftDuplicateFuelEntry(entry as Record<string, unknown>, entry.id);
+      if (softDup) {
+        return c.json({
+          success: true,
+          data: softDup,
+          softDuplicateOf: String(softDup.id),
+        });
       }
     }
 

@@ -145,7 +145,6 @@ import { DistanceByPlatform } from './DistanceByPlatform';
 import { FinancialSubTabs } from './FinancialSubTabs';
 import { OverviewMetricsGrid, MetricCard as ExtractedMetricCard, PLATFORM_COLORS as EXTRACTED_PLATFORM_COLORS, getPlatformColor as extractedGetPlatformColor } from './OverviewMetricsGrid';
 import { DriverIndriveWalletTab } from './DriverIndriveWalletTab';
-import { FuelWalletView } from './FuelWalletView';
 import { DriverFuelPolicySelect } from './DriverFuelPolicySelect';
 import { TimeFilterDropdown, TimeFilterValue, isHourInTimeFilter } from './TimeFilterDropdown';
 import { api } from '../../services/api';
@@ -1253,7 +1252,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
    //   2. OPERATIONAL — totalDistance, totalDuration, completionRate, distanceMetrics, tripRatio,
    //      fuelMetrics, platformStats.completed/distance/rating. Used by Efficiency + Trips tabs.
    //   3. CASH WALLET — floatHeld, pendingClearance, approvedFuelCredits, cashReceived (still live).
-   //      Phase 5: netOutstanding/periodCashReceived/periodNetChange are DEAD CODE. totalCashCollected kept as fallback for walletMetrics.
+   //      Phase 5: netOutstanding/periodCashReceived/periodNetChange removed — cash wash lives on period SSOT.
   const metrics = useMemo(() => {
      const emptyMetrics = {
         periodEarnings: 0,
@@ -1275,7 +1274,6 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
         fuelSpend: 0,
         earningsPerKm: 0,
         avgDuration: 0,
-        netOutstanding: 0,
         approvedFuelCredits: 0,
         floatHeld: 0,
         pendingClearance: 0,
@@ -1850,7 +1848,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
 
      // Phase 4: Cash Logic
 
-     // DEAD CODE (Phase 5): csvPeriodCash / cashCollected override — only fed dead periodNetChange
+     // cashCollected override — used by wallet metrics and period earnings fallback
      // Calculate cash from CSV only if the selected range covers the CSV period
      const csvPeriodCash = relevantCsvMetrics.reduce((sum, m) => {
         // Uber payment statement cash is applied only via resolveUberPeriodCashCollected.
@@ -1887,31 +1885,12 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
 
      // --- Phase 1: STRICT Cash Liability Logic ---
      
-     // 1. DEAD CODE (Phase 5): totalFloatIssued — identical to floatHeld, only fed dead netOutstanding
-     // In transactions, floats are negative (money leaving fleet). We need the absolute value.
-     const totalFloatIssued = Math.abs((transactions || [])
-        .filter(t => t && t.category === "Float Issue")
-        .reduce((sum, t) => sum + (t?.amount || 0), 0));
-
      // 2. Calculate Payments Received (Cash returned to fleet)
      // Strictly look for 'Payment_Received' type or 'Cash Collection' category.
      // These are positive values (money entering fleet).
      const totalPaymentsReceived = (transactions || [])
         .filter(isDriverCashPaymentTransaction)
         .reduce((sum, t) => sum + (t?.amount || 0), 0);
-
-     // 3. DEAD CODE (Phase 5): approvedCashTollExpenses — walletMetrics recomputes this
-     // These must be CASH payments (receipts) that are RESOLVED or APPROVED (Reimbursed/Written Off).
-     // These reduce the liability.
-     const approvedCashTollExpenses = (transactions || [])
-        .filter(t => {
-            if (!t) return false;
-            const isToll = t.category === 'Toll Usage' || t.category === 'Toll' || t.category === 'Tolls';
-            const isCash = t.paymentMethod === 'Cash' || !!t.receiptUrl; // Assumption: Receipts imply cash/personal payment
-            const isResolved = t.status === 'Resolved' || t.status === 'Approved'; // Accept both statuses
-            return isToll && isCash && isResolved;
-        })
-        .reduce((sum, t) => sum + Math.abs(t?.amount || 0), 0);
 
      // 3b. Fuel reimbursements from Finalize only (exclude orphan approve-time credits)
      const approvedFuelCredits = (transactions || [])
@@ -1927,22 +1906,8 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
         })
         .reduce((sum, t) => sum + (t?.amount || 0), 0);
 
-     // 4. DEAD CODE (Phase 5): Old Net Outstanding — replaced by walletMetrics useMemo
-     // netOutstanding, totalFloatIssued, approvedCashTollExpenses, periodCashReceived, periodNetChange below are no longer consumed.
      // Note: totalCashCollected is Lifetime, calculated earlier in the loop.
-     const netOutstanding = (totalCashCollected + totalFloatIssued) - (totalPaymentsReceived + approvedCashTollExpenses);
-
-     const cashReceived = totalPaymentsReceived; // Alias for backward compatibility if needed, but we used refined logic above.
-
-     const periodCashReceived = (transactions || [])
-        .filter(t => {
-            if (!t) return false;
-            const d = new Date(t.date);
-            return isWithinInterval(d, { start, end }) && isDriverCashPaymentTransaction(t);
-        })
-        .reduce((sum, t) => sum + (t?.amount || 0), 0);
-     
-     const periodNetChange = cashCollected - periodCashReceived;
+     const cashReceived = totalPaymentsReceived;
 
      // Wallet State Logic (Phase 5)
      // Float Held: Total sum of negative transactions categorized as "Float Issue"
@@ -2073,10 +2038,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
         cashCollected,
         totalCashCollected,
         cashReceived, // ── CASH WALLET (from transactions, NOT trips) ──
-        netOutstanding,
         approvedFuelCredits, // Phase 5: Fuel reimbursement credits
-        periodCashReceived, // New
-        periodNetChange,    // New
         floatHeld,          // Phase 5
         pendingClearance,   // Phase 5
         weeklyEarningsData,
@@ -2398,15 +2360,22 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
     // by the Reconciliation tab and "Net Settlement" below. classifyTollLedgerEntry's
     // 'cashWash' bucket is the equivalent concept: a cash toll not yet given
     // an explicit business/personal/write-off resolution, netting against float.
+    // Cash wash still derived from classifyTollLedgerEntry for wallet residual fallback.
+    // Prefer period SSOT for Overview KPI (see OverviewMetricsGrid).
     const tollExpenses = (transactions || [])
       .filter((t: any) => t && isTollCategory(t.category) && classifyTollLedgerEntry(t) === 'cashWash')
       .reduce((sum: number, t: any) => sum + Math.abs(t?.amount || 0), 0);
-    const netOutstanding = (lifetimeCashCollected + floatIssued) - (paymentsReceived + tollExpenses);
-    return { netOutstanding, lifetimeCashCollected };
+    return { lifetimeCashCollected, cashWash: tollExpenses };
   }, [allTrips, resolvedFinancials.lifetimeCashCollected, metrics.totalCashCollected, metrics.floatHeld, metrics.cashReceived, transactions]);
 
-  /** Single Financials+Wallet core bundle for this driver profile. */
-  const sharedFinancialBundle = useDriverFinancialBundle(driverId, driver);
+  /**
+   * Lazy money core: only when Financials or Cash Wallet tab is active.
+   * Overview-only visits keep vehicles/finalized/dispute fetches off the wire.
+   */
+  const moneyTabActive = activeTab === 'financial' || activeTab === 'wallet';
+  const sharedFinancialBundle = useDriverFinancialBundle(driverId, driver, {
+    enabled: moneyTabActive,
+  });
 
   /** One weekly money pipeline — shared by Cash Wallet + Financials Settlement/Payout. */
   const { periodData: walletPayoutPeriodRows, cashWeeks: walletCashWeeks } = useDriverPayoutPeriodRows({
@@ -2417,6 +2386,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
     csvMetrics: csvMetrics || [],
     periodType: 'weekly',
     financialBundle: sharedFinancialBundle,
+    enabled: moneyTabActive,
   });
 
   /** Live Log Cash period list (never a stale Weekly Settlements snapshot). */
@@ -3573,122 +3543,9 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
              weeklyPeriodData={walletPayoutPeriodRows}
              weeklyCashWeeks={walletCashWeeks}
            />
-            {/* ___OLD_FINANCIAL_SUBTABS_BLOCK_1___ <Tabs defaultValue="earnings" className="space-y-4">
-             <TabsList className="grid w-full grid-cols-3 max-w-[450px]">
-               <TabsTrigger value="earnings">Earnings</TabsTrigger>
-               <TabsTrigger value="expenses">Expenses</TabsTrigger>
-                <TabsTrigger value="payout">Payout</TabsTrigger>
-             </TabsList>
-
-             <TabsContent value="earnings" className="space-y-6">
-            <div className="grid grid-cols-1 gap-6">
-               <Card>
-                  <CardHeader>
-                     <CardTitle>Earnings Breakdown by Platform</CardTitle>
-                     <CardDescription className="text-xs text-slate-500">All-time completed trip earnings across platforms</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                     {platformBreakdownData.length > 0 ? (
-                       <div className="flex flex-col md:flex-row items-center gap-6">
-                         <div className="w-full md:w-1/2">
-                           <ResponsiveContainer width="100%" height={260}>
-                              <PieChart>
-                                 <Pie
-                                    key="pie-plat-brk"
-                                     data={platformBreakdownData}
-                                    cx="50%"
-                                    cy="50%"
-                                    innerRadius={65}
-                                    outerRadius={90}
-                                    paddingAngle={4}
-                                    dataKey="value"
-                                 >
-                                    {platformBreakdownData.map((entry, index) => (
-                                       <Cell key={`plat-${index}`} fill={entry.color} />
-                                    ))}
-                                    <RechartsLabel
-                                      position="center"
-                                      content={({ viewBox }: any) => {
-                                        const { cx, cy } = viewBox || { cx: 130, cy: 130 };
-                                        return (
-                                        <text x={cx} y={cy} textAnchor="middle" dominantBaseline="central">
-                                          <tspan x={cx} dy="-8" fontSize="18" fontWeight="bold" fill="#1e293b">
-                                            {`$${platformTotalEarnings.toLocaleString(undefined, { maximumFractionDigits: 0 })}`}
-                                          </tspan>
-                                          <tspan x={cx} dy="22" fontSize="11" fill="#94a3b8">
-                                            Total Earnings
-                                          </tspan>
-                                        </text>
-                                        );
-                                      }}
-                                    />
-                                 </Pie>
-                                 <Tooltip
-                                   key="tt-plat-brk"
-                                    formatter={(value: number) => [`$${value.toLocaleString(undefined, { minimumFractionDigits: 2 })}`, 'Earnings']}
-                                 />
-                              </PieChart>
-                           </ResponsiveContainer>
-                         </div>
-                         <div className="w-full md:w-1/2 space-y-2">
-                           {platformBreakdownData.map(d => {
-                             const pct = platformTotalEarnings > 0 ? (d.value / platformTotalEarnings * 100) : 0;
-                             return (
-                               <div key={d.name} className="flex items-center gap-3">
-                                 <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: d.color }} />
-                                 <div className="flex-1 min-w-0">
-                                   <div className="flex items-center justify-between">
-                                     <span className="text-sm font-medium text-slate-700">{d.name}</span>
-                                     <span className="text-sm text-slate-600 font-medium">
-                                       {`$${d.value.toLocaleString(undefined, { minimumFractionDigits: 2 })}`}
-                                     </span>
-                                   </div>
-                                   <div className="w-full h-1.5 bg-slate-100 rounded-full mt-1">
-                                     <div className="h-full rounded-full" style={{ width: `${pct}%`, backgroundColor: d.color }} />
-                                   </div>
-                                 </div>
-                                 <span className="text-xs text-slate-400 w-10 text-right">{pct.toFixed(0)}%</span>
-                               </div>
-                             );
-                           })}
-                         </div>
-                       </div>
-                     ) : (
-                       <div className="flex items-center justify-center h-[200px] text-slate-400 text-sm">
-                         No completed trips found for earnings breakdown.
-                       </div>
-                     )}
-                  </CardContent>
-               </Card>
-            </div>
-
-            <DriverEarningsHistory
-              driverId={driverId}
-              quotaConfig={quotaConfig || undefined}
-              trips={allTrips}
-              transactions={transactions}
-            />
-         </TabsContent>
-
-         <TabsContent value="expenses" className="space-y-6">
-                <DriverExpensesHistory driverId={driverId} transactions={transactions} trips={allTrips} />
-              </TabsContent>
-            </Tabs>
+            
           </TabsContent>
-
-              ___OLD_FINANCIAL_SUBTABS_BLOCK_1_END___ */}
-          </TabsContent>
-          {/* ___OLD_FINANCIAL_SUBTABS_BLOCK_2___
-                <DriverPayoutHistory driverId={driverId} transactions={transactions} trips={allTrips} />
-              </TabsContent>
-            </Tabs>
-          </TabsContent>
-              </TabsContent>
-            </Tabs>
-          </TabsContent>
-
-          <TabsContent value="wallet" className="space-y-6">
-             ___OLD_FINANCIAL_SUBTABS_BLOCK_2_END___ */}
+          
           <TabsContent value="wallet" className="space-y-6">
              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                  <Card className="bg-white border-rose-100">
@@ -3769,6 +3626,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <div className="lg:col-span-2">
                     {walletView === 'settlements' ? (
+                        // Cash Wallet uses shared period cash weeks (useDriverPayoutPeriodRows SSOT).
                         <WeeklySettlementView 
                             trips={allTrips}
                             transactions={transactions}
@@ -4127,34 +3985,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                 </div>
             </div>
           </TabsContent>
-          {/* __DEAD_EXPENSES_WRAP_START__
-                             </Button>
-                        </CardContent>
-                    </Card>
-                </div>
-            </div>
-             </TabsContent>
-
-             <TabsContent value="expenses" className="space-y-6">
-               <Card>
-                 <DriverExpensesHistory driverId={driverId} transactions={transactions} trips={allTrips} />
-               </TabsContent>
-               <TabsContent value="payout" className="space-y-6">
-                 <DriverPayoutHistory driverId={driverId} transactions={transactions} trips={allTrips} />
-               </TabsContent>
-             </Tabs>
-           </TabsContent>
-          <TabsContent value="wallet" className="space-y-6">__DEAD_EXPENSES_WRAP_END__ */}{/* DEAD_BLOCK_NEUTRALIZED<CardContent className="hidden">
-                   {null}
-                   {null}
-                   {null}
-                 </CardContent>
-               </Card>
-             </TabsContent>
-           </Tabs>
-         </TabsContent>
-
-         DEAD_BLOCK_END */}
+          
 
 
          <TabsContent value="quality" className="space-y-6">

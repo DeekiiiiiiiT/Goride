@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
 import { Button } from "../ui/button";
@@ -20,6 +20,7 @@ import { useDriverFinancialPeriods } from '../../hooks/useDriverFinancialPeriods
 import type { PayoutPeriodRow } from '../../types/driverPayoutPeriod';
 import type { CashWeekData } from '../../utils/cashSettlementCalc';
 import { endOfWeek, format, startOfWeek } from 'date-fns';
+import { resolvePeriodTollCashWash } from '../../utils/periodTollCashSpend';
 
 interface DriverTollChargeTotals {
   chargedToDriver: number;
@@ -78,7 +79,10 @@ export function FinancialSubTabs({
   weeklyCashWeeks,
 }: FinancialSubTabsProps) {
   // Prefer parent shared bundle; fallback keeps FinancialSubTabs usable alone.
-  const localBundle = useDriverFinancialBundle(driverId, driver);
+  // When parent already owns the pipeline, skip a second local core fetch.
+  const localBundle = useDriverFinancialBundle(driverId, driver, {
+    enabled: !financialBundleProp,
+  });
   const financialBundle = financialBundleProp ?? localBundle;
   const sharedPeriodsQuery = useDriverFinancialPeriods(driverId);
 
@@ -102,6 +106,7 @@ export function FinancialSubTabs({
 
   // Driver toll disposition (charged / written-off / business / refunded /
   // reconciled) — server-computed from toll_ledger for the Reconciliation tab.
+  // Cash wash for week scope prefers period SSOT (resolvePeriodTollCashWash).
   const [tollTotals, setTollTotals] = React.useState<DriverTollChargeTotals | null>(null);
   React.useEffect(() => {
     let active = true;
@@ -124,6 +129,18 @@ export function FinancialSubTabs({
   // model is trusted — gate its display so the card grid doesn't change for
   // fleets that haven't opted in yet.
   const unifiedTollSettlementEnabled = financialBundle.unifiedToll;
+
+  // Prefer period cash wash when week scope matches shared period; else fall back
+  // to the disposition API cashWash bucket.
+  const periodCashWash = React.useMemo(() => {
+    if (reconScope !== 'week') return null;
+    const anchor = format(weekBounds.from, 'yyyy-MM-dd');
+    const period = (sharedPeriodsQuery.data || []).find(
+      (p) => String(p.periodAnchor || '').slice(0, 10) === anchor
+    );
+    if (!period) return null;
+    return Number(resolvePeriodTollCashWash(period) || 0);
+  }, [reconScope, weekBounds.from, sharedPeriodsQuery.data]);
 
   const uberSsotReconciliation = React.useMemo(() => {
     let fareComponents = 0;
@@ -272,6 +289,8 @@ export function FinancialSubTabs({
           quotaConfig={quotaConfig || undefined}
           trips={allTrips}
           transactions={transactions}
+          rangeFrom={periodFrom}
+          rangeTo={periodTo}
         />
       </TabsContent>
 
@@ -415,7 +434,12 @@ export function FinancialSubTabs({
                   { label: 'Business Expense', value: tollTotals.business, tone: 'text-slate-700', hint: 'Absorbed by the fleet as a business cost.' },
                   { label: 'Written Off', value: tollTotals.writtenOff, tone: 'text-slate-700', hint: 'Written off as a loss.' },
                   ...(unifiedTollSettlementEnabled
-                    ? [{ label: 'Cash Wash', value: tollTotals.cashWash, tone: 'text-sky-600', hint: 'Cash toll, no resolution yet — nets against what the driver is owed, not a real loss.' }] as const
+                    ? [{
+                        label: 'Cash Wash',
+                        value: periodCashWash != null ? periodCashWash : Number(tollTotals?.cashWash || 0),
+                        tone: 'text-sky-600',
+                        hint: 'Cash toll, no resolution yet — nets against what the driver is owed, not a real loss.',
+                      }] as const
                     : []),
                   { label: 'Unresolved', value: tollTotals.unresolved, tone: 'text-amber-600', hint: 'Still pending reconciliation.' },
                 ] as const).map(item => (

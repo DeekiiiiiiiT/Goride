@@ -5,7 +5,6 @@ import { Button } from "../ui/button";
 import { Download, ChevronDown, ChevronLeft, ChevronRight, TrendingDown, Fuel, Navigation, Loader2, CheckCircle, Clock, Info, LinkIcon, Unlink } from "lucide-react";
 import { FinancialTransaction, Trip, DisputeRefund } from "../../types/data";
 import type { FuelEntry, MileageAdjustment, FuelScenario } from "../../types/fuel";
-import { api } from "../../services/api";
 import { fuelService } from "../../services/fuelService";
 import { FuelCalculationService } from "../../services/fuelCalculationService";
 import {
@@ -25,6 +24,7 @@ import { getFuelDeductionForPeriod } from '../../utils/fuelDeductionForPeriod';
 import type { DriverFinancialBundle, DriverLike } from '../../hooks/useDriverFinancialBundle';
 import { useDriverFinancialBundle } from '../../hooks/useDriverFinancialBundle';
 import { useDriverFinancialPeriods } from '../../hooks/useDriverFinancialPeriods';
+import { useDriverFuelEntries } from '../../hooks/useDriverFuelEntries';
 
 type PeriodType = 'daily' | 'weekly' | 'monthly';
 
@@ -75,7 +75,9 @@ export function DriverExpensesHistory({
   const [expenseView, setExpenseView] = React.useState<ExpenseView>('toll');
   const fleetTz = useFleetTimezone();
 
-  const localBundle = useDriverFinancialBundle(driverId, driver);
+  const localBundle = useDriverFinancialBundle(driverId, driver, {
+    enabled: !bundleProp,
+  });
   const financialBundle = bundleProp ?? localBundle;
 
   const fuelCoreLoading = financialBundle.isCoreLoading;
@@ -109,28 +111,25 @@ export function DriverExpensesHistory({
   const [draftAdjustments, setDraftAdjustments] = useState<MileageAdjustment[]>([]);
   const [draftScenarios, setDraftScenarios] = useState<FuelScenario[]>([]);
 
+  const { entries: cachedFuelEntries, loading: fuelEntriesLoading } = useDriverFuelEntries(
+    driverId,
+    Array.from(vehicleIdSet)
+  );
+
   useEffect(() => {
     if (expenseView !== 'fuel') return;
-    if (fuelCoreLoading) return;
+    if (fuelCoreLoading || fuelEntriesLoading) return;
 
     let cancelled = false;
     const loadDraft = async () => {
       setFuelDraftLoading(true);
       try {
-        const vehicleIds = Array.from(vehicleIdSet);
-        const [entryLists, adjustments, scenarios] = await Promise.all([
-          Promise.all(
-            vehicleIds.map((vid) => api.getFuelEntriesByVehicle(vid).catch(() => [] as FuelEntry[]))
-          ),
-          fuelService.getMileageAdjustments().catch(() => []),
-          fuelService.getFuelScenarios().catch(() => []),
-        ]);
+        const adjustments = await fuelService.getMileageAdjustments().catch(() => []);
+        const scenarios = await fuelService.getFuelScenarios().catch(() => []);
         if (cancelled) return;
-
-        const entries = (entryLists as FuelEntry[][]).flat();
         const byId = new Map<string, FuelEntry>();
-        for (const e of entries) {
-          if (e?.id) byId.set(e.id, e);
+        for (const e of cachedFuelEntries) {
+          if (e?.id) byId.set(String(e.id), e);
         }
         startTransition(() => {
           setDraftFuelEntries(Array.from(byId.values()));
@@ -147,7 +146,7 @@ export function DriverExpensesHistory({
     };
     loadDraft();
     return () => { cancelled = true; };
-  }, [expenseView, fuelCoreLoading, vehicleIdSet, driverId]);
+  }, [expenseView, fuelCoreLoading, fuelEntriesLoading, cachedFuelEntries, vehicleIdSet]);
 
   // ── Compute time buckets (fleet timezone — same Monday keys as Reconciliation) ──
   const timeBuckets: { start: Date; end: Date }[] = useMemo(() => {

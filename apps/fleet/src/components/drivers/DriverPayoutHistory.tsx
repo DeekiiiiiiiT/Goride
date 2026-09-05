@@ -33,9 +33,9 @@ import {
   buildDraftFuelByPeriod,
   rollupWeeklyPayoutRowsToMonthly,
 } from '../../utils/payoutDraftFuel';
-import { api } from '../../services/api';
 import { fuelService } from '../../services/fuelService';
 import type { DriverFinancialBundle, DriverLike } from '../../hooks/useDriverFinancialBundle';
+import { useDriverFuelEntries } from '../../hooks/useDriverFuelEntries';
 
 interface DriverPayoutHistoryProps {
   driverId: string;
@@ -110,6 +110,7 @@ export function DriverPayoutHistory({
         periodType === 'daily' && Object.keys(draftFuelByPeriod).length
           ? draftFuelByPeriod
           : undefined,
+      enabled: true,
     });
 
   const unifiedToll = resolvedBundle.unifiedToll;
@@ -123,6 +124,16 @@ export function DriverPayoutHistory({
     return hookPeriodData;
   }, [weeklyPeriodData, periodType, hookPeriodData]);
 
+  // Shared RQ fuel entries for this driver's vehicles (Expenses + Payout share cache).
+  const vehicleIdsForDraft = useMemo(
+    () => vehicles.map((v: { id?: string }) => v.id).filter(Boolean) as string[],
+    [vehicles]
+  );
+  const { entries: cachedFuelEntries, loading: fuelEntriesLoading } = useDriverFuelEntries(
+    driverId,
+    vehicleIdsForDraft
+  );
+
   // Draft fuel for Pending Fuel weeks (Payout estimates; Settlement stays locked).
   useEffect(() => {
     const pending = weeksForDraft.filter((r) => !r.isFinalized);
@@ -130,34 +141,25 @@ export function DriverPayoutHistory({
       setDraftFuelByPeriod({});
       return;
     }
+    if (fuelEntriesLoading) return;
 
     let cancelled = false;
     const load = async () => {
       setDraftLoading(true);
       try {
-        const vehicleIds = vehicles.map((v: { id?: string }) => v.id).filter(Boolean) as string[];
-        const [entryLists, adjustments, scenarios] = await Promise.all([
-          Promise.all(
-            vehicleIds.map((vid) => api.getFuelEntriesByVehicle(vid).catch(() => [] as FuelEntry[])),
-          ),
-          fuelService.getMileageAdjustments().catch(() => [] as MileageAdjustment[]),
-          fuelService.getFuelScenarios().catch(() => [] as FuelScenario[]),
-        ]);
+        const adjustments = await fuelService.getMileageAdjustments().catch(
+          () => [] as MileageAdjustment[]
+        );
+        const scenarios = await fuelService.getFuelScenarios().catch(() => [] as FuelScenario[]);
         if (cancelled) return;
 
-        const byId = new Map<string, FuelEntry>();
-        for (const list of entryLists as FuelEntry[][]) {
-          for (const e of list) {
-            if (e?.id) byId.set(e.id, e);
-          }
-        }
         const draft = buildDraftFuelByPeriod({
           periods: pending.map((r) => ({ periodStart: r.periodStart, periodEnd: r.periodEnd })),
           vehicles,
           trips,
-          fuelEntries: Array.from(byId.values()),
+          fuelEntries: cachedFuelEntries,
           adjustments: (adjustments || []).filter((a: MileageAdjustment) =>
-            vehicleIds.includes(a.vehicleId),
+            vehicleIdsForDraft.includes(a.vehicleId),
           ),
           scenarios: scenarios || [],
         });
@@ -176,7 +178,16 @@ export function DriverPayoutHistory({
     return () => {
       cancelled = true;
     };
-  }, [weeksForDraft, fuelCoreLoading, vehicles, trips, driverId]);
+  }, [
+    weeksForDraft,
+    fuelCoreLoading,
+    fuelEntriesLoading,
+    vehicles,
+    trips,
+    driverId,
+    cachedFuelEntries,
+    vehicleIdsForDraft,
+  ]);
 
   const periodData = useMemo(() => {
     const apply = (rows: PayoutPeriodRow[]) => {

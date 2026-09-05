@@ -120,6 +120,7 @@ import {
   isSingleFleetWeek,
   overlayOverviewFromPeriod,
   findSignedWeeksTouchedByEvents,
+  listDriverFinancialPeriods,
 } from "./driver_financial_periods.ts";
 import {
   isFinanceReadProjectionOverview,
@@ -148,6 +149,12 @@ import {
   getTierForEarningsEH,
   mondayYmdFromYmd,
 } from "./earnings_policy_runtime.ts";
+import {
+  clampHistoryRange,
+  emptyEarningsHistoryEnvelope,
+  EARNINGS_HISTORY_DEFAULT_LIMIT,
+  parseHistoryRangeParams,
+} from "./earnings_history_limits.ts";
 import {
   enrichRecordWithDriverVehicle,
   syncDriverRecordFromVehicleAssignment,
@@ -5544,16 +5551,25 @@ app.get("/make-server-37f42386/diagnostic/unresolvable-driver-map", requireAuth(
   return c.json({ error: "Retired: unresolvable-driver-map scanned ledger_event KV.", retired: true }, 410);
 });
 
-async function fetchAllLedgerEventValuesForDrivers(driverIds: string[], c: any): Promise<any[]> {
+async function fetchAllLedgerEventValuesForDrivers(
+  driverIds: string[],
+  c: any,
+  opts?: { from?: string; to?: string; maxRows?: number },
+): Promise<any[]> {
   if (!driverIds.length) return [];
   const { listAllUnifiedCanonicalEvents } = await import("../_shared/unifiedLedger/queries.ts");
   const seen = new Set<string>();
   const all: any[] = [];
+  const maxRows = opts?.maxRows ?? 50_000;
+  const from = opts?.from;
+  const to = opts?.to;
   for (const did of driverIds) {
     const rows = await listAllUnifiedCanonicalEvents({
       products: ["roam_driver", "roam_fleet"],
       driverId: did,
-      maxRows: 50_000,
+      from,
+      to,
+      maxRows,
     });
     for (const r of rows) {
       const id = String(r.id || "");
@@ -5710,8 +5726,9 @@ function aggregateFleetSummaryFromLedgerLikeEntries(entries: any[]): {
 // Computes the same weekly/daily/monthly earnings table as DriverEarningsHistory,
 // but from ledger entries instead of raw trips.
 // Query params: driverId (required), periodType (daily|weekly|monthly, default: weekly),
-//               startDate (optional), endDate (optional)
-//               ledger_event:* only (legacy readModel removed).
+//               startDate / endDate (default last 7 days when omitted),
+//               mode=periods|ledger, limit, cursor
+// Enterprise: date-scoped fetch + hard caps + hasMore envelope (no full lifetime).
 app.get("/make-server-37f42386/ledger/driver-earnings-history", requireAuth(), async (c) => {
   try {
     const startMs = Date.now();
@@ -5719,57 +5736,101 @@ app.get("/make-server-37f42386/ledger/driver-earnings-history", requireAuth(), a
     const periodType = (c.req.query("periodType") || "weekly") as "daily" | "weekly" | "monthly";
     const startDateParam = c.req.query("startDate") || null;
     const endDateParam = c.req.query("endDate") || null;
+    const mode = (c.req.query("mode") || "ledger") as "periods" | "ledger";
+    const limitRaw = Number(c.req.query("limit") || 500);
+    const limit = Number.isFinite(limitRaw)
+      ? Math.min(Math.max(1, Math.floor(limitRaw)), 500)
+      : 500;
+    const cursor = c.req.query("cursor") || null;
 
     if (!driverId) {
       return c.json({ error: "Missing required param: driverId" }, 400);
     }
 
+    // Phase 1: default last 7 days when range omitted (no full-lifetime auto-load)
+    const range = parseHistoryRangeParams({
+      startDate: startDateParam,
+      endDate: endDateParam,
+      defaultWhenMissing: true,
+    });
+    if (!range.scopedByRange || !range.startDate || !range.endDate) {
+      return c.json({ ...emptyEarningsHistoryEnvelope(Date.now() - startMs) });
+    }
+    const clamped = clampHistoryRange(range.startDate, range.endDate, periodType);
+    const startDate = clamped.startDate;
+    const endDate = clamped.endDate;
+
     console.log(
-      `[Ledger EarningsHistory] driverId=${driverId} periodType=${periodType} range=${startDateParam || "auto"}..${endDateParam || "auto"} readModel=canonical`,
+      `[Ledger EarningsHistory] driverId=${driverId} periodType=${periodType} mode=${mode} range=${startDate}..${endDate} limit=${limit} cursor=${cursor || "none"}`,
     );
 
-    const driverIdsResolved = await expandStatementSummaryDriverIds(driverId);
+    // Phase 2: weekly periods SSOT when requested (fallback to ledger if empty)
+    if (mode === "periods") {
+      let rows = await listDriverFinancialPeriods(driverId);
+      // Filter by range first (ascending by period_anchor)
+      rows = rows.filter((r: any) => {
+        const a = String(r.periodAnchor || "").slice(0, 10);
+        return a >= startDate && a <= endDate;
+      });
+      rows = rows.sort((a: any, b: any) => String(a.periodAnchor).localeCompare(String(b.periodAnchor)));
+      // Prefer periods for weekly history. If incomplete, fall through to ledger (below).
+      // rows are ascending by period_anchor; UI expects newest-first.
+      if (rows.length > 0) {
+        // Newest first: reverse ascending list
+        const newestFirst = rows.slice().reverse();
+        // Continue older when cursor is provided (period_anchor of last returned)
+        const pageSource = cursor
+          ? newestFirst.filter((r: any) => String(r.periodAnchor || "") < String(cursor))
+          : newestFirst;
+        if (pageSource.length > limit) {
+          const page = pageSource.slice(0, limit);
+          const oldestInPage = page[page.length - 1];
+          return c.json({
+            success: true,
+            data: page.map(mapPeriodRowToEarningsHistory),
+            durationMs: Date.now() - startMs,
+            readModel: "driver_financial_periods",
+            hasMore: true,
+            nextCursor: oldestInPage?.periodAnchor || null,
+            truncated: false,
+          });
+        }
+        return c.json({
+          success: true,
+          data: pageSource.map(mapPeriodRowToEarningsHistory),
+          durationMs: Date.now() - startMs,
+          readModel: "driver_financial_periods",
+          hasMore: false,
+          nextCursor: null,
+          truncated: false,
+        });
+      }
+      // Incomplete periods: fall through to date-scoped ledger path
+    }
 
-    // ── Step 1: Fetch canonical ledger_event rows for this driver (multi-ID) ──
-    const allEntries = await fetchAllLedgerEventValuesForDrivers(driverIdsResolved, c);
+    // Mode ledger: date-scoped fetch only
+    const driverIdsResolved = await expandStatementSummaryDriverIds(driverId);
+    const fromIso = `${startDate}T00:00:00.000Z`;
+    const toIso = `${endDate}T23:59:59.999Z`;
+    const allEntries = await fetchAllLedgerEventValuesForDrivers(driverIdsResolved, c, {
+      from: fromIso,
+      to: toIso,
+      maxRows: 20_000,
+    });
     console.log(`[Ledger EarningsHistory] Canonical ledger_event rows for driver(s): ${allEntries.length}`);
 
-    // ── Step 2: Determine date range ──
-    // When `startDate`+`endDate` are sent (same span as trips/transactions), bucket **that** full range
-    // so weeks align with Expenses / Settlement. Otherwise min..max from ledger_event dates only (sparse).
-    const allDatesEH = allEntries
-      .map((e: any) => e.date)
-      .filter(Boolean)
-      .map((d: string) => new Date(d + "T00:00:00").getTime())
-      .filter((t: number) => !isNaN(t));
-
-    const scopedByActivityRange = !!(startDateParam && endDateParam);
-    let minDateMs: number;
-    let maxDateMs: number;
+    // Buckets use the already-clamped startDate/endDate (Phase 1 range guardrails)
     const nowMs = Date.now();
-    if (scopedByActivityRange) {
-      minDateMs = new Date(startDateParam! + "T00:00:00").getTime();
-      maxDateMs = new Date(endDateParam! + "T23:59:59").getTime();
-      if (minDateMs > maxDateMs) {
-        const x = minDateMs;
-        minDateMs = maxDateMs;
-        maxDateMs = x;
-      }
-      // Never project past "now" — avoids empty future weeks from bad client dates.
-      maxDateMs = Math.min(maxDateMs, nowMs);
-      // Earnings rows are ledger-backed; do not start buckets before the first canonical ledger date.
-      if (allDatesEH.length > 0) {
-        const ledgerMin = Math.min(...allDatesEH);
-        minDateMs = Math.max(minDateMs, ledgerMin);
-      }
-      if (minDateMs > maxDateMs) {
-        return c.json({ success: true, data: [], durationMs: Date.now() - startMs });
-      }
-    } else if (allDatesEH.length > 0) {
-      minDateMs = Math.min(...allDatesEH);
-      maxDateMs = Math.min(Math.max(...allDatesEH), nowMs);
-    } else {
-      return c.json({ success: true, data: [], durationMs: Date.now() - startMs });
+    let minDateMs = new Date(startDate + "T00:00:00").getTime();
+    let maxDateMs = new Date(endDate + "T23:59:59").getTime();
+    if (minDateMs > maxDateMs) {
+      const x = minDateMs;
+      minDateMs = maxDateMs;
+      maxDateMs = x;
+    }
+    maxDateMs = Math.min(maxDateMs, nowMs);
+    if (minDateMs > maxDateMs) {
+      return c.json({ ...emptyEarningsHistoryEnvelope(Date.now() - startMs) });
     }
 
     // ── Step 3: Generate period buckets ──
@@ -6007,16 +6068,69 @@ app.get("/make-server-37f42386/ledger/driver-earnings-history", requireAuth(), a
 
     const activeRows = rowsEH.filter(rowHasActivityEH).reverse();
 
-    const durationMs = Date.now() - startMs;
-    const totalGross = activeRows.reduce((s: number, r: any) => s + r.grossRevenue, 0);
-    console.log(`[Ledger EarningsHistory] driverId=${driverId} periodType=${periodType} range=${startDateParam || "auto"}..${endDateParam || "auto"} — returned ${activeRows.length} rows, total gross $${totalGross.toFixed(2)}, ${durationMs}ms`);
+    // Cap + hasMore when more periods would exist beyond limit.
+    // Cursor = periodStart of the last returned (oldest) row.
+    let data = activeRows;
+    let hasMore = false;
+    let nextCursor: string | null = null;
+    if (cursor) {
+      // Continue older periods after cursor
+      data = data.filter((r: any) => String(r.periodStart || "") < String(cursor));
+    }
+    if (data.length > limit) {
+      data = data.slice(0, limit);
+      const last = data[data.length - 1];
+      hasMore = true;
+      nextCursor = last.periodStart || null;
+    }
 
-    return c.json({ success: true, data: activeRows, durationMs, readModel: "canonical" });
+    const durationMs = Date.now() - startMs;
+    const totalGross = data.reduce((s: number, r: any) => s + r.grossRevenue, 0);
+    console.log(`[Ledger EarningsHistory] driverId=${driverId} periodType=${periodType} range=${startDate}..${endDate} — returned ${data.length} rows, total gross $${totalGross.toFixed(2)}, ${durationMs}ms`);
+
+    return c.json({
+      success: true,
+      data,
+      durationMs,
+      readModel: "canonical",
+      hasMore,
+      nextCursor,
+      truncated: hasMore || buckets.length > limit || activeRows.length > limit,
+    });
   } catch (e: any) {
     console.error("[Ledger EarningsHistory] Error:", e);
     return c.json({ error: e.message }, 500);
   }
 });
+
+/** Map weekly driver_financial_periods row → earnings-history shape. */
+function mapPeriodRowToEarningsHistory(r: any) {
+  return {
+    periodStart: String(r.periodAnchor || "").slice(0, 10),
+    periodEnd: String(r.periodEnd || r.periodAnchor || "").slice(0, 10),
+    grossRevenue: Number(r.earningsGross) || 0,
+    periodEarnings: Number(r.earningsGross) || 0,
+    driverShare: Number(r.driverShare) || 0,
+    fleetShare: Number(r.fleetShare) || 0,
+    expenses: Number(r.fuelDeduction) || 0,
+    tier: {
+      id: r.tierId || "tier_1",
+      name: r.tierName || "Bronze",
+      sharePercentage: Number(r.driverSharePercent) || 25,
+      color: "#CD7F32",
+    },
+    netEarnings: Number(r.payoutNet) || 0,
+    payouts: Number(r.payoutNet) || 0,
+    tripCount: Number(r.tripCount) || 0,
+    transactionCount: 0,
+    quotaTarget: null as number | null,
+    quotaPercent: null as number | null,
+    policyId: r.metadata?.policyId || null,
+    versionId: r.metadata?.versionId || null,
+    policyName: r.metadata?.policyName || null,
+    policySource: r.metadata?.policySource || null,
+  };
+}
 
 // ═══════════════════════════════════════════════════════════════════════
 // END OF LEDGER ENDPOINTS

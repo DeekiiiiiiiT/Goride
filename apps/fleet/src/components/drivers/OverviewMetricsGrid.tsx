@@ -1,7 +1,7 @@
 import { useIndriveWallet, type IndriveWalletDateRange } from '../../hooks/useIndriveWallet';
 import { useDriverFinancialPeriods } from '../../hooks/useDriverFinancialPeriods';
-import { api } from '../../services/api';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo } from 'react';
+import { resolvePeriodTollCashWash } from '../../utils/periodTollCashSpend';
 import {
   DollarSign,
   Navigation,
@@ -298,27 +298,11 @@ export function OverviewMetricsGrid({
     return (periodsQuery.data || []).find((p) => String(p.periodAnchor).slice(0, 10) === start) || null;
   }, [periodsQuery.data, walletRange?.startDate]);
 
-  const [cashWash, setCashWash] = useState(0);
-  useEffect(() => {
-    if (!driverId || !walletRange?.startDate || !walletRange?.endDate) {
-      setCashWash(0);
-      return;
-    }
-    let active = true;
-    api
-      .getDriverTollCharges(driverId, { from: walletRange.startDate, to: walletRange.endDate })
-      .then((res) => {
-        if (!active) return;
-        const totals = (res?.data?.totals || {}) as { cashWash?: number };
-        setCashWash(Number(totals.cashWash) || 0);
-      })
-      .catch(() => {
-        if (active) setCashWash(0);
-      });
-    return () => {
-      active = false;
-    };
-  }, [driverId, walletRange?.startDate, walletRange?.endDate]);
+  // Cash wash SSOT: period rollup (resolvePeriodTollCashWash). Prefer over dual toll-charges API.
+  const cashWash = useMemo(() => {
+    if (!weekPeriod) return 0;
+    return Number(resolvePeriodTollCashWash(weekPeriod) || 0);
+  }, [weekPeriod]);
 
   // Platform breakdowns computed from resolvedFinancials (ledger-preferred)
   const earningsBreakdown = useMemo(() =>

@@ -78,7 +78,11 @@ export function useDriverPayoutPeriodRows(opts: {
     setLedgerError(false);
 
     api
-      .getLedgerEarningsHistory({ driverId, periodType })
+      .getLedgerEarningsHistory({
+        driverId,
+        periodType,
+        mode: periodType === 'weekly' ? 'periods' : 'ledger',
+      })
       .then((result) => {
         if (cancelled) return;
         if (result.success && result.data) {

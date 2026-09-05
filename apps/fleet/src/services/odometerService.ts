@@ -68,19 +68,24 @@ export const odometerService = {
   ): Promise<{ data: UnifiedOdometerEntry[]; total: number }> => {
     const result = await api.getOdometerLedger(vehicleId, filters);
     const rows = Array.isArray(result?.data) ? result.data : Array.isArray(result) ? result : [];
+    const mapped = rows.map((r: any) => mapLedgerRowToUnified(r, vehicleId));
+    // Soft-collapse exact same-time/same-odo re-submits that already landed in the ledger
+    const data = processUnifiedHistory(mapped);
     return {
-      data: rows.map((r: any) => mapLedgerRowToUnified(r, vehicleId)),
+      data,
+      // total is raw count; UI uses data.length for visible rows
       total: Number(result?.total ?? rows.length) || rows.length,
     };
   },
 
   /**
    * @deprecated Prefer getLedger — thin wrapper over server ledger for one release.
+   * getLedger already applies processUnifiedHistory.
    */
   getUnifiedHistory: async (vehicleId: string): Promise<UnifiedOdometerEntry[]> => {
     try {
       const { data } = await odometerService.getLedger(vehicleId, { limit: 5000 });
-      return processUnifiedHistory(data);
+      return data;
     } catch (error) {
       console.error("Error fetching odometer ledger history:", error);
       return [];
