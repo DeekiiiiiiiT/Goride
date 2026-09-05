@@ -2407,10 +2407,19 @@ app.post(`${BASE_PATH}/fuel-pnl-offset-backfill/backfill`, requirePlatformStaff(
 // --- Fuel cycle snapshots (server-owned) ---
 app.get(`${BASE_PATH}/cycles`, requirePermission("fuel.view"), async (c) => {
   try {
-    const vehicleId = c.req.query("vehicleId") || "";
+    const singleVehicleId = (c.req.query("vehicleId") || "").trim();
+    const multiRaw = c.req.query("vehicleIds") || "";
+    const vehicleIds = Array.from(
+      new Set([
+        ...multiRaw.split(",").map((s) => s.trim()).filter(Boolean),
+        ...(singleVehicleId ? [singleVehicleId] : []),
+      ]),
+    );
     const weekStart = c.req.query("weekStart") || undefined;
     const weekEnd = c.req.query("weekEnd") || undefined;
-    if (!vehicleId) return c.json({ error: "vehicleId required" }, 400);
+    if (vehicleIds.length === 0) {
+      return c.json({ error: "vehicleId or vehicleIds required" }, 400);
+    }
 
     const { queryFleet } = await import("./repos/baseRepo.ts");
     // Look back so cumulative_98 carryover / SPLIT math is intact; clip cycles to week after build
@@ -2424,7 +2433,7 @@ app.get(`${BASE_PATH}/cycles`, requirePermission("fuel.view"), async (c) => {
     }
     const res = await queryFleet("fuel_entries", {
       legacyPrefix: "fuel_entry:",
-      filters: [{ op: "eq", col: "vehicle_id", value: vehicleId }],
+      filters: [{ op: "in", col: "vehicle_id", value: vehicleIds }],
       dateFrom,
       dateTo: weekEndYmd,
       order: { col: "date", ascending: true },
@@ -2435,14 +2444,26 @@ app.get(`${BASE_PATH}/cycles`, requirePermission("fuel.view"), async (c) => {
     const entries = filterByOrg((res.data || []) as Record<string, unknown>[], c, {
       endpoint: "/fuel/cycles",
     });
-    const vehicle = await kv.get(`vehicle:${vehicleId}`);
-    const cycles = buildFleetCycleSnapshot(entries, { [vehicleId]: vehicle as Record<string, unknown> }, {
-      vehicleId,
+    const vehiclePairs = await Promise.all(
+      vehicleIds.map(async (vid) => [vid, await kv.get(`vehicle:${vid}`)] as const),
+    );
+    const vehiclesMap: Record<string, Record<string, unknown>> = {};
+    for (const [vid, vehicle] of vehiclePairs) {
+      vehiclesMap[vid] = (vehicle || {}) as Record<string, unknown>;
+    }
+    const cycles = buildFleetCycleSnapshot(entries as any[], vehiclesMap, {
+      // Omit vehicleId so all requested vehicles are built from the shared entry set
       weekStart: weekStartYmd,
       weekEnd: weekEndYmd,
-    });
+    }).filter((cy) => vehicleIds.includes(String(cy.vehicleId)));
 
-    return c.json({ vehicleId, weekStart, weekEnd, cycles });
+    return c.json({
+      vehicleId: vehicleIds.length === 1 ? vehicleIds[0] : undefined,
+      vehicleIds,
+      weekStart,
+      weekEnd,
+      cycles,
+    });
   } catch (e: any) {
     return c.json({ error: e.message }, 500);
   }

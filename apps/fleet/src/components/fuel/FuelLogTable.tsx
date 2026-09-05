@@ -227,6 +227,8 @@ export function FuelLogTable({
     const allCycles = useFuelCycles(entries, vehicles, {
         weekStart: periodStart,
         weekEnd: periodEnd,
+        // Transactions tab uses the client engine only — avoids N /cycles GETs on every visit.
+        enabled: activeView === 'cycles',
     });
     
     const { validAnchorIds, getLinkedTransaction } = useFuelAnchors(entries, transactions);

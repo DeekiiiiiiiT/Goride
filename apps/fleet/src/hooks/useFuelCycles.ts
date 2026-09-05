@@ -13,6 +13,11 @@ export type UseFuelCyclesOptions = {
    * Also globally forced by VITE_FUEL_CYCLE_LEGACY_CLIENT === '1'.
    */
   legacyClient?: boolean;
+  /**
+   * When false, skip the server snapshot (client engine only).
+   * Use to avoid N /cycles requests on the Transactions tab.
+   */
+  enabled?: boolean;
 };
 
 /** Keep only cycles that overlap the selected week (after tank math runs). */
@@ -53,8 +58,8 @@ function legacyClientForced(): boolean {
 /**
  * Full Tanks cycles for the selected week.
  *
- * Default (server spine): fetches the server-owned cycle snapshot per unique
- * vehicle, hydrates transactions from loaded entries, and clips to the week.
+ * Default (server spine): one batched GET /fuel/cycles for all vehicles in range,
+ * hydrates transactions from loaded entries, and clips to the week.
  * Falls back to the in-browser engine when the server fetch fails or when the
  * legacy flag is set (VITE_FUEL_CYCLE_LEGACY_CLIENT=1 or opts.legacyClient).
  */
@@ -64,6 +69,7 @@ export function useFuelCycles(
   opts: UseFuelCyclesOptions = {},
 ): FuelCycle[] {
   const legacy = opts.legacyClient === true || legacyClientForced();
+  const enabled = opts.enabled !== false;
 
   // Client engine result — initial paint + guaranteed offline fallback.
   const clientCycles = useMemo(
@@ -89,7 +95,7 @@ export function useFuelCycles(
   entriesRef.current = entries;
 
   useEffect(() => {
-    if (legacy || !vehicleIdsKey) {
+    if (!enabled || legacy || !vehicleIdsKey) {
       setServerCycles(null);
       return;
     }
@@ -98,16 +104,29 @@ export function useFuelCycles(
 
     (async () => {
       try {
-        const results = await Promise.all(
-          vehicleIds.map((vehicleId) =>
-            api.getFuelCycles({
-              vehicleId,
-              weekStart: opts.weekStart,
-              weekEnd: opts.weekEnd,
-            }),
-          ),
-        );
-        const slim = results.flatMap((r) => (r?.cycles ? r.cycles : []));
+        let slim: Awaited<ReturnType<typeof api.getFuelCycles>>['cycles'] = [];
+        try {
+          // Prefer one round-trip (needs server vehicleIds support).
+          const result = await api.getFuelCycles({
+            vehicleIds,
+            weekStart: opts.weekStart,
+            weekEnd: opts.weekEnd,
+          });
+          slim = result?.cycles ? result.cycles : [];
+        } catch (batchErr) {
+          // Older edge builds only accept vehicleId — fall back to parallel GETs.
+          console.warn('[useFuelCycles] batched /cycles failed, trying per-vehicle', batchErr);
+          const results = await Promise.all(
+            vehicleIds.map((vehicleId) =>
+              api.getFuelCycles({
+                vehicleId,
+                weekStart: opts.weekStart,
+                weekEnd: opts.weekEnd,
+              }),
+            ),
+          );
+          slim = results.flatMap((r) => (r?.cycles ? r.cycles : []));
+        }
         const hydrated = hydrateFuelCyclesFromEntries(slim, entriesRef.current);
         const filtered = filterCyclesByWeek(hydrated, opts);
         if (!cancelled) setServerCycles(filtered);
@@ -122,7 +141,7 @@ export function useFuelCycles(
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [legacy, vehicleIdsKey, opts.weekStart, opts.weekEnd]);
+  }, [enabled, legacy, vehicleIdsKey, opts.weekStart, opts.weekEnd]);
 
-  return !legacy && serverCycles ? serverCycles : clientCycles;
+  return !legacy && enabled && serverCycles ? serverCycles : clientCycles;
 }

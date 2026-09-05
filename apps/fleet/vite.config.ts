@@ -6,10 +6,12 @@ import path from 'path';
 import { createRequire } from 'node:module';
 import { roamSupabaseDevProxy } from '@roam/api-client/viteDevProxy';
 
-// Force one React instance — nested app/node_modules copies break hooks (useState of null).
+// Force one React / Query instance — nested copies break hooks (useState of null,
+// observer.getOptimisticResult is not a function).
 const require = createRequire(import.meta.url);
 const reactRoot = path.dirname(require.resolve('react/package.json'));
 const reactDomRoot = path.dirname(require.resolve('react-dom/package.json'));
+const reactQueryRoot = path.dirname(require.resolve('@tanstack/react-query/package.json'));
 
 const productLine = process.env.VITE_PRODUCT_LINE || 'fleet';
 const isEnterprise = productLine === 'enterprise';
@@ -122,13 +124,14 @@ export default defineConfig({
   ],
   resolve: {
     extensions: ['.js', '.jsx', '.ts', '.tsx', '.json'],
-    dedupe: ['react', 'react-dom'],
+    dedupe: ['react', 'react-dom', '@tanstack/react-query'],
     alias: {
       react: reactRoot,
       'react-dom': reactDomRoot,
       'react/jsx-runtime': path.join(reactRoot, 'jsx-runtime.js'),
       'react/jsx-dev-runtime': path.join(reactRoot, 'jsx-dev-runtime.js'),
       'react-dom/client': path.join(reactDomRoot, 'client.js'),
+      '@tanstack/react-query': reactQueryRoot,
       'vaul@1.1.2': 'vaul',
       'sonner@2.0.3': 'sonner',
       'react-resizable-panels@2.1.7': 'react-resizable-panels',
@@ -180,7 +183,7 @@ export default defineConfig({
     },
   },
   optimizeDeps: {
-    include: ['react', 'react-dom', 'react/jsx-runtime'],
+    include: ['react', 'react-dom', 'react/jsx-runtime', '@tanstack/react-query'],
     exclude: ['@roam/roam-shared', '@roam/finance-core'],
   },
   build: {
@@ -219,6 +222,7 @@ export default defineConfig({
       'react/jsx-runtime': path.join(reactRoot, 'jsx-runtime.js'),
       'react/jsx-dev-runtime': path.join(reactRoot, 'jsx-dev-runtime.js'),
       'react-dom/client': path.join(reactDomRoot, 'client.js'),
+      '@tanstack/react-query': reactQueryRoot,
     },
     server: {
       deps: {

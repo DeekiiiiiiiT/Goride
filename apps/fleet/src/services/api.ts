@@ -621,11 +621,21 @@ export const api = {
   },
 
   async getFuelCycles(params: {
-    vehicleId: string;
+    vehicleId?: string;
+    vehicleIds?: string[];
     weekStart?: string;
     weekEnd?: string;
   }) {
-    const qs = new URLSearchParams({ vehicleId: params.vehicleId });
+    const qs = new URLSearchParams();
+    const ids = Array.from(
+      new Set([
+        ...(params.vehicleIds || []).map((id) => String(id).trim()).filter(Boolean),
+        ...(params.vehicleId ? [String(params.vehicleId).trim()] : []),
+      ]),
+    );
+    if (ids.length === 0) throw new Error('vehicleId or vehicleIds required');
+    if (ids.length === 1) qs.set('vehicleId', ids[0]);
+    else qs.set('vehicleIds', ids.join(','));
     if (params.weekStart) qs.set('weekStart', params.weekStart);
     if (params.weekEnd) qs.set('weekEnd', params.weekEnd);
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/cycles?${qs}`, {
