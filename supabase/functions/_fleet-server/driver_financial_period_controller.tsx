@@ -501,17 +501,58 @@ app.post(`${BASE}/rebuild`, requirePermission('transactions.edit'), async (c) =>
 /**
  * Heal Fleet owes after Undo: settlement mirror rows were left behind when txs deleted,
  * so settlement_paid stayed high. Purge orphans in range and re-sync those weeks.
+ * Lives here (not settlement_transactions) so deno check does not pull toll via
+ * settlement_transactions → driver_financial_periods cycle.
  */
 app.post(`${BASE}/repair-orphan-mirrors`, requirePermission('transactions.edit'), async (c) => {
   try {
     const body = await c.req.json().catch(() => ({}));
-    const { repairOrphanSettlementMirrors } = await import("./settlement_transactions.ts");
-    const result = await repairOrphanSettlementMirrors({
-      periodStart: typeof body.periodStart === "string" ? body.periodStart.slice(0, 10) : undefined,
-      periodEnd: typeof body.periodEnd === "string" ? body.periodEnd.slice(0, 10) : undefined,
-      limit: body.limit != null ? Number(body.limit) : undefined,
+    const {
+      purgeOrphanSettlementMirrorsForDriver,
+    } = await import("./settlement_transactions.ts");
+    const { syncPeriodCashFromTransactions } = await import("./driver_financial_periods.ts");
+    const limit = Math.min(Math.max(Number(body.limit) || 200, 1), 500);
+    const periodStart =
+      typeof body.periodStart === "string" ? body.periodStart.slice(0, 10) : undefined;
+    const periodEnd =
+      typeof body.periodEnd === "string" ? body.periodEnd.slice(0, 10) : undefined;
+
+    let q = getServiceClient()
+      .from("driver_financial_periods")
+      .select("driver_id")
+      .gt("settlement_paid", 0.005)
+      .limit(limit * 4);
+    if (periodStart && /^\d{4}-\d{2}-\d{2}$/.test(periodStart)) {
+      q = q.gte("period_anchor", periodStart);
+    }
+    if (periodEnd && /^\d{4}-\d{2}-\d{2}$/.test(periodEnd)) {
+      q = q.lte("period_anchor", periodEnd);
+    }
+    const { data, error } = await q;
+    if (error) throw new Error(error.message);
+
+    const driverIds = [
+      ...new Set(
+        (data || []).map((r: { driver_id: string }) => String(r.driver_id)).filter(Boolean),
+      ),
+    ].slice(0, limit);
+
+    let purged = 0;
+    let weeksSynced = 0;
+    for (const driverId of driverIds) {
+      const result = await purgeOrphanSettlementMirrorsForDriver(driverId);
+      purged += result.purgedCount;
+      for (const anchor of result.periodAnchors) {
+        await syncPeriodCashFromTransactions(driverId, anchor);
+        weeksSynced += 1;
+      }
+    }
+    return c.json({
+      success: true,
+      drivers: driverIds.length,
+      purged,
+      weeksSynced,
     });
-    return c.json({ success: true, ...result });
   } catch (e: any) {
     return c.json({ error: e.message }, 500);
   }

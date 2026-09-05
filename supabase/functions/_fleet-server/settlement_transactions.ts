@@ -100,6 +100,38 @@ export async function unmirrorSettlementTransaction(
 }
 
 /**
+ * Presence check for source txs without importing kv_store (CI deno-check graph).
+ * Fleet table first, then legacy KV keys.
+ */
+async function loadLiveTransactionKeys(txIds: string[]): Promise<Set<string>> {
+  const keys = txIds.map((txId) => `transaction:${txId}`);
+  const live = new Set<string>();
+  try {
+    const { readMappedKvKeys } = await import("./fleet_table_read_thru.ts");
+    const mapped = await readMappedKvKeys(keys);
+    for (const [key, value] of mapped.entries()) {
+      if (value != null) live.add(key);
+    }
+  } catch (e) {
+    console.error("[settlement_transactions] fleet live-key check failed:", e);
+  }
+  const missing = keys.filter((k) => !live.has(k));
+  if (missing.length === 0) return live;
+  const { data, error } = await ledgerSb()
+    .from("kv_store_37f42386")
+    .select("key")
+    .in("key", missing);
+  if (error) {
+    console.error("[settlement_transactions] KV live-key check failed:", error.message);
+    return live;
+  }
+  for (const row of data || []) {
+    if (row?.key) live.add(String(row.key));
+  }
+  return live;
+}
+
+/**
  * Mirror rows whose KV/fleet source is gone keep settlement_paid inflated after Undo.
  * Purge those orphans and return Settlement Week anchors that need a cash re-sync.
  */
@@ -115,15 +147,15 @@ export async function purgeOrphanSettlementMirrorsForDriver(
   const txIds = mirrored.map((t) => String(t.id || "").trim()).filter(Boolean);
   if (txIds.length === 0) return { purgedCount: 0, periodAnchors: [] };
 
-  const kv = await import("./kv_store.tsx");
-  const liveValues = await kv.mget(txIds.map((txId) => `transaction:${txId}`));
+  // Do NOT import kv_store here — that pulls the full fleet graph into
+  // `deno check` via rush_settlement_routes and fails CI (circular dual-write).
+  const liveByKey = await loadLiveTransactionKeys(txIds);
 
   const orphanIds: string[] = [];
   const anchors = new Set<string>();
   for (let i = 0; i < mirrored.length; i++) {
-    if (liveValues[i]) continue;
     const txId = txIds[i];
-    if (!txId) continue;
+    if (!txId || liveByKey.has(`transaction:${txId}`)) continue;
     orphanIds.push(txId);
     const anchor = resolveTransactionPeriodAnchor(mirrored[i]);
     if (anchor && /^\d{4}-\d{2}-\d{2}$/.test(anchor)) anchors.add(anchor);
@@ -136,48 +168,6 @@ export async function purgeOrphanSettlementMirrorsForDriver(
     );
   }
   return { purgedCount: orphanIds.length, periodAnchors: [...anchors] };
-}
-
-/** Desk Refresh heal: purge orphans for drivers with settlement activity in range, then re-sync weeks. */
-export async function repairOrphanSettlementMirrors(opts?: {
-  periodStart?: string;
-  periodEnd?: string;
-  limit?: number;
-}): Promise<{ drivers: number; purged: number; weeksSynced: number }> {
-  const limit = Math.min(Math.max(Number(opts?.limit) || 200, 1), 500);
-  let q = ledgerSb()
-    .from("driver_financial_periods")
-    .select("driver_id")
-    .gt("settlement_paid", 0.005)
-    .limit(limit * 4);
-  if (opts?.periodStart && /^\d{4}-\d{2}-\d{2}$/.test(opts.periodStart)) {
-    q = q.gte("period_anchor", opts.periodStart);
-  }
-  if (opts?.periodEnd && /^\d{4}-\d{2}-\d{2}$/.test(opts.periodEnd)) {
-    q = q.lte("period_anchor", opts.periodEnd);
-  }
-  const { data, error } = await q;
-  if (error) {
-    console.error("[settlement_transactions] repair driver list failed:", error.message);
-    throw new Error(error.message);
-  }
-
-  const driverIds = [
-    ...new Set((data || []).map((r: { driver_id: string }) => String(r.driver_id)).filter(Boolean)),
-  ].slice(0, limit);
-
-  const { syncPeriodCashFromTransactions } = await import("./driver_financial_periods.ts");
-  let purged = 0;
-  let weeksSynced = 0;
-  for (const driverId of driverIds) {
-    const result = await purgeOrphanSettlementMirrorsForDriver(driverId);
-    purged += result.purgedCount;
-    for (const anchor of result.periodAnchors) {
-      await syncPeriodCashFromTransactions(driverId, anchor);
-      weeksSynced += 1;
-    }
-  }
-  return { drivers: driverIds.length, purged, weeksSynced };
 }
 
 export function settlementTxTableReadEnabled(): boolean {
