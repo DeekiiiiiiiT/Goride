@@ -95,6 +95,7 @@ export function calculateFuelCycles(entries: FuelEntry[], vehicles: Vehicle[] = 
                 meta.isFullTank === true ||
                 meta.isSoftAnchor === true ||
                 meta.isHardAnchor === true ||
+                meta.isCapacityClose === true ||
                 (meta.isAnchor === true && meta.isSoftAnchor !== true);
 
             let isHard = false;

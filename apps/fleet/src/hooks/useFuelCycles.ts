@@ -56,6 +56,30 @@ function legacyClientForced(): boolean {
 }
 
 /**
+ * Prefer server snapshots unless they are a degenerate Active-only collapse
+ * while the client engine already found completed capacity closes.
+ */
+export function pickFuelCyclesSource(
+  serverCycles: FuelCycle[] | null,
+  clientCycles: FuelCycle[],
+  opts: { legacy?: boolean; enabled?: boolean } = {},
+): FuelCycle[] {
+  const legacy = opts.legacy === true;
+  const enabled = opts.enabled !== false;
+  if (!legacy && enabled && serverCycles != null && serverCycles.length > 0) {
+    const serverComplete = serverCycles.filter((c) => c.status === 'Complete').length;
+    const clientComplete = clientCycles.filter((c) => c.status === 'Complete').length;
+    const serverOnlyActive =
+      serverComplete === 0 && serverCycles.every((c) => c.status === 'Active');
+    if (serverOnlyActive && clientComplete > 0) {
+      return clientCycles;
+    }
+    return serverCycles;
+  }
+  return clientCycles;
+}
+
+/**
  * Full Tanks cycles for the selected week.
  *
  * Default (server spine): one batched GET /fuel/cycles for all vehicles in range,
@@ -143,10 +167,5 @@ export function useFuelCycles(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enabled, legacy, vehicleIdsKey, opts.weekStart, opts.weekEnd]);
 
-  // Prefer server when it returned cycles. Empty server array must NOT blank out
-  // a working client engine (stamps often lag /cycles on local edge builds).
-  if (!legacy && enabled && serverCycles != null && serverCycles.length > 0) {
-    return serverCycles;
-  }
-  return clientCycles;
+  return pickFuelCyclesSource(serverCycles, clientCycles, { legacy, enabled });
 }

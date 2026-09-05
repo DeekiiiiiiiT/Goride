@@ -8,7 +8,7 @@ import {
   normalizeIntegrityStatus,
   type FuelSignalTier,
 } from "./fuel_cycle_stamp.ts";
-import { resolveCycleCloseMode } from "./fuel_cycle_close_policy.ts";
+import { evaluateCycleClose, resolveCycleCloseMode } from "./fuel_cycle_close_policy.ts";
 import * as fuelLogic from "./fuel_logic.ts";
 import { isJaaStatementLedgerRow } from "./fuel_jaa_ledger.ts";
 
@@ -86,7 +86,14 @@ export function buildVehicleCycleSnapshot(
   vehicle: Record<string, unknown> | null,
   opts: { weekStart?: string; weekEnd?: string } = {},
 ): SlimCycleSnapshot[] {
-  const closeMode = resolveCycleCloseMode(vehicle, null);
+  // Explicit vehicle/org mode wins. Unstamped historical fleets used cumulative_98
+  // (client Full Tanks spine) — do not silently force rideshare and collapse the week
+  // into one Active mega-cycle.
+  const explicitMode = (vehicle?.fuelSettings as Record<string, unknown> | undefined)
+    ?.cycleCloseMode;
+  const closeMode = explicitMode
+    ? resolveCycleCloseMode(vehicle, null)
+    : "cumulative_98";
   const tankCapacity = fuelLogic.resolveTankCapacity(vehicle);
 
   // Build from full lookback history; clip to week only AFTER cycles are formed.
@@ -106,6 +113,9 @@ export function buildVehicleCycleSnapshot(
   let lastAnchorOdo: number | undefined;
   let lastAnchorDate: string | undefined;
   let carryover = 0;
+
+  const prevCumulative = () =>
+    carryover + current.reduce((s, e) => s + effectiveCycleVolume(e), 0);
 
   const flushCycle = (closingEntry: CycleSnapshotEntry, isClosed: boolean) => {
     if (current.length === 0 && !isClosed) return;
@@ -181,32 +191,62 @@ export function buildVehicleCycleSnapshot(
 
   for (const entry of filtered) {
     const m = (entry.metadata || {}) as Record<string, unknown>;
-    const isAnchor = !!m.isAnchor || !!m.isSoftAnchor || !!m.isCapacityClose;
+    let isAnchor = !!m.isAnchor || !!m.isSoftAnchor || !!m.isCapacityClose;
     const hasValidOdo = Number(entry.odometer) > 0;
+    const volumeAtEntry = isCycleVolumeEligible(entry)
+      ? Math.max(0, Number(entry.liters) || Number(m.fuelVolume) || 0)
+      : 0;
 
-    if (isLegacyRow(entry) && !isAnchor) {
+    // Unstamped fills used to be appended forever → one Active mega-cycle for the week.
+    // Derive capacity closes the same way the stamp path / client engine do.
+    if (!isAnchor && isLegacyRow(entry) && tankCapacity > 0 && volumeAtEntry > 0) {
+      const decision = evaluateCycleClose({
+        closeMode,
+        prevCumulative: prevCumulative(),
+        volume: volumeAtEntry,
+        tankCapacity,
+        entryType: String(entry.type || ""),
+        paymentSource: String(entry.paymentSource || m.paymentSource || ""),
+        entryMode: String(entry.entryMode || m.entryMode || ""),
+        adminConfirmedFullTank: m.adminConfirmedFullTank === true,
+      });
+      if (decision.shouldClose) {
+        isAnchor = true;
+        // Mirror soft-close fields so flushCycle labels Capacity close correctly
+        (entry as CycleSnapshotEntry).metadata = {
+          ...m,
+          isSoftAnchor: true,
+          isCapacityClose: true,
+          volumeContributed: decision.volumeContributed,
+          excessVolume: decision.excessVolume,
+          cycleCloseReason: decision.reason,
+        };
+      }
+    }
+
+    if (!isAnchor) {
       current.push(entry);
       continue;
     }
 
-    if (isAnchor) {
-      if (lastAnchorOdo == null && hasValidOdo) {
-        // Seed anchor chain — first close stamp opens the tank window, does not flush yet
-        lastAnchorOdo = Number(entry.odometer);
-        lastAnchorDate = String(entry.date);
-        current.push(entry);
-      } else if (distanceReady(lastAnchorOdo, entry) || !hasValidOdo) {
-        // flushCycle appends closingEntry — do not push into current first
-        flushCycle(entry, true);
-      } else {
-        current.push(entry);
-      }
+    if (lastAnchorOdo == null && hasValidOdo) {
+      // Chain origin: open the window — do NOT put the origin fill into the open cycle
+      // (matches client engine; avoids folding origin liters into the Active blob).
+      lastAnchorOdo = Number(entry.odometer);
+      lastAnchorDate = String(entry.date);
+      const mm = (entry.metadata || {}) as Record<string, unknown>;
+      const excess = Number(mm.excessVolume) || 0;
+      carryover = excess > 0 ? excess : 0;
+      current = [];
+    } else if (distanceReady(lastAnchorOdo, entry) || !hasValidOdo) {
+      // flushCycle appends closingEntry — do not push into current first
+      flushCycle(entry, true);
     } else {
       current.push(entry);
     }
   }
 
-  if (current.length > 0) {
+  if (current.length > 0 && lastAnchorOdo != null) {
     const last = current[current.length - 1];
     flushCycle(last, false);
   }
