@@ -140,7 +140,9 @@ function cycleFillsForClip(
 
 /**
  * Fuel liters attributed to the selected period for one trusted cycle.
- * Prefer distance share when odo clip is known; else sum in-period fill liters.
+ * Capacity-close liters belong to the week the tank closes — never pro-rate
+ * by distance (that under-counts Completes that started before the week).
+ * Spans that close after the period use in-period fill liters only.
  */
 export function clipCycleFuelToPeriod(
   cycle: FuelCycle,
@@ -152,26 +154,39 @@ export function clipCycleFuelToPeriod(
 
   const start = period?.start || '0000-01-01';
   const end = period?.end || '9999-12-31';
-  const fullDist = Number(cycle.distance) || 0;
-  const clippedDist = clipCycleDistanceToPeriod(cycle, period?.start, period?.end);
+  const cStart = ymd(cycle.startDate);
+  const cEnd = ymd(cycle.endDate);
 
-  if (fullDist > 0 && clippedDist >= 0) {
-    if (clippedDist === 0) return 0;
-    if (Math.abs(clippedDist - fullDist) < 0.5) return Math.round(fullLiters * 100) / 100;
-    return Math.round(fullLiters * (clippedDist / fullDist) * 100) / 100;
+  if (cEnd && cEnd < start) return 0;
+  if (cStart && cStart > end) return 0;
+
+  // Tank closed inside this period → full cycle liters belong here
+  if (cEnd && cEnd >= start && cEnd <= end) {
+    return Math.round(fullLiters * 100) / 100;
   }
 
+  // Still open past period end (Active / close next week) → in-period fills
   const fills = cycleFillsForClip(cycle, lookbackEntries);
-  const sum = fills.reduce((s, t) => {
+  const fillSum = fills.reduce((s, t) => {
     if (!inPeriodYmd(t.date, start, end)) return s;
     const L = Number(t.volumeContributed ?? t.liters) || 0;
     return s + L;
   }, 0);
-  return Math.round(sum * 100) / 100;
+  if (fillSum > 0) return Math.round(fillSum * 100) / 100;
+
+  // Last resort when fills missing: distance share
+  const fullDist = Number(cycle.distance) || 0;
+  const clippedDist = clipCycleDistanceToPeriod(cycle, period?.start, period?.end);
+  if (fullDist > 0 && clippedDist > 0) {
+    if (Math.abs(clippedDist - fullDist) < 0.5) return Math.round(fullLiters * 100) / 100;
+    return Math.round(fullLiters * (clippedDist / fullDist) * 100) / 100;
+  }
+  return 0;
 }
 
 /**
  * Spend attributed to the selected period for one trusted cycle.
+ * Same close-week rule as fuel (not distance pro-rate).
  */
 export function clipCycleSpendToPeriod(
   cycle: FuelCycle,
@@ -183,17 +198,18 @@ export function clipCycleSpendToPeriod(
 
   const start = period?.start || '0000-01-01';
   const end = period?.end || '9999-12-31';
-  const fullDist = Number(cycle.distance) || 0;
-  const clippedDist = clipCycleDistanceToPeriod(cycle, period?.start, period?.end);
+  const cStart = ymd(cycle.startDate);
+  const cEnd = ymd(cycle.endDate);
 
-  if (fullDist > 0 && clippedDist >= 0) {
-    if (clippedDist === 0) return 0;
-    if (Math.abs(clippedDist - fullDist) < 0.5) return Math.round(fullSpend * 100) / 100;
-    return Math.round(fullSpend * (clippedDist / fullDist) * 100) / 100;
+  if (cEnd && cEnd < start) return 0;
+  if (cStart && cStart > end) return 0;
+
+  if (cEnd && cEnd >= start && cEnd <= end) {
+    return Math.round(fullSpend * 100) / 100;
   }
 
   const fills = cycleFillsForClip(cycle, lookbackEntries);
-  const sum = fills.reduce((s, t) => {
+  const fillSum = fills.reduce((s, t) => {
     if (!inPeriodYmd(t.date, start, end) || t.isCarryover) return s;
     const liters = Number(t.liters) || 0;
     const contrib = Number(t.volumeContributed);
@@ -203,7 +219,15 @@ export function clipCycleSpendToPeriod(
     }
     return s + amount;
   }, 0);
-  return Math.round(sum * 100) / 100;
+  if (fillSum > 0) return Math.round(fillSum * 100) / 100;
+
+  const fullDist = Number(cycle.distance) || 0;
+  const clippedDist = clipCycleDistanceToPeriod(cycle, period?.start, period?.end);
+  if (fullDist > 0 && clippedDist > 0) {
+    if (Math.abs(clippedDist - fullDist) < 0.5) return Math.round(fullSpend * 100) / 100;
+    return Math.round(fullSpend * (clippedDist / fullDist) * 100) / 100;
+  }
+  return 0;
 }
 
 export function resolvePeriodDistance(

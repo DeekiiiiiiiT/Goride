@@ -837,6 +837,7 @@ export function FuelLogTable({
                                 <p className="text-xl font-bold text-slate-700">
                                     {transactionKpis.totalVolume.toLocaleString(undefined, { maximumFractionDigits: 1 })} L
                                 </p>
+                                <p className="text-[11px] text-slate-500 mt-0.5">Fills posted this week</p>
                             </div>
                         </div>
                         <div className="bg-white p-4 rounded-lg border border-slate-200 shadow-sm flex items-center gap-4">
@@ -903,6 +904,7 @@ export function FuelLogTable({
                                 <p className="text-xl font-bold text-slate-700">
                                     {cycleKpis.totalFuel.toLocaleString(undefined, { maximumFractionDigits: 1 })} L
                                 </p>
+                                <p className="text-[11px] text-slate-500 mt-0.5">Tanks closed in this week</p>
                             </div>
                         </div>
                         <div className="bg-white p-4 rounded-lg border border-slate-200 shadow-sm flex items-center gap-4">

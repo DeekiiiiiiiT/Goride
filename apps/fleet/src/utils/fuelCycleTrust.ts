@@ -84,8 +84,26 @@ export function isIncompleteMegaCycle(
 }
 
 /**
- * Split overlapping cycles into trusted (Complete + Active-on-open-week) vs exception.
- * Megas and unclosed Actives on closed weeks never stay in trusted.
+ * Complete tanks count for a week only when the capacity close lands in that week.
+ * A cycle that merely overlaps (e.g. starts Aug 29, closes Sep 1) is next week's tank.
+ */
+export function isCompleteCloseInPeriod(
+  cycle: FuelCycle,
+  period: PeriodBoundsYmd,
+): boolean {
+  if (cycle.status !== 'Complete') return false;
+  const periodStart = period.start ? ymd(period.start) : '';
+  const periodEnd = period.end ? ymd(period.end) : '';
+  const cEnd = ymd(cycle.endDate);
+  if (!cEnd) return false;
+  if (periodStart && cEnd < periodStart) return false;
+  if (periodEnd && cEnd > periodEnd) return false;
+  return true;
+}
+
+/**
+ * Split overlapping cycles into trusted (Completes closed this week + Active-on-open-week)
+ * vs exception / next-week spillover.
  */
 export function partitionCyclesForPeriod(
   cycles: FuelCycle[],
@@ -115,9 +133,13 @@ export function partitionCyclesForPeriod(
       pushException(cycle);
       continue;
     }
-    if (cycle.status === 'Complete' || cycle.status === 'Active') {
+    if (cycle.status === 'Complete') {
+      if (!isCompleteCloseInPeriod(cycle, period)) {
+        // Overlaps this week but closes later — investigation only, not this week's done tank
+        pushException(cycle);
+        continue;
+      }
       trusted.push(cycle);
-      // Short in-period efficiency outliers still surface in the queue for review
       if (
         typeof cycle.efficiency === 'number' &&
         cycle.efficiency > 0 &&
@@ -127,7 +149,17 @@ export function partitionCyclesForPeriod(
       }
       continue;
     }
-    // Unknown status — keep visible for investigation, not in headline totals
+    if (cycle.status === 'Active') {
+      trusted.push(cycle);
+      if (
+        typeof cycle.efficiency === 'number' &&
+        cycle.efficiency > 0 &&
+        cycle.efficiency < 8
+      ) {
+        pushException(cycle);
+      }
+      continue;
+    }
     pushException(cycle);
   }
 
@@ -137,6 +169,13 @@ export function partitionCyclesForPeriod(
 export function incompleteHistoryReason(cycle: FuelCycle, period: PeriodBoundsYmd, opts?: PartitionOpts): string {
   if (isUnclosedActiveOnClosedPeriod(cycle, opts)) {
     return 'Tank did not close in this week — still open or missing capacity close';
+  }
+  if (
+    cycle.status === 'Complete' &&
+    !isCompleteCloseInPeriod(cycle, period) &&
+    !isIncompleteMegaCycle(cycle, period, opts)
+  ) {
+    return 'Tank closes after this week — counted in the close week';
   }
   if (isIncompleteMegaCycle(cycle, period, opts)) {
     return 'Incomplete tank history — often missing card import or capacity closes';

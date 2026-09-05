@@ -245,30 +245,52 @@ describe('buildTrustedPeriodTotals', () => {
     expect(totals.provisional).toBe(true);
   });
 
-  it('pro-rates fuel by clipped distance share', () => {
+  it('gives full tank liters when the capacity close lands in the period', () => {
+    const close = makeCycle({
+      id: 'close',
+      status: 'Complete',
+      startDate: '2026-08-21',
+      endDate: '2026-08-25',
+      distance: 448,
+      totalLiters: 36,
+      totalCost: 8000,
+      startOdometer: 100000,
+      endOdometer: 100448,
+    });
+    // Started before week; distance would clip — fuel must stay full 36 L
+    const fuel = clipCycleFuelToPeriod(close, { start: '2026-08-24', end: '2026-08-30' });
+    expect(fuel).toBe(36);
+  });
+
+  it('uses in-period fills when the tank closes after the selected week', () => {
     const long = makeCycle({
       id: 'long',
-      distance: 2774,
-      totalLiters: 242.7,
-      startOdometer: 100000,
-      endOdometer: 102774,
+      status: 'Complete',
+      startDate: '2026-08-29',
+      endDate: '2026-09-01',
+      distance: 446,
+      totalLiters: 26.7,
       transactions: [
         {
           id: 'a',
-          date: '2026-08-19',
-          amount: 1,
-          odometer: 100000,
-          type: 'Manual_Entry',
+          date: '2026-08-29',
+          amount: 3000,
+          liters: 13.4,
+          volumeContributed: 13.4,
+          odometer: 181453,
+          type: 'Reimbursement',
           entryMode: 'Floating',
           paymentSource: 'RideShare_Cash',
           vehicleId: 'v1',
         } as FuelEntry,
         {
-          id: 'mid',
+          id: 'b',
           date: '2026-08-30',
-          amount: 1,
-          odometer: 102000,
-          type: 'Manual_Entry',
+          amount: 3000,
+          liters: 13.4,
+          volumeContributed: 13.3,
+          odometer: 181670,
+          type: 'Reimbursement',
           entryMode: 'Floating',
           paymentSource: 'RideShare_Cash',
           vehicleId: 'v1',
@@ -276,17 +298,19 @@ describe('buildTrustedPeriodTotals', () => {
         {
           id: 'c',
           date: '2026-09-01',
-          amount: 1,
-          odometer: 102774,
-          type: 'Manual_Entry',
+          amount: 4000,
+          liters: 17.8,
+          volumeContributed: 0,
+          odometer: 181900,
+          type: 'Reimbursement',
           entryMode: 'Floating',
           paymentSource: 'RideShare_Cash',
           vehicleId: 'v1',
         } as FuelEntry,
       ],
     });
-    // 774 / 2774 of 242.7 ≈ 67.68
-    const fuel = clipCycleFuelToPeriod(long, { start: '2026-08-31', end: '2026-09-06' });
-    expect(fuel).toBe(Math.round(242.7 * (774 / 2774) * 100) / 100);
+    const fuel = clipCycleFuelToPeriod(long, { start: '2026-08-24', end: '2026-08-30' });
+    // Aug 29 + Aug 30 contrib only (not Sep 1, not distance pro-rate of 26.7)
+    expect(fuel).toBe(26.7);
   });
 });

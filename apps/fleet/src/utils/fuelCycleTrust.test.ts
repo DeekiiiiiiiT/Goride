@@ -109,30 +109,28 @@ describe('partitionCyclesForPeriod', () => {
     expect(exceptions.map((c) => c.id)).toEqual(['active-aug19']);
   });
 
-  it('keeps normal Complete cycles in trusted for a closed week', () => {
+  it('keeps Complete that closes inside the week even if it started earlier', () => {
     const week = { start: '2026-08-24', end: '2026-08-30' };
-    const closes = [
-      cycle({
-        id: 'c1',
-        status: 'Complete',
-        signalTier: 'observe',
-        startDate: '2026-08-24',
-        endDate: '2026-08-25',
-        distance: 448,
-      }),
-      cycle({
-        id: 'c2',
-        status: 'Complete',
-        signalTier: 'observe',
-        startDate: '2026-08-25',
-        endDate: '2026-08-27',
-        distance: 463,
-      }),
-    ];
-    const { trusted, exceptions } = partitionCyclesForPeriod(closes, week, {
+    const close = cycle({
+      id: 'c-end-25',
+      status: 'Complete',
+      signalTier: 'observe',
+      startDate: '2026-08-21',
+      endDate: '2026-08-25',
+      distance: 448,
+    });
+    const nextWeekClose = cycle({
+      id: 'c-end-sep1',
+      status: 'Complete',
+      signalTier: 'observe',
+      startDate: '2026-08-29',
+      endDate: '2026-09-01',
+      distance: 446,
+    });
+    const { trusted, exceptions } = partitionCyclesForPeriod([close, nextWeekClose], week, {
       isPeriodOpen: false,
     });
-    expect(trusted).toHaveLength(2);
-    expect(exceptions).toHaveLength(0);
+    expect(trusted.map((c) => c.id)).toEqual(['c-end-25']);
+    expect(exceptions.map((c) => c.id)).toEqual(['c-end-sep1']);
   });
 });
