@@ -33,6 +33,7 @@ import {
   closeOpenCyclesForWeek,
 } from "./fuel_cycle_stamp.ts";
 import { buildFleetCycleSnapshot } from "./fuel_cycle_snapshot.ts";
+import { summarizeFuelLogEntries } from "./fuel_log_summary.ts";
 import { persistFuelMatchPair } from "./fuel_jaa_match.ts";
 import { auditLogic } from "./audit_logic.ts";
 import { findMatchingStation, findMatchingStationSmart, calculateDistance } from "./geo_matcher.ts";
@@ -2469,65 +2470,73 @@ app.get(`${BASE_PATH}/cycles`, requirePermission("fuel.view"), async (c) => {
   }
 });
 
-// --- Fuel log KPI roll-up (high-level totals for a date range) ---
+// --- Fuel log KPI roll-up (must match client buildTransactionKpis / fuelLogSummaryCore) ---
 app.get(`${BASE_PATH}/fuel/log-summary`, requirePermission("fuel.view"), async (c) => {
   try {
     const { queryFleet } = await import("./repos/baseRepo.ts");
     const vehicleId = (c.req.query("vehicleId") || "").trim();
     const startYmd = (c.req.query("startDate") || "").slice(0, 10);
     const endYmd = (c.req.query("endDate") || "").slice(0, 10);
+    const orgId = getOrgId(c);
 
-    const filters = vehicleId
-      ? [{ op: "eq" as const, col: "vehicle_id", value: vehicleId }]
-      : undefined;
-
-    const res = await queryFleet("fuel_entries", {
-      legacyPrefix: "fuel_entry:",
-      filters,
-      dateFrom: /^\d{4}-\d{2}-\d{2}$/.test(startYmd) ? startYmd : undefined,
-      dateTo: /^\d{4}-\d{2}-\d{2}$/.test(endYmd) ? endYmd : undefined,
-      order: { col: "date", ascending: true },
-      limit: 5000,
-    });
-    if (res.error) throw res.error;
-
-    const entries = filterByOrg((res.data || []) as Record<string, unknown>[], c, {
-      endpoint: "/fuel/log-summary",
-    });
-
-    // Entry-level financial totals (high-level; statement fees left in the raw count).
-    let totalFills = 0;
-    let totalSpend = 0;
-    let totalVolume = 0;
-    for (const e of entries) {
-      totalFills += 1;
-      totalSpend += Number(e.amount) || 0;
-      totalVolume += Number(e.liters) || 0;
+    const filters: import("./repos/baseRepo.ts").FleetQueryFilter[] = [];
+    if (vehicleId) filters.push({ op: "eq", col: "vehicle_id", value: vehicleId });
+    if (orgId && !isPlatformCaller(c)) {
+      filters.push({ op: "orOrg", orgId });
     }
 
-    // Cycle-level distance totals from the server-owned snapshot.
+    const PAGE = 1500;
+    const MAX_PAGES = 40;
+    const accumulated: Record<string, unknown>[] = [];
+    let truncated = false;
+    for (let page = 0; page < MAX_PAGES; page++) {
+      const res = await queryFleet("fuel_entries", {
+        legacyPrefix: "fuel_entry:",
+        filters,
+        dateFrom: /^\d{4}-\d{2}-\d{2}$/.test(startYmd) ? startYmd : undefined,
+        dateTo: /^\d{4}-\d{2}-\d{2}$/.test(endYmd) ? endYmd : undefined,
+        order: { col: "date", ascending: true },
+        limit: PAGE,
+        offset: page * PAGE,
+      });
+      if (res.error) throw res.error;
+      const batch = (res.data || []) as Record<string, unknown>[];
+      if (batch.length === 0) break;
+      accumulated.push(...batch);
+      if (batch.length < PAGE) break;
+      if (page === MAX_PAGES - 1) truncated = true;
+    }
+
+    const entries = filterByOrg(accumulated, c, { endpoint: "/fuel/log-summary" });
+    const rolled = summarizeFuelLogEntries(entries as any[]);
+
+    // Cycle count only (distance for Full Tanks lives elsewhere — never under totalKm).
     const vehicleIds = vehicleId
       ? [vehicleId]
       : [...new Set(entries.map((e) => String(e.vehicleId || "")).filter(Boolean))];
+    const vehicleKeys = vehicleIds.map((vid) => `vehicle:${vid}`);
+    const vehicleRows = vehicleKeys.length ? await kv.mget(vehicleKeys) : [];
     const vehicles: Record<string, Record<string, unknown>> = {};
-    for (const vid of vehicleIds) {
-      const v = await kv.get(`vehicle:${vid}`);
-      if (v) vehicles[vid] = v as Record<string, unknown>;
-    }
-    const cycles = buildFleetCycleSnapshot(entries, vehicles, {
+    vehicleIds.forEach((vid, i) => {
+      if (vehicleRows[i]) vehicles[vid] = vehicleRows[i] as Record<string, unknown>;
+    });
+    const cycles = buildFleetCycleSnapshot(entries as any[], vehicles, {
       vehicleId: vehicleId || undefined,
     });
-    const totalCycles = cycles.length;
-    const totalDistance = cycles.reduce((s, cy) => s + (Number(cy.distance) || 0), 0);
 
     return c.json({
-      totalFills,
-      totalSpend: Number(totalSpend.toFixed(2)),
-      totalVolume: Number(totalVolume.toFixed(2)),
-      totalKm: Number(totalDistance.toFixed(2)),
-      totalCycles,
-      totalDistance: Number(totalDistance.toFixed(2)),
-      totalFuel: Number(totalVolume.toFixed(2)),
+      totalFills: rolled.totalFills,
+      totalSpend: rolled.totalSpend,
+      totalVolume: rolled.totalVolume,
+      totalKm: rolled.totalKm,
+      sourcePortal: rolled.sourcePortal,
+      sourceAdmin: rolled.sourceAdmin,
+      sourceAnchors: rolled.sourceAnchors,
+      totalCycles: cycles.length,
+      totalDistance: rolled.totalKm,
+      totalFuel: rolled.totalVolume,
+      truncated,
+      entryCount: entries.length,
     });
   } catch (e: any) {
     return c.json({ error: e.message }, 500);
@@ -2663,6 +2672,71 @@ app.get(`${BASE_PATH}/fuel-entries/:id/corrections`, requirePermission("fuel.vie
     const { data, error } = await query;
     if (error) throw error;
     return c.json({ corrections: data || [] });
+  } catch (e: any) {
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+// --- Exception queue assignments (org-visible; service-role writes) ---
+app.get(`${BASE_PATH}/fuel/exception-assignments`, requirePermission("fuel.view"), async (c) => {
+  try {
+    const orgId = getOrgId(c);
+    if (!orgId && !isPlatformCaller(c)) {
+      return c.json({ assignments: [] });
+    }
+    let query = supabase.from("fuel_exception_assignments").select("*");
+    if (orgId) query = query.eq("organization_id", orgId);
+    const { data, error } = await query;
+    if (error) throw error;
+    const map: Record<string, { note: string; at: string; by?: string }> = {};
+    for (const row of data || []) {
+      const cycleId = String(row.cycle_id || "");
+      if (!cycleId) continue;
+      map[cycleId] = {
+        note: String(row.note || ""),
+        at: String(row.assigned_at || new Date().toISOString()),
+        by: row.assigned_by ? String(row.assigned_by) : undefined,
+      };
+    }
+    return c.json({ assignments: map });
+  } catch (e: any) {
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+app.put(`${BASE_PATH}/fuel/exception-assignments/:cycleId`, requirePermission("fuel.edit_entry"), async (c) => {
+  try {
+    const cycleId = c.req.param("cycleId");
+    const orgId = getOrgId(c);
+    if (!orgId) return c.json({ error: "organization required" }, 400);
+    const body = await c.req.json().catch(() => ({}));
+    const note = String(body.note || "").trim();
+    const user = c.get("rbacUser") as RbacUser | undefined;
+    const actor = user?.userId || null;
+    const { data, error } = await supabase
+      .from("fuel_exception_assignments")
+      .upsert(
+        {
+          organization_id: orgId,
+          cycle_id: cycleId,
+          note,
+          assigned_by: actor,
+          assigned_to: body.assignedTo ? String(body.assignedTo) : actor,
+          assigned_at: new Date().toISOString(),
+          status: "open",
+        },
+        { onConflict: "organization_id,cycle_id" },
+      )
+      .select("*")
+      .maybeSingle();
+    if (error) throw error;
+    return c.json({
+      assignment: {
+        note: String(data?.note || note),
+        at: String(data?.assigned_at || new Date().toISOString()),
+        by: data?.assigned_by ? String(data.assigned_by) : undefined,
+      },
+    });
   } catch (e: any) {
     return c.json({ error: e.message }, 500);
   }

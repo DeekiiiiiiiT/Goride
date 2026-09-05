@@ -81,7 +81,7 @@ export type FuelExceptionQueueProps = {
   period?: PeriodBoundsYmd;
   isPeriodOpen?: boolean;
   onAssign?: (cycleId: string, note: string) => void;
-  /** Persisted assignments keyed by cycle id (localStorage via parent). */
+  /** Persisted assignments keyed by cycle id (server via useFuelExceptionAssignments). */
   assignments?: Record<string, FuelExceptionAssignment>;
 };
 

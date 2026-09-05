@@ -21,11 +21,6 @@ export interface FuelEntryLike {
   entrySource?: string;
   reconciliationStatus?: string;
   metadata?: Record<string, unknown> | null;
-  /**
-   * @deprecated Neutralized — clients must not use this as a sealed-edit escape hatch.
-   * Sealed edits require `correctionReason` on the server; this flag is ignored if set.
-   */
-  bypassSignatureCheck?: boolean;
 }
 
 /** Inventory card fields used to hydrate statement identity before match. */

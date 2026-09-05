@@ -668,7 +668,36 @@ export const api = {
       totalCycles: number;
       totalDistance: number;
       totalFuel: number;
+      sourcePortal?: number;
+      sourceAdmin?: number;
+      sourceAnchors?: number;
+      truncated?: boolean;
+      entryCount?: number;
     }>;
+  },
+
+  async getFuelExceptionAssignments(): Promise<Record<string, { note: string; at: string; by?: string }>> {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/fuel/exception-assignments`, {
+      headers: await requireAuthHeaders(null),
+    });
+    if (!response.ok) return {};
+    const data = await response.json().catch(() => ({}));
+    return data?.assignments && typeof data.assignments === 'object' ? data.assignments : {};
+  },
+
+  async putFuelExceptionAssignment(
+    cycleId: string,
+    note: string,
+  ): Promise<{ note: string; at: string; by?: string }> {
+    const enc = encodeURIComponent(cycleId);
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/fuel/exception-assignments/${enc}`, {
+      method: 'PUT',
+      headers: await requireAuthHeaders(),
+      body: JSON.stringify({ note }),
+    });
+    if (!response.ok) throw new Error('Failed to save exception assignment');
+    const data = await response.json();
+    return data?.assignment || { note, at: new Date().toISOString() };
   },
 
   async recalculateFuelCycles(vehicleId?: string) {

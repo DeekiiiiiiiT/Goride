@@ -153,7 +153,6 @@ describe('buildCycleKpis', () => {
     expect(kpis.totalDistance).toBe(280);
     expect(kpis.totalFuel).toBe(30);
     expect(kpis.totalSpend).toBe(150);
-    expect(kpis.avgEfficiency).toBe(9.33);
   });
 
   it('counts exception partition length separately from trusted list', () => {

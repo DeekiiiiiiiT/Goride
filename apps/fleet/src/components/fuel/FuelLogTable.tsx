@@ -10,7 +10,10 @@ import { fuelService } from '../../services/fuelService';
 import { useFuelCycles } from '../../hooks/useFuelCycles';
 import { useFuelAnchors } from '../../hooks/useFuelAnchors';
 import { useFuelLogQuery } from '../../hooks/useFuelLogQuery';
-import { useFuelLogSummary, mergeServerTransactionKpis } from '../../hooks/useFuelLogSummary';
+import {
+  useFuelLogSummary,
+  replaceServerTransactionKpis,
+} from '../../hooks/useFuelLogSummary';
 import { DateRange } from 'react-day-picker';
 import { format } from 'date-fns';
 import { downloadBlob, jsonToCsv } from '../../utils/csv-helper';
@@ -45,21 +48,9 @@ import { FuelLogToolbar } from './logs/FuelLogToolbar';
 import { FuelTransactionsTable, resolvePaymentLabel } from './logs/FuelTransactionsTable';
 import { FuelCyclesPanel } from './logs/FuelCyclesPanel';
 import { fuelEntrySortMs } from './logs/fuelLogDisplay';
-import type { FuelExceptionAssignment } from './logs/FuelExceptionQueue';
+import { useFuelExceptionAssignments } from './logs/useFuelExceptionAssignments';
 
-const EXCEPTION_ASSIGNMENTS_KEY = 'fuel_exception_assignments';
 const PAGE_SIZE = 50;
-
-function loadExceptionAssignments(): Record<string, FuelExceptionAssignment> {
-  try {
-    const raw = localStorage.getItem(EXCEPTION_ASSIGNMENTS_KEY);
-    if (!raw) return {};
-    const parsed = JSON.parse(raw) as Record<string, FuelExceptionAssignment>;
-    return parsed && typeof parsed === 'object' ? parsed : {};
-  } catch {
-    return {};
-  }
-}
 
 interface FuelLogTableProps {
   entries: FuelEntry[];
@@ -123,9 +114,8 @@ export function FuelLogTable({
   );
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>(query.sortDir || 'desc');
   const [page, setPage] = useState(0);
-  const [exceptionAssignments, setExceptionAssignments] = useState<
-    Record<string, FuelExceptionAssignment>
-  >(loadExceptionAssignments);
+  const { assignments: exceptionAssignments, assign: handleAssignException } =
+    useFuelExceptionAssignments();
 
   useEffect(() => {
     let timer: number | undefined;
@@ -578,7 +568,11 @@ export function FuelLogTable({
     filterIntegrity !== 'all' ||
     !!filterCycleId;
 
-  const { summary: serverSummary } = useFuelLogSummary({
+  const {
+    summary: serverSummary,
+    isLoading: summaryLoading,
+    error: summaryError,
+  } = useFuelLogSummary({
     startDate: periodStart,
     endDate: periodEnd,
     vehicleId: filterVehicle,
@@ -595,9 +589,27 @@ export function FuelLogTable({
   }, [filteredEntries, validAnchorIds, ledgerIntegrity]);
 
   const transactionKpis = useMemo(() => {
-    if (hasExtraTxnFilters || !serverSummary) return clientTransactionKpis;
-    return mergeServerTransactionKpis(clientTransactionKpis, serverSummary);
-  }, [hasExtraTxnFilters, serverSummary, clientTransactionKpis]);
+    if (hasExtraTxnFilters) return clientTransactionKpis;
+    if (summaryLoading && !serverSummary) {
+      return {
+        ...clientTransactionKpis,
+        populationNote: 'Loading server totals…',
+      };
+    }
+    if (summaryError || !serverSummary) {
+      return {
+        ...clientTransactionKpis,
+        populationNote: 'Local totals (server summary unavailable)',
+      };
+    }
+    return replaceServerTransactionKpis(clientTransactionKpis, serverSummary);
+  }, [
+    hasExtraTxnFilters,
+    summaryLoading,
+    summaryError,
+    serverSummary,
+    clientTransactionKpis,
+  ]);
 
   const cycleKpis = useMemo(
     () =>
@@ -752,20 +764,6 @@ export function FuelLogTable({
     });
   };
 
-  const handleAssignException = (cycleId: string, note: string) => {
-    const next: Record<string, FuelExceptionAssignment> = {
-      ...exceptionAssignments,
-      [cycleId]: { note, at: new Date().toISOString() },
-    };
-    setExceptionAssignments(next);
-    try {
-      localStorage.setItem(EXCEPTION_ASSIGNMENTS_KEY, JSON.stringify(next));
-    } catch {
-      /* ignore quota */
-    }
-    toast.success('Exception assigned', { description: note });
-  };
-
   const toggleSelect = (id: string) => {
     setSelectedIds((prev) => {
       const next = new Set(prev);
@@ -913,38 +911,51 @@ export function FuelLogTable({
       )}
 
       <div className="mb-2">
-        <FuelLogKpiRow
-          tiles={
-            activeView === 'transactions'
-              ? transactionKpisToTiles(transactionKpis, {
-                  distanceKm: periodDistance.primaryKm,
-                  distanceHint:
-                    periodDistance.carriedInKm > 0
-                      ? `${periodDistance.carriedInKm.toLocaleString()} km before this period excluded`
-                      : periodDistance.primaryLabel,
-                  integrityActive: filterIntegrity === 'imbalanced',
-                  sourceHint: `${transactionKpis.sourcePortal} portal · ${transactionKpis.sourceAdmin} admin · ${transactionKpis.sourceAnchors} anchors`,
-                })
-              : cycleKpisToTiles(cycleKpis, {
-                  distanceKm: trustedPeriodTotals.distanceKm,
-                  exceptionsActive: focusExceptions,
-                })
-          }
-          onTileClick={(tileId) => {
-            if (tileId === 'imbalanced') {
-              const next = filterIntegrity === 'imbalanced' ? 'all' : 'imbalanced';
-              setFilterIntegrity(next);
-              setQuery({ integrity: next === 'all' ? undefined : next });
-              return;
+        {activeView === 'transactions' && summaryLoading && !hasExtraTxnFilters && !serverSummary ? (
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <Skeleton key={i} className="h-14 w-full rounded-lg" />
+            ))}
+          </div>
+        ) : (
+          <FuelLogKpiRow
+            tiles={
+              activeView === 'transactions'
+                ? transactionKpisToTiles(transactionKpis, {
+                    distanceKm: periodDistance.primaryKm,
+                    distanceHint:
+                      periodDistance.carriedInKm > 0
+                        ? `${periodDistance.carriedInKm.toLocaleString()} km before this period excluded`
+                        : periodDistance.primaryLabel,
+                    integrityActive: filterIntegrity === 'imbalanced',
+                    sourceHint: `${transactionKpis.sourcePortal} portal · ${transactionKpis.sourceAdmin} admin · ${transactionKpis.sourceAnchors} anchors`,
+                  })
+                : cycleKpisToTiles(cycleKpis, {
+                    distanceKm: trustedPeriodTotals.distanceKm,
+                    exceptionsActive: focusExceptions,
+                  })
             }
-            if (tileId === 'exceptions') {
-              setFocusExceptions(true);
-              requestAnimationFrame(() => {
-                exceptionQueueRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-              });
-            }
-          }}
-        />
+            onTileClick={(tileId) => {
+              if (tileId === 'imbalanced') {
+                const next = filterIntegrity === 'imbalanced' ? 'all' : 'imbalanced';
+                setFilterIntegrity(next);
+                setQuery({ integrity: next === 'all' ? undefined : next });
+                return;
+              }
+              if (tileId === 'exceptions') {
+                setFocusExceptions(true);
+                requestAnimationFrame(() => {
+                  exceptionQueueRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                });
+              }
+            }}
+          />
+        )}
+        {activeView === 'transactions' &&
+        !hasExtraTxnFilters &&
+        (summaryError || transactionKpis.populationNote.startsWith('Local totals')) ? (
+          <div className="mt-1 text-[10px] text-slate-400">Local totals</div>
+        ) : null}
       </div>
 
       <div className="rounded-md border bg-white overflow-x-auto">

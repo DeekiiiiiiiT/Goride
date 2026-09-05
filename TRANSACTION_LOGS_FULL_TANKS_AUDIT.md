@@ -4,7 +4,141 @@
 **Round 1 audited:** 2026-09-05 · baseline `94d9ebd8`
 **Round 2 verified:** 2026-09-05 · head `1f5a774b`
 **Round 3 verified:** 2026-09-05 · head `d4fcd90f` + 13 uncommitted files
+**Round 4 audited:** 2026-09-05 · head `409532fd` (working tree clean)
 **Mode:** Audit only. **No code was changed by this audit.**
+
+---
+
+# 🔴 ROUND 4 — FRESH AUDIT OF THE NEW CODE
+
+> Rounds 2 and 3 verified that *my findings* were closed. They did not review the
+> ~2,000 lines of new code written to close them. This round does.
+>
+> **The committed state is clean and green — and it contains one Critical regression.**
+> The server KPI roll-up added in the last round silently reintroduces **F-C1, F-C2 and
+> F-H6** — three of the original findings — in the default, unfiltered view of the
+> Transactions tab.
+
+## Verification of the committed state
+
+| Check | Result |
+|---|---|
+| Working tree | ✅ Clean, committed at `409532fd` |
+| Full Fleet test suite | ✅ **203 files, 1,229 passed, 1 skipped, 0 failed** |
+| `tsc --noEmit` across the whole logs surface | ✅ **0 errors** |
+| Round 3 item #1 (uncommitted work) | ✅ **Resolved** |
+| Round 3 items #2–#6 | ⚪ Unchanged — all still minor, none blocking |
+
+**Everything I asked for in Round 3 that mattered is done.** The finding below is new, and it is not something any previous round looked at.
+
+---
+
+## 🔴 R4-1 · CRITICAL — the server KPI roll-up disagrees with the rows it sits above
+
+**Files:** `supabase/functions/_fleet-server/fuel_controller.tsx:2473-2531` · `hooks/useFuelLogSummary.ts:84-97` · `FuelLogTable.tsx:581-600`
+
+### How it reaches the screen
+
+```
+activeView === 'transactions' && !hasExtraTxnFilters   →  useFuelLogSummary() fires
+                                                       →  mergeServerTransactionKpis()
+                                                       →  server totals overwrite client totals
+```
+
+`hasExtraTxnFilters` (`FuelLogTable.tsx:571-579`) is false when no search term and all seven filters are `'all'` — **the state the page opens in.** So on a normal visit to the Transactions tab, the four KPI cards come from the server while the rows below them come from the client.
+
+The guard itself is well built: it correctly covers all seven filters plus `filterCycleId`, and the server is keyed on the same period + vehicle. The intent — *"callers must fall back to client KPIs when extra filters are active (KPI≡list invariant)"* (`useFuelLogSummary.ts:27`) — is exactly right.
+
+**The problem is that the server does not compute the same population as the client even when the scoping is identical.**
+
+### Four concrete divergences
+
+| # | Client behaviour | Server behaviour | Effect on screen |
+|---|---|---|---|
+| 1 | Excludes JAA statement ledger rows in 4 places (`FuelLogTable.tsx:358`, `fuelLogKpiMetrics.ts:108`) | **Counts them.** The code says so: *"statement fees left in the raw count"* (`:2498`) | **Total fills > rendered rows.** This is F-C2's exact failure class. |
+| 2 | Spend/volume filtered by `countsInFuelLogSpend` — drops fees, declines, awaiting-statement $0 anchors (`fuelOpsEligibility.ts:10-18`) | Sums raw `amount` / `liters` for every row (`:2504-2505`) | **Total spend and Total volume inflated.** Undoes F-H6. |
+| 3 | Total km = fill-to-fill odometer deltas — a deliberately *different* measure from cycle distance | `totalKm: Number(totalDistance.toFixed(2))` (`:2527`) — cycle distance under a km label | **The Total km card silently switches measure.** This is F-C1, the finding this audit opened with. |
+| 4 | Cycle distance clipped to the period via `clipCycleDistanceToPeriod` — the entire reason `fuelPeriodTotals.ts` exists | `cycles.reduce((s, cy) => s + cy.distance, 0)` (`:2521`) — unclipped | Distance includes km driven **before** the selected week. |
+
+### Why this is Critical rather than High
+
+Three reasons, in order:
+
+1. **It is the default state.** No filter needs to be touched. Open the page and the numbers are wrong.
+2. **It is non-deterministic.** If the server call fails, `transactionKpis` falls back to the client (`:598`) and the numbers *change*. The same page, same week, two different sets of totals depending on a network result — with nothing on screen to say which one you are looking at.
+3. **It re-opens findings that were closed and celebrated.** F-C1, F-C2 and F-H6 are all marked ✅ above. They are correct at the client layer and were re-broken at a new one.
+
+### Why the tests did not catch it
+
+The KPI≡list invariant test added in Phase 1 asserts against `buildTransactionKpis` — the **client** builder, which is correct. The server endpoint is a Deno edge function outside the vitest suite. **1,229 passing tests cannot see this code path.** That is the real lesson: the invariant was encoded as a unit test of one implementation rather than as a contract both implementations must satisfy.
+
+### Fix
+
+Two options, in preference order:
+
+1. **Make the server the single authority and teach it the client's rules.** Port `isJaaStatementLedgerRow`, `countsInFuelLogSpend` and `clipCycleDistanceToPeriod` into the edge function (they already live in `packages/roam-shared` / are portable), and return `totalKm` as genuine fill-to-fill deltas — or drop `totalKm` from the response and let the client keep owning that one measure.
+2. **Or delete the merge.** `mergeServerTransactionKpis` is an optimisation; the client already computes all of this correctly from data it has loaded. Removing it restores correctness immediately at zero cost, and the endpoint can come back once it agrees.
+
+Either way, add a contract test that runs the same fixture through both the server summary and `buildTransactionKpis` and asserts equality.
+
+---
+
+## 🟠 R4-2 · Two smaller issues in the same endpoint
+
+**Silent truncation at 5,000 rows.** `queryFleet(..., { limit: 5000 })` (`:2490`) with no pagination and no truncation signal in the response — the same class as F-H3, which was fixed on the client side. Worse, `filterByOrg` runs **after** the query (`:2494`), so in a multi-tenant deployment another org's rows consume the limit budget before this org's are filtered in.
+
+**N+1 KV reads.** `:2513-2516` loops `await kv.get(\`vehicle:${vid}\`)` one vehicle at a time on every summary request.
+
+---
+
+## 🟡 R4-3 · Mixed provenance inside a single KPI card
+
+`mergeServerTransactionKpis` (`useFuelLogSummary.ts:89-96`) replaces `totalFills` from the server but keeps `sourcePortal` / `sourceAdmin` / `sourceAnchors` from the client — and those three render as the hint line *underneath* `totalFills` on the same tile.
+
+Given R4-1, the card can read **"12 fills · 5 portal · 4 admin · 0 anchors"** — a headline and a breakdown that do not reconcile, inside one box. Even after R4-1 is fixed, a card should not blend two sources; take the whole tile from one or the other.
+
+---
+
+## Round 3 minor items — status
+
+| # | Item | Status |
+|---|---|:---:|
+| 1 | 13 uncommitted files | ✅ **Committed** (`409532fd`) |
+| 2 | `avgEfficiency` computed, never rendered | ⚪ Unchanged |
+| 3 | `bypassSignatureCheck?: boolean` type field still declared (`jaaFuelStatementMatcher.ts:28`) | ⚪ Unchanged — never set, vestigial |
+| 4 | Exception assignments `localStorage`-only | ⚪ Unchanged |
+| 5 | No RTL component tests | ⚪ Unchanged — **and now demonstrably load-bearing**, see R4-1 |
+| 6 | `FuelLogTable` 1,046 lines | ⚪ Unchanged |
+
+## Updated scorecard
+
+| Dimension | R1 | R2 | R3 | **R4** | Note |
+|---|:---:|:---:|:---:|:---:|---|
+| Domain model / business logic | B+ | A− | A | **A** | Unchanged — the domain layer is genuinely good |
+| Architecture & separation | D | C | A− | **A−** | Component split holds up on close reading |
+| Correctness of displayed numbers | D− | A− | A | **C** | ⬇ Client layer is right; the server roll-up above it is not |
+| Type safety | F | A− | A | **A** | 0 errors on the surface |
+| Security / RBAC | D | A− | A | **A−** | ⬇ Slightly: org filter applied after the row limit (R4-2) |
+| Scale & performance | D | B− | A− | **B** | ⬇ New unpaginated 5,000-row server ceiling + N+1 |
+| Accessibility | F | B+ | A− | **A−** | Unchanged |
+| UX / information design | C− | C+ | A− | **B+** | ⬇ Mixed-provenance KPI card |
+| Test coverage | F | B | B+ | **B−** | ⬇ A whole implementation of the KPI contract is untested |
+| Observability | F | D+ | B | **B** | Unchanged |
+
+## What to do next
+
+1. **R4-1** — fix or remove the server merge. Removing `mergeServerTransactionKpis` is a one-line revert that restores correctness today; porting the exclusions is the proper fix. **Do this before anyone reads these KPIs as truth.**
+2. **R4-1 follow-up** — add a contract test running one fixture through both implementations. This is the test that should have existed when `/fuel/log-summary` was written.
+3. **R4-2** — page the endpoint, move `filterByOrg` into the query, batch the vehicle reads.
+4. **R4-3** — take a whole tile from one source.
+5. Round 3 items #2–#6 remain optional housekeeping.
+
+Items 1–4 are under a day.
+
+---
+---
+
+# ROUND 3 — VERIFICATION (superseded by Round 4 above)
 
 ---
 
@@ -1052,3 +1186,23 @@ Two things are worth saying plainly about what this now buys you. The audit trai
 The six remaining items are housekeeping. Commit your work — that is the only one worth doing today.
 
 *Round 3 verification performed against `d4fcd90f` plus 13 uncommitted files. No files were modified.*
+
+---
+
+## 17. Round 4 closing note
+
+Everything Round 3 asked for is committed, the suite is green, and the surface typechecks clean. Read as a verification pass, this is a pass.
+
+But Rounds 2 and 3 were checking my own list, and a closed list is not the same as correct code. This round read the ~2,000 lines written to close that list, and found that `GET /fuel/log-summary` — added to satisfy Phase 3.1 — silently undoes F-C1, F-C2 and F-H6 in the default view of the page. The client layer is right. A second implementation was added above it that does not agree, and because it only engages when no filter is active, it is wrong precisely when a user is least likely to be looking for a discrepancy.
+
+Three things are worth taking from this beyond the fix itself.
+
+**A duplicated calculation is a liability until something forces the two copies to agree.** The client KPI builders and the server roll-up now both answer "what are the totals for this week." Nothing compares them. The same shape produced the original F-C2 (list and KPI filtering by different keys) and F-C1 (two definitions of distance) — this is the third instance of one pattern, which makes it the thing to design against rather than fix again.
+
+**The invariant was written as a unit test instead of a contract.** "KPI ≡ list" is enforced against `buildTransactionKpis` and nothing else, so 1,229 passing tests are blind to an entire implementation of the same rule. An invariant that matters should be asserted against every implementation of it, with one shared fixture.
+
+**Server-side is not automatically more trustworthy than client-side.** Moving the roll-up to the server was the right architectural call and it was implemented as a straightforward `SUM` over rows — which is exactly what the domain does *not* want. The exclusion rules in `fuelOpsEligibility` and `jaaFuelStatementMatcher` are the product; the arithmetic is the easy part.
+
+None of this diminishes the work. F-C3's correction ledger, the period clipping in `fuelPeriodTotals.ts`, and the close-mode alignment across client, server and doc are all properly engineered and still hold up under close reading. This is one regression in a strong body of work, it is well localised, and reverting the merge fixes it in a line while the endpoint is brought into agreement.
+
+*Round 4 audit performed against `409532fd`, working tree clean. No files were modified.*
