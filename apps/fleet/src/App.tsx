@@ -44,7 +44,6 @@ import { ErrorBoundary } from './components/ui/ErrorBoundary';
 import { API_ENDPOINTS } from './services/apiConfig';
 import { withProductLineHeaders } from './config/productLine';
 
-import { fuelService } from './services/fuelService';
 import { PermissionGate } from './components/auth/PermissionGate';
 import { PAGE_PERMISSION_MAP } from './utils/permissions';
 
@@ -262,19 +261,6 @@ function AppContent() {
         setMaintenanceStatus(prev => ({ ...prev, checked: true }));
       });
   }, []);
-
-  // Phase 5: Prefetch parent companies on app load for instant dropdown population
-  useEffect(() => {
-    if (user && role === 'admin') {
-      queryClient.prefetchQuery({
-        queryKey: ['parentCompanies'],
-        queryFn: () => fuelService.getParentCompanies(),
-        staleTime: 5 * 60 * 1000, // 5 minutes
-      }).catch(err => {
-        console.log('[Prefetch] Parent companies prefetch failed (non-critical):', err);
-      });
-    }
-  }, [user, role]);
 
   // OAuth Callback Handler
   useEffect(() => {

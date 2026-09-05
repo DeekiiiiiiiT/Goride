@@ -143,5 +143,10 @@ export function useFuelCycles(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enabled, legacy, vehicleIdsKey, opts.weekStart, opts.weekEnd]);
 
-  return !legacy && enabled && serverCycles ? serverCycles : clientCycles;
+  // Prefer server when it returned cycles. Empty server array must NOT blank out
+  // a working client engine (stamps often lag /cycles on local edge builds).
+  if (!legacy && enabled && serverCycles != null && serverCycles.length > 0) {
+    return serverCycles;
+  }
+  return clientCycles;
 }

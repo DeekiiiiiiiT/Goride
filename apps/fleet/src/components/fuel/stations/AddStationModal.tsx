@@ -88,6 +88,7 @@ export function AddStationModal({
     gcTime: 10 * 60 * 1000, // 10 minutes
     refetchOnWindowFocus: false,
     refetchOnMount: false,
+    enabled: isOpen,
   });
 
   const [loading, setLoading] = useState(false);

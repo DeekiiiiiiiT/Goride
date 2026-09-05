@@ -71,6 +71,7 @@ export function FuelLogModal({
         gcTime: 10 * 60 * 1000, // 10 minutes
         refetchOnWindowFocus: false,
         refetchOnMount: false,
+        enabled: isOpen,
     });
 
     const [activeTab, setActiveTab] = useState('single');

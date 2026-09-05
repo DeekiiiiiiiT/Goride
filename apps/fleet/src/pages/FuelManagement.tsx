@@ -148,13 +148,11 @@ function FuelManagementInner({ defaultTab = 'logs', onViewDriverLedger, onTabCha
       : toEntryYmd(week.to);
     const currentEnd = toEntryYmd(week.to);
 
-    // Landing needs the full activity span — week-only fetch made reopened older
-    // weeks vanish (no entries in memory → filtered off Outstanding).
-    const activityStart = activityMinDate && activityMinDate < selectedStart
-      ? activityMinDate
-      : selectedStart;
+    // Logs/tx window = selected week only (+ fuelListWindow pad). Do NOT expand to
+    // activityMinDate — that paged the entire history and saturated HTTP/1.1 (ROAM-FLEET-10).
+    // Recon landing uses SQL periods; older weeks do not need every fill in memory.
     const endDate = selectedEnd > currentEnd ? selectedEnd : currentEnd;
-    const base = fuelListWindow({ startYmd: activityStart, endYmd: endDate });
+    const base = fuelListWindow({ startYmd: selectedStart, endYmd: endDate });
 
     if (logCustomOverride && logDateRangeOverride?.from) {
       const customStart = toEntryYmd(logDateRangeOverride.from);
@@ -165,7 +163,7 @@ function FuelManagementInner({ defaultTab = 'logs', onViewDriverLedger, onTabCha
       };
     }
     return base;
-  }, [reconciliationDateRange, logCustomOverride, logDateRangeOverride, fleetTz, activityMinDate]);
+  }, [reconciliationDateRange, logCustomOverride, logDateRangeOverride, fleetTz]);
 
   const setLogDateRange = (range: DateRange | undefined) => {
     const activeStart = activeFuelWeek?.from ? toEntryYmd(activeFuelWeek.from) : '';
@@ -303,7 +301,10 @@ function FuelManagementInner({ defaultTab = 'logs', onViewDriverLedger, onTabCha
   } = useFuelPeriods({
     from: landingPeriodRange.from,
     to: landingPeriodRange.to,
-    enabled: Boolean(landingPeriodRange.from && landingPeriodRange.to),
+    // Recon-only — never compete with Transaction Logs page load (HTTP/1.1 overhead).
+    enabled:
+      activeTab === 'reconciliation' &&
+      Boolean(landingPeriodRange.from && landingPeriodRange.to),
   });
 
   // No browser week-engines on landing mount (was N engines × trips/PA/brain → multi-second trickle).
@@ -359,6 +360,7 @@ function FuelManagementInner({ defaultTab = 'logs', onViewDriverLedger, onTabCha
 
   // Keep finalized-week SQL rows fresh (does not run open-week browser engines)
   useEffect(() => {
+    if (activeTab !== 'reconciliation') return;
     if (!landingPeriodRange.from || !landingPeriodRange.to) return;
     void api
       .recomputeFuelReconciliationPeriods({
@@ -367,10 +369,11 @@ function FuelManagementInner({ defaultTab = 'logs', onViewDriverLedger, onTabCha
       })
       .then(() => queryClient.invalidateQueries({ queryKey: [FUEL_PERIODS_KEY] }))
       .catch(() => undefined);
-  }, [landingPeriodRange.from, landingPeriodRange.to, queryClient]);
+  }, [activeTab, landingPeriodRange.from, landingPeriodRange.to, queryClient]);
 
   // Dual-approval prefs for landing badges + finalize gate (org-scoped)
   useEffect(() => {
+    if (activeTab !== 'reconciliation') return;
     let cancelled = false;
     void api
       .getPreferences()
@@ -393,7 +396,7 @@ function FuelManagementInner({ defaultTab = 'logs', onViewDriverLedger, onTabCha
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [activeTab]);
 
   // If selection falls outside activity-based options (e.g. old Dec weeks), snap to current week
   useEffect(() => {
@@ -412,6 +415,7 @@ function FuelManagementInner({ defaultTab = 'logs', onViewDriverLedger, onTabCha
 
   // Effect to reload trips when Reconciliation Date Range changes
   useEffect(() => {
+    if (activeTab !== 'reconciliation') return;
     const fetchTripsForRange = async () => {
         if (!reconciliationDateRange?.from) return;
         try {
@@ -429,7 +433,7 @@ function FuelManagementInner({ defaultTab = 'logs', onViewDriverLedger, onTabCha
         }
     };
     fetchTripsForRange();
-  }, [reconciliationDateRange]);
+  }, [activeTab, reconciliationDateRange]);
 
   const loadLogsAndTransactions = useCallback(async () => {
     const { startDate, endDate } = fuelFetchWindow;
@@ -480,19 +484,37 @@ function FuelManagementInner({ defaultTab = 'logs', onViewDriverLedger, onTabCha
     }
   }, [activeTab, loadLogsAndTransactions]);
 
-  const loadData = useCallback(async (silent = false) => {
+  const coreLoadedRef = useRef(false);
+  const fullLoadedRef = useRef(false);
+
+  const loadData = useCallback(async (silent = false, opts?: { scope?: 'core' | 'full' }) => {
+      const scope =
+        opts?.scope ||
+        (activeTab === 'logs' || activeTab === 'reimbursements' ? 'core' : 'full');
       if (!silent) setIsRefreshing(true);
       try {
-          // Heal in background — must not block Card Inventory / first paint
-          void fuelService.ensurePostedEntries(40).catch(() => ({ healed: 0, blocked: 0 }));
-
-          // Start all fetches immediately; paint cards (and names) as soon as those resolve.
+          // Names first — Transaction Logs only needs vehicles/drivers for display.
           const vehiclesP = api.getVehicles().catch((err) => {
               console.error('[FuelManagement] getVehicles failed', err);
               toast.error('Could not load vehicles — session may have expired.');
               return [];
           });
           const driversP = api.getDrivers().catch(() => []);
+
+          if (scope === 'core') {
+              const [vData, dData] = await Promise.all([vehiclesP, driversP]);
+              setVehicles(vData);
+              setDrivers(dData);
+              setCardsLoading(false);
+              coreLoadedRef.current = true;
+              if (!silent) toast.success('Data refreshed');
+              return;
+          }
+
+          // Heal in background — must not block Card Inventory / first paint
+          void fuelService.ensurePostedEntries(40).catch(() => ({ healed: 0, blocked: 0 }));
+
+          // Start remaining fetches; paint cards (and names) as soon as those resolve.
           const scenariosP = fuelService.getFuelScenarios().catch(() => []);
           const cardsP = fuelService.getFuelCards().then(
               (data) => data,
@@ -543,6 +565,8 @@ function FuelManagementInner({ defaultTab = 'logs', onViewDriverLedger, onTabCha
           setDisputes(disputesData);
           setFinalizedReports(Array.isArray(finalizedData) ? finalizedData : []);
           setActivityMinDate(boundsData.minDate);
+          coreLoadedRef.current = true;
+          fullLoadedRef.current = true;
 
           if (!silent) toast.success("Data refreshed");
       } catch (e) {
@@ -552,11 +576,33 @@ function FuelManagementInner({ defaultTab = 'logs', onViewDriverLedger, onTabCha
       } finally {
           setIsRefreshing(false);
       }
-  }, []);
+  }, [activeTab, activityMinDate, fuelFetchWindow.endDate, fuelFetchWindow.startDate]);
 
+  // Tab-scoped bootstrap — logs stay light; recon/cards/config load the full bundle once.
   useEffect(() => {
-    loadData(true);
-  }, []);
+    const needsFull = activeTab !== 'logs' && activeTab !== 'reimbursements';
+    if (needsFull) {
+      if (fullLoadedRef.current) return;
+      void loadData(true, { scope: 'full' });
+      return;
+    }
+    if (coreLoadedRef.current || fullLoadedRef.current) return;
+    void loadData(true, { scope: 'core' });
+  }, [activeTab, loadData]);
+
+  // When opening Add Fill from Logs, warm cards if still empty.
+  useEffect(() => {
+    if (!isLogModalOpen || cards.length > 0) return;
+    void fuelService
+      .getFuelCards()
+      .then((data) => {
+        setCards(data);
+        setCardsLoadError(null);
+      })
+      .catch((err) => {
+        console.error('[FuelManagement] Lazy card load failed', err);
+      });
+  }, [isLogModalOpen, cards.length]);
 
   // Lightweight refresh for fuel entries only (used after Bulk Assign)
   const refreshLogs = useCallback(async () => {
@@ -741,7 +787,9 @@ function FuelManagementInner({ defaultTab = 'logs', onViewDriverLedger, onTabCha
           }
           setIsLogModalOpen(false);
           setEditingLog(null);
-          loadData(true); // Full reload to refresh ledger balances
+          void loadLogsAndTransactions();
+          // Keep names/cards warm without re-running the full recon/cards bundle.
+          void loadData(true, { scope: activeTab === 'logs' ? 'core' : 'full' });
       } catch (e) {
           console.error(e);
           toast.error(e instanceof Error ? e.message : "Failed to save transaction(s)");

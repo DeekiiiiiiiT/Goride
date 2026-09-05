@@ -41,6 +41,7 @@ export function SubmitExpenseModal({ isOpen, onClose, onSave, drivers, vehicles,
         gcTime: 10 * 60 * 1000, // 10 minutes
         refetchOnWindowFocus: false,
         refetchOnMount: false,
+        enabled: isOpen,
     });
 
     const [isSubmitting, setIsSubmitting] = useState(false);

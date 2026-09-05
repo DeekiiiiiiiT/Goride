@@ -105,13 +105,36 @@ describe('calculateFuelCycles — statement ledger isolation', () => {
 });
 
 describe('calculateFuelCycles — tank capacity guard', () => {
-  it('skips cycle math entirely when tank capacity is unknown (no silent 40L fallback)', () => {
+  it('skips legacy (unstamped) cycle math when tank capacity is unknown — no silent 40L', () => {
     const noCapVehicle = { id: 'NOCAP' } as Vehicle;
     const entries: FuelEntry[] = [
-      entry({ id: 'a', vehicleId: 'NOCAP', odometer: 1000, liters: 35, metadata: { isSoftAnchor: true, isFullTank: true, isCapacityClose: true } }),
-      entry({ id: 'b', vehicleId: 'NOCAP', odometer: 1500, liters: 35, metadata: { isSoftAnchor: true, isFullTank: true, isCapacityClose: true } }),
+      entry({ id: 'a', vehicleId: 'NOCAP', odometer: 1000, liters: 35 }),
+      entry({ id: 'b', vehicleId: 'NOCAP', odometer: 1500, liters: 35 }),
     ];
     expect(calculateFuelCycles(entries, [noCapVehicle])).toEqual([]);
+  });
+
+  it('still builds cycles from server capacity-close stamps when tank capacity is unknown', () => {
+    const noCapVehicle = { id: 'NOCAP' } as Vehicle;
+    const entries: FuelEntry[] = [
+      entry({
+        id: 'a',
+        vehicleId: 'NOCAP',
+        odometer: 1000,
+        liters: 35,
+        metadata: { isSoftAnchor: true, isFullTank: true, isCapacityClose: true, volumeContributed: 35 },
+      }),
+      entry({
+        id: 'b',
+        vehicleId: 'NOCAP',
+        odometer: 1500,
+        liters: 35,
+        metadata: { isSoftAnchor: true, isFullTank: true, isCapacityClose: true, volumeContributed: 35 },
+      }),
+    ];
+    const closed = calculateFuelCycles(entries, [noCapVehicle]).filter((c) => c.status !== 'Active');
+    expect(closed.length).toBeGreaterThanOrEqual(1);
+    expect(closed[0].distance).toBe(500);
   });
 });
 

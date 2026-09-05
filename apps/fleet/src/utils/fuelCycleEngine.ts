@@ -38,10 +38,21 @@ export function calculateFuelCycles(entries: FuelEntry[], vehicles: Vehicle[] = 
 
     vehicleGroups.forEach((vehicleEntries, vehicleId) => {
         const vehicle = vehicleMap.get(vehicleId);
-        // No silent fallback: without a real tank capacity the SPLIT/close math is
-        // meaningless. Skip cycle math for this vehicle entirely (no fabricated 40L tank).
+        // Prefer real tank capacity. Do NOT invent 40 L — but still process vehicles
+        // that already have server capacity-close stamps (volumeContributed / isSoftAnchor).
         const tankCapacity = resolveTankCapacity(vehicle);
-        if (!(tankCapacity > 0)) return;
+        const hasPersistedClose = vehicleEntries.some((e) => {
+            const m = e.metadata || {};
+            return (
+                m.isCapacityClose === true ||
+                m.isSoftAnchor === true ||
+                m.isHardAnchor === true ||
+                m.isFullTank === true ||
+                (typeof m.volumeContributed === 'number' && m.volumeContributed > 0)
+            );
+        });
+        // Without capacity AND without stamps there is no defensible close math.
+        if (!(tankCapacity > 0) && !hasPersistedClose) return;
 
         const sorted = [...vehicleEntries].sort((a, b) => {
             const dateStrA = a.date.includes('-') ? a.date : a.date.replace(/\//g, '-');
@@ -121,6 +132,11 @@ export function calculateFuelCycles(entries: FuelEntry[], vehicles: Vehicle[] = 
                     isCapped = true;
                 }
             } else {
+                // Legacy rows need a real tank capacity to decide closes.
+                if (!(tankCapacity > 0)) {
+                    currentCycleEntries.push({ ...entry, volumeContributed: entryVolume });
+                    return;
+                }
                 // Legacy rows (no server metadata): decide the close via the shared
                 // cycle-close policy instead of a hard-wired 98% classifyAnchor.
                 const decision = evaluateCycleClose({

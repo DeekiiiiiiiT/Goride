@@ -190,6 +190,23 @@ export function FuelLogTable({
         };
     }, [entries]);
 
+    const resolveVehicleFilterId = (raw: string): string => {
+        if (!raw || raw === 'all') return 'all';
+        // Exact id match
+        if (entries.some((e) => e.vehicleId === raw) || vehicles.some((v) => v.id === raw)) return raw;
+        // Plate / display-name deep-link (e.g. ?vehicleId=5179KZ)
+        const byName = uniqueVehicles.find((v) => v.name.toLowerCase() === raw.toLowerCase());
+        if (byName) return byName.id;
+        const byPlate = vehicles.find((v) => {
+            const plate = String((v as { licensePlate?: string; plate?: string }).licensePlate
+                || (v as { plate?: string }).plate
+                || '').toLowerCase();
+            return plate === raw.toLowerCase() || plate.replace(/\s+/g, '') === raw.toLowerCase();
+        });
+        if (byPlate) return byPlate.id;
+        return raw;
+    };
+
     // Sync tab/filters to URL for shareable views
     useEffect(() => {
         try {
@@ -199,13 +216,15 @@ export function FuelLogTable({
             const q = params.get('q');
             if (q) setSearchTerm(q);
             const v = params.get('vehicleId');
-            if (v) setFilterVehicle(v);
+            if (v) setFilterVehicle(resolveVehicleFilterId(v));
             const integrity = params.get('integrity');
             if (integrity) setFilterIntegrity(integrity);
         } catch {
             /* ignore */
         }
-    }, []);
+        // uniqueVehicles/vehicles resolve plate→id once data arrives
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [entries, vehicles]);
 
     useEffect(() => {
         try {
@@ -454,17 +473,25 @@ export function FuelLogTable({
     }, [entries]);
 
     const filteredCycles = useMemo(() => {
+        const startYmd = dateRange?.from ? toEntryYmd(dateRange.from) : null;
+        const endYmd = dateRange?.to
+            ? toEntryYmd(dateRange.to)
+            : (dateRange?.from ? toEntryYmd(dateRange.from) : null);
+        const term = searchTerm.trim().toLowerCase();
         return allCycles.filter(c => {
             if (filterVehicle !== 'all' && c.vehicleId !== filterVehicle) return false;
-            if (filterStatus === 'Flagged' && c.status !== 'Anomaly') return false;
+            if (filterStatus === 'Flagged' && c.status !== 'Anomaly' && c.signalTier !== 'exception') return false;
             if (filterStatus === 'Verified' && c.status !== 'Complete') return false;
             if (filterStatus === 'Pending' && c.status !== 'Active') return false;
-            if (dateRange?.from || dateRange?.to) {
-                const cycleDate = new Date(c.endDate);
-                if (dateRange.from && cycleDate < dateRange.from) return false;
-                if (dateRange.to && cycleDate > dateRange.to) return false;
+            // Overlap with selected week (YMD — avoid UTC Date parse shifting Aug 24–30)
+            if (startYmd || endYmd) {
+                const cStart = String(c.startDate || '').split('T')[0];
+                const cEnd = String(c.endDate || '').split('T')[0];
+                if (endYmd && cStart && cStart > endYmd) return false;
+                if (startYmd && cEnd && cEnd < startYmd) return false;
             }
-            return getVehicleName(c.vehicleId).toLowerCase().includes(searchTerm.toLowerCase());
+            if (!term) return true;
+            return getVehicleName(c.vehicleId).toLowerCase().includes(term);
         });
     }, [allCycles, filterVehicle, filterStatus, dateRange, searchTerm, getVehicleName]);
 
@@ -1281,7 +1308,14 @@ export function FuelLogTable({
                     </>
                 ) : (
                     <div className="p-4">
-                        {filteredCycles.length === 0 ? <div className="h-24 flex items-center justify-center">No fuel cycles identified</div> : 
+                        {filteredCycles.length === 0 ? (
+                            <div className="h-24 flex flex-col items-center justify-center gap-1 text-sm text-slate-500 px-4 text-center">
+                                <span>No fuel cycles identified</span>
+                                <span className="text-[11px] text-slate-400">
+                                    Cycles appear after capacity-close fills with odometer. Set tank capacity on the vehicle if closes are missing.
+                                </span>
+                            </div>
+                        ) : 
                         <Accordion type="multiple" className="space-y-3">
                             {filteredCycles.map(cycle => {
                                 const vehicle = vehicles.find(v => v.id === cycle.vehicleId);
