@@ -14,7 +14,9 @@ const vehicle: Vehicle = {
   id: '5179KZ',
   licensePlate: '5179KZ',
   specifications: { tankCapacity: 36 },
-  fuelSettings: { tankCapacity: 36, efficiencyCity: 7.3 },
+  // Soft-cap stacking for this golden requires cumulative_98 — rideshare is the
+  // engine default when unset (see fuelCycleEngine + fuel-brain-spine.md).
+  fuelSettings: { tankCapacity: 36, efficiencyCity: 7.3, cycleCloseMode: 'cumulative_98' },
 } as Vehicle;
 
 /** Chronological fills for the statement week (liters + round-dollar top-ups). */
