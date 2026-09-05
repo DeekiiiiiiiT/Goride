@@ -2,6 +2,7 @@ import { Flag } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { api } from '../../../services/api';
+import { fuelService } from '../../../services/fuelService';
 import { finalizeFuelWeekReports } from '../../../services/fuelFinalizeService';
 import {
   buildFuelWeekReportsWithGating,
@@ -40,6 +41,7 @@ type PreparedWeek = {
   label: string;
   reports: WeeklyFuelReport[];
   trips: Trip[];
+  weekEntries: FuelEntry[];
 };
 
 export type FuelBulkFinalizeDialogProps = {
@@ -91,7 +93,11 @@ export function bulkEarlyGateFailure(
     (v) => v.totalSpend > FUEL_SPEND_EPS || v.pendingCount > 0 || v.hasOpenDispute || v.isFinalized,
   );
 
-  const counts = buildFuelStepCounts({ vehicles: vehicleSnaps });
+  const counts = buildFuelStepCounts({
+    vehicles: vehicleSnaps,
+    // Must honor accepted unexplained — same as landing/wizard (was always blocking bulk).
+    leakageReviewed: Boolean(period.leakageReviewed),
+  });
   if (counts['adjustments-disputes'].actionable > 0) {
     return `Blocked — ${counts['adjustments-disputes'].actionable} open dispute(s)`;
   }
@@ -125,7 +131,10 @@ export function FuelBulkFinalizeDialog({
   const queryClient = useQueryClient();
   const { confirmIfNeeded: confirmSettlementReopen, dialog: settlementReopenDialog } =
     useFuelSettlementReopenGate();
-  const outstanding = periods.filter((p) => !p.locked && (p.status === 'outstanding' || p.status === 'in_progress'));
+  const outstanding = periods
+    .filter((p) => !p.locked && (p.status === 'outstanding' || p.status === 'in_progress'))
+    .slice()
+    .sort((a, b) => a.startDate.localeCompare(b.startDate));
   const [secondApproverThreshold, setSecondApproverThreshold] = useState(
     FUEL_SECOND_APPROVER_THRESHOLD,
   );
@@ -156,7 +165,7 @@ export function FuelBulkFinalizeDialog({
       executingLabel="Finalizing…"
       busyMessage="Bulk finalizing weeks…"
       extraAck
-      extraAckLabel="I reviewed data-quality, disputes, and re-finalize warnings. Hard-blocked weeks (exceptions, open disputes, unexplained fuel) will still be rejected."
+      extraAckLabel="I reviewed data-quality, disputes, unexplained fuel, and re-finalize warnings. Accepting unexplained for selected weeks is included in this run. Hard-blocked weeks (exceptions, open disputes) will still be rejected."
       icon={<Flag className="h-5 w-5 text-indigo-600" />}
       renderItemMeta={(p) => {
         const actionable = p.counts?.finalize?.actionable ?? 0;
@@ -168,6 +177,10 @@ export function FuelBulkFinalizeDialog({
             <span className="font-semibold text-slate-800">{selected.length}</span> week
             {selected.length === 1 ? '' : 's'} selected — each week settles fills then saves
             snapshots before the next starts.
+          </p>
+          <p>
+            Unexplained fuel still marked “to review” will be accepted when you confirm below
+            (same as Mark reviewed in the week wizard).
           </p>
           <p>Failed weeks do not undo weeks that already succeeded.</p>
         </div>
@@ -191,12 +204,21 @@ export function FuelBulkFinalizeDialog({
           onProgress(`${formatFuelBulkProgress(i + 1, sorted.length, label)} Preparing…`);
 
           try {
+            // Landing money is SQL; in-memory logs only cover a recent window — fetch this week.
+            onProgress(
+              `${formatFuelBulkProgress(i + 1, sorted.length, label)} Loading fills…`,
+            );
+            const weekEntries = await fuelService.getAllFuelEntriesInRange({
+              startDate: period.startDate,
+              endDate: period.endDate,
+            });
+
             const { reports, trips, gateResult } = await buildFuelWeekReportsWithGating({
               weekStartYmd: period.startDate,
               weekEndYmd: period.endDate,
               vehicles,
               drivers,
-              fuelEntries,
+              fuelEntries: weekEntries,
               adjustments,
               scenarios,
               fuelCards,
@@ -205,8 +227,39 @@ export function FuelBulkFinalizeDialog({
             });
 
             if (!reports.length) {
-              weekResults.push({ id: period.id, label, status: 'skipped', message: 'No driver statements with spend' });
+              const hasSpend = (Number(period.totalSpend) || 0) > FUEL_SPEND_EPS;
+              weekResults.push({
+                id: period.id,
+                label,
+                status: 'skipped',
+                message: hasSpend
+                  ? 'Could not build driver statements from fills for this week'
+                  : 'No driver statements with spend',
+              });
               continue;
+            }
+
+            // Accept unexplained only after we know the week can be built/finalized.
+            // Negative misc (over-explained) gates as data-quality until leakageReviewed — same accept API.
+            let periodForGate = period;
+            const leakageAmt = Number(period.netLeakage) || 0;
+            const needsLeakageAccept =
+              !period.leakageReviewed &&
+              ((period.counts?.['leakage-gap']?.actionable || 0) > 0 ||
+                Math.abs(leakageAmt) > FUEL_SPEND_EPS);
+            if (needsLeakageAccept) {
+              onProgress(
+                `${formatFuelBulkProgress(i + 1, sorted.length, label)} Accepting unexplained…`,
+              );
+              const periodRow = await api.ensureFuelReconciliationPeriod({
+                weekStart: period.startDate,
+                weekEnd: period.endDate,
+              });
+              await api.reviewFuelPeriodLeakage({
+                periodId: periodRow.id,
+                note: 'Accepted via bulk Finalize weeks',
+              });
+              periodForGate = { ...period, leakageReviewed: true };
             }
 
             if (gateResult.hasExceptionBlockers) {
@@ -228,9 +281,9 @@ export function FuelBulkFinalizeDialog({
             }
 
             const earlyFail = bulkEarlyGateFailure(
-              period,
+              periodForGate,
               reports,
-              fuelEntries,
+              weekEntries,
               disputes,
               vehicles,
               scenarios,
@@ -241,7 +294,7 @@ export function FuelBulkFinalizeDialog({
               continue;
             }
 
-            prepared.push({ period, label, reports, trips });
+            prepared.push({ period: periodForGate, label, reports, trips, weekEntries });
           } catch (e: any) {
             console.error('[FuelBulkFinalize] prepare failed', period.id, e);
             weekResults.push({ id: period.id, label, status: 'failed', message: e?.message || 'Failed' });
@@ -267,13 +320,13 @@ export function FuelBulkFinalizeDialog({
 
         for (let i = 0; i < prepared.length; i++) {
           const item = prepared[i];
-          const { period, label, reports, trips } = item;
+          const { period, label, reports, trips, weekEntries } = item;
           onProgress(formatFuelBulkProgress(i + 1, prepared.length, label));
 
           try {
             const result = await finalizeFuelWeekReports(
               reports,
-              { vehicles, drivers, fuelCards, fuelEntries, scenarios, trips },
+              { vehicles, drivers, fuelCards, fuelEntries: weekEntries, scenarios, trips },
               {
                 priorReports,
                 skipCacheInvalidation: true,
@@ -314,15 +367,33 @@ export function FuelBulkFinalizeDialog({
                 snapshots: result.snapshots || [],
                 totalSpend,
                 secondApproverThreshold,
+                allowServiceSecondApprove: true,
+              }).catch(async (lockErr: any) => {
+                // Worker may OOM after lock — treat already-locked as success.
+                const fresh = await api.getFuelReconciliationPeriod(periodRow.id).catch(() => null);
+                if (fresh && (fresh.status === 'locked' || fresh.lockedAt || fresh.locked_at)) {
+                  return { state: 'succeeded', ok: true, alreadyLocked: true };
+                }
+                throw lockErr;
               });
               const jobInterp = interpretFuelFinalizeJobResult(jobRes);
               if (jobInterp.incomplete) {
-                weekResults.push({
-                  id: period.id,
-                  label,
-                  status: 'failed',
-                  message: jobInterp.toastMessage || jobRes.error || 'Server finalize failed',
-                });
+                const fresh = await api.getFuelReconciliationPeriod(periodRow.id).catch(() => null);
+                if (fresh && (fresh.status === 'locked' || fresh.lockedAt || fresh.locked_at)) {
+                  weekResults.push({
+                    id: period.id,
+                    label,
+                    status: 'ok',
+                    message: `${result.successCount} posted · already locked`,
+                  });
+                } else {
+                  weekResults.push({
+                    id: period.id,
+                    label,
+                    status: 'failed',
+                    message: jobInterp.toastMessage || jobRes.error || 'Server finalize failed',
+                  });
+                }
               } else {
                 weekResults.push({
                   id: period.id,

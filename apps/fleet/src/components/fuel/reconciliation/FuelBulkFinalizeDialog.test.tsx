@@ -19,6 +19,10 @@ vi.mock('../../../services/api', () => ({
   api: {
     getPreferences: vi.fn(async () => ({})),
     getFinalizedReports: vi.fn(async () => []),
+    ensureFuelReconciliationPeriod: vi.fn(async () => ({ id: 'p1', version: 1 })),
+    reviewFuelPeriodLeakage: vi.fn(async () => ({ ok: true })),
+    enqueueFuelPeriodFinalize: vi.fn(async () => ({ state: 'succeeded', ok: true })),
+    getFuelReconciliationPeriod: vi.fn(async () => null),
   },
 }));
 
@@ -107,5 +111,36 @@ describe('FuelBulkFinalizeDialog', () => {
       [],
     );
     expect(msg).toMatch(/Blocked — .*open dispute/i);
+  });
+
+  it('does not hard-gate unexplained when the period already accepted leakage', () => {
+    const vehicle = {
+      id: 'v1',
+      licensePlate: '5179KZ',
+      make: 'Toyota',
+      model: 'Corolla',
+    } as Vehicle;
+    const msg = bulkEarlyGateFailure(
+      period({ leakageReviewed: true, netLeakage: 500 }),
+      [
+        {
+          driverId: 'd1',
+          vehicleId: 'v1',
+          vehicleIds: ['v1'],
+          weekStart: '2026-07-06',
+          weekEnd: '2026-07-12',
+          totalGasCardCost: 1_000,
+          driverShare: 500,
+          companyShare: 500,
+          miscellaneousCost: 500,
+        } as any,
+      ],
+      [],
+      [],
+      [vehicle],
+      [],
+      [],
+    );
+    expect(msg).toBeNull();
   });
 });

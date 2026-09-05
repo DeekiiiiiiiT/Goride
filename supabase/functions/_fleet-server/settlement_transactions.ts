@@ -1,14 +1,15 @@
 /**
  * A-11: Indexed mirror for driver settlement transactions.
  * Dual-write on KV persist; read path switches via SETTLEMENT_TX_TABLE_READ=true.
+ * PostgREST does not expose ledger — use public.driver_settlement_transactions view.
  */
-import { getServiceClientWithSchema } from "./service_client.ts";
+import { getServiceClient } from "./service_client.ts";
 import { periodKeyFor, DEFAULT_FLEET_TZ } from "../../../packages/finance-core/src/periodKey.ts";
 import { isSettlementParticipantTransaction } from "../../../packages/finance-core/src/driverCashPayment.ts";
 import { getFleetTimezone } from "./timezone_helper.tsx";
 
 function ledgerSb() {
-  return getServiceClientWithSchema("ledger");
+  return getServiceClient();
 }
 
 /** @deprecated use isSettlementParticipantTransaction — kept as alias for call sites */

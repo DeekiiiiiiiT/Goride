@@ -254,6 +254,20 @@ async function processJobRow(job: Record<string, unknown>) {
   >;
 
   if (kind === "finalize") {
+    // Idempotent resume: period already locked (e.g. worker died mid post-lock rebuild).
+    if (period.status === "locked" || period.locked_at) {
+      await sb
+        .from("fuel_period_job")
+        .update({
+          state: "succeeded",
+          progress_done: 1,
+          progress_total: 1,
+          updated_at: now,
+        })
+        .eq("id", job.id);
+      return { ok: true, version: Number(period.version) || nextVersion, alreadyLocked: true };
+    }
+
     const threshold = Number(cursor.secondApproverThreshold) || 0;
     const totalSpend = Number(cursor.totalSpend) || Number(period.total_spend) || 0;
     if (threshold > 0 && totalSpend > threshold) {
@@ -376,6 +390,13 @@ async function processJobRow(job: Record<string, unknown>) {
         await commitFinalizedSnapshotMoney(snap, orgId);
       } catch (e: any) {
         console.error("[fuel_period] money commit failed", snap?.driverId, e);
+        const moneyFailures = [
+          {
+            driverId: String(snap?.driverId || ""),
+            error: e?.message || String(e),
+            phase: "money_commit",
+          },
+        ];
         await sb
           .from("fuel_reconciliation_period")
           .update({
@@ -391,17 +412,11 @@ async function processJobRow(job: Record<string, unknown>) {
           .from("fuel_period_job")
           .update({
             state: "failed",
-            failures: [
-              {
-                driverId: String(snap?.driverId || ""),
-                error: e?.message || String(e),
-                phase: "money_commit",
-              },
-            ],
+            failures: moneyFailures,
             updated_at: now,
           })
           .eq("id", job.id);
-        return { ok: false, error: "money_commit_failure" };
+        return { ok: false, error: "money_commit_failure", failures: moneyFailures };
       }
     }
     await sb
@@ -430,11 +445,26 @@ async function processJobRow(job: Record<string, unknown>) {
       },
       actor,
     );
-    // Post-lock rebuild so Expenses fuelStatus flips to finalized.
-    await rebuildExpensesForFuelWeek(ymd(period.week_start), [
-      ...done,
-      ...snapshots.map((s: any) => String(s?.driverId || "")),
-    ]);
+    // Mark succeeded before heavy Expenses rebuild — lock is already durable.
+    // WORKER_RESOURCE_LIMIT during rebuild must not leave the job "running".
+    await sb
+      .from("fuel_period_job")
+      .update({
+        state: "succeeded",
+        progress_done: snapshots.length || 1,
+        progress_total: snapshots.length || 1,
+        updated_at: now,
+      })
+      .eq("id", job.id);
+    try {
+      await rebuildExpensesForFuelWeek(ymd(period.week_start), [
+        ...done,
+        ...snapshots.map((s: any) => String(s?.driverId || "")),
+      ]);
+    } catch (rebuildErr) {
+      console.error("[fuel_period] post-lock expenses rebuild failed (non-fatal)", rebuildErr);
+    }
+    return { ok: true, version: nextVersion };
   } else if (kind === "reopen") {
     const reason = String(cursor.reason || "");
     const weekStart = ymd(period.week_start);
@@ -795,6 +825,42 @@ export function registerFuelPeriodRoutes(app: Hono) {
         c.req.header("Idempotency-Key") ||
         `finalize:${periodId}:v${Number(period.version) || 1}`;
       const sb = getServiceClient();
+      const actor = actorId(c);
+      // Program 4: UI service_only — record system second_approve before finalize if needed.
+      // Bulk finalize with explicit ack may also request service second_approve (high-spend weeks).
+      const orgPrefs = await loadOrgPreferences(orgId);
+      const uiMode = resolveDualApprovalUiMode(orgPrefs.fuelDualApprovalUiMode);
+      const thr =
+        Number(body.secondApproverThreshold) ||
+        secondApproverThresholdFromPrefs(orgPrefs);
+      const allowServiceSecondApprove =
+        uiMode === "service_only" || Boolean(body.allowServiceSecondApprove);
+      const stampServiceSecondApproveIfNeeded = async (cursorSpend?: number) => {
+        const effectiveSpend = Math.max(
+          Number(body.totalSpend) || 0,
+          Number(period.total_spend) || 0,
+          Number(cursorSpend) || 0,
+        );
+        if (!allowServiceSecondApprove || !(thr > 0 && effectiveSpend > thr) || !actor) {
+          return;
+        }
+        const approver = fuelAutoCloseApproverId();
+        if (approver === actor) return;
+        await insertAudit(
+          orgId,
+          periodId,
+          "second_approve",
+          {
+            source: body.allowServiceSecondApprove
+              ? "bulk_finalize_ack"
+              : "ui_service_approve",
+            totalSpend: effectiveSpend,
+            secondApproverThreshold: thr,
+          },
+          approver,
+        );
+      };
+
       const { data: existing } = await sb
         .from("fuel_period_job")
         .select("*")
@@ -808,6 +874,12 @@ export function registerFuelPeriodRoutes(app: Hono) {
           existing.state === "running" ||
           existing.state === "failed"
         ) {
+          const cursorSpend = Number(
+            (existing.cursor && typeof existing.cursor === "object"
+              ? (existing.cursor as Record<string, unknown>).totalSpend
+              : 0) as number,
+          );
+          await stampServiceSecondApproveIfNeeded(cursorSpend);
           const { data: fresh } = await sb
             .from("fuel_period_job")
             .select("*")
@@ -832,26 +904,7 @@ export function registerFuelPeriodRoutes(app: Hono) {
           202,
         );
       }
-      const actor = actorId(c);
-      // Program 4: UI service_only — record system second_approve before finalize if needed
-      const orgPrefs = await loadOrgPreferences(orgId);
-      const uiMode = resolveDualApprovalUiMode(orgPrefs.fuelDualApprovalUiMode);
-      const thr =
-        Number(body.secondApproverThreshold) ||
-        secondApproverThresholdFromPrefs(orgPrefs);
-      const spend = Number(body.totalSpend) || Number(period.total_spend) || 0;
-      if (uiMode === "service_only" && thr > 0 && spend > thr && actor) {
-        const approver = fuelAutoCloseApproverId();
-        if (approver !== actor) {
-          await insertAudit(
-            orgId,
-            periodId,
-            "second_approve",
-            { source: "ui_service_approve", totalSpend: spend, secondApproverThreshold: thr },
-            approver,
-          );
-        }
-      }
+      await stampServiceSecondApproveIfNeeded();
       const { data: job, error } = await sb
         .from("fuel_period_job")
         .insert({

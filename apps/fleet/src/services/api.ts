@@ -4123,6 +4123,8 @@ export const api = {
     snapshots?: any[];
     totalSpend?: number;
     secondApproverThreshold?: number;
+    /** Bulk finalize ack — server may stamp system second_approve for high-spend weeks. */
+    allowServiceSecondApprove?: boolean;
   }) {
     const response = await fetchWithRetry(
       `${API_ENDPOINTS.fuel}/fuel/periods/${encodeURIComponent(args.periodId)}/finalize`,
@@ -4137,6 +4139,7 @@ export const api = {
           snapshots: args.snapshots || [],
           totalSpend: args.totalSpend,
           secondApproverThreshold: args.secondApproverThreshold,
+          allowServiceSecondApprove: args.allowServiceSecondApprove === true,
         }),
       },
     );

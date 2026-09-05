@@ -1,10 +1,11 @@
 /**
  * A-7: append settlement revision when paid/settlement fields change.
+ * PostgREST does not expose ledger — write via public.driver_period_revisions.
  */
-import { getServiceClientWithSchema } from "./service_client.ts";
+import { getServiceClient } from "./service_client.ts";
 
 function sb() {
-  return getServiceClientWithSchema("ledger");
+  return getServiceClient();
 }
 
 export async function appendPeriodRevisionIfNeeded(

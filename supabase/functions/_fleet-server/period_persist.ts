@@ -1,11 +1,12 @@
 /**
  * Optimistic-concurrency persist for driver_financial_periods (A-6).
+ * PostgREST does not expose ledger — write via public views (ADR 0005).
  */
-import { getServiceClientWithSchema } from "./service_client.ts";
+import { getServiceClient } from "./service_client.ts";
 import { appendPeriodRevisionIfNeeded } from "./period_revision.ts";
 
 function sb() {
-  return getServiceClientWithSchema("ledger");
+  return getServiceClient();
 }
 
 export type PersistPeriodResult = {

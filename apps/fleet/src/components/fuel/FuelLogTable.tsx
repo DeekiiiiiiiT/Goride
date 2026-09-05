@@ -553,13 +553,8 @@ export function FuelLogTable({
     [trustedCycles, entries, periodBounds, isPeriodOpen],
   );
 
-  const {
-    transactionKpis,
-    summaryLoading,
-    summaryError,
-    hasExtraTxnFilters,
-    serverSummary,
-  } = useTransactionLogKpis({
+  // Keep KPI state on one object — bare summaryError refs broke under Vite HMR (ROAM-FLEET-1A/19).
+  const txnKpis = useTransactionLogKpis({
     activeView,
     periodStart,
     periodEnd,
@@ -578,6 +573,10 @@ export function FuelLogTable({
     validAnchorIds,
     ledgerIntegrity,
   });
+  const { transactionKpis, summaryLoading, hasExtraTxnFilters, serverSummary } = txnKpis;
+  const showLocalTotalsHint =
+    !!txnKpis.summaryError ||
+    String(transactionKpis.populationNote || '').startsWith('Local totals');
 
   const cycleKpis = useMemo(
     () =>
@@ -919,9 +918,7 @@ export function FuelLogTable({
             }}
           />
         )}
-        {activeView === 'transactions' &&
-        !hasExtraTxnFilters &&
-        (summaryError || transactionKpis.populationNote.startsWith('Local totals')) ? (
+        {activeView === 'transactions' && !hasExtraTxnFilters && showLocalTotalsHint ? (
           <div className="mt-1 text-[10px] text-slate-400">Local totals</div>
         ) : null}
       </div>

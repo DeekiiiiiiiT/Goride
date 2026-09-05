@@ -539,37 +539,26 @@ function FuelManagementInner({ defaultTab = 'logs', onViewDriverLedger, onTabCha
               return;
           }
 
-          // Recon/config need scenarios/disputes/finalized — not card inventory or ensure-posted.
+          // Recon/config need scenarios/disputes — finalized + activity-bounds are deferred
+          // until after periods arm so they do not join the mount HTTP/1.1 storm (ROAM-FLEET-10).
           const scenariosP = fuelService.getFuelScenarios().catch(() => []);
           const adjsP = fuelService.getMileageAdjustments().catch(() => []);
           const disputesP = FuelDisputeService.getAllDisputes().catch(() => []);
-          // Finalized window stays on the selected week pad — activity-bounds is deferred
-          // (see effect below) so it does not join the recon mount HTTP/1.1 storm (ROAM-FLEET-10).
-          const finalizedFrom = fuelFetchWindow.startDate;
-          const finalizedTo = fuelFetchWindow.endDate;
-          const finalizedP = api
-            .getFinalizedReports({
-              weekStartFrom: finalizedFrom,
-              weekStartTo: finalizedTo,
-            })
-            .catch(() => []);
 
           if (scope === 'recon') {
-              const [vData, dData, scenariosData, adjsData, disputesData, finalizedData] =
+              const [vData, dData, scenariosData, adjsData, disputesData] =
                   await Promise.all([
                       vehiclesP,
                       driversP,
                       scenariosP,
                       adjsP,
                       disputesP,
-                      finalizedP,
                   ]);
               setVehicles(vData);
               setDrivers(dData);
               setScenarios(scenariosData);
               setAdjustments(adjsData);
               setDisputes(disputesData);
-              setFinalizedReports(Array.isArray(finalizedData) ? finalizedData : []);
               setCardsLoading(false);
               coreLoadedRef.current = true;
               reconLoadedRef.current = true;
@@ -610,13 +599,12 @@ function FuelManagementInner({ defaultTab = 'logs', onViewDriverLedger, onTabCha
               // Keep previous cards if any — never pretend the inventory was empty
           }
 
-          const [scenariosData, adjsData, disputesData, finalizedData] =
-              await Promise.all([scenariosP, adjsP, disputesP, finalizedP]);
+          const [scenariosData, adjsData, disputesData] =
+              await Promise.all([scenariosP, adjsP, disputesP]);
 
           setScenarios(scenariosData);
           setAdjustments(adjsData);
           setDisputes(disputesData);
-          setFinalizedReports(Array.isArray(finalizedData) ? finalizedData : []);
           coreLoadedRef.current = true;
           reconLoadedRef.current = true;
           fullLoadedRef.current = true;
@@ -629,48 +617,44 @@ function FuelManagementInner({ defaultTab = 'logs', onViewDriverLedger, onTabCha
       } finally {
           setIsRefreshing(false);
       }
-  }, [activeTab, fuelFetchWindow.endDate, fuelFetchWindow.startDate]);
+  }, [activeTab]);
 
-  // Defer activity-bounds until after recon periods are armed (or immediately on cards/config).
-  // Keeps GET /fuel-entries/activity-bounds out of the mount parallel wave (ROAM-FLEET-10).
+  // Sequential post-paint: activity-bounds → one finalized-reports call (ROAM-FLEET-10).
+  // Never parallel with recompute/periods/trips/logs on recon mount.
   useEffect(() => {
     if (activeTab === 'logs' || activeTab === 'reimbursements') return;
     if (activeTab === 'reconciliation' && !periodsQueryReady) return;
     let cancelled = false;
-    const delayMs = activeTab === 'reconciliation' ? 750 : 0;
+    const delayMs = activeTab === 'reconciliation' ? 900 : 200;
     const timer = window.setTimeout(() => {
-      void fuelService
-        .getFuelActivityBounds()
-        .then((bounds) => {
-          if (cancelled || !bounds.minDate) return;
-          setActivityMinDate((prev) => (prev === bounds.minDate ? prev : bounds.minDate));
-        })
-        .catch(() => undefined);
+      void (async () => {
+        try {
+          const bounds = await fuelService.getFuelActivityBounds().catch(() => ({
+            minDate: null as string | null,
+          }));
+          if (cancelled) return;
+          const minDate = bounds.minDate;
+          if (minDate) {
+            setActivityMinDate((prev) => (prev === minDate ? prev : minDate));
+          }
+          const weekStartFrom = minDate || fuelFetchWindow.startDate;
+          const data = await api
+            .getFinalizedReports({
+              weekStartFrom,
+              weekStartTo: fuelFetchWindow.endDate,
+            })
+            .catch(() => []);
+          if (!cancelled) setFinalizedReports(Array.isArray(data) ? data : []);
+        } catch {
+          /* non-blocking */
+        }
+      })();
     }, delayMs);
     return () => {
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [activeTab, periodsQueryReady]);
-
-  // Once earliest activity is known, expand finalized coverage for older weeks in the dropdown.
-  useEffect(() => {
-    if (!activityMinDate) return;
-    if (activeTab !== 'reconciliation' && activeTab !== 'configuration') return;
-    let cancelled = false;
-    void api
-      .getFinalizedReports({
-        weekStartFrom: activityMinDate,
-        weekStartTo: fuelFetchWindow.endDate,
-      })
-      .then((data) => {
-        if (!cancelled) setFinalizedReports(Array.isArray(data) ? data : []);
-      })
-      .catch(() => undefined);
-    return () => {
-      cancelled = true;
-    };
-  }, [activityMinDate, activeTab, fuelFetchWindow.endDate]);
+  }, [activeTab, periodsQueryReady, fuelFetchWindow.startDate, fuelFetchWindow.endDate]);
 
   // Tab-scoped bootstrap — logs stay light; recon skips cards; cards tab loads full bundle.
   useEffect(() => {
@@ -1328,19 +1312,40 @@ function FuelManagementInner({ defaultTab = 'logs', onViewDriverLedger, onTabCha
             (s, r) => s + (Number(r.totalGasCardCost) || 0),
             0,
           );
-          const jobRes = await api.enqueueFuelPeriodFinalize({
-            periodId: periodRow.id,
-            version: periodRow.version || 1,
-            idempotencyKey: fuelPeriodFinalizeIdempotencyKey(
-              periodRow.id,
-              periodRow.version || 1,
-            ),
-            snapshots: weekResult.snapshots || [],
-            totalSpend,
-            secondApproverThreshold: threshold,
-          });
+          const recoverIfAlreadyLocked = async (): Promise<boolean> => {
+            const fresh = await api.getFuelReconciliationPeriod(periodRow.id).catch(() => null);
+            const locked =
+              fresh &&
+              (fresh.status === 'locked' || Boolean(fresh.lockedAt || fresh.locked_at));
+            if (!locked) return false;
+            await queryClient.invalidateQueries({ queryKey: ['finalizedReports'] });
+            await queryClient.invalidateQueries({ queryKey: ['driverFinancialPeriods'] });
+            await queryClient.invalidateQueries({ queryKey: [FUEL_PERIODS_KEY] });
+            toast.success('Week locked — this period is now Completed.');
+            return true;
+          };
+
+          let jobRes: Awaited<ReturnType<typeof api.enqueueFuelPeriodFinalize>>;
+          try {
+            jobRes = await api.enqueueFuelPeriodFinalize({
+              periodId: periodRow.id,
+              version: periodRow.version || 1,
+              idempotencyKey: fuelPeriodFinalizeIdempotencyKey(
+                periodRow.id,
+                periodRow.version || 1,
+              ),
+              snapshots: weekResult.snapshots || [],
+              totalSpend,
+              secondApproverThreshold: threshold,
+            });
+          } catch (lockErr: any) {
+            // Worker may OOM after lock, or retry hits version_conflict — both can mean success.
+            if (await recoverIfAlreadyLocked()) return true;
+            throw lockErr;
+          }
           const jobInterp = interpretFuelFinalizeJobResult(jobRes);
           if (jobInterp.incomplete) {
+            if (await recoverIfAlreadyLocked()) return true;
             toast.warning(jobInterp.toastMessage);
             await queryClient.invalidateQueries({ queryKey: [FUEL_PERIODS_KEY] });
             return false;
