@@ -132,10 +132,29 @@ export function FuelPeriodResetDialog({
         { id: toastId },
       );
       void queryClient.invalidateQueries({ queryKey: [DRIVER_FINANCIAL_PERIODS_KEY] });
-      const driverIds = preview?.driverIds?.length
-        ? preview.driverIds
-        : [];
-      if (driverIds.length > 0) {
+
+      // Server already reverses fuel ledger + rebuilds Expenses (reverseFuelFinancialEventsAndRebuild).
+      // Only retry from the client when that sync reported failure — a second rebuild after a
+      // successful reset races the same edge worker and was surfacing a false error toast.
+      const driverIds =
+        (Array.isArray(result.driverIds) && result.driverIds.length > 0
+          ? result.driverIds
+          : preview?.driverIds) || [];
+      const syncErrors = Array.isArray(result.syncErrors) ? result.syncErrors : [];
+      const unlockFailed = syncErrors.some((e) => /unlock period/i.test(String(e)));
+      // Only retry when the server explicitly reported a failed/empty Expenses sync.
+      // Missing periodsRebuilt (older deploy) + no syncErrors → trust server path (same as bulk reopen).
+      const needsExpenseRetry =
+        !unlockFailed &&
+        driverIds.length > 0 &&
+        (syncErrors.length > 0 ||
+          (typeof result.periodsRebuilt === 'number' && result.periodsRebuilt === 0));
+
+      if (unlockFailed) {
+        toast.error(
+          'Week money was reversed but it still shows Completed — refresh and try Reopen week once more',
+        );
+      } else if (needsExpenseRetry) {
         const weekKey = period.startDate || period.id;
         void runBackgroundJobToast(
           async () => {
@@ -148,7 +167,9 @@ export function FuelPeriodResetDialog({
           {
             loading: `Updating Expenses for ${driverIds.length} driver${driverIds.length === 1 ? '' : 's'}…`,
             success: (n) => `Expenses refreshed for ${n} driver${Number(n) === 1 ? '' : 's'}`,
-            error: 'Could not refresh Driver Expenses — try again from Admin if needed',
+            error: (err) =>
+              (err as Error)?.message ||
+              'Could not refresh Driver Expenses — try again from Admin if needed',
           },
         );
       }

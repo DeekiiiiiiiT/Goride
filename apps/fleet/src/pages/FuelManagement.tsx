@@ -260,6 +260,7 @@ function FuelManagementInner({ defaultTab = 'logs', onViewDriverLedger, onTabCha
   const [isSyncing, setIsSyncing] = useState(false);
   /** First fuel-logs fetch finished (even if empty) — avoids empty-state flash on recon. */
   const [fuelLogsHydrated, setFuelLogsHydrated] = useState(false);
+  const [fuelLogsLoadError, setFuelLogsLoadError] = useState<string | null>(null);
   const [secondApproverThreshold, setSecondApproverThreshold] = useState(
     FUEL_SECOND_APPROVER_THRESHOLD,
   );
@@ -434,9 +435,17 @@ function FuelManagementInner({ defaultTab = 'logs', onViewDriverLedger, onTabCha
     const { startDate, endDate } = fuelFetchWindow;
     try {
       const [logsData, txData] = await Promise.all([
-        fuelService.getFuelEntries({ startDate, endDate, limit: 1500 }).catch((err) => {
-          console.error('[FuelManagement] getFuelEntries failed', err);
-          toast.error('Could not load fuel entries — try logging out and back in.');
+        // Paged fetch loads the whole date window (not a single 1500-row page) under
+        // the service safety ceiling; on ceiling overflow it surfaces the partial count.
+        fuelService.getAllFuelEntriesInRange({ startDate, endDate }).catch((err) => {
+          console.error('[FuelManagement] getAllFuelEntriesInRange failed', err);
+          if (typeof err?.partialCount === 'number' && typeof err?.totalCount === 'number') {
+            toast.warning(
+              `Loaded ${err.partialCount} of ${err.totalCount} fills — narrow the period.`,
+            );
+          } else {
+            toast.error('Could not load fuel entries — try logging out and back in.');
+          }
           return [] as FuelEntry[];
         }),
         api.getTransactions(undefined, { startDate, endDate, limit: 1500 }).catch((err) => {
@@ -445,12 +454,15 @@ function FuelManagementInner({ defaultTab = 'logs', onViewDriverLedger, onTabCha
         }),
       ]);
       setLogs(logsData);
-      setFuelDataTruncated(Array.isArray(logsData) && logsData.length >= 1500);
+      const logsTotal = (logsData as FuelEntry[] & { totalCount?: number }).totalCount;
+      setFuelDataTruncated(typeof logsTotal === 'number' && logsData.length < logsTotal);
       setTransactions(txData);
       lastFuelDataLoadAtRef.current = Date.now();
+      setFuelLogsLoadError(null);
       setFuelLogsHydrated(true);
     } catch (e) {
       console.error('[FuelManagement] Dated fuel/tx load failed', e);
+      setFuelLogsLoadError(e instanceof Error ? e.message : 'Failed to load fuel logs.');
       setFuelLogsHydrated(true);
     }
   }, [fuelFetchWindow]);
@@ -643,6 +655,10 @@ function FuelManagementInner({ defaultTab = 'logs', onViewDriverLedger, onTabCha
               // If we are editing, we should mark it as edited in metadata
               const payload = editingLog ? {
                   ...entry,
+                  correctionReason:
+                      (entry as FuelEntry & { correctionReason?: string }).correctionReason ||
+                      entry.metadata?.editReason ||
+                      'Admin correction',
                   metadata: {
                       ...entry.metadata,
                       isEdited: true,
@@ -738,42 +754,6 @@ function FuelManagementInner({ defaultTab = 'logs', onViewDriverLedger, onTabCha
       setDeleteLogConfirmationId(id);
       setCascadeDelete(true);
   }, []);
-
-  const handleVerifyLog = async (id: string) => {
-      // Optimistic UI Update (Phase 3: Fuel Management & Odometer Audit Core)
-      const originalLogs = [...logs];
-      const entry = logs.find(l => l.id === id);
-      
-      if (!entry) return;
-
-      const updatedEntry = {
-          ...entry,
-          metadata: {
-              ...entry.metadata,
-              isVerified: true,
-              verifiedAt: new Date().toISOString()
-          }
-      };
-
-      setLogs(prev => prev.map(l => l.id === id ? updatedEntry : l));
-
-      try {
-          await fuelService.saveFuelEntry(updatedEntry);
-          toast.success("Log verified successfully");
-          
-          // Trigger integrity recalculation
-          const promise = api.runFuelBackfill();
-          toast.promise(promise, {
-              loading: 'Recalculating fleet integrity...',
-              success: 'Audit trail updated',
-              error: 'Background sync failed'
-          });
-      } catch (e) {
-          console.error("Verify Log Error:", e);
-          setLogs(originalLogs); // Rollback
-          toast.error("Failed to verify log. Reverting changes.");
-      }
-  };
 
   const handleApproveLogReview = useCallback(async (id: string, odometer: number, notes?: string) => {
       try {
@@ -1383,7 +1363,7 @@ function FuelManagementInner({ defaultTab = 'logs', onViewDriverLedger, onTabCha
             const priorTier = entry.metadata?.signalTier;
             const updated: FuelEntry = {
               ...entry,
-              bypassSignatureCheck: true,
+              correctionReason: note?.trim() || 'Fuel exception acknowledged',
               metadata: {
                 ...entry.metadata,
                 priorSignalTier: priorTier,
@@ -1482,11 +1462,14 @@ function FuelManagementInner({ defaultTab = 'logs', onViewDriverLedger, onTabCha
                 vehicles={vehicles}
                 onEdit={(log) => { setEditingLog(log); setIsLogModalOpen(true); }}
                 onDelete={handleDeleteLog}
-                onVerifyLog={handleVerifyLog}
                 getVehicleName={getVehicleName}
                 getDriverName={getDriverName}
                 dateRange={logDateRange}
                 onDateRangeChange={setLogDateRange}
+                dataTruncated={fuelDataTruncated}
+                isLoading={!fuelLogsHydrated}
+                loadError={fuelLogsLoadError}
+                onRefresh={refreshLogs}
             />
         </div>
       )}

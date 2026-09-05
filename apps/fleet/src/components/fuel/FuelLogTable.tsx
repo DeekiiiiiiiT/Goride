@@ -45,10 +45,9 @@ import {
 } from "../ui/accordion";
 import { Label } from "../ui/label";
 import { cn } from "../ui/utils";
-import { Search, MoreHorizontal, Pencil, Trash2, Fuel, CreditCard, Banknote, AlertCircle, AlertTriangle, Filter as FilterIcon, X, ListFilter, ShieldCheck, HelpCircle, History, RotateCcw, Gauge, ChevronRight, Calculator, Calendar, ArrowRight, Scissors, CheckCircle2, Link2, Eye, MapPin, Clock, Hash, FileText } from "lucide-react";
+import { Search, MoreHorizontal, Pencil, Trash2, Fuel, CreditCard, Banknote, AlertCircle, AlertTriangle, Filter as FilterIcon, ShieldCheck, HelpCircle, RotateCcw, Gauge, Scissors, CheckCircle2, Link2, Eye, MapPin, MapPinned, Clock, Hash, FileText, Download, History, ListFilter, X } from "lucide-react";
 import { toast } from "sonner";
-import { projectId, publicAnonKey } from '../../utils/supabase/info';
-import { FuelEntry, FuelCard, FuelCycle } from '../../types/fuel';
+import { FuelEntry } from '../../types/fuel';
 import { FinancialTransaction } from '../../types/data';
 import { Vehicle } from '../../types/vehicle';
 import { api } from '../../services/api';
@@ -59,8 +58,6 @@ import { DateRange } from "react-day-picker";
 import { format } from "date-fns";
 import { PeriodWeekDropdown } from "../ui/PeriodWeekDropdown";
 import { downloadBlob, jsonToCsv } from '../../utils/csv-helper';
-import { FUEL_CSV_COLUMNS } from '../../types/csv-schemas';
-import { Download } from 'lucide-react';
 import { usePermissions } from '../../hooks/usePermissions';
 import { isEntryInInclusiveYmdRange, toEntryYmd } from '../../utils/fuelWeekPeriod';
 import { resolveFuelEntrySource } from '../../utils/fuelEntrySource';
@@ -70,6 +67,22 @@ import {
   buildCycleKpis,
   buildTransactionKpis,
 } from '../../utils/fuelLogKpiMetrics';
+import { formatFuelMoney } from '../../utils/formatFuelMoney';
+import { resolvePeriodDistance } from '../../utils/fuelPeriodTotals';
+import { Skeleton } from '../ui/skeleton';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '../ui/alert-dialog';
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from '../ui/dialog';
+import { FuelExceptionQueue } from './logs/FuelExceptionQueue';
+import { FuelEfficiencyTrend } from './logs/FuelEfficiencyTrend';
 
 /** Sort/display timestamp: live ISO `date` or admin `date` + `time`. */
 function fuelEntrySortMs(e: { date?: string; time?: string | null }): number {
@@ -105,11 +118,14 @@ interface FuelLogTableProps {
     vehicles: Vehicle[];
     onEdit: (entry: FuelEntry) => void;
     onDelete: (id: string) => void;
-    onVerifyLog?: (id: string) => void;
     getVehicleName: (id?: string) => string;
     getDriverName: (id?: string) => string;
     dateRange?: DateRange;
     onDateRangeChange?: (range: DateRange | undefined) => void;
+    dataTruncated?: boolean;
+    isLoading?: boolean;
+    loadError?: string | null;
+    onRefresh?: () => void | Promise<void>;
 }
 
 export function FuelLogTable({ 
@@ -118,11 +134,14 @@ export function FuelLogTable({
     vehicles,
     onEdit, 
     onDelete, 
-    onVerifyLog,
     getVehicleName, 
     getDriverName,
     dateRange,
     onDateRangeChange,
+    dataTruncated = false,
+    isLoading = false,
+    loadError = null,
+    onRefresh,
 }: FuelLogTableProps) {
     const { can } = usePermissions();
     const [searchTerm, setSearchTerm] = useState('');
@@ -132,13 +151,21 @@ export function FuelLogTable({
     const [filterAnchor, setFilterAnchor] = useState<string>('all');
     const [filterStatus, setFilterStatus] = useState<string>('all');
     const [filterSource, setFilterSource] = useState<string>('all');
+    const [filterIntegrity, setFilterIntegrity] = useState<string>('all');
     const [activeView, setActiveView] = useState<'transactions' | 'cycles'>('transactions');
     const [isRecalculating, setIsRecalculating] = useState(false);
+    const [confirmFleetRecalc, setConfirmFleetRecalc] = useState(false);
     const [viewingEntry, setViewingEntry] = useState<FuelEntry | null>(null);
     const [focusEntryId, setFocusEntryId] = useState<string | null>(null);
+    const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+    const [sortField, setSortField] = useState<'date' | 'amount' | 'liters' | 'odometer'>('date');
+    const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
+    const [page, setPage] = useState(0);
+    const PAGE_SIZE = 50;
 
     // Soft-highlight row when navigating from Review → Logs
     useEffect(() => {
+        let timer: number | undefined;
         try {
             const raw = sessionStorage.getItem('fuel_logs_focus_entry');
             if (!raw) return;
@@ -154,24 +181,55 @@ export function FuelLogTable({
             } else {
                 setFocusEntryId(raw);
             }
-            const t = window.setTimeout(() => setFocusEntryId(null), 8000);
-            return () => window.clearTimeout(t);
+            timer = window.setTimeout(() => setFocusEntryId(null), 8000);
         } catch {
             /* ignore */
         }
+        return () => {
+            if (timer) window.clearTimeout(timer);
+        };
     }, [entries]);
+
+    // Sync tab/filters to URL for shareable views
+    useEffect(() => {
+        try {
+            const params = new URLSearchParams(window.location.search);
+            const tab = params.get('tab');
+            if (tab === 'cycles' || tab === 'transactions') setActiveView(tab);
+            const q = params.get('q');
+            if (q) setSearchTerm(q);
+            const v = params.get('vehicleId');
+            if (v) setFilterVehicle(v);
+            const integrity = params.get('integrity');
+            if (integrity) setFilterIntegrity(integrity);
+        } catch {
+            /* ignore */
+        }
+    }, []);
+
+    useEffect(() => {
+        try {
+            const params = new URLSearchParams(window.location.search);
+            params.set('tab', activeView);
+            if (searchTerm) params.set('q', searchTerm); else params.delete('q');
+            if (filterVehicle !== 'all') params.set('vehicleId', filterVehicle); else params.delete('vehicleId');
+            if (filterIntegrity !== 'all') params.set('integrity', filterIntegrity); else params.delete('integrity');
+            const next = `${window.location.pathname}?${params.toString()}`;
+            window.history.replaceState({}, '', next);
+        } catch {
+            /* ignore */
+        }
+    }, [activeView, searchTerm, filterVehicle, filterIntegrity]);
 
     const periodStart = dateRange?.from ? format(dateRange.from, 'yyyy-MM-dd') : undefined;
     const periodEnd = dateRange?.to ? format(dateRange.to, 'yyyy-MM-dd') : undefined;
 
-    // Phase 2: Cycle Mapping (server snapshot when available)
     const allCycles = useFuelCycles(entries, vehicles, {
         weekStart: periodStart,
         weekEnd: periodEnd,
     });
     
-    // Phase 7: Shared Anchor Logic
-    const { validAnchorIds, anchorFailures, getLinkedTransaction } = useFuelAnchors(entries, transactions);
+    const { validAnchorIds, getLinkedTransaction } = useFuelAnchors(entries, transactions);
 
     const uniqueVehicles = useMemo(() => {
         const ids = Array.from(new Set(entries.map(e => e.vehicleId).filter(Boolean))) as string[];
@@ -189,7 +247,8 @@ export function FuelLogTable({
         filterDriver !== 'all',
         filterAnchor !== 'all',
         filterStatus !== 'all',
-        filterSource !== 'all'
+        filterSource !== 'all',
+        filterIntegrity !== 'all',
     ].filter(Boolean).length;
 
     const clearFilters = () => {
@@ -199,6 +258,8 @@ export function FuelLogTable({
         setFilterAnchor('all');
         setFilterStatus('all');
         setFilterSource('all');
+        setFilterIntegrity('all');
+        setPage(0);
     };
 
     const isManualEntry = (entry: FuelEntry) => {
@@ -215,7 +276,6 @@ export function FuelLogTable({
         return isManualType || hasManualPortalType || hasManualSource;
     };
 
-    // Authorship label — delegates to shared resolver (isManual ≠ admin)
     const resolveEntrySource = (entry: FuelEntry) => resolveFuelEntrySource(entry);
 
     const entrySourceLabel = (src: string): { label: string; color: string } => {
@@ -229,70 +289,127 @@ export function FuelLogTable({
         }
     };
 
-    const filteredEntries = entries.filter(entry => {
-        // Statement ledger belongs on Card Inventory — never Transaction Logs
-        if (isJaaStatementLedgerRow(entry)) return false;
-        if (filterType !== 'all') {
-            if (filterType === 'Fuel_Manual_Entry') {
-                if (!isManualEntry(entry)) return false;
-            } else if (entry.type !== filterType) return false;
+    const txBySourceId = useMemo(() => {
+        const map = new Map<string, FinancialTransaction[]>();
+        for (const t of transactions) {
+            const sid = t.metadata?.sourceId || t.id;
+            if (!sid) continue;
+            if (!map.has(sid)) map.set(sid, []);
+            map.get(sid)!.push(t);
+            if (t.id && t.id !== sid) {
+                if (!map.has(t.id)) map.set(t.id, []);
+                map.get(t.id)!.push(t);
+            }
         }
-        if (filterVehicle !== 'all' && entry.vehicleId !== filterVehicle) return false;
-        if (filterDriver !== 'all' && entry.driverId !== filterDriver) return false;
-        if (filterAnchor === 'valid' && !validAnchorIds.has(entry.id)) return false;
-        if (filterAnchor === 'invalid') {
-            const isClose = entry.metadata?.isCapacityClose === true || entry.metadata?.isSoftAnchor === true;
-            if (!isClose || validAnchorIds.has(entry.id)) return false;
-        }
-        if (filterSource !== 'all') {
-            if (resolveEntrySource(entry) !== filterSource) return false;
-        }
-        if (filterStatus !== 'all') {
-            const status = entry.reconciliationStatus || 'Pending';
-            if (status !== filterStatus) return false;
-        }
-        if (dateRange?.from || dateRange?.to) {
-            const startYmd = dateRange.from ? toEntryYmd(dateRange.from) : '0000-01-01';
-            const endYmd = dateRange.to ? toEntryYmd(dateRange.to) : (dateRange.from ? toEntryYmd(dateRange.from) : '9999-12-31');
-            if (!isEntryInInclusiveYmdRange(entry.date, startYmd, endYmd)) return false;
-        }
-        return (
-            getVehicleName(entry.vehicleId).toLowerCase().includes(searchTerm.toLowerCase()) ||
-            getDriverName(entry.driverId).toLowerCase().includes(searchTerm.toLowerCase()) ||
-            entry.location?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            entry.vendor?.toLowerCase().includes(searchTerm.toLowerCase())
-        );
-    }).sort((a, b) => {
-        // Newest fill first — use combined date+time (not date-only midnight)
-        const diff = fuelEntrySortMs(b) - fuelEntrySortMs(a);
-        if (diff !== 0) return diff;
-        return ((b.odometer as number) || 0) - ((a.odometer as number) || 0);
-    });
+        return map;
+    }, [transactions]);
 
     const ledgerIntegrity = useMemo(() => {
-        // Wallet credits post only at weekly Finalize — debit-only is normal until then (and for gas-card).
-        const integrityMap = new Map<string, 'Complete' | 'Partial' | 'Orphaned' | 'Pending'>();
+        const integrityMap = new Map<string, 'Complete' | 'Partial' | 'Orphaned' | 'Pending' | 'N/A'>();
         entries.forEach(entry => {
-            if (!isManualEntry(entry)) return;
+            if (isJaaStatementLedgerRow(entry)) {
+                integrityMap.set(entry.id, 'N/A');
+                return;
+            }
             const gasCardIntegrity = resolveGasCardLedgerIntegrity(entry);
             if (gasCardIntegrity) {
                 integrityMap.set(entry.id, gasCardIntegrity);
+                return;
+            }
+            if (!isManualEntry(entry)) {
+                // Card / portal / anchors: N/A unless gas-card rule applied above
+                integrityMap.set(entry.id, 'N/A');
                 return;
             }
             if (entry.reconciliationStatus === 'Pending') {
                 integrityMap.set(entry.id, 'Pending');
                 return;
             }
-            const related = transactions.filter(t => t.metadata?.sourceId === entry.id || t.id === entry.transactionId);
+            const related = [
+                ...(txBySourceId.get(entry.id) || []),
+                ...(entry.transactionId ? txBySourceId.get(entry.transactionId) || [] : []),
+            ];
             const hasDebit = related.some(t => t.amount < 0);
             const hasCredit = related.some(t => t.amount > 0);
             if (hasDebit && hasCredit) integrityMap.set(entry.id, 'Complete');
-            else if (hasDebit) integrityMap.set(entry.id, 'Pending'); // awaiting Finalize / gas-card — not imbalanced
+            else if (hasDebit) integrityMap.set(entry.id, 'Pending');
             else if (hasCredit) integrityMap.set(entry.id, 'Partial');
             else integrityMap.set(entry.id, 'Orphaned');
         });
         return integrityMap;
-    }, [entries, transactions]);
+    }, [entries, txBySourceId, validAnchorIds]);
+
+    const filteredEntries = useMemo(() => {
+        const term = searchTerm.toLowerCase();
+        return entries.filter(entry => {
+            if (isJaaStatementLedgerRow(entry)) return false;
+            if (filterType !== 'all') {
+                if (filterType === 'Fuel_Manual_Entry') {
+                    if (!isManualEntry(entry)) return false;
+                } else if (entry.type !== filterType) return false;
+            }
+            if (filterVehicle !== 'all' && entry.vehicleId !== filterVehicle) return false;
+            if (filterDriver !== 'all' && entry.driverId !== filterDriver) return false;
+            if (filterAnchor === 'valid' && !validAnchorIds.has(entry.id)) return false;
+            if (filterAnchor === 'invalid') {
+                const isClose = entry.metadata?.isCapacityClose === true || entry.metadata?.isSoftAnchor === true;
+                if (!isClose || validAnchorIds.has(entry.id)) return false;
+            }
+            if (filterSource !== 'all') {
+                if (resolveEntrySource(entry) !== filterSource) return false;
+            }
+            if (filterStatus !== 'all') {
+                const status = entry.reconciliationStatus || 'Pending';
+                if (status !== filterStatus) return false;
+            }
+            if (filterIntegrity === 'imbalanced') {
+                const st = ledgerIntegrity.get(entry.id);
+                if (st !== 'Partial' && st !== 'Orphaned') return false;
+            } else if (filterIntegrity !== 'all') {
+                if (ledgerIntegrity.get(entry.id) !== filterIntegrity) return false;
+            }
+            if (dateRange?.from || dateRange?.to) {
+                const startYmd = dateRange.from ? toEntryYmd(dateRange.from) : '0000-01-01';
+                const endYmd = dateRange.to ? toEntryYmd(dateRange.to) : (dateRange.from ? toEntryYmd(dateRange.from) : '9999-12-31');
+                if (!isEntryInInclusiveYmdRange(entry.date, startYmd, endYmd)) return false;
+            }
+            if (term) {
+                const hay = [
+                    getVehicleName(entry.vehicleId),
+                    getDriverName(entry.driverId),
+                    entry.location || '',
+                    entry.vendor || '',
+                ].join(' ').toLowerCase();
+                if (!hay.includes(term)) return false;
+            }
+            return true;
+        }).sort((a, b) => {
+            let diff = 0;
+            if (sortField === 'date') diff = fuelEntrySortMs(b) - fuelEntrySortMs(a);
+            else if (sortField === 'amount') diff = (Number(b.amount) || 0) - (Number(a.amount) || 0);
+            else if (sortField === 'liters') diff = (Number(b.liters) || 0) - (Number(a.liters) || 0);
+            else if (sortField === 'odometer') diff = (Number(b.odometer) || 0) - (Number(a.odometer) || 0);
+            if (sortDir === 'asc') diff = -diff;
+            if (diff !== 0) return diff;
+            return ((b.odometer as number) || 0) - ((a.odometer as number) || 0);
+        });
+    }, [
+        entries, filterType, filterVehicle, filterDriver, filterAnchor, filterSource,
+        filterStatus, filterIntegrity, dateRange, searchTerm, validAnchorIds, ledgerIntegrity,
+        getVehicleName, getDriverName, sortField, sortDir,
+    ]);
+
+    const pagedEntries = useMemo(() => {
+        const start = page * PAGE_SIZE;
+        return filteredEntries.slice(start, start + PAGE_SIZE);
+    }, [filteredEntries, page]);
+
+    const pageCount = Math.max(1, Math.ceil(filteredEntries.length / PAGE_SIZE));
+
+    // Reset to first page whenever the scoped result set changes.
+    useEffect(() => {
+        setPage(0);
+    }, [searchTerm, filterType, filterVehicle, filterDriver, filterAnchor, filterStatus, filterSource, filterIntegrity, dateRange, activeView]);
 
     // Build per-vehicle timeline to compute previous odometer for each entry.
     // Skip JAA statement ledger rows (fees/declines/statement-only) — they have no
@@ -349,37 +466,93 @@ export function FuelLogTable({
         });
     }, [allCycles, filterVehicle, filterStatus, dateRange, searchTerm, getVehicleName]);
 
-    // Tab-specific KPIs — Transactions vs Full Tanks never share the same metrics
+    // Tab-specific KPIs — pre-scoped collections only (no second filter pass)
     const transactionKpis = useMemo(() => {
         const integrityById = new Map<string, string>();
         for (const [id, status] of ledgerIntegrity.entries()) integrityById.set(id, status);
         return buildTransactionKpis(filteredEntries, {
-            dateRange: dateRange ? { from: dateRange.from, to: dateRange.to } : undefined,
-            vehicleId: filterVehicle === 'all' ? undefined : filterVehicle,
-            driverId: filterDriver === 'all' ? undefined : filterDriver,
-            source: filterSource === 'all' ? undefined : filterSource,
-            searchTerm: searchTerm || undefined,
             validAnchorIds,
             integrityById,
         });
-    }, [
-        filteredEntries,
-        dateRange,
-        filterVehicle,
-        filterDriver,
-        filterSource,
-        searchTerm,
-        validAnchorIds,
-        ledgerIntegrity,
-    ]);
+    }, [filteredEntries, validAnchorIds, ledgerIntegrity]);
 
-    const cycleKpis = useMemo(() => {
-        return buildCycleKpis(filteredCycles, {
-            dateRange: dateRange ? { from: dateRange.from, to: dateRange.to } : undefined,
-            vehicleId: filterVehicle === 'all' ? undefined : filterVehicle,
-            searchTerm: searchTerm || undefined,
-        });
-    }, [filteredCycles, dateRange, filterVehicle, searchTerm]);
+    const cycleKpis = useMemo(() => buildCycleKpis(filteredCycles), [filteredCycles]);
+
+    const periodDistance = useMemo(
+        () => resolvePeriodDistance(filteredCycles, filteredEntries),
+        [filteredCycles, filteredEntries],
+    );
+
+    const runRecalculate = async () => {
+        setIsRecalculating(true);
+        try {
+            const scopeId = filterVehicle !== 'all' ? filterVehicle : undefined;
+            const result = await api.recalculateAllIntegrity(
+                scopeId ? { vehicleId: scopeId } : undefined,
+            );
+            toast.success(scopeId ? 'Vehicle recalculation complete' : 'Fleet recalculation complete', {
+                description: `Re-scored ${result?.entriesModified ?? 0} entries / ${result?.modified ?? 0} transactions.`,
+            });
+            await onRefresh?.();
+        } catch (err) {
+            console.error('[Recalculate] failed:', err);
+            toast.error('Failed to recalculate cycles', { description: String(err) });
+        } finally {
+            setIsRecalculating(false);
+            setConfirmFleetRecalc(false);
+        }
+    };
+
+    const handleRecalculateClick = () => {
+        if (filterVehicle === 'all') {
+            setConfirmFleetRecalc(true);
+            return;
+        }
+        void runRecalculate();
+    };
+
+    const exportRows = (rows: FuelEntry[]) => {
+        const mapped = rows.map((e) => ({
+            date: e.date,
+            time: e.time || '',
+            vehicle: getVehicleName(e.vehicleId),
+            driver: getDriverName(e.driverId),
+            station: e.location || e.vendor || '',
+            liters: e.liters ?? '',
+            amount: e.amount ?? '',
+            currency: 'JMD',
+            odometer: e.odometer ?? '',
+            entrySource: resolveEntrySource(e),
+            paymentSource: String(e.paymentSource || e.metadata?.paymentSource || ''),
+            cycleId: String(e.metadata?.cycleId || ''),
+            auditScore: e.metadata?.auditConfidenceScore ?? '',
+            locked: e.isLocked || e.status === 'Finalized' ? 'yes' : 'no',
+            notes: e.notes || '',
+        }));
+        type Row = (typeof mapped)[number];
+        const cols: { key: keyof Row; label: string }[] = [
+            { key: 'date', label: 'Date' },
+            { key: 'time', label: 'Time' },
+            { key: 'vehicle', label: 'Vehicle' },
+            { key: 'driver', label: 'Driver' },
+            { key: 'station', label: 'Station' },
+            { key: 'liters', label: 'Liters' },
+            { key: 'amount', label: 'Amount' },
+            { key: 'currency', label: 'Currency' },
+            { key: 'odometer', label: 'Odometer' },
+            { key: 'entrySource', label: 'Entry Source' },
+            { key: 'paymentSource', label: 'Payment' },
+            { key: 'cycleId', label: 'Cycle Id' },
+            { key: 'auditScore', label: 'Audit Score' },
+            { key: 'locked', label: 'Locked' },
+            { key: 'notes', label: 'Notes' },
+        ];
+        const bom = '\uFEFF';
+        const csv = bom + jsonToCsv(mapped, cols);
+        const name = `fuel_logs_${new Date().toISOString().split('T')[0]}.csv`;
+        downloadBlob(csv, name);
+        toast.success('Exporting fuel logs...');
+    };
 
     const getTypeIcon = (label: string) => {
         switch(label) {
@@ -472,6 +645,48 @@ export function FuelLogTable({
 
     return (
         <div className="space-y-4">
+            {/* Load error banner */}
+            {loadError && (
+                <div className="flex items-start gap-3 rounded-lg border border-rose-200 bg-rose-50 p-3">
+                    <AlertCircle className="h-4 w-4 text-rose-500 mt-0.5 shrink-0" />
+                    <div className="flex-1">
+                        <p className="text-xs font-bold text-rose-700">Couldn’t load fuel logs</p>
+                        <p className="text-[11px] text-rose-600 mt-0.5">{loadError}</p>
+                    </div>
+                    {onRefresh && (
+                        <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs border-rose-200 text-rose-700 hover:bg-rose-100" onClick={() => void onRefresh()}>
+                            <RotateCcw className="h-3 w-3" /> Retry
+                        </Button>
+                    )}
+                </div>
+            )}
+
+            {/* Truncation banner */}
+            {dataTruncated && (
+                <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3">
+                    <AlertTriangle className="h-4 w-4 text-amber-500 mt-0.5 shrink-0" />
+                    <div className="flex-1">
+                        <p className="text-xs font-bold text-amber-700">Showing a partial dataset</p>
+                        <p className="text-[11px] text-amber-600 mt-0.5">Too many fuel logs to load at once. Narrow the date range or filters for complete totals.</p>
+                    </div>
+                </div>
+            )}
+
+            {/* Loading skeletons */}
+            {isLoading && (
+                <div className="space-y-3">
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                        {Array.from({ length: 4 }).map((_, i) => (
+                            <Skeleton key={i} className="h-20 rounded-lg" />
+                        ))}
+                    </div>
+                    <Skeleton className="h-9 w-full rounded-md" />
+                    {Array.from({ length: 6 }).map((_, i) => (
+                        <Skeleton key={i} className="h-12 w-full rounded-md" />
+                    ))}
+                </div>
+            )}
+
             {/* Section tabs — primary view switch for Transaction Logs */}
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <Tabs value={activeView} onValueChange={(v: any) => setActiveView(v)} className="w-full sm:w-fit">
@@ -520,7 +735,7 @@ export function FuelLogTable({
                             </div>
                             <div className="flex-1">
                                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total spend</p>
-                                <p className="text-xl font-bold text-slate-700">${transactionKpis.totalSpend.toFixed(0)}</p>
+                                <p className="text-xl font-bold text-slate-700">{formatFuelMoney(transactionKpis.totalSpend, 0)}</p>
                             </div>
                         </div>
                         <div className="bg-white p-4 rounded-lg border border-slate-200 shadow-sm flex items-center gap-4">
@@ -541,10 +756,10 @@ export function FuelLogTable({
                             <div className="flex-1">
                                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total km</p>
                                 <p className="text-xl font-bold text-slate-700">
-                                    {transactionKpis.totalKm.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                                    {periodDistance.primaryKm.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                                 </p>
                                 <p className="text-[10px] text-slate-500 mt-0.5">
-                                    Odometer deltas between consecutive fills
+                                    {periodDistance.fillToFillKm.toLocaleString(undefined, { maximumFractionDigits: 0 })} km fill-to-fill
                                 </p>
                             </div>
                         </div>
@@ -573,7 +788,7 @@ export function FuelLogTable({
                             <div className="flex-1">
                                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total distance</p>
                                 <p className="text-xl font-bold text-slate-700">
-                                    {cycleKpis.totalDistance.toLocaleString(undefined, { maximumFractionDigits: 0 })} km
+                                    {periodDistance.primaryKm.toLocaleString(undefined, { maximumFractionDigits: 0 })} km
                                 </p>
                             </div>
                         </div>
@@ -623,11 +838,7 @@ export function FuelLogTable({
                             variant="outline" 
                             size="sm" 
                             className="gap-2 h-9"
-                            onClick={() => {
-                                const csv = jsonToCsv(filteredEntries, FUEL_CSV_COLUMNS);
-                                downloadBlob(csv, `fuel_logs_${new Date().toISOString().split('T')[0]}.csv`);
-                                toast.success("Exporting fuel logs...");
-                            }}
+                            onClick={() => exportRows(filteredEntries)}
                         >
                             <Download className="h-3.5 w-3.5" />
                             Export
@@ -675,6 +886,7 @@ export function FuelLogTable({
                         />
                     )}
                 </div>
+                {activeView === 'cycles' && can('data.backfill') && (
                 <TooltipProvider>
                     <Tooltip>
                         <TooltipTrigger asChild>
@@ -683,25 +895,7 @@ export function FuelLogTable({
                                 size="sm" 
                                 className="gap-2 h-9 text-slate-600 border-slate-200 hover:text-indigo-600 hover:border-indigo-300 transition-colors shrink-0"
                                 disabled={isRecalculating}
-                                onClick={async () => {
-                                    setIsRecalculating(true);
-                                    try {
-                                        const scopeId = filterVehicle !== 'all' ? filterVehicle : undefined;
-                                        const result = await api.recalculateAllIntegrity(
-                                            scopeId ? { vehicleId: scopeId } : undefined,
-                                        );
-                                        toast.success(scopeId ? 'Vehicle recalculation complete' : 'Fleet recalculation complete', {
-                                            description: `Re-scored ${result?.entriesModified ?? 0} entries / ${result?.modified ?? 0} transactions (capacity full @ 98%). Refresh to see cycles.`
-                                        });
-                                    } catch (err) {
-                                        console.error('[Recalculate] failed:', err);
-                                        toast.error('Failed to recalculate cycles', {
-                                            description: String(err)
-                                        });
-                                    } finally {
-                                        setIsRecalculating(false);
-                                    }
-                                }}
+                                onClick={handleRecalculateClick}
                             >
                                 <RotateCcw className={cn("h-3.5 w-3.5", isRecalculating && "animate-spin")} />
                                 <span className="text-xs font-semibold">{isRecalculating ? 'Recalculating...' : 'Recalculate'}</span>
@@ -713,10 +907,12 @@ export function FuelLogTable({
                         </TooltipContent>
                     </Tooltip>
                 </TooltipProvider>
+                )}
             </div>
 
             <div className="rounded-md border bg-white overflow-hidden">
                 {activeView === 'transactions' ? (
+                    <>
                     <Table>
                         <TableHeader>
                             <TableRow>
@@ -727,15 +923,16 @@ export function FuelLogTable({
                                 <TableHead>Driver</TableHead>
                                 <TableHead>Vol (L)</TableHead>
                                 <TableHead>Odo</TableHead>
-                                <TableHead title="Pump-to-pump odometer change only — not Odometer History / Live Status">Δ Fuel</TableHead>
-                                <TableHead>Cost ($)</TableHead>
+                                <TableHead title="Pump-to-pump odometer change only — not Odometer History / Live Status">Δ Odo</TableHead>
+                                <TableHead>Cost</TableHead>
+                                <TableHead className="text-center">Cycle</TableHead>
                                 <TableHead className="text-center">Audit</TableHead>
                                 <TableHead className="text-right">Actions</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
-                            {filteredEntries.length === 0 ? <TableRow><TableCell colSpan={11} className="h-24 text-center">No transactions found</TableCell></TableRow> : 
-                            filteredEntries.map(entry => {
+                            {filteredEntries.length === 0 ? <TableRow><TableCell colSpan={12} className="h-24 text-center">No transactions found</TableCell></TableRow> : 
+                            pagedEntries.map(entry => {
                                 const locationStatus = entry.metadata?.locationStatus || entry.locationStatus;
                                 const confidenceScore = entry.metadata?.auditConfidenceScore;
                                 const isHighlyTrusted = entry.metadata?.isHighlyTrusted || (confidenceScore !== undefined && confidenceScore >= 90);
@@ -869,8 +1066,8 @@ export function FuelLogTable({
                                     <TableCell>
                                         {(() => {
                                             const vehicle = vehicles.find(v => v.id === entry.vehicleId);
-                                            const tankCap = Number(vehicle?.specifications?.tankCapacity) || vehicle?.fuelSettings?.tankCapacity || 40;
-                                            const fillPct = Math.min(100, ((entry.liters || 0) / tankCap) * 100);
+                                            const tankCap = Number(vehicle?.specifications?.tankCapacity) || vehicle?.fuelSettings?.tankCapacity || 0;
+                                            const fillPct = tankCap > 0 ? Math.min(100, ((entry.liters || 0) / tankCap) * 100) : 0;
                                             return (
                                                 <div className="flex flex-col gap-1 min-w-[50px]">
                                                     <span className="text-xs font-medium">{entry.liters?.toFixed(1)} L</span>
@@ -890,7 +1087,7 @@ export function FuelLogTable({
                                                             </div>
                                                         </TooltipTrigger>
                                                         <TooltipContent>
-                                                            <p className="text-[10px]">{fillPct.toFixed(0)}% of {tankCap}L tank capacity</p>
+                                                            <p className="text-[11px]">{tankCap > 0 ? `${fillPct.toFixed(0)}% of ${tankCap}L tank capacity` : 'Tank capacity not configured'}</p>
                                                         </TooltipContent>
                                                     </Tooltip>
                                                 </div>
@@ -934,8 +1131,31 @@ export function FuelLogTable({
                                           : (entry.metadata as any)?.jaaRowKind === 'declined'
                                             ? <span className="text-rose-600 font-medium">Declined</span>
                                             : (entry.metadata as any)?.jaaRowKind === 'fee'
-                                              ? <span className="text-slate-500">${(entry.amount ?? 0).toFixed(2)} fee</span>
-                                              : `$${(entry.amount ?? 0).toFixed(2)}`}
+                                              ? <span className="text-slate-500">{formatFuelMoney(entry.amount ?? 0)} fee</span>
+                                              : formatFuelMoney(entry.amount ?? 0)}
+                                    </TableCell>
+                                    <TableCell className="text-center">
+                                        {(() => {
+                                            const cycleId = entry.metadata?.cycleId ? String(entry.metadata.cycleId) : '';
+                                            if (!cycleId) return <span className="text-xs text-slate-300">—</span>;
+                                            const shortId = cycleId.length > 8 ? `${cycleId.slice(0, 8)}…` : cycleId;
+                                            return (
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    className="h-6 gap-1 px-2 text-[10px] font-bold text-indigo-600 border-indigo-200 hover:bg-indigo-50"
+                                                    title={`View Full Tank cycle ${cycleId}`}
+                                                    onClick={() => {
+                                                        setActiveView('cycles');
+                                                        if (entry.vehicleId) setFilterVehicle(entry.vehicleId);
+                                                        toast.info('Switched to Full Tanks', { description: `Cycle ${shortId}` });
+                                                    }}
+                                                >
+                                                    <RotateCcw className="h-2.5 w-2.5" />
+                                                    {shortId}
+                                                </Button>
+                                            );
+                                        })()}
                                     </TableCell>
                                     <TableCell>
                                         <div className="flex justify-center">
@@ -1000,7 +1220,7 @@ export function FuelLogTable({
                                         <div className="flex justify-end">
                                             <DropdownMenu>
                                                 <DropdownMenuTrigger asChild>
-                                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-slate-600" title="Actions">
+                                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-slate-600" title="Actions" aria-label="Row actions">
                                                         <MoreHorizontal className="h-4 w-4" />
                                                     </Button>
                                                 </DropdownMenuTrigger>
@@ -1016,7 +1236,7 @@ export function FuelLogTable({
                                                         Edit Log
                                                     </DropdownMenuItem>
                                                     <DropdownMenuSeparator />
-                                                    <DropdownMenuItem onClick={() => onDelete(entry.id)} disabled={isLocked} className="gap-2 text-xs cursor-pointer text-red-600 focus:text-red-600">
+                                                    <DropdownMenuItem onClick={() => onDelete(entry.id)} disabled={isLocked || !can('fuel.delete_entry')} className="gap-2 text-xs cursor-pointer text-red-600 focus:text-red-600">
                                                         <Trash2 className="h-3.5 w-3.5" />
                                                         Delete Log
                                                     </DropdownMenuItem>
@@ -1028,14 +1248,44 @@ export function FuelLogTable({
                             )})}
                         </TableBody>
                     </Table>
+                    {filteredEntries.length > PAGE_SIZE && (
+                        <div className="flex items-center justify-between border-t border-slate-100 px-4 py-2.5">
+                            <span className="text-[11px] text-slate-500">
+                                Showing {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, filteredEntries.length)} of {filteredEntries.length.toLocaleString()}
+                            </span>
+                            <div className="flex items-center gap-2">
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-7 text-xs"
+                                    disabled={page === 0}
+                                    onClick={() => setPage(p => Math.max(0, p - 1))}
+                                >
+                                    Previous
+                                </Button>
+                                <span className="text-[11px] font-semibold text-slate-600">Page {page + 1} of {pageCount}</span>
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-7 text-xs"
+                                    disabled={page >= pageCount - 1}
+                                    onClick={() => setPage(p => Math.min(pageCount - 1, p + 1))}
+                                >
+                                    Next
+                                </Button>
+                            </div>
+                        </div>
+                    )}
+                    </>
                 ) : (
                     <div className="p-4">
                         {filteredCycles.length === 0 ? <div className="h-24 flex items-center justify-center">No fuel cycles identified</div> : 
                         <Accordion type="multiple" className="space-y-3">
                             {filteredCycles.map(cycle => {
                                 const vehicle = vehicles.find(v => v.id === cycle.vehicleId);
-                                const tankCap = Number(vehicle?.specifications?.tankCapacity) || vehicle?.fuelSettings?.tankCapacity || 40;
-                                const calculatedEndPct = Math.min(100, (cycle.startingPercentage || 0) + (cycle.totalLiters / tankCap) * 100);
+                                const tankCap = Number(vehicle?.specifications?.tankCapacity) || vehicle?.fuelSettings?.tankCapacity || 0;
+                                const tankConfigured = tankCap > 0;
+                                const calculatedEndPct = tankConfigured ? Math.min(100, (cycle.startingPercentage || 0) + (cycle.totalLiters / tankCap) * 100) : 0;
 
                                 return (
                                 <AccordionItem key={cycle.id} value={cycle.id} className="border rounded-xl px-4 py-1 hover:bg-slate-50/50 transition-colors">
@@ -1049,20 +1299,24 @@ export function FuelLogTable({
                                             {/* Tank Visualization */}
                                             <div className="flex flex-col min-w-[120px]">
                                                 <span className="text-[10px] text-slate-400 font-bold uppercase">Tank Range</span>
-                                                <div className="flex items-center gap-2 mt-0.5">
-                                                    <span className="text-[10px] font-bold text-slate-500">{(cycle.startingPercentage || 0).toFixed(0)}%</span>
-                                                    <div className="h-1.5 w-14 bg-slate-100 rounded-full overflow-hidden flex border border-slate-200/50">
-                                                        <div 
-                                                            className="h-full bg-slate-200" 
-                                                            style={{ width: `${cycle.startingPercentage || 0}%` }} 
-                                                        />
-                                                        <div 
-                                                            className="h-full bg-emerald-500" 
-                                                            style={{ width: `${Math.min(100 - (cycle.startingPercentage || 0), (cycle.totalLiters / tankCap) * 100)}%` }} 
-                                                        />
+                                                {tankConfigured ? (
+                                                    <div className="flex items-center gap-2 mt-0.5">
+                                                        <span className="text-[10px] font-bold text-slate-500">{(cycle.startingPercentage || 0).toFixed(0)}%</span>
+                                                        <div className="h-1.5 w-14 bg-slate-100 rounded-full overflow-hidden flex border border-slate-200/50">
+                                                            <div 
+                                                                className="h-full bg-slate-200" 
+                                                                style={{ width: `${cycle.startingPercentage || 0}%` }} 
+                                                            />
+                                                            <div 
+                                                                className="h-full bg-emerald-500" 
+                                                                style={{ width: `${Math.min(100 - (cycle.startingPercentage || 0), (cycle.totalLiters / tankCap) * 100)}%` }} 
+                                                            />
+                                                        </div>
+                                                        <span className="text-[10px] font-bold text-emerald-600">{cycle.isCapped ? '100%' : `${calculatedEndPct.toFixed(0)}%`}</span>
                                                     </div>
-                                                    <span className="text-[10px] font-bold text-emerald-600">{cycle.isCapped ? '100%' : `${calculatedEndPct.toFixed(0)}%`}</span>
-                                                </div>
+                                                ) : (
+                                                    <span className="text-[10px] font-medium text-amber-600 mt-0.5">Tank capacity not configured</span>
+                                                )}
                                             </div>
 
                                             <div className="flex-1" />
@@ -1096,15 +1350,15 @@ export function FuelLogTable({
                                                     <Badge className="bg-blue-50 text-blue-700 border-blue-200 animate-pulse">ACTIVE CYCLE</Badge>
                                                     <span className="text-[9px] text-blue-500 font-bold uppercase">Calculating...</span>
                                                 </div>
-                                             ) : cycle.trustTier === 'Soft' || cycle.trustTier === 'Capacity' || cycle.resetType === 'Auto_Soft' ? (
+                                             ) : cycle.trustTier === 'Soft' || cycle.resetType === 'Auto_Soft' ? (
                                                 <Tooltip>
                                                     <TooltipTrigger asChild>
                                                         <Badge className="bg-teal-50 text-teal-800 border-teal-200 gap-1 cursor-help">
-                                                            CAPACITY FULL
+                                                            Capacity close
                                                         </Badge>
                                                     </TooltipTrigger>
                                                     <TooltipContent className="max-w-[220px]">
-                                                        <p className="text-xs font-bold">Capacity full cycle close</p>
+                                                        <p className="text-xs font-bold">Capacity close cycle</p>
                                                         <p className="text-[10px] text-slate-300">Cumulative liters reached ~98% of tank. Spillover liters open the next cycle.</p>
                                                     </TooltipContent>
                                                 </Tooltip>
@@ -1127,8 +1381,8 @@ export function FuelLogTable({
                                         <div className="grid grid-cols-5 gap-6 bg-slate-50 p-4 rounded-lg mb-4 border border-slate-100">
                                             <div><p className="text-[10px] font-bold text-slate-400 uppercase">Odo Range</p><p className="text-xs font-mono">{cycle.startOdometer?.toLocaleString()} → {cycle.endOdometer?.toLocaleString()}</p></div>
                                             <div><p className="text-[10px] font-bold text-slate-400 uppercase">Total Fuel</p><p className="text-sm font-bold">{cycle.totalLiters.toFixed(1)} L</p></div>
-                                            <div><p className="text-[10px] font-bold text-slate-400 uppercase">Total Cost</p><p className="text-sm font-bold">${cycle.totalCost.toFixed(2)}</p></div>
-                                            <div><p className="text-[10px] font-bold text-slate-400 uppercase">Avg Price/L</p><p className="text-sm">${cycle.avgPricePerLiter.toFixed(3)}</p></div>
+                                            <div><p className="text-[10px] font-bold text-slate-400 uppercase">Total Cost</p><p className="text-sm font-bold">{formatFuelMoney(cycle.totalCost)}</p></div>
+                                            <div><p className="text-[10px] font-bold text-slate-400 uppercase">Avg Price/L</p><p className="text-sm">{formatFuelMoney(cycle.avgPricePerLiter, 3)}</p></div>
                                             <div><p className="text-[10px] font-bold text-slate-400 uppercase">Reset Mode</p>
                                                 <div className="flex items-center gap-1.5 mt-0.5">
                                                     <Badge variant="outline" className="text-[9px] font-bold">{cycle.resetType}</Badge>
@@ -1168,9 +1422,9 @@ export function FuelLogTable({
                                                             </div>
                                                         </TableCell>
                                                         <TableCell className="py-2 text-xs font-bold">
-                                                            ${(tx.volumeContributed !== undefined && tx.liters !== undefined && tx.liters > 0 && !tx.isCarryover
+                                                            {formatFuelMoney(tx.volumeContributed !== undefined && tx.liters !== undefined && tx.liters > 0 && !tx.isCarryover
                                                                 ? (tx.amount * (tx.volumeContributed / tx.liters)) 
-                                                                : (tx.isCarryover ? 0 : tx.amount)).toFixed(2)}
+                                                                : (tx.isCarryover ? 0 : tx.amount))}
                                                         </TableCell>
                                                         <TableCell className="py-2 text-xs font-mono">{tx.odometer?.toLocaleString() || '-'}</TableCell>
                                                         <TableCell className="py-2 text-right">
@@ -1195,6 +1449,23 @@ export function FuelLogTable({
                                 </AccordionItem>
                             )})}
                         </Accordion>}
+                        {filteredCycles.length > 0 && (
+                            <div className="mt-6 space-y-4">
+                                <div>
+                                    <h3 className="text-sm font-semibold text-slate-700 mb-2">Efficiency trend</h3>
+                                    <FuelEfficiencyTrend cycles={filteredCycles} />
+                                </div>
+                                <div>
+                                    <h3 className="text-sm font-semibold text-slate-700 mb-2">Exception queue</h3>
+                                    <FuelExceptionQueue
+                                        cycles={filteredCycles}
+                                        onAssign={(cycleId, note) => {
+                                            toast.message(`Noted for ${cycleId}`, { description: note });
+                                        }}
+                                    />
+                                </div>
+                            </div>
+                        )}
                     </div>
                 )}
             </div>
@@ -1204,8 +1475,9 @@ export function FuelLogTable({
                 const entry = viewingEntry;
                 const prev = prevOdometerMap.get(entry.id);
                 const vehicle = vehicles.find(v => v.id === entry.vehicleId);
-                const tankCap = Number(vehicle?.specifications?.tankCapacity) || vehicle?.fuelSettings?.tankCapacity || 40;
-                const fillPct = Math.min(100, ((entry.liters || 0) / tankCap) * 100);
+                const tankCap = Number(vehicle?.specifications?.tankCapacity) || vehicle?.fuelSettings?.tankCapacity || 0;
+                const tankConfigured = tankCap > 0;
+                const fillPct = tankConfigured ? Math.min(100, ((entry.liters || 0) / tankCap) * 100) : 0;
                 const confidenceScore = entry.metadata?.auditConfidenceScore;
                 const locationStatus = entry.metadata?.locationStatus || entry.locationStatus;
                 const src = resolveEntrySource(entry);
@@ -1215,8 +1487,10 @@ export function FuelLogTable({
                 const isRegression = prev?.prevOdo != null ? curOdo < prev.prevOdo : false;
 
                 return (
-                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={() => setViewingEntry(null)}>
-                        <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden animate-in fade-in zoom-in-95 duration-200" onClick={(e) => e.stopPropagation()}>
+                    <Dialog open onOpenChange={(open) => { if (!open) setViewingEntry(null); }}>
+                        <DialogContent hideCloseButton className="p-0 gap-0 overflow-hidden sm:max-w-lg" aria-describedby="fuel-log-detail-desc">
+                            <DialogTitle className="sr-only">Fuel Log Details</DialogTitle>
+                            <DialogDescription id="fuel-log-detail-desc" className="sr-only">Detailed record for this fuel log entry.</DialogDescription>
                             {/* Header */}
                             <div className="bg-gradient-to-r from-slate-800 to-slate-700 p-5 text-white">
                                 <div className="flex items-center justify-between">
@@ -1246,16 +1520,18 @@ export function FuelLogTable({
                                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                                     <div className="bg-emerald-50 rounded-lg p-3 text-center border border-emerald-100">
                                         <p className="text-[10px] text-emerald-600 font-semibold uppercase tracking-wider">Amount</p>
-                                        <p className="text-lg font-bold text-emerald-700">${(entry.amount ?? 0).toFixed(2)}</p>
+                                        <p className="text-lg font-bold text-emerald-700">{formatFuelMoney(entry.amount ?? 0)}</p>
                                     </div>
                                     <div className="bg-blue-50 rounded-lg p-3 text-center border border-blue-100">
                                         <p className="text-[10px] text-blue-600 font-semibold uppercase tracking-wider">Volume</p>
                                         <p className="text-lg font-bold text-blue-700">{entry.liters?.toFixed(2) || '0'} L</p>
-                                        <p className="text-[9px] text-blue-500">{fillPct.toFixed(0)}% of tank</p>
+                                        {tankConfigured
+                                            ? <p className="text-[9px] text-blue-500">{fillPct.toFixed(0)}% of tank</p>
+                                            : <p className="text-[9px] text-amber-600">Tank capacity not configured</p>}
                                     </div>
                                     <div className="bg-violet-50 rounded-lg p-3 text-center border border-violet-100">
                                         <p className="text-[10px] text-violet-600 font-semibold uppercase tracking-wider">Price/L</p>
-                                        <p className="text-lg font-bold text-violet-700">${(entry.pricePerLiter || (entry.amount && entry.liters ? entry.amount / entry.liters : 0)).toFixed(2)}</p>
+                                        <p className="text-lg font-bold text-violet-700">{formatFuelMoney(entry.pricePerLiter || (entry.amount && entry.liters ? entry.amount / entry.liters : 0))}</p>
                                     </div>
                                     <div className="bg-amber-50 rounded-lg p-3 text-center border border-amber-100">
                                         <p className="text-[10px] text-amber-700 font-semibold uppercase tracking-wider">Fuel type</p>
@@ -1400,10 +1676,28 @@ export function FuelLogTable({
                                     Close
                                 </Button>
                             </div>
-                        </div>
-                    </div>
+                        </DialogContent>
+                    </Dialog>
                 );
             })()}
+
+            {/* Fleet-wide recalculate confirmation */}
+            <AlertDialog open={confirmFleetRecalc} onOpenChange={(open) => { if (!open) setConfirmFleetRecalc(false); }}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Recalculate the entire fleet?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            This re-scores capacity cycles and ledger integrity for every vehicle. It can take a while and will refresh the logs when done. Filter to a single vehicle first to scope the run.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel disabled={isRecalculating}>Cancel</AlertDialogCancel>
+                        <AlertDialogAction disabled={isRecalculating} onClick={() => void runRecalculate()}>
+                            {isRecalculating ? 'Recalculating…' : 'Recalculate fleet'}
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </div>
     );
 }

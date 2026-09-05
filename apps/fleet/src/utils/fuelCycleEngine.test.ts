@@ -103,3 +103,47 @@ describe('calculateFuelCycles — statement ledger isolation', () => {
     expect(closingAtMichael!.distance).toBeLessThan(1000);
   });
 });
+
+describe('calculateFuelCycles — tank capacity guard', () => {
+  it('skips cycle math entirely when tank capacity is unknown (no silent 40L fallback)', () => {
+    const noCapVehicle = { id: 'NOCAP' } as Vehicle;
+    const entries: FuelEntry[] = [
+      entry({ id: 'a', vehicleId: 'NOCAP', odometer: 1000, liters: 35, metadata: { isSoftAnchor: true, isFullTank: true, isCapacityClose: true } }),
+      entry({ id: 'b', vehicleId: 'NOCAP', odometer: 1500, liters: 35, metadata: { isSoftAnchor: true, isFullTank: true, isCapacityClose: true } }),
+    ];
+    expect(calculateFuelCycles(entries, [noCapVehicle])).toEqual([]);
+  });
+});
+
+describe('calculateFuelCycles — chain origin + odometer regression', () => {
+  it('marks the first cycle after the chain origin and preserves opening spillover', () => {
+    const entries: FuelEntry[] = [
+      // Chain origin: over-capacity first anchor (8.83L, only 6.99 fits → 1.84 spillover)
+      entry({ id: 'origin', date: '2026-08-04T10:00:00', odometer: 100000, liters: 8.83, metadata: { isSoftAnchor: true, isFullTank: true, isCapacityClose: true, volumeContributed: 6.99 } }),
+      entry({ id: 'mid', date: '2026-08-05T10:00:00', odometer: 100200, liters: 20 }),
+      entry({ id: 'close', date: '2026-08-06T10:00:00', odometer: 100450, liters: 13.5, metadata: { isSoftAnchor: true, isFullTank: true, isCapacityClose: true, volumeContributed: 2.73 } }),
+    ];
+    const closed = calculateFuelCycles(entries, [vehicle]).filter((c) => c.status !== 'Active');
+    const first = closed.find((c) => c.endOdometer === 100450);
+    expect(first).toBeTruthy();
+    expect(first!.isChainOrigin).toBe(true);
+    // Opening spillover (1.84) must be folded into the first cycle's liters, not dropped.
+    expect(first!.totalLiters).toBeGreaterThan(20);
+  });
+
+  it('does not double-count liters into the next cycle when the odometer regresses at a close', () => {
+    const entries: FuelEntry[] = [
+      entry({ id: 'anchor-1', date: '2026-08-04T10:00:00', odometer: 100000, liters: 35, metadata: { isSoftAnchor: true, isFullTank: true, isCapacityClose: true } }),
+      // Regression close — odometer LOWER than prior anchor (bad reading)
+      entry({ id: 'regress', date: '2026-08-05T10:00:00', odometer: 99000, liters: 30, metadata: { isSoftAnchor: true, isFullTank: true, isCapacityClose: true } }),
+      entry({ id: 'anchor-2', date: '2026-08-06T10:00:00', odometer: 99500, liters: 34, metadata: { isSoftAnchor: true, isFullTank: true, isCapacityClose: true } }),
+    ];
+    const closed = calculateFuelCycles(entries, [vehicle]).filter((c) => c.status !== 'Active');
+    // The cycle closing at anchor-2 must NOT carry the regressed fill's 30L forward.
+    const afterRegress = closed.find((c) => c.endOdometer === 99500);
+    expect(afterRegress).toBeTruthy();
+    expect(afterRegress!.startOdometer).toBe(99000);
+    expect(afterRegress!.distance).toBe(500);
+    expect(afterRegress!.totalLiters).toBeLessThanOrEqual(34);
+  });
+});

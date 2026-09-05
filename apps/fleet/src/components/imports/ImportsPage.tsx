@@ -1059,7 +1059,7 @@ function ImportsPageInner({ onNavigate }: ImportsPageProps) {
                   const { pairs, updates, summary } = buildJaaMatchUpdates(saved, existing, inventory);
                   for (const entry of updates) {
                       try {
-                          await fuelService.saveFuelEntry({ ...entry, bypassSignatureCheck: true });
+                          await fuelService.saveFuelEntry({ ...entry, correctionReason: 'JAA statement match enrichment' });
                       } catch (saveErr) {
                           console.warn('[Import] JAA match save failed', entry.id, saveErr);
                       }

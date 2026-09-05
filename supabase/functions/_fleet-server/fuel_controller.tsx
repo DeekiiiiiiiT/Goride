@@ -1860,6 +1860,80 @@ app.post(`${BASE_PATH}/finalized-reports/reset-period`, requirePermission('trans
       syncErrors.push(String(syncErr?.message || syncErr));
     }
 
+    // Completed tab reads fuel_reconciliation_period.status=locked — unlock it here.
+    // Without this, reset-period wiped KV/ledger but the week stayed on Completed forever.
+    let periodUnlocked = false;
+    try {
+      const orgId = getOrgId(c);
+      if (orgId) {
+        const rbacUnlock = c.get("rbacUser") as RbacUser | undefined;
+        const actorRaw = rbacUnlock?.userId || null;
+        const actorUuid =
+          actorRaw && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+            String(actorRaw),
+          )
+            ? String(actorRaw)
+            : null;
+        const now = new Date().toISOString();
+        const { data: existingPeriod, error: loadPeriodErr } = await supabase
+          .from("fuel_reconciliation_period")
+          .select("id, version, status")
+          .eq("org_id", orgId)
+          .eq("week_start", weekKey)
+          .maybeSingle();
+        if (loadPeriodErr) {
+          syncErrors.push(`unlock period load: ${loadPeriodErr.message}`);
+          console.warn("[FuelResetPeriod] SQL period load failed:", loadPeriodErr.message);
+        } else if (existingPeriod?.id) {
+          const nextVersion = Number(existingPeriod.version || 1) + 1;
+          const { error: unlockErr } = await supabase
+            .from("fuel_reconciliation_period")
+            .update({
+              status: "reopened",
+              reopened_at: now,
+              reopened_by: actorUuid,
+              reopen_reason: reopenReason || null,
+              locked_at: null,
+              locked_by: null,
+              version: nextVersion,
+              updated_at: now,
+            })
+            .eq("id", existingPeriod.id)
+            .eq("org_id", orgId);
+          if (unlockErr) {
+            syncErrors.push(`unlock period: ${unlockErr.message}`);
+            console.warn("[FuelResetPeriod] SQL unlock failed:", unlockErr.message);
+          } else {
+            periodUnlocked = true;
+            try {
+              await supabase.from("fuel_period_audit").insert({
+                period_id: existingPeriod.id,
+                org_id: orgId,
+                actor_id: actorUuid || "00000000-0000-0000-0000-000000000000",
+                action: "reopen",
+                payload: {
+                  reason: reopenReason || null,
+                  version: nextVersion,
+                  source: "finalized-reports/reset-period",
+                  snapshotsDeleted,
+                  deletedTransactions: txIdsToDelete.size,
+                  resetFuelEntries: entriesReset,
+                },
+              });
+            } catch (auditSqlErr: any) {
+              console.warn(
+                "[FuelResetPeriod] SQL audit insert failed (non-fatal):",
+                auditSqlErr?.message || auditSqlErr,
+              );
+            }
+          }
+        }
+      }
+    } catch (unlockEx: any) {
+      syncErrors.push(`unlock period: ${unlockEx?.message || unlockEx}`);
+      console.warn("[FuelResetPeriod] SQL unlock exception:", unlockEx?.message || unlockEx);
+    }
+
     // H5: append-only reopen audit (KV until fuel_period_audit table ships)
     try {
       const rbacFull = c.get("rbacUser") as RbacUser | undefined;
@@ -1879,6 +1953,7 @@ app.post(`${BASE_PATH}/finalized-reports/reset-period`, requirePermission('trans
               snapshotsDeleted,
               deletedTransactions: txIdsToDelete.size,
               resetFuelEntries: entriesReset,
+              periodUnlocked,
             },
           } as Record<string, unknown>,
           c,
@@ -1897,6 +1972,9 @@ app.post(`${BASE_PATH}/finalized-reports/reset-period`, requirePermission('trans
       resetFuelEntries: entriesReset,
       eventsReversed,
       periodsRebuilt,
+      periodUnlocked,
+      driverIds: [...driverIds],
+      vehicleIds: [...vehicleIds],
       reopenReason: reopenReason || null,
       ...(syncErrors.length ? { syncErrors } : {}),
     });
@@ -2370,6 +2448,71 @@ app.get(`${BASE_PATH}/cycles`, requirePermission("fuel.view"), async (c) => {
   }
 });
 
+// --- Fuel log KPI roll-up (high-level totals for a date range) ---
+app.get(`${BASE_PATH}/fuel/log-summary`, requirePermission("fuel.view"), async (c) => {
+  try {
+    const { queryFleet } = await import("./repos/baseRepo.ts");
+    const vehicleId = (c.req.query("vehicleId") || "").trim();
+    const startYmd = (c.req.query("startDate") || "").slice(0, 10);
+    const endYmd = (c.req.query("endDate") || "").slice(0, 10);
+
+    const filters = vehicleId
+      ? [{ op: "eq" as const, col: "vehicle_id", value: vehicleId }]
+      : undefined;
+
+    const res = await queryFleet("fuel_entries", {
+      legacyPrefix: "fuel_entry:",
+      filters,
+      dateFrom: /^\d{4}-\d{2}-\d{2}$/.test(startYmd) ? startYmd : undefined,
+      dateTo: /^\d{4}-\d{2}-\d{2}$/.test(endYmd) ? endYmd : undefined,
+      order: { col: "date", ascending: true },
+      limit: 5000,
+    });
+    if (res.error) throw res.error;
+
+    const entries = filterByOrg((res.data || []) as Record<string, unknown>[], c, {
+      endpoint: "/fuel/log-summary",
+    });
+
+    // Entry-level financial totals (high-level; statement fees left in the raw count).
+    let totalFills = 0;
+    let totalSpend = 0;
+    let totalVolume = 0;
+    for (const e of entries) {
+      totalFills += 1;
+      totalSpend += Number(e.amount) || 0;
+      totalVolume += Number(e.liters) || 0;
+    }
+
+    // Cycle-level distance totals from the server-owned snapshot.
+    const vehicleIds = vehicleId
+      ? [vehicleId]
+      : [...new Set(entries.map((e) => String(e.vehicleId || "")).filter(Boolean))];
+    const vehicles: Record<string, Record<string, unknown>> = {};
+    for (const vid of vehicleIds) {
+      const v = await kv.get(`vehicle:${vid}`);
+      if (v) vehicles[vid] = v as Record<string, unknown>;
+    }
+    const cycles = buildFleetCycleSnapshot(entries, vehicles, {
+      vehicleId: vehicleId || undefined,
+    });
+    const totalCycles = cycles.length;
+    const totalDistance = cycles.reduce((s, cy) => s + (Number(cy.distance) || 0), 0);
+
+    return c.json({
+      totalFills,
+      totalSpend: Number(totalSpend.toFixed(2)),
+      totalVolume: Number(totalVolume.toFixed(2)),
+      totalKm: Number(totalDistance.toFixed(2)),
+      totalCycles,
+      totalDistance: Number(totalDistance.toFixed(2)),
+      totalFuel: Number(totalVolume.toFixed(2)),
+    });
+  } catch (e: any) {
+    return c.json({ error: e.message }, 500);
+  }
+});
+
 app.post(`${BASE_PATH}/cycles/recalculate`, requirePermission("fuel.edit_entry"), async (c) => {
   try {
     const body = await c.req.json().catch(() => ({}));
@@ -2480,6 +2623,25 @@ app.get(`${BASE_PATH}/fuel-entries/:id`, async (c) => {
     const narrowed = narrowPlatformOrg(scoped, c);
     if (!narrowed[0]) return c.json({ error: "Not found" }, 404);
     return c.json(narrowed[0]);
+  } catch (e: any) {
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+// Correction history for a fuel entry (append-only ledger of edits to sealed rows).
+app.get(`${BASE_PATH}/fuel-entries/:id/corrections`, requirePermission("fuel.view"), async (c) => {
+  try {
+    const id = c.req.param("id");
+    const orgId = getOrgId(c);
+    let query = supabase
+      .from("fuel_entry_corrections")
+      .select("*")
+      .eq("entry_id", id)
+      .order("created_at", { ascending: false });
+    if (orgId) query = query.eq("organization_id", orgId);
+    const { data, error } = await query;
+    if (error) throw error;
+    return c.json({ corrections: data || [] });
   } catch (e: any) {
     return c.json({ error: e.message }, 500);
   }
@@ -3802,6 +3964,21 @@ app.post(`${BASE_PATH}/fuel-entries`, async (c: Context) => {
     const entry = await c.req.json();
     if (!entry.id) entry.id = crypto.randomUUID();
 
+    // SECURITY: a client can NEVER self-authorize a signature/lock bypass. The old
+    // `bypassSignatureCheck` flag let the browser edit sealed rows at will. It is
+    // stripped here; locked/signed rows may only change via an explicit correction
+    // with a reason (recorded in fuel_entry_corrections). See migration 20260905120000.
+    delete (entry as Record<string, unknown>).bypassSignatureCheck;
+    const correctionReason =
+      typeof (entry as Record<string, unknown>).correctionReason === "string"
+        ? String((entry as Record<string, unknown>).correctionReason).trim()
+        : "";
+    delete (entry as Record<string, unknown>).correctionReason;
+    // Filled once we know an existing sealed row is actually being changed.
+    let correctionAuthorized = false;
+    let correctionDiffs: Record<string, { from: unknown; to: unknown }> | null = null;
+    let correctionPrevSig: string | null = null;
+
     // Org ownership: fleet JWT stamp; platform keeps explicit organizationId
     Object.assign(entry, stampFuelRecord(entry as Record<string, unknown>, c));
 
@@ -3829,6 +4006,30 @@ app.post(`${BASE_PATH}/fuel-entries`, async (c: Context) => {
     // Phase 5: Integrity Guardrail - Prevent modifications to signed records
     const existingEntry = await kv.get(`fuel_entry:${entry.id}`);
     const isNewFuelEntry = !existingEntry;
+
+    // A correction is only authorized when an EXISTING row is being modified, the
+    // caller can edit fuel, AND a reason was given. This intentionally cannot be
+    // triggered on brand-new rows (no existingEntry ⇒ no station-lock bypass).
+    if (existingEntry) {
+      const canEditFuel = hasPermission(rbacUser.resolvedRole, "fuel.edit_entry");
+      if (canEditFuel && correctionReason.length > 0) {
+        const diffFields = [
+          "liters", "amount", "odometer", "date", "vehicleId", "lat", "lng",
+          "notes", "driverId", "pricePerLiter", "location", "stationAddress",
+        ];
+        const diffs: Record<string, { from: unknown; to: unknown }> = {};
+        for (const f of diffFields) {
+          if ((entry as Record<string, unknown>)[f] !== undefined && existingEntry[f] !== (entry as Record<string, unknown>)[f]) {
+            diffs[f] = { from: existingEntry[f] ?? null, to: (entry as Record<string, unknown>)[f] ?? null };
+          }
+        }
+        if (Object.keys(diffs).length > 0) {
+          correctionAuthorized = true;
+          correctionDiffs = diffs;
+          correctionPrevSig = (existingEntry.signature as string) || null;
+        }
+      }
+    }
 
     if (isNewFuelEntry) {
       const gasConflict = await findConflictingGasCardAnchor(entry as Record<string, unknown>);
@@ -3858,7 +4059,7 @@ app.post(`${BASE_PATH}/fuel-entries`, async (c: Context) => {
       (existingEntry?.paymentSource === "Gas_Card" &&
         Number(existingEntry?.amount) === 0 &&
         existingEntry?.entryMode === "Anchor");
-    if (existingEntry && existingEntry.signature && !entry.bypassSignatureCheck) {
+    if (existingEntry && existingEntry.signature && !correctionAuthorized) {
         // Signed $0 Gas Card anchors are created before statement money exists —
         // amount/liters must be fillable later. Odometer/date/vehicle stay locked.
         const coreFields = awaitingCardStatement
@@ -3873,7 +4074,7 @@ app.post(`${BASE_PATH}/fuel-entries`, async (c: Context) => {
 
     // Step 7.2: Data Integrity Lock
     // Only verified stations can be linked to finalized transactions in the master audit trail.
-    if ((entry.status === 'Finalized' || entry.isLocked) && !entry.bypassSignatureCheck) {
+    if ((entry.status === 'Finalized' || entry.isLocked) && !correctionAuthorized) {
         const matchedStationId = entry.matchedStationId || entry.metadata?.matchedStationId;
         if (matchedStationId) {
             const station = await kv.get(`station:${matchedStationId}`);
@@ -3884,9 +4085,9 @@ app.post(`${BASE_PATH}/fuel-entries`, async (c: Context) => {
     }
 
     // Step 3.1: Immutability Lockdown (Legacy)
-    // Bypass when admin is explicitly editing via the modal (bypassSignatureCheck flag)
+    // Bypass only via an authorized correction (reason recorded in fuel_entry_corrections).
     // Gas Card $0 anchors are allowed to receive statement liters/amount (match enrich).
-    if (existingEntry && !existingEntry.signature && !entry.bypassSignatureCheck) {
+    if (existingEntry && !existingEntry.signature && !correctionAuthorized) {
         const awaitingCard = awaitingCardStatement;
         const protectedFields = awaitingCard
           ? ["odometer", "date", "vehicleId"]
@@ -4317,6 +4518,25 @@ app.post(`${BASE_PATH}/fuel-entries`, async (c: Context) => {
     Object.assign(entry, stampFuelRecord(entry as Record<string, unknown>, c));
     stampPendingReconciliationStatus(entry as Record<string, unknown>);
     await kv.set(`fuel_entry:${entry.id}`, entry);
+
+    // Append-only correction ledger for any mutation of a sealed row.
+    if (correctionAuthorized && correctionDiffs) {
+      try {
+        const actor = c.get("rbacUser") as RbacUser | undefined;
+        await supabase.from("fuel_entry_corrections").insert({
+          organization_id: (entry as any).organizationId || getOrgId(c) || null,
+          entry_id: String(entry.id),
+          actor_id: actor?.userId || null,
+          reason: correctionReason,
+          field_diffs: correctionDiffs,
+          previous_signature: correctionPrevSig,
+          new_signature: (entry.signature as string) || null,
+        });
+      } catch (corrErr) {
+        console.error("[FuelEntry] Correction ledger insert failed (non-fatal):", corrErr);
+      }
+    }
+
     try {
       await projectFromFuelEntry(entry as Record<string, unknown>, (entry as any).organizationId || getOrgId(c));
     } catch (odoErr) {

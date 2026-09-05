@@ -20,6 +20,7 @@ import {
   periodsToPayoutPeriodRows,
   useDriverFinancialPeriods,
 } from './useDriverFinancialPeriods';
+import { earningsHistoryQueryKey } from './useDriverEarningsHistory';
 
 export type PeriodType = 'daily' | 'weekly' | 'monthly';
 
@@ -106,8 +107,15 @@ export function useDriverPayoutPeriodRows(opts: {
 
   // Phase 1: require a date range (default last 7 days when omitted) so we never auto-load full lifetime.
   // Phase 2: mode=periods for weekly; ledger for daily/monthly.
+  // Same RQ key as useDriverEarningsHistory — Financials Earnings tab shares cache.
+  // Skip weekly history fetch when driver_financial_periods already paints Settlement/Payout.
+  const hasSharedPeriods = (sharedPeriodsQuery.data?.length ?? 0) > 0;
+  const skipWeeklyHistoryForPeriods =
+    periodType === 'weekly' &&
+    (sharedPeriodsQuery.isLoading || sharedPeriodsQuery.isFetching || hasSharedPeriods);
+
   const ledgerQuery = useQuery({
-    queryKey: ['ledgerEarningsHistory', driverId, periodType, startDate || '', endDate || ''],
+    queryKey: earningsHistoryQueryKey(driverId, periodType, startDate, endDate),
     queryFn: () =>
       api.getLedgerEarningsHistory({
         driverId,
@@ -117,7 +125,12 @@ export function useDriverPayoutPeriodRows(opts: {
         mode: periodType === 'weekly' ? 'periods' : 'ledger',
       }),
     staleTime: DRIVER_FINANCIAL_STALE_MS,
-    enabled: enabled && Boolean(driverId) && !useSharedWeekly && Boolean(startDate && endDate),
+    enabled:
+      enabled &&
+      Boolean(driverId) &&
+      !useSharedWeekly &&
+      Boolean(startDate && endDate) &&
+      !skipWeeklyHistoryForPeriods,
   });
 
   const ledgerLoaded = enabled && !ledgerQuery.isLoading && (ledgerQuery.isSuccess || ledgerQuery.isError);

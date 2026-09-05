@@ -80,11 +80,14 @@ export interface FuelEntry {
   amount: number; // Total Cost
   liters?: number; // Volume
   pricePerLiter?: number;
+  fuelType?: FuelType | string;
   
   odometer?: number | null;
   odometerImageUrl?: string; // Photo of odometer dashboard (admin upload)
   location?: string; // Station Name/Address
   stationAddress?: string; // Specific location/address
+  vendor?: string;
+  notes?: string;
   
   type: 'Card_Transaction' | 'Manual_Entry' | 'Fuel_Manual_Entry' | 'Reimbursement';
   entryMode: 'Anchor' | 'Floating'; // Anchor = Verified Odo, Floating = Legacy/Cash without Odo
@@ -94,6 +97,20 @@ export interface FuelEntry {
   entrySource?: 'driver-portal' | 'admin-manual' | 'admin-edit' | 'bulk-import' | 'fuel-card';
   
   isFlagged?: boolean; // If capacity exceeded or outlier
+  isVerified?: boolean;
+
+  /** Persistence seal — stamped server-side when forensic-trusted */
+  status?: 'Draft' | 'Posted' | 'Finalized' | string;
+  isLocked?: boolean;
+  lockedAt?: string;
+  signature?: string;
+  signedAt?: string;
+  /**
+   * Transient (never persisted): supplying a reason authorizes editing a SEALED
+   * row and makes the server write an append-only fuel_entry_corrections row.
+   * Replaces the removed client-side `bypassSignatureCheck` escape hatch.
+   */
+  correctionReason?: string;
   
   // Link to financial transaction
   transactionId?: string;
@@ -146,6 +163,19 @@ export interface FuelEntry {
     
     [key: string]: any;
   };
+}
+
+/** Append-only correction row for a sealed fuel entry (server: fuel_entry_corrections). */
+export interface FuelEntryCorrection {
+  id: string;
+  organization_id?: string | null;
+  entry_id: string;
+  actor_id?: string | null;
+  created_at: string;
+  reason: string;
+  field_diffs: Record<string, { from: unknown; to: unknown }>;
+  previous_signature?: string | null;
+  new_signature?: string | null;
 }
 
 export interface MileageAdjustment {
@@ -338,6 +368,8 @@ export interface FuelCycle {
   startingPercentage?: number;
   isCapped?: boolean;
   excessVolume?: number;
+  /** True on the first cycle emitted after a fresh anchor-chain origin (spillover preserved). */
+  isChainOrigin?: boolean;
   /** Alert tier from server snapshot — exception counts in header badges */
   signalTier?: 'observe' | 'review' | 'exception';
   healthStatus?: 'healthy' | 'review' | 'exception';

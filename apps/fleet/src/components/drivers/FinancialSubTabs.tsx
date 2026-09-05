@@ -21,6 +21,8 @@ import type { PayoutPeriodRow } from '../../types/driverPayoutPeriod';
 import type { CashWeekData } from '../../utils/cashSettlementCalc';
 import { endOfWeek, format, startOfWeek } from 'date-fns';
 import { resolvePeriodTollCashWash } from '../../utils/periodTollCashSpend';
+import { PeriodWeekDropdown } from '../ui/PeriodWeekDropdown';
+import type { PeriodWeekOption } from '../../utils/periodWeekOptions';
 
 interface DriverTollChargeTotals {
   chargedToDriver: number;
@@ -48,9 +50,11 @@ interface FinancialSubTabsProps {
   platformTotalEarnings: number;
   csvMetrics?: import('../../types/data').DriverMetrics[];
   uberLedgerReconciliation?: LedgerDriverOverview['period']['uber'] | null;
-  /** Overview date range — SSOT Uber panel matches ledger period when provided. */
+  /** Financials-owned date range (not Overview header calendar). */
   periodFrom?: Date;
   periodTo?: Date;
+  /** Week / custom range picker for Financials section. */
+  onFinancialPeriodSelect?: (period: PeriodWeekOption) => void;
   /** Shared DriverDetail bundle — avoids a second Financials core fetch. */
   financialBundle?: DriverFinancialBundle;
   /** Shared weekly payout rows from DriverDetail pipeline. */
@@ -74,6 +78,7 @@ export function FinancialSubTabs({
   uberLedgerReconciliation = null,
   periodFrom,
   periodTo,
+  onFinancialPeriodSelect,
   financialBundle: financialBundleProp,
   weeklyPeriodData,
   weeklyCashWeeks,
@@ -183,13 +188,29 @@ export function FinancialSubTabs({
 
   return (
     <Tabs defaultValue="earnings" className="space-y-4">
-      <TabsList className="grid w-full grid-cols-5 max-w-[750px]">
-        <TabsTrigger value="earnings">Earnings</TabsTrigger>
-        <TabsTrigger value="expenses">Expenses</TabsTrigger>
-        <TabsTrigger value="settlement">Settlement</TabsTrigger>
-        <TabsTrigger value="payout">Payout</TabsTrigger>
-        <TabsTrigger value="reconciliation">Reconciliation</TabsTrigger>
-      </TabsList>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <TabsList className="grid w-full grid-cols-5 max-w-[750px]">
+          <TabsTrigger value="earnings">Earnings</TabsTrigger>
+          <TabsTrigger value="expenses">Expenses</TabsTrigger>
+          <TabsTrigger value="settlement">Settlement</TabsTrigger>
+          <TabsTrigger value="payout">Payout</TabsTrigger>
+          <TabsTrigger value="reconciliation">Reconciliation</TabsTrigger>
+        </TabsList>
+        {periodFrom && onFinancialPeriodSelect && (
+          <div className="flex items-center gap-2 shrink-0">
+            <span className="text-xs font-medium text-slate-500 whitespace-nowrap">Financials period</span>
+            <PeriodWeekDropdown
+              selectedStart={format(periodFrom, 'yyyy-MM-dd')}
+              selectedEnd={format(periodTo || periodFrom, 'yyyy-MM-dd')}
+              onSelect={onFinancialPeriodSelect}
+              weekCount={24}
+              allowCustomRange
+              placeholder="Select financials period"
+              buttonClassName="h-9"
+            />
+          </div>
+        )}
+      </div>
 
       {/* ── Earnings Sub-Tab ── */}
       <TabsContent value="earnings" className="space-y-6">
@@ -336,8 +357,8 @@ export function FinancialSubTabs({
       <TabsContent value="reconciliation" className="space-y-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <p className="text-xs text-slate-500">
-            Toll disposition cards follow the scope below. Uber SSOT vs Ledger uses the Overview date range
-            (not lifetime).
+            Toll disposition cards follow the scope below. Uber SSOT vs Ledger uses the Financials period
+            (same control as Earnings), not lifetime.
           </p>
           <div className="flex p-1 bg-slate-100 rounded-lg">
             <Button

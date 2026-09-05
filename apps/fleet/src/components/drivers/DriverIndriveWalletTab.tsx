@@ -56,32 +56,32 @@ function formatTimeLabel(e: LedgerEntry): string {
 async function fetchIndriveWalletLedgerPage(
   driverId: string,
   startDate: string,
-  endDate: string
-): Promise<LedgerEntry[]> {
-  const merged: LedgerEntry[] = [];
-  let offset = 0;
+  endDate: string,
+  offset: number
+): Promise<{ entries: LedgerEntry[]; hasMore: boolean; nextOffset: number }> {
   const limit = 250;
-  const maxPages = 40;
-
-  for (let p = 0; p < maxPages; p++) {
-    const res = await api.getLedgerEntries({
-      driverId,
-      startDate,
-      endDate,
-      eventTypes: ['wallet_credit', 'platform_fee', 'fare_earning'],
-      platform: 'InDrive',
-      limit,
-      offset,
-      sortBy: 'date',
-      sortDir: 'desc',
-    });
-    merged.push(...res.data);
-    if (!res.hasMore || res.data.length === 0) break;
-    offset += limit;
-  }
-
-  return merged;
+  const res = await api.getLedgerEntries({
+    driverId,
+    startDate,
+    endDate,
+    eventTypes: ['wallet_credit', 'platform_fee', 'fare_earning'],
+    platform: 'InDrive',
+    limit,
+    offset,
+    sortBy: 'date',
+    sortDir: 'desc',
+  });
+  const entries = res.data || [];
+  const hasMore = Boolean(res.hasMore && entries.length > 0);
+  return {
+    entries,
+    hasMore,
+    nextOffset: offset + limit,
+  };
 }
+
+/** Hard cap — never silently crawl dozens of ledger pages. */
+const INDRIVE_ACTIVITY_MAX_PAGES = 4;
 
 export interface DriverIndriveWalletTabProps {
   driverId: string | undefined;
@@ -205,44 +205,106 @@ export function DriverIndriveWalletTab({
   const rangeReady = !!(driverId && range?.startDate && range?.endDate);
   const { data: walletData, loading: walletLoading, error: walletError, refetch: refetchWalletSummary } = useIndriveWallet(
     driverId,
-    rangeReady ? range : null
+    rangeReady ? range : null,
+    { enabled: canView && rangeReady }
   );
 
   const [ledgerLoading, setLedgerLoading] = useState(false);
+  const [ledgerLoadingMore, setLedgerLoadingMore] = useState(false);
   const [ledgerError, setLedgerError] = useState<string | null>(null);
   const [ledgerEntries, setLedgerEntries] = useState<LedgerEntry[]>([]);
+  const [ledgerHasMore, setLedgerHasMore] = useState(false);
+  const [ledgerNextOffset, setLedgerNextOffset] = useState(0);
+  const [ledgerPagesLoaded, setLedgerPagesLoaded] = useState(0);
   const [topUpDeleteOpen, setTopUpDeleteOpen] = useState(false);
   const [topUpPending, setTopUpPending] = useState<{ transactionId: string; amountLabel: string } | null>(null);
   const [topUpDeleting, setTopUpDeleting] = useState(false);
   const [activityFilter, setActivityFilter] = useState<ActivityKindFilter>('all');
 
-  const loadLedger = useCallback(async () => {
+  const loadLedgerFirstPage = useCallback(async () => {
     if (!driverId || !range?.startDate || !range?.endDate) {
       setLedgerEntries([]);
+      setLedgerHasMore(false);
+      setLedgerNextOffset(0);
+      setLedgerPagesLoaded(0);
       return;
     }
     setLedgerLoading(true);
     setLedgerError(null);
     try {
-      const rows = await fetchIndriveWalletLedgerPage(driverId, range.startDate, range.endDate);
-      setLedgerEntries(rows);
+      const page = await fetchIndriveWalletLedgerPage(driverId, range.startDate, range.endDate, 0);
+      setLedgerEntries(page.entries);
+      setLedgerHasMore(page.hasMore && 1 < INDRIVE_ACTIVITY_MAX_PAGES);
+      setLedgerNextOffset(page.nextOffset);
+      setLedgerPagesLoaded(1);
     } catch (err) {
       console.error('[DriverIndriveWalletTab] ledger fetch', err);
       setLedgerError(err instanceof Error ? err.message : 'Failed to load activity');
       setLedgerEntries([]);
+      setLedgerHasMore(false);
+      setLedgerPagesLoaded(0);
     } finally {
       setLedgerLoading(false);
     }
   }, [driverId, range?.startDate, range?.endDate]);
 
+  const loadMoreLedger = useCallback(async () => {
+    if (!driverId || !range?.startDate || !range?.endDate) return;
+    if (!ledgerHasMore || ledgerLoadingMore) return;
+    if (ledgerPagesLoaded >= INDRIVE_ACTIVITY_MAX_PAGES) {
+      setLedgerHasMore(false);
+      return;
+    }
+    setLedgerLoadingMore(true);
+    setLedgerError(null);
+    try {
+      const page = await fetchIndriveWalletLedgerPage(
+        driverId,
+        range.startDate,
+        range.endDate,
+        ledgerNextOffset
+      );
+      setLedgerEntries((prev) => {
+        const seen = new Set(prev.map((e) => e.id));
+        const next = [...prev];
+        for (const e of page.entries) {
+          if (e?.id && !seen.has(e.id)) {
+            seen.add(e.id);
+            next.push(e);
+          }
+        }
+        return next;
+      });
+      const pages = ledgerPagesLoaded + 1;
+      setLedgerPagesLoaded(pages);
+      setLedgerNextOffset(page.nextOffset);
+      setLedgerHasMore(page.hasMore && pages < INDRIVE_ACTIVITY_MAX_PAGES);
+    } catch (err) {
+      console.error('[DriverIndriveWalletTab] ledger load more', err);
+      setLedgerError(err instanceof Error ? err.message : 'Failed to load more activity');
+    } finally {
+      setLedgerLoadingMore(false);
+    }
+  }, [
+    driverId,
+    range?.startDate,
+    range?.endDate,
+    ledgerHasMore,
+    ledgerLoadingMore,
+    ledgerNextOffset,
+    ledgerPagesLoaded,
+  ]);
+
   useEffect(() => {
     if (!canView || !rangeReady) {
       setLedgerEntries([]);
+      setLedgerHasMore(false);
+      setLedgerPagesLoaded(0);
       return;
     }
-    void loadLedger();
-    void refetchWalletSummary();
-  }, [canView, rangeReady, loadLedger, refetchWalletSummary, ledgerRefreshKey]);
+    // Summary is RQ-cached — do not force refetch on every mount.
+    void loadLedgerFirstPage();
+  }, [canView, rangeReady, loadLedgerFirstPage, ledgerRefreshKey]);
 
   useEffect(() => {
     setActivityFilter('all');
@@ -298,14 +360,14 @@ export function DriverIndriveWalletTab({
       setTopUpDeleteOpen(false);
       setTopUpPending(null);
       await refetchWalletSummary();
-      await loadLedger();
+      await loadLedgerFirstPage();
       onWalletLedgerMutated?.();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Could not delete top up');
     } finally {
       setTopUpDeleting(false);
     }
-  }, [topUpPending, refetchWalletSummary, loadLedger, onWalletLedgerMutated]);
+  }, [topUpPending, refetchWalletSummary, loadLedgerFirstPage, onWalletLedgerMutated]);
 
   if (!canView) {
     return (
@@ -549,6 +611,26 @@ export function DriverIndriveWalletTab({
                   </ul>
                 </section>
               ))}
+              {ledgerHasMore && (
+                <div className="flex justify-center p-4 border-t border-slate-100 dark:border-slate-800">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={ledgerLoadingMore}
+                    onClick={() => void loadMoreLedger()}
+                  >
+                    {ledgerLoadingMore ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                        Loading…
+                      </>
+                    ) : (
+                      'Show more activity'
+                    )}
+                  </Button>
+                </div>
+              )}
             </div>
           )}
         </CardContent>

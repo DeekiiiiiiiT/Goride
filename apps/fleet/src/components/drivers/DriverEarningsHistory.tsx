@@ -20,7 +20,7 @@ interface DriverEarningsHistoryProps {
   /** When set, API week range matches Expenses/Settlement (trips + transactions), not only ledger_event dates. */
   trips?: Trip[];
   transactions?: FinancialTransaction[];
-  /** Prefer Overview date range (enterprise: no full-lifetime auto-load). */
+  /** Prefer Financials period (enterprise: no full-lifetime auto-load). */
   rangeFrom?: Date | string | null;
   rangeTo?: Date | string | null;
 }
@@ -86,20 +86,20 @@ export function DriverEarningsHistory({
   const [dataSource, setDataSource] = useState<'loading' | 'ledger' | 'error' | 'waiting'>('waiting');
 
   /**
-   * Single date SSOT: Overview rangeFrom/rangeTo only.
-   * Secondary activity min→today is used only when Overview range is not set.
+   * Financials period only (owned by Financials date control — not Overview header).
+   * Falls back to trip/tx activity span only when Financials range is unset.
    */
-  const overviewRangeKey = useMemo(() => {
+  const financialRangeKey = useMemo(() => {
     const rFrom = toYmd(rangeFrom);
     const rTo = toYmd(rangeTo);
     return rFrom && rTo ? `${rFrom}|${rTo}` : "";
   }, [rangeFrom, rangeTo]);
 
   const activityRangeKey = useMemo(() => {
-    if (overviewRangeKey) return overviewRangeKey;
+    if (financialRangeKey) return financialRangeKey;
     const r = deriveDriverFinancialDateRange(trips, transactions);
     return r ? `${r.startDate}|${r.endDate}` : "";
-  }, [overviewRangeKey, trips, transactions]);
+  }, [financialRangeKey, trips, transactions]);
 
   const convertRows = (rows: any[]): PeriodRow[] =>
     rows.map((row: any) => ({
@@ -144,7 +144,7 @@ export function DriverEarningsHistory({
 
   // Sync RQ page into local server state
   useEffect(() => {
-    if (!overviewRangeKey && !activityRangeKey) {
+    if (!financialRangeKey && !activityRangeKey) {
       setServerPeriodData([]);
       setServerDataLoaded(true);
       setServerDataLoading(false);
@@ -185,7 +185,7 @@ export function DriverEarningsHistory({
     console.log(
       `[EarningsHistory] Loaded ${converted.length} rows (RQ ${firstHasMore ? 'hasMore' : 'complete'})`
     );
-  }, [driverId, periodType, activityRangeKey, overviewRangeKey, rqLoading, rqError, rqRows, firstHasMore, firstCursor]);
+  }, [driverId, periodType, activityRangeKey, financialRangeKey, rqLoading, rqError, rqRows, firstHasMore, firstCursor]);
 
   // Load more: next page via cursor (append unique period starts)
   const handleShowMore = () => {
@@ -317,8 +317,8 @@ export function DriverEarningsHistory({
   if (dataSource === 'waiting' && activePeriodData.length === 0) {
     return (
       <div className="text-center p-8 border border-dashed rounded-lg text-slate-400">
-        <p className="text-sm font-medium text-slate-500">Choose a date range to load earnings history.</p>
-        <p className="text-xs text-slate-400 mt-1">History is limited to the Overview date range — not full career weeks.</p>
+        <p className="text-sm font-medium text-slate-500">Choose a Financials period to load earnings history.</p>
+        <p className="text-xs text-slate-400 mt-1">Use the Financials period control above — not the Overview calendar.</p>
       </div>
     );
   }
@@ -347,7 +347,7 @@ export function DriverEarningsHistory({
       <div className="text-center p-6 border border-dashed rounded-lg text-slate-600 space-y-2 max-w-lg mx-auto">
         <p className="text-sm font-medium text-slate-800">No earnings history for this range</p>
         <p className="text-xs text-slate-500 leading-relaxed">
-          History is limited to the selected Overview date range. Expand the range or switch to another period.
+          History is limited to the selected Financials period. Expand the range or switch to another period.
         </p>
       </div>
     );
@@ -408,7 +408,7 @@ export function DriverEarningsHistory({
           <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-slate-50 border border-slate-200">
             <CalendarDays className="h-4 w-4 text-slate-400" />
             <span className="text-xs text-slate-500">
-              History follows the Overview date range
+              History follows the Financials period
             </span>
           </div>
         </div>

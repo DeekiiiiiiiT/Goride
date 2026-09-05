@@ -350,6 +350,10 @@ export function FuelLogModal({
             toast.error("Enter liters for RideShare Cash");
             return;
         }
+        if (initialData && (initialData.isLocked || initialData.status === 'Finalized') && !String(formData.editReason || '').trim()) {
+            toast.error("Enter a correction reason for locked entries");
+            return;
+        }
 
         const fullDate = formData.date;
         const finalTime = time ? (time.length === 5 ? `${time}:00` : time) : initialData?.time;
@@ -382,9 +386,6 @@ export function FuelLogModal({
                     ? 'admin-manual'
                     : 'admin-edit')
                 : 'admin-manual',
-            // When editing, bypass server-side integrity guardrails that block
-            // admin corrections (signature check, immutability lockdown, data lock)
-            bypassSignatureCheck: !!initialData,
             metadata: {
                 ...(initialData?.metadata || {}),
                 pricePerLiter: isRideShareCash
@@ -401,17 +402,15 @@ export function FuelLogModal({
                     : 'admin-manual',
                 paymentSource: formData.type,
                 matchedStationId: formData.matchedStationId || undefined,
-            }
-        };
+            },
+            // Server records append-only corrections for sealed rows when this is set
+            ...(initialData && formData.editReason
+                ? { correctionReason: formData.editReason }
+                : {}),
+        } as FuelEntry & { correctionReason?: string };
 
-        // When editing, strip stale lock/signature from the spread of initialData
-        // so server guardrails don't reject the admin's correction
-        if (initialData) {
-            delete entry.signature;
-            delete entry.signedAt;
-            delete entry.isLocked;
-            delete entry.lockedAt;
-        }
+        // Locked entries keep their signature/lock fields on edit — the payload
+        // carries them through so server-side integrity records stay intact.
 
         onSave(entry);
         onClose();

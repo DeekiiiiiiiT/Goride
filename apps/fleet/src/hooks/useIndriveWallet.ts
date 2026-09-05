@@ -1,6 +1,12 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+/**
+ * Fetches GET /ledger/driver-indrive-wallet — period loads, period fees, lifetime loads.
+ * React Query + optional `enabled` so Overview does not pay for this until needed.
+ */
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useCallback } from 'react';
 import type { IndriveWalletSummary } from '../types/data';
 import { api } from '../services/api';
+import { DRIVER_FINANCIAL_STALE_MS } from './useDriverFinancialBundle';
 
 /** YYYY-MM-DD bounds; must match `getLedgerDriverOverview` / driver detail date filter. */
 export interface IndriveWalletDateRange {
@@ -8,74 +14,61 @@ export interface IndriveWalletDateRange {
   endDate: string;
 }
 
-const DEBOUNCE_MS = 300;
+export function indriveWalletSummaryQueryKey(
+  driverId: string | undefined,
+  startDate: string | undefined,
+  endDate: string | undefined
+) {
+  return ['indriveWalletSummary', driverId || '', startDate || '', endDate || ''] as const;
+}
 
 /**
- * Fetches `GET /ledger/driver-indrive-wallet` — period loads, period fees, lifetime loads.
- * Skips the network call when `driverId` or `range` is missing.
- * Debounces range changes (Phase 6) so rapid date-picker changes do not spam the API.
+ * @param enabled — when false, skips network (Overview must pass false; InDrive tab / dialog pass true).
  */
 export function useIndriveWallet(
   driverId: string | undefined,
-  range: IndriveWalletDateRange | null | undefined
+  range: IndriveWalletDateRange | null | undefined,
+  options?: { enabled?: boolean }
 ): {
   data: IndriveWalletSummary | null;
   loading: boolean;
   error: string | null;
   refetch: () => Promise<void>;
 } {
-  const [data, setData] = useState<IndriveWalletSummary | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const fetchGenRef = useRef(0);
+  const enabledOpt = options?.enabled !== false;
+  const startDate = range?.startDate;
+  const endDate = range?.endDate;
+  const enabled =
+    enabledOpt && Boolean(driverId && startDate && endDate);
 
-  const fetchForRange = useCallback(
-    async (startDate: string, endDate: string, gen: number) => {
-      if (!driverId) return;
-      setLoading(true);
-      setError(null);
-      try {
-        const next = await api.getDriverIndriveWallet({ driverId, startDate, endDate });
-        if (fetchGenRef.current !== gen) return;
-        setData(next);
-      } catch (e: unknown) {
-        if (fetchGenRef.current !== gen) return;
-        const message = e instanceof Error ? e.message : 'Failed to load InDrive wallet';
-        console.error('[useIndriveWallet]', e);
-        setError(message);
-        setData(null);
-      } finally {
-        if (fetchGenRef.current === gen) setLoading(false);
-      }
+  const query = useQuery({
+    queryKey: indriveWalletSummaryQueryKey(driverId, startDate, endDate),
+    queryFn: async () => {
+      if (!driverId || !startDate || !endDate) return null;
+      return api.getDriverIndriveWallet({ driverId, startDate, endDate });
     },
-    [driverId]
-  );
+    staleTime: DRIVER_FINANCIAL_STALE_MS,
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+    enabled,
+  });
 
-  useEffect(() => {
-    if (!driverId || !range?.startDate || !range?.endDate) {
-      fetchGenRef.current += 1;
-      setData(null);
-      setError(null);
-      setLoading(false);
-      return;
-    }
-    const gen = ++fetchGenRef.current;
-    setLoading(true);
-    setError(null);
-    const t = setTimeout(() => {
-      void fetchForRange(range.startDate, range.endDate, gen);
-    }, DEBOUNCE_MS);
-    return () => {
-      clearTimeout(t);
-      if (fetchGenRef.current === gen) setLoading(false);
-    };
-  }, [driverId, range?.startDate, range?.endDate, fetchForRange]);
-
+  const qc = useQueryClient();
   const refetch = useCallback(async () => {
-    if (!driverId || !range?.startDate || !range?.endDate) return;
-    const gen = ++fetchGenRef.current;
-    await fetchForRange(range.startDate, range.endDate, gen);
-  }, [driverId, range?.startDate, range?.endDate, fetchForRange]);
+    if (!enabled) return;
+    await qc.invalidateQueries({
+      queryKey: indriveWalletSummaryQueryKey(driverId, startDate, endDate),
+    });
+  }, [qc, driverId, startDate, endDate, enabled]);
 
-  return { data, loading, error, refetch };
+  return {
+    data: query.data ?? null,
+    loading: enabled && (query.isLoading || query.isFetching),
+    error: query.isError
+      ? query.error instanceof Error
+        ? query.error.message
+        : 'Failed to load InDrive wallet'
+      : null,
+    refetch,
+  };
 }

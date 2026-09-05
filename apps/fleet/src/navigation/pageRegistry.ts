@@ -27,7 +27,7 @@ export const FLEET_PAGE_REGISTRY: Record<string, FleetPageDef> = {
     path: '/fuel-reconciliation',
     permission: 'nav.fuel_overview',
   },
-  'fuel-logs': { id: 'fuel-logs', path: '/fuel-logs', permission: 'nav.fuel_overview' },
+  'fuel-logs': { id: 'fuel-logs', path: '/fuel-logs', permission: 'nav.fuel_logs' },
   'fuel-cards': { id: 'fuel-cards', path: '/fuel-cards', permission: 'nav.fuel_overview' },
   'fuel-configuration': {
     id: 'fuel-configuration',

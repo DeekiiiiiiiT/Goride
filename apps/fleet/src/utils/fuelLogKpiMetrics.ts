@@ -1,6 +1,6 @@
 /**
  * Pure KPI builders for Transaction Logs (Transactions vs Full Tanks).
- * Never mixes domains — fill-ups vs capacity cycles.
+ * Callers MUST pass already-scoped collections — no second filter pass here.
  */
 
 import type { FuelEntry } from '../types/fuel';
@@ -12,17 +12,20 @@ import { resolveFuelEntrySource } from './fuelEntrySource';
 
 export type DateRangeYmd = { from?: Date | string | null; to?: Date | string | null };
 
-export type IntegrityStatus = 'Complete' | 'Partial' | 'Orphaned' | 'Pending' | string;
+export type IntegrityStatus = 'Complete' | 'Partial' | 'Orphaned' | 'Pending' | 'N/A' | string;
 
 export type TransactionKpis = {
   totalFills: number;
   totalSpend: number;
   totalVolume: number;
+  /** Fill-to-fill odo deltas within the scoped set (secondary measure). */
   totalKm: number;
   imbalancedCount: number;
   sourcePortal: number;
   sourceAdmin: number;
   sourceAnchors: number;
+  /** Population note for UI counting-rules popover */
+  populationNote: string;
 };
 
 export type CycleKpis = {
@@ -36,19 +39,11 @@ export type CycleKpis = {
   avgEfficiency: number | null;
 };
 
-export type FuelLogKpiFilters = {
-  vehicleId?: string | null;
-  driverId?: string | null;
-  source?: string | null;
-  searchTerm?: string | null;
+export type TransactionKpiOptions = {
+  integrityById?: Map<string, IntegrityStatus>;
+  /** Valid anchor entry ids for Log Volume anchors count */
+  validAnchorIds?: Set<string>;
 };
-
-export type TransactionKpiOptions = DateRangeYmd &
-  FuelLogKpiFilters & {
-    integrityById?: Map<string, IntegrityStatus>;
-    /** Valid anchor entry ids for Log Volume anchors count */
-    validAnchorIds?: Set<string>;
-  };
 
 function isValidOdo(n: number | null | undefined): n is number {
   return typeof n === 'number' && Number.isFinite(n) && n > 0;
@@ -61,35 +56,15 @@ function inDateRange(date: string | undefined | null, range?: DateRangeYmd): boo
   return isEntryInInclusiveYmdRange(date, startYmd, endYmd);
 }
 
-function matchesSearch(haystack: string, term?: string | null): boolean {
-  const t = (term || '').trim().toLowerCase();
-  if (!t) return true;
-  return haystack.toLowerCase().includes(t);
-}
-
-function matchesVehicle(entry: FuelEntry, vehicleId?: string | null): boolean {
-  if (!vehicleId) return true;
-  return entry.vehicleId === vehicleId;
-}
-
-function matchesDriver(entry: FuelEntry, driverId?: string | null): boolean {
-  if (!driverId) return true;
-  return entry.driverId === driverId;
-}
-
 /**
  * Sum consecutive odo deltas per vehicle (chronological). Skips JAA rows.
  * Only positive deltas count (backwards odo not treated as distance).
+ * Entries must already be scoped (period + vehicle + search).
  */
-export function sumOdometerDeltasBetweenFills(
-  entries: FuelEntry[],
-  opts?: { vehicleId?: string | null; searchTerm?: string | null },
-): number {
+export function sumOdometerDeltasBetweenFills(entries: FuelEntry[]): number {
   const byVehicle = new Map<string, FuelEntry[]>();
   for (const e of entries) {
     if (isJaaStatementLedgerRow(e)) continue;
-    if (opts?.vehicleId && e.vehicleId !== opts.vehicleId) continue;
-    if (!matchesSearch(e.vehicleId || '', opts?.searchTerm)) continue;
     const key = e.vehicleId || 'unknown';
     if (!byVehicle.has(key)) byVehicle.set(key, []);
     byVehicle.get(key)!.push(e);
@@ -120,39 +95,17 @@ export function sumOdometerDeltasBetweenFills(
 }
 
 /**
- * Build Transaction Logs KPI card set for the Transactions tab.
- * Scope = period + optional filters (vehicle, driver, source, search).
+ * Build Transaction Logs KPI card set.
+ * `entries` must already be filtered to the visible table population.
  */
 export function buildTransactionKpis(
   entries: FuelEntry[],
   opts: TransactionKpiOptions = {},
 ): TransactionKpis {
-  const {
-    dateRange,
-    vehicleId,
-    driverId,
-    source,
-    searchTerm,
-    integrityById,
-    validAnchorIds,
-  } = opts;
+  const { integrityById, validAnchorIds } = opts;
 
-  const periodEntries = entries.filter((e) => {
-    if (isJaaStatementLedgerRow(e)) return false;
-    if (!inDateRange(e.date, dateRange)) return false;
-    if (!matchesVehicle(e, vehicleId)) return false;
-    if (!matchesDriver(e, driverId)) return false;
-    if (source && resolveFuelEntrySource(e) !== source) return false;
-    if (
-      !matchesSearch(
-        [e.location || '', e.vendor || '', e.driverId || '', e.vehicleId || ''].join(' '),
-        searchTerm,
-      )
-    ) {
-      return false;
-    }
-    return true;
-  });
+  // Defensive: never count statement ledger even if a caller forgot to strip it
+  const periodEntries = entries.filter((e) => !isJaaStatementLedgerRow(e));
 
   const portal = periodEntries.filter((e) => resolveFuelEntrySource(e) === 'driver-portal').length;
   const admin =
@@ -160,17 +113,16 @@ export function buildTransactionKpis(
     periodEntries.filter((e) => resolveFuelEntrySource(e) === 'admin-edit').length;
   const anchors = periodEntries.filter((e) => validAnchorIds?.has(e.id)).length;
 
+  // Spend/volume use ops eligibility; fills/km use full scoped set (documented in UI)
   const spendScope = periodEntries.filter(countsInFuelLogSpend);
   const totalSpend = spendScope.reduce((s, e) => s + (Number(e.amount) || 0), 0);
   const totalVolume = spendScope.reduce((s, e) => s + (Number(e.liters) || 0), 0);
-  const totalKm = sumOdometerDeltasBetweenFills(periodEntries, { vehicleId, searchTerm });
+  const totalKm = sumOdometerDeltasBetweenFills(periodEntries);
 
   const imbalancedCount = periodEntries.filter((e) => {
-    if (integrityById && integrityById.has(e.id)) {
-      const status = integrityById.get(e.id);
-      return status && status !== 'Complete' && status !== 'Pending';
-    }
-    return false;
+    if (!integrityById || !integrityById.has(e.id)) return false;
+    const status = integrityById.get(e.id);
+    return status === 'Partial' || status === 'Orphaned';
   }).length;
 
   return {
@@ -182,39 +134,29 @@ export function buildTransactionKpis(
     sourcePortal: portal,
     sourceAdmin: admin,
     sourceAnchors: anchors,
+    populationNote:
+      'Fills & km = all scoped rows. Spend & volume exclude fees/declines/awaiting. Imbalanced = ledger Partial/Orphaned only.',
   };
 }
 
 /**
- * Build Full Tanks KPI set. Scope = period + optional filters.
+ * Build Full Tanks KPI set. `cycles` must already be filtered to the visible set.
  */
-export function buildCycleKpis(
-  cycles: FuelCycle[],
-  opts: DateRangeYmd & FuelLogKpiFilters = {},
-): CycleKpis {
-  const { dateRange, vehicleId, searchTerm } = opts;
-
-  const periodCycles = cycles.filter((c) => {
-    if (!inDateRange(c.endDate, dateRange)) return false;
-    if (vehicleId && c.vehicleId !== vehicleId) return false;
-    if (searchTerm) {
-      const term = searchTerm.toLowerCase();
-      if (!String(c.vehicleId).toLowerCase().includes(term)) return false;
-    }
-    return true;
-  });
-
-  const completed = periodCycles.filter((c) => c.status === 'Complete').length;
-  const active = periodCycles.filter((c) => c.status === 'Active').length;
-  const exceptions = periodCycles.filter(
-    (c) => c.signalTier === 'exception' || (c.status === 'Anomaly' && c.signalTier !== 'review'),
+export function buildCycleKpis(cycles: FuelCycle[]): CycleKpis {
+  const completed = cycles.filter((c) => c.status === 'Complete').length;
+  const active = cycles.filter((c) => c.status === 'Active').length;
+  const exceptions = cycles.filter(
+    (c) =>
+      c.signalTier === 'exception' ||
+      c.status === 'Anomaly' ||
+      (typeof c.efficiency === 'number' && c.efficiency > 0 && c.efficiency < 8),
   ).length;
 
-  const totalDistance = periodCycles.reduce((s, c) => s + (Number(c.distance) || 0), 0);
-  const totalFuel = periodCycles.reduce((s, c) => s + (Number(c.totalLiters) || 0), 0);
-  const totalSpend = periodCycles.reduce((s, c) => s + (Number(c.totalCost) || 0), 0);
+  const totalDistance = cycles.reduce((s, c) => s + (Number(c.distance) || 0), 0);
+  const totalFuel = cycles.reduce((s, c) => s + (Number(c.totalLiters) || 0), 0);
+  const totalSpend = cycles.reduce((s, c) => s + (Number(c.totalCost) || 0), 0);
 
-  const withEff = periodCycles.filter(
+  const withEff = cycles.filter(
     (c) => isValidOdo(Number(c.distance)) && Number(c.totalLiters) > 0 && Number(c.efficiency) > 0,
   );
   let avgEfficiency: number | null = null;
@@ -231,7 +173,7 @@ export function buildCycleKpis(
   }
 
   return {
-    totalCycles: periodCycles.length,
+    totalCycles: cycles.length,
     completed,
     active,
     exceptions,

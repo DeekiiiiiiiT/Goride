@@ -1,6 +1,6 @@
 import { projectId } from '../utils/supabase/info';
 import { requireAuthHeaders } from '../utils/authHeaders';
-import { FuelCard, FuelEntry, MileageAdjustment, FuelScenario, JaaProgram } from '../types/fuel';
+import { FuelCard, FuelEntry, FuelEntryCorrection, MileageAdjustment, FuelScenario, JaaProgram } from '../types/fuel';
 import { FinancialTransaction } from '../types/data';
 import { API_ENDPOINTS } from './apiConfig';
 import { settlementService } from './settlementService';
@@ -155,6 +155,30 @@ export const fuelService = {
       (accumulated as any).totalCount = totalCount;
     }
     return accumulated;
+  },
+
+  /** Append-only correction history for a sealed fuel entry (reason + field diffs). */
+  async getFuelEntryCorrections(id: string): Promise<FuelEntryCorrection[]> {
+    const enc = encodeURIComponent(id);
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/fuel-entries/${enc}/corrections`, {
+      headers: await requireAuthHeaders(null),
+    });
+    if (!response.ok) return [];
+    const data = await response.json().catch(() => ({}));
+    return Array.isArray(data?.corrections) ? data.corrections : [];
+  },
+
+  /**
+   * Thin paged wrapper over getAllFuelEntriesInRange for callers that page the
+   * fuel log (FuelManagement). Loads the full date window under the safety ceiling.
+   */
+  async getFuelEntriesPaged(options: {
+    startDate: string;
+    endDate: string;
+    pageSize?: number;
+    maxPages?: number;
+  }): Promise<FuelEntry[]> {
+    return this.getAllFuelEntriesInRange(options);
   },
 
   async getFuelEntry(id: string): Promise<FuelEntry | null> {

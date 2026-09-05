@@ -472,7 +472,7 @@ export function AdminJaaGasCardsPage() {
       try {
         await fuelService.saveFuelEntry({
           ...entry,
-          bypassSignatureCheck: true,
+          correctionReason: 'JAA statement match enrichment',
         } as FuelEntry);
       } catch (err) {
         console.error('[JAA match] save failed', entry.id, err);

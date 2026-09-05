@@ -1,6 +1,11 @@
 import { FuelEntry, FuelCycle } from '../types/fuel';
 import { Vehicle } from '../types/vehicle';
 import { classifyAnchor, isStableCycleId, resolveTankCapacity } from './fuelAnchorLogic';
+import {
+    evaluateCycleClose,
+    resolveCycleCloseMode,
+    type CycleCloseMode,
+} from './fuelCycleClosePolicy';
 import { isJaaStatementLedgerRow } from './jaaFuelStatementMatcher';
 
 /**
@@ -33,8 +38,10 @@ export function calculateFuelCycles(entries: FuelEntry[], vehicles: Vehicle[] = 
 
     vehicleGroups.forEach((vehicleEntries, vehicleId) => {
         const vehicle = vehicleMap.get(vehicleId);
-        // UI-only fallback 40 when capacity unknown
-        const tankCapacity = resolveTankCapacity(vehicle) || 40;
+        // No silent fallback: without a real tank capacity the SPLIT/close math is
+        // meaningless. Skip cycle math for this vehicle entirely (no fabricated 40L tank).
+        const tankCapacity = resolveTankCapacity(vehicle);
+        if (!(tankCapacity > 0)) return;
 
         const sorted = [...vehicleEntries].sort((a, b) => {
             const dateStrA = a.date.includes('-') ? a.date : a.date.replace(/\//g, '-');
@@ -55,6 +62,17 @@ export function calculateFuelCycles(entries: FuelEntry[], vehicles: Vehicle[] = 
 
         let carryoverVolume = 0;
         let startingPercentage = 0;
+        // Marks the first cycle emitted after a fresh chain origin so callers can
+        // tell that its opening spillover was preserved (not a mid-chain close).
+        let pendingChainOrigin = false;
+
+        // Legacy rows honor an explicit per-vehicle close mode; otherwise the engine
+        // keeps its historical 98% cumulative spine (docs/fuel-brain-spine.md).
+        const explicitCloseMode = (vehicle as { fuelSettings?: { cycleCloseMode?: string } } | undefined)
+            ?.fuelSettings?.cycleCloseMode;
+        const legacyCloseMode: CycleCloseMode = explicitCloseMode
+            ? resolveCycleCloseMode(vehicle as { fuelSettings?: { cycleCloseMode?: string } })
+            : 'cumulative_98';
 
         sorted.forEach((entry, index) => {
             const entryVolume = entry.liters || 0;
@@ -103,21 +121,21 @@ export function calculateFuelCycles(entries: FuelEntry[], vehicles: Vehicle[] = 
                     isCapped = true;
                 }
             } else {
-                // Legacy rows: derive from 98% classifyAnchor
-                const local = classifyAnchor({
-                    isFullTank: meta.isFullTank === true,
-                    isAnchor: meta.isAnchor === true,
-                    isHardAnchor: meta.isHardAnchor === true,
-                    isSoftAnchor: meta.isSoftAnchor === true,
+                // Legacy rows (no server metadata): decide the close via the shared
+                // cycle-close policy instead of a hard-wired 98% classifyAnchor.
+                const decision = evaluateCycleClose({
+                    closeMode: legacyCloseMode,
                     prevCumulative: currentTotalVolume,
                     volume: entryVolume,
                     tankCapacity,
+                    paymentSource: entry.paymentSource,
+                    entryMode: entry.entryMode,
                 });
-                isHard = local.isHard;
-                isSoft = local.isSoft;
-                volumeContributed = local.volumeContributed;
-                excessVolume = local.excessVolume;
-                isCapped = local.isSoft;
+                isHard = false;
+                isSoft = decision.shouldClose;
+                volumeContributed = decision.volumeContributed;
+                excessVolume = decision.excessVolume;
+                isCapped = decision.isSoft;
             }
 
             const isCycleEnd = isHard || isSoft;
@@ -202,22 +220,36 @@ export function calculateFuelCycles(entries: FuelEntry[], vehicles: Vehicle[] = 
                             isCapped,
                             excessVolume: excessVolume > 0 ? excessVolume : undefined,
                             signalTier: cycleSignalTier,
+                            isChainOrigin: pendingChainOrigin || undefined,
                         });
+                        // First real cycle after the origin has now been emitted.
+                        pendingChainOrigin = false;
 
                         // Carry spillover as a number only — do NOT also insert a synthetic
                         // duplicate of this fill (that double-counted liters + fake SPLIT rows).
                         carryoverVolume = excessVolume;
                         startingPercentage = tankCapacity > 0 ? (carryoverVolume / tankCapacity) * 100 : 0;
                         currentCycleEntries = [];
+                    } else if (hasValidOdo) {
+                        // Odometer regressed at a close: no valid distance. The anchor still
+                        // advances (below); drop the open cycle so this fill's liters are not
+                        // double-counted into the next cycle.
+                        currentCycleEntries = [];
+                        carryoverVolume = 0;
+                        startingPercentage = 0;
                     } else {
+                        // Capacity close with no odo can't advance the anchor — keep liters flowing.
                         currentCycleEntries.push({ ...entry, volumeContributed: entryVolume });
                     }
                 } else if (hasValidOdo) {
+                    // Chain origin: first trusted anchor. Preserve any over-capacity
+                    // spillover as carryover instead of dropping it to zero.
                     lastAnchorOdometer = entryOdo;
                     lastAnchorDate = entry.date;
                     currentCycleEntries = [];
-                    carryoverVolume = 0;
-                    startingPercentage = 0;
+                    carryoverVolume = excessVolume > 0 ? excessVolume : 0;
+                    startingPercentage = tankCapacity > 0 ? (carryoverVolume / tankCapacity) * 100 : 0;
+                    pendingChainOrigin = true;
                 } else {
                     // Capacity-close with no odo cannot open/advance the anchor chain
                     currentCycleEntries.push({ ...entry, volumeContributed: entryVolume });

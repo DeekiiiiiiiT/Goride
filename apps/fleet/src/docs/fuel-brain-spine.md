@@ -7,8 +7,27 @@ Single source of truth for tank integrity vs km attribution vs stop-to-stop diag
 | Cycle stamp + lane split | Server `fuel_cycle_stamp.ts` | Ad-hoc cycle math in `index.tsx` / `fuel_controller.tsx` |
 | Close policy (rideshare default) | `fuel_cycle_close_policy.ts` | Client-only 98% stacking unless org opts into `cumulative_98` |
 | Cycle snapshots | `fuel_cycle_snapshot.ts` + `GET /fuel/cycles` | Client re-derive when server snapshot available |
+| Log KPI roll-up | `GET /fuel/log-summary` | Client totals when server summary available |
+| Corrections to sealed rows | `fuel_entry_corrections` table + `correctionReason` | Client `bypassSignatureCheck` (removed) |
 | Week health Emerald/Amber/Red | `fuelCalculationService.ts` | Bucket ±20% variance as primary Amber |
 | Km purpose (RS / Personal / DH) | `fuelBrainClassify.ts` | Tank integrity / capacity close |
+
+## Client engine is legacy-only
+
+`utils/fuelCycleEngine.ts` (`calculateFuelCycles`) is now the **fallback**, not the source of truth.
+`useFuelCycles` fetches the server snapshot (`GET /fuel/cycles`) per vehicle and hydrates it; it
+only runs the in-browser engine when `VITE_FUEL_CYCLE_LEGACY_CLIENT=1`, when a caller passes
+`legacyClient`, or when the server fetch fails (silent fallback so Full Tanks never blanks out).
+The client engine also no longer fabricates a 40 L tank: a vehicle with no configured tank
+capacity is skipped entirely.
+
+## Corrections replace bypassSignatureCheck
+
+Sealed fuel rows (signed / locked / finalized) can no longer be edited via a client
+`bypassSignatureCheck` flag — the server strips it. Editing a sealed row requires a
+`correctionReason`; the server records an append-only `fuel_entry_corrections` row
+(reason + field diffs + signature rotation) and rotates the signature. History is read via
+`GET /fuel-entries/:id/corrections`.
 
 ## Three lanes (locked)
 

@@ -636,6 +636,31 @@ export const api = {
     return response.json() as Promise<{ cycles: import('../types/fuel').SlimFuelCycle[] }>;
   },
 
+  /**
+   * High-level fuel log KPI roll-up for a date range (optionally one vehicle).
+   * Server computes totals from entries in range — see /fuel/log-summary.
+   */
+  async getFuelLogSummary(params: { startDate?: string; endDate?: string; vehicleId?: string }) {
+    const qs = new URLSearchParams();
+    if (params.startDate) qs.set('startDate', params.startDate);
+    if (params.endDate) qs.set('endDate', params.endDate);
+    if (params.vehicleId) qs.set('vehicleId', params.vehicleId);
+    const suffix = qs.toString() ? `?${qs.toString()}` : '';
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/fuel/log-summary${suffix}`, {
+      headers: await requireAuthHeaders(null),
+    });
+    if (!response.ok) throw new Error('Failed to fetch fuel log summary');
+    return response.json() as Promise<{
+      totalFills: number;
+      totalSpend: number;
+      totalVolume: number;
+      totalKm: number;
+      totalCycles: number;
+      totalDistance: number;
+      totalFuel: number;
+    }>;
+  },
+
   async recalculateFuelCycles(vehicleId?: string) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/cycles/recalculate`, {
       method: 'POST',
@@ -4388,8 +4413,12 @@ export const api = {
     resetFuelEntries?: number;
     eventsReversed?: number;
     periodsRebuilt?: number;
+    /** True when fuel_reconciliation_period was cleared from locked → reopened. */
+    periodUnlocked?: boolean;
     driverIds?: string[];
     vehicleIds?: string[];
+    /** Present when fuel ledger reverse / Expenses rebuild had non-fatal failures. */
+    syncErrors?: string[];
     error?: string;
   }> {
     const weekKey = String(weekStart).split('T')[0];

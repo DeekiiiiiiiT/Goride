@@ -80,6 +80,7 @@ import {
 import { Button } from "../ui/button";
 import { PeriodWeekDropdown } from '../ui/PeriodWeekDropdown';
 import type { PeriodWeekOption } from '../../utils/periodWeekOptions';
+import { generatePeriodWeekOptions } from '../../utils/periodWeekOptions';
 import { Input } from "../ui/input";
 import { 
   Table, 
@@ -124,17 +125,19 @@ import { classifyTollTransaction } from '../../utils/tollTransactionUtils';
 import { format, subDays, isWithinInterval, startOfDay, endOfDay, eachDayOfInterval, differenceInDays } from "date-fns";
 import { DateRange } from "react-day-picker";
 import { cn } from "../ui/utils";
-import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
-import { Calendar } from "../ui/calendar";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "../ui/dialog";
 import { LogCashPaymentModal } from './LogCashPaymentModal';
 import { CashWriteOffModal, type CashWriteOffSavePayload } from './CashWriteOffModal';
 import { RecordPayoutModal, type RecordPayoutSavePayload } from './RecordPayoutModal';
 import { WeeklySettlementView } from './WeeklySettlementView';
+import { useQueryClient } from '@tanstack/react-query';
 import { useDriverPayoutPeriodRows } from '../../hooks/useDriverPayoutPeriodRows';
 import { useDriverFinancialBundle } from '../../hooks/useDriverFinancialBundle';
 import { useInvalidateDriverFinancialPeriods } from '../../hooks/useDriverFinancialPeriods';
+import { useDriverTransactions, driverTransactionsQueryKey } from '../../hooks/useDriverTransactions';
+import { useFleetClaims, FLEET_CLAIMS_QUERY_KEY } from '../../hooks/useFleetClaims';
+import { useDriverTollLogs, driverTollLogsQueryKey } from '../../hooks/useDriverTollLogs';
 import { buildWalletCallOutstandingByMonday } from '../../utils/walletCallOutstanding';
 import { DriverEarningsHistory } from './DriverEarningsHistory';
 import { DriverExpensesHistory } from './DriverExpensesHistory';
@@ -327,8 +330,10 @@ interface DriverDetailProps {
 
 export function DriverDetail({ driverId, driverName, driver, trips, metrics: csvMetrics, vehicleMetrics, onBack }: DriverDetailProps) {
   const { serviceLineParam } = useServiceLineScopeParam();
+  const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState("overview");
-  const [localLoading, setLocalLoading] = useState(true);
+  /** Financials / Cash Wallet — gates money supporting APIs off Overview. */
+  const moneyTabActive = activeTab === 'financial' || activeTab === 'wallet';
   const [selectedDocument, setSelectedDocument] = useState<DriverDocument | null>(null);
   const [paymentModalState, setPaymentModalState] = useState<{
       isOpen: boolean;
@@ -356,11 +361,34 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
   const [selectedPlatforms, setSelectedPlatforms] = useState<Set<string>>(new Set(['All']));
   const [timeFilter, setTimeFilter] = useState<TimeFilterValue>({ preset: 'all' });
 
-  // Date Range State (Default: Last 7 Days) — declared early so all hooks below can reference it
+  // Date Range State (Default: Last 7 Days) — Overview / InDrive only
   const [dateRange, setDateRange] = useState<DateRange | undefined>({
     from: subDays(new Date(), 7),
     to: new Date(),
   });
+
+  /** Financials-owned range — independent of Overview calendar; default last 12 pay weeks. */
+  const [financialDateRange, setFinancialDateRange] = useState<DateRange>(() => {
+    const weeks = generatePeriodWeekOptions(12);
+    const newest = weeks[0];
+    const oldest = weeks[weeks.length - 1] || newest;
+    return {
+      from: new Date(`${oldest.startDate}T12:00:00`),
+      to: new Date(`${newest.endDate}T12:00:00`),
+    };
+  });
+
+  const financialDateRangeStrings = useMemo(() => {
+    if (!financialDateRange?.from) return null;
+    return {
+      startDate: format(financialDateRange.from, 'yyyy-MM-dd'),
+      endDate: format(financialDateRange.to || financialDateRange.from, 'yyyy-MM-dd'),
+    };
+  }, [financialDateRange]);
+
+  /** Header Overview calendar only on Overview + InDrive Wallet. */
+  const showOverviewDateControls =
+    activeTab === 'overview' || activeTab === 'indrive-wallet';
 
   /** Once per driver, prefer the latest CSV metrics period (if any) over "last 7 days → today" so the calendar matches imported statement weeks. */
   const didInitDateRangeFromCsv = useRef(false);
@@ -461,8 +489,9 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
     return () => { cancelled = true; };
   }, [driverId, driver?.uberDriverId, driver?.inDriveDriverId, driver?.name, driver?.firstName, driver?.lastName, driverName]);
 
-  // ── Ledger summary fetch (Phase 10) ──
+  // Ledger summary — only when money tabs need it (unused on Overview KPIs).
   useEffect(() => {
+    if (!moneyTabActive) return;
     let cancelled = false;
     const fetchLedgerSummary = async () => {
       try {
@@ -479,7 +508,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
     };
     fetchLedgerSummary();
     return () => { cancelled = true; };
-  }, [driverId]);
+  }, [driverId, moneyTabActive]);
 
 
 
@@ -735,67 +764,69 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
       return { monthlyEarnings: mEarnings, currentTier: cTier };
   }, [allTrips, tiers]);
 
-  // Fetch Transactions & Claims
-  const refreshData = React.useCallback(async () => {
-      setLocalLoading(true);
-      try {
-          // Collect all relevant driver IDs to query
-          const driverIds = expandDriverTransactionIds([
-              driverId,
-              driver?.uberDriverId,
-              driver?.inDriveDriverId,
-          ]);
+  // Money supporting data (tx / claims / toll-logs) — RQ-cached; only when Financials or Cash Wallet is open.
+  const moneyExpandedIds = React.useMemo(
+    () =>
+      expandDriverTransactionIds([
+        driverId,
+        driver?.uberDriverId,
+        driver?.inDriveDriverId,
+      ]),
+    [driverId, driver?.uberDriverId, driver?.inDriveDriverId]
+  );
 
-          const [driverTx, allClaims, tollLogsResponses] = await Promise.all([
-              api.getAllTransactionsForDrivers(driverIds),
-              api.getClaims(), // Fetch ALL claims to ensure we find links even if driverId filter is tricky
-              // Toll Logs already merges toll_ledger + legacy transaction:* toll
-              // rows (dedup by id, ledger wins) — the same view Toll Reconciliation
-              // uses. Tolls created after the toll_ledger migration only live there,
-              // never in transaction:*, so without this merge they're invisible to
-              // Expenses / Settlement / Cash Wallet even though they're fully
-              // reconciled. Per-driverId-variant + fail-soft (falls back to legacy
-              // transactions only if a call errors).
-              Promise.all(driverIds.map((id: string) => api.getTollLogs({ driverId: id }).catch(() => ({ data: [] as any[] })))),
-          ]);
+  const {
+    transactions: rqTransactions,
+    loading: rqTxLoading,
+    refetch: refetchDriverTx,
+  } = useDriverTransactions(moneyExpandedIds, { enabled: moneyTabActive });
+  const {
+    claims: rqClaims,
+    loading: rqClaimsLoading,
+    refetch: refetchClaims,
+  } = useFleetClaims({ enabled: moneyTabActive });
+  const {
+    tollLogs: rqTollLogs,
+    loading: rqTollLogsLoading,
+    refetch: refetchTollLogs,
+  } = useDriverTollLogs(moneyExpandedIds, { enabled: moneyTabActive });
 
-          // Server-side filtering is now enabled for getTransactions(driverIds)
-          const validTx = Array.isArray(driverTx) ? driverTx.filter(Boolean) : [];
-
-          // Merge in the full toll picture. Ledger-shaped rows win over any legacy
-          // transaction:* row sharing the same id (server dedups this way already);
-          // rows with a toll_ledger-only id simply fill a previously-invisible gap.
-          const tollLogRows = (tollLogsResponses || []).flatMap((r: any) => (r && Array.isArray(r.data)) ? r.data : []);
-          const mergedById = new Map<string, any>();
-          for (const tx of validTx) if (tx?.id) mergedById.set(tx.id, tx);
-          for (const tx of tollLogRows) if (tx?.id) mergedById.set(tx.id, tx);
-          const mergedTx = Array.from(mergedById.values());
-
-          // Diagnostic: Log transaction breakdown to verify data completeness
-          const paymentCount = mergedTx.filter(isDriverCashPaymentTransaction).length;
-          const tollCount = mergedTx.filter((t: any) => ['Toll Usage', 'Toll', 'Tolls'].includes(t.category)).length;
-          const fuelCount = mergedTx.filter((t: any) => (t.category || '').toLowerCase().includes('fuel')).length;
-          const floatCount = mergedTx.filter((t: any) => t.category === 'Float Issue').length;
-          console.log(`[DriverDetail] Transactions loaded: ${mergedTx.length} total (${validTx.length} legacy + ${tollLogRows.length} toll-log rows merged) | ${paymentCount} payments | ${tollCount} tolls | ${fuelCount} fuel | ${floatCount} floats`);
-
-          setTransactions(mergedTx);
-          
-          // Filter claims locally if needed, or just use all for linking (safer)
-          setClaims(Array.isArray(allClaims) ? allClaims : []);
-      } catch (e) {
-          console.error("Failed to load data", e);
-          // Ensure we don't crash if API fails
-          // But don't clear data if it's just a refresh failure
-          if (!transactions || transactions.length === 0) setTransactions([]);
-          if (!claims || claims.length === 0) setClaims([]);
-      } finally {
-          setLocalLoading(false);
-      }
-  }, [driverId, driver]);
+  const serverMergedTransactions = React.useMemo(() => {
+    const validTx = Array.isArray(rqTransactions) ? rqTransactions.filter(Boolean) : [];
+    const tollLogRows = Array.isArray(rqTollLogs) ? rqTollLogs : [];
+    const mergedById = new Map<string, any>();
+    for (const tx of validTx) if (tx?.id) mergedById.set(tx.id, tx);
+    for (const tx of tollLogRows) if (tx?.id) mergedById.set(tx.id, tx);
+    return Array.from(mergedById.values()) as FinancialTransaction[];
+  }, [rqTransactions, rqTollLogs]);
 
   React.useEffect(() => {
-      refreshData();
-  }, [refreshData]);
+    if (!moneyTabActive) return;
+    if (rqTxLoading || rqTollLogsLoading) return;
+    setTransactions(serverMergedTransactions);
+  }, [moneyTabActive, serverMergedTransactions, rqTxLoading, rqTollLogsLoading]);
+
+  React.useEffect(() => {
+    if (!moneyTabActive || rqClaimsLoading) return;
+    setClaims(Array.isArray(rqClaims) ? rqClaims : []);
+  }, [moneyTabActive, rqClaims, rqClaimsLoading]);
+
+  const refreshData = React.useCallback(async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: driverTransactionsQueryKey(moneyExpandedIds) }),
+      queryClient.invalidateQueries({ queryKey: FLEET_CLAIMS_QUERY_KEY }),
+      queryClient.invalidateQueries({ queryKey: driverTollLogsQueryKey(moneyExpandedIds) }),
+      refetchDriverTx(),
+      refetchClaims(),
+      refetchTollLogs(),
+    ]);
+  }, [
+    queryClient,
+    moneyExpandedIds,
+    refetchDriverTx,
+    refetchClaims,
+    refetchTollLogs,
+  ]);
 
   // Grouped Transactions Logic (Trip-Centric)
   const groupedTollTransactions = useMemo(() => {
@@ -2372,7 +2403,6 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
    * Lazy money core: only when Financials or Cash Wallet tab is active.
    * Overview-only visits keep vehicles/finalized/dispute fetches off the wire.
    */
-  const moneyTabActive = activeTab === 'financial' || activeTab === 'wallet';
   const sharedFinancialBundle = useDriverFinancialBundle(driverId, driver, {
     enabled: moneyTabActive,
   });
@@ -2387,6 +2417,8 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
     periodType: 'weekly',
     financialBundle: sharedFinancialBundle,
     enabled: moneyTabActive,
+    startDate: financialDateRangeStrings?.startDate,
+    endDate: financialDateRangeStrings?.endDate,
   });
 
   /** Live Log Cash period list (never a stale Weekly Settlements snapshot). */
@@ -2541,16 +2573,20 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
     [platformBreakdownData]
   );
 
-  const handleDateSelect = (newRange: DateRange | undefined) => {
-    if (newRange?.from) {
-      setDateRange(newRange);
-    }
-  };
-
   const handlePeriodWeekSelect = (p: PeriodWeekOption) => {
     const [y1, m1, d1] = p.startDate.split('-').map(Number);
     const [y2, m2, d2] = p.endDate.split('-').map(Number);
     setDateRange({
+      from: new Date(y1, m1 - 1, d1, 12, 0, 0, 0),
+      to: new Date(y2, m2 - 1, d2, 12, 0, 0, 0),
+    });
+  };
+
+  const handleFinancialPeriodWeekSelect = (p: PeriodWeekOption) => {
+    if (!p.startDate || !p.endDate) return;
+    const [y1, m1, d1] = p.startDate.split('-').map(Number);
+    const [y2, m2, d2] = p.endDate.split('-').map(Number);
+    setFinancialDateRange({
       from: new Date(y1, m1 - 1, d1, 12, 0, 0, 0),
       to: new Date(y2, m2 - 1, d2, 12, 0, 0, 0),
     });
@@ -2632,7 +2668,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
     }
   };
 
-  if (localLoading && (!metrics || metrics.totalTrips === 0)) {
+  if (!serverTripsLoaded && (!metrics || metrics.totalTrips === 0)) {
     return (
       <div className="flex flex-col items-center justify-center h-[60vh] space-y-4">
         <Loader2 className="h-10 w-10 animate-spin text-indigo-600" />
@@ -2730,55 +2766,20 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
              </DropdownMenuContent>
            </DropdownMenu>
 
-           <TimeFilterDropdown value={timeFilter} onChange={setTimeFilter} inactive={activeTab !== 'overview'} />{/* Date Picker */}
+           <TimeFilterDropdown value={timeFilter} onChange={setTimeFilter} inactive={activeTab !== 'overview'} />
+           {/* Overview / InDrive date only — Financials uses its own filter inside the tab */}
+           {showOverviewDateControls && (
            <div className="flex flex-wrap items-center gap-2">
             {dateRange?.from && (
               <PeriodWeekDropdown
                 selectedStart={format(dateRange.from, 'yyyy-MM-dd')}
                 selectedEnd={format(dateRange.to || dateRange.from, 'yyyy-MM-dd')}
                 onSelect={handlePeriodWeekSelect}
+                allowCustomRange
                 placeholder="Select week period"
                 buttonClassName="h-9"
               />
             )}
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button
-                  id="date"
-                  variant={"outline"}
-                  className={cn(
-                    "w-[260px] justify-start text-left font-normal",
-                    !dateRange && "text-muted-foreground"
-                  )}
-                >
-                  <CalendarIcon className="mr-2 h-4 w-4" />
-                  {dateRange?.from ? (
-                    dateRange.to ? (
-                      <>
-                        {format(dateRange.from, "LLL dd, y")} -{" "}
-                        {format(dateRange.to, "LLL dd, y")}
-                      </>
-                    ) : (
-                      format(dateRange.from, "LLL dd, y")
-                    )
-                  ) : (
-                    <span>Pick a date</span>
-                  )}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0" align="end">
-                <Calendar
-                  initialFocus
-                  mode="range"
-                  defaultMonth={dateRange?.from}
-                  selected={dateRange}
-                  onSelect={handleDateSelect}
-                  numberOfMonths={2}
-                  showOutsideDays={false}
-                  required
-                />
-              </PopoverContent>
-            </Popover>
             <Button
               type="button"
               variant="ghost"
@@ -2791,6 +2792,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
               {tripGapDiagLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Stethoscope className="h-4 w-4" />}
             </Button>
            </div>
+           )}
 
            <Button variant="outline" size="sm">
              <Download className="h-4 w-4 mr-2" />
@@ -3041,7 +3043,9 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                 resolvedFinancials={resolvedFinancials}
                 metrics={metrics}
                 uberPaymentCsvRollup={metrics.uberPaymentCsvRollup}
-                localLoading={localLoading}
+                earningsLoading={!ledgerOverviewLoaded}
+                tripsLoading={!serverTripsLoaded}
+                tollsLoading={!ledgerOverviewLoaded}
                 isToday={!!isToday}
                 driverId={driverId}
                 walletRange={ledgerDateRangeStrings}
@@ -3061,7 +3065,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                   trend={`${resolvedFinancials.trendPercent}% vs prev`} 
                   trendUp={resolvedFinancials.trendUp}
                   icon={<DollarSign className="h-4 w-4 text-slate-500" />}
-                  loading={localLoading}
+                  loading={!serverTripsLoaded}
                    breakdown={Object.entries(metrics.platformStats)
                        .filter(([_, stats]: [string, any]) => stats.earnings > 0 || stats.completed > 0)
                        .map(([label, stats]: [string, any]) => ({
@@ -3075,7 +3079,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                   value={`$${resolvedFinancials.cashCollected.toFixed(2)}`} 
                   icon={<DollarSign className="h-4 w-4 text-slate-500" />}
                   tooltip="Total cash collected from trips during this period"
-                  loading={localLoading}
+                  loading={!serverTripsLoaded}
                   breakdown={[
                       ...Object.entries(resolvedFinancials.platformStats)
                           .filter(([_, stats]: [string, any]) => stats.cashCollected > 0)
@@ -3090,7 +3094,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                   title="Km Driven for Period" 
                   value={`${metrics.totalDistance.toFixed(1)} km`} 
                   icon={<Navigation className="h-4 w-4 text-slate-500" />}
-                  loading={localLoading}
+                  loading={!serverTripsLoaded}
                    breakdown={Object.entries(metrics.platformStats)
                        .filter(([_, stats]: [string, any]) => stats.distance > 0)
                        .map(([label, stats]: [string, any]) => ({
@@ -3105,7 +3109,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                   </CardHeader>
                   <CardContent>
                      <div className="h-[180px] w-full relative">
-                        {localLoading && (
+                        {!serverTripsLoaded && (
                             <div className="absolute inset-0 bg-white/50 dark:bg-slate-900/50 flex items-center justify-center z-10 backdrop-blur-[1px]">
                                 <Loader2 className="h-6 w-6 animate-spin text-indigo-600" />
                             </div>
@@ -3213,7 +3217,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                   subtext="Driver cash risk — genuine Uber/support refunds"
                   tooltip="Uber/support toll refunds that change what the driver owes. Plaza tag cost minus Uber trip credits lives on Business Finance P&L."
                   icon={<DollarSign className="h-4 w-4 text-slate-500" />}
-                  loading={localLoading}
+                  loading={!serverTripsLoaded}
                    breakdown={Object.entries(metrics.platformStats)
                        .filter(([_, stats]: [string, any]) => stats.tolls > 0)
                        .map(([label, stats]: [string, any]) => ({
@@ -3230,7 +3234,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                      {metrics.distanceMetrics ? (
                         <>
                            <div className="h-[180px] w-full relative">
-                              {localLoading && (
+                              {!serverTripsLoaded && (
                                   <div className="absolute inset-0 bg-white/50 dark:bg-slate-900/50 flex items-center justify-center z-10 backdrop-blur-[1px]">
                                       <Loader2 className="h-6 w-6 animate-spin text-indigo-600" />
                                   </div>
@@ -3409,7 +3413,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                      {metrics.fuelMetrics ? (
                         <>
                            <div className="h-[180px] w-full relative">
-                              {localLoading && (
+                              {!serverTripsLoaded && (
                                   <div className="absolute inset-0 bg-white/50 dark:bg-slate-900/50 flex items-center justify-center z-10 backdrop-blur-[1px]">
                                       <Loader2 className="h-6 w-6 animate-spin text-indigo-600" />
                                   </div>
@@ -3523,7 +3527,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
 
             )}
              {/* Platform distance gauges */}
-            <DistanceByPlatform perPlatformDistance={metrics.perPlatformDistance} loading={localLoading} />
+            <DistanceByPlatform perPlatformDistance={metrics.perPlatformDistance} loading={!serverTripsLoaded} />
          </TabsContent>
 
          <TabsContent value="financial" className="space-y-6">
@@ -3537,8 +3541,9 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
              platformTotalEarnings={platformTotalEarnings}
              csvMetrics={csvMetrics}
              uberLedgerReconciliation={resolvedFinancials.uberLedgerReconciliation}
-             periodFrom={dateRange?.from}
-             periodTo={dateRange?.to}
+             periodFrom={financialDateRange?.from}
+             periodTo={financialDateRange?.to}
+             onFinancialPeriodSelect={handleFinancialPeriodWeekSelect}
              financialBundle={sharedFinancialBundle}
              weeklyPeriodData={walletPayoutPeriodRows}
              weeklyCashWeeks={walletCashWeeks}
@@ -3995,7 +4000,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                     value={metrics.currentRating.toFixed(1)} 
                     subtext="Last 4 weeks"
                     icon={<Star className="h-4 w-4 text-slate-500" />}
-                    loading={localLoading}
+                    loading={!serverTripsLoaded}
                      breakdown={[
                         { label: 'Uber', value: metrics.platformStats.Uber.ratingCount > 0 ? (metrics.platformStats.Uber.ratingSum / metrics.platformStats.Uber.ratingCount).toFixed(1) : metrics.currentRating.toFixed(1), color: '#3b82f6' },
                         { label: 'InDrive', value: metrics.platformStats.InDrive.ratingCount > 0 ? (metrics.platformStats.InDrive.ratingSum / metrics.platformStats.InDrive.ratingCount).toFixed(1) : metrics.currentRating.toFixed(1), color: '#10b981' }
@@ -4008,21 +4013,21 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                     progress={metrics.completionRate}
                     progressColor="bg-emerald-500"
                     target="Target: 95%"
-                    loading={localLoading}
+                    loading={!serverTripsLoaded}
                  />
                  <MetricCard 
                     title="Cancelled Trips" 
                     value={metrics.periodCancelledTrips} 
                     icon={<AlertTriangle className="h-4 w-4 text-slate-500" />}
                     subtext="In selected period"
-                    loading={localLoading}
+                    loading={!serverTripsLoaded}
                  />
                  <MetricCard 
                     title="Safety Score" 
                     value="98/100" 
                     icon={<Shield className="h-4 w-4 text-slate-500" />}
                     subtext="Based on harsh braking events"
-                    loading={localLoading}
+                    loading={!serverTripsLoaded}
                  />
                <MetricCard 
                   title="Acceptance Rate" 
@@ -4031,7 +4036,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                   progress={metrics.acceptanceRate || 0}
                   progressColor={!metrics.acceptanceRate ? "bg-slate-200" : metrics.acceptanceRate >= 80 ? "bg-emerald-500" : metrics.acceptanceRate < 40 ? "bg-rose-600" : "bg-amber-500"}
                   icon={(metrics.acceptanceRate !== null && metrics.acceptanceRate < 40) ? <AlertTriangle className="h-4 w-4 text-rose-600 animate-pulse" /> : <ThumbsUp className="h-4 w-4 text-slate-500" />}
-                  loading={localLoading}
+                  loading={!serverTripsLoaded}
                    breakdown={[
                        { label: 'Uber', value: metrics.platformStats.Uber.trips > 0 ? `${Math.round((metrics.platformStats.Uber.completed / metrics.platformStats.Uber.trips) * 100)}%` : '-', color: '#3b82f6' },
                        { label: 'InDrive', value: metrics.platformStats.InDrive.trips > 0 ? `${Math.round((metrics.platformStats.InDrive.completed / metrics.platformStats.InDrive.trips) * 100)}%` : '-', color: '#10b981' }
@@ -4045,7 +4050,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                   progressColor={metrics.cancellationRate < 5 ? "bg-emerald-500" : "bg-rose-500"}
                   tooltip={`Calculated from ${metrics.periodCancelledTrips} cancelled trips out of ${metrics.totalTrips} total trips in the selected period.`}
                   icon={<AlertTriangle className="h-4 w-4 text-slate-500" />}
-                  loading={localLoading}
+                  loading={!serverTripsLoaded}
                    breakdown={[
                        { label: 'Uber', value: metrics.platformStats.Uber.trips > 0 ? `${(( (metrics.platformStats.Uber.trips - metrics.platformStats.Uber.completed) / metrics.platformStats.Uber.trips) * 100).toFixed(1)}%` : '-', color: '#3b82f6' },
                        { label: 'InDrive', value: metrics.platformStats.InDrive.trips > 0 ? `${(( (metrics.platformStats.InDrive.trips - metrics.platformStats.InDrive.completed) / metrics.platformStats.InDrive.trips) * 100).toFixed(1)}%` : '-', color: '#10b981' }

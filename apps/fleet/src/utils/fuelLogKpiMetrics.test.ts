@@ -22,94 +22,39 @@ function makeEntry(partial: Partial<FuelEntry> & { id: string }): FuelEntry {
 describe('sumOdometerDeltasBetweenFills', () => {
   it('sums positive consecutive odo deltas per vehicle', () => {
     const entries: FuelEntry[] = [
-      makeEntry({
-        id: 'a',
-        vehicleId: 'v1',
-        date: '2026-08-20',
-        odometer: 1000,
-      }),
-      makeEntry({
-        id: 'b',
-        vehicleId: 'v1',
-        date: '2026-08-21',
-        odometer: 1100,
-      }),
-      makeEntry({
-        id: 'c',
-        vehicleId: 'v1',
-        date: '2026-08-22',
-        odometer: 1250,
-      }),
+      makeEntry({ id: 'a', vehicleId: 'v1', date: '2026-08-20', odometer: 1000 }),
+      makeEntry({ id: 'b', vehicleId: 'v1', date: '2026-08-21', odometer: 1100 }),
+      makeEntry({ id: 'c', vehicleId: 'v1', date: '2026-08-22', odometer: 1250 }),
     ];
     expect(sumOdometerDeltasBetweenFills(entries)).toBe(250);
   });
 
   it('ignores JAA statement rows and backwards odo', () => {
     const entries: FuelEntry[] = [
-      makeEntry({
-        id: 'a',
-        vehicleId: 'v1',
-        date: '2026-08-20',
-        odometer: 1000,
-      }),
-      makeEntry({
-        id: 'b',
-        vehicleId: 'v1',
-        date: '2026-08-21',
-        odometer: 900,
-      }),
+      makeEntry({ id: 'a', vehicleId: 'v1', date: '2026-08-20', odometer: 1000 }),
+      makeEntry({ id: 'b', vehicleId: 'v1', date: '2026-08-21', odometer: 900 }),
     ];
     expect(sumOdometerDeltasBetweenFills(entries)).toBe(0);
   });
 });
 
 describe('buildTransactionKpis', () => {
-  it('returns total fills, spend, volume, and total km', () => {
+  it('returns total fills, spend, volume, and total km from pre-scoped entries', () => {
     const entries: FuelEntry[] = [
-      makeEntry({
-        id: '1',
-        vehicleId: 'v1',
-        date: '2026-08-20',
-        amount: 100,
-        liters: 10,
-        odometer: 1000,
-      }),
-      makeEntry({
-        id: '2',
-        vehicleId: 'v1',
-        date: '2026-08-21',
-        amount: 50,
-        liters: 5,
-        odometer: 1100,
-      }),
-      makeEntry({
-        id: '3',
-        vehicleId: 'v2',
-        date: '2026-08-22',
-        amount: 25,
-        liters: 2,
-        odometer: 50,
-      }),
+      makeEntry({ id: '1', vehicleId: 'v1', date: '2026-08-20', amount: 100, liters: 10, odometer: 1000 }),
+      makeEntry({ id: '2', vehicleId: 'v1', date: '2026-08-21', amount: 50, liters: 5, odometer: 1100 }),
+      makeEntry({ id: '3', vehicleId: 'v2', date: '2026-08-22', amount: 25, liters: 2, odometer: 50 }),
     ];
-    const kpis = buildTransactionKpis(entries, {
-      dateRange: { from: new Date('2026-08-01'), to: new Date('2026-08-31') },
-    });
+    const kpis = buildTransactionKpis(entries);
     expect(kpis.totalFills).toBe(3);
     expect(kpis.totalSpend).toBe(175);
     expect(kpis.totalVolume).toBe(17);
-    // v1: 1100-1000 = 100; v2 has only one fill so no delta
     expect(kpis.totalKm).toBe(100);
   });
 
   it('excludes JAA fee/declines from spend and volume', () => {
     const entries: FuelEntry[] = [
-      makeEntry({
-        id: '1',
-        vehicleId: 'v1',
-        date: '2026-08-20',
-        amount: 100,
-        liters: 10,
-      }),
+      makeEntry({ id: '1', vehicleId: 'v1', date: '2026-08-20', amount: 100, liters: 10 }),
       makeEntry({
         id: '2',
         vehicleId: 'v1',
@@ -120,30 +65,32 @@ describe('buildTransactionKpis', () => {
       }),
     ];
     const kpis = buildTransactionKpis(entries);
-    // JAA fee rows are not in Transaction Logs (filtered out entirely)
     expect(kpis.totalFills).toBe(1);
     expect(kpis.totalSpend).toBe(100);
     expect(kpis.totalVolume).toBe(10);
   });
 
-  it('applies vehicle filter', () => {
+  it('does not re-filter by vehicle — caller scopes first', () => {
     const entries: FuelEntry[] = [
-      makeEntry({
-        id: '1',
-        vehicleId: 'v1',
-        date: '2026-08-20',
-        amount: 100,
-      }),
-      makeEntry({
-        id: '2',
-        vehicleId: 'v2',
-        date: '2026-08-21',
-        amount: 50,
-      }),
+      makeEntry({ id: '2', vehicleId: 'v2', date: '2026-08-21', amount: 50 }),
     ];
-    const kpis = buildTransactionKpis(entries, { vehicleId: 'v2' });
+    const kpis = buildTransactionKpis(entries);
     expect(kpis.totalFills).toBe(1);
     expect(kpis.totalSpend).toBe(50);
+  });
+
+  it('KPI≡list: imbalanced count only from integrity map on scoped rows', () => {
+    const entries = [
+      makeEntry({ id: 'a', vehicleId: 'v1', amount: 10 }),
+      makeEntry({ id: 'b', vehicleId: 'v1', amount: 20 }),
+    ];
+    const integrityById = new Map<string, string>([
+      ['a', 'Orphaned'],
+      ['b', 'Complete'],
+    ]);
+    const kpis = buildTransactionKpis(entries, { integrityById });
+    expect(kpis.totalFills).toBe(2);
+    expect(kpis.imbalancedCount).toBe(1);
   });
 });
 
@@ -192,9 +139,7 @@ describe('buildCycleKpis', () => {
       },
     ];
 
-    const kpis = buildCycleKpis(cycles, {
-      dateRange: { from: new Date('2026-08-01'), to: new Date('2026-08-31') },
-    });
+    const kpis = buildCycleKpis(cycles);
     expect(kpis.totalCycles).toBe(3);
     expect(kpis.completed).toBe(1);
     expect(kpis.active).toBe(1);
@@ -205,7 +150,7 @@ describe('buildCycleKpis', () => {
     expect(kpis.avgEfficiency).toBe(9.14);
   });
 
-  it('filters by vehicle', () => {
+  it('counts low efficiency as exception', () => {
     const cycles: FuelCycle[] = [
       {
         id: 'c1',
@@ -217,25 +162,10 @@ describe('buildCycleKpis', () => {
         avgPricePerLiter: 5,
         transactions: [],
         status: 'Complete',
-        distance: 200,
-        efficiency: 10,
-      },
-      {
-        id: 'c2',
-        vehicleId: 'v2',
-        startDate: '2026-08-01',
-        endDate: '2026-08-05',
-        totalLiters: 5,
-        totalCost: 25,
-        avgPricePerLiter: 5,
-        transactions: [],
-        status: 'Complete',
-        distance: 40,
-        efficiency: 8,
+        distance: 100,
+        efficiency: 5,
       },
     ];
-    const kpis = buildCycleKpis(cycles, { vehicleId: 'v2' });
-    expect(kpis.totalCycles).toBe(1);
-    expect(kpis.totalDistance).toBe(40);
+    expect(buildCycleKpis(cycles).exceptions).toBe(1);
   });
 });

@@ -1,6 +1,6 @@
 import { useIndriveWallet, type IndriveWalletDateRange } from '../../hooks/useIndriveWallet';
 import { useDriverFinancialPeriods } from '../../hooks/useDriverFinancialPeriods';
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { resolvePeriodTollCashWash } from '../../utils/periodTollCashSpend';
 import {
   DollarSign,
@@ -265,7 +265,14 @@ interface OverviewMetricsGridProps {
   metrics: any;
   /** Statement-level Uber CSV totals overlapping the period — used to mirror payments_driver row labels. */
   uberPaymentCsvRollup?: UberPaymentCsvRollup | null;
-  localLoading: boolean;
+  /** Period Earnings / Cash Collected wait on ledger overview. */
+  earningsLoading?: boolean;
+  /** Km Driven / Time Metrics wait on trip fetch. */
+  tripsLoading?: boolean;
+  /** Tolls card waits on financial periods (or overview fallback). */
+  tollsLoading?: boolean;
+  /** @deprecated Prefer per-card flags; kept as fallback when new props omitted. */
+  localLoading?: boolean;
   isToday: boolean;
   driverId?: string;
   walletRange?: IndriveWalletDateRange | null;
@@ -278,7 +285,10 @@ export function OverviewMetricsGrid({
   resolvedFinancials,
   metrics,
   uberPaymentCsvRollup = null,
-  localLoading,
+  earningsLoading,
+  tripsLoading,
+  tollsLoading,
+  localLoading = false,
   isToday,
   driverId,
   walletRange,
@@ -287,11 +297,18 @@ export function OverviewMetricsGrid({
   const [periodEarningsOpen, setPeriodEarningsOpen] = useState(false);
   const [cashCollectedOpen, setCashCollectedOpen] = useState(false);
   const [platformFeesExpanded, setPlatformFeesExpanded] = useState(false);
+  /** Lazy-fetch InDrive fee alignment only when Period Earnings dialog is open. */
+  const [feeAlignOpen, setFeeAlignOpen] = useState(false);
 
   const rangeReady = !!(driverId && walletRange?.startDate && walletRange?.endDate);
   const { data: walletData, loading: walletLoading, error: walletError } =
-    useIndriveWallet(driverId, rangeReady ? walletRange : null);
+    useIndriveWallet(driverId, rangeReady ? walletRange : null, {
+      enabled: periodEarningsOpen && feeAlignOpen,
+    });
   const periodsQuery = useDriverFinancialPeriods(driverId || '');
+  const earningsBusy = earningsLoading ?? localLoading;
+  const tripsBusy = tripsLoading ?? localLoading;
+  const tollsBusy = (tollsLoading ?? localLoading) || periodsQuery.isLoading;
   const weekPeriod = useMemo(() => {
     const start = walletRange?.startDate?.slice(0, 10);
     if (!start) return null;
@@ -779,7 +796,15 @@ export function OverviewMetricsGrid({
                             <p className="text-[10px] font-medium uppercase tracking-wide text-emerald-800 dark:text-emerald-400">
                               InDrive fees — period alignment
                             </p>
-                            {walletLoading ? (
+                            {!feeAlignOpen ? (
+                              <button
+                                type="button"
+                                className="mt-2 text-[11px] font-medium text-emerald-800 underline-offset-2 hover:underline dark:text-emerald-400"
+                                onClick={() => setFeeAlignOpen(true)}
+                              >
+                                Load InDrive fee alignment
+                              </button>
+                            ) : walletLoading ? (
                               <p className="mt-1 text-[11px] text-slate-500">
                                 Loading InDrive wallet summary…
                               </p>
@@ -818,7 +843,11 @@ export function OverviewMetricsGrid({
                                     </p>
                                   )}
                               </>
-                            ) : null}
+                            ) : (
+                              <p className="mt-1 text-[11px] text-slate-500">
+                                Open InDrive Wallet for fee detail.
+                              </p>
+                            )}
                           </div>
                         )}
                       </div>
@@ -1121,7 +1150,7 @@ export function OverviewMetricsGrid({
         trend={showFinancialValues ? `${resolvedFinancials.trendPercent}% vs prev` : undefined}
         trendUp={resolvedFinancials.trendUp}
         icon={<DollarSign className="h-4 w-4 text-slate-500" />}
-        loading={localLoading}
+        loading={earningsBusy}
         breakdown={showFinancialValues ? earningsBreakdown : []}
         onClick={() => setPeriodEarningsOpen(true)}
         interactiveLabel="Open period earnings breakdown and cash allocation"
@@ -1133,7 +1162,7 @@ export function OverviewMetricsGrid({
         value={showFinancialValues ? `$${resolvedFinancials.cashCollected.toFixed(2)}` : '—'}
         icon={<DollarSign className="h-4 w-4 text-slate-500" />}
         tooltip="Passenger cash on the saved pay week — same number as Settlements"
-        loading={localLoading}
+        loading={earningsBusy}
         breakdown={showFinancialValues ? cashBreakdown : []}
         onClick={() => setCashCollectedOpen(true)}
         interactiveLabel="Open cash collected admin detail"
@@ -1144,7 +1173,7 @@ export function OverviewMetricsGrid({
         title="Km Driven for Period"
         value={`${metrics.totalDistance.toFixed(1)} km`}
         icon={<Navigation className="h-4 w-4 text-slate-500" />}
-        loading={localLoading}
+        loading={tripsBusy}
         breakdown={Object.entries(metrics.platformStats)
           .filter(([_, stats]: [string, any]) => stats.distance > 0)
           .map(([label, stats]: [string, any]) => ({
@@ -1162,7 +1191,7 @@ export function OverviewMetricsGrid({
         </CardHeader>
         <CardContent>
           <div className="h-[180px] w-full relative">
-            {localLoading && (
+            {tripsBusy && (
               <div className="absolute inset-0 bg-white/50 dark:bg-slate-900/50 flex items-center justify-center z-10 backdrop-blur-[1px]">
                 <Loader2 className="h-6 w-6 animate-spin text-indigo-600" />
               </div>
@@ -1279,7 +1308,7 @@ export function OverviewMetricsGrid({
         }
         tooltip="Tag spent vs Uber credited, cash plaza vs wash, and personal billed to the driver. Uber/support refunds are cash-risk only — plaza net lives on Business Finance P&L."
         icon={<Ticket className="h-4 w-4 text-slate-500" />}
-        loading={localLoading}
+        loading={tollsBusy}
         breakdown={showFinancialValues ? tollsBreakdown : []}
       />
 
