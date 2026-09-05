@@ -65,7 +65,8 @@
     "npm:@supabase/storage-js@2.7.1": "2.7.1",
     "npm:@supabase/supabase-js@2": "2.112.4",
     "npm:@tailwindcss/vite@4.1.12": "4.1.12_vite@6.3.5__@types+node@20.19.43_@types+node@20.19.43",
-    "npm:@tanstack/react-query@*": "5.102.3_react@18.3.1",
+    "npm:@tanstack/react-query@*": "5.100.9_react@18.3.1",
+    "npm:@tanstack/react-query@5.100.9": "5.100.9_react@18.3.1",
     "npm:@testing-library/jest-dom@^7.0.1": "7.0.1_@testing-library+dom@10.4.1_vitest@3.2.7__@types+node@20.19.43__jsdom@30.0.1_jsdom@30.0.1",
     "npm:@testing-library/react@^16.3.3": "16.3.3_@testing-library+dom@10.4.1_@types+react@18.3.31_@types+react-dom@18.3.7__@types+react@18.3.31_react@18.3.1_react-dom@18.3.1__react@18.3.1",
     "npm:@testing-library/user-event@^14.6.6": "14.6.6_@testing-library+dom@10.4.1",
@@ -3052,11 +3053,11 @@
         "vite"
       ]
     },
-    "@tanstack/query-core@5.102.3": {
-      "integrity": "sha512-5O2VEceonqC4uaTLUGglb0hgPouWCJ4K1ykVWyeV8aThhdNCzwpwu01bYoaRNJ9mgFUXS7Kf9utJ46ysT8m+bw=="
+    "@tanstack/query-core@5.100.9": {
+      "integrity": "sha512-SJSFw1S8+kQ0+knv/XGfrbocWoAlT7vDKsSImtLx3ZPQmEcR46hkDjLSvynSy25N8Ms4tIEini1FuBd5k7IscQ=="
     },
-    "@tanstack/react-query@5.102.3_react@18.3.1": {
-      "integrity": "sha512-nHazxUEUQSGJOswGgSL2DI77f2K75WRCowDgaiyEi0ACocZTFKewTv+A/rJfq6QkuE35rVPff1QUT3ClbaePGQ==",
+    "@tanstack/react-query@5.100.9_react@18.3.1": {
+      "integrity": "sha512-Oa44XkaI3kCNN6ME0KByU3xT3SEUNOMfZpHxL6+wFoTm+OeUFYHKdeYVe0aOXlRDm/f15sgLwEt2HDorIdW8+A==",
       "dependencies": [
         "@tanstack/query-core",
         "react"
@@ -3068,7 +3069,7 @@
         "@babel/code-frame",
         "@babel/runtime",
         "@types/aria-query",
-        "aria-query@5.3.0",
+        "aria-query",
         "dom-accessibility-api@0.5.16",
         "lz-string",
         "picocolors",
@@ -3080,7 +3081,7 @@
       "dependencies": [
         "@adobe/css-tools",
         "@testing-library/dom",
-        "aria-query@5.3.2",
+        "aria-query",
         "css.escape",
         "dom-accessibility-api@0.6.3",
         "picocolors",
@@ -3381,9 +3382,6 @@
       "dependencies": [
         "dequal"
       ]
-    },
-    "aria-query@5.3.2": {
-      "integrity": "sha512-COROpnaoap1E2F000S62r6A60uHZnmlvomhfyT2DlTcrY1OrBKn2UhH7qn5wTC9zMvD0AY7csdPSNwKP+7WiQw=="
     },
     "array-buffer-byte-length@1.0.2": {
       "integrity": "sha512-LHE+8BuR7RYGDKvnrmcuSq3tDcKv9OFEXQt/HpbZhY7V6h0zlUXutnAD82GiFx9rdieCMjkvtcsPqBwgUl1Iiw==",
@@ -4911,7 +4909,7 @@
       "dependencies": [
         "ansi-regex",
         "ansi-styles@5.2.0",
-        "react-is@17.0.2"
+        "react-is"
       ]
     },
     "process-nextick-args@2.0.1": {
@@ -4997,9 +4995,6 @@
     },
     "react-is@17.0.2": {
       "integrity": "sha512-w2GsyukL62IJnlaff/nRegPQR94C/XXamvMWmSHRJ4y7Ts/4ocGRmTHvOs8PSE6pB3dWOrD/nueuU5sduBsQ4w=="
-    },
-    "react-is@19.2.8": {
-      "integrity": "sha512-s5un28nYxKJw5gvUHyW5PCC28CvBqLu9r3cWgzHT4Vo/5fqqkFcdRYsGcKf50WMPpjjFZS5d76fn3YCo2njKwQ=="
     },
     "react-redux@9.3.0_@types+react@18.3.31_react@18.3.1_redux@5.0.1": {
       "integrity": "sha512-KQopgqFo/p/fgmAs5qz6p5RWaNAzq40WAu7fJIXnQpYxFPbJYtsJPWvGeF2rOBaY/kEuV77AVsX8TsQzKm+A/g==",
@@ -5121,7 +5116,6 @@
         "immer",
         "react",
         "react-dom",
-        "react-is@19.2.8",
         "react-redux",
         "reselect",
         "tiny-invariant",
@@ -6827,7 +6821,7 @@
             "npm:@sentry/react@^10.69.0",
             "npm:@supabase/supabase-js@2",
             "npm:@tailwindcss/vite@4.1.12",
-            "npm:@tanstack/react-query@*",
+            "npm:@tanstack/react-query@5.100.9",
             "npm:@testing-library/jest-dom@^7.0.1",
             "npm:@testing-library/react@^16.3.3",
             "npm:@testing-library/user-event@^14.6.6",

@@ -10,10 +10,7 @@ import { fuelService } from '../../services/fuelService';
 import { useFuelCycles } from '../../hooks/useFuelCycles';
 import { useFuelAnchors } from '../../hooks/useFuelAnchors';
 import { useFuelLogQuery } from '../../hooks/useFuelLogQuery';
-import {
-  useFuelLogSummary,
-  replaceServerTransactionKpis,
-} from '../../hooks/useFuelLogSummary';
+import { useTransactionLogKpis } from '../../hooks/useTransactionLogKpis';
 import { DateRange } from 'react-day-picker';
 import { format } from 'date-fns';
 import { downloadBlob, jsonToCsv } from '../../utils/csv-helper';
@@ -24,7 +21,6 @@ import { isJaaStatementLedgerRow } from '../../utils/jaaFuelStatementMatcher';
 import { resolveGasCardLedgerIntegrity } from '../../utils/fuelLedgerIntegrity';
 import {
   buildCycleKpis,
-  buildTransactionKpis,
   sumOdometerDeltasBetweenFills,
 } from '../../utils/fuelLogKpiMetrics';
 import { resolvePeriodDistance, buildTrustedPeriodTotals } from '../../utils/fuelPeriodTotals';
@@ -557,59 +553,31 @@ export function FuelLogTable({
     [trustedCycles, entries, periodBounds, isPeriodOpen],
   );
 
-  // Extra filters beyond period/vehicle → keep client KPIs (KPI≡list)
-  const hasExtraTxnFilters =
-    !!searchTerm.trim() ||
-    filterType !== 'all' ||
-    filterDriver !== 'all' ||
-    filterAnchor !== 'all' ||
-    filterStatus !== 'all' ||
-    filterSource !== 'all' ||
-    filterIntegrity !== 'all' ||
-    !!filterCycleId;
-
   const {
-    summary: serverSummary,
-    isLoading: summaryLoading,
-    error: summaryError,
-  } = useFuelLogSummary({
-    startDate: periodStart,
-    endDate: periodEnd,
-    vehicleId: filterVehicle,
-    enabled: activeView === 'transactions' && !hasExtraTxnFilters,
-  });
-
-  const clientTransactionKpis = useMemo(() => {
-    const integrityById = new Map<string, string>();
-    for (const [id, status] of ledgerIntegrity.entries()) integrityById.set(id, status);
-    return buildTransactionKpis(filteredEntries, {
-      validAnchorIds,
-      integrityById,
-    });
-  }, [filteredEntries, validAnchorIds, ledgerIntegrity]);
-
-  const transactionKpis = useMemo(() => {
-    if (hasExtraTxnFilters) return clientTransactionKpis;
-    if (summaryLoading && !serverSummary) {
-      return {
-        ...clientTransactionKpis,
-        populationNote: 'Loading server totals…',
-      };
-    }
-    if (summaryError || !serverSummary) {
-      return {
-        ...clientTransactionKpis,
-        populationNote: 'Local totals (server summary unavailable)',
-      };
-    }
-    return replaceServerTransactionKpis(clientTransactionKpis, serverSummary);
-  }, [
-    hasExtraTxnFilters,
+    transactionKpis,
     summaryLoading,
     summaryError,
+    hasExtraTxnFilters,
     serverSummary,
-    clientTransactionKpis,
-  ]);
+  } = useTransactionLogKpis({
+    activeView,
+    periodStart,
+    periodEnd,
+    filterVehicle,
+    filters: {
+      searchTerm,
+      filterType,
+      filterDriver,
+      filterAnchor,
+      filterStatus,
+      filterSource,
+      filterIntegrity,
+      filterCycleId,
+    },
+    filteredEntries,
+    validAnchorIds,
+    ledgerIntegrity,
+  });
 
   const cycleKpis = useMemo(
     () =>

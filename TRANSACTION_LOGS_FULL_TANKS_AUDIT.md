@@ -5,7 +5,123 @@
 **Round 2 verified:** 2026-09-05 · head `1f5a774b`
 **Round 3 verified:** 2026-09-05 · head `d4fcd90f` + 13 uncommitted files
 **Round 4 audited:** 2026-09-05 · head `409532fd` (working tree clean)
+**Round 5 verified:** 2026-09-05 · head `970ef246` (working tree clean)
 **Mode:** Audit only. **No code was changed by this audit.**
+
+---
+
+# ✅ ROUND 5 — VERIFIED
+
+> **All Round 4 findings are fixed, and fixed the right way.**
+> R4-1 was resolved by building the shared contract rather than patching the symptom.
+> Three of the four Round 3 leftovers were also closed.
+>
+> **One new Medium remains, and it is the last instance of the pattern this audit has
+> been chasing since Round 1: a duplicated calculation with nothing enforcing agreement.**
+
+## Verification of the committed state
+
+| Check | Result |
+|---|---|
+| Working tree | ✅ Clean, committed at `970ef246` |
+| Full Fleet test suite | ✅ **205 files, 1,234 passed, 1 skipped, 0 failed** (+2 files, +5 tests) |
+| `tsc --noEmit` across the whole logs surface | ✅ **0 errors** |
+| Client core ↔ server mirror, structural diff | ✅ **Identical** — differences are comments and line wrapping only |
+
+## Round 4 findings — final status
+
+| ID | Finding | Status | Evidence |
+|---|---|:---:|---|
+| **R4-1** | Server roll-up disagreed with the rows | ✅ **Fixed correctly** | See below |
+| **R4-2** | 5,000-row truncation, org filter after limit, N+1 reads | ✅ **Fixed** | Paged 1,500 × 40 with a `truncated` flag (`fuel_controller.tsx:2488-2508`); org pushed into the query as an `orOrg` filter (`:2484-2486`); `kv.mget` batch replaces the loop (`:2518`) |
+| **R4-3** | Mixed provenance in one KPI tile | ✅ **Fixed** | `mergeServerTransactionKpis` → `replaceServerTransactionKpis` — takes the whole tile set from the server including `sourcePortal/Admin/Anchors` (`useFuelLogSummary.ts:103-121`) |
+
+### How R4-1 was fixed — worth recording
+
+Not by patching the endpoint. By extracting the contract:
+
+1. **`utils/fuelLogSummaryCore.ts`** (222 lines) — a pure roll-up implementing every exclusion the client had and the server lacked: `isJaaStatementLedgerRowCore`, `countsInFuelLogSpendCore`, `resolveFuelEntrySourceCore`, `sumOdometerDeltasBetweenFillsCore`.
+2. **`buildTransactionKpis` now delegates to it** (`fuelLogKpiMetrics.ts:74`) — the client stopped being a second implementation. That file shrank by 82 lines.
+3. **The server calls the same roll-up** (`fuel_controller.tsx:2511`), and `totalKm` is now genuine fill-to-fill deltas, not cycle distance (`:2531`). The comment at `:2513` states the rule explicitly: *"Cycle count only (distance for Full Tanks lives elsewhere — never under totalKm)."*
+4. **A contract test was added** — `fuelLogSummaryCore.test.ts:74-101` asserts `buildTransactionKpis ≡ summarizeFuelLogEntries` across all seven shared fields, plus regression cases for the exact defects: JAA fee excluded from fills, awaiting-$0 excluded from spend, and *"never uses cycle-distance semantics for totalKm."*
+5. **A schema guard was added** — `useFuelLogSummary.ts:62-67` rejects a response that omits `source*`, so a stale edge deployment falls back to client totals with an explicit error rather than silently serving the old wrong shape.
+
+All four divergences I listed in R4-1 are closed. Point 5 in particular is the kind of defensive detail that suggests the failure mode was understood rather than just patched.
+
+## Round 3 leftovers — status
+
+| # | Item | Status |
+|---|---|:---:|
+| 1 | Uncommitted work | ✅ Fixed in R4 |
+| 2 | `avgEfficiency` computed, never rendered | ⚪ **Still open** — the last dead field |
+| 3 | `bypassSignatureCheck` type field in `roam-shared` | ✅ **Fixed** — the field is gone; only an explanatory comment remains (`jaaFuelStatementMatcher.ts:360`) |
+| 4 | Exception assignments `localStorage`-only | ✅ **Fixed** — now server-backed: migration `20260905160000`, `GET`/`PUT` endpoints (`fuel_controller.tsx:2687`, `:2717`), and `useFuelExceptionAssignments` migrates existing local rows to the server on first load (`:49`) |
+| 5 | No RTL component tests | ✅ **Started** — `FuelLogKpiRow.test.tsx` added |
+| 6 | `FuelLogTable` > 300 lines | ⚪ Still open — diminishing returns |
+
+---
+
+## 🟠 R5-1 · The shared core is duplicated across the Deno boundary with no drift test
+
+**Files:** `apps/fleet/src/utils/fuelLogSummaryCore.ts` ↔ `supabase/functions/_fleet-server/fuel_log_summary.ts`
+
+The edge runtime cannot import from `packages/roam-shared`, so the roll-up exists as two hand-maintained copies. I diffed them ignoring whitespace and quoting: **they are currently identical** — the only differences are docblocks. That is genuinely careful work, and it follows an established house convention (`fuel_blended_ratio.ts`, `fuel_card_assignment.ts`, `fuel_jaa_ledger.ts` all carry the same "Keep in sync" mirror pattern).
+
+**But the convention includes a drift test, and this one is missing it.** `fuel_finalize_validation.test.ts:40` does exactly the right thing for its mirror:
+
+```ts
+Deno.test("blendedDriverShareRatio matches roam-shared formula", () => { … })
+```
+
+There are 27 Deno test files under `_fleet-server`. **None references `fuel_log_summary` or `summarizeFuelLogEntries.`** So:
+
+- The contract test proves *client builder ≡ client core*.
+- Nothing proves *client core ≡ server core*.
+- The server copy has **zero** test coverage of its own.
+
+This is the fourth instance of one pattern — F-C2 (list vs KPI filtered by different keys), F-C1 (two definitions of distance), R4-1 (two implementations of the totals), and now two copies of the fix for R4-1. Each time the code was correct when written and drifted or diverged later.
+
+**Severity is Medium, not Critical**, for two concrete reasons: the copies agree today (verified), and the schema guard at `useFuelLogSummary.ts:62-67` means a drifted server gets rejected rather than silently trusted for the fields it covers. The residual exposure is a drift in *values* rather than *shape* — e.g. someone edits `countsInFuelLogSpendCore` on the client only.
+
+**Fix:** add `supabase/functions/_fleet-server/fuel_log_summary.test.ts` running the same fixture as `fuelLogSummaryCore.test.ts` and asserting the same expected totals. Copy the fixture literally — if the two cores drift, one of the two suites goes red. That is ~30 lines and it closes the pattern for good.
+
+---
+
+## Updated scorecard
+
+| Dimension | R1 | R2 | R3 | R4 | **R5** |
+|---|:---:|:---:|:---:|:---:|:---:|
+| Domain model / business logic | B+ | A− | A | A | **A** |
+| Architecture & separation | D | C | A− | A− | **A** |
+| Correctness of displayed numbers | D− | A− | A | C | **A** |
+| Type safety | F | A− | A | A | **A** |
+| Security / RBAC | D | A− | A | A− | **A** |
+| Scale & performance | D | B− | A− | B | **A−** |
+| Accessibility | F | B+ | A− | A− | **A−** |
+| UX / information design | C− | C+ | A− | B+ | **A−** |
+| Test coverage | F | B | B+ | B− | **A−** |
+| Observability | F | D+ | B | B | **B** |
+
+## What remains
+
+| # | Item | Severity | Effort |
+|---|---|:---:|---|
+| 1 | **R5-1** — no Deno drift test for the server core mirror | 🟠 Medium | ~30 lines |
+| 2 | `avgEfficiency` computed, never rendered | ⚪ Trivial | 1 line |
+| 3 | `FuelLogTable` at ~1,000 lines vs the 300 target | ⚪ Trivial | Optional |
+
+**Nothing here is a bug.** Item 1 is the only one I would actually do.
+
+## Acceptance criteria — final
+
+**Phase 0–1** ✅ 8 of 8 · **Phase 2–3** ✅ 4 of 5 (file-size target outstanding)
+
+Plus, beyond the original plan: server-owned KPI roll-up with an enforced client contract, server-backed exception assignment workflow, and the first component test.
+
+---
+---
+
+# ROUND 4 — AUDIT (superseded by Round 5 above)
 
 ---
 
@@ -1206,3 +1322,19 @@ Three things are worth taking from this beyond the fix itself.
 None of this diminishes the work. F-C3's correction ledger, the period clipping in `fuelPeriodTotals.ts`, and the close-mode alignment across client, server and doc are all properly engineered and still hold up under close reading. This is one regression in a strong body of work, it is well localised, and reverting the merge fixes it in a line while the endpoint is brought into agreement.
 
 *Round 4 audit performed against `409532fd`, working tree clean. No files were modified.*
+
+---
+
+## 18. Round 5 closing note
+
+R4-1 was fixed the way you fix a class of problem rather than an instance of one. The obvious move was to add the missing exclusions to the endpoint; that would have closed the finding and left two implementations of the same rule drifting apart again. Instead the roll-up was extracted, the client was made to *delegate* to it — deleting 82 lines of what had been the second implementation — and a contract test now asserts the two agree. The schema guard that rejects a stale edge response is the detail that tells me the failure mode was actually understood: it fails loudly and falls back, rather than trusting whatever shape arrives.
+
+That is the difference between a fix and an engineering decision, and it is why the correctness grade goes back to A rather than to where it was before the regression.
+
+The one thing left is the last echo of the same pattern. The Deno boundary forces the roll-up to exist twice. Those two copies are identical today — I diffed them — and the mirror follows an established convention in this codebase. But that convention includes a drift test, and `fuel_blended_ratio` has one while `fuel_log_summary` does not. Thirty lines of Deno test, running the fixture that already exists, and the fourth instance of "duplicated calculation, nothing enforcing agreement" is closed for good.
+
+Five rounds on, the picture has inverted. Round 1 opened with two tabs contradicting each other on screen and a lock badge that locked nothing. What is here now is a surface where the totals reconcile by construction, corrections are append-only and fail closed, the RBAC gates hold on both sides, both fetches page, and the contract between client and server is asserted by a test rather than assumed. The remaining list is one test file and two cosmetic items.
+
+This is finished work. Add the drift test when convenient.
+
+*Round 5 verification performed against `970ef246`, working tree clean. No files were modified.*
