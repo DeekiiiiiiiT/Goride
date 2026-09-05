@@ -95,8 +95,8 @@ describe('buildTransactionKpis', () => {
 });
 
 describe('buildCycleKpis', () => {
-  it('aggregates cycle status, distance, fuel, spend, efficiency', () => {
-    const cycles: FuelCycle[] = [
+  it('aggregates trusted status + clipped totals; exceptions stay out of Total', () => {
+    const trusted: FuelCycle[] = [
       {
         id: 'c1',
         vehicleId: 'v1',
@@ -123,6 +123,8 @@ describe('buildCycleKpis', () => {
         distance: 80,
         efficiency: 8,
       },
+    ];
+    const exceptions: FuelCycle[] = [
       {
         id: 'c3',
         vehicleId: 'v2',
@@ -139,19 +141,23 @@ describe('buildCycleKpis', () => {
       },
     ];
 
-    const kpis = buildCycleKpis(cycles);
-    expect(kpis.totalCycles).toBe(3);
+    const kpis = buildCycleKpis({
+      trusted,
+      exceptions,
+      clippedTotals: { distanceKm: 280, fuelL: 30, spend: 150 },
+    });
+    expect(kpis.totalCycles).toBe(2);
     expect(kpis.completed).toBe(1);
     expect(kpis.active).toBe(1);
     expect(kpis.exceptions).toBe(1);
-    expect(kpis.totalDistance).toBe(320);
-    expect(kpis.totalFuel).toBe(35);
-    expect(kpis.totalSpend).toBe(175);
-    expect(kpis.avgEfficiency).toBe(9.14);
+    expect(kpis.totalDistance).toBe(280);
+    expect(kpis.totalFuel).toBe(30);
+    expect(kpis.totalSpend).toBe(150);
+    expect(kpis.avgEfficiency).toBe(9.33);
   });
 
-  it('counts low efficiency as exception', () => {
-    const cycles: FuelCycle[] = [
+  it('counts exception partition length separately from trusted list', () => {
+    const trusted: FuelCycle[] = [
       {
         id: 'c1',
         vehicleId: 'v1',
@@ -166,6 +172,11 @@ describe('buildCycleKpis', () => {
         efficiency: 5,
       },
     ];
-    expect(buildCycleKpis(cycles).exceptions).toBe(1);
+    expect(
+      buildCycleKpis({
+        trusted,
+        exceptions: trusted,
+      }).exceptions,
+    ).toBe(1);
   });
 });

@@ -59,6 +59,10 @@ function legacyClientForced(): boolean {
  * Prefer server snapshots unless they are a degenerate Active-only collapse
  * while the client engine already found completed capacity closes.
  */
+/**
+ * Prefer server snapshots unless they under-report capacity closes vs the
+ * client engine (Active-only collapse, or Anomaly+Active swallowing Completes).
+ */
 export function pickFuelCyclesSource(
   serverCycles: FuelCycle[] | null,
   clientCycles: FuelCycle[],
@@ -71,7 +75,9 @@ export function pickFuelCyclesSource(
     const clientComplete = clientCycles.filter((c) => c.status === 'Complete').length;
     const serverOnlyActive =
       serverComplete === 0 && serverCycles.every((c) => c.status === 'Active');
-    if (serverOnlyActive && clientComplete > 0) {
+    // Server collapsed tanks into Anomaly/Active while client found real Completes
+    const serverUnderReportsCompletes = clientComplete > serverComplete;
+    if ((serverOnlyActive && clientComplete > 0) || serverUnderReportsCompletes) {
       return clientCycles;
     }
     return serverCycles;

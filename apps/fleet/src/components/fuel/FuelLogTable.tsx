@@ -66,9 +66,12 @@ import { resolveGasCardLedgerIntegrity } from '../../utils/fuelLedgerIntegrity';
 import {
   buildCycleKpis,
   buildTransactionKpis,
+  sumOdometerDeltasBetweenFills,
 } from '../../utils/fuelLogKpiMetrics';
 import { formatFuelMoney } from '../../utils/formatFuelMoney';
-import { resolvePeriodDistance } from '../../utils/fuelPeriodTotals';
+import { resolvePeriodDistance, buildTrustedPeriodTotals } from '../../utils/fuelPeriodTotals';
+import { partitionCyclesForPeriod } from '../../utils/fuelCycleTrust';
+import { useFleetTimezone, fleetTzDateKey } from '../../utils/timezoneDisplay';
 import { Skeleton } from '../ui/skeleton';
 import {
   AlertDialog,
@@ -144,6 +147,7 @@ export function FuelLogTable({
     onRefresh,
 }: FuelLogTableProps) {
     const { can } = usePermissions();
+    const fleetTz = useFleetTimezone();
     const [searchTerm, setSearchTerm] = useState('');
     const [filterType, setFilterType] = useState<string>('all');
     const [filterVehicle, setFilterVehicle] = useState<string>('all');
@@ -495,6 +499,41 @@ export function FuelLogTable({
         });
     }, [allCycles, filterVehicle, filterStatus, dateRange, searchTerm, getVehicleName]);
 
+    const periodBounds = useMemo(
+        () => ({ start: periodStart || null, end: periodEnd || null }),
+        [periodStart, periodEnd],
+    );
+
+    const isPeriodOpen = useMemo(() => {
+        if (!periodEnd) return false;
+        const today = fleetTzDateKey(new Date(), fleetTz || 'America/Jamaica');
+        return periodEnd >= today;
+    }, [periodEnd, fleetTz]);
+
+    const periodFillToFillKm = useMemo(
+        () => sumOdometerDeltasBetweenFills(filteredEntries),
+        [filteredEntries],
+    );
+
+    const { trustedCycles, exceptionCycles } = useMemo(() => {
+        const { trusted, exceptions } = partitionCyclesForPeriod(filteredCycles, periodBounds, {
+            periodFillToFillKm,
+            isPeriodOpen,
+        });
+        return { trustedCycles: trusted, exceptionCycles: exceptions };
+    }, [filteredCycles, periodBounds, periodFillToFillKm, isPeriodOpen]);
+
+    const trustedPeriodTotals = useMemo(
+        () =>
+            buildTrustedPeriodTotals({
+                trusted: trustedCycles,
+                entries,
+                period: periodBounds,
+                provisional: isPeriodOpen,
+            }),
+        [trustedCycles, entries, periodBounds, isPeriodOpen],
+    );
+
     // Tab-specific KPIs — pre-scoped collections only (no second filter pass)
     const transactionKpis = useMemo(() => {
         const integrityById = new Map<string, string>();
@@ -505,11 +544,27 @@ export function FuelLogTable({
         });
     }, [filteredEntries, validAnchorIds, ledgerIntegrity]);
 
-    const cycleKpis = useMemo(() => buildCycleKpis(filteredCycles), [filteredCycles]);
+    const cycleKpis = useMemo(
+        () =>
+            buildCycleKpis({
+                trusted: trustedCycles,
+                exceptions: exceptionCycles,
+                clippedTotals: {
+                    distanceKm: trustedPeriodTotals.distanceKm,
+                    fuelL: trustedPeriodTotals.fuelL,
+                    spend: trustedPeriodTotals.spend,
+                },
+            }),
+        [trustedCycles, exceptionCycles, trustedPeriodTotals],
+    );
 
     const periodDistance = useMemo(
-        () => resolvePeriodDistance(filteredCycles, filteredEntries),
-        [filteredCycles, filteredEntries],
+        () =>
+            resolvePeriodDistance(trustedCycles, filteredEntries, {
+                start: periodStart,
+                end: periodEnd,
+            }),
+        [trustedCycles, filteredEntries, periodStart, periodEnd],
     );
 
     const runRecalculate = async () => {
@@ -732,6 +787,12 @@ export function FuelLogTable({
                 </Tabs>
             </div>
 
+            {activeView === 'cycles' && isPeriodOpen && (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm text-amber-900">
+                    Week in progress. Totals update as driver fills and gas-card CSV arrive. Exception history is excluded from period totals.
+                </div>
+            )}
+
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-2">
                 {activeView === 'transactions' ? (
                     <>
@@ -783,19 +844,21 @@ export function FuelLogTable({
                                 <MapPinned className="h-5 w-5 text-violet-500" />
                             </div>
                             <div className="flex-1">
-                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total km</p>
+                                <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Period distance</p>
                                 <p className="text-xl font-bold text-slate-700">
-                                    {periodDistance.primaryKm.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                                    {periodDistance.primaryKm.toLocaleString(undefined, { maximumFractionDigits: 0 })} km
                                 </p>
-                                <p className="text-[10px] text-slate-500 mt-0.5">
-                                    {periodDistance.fillToFillKm.toLocaleString(undefined, { maximumFractionDigits: 0 })} km fill-to-fill
+                                <p className="text-[11px] text-slate-500 mt-0.5" title={periodDistance.secondaryLabel}>
+                                    {periodDistance.carriedInKm > 0
+                                        ? `${periodDistance.carriedInKm.toLocaleString()} km before this period excluded`
+                                        : periodDistance.primaryLabel}
                                 </p>
                             </div>
                         </div>
                     </>
                 ) : (
                     <>
-                        {/* Full Tanks tab — cycle KPIs */}
+                        {/* Full Tanks tab — trusted cycle KPIs only */}
                         <div className="bg-white p-4 rounded-lg border border-slate-200 shadow-sm flex items-center gap-4">
                             <div className="h-10 w-10 bg-indigo-50 rounded-full flex items-center justify-center shrink-0">
                                 <RotateCcw className="h-5 w-5 text-indigo-500" />
@@ -806,6 +869,9 @@ export function FuelLogTable({
                                     <p className="text-xl font-bold text-slate-700">{cycleKpis.totalCycles}</p>
                                     <span className="text-[10px] text-slate-500">
                                         {cycleKpis.completed} done · {cycleKpis.active} active
+                                        {cycleKpis.exceptions > 0
+                                            ? ` · ${cycleKpis.exceptions} exceptions`
+                                            : ''}
                                     </span>
                                 </div>
                             </div>
@@ -815,9 +881,16 @@ export function FuelLogTable({
                                 <MapPinned className="h-5 w-5 text-violet-500" />
                             </div>
                             <div className="flex-1">
-                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total distance</p>
+                                <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Period distance</p>
                                 <p className="text-xl font-bold text-slate-700">
-                                    {periodDistance.primaryKm.toLocaleString(undefined, { maximumFractionDigits: 0 })} km
+                                    {trustedPeriodTotals.distanceKm.toLocaleString(undefined, { maximumFractionDigits: 0 })} km
+                                </p>
+                                <p className="text-[11px] text-slate-500 mt-0.5">
+                                    {exceptionCycles.length > 0 && trustedPeriodTotals.carriedInKm <= 0
+                                        ? 'Incomplete tanks excluded from totals.'
+                                        : trustedPeriodTotals.carriedInKm > 0
+                                          ? `${trustedPeriodTotals.carriedInKm.toLocaleString()} km before this period excluded`
+                                          : 'In this week.'}
                                 </p>
                             </div>
                         </div>
@@ -1308,16 +1381,22 @@ export function FuelLogTable({
                     </>
                 ) : (
                     <div className="p-4">
-                        {filteredCycles.length === 0 ? (
+                        {trustedCycles.length === 0 ? (
                             <div className="h-24 flex flex-col items-center justify-center gap-1 text-sm text-slate-500 px-4 text-center">
-                                <span>No fuel cycles identified</span>
+                                <span>
+                                    {exceptionCycles.length > 0
+                                        ? 'No completed full tanks in this week yet'
+                                        : 'No fuel cycles identified'}
+                                </span>
                                 <span className="text-[11px] text-slate-400">
-                                    Cycles appear after capacity-close fills with odometer. Set tank capacity on the vehicle if closes are missing.
+                                    {exceptionCycles.length > 0
+                                        ? 'Incomplete tank history is in the Exception queue below — excluded from period totals.'
+                                        : 'Cycles appear after capacity-close fills with odometer. Set tank capacity on the vehicle if closes are missing.'}
                                 </span>
                             </div>
                         ) : 
                         <Accordion type="multiple" className="space-y-3">
-                            {filteredCycles.map(cycle => {
+                            {trustedCycles.map(cycle => {
                                 const vehicle = vehicles.find(v => v.id === cycle.vehicleId);
                                 const tankCap = Number(vehicle?.specifications?.tankCapacity) || vehicle?.fuelSettings?.tankCapacity || 0;
                                 const tankConfigured = tankCap > 0;
@@ -1485,16 +1564,20 @@ export function FuelLogTable({
                                 </AccordionItem>
                             )})}
                         </Accordion>}
-                        {filteredCycles.length > 0 && (
+                        { (trustedCycles.length > 0 || exceptionCycles.length > 0) && (
                             <div className="mt-6 space-y-4">
+                                {trustedCycles.length > 0 && (
                                 <div>
                                     <h3 className="text-sm font-semibold text-slate-700 mb-2">Efficiency trend</h3>
-                                    <FuelEfficiencyTrend cycles={filteredCycles} />
+                                    <FuelEfficiencyTrend cycles={trustedCycles} />
                                 </div>
+                                )}
                                 <div>
                                     <h3 className="text-sm font-semibold text-slate-700 mb-2">Exception queue</h3>
                                     <FuelExceptionQueue
-                                        cycles={filteredCycles}
+                                        cycles={exceptionCycles}
+                                        period={periodBounds}
+                                        isPeriodOpen={isPeriodOpen}
                                         onAssign={(cycleId, note) => {
                                             toast.message(`Noted for ${cycleId}`, { description: note });
                                         }}

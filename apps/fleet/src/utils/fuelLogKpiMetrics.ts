@@ -139,24 +139,37 @@ export function buildTransactionKpis(
   };
 }
 
+export type BuildCycleKpisArgs = {
+  /** Trusted Complete + Active (primary list population) */
+  trusted: FuelCycle[];
+  /** Exception / incomplete mega cycles (queue only — not in Total) */
+  exceptions?: FuelCycle[];
+  /** Period-clipped distance / fuel / spend — never raw cycle sums */
+  clippedTotals?: { distanceKm: number; fuelL: number; spend: number };
+};
+
 /**
- * Build Full Tanks KPI set. `cycles` must already be filtered to the visible set.
+ * Build Full Tanks KPI set from the trusted partition.
+ * Total = Done + Active (exceptions counted separately, not in totalCycles).
  */
-export function buildCycleKpis(cycles: FuelCycle[]): CycleKpis {
-  const completed = cycles.filter((c) => c.status === 'Complete').length;
-  const active = cycles.filter((c) => c.status === 'Active').length;
-  const exceptions = cycles.filter(
-    (c) =>
-      c.signalTier === 'exception' ||
-      c.status === 'Anomaly' ||
-      (typeof c.efficiency === 'number' && c.efficiency > 0 && c.efficiency < 8),
-  ).length;
+export function buildCycleKpis(args: BuildCycleKpisArgs): CycleKpis {
+  const trusted = args.trusted;
+  const exceptionRows = args.exceptions ?? [];
+  const completed = trusted.filter((c) => c.status === 'Complete').length;
+  const active = trusted.filter((c) => c.status === 'Active').length;
+  const exceptions = exceptionRows.length;
 
-  const totalDistance = cycles.reduce((s, c) => s + (Number(c.distance) || 0), 0);
-  const totalFuel = cycles.reduce((s, c) => s + (Number(c.totalLiters) || 0), 0);
-  const totalSpend = cycles.reduce((s, c) => s + (Number(c.totalCost) || 0), 0);
+  const totalDistance =
+    args.clippedTotals?.distanceKm ??
+    trusted.reduce((s, c) => s + (Number(c.distance) || 0), 0);
+  const totalFuel =
+    args.clippedTotals?.fuelL ??
+    trusted.reduce((s, c) => s + (Number(c.totalLiters) || 0), 0);
+  const totalSpend =
+    args.clippedTotals?.spend ??
+    trusted.reduce((s, c) => s + (Number(c.totalCost) || 0), 0);
 
-  const withEff = cycles.filter(
+  const withEff = trusted.filter(
     (c) => isValidOdo(Number(c.distance)) && Number(c.totalLiters) > 0 && Number(c.efficiency) > 0,
   );
   let avgEfficiency: number | null = null;
@@ -173,7 +186,7 @@ export function buildCycleKpis(cycles: FuelCycle[]): CycleKpis {
   }
 
   return {
-    totalCycles: cycles.length,
+    totalCycles: trusted.length,
     completed,
     active,
     exceptions,
