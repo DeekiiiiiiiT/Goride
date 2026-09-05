@@ -21,7 +21,10 @@ export interface FuelEntryLike {
   entrySource?: string;
   reconciliationStatus?: string;
   metadata?: Record<string, unknown> | null;
-  /** Set on statement-enrich writes so signed $0 Gas Card anchors can receive $ / L. */
+  /**
+   * @deprecated Neutralized — clients must not use this as a sealed-edit escape hatch.
+   * Sealed edits require `correctionReason` on the server; this flag is ignored if set.
+   */
   bypassSignatureCheck?: boolean;
 }
 
@@ -359,7 +362,7 @@ export function applyFuelMatchLinks<T extends FuelEntryLike>(
       priorDriverAmount: drv.amount,
       priorDriverLiters: drv.liters,
     },
-    bypassSignatureCheck: true,
+    // bypassSignatureCheck intentionally omitted — sealed edits need correctionReason.
   } as T;
 
   if (stmtMeta.jaaFuelType && !(driver as FuelEntryLike & { fuelType?: string }).fuelType) {

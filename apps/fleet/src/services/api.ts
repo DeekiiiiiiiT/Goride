@@ -873,6 +873,41 @@ export const api = {
     return all;
   },
 
+  /**
+   * Page through org transactions for a date window (Fuel Management logs).
+   * Safety ceiling: 40 pages × 1500 = 60k rows — marks truncated if still full pages.
+   */
+  async getAllTransactionsInRange(options: {
+    startDate: string;
+    endDate: string;
+    pageSize?: number;
+    maxPages?: number;
+  }): Promise<FinancialTransaction[]> {
+    const pageSize = options.pageSize ?? 1500;
+    const maxPages = options.maxPages ?? 40;
+    const accumulated: FinancialTransaction[] = [];
+    let hitFullPageCeiling = false;
+    for (let page = 0; page < maxPages; page++) {
+      const batch = await this.getTransactions(undefined, {
+        startDate: options.startDate,
+        endDate: options.endDate,
+        limit: pageSize,
+        offset: page * pageSize,
+      });
+      const rows = Array.isArray(batch) ? batch.filter(Boolean) : [];
+      if (rows.length === 0) break;
+      accumulated.push(...rows);
+      if (rows.length < pageSize) break;
+      if (page === maxPages - 1) hitFullPageCeiling = true;
+    }
+    if (hitFullPageCeiling) {
+      (accumulated as FinancialTransaction[] & { truncated?: boolean; totalCount?: number }).truncated = true;
+      (accumulated as FinancialTransaction[] & { truncated?: boolean; totalCount?: number }).totalCount =
+        accumulated.length;
+    }
+    return accumulated;
+  },
+
   /** Pending fuel transactions with station gate hold (Station Database → Evidence inbox). */
   async getStationGateEvidence(options?: { limit?: number }) {
     const params = new URLSearchParams();

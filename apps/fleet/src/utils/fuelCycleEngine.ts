@@ -77,13 +77,13 @@ export function calculateFuelCycles(entries: FuelEntry[], vehicles: Vehicle[] = 
         // tell that its opening spillover was preserved (not a mid-chain close).
         let pendingChainOrigin = false;
 
-        // Legacy rows honor an explicit per-vehicle close mode; otherwise the engine
-        // keeps its historical 98% cumulative spine (docs/fuel-brain-spine.md).
+        // Missing cycleCloseMode defaults to rideshare (docs/fuel-brain-spine.md).
+        // Orgs that want 98% partial stacking must set fuelSettings.cycleCloseMode.
         const explicitCloseMode = (vehicle as { fuelSettings?: { cycleCloseMode?: string } } | undefined)
             ?.fuelSettings?.cycleCloseMode;
         const legacyCloseMode: CycleCloseMode = explicitCloseMode
             ? resolveCycleCloseMode(vehicle as { fuelSettings?: { cycleCloseMode?: string } })
-            : 'cumulative_98';
+            : 'rideshare';
 
         sorted.forEach((entry, index) => {
             const entryVolume = entry.liters || 0;

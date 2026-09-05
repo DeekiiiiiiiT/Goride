@@ -1,18 +1,24 @@
 import React from 'react';
 import { Card } from '../../ui/card';
 import { formatFuelMoney } from '../../../utils/formatFuelMoney';
+import { cn } from '../../ui/utils';
 import type { CycleKpis, TransactionKpis } from '../../../utils/fuelLogKpiMetrics';
 
 /**
  * Thin presentational KPI strip for Transaction Logs.
  * Pure display — callers pass already-computed KPI objects (no data fetching here).
+ * Clickable tiles call onTileClick with the tile id (e.g. 'imbalanced').
  */
 
 export type KpiTile = {
+  id: string;
   label: string;
   value: string;
   hint?: string;
   tone?: 'default' | 'warning' | 'danger' | 'success';
+  /** When set, tile is a filter control. */
+  filterable?: boolean;
+  active?: boolean;
 };
 
 const toneClass: Record<NonNullable<KpiTile['tone']>, string> = {
@@ -22,57 +28,105 @@ const toneClass: Record<NonNullable<KpiTile['tone']>, string> = {
   success: 'text-emerald-600',
 };
 
-export function FuelLogKpiRow({ tiles }: { tiles: KpiTile[] }) {
+export function FuelLogKpiRow({
+  tiles,
+  onTileClick,
+}: {
+  tiles: KpiTile[];
+  onTileClick?: (tileId: string) => void;
+}) {
   if (!tiles.length) return null;
   return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-      {tiles.map((t) => (
-        <Card key={t.label} className="p-3">
-          <div className="text-xs font-medium uppercase tracking-wide text-slate-500">
-            {t.label}
-          </div>
-          <div className={`mt-1 text-lg font-semibold ${toneClass[t.tone || 'default']}`}>
-            {t.value}
-          </div>
-          {t.hint ? <div className="mt-0.5 text-[11px] text-slate-400">{t.hint}</div> : null}
-        </Card>
-      ))}
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+      {tiles.map((t) => {
+        const clickable = !!onTileClick && (t.filterable || t.id === 'imbalanced' || t.id === 'exceptions');
+        return (
+          <Card
+            key={t.id}
+            role={clickable ? 'button' : undefined}
+            tabIndex={clickable ? 0 : undefined}
+            aria-pressed={t.active || undefined}
+            onClick={clickable ? () => onTileClick?.(t.id) : undefined}
+            onKeyDown={
+              clickable
+                ? (e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      onTileClick?.(t.id);
+                    }
+                  }
+                : undefined
+            }
+            className={cn(
+              'p-3 transition-colors',
+              clickable && 'cursor-pointer hover:border-slate-300 hover:bg-slate-50/80',
+              t.active && 'ring-2 ring-amber-400 border-amber-300',
+            )}
+          >
+            <div className="text-xs font-medium uppercase tracking-wide text-slate-500">{t.label}</div>
+            <div className={`mt-1 text-lg font-semibold ${toneClass[t.tone || 'default']}`}>{t.value}</div>
+            {t.hint ? <div className="mt-0.5 text-[11px] text-slate-400">{t.hint}</div> : null}
+          </Card>
+        );
+      })}
     </div>
   );
 }
 
-/** Convenience: map Full Tanks CycleKpis to display tiles. */
-export function cycleKpisToTiles(kpis: CycleKpis): KpiTile[] {
+/** Map Full Tanks CycleKpis to display tiles (clipped totals from trustedPeriodTotals preferred by caller). */
+export function cycleKpisToTiles(
+  kpis: CycleKpis,
+  opts?: { distanceKm?: number; exceptionsActive?: boolean },
+): KpiTile[] {
+  const distance = opts?.distanceKm ?? kpis.totalDistance;
   return [
-    { label: 'Cycles', value: String(kpis.totalCycles) },
-    { label: 'Completed', value: String(kpis.completed), tone: 'success' },
-    { label: 'Active', value: String(kpis.active) },
+    { id: 'cycles', label: 'Cycles', value: String(kpis.totalCycles), hint: `${kpis.completed} done · ${kpis.active} active` },
+    { id: 'distance', label: 'Period distance', value: `${Math.round(distance).toLocaleString()} km` },
+    { id: 'fuel', label: 'Fuel', value: `${kpis.totalFuel.toLocaleString()} L` },
     {
+      id: 'exceptions',
       label: 'Exceptions',
       value: String(kpis.exceptions),
-      tone: kpis.exceptions > 0 ? 'danger' : 'default',
+      tone: kpis.exceptions > 0 ? 'danger' : 'success',
+      filterable: kpis.exceptions > 0,
+      active: opts?.exceptionsActive,
     },
-    {
-      label: 'Avg km/L',
-      value: kpis.avgEfficiency != null ? kpis.avgEfficiency.toFixed(2) : '—',
-    },
-    { label: 'Distance', value: `${kpis.totalDistance.toLocaleString()} km` },
-    { label: 'Fuel', value: `${kpis.totalFuel.toLocaleString()} L` },
-    { label: 'Spend', value: formatFuelMoney(kpis.totalSpend) },
   ];
 }
 
-/** Convenience: map Transaction KPIs to display tiles. */
-export function transactionKpisToTiles(kpis: TransactionKpis): KpiTile[] {
+/** Map Transaction KPIs to display tiles. */
+export function transactionKpisToTiles(
+  kpis: TransactionKpis,
+  opts?: {
+    distanceKm?: number;
+    distanceHint?: string;
+    integrityActive?: boolean;
+    sourceHint?: string;
+  },
+): KpiTile[] {
   return [
-    { label: 'Fills', value: String(kpis.totalFills) },
-    { label: 'Spend', value: formatFuelMoney(kpis.totalSpend) },
-    { label: 'Volume', value: `${kpis.totalVolume.toLocaleString()} L` },
-    { label: 'Distance', value: `${kpis.totalKm.toLocaleString()} km` },
     {
+      id: 'fills',
+      label: 'Fills',
+      value: String(kpis.totalFills),
+      hint: opts?.sourceHint,
+    },
+    { id: 'spend', label: 'Spend', value: formatFuelMoney(kpis.totalSpend, 0) },
+    { id: 'volume', label: 'Volume', value: `${kpis.totalVolume.toLocaleString()} L` },
+    {
+      id: 'distance',
+      label: 'Period distance',
+      value: `${Math.round(opts?.distanceKm ?? kpis.totalKm).toLocaleString()} km`,
+      hint: opts?.distanceHint,
+    },
+    {
+      id: 'imbalanced',
       label: 'Imbalanced',
       value: String(kpis.imbalancedCount),
       tone: kpis.imbalancedCount > 0 ? 'warning' : 'default',
+      hint: kpis.imbalancedCount > 0 ? 'Click to filter' : 'Ledger healthy',
+      filterable: true,
+      active: opts?.integrityActive,
     },
   ];
 }

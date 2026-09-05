@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi, afterEach } from 'vitest';
 import { pickFuelCyclesSource } from './useFuelCycles';
 import type { FuelCycle } from '../types/fuel';
 
@@ -19,19 +19,21 @@ function cycle(partial: Partial<FuelCycle> & { id: string; status: FuelCycle['st
 }
 
 describe('pickFuelCyclesSource', () => {
-  it('rejects Active-only server collapse when client has Complete cycles', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('always returns server when fetch succeeded (even Active-only / fewer Completes)', () => {
     const server = [cycle({ id: 'active_v1', status: 'Active', distance: 2545, totalLiters: 241 })];
     const client = [
       cycle({ id: 'c1', status: 'Complete' }),
       cycle({ id: 'c2', status: 'Complete' }),
       cycle({ id: 'active_v1', status: 'Active', totalLiters: 20 }),
     ];
-    const picked = pickFuelCyclesSource(server, client);
-    expect(picked).toBe(client);
-    expect(picked.filter((c) => c.status === 'Complete')).toHaveLength(2);
+    expect(pickFuelCyclesSource(server, client)).toBe(server);
   });
 
-  it('rejects server Anomaly+Active when client found more Completes', () => {
+  it('keeps server Anomaly+Active even when client found more Completes', () => {
     const server = [
       cycle({
         id: 'mega',
@@ -56,17 +58,37 @@ describe('pickFuelCyclesSource', () => {
       cycle({ id: 'c3', status: 'Complete', startDate: '2026-08-20', endDate: '2026-08-21' }),
       cycle({ id: 'c4', status: 'Complete', startDate: '2026-08-21', endDate: '2026-08-25' }),
     ];
-    const picked = pickFuelCyclesSource(server, client);
-    expect(picked).toBe(client);
-    expect(picked.filter((c) => c.status === 'Complete')).toHaveLength(4);
+    expect(pickFuelCyclesSource(server, client)).toBe(server);
   });
 
-  it('keeps server when Complete counts match or exceed client', () => {
-    const server = [
-      cycle({ id: 's1', status: 'Complete' }),
-      cycle({ id: 's2', status: 'Complete' }),
-    ];
+  it('returns empty server list when fetch succeeded with no cycles', () => {
+    const server: FuelCycle[] = [];
     const client = [cycle({ id: 'c1', status: 'Complete' })];
     expect(pickFuelCyclesSource(server, client)).toBe(server);
+  });
+
+  it('falls back to client when server is null (fetch failed)', () => {
+    const info = vi.spyOn(console, 'info').mockImplementation(() => {});
+    const client = [cycle({ id: 'c1', status: 'Complete' })];
+    expect(pickFuelCyclesSource(null, client)).toBe(client);
+    expect(info).toHaveBeenCalledWith(
+      expect.stringContaining('server fetch failed'),
+    );
+  });
+
+  it('falls back to client when legacy flag is set', () => {
+    const info = vi.spyOn(console, 'info').mockImplementation(() => {});
+    const server = [cycle({ id: 's1', status: 'Complete' })];
+    const client = [cycle({ id: 'c1', status: 'Complete' })];
+    expect(pickFuelCyclesSource(server, client, { legacy: true })).toBe(client);
+    expect(info).toHaveBeenCalledWith(expect.stringContaining('legacy'));
+  });
+
+  it('falls back to client when enabled is false', () => {
+    const info = vi.spyOn(console, 'info').mockImplementation(() => {});
+    const server = [cycle({ id: 's1', status: 'Complete' })];
+    const client = [cycle({ id: 'c1', status: 'Complete' })];
+    expect(pickFuelCyclesSource(server, client, { enabled: false })).toBe(client);
+    expect(info).toHaveBeenCalledWith(expect.stringContaining('disabled'));
   });
 });

@@ -56,12 +56,9 @@ function legacyClientForced(): boolean {
 }
 
 /**
- * Prefer server snapshots unless they are a degenerate Active-only collapse
- * while the client engine already found completed capacity closes.
- */
-/**
- * Prefer server snapshots unless they under-report capacity closes vs the
- * client engine (Active-only collapse, or Anomaly+Active swallowing Completes).
+ * Server snapshot wins whenever the fetch succeeded (`serverCycles != null`)
+ * and legacy mode is off. Client engine is only used when the server fetch
+ * failed/disabled (`null`) or `VITE_FUEL_CYCLE_LEGACY_CLIENT` / opts.legacy.
  */
 export function pickFuelCyclesSource(
   serverCycles: FuelCycle[] | null,
@@ -70,18 +67,19 @@ export function pickFuelCyclesSource(
 ): FuelCycle[] {
   const legacy = opts.legacy === true;
   const enabled = opts.enabled !== false;
-  if (!legacy && enabled && serverCycles != null && serverCycles.length > 0) {
-    const serverComplete = serverCycles.filter((c) => c.status === 'Complete').length;
-    const clientComplete = clientCycles.filter((c) => c.status === 'Complete').length;
-    const serverOnlyActive =
-      serverComplete === 0 && serverCycles.every((c) => c.status === 'Active');
-    // Server collapsed tanks into Anomaly/Active while client found real Completes
-    const serverUnderReportsCompletes = clientComplete > serverComplete;
-    if ((serverOnlyActive && clientComplete > 0) || serverUnderReportsCompletes) {
-      return clientCycles;
-    }
+
+  if (legacy) {
+    console.info('[pickFuelCyclesSource] client cycles — legacy flag');
+    return clientCycles;
+  }
+  if (!enabled) {
+    console.info('[pickFuelCyclesSource] client cycles — server fetch disabled');
+    return clientCycles;
+  }
+  if (serverCycles != null) {
     return serverCycles;
   }
+  console.info('[pickFuelCyclesSource] client cycles — server fetch failed or unavailable');
   return clientCycles;
 }
 

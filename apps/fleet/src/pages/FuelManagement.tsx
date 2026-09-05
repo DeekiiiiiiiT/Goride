@@ -234,6 +234,7 @@ function FuelManagementInner({ defaultTab = 'logs', onViewDriverLedger, onTabCha
   // Fuel Log State
   const [logs, setLogs] = useState<FuelEntry[]>([]);
   const [fuelDataTruncated, setFuelDataTruncated] = useState(false);
+  const [transactionsTruncated, setTransactionsTruncated] = useState(false);
   const [isLogModalOpen, setIsLogModalOpen] = useState(false);
   const [editingLog, setEditingLog] = useState<FuelEntry | null>(null);
 
@@ -452,8 +453,8 @@ function FuelManagementInner({ defaultTab = 'logs', onViewDriverLedger, onTabCha
           }
           return [] as FuelEntry[];
         }),
-        api.getTransactions(undefined, { startDate, endDate, limit: 1500 }).catch((err) => {
-          console.error('[FuelManagement] getTransactions failed', err);
+        api.getAllTransactionsInRange({ startDate, endDate }).catch((err) => {
+          console.error('[FuelManagement] getAllTransactionsInRange failed', err);
           return [] as FinancialTransaction[];
         }),
       ]);
@@ -461,6 +462,9 @@ function FuelManagementInner({ defaultTab = 'logs', onViewDriverLedger, onTabCha
       const logsTotal = (logsData as FuelEntry[] & { totalCount?: number }).totalCount;
       setFuelDataTruncated(typeof logsTotal === 'number' && logsData.length < logsTotal);
       setTransactions(txData);
+      setTransactionsTruncated(
+        (txData as FinancialTransaction[] & { truncated?: boolean }).truncated === true,
+      );
       lastFuelDataLoadAtRef.current = Date.now();
       setFuelLogsLoadError(null);
       setFuelLogsHydrated(true);
@@ -1515,6 +1519,7 @@ function FuelManagementInner({ defaultTab = 'logs', onViewDriverLedger, onTabCha
                 dateRange={logDateRange}
                 onDateRangeChange={setLogDateRange}
                 dataTruncated={fuelDataTruncated}
+                transactionsTruncated={transactionsTruncated}
                 isLoading={!fuelLogsHydrated}
                 loadError={fuelLogsLoadError}
                 onRefresh={refreshLogs}

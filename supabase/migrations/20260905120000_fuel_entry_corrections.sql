@@ -24,6 +24,7 @@ CREATE INDEX IF NOT EXISTS fuel_entry_corrections_org_idx
 ALTER TABLE public.fuel_entry_corrections ENABLE ROW LEVEL SECURITY;
 
 -- Edge/service-role bypasses RLS; authenticated JWT org scoped for PostgREST reads.
+-- No authenticated INSERT — writes are service-role only via the edge function.
 CREATE POLICY fuel_entry_corrections_org_select ON public.fuel_entry_corrections
   FOR SELECT TO authenticated
   USING (
@@ -33,14 +34,5 @@ CREATE POLICY fuel_entry_corrections_org_select ON public.fuel_entry_corrections
     )
   );
 
-CREATE POLICY fuel_entry_corrections_org_insert ON public.fuel_entry_corrections
-  FOR INSERT TO authenticated
-  WITH CHECK (
-    organization_id = COALESCE(
-      (auth.jwt() -> 'app_metadata' ->> 'organization_id'),
-      (auth.jwt() -> 'user_metadata' ->> 'organization_id')
-    )
-  );
-
 COMMENT ON TABLE public.fuel_entry_corrections IS
-  'Append-only audit of corrections to locked/signed fuel entries (reason + field diff + signature rotation).';
+  'Append-only audit of corrections to locked/signed fuel entries. SELECT: org JWT. INSERT: service role / edge function only.';

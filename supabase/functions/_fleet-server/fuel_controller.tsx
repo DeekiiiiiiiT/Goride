@@ -3999,6 +3999,8 @@ app.post(`${BASE_PATH}/fuel-entries`, async (c: Context) => {
     let correctionAuthorized = false;
     let correctionDiffs: Record<string, { from: unknown; to: unknown }> | null = null;
     let correctionPrevSig: string | null = null;
+    /** Pre-update KV snapshot for fail-closed rollback if ledger insert fails. */
+    let correctionPrevSnapshot: Record<string, unknown> | null = null;
 
     // Org ownership: fleet JWT stamp; platform keeps explicit organizationId
     Object.assign(entry, stampFuelRecord(entry as Record<string, unknown>, c));
@@ -4048,6 +4050,7 @@ app.post(`${BASE_PATH}/fuel-entries`, async (c: Context) => {
           correctionAuthorized = true;
           correctionDiffs = diffs;
           correctionPrevSig = (existingEntry.signature as string) || null;
+          correctionPrevSnapshot = { ...(existingEntry as Record<string, unknown>) };
         }
       }
     }
@@ -4540,21 +4543,38 @@ app.post(`${BASE_PATH}/fuel-entries`, async (c: Context) => {
     stampPendingReconciliationStatus(entry as Record<string, unknown>);
     await kv.set(`fuel_entry:${entry.id}`, entry);
 
-    // Append-only correction ledger for any mutation of a sealed row.
+    // Append-only correction ledger for sealed-row mutations — fail closed.
+    // Entry is already written; if the ledger insert fails, restore the prior
+    // snapshot so sealed edits never land without an audit row.
     if (correctionAuthorized && correctionDiffs) {
-      try {
-        const actor = c.get("rbacUser") as RbacUser | undefined;
-        await supabase.from("fuel_entry_corrections").insert({
-          organization_id: (entry as any).organizationId || getOrgId(c) || null,
-          entry_id: String(entry.id),
-          actor_id: actor?.userId || null,
-          reason: correctionReason,
-          field_diffs: correctionDiffs,
-          previous_signature: correctionPrevSig,
-          new_signature: (entry.signature as string) || null,
-        });
-      } catch (corrErr) {
-        console.error("[FuelEntry] Correction ledger insert failed (non-fatal):", corrErr);
+      const actor = c.get("rbacUser") as RbacUser | undefined;
+      const { error: corrErr } = await supabase.from("fuel_entry_corrections").insert({
+        organization_id: (entry as any).organizationId || getOrgId(c) || null,
+        entry_id: String(entry.id),
+        actor_id: actor?.userId || null,
+        reason: correctionReason,
+        field_diffs: correctionDiffs,
+        previous_signature: correctionPrevSig,
+        new_signature: (entry.signature as string) || null,
+      });
+      if (corrErr) {
+        console.error("[FuelEntry] Correction ledger insert failed — rolling back entry:", corrErr);
+        if (correctionPrevSnapshot) {
+          try {
+            await kv.set(`fuel_entry:${entry.id}`, correctionPrevSnapshot);
+          } catch (rollbackErr) {
+            console.error("[FuelEntry] Rollback after correction failure also failed:", rollbackErr);
+          }
+        }
+        return c.json(
+          {
+            error:
+              "Correction ledger write failed; sealed entry was not updated. Retry the correction.",
+            code: "CORRECTION_LEDGER_FAILED",
+            details: corrErr.message,
+          },
+          500,
+        );
       }
     }
 

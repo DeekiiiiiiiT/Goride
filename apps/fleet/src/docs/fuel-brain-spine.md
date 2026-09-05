@@ -12,22 +12,30 @@ Single source of truth for tank integrity vs km attribution vs stop-to-stop diag
 | Week health Emerald/Amber/Red | `fuelCalculationService.ts` | Bucket ±20% variance as primary Amber |
 | Km purpose (RS / Personal / DH) | `fuelBrainClassify.ts` | Tank integrity / capacity close |
 
-## Client engine is legacy-only
+## Client engine is fallback-only
 
-`utils/fuelCycleEngine.ts` (`calculateFuelCycles`) is now the **fallback**, not the source of truth.
-`useFuelCycles` fetches the server snapshot (`GET /fuel/cycles`) per vehicle and hydrates it; it
-only runs the in-browser engine when `VITE_FUEL_CYCLE_LEGACY_CLIENT=1`, when a caller passes
-`legacyClient`, or when the server fetch fails (silent fallback so Full Tanks never blanks out).
+`utils/fuelCycleEngine.ts` (`calculateFuelCycles`) is the **fallback**, not the source of truth.
+`useFuelCycles` / `pickFuelCyclesSource` (via `api.getFuelCycles`):
+
+- **Server wins** whenever `GET /fuel/cycles` succeeds (`serverCycles != null`), including an empty list.
+- **Client only** when the server fetch fails/disabled (`serverCycles === null`), or when
+  `VITE_FUEL_CYCLE_LEGACY_CLIENT=1` / `opts.legacyClient` is set.
+- There is **no** client override when the server under-reports Completes — trust the snapshot.
+- Log KPIs similarly prefer `GET /fuel/log-summary` (`useFuelLogSummary`) when only period/vehicle
+  filters are active; extra filters (search, integrity, cycleId, …) keep client KPIs so KPI≡list.
+
 The client engine also no longer fabricates a 40 L tank: a vehicle with no configured tank
-capacity is skipped entirely.
+capacity is skipped entirely. Missing `cycleCloseMode` defaults to **`rideshare`** (not
+`cumulative_98`).
 
 ## Corrections replace bypassSignatureCheck
 
 Sealed fuel rows (signed / locked / finalized) can no longer be edited via a client
-`bypassSignatureCheck` flag — the server strips it. Editing a sealed row requires a
-`correctionReason`; the server records an append-only `fuel_entry_corrections` row
-(reason + field diffs + signature rotation) and rotates the signature. History is read via
-`GET /fuel-entries/:id/corrections`.
+`bypassSignatureCheck` flag — the server strips it and shared matchers must not set it.
+Editing a sealed row requires a `correctionReason`; the server records an append-only
+`fuel_entry_corrections` row (reason + field diffs + signature rotation) and rotates the
+signature. Ledger insert is **fail-closed** (entry rolled back on ledger failure).
+History is read via `GET /fuel-entries/:id/corrections`. Table INSERT is service-role only.
 
 ## Three lanes (locked)
 
@@ -64,7 +72,7 @@ Cycle `status` (Complete / Active / Anomaly) is decoupled from row `integritySta
 
 - Mint **one UUID** when a cycle opens; stamp on every fill as `metadata.cycleId`.
 - Server stamper is the single write path: `stampEntryCycleMetadata`.
-- Client `useFuelCycles` reads `GET /fuel/cycles`; fallback `fuelCycleEngine` only when `VITE_FUEL_CYCLE_LEGACY_CLIENT=1`.
+- Client `useFuelCycles` reads `GET /fuel/cycles`; fallback `fuelCycleEngine` only on fetch failure or `VITE_FUEL_CYCLE_LEGACY_CLIENT=1`.
 
 ## Client mirror
 

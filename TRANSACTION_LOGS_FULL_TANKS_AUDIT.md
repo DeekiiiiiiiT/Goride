@@ -1,8 +1,217 @@
 # Transaction Logs & Full Tanks — Enterprise Audit
 
 **Surface:** `/fuel-logs` → Fleet Operations → Fuel Management → Transaction Logs (tabs: *Transactions*, *Full Tanks*)
-**Audited:** 2026-09-05 · branch `main` (working tree, `FuelLogTable.tsx` modified)
-**Mode:** Audit only. **No code was changed.**
+**Round 1 audited:** 2026-09-05 · baseline `94d9ebd8`
+**Round 2 verified:** 2026-09-05 · head `1f5a774b` (working tree clean)
+**Mode:** Audit only. **No code was changed by this audit.**
+
+---
+
+# ⬛ ROUND 2 — VERIFICATION OF YOUR IMPLEMENTATION
+
+> You asked whether everything was completed properly with no bugs or issues.
+> **Short answer: the hard part is done and done well. It is not 100% complete.**
+> All five Criticals are resolved. 4 items are partially done, 9 items were never wired up,
+> and the work introduced 6 new dead modules. Details below, all independently verified.
+
+## Verification method
+
+| Check | Result |
+|---|---|
+| Full Fleet test suite (`npx vitest run`) | ✅ **203 files, 1,222 passed, 1 skipped, 0 failed** |
+| New fuel suites (period totals, KPI, cycle engine, trust, UAT, hook) | ✅ **32 tests passing** |
+| `tsc --noEmit` on `FuelLogTable.tsx` | ⚠️ **20 errors → 2 errors** |
+| `tsc --noEmit` on `fuelLogKpiMetrics` / `fuelCycleEngine` / `useFuelCycles` | ✅ **0 errors** |
+| Server enforcement path read end-to-end | ✅ verified in `fuel_controller.tsx` |
+| Every new module checked for a real import | ⚠️ **6 of 11 are unreferenced** |
+
+## Round 1 findings — final status
+
+| ID | Finding | Status | Evidence |
+|---|---|:---:|---|
+| **F-C1** | Tabs contradict on distance | ✅ **Fixed** | `fuelPeriodTotals.ts` clips per cycle; both tabs disclose "N km before this period excluded" (`FuelLogTable.tsx:850-855`, `:890-893`); 7 tests |
+| **F-C2** | Search zeroes KPI cards | ✅ **Fixed** | All filter args deleted from `TransactionKpiOptions` (`:42-46`) and `buildCycleKpis`; one search predicate at `:401-409` |
+| **F-C3** | Immutability seal decorative | ✅ **Fixed** | Server strips `bypassSignatureCheck` (`fuel_controller.tsx:3992`), requires `fuel.edit_entry` + reason + real diff (`:4034-4053`), writes append-only row (`:4547`); migration `20260905120000` |
+| **F-C4** | Delete ungated | ✅ **Fixed** | `fuel.delete_entry` (`:1343`); Recalculate gated on `data.backfill` + fleet-scope confirm (`:993`, `:590-596`) |
+| **F-C5** | 20 type errors | ⚠️ **Partial** | 2 remain: `:679` and `:1283` |
+| **F-H1** | Docs ≠ code; server cycles dead | ✅ **Fixed** | `useFuelCycles` fetches `GET /fuel/cycles`, env flag honoured, close policy wired (`fuelCycleEngine.ts:82-86`), doc updated — *see R2-10, R2-11* |
+| **F-H2** | Recalculate no refetch | ✅ **Fixed** | Confirm dialog for fleet scope |
+| **F-H3** | 1,500-row ceiling | ⚠️ **Partial** | Entries now paged via `getAllFuelEntriesInRange`; truncation banner on Logs tab (`:749`). **Transactions still `limit: 1500` unpaged** — *see R2-3* |
+| **F-H4** | Cycle-engine gaps | ✅ **Fixed** | Regression double-count fixed; spillover preserved at chain origin; `isChainOrigin` marker; 40 L fallback removed |
+| **F-H5** | Integrity for minority of rows | ✅ **Fixed** | All rows classified with explicit `'N/A'` (`:332-365`); `txBySourceId` index makes it O(n); deps corrected |
+| **F-H6** | Inconsistent denominators | ✅ **Fixed** | `populationNote` shipped; imbalanced = Partial/Orphaned only |
+| **F-H7** | Toolbar tab-blind | ⚠️ **Partial** | Recalculate now cycles-only. **Export still exports transactions on the Full Tanks tab** (`:945`) |
+| **F-H8** | Weak export | ✅ **Fixed** | 15 columns, resolved names, currency, cycle id, audit score, locked, UTF-8 BOM |
+| **F-M1** | 4 filters unreachable | ❌ **Not fixed** | Popover still only Vehicle + Entry Source (`:954`, `:959`) |
+| **F-M2** | `Δ Fuel` mislabelled | ✅ **Fixed** | Now `Δ Odo` (`:1030`) |
+| **F-M3** | Currency formatting | ✅ **Fixed** | `formatFuelMoney`, JMD |
+| **F-M4** | No loading/error state | ✅ **Fixed** | `isLoading` / `loadError` props (`:129-130`, `:733`, `:760`) |
+| **F-M5** | Dead code | ⚠️ **Mixed** | Round-1 items removed (`onVerifyLog`, `anchorFailures`, unused imports). **6 new dead modules added** — *see R2-1* |
+| **F-M6** | Divergent page permission | ✅ **Fixed** | `pageRegistry.ts:30` now `nav.fuel_logs` |
+| **A11y** | Hand-rolled modal | ✅ **Fixed** | Radix `Dialog` + `aria-describedby` (`:1612`) |
+
+**Score: 14 fixed · 4 partial · 1 not fixed.**
+
+## Round 2 — new findings
+
+### 🔴 R2-1 · Six new modules were written but never imported
+
+Verified by checking every new file for a real reference outside itself:
+
+| Module | Lines | Referenced by |
+|---|---:|---|
+| `components/fuel/logs/FuelEntryDetailSheet.tsx` | 135 | **nothing** |
+| `components/fuel/logs/FuelLogKpiRow.tsx` | 80 | **nothing** |
+| `hooks/useFuelLogQuery.ts` | 77 | **nothing** |
+| `utils/fuelAnomalyExplain.ts` | 38 | **nothing** |
+| `utils/fuelScheduledExport.ts` | 31 | **nothing** |
+| `utils/fuelMobileReview.ts` | 28 | **nothing** |
+
+`FuelExceptionQueue` and `FuelEfficiencyTrend` **are** wired. The other six are not.
+
+This matters beyond tidiness: the detail-sheet and URL-state features **were** delivered — but re-implemented inline inside `FuelLogTable.tsx` (Dialog at `:1612`, URL sync at `:214-245`) instead of using the extracted components. You now have **two implementations of the same view**, one of which is unreachable and will drift. That is the exact redundancy class the audit was written to remove.
+
+**Action:** delete all six, or wire them and delete the inline duplicates. Do not leave both.
+
+---
+
+### 🔴 R2-2 · Correction history is written but can never be read by a user
+
+The full chain exists — table, server write (`:4547`), `GET /fuel-entries/:id/corrections` (`:2653`), `fuelService.getFuelEntryCorrections` (`fuelService.ts:161`), `FuelEntryCorrection` type, and a rendering component.
+
+**`getFuelEntryCorrections` has zero callers.** The inline detail dialog in `FuelLogTable.tsx` contains no correction UI (the component that does is the dead `FuelEntryDetailSheet`).
+
+So corrections accumulate in an audit table that nothing in the product surfaces. Phase 2.3 is not delivered. This is the single highest-value remaining gap — it is the payoff for all of the F-C3 work.
+
+---
+
+### 🔴 R2-3 · Transactions are still unpaged, and that now creates *false* "Orphaned" rows
+
+`FuelManagement.tsx:444` correctly switched entries to the paged `getAllFuelEntriesInRange`.
+`FuelManagement.tsx:455` still does `api.getTransactions(…, { limit: 1500 })` with no paging.
+
+Because F-H5 was fixed — integrity is now computed for **all** rows instead of a subset — a truncated transaction set makes `ledgerIntegrity` fall through to `'Orphaned'` (`:362`) for entries whose transactions simply were not loaded. Those roll straight into `imbalancedCount` and the red "N imbalanced" KPI.
+
+**Net effect: the F-H5 fix made this failure mode worse, not better.** Page the transactions the same way, or mark integrity `'Unknown'` when the transaction window is truncated.
+
+---
+
+### 🟠 R2-4 · Column sorting is implemented but has no UI
+
+`sortField` / `sortDir` state exists (`:165-166`) and is fully honoured in the sort comparator (`:411-420`). **`setSortField` and `setSortDir` are never called** — each appears exactly once, in its own `useState` declaration. No table header is clickable.
+
+This is the same defect shape as Round 1's `activeFilterCount`: logic shipped, control missing.
+
+---
+
+### 🟠 R2-5 · `activeFilterCount` *still* never rendered
+
+Round 1, F-M5. Still computed, still no badge on the Filters button. Combined with F-M1 (four filters with no popover control), a user can hold an active filter set they cannot see or clear.
+
+---
+
+### 🟠 R2-6 · KPI cards are still not clickable
+
+Acceptance criterion *"Every KPI card is clickable and applies a visible, removable filter"* is unmet. `filterIntegrity` exists and works, and is even URL-addressable — but the only way to set it is by hand-editing the query string. `setFilterIntegrity` is called only from URL hydration (`:225`) and `clearFilters` (`:286`).
+
+The "N imbalanced" number is still a dead end for anyone using a mouse.
+
+---
+
+### 🟠 R2-7 · The audit-ledger write is non-fatal
+
+```ts
+} catch (corrErr) {
+  console.error("[FuelEntry] Correction ledger insert failed (non-fatal):", corrErr);
+}
+```
+`fuel_controller.tsx:4556-4558` — the entry is persisted at `:4541` **before** the correction row is attempted, and a failed audit write only logs.
+
+For an append-only audit ledger this is the wrong failure mode: a sealed row can be silently mutated with no corresponding audit record. Write the correction first (or in a transaction) and fail the request if it cannot be recorded.
+
+---
+
+### 🟠 R2-8 · `fuel_entry_corrections` accepts client-authored rows
+
+The migration's RLS `INSERT` policy (`20260905120000…sql:36-43`) allows any `authenticated` user in the org to insert. `UPDATE`/`DELETE` are correctly denied by omission, so it is append-only — but an authenticated client can POST **fabricated** corrections directly through PostgREST, including for entries they never edited.
+
+Audit ledgers should be service-role write only. Drop the insert policy; the edge function uses the service role and bypasses RLS anyway.
+
+---
+
+### 🟠 R2-9 · Table still clips horizontally
+
+`:1017` is unchanged: `className="rounded-md border bg-white overflow-hidden"`. With 11 columns (now 12, with the new Cycle column) and no `overflow-x-auto`, narrow viewports still clip the rightmost columns rather than scrolling.
+
+---
+
+### 🟡 R2-10 · The client engine can still silently override the server
+
+`pickFuelCyclesSource` (`useFuelCycles.ts:66-86`) returns the **client** result whenever `clientComplete > serverComplete`. So both engines still run on the Full Tanks tab, and the displayed number is decided by a disagreement heuristic rather than a contract.
+
+The consequence is subtle and worth stating plainly: **a correct server-side fix that legitimately reports fewer completed tanks — for example one that properly applies `rideshare` close mode — will be silently discarded in favour of the client's 98% math.** The escape hatch outlives the bug it was built for.
+
+The updated doc (`fuel-brain-spine.md:22-26`) says the client engine runs "only … when the server fetch fails" — which is now inaccurate. Same doc-drift class as F-H1, one layer down.
+
+Defensible as a transitional bridge. Time-box it, log every override, and delete it once the server snapshot is trusted.
+
+---
+
+### 🟡 R2-11 · Legacy close mode defaults to `cumulative_98`, doc still says `rideshare`
+
+`fuelCycleEngine.ts:82-86` — when a vehicle has no explicit `fuelSettings.cycleCloseMode`, the legacy path uses `'cumulative_98'`, deliberately ("keeps its historical 98% cumulative spine"). `fuel-brain-spine.md:42` still states the org-wide default is `rideshare`.
+
+The wiring is real progress and the intent is documented in code. But the contract file and the code still disagree on the default. Pick one and make both say it.
+
+---
+
+### 🟡 R2-12 · Residual smaller items
+
+| Item | Anchor |
+|---|---|
+| 2 type errors remain | `FuelLogTable.tsx:679` (`resolvePaymentLabel` default branch is `never`), `:1283` (`entry.odometer` possibly null) |
+| `cycleKpis.totalDistance` / `.totalSpend` / `.avgEfficiency` computed, never rendered | `fuelLogKpiMetrics.ts:162-196` — cycles tab uses `trustedPeriodTotals` instead |
+| `bypassSignatureCheck` still exists and is set `true` in shared code | `packages/roam-shared/src/fuel/jaaFuelStatementMatcher.ts:25,362` |
+| Exception queue `onAssign` is a `toast.message` stub | `FuelLogTable.tsx:1583-1584` |
+| Currency hardcoded `'JMD'` rather than org config | `FuelLogTable.tsx:607` |
+| `FuelLogTable.tsx` grew 1,440 → **1,855** lines | Phase 3.5 ("no file > 300 lines") not started |
+| No sticky table header | — |
+
+---
+
+## Updated scorecard
+
+| Dimension | R1 | R2 | Note |
+|---|:---:|:---:|---|
+| Domain model / business logic | B+ | **A−** | Close policy wired; engine bugs fixed; period clipping is genuinely well designed |
+| Architecture & separation | D | **C** | Server spine restored; god component still 1,855 lines with 6 orphaned modules |
+| Correctness of displayed numbers | D− | **A−** | All three number defects fixed and tested; R2-3 is the one remaining risk |
+| Type safety | F | **A−** | 20 → 2 errors |
+| Security / RBAC | D | **A−** | Gated both sides; R2-8 is the residual |
+| Scale & performance | D | **B−** | Paging + O(n) integrity; transactions still unpaged |
+| Accessibility | F | **B+** | Real Radix Dialog; hover-only content and 8px type remain |
+| UX / information design | C− | **C+** | Cycle cross-nav, disclosure, exception queue landed; KPIs/sort/filters still not clickable |
+| Test coverage | F | **B** | +32 fuel tests incl. the KPI≡list invariant; still no component tests |
+| Observability | F | **D+** | Error/loading states added; still no telemetry |
+
+## What to do next, in order
+
+1. **R2-2** — surface correction history. Everything else exists; this is one `useEffect` + render. Highest value per hour of any item on this list.
+2. **R2-3** — page the transactions fetch. Prevents false "imbalanced" alarms in production.
+3. **R2-1** — delete the six orphaned modules (or wire them and delete the inline duplicates).
+4. **R2-4, R2-5, R2-6, F-M1** — one afternoon of wiring: clickable headers, filter badge, clickable KPIs, full Filters popover. All the logic already exists.
+5. **R2-7, R2-8** — make the audit ledger fail-closed and service-role-only.
+6. **R2-9** — one CSS class.
+7. **R2-10, R2-11** — decide the cycle-source contract and make the doc match.
+
+Items 1–6 are roughly two days. None require new architecture.
+
+---
+---
+
+# ROUND 1 — ORIGINAL AUDIT (2026-09-05, baseline `94d9ebd8`)
+
+> Retained in full for traceability. Statuses above supersede the severity labels below.
 
 ---
 
@@ -721,4 +930,18 @@ The instinct behind this feature is right. Capacity-close cycles with spillover,
 
 What is missing is **discipline at the boundaries**: one place where a filter is defined, one place where a total is computed, one owner for cycle math, one contract between the doc and the code, and one gate on every mutation. Phase 0 and Phase 1 buy back most of the credibility for about a week of work. Phase 3 is what turns it into a system you can put in front of an enterprise buyer.
 
-*Audit performed against the working tree at `main`. No files were modified.*
+*Round 1 audit performed against the working tree at `main` (`94d9ebd8`). No files were modified.*
+
+---
+
+## 15. Round 2 closing note
+
+You cleared every Critical. That is the part that was genuinely hard, and the quality is high — `fuelPeriodTotals.ts` is a properly reasoned piece of accounting code, the correction ledger is designed correctly end-to-end, and stripping `bypassSignatureCheck` server-side rather than trusting the client is exactly the right instinct. 1,222 tests pass and the type errors on the safety-critical paths are gone.
+
+The gap that remains has one shape, and it is worth naming because it repeats: **logic shipped without its control surface.** Sorting works but no header is clickable. Integrity filtering works but no KPI is clickable. The filter count is computed but never drawn. The correction ledger is written but never displayed. Six modules were built and never imported. In each case the difficult half is done and the last 5% — the wire — is missing.
+
+Two consequences follow. First, a reviewer reading the code concludes these features exist; a user clicking the screen finds they do not. Second, R2-3 shows how this bites: fixing F-H5 properly made a *different* unfixed item (unpaged transactions) produce visibly wrong output. Half-wired changes interact.
+
+None of it is architectural, and none of it is more than about two days. Finish the wires before starting Phase 4.
+
+*Round 2 verification performed against `1f5a774b`. No files were modified.*
