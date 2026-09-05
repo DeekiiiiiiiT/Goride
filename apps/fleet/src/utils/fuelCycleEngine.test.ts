@@ -171,15 +171,41 @@ describe('calculateFuelCycles — chain origin + odometer regression', () => {
   });
 });
 
-describe('calculateFuelCycles — rideshare default close mode', () => {
-  it('does not close on stacked partials when cycleCloseMode is unset (rideshare default)', () => {
-    // 36L tank: 20+20 would close under cumulative_98 (~98%) but not rideshare
+describe('calculateFuelCycles — unset close mode defaults to cumulative_98', () => {
+  it('closes on stacked partials when cycleCloseMode is unset (matches server snapshot)', () => {
+    // 36L tank: 20+16 hits ~98% under cumulative_98; origin seeds the chain
+    const entries: FuelEntry[] = [
+      entry({
+        id: 'origin',
+        date: '2026-08-04T10:00:00',
+        odometer: 100000,
+        liters: 35,
+        metadata: {
+          isSoftAnchor: true,
+          isFullTank: true,
+          isCapacityClose: true,
+          volumeContributed: 35,
+        },
+      }),
+      entry({ id: 'p1', date: '2026-08-05T10:00:00', odometer: 100300, liters: 20 }),
+      entry({ id: 'p2', date: '2026-08-06T10:00:00', odometer: 100600, liters: 16 }),
+    ];
+    const closed = calculateFuelCycles(entries, [vehicle]).filter((c) => c.status !== 'Active');
+    expect(closed.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('does not stack-close when vehicle opts into rideshare', () => {
+    const rsVehicle = {
+      id: '5179KZ',
+      specifications: { tankCapacity: 36 },
+      fuelSettings: { cycleCloseMode: 'rideshare' },
+    } as Vehicle;
     const entries: FuelEntry[] = [
       entry({ id: 'p1', date: '2026-08-04T10:00:00', odometer: 100000, liters: 20 }),
       entry({ id: 'p2', date: '2026-08-05T10:00:00', odometer: 100300, liters: 20 }),
       entry({ id: 'p3', date: '2026-08-06T10:00:00', odometer: 100600, liters: 10 }),
     ];
-    const closed = calculateFuelCycles(entries, [vehicle]).filter((c) => c.status !== 'Active');
+    const closed = calculateFuelCycles(entries, [rsVehicle]).filter((c) => c.status !== 'Active');
     expect(closed).toHaveLength(0);
   });
 

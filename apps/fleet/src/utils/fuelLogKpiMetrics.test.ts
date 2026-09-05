@@ -179,4 +179,26 @@ describe('buildCycleKpis', () => {
       }).exceptions,
     ).toBe(1);
   });
+
+  it('does not throw when trusted is missing or a legacy array is passed', () => {
+    expect(buildCycleKpis(undefined).totalCycles).toBe(0);
+    expect(buildCycleKpis({} as any).totalCycles).toBe(0);
+    expect(
+      buildCycleKpis([
+        {
+          id: 'c1',
+          vehicleId: 'v1',
+          startDate: '2026-08-01',
+          endDate: '2026-08-10',
+          totalLiters: 20,
+          totalCost: 100,
+          avgPricePerLiter: 5,
+          transactions: [],
+          status: 'Complete',
+          distance: 100,
+          efficiency: 5,
+        },
+      ] as FuelCycle[]).totalCycles,
+    ).toBe(1);
+  });
 });

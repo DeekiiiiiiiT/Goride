@@ -515,7 +515,7 @@ export function FuelLogTable({
         ? toEntryYmd(dateRange.from)
         : null;
     const term = searchTerm.trim().toLowerCase();
-    return allCycles.filter((c) => {
+    return (allCycles ?? []).filter((c) => {
       if (filterVehicle !== 'all' && c.vehicleId !== filterVehicle) return false;
       if (filterStatus === 'Flagged' && c.status !== 'Anomaly' && c.signalTier !== 'exception')
         return false;
@@ -971,7 +971,6 @@ export function FuelLogTable({
             onView={setViewingEntry}
             onEdit={onEdit}
             onDelete={onDelete}
-            onCycleClick={(cycleId, vehicleId) => applyCycleFilter(cycleId, vehicleId, true)}
             onPageChange={setPage}
           />
         ) : (

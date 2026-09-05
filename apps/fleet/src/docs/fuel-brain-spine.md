@@ -5,8 +5,8 @@ Single source of truth for tank integrity vs km attribution vs stop-to-stop diag
 | Concern | Owner | Must not invent |
 |---|---|---|
 | Cycle stamp + lane split | Server `fuel_cycle_stamp.ts` | Ad-hoc cycle math in `index.tsx` / `fuel_controller.tsx` |
-| Close policy (rideshare default) | `fuel_cycle_close_policy.ts` | Client-only 98% stacking unless org opts into `cumulative_98` |
-| Cycle snapshots | `fuel_cycle_snapshot.ts` + `GET /fuel/cycles` | Client re-derive when server snapshot available |
+| Close policy (unset = cumulative_98) | `fuel_cycle_close_policy.ts` + snapshot | Force rideshare without vehicle/org flag |
+| Cycle snapshots | `fuel_cycle_snapshot.ts` + `GET /fuel/cycles` | Client re-derive when server snapshot is healthy |
 | Log KPI roll-up | `GET /fuel/log-summary` | Client totals when server summary available |
 | Corrections to sealed rows | `fuel_entry_corrections` table + `correctionReason` | Client `bypassSignatureCheck` (removed) |
 | Week health Emerald/Amber/Red | `fuelCalculationService.ts` | Bucket ±20% variance as primary Amber |
@@ -17,16 +17,19 @@ Single source of truth for tank integrity vs km attribution vs stop-to-stop diag
 `utils/fuelCycleEngine.ts` (`calculateFuelCycles`) is the **fallback**, not the source of truth.
 `useFuelCycles` / `pickFuelCyclesSource` (via `api.getFuelCycles`):
 
-- **Server wins** whenever `GET /fuel/cycles` succeeds (`serverCycles != null`), including an empty list.
+- **Server preferred** when `GET /fuel/cycles` succeeds with a healthy Complete count.
+- **Client bridge** when the server returns Active/Anomaly-only (or fewer Completes than the
+  client) — logs `[pickFuelCyclesSource] … under-reports Completes`. Prevents Full Tanks from
+  collapsing into one Exception mega-cycle after a close-mode mismatch.
 - **Client only** when the server fetch fails/disabled (`serverCycles === null`), or when
   `VITE_FUEL_CYCLE_LEGACY_CLIENT=1` / `opts.legacyClient` is set.
-- There is **no** client override when the server under-reports Completes — trust the snapshot.
 - Log KPIs similarly prefer `GET /fuel/log-summary` (`useFuelLogSummary`) when only period/vehicle
   filters are active; extra filters (search, integrity, cycleId, …) keep client KPIs so KPI≡list.
 
 The client engine also no longer fabricates a 40 L tank: a vehicle with no configured tank
-capacity is skipped entirely. Missing `cycleCloseMode` defaults to **`rideshare`** (not
-`cumulative_98`).
+capacity is skipped entirely. Missing `cycleCloseMode` defaults to **`cumulative_98`** (same as
+`fuel_cycle_snapshot.ts`) so historical fleets keep stacking closes; set `rideshare` explicitly
+to require a single fill ≥ 90% tank.
 
 ## Corrections replace bypassSignatureCheck
 
@@ -47,14 +50,14 @@ Card ops log      ──► after CSV match: liters count on the Gas Card ops ro
 
 **Matched pairs** (`jaaMatchedStatementId` ↔ `jaaMatchedDriverEntryId`) count as **one** swipe for frequency; frequency flags suppressed. Awaiting (pre-match) Gas Card anchors contribute **0** liters until statement liters land.
 
-**5179KZ / fleets that expect “every full tank ≈ tank capacity liters”:** set `vehicle.fuelSettings.cycleCloseMode = cumulative_98` (default org-wide is still `rideshare`).
+**5179KZ / fleets that expect “every full tank ≈ tank capacity liters”:** unset mode already uses `cumulative_98`; set `vehicle.fuelSettings.cycleCloseMode = rideshare` only when single-fill closes are required.
 
 ## Close modes
 
 | Mode | Default | Closes when |
 |---|---|---|
-| `rideshare` | **Yes (all fleets)** | Single fill ≥ 90% tank, admin confirmed full, week finalize |
-| `cumulative_98` | Org opt-in (`fuelSettings.cycleCloseMode`) | Legacy 98% partial stacking + SPLIT |
+| `cumulative_98` | **Yes (unset vehicle/org)** | Stacked fills reach ~98% tank + SPLIT |
+| `rideshare` | Explicit opt-in | Single fill ≥ 90% tank, admin confirmed full, week finalize |
 
 Org flag: `vehicle.fuelSettings.cycleCloseMode` or `config:audit_settings.cycleCloseMode`.
 

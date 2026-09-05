@@ -23,17 +23,23 @@ describe('pickFuelCyclesSource', () => {
     vi.restoreAllMocks();
   });
 
-  it('always returns server when fetch succeeded (even Active-only / fewer Completes)', () => {
+  it('uses client when server is Active-only and client found Completes', () => {
+    const info = vi.spyOn(console, 'info').mockImplementation(() => {});
     const server = [cycle({ id: 'active_v1', status: 'Active', distance: 2545, totalLiters: 241 })];
     const client = [
       cycle({ id: 'c1', status: 'Complete' }),
       cycle({ id: 'c2', status: 'Complete' }),
       cycle({ id: 'active_v1', status: 'Active', totalLiters: 20 }),
     ];
-    expect(pickFuelCyclesSource(server, client)).toBe(server);
+    expect(pickFuelCyclesSource(server, client)).toBe(client);
+    expect(info).toHaveBeenCalledWith(
+      expect.stringContaining('under-reports Completes'),
+      expect.any(Object),
+    );
   });
 
-  it('keeps server Anomaly+Active even when client found more Completes', () => {
+  it('uses client when client found more Completes than server', () => {
+    const info = vi.spyOn(console, 'info').mockImplementation(() => {});
     const server = [
       cycle({
         id: 'mega',
@@ -58,11 +64,18 @@ describe('pickFuelCyclesSource', () => {
       cycle({ id: 'c3', status: 'Complete', startDate: '2026-08-20', endDate: '2026-08-21' }),
       cycle({ id: 'c4', status: 'Complete', startDate: '2026-08-21', endDate: '2026-08-25' }),
     ];
-    expect(pickFuelCyclesSource(server, client)).toBe(server);
+    expect(pickFuelCyclesSource(server, client)).toBe(client);
+    expect(info).toHaveBeenCalledWith(
+      expect.stringContaining('under-reports Completes'),
+      expect.any(Object),
+    );
   });
 
-  it('returns empty server list when fetch succeeded with no cycles', () => {
-    const server: FuelCycle[] = [];
+  it('keeps server when it has at least as many Completes as client', () => {
+    const server = [
+      cycle({ id: 's1', status: 'Complete' }),
+      cycle({ id: 's2', status: 'Complete' }),
+    ];
     const client = [cycle({ id: 'c1', status: 'Complete' })];
     expect(pickFuelCyclesSource(server, client)).toBe(server);
   });

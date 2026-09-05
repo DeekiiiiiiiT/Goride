@@ -197,9 +197,12 @@ export function buildVehicleCycleSnapshot(
       ? Math.max(0, Number(entry.liters) || Number(m.fuelVolume) || 0)
       : 0;
 
-    // Unstamped fills used to be appended forever → one Active mega-cycle for the week.
-    // Derive capacity closes the same way the stamp path / client engine do.
-    if (!isAnchor && isLegacyRow(entry) && tankCapacity > 0 && volumeAtEntry > 0) {
+    // Unstamped OR partially stamped fills without a close flag used to append
+    // forever → one Active mega-cycle for the week. Derive capacity closes the
+    // same way the stamp path / client engine do whenever this fill is not
+    // already an anchor (do not require isLegacyRow — volumeContributed alone
+    // must not block closes).
+    if (!isAnchor && tankCapacity > 0 && volumeAtEntry > 0) {
       const decision = evaluateCycleClose({
         closeMode,
         prevCumulative: prevCumulative(),

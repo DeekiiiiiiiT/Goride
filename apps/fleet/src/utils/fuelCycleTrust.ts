@@ -106,7 +106,7 @@ export function isCompleteCloseInPeriod(
  * vs exception / next-week spillover.
  */
 export function partitionCyclesForPeriod(
-  cycles: FuelCycle[],
+  cycles: FuelCycle[] | null | undefined,
   period: PeriodBoundsYmd,
   opts?: PartitionOpts,
 ): CyclePartition {
@@ -120,7 +120,7 @@ export function partitionCyclesForPeriod(
     exceptions.push(c);
   };
 
-  for (const cycle of cycles) {
+  for (const cycle of cycles ?? []) {
     if (isIncompleteMegaCycle(cycle, period, opts)) {
       pushException(cycle);
       continue;

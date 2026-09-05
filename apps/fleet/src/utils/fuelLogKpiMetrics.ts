@@ -61,9 +61,9 @@ function inDateRange(date: string | undefined | null, range?: DateRangeYmd): boo
  * Only positive deltas count (backwards odo not treated as distance).
  * Entries must already be scoped (period + vehicle + search).
  */
-export function sumOdometerDeltasBetweenFills(entries: FuelEntry[]): number {
+export function sumOdometerDeltasBetweenFills(entries: FuelEntry[] | null | undefined): number {
   const byVehicle = new Map<string, FuelEntry[]>();
-  for (const e of entries) {
+  for (const e of entries ?? []) {
     if (isJaaStatementLedgerRow(e)) continue;
     const key = e.vehicleId || 'unknown';
     if (!byVehicle.has(key)) byVehicle.set(key, []);
@@ -99,13 +99,13 @@ export function sumOdometerDeltasBetweenFills(entries: FuelEntry[]): number {
  * `entries` must already be filtered to the visible table population.
  */
 export function buildTransactionKpis(
-  entries: FuelEntry[],
+  entries: FuelEntry[] | null | undefined,
   opts: TransactionKpiOptions = {},
 ): TransactionKpis {
   const { integrityById, validAnchorIds } = opts;
 
   // Defensive: never count statement ledger even if a caller forgot to strip it
-  const periodEntries = entries.filter((e) => !isJaaStatementLedgerRow(e));
+  const periodEntries = (entries ?? []).filter((e) => !isJaaStatementLedgerRow(e));
 
   const portal = periodEntries.filter((e) => resolveFuelEntrySource(e) === 'driver-portal').length;
   const admin =
@@ -151,22 +151,33 @@ export type BuildCycleKpisArgs = {
 /**
  * Build Full Tanks KPI set from the trusted partition.
  * Total = Done + Active (exceptions counted separately, not in totalCycles).
+ * Accepts the object form (preferred) or a legacy FuelCycle[] for HMR/call-site safety.
  */
-export function buildCycleKpis(args: BuildCycleKpisArgs): CycleKpis {
-  const trusted = args.trusted;
-  const exceptionRows = args.exceptions ?? [];
+export function buildCycleKpis(args: BuildCycleKpisArgs | FuelCycle[] | null | undefined): CycleKpis {
+  const trusted = Array.isArray(args)
+    ? args
+    : Array.isArray(args?.trusted)
+      ? args.trusted
+      : [];
+  const exceptionRows = Array.isArray(args)
+    ? []
+    : Array.isArray(args?.exceptions)
+      ? args.exceptions
+      : [];
+  const clippedTotals = Array.isArray(args) ? undefined : args?.clippedTotals;
+
   const completed = trusted.filter((c) => c.status === 'Complete').length;
   const active = trusted.filter((c) => c.status === 'Active').length;
   const exceptions = exceptionRows.length;
 
   const totalDistance =
-    args.clippedTotals?.distanceKm ??
+    clippedTotals?.distanceKm ??
     trusted.reduce((s, c) => s + (Number(c.distance) || 0), 0);
   const totalFuel =
-    args.clippedTotals?.fuelL ??
+    clippedTotals?.fuelL ??
     trusted.reduce((s, c) => s + (Number(c.totalLiters) || 0), 0);
   const totalSpend =
-    args.clippedTotals?.spend ??
+    clippedTotals?.spend ??
     trusted.reduce((s, c) => s + (Number(c.totalCost) || 0), 0);
 
   const withEff = trusted.filter(

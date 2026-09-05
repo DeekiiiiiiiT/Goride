@@ -56,9 +56,11 @@ function legacyClientForced(): boolean {
 }
 
 /**
- * Server snapshot wins whenever the fetch succeeded (`serverCycles != null`)
- * and legacy mode is off. Client engine is only used when the server fetch
- * failed/disabled (`null`) or `VITE_FUEL_CYCLE_LEGACY_CLIENT` / opts.legacy.
+ * Prefer server snapshots when the fetch succeeded.
+ * Bridge: if the server only returns Active/Anomaly while the client engine
+ * found real Completes (capacity closes), keep the client result and log —
+ * otherwise Full Tanks collapses into one Exception mega-cycle after a
+ * rideshare/stale-edge mismatch. Remove after edge snapshot soak is trusted.
  */
 export function pickFuelCyclesSource(
   serverCycles: FuelCycle[] | null,
@@ -77,6 +79,20 @@ export function pickFuelCyclesSource(
     return clientCycles;
   }
   if (serverCycles != null) {
+    const serverComplete = serverCycles.filter((c) => c.status === 'Complete').length;
+    const clientComplete = clientCycles.filter((c) => c.status === 'Complete').length;
+    const serverOnlyActive =
+      serverCycles.length > 0 &&
+      serverComplete === 0 &&
+      serverCycles.every((c) => c.status === 'Active' || c.status === 'Anomaly');
+    if ((serverOnlyActive && clientComplete > 0) || clientComplete > serverComplete) {
+      console.info('[pickFuelCyclesSource] client cycles — server under-reports Completes', {
+        serverComplete,
+        clientComplete,
+        serverCount: serverCycles.length,
+      });
+      return clientCycles;
+    }
     return serverCycles;
   }
   console.info('[pickFuelCyclesSource] client cycles — server fetch failed or unavailable');

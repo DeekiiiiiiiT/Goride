@@ -37,7 +37,7 @@ export function FuelLogKpiRow({
 }) {
   if (!tiles.length) return null;
   return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
       {tiles.map((t) => {
         const clickable = !!onTileClick && (t.filterable || t.id === 'imbalanced' || t.id === 'exceptions');
         return (
@@ -58,14 +58,22 @@ export function FuelLogKpiRow({
                 : undefined
             }
             className={cn(
-              'p-3 transition-colors',
+              'px-2.5 py-1.5 shadow-none transition-colors',
               clickable && 'cursor-pointer hover:border-slate-300 hover:bg-slate-50/80',
               t.active && 'ring-2 ring-amber-400 border-amber-300',
             )}
           >
-            <div className="text-xs font-medium uppercase tracking-wide text-slate-500">{t.label}</div>
-            <div className={`mt-1 text-lg font-semibold ${toneClass[t.tone || 'default']}`}>{t.value}</div>
-            {t.hint ? <div className="mt-0.5 text-[11px] text-slate-400">{t.hint}</div> : null}
+            <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 leading-tight">
+              {t.label}
+            </div>
+            <div className={`text-base font-bold leading-tight ${toneClass[t.tone || 'default']}`}>
+              {t.value}
+            </div>
+            {t.hint ? (
+              <div className="text-[10px] text-slate-400 leading-tight truncate" title={t.hint}>
+                {t.hint}
+              </div>
+            ) : null}
           </Card>
         );
       })}

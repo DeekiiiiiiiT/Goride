@@ -31,7 +31,6 @@ import {
   AlertTriangle,
   ShieldCheck,
   HelpCircle,
-  RotateCcw,
   CheckCircle2,
   Eye,
 } from 'lucide-react';
@@ -140,7 +139,6 @@ export type FuelTransactionsTableProps = {
   onView: (entry: FuelEntry) => void;
   onEdit: (entry: FuelEntry) => void;
   onDelete: (id: string) => void;
-  onCycleClick: (cycleId: string, vehicleId?: string) => void;
   onPageChange: (page: number) => void;
 };
 
@@ -166,7 +164,6 @@ export function FuelTransactionsTable({
   onView,
   onEdit,
   onDelete,
-  onCycleClick,
   onPageChange,
 }: FuelTransactionsTableProps) {
   const sortIndicator = (field: 'date' | 'amount' | 'liters' | 'odometer') => {
@@ -218,7 +215,6 @@ export function FuelTransactionsTable({
                 Cost{sortIndicator('amount')}
               </button>
             </TableHead>
-            <TableHead className="text-center">Cycle</TableHead>
             <TableHead className="text-center">
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -243,7 +239,7 @@ export function FuelTransactionsTable({
         <TableBody>
           {filteredCount === 0 ? (
             <TableRow>
-              <TableCell colSpan={13} className="h-24 text-center">
+              <TableCell colSpan={12} className="h-24 text-center">
                 No transactions found
               </TableCell>
             </TableRow>
@@ -471,27 +467,6 @@ export function FuelTransactionsTable({
                     ) : (
                       formatFuelMoney(entry.amount ?? 0)
                     )}
-                  </TableCell>
-                  <TableCell className="text-center">
-                    {(() => {
-                      const cycleId = entry.metadata?.cycleId
-                        ? String(entry.metadata.cycleId)
-                        : '';
-                      if (!cycleId) return <span className="text-xs text-slate-300">—</span>;
-                      const shortId = cycleId.length > 8 ? `${cycleId.slice(0, 8)}…` : cycleId;
-                      return (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="h-6 gap-1 px-2 text-[11px] font-bold text-indigo-600 border-indigo-200 hover:bg-indigo-50"
-                          title={`Filter fills for Full Tank cycle ${cycleId}`}
-                          onClick={() => onCycleClick(cycleId, entry.vehicleId)}
-                        >
-                          <RotateCcw className="h-2.5 w-2.5" />
-                          {shortId}
-                        </Button>
-                      );
-                    })()}
                   </TableCell>
                   <TableCell>
                     <div className="flex justify-center">
