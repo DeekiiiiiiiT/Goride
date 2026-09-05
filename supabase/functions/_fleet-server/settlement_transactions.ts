@@ -74,6 +74,112 @@ export async function loadMirroredDriverTransactions(
   return (data || []).map((r: { payload: Record<string, unknown> }) => r.payload).filter(Boolean);
 }
 
+/** Drop mirror row(s) when the source transaction is deleted (Undo Pay / Collect). */
+export async function unmirrorSettlementTransactions(
+  transactionIds: string[],
+): Promise<void> {
+  const ids = [
+    ...new Set(
+      transactionIds.map((x) => String(x || "").trim()).filter(Boolean),
+    ),
+  ];
+  if (ids.length === 0) return;
+  const { error } = await ledgerSb()
+    .from("driver_settlement_transactions")
+    .delete()
+    .in("transaction_id", ids);
+  if (error) {
+    console.error("[settlement_transactions] unmirror failed:", error.message);
+  }
+}
+
+export async function unmirrorSettlementTransaction(
+  transactionId: string,
+): Promise<void> {
+  await unmirrorSettlementTransactions([transactionId]);
+}
+
+/**
+ * Mirror rows whose KV/fleet source is gone keep settlement_paid inflated after Undo.
+ * Purge those orphans and return Settlement Week anchors that need a cash re-sync.
+ */
+export async function purgeOrphanSettlementMirrorsForDriver(
+  driverId: string,
+): Promise<{ purgedCount: number; periodAnchors: string[] }> {
+  const id = String(driverId || "").trim();
+  if (!id) return { purgedCount: 0, periodAnchors: [] };
+
+  const mirrored = await loadMirroredDriverTransactions(id);
+  if (mirrored.length === 0) return { purgedCount: 0, periodAnchors: [] };
+
+  const txIds = mirrored.map((t) => String(t.id || "").trim()).filter(Boolean);
+  if (txIds.length === 0) return { purgedCount: 0, periodAnchors: [] };
+
+  const kv = await import("./kv_store.tsx");
+  const liveValues = await kv.mget(txIds.map((txId) => `transaction:${txId}`));
+
+  const orphanIds: string[] = [];
+  const anchors = new Set<string>();
+  for (let i = 0; i < mirrored.length; i++) {
+    if (liveValues[i]) continue;
+    const txId = txIds[i];
+    if (!txId) continue;
+    orphanIds.push(txId);
+    const anchor = resolveTransactionPeriodAnchor(mirrored[i]);
+    if (anchor && /^\d{4}-\d{2}-\d{2}$/.test(anchor)) anchors.add(anchor);
+  }
+
+  if (orphanIds.length > 0) {
+    await unmirrorSettlementTransactions(orphanIds);
+    console.warn(
+      `[settlement_transactions] purged ${orphanIds.length} orphan mirror(s) driver=${id}`,
+    );
+  }
+  return { purgedCount: orphanIds.length, periodAnchors: [...anchors] };
+}
+
+/** Desk Refresh heal: purge orphans for drivers with settlement activity in range, then re-sync weeks. */
+export async function repairOrphanSettlementMirrors(opts?: {
+  periodStart?: string;
+  periodEnd?: string;
+  limit?: number;
+}): Promise<{ drivers: number; purged: number; weeksSynced: number }> {
+  const limit = Math.min(Math.max(Number(opts?.limit) || 200, 1), 500);
+  let q = ledgerSb()
+    .from("driver_financial_periods")
+    .select("driver_id")
+    .gt("settlement_paid", 0.005)
+    .limit(limit * 4);
+  if (opts?.periodStart && /^\d{4}-\d{2}-\d{2}$/.test(opts.periodStart)) {
+    q = q.gte("period_anchor", opts.periodStart);
+  }
+  if (opts?.periodEnd && /^\d{4}-\d{2}-\d{2}$/.test(opts.periodEnd)) {
+    q = q.lte("period_anchor", opts.periodEnd);
+  }
+  const { data, error } = await q;
+  if (error) {
+    console.error("[settlement_transactions] repair driver list failed:", error.message);
+    throw new Error(error.message);
+  }
+
+  const driverIds = [
+    ...new Set((data || []).map((r: { driver_id: string }) => String(r.driver_id)).filter(Boolean)),
+  ].slice(0, limit);
+
+  const { syncPeriodCashFromTransactions } = await import("./driver_financial_periods.ts");
+  let purged = 0;
+  let weeksSynced = 0;
+  for (const driverId of driverIds) {
+    const result = await purgeOrphanSettlementMirrorsForDriver(driverId);
+    purged += result.purgedCount;
+    for (const anchor of result.periodAnchors) {
+      await syncPeriodCashFromTransactions(driverId, anchor);
+      weeksSynced += 1;
+    }
+  }
+  return { drivers: driverIds.length, purged, weeksSynced };
+}
+
 export function settlementTxTableReadEnabled(): boolean {
   // Default ON after A-11 backfill+parity. Set SETTLEMENT_TX_TABLE_READ=false to roll back to fleet scan.
   const raw = Deno.env.get("SETTLEMENT_TX_TABLE_READ");

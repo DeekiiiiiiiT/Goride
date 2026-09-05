@@ -10,6 +10,7 @@
  *   GET  /driver-financial-periods/reconciled
  *   GET  /driver-financial-periods/:anchor?driverId=
  *   POST /driver-financial-periods/rebuild { driverId, periodAnchor? }
+ *   POST /driver-financial-periods/repair-orphan-mirrors { periodStart?, periodEnd?, limit? }
  *   POST /driver-financial-periods/process-outbox
  *   POST /driver-financial-periods/backfill { driverId?, dryRun? }
  *   GET  /driver-financial-periods/health
@@ -492,6 +493,25 @@ app.post(`${BASE}/rebuild`, requirePermission('transactions.edit'), async (c) =>
     const n = await rebuildAllPeriodsForDriver(driverId, { force: !!body.force });
     const periods = await listDriverFinancialPeriods(driverId);
     return c.json({ success: true, rebuilt: n.rebuilt, skippedSigned: n.skippedSigned, data: periods });
+  } catch (e: any) {
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+/**
+ * Heal Fleet owes after Undo: settlement mirror rows were left behind when txs deleted,
+ * so settlement_paid stayed high. Purge orphans in range and re-sync those weeks.
+ */
+app.post(`${BASE}/repair-orphan-mirrors`, requirePermission('transactions.edit'), async (c) => {
+  try {
+    const body = await c.req.json().catch(() => ({}));
+    const { repairOrphanSettlementMirrors } = await import("./settlement_transactions.ts");
+    const result = await repairOrphanSettlementMirrors({
+      periodStart: typeof body.periodStart === "string" ? body.periodStart.slice(0, 10) : undefined,
+      periodEnd: typeof body.periodEnd === "string" ? body.periodEnd.slice(0, 10) : undefined,
+      limit: body.limit != null ? Number(body.limit) : undefined,
+    });
+    return c.json({ success: true, ...result });
   } catch (e: any) {
     return c.json({ error: e.message }, 500);
   }

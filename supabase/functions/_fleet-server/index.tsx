@@ -3367,17 +3367,36 @@ function cashTxWeekAnchors(tx: unknown): { driverId: string; anchors: string[] }
 /**
  * After Log Cash / Reverse / Write-off: patch cash fields only on existing weeks.
  * Full rebuild here was rewriting passenger cash / fuel and making Driver owes jump.
+ * Also purges orphan settlement mirrors (Undo used to leave them, so Fleet owes never moved).
  */
 async function rebuildFinancialPeriodsForCashTx(next: unknown, previous: unknown): Promise<void> {
   try {
     const targets = new Map<string, Set<string>>();
+    const driverIds = new Set<string>();
     for (const t of [next, previous]) {
+      if (t && typeof t === "object") {
+        const did = String((t as Record<string, unknown>).driverId || "").trim();
+        if (did) driverIds.add(did);
+      }
       const info = cashTxWeekAnchors(t);
-      if (!info || info.anchors.length === 0) continue;
+      if (!info) continue;
+      driverIds.add(info.driverId);
+      if (info.anchors.length === 0) continue;
       const set = targets.get(info.driverId) || new Set<string>();
       for (const a of info.anchors) set.add(a);
       targets.set(info.driverId, set);
     }
+
+    const { purgeOrphanSettlementMirrorsForDriver } = await import("./settlement_transactions.ts");
+    for (const driverId of driverIds) {
+      const { periodAnchors, purgedCount } = await purgeOrphanSettlementMirrorsForDriver(driverId);
+      if (purgedCount > 0 || periodAnchors.length > 0) {
+        const set = targets.get(driverId) || new Set<string>();
+        for (const a of periodAnchors) set.add(a);
+        targets.set(driverId, set);
+      }
+    }
+
     if (targets.size === 0) return;
     const { syncPeriodCashFromTransactions } = await import("./driver_financial_periods.ts");
     for (const [driverId, anchors] of targets) {

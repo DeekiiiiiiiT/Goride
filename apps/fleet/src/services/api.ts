@@ -2665,6 +2665,42 @@ export const api = {
     return response.json();
   },
 
+  /** Heal Fleet owes after Undo left settlement mirror orphans behind. */
+  async repairOrphanSettlementMirrors(opts?: {
+    periodStart?: string;
+    periodEnd?: string;
+    limit?: number;
+  }) {
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.financial}/driver-financial-periods/repair-orphan-mirrors`,
+      {
+        method: "POST",
+        headers: await requireAuthHeaders(),
+        body: JSON.stringify({
+          periodStart: opts?.periodStart,
+          periodEnd: opts?.periodEnd,
+          limit: opts?.limit,
+        }),
+      },
+    );
+    if (!response.ok) {
+      let detail = "Failed to repair settlement mirrors";
+      try {
+        const body = await response.json();
+        if (body?.error) detail = String(body.error);
+      } catch {
+        /* keep default */
+      }
+      throw new Error(detail);
+    }
+    return response.json() as Promise<{
+      success: boolean;
+      drivers: number;
+      purged: number;
+      weeksSynced: number;
+    }>;
+  },
+
   /** Unlock Pay before tolls are clear — reason required (audited). */
   async forceReleaseDriverFinancialPeriod(
     driverId: string,

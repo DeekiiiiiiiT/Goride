@@ -711,7 +711,15 @@ export function DriverSettlementsPage({
     0,
   );
 
-  const refreshAll = () => {
+  const refreshAll = async () => {
+    try {
+      await api.repairOrphanSettlementMirrors({
+        periodStart: weekFrom,
+        periodEnd: weekTo,
+      });
+    } catch (e: any) {
+      console.warn("[DriverSettlements] orphan mirror repair failed:", e?.message || e);
+    }
     void qc.invalidateQueries({ queryKey: ['companyOwesPeriods'] });
     void qc.invalidateQueries({ queryKey: ['driverOwesPeriods'] });
     void qc.invalidateQueries({ queryKey: ['cashHeldPeriods'] });
@@ -978,7 +986,7 @@ export function DriverSettlementsPage({
         isDriverPayoutTransaction(txToReverse) ? 'Payout reversed' : 'Cash payment reversed',
       );
       setTxToReverse(null);
-      refreshAll();
+      await refreshAll();
     } catch (e: any) {
       toast.error(e?.message || 'Failed to reverse');
     } finally {

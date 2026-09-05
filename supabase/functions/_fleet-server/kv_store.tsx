@@ -88,6 +88,16 @@ export const get = async (key: string): Promise<any> => {
   return data?.value;
 };
 
+async function afterSettlementTxDelete(key: string): Promise<void> {
+  if (!key.startsWith("transaction:")) return;
+  try {
+    const { unmirrorSettlementTransaction } = await import("./settlement_transactions.ts");
+    await unmirrorSettlementTransaction(key.slice("transaction:".length));
+  } catch (e) {
+    console.error("[kv] settlement transaction unmirror failed:", key, e);
+  }
+}
+
 // Delete deletes a key-value pair.
 export const del = async (key: string): Promise<void> => {
   const writeKv = await allowLegacyWrite(key);
@@ -99,6 +109,7 @@ export const del = async (key: string): Promise<void> => {
     }
   }
   await afterDelete(key);
+  await afterSettlementTxDelete(key);
 };
 
 // Sets multiple key-value pairs.
@@ -156,6 +167,7 @@ export const mdel = async (keys: string[]): Promise<void> => {
     }
   }
   await Promise.all(keys.map((k) => afterDelete(k)));
+  await Promise.all(keys.map((k) => afterSettlementTxDelete(k)));
 };
 
 /**
