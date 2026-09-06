@@ -325,11 +325,20 @@ export function DriversPage({
   }, [rosterLoading]);
   const enrichEnabled = enrichReady;
 
-  // Keep getDrivers for mutations / detail profile merge (bankInfo, etc.)
+  // List-tier enrich fights money-tab APIs for HTTP/1.1 slots (ROAM-FLEET-10).
+  // Inline gates — Vite HMR TDZ on const bindings (ROAM-FLEET-1Z/1D).
+  const onMoneyDeepLink =
+    Boolean(selectedDriverId) &&
+    (detailTab === 'financial' || detailTab === 'wallet');
+  // List enrich only — vehicle-metrics lives in DriverDetail (ops tabs).
+  const listEnrichOk = enrichEnabled && !onMoneyDeepLink;
+
+  // Keep getDrivers for mutations / detail profile merge (bankInfo, etc.).
+  // Skip while money deep-link is loading so ledger APIs own the HTTP/1.1 slots.
   const { data: manualDrivers = [], isError: driversLoadError, error: driversError } = useQuery({
     queryKey: ['drivers'],
     queryFn: () => api.getDrivers(),
-    enabled: enrichEnabled,
+    enabled: listEnrichOk,
     staleTime: 5 * 60 * 1000,
     gcTime: 15 * 60 * 1000,
     refetchOnWindowFocus: false,
@@ -360,29 +369,10 @@ export function DriversPage({
     }
   }, [rosterTruncated]);
 
-  // List-tier enrich fights money-tab APIs for HTTP/1.1 slots on financial deep-links.
-  const onMoneyDeepLink =
-    Boolean(selectedDriverId) &&
-    (detailTab === 'financial' || detailTab === 'wallet');
-  // Ops tabs only — financial/wallet deep-links must not pull fleet vehicle-metrics (ROAM-FLEET-10).
-  const needsVehicleMetrics =
-    Boolean(selectedDriverId) &&
-    (detailTab === 'overview' || detailTab === 'quality');
-
   const { data: importedMetrics = [] } = useQuery({
     queryKey: ['driverMetrics'],
     queryFn: () => api.getDriverMetrics().catch(() => []),
-    enabled: enrichEnabled && !onMoneyDeepLink,
-    staleTime: 5 * 60 * 1000,
-    gcTime: 15 * 60 * 1000,
-    refetchOnWindowFocus: false,
-    refetchOnMount: false,
-  });
-
-  const { data: vehicleMetrics = [] } = useQuery({
-    queryKey: ['vehicleMetrics'],
-    queryFn: () => api.getVehicleMetrics().catch(() => []),
-    enabled: enrichEnabled && needsVehicleMetrics,
+    enabled: listEnrichOk,
     staleTime: 5 * 60 * 1000,
     gcTime: 15 * 60 * 1000,
     refetchOnWindowFocus: false,
@@ -392,7 +382,7 @@ export function DriversPage({
   const { data: earningsPolicyCtx } = useQuery({
     queryKey: ['earningsPolicyRuntimeContext'],
     queryFn: () => loadEarningsPolicyRuntimeContext(),
-    enabled: enrichEnabled && !onMoneyDeepLink,
+    enabled: listEnrichOk,
     staleTime: 10 * 60 * 1000,
     gcTime: 30 * 60 * 1000,
     refetchOnWindowFocus: false,
@@ -757,7 +747,6 @@ export function DriversPage({
         driver={selectedDriver}
         trips={[]}
         metrics={driverMetrics}
-        vehicleMetrics={vehicleMetrics}
         initialTab={detailTab}
         onTabChange={(tab) => {
           setDetailTab(tab);

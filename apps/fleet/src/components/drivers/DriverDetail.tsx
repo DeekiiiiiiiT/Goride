@@ -67,7 +67,7 @@ import {
   useDriverTransactions,
   mergeDriverMoneyTransactions,
 } from '../../hooks/useDriverTransactions';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useDriverTollLogs } from '../../hooks/useDriverTollLogs';
 import { useDriverDetailTrips } from '../../hooks/useDriverDetailTrips';
 import { useDriverDetailLedger } from '../../hooks/useDriverDetailLedger';
@@ -137,7 +137,6 @@ interface DriverDetailProps {
   /** Optional seed trips — detail always fetches its own full set. */
   trips?: Trip[];
   metrics?: DriverMetrics[];
-  vehicleMetrics?: import('../../types/data').VehicleMetrics[];
   onBack: () => void;
   /** Deep-link tab from `/drivers/:id/:tab` */
   initialTab?: DriverDetailTab | string;
@@ -158,7 +157,6 @@ function DriverDetailInner({
   driver,
   trips = [],
   metrics: csvMetrics,
-  vehicleMetrics,
   onBack,
   initialTab,
   onTabChange,
@@ -192,6 +190,16 @@ function DriverDetailInner({
   const moneyTabActive = activeTab === 'financial' || activeTab === 'wallet';
   /** Overview + Service Quality need trip history; money tabs must not paginate trips. */
   const tripsTabActive = activeTab === 'overview' || activeTab === 'quality';
+  // Fleet-wide vehicle-metrics only on ops tabs — never on money deep-links (ROAM-FLEET-10).
+  const { data: vehicleMetrics = [] } = useQuery({
+    queryKey: ['vehicleMetrics'],
+    queryFn: () => api.getVehicleMetrics().catch(() => []),
+    enabled: tripsTabActive,
+    staleTime: 5 * 60 * 1000,
+    gcTime: 15 * 60 * 1000,
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+  });
   const {
     paymentModalState,
     setPaymentModalState,

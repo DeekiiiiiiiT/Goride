@@ -48,26 +48,58 @@ export function tripHasMoneyForLedgerProjection(trip: any): boolean {
 }
 
 /**
- * Import pipeline gate: Authorization Bearer must be the project anon or service role key.
- * Mirrors the "key-checked" internal import pattern — not session RBAC.
+ * Import pipeline gate: Bearer must be a project anon or service_role JWT.
+ * Supabase gateway already validates the signature; we only accept those roles
+ * (not authenticated user sessions — those use the Repair route).
  */
 export function requireImportAnonOrServiceKey() {
   return async (c: Context, next: Next) => {
     const auth = c.req.header("Authorization") || "";
     const token = auth.replace(/^Bearer\s+/i, "").trim();
+    const apikey = (c.req.header("apikey") || "").trim();
     const anon = (Deno.env.get("SUPABASE_ANON_KEY") || "").trim();
     const service = (Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "").trim();
-    if (!token || (!anon && !service) || (token !== anon && token !== service)) {
+
+    const candidates = [token, apikey].filter(Boolean);
+    const exactMatch = candidates.some(
+      (t) => (anon && t === anon) || (service && t === service),
+    );
+
+    let roleOk = false;
+    for (const t of candidates) {
+      const role = jwtRoleClaim(t);
+      if (role === "anon" || role === "service_role") {
+        roleOk = true;
+        break;
+      }
+    }
+
+    if (!exactMatch && !roleOk) {
       return c.json(
         {
           error: "Unauthorized",
-          message: "POST /ledger/ensure-from-trip-ids/import requires the project anon or service role key.",
+          message:
+            "POST /ledger/ensure-from-trip-ids/import requires the project anon or service role key.",
         },
         401,
       );
     }
     return await next();
   };
+}
+
+function jwtRoleClaim(token: string): string | null {
+  try {
+    const parts = token.split(".");
+    if (parts.length < 2) return null;
+    const b64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    const pad = b64.length % 4 === 0 ? "" : "=".repeat(4 - (b64.length % 4));
+    const json = atob(b64 + pad);
+    const payload = JSON.parse(json) as { role?: string };
+    return typeof payload.role === "string" ? payload.role : null;
+  } catch {
+    return null;
+  }
 }
 
 async function handleEnsureFromTripIds(c: Context) {
