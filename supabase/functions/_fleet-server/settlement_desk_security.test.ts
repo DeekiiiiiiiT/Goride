@@ -23,8 +23,18 @@ Deno.test("S1-2b: org-A cannot mutate org-B transaction", () => {
   assertEquals(mayMutateTransactionOrg(ORG_B, ORG_A), false);
   assertEquals(mayMutateTransactionOrg(ORG_A, ORG_A), true);
   assertEquals(mayMutateTransactionOrg(ORG_A, null), true); // platform
-  assertEquals(mayMutateTransactionOrg(null, ORG_A), true); // legacy
-  assertEquals(mayMutateTransactionOrg("roam-default-org", ORG_A), true);
+});
+
+Deno.test("N-1: unstamped and legacy org fail closed when caller has org", () => {
+  assertEquals(mayMutateTransactionOrg(null, ORG_A), false);
+  assertEquals(mayMutateTransactionOrg("", ORG_A), false);
+  assertEquals(mayMutateTransactionOrg("roam-default-org", ORG_A), false);
+  // Burn-down escape hatch
+  assertEquals(mayMutateTransactionOrg(null, ORG_A, { denyUnstamped: false }), true);
+  assertEquals(
+    mayMutateTransactionOrg("roam-default-org", ORG_A, { denyUnstamped: false }),
+    true,
+  );
 });
 
 Deno.test("S1-3: reconciled periods filter by organizationId", () => {

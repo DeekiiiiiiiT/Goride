@@ -2,9 +2,13 @@
  * Settlement command API — Phase 3 immutable movements + dual-write to KV txs.
  *
  * Routes under /make-server-37f42386/settlements:
- *   POST /collect | /pay | /write-off | /reverse | /runs
- *   GET  /runs/:runId
+ *   POST /collect | /pay | /write-off | /reverse | /verify | /runs
+ *   GET  /runs/:runId | /queue | /movements
  *   POST /:movementId/approve
+ *
+ * N-3: Handlers use getServiceClient() (service_role) — RLS on settlement_* /
+ * driver_financial_periods is defence-in-depth for direct PostgREST only.
+ * Live tenant isolation is the organizationId threaded into every list/mutate.
  */
 import { Hono, type Context, type Next } from "npm:hono";
 import * as kv from "./kv_store.tsx";
@@ -28,6 +32,7 @@ import {
   toMinor,
   fromMinor,
   assertExpectedOutstanding,
+  assertPeriodCasClaimed,
   companyOwesResidual,
   driverOwesResidual,
   enforcePayCap,
@@ -37,6 +42,14 @@ import {
   type SettlementMovementKind,
 } from "./settlement_commands.ts";
 import { assertPeriodNotFrozen } from "./settlement_period_freeze.ts";
+import {
+  SETTLEMENT_APPROVAL_THRESHOLD,
+  requiresSettlementApproval,
+} from "../../../packages/finance-core/src/settlementApproval.ts";
+
+function requiresApproval(amount: number, threshold = SETTLEMENT_APPROVAL_THRESHOLD): boolean {
+  return requiresSettlementApproval(amount, threshold);
+}
 
 const app = new Hono();
 app.use("*", requireAuth({ strict: true }));
@@ -158,22 +171,40 @@ async function findMovementByIdempotency(
   return data as Record<string, unknown> | null;
 }
 
-async function bumpPeriodRowVersion(
+/**
+ * Load-bearing CAS: claim period write lock before any movement insert.
+ * Fails closed with STALE_RESIDUAL when another writer already bumped.
+ */
+async function claimPeriodWriteLock(
   driverId: string,
   periodAnchor: string,
   organizationId: string | null,
 ): Promise<void> {
   const existing = await loadPeriodDb(driverId, periodAnchor, organizationId);
-  if (!existing?.id) return;
-  const next = (Number(existing.row_version) || 1) + 1;
-  const { error } = await sb()
+  if (!existing?.id) {
+    throw new SettlementCommandError(
+      "PERIOD_NOT_FOUND",
+      "No financial period for this driver/week",
+      404,
+    );
+  }
+  const current = Number(existing.row_version) || 1;
+  const next = current + 1;
+  const { data, error } = await sb()
     .from("driver_financial_periods")
     .update({ row_version: next })
     .eq("id", existing.id)
-    .eq("row_version", Number(existing.row_version) || 1);
+    .eq("row_version", current)
+    .select("id")
+    .maybeSingle();
   if (error) {
-    console.warn("[settlements] row_version bump failed:", error.message);
+    throw new SettlementCommandError(
+      "STALE_RESIDUAL",
+      error.message || "Failed to claim period write lock",
+      409,
+    );
   }
+  assertPeriodCasClaimed(data);
 }
 
 async function loadDriverName(driverId: string): Promise<string> {
@@ -291,6 +322,9 @@ async function insertMovementAndDualWrite(
     metadata?: Record<string, unknown>;
   },
 ): Promise<{ movement: Record<string, unknown>; period: DriverFinancialPeriodRow | null }> {
+  // Claim lock first — two concurrent pays must not both insert.
+  await claimPeriodWriteLock(opts.driverId, opts.weekAnchor, opts.organizationId);
+
   const transactionId = crypto.randomUUID();
   const movementId = crypto.randomUUID();
   const driverName = await loadDriverName(opts.driverId);
@@ -352,7 +386,6 @@ async function insertMovementAndDualWrite(
   await kv.set(`transaction:${transactionId}`, stampOrg(tx, c));
 
   await syncPeriodCashFromTransactions(opts.driverId, opts.weekAnchor);
-  await bumpPeriodRowVersion(opts.driverId, opts.weekAnchor, opts.organizationId);
 
   const period = await getDriverFinancialPeriodDetail(opts.driverId, opts.weekAnchor);
   return { movement: inserted as Record<string, unknown>, period };
@@ -398,10 +431,16 @@ app.post(`${BASE}/collect`, requireSettlementPerm("settlements.collect"), async 
     const amount = Number(body.amount);
     const method = String(body.method || "Cash");
     const reference = body.reference ? String(body.reference) : undefined;
-    const reason = body.reason ? String(body.reason) : undefined;
+    const note = body.note ? String(body.note) : undefined;
+    const reasonFromBody = body.reason ? String(body.reason).trim() : "";
+    const overFromNote = note?.match(/\[Over-collection\]\s*(.+)/i)?.[1]?.trim() || "";
+    const reason = reasonFromBody || overFromNote || undefined;
     const idempotencyKey = String(body.idempotencyKey || "").trim();
     const expectedOutstanding = Number(body.expectedOutstanding);
-    const allowOver = !!body.allowOverCollect;
+    const allowOver =
+      !!body.allowOverCollect ||
+      !!body.allowOver ||
+      (!!reason && Number(body.amount) > Number(body.expectedOutstanding) + 0.005);
 
     if (!driverId || !/^\d{4}-\d{2}-\d{2}$/.test(weekAnchor) || !idempotencyKey) {
       return c.json({ error: "driverId, weekAnchor, and idempotencyKey are required" }, 400);
@@ -489,6 +528,7 @@ app.post(`${BASE}/pay`, requireSettlementPerm("settlements.pay"), async (c) => {
     // Entitlement = already paid + still owed (gross positive claim for the week).
     enforcePayCap(settlementPaid, settlementPaid + residual, amount);
 
+    const needsApproval = requiresApproval(amount) && method !== "Cash";
     const { movement, period } = await insertMovementAndDualWrite(c, {
       organizationId,
       actorId: user.userId,
@@ -500,11 +540,15 @@ app.post(`${BASE}/pay`, requireSettlementPerm("settlements.pay"), async (c) => {
       reference,
       reason,
       idempotencyKey,
-      // Large non-cash pays stay pending approval when threshold flag set later
-      approvalState: "none",
-      status: method === "Cash" ? "posted" : "pending",
+      approvalState: needsApproval ? "pending" : "none",
+      status: needsApproval ? "pending" : method === "Cash" ? "posted" : "pending",
     });
-    return c.json({ success: true, movement: mapMovement(movement), period: mapPeriod(period) });
+    return c.json({
+      success: true,
+      movement: mapMovement(movement),
+      period: mapPeriod(period),
+      requiresApproval: needsApproval,
+    });
   } catch (e) {
     return commandErrorResponse(c, e);
   }
@@ -581,12 +625,16 @@ app.post(`${BASE}/reverse`, requireSettlementPerm("settlements.reverse"), async 
     const user = c.get("rbacUser") as RbacUser;
     const body = await c.req.json();
 
-    const movementId = String(body.movementId || "").trim();
+    let movementId = String(body.movementId || "").trim();
+    const sourceTransactionId = String(body.sourceTransactionId || "").trim();
     const reason = String(body.reason || "").trim();
     const idempotencyKey = String(body.idempotencyKey || "").trim();
 
-    if (!movementId || !idempotencyKey) {
-      return c.json({ error: "movementId and idempotencyKey are required" }, 400);
+    if (!idempotencyKey) {
+      return c.json({ error: "idempotencyKey is required" }, 400);
+    }
+    if (!movementId && !sourceTransactionId) {
+      return c.json({ error: "movementId or sourceTransactionId is required" }, 400);
     }
     if (!reason) {
       return c.json({ error: "reason is required for reversals" }, 400);
@@ -599,6 +647,78 @@ app.post(`${BASE}/reverse`, requireSettlementPerm("settlements.reverse"), async 
         String(existing.period_anchor).slice(0, 10),
       );
       return c.json({ success: true, idempotent: true, movement: mapMovement(existing), period: mapPeriod(period) });
+    }
+
+    // Legacy bridge: resolve movement from dual-write / pre-migration transaction id.
+    if (!movementId && sourceTransactionId) {
+      const { data: byTx } = await sb()
+        .from("settlement_movements")
+        .select("*")
+        .eq("organization_id", organizationId)
+        .eq("source_transaction_id", sourceTransactionId)
+        .neq("kind", "reverse")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (byTx?.id) {
+        movementId = String(byTx.id);
+      } else {
+        // No movement row — void KV tx only (never hard-delete).
+        const tx = await kv.get(`transaction:${sourceTransactionId}`);
+        if (!tx || typeof tx !== "object") {
+          return c.json({ error: "MOVEMENT_NOT_FOUND", message: "No movement or transaction to reverse" }, 404);
+        }
+        const t = tx as Record<string, unknown>;
+        const driverId = String(t.driverId || "");
+        const meta = (t.metadata as Record<string, unknown>) || {};
+        const weekAnchor = String(meta.workPeriodStart || t.date || "").slice(0, 10);
+        if (!driverId || !/^\d{4}-\d{2}-\d{2}$/.test(weekAnchor)) {
+          return c.json({ error: "INVALID_TX", message: "Transaction missing driver/week for reverse" }, 400);
+        }
+        await claimPeriodWriteLock(driverId, weekAnchor, organizationId);
+        const next = {
+          ...t,
+          status: "Reversed",
+          isReconciled: false,
+          metadata: {
+            ...meta,
+            reversedAt: new Date().toISOString(),
+            reverseReason: reason,
+            reversedBy: user.userId,
+          },
+        };
+        await kv.set(`transaction:${sourceTransactionId}`, stampOrg(next, c));
+
+        const reverseRow = buildMovementRow({
+          organizationId,
+          driverId,
+          periodAnchor: weekAnchor,
+          kind: "reverse",
+          amountMinor: toMinor(Math.abs(Number(t.amount) || 0)),
+          method: t.paymentMethod ? String(t.paymentMethod) : null,
+          reference: t.referenceNumber ? String(t.referenceNumber) : null,
+          reason,
+          actorId: user.userId,
+          idempotencyKey,
+          status: "posted",
+          sourceTransactionId,
+          metadata: { legacyTxReverse: true, reversedKind: "legacy_tx" },
+        });
+        const { data: inserted, error: insErr } = await sb()
+          .from("settlement_movements")
+          .insert(reverseRow)
+          .select("*")
+          .single();
+        if (insErr) throw new Error(insErr.message);
+        await syncPeriodCashFromTransactions(driverId, weekAnchor);
+        const period = await getDriverFinancialPeriodDetail(driverId, weekAnchor);
+        return c.json({
+          success: true,
+          movement: mapMovement(inserted as Record<string, unknown>),
+          period: mapPeriod(period),
+          legacy: true,
+        });
+      }
     }
 
     const { data: original, error: loadErr } = await sb()
@@ -620,6 +740,9 @@ app.post(`${BASE}/reverse`, requireSettlementPerm("settlements.reverse"), async 
     const sourceTxId = original.source_transaction_id
       ? String(original.source_transaction_id)
       : null;
+
+    // Claim period lock before void + reverse insert.
+    await claimPeriodWriteLock(driverId, weekAnchor, organizationId);
 
     // Mark original void (append-only: row stays, status flips).
     await sb()
@@ -679,8 +802,169 @@ app.post(`${BASE}/reverse`, requireSettlementPerm("settlements.reverse"), async 
     if (insErr) throw new Error(insErr.message);
 
     await syncPeriodCashFromTransactions(driverId, weekAnchor);
-    await bumpPeriodRowVersion(driverId, weekAnchor, organizationId);
     const period = await getDriverFinancialPeriodDetail(driverId, weekAnchor);
+
+    return c.json({
+      success: true,
+      movement: mapMovement(inserted as Record<string, unknown>),
+      period: mapPeriod(period),
+    });
+  } catch (e) {
+    return commandErrorResponse(c, e);
+  }
+});
+
+// ── POST /verify — bank clear / verify pending movement or legacy tx ─────────
+app.post(`${BASE}/verify`, requireSettlementPerm("settlements.pay"), async (c) => {
+  try {
+    const orgOrResp = await requireOrgId(c);
+    if (typeof orgOrResp !== "string") return orgOrResp;
+    const organizationId = orgOrResp;
+    const user = c.get("rbacUser") as RbacUser;
+    const body = await c.req.json();
+
+    const movementId = String(body.movementId || "").trim();
+    const sourceTransactionId = String(body.sourceTransactionId || "").trim();
+    const idempotencyKey = String(body.idempotencyKey || "").trim();
+    const note = body.note ? String(body.note) : undefined;
+
+    if (!idempotencyKey) {
+      return c.json({ error: "idempotencyKey is required" }, 400);
+    }
+    if (!movementId && !sourceTransactionId) {
+      return c.json({ error: "movementId or sourceTransactionId is required" }, 400);
+    }
+
+    const existing = await findMovementByIdempotency(organizationId, idempotencyKey);
+    if (existing) {
+      return c.json({ success: true, idempotent: true, movement: mapMovement(existing) });
+    }
+
+    let targetMovement: Record<string, unknown> | null = null;
+    if (movementId) {
+      const { data, error } = await sb()
+        .from("settlement_movements")
+        .select("*")
+        .eq("id", movementId)
+        .eq("organization_id", organizationId)
+        .maybeSingle();
+      if (error) throw new Error(error.message);
+      targetMovement = data as Record<string, unknown> | null;
+    } else if (sourceTransactionId) {
+      const { data } = await sb()
+        .from("settlement_movements")
+        .select("*")
+        .eq("organization_id", organizationId)
+        .eq("source_transaction_id", sourceTransactionId)
+        .neq("kind", "reverse")
+        .neq("kind", "verify")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      targetMovement = data as Record<string, unknown> | null;
+    }
+
+    const txId =
+      (targetMovement?.source_transaction_id
+        ? String(targetMovement.source_transaction_id)
+        : null) ||
+      (sourceTransactionId || null);
+
+    if (txId) {
+      const tx = await kv.get(`transaction:${txId}`);
+      if (tx && typeof tx === "object") {
+        const next = {
+          ...(tx as Record<string, unknown>),
+          status: "Verified",
+          isReconciled: true,
+          metadata: {
+            ...(((tx as Record<string, unknown>).metadata as Record<string, unknown>) || {}),
+            verifiedAt: new Date().toISOString(),
+            verifiedBy: user.userId,
+            verifyNote: note || null,
+          },
+        };
+        await kv.set(`transaction:${txId}`, stampOrg(next, c));
+      }
+    }
+
+    if (targetMovement?.id) {
+      await sb()
+        .from("settlement_movements")
+        .update({
+          status: "posted",
+          metadata: {
+            ...((targetMovement.metadata as Record<string, unknown>) || {}),
+            verifiedAt: new Date().toISOString(),
+            verifiedBy: user.userId,
+            verifyNote: note || null,
+          },
+        })
+        .eq("id", String(targetMovement.id));
+    }
+
+    const driverId = targetMovement
+      ? String(targetMovement.driver_id)
+      : "";
+    const weekAnchor = targetMovement
+      ? String(targetMovement.period_anchor).slice(0, 10)
+      : "";
+
+    // Resolve driver/week from KV when no movement (legacy verify).
+    let resolvedDriver = driverId;
+    let resolvedWeek = weekAnchor;
+    if ((!resolvedDriver || !resolvedWeek) && txId) {
+      const tx = await kv.get(`transaction:${txId}`);
+      if (tx && typeof tx === "object") {
+        const t = tx as Record<string, unknown>;
+        const meta = (t.metadata as Record<string, unknown>) || {};
+        resolvedDriver = String(t.driverId || "");
+        resolvedWeek = String(meta.workPeriodStart || t.date || "").slice(0, 10);
+      }
+    }
+
+    if (!resolvedDriver || !/^\d{4}-\d{2}-\d{2}$/.test(resolvedWeek)) {
+      return c.json({ error: "VERIFY_TARGET_INVALID", message: "Could not resolve driver/week for verify" }, 400);
+    }
+
+    await claimPeriodWriteLock(resolvedDriver, resolvedWeek, organizationId);
+
+    const amountMinor = targetMovement
+      ? Number(targetMovement.amount_minor) || 0
+      : toMinor(
+        Math.abs(
+          Number(
+            ((await kv.get(`transaction:${txId}`)) as { amount?: number } | null)?.amount || 0,
+          ),
+        ),
+      );
+
+    const verifyRow = buildMovementRow({
+      organizationId,
+      driverId: resolvedDriver,
+      periodAnchor: resolvedWeek,
+      kind: "verify",
+      amountMinor,
+      method: targetMovement?.method ? String(targetMovement.method) : null,
+      reason: note,
+      actorId: user.userId,
+      idempotencyKey,
+      status: "posted",
+      sourceTransactionId: txId,
+      metadata: {
+        verifiedMovementId: targetMovement?.id ? String(targetMovement.id) : null,
+      },
+    });
+
+    const { data: inserted, error: insErr } = await sb()
+      .from("settlement_movements")
+      .insert(verifyRow)
+      .select("*")
+      .single();
+    if (insErr) throw new Error(insErr.message);
+
+    await syncPeriodCashFromTransactions(resolvedDriver, resolvedWeek);
+    const period = await getDriverFinancialPeriodDetail(resolvedDriver, resolvedWeek);
 
     return c.json({
       success: true,
@@ -739,7 +1023,10 @@ app.post(`${BASE}/runs`, requireSettlementPerm("settlements.pay"), async (c) => 
         effective_date: effectiveDate,
         status: "processing",
         idempotency_key: idempotencyKey,
-        metadata: { kind: runKind },
+        metadata: {
+          kind: runKind,
+          reference: body.reference ? String(body.reference) : null,
+        },
       })
       .select("*")
       .single();

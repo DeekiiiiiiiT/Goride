@@ -33,23 +33,32 @@ import {
 import { payOutstandingAmount } from '../../utils/driverSettlementsPayAmount';
 import { CSV_UTF8_BOM, csvRow } from '../../utils/csvSafeExport';
 import { DRIVER_FINANCIAL_PERIODS_KEY } from '../../hooks/useDriverFinancialPeriods';
-import type { SettlementQueueRow } from '../../hooks/useSettlementQueue';
+import {
+  useSettlementQueue,
+  settlementKeys,
+  type SettlementQueueRow,
+} from '../../hooks/useSettlementQueue';
 import { resolvePeriodTollCashWash } from '../../utils/periodTollCashSpend';
 import {
   OVERPAID_BADGE_TOOLTIP,
   collectKindTooltip,
   overpaidBadgeLabel,
 } from '../../utils/settlementDeskUx';
+import {
+  requiresApproval,
+  SETTLEMENT_APPROVAL_THRESHOLD,
+} from '../../utils/settlementEnterprise';
 import { BusinessFinanceDeskChrome } from '../business-finance/BusinessFinanceDeskChrome';
 import {
+  ApprovalQueue,
   MovementHistoryTable,
   SettlementFilters,
   SettlementKpiBar,
   SettlementQueueTable,
   type SettlementMovementRow,
 } from './settlements';
-import { settlementCommandsApi } from '../../services/settlementCommandsApi';
-import { newIdempotencyKey } from '../../hooks/useSettlementCommands';
+import { settlementCommandsApi, isSettlementCommandUnavailable } from '../../services/settlementCommandsApi';
+import { useSettlementCommands, newIdempotencyKey } from '../../hooks/useSettlementCommands';
 import { useServiceLineScopeParam } from '../../hooks/useServiceLineScopeParam';
 import {
   RecordPayoutModal,
@@ -258,6 +267,52 @@ function txSettlementWeekStart(t: FinancialTransaction): string {
   return ymdKey(t.metadata?.workPeriodStart || t.date);
 }
 
+/** True when id is a UUID (settlement_movements PK). */
+function looksLikeUuid(id: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+    String(id || '').trim(),
+  );
+}
+
+function mapApiMovementToRow(r: {
+  id: string;
+  kind: string;
+  driverId: string;
+  driverName?: string;
+  periodAnchor: string;
+  amount: number;
+  method?: string | null;
+  reference?: string | null;
+  reason?: string | null;
+  status?: string;
+  approvalState?: string;
+  sourceTransactionId?: string | null;
+  createdAt?: string;
+}): SettlementMovementRow {
+  return {
+    id: String(r.id),
+    kind: r.kind,
+    driverId: r.driverId,
+    driverName: r.driverName,
+    amount: Math.abs(Number(r.amount) || 0),
+    method: r.method || undefined,
+    status: r.status,
+    date: r.createdAt ? String(r.createdAt).slice(0, 10) : undefined,
+    periodAnchor: ymdKey(r.periodAnchor),
+    periodEnd: ymdKey(r.periodAnchor),
+    reference: r.reference || undefined,
+    description: r.reason || undefined,
+    approvalState: r.approvalState,
+    // Always set when from movements API (empty = no dual-write tx) so reverse/verify can detect movement rows.
+    sourceTransactionId: r.sourceTransactionId ? String(r.sourceTransactionId) : '',
+  };
+}
+
+type ReverseTarget = Pick<
+  SettlementMovementRow,
+  'id' | 'kind' | 'amount' | 'driverName' | 'sourceTransactionId'
+>;
+
 export function DriverSettlementsPage({
   onBackToBusinessFinance,
   onOpenDriver,
@@ -266,6 +321,7 @@ export function DriverSettlementsPage({
   onOpenDriver?: (driverId: string) => void;
 }) {
   const qc = useQueryClient();
+  const settlementCmds = useSettlementCommands();
   const { scope, serviceLineParam } = useServiceLineScopeParam();
   const thisMonday = format(startOfWeek(new Date(), { weekStartsOn: 1 }), 'yyyy-MM-dd');
   const [weekFrom, setWeekFrom] = useState(
@@ -334,7 +390,7 @@ export function DriverSettlementsPage({
     maxAmount: 0,
   });
 
-  const [txToReverse, setTxToReverse] = useState<FinancialTransaction | null>(null);
+  const [txToReverse, setTxToReverse] = useState<ReverseTarget | null>(null);
   const [reverseReason, setReverseReason] = useState('');
   const [reverseBusy, setReverseBusy] = useState(false);
   const [logCashDriverId, setLogCashDriverId] = useState('');
@@ -452,28 +508,68 @@ export function DriverSettlementsPage({
     },
   });
 
+  const movementsQuery = useQuery({
+    queryKey: settlementKeys.movements({
+      weekFrom,
+      weekTo,
+      kind: direction === 'pay' ? 'pay' : 'collect',
+    }),
+    queryFn: () =>
+      settlementCommandsApi.getMovements({
+        weekFrom,
+        weekTo,
+        kind: direction === 'pay' ? 'pay' : 'collect',
+        pageSize: 500,
+      }),
+    enabled: deskMode === 'collect' || deskMode === 'pay',
+  });
+
+  const pendingApprovalsQuery = useQuery({
+    queryKey: settlementKeys.movements({ weekFrom, weekTo, approvalState: 'pending' }),
+    queryFn: () =>
+      settlementCommandsApi.getMovements({
+        weekFrom,
+        weekTo,
+        approvalState: 'pending',
+        pageSize: 200,
+      }),
+    enabled: deskMode === 'collect' || deskMode === 'pay',
+  });
+
+  const queueQuery = useSettlementQueue(
+    {
+      view: deskMode === 'reconciled' ? 'reconciled' : direction === 'pay' ? 'pay' : 'collect',
+      weekFrom,
+      weekTo,
+      minAmount: minAmount ? Number(minAmount) : 0,
+      scope,
+      search,
+      pageSize: 200,
+      groupBy: 'week',
+    },
+    { enabled: deskMode !== 'log-cash' },
+  );
+
   const txsQuery = useQuery({
     queryKey: ['driverSettlementsTransactions', weekFrom, weekTo, scope],
     queryFn: async () => {
-      const all: FinancialTransaction[] = [];
-      const pageSize = 5000;
-      let offset = 0;
-      while (offset < 50000) {
-        const page = await api.getTransactions(undefined, {
-          limit: pageSize,
-          offset,
-          startDate: weekFrom,
-          endDate: weekTo,
-          desk: 'settlements',
-          ...(serviceLineParam ? { serviceLine: serviceLineParam } : {}),
-        });
-        const batch = (Array.isArray(page) ? page : page?.data || []) as FinancialTransaction[];
-        all.push(...batch.filter(Boolean));
-        if (batch.length < pageSize) break;
-        offset += pageSize;
-      }
-      return all;
+      // Cap at one page — prefer movementsQuery for awaiting/done/cleared KPIs.
+      const page = await api.getTransactions(undefined, {
+        limit: 5000,
+        offset: 0,
+        startDate: weekFrom,
+        endDate: weekTo,
+        desk: 'settlements',
+        ...(serviceLineParam ? { serviceLine: serviceLineParam } : {}),
+      });
+      return (Array.isArray(page) ? page : page?.data || []) as FinancialTransaction[];
     },
+    enabled:
+      movementsQuery.isError ||
+      (movementsQuery.isSuccess && (movementsQuery.data?.rows?.length ?? 0) === 0) ||
+      deskMode === 'reconciled' ||
+      reconciledOverlay.open ||
+      deskMode === 'log-cash',
   });
 
   const driversQuery = useQuery({
@@ -539,21 +635,68 @@ export function DriverSettlementsPage({
 
   const outstandingRows = direction === 'collect' ? collectOutstanding : payOutstanding;
   const outstandingAllRows = direction === 'collect' ? collectOutstandingAll : payOutstandingAll;
-  const outstandingShowingAmount = outstandingRows.reduce(
-    (s, r) => s + (direction === 'collect' ? collectAmount(r) : payOutstandingAmount(r)),
-    0,
-  );
-  const outstandingTotalAmount = outstandingAllRows.reduce(
-    (s, r) => s + (direction === 'collect' ? collectAmount(r) : payOutstandingAmount(r)),
-    0,
-  );
-  const outstandingQueueRows = useMemo(
+
+  const legacyOutstandingQueueRows = useMemo(
     () => outstandingRows.map((r) => toSettlementQueueRow(r, direction)),
     [outstandingRows, direction],
   );
 
+  // Prefer GET /settlements/queue; fall back to legacy period mapping during cutover.
+  const outstandingQueueRows = useMemo(() => {
+    const fromQueue = queueQuery.data?.rows;
+    if (fromQueue && fromQueue.length > 0) return fromQueue;
+    return legacyOutstandingQueueRows;
+  }, [queueQuery.data?.rows, legacyOutstandingQueueRows]);
+
+  const outstandingShowingAmount = outstandingQueueRows.reduce(
+    (s, r) => s + (direction === 'collect' ? collectAmount(r as PeriodRow) : payOutstandingAmount(r)),
+    0,
+  );
+  const outstandingTotalAmount =
+    queueQuery.data?.totals?.amountOwedMinor != null && (queueQuery.data?.rows?.length ?? 0) > 0
+      ? (queueQuery.data.totals.amountOwedMinor || 0) / 100
+      : outstandingAllRows.reduce(
+          (s, r) => s + (direction === 'collect' ? collectAmount(r) : payOutstandingAmount(r)),
+          0,
+        );
+
+  const apiMovementRows = useMemo(() => {
+    const raw = movementsQuery.data?.rows || [];
+    return raw.map((r) => mapApiMovementToRow(r as Parameters<typeof mapApiMovementToRow>[0]));
+  }, [movementsQuery.data?.rows]);
+
+  const pendingApprovalRows = useMemo(() => {
+    const raw = pendingApprovalsQuery.data?.rows || [];
+    return raw.map((r) => mapApiMovementToRow(r as Parameters<typeof mapApiMovementToRow>[0]));
+  }, [pendingApprovalsQuery.data?.rows]);
+
   const awaitingRows = useMemo(() => {
     const q = search.trim().toLowerCase();
+    if (apiMovementRows.length > 0) {
+      return apiMovementRows
+        .filter((m) => {
+          const st = String(m.status || '').toLowerCase();
+          const ap = String(m.approvalState || '').toLowerCase();
+          if (st !== 'pending') return false;
+          if (ap === 'pending') return false; // approval queue owns maker-checker rows
+          if (direction === 'pay' && m.kind !== 'pay') return false;
+          if (direction === 'collect' && m.kind !== 'collect') return false;
+          if (!q) return true;
+          return (
+            String(m.driverName || '').toLowerCase().includes(q) ||
+            String(m.driverId || '').toLowerCase().includes(q) ||
+            String(m.periodAnchor || '').includes(q)
+          );
+        })
+        .sort((a, b) => {
+          const week = ymdKey(b.periodAnchor).localeCompare(ymdKey(a.periodAnchor));
+          if (week !== 0) return week;
+          return String(a.driverName || '').localeCompare(String(b.driverName || ''), undefined, {
+            sensitivity: 'base',
+          });
+        });
+    }
+    // Legacy tx fallback during cutover
     const all = txsQuery.data || [];
     const filtered =
       direction === 'collect'
@@ -576,74 +719,86 @@ export function DriverSettlementsPage({
           String(t.metadata?.workPeriodStart || '').includes(q)
         );
       })
+      .map((t) => txToMovementRow(t, direction))
       .sort((a, b) => {
-        const week = txSettlementWeekStart(b).localeCompare(txSettlementWeekStart(a));
+        const week = ymdKey(b.periodAnchor).localeCompare(ymdKey(a.periodAnchor));
         if (week !== 0) return week;
-        const name = String(a.driverName || '').localeCompare(String(b.driverName || ''), undefined, {
+        return String(a.driverName || '').localeCompare(String(b.driverName || ''), undefined, {
           sensitivity: 'base',
         });
-        if (name !== 0) return name;
-        return String(b.date || '').localeCompare(String(a.date || ''));
       });
-  }, [txsQuery.data, search, direction]);
+  }, [apiMovementRows, txsQuery.data, search, direction]);
 
-  const donePayRows = useMemo(() => {
+  const doneMovementRows = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return (txsQuery.data || [])
-      .filter((t) => {
-        if (!isClearedDriverPayout(t)) return false;
-        const week = txSettlementWeekStart(t);
-        if (week && (week < weekFrom || week > weekTo)) return false;
-        if (!week) {
-          const d = String(t.date || '').slice(0, 10);
-          if (d < weekFrom || d > weekTo) return false;
-        }
-        if (!q) return true;
-        return (
-          String(t.driverName || '').toLowerCase().includes(q) ||
-          String(t.driverId || '').toLowerCase().includes(q) ||
-          week.includes(q)
-        );
-      })
-      .sort((a, b) => {
-        const week = txSettlementWeekStart(b).localeCompare(txSettlementWeekStart(a));
-        if (week !== 0) return week;
-        const name = String(a.driverName || '').localeCompare(String(b.driverName || ''), undefined, {
-          sensitivity: 'base',
+    if (apiMovementRows.length > 0) {
+      return apiMovementRows
+        .filter((m) => {
+          const st = String(m.status || '').toLowerCase();
+          const ap = String(m.approvalState || '').toLowerCase();
+          if (st === 'void' || st === 'pending') return false;
+          if (ap === 'pending' || ap === 'rejected') return false;
+          if (direction === 'pay' && m.kind !== 'pay' && m.kind !== 'reverse') return false;
+          if (
+            direction === 'collect' &&
+            m.kind !== 'collect' &&
+            m.kind !== 'write_off' &&
+            m.kind !== 'reverse'
+          )
+            return false;
+          if (!q) return true;
+          return (
+            String(m.driverName || '').toLowerCase().includes(q) ||
+            String(m.driverId || '').toLowerCase().includes(q) ||
+            String(m.periodAnchor || '').includes(q)
+          );
+        })
+        .sort((a, b) => {
+          const week = ymdKey(b.periodAnchor).localeCompare(ymdKey(a.periodAnchor));
+          if (week !== 0) return week;
+          return String(b.date || '').localeCompare(String(a.date || ''));
         });
-        if (name !== 0) return name;
+    }
+    const legacy =
+      direction === 'pay'
+        ? (txsQuery.data || []).filter((t) => {
+            if (!isClearedDriverPayout(t)) return false;
+            const week = txSettlementWeekStart(t);
+            if (week && (week < weekFrom || week > weekTo)) return false;
+            if (!week) {
+              const d = String(t.date || '').slice(0, 10);
+              if (d < weekFrom || d > weekTo) return false;
+            }
+            if (!q) return true;
+            return (
+              String(t.driverName || '').toLowerCase().includes(q) ||
+              String(t.driverId || '').toLowerCase().includes(q) ||
+              week.includes(q)
+            );
+          })
+        : (txsQuery.data || []).filter((t) => {
+            if (!isClearedDriverCashPayment(t)) return false;
+            const week = txSettlementWeekStart(t);
+            if (week && (week < weekFrom || week > weekTo)) return false;
+            if (!week) {
+              const d = String(t.date || '').slice(0, 10);
+              if (d < weekFrom || d > weekTo) return false;
+            }
+            if (!q) return true;
+            return (
+              String(t.driverName || '').toLowerCase().includes(q) ||
+              String(t.driverId || '').toLowerCase().includes(q) ||
+              week.includes(q)
+            );
+          });
+    return legacy
+      .map((t) => txToMovementRow(t, direction))
+      .sort((a, b) => {
+        const week = ymdKey(b.periodAnchor).localeCompare(ymdKey(a.periodAnchor));
+        if (week !== 0) return week;
         return String(b.date || '').localeCompare(String(a.date || ''));
       });
-  }, [txsQuery.data, weekFrom, weekTo, search]);
-
-  const doneCollectRows = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return (txsQuery.data || [])
-      .filter((t) => {
-        if (!isClearedDriverCashPayment(t)) return false;
-        const week = txSettlementWeekStart(t);
-        if (week && (week < weekFrom || week > weekTo)) return false;
-        if (!week) {
-          const d = String(t.date || '').slice(0, 10);
-          if (d < weekFrom || d > weekTo) return false;
-        }
-        if (!q) return true;
-        return (
-          String(t.driverName || '').toLowerCase().includes(q) ||
-          String(t.driverId || '').toLowerCase().includes(q) ||
-          week.includes(q)
-        );
-      })
-      .sort((a, b) => {
-        const week = txSettlementWeekStart(b).localeCompare(txSettlementWeekStart(a));
-        if (week !== 0) return week;
-        const name = String(a.driverName || '').localeCompare(String(b.driverName || ''), undefined, {
-          sensitivity: 'base',
-        });
-        if (name !== 0) return name;
-        return String(b.date || '').localeCompare(String(a.date || ''));
-      });
-  }, [txsQuery.data, weekFrom, weekTo, search]);
+  }, [apiMovementRows, txsQuery.data, search, direction, weekFrom, weekTo]);
 
   const reconciledRows = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -672,38 +827,74 @@ export function DriverSettlementsPage({
     (s, r) => s + payOutstandingAmount(r),
     0,
   );
-  const awaitingPayTotal = (txsQuery.data || [])
-    .filter((t) => isDriverPayoutTransaction(t) && String(t.status || '').toLowerCase() === 'pending')
-    .reduce((s, t) => s + Math.abs(Number(t.amount) || 0), 0);
-  const awaitingCollectTotal = (txsQuery.data || [])
-    .filter(
-      (t) =>
-        isDriverCashPaymentTransaction(t) &&
-        !isClearedDriverCashPayment(t) &&
-        String(t.status || '').toLowerCase() === 'pending',
-    )
-    .reduce((s, t) => s + Math.abs(Number(t.amount) || 0), 0);
+  const awaitingPayTotal = apiMovementRows.length
+    ? apiMovementRows
+        .filter(
+          (m) =>
+            m.kind === 'pay' &&
+            String(m.status || '').toLowerCase() === 'pending' &&
+            String(m.approvalState || '').toLowerCase() !== 'pending',
+        )
+        .reduce((s, m) => s + Math.abs(Number(m.amount) || 0), 0)
+    : (txsQuery.data || [])
+        .filter((t) => isDriverPayoutTransaction(t) && String(t.status || '').toLowerCase() === 'pending')
+        .reduce((s, t) => s + Math.abs(Number(t.amount) || 0), 0);
+  const awaitingCollectTotal = apiMovementRows.length
+    ? apiMovementRows
+        .filter(
+          (m) =>
+            m.kind === 'collect' &&
+            String(m.status || '').toLowerCase() === 'pending' &&
+            String(m.approvalState || '').toLowerCase() !== 'pending',
+        )
+        .reduce((s, m) => s + Math.abs(Number(m.amount) || 0), 0)
+    : (txsQuery.data || [])
+        .filter(
+          (t) =>
+            isDriverCashPaymentTransaction(t) &&
+            !isClearedDriverCashPayment(t) &&
+            String(t.status || '').toLowerCase() === 'pending',
+        )
+        .reduce((s, t) => s + Math.abs(Number(t.amount) || 0), 0);
   const awaitingTotal = direction === 'pay' ? awaitingPayTotal : awaitingCollectTotal;
-  const clearedPayThisWeek = (txsQuery.data || [])
-    .filter((t) => {
-      if (!isDriverPayoutTransaction(t)) return false;
-      const st = String(t.status || '').toLowerCase();
-      if (st !== 'completed' && st !== 'verified') return false;
-      return String(t.date || '').slice(0, 10) >= thisMonday;
-    })
-    .reduce((s, t) => s + Math.abs(Number(t.amount) || 0), 0);
-  const clearedCollectThisWeek = (txsQuery.data || [])
-    .filter((t) => {
-      if (!isClearedDriverCashPayment(t)) return false;
-      return String(t.date || '').slice(0, 10) >= thisMonday;
-    })
-    .reduce((s, t) => s + Math.abs(Number(t.amount) || 0), 0);
+  const clearedPayThisWeek = apiMovementRows.length
+    ? apiMovementRows
+        .filter((m) => {
+          if (m.kind !== 'pay') return false;
+          const st = String(m.status || '').toLowerCase();
+          if (st !== 'posted' && st !== 'completed' && st !== 'verified') return false;
+          return String(m.date || '').slice(0, 10) >= thisMonday;
+        })
+        .reduce((s, m) => s + Math.abs(Number(m.amount) || 0), 0)
+    : (txsQuery.data || [])
+        .filter((t) => {
+          if (!isDriverPayoutTransaction(t)) return false;
+          const st = String(t.status || '').toLowerCase();
+          if (st !== 'completed' && st !== 'verified') return false;
+          return String(t.date || '').slice(0, 10) >= thisMonday;
+        })
+        .reduce((s, t) => s + Math.abs(Number(t.amount) || 0), 0);
+  const clearedCollectThisWeek = apiMovementRows.length
+    ? apiMovementRows
+        .filter((m) => {
+          if (m.kind !== 'collect') return false;
+          const st = String(m.status || '').toLowerCase();
+          if (st !== 'posted' && st !== 'completed' && st !== 'verified') return false;
+          return String(m.date || '').slice(0, 10) >= thisMonday;
+        })
+        .reduce((s, m) => s + Math.abs(Number(m.amount) || 0), 0)
+    : (txsQuery.data || [])
+        .filter((t) => {
+          if (!isClearedDriverCashPayment(t)) return false;
+          return String(t.date || '').slice(0, 10) >= thisMonday;
+        })
+        .reduce((s, t) => s + Math.abs(Number(t.amount) || 0), 0);
   const clearedThisWeek = direction === 'pay' ? clearedPayThisWeek : clearedCollectThisWeek;
 
   // Per-basis errors — don't blank Collect KPIs when only the tx history query fails.
   const collectKpiError = driverOwesQuery.isError || cashHeldQuery.isError;
   const payKpiError = owesQuery.isError;
-  const txKpiError = txsQuery.isError;
+  const txKpiError = movementsQuery.isError && txsQuery.isError;
 
   useEffect(() => {
     setSelected(new Set());
@@ -757,19 +948,19 @@ export function DriverSettlementsPage({
   };
 
   const toggleSelectAll = () => {
-    if (selected.size === outstandingRows.length) {
+    if (selected.size === outstandingQueueRows.length) {
       setSelected(new Set());
       return;
     }
-    setSelected(new Set(outstandingRows.map((r) => rowKey(r))));
+    setSelected(new Set(outstandingQueueRows.map((r) => rowKey(r))));
   };
 
-  const selectedRows = outstandingRows.filter((r) => selected.has(rowKey(r)));
+  const selectedRows = outstandingQueueRows.filter((r) => selected.has(rowKey(r)));
   const selectedTotal = selectedRows.reduce(
     (s, r) =>
       s +
       (direction === 'collect'
-        ? collectAmount(r)
+        ? collectAmount(r as PeriodRow)
         : payOutstandingAmount(r)),
     0,
   );
@@ -791,6 +982,7 @@ export function DriverSettlementsPage({
       console.warn("[DriverSettlements] orphan mirror repair failed:", e?.message || e);
       toast.error(e?.message || 'Could not fully refresh settlement totals');
     }
+    settlementCmds.invalidate();
     void qc.invalidateQueries({ queryKey: ['companyOwesPeriods'] });
     void qc.invalidateQueries({ queryKey: ['driverOwesPeriods'] });
     void qc.invalidateQueries({ queryKey: ['cashHeldPeriods'] });
@@ -929,7 +1121,7 @@ export function DriverSettlementsPage({
   };
 
   const exportCsv = () => {
-    const rows = selectedRows.length > 0 ? selectedRows : outstandingRows;
+    const rows = selectedRows.length > 0 ? selectedRows : outstandingQueueRows;
     if (rows.length === 0) {
       toast.error('Nothing to export');
       return;
@@ -947,8 +1139,8 @@ export function DriverSettlementsPage({
               r.driverName || '',
               r.periodAnchor,
               r.periodEnd,
-              collectAmount(r).toFixed(2),
-              r.collectKind || '',
+              collectAmount(r as PeriodRow).toFixed(2),
+              (r as PeriodRow).collectKind || '',
               rowOverpaidAmount(r).toFixed(2),
               Number(r.cashCollected || 0).toFixed(2),
             ])
@@ -975,7 +1167,7 @@ export function DriverSettlementsPage({
   };
 
   const exportDoneCsv = () => {
-    const rows = direction === 'pay' ? donePayRows : doneCollectRows;
+    const rows = doneMovementRows;
     if (rows.length === 0) {
       toast.error('Nothing to export');
       return;
@@ -999,11 +1191,11 @@ export function DriverSettlementsPage({
           t.driverId || '',
           t.driverName || '',
           String(t.date || '').slice(0, 10),
-          txSettlementWeekStart(t),
+          ymdKey(t.periodAnchor),
           Math.abs(Number(t.amount) || 0).toFixed(2),
-          t.paymentMethod || '',
+          t.method || '',
           t.status || '',
-          t.referenceNumber || '',
+          t.reference || '',
         ]),
       ),
     ];
@@ -1065,29 +1257,33 @@ export function DriverSettlementsPage({
     toast.success(`Exported ${reconciledRows.length} row${reconciledRows.length !== 1 ? 's' : ''}`);
   };
 
-  const doneMovementRows = useMemo(
-    () =>
-      (direction === 'pay' ? donePayRows : doneCollectRows).map((t) =>
-        txToMovementRow(t, direction),
-      ),
-    [direction, donePayRows, doneCollectRows],
-  );
-
   const saveSinglePayout = async (payload: RecordPayoutSavePayload) => {
     const weekAnchor = String(payload.workPeriodStart || payoutModal.workPeriodStart || '').slice(0, 10);
+    const amount = Math.abs(Number(payload.amount) || 0);
     try {
-      await settlementCommandsApi.pay({
+      const res = await settlementCommandsApi.pay({
         driverId: payoutModal.driverId,
         weekAnchor,
-        amount: Math.abs(Number(payload.amount) || 0),
+        amount,
         method: payload.paymentMethod,
         reference: payload.referenceNumber,
         note: payload.notes,
         idempotencyKey: newIdempotencyKey(),
         expectedOutstanding: payoutModal.maxAmount,
       });
-    } catch {
-      // Cutover fallback until migration is applied everywhere.
+      const needsApproval =
+        (res as { requiresApproval?: boolean })?.requiresApproval === true ||
+        (requiresApproval(amount, SETTLEMENT_APPROVAL_THRESHOLD) &&
+          String(payload.paymentMethod || '') !== 'Cash');
+      if (needsApproval) {
+        toast.info('Sent for approval');
+      }
+    } catch (err) {
+      // Cutover: only when command endpoint is absent — never on business 4xx.
+      if (!isSettlementCommandUnavailable(err)) {
+        toast.error(err instanceof Error ? err.message : 'Pay failed');
+        throw err;
+      }
       const newTx = buildDriverPayoutTx(payload, {
         driverId: payoutModal.driverId,
         driverName: payoutModal.driverName,
@@ -1113,33 +1309,14 @@ export function DriverSettlementsPage({
     ).slice(0, 10);
     const beforeAmt = collectModal.maxAmount;
     let serverAfter: number | null = null;
-    try {
-      if (payment.transactionType === 'payment' && weekStart) {
-        const res = await settlementCommandsApi.collect({
-          driverId: collectModal.driverId,
-          weekAnchor: weekStart,
-          amount: Math.abs(Number(payment.amount) || 0),
-          method: payment.paymentMethod,
-          reference: payment.referenceNumber,
-          note: payment.notes,
-          idempotencyKey: newIdempotencyKey(),
-          expectedOutstanding: beforeAmt,
-        });
-        const period = (res as any)?.period;
-        if (period) {
-          const owed = Math.max(
-            0,
-            Number(period.amountOwed) ||
-              Math.abs(Number(period.settlementAmount) || 0) ||
-              Number(period.cashStillHeld) ||
-              0,
-          );
-          serverAfter = owed;
-        }
-      } else {
-        throw new Error('use-legacy');
-      }
-    } catch {
+    const amount = Math.abs(Number(payment.amount) || 0);
+    const overCollect = amount > beforeAmt + MONEY_EPS;
+    const overReason =
+      payment.notes?.match(/\[Over-collection\]\s*(.+)/i)?.[1]?.trim() ||
+      (overCollect ? String(payment.notes || '').trim() : undefined);
+
+    // Float/adjustment stay on intentional legacy path (no command yet) — not via catch.
+    if (payment.transactionType !== 'payment' || !weekStart) {
       const newTx = buildCashCollectionTx(
         {
           ...payment,
@@ -1152,11 +1329,56 @@ export function DriverSettlementsPage({
         { driverId: collectModal.driverId, driverName: collectModal.driverName },
       );
       await api.saveTransaction(newTx);
+    } else {
+      try {
+        const res = await settlementCommandsApi.collect({
+          driverId: collectModal.driverId,
+          weekAnchor: weekStart,
+          amount,
+          method: payment.paymentMethod,
+          reference: payment.referenceNumber,
+          note: payment.notes,
+          idempotencyKey: newIdempotencyKey(),
+          expectedOutstanding: beforeAmt,
+          ...(overCollect
+            ? { allowOverCollect: true, reason: overReason || 'Over-collection' }
+            : {}),
+        });
+        const period = (res as { period?: Record<string, unknown> })?.period;
+        if (period) {
+          const owed = Math.max(
+            0,
+            Number(period.amountOwed) ||
+              Math.abs(Number(period.settlementAmount) || 0) ||
+              Number(period.cashStillHeld) ||
+              0,
+          );
+          serverAfter = owed;
+        }
+      } catch (err) {
+        if (!isSettlementCommandUnavailable(err)) {
+          toast.error(err instanceof Error ? err.message : 'Collect failed');
+          throw err;
+        }
+        const newTx = buildCashCollectionTx(
+          {
+            ...payment,
+            workPeriodStart:
+              payment.workPeriodStart ||
+              `${collectModal.workPeriodStart}T12:00:00.000Z`,
+            workPeriodEnd:
+              payment.workPeriodEnd || `${collectModal.workPeriodEnd}T12:00:00.000Z`,
+          },
+          { driverId: collectModal.driverId, driverName: collectModal.driverName },
+        );
+        await api.saveTransaction(newTx);
+      }
     }
     await Promise.all([
       qc.invalidateQueries({ queryKey: ['driverOwesPeriods'] }),
       qc.invalidateQueries({ queryKey: ['cashHeldPeriods'] }),
       qc.invalidateQueries({ queryKey: ['driverSettlementsTransactions'] }),
+      qc.invalidateQueries({ queryKey: settlementKeys.all }),
     ]);
     await Promise.all([
       qc.refetchQueries({ queryKey: ['driverOwesPeriods'] }),
@@ -1170,7 +1392,7 @@ export function DriverSettlementsPage({
           ? serverAfter
           : fresh
             ? collectAmount(fresh)
-            : Math.max(0, beforeAmt - Math.abs(payment.amount));
+            : Math.max(0, beforeAmt - amount);
       const reduced = Math.round((beforeAmt - afterAmt) * 100) / 100;
       toast.success(
         `Collected ${MONEY(payment.amount)} · owed ${MONEY(beforeAmt)} → ${MONEY(afterAmt)} (changed by ${MONEY(reduced)})`,
@@ -1196,7 +1418,11 @@ export function DriverSettlementsPage({
         idempotencyKey: newIdempotencyKey(),
         expectedOutstanding: writeOffModal.maxAmount,
       });
-    } catch {
+    } catch (err) {
+      if (!isSettlementCommandUnavailable(err)) {
+        toast.error(err instanceof Error ? err.message : 'Write-off failed');
+        throw err;
+      }
       await api.saveTransaction(
         buildCashWriteOffTx(payload, {
           driverId: writeOffModal.driverId,
@@ -1216,11 +1442,21 @@ export function DriverSettlementsPage({
     }
     setReverseBusy(true);
     try {
-      // Reason is required for audit (S3-9); reverse API will consume it when wired.
-      await api.deleteTransaction(txToReverse.id);
-      toast.success(
-        isDriverPayoutTransaction(txToReverse) ? 'Payout reversed' : 'Cash payment reversed',
-      );
+      const id = String(txToReverse.id);
+      const sourceTransactionId = txToReverse.sourceTransactionId || id;
+      const fromMovementsTable =
+        looksLikeUuid(id) &&
+        (txToReverse.sourceTransactionId != null ||
+          apiMovementRows.some((m) => m.id === id));
+      await settlementCommandsApi.reverse({
+        ...(fromMovementsTable ? { movementId: id } : {}),
+        sourceTransactionId,
+        reason,
+        idempotencyKey: newIdempotencyKey(),
+      });
+      const isPay =
+        String(txToReverse.kind || '').toLowerCase() === 'pay' || direction === 'pay';
+      toast.success(isPay ? 'Payout reversed' : 'Cash payment reversed');
       setTxToReverse(null);
       setReverseReason('');
       await refreshAll();
@@ -1242,67 +1478,69 @@ export function DriverSettlementsPage({
       return;
     }
     setBatchBusy(true);
-    let ok = 0;
-    let fail = 0;
     try {
-      for (const row of selectedRows) {
-        try {
-          if (direction === 'pay') {
-            await api.saveTransaction(
-              buildDriverPayoutTx(
-                {
-                  amount: Math.round(payOutstandingAmount(row) * 100) / 100,
-                  date: batchDate,
-                  paymentMethod: batchMethod,
-                  referenceNumber: batchRef.trim() || undefined,
-                  notes: 'Batch payout',
-                  workPeriodStart: row.periodAnchor,
-                  workPeriodEnd: row.periodEnd,
-                },
-                { driverId: row.driverId, driverName: row.driverName || row.driverId },
-              ),
-            );
-          } else {
-            await api.saveTransaction(
-              buildCashCollectionTx(
-                {
-                  amount: Math.round(collectAmount(row) * 100) / 100,
-                  date: batchDate,
-                  notes: 'Batch cash collection',
-                  paymentMethod: batchMethod,
-                  referenceNumber: batchRef.trim() || undefined,
-                  transactionType: 'payment',
-                  workPeriodStart: `${row.periodAnchor}T12:00:00.000Z`,
-                  workPeriodEnd: `${row.periodEnd}T12:00:00.000Z`,
-                },
-                { driverId: row.driverId, driverName: row.driverName || row.driverId },
-              ),
-            );
-          }
-          ok++;
-        } catch {
-          fail++;
-        }
-      }
-      if (ok > 0) {
+      const rows = selectedRows.map((r) => {
+        const amount =
+          direction === 'collect'
+            ? Math.round(collectAmount(r as PeriodRow) * 100) / 100
+            : Math.round(payOutstandingAmount(r) * 100) / 100;
+        return {
+          driverId: r.driverId,
+          weekAnchor: r.periodAnchor,
+          amount,
+          expectedOutstanding: amount,
+        };
+      });
+      const expectedOutstanding = rows.reduce((s, r) => s + r.amount, 0);
+      const res = await settlementCommandsApi.createRun({
+        rows,
+        method: batchMethod,
+        effectiveDate: batchDate,
+        kind: direction === 'pay' ? 'pay' : 'collect',
+        reference: batchRef.trim() || undefined,
+        idempotencyKey: newIdempotencyKey(),
+        expectedOutstanding,
+      });
+      const posted = res.summary?.posted ?? rows.length;
+      const failed = res.summary?.failed ?? 0;
+      if (posted > 0) {
         toast.success(
           direction === 'pay'
-            ? `Recorded ${ok} payout${ok !== 1 ? 's' : ''}`
-            : `Logged ${ok} collection${ok !== 1 ? 's' : ''}`,
+            ? `Recorded ${posted} payout${posted !== 1 ? 's' : ''}`
+            : `Logged ${posted} collection${posted !== 1 ? 's' : ''}`,
         );
       }
-      if (fail > 0) toast.error(`${fail} failed`);
+      if (failed > 0) {
+        const firstErr =
+          (res.rows || []).find((r) => r.error_message)?.error_message || 'Unknown error';
+        toast.error(`${failed} failed · ${firstErr}`);
+      }
       setBatchOpen(false);
       setSelected(new Set());
       refreshAll();
+    } catch (e: any) {
+      toast.error(e?.message || 'Batch run failed');
     } finally {
       setBatchBusy(false);
     }
   };
 
-  const verifyPending = async (tx: FinancialTransaction) => {
+  const verifyPending = async (row: SettlementMovementRow | FinancialTransaction) => {
     try {
-      await api.saveTransaction({ ...tx, status: 'Verified' });
+      const id = String(row.id || '');
+      const sourceTransactionId =
+        'sourceTransactionId' in row && row.sourceTransactionId
+          ? String(row.sourceTransactionId)
+          : id;
+      const fromMovementsTable =
+        looksLikeUuid(id) &&
+        (('sourceTransactionId' in row && row.sourceTransactionId != null) ||
+          apiMovementRows.some((m) => m.id === id));
+      await settlementCommandsApi.verify({
+        ...(fromMovementsTable ? { movementId: id } : {}),
+        sourceTransactionId,
+        idempotencyKey: newIdempotencyKey(),
+      });
       toast.success('Verified');
       refreshAll();
     } catch (e: any) {
@@ -1315,7 +1553,8 @@ export function DriverSettlementsPage({
     driverOwesQuery.isLoading ||
     cashHeldQuery.isLoading ||
     reconciledQuery.isLoading ||
-    txsQuery.isLoading;
+    (movementsQuery.isLoading && txsQuery.isLoading) ||
+    queueQuery.isLoading;
 
   const collectPeriodForModal = useMemo(() => {
     if (!collectModal.isOpen) return [];
@@ -1415,6 +1654,7 @@ export function DriverSettlementsPage({
           variant={deskMode === 'collect' ? 'default' : 'outline'}
           className={cn('h-9', deskMode === 'collect' && 'bg-rose-700 hover:bg-rose-800')}
           onClick={() => setDeskMode('collect')}
+          title="Money drivers owe you"
         >
           <ArrowDownLeft className="h-4 w-4 mr-1.5" />
           Collect
@@ -1425,6 +1665,7 @@ export function DriverSettlementsPage({
           variant={deskMode === 'pay' ? 'default' : 'outline'}
           className={cn('h-9', deskMode === 'pay' && 'bg-emerald-700 hover:bg-emerald-800')}
           onClick={() => setDeskMode('pay')}
+          title="Money you owe drivers"
         >
           <ArrowUpRight className="h-4 w-4 mr-1.5" />
           Pay
@@ -1450,6 +1691,13 @@ export function DriverSettlementsPage({
           Reconciled
         </Button>
       </div>
+      {(deskMode === 'collect' || deskMode === 'pay') && (
+        <p className="text-xs text-slate-500 -mt-4">
+          {deskMode === 'collect'
+            ? 'Collect = money drivers owe you'
+            : 'Pay = money you owe drivers'}
+        </p>
+      )}
 
       <SettlementFilters
         weekFrom={weekFrom}
@@ -1549,16 +1797,16 @@ export function DriverSettlementsPage({
                 {collectOutstanding.length} week{collectOutstanding.length !== 1 ? 's' : ''}
               </p>
             </div>
-            <OutstandingTable
-              direction="collect"
-              rows={collectOutstanding}
+            <SettlementQueueTable
+              rows={collectOutstanding.map((r) => toSettlementQueueRow(r, 'collect'))}
+              mode="collect"
               loading={loading}
               selected={selected}
               onToggle={toggleSelect}
               onToggleAll={toggleSelectAll}
               onOpenDriver={onOpenDriver}
               onPay={() => {}}
-              onCollect={(r) => openLogCashForDriver(r.driverId, r.driverName || r.driverId, r)}
+              onCollect={(r) => openLogCashForDriver(r.driverId, r.driverName || r.driverId, r as PeriodRow)}
               onWriteOff={(r) =>
                 setWriteOffModal({
                   isOpen: true,
@@ -1566,7 +1814,7 @@ export function DriverSettlementsPage({
                   driverName: r.driverName || r.driverId,
                   workPeriodStart: r.periodAnchor,
                   workPeriodEnd: r.periodEnd,
-                  maxAmount: collectAmount(r),
+                  maxAmount: collectAmount(r as PeriodRow),
                 })
               }
             />
@@ -1588,7 +1836,44 @@ export function DriverSettlementsPage({
           />
         </div>
       ) : (
-        <Tabs value={deskTab} onValueChange={(v) => setDeskTab(v as DeskTab)}>
+        <div className="space-y-4">
+          {pendingApprovalRows.length > 0 ? (
+            <ApprovalQueue
+              movements={pendingApprovalRows}
+              loading={pendingApprovalsQuery.isLoading}
+              onOpenDriver={onOpenDriver}
+              onApprove={async (movementId, note) => {
+                try {
+                  await settlementCommandsApi.approve(movementId, {
+                    decision: 'approved',
+                    note,
+                    idempotencyKey: newIdempotencyKey(),
+                  });
+                  toast.success('Approved');
+                  refreshAll();
+                } catch (e: any) {
+                  toast.error(e?.message || 'Approve failed');
+                  throw e;
+                }
+              }}
+              onReject={async (movementId, note) => {
+                try {
+                  await settlementCommandsApi.approve(movementId, {
+                    decision: 'rejected',
+                    note,
+                    idempotencyKey: newIdempotencyKey(),
+                  });
+                  toast.success('Rejected');
+                  refreshAll();
+                } catch (e: any) {
+                  toast.error(e?.message || 'Reject failed');
+                  throw e;
+                }
+              }}
+            />
+          ) : null}
+
+          <Tabs value={deskTab} onValueChange={(v) => setDeskTab(v as DeskTab)}>
           <TabsList>
             <TabsTrigger value="outstanding">Outstanding</TabsTrigger>
             <TabsTrigger value="awaiting">Awaiting clear</TabsTrigger>
@@ -1604,8 +1889,10 @@ export function DriverSettlementsPage({
               onToggle={toggleSelect}
               onToggleAll={toggleSelectAll}
               groupByDriver
-              showingCount={outstandingRows.length}
-              totalCount={outstandingAllRows.length}
+              showingCount={outstandingQueueRows.length}
+              totalCount={
+                queueQuery.data?.page?.total ?? outstandingAllRows.length
+              }
               showingAmount={outstandingShowingAmount}
               totalAmount={outstandingTotalAmount}
               onOpenDriver={onOpenDriver}
@@ -1643,7 +1930,23 @@ export function DriverSettlementsPage({
           </TabsContent>
 
           <TabsContent value="awaiting" className="mt-4">
-            <PendingTable rows={awaitingRows} direction={direction} onOpenDriver={onOpenDriver} onVerify={verifyPending} />
+            <MovementHistoryTable
+              rows={awaitingRows}
+              mode={direction}
+              onOpenDriver={onOpenDriver}
+              onVerify={verifyPending}
+              onRequestUndo={(row) => {
+                setTxToReverse({
+                  id: row.id,
+                  kind: row.kind,
+                  amount: row.amount,
+                  driverName: row.driverName,
+                  sourceTransactionId: row.sourceTransactionId,
+                });
+                setReverseReason('');
+              }}
+              onUndo={() => {}}
+            />
           </TabsContent>
 
           <TabsContent value="done" className="mt-4">
@@ -1652,17 +1955,20 @@ export function DriverSettlementsPage({
               mode={direction}
               onOpenDriver={onOpenDriver}
               onRequestUndo={(row) => {
-                const src = direction === 'pay' ? donePayRows : doneCollectRows;
-                const tx = src.find((t) => String(t.id) === String(row.id));
-                if (tx) {
-                  setTxToReverse(tx);
-                  setReverseReason('');
-                }
+                setTxToReverse({
+                  id: row.id,
+                  kind: row.kind,
+                  amount: row.amount,
+                  driverName: row.driverName,
+                  sourceTransactionId: row.sourceTransactionId,
+                });
+                setReverseReason('');
               }}
               onUndo={() => {}}
             />
           </TabsContent>
         </Tabs>
+        </div>
       )}
 
       <RecordPayoutModal
@@ -1728,12 +2034,14 @@ export function DriverSettlementsPage({
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
-              {txToReverse && isDriverPayoutTransaction(txToReverse)
+              {txToReverse &&
+              (String(txToReverse.kind || '').toLowerCase() === 'pay' || direction === 'pay')
                 ? 'Undo payout?'
                 : 'Undo cash payment?'}
             </AlertDialogTitle>
             <AlertDialogDescription>
-              {txToReverse && isDriverPayoutTransaction(txToReverse)
+              {txToReverse &&
+              (String(txToReverse.kind || '').toLowerCase() === 'pay' || direction === 'pay')
                 ? 'This restores the fleet-owes balance for that Settlement Week — same as Cash Wallet undo.'
                 : 'This restores cash still owed for that Settlement Week — same as Cash Wallet undo.'}
               {txToReverse ? (
@@ -1841,252 +2149,8 @@ export function DriverSettlementsPage({
   );
 }
 
-/** @deprecated Use DriverSettlementsPage — kept for import aliases. */
+/** @deprecated Prefer importing DriverSettlementsPage; alias kept for deep links. */
 export const DriverPayoutsPage = DriverSettlementsPage;
-
-function OutstandingTable({
-  direction,
-  rows,
-  loading,
-  selected,
-  onToggle,
-  onToggleAll,
-  onOpenDriver,
-  onPay,
-  onCollect,
-  onWriteOff,
-}: {
-  direction: MoneyDirection;
-  rows: PeriodRow[];
-  loading: boolean;
-  selected: Set<string>;
-  onToggle: (k: string) => void;
-  onToggleAll: () => void;
-  onOpenDriver?: (id: string) => void;
-  onPay: (r: PeriodRow) => void;
-  onCollect: (r: PeriodRow) => void;
-  onWriteOff: (r: PeriodRow) => void;
-}) {
-  return (
-    <div className="rounded-lg border border-slate-200 overflow-hidden bg-white">
-      <Table>
-        <TableHeader>
-          <TableRow className="bg-slate-50">
-            <TableHead className="w-10">
-              <Checkbox
-                checked={rows.length > 0 && selected.size === rows.length}
-                onCheckedChange={onToggleAll}
-                aria-label="Select all"
-              />
-            </TableHead>
-            <TableHead>Driver</TableHead>
-            <TableHead>Settlement Week</TableHead>
-            <TableHead className="text-right">Passenger cash</TableHead>
-            {direction === 'collect' ? (
-              <TableHead>Status</TableHead>
-            ) : (
-              <TableHead className="text-right">Already paid</TableHead>
-            )}
-            <TableHead className="text-right">
-              {direction === 'collect' ? 'Driver owes' : 'Fleet owes'}
-            </TableHead>
-            <TableHead className={direction === 'collect' ? 'w-[220px]' : 'w-[120px]'}></TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {loading ? (
-            <TableRow>
-              <TableCell colSpan={7} className="h-24 text-center text-slate-500">
-                <Loader2 className="h-4 w-4 animate-spin inline mr-2" />
-                Loading…
-              </TableCell>
-            </TableRow>
-          ) : rows.length === 0 ? (
-            <TableRow>
-              <TableCell colSpan={7} className="h-24 text-center text-slate-500">
-                No outstanding {direction === 'collect' ? 'collections' : 'payouts'} in this range.
-              </TableCell>
-            </TableRow>
-          ) : (
-            rows.map((r) => {
-              const key = rowKey(r);
-              return (
-                <TableRow key={key}>
-                  <TableCell>
-                    <Checkbox
-                      checked={selected.has(key)}
-                      onCheckedChange={() => onToggle(key)}
-                      aria-label={`Select ${r.driverName}`}
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <div>
-                      <button
-                        type="button"
-                        className="text-left font-medium text-slate-900 hover:text-indigo-600"
-                        onClick={() => onOpenDriver?.(r.driverId)}
-                      >
-                        {r.driverName || r.driverId}
-                      </button>
-                      {Math.abs(Number(r.cashSourceMismatch) || 0) > 0.5 ? (
-                        <p className="text-[10px] text-amber-700 mt-0.5">
-                          Cash mismatch {MONEY(r.cashSourceMismatch)}
-                        </p>
-                      ) : null}
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-sm text-slate-600">
-                    {weekLabel(r.periodAnchor, r.periodEnd)}
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums text-slate-600">
-                    {MONEY(r.cashCollected)}
-                  </TableCell>
-                  {direction === 'collect' ? (
-                    <TableCell>
-                      <div className="flex flex-wrap items-center gap-1">
-                        <Badge
-                          variant="secondary"
-                          className={cn(
-                            'font-normal',
-                            r.collectKind === 'driver_owes'
-                              ? 'bg-rose-50 text-rose-800'
-                              : 'bg-amber-50 text-amber-800',
-                          )}
-                          title={collectKindTooltip(r.collectKind)}
-                        >
-                          {r.collectKind === 'driver_owes' ? 'Driver owes' : 'Cash held'}
-                        </Badge>
-                        <OverpaidBadge amount={rowOverpaidAmount(r)} />
-                      </div>
-                    </TableCell>
-                  ) : (
-                    <TableCell className="text-right">
-                      <div className="flex flex-col items-end gap-1">
-                        <span className="tabular-nums text-slate-500">{MONEY(r.settlementPaid)}</span>
-                        <OverpaidBadge amount={rowOverpaidAmount(r)} />
-                      </div>
-                    </TableCell>
-                  )}
-                  <TableCell
-                    className={cn(
-                      'text-right tabular-nums font-semibold',
-                      direction === 'collect' ? 'text-rose-700' : 'text-emerald-800',
-                    )}
-                  >
-                    {MONEY(direction === 'collect' ? collectAmount(r) : payOutstandingAmount(r))}
-                  </TableCell>
-                  <TableCell>
-                    {direction === 'collect' ? (
-                      <div className="flex items-center justify-end gap-1.5">
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          className="h-8"
-                          onClick={() => onWriteOff(r)}
-                        >
-                          <Ban className="h-3.5 w-3.5 mr-1" />
-                          Write Off
-                        </Button>
-                        <Button
-                          size="sm"
-                          className="h-8 bg-rose-700 hover:bg-rose-800"
-                          onClick={() => onCollect(r)}
-                        >
-                          Log Cash
-                        </Button>
-                      </div>
-                    ) : (
-                      <Button
-                        size="sm"
-                        className="h-8 bg-emerald-700 hover:bg-emerald-800"
-                        onClick={() => onPay(r)}
-                      >
-                        Pay
-                      </Button>
-                    )}
-                  </TableCell>
-                </TableRow>
-              );
-            })
-          )}
-        </TableBody>
-      </Table>
-    </div>
-  );
-}
-
-function PendingTable({
-  rows,
-  direction,
-  onOpenDriver,
-  onVerify,
-}: {
-  rows: FinancialTransaction[];
-  direction: MoneyDirection;
-  onOpenDriver?: (id: string) => void;
-  onVerify: (tx: FinancialTransaction) => void;
-}) {
-  return (
-    <div className="rounded-lg border border-slate-200 overflow-hidden bg-white">
-      <Table>
-        <TableHeader>
-          <TableRow className="bg-slate-50">
-            <TableHead>Driver</TableHead>
-            <TableHead>Settlement Week</TableHead>
-            <TableHead>Method</TableHead>
-            <TableHead>Reference</TableHead>
-            <TableHead className="text-right">Amount</TableHead>
-            <TableHead className="w-[100px]"></TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {rows.length === 0 ? (
-            <TableRow>
-              <TableCell colSpan={6} className="h-24 text-center text-slate-500">
-                No pending {direction === 'collect' ? 'collections' : 'payouts'}.
-              </TableCell>
-            </TableRow>
-          ) : (
-            rows.map((tx) => (
-              <TableRow key={tx.id}>
-                <TableCell>
-                  <button
-                    type="button"
-                    className="text-left font-medium text-slate-900 hover:text-indigo-600"
-                    onClick={() => tx.driverId && onOpenDriver?.(tx.driverId)}
-                  >
-                    {tx.driverName || tx.driverId}
-                  </button>
-                </TableCell>
-                <TableCell className="text-sm text-slate-600">
-                  {tx.metadata?.workPeriodStart
-                    ? weekLabel(
-                        String(tx.metadata.workPeriodStart).slice(0, 10),
-                        String(tx.metadata.workPeriodEnd || tx.metadata.workPeriodStart).slice(0, 10),
-                      )
-                    : '—'}
-                </TableCell>
-                <TableCell>{tx.paymentMethod || '—'}</TableCell>
-                <TableCell className="font-mono text-xs text-slate-500">
-                  {tx.referenceNumber || '—'}
-                </TableCell>
-                <TableCell className="text-right tabular-nums font-semibold">
-                  {MONEY(tx.amount)}
-                </TableCell>
-                <TableCell>
-                  <Button size="sm" variant="outline" className="h-8" onClick={() => onVerify(tx)}>
-                    Verify
-                  </Button>
-                </TableCell>
-              </TableRow>
-            ))
-          )}
-        </TableBody>
-      </Table>
-    </div>
-  );
-}
 
 
 function ReconciledTable({

@@ -120,6 +120,23 @@ export function assertExpectedOutstanding(
   }
 }
 
+/**
+ * Claim the period write lock via CAS on row_version.
+ * Must run BEFORE movement insert so two concurrent pays cannot both succeed.
+ * Throws STALE_RESIDUAL (409) when another writer won the race (updatedRow null).
+ */
+export function assertPeriodCasClaimed(
+  updatedRow: unknown | null | undefined,
+): void {
+  if (updatedRow == null) {
+    throw new SettlementCommandError(
+      "STALE_RESIDUAL",
+      "This week was updated by someone else. Refresh and try again.",
+      409,
+    );
+  }
+}
+
 /** Company-owes residual (pay queue). */
 export function companyOwesResidual(settlementAmount: number): number {
   return Math.max(0, Number(settlementAmount) || 0);

@@ -13,6 +13,38 @@ import type {
 
 const BASE = `${API_ENDPOINTS.financial}/settlements`;
 
+/** Thrown by settlement command POSTs so callers can distinguish business vs cutover. */
+export class SettlementCommandApiError extends Error {
+  readonly status: number;
+  readonly code?: string;
+
+  constructor(message: string, status: number, code?: string) {
+    super(message);
+    this.name = 'SettlementCommandApiError';
+    this.status = status;
+    this.code = code;
+  }
+}
+
+/**
+ * True only when the command endpoint is genuinely absent / unreachable.
+ * Business 4xx (403, 409, caps, freeze) must NOT fall back to legacy writes.
+ */
+export function isSettlementCommandUnavailable(err: unknown): boolean {
+  if (err instanceof SettlementCommandApiError) {
+    return err.status === 404 || err.status === 501;
+  }
+  // Network / fetch failure (no Response)
+  if (err instanceof TypeError) return true;
+  if (err instanceof Error) {
+    const m = err.message.toLowerCase();
+    if (m.includes('failed to fetch') || m.includes('networkerror') || m.includes('network request failed')) {
+      return true;
+    }
+  }
+  return false;
+}
+
 export type SettlementCollectBody = {
   driverId: string;
   weekAnchor: string;
@@ -20,6 +52,9 @@ export type SettlementCollectBody = {
   method?: string;
   reference?: string;
   note?: string;
+  /** First-class over-collection / write reason (N-4). */
+  reason?: string;
+  allowOverCollect?: boolean;
   idempotencyKey: string;
   expectedOutstanding: number;
 };
@@ -45,10 +80,22 @@ export type SettlementWriteOffBody = {
 };
 
 export type SettlementReverseBody = {
-  movementId: string;
+  /** Preferred: reverse by movement UUID. */
+  movementId?: string;
+  /** Legacy bridge: reverse dual-write / pre-migration tx by transaction id. */
+  sourceTransactionId?: string;
   reason: string;
   idempotencyKey: string;
-  expectedOutstanding: number;
+  expectedOutstanding?: number;
+};
+
+export type SettlementVerifyBody = {
+  /** Prefer movement id when available. */
+  movementId?: string;
+  /** Legacy awaiting-clear txs. */
+  sourceTransactionId?: string;
+  idempotencyKey: string;
+  note?: string;
 };
 
 export type SettlementRunRow = {
@@ -63,26 +110,43 @@ export type SettlementRunBody = {
   method?: string;
   effectiveDate?: string;
   kind?: 'collect' | 'pay';
+  /** Optional batch reference (bank / mobile). */
+  reference?: string;
   idempotencyKey: string;
   /** Batch-level expected total; per-row expectedOutstanding is authoritative. */
   expectedOutstanding: number;
 };
 
 export type SettlementApproveBody = {
-  decision: 'approve' | 'reject';
+  /** Server expects approved | rejected. */
+  decision: 'approved' | 'rejected';
   note?: string;
   idempotencyKey?: string;
 };
 
-async function parseError(response: Response, fallback: string): Promise<string> {
+async function parseErrorBody(
+  response: Response,
+  fallback: string,
+): Promise<{ message: string; code?: string }> {
   try {
     const j = await response.json();
-    if (j && typeof j.error === 'string') return j.error;
-    if (j && typeof j.message === 'string') return j.message;
+    if (j && typeof j === 'object') {
+      const code = typeof (j as { code?: string }).code === 'string' ? (j as { code: string }).code : undefined;
+      if (typeof (j as { error?: string }).error === 'string') {
+        return { message: (j as { error: string }).error, code };
+      }
+      if (typeof (j as { message?: string }).message === 'string') {
+        return { message: (j as { message: string }).message, code };
+      }
+    }
   } catch {
     /* ignore */
   }
-  return fallback;
+  return { message: fallback };
+}
+
+async function parseError(response: Response, fallback: string): Promise<string> {
+  return (await parseErrorBody(response, fallback)).message;
 }
 
 async function postJson<T>(path: string, body: unknown, fallback: string): Promise<T> {
@@ -92,7 +156,8 @@ async function postJson<T>(path: string, body: unknown, fallback: string): Promi
     body: JSON.stringify(body),
   });
   if (!response.ok) {
-    throw new Error(await parseError(response, fallback));
+    const { message, code } = await parseErrorBody(response, fallback);
+    throw new SettlementCommandApiError(message, response.status, code);
   }
   return response.json() as Promise<T>;
 }
@@ -227,20 +292,81 @@ export const settlementCommandsApi = {
     return postJson('/reverse', body, 'Reverse failed');
   },
 
+  async verify(body: SettlementVerifyBody) {
+    return postJson('/verify', body, 'Verify failed');
+  },
+
   async createRun(body: SettlementRunBody) {
-    return postJson<{ runId: string; status?: string }>('/runs', body, 'Payment run failed');
+    return postJson<{
+      runId: string;
+      status?: string;
+      summary?: { posted: number; failed: number; total: number };
+      rows?: Array<{
+        id?: string;
+        driver_id?: string;
+        period_anchor?: string;
+        status?: string;
+        error_message?: string | null;
+        movement_id?: string | null;
+      }>;
+    }>('/runs', body, 'Payment run failed');
   },
 
   async getRun(id: string) {
     const response = await fetchWithRetry(`${BASE}/runs/${encodeURIComponent(id)}`, {
       headers: await requireAuthHeaders(null),
     });
-    if (!response.ok) throw new Error(await parseError(response, 'Failed to load settlement run'));
+    if (!response.ok) {
+      const { message, code } = await parseErrorBody(response, 'Failed to load settlement run');
+      throw new SettlementCommandApiError(message, response.status, code);
+    }
     return response.json();
   },
 
   async approve(movementId: string, body: SettlementApproveBody) {
     return postJson(`/${encodeURIComponent(movementId)}/approve`, body, 'Approval failed');
+  },
+
+  async getMovements(params: {
+    weekFrom?: string;
+    weekTo?: string;
+    kind?: string;
+    approvalState?: string;
+    pageSize?: number;
+  } = {}) {
+    const qs = new URLSearchParams();
+    if (params.weekFrom) qs.set('weekFrom', params.weekFrom);
+    if (params.weekTo) qs.set('weekTo', params.weekTo);
+    if (params.kind) qs.set('kind', params.kind);
+    if (params.approvalState) qs.set('approvalState', params.approvalState);
+    if (params.pageSize != null) qs.set('pageSize', String(params.pageSize));
+    const response = await fetchWithRetry(`${BASE}/movements?${qs.toString()}`, {
+      headers: await requireAuthHeaders(null),
+    });
+    if (!response.ok) {
+      const { message, code } = await parseErrorBody(response, 'Failed to load movements');
+      throw new SettlementCommandApiError(message, response.status, code);
+    }
+    return response.json() as Promise<{
+      success: boolean;
+      rows: Array<{
+        id: string;
+        kind: string;
+        driverId: string;
+        driverName?: string;
+        periodAnchor: string;
+        amount: number;
+        amountMinor: number;
+        method?: string | null;
+        reference?: string | null;
+        reason?: string | null;
+        status?: string;
+        approvalState?: string;
+        sourceTransactionId?: string | null;
+        createdAt?: string;
+      }>;
+      page: { total: number; hasMore: boolean };
+    }>;
   },
 
   /**

@@ -21,6 +21,16 @@ export const FLEET_PAGE_REGISTRY: Record<string, FleetPageDef> = {
   deliveries: { id: 'deliveries', path: '/deliveries', permission: 'nav.deliveries' },
   'delivery-analytics': { id: 'delivery-analytics', path: '/delivery-analytics', permission: 'nav.delivery_analytics' },
   'courier-settlements': { id: 'courier-settlements', path: '/courier-settlements', permission: 'nav.courier_settlements' },
+  'driver-settlements': {
+    id: 'driver-settlements',
+    path: '/driver-settlements',
+    permission: 'nav.financial_analytics',
+  },
+  'driver-payouts': {
+    id: 'driver-payouts',
+    path: '/driver-payouts',
+    permission: 'nav.financial_analytics',
+  },
   'supply-health': { id: 'supply-health', path: '/supply-health', permission: 'nav.supply_health' },
   'fuel-reconciliation': {
     id: 'fuel-reconciliation',

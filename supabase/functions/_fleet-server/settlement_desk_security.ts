@@ -23,16 +23,35 @@ function isLegacyOrg(organizationId: unknown): boolean {
 }
 
 /**
- * Cross-tenant delete guard. Returns true when the caller may mutate the record.
+ * Cross-tenant delete/mutate guard.
+ * N-1: unstamped / legacy org rows fail closed when the caller has an org.
  * Platform callers pass organizationId=null and are allowed through.
+ * Pass denyUnstamped:false only during a documented burn-down backfill window
+ * (or set SETTLEMENT_ORG_STRICT=0 in the edge runtime).
  */
 export function mayMutateTransactionOrg(
   recordOrgId: unknown,
   callerOrgId: string | null | undefined,
+  opts?: { denyUnstamped?: boolean },
 ): boolean {
   if (!callerOrgId) return true;
-  if (recordOrgId == null || String(recordOrgId).trim() === "") return true;
-  if (isLegacyOrg(recordOrgId)) return true;
+  let denyUnstamped = opts?.denyUnstamped;
+  if (denyUnstamped === undefined) {
+    try {
+      // Edge runtime only — browser/Vitest never hit this path.
+      const env = (globalThis as { Deno?: { env?: { get?: (k: string) => string | undefined } } })
+        .Deno?.env?.get?.("SETTLEMENT_ORG_STRICT");
+      denyUnstamped = env !== "0";
+    } catch {
+      denyUnstamped = true;
+    }
+  }
+  if (recordOrgId == null || String(recordOrgId).trim() === "") {
+    return !denyUnstamped;
+  }
+  if (isLegacyOrg(recordOrgId)) {
+    return !denyUnstamped;
+  }
   return String(recordOrgId) === callerOrgId;
 }
 

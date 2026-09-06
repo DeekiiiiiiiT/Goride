@@ -1,3 +1,9 @@
+/** Maker-checker: re-export shared threshold (R-11 — single source of truth). */
+export {
+  SETTLEMENT_APPROVAL_THRESHOLD,
+  requiresSettlementApproval as requiresApproval,
+} from '@roam/finance-core';
+
 /**
  * Settlement remittance advice + bank-file export (Phase 6).
  * Pure formatters — no I/O.
@@ -82,12 +88,4 @@ export function buildBankFile(rows: BankFileRow[], header = true): string {
   );
   if (!header) return body.join("\n");
   return ["account|name|amount|currency|reference|value_date", ...body].join("\n");
-}
-
-/** Maker-checker: payouts at/above this major-unit amount need approval. */
-export const SETTLEMENT_APPROVAL_THRESHOLD = 50000;
-
-/** Maker-checker threshold helper (major units). */
-export function requiresApproval(amount: number, threshold: number = SETTLEMENT_APPROVAL_THRESHOLD): boolean {
-  return Number(amount) >= Number(threshold) && Number(threshold) > 0;
 }

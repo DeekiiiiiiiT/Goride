@@ -49,9 +49,14 @@ export function useSettlementCommands() {
 
   const pay = useMutation({
     mutationFn: async (body: SettlementPayBody) => {
-      // Maker-checker: amounts >= SETTLEMENT_APPROVAL_THRESHOLD flag for approval queue.
-      const needsApproval = requiresApproval(body.amount, SETTLEMENT_APPROVAL_THRESHOLD);
-      const result = await settlementCommandsApi.pay(body);
+      const result = (await settlementCommandsApi.pay(body)) as {
+        requiresApproval?: boolean;
+        movement?: { approvalState?: string };
+      };
+      const needsApproval =
+        result?.requiresApproval === true ||
+        String(result?.movement?.approvalState || '').toLowerCase() === 'pending' ||
+        requiresApproval(body.amount, SETTLEMENT_APPROVAL_THRESHOLD);
       return { result, requiresApproval: needsApproval };
     },
     onSuccess,
@@ -72,5 +77,39 @@ export function useSettlementCommands() {
     onSuccess,
   });
 
-  return { collect, pay, writeOff, reverse, startRun, invalidate: onSuccess, newIdempotencyKey };
+  const verify = useMutation({
+    mutationFn: (body: Parameters<typeof settlementCommandsApi.verify>[0]) =>
+      settlementCommandsApi.verify(body),
+    onSuccess,
+  });
+
+  const approve = useMutation({
+    mutationFn: ({
+      movementId,
+      decision,
+      note,
+    }: {
+      movementId: string;
+      decision: 'approved' | 'rejected';
+      note?: string;
+    }) =>
+      settlementCommandsApi.approve(movementId, {
+        decision,
+        note,
+        idempotencyKey: newIdempotencyKey(),
+      }),
+    onSuccess,
+  });
+
+  return {
+    collect,
+    pay,
+    writeOff,
+    reverse,
+    startRun,
+    verify,
+    approve,
+    invalidate: onSuccess,
+    newIdempotencyKey,
+  };
 }

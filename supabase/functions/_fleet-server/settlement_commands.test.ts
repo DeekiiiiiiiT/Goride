@@ -2,6 +2,7 @@ import { assertEquals, assertThrows } from "https://deno.land/std@0.224.0/assert
 import {
   toMinor,
   assertExpectedOutstanding,
+  assertPeriodCasClaimed,
   enforcePayCap,
   enforceCollectCap,
   buildMovementRow,
@@ -35,6 +36,22 @@ Deno.test("assertExpectedOutstanding throws STALE_RESIDUAL", () => {
     assertEquals((e as SettlementCommandError).code, "STALE_RESIDUAL");
     assertEquals((e as SettlementCommandError).status, 409);
   }
+});
+
+Deno.test("assertPeriodCasClaimed fails closed when CAS returns null (concurrent pay)", () => {
+  assertPeriodCasClaimed({ id: "period-1" });
+  try {
+    assertPeriodCasClaimed(null);
+    throw new Error("expected throw");
+  } catch (e) {
+    assertEquals((e as SettlementCommandError).code, "STALE_RESIDUAL");
+    assertEquals((e as SettlementCommandError).status, 409);
+  }
+  // Two writers: first claim wins, second sees null → exactly one success.
+  const firstClaim = { id: "a" };
+  const secondClaim = null;
+  assertPeriodCasClaimed(firstClaim);
+  assertThrows(() => assertPeriodCasClaimed(secondClaim), SettlementCommandError);
 });
 
 Deno.test("enforcePayCap blocks over-entitlement", () => {
