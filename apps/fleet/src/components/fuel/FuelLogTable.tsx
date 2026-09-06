@@ -574,9 +574,8 @@ export function FuelLogTable({
     ledgerIntegrity,
   });
   const { transactionKpis, summaryLoading, hasExtraTxnFilters, serverSummary } = txnKpis;
-  const showLocalTotalsHint =
-    !!txnKpis.summaryError ||
-    String(transactionKpis.populationNote || '').startsWith('Local totals');
+  // Derive from KPI note only — never read summaryError bare (ROAM-FLEET-19 HMR).
+  const showLocalTotalsHint = String(transactionKpis.populationNote || '').startsWith('Local totals');
 
   const cycleKpis = useMemo(
     () =>

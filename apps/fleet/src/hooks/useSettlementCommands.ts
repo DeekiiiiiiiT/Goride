@@ -1,21 +1,15 @@
 /**
- * Settlement desk mutations — idempotent commands + shared invalidation.
+ * Settlement desk helpers — invalidate queries after direct API commands.
+ * Mutations intentionally omitted: DriverSettlementsPage calls settlementCommandsApi
+ * imperatively; unused useMutation hooks crashed under Vite HMR (ROAM-FLEET-1B/1C).
  */
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
+import { useCallback } from 'react';
 import { DRIVER_FINANCIAL_PERIODS_KEY } from './useDriverFinancialPeriods';
 import { settlementKeys } from './useSettlementQueue';
-import {
-  settlementCommandsApi,
-  type SettlementCollectBody,
-  type SettlementPayBody,
-  type SettlementReverseBody,
-  type SettlementRunBody,
-  type SettlementWriteOffBody,
-} from '../services/settlementCommandsApi';
-import {
-  requiresApproval,
-  SETTLEMENT_APPROVAL_THRESHOLD,
-} from '../utils/settlementEnterprise';
+import { SETTLEMENT_APPROVAL_THRESHOLD, requiresApproval } from '../utils/settlementEnterprise';
+
+export { SETTLEMENT_APPROVAL_THRESHOLD, requiresApproval };
 
 /** Client-generated idempotency key for settlement commands. */
 export function newIdempotencyKey(): string {
@@ -38,78 +32,12 @@ export function invalidateSettlementQueries(qc: ReturnType<typeof useQueryClient
   }
 }
 
+/** Thin hook for desk pages that only need invalidate + idempotency helpers. */
 export function useSettlementCommands() {
   const qc = useQueryClient();
-  const onSuccess = () => invalidateSettlementQueries(qc);
-
-  const collect = useMutation({
-    mutationFn: (body: SettlementCollectBody) => settlementCommandsApi.collect(body),
-    onSuccess,
-  });
-
-  const pay = useMutation({
-    mutationFn: async (body: SettlementPayBody) => {
-      const result = (await settlementCommandsApi.pay(body)) as {
-        requiresApproval?: boolean;
-        movement?: { approvalState?: string };
-      };
-      const needsApproval =
-        result?.requiresApproval === true ||
-        String(result?.movement?.approvalState || '').toLowerCase() === 'pending' ||
-        requiresApproval(body.amount, SETTLEMENT_APPROVAL_THRESHOLD);
-      return { result, requiresApproval: needsApproval };
-    },
-    onSuccess,
-  });
-
-  const writeOff = useMutation({
-    mutationFn: (body: SettlementWriteOffBody) => settlementCommandsApi.writeOff(body),
-    onSuccess,
-  });
-
-  const reverse = useMutation({
-    mutationFn: (body: SettlementReverseBody) => settlementCommandsApi.reverse(body),
-    onSuccess,
-  });
-
-  const startRun = useMutation({
-    mutationFn: (body: SettlementRunBody) => settlementCommandsApi.createRun(body),
-    onSuccess,
-  });
-
-  const verify = useMutation({
-    mutationFn: (body: Parameters<typeof settlementCommandsApi.verify>[0]) =>
-      settlementCommandsApi.verify(body),
-    onSuccess,
-  });
-
-  const approve = useMutation({
-    mutationFn: ({
-      movementId,
-      decision,
-      note,
-    }: {
-      movementId: string;
-      decision: 'approved' | 'rejected';
-      note?: string;
-    }) =>
-      settlementCommandsApi.approve(movementId, {
-        decision,
-        note,
-        idempotencyKey: newIdempotencyKey(),
-      }),
-    onSuccess,
-  });
-
+  const invalidate = useCallback(() => invalidateSettlementQueries(qc), [qc]);
   return {
-    collect,
-    pay,
-    writeOff,
-    reverse,
-    startRun,
-    verify,
-    approve,
-    invalidate: onSuccess,
+    invalidate,
     newIdempotencyKey,
   };
 }

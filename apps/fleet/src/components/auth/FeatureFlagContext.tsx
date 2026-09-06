@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
-import { API_ENDPOINTS, publicAnonKey } from '@roam/api-client';
+import { API_ENDPOINTS } from '@roam/api-client';
 import {
   allModulesOff,
   mergeFleetEffectiveModules,
@@ -7,6 +7,7 @@ import {
   type ModuleKey,
 } from '@roam/platform-settings';
 import { withProductLineHeaders } from '../../config/productLine';
+import { fetchEnterpriseModules } from '../../services/enterpriseModulesClient';
 import { useAuth } from './AuthContext';
 
 /** Legacy fleet module keys used by AppSidebar gating. */
@@ -96,15 +97,8 @@ export function FeatureFlagProvider({ children }: { children: React.ReactNode })
     if (initial) setLoading(true);
 
     try {
-      const res = await fetch(`${API_ENDPOINTS.fleet}/enterprise/me/modules`, {
-        headers: {
-          ...withProductLineHeaders(),
-          Authorization: `Bearer ${token}`,
-          apikey: publicAnonKey,
-        },
-      });
-
-      if (!res.ok) {
+      const data = await fetchEnterpriseModules(token);
+      if (!data) {
         if (lastKnownRef.current) {
           setEnabledModules(lastKnownRef.current);
         } else {
@@ -113,7 +107,6 @@ export function FeatureFlagProvider({ children }: { children: React.ReactNode })
         return;
       }
 
-      const data = await res.json();
       const lines = Array.isArray(data.serviceLines)
         ? data.serviceLines.filter((s: string) => s === 'rideshare' || s === 'rush_delivery')
         : ['rideshare'];

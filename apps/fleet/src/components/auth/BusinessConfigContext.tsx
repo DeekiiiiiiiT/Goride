@@ -3,8 +3,7 @@ import { BusinessType } from '../../types/data';
 import { DEFAULT_BUSINESS_TYPE, isValidBusinessType } from '../../utils/businessTypes';
 import { api } from '../../services/api';
 import { supabase } from '../../utils/supabase/client';
-import { API_ENDPOINTS, publicAnonKey } from '@roam/api-client';
-import { withProductLineHeaders } from '../../config/productLine';
+import { fetchEnterpriseModules } from '../../services/enterpriseModulesClient';
 import { useAuth } from './AuthContext';
 
 export type ServiceLine = 'rideshare' | 'rush_delivery';
@@ -60,15 +59,8 @@ export function BusinessConfigProvider({ children }: { children: React.ReactNode
           const { data: { session } } = await supabase.auth.getSession();
           const token = session?.access_token;
           if (token) {
-            const res = await fetch(`${API_ENDPOINTS.fleet}/enterprise/me/modules`, {
-              headers: {
-                ...withProductLineHeaders(),
-                Authorization: `Bearer ${token}`,
-                apikey: publicAnonKey,
-              },
-            });
-            if (res.ok) {
-              const data = await res.json();
+            const data = await fetchEnterpriseModules(token);
+            if (data) {
               const lines = normalizeServiceLines(data.serviceLines);
               if (lines.length) orgLines = lines;
             }
