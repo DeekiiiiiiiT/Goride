@@ -46,13 +46,18 @@ export type SettlementKpiBarProps = {
   awaiting: number | null | undefined;
   cleared: number | null | undefined;
   loading?: boolean;
+  /** @deprecated Prefer per-tile error flags — a single error blanked healthy KPIs. */
   error?: boolean;
+  settledOwesError?: boolean;
+  cashHeldError?: boolean;
+  fleetOwesError?: boolean;
+  awaitingError?: boolean;
+  clearedError?: boolean;
   settledOwesSub?: string;
   cashHeldSub?: string;
   fleetOwesSub?: string;
   awaitingSub?: string;
   clearedSub?: string;
-  /** Direction-aware labels for awaiting / cleared tiles. */
   directionLabels?: {
     awaiting?: string;
     cleared?: string;
@@ -61,6 +66,7 @@ export type SettlementKpiBarProps = {
 
 /**
  * KPI strip for Driver Settlements. On error shows "—" never $0.00 (S3-5).
+ * Errors are per-tile so a failed tx history fetch does not blank Collect totals.
  */
 export function SettlementKpiBar({
   settledOwes,
@@ -70,6 +76,11 @@ export function SettlementKpiBar({
   cleared,
   loading,
   error,
+  settledOwesError,
+  cashHeldError,
+  fleetOwesError,
+  awaitingError,
+  clearedError,
   settledOwesSub,
   cashHeldSub,
   fleetOwesSub,
@@ -77,44 +88,38 @@ export function SettlementKpiBar({
   clearedSub,
   directionLabels,
 }: SettlementKpiBarProps) {
-  const display = (n: number | null | undefined) => {
-    if (error) return '—';
-    if (loading && (n == null || !Number.isFinite(n))) return '—';
-    return MONEY(n);
+  const tile = (
+    n: number | null | undefined,
+    tileError: boolean | undefined,
+    sub: string | undefined,
+  ) => {
+    const failed = Boolean(error || tileError);
+    if (failed) return { value: '—', sub: 'Failed to load' };
+    if (loading && (n == null || !Number.isFinite(n))) return { value: '—', sub };
+    return { value: MONEY(n), sub };
   };
 
-  const failSub = error ? 'Failed to load' : undefined;
+  const a = tile(settledOwes, settledOwesError, settledOwesSub);
+  const b = tile(cashHeld, cashHeldError, cashHeldSub);
+  const c = tile(fleetOwes, fleetOwesError, fleetOwesSub);
+  const d = tile(awaiting, awaitingError, awaitingSub);
+  const e = tile(cleared, clearedError, clearedSub);
 
   return (
     <div className="grid grid-cols-2 lg:grid-cols-5 gap-3" aria-live="polite">
-      <KpiTile
-        label="Driver owes (settled)"
-        value={display(settledOwes)}
-        sub={failSub ?? settledOwesSub}
-        tone="owed"
-      />
-      <KpiTile
-        label="Cash held (not finalized)"
-        value={display(cashHeld)}
-        sub={failSub ?? cashHeldSub}
-        tone="pending"
-      />
-      <KpiTile
-        label="Fleet owes"
-        value={display(fleetOwes)}
-        sub={failSub ?? fleetOwesSub}
-        tone="pay"
-      />
+      <KpiTile label="Driver owes (settled)" value={a.value} sub={a.sub} tone="owed" />
+      <KpiTile label="Cash held (not finalized)" value={b.value} sub={b.sub} tone="pending" />
+      <KpiTile label="Fleet owes" value={c.value} sub={c.sub} tone="pay" />
       <KpiTile
         label={directionLabels?.awaiting || 'Awaiting bank clear'}
-        value={display(awaiting)}
-        sub={failSub ?? awaitingSub}
+        value={d.value}
+        sub={d.sub}
         tone="pending"
       />
       <KpiTile
         label={directionLabels?.cleared || 'Cleared this week'}
-        value={display(cleared)}
-        sub={failSub ?? clearedSub}
+        value={e.value}
+        sub={e.sub}
         tone="paid"
       />
     </div>

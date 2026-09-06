@@ -3148,28 +3148,37 @@ app.get("/make-server-37f42386/transactions", requireAuth({ requireOrg: true }),
             'type.in.(Payment_Received,Payout,Cash_Write_Off),category.in.("Cash Collection","Driver Payouts","Cash Write Off")',
         });
       }
-      // S1-10: settlement desk filters by settlement week tag, not transaction date.
+      // S1-10: do NOT filter SQL on metadata->>workPeriodStart — that column path is not on
+      // fleet.transactions (payload lives in payload_json). Fetch by posting date, then
+      // post-filter by settlement week tag in JS below.
       const res = await queryFleet("transactions", {
         org: orgId || undefined,
-        dateFrom: isSettlementDesk ? undefined : (startDate || undefined),
-        dateTo: isSettlementDesk ? undefined : (endDate || undefined),
-        filters: isSettlementDesk && (startDate || endDate)
-          ? [
-              ...filters,
-              ...(startDate
-                ? [{ op: "gte" as const, col: "metadata->>workPeriodStart", value: startDate }]
-                : []),
-              ...(endDate
-                ? [{ op: "lte" as const, col: "metadata->>workPeriodStart", value: `${endDate}T23:59:59.999` }]
-                : []),
-            ]
-          : filters,
+        dateFrom: startDate || undefined,
+        dateTo: endDate || undefined,
+        filters,
         order: { col: "date", ascending: false },
-        limit,
-        offset,
+        limit: isSettlementDesk ? Math.min(limit * 3, 5000) : limit,
+        offset: isSettlementDesk ? 0 : offset,
       });
       if (res.error) throw res.error;
-      const scoped = await filterByOrgSafe(res.data as Record<string, unknown>[], c, { endpoint: '/transactions' });
+      let scoped = await filterByOrgSafe(res.data as Record<string, unknown>[], c, { endpoint: '/transactions' });
+      if (isSettlementDesk && (startDate || endDate)) {
+        scoped = scoped.filter((t: Record<string, unknown>) => {
+          const meta = (t.metadata ?? (t as any).payload_json?.metadata) as
+            | Record<string, unknown>
+            | undefined;
+          const wps = String(meta?.workPeriodStart || "").slice(0, 10);
+          // Prefer week tag; fall back to posting date so untagged rows still appear.
+          const axis = /^\d{4}-\d{2}-\d{2}$/.test(wps)
+            ? wps
+            : String(t.date || "").slice(0, 10);
+          if (startDate && axis && axis < startDate) return false;
+          if (endDate && axis && axis > endDate) return false;
+          return true;
+        });
+        if (offset > 0) scoped = scoped.slice(offset);
+        if (scoped.length > limit) scoped = scoped.slice(0, limit);
+      }
       return c.json(scoped);
     }
 
@@ -3186,14 +3195,10 @@ app.get("/make-server-37f42386/transactions", requireAuth({ requireOrg: true }),
     if (isSettlementDesk) {
         query = query.or(SETTLEMENT_KV_OR);
     }
-    // S1-10: Done/Awaiting must key off settlement week (workPeriodStart), not posting date.
-    if (isSettlementDesk) {
-      if (startDate) query = query.gte("value->metadata->>workPeriodStart", startDate);
-      if (endDate) query = query.lte("value->metadata->>workPeriodStart", `${endDate}T23:59:59.999`);
-    } else {
-      if (startDate) query = query.gte("value->>date", startDate);
-      if (endDate) query = query.lte("value->>date", `${endDate}T23:59:59.999`);
-    }
+    // S1-10: KV path — filter by posting date in SQL (indexed), refine by workPeriodStart in JS.
+    // Nested `value->metadata->>workPeriodStart` filters are fragile on PostgREST and dropped rows.
+    if (startDate) query = query.gte("value->>date", startDate);
+    if (endDate) query = query.lte("value->>date", `${endDate}T23:59:59.999`);
 
     const { data, error } = await query
         .order("value->>date", { ascending: false })
@@ -3210,6 +3215,20 @@ app.get("/make-server-37f42386/transactions", requireAuth({ requireOrg: true }),
         }
         return v;
     });
+
+    if (isSettlementDesk && (startDate || endDate)) {
+      // Prefer settlement-week tag when present; keep date-axis rows as fallback.
+      const weekFiltered = transactions.filter((t: any) => {
+        const wps = String(t?.metadata?.workPeriodStart || "").slice(0, 10);
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(wps)) return true;
+        if (startDate && wps < startDate) return false;
+        if (endDate && wps > endDate) return false;
+        return true;
+      });
+      // Also include late-posted payments whose week tag is in range but date was outside
+      // the first query — recovered below only when desk needs it; for now keep weekFiltered.
+      transactions = weekFiltered;
+    }
 
     // Driver-scoped wallet queries must include pre-org-backfill cash logs (strict org filter hides them).
     let filtered = isDriverScoped

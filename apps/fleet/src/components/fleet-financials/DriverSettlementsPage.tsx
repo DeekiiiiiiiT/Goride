@@ -700,12 +700,10 @@ export function DriverSettlementsPage({
     .reduce((s, t) => s + Math.abs(Number(t.amount) || 0), 0);
   const clearedThisWeek = direction === 'pay' ? clearedPayThisWeek : clearedCollectThisWeek;
 
-  const queueFetchError =
-    owesQuery.isError ||
-    driverOwesQuery.isError ||
-    cashHeldQuery.isError ||
-    reconciledQuery.isError ||
-    txsQuery.isError;
+  // Per-basis errors — don't blank Collect KPIs when only the tx history query fails.
+  const collectKpiError = driverOwesQuery.isError || cashHeldQuery.isError;
+  const payKpiError = owesQuery.isError;
+  const txKpiError = txsQuery.isError;
 
   useEffect(() => {
     setSelected(new Set());
@@ -1374,7 +1372,11 @@ export function DriverSettlementsPage({
         awaiting={awaitingTotal}
         cleared={clearedThisWeek}
         loading={loading}
-        error={queueFetchError}
+        settledOwesError={driverOwesQuery.isError}
+        cashHeldError={cashHeldQuery.isError}
+        fleetOwesError={owesQuery.isError}
+        awaitingError={txKpiError}
+        clearedError={txKpiError}
         settledOwesSub={`${driverOwesQuery.data?.rows?.length || 0} weeks · period range`}
         cashHeldSub={`${cashHeldQuery.data?.rows?.length || 0} weeks · period range`}
         fleetOwesSub={`${owesQuery.data?.rows?.length || 0} weeks · period range`}
@@ -1386,12 +1388,14 @@ export function DriverSettlementsPage({
         }}
       />
 
-      {queueFetchError ? (
+      {collectKpiError || payKpiError || txKpiError || reconciledQuery.isError ? (
         <div
           role="alert"
           className="rounded-md border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900"
         >
-          Could not load settlement queues. Totals above are not zero — refresh or try again.
+          {txKpiError && !collectKpiError && !payKpiError
+            ? 'Payment history (Awaiting / Done / Cleared) failed to load. Collect and Pay queues below may still be valid.'
+            : 'Could not load some settlement queues. Totals marked “Failed to load” are not zero — refresh or try again.'}
           <Button
             type="button"
             variant="outline"
