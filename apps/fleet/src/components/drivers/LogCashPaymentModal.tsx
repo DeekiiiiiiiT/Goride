@@ -23,6 +23,10 @@ import { toast } from "sonner";
 import { Loader2, DollarSign, Wallet, ArrowRightLeft, Calendar } from "lucide-react";
 import { FinancialTransaction } from '../../types/data';
 import { format } from "date-fns";
+import {
+  isSettlementPeriodEnded,
+  settlementPeriodOpenMessage,
+} from "../../utils/settlementPeriodGate";
 
 interface SettlementPeriod {
   start: Date;
@@ -80,7 +84,20 @@ export function LogCashPaymentModal({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [overCollectReason, setOverCollectReason] = useState('');
 
-  const activePeriods = periods.filter(p => p.amountOwed > 0);
+  const activePeriods = periods.filter((p) => {
+    if (!(p.amountOwed > 0)) return false;
+    return isSettlementPeriodEnded({
+      periodEnd: format(p.end, 'yyyy-MM-dd'),
+      periodAnchor: format(p.start, 'yyyy-MM-dd'),
+    });
+  });
+  const blockedOpenPeriods = periods.filter((p) => {
+    if (!(p.amountOwed > 0)) return false;
+    return !isSettlementPeriodEnded({
+      periodEnd: format(p.end, 'yyyy-MM-dd'),
+      periodAnchor: format(p.start, 'yyyy-MM-dd'),
+    });
+  });
 
   // Helper: find a period key that matches a given start date ISO string
   const findPeriodKey = (startIso: string): string => {
@@ -222,6 +239,24 @@ export function LogCashPaymentModal({
     // Cash Collection must be tagged to a Settlement Week (Cash Returned SSOT)
     if (transactionType === 'payment' && (!workPeriodStart || !workPeriodEnd)) {
       toast.error("Select a Settlement Week for this cash payment");
+      return;
+    }
+
+    if (
+      transactionType === 'payment' &&
+      workPeriodStart &&
+      workPeriodEnd &&
+      !isSettlementPeriodEnded({
+        periodAnchor: workPeriodStart,
+        periodEnd: workPeriodEnd,
+      })
+    ) {
+      toast.error(
+        settlementPeriodOpenMessage({
+          periodAnchor: workPeriodStart,
+          periodEnd: workPeriodEnd,
+        }),
+      );
       return;
     }
 
@@ -445,6 +480,10 @@ export function LogCashPaymentModal({
                   );
                 })}
               </select>
+            ) : blockedOpenPeriods.length > 0 ? (
+              <div className="flex h-9 w-full items-center rounded-md border border-amber-200 bg-amber-50 px-3 text-sm text-amber-800">
+                Current week still open — settle after it ends
+              </div>
             ) : (
               <div className="flex h-9 w-full items-center rounded-md border border-input bg-slate-50 px-3 text-sm text-slate-500">
                 No settlement weeks available yet

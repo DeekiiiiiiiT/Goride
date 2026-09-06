@@ -63,6 +63,12 @@ export {
   SETTLEMENT_APPROVAL_THRESHOLD,
   requiresSettlementApproval,
 } from './settlementApproval.ts';
+export {
+  isSettlementPeriodEnded,
+  isSettlementPeriodOpen,
+  settlementPeriodOpenMessage,
+} from './settlementPeriodGate.ts';
+export type { SettlementPeriodGateInput } from './settlementPeriodGate.ts';
 export { clusterPayoutCashC1 } from './payoutCashC1.ts';
 export type { PayoutCashC1Row, PayoutCashC1Cluster } from './payoutCashC1.ts';
 export {

@@ -9,9 +9,10 @@
 | 3 — re-verification | 2026-09-05 | 17 of 18 closed. One real concurrency bug remains (§0.1) plus cleanup |
 | 4 — implementation closeout | 2026-09-05 | All Pass-3 open items closed (N-5, R-9, R-11, R-12, S2-3b, S2-9, S3-12, Vitest, §3 tests). |
 | 5 — independent verification | 2026-09-05 | Every Pass-4 claim verified true. One new operational finding: N-6 (§0.4). No code defects outstanding. |
-| **6 — N-6 closeout** | **2026-09-05** | **Live DB: orphaned=0 / 36 periods. Write-path stamp + `GET /settlements/health` + desk alert + dual-pay/approve CAS test. N-6 closed.** |
+| 6 — N-6 closeout | 2026-09-05 | Live DB: orphaned=0 / 36 periods. Write-path stamp + `GET /settlements/health` + desk alert + dual-pay/approve CAS test. N-6 closed. |
+| **7 — independent verification** | **2026-09-05** | **All Pass-6 claims verified, incl. re-running the live query. No defects outstanding. Two coverage observations (O-1, O-2) — §0.6.** |
 
-**Mode**: Passes 1–3 and 5 audit-only. Pass 4 and Pass 6 implemented (code changed).
+**Mode**: Passes 1–3, 5 and 7 audit-only. Pass 4 and Pass 6 implemented (code changed).
 
 **Related**: [SETTLEMENT_CALCULATION_AUDIT.md](SETTLEMENT_CALCULATION_AUDIT.md) · [docs/FINANCIAL_INTEGRITY_AUDIT.md](docs/FINANCIAL_INTEGRITY_AUDIT.md) · [docs/adr/0010-collect-kpi-basis.md](docs/adr/0010-collect-kpi-basis.md)
 
@@ -80,9 +81,52 @@ Extended backfill migration **not required** (gate: orphaned = 0). Empty Reconci
 
 Do **not** broaden RLS to include `organization_id IS NULL` (reintroduces Wave-2 cross-tenant leak).
 
-## 0.5 Recommended follow-ups (non-blocking)
+## 0.5 Pass 7 — independent verification of Pass 6
 
-- Optional live dual-HTTP pay soak against deployed edge (predicate + wiring covered; full network race still optional).
+| Claim | Verified |
+|---|---|
+| Write-path stamp | `requirePeriodOrganizationId` ([driver_financial_periods.ts:486](supabase/functions/_fleet-server/driver_financial_periods.ts#L486)) resolves UUID → driver org → sole-org → **throws**. Called at the period upsert ([:1280](supabase/functions/_fleet-server/driver_financial_periods.ts#L1280)). A NULL-org write is now impossible rather than merely unlikely. |
+| Health endpoint | `GET ${BASE}/health` behind `transactions.view` ([settlement_commands_controller.tsx:1623](supabase/functions/_fleet-server/settlement_commands_controller.tsx#L1623)) |
+| Desk alert | Amber banner at [:1497-1505](apps/fleet/src/components/fleet-financials/DriverSettlementsPage.tsx#L1497-L1505), driven by `healthQuery` |
+| CAS coverage | 6 tests in `settlement_authz_concurrency.test.ts`, incl. "two observers of v1 → exactly one CAS win" and "dual pay handlers + approve share observed-version CAS" |
+| Full Deno suite | **25 passed / 0 failed** across all five settlement test files |
+| Live DB numbers | **Re-run independently against `csfllzzastacofsvcdsc`**: `orphaned = 0`, `total = 36`, anchors `2025-12-08 … 2026-08-31`, `distinct_orgs = 1`. Pass-6 figures confirmed exactly. |
+
+The sole-org fallback is worth noting as deliberately safe: it only fires when exactly one `organizations` row exists, and the moment a second tenant is created an unresolvable driver throws instead of guessing. It degrades in the correct direction.
+
+## 0.6 Pass 7 observations — coverage, not defects
+
+**O-1 · The Reconciled tab is empty because nothing has ever reached `settled` — and that is correct.**
+
+Live status distribution across all 36 periods:
+
+| settlement_status | weeks | range |
+|---|---|---|
+| `company_owes` | 19 | 2026-01-19 … 2026-08-24 |
+| `pending` | 13 | 2025-12-08 … 2026-08-10 |
+| `driver_owes` | 4 | 2026-01-12 … 2026-08-31 |
+| **`settled`** | **0** | — |
+
+`deriveDirectionalSettlementStatus` only returns `settled` when `|settlement_amount| < 0.01` ([settlementStatusRepair.ts](packages/finance-core/src/settlementStatusRepair.ts)), and no week has yet been driven to a zero residual. So the Pass-4 soak note is definitively answered: **the empty Reconciled tab is real data, not a query bug** — and it is empty for every date range, not just Jul–Sep.
+
+The consequence worth tracking: the Reconciled read path — including the rich-field mapping added in Pass 4 ([controller:1376-1407](supabase/functions/_fleet-server/settlement_commands_controller.tsx#L1376-L1407)) and the extracted `ReconciledTable` — has **never rendered a real row**. It is correct by inspection and by unit test, unexercised in practice. Settling one week to zero (collect or pay the residual in full) would validate the whole path in one action.
+
+**O-2 · The command machinery is barely exercised against live data.**
+
+| Table | Rows |
+|---|---|
+| `settlement_movements` | 1 |
+| `settlement_runs` | 0 |
+| `driver_financial_periods` with `row_version > 1` | 1 |
+
+One movement, zero runs. The batch/run path — locks, per-row outcomes, `settlement_run_rows` — has never executed against the live database. Again: covered by tests, not by use.
+
+Neither observation is a defect, and neither blocks anything. They mark where the residual risk actually sits now that the code is correct: in paths whose first real execution is still ahead.
+
+## 0.7 Recommended follow-ups (non-blocking)
+
+- **Exercise the two unproven paths once each** (O-1, O-2): settle one week to a zero residual to light up Reconciled, and run one small batch through `/settlements/runs`. Between them that is the highest-value validation left, and it costs two operator actions rather than engineering time.
+- Optional live dual-HTTP pay soak against the deployed edge (predicate + wiring covered; the full network race is still only proven by unit test).
 - Deferred product work remains out of scope.
 
 ---
@@ -178,7 +222,11 @@ Do **not** broaden RLS to include `organization_id IS NULL` (reintroduces Wave-2
 
 **Pass 6 closed N-6.** Live data has zero NULL-org periods (36/36 stamped). Period upserts now refuse NULL org; `GET /settlements/health` and a desk alert prevent silent under-reporting if drift returns.
 
-Across six passes: **every Severity-1, structural, UX, and operational finding raised in this program is closed or deliberately deferred.** Desk KPIs can be trusted for org-scoped totals on the current GoRide database.
+**Pass 7 verified it independently**, including re-running the live query (`orphaned = 0`, 36 periods, 1 org) and the full Deno suite (25 passed / 0 failed).
+
+Across seven passes: **every Severity-1, structural, UX, and operational finding raised in this program is closed or deliberately deferred. Nothing is outstanding.** Desk KPIs can be trusted for org-scoped totals on the current GoRide database.
+
+What remains is not engineering work but **exposure**: two paths are correct by inspection and by test, and have never executed against real data — Reconciled (0 `settled` weeks exist, so the tab has never rendered a row) and batch runs (`settlement_runs` is empty). §0.6 explains why, and §0.7 suggests settling one week and running one small batch to close that gap in two operator actions.
 
 Deferred product work (timeline, disputes, multi-currency, attachments) remains out of scope by design.
 
@@ -186,4 +234,4 @@ The settlement math was correct at the start and is untouched.
 
 ---
 
-*Passes 1–3 and 5: audit only. Passes 4 and 6: implementation.*
+*Passes 1–3, 5 and 7: audit only. Passes 4 and 6: implementation.*

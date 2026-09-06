@@ -41,7 +41,10 @@ import {
   SettlementCommandError,
   type SettlementMovementKind,
 } from "./settlement_commands.ts";
-import { assertPeriodNotFrozen } from "./settlement_period_freeze.ts";
+import {
+  assertPeriodNotFrozen,
+  assertPeriodEndedForSettlement,
+} from "./settlement_period_freeze.ts";
 import {
   SETTLEMENT_APPROVAL_THRESHOLD,
   requiresSettlementApproval,
@@ -331,6 +334,9 @@ async function insertMovementAndDualWrite(
     expectedRowVersion: number;
   },
 ): Promise<{ movement: Record<string, unknown>; period: DriverFinancialPeriodRow | null }> {
+  // Calendar close first — open weeks cannot Collect / Pay / Write-off / batch.
+  assertPeriodEndedForSettlement(opts.weekAnchor);
+
   // Claim lock first — two concurrent pays must not both insert.
   await claimPeriodWriteLock(
     opts.driverId,

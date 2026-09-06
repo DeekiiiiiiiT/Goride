@@ -18,6 +18,10 @@ import { Textarea } from '../ui/textarea';
 import { toast } from 'sonner';
 import { Loader2, Ban } from 'lucide-react';
 import { format } from 'date-fns';
+import {
+  isSettlementPeriodEnded,
+  settlementPeriodOpenMessage,
+} from '../../utils/settlementPeriodGate';
 
 export type CashWriteOffSavePayload = {
   amount: number;
@@ -85,6 +89,20 @@ export function CashWriteOffModal({
     }
     if (!workPeriodStart || !workPeriodEnd) {
       toast.error('Settlement Week is required');
+      return;
+    }
+    if (
+      !isSettlementPeriodEnded({
+        periodAnchor: workPeriodStart,
+        periodEnd: workPeriodEnd,
+      })
+    ) {
+      toast.error(
+        settlementPeriodOpenMessage({
+          periodAnchor: workPeriodStart,
+          periodEnd: workPeriodEnd,
+        }),
+      );
       return;
     }
     const reasonTrim = reason.trim();

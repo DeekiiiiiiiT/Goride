@@ -18,6 +18,10 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { MONEY_EPS } from '@roam/finance-core';
+import {
+  isSettlementPeriodEnded,
+  settlementPeriodOpenMessage,
+} from '../../utils/settlementPeriodGate';
 import { api } from '../../services/api';
 import {
   isClearedDriverCashPayment,
@@ -813,10 +817,31 @@ export function DriverSettlementsPage({
 
   const openLogCashForDriver = (driverId: string, driverName: string, row?: PeriodRow) => {
     const openWeeks = collectOutstanding.filter((r) => r.driverId === driverId);
-    const target = row || openWeeks[0];
+    const endedWeeks = openWeeks.filter((r) =>
+      isSettlementPeriodEnded({
+        periodAnchor: r.periodAnchor,
+        periodEnd: r.periodEnd,
+      }),
+    );
+    const target = row || endedWeeks[0] || openWeeks[0];
+    if (
+      target &&
+      !isSettlementPeriodEnded({
+        periodAnchor: target.periodAnchor,
+        periodEnd: target.periodEnd,
+      })
+    ) {
+      toast.error(
+        settlementPeriodOpenMessage({
+          periodAnchor: target.periodAnchor,
+          periodEnd: target.periodEnd,
+        }),
+      );
+      return;
+    }
     const maxAmount = target
       ? collectAmount(target)
-      : openWeeks.reduce((s, r) => s + collectAmount(r), 0);
+      : endedWeeks.reduce((s, r) => s + collectAmount(r), 0);
     const fallbackStart = format(startOfWeek(new Date(), { weekStartsOn: 1 }), 'yyyy-MM-dd');
     const fallbackEnd = format(endOfWeek(new Date(), { weekStartsOn: 1 }), 'yyyy-MM-dd');
     setCollectModal({
@@ -830,6 +855,23 @@ export function DriverSettlementsPage({
   };
 
   const toggleSelect = (key: string) => {
+    const row = outstandingQueueRows.find((r) => rowKey(r) === key);
+    if (
+      row &&
+      !selected.has(key) &&
+      !isSettlementPeriodEnded({
+        periodAnchor: row.periodAnchor,
+        periodEnd: row.periodEnd,
+      })
+    ) {
+      toast.error(
+        settlementPeriodOpenMessage({
+          periodAnchor: row.periodAnchor,
+          periodEnd: row.periodEnd,
+        }),
+      );
+      return;
+    }
     setSelected((prev) => {
       const next = new Set(prev);
       if (next.has(key)) next.delete(key);
@@ -839,11 +881,17 @@ export function DriverSettlementsPage({
   };
 
   const toggleSelectAll = () => {
-    if (selected.size === outstandingQueueRows.length) {
+    const actionable = outstandingQueueRows.filter((r) =>
+      isSettlementPeriodEnded({
+        periodAnchor: r.periodAnchor,
+        periodEnd: r.periodEnd,
+      }),
+    );
+    if (selected.size === actionable.length && actionable.length > 0) {
       setSelected(new Set());
       return;
     }
-    setSelected(new Set(outstandingQueueRows.map((r) => rowKey(r))));
+    setSelected(new Set(actionable.map((r) => rowKey(r))));
   };
 
   const selectedRows = outstandingQueueRows.filter((r) => selected.has(rowKey(r)));
@@ -1363,6 +1411,22 @@ export function DriverSettlementsPage({
       return;
     }
     if (selectedRows.length === 0) return;
+    const stillOpen = selectedRows.filter(
+      (r) =>
+        !isSettlementPeriodEnded({
+          periodAnchor: r.periodAnchor,
+          periodEnd: r.periodEnd,
+        }),
+    );
+    if (stillOpen.length > 0) {
+      toast.error(
+        settlementPeriodOpenMessage({
+          periodAnchor: stillOpen[0].periodAnchor,
+          periodEnd: stillOpen[0].periodEnd,
+        }),
+      );
+      return;
+    }
     const needsRef =
       batchMethod === 'Bank Transfer' ||
       batchMethod === 'Mobile Money' ||
@@ -1732,7 +1796,21 @@ export function DriverSettlementsPage({
               onCollect={(r) =>
                 openLogCashForDriver(r.driverId, r.driverName || r.driverId, queueToPeriodRow(r))
               }
-              onWriteOff={(r) =>
+              onWriteOff={(r) => {
+                if (
+                  !isSettlementPeriodEnded({
+                    periodAnchor: r.periodAnchor,
+                    periodEnd: r.periodEnd,
+                  })
+                ) {
+                  toast.error(
+                    settlementPeriodOpenMessage({
+                      periodAnchor: r.periodAnchor,
+                      periodEnd: r.periodEnd,
+                    }),
+                  );
+                  return;
+                }
                 setWriteOffModal({
                   isOpen: true,
                   driverId: r.driverId,
@@ -1740,8 +1818,8 @@ export function DriverSettlementsPage({
                   workPeriodStart: r.periodAnchor,
                   workPeriodEnd: r.periodEnd,
                   maxAmount: queueOwedMajor(r, 'collect'),
-                })
-              }
+                });
+              }}
             />
           </div>
         </div>
@@ -1821,7 +1899,21 @@ export function DriverSettlementsPage({
               showingAmount={outstandingShowingAmount}
               totalAmount={outstandingTotalAmount}
               onOpenDriver={onOpenDriver}
-              onPay={(r) =>
+              onPay={(r) => {
+                if (
+                  !isSettlementPeriodEnded({
+                    periodAnchor: r.periodAnchor,
+                    periodEnd: r.periodEnd,
+                  })
+                ) {
+                  toast.error(
+                    settlementPeriodOpenMessage({
+                      periodAnchor: r.periodAnchor,
+                      periodEnd: r.periodEnd,
+                    }),
+                  );
+                  return;
+                }
                 setPayoutModal({
                   isOpen: true,
                   driverId: r.driverId,
@@ -1829,9 +1921,23 @@ export function DriverSettlementsPage({
                   workPeriodStart: r.periodAnchor,
                   workPeriodEnd: r.periodEnd,
                   maxAmount: queueOwedMajor(r, 'pay'),
-                })
-              }
-              onCollect={(r) =>
+                });
+              }}
+              onCollect={(r) => {
+                if (
+                  !isSettlementPeriodEnded({
+                    periodAnchor: r.periodAnchor,
+                    periodEnd: r.periodEnd,
+                  })
+                ) {
+                  toast.error(
+                    settlementPeriodOpenMessage({
+                      periodAnchor: r.periodAnchor,
+                      periodEnd: r.periodEnd,
+                    }),
+                  );
+                  return;
+                }
                 setCollectModal({
                   isOpen: true,
                   driverId: r.driverId,
@@ -1839,9 +1945,23 @@ export function DriverSettlementsPage({
                   workPeriodStart: r.periodAnchor,
                   workPeriodEnd: r.periodEnd,
                   maxAmount: queueOwedMajor(r, 'collect'),
-                })
-              }
-              onWriteOff={(r) =>
+                });
+              }}
+              onWriteOff={(r) => {
+                if (
+                  !isSettlementPeriodEnded({
+                    periodAnchor: r.periodAnchor,
+                    periodEnd: r.periodEnd,
+                  })
+                ) {
+                  toast.error(
+                    settlementPeriodOpenMessage({
+                      periodAnchor: r.periodAnchor,
+                      periodEnd: r.periodEnd,
+                    }),
+                  );
+                  return;
+                }
                 setWriteOffModal({
                   isOpen: true,
                   driverId: r.driverId,
@@ -1849,8 +1969,8 @@ export function DriverSettlementsPage({
                   workPeriodStart: r.periodAnchor,
                   workPeriodEnd: r.periodEnd,
                   maxAmount: queueOwedMajor(r, 'collect'),
-                })
-              }
+                });
+              }}
             />
           </TabsContent>
 

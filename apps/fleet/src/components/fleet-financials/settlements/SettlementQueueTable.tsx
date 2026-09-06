@@ -16,8 +16,27 @@ import {
 import { cn } from '../../ui/utils';
 import { agingBucket, daysOverdue, type AgingBucket } from '../../../utils/settlementAging';
 import { payOutstandingAmount } from '../../../utils/driverSettlementsPayAmount';
+import {
+  isSettlementPeriodEnded,
+  settlementPeriodOpenMessage,
+} from '../../../utils/settlementPeriodGate';
 import type { SettlementQueueRow } from '../../../hooks/useSettlementQueue';
 import { useWindowedRows } from './useWindowedRows';
+
+function weekActionable(r: Pick<SettlementQueueRow, 'periodAnchor' | 'periodEnd'>): boolean {
+  return isSettlementPeriodEnded({
+    periodAnchor: r.periodAnchor,
+    periodEnd: r.periodEnd,
+  });
+}
+
+function weekOpenTitle(r: Pick<SettlementQueueRow, 'periodAnchor' | 'periodEnd'>): string | undefined {
+  if (weekActionable(r)) return undefined;
+  return settlementPeriodOpenMessage({
+    periodAnchor: r.periodAnchor,
+    periodEnd: r.periodEnd,
+  });
+}
 
 const MONEY = (n: number | null | undefined) => {
   if (n == null || !Number.isFinite(n)) return '—';
@@ -149,7 +168,8 @@ export function SettlementQueueTable({
     [rows, mode, groupByDriver],
   );
 
-  const weekKeys = useMemo(() => rows.map(rowKey), [rows]);
+  const actionableRows = useMemo(() => rows.filter(weekActionable), [rows]);
+  const weekKeys = useMemo(() => actionableRows.map(rowKey), [actionableRows]);
   const allSelected = weekKeys.length > 0 && weekKeys.every((k) => selected.has(k));
   const someSelected = weekKeys.some((k) => selected.has(k)) && !allSelected;
 
@@ -233,9 +253,17 @@ export function SettlementQueueTable({
                 ) : null}
                 {rollupWindow.visible.map((g) => {
                 const open = expanded.has(g.driverId);
-                const weekKeysForDriver = g.weeks.map(rowKey);
+                const actionableWeeks = g.weeks.filter(weekActionable);
+                const weekKeysForDriver = actionableWeeks.map(rowKey);
+                const firstActionable = actionableWeeks[0] || null;
                 const driverAllSelected =
                   weekKeysForDriver.length > 0 && weekKeysForDriver.every((k) => selected.has(k));
+                const parentOpenTitle = firstActionable
+                  ? undefined
+                  : settlementPeriodOpenMessage({
+                      periodAnchor: g.weeks[0]?.periodAnchor,
+                      periodEnd: g.weeks[0]?.periodEnd || g.oldestPeriodEnd,
+                    });
                 return (
                   <React.Fragment key={g.driverId}>
                     <TableRow
@@ -253,6 +281,7 @@ export function SettlementQueueTable({
                       <TableCell onClick={(e) => e.stopPropagation()}>
                         <Checkbox
                           checked={driverAllSelected}
+                          disabled={weekKeysForDriver.length === 0}
                           onCheckedChange={() => {
                             const allOn = weekKeysForDriver.every((k) => selected.has(k));
                             for (const k of weekKeysForDriver) {
@@ -309,7 +338,9 @@ export function SettlementQueueTable({
                               type="button"
                               size="sm"
                               className="h-8 bg-rose-700 hover:bg-rose-800"
-                              onClick={() => g.weeks[0] && onCollect?.(g.weeks[0])}
+                              disabled={!firstActionable}
+                              title={parentOpenTitle}
+                              onClick={() => firstActionable && onCollect?.(firstActionable)}
                             >
                               Collect
                             </Button>
@@ -319,7 +350,9 @@ export function SettlementQueueTable({
                             type="button"
                             size="sm"
                             className="h-8 bg-emerald-700 hover:bg-emerald-800"
-                            onClick={() => g.weeks[0] && onPay?.(g.weeks[0])}
+                            disabled={!firstActionable}
+                            title={parentOpenTitle}
+                            onClick={() => firstActionable && onPay?.(firstActionable)}
                           >
                             Pay
                           </Button>
@@ -331,18 +364,27 @@ export function SettlementQueueTable({
                           const k = rowKey(r);
                           const bucket = agingBucket(r.periodEnd);
                           const amt = owedMajor(r, mode);
+                          const canAct = weekActionable(r);
+                          const openTitle = weekOpenTitle(r);
                           return (
                             <TableRow key={k} className="bg-white">
                               <TableCell>
                                 <Checkbox
                                   checked={selected.has(k)}
-                                  onCheckedChange={() => onToggle(k)}
+                                  disabled={!canAct}
+                                  title={openTitle}
+                                  onCheckedChange={() => canAct && onToggle(k)}
                                   aria-label={`Select ${r.driverName} ${r.periodAnchor}`}
                                 />
                               </TableCell>
                               <TableCell />
                               <TableCell className="text-sm text-slate-500 pl-6">
                                 {r.collectKind === 'cash_held' ? 'Cash held' : 'Week'}
+                                {!canAct ? (
+                                  <span className="ml-2 text-[10px] font-medium uppercase tracking-wide text-amber-700">
+                                    Still open
+                                  </span>
+                                ) : null}
                               </TableCell>
                               <TableCell className="text-sm text-slate-600">
                                 {weekLabel(r.periodAnchor, r.periodEnd)}
@@ -369,7 +411,9 @@ export function SettlementQueueTable({
                                         type="button"
                                         size="sm"
                                         className="h-8 bg-rose-700 hover:bg-rose-800"
-                                        onClick={() => onCollect?.(r)}
+                                        disabled={!canAct}
+                                        title={openTitle}
+                                        onClick={() => canAct && onCollect?.(r)}
                                       >
                                         Collect
                                       </Button>
@@ -378,7 +422,9 @@ export function SettlementQueueTable({
                                         size="sm"
                                         variant="outline"
                                         className="h-8"
-                                        onClick={() => onWriteOff?.(r)}
+                                        disabled={!canAct}
+                                        title={openTitle}
+                                        onClick={() => canAct && onWriteOff?.(r)}
                                       >
                                         <Ban className="h-3.5 w-3.5 mr-1" />
                                         Write off
@@ -389,7 +435,9 @@ export function SettlementQueueTable({
                                       type="button"
                                       size="sm"
                                       className="h-8 bg-emerald-700 hover:bg-emerald-800"
-                                      onClick={() => onPay?.(r)}
+                                      disabled={!canAct}
+                                      title={openTitle}
+                                      onClick={() => canAct && onPay?.(r)}
                                     >
                                       Pay
                                     </Button>
@@ -426,12 +474,16 @@ export function SettlementQueueTable({
                 const k = rowKey(r);
                 const bucket = agingBucket(r.periodEnd);
                 const amt = owedMajor(r, mode);
+                const canAct = weekActionable(r);
+                const openTitle = weekOpenTitle(r);
                 return (
                   <TableRow key={k}>
                     <TableCell>
                       <Checkbox
                         checked={selected.has(k)}
-                        onCheckedChange={() => onToggle(k)}
+                        disabled={!canAct}
+                        title={openTitle}
+                        onCheckedChange={() => canAct && onToggle(k)}
                         aria-label={`Select ${r.driverName}`}
                       />
                     </TableCell>
@@ -446,6 +498,11 @@ export function SettlementQueueTable({
                     </TableCell>
                     <TableCell className="text-sm text-slate-600">
                       {weekLabel(r.periodAnchor, r.periodEnd)}
+                      {!canAct ? (
+                        <span className="ml-2 text-[10px] font-medium uppercase tracking-wide text-amber-700">
+                          Still open
+                        </span>
+                      ) : null}
                     </TableCell>
                     <TableCell>
                       <Badge className={cn('font-normal', AGING_TONE[bucket])}>{bucket}</Badge>
@@ -466,7 +523,9 @@ export function SettlementQueueTable({
                               type="button"
                               size="sm"
                               className="h-8 bg-rose-700 hover:bg-rose-800"
-                              onClick={() => onCollect?.(r)}
+                              disabled={!canAct}
+                              title={openTitle}
+                              onClick={() => canAct && onCollect?.(r)}
                             >
                               Collect
                             </Button>
@@ -475,7 +534,9 @@ export function SettlementQueueTable({
                               size="sm"
                               variant="outline"
                               className="h-8"
-                              onClick={() => onWriteOff?.(r)}
+                              disabled={!canAct}
+                              title={openTitle}
+                              onClick={() => canAct && onWriteOff?.(r)}
                             >
                               <Ban className="h-3.5 w-3.5 mr-1" />
                               Write off
@@ -486,7 +547,9 @@ export function SettlementQueueTable({
                             type="button"
                             size="sm"
                             className="h-8 bg-emerald-700 hover:bg-emerald-800"
-                            onClick={() => onPay?.(r)}
+                            disabled={!canAct}
+                            title={openTitle}
+                            onClick={() => canAct && onPay?.(r)}
                           >
                             Pay
                           </Button>

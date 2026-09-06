@@ -25,6 +25,10 @@ import {
 import { toast } from 'sonner';
 import { Loader2, Banknote } from 'lucide-react';
 import { format } from 'date-fns';
+import {
+  isSettlementPeriodEnded,
+  settlementPeriodOpenMessage,
+} from '../../utils/settlementPeriodGate';
 
 export type RecordPayoutSavePayload = {
   amount: number;
@@ -98,6 +102,20 @@ export function RecordPayoutModal({
     }
     if (!workPeriodStart || !workPeriodEnd) {
       toast.error('Settlement Week is required');
+      return;
+    }
+    if (
+      !isSettlementPeriodEnded({
+        periodAnchor: workPeriodStart,
+        periodEnd: workPeriodEnd,
+      })
+    ) {
+      toast.error(
+        settlementPeriodOpenMessage({
+          periodAnchor: workPeriodStart,
+          periodEnd: workPeriodEnd,
+        }),
+      );
       return;
     }
     if (needsReference && !referenceNumber.trim()) {

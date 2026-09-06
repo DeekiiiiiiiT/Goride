@@ -1,7 +1,12 @@
 /**
- * Period freeze / close gate for settlement commands (Phase 6).
- * Signed weeks in the projection metadata block further money writes.
+ * Period freeze / calendar-close gates for settlement commands.
+ * Signed weeks block further money writes; open weeks cannot settle yet.
  */
+import {
+  isSettlementPeriodEnded,
+  settlementPeriodOpenMessage,
+} from "../../../packages/finance-core/src/settlementPeriodGate.ts";
+import { SettlementCommandError } from "./settlement_commands.ts";
 
 export function isPeriodFrozen(period: {
   metadata?: Record<string, unknown> | null;
@@ -25,4 +30,19 @@ export function assertPeriodNotFrozen(period: Parameters<typeof isPeriodFrozen>[
     (err as Error & { code?: string }).code = "PERIOD_FROZEN";
     throw err;
   }
+}
+
+/** Collect / Pay / Write-off / runs — week must be fully over (periodEnd + 1). */
+export function assertPeriodEndedForSettlement(
+  weekAnchor: string,
+  now: Date | string = new Date(),
+): void {
+  const gate = { weekAnchor, now };
+  if (isSettlementPeriodEnded(gate)) return;
+  throw new SettlementCommandError(
+    "PERIOD_NOT_ENDED",
+    settlementPeriodOpenMessage(gate),
+    409,
+    { weekAnchor },
+  );
 }
