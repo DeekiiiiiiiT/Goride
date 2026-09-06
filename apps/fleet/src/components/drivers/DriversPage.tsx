@@ -274,22 +274,15 @@ export function DriversPage({
   const [currentPage, setCurrentPage] = useState(1);
   const rowsPerPage = 10;
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [savedViews, setSavedViews] = useState<DriverSavedView[]>(() =>
-    typeof window !== 'undefined' ? loadDriverSavedViews() : [],
-  );
+  const { data: savedViews = [], refetch: refetchSavedViews } = useQuery({
+    queryKey: ['driverSavedViews'],
+    queryFn: () => fetchDriverSavedViews(),
+    initialData: typeof window !== 'undefined' ? loadDriverSavedViews() : [],
+    staleTime: 60_000,
+  });
   const [saveViewOpen, setSaveViewOpen] = useState(false);
   const [saveViewName, setSaveViewName] = useState('');
   const [bulkStatusBusy, setBulkStatusBusy] = useState(false);
-
-  useEffect(() => {
-    let cancelled = false;
-    void fetchDriverSavedViews().then((views) => {
-      if (!cancelled) setSavedViews(views);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   const [driverToDelete, setDriverToDelete] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -369,9 +362,9 @@ export function DriversPage({
     }
   }, [rosterTruncated]);
 
-  const { data: importedMetrics = [] } = useQuery({
+  const { data: importedMetrics = [], isError: metricsEnrichError, error: metricsEnrichErr } = useQuery({
     queryKey: ['driverMetrics'],
-    queryFn: () => api.getDriverMetrics().catch(() => []),
+    queryFn: () => api.getDriverMetrics(),
     enabled: listEnrichOk,
     staleTime: 5 * 60 * 1000,
     gcTime: 15 * 60 * 1000,
@@ -379,6 +372,14 @@ export function DriversPage({
     refetchOnMount: false,
   });
 
+  useEffect(() => {
+    if (!metricsEnrichError) return;
+    toast.error(
+      metricsEnrichErr instanceof Error
+        ? `Could not load driver metrics: ${metricsEnrichErr.message}`
+        : 'Could not load driver metrics — list enrichment may be incomplete.',
+    );
+  }, [metricsEnrichError, metricsEnrichErr]);
   const { data: earningsPolicyCtx } = useQuery({
     queryKey: ['earningsPolicyRuntimeContext'],
     queryFn: () => loadEarningsPolicyRuntimeContext(),
@@ -415,7 +416,6 @@ export function DriversPage({
       toast.success("Driver deleted successfully");
       setDriverToDelete(null);
     } catch (error: any) {
-      console.error("Delete error:", error);
       toast.error(error.message || "Failed to delete driver");
     } finally {
       setIsDeleting(false);
@@ -439,7 +439,6 @@ export function DriversPage({
       toast.success('Driver removed from your fleet');
       setDriverToRemove(null);
     } catch (error: any) {
-      console.error('Remove error:', error);
       toast.error(error.message || 'Failed to remove driver');
     } finally {
       setIsRemoving(false);
@@ -657,15 +656,16 @@ export function DriversPage({
         overdueFollowUpsOnly: overdueFollowUpsOnly || undefined,
       },
     };
-    const next = await saveDriverSavedView(view);
-    setSavedViews(next);
+    await saveDriverSavedView(view);
+    await refetchSavedViews();
     setSaveViewName('');
     setSaveViewOpen(false);
     toast.success(`Saved view “${name}”`);
   };
 
   const handleDeleteSavedView = async (id: string) => {
-    setSavedViews(await deleteDriverSavedView(id));
+    await deleteDriverSavedView(id);
+    await refetchSavedViews();
   };
 
   // Clear selection when filters change page contents
@@ -1290,7 +1290,6 @@ export function DriversPage({
               queryClient.invalidateQueries({ queryKey: ['drivers'] });
               queryClient.invalidateQueries({ queryKey: ['driversRoster'] });
             } catch (error: any) {
-              console.error(error);
               toast.error(error.message || "Failed to claim driver");
             } finally {
               setClaimLoading(false);

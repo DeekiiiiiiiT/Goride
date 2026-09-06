@@ -61,6 +61,12 @@ const statusConfig: Record<
     bg: 'bg-rose-50',
     label: 'Driver Owes Company',
   },
+  'Awaiting Tolls': {
+    icon: <Clock className="h-4 w-4" />,
+    color: 'text-orange-800',
+    bg: 'bg-orange-50',
+    label: 'Awaiting Tolls',
+  },
   Pending: {
     icon: <Clock className="h-4 w-4" />,
     color: 'text-amber-700',
@@ -128,7 +134,7 @@ export function SettlementPeriodDetail({
   if (!row) return null;
 
   const periodLabel = `${format(row.periodStart, 'MMM d')} – ${format(row.periodEnd, 'MMM d, yyyy')}`;
-  const cfg = statusConfig[row.settlementStatus];
+  const cfg = statusConfig[row.settlementStatus] ?? statusConfig.Pending;
   const netApplied = row.isFinalized ? row.netPayout : 0;
   // Prefer Fleet Financials gate; fall back to ledger-only if confirms not loaded.
   const bankDisplay: BankSettledDisplay =

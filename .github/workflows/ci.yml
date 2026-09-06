@@ -121,6 +121,9 @@ jobs:
       - name: Typecheck fleet money spine
         run: pnpm --filter @roam/fleet typecheck:money
 
+      - name: Check driver section (guardrails + typecheck)
+        run: pnpm --filter @roam/fleet check:drivers
+
       - name: Typecheck admin money spine
         run: pnpm --filter @roam/admin typecheck:money
 

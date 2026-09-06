@@ -1,6 +1,6 @@
 /** Shared types for Cash Settlement — aligned with fleet PayoutPeriodRow. */
 
-export type PayoutStatus = 'Finalized' | 'Awaiting Cash' | 'Pending';
+export type PayoutStatus = 'Finalized' | 'Awaiting Cash' | 'Awaiting Tolls' | 'Pending';
 
 export interface CashPaidBreakdown {
   allocatedPayments: number;

@@ -305,7 +305,6 @@ export function LogCashPaymentModal({
             : "Failed to record transaction — the week may not have moved.",
         );
       }
-      console.error(error);
     } finally {
       setIsSubmitting(false);
     }

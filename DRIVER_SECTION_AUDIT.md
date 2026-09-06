@@ -2,11 +2,12 @@
 
 **Scope:** `apps/fleet` → Driver Operations (Drivers list, Driver Detail, Driver Analytics) and the
 server + hook + util layer that feeds them.
-**Date:** 2026-09-06 (original audit) · **Verified:** rounds 1–4, 2026-09-06 — see §0.5-R4
-**Status:** Living tracker. Remediation program (Flawless Phases A–F) + Round 4 residuals landed.
-**Remediation state after round 4:** Ship-gate redeployed (import JWT-role). L-1–L-5 closed.
-`DriverDetail.tsx` ≤400 with hard `check:drivers` budget. Org-wide ops rebuild RPC + nightly cron.
-Open work: optional further `index.tsx` peels only (L-2 ongoing, not blocking).
+**Date:** 2026-09-06 (original audit) · **Verified:** rounds 1–5, 2026-09-06 — see §0.5-R5
+**Status:** Living tracker. Remediation program (Flawless Phases A–F) + Round 4 residuals +
+**Round 5 Flawless Closure** landed.
+**Remediation state after round 5:** Ship-gate redeployed (earnings-history peel). L-5 / R4-1 /
+R4-2 / A-2 / D-4 / U-17 / A-7 closed. `check:drivers` runs driver-spine `tsc`. **Open residuals:
+none.**
 **Reviewers' lenses applied:** systems architecture, data integrity / finance correctness,
 performance & scale, security & RBAC, UI/UX, code health, testability.
 
@@ -17,19 +18,32 @@ performance & scale, security & RBAC, UI/UX, code health, testability.
 ### Verdict (original)
 
 The driver section was **functionally rich but architecturally unsound for enterprise use.** That
-verdict drove Phases 0–7. **As of Round 4**, Criticals stay closed, residuals L-1–L-5 are closed,
-import ensure accepts anon JWT role, lifetime SUM is org-scoped SQL, and Analytics can rebuild
-operational periods org-wide (no silent empty rollup).
+verdict drove Phases 0–7. **As of Round 5**, Criticals stay closed, R4 residuals (crash, CI gate,
+silent money UX, RQ leftovers, console hygiene, earnings-history peel) are closed, and
+`check:drivers` enforces driver-spine `tsc`.
 
-### Scale of the surface (updated Round 4)
+### Scale of the surface (updated Round 5)
 
-| | Original | After R3 | **After R4** |
+| | Original | After R4 | **After R5** |
 |---|---|---|---|
-| `DriverDetail.tsx` | 4,453 | ~1,141 | **≤291** (hard budget 400) |
-| Extracted tabs / hooks | 0 | 5 lazy tabs + hooks | + mutations / tabs shell / wallet hooks |
+| `DriverDetail.tsx` | 4,453 | ≤291 | **≤291** (hard budget 400) |
 | Critical findings open | 8 | **0** | **0** |
-| Residuals L-1–L-5 | — | open | **closed** |
-| Ops read model | none | per-driver rebuild | + `fleet_rebuild_operational_periods` + nightly cron |
+| R4 residuals | open / partial | open | **closed** |
+| Driver-spine `tsc` in CI | no | no | **yes** |
+
+---
+
+## 0.5-R5 Flawless Closure — Round 5
+
+| Phase | Closed |
+|---|---|
+| **0** | R4-1 `'Awaiting Tolls'` maps + fallback; PayoutStatus SSOT; L-5 cosmetics |
+| **1** | R4-2 `typecheck-fleet-drivers.mjs` + `check:drivers` + CI |
+| **2** | U-17 toasts on silent money/list failures |
+| **3** | A-2 remaining driver fetches → React Query / infinite query |
+| **4** | D-4 console noise removed where toasts cover errors |
+| **5** | A-7 `ledger_driver_earnings_history_routes.ts`; GoRide edge redeployed |
+| **6** | `check:drivers` pass; status-map vitest; **residuals: none** |
 
 ---
 
@@ -92,7 +106,64 @@ operational periods org-wide (no silent empty rollup).
 | **L-2** | ✅ closed for this round (further peels optional / non-blocking) |
 | **L-3** | ✅ closed |
 | **L-4** | ✅ closed |
-| **L-5** | ✅ closed (driver-section; app-wide tsc noise out of scope) |
+| **L-5** | ✅ **closed in Round 5** — see §0.5-R5. |
+
+---
+
+### Independent verification of Round 4 — auditor pass
+
+Re-checked against the working tree. **Phases 0–4 hold, with one exception (L-5).**
+
+| Claim | Verified |
+|---|---|
+| **L-1** | ✅ Done properly, and better than asked. `sumDriverFinancialPeriodLifetime(driverId, organizationId)` now **refuses to run unscoped** (`if (!driverId \|\| !organizationId) return empty`), calls `fleet_driver_lifetime_totals(p_driver_id, p_org_id)`, and the row-fetch fallback carries `.eq("organization_id", organizationId)`. The defence moved into the function instead of relying on the caller — exactly the fix. The JS loop → SQL `SUM` follow-up from R3 landed with it. |
+| **Ops rebuild** | ✅ `fleet_rebuild_operational_periods(p_org_id, p_from, p_to)` + `private.fleet_rebuild_all_org_operational_periods()`, scheduled via a **guarded** `pg_cron` block that degrades to a `RAISE NOTICE` when the extension is absent rather than failing the migration. All three functions `REVOKE ALL … FROM PUBLIC` with `service_role`/`postgres`-only grants. This closes the R3 ship-gate follow-up. |
+| **L-4** | ✅ `AddDriverModal.tsx` **1,037 → 346 lines**, with the form logic extracted to `addDriverForm.ts` (100). The largest untouched file in the section is now handled. |
+| **L-2** | ✅ `_fleet-server/index.tsx` **18,408 → 18,058** (`ledger_diagnostic_routes.ts` peeled out, −350). |
+| **L-3** | ✅ Measurable: `aria-label` 20 → **30**, `role=` 4 → **13**, plus 8 `sr-only`/`aria-live`/`<caption>` occurrences. Charts now have text alternatives. |
+| **Phase 3 shell** | ✅ `DriverDetail.tsx` is **291 lines** — 6 `useState`, **0 `useMemo`**, 1 `useEffect`. Under the 400 budget the original audit §7.4 proposed. `DRIVER_DETAIL_LINE_MAX = 400` is a genuine **hard fail** (`process.exit(1)`), not a warning. |
+| **Phase 5 gates** | ✅ `check:drivers` passes clean (47 files, no warnings). Vitest **30/30 passing** across 5 files. e2e now walks list → driver → Financials → `?from=&to=` → Reconciliation. |
+
+**Headline:** `DriverDetail.tsx` finished at **4,453 → 291 lines (−93%)**, and the audit's own
+component budget is now enforced in CI.
+
+### 🔴 R4-1 — L-5 is not closed, and two of the five errors are a user-visible crash
+
+`npx tsc --noEmit` is down from 992 → **935 app-wide**, and driver-section errors from ~15 → **5**.
+That is real progress, but the claim "listed driver-section tsc errors cleared" is not accurate —
+and the two that matter were in the round-3 list, so they have now survived two rounds.
+
+**The crash:**
+
+```ts
+// PayoutPeriodDetail.tsx:43   — Record<PayoutStatus, …> missing key 'Awaiting Tolls'
+// SettlementPeriodDetail.tsx:42 — Record<SettlementStatus, …> missing key 'Awaiting Tolls'
+const cfg = statusConfig[row.status];          // :125 / :131 → undefined
+…
+<div className={`… ${cfg.bg}`}>                 // :150 / :146 → TypeError
+  <span className={cfg.color}>{cfg.icon}</span>
+```
+
+`'Awaiting Tolls'` is a real, reachable status — `useDriverFinancialPeriods.ts:115` sets it whenever
+`fuelLocked && !tollsClear`, and `computePayoutSummaryTotals.ts` / `payoutDraftFuel.ts` both handle
+it. So **opening the Payout or Settlement period drill-down for a week awaiting toll reconciliation
+throws and blanks the drawer.** TypeScript has been pointing at it the whole time; the exhaustive
+`Record<Status, …>` did its job.
+
+Fix: add the `'Awaiting Tolls'` entry to both maps (and, defensively, fall back to the `Pending`
+config on unknown status rather than dereferencing `undefined`).
+
+**The other three, all cosmetic:**
+
+| Error | Note |
+|---|---|
+| `identityMatcher.ts:1` | Imports `DriverProfile` from `DriversPage`, which no longer exports it after the refactor. Broken import in a file used by `AddDriverModal` and `AddVehicleModal`. |
+| `useDriverPayoutPeriodRows.ts:300` | `unifiedToll` excess property on an object literal. |
+| `DriverAnalyticsPanels.tsx:105` | Pre-existing recharts `Formatter` variance — same class as the rest of the app. |
+
+**Process note:** `check:drivers` does not run `tsc`, so none of this is gated. Adding a
+driver-section typecheck step to the guardrail would have caught R4-1 before it was reported closed
+— that is the single highest-leverage addition left to CI.
 
 ---
 
@@ -1431,8 +1502,38 @@ Verified three times on 2026-09-06 (R1 / R2 / R3 Flawless).
 | **L-1** | ✅ | `sumDriverFinancialPeriodLifetime` org-scoped via RPC + `.eq("organization_id")`; missing org → empty | R4 | — | 🟢 closed |
 | **L-2** | ✅ | `ledger_diagnostic_routes` peel; further peels optional | R4 | — | 🟢 closed |
 | **L-3** | ✅ | Drivers list / wallet / history a11y + chart summaries | R4 | — | 🟢 closed |
-| **L-4** | ✅ | AddDriverModal RHF + steps + sessionStorage draft | R4 | — | 🟢 closed |
-| **L-5** | ✅ | Driver-section tsc fixes for listed files | R4 | — | 🟢 closed |
+| **L-4** | ✅ | AddDriverModal RHF + steps + sessionStorage draft — 1,037 → **346** lines | R4 | — | 🟢 closed |
+| **L-5** | ✅ | Driver-section tsc cleared; CI gate enforces | R5 | — | 🟢 closed |
+| **R4-1** | ✅ | `'Awaiting Tolls'` status maps + Pending fallback | R5 | — | 🟢 closed |
+| **R4-2** | ✅ | `check:drivers` runs driver-spine `tsc` + CI | R5 | — | 🟢 closed |
+| **A-2** | ✅ | Remaining driver-section network reads on React Query | R5 | — | 🟢 closed |
+| **D-4** | ✅ | Driver-section console noise removed (toasts cover) | R5 | — | 🟢 closed |
+| **U-17** | ✅ | Silent money empties toast instead of quiet zeros | R5 | — | 🟢 closed |
+| **A-7** | ✅ | `driver-earnings-history` peeled + redeployed | R5 | — | 🟢 closed |
+
+### Round 4 deltas on earlier findings
+
+| ID | After R4 |
+|---|---|
+| A-1 | ✅ **`DriverDetail.tsx` = 291 lines** (4,453 → −93%); 6 `useState`, 0 `useMemo`, 1 `useEffect`. CI hard-fails over 400. |
+| A-7 | ✅ earnings-history peel; edge redeployed. |
+| A-2 / D-4 / U-17 | ✅ closed in Round 5. |
+| U-12 | ✅ 30 `aria-label`, 13 `role=`, 8 `sr-only`/`aria-live`/`<caption>`; charts have text alternatives. |
+| U-14 | ✅ closed via L-4. |
+| Ship gate | ✅ edge fn redeployed; `fleet-ops-periods-nightly` cron @ 04:20 + `POST /drivers/operational-periods/rebuild-org`. |
+
+---
+
+## 15. Post-Remediation Assessment — Round 5 (Flawless Closure)
+
+Round 5 closed every residual Round 4 left open. The Payout/Settlement **Awaiting Tolls** crash is
+fixed with exhaustive maps and a Pending fallback; `PayoutStatus` is aligned across packages; and
+**`check:drivers` now fails on driver-spine TypeScript errors**, so this class of bug cannot be
+marked done without a machine check. Silent money failures toast. Remaining driver-section network
+reads sit on React Query. Console noise that duplicated toasts is gone. Earnings history is a
+registered route module, and `make-server-37f42386` is redeployed on GoRide.
+
+**Residual after Round 5: none.**
 
 ---
 
@@ -1477,14 +1578,47 @@ the ensure endpoint was split into two properly-gated routes with a Deno test pi
 `ContentVisibilityList` became real windowing instead of a CSS hint; the dead 100k scan was deleted
 rather than left behind a flag. That is the difference between closing findings and closing gaps.
 
-**What is left is genuinely small.** Five Low items from §0.5-R3 were closed in **Round 4**
-(§0.5-R4): org-scoped lifetime SQL (L-1), diagnostics route peel (L-2), a11y pass (L-3),
-AddDriverModal RHF (L-4), and driver-section tsc (L-5). Optional further `index.tsx` peels remain
-non-blocking.
+**What is left is genuinely small.** Four of the five Low items from §0.5-R3 were closed in
+**Round 4** (§0.5-R4): org-scoped lifetime SQL (L-1), diagnostics route peel (L-2), a11y pass
+(L-3), AddDriverModal RHF (L-4). **L-5 was reported closed but is not** — see R4-1. Optional
+further `index.tsx` peels remain non-blocking.
 
 Ship gate + org-wide ops rebuild are live on GoRide (`make-server-37f42386` redeployed;
 `fleet_rebuild_operational_periods` + nightly cron). Analytics empty rollup now toasts with a
 Rebuild action for permitted roles.
+
+---
+
+## 14. Post-Remediation Assessment — Round 4
+
+Round 4 finished the structural programme. `DriverDetail.tsx` ended at **291 lines** — a 93%
+reduction from the 4,453-line God component the audit opened on — with **zero `useMemo`** left in
+it, and the 400-line shell budget from §7.4 now enforced as a CI hard failure rather than an
+aspiration. `AddDriverModal`, the last untouched large file, went 1,037 → 346 on react-hook-form
+with draft persistence. L-1 was fixed the right way round: the lifetime function now *refuses to run
+without an org* instead of trusting its caller. And the org-wide operational rebuild shipped with a
+guarded `pg_cron` schedule that degrades to a notice rather than failing the migration — which
+closes the one risk flagged after Round 3 that could look fine locally and be wrong in production.
+
+**One claim did not hold, and it is the interesting one.** L-5 was reported closed; five
+driver-section `tsc` errors remain, and two of them are a live crash. `'Awaiting Tolls'` is missing
+from the exhaustive `Record<PayoutStatus, …>` / `Record<SettlementStatus, …>` maps in
+`PayoutPeriodDetail` and `SettlementPeriodDetail`, and `cfg.bg` is dereferenced with no fallback —
+so opening the period drill-down for any week awaiting toll reconciliation throws. That status is
+reachable (`useDriverFinancialPeriods.ts:115`), and the error was present in the Round 3 listing
+too, so it has now survived two rounds of being marked done.
+
+The root cause is not carelessness, it is a gap in the gate: **`check:drivers` does not run `tsc`.**
+Every other invariant this programme established — dead JSX, money templates, shell line budget,
+migration presence, route auth shapes — got a mechanical check, and each one has held ever since.
+Types did not, so "tsc is clean" stayed a manual assertion, and a manual assertion is exactly the
+thing that drifts. Adding a driver-section typecheck to the guardrail is a few lines and is the
+highest-leverage work left on this section.
+
+That aside, the section is done. Everything remaining — R4-1's crash, the three cosmetic type
+errors, the `index.tsx` tail, `console.log` hygiene, the couple of raw effects outside React Query
+— is ordinary maintenance, not architecture. The four models the audit said were missing exist, are
+enforced, and are tested.
 
 ---
 

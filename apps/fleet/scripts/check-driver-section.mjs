@@ -4,15 +4,18 @@
  * Hard-fails when DriverDetail.tsx exceeds the 400-line shell budget.
  * Soft-warns on count of `false &&` without braces and leftover
  * "Restoring rich performance dashboard" copy.
+ * Also runs the driver-spine typecheck (R4-2) so missing status-map keys fail CI.
  *
  * Usage: node apps/fleet/scripts/check-driver-section.mjs
  */
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { spawnSync } from 'node:child_process';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '../src/components/drivers');
+const REPO_ROOT = path.resolve(__dirname, '../../..');
 
 const HARD_FAIL = /\{false\s*&&/;
 const SOFT_WARN = /false\s*&&/g;
@@ -88,6 +91,18 @@ if (fs.existsSync(migRoot)) {
       process.exit(1);
     }
   }
+}
+
+// R4-2: driver-spine tsc must stay clean (would have caught Awaiting Tolls crash).
+const tscScript = path.join(REPO_ROOT, 'scripts', 'typecheck-fleet-drivers.mjs');
+const tsc = spawnSync(process.execPath, [tscScript], {
+  cwd: REPO_ROOT,
+  encoding: 'utf8',
+});
+if (tsc.stdout) process.stdout.write(tsc.stdout);
+if (tsc.stderr) process.stderr.write(tsc.stderr);
+if (tsc.status !== 0) {
+  process.exit(tsc.status ?? 1);
 }
 
 console.log(`check:drivers OK (${files.length} files scanned)`);

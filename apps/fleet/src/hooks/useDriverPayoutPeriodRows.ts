@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { differenceInCalendarDays, format } from 'date-fns';
+import { toast } from 'sonner';
 import type { FinancialTransaction, Trip, DriverMetrics, TierConfig } from '../types/data';
 import type { PayoutPeriodRow } from '../types/driverPayoutPeriod';
 import { api } from '../services/api';
@@ -202,11 +203,16 @@ export function useDriverPayoutPeriodRows(opts: {
             const uberCash = Math.abs(Number(ov?.platformStats?.Uber?.cashCollected) || 0);
             return [start, { bank, uberCash }] as const;
           } catch {
-            return [start, { bank: 0, uberCash: 0 }] as const;
+            toast.error(`Couldn't load bank/cash overview for week ${start}.`);
+            // Omit invented zeros — week falls back to event/trip cash paths only.
+            return null;
           }
         }),
       );
-      return Object.fromEntries(entries) as Record<string, { bank: number; uberCash: number }>;
+      return Object.fromEntries(entries.filter(Boolean) as Array<readonly [string, { bank: number; uberCash: number }]>) as Record<
+        string,
+        { bank: number; uberCash: number }
+      >;
     },
     // Only when event path incomplete — avoid 40 overview calls when payout_* events work.
     enabled:
@@ -297,7 +303,6 @@ export function useDriverPayoutPeriodRows(opts: {
             finalizedReports,
             disputeRefunds,
             periodType,
-            unifiedToll,
             timezone: fleetTz,
             draftFuelByPeriod,
           });
@@ -316,7 +321,6 @@ export function useDriverPayoutPeriodRows(opts: {
     finalizedReports,
     disputeRefunds,
     periodType,
-    unifiedToll,
     fleetTz,
     draftFuelByPeriod,
     sharedPeriodsQuery.data,

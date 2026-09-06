@@ -177,7 +177,7 @@ export function DriverPayoutHistory({
         setDraftLoading(false);
       });
     } catch (e) {
-      console.error('[DriverPayoutHistory] Draft fuel load failed:', e);
+      toast.error("Couldn't load draft fuel for payout.");
       setDraftLoading(false);
     }
   }, [

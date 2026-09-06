@@ -1,6 +1,3 @@
-import { DriverProfile } from '../components/drivers/DriversPage';
-import { Vehicle } from '../types/vehicle';
-
 /**
  * Normalizes a string for fuzzy matching (lowercase, alphanumeric only)
  */

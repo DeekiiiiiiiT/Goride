@@ -183,9 +183,6 @@ export function DriverEarningsHistory({
     setDataSource('ledger');
     setHasMore(Boolean(firstHasMore));
     setNextCursor(firstCursor);
-    console.log(
-      `[EarningsHistory] Loaded ${converted.length} rows (RQ ${firstHasMore ? 'hasMore' : 'complete'})`
-    );
   }, [driverId, periodType, activityRangeKey, financialRangeKey, rqLoading, rqError, rqRows, firstHasMore, firstCursor]);
 
   // Load more: next page via cursor (append unique period starts)
@@ -219,8 +216,8 @@ export function DriverEarningsHistory({
         setHasMore(Boolean(result.hasMore));
         setNextCursor(result.nextCursor || null);
       })
-      .catch((err) => {
-        console.error('[EarningsHistory] Show more failed:', err);
+      .catch(() => {
+        toast.error("Couldn't load more earnings history.");
       })
       .finally(() => {
         setShowMoreLoading(false);

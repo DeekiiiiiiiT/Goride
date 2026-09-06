@@ -47,7 +47,6 @@ export function LogTollTopupModal({ isOpen, onClose, onSave }: LogTollTopupModal
       onClose();
     } catch (error) {
       toast.error("Failed to record top-up");
-      console.error(error);
     } finally {
       setIsSubmitting(false);
     }

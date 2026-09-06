@@ -102,7 +102,7 @@ export function DriverAnalyticsPanels({
                         <Cell key={s.name} fill={s.color} />
                       ))}
                     </Pie>
-                    <Tooltip formatter={(v: number) => formatJMD(v)} />
+                    <Tooltip formatter={(v) => formatJMD(Number(Array.isArray(v) ? v[0] : v))} />
                   </PieChart>
                 </ResponsiveContainer>
                 <div className="space-y-2">

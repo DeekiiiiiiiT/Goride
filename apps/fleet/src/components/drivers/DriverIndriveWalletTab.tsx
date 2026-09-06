@@ -1,5 +1,6 @@
 import { formatJMD } from '../../utils/formatJMD';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useInfiniteQuery } from '@tanstack/react-query';
 import { format, parseISO } from 'date-fns';
 import { ArrowDownLeft, ArrowUpRight, Filter, Loader2, Trash2, Wallet } from 'lucide-react';
 import { toast } from 'sonner';
@@ -210,102 +211,71 @@ export function DriverIndriveWalletTab({
     { enabled: canView && rangeReady }
   );
 
-  const [ledgerLoading, setLedgerLoading] = useState(false);
-  const [ledgerLoadingMore, setLedgerLoadingMore] = useState(false);
-  const [ledgerError, setLedgerError] = useState<string | null>(null);
-  const [ledgerEntries, setLedgerEntries] = useState<LedgerEntry[]>([]);
-  const [ledgerHasMore, setLedgerHasMore] = useState(false);
-  const [ledgerNextOffset, setLedgerNextOffset] = useState(0);
-  const [ledgerPagesLoaded, setLedgerPagesLoaded] = useState(0);
   const [topUpDeleteOpen, setTopUpDeleteOpen] = useState(false);
   const [topUpPending, setTopUpPending] = useState<{ transactionId: string; amountLabel: string } | null>(null);
   const [topUpDeleting, setTopUpDeleting] = useState(false);
   const [activityFilter, setActivityFilter] = useState<ActivityKindFilter>('all');
 
-  const loadLedgerFirstPage = useCallback(async () => {
-    if (!driverId || !range?.startDate || !range?.endDate) {
-      setLedgerEntries([]);
-      setLedgerHasMore(false);
-      setLedgerNextOffset(0);
-      setLedgerPagesLoaded(0);
-      return;
-    }
-    setLedgerLoading(true);
-    setLedgerError(null);
-    try {
-      const page = await fetchIndriveWalletLedgerPage(driverId, range.startDate, range.endDate, 0);
-      setLedgerEntries(page.entries);
-      setLedgerHasMore(page.hasMore && 1 < INDRIVE_ACTIVITY_MAX_PAGES);
-      setLedgerNextOffset(page.nextOffset);
-      setLedgerPagesLoaded(1);
-    } catch (err) {
-      console.error('[DriverIndriveWalletTab] ledger fetch', err);
-      setLedgerError(err instanceof Error ? err.message : 'Failed to load activity');
-      setLedgerEntries([]);
-      setLedgerHasMore(false);
-      setLedgerPagesLoaded(0);
-    } finally {
-      setLedgerLoading(false);
-    }
-  }, [driverId, range?.startDate, range?.endDate]);
+  const ledgerInfinite = useInfiniteQuery({
+    queryKey: [
+      'indriveWalletLedger',
+      driverId,
+      range?.startDate || '',
+      range?.endDate || '',
+      ledgerRefreshKey,
+    ] as const,
+    queryFn: ({ pageParam = 0 }) => {
+      const start = range?.startDate;
+      const end = range?.endDate;
+      if (!driverId || !start || !end) throw new Error('Missing InDrive wallet range');
+      return fetchIndriveWalletLedgerPage(driverId, start, end, pageParam as number);
+    },
+    initialPageParam: 0,
+    getNextPageParam: (lastPage, pages) => {
+      if (!lastPage.hasMore || pages.length >= INDRIVE_ACTIVITY_MAX_PAGES) return undefined;
+      return lastPage.nextOffset;
+    },
+    enabled: canView && rangeReady,
+    staleTime: 60_000,
+  });
 
-  const loadMoreLedger = useCallback(async () => {
-    if (!driverId || !range?.startDate || !range?.endDate) return;
-    if (!ledgerHasMore || ledgerLoadingMore) return;
-    if (ledgerPagesLoaded >= INDRIVE_ACTIVITY_MAX_PAGES) {
-      setLedgerHasMore(false);
-      return;
-    }
-    setLedgerLoadingMore(true);
-    setLedgerError(null);
-    try {
-      const page = await fetchIndriveWalletLedgerPage(
-        driverId,
-        range.startDate,
-        range.endDate,
-        ledgerNextOffset
-      );
-      setLedgerEntries((prev) => {
-        const seen = new Set(prev.map((e) => e.id));
-        const next = [...prev];
-        for (const e of page.entries) {
-          if (e?.id && !seen.has(e.id)) {
-            seen.add(e.id);
-            next.push(e);
-          }
+  const ledgerEntries = useMemo(() => {
+    const pages = ledgerInfinite.data?.pages || [];
+    const seen = new Set<string>();
+    const merged: LedgerEntry[] = [];
+    for (const page of pages) {
+      for (const e of page.entries) {
+        if (e?.id && !seen.has(e.id)) {
+          seen.add(e.id);
+          merged.push(e);
         }
-        return next;
-      });
-      const pages = ledgerPagesLoaded + 1;
-      setLedgerPagesLoaded(pages);
-      setLedgerNextOffset(page.nextOffset);
-      setLedgerHasMore(page.hasMore && pages < INDRIVE_ACTIVITY_MAX_PAGES);
-    } catch (err) {
-      console.error('[DriverIndriveWalletTab] ledger load more', err);
-      setLedgerError(err instanceof Error ? err.message : 'Failed to load more activity');
-    } finally {
-      setLedgerLoadingMore(false);
+      }
     }
-  }, [
-    driverId,
-    range?.startDate,
-    range?.endDate,
-    ledgerHasMore,
-    ledgerLoadingMore,
-    ledgerNextOffset,
-    ledgerPagesLoaded,
-  ]);
+    return merged;
+  }, [ledgerInfinite.data?.pages]);
+
+  const ledgerLoading = ledgerInfinite.isLoading || ledgerInfinite.isFetching;
+  const ledgerLoadingMore = ledgerInfinite.isFetchingNextPage;
+  const ledgerHasMore = Boolean(ledgerInfinite.hasNextPage);
+  const ledgerError = ledgerInfinite.isError
+    ? ledgerInfinite.error instanceof Error
+      ? ledgerInfinite.error.message
+      : 'Failed to load activity'
+    : null;
 
   useEffect(() => {
-    if (!canView || !rangeReady) {
-      setLedgerEntries([]);
-      setLedgerHasMore(false);
-      setLedgerPagesLoaded(0);
-      return;
-    }
-    // Summary is RQ-cached — do not force refetch on every mount.
-    void loadLedgerFirstPage();
-  }, [canView, rangeReady, loadLedgerFirstPage, ledgerRefreshKey]);
+    if (!ledgerInfinite.isError) return;
+    toast.error("Couldn't load InDrive wallet activity.");
+  }, [ledgerInfinite.isError]);
+
+  const loadLedgerFirstPage = useCallback(async () => {
+    await ledgerInfinite.refetch();
+  }, [ledgerInfinite]);
+
+  const loadMoreLedger = useCallback(async () => {
+    if (!ledgerHasMore || ledgerLoadingMore) return;
+    await ledgerInfinite.fetchNextPage();
+  }, [ledgerHasMore, ledgerLoadingMore, ledgerInfinite]);
 
   useEffect(() => {
     setActivityFilter('all');

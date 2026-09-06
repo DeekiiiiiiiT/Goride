@@ -1,7 +1,7 @@
 /**
  * Driver Profile tab — documents, personal info, notes, compliance verify, audit trail.
  */
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { format, differenceInCalendarDays, isValid } from 'date-fns';
 import {
   AlertTriangle,
@@ -33,6 +33,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../ui/tabs';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '../../ui/dialog';
 import { toast } from 'sonner';
 import { api } from '../../../services/api';
+import {
+  useDriverAudit,
+  useDriverCompliance,
+  useDriverNotes,
+  useInvalidateDriverProfileQueries,
+} from '../../../hooks/useDriverProfileQueries';
 
 /** Lightweight date parse for display — avoids circular import with DriverDetail. */
 function parseDisplayDate(dateStr: string | Date | undefined | null): Date | null {
@@ -206,18 +212,26 @@ export function DriverProfileTab({
   onComplianceChanged,
   initialSubTab = 'documents',
 }: DriverProfileTabProps) {
-  const [notes, setNotes] = useState<DriverNote[]>([]);
-  const [notesLoading, setNotesLoading] = useState(false);
+  const fallbackDocs = useMemo(() => buildDriverDocuments(driver), [driver]);
+  const complianceQuery = useDriverCompliance(driverId, fallbackDocs);
+  const notesQuery = useDriverNotes(driverId);
+  const auditQuery = useDriverAudit(driverId);
+  const { invalidateCompliance, invalidateNotes, invalidateAudit } =
+    useInvalidateDriverProfileQueries();
+
+  const notes = (notesQuery.data || []) as DriverNote[];
+  const notesLoading = notesQuery.isLoading || notesQuery.isFetching;
+  const auditEvents = (auditQuery.data || []) as AuditEvent[];
+  const auditLoading = auditQuery.isLoading || auditQuery.isFetching;
+  const localDocs = (complianceQuery.data?.documents ||
+    (complianceQuery.isError ? fallbackDocs : [])) as DriverDocument[];
   const [noteText, setNoteText] = useState('');
   const [followUpDate, setFollowUpDate] = useState('');
   const [assignedTo, setAssignedTo] = useState('');
   const [savingNote, setSavingNote] = useState(false);
   const [verifyingId, setVerifyingId] = useState<string | null>(null);
-  const [localDocs, setLocalDocs] = useState<DriverDocument[]>([]);
   const [selectedDocument, setSelectedDocument] = useState<DriverDocument | null>(null);
   const [subTab, setSubTab] = useState(initialSubTab);
-  const [auditEvents, setAuditEvents] = useState<AuditEvent[]>([]);
-  const [auditLoading, setAuditLoading] = useState(false);
   const [complianceExpiry, setComplianceExpiry] = useState<string | null>(
     driver?.licenseExpiry ? String(driver.licenseExpiry).slice(0, 10) : null,
   );
@@ -227,65 +241,12 @@ export function DriverProfileTab({
   }, [initialSubTab]);
 
   useEffect(() => {
-    if (driver?.licenseExpiry) {
+    if (complianceQuery.data?.licenseExpiry) {
+      setComplianceExpiry(complianceQuery.data.licenseExpiry);
+    } else if (driver?.licenseExpiry) {
       setComplianceExpiry(String(driver.licenseExpiry).slice(0, 10));
     }
-  }, [driver?.licenseExpiry]);
-
-  // Primary: GET /drivers/:id/compliance. Fallback: buildDriverDocuments only on network error.
-  useEffect(() => {
-    if (!driverId) return;
-    let cancelled = false;
-    api
-      .getDriverCompliance(driverId)
-      .then((res) => {
-        if (cancelled) return;
-        if (res?.licenseExpiry) setComplianceExpiry(String(res.licenseExpiry).slice(0, 10));
-        setLocalDocs(Array.isArray(res?.documents) ? (res.documents as DriverDocument[]) : []);
-      })
-      .catch(() => {
-        if (cancelled) return;
-        setLocalDocs(buildDriverDocuments(driver));
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [driverId]);
-
-  const loadNotes = useCallback(async () => {
-    if (!driverId) return;
-    setNotesLoading(true);
-    try {
-      const res = await api.getDriverNotes(driverId);
-      setNotes(Array.isArray(res?.notes) ? res.notes : []);
-    } catch {
-      setNotes([]);
-    } finally {
-      setNotesLoading(false);
-    }
-  }, [driverId]);
-
-  const loadAudit = useCallback(async () => {
-    if (!driverId) return;
-    setAuditLoading(true);
-    try {
-      const res = await api.getDriverAudit(driverId);
-      const rows = Array.isArray(res?.data) ? res.data : Array.isArray(res?.events) ? res.events : [];
-      setAuditEvents(rows);
-    } catch {
-      setAuditEvents([]);
-    } finally {
-      setAuditLoading(false);
-    }
-  }, [driverId]);
-
-  useEffect(() => {
-    void loadNotes();
-  }, [loadNotes]);
-
-  useEffect(() => {
-    void loadAudit();
-  }, [loadAudit]);
+  }, [complianceQuery.data?.licenseExpiry, driver?.licenseExpiry]);
 
   const licenseDays = useMemo(() => daysUntilExpiry(complianceExpiry), [complianceExpiry]);
   const licenseExpired = licenseDays != null && licenseDays < 0;
@@ -296,13 +257,13 @@ export function DriverProfileTab({
     if (!text || !canEditDrivers) return;
     setSavingNote(true);
     try {
-      const res = await api.addDriverNote(
+      await api.addDriverNote(
         driverId,
         text,
         followUpDate || undefined,
         assignedTo.trim() || undefined,
       );
-      setNotes(Array.isArray(res?.notes) ? res.notes : res?.note ? [res.note, ...notes] : notes);
+      await invalidateNotes(driverId);
       setNoteText('');
       setFollowUpDate('');
       setAssignedTo('');
@@ -318,30 +279,15 @@ export function DriverProfileTab({
     if (!canEditDrivers || doc.status === 'Verified') return;
     setVerifyingId(doc.id);
     try {
-      const res = await api.verifyDriverDocument(driverId, doc.id);
-      if (Array.isArray(res?.documents)) {
-        setLocalDocs(res.documents);
-      } else {
-        setLocalDocs((prev) =>
-          prev.map((d) =>
-            d.id === doc.id
-              ? {
-                  ...d,
-                  status: 'Verified',
-                  verifiedAt: res?.verification?.verifiedAt,
-                  verifiedBy: res?.verification?.verifiedBy,
-                }
-              : d,
-          ),
-        );
-      }
+      await api.verifyDriverDocument(driverId, doc.id);
+      await invalidateCompliance(driverId);
       toast.success(`${doc.name} marked verified`);
       void api
         .appendDriverAudit(driverId, {
           action: 'compliance_verify',
           after: { documentId: doc.id, status: 'Verified' },
         })
-        .then(() => loadAudit())
+        .then(() => invalidateAudit(driverId))
         .catch(() => {});
       onComplianceChanged?.();
     } catch (e: any) {

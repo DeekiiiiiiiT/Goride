@@ -13,7 +13,7 @@ import { computeDisputeRefundCounts, weekBucketForDate } from './tollWeekPeriod'
 import { getFuelDeductionForPeriod } from './fuelDeductionForPeriod';
 import { deriveTollTxIsReconciled } from './tollHandledDisplay';
 import { fleetTzDateKey } from './timezoneDisplay';
-import { isDriverTollChargeRow, netDriverTollCharges } from './netDriverTollCharges';
+import { isDriverTollChargeRow, netDriverTollCharges, type TollChargeLike } from './netDriverTollCharges';
 import { classifyTollLedgerEntry, isCashPaidToll } from './tollDisposition';
 
 type PeriodType = 'daily' | 'weekly' | 'monthly';
@@ -295,8 +295,11 @@ export function buildLedgerPayoutPeriodRows(params: {
       // Driver settlement deductions = fuel + personal toll charges only.
       // Gross plaza toll spend is cash wash / fleet cost after reconcile — not driver take-home.
       const periodChargeTx = transactions.filter(
-        (t) => t?.date && isDriverTollChargeRow(t) && tollBelongsToPeriod(t.date, periodStart, periodEnd),
-      );
+        (t) =>
+          t?.date &&
+          isDriverTollChargeRow(t as TollChargeLike) &&
+          tollBelongsToPeriod(t.date, periodStart, periodEnd),
+      ) as TollChargeLike[];
       const tollCharged = netDriverTollCharges(periodChargeTx);
       const expenseDeductions = fuelDeduction + tollCharged;
 

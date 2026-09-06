@@ -15,25 +15,16 @@ import { DriverEarningsHistory } from './DriverEarningsHistory';
 import { DriverExpensesHistory } from './DriverExpensesHistory';
 import { DriverPayoutHistory } from './DriverPayoutHistory';
 import { SettlementSummaryView } from './SettlementSummaryView';
-import { api } from '../../services/api';
 import { useDriverFinancialBundle, type DriverFinancialBundle, type DriverLike } from '../../hooks/useDriverFinancialBundle';
 import { useDriverFinancialPeriods } from '../../hooks/useDriverFinancialPeriods';
+import { useDriverTollCharges } from '../../hooks/useDriverTollCharges';
+import { useDriverReconciliation } from '../../hooks/useDriverReconciliation';
 import type { PayoutPeriodRow } from '../../types/driverPayoutPeriod';
 import type { CashWeekData } from '../../utils/cashSettlementCalc';
 import { endOfWeek, format, startOfWeek } from 'date-fns';
 import { resolvePeriodTollCashWash } from '../../utils/periodTollCashSpend';
 import { PeriodWeekDropdown } from '../ui/PeriodWeekDropdown';
 import type { PeriodWeekOption } from '../../utils/periodWeekOptions';
-
-interface DriverTollChargeTotals {
-  chargedToDriver: number;
-  writtenOff: number;
-  business: number;
-  refunded: number;
-  reconciled: number;
-  cashWash: number;
-  unresolved: number;
-}
 
 type ReconScope = 'week' | 'all';
 
@@ -114,23 +105,13 @@ export function FinancialSubTabs({
   // Driver toll disposition (charged / written-off / business / refunded /
   // reconciled) — server-computed from toll_ledger for the Reconciliation tab.
   // Cash wash for week scope prefers period SSOT (resolvePeriodTollCashWash).
-  const [tollTotals, setTollTotals] = React.useState<DriverTollChargeTotals | null>(null);
-  React.useEffect(() => {
-    let active = true;
-    if (!driverId) return;
-    setTollTotals(null);
-    const opts =
-      reconScope === 'week'
-        ? {
-            from: format(weekBounds.from, 'yyyy-MM-dd'),
-            to: format(weekBounds.to, 'yyyy-MM-dd'),
-          }
-        : undefined;
-    api.getDriverTollCharges(driverId, opts)
-      .then(res => { if (active) setTollTotals(res.data.totals as DriverTollChargeTotals); })
-      .catch(err => console.error('[FinancialSubTabs] driver toll charges load failed', err));
-    return () => { active = false; };
-  }, [driverId, reconScope, weekBounds.from, weekBounds.to]);
+  const tollFrom = reconScope === 'week' ? format(weekBounds.from, 'yyyy-MM-dd') : undefined;
+  const tollTo = reconScope === 'week' ? format(weekBounds.to, 'yyyy-MM-dd') : undefined;
+  const { tollTotals } = useDriverTollCharges({
+    driverId,
+    from: tollFrom,
+    to: tollTo,
+  });
 
   // Cash Wash is a new bucket that only appears once the unified settlement
   // model is trusted — gate its display so the card grid doesn't change for
@@ -150,46 +131,16 @@ export function FinancialSubTabs({
   }, [reconScope, weekBounds.from, sharedPeriodsQuery.data]);
 
   // Server reconciliation (GET /drivers/:id/reconciliation) — SSOT vs ledger nets for Financials window.
-  const [serverRecon, setServerRecon] = React.useState<{
-    ssotNet: number;
-    ledgerNet: number;
-    delta: number;
-    status: string;
-    source: string;
-  } | null>(null);
-  const [serverReconLoading, setServerReconLoading] = React.useState(false);
-  React.useEffect(() => {
-    let active = true;
-    if (!driverId || !periodFrom) {
-      setServerRecon(null);
-      return;
-    }
-    const from = format(periodFrom, 'yyyy-MM-dd');
-    const to = format(periodTo || periodFrom, 'yyyy-MM-dd');
-    setServerReconLoading(true);
-    api
-      .getDriverReconciliation(driverId, from, to)
-      .then((res: any) => {
-        if (!active) return;
-        setServerRecon({
-          ssotNet: Number(res?.ssot?.netEarnings) || 0,
-          ledgerNet: Number(res?.ledger?.netEarnings) || 0,
-          delta: Number(res?.delta) || 0,
-          status: String(res?.status || 'mismatch'),
-          source: String(res?.source || 'unavailable'),
-        });
-      })
-      .catch((err) => {
-        console.error('[FinancialSubTabs] reconciliation load failed', err);
-        if (active) setServerRecon(null);
-      })
-      .finally(() => {
-        if (active) setServerReconLoading(false);
-      });
-    return () => {
-      active = false;
-    };
-  }, [driverId, periodFrom, periodTo]);
+  const reconFrom = periodFrom ? format(periodFrom, 'yyyy-MM-dd') : undefined;
+  const reconTo = periodFrom
+    ? format(periodTo || periodFrom, 'yyyy-MM-dd')
+    : undefined;
+  const { serverRecon, loading: serverReconLoading } = useDriverReconciliation({
+    driverId,
+    from: reconFrom,
+    to: reconTo,
+    enabled: Boolean(periodFrom),
+  });
 
   const reconciliationStatus = React.useMemo(() => {
     if (serverReconLoading) return { label: 'Loading reconciliation…', ok: false };

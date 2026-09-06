@@ -1,10 +1,14 @@
 /**
- * Ledger driver-overview fetch for Driver Detail (Phase 14 — date-range aware).
- * Repair handlers live in useDriverDetailMutations; they bump refreshKey via setLedgerRefreshKey.
+ * Ledger driver-overview fetch for Driver Detail (date-range aware).
+ * Repair handlers bump ledgerRefreshKey (kept in query key for forced refresh).
  */
 import * as React from 'react';
+import { useEffect } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import type { LedgerDriverOverview } from '../types/data';
 import { api } from '../services/api';
+import { DRIVER_FINANCIAL_STALE_MS } from './useDriverFinancialBundle';
 
 export type UseDriverDetailLedgerArgs = {
   driverId: string;
@@ -19,43 +23,43 @@ export function useDriverDetailLedger({
   endDate,
   selectedPlatforms,
 }: UseDriverDetailLedgerArgs) {
-  const [ledgerOverview, setLedgerOverview] = React.useState<LedgerDriverOverview | null>(null);
-  const [ledgerOverviewLoaded, setLedgerOverviewLoaded] = React.useState(false);
   const [ledgerRefreshKey, setLedgerRefreshKey] = React.useState(0);
+  const platformsKey = selectedPlatforms.has('All')
+    ? 'All'
+    : Array.from(selectedPlatforms).sort().join(',');
 
-  React.useEffect(() => {
-    if (!startDate || !endDate) return;
-    let cancelled = false;
-    const fetchLedgerOverview = async () => {
-      try {
-        const platforms = selectedPlatforms.has('All')
-          ? undefined
-          : Array.from(selectedPlatforms);
-        const result = await api.getLedgerDriverOverview({
-          driverId,
-          startDate,
-          endDate,
-          platforms,
-        });
-        if (!cancelled) {
-          setLedgerOverview(result);
-        }
-      } catch (err) {
-        console.error('[DriverDetail LEDGER] Overview fetch failed (non-blocking):', err);
-      } finally {
-        if (!cancelled) setLedgerOverviewLoaded(true);
-      }
-    };
-    setLedgerOverviewLoaded(false);
-    fetchLedgerOverview();
-    return () => {
-      cancelled = true;
-    };
-  }, [driverId, startDate, endDate, selectedPlatforms, ledgerRefreshKey]);
+  const query = useQuery({
+    queryKey: [
+      'ledgerDriverOverview',
+      driverId,
+      startDate || '',
+      endDate || '',
+      platformsKey,
+      ledgerRefreshKey,
+    ] as const,
+    queryFn: async (): Promise<LedgerDriverOverview> => {
+      const platforms = selectedPlatforms.has('All')
+        ? undefined
+        : Array.from(selectedPlatforms);
+      return api.getLedgerDriverOverview({
+        driverId,
+        startDate: startDate!,
+        endDate: endDate!,
+        platforms,
+      });
+    },
+    enabled: Boolean(driverId && startDate && endDate),
+    staleTime: DRIVER_FINANCIAL_STALE_MS,
+  });
+
+  useEffect(() => {
+    if (!query.isError) return;
+    toast.error("Couldn't load driver overview KPIs — numbers may be incomplete.");
+  }, [query.isError]);
 
   return {
-    ledgerOverview,
-    ledgerOverviewLoaded,
+    ledgerOverview: query.data ?? null,
+    ledgerOverviewLoaded: query.isFetched || query.isError,
     ledgerRefreshKey,
     setLedgerRefreshKey,
   };

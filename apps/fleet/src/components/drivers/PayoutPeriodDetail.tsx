@@ -56,6 +56,12 @@ const statusConfig: Record<
     bg: 'bg-blue-50',
     description: 'Fuel confirmed — cash still needs to be settled',
   },
+  'Awaiting Tolls': {
+    icon: <Clock className="h-4 w-4" />,
+    color: 'text-orange-800',
+    bg: 'bg-orange-50',
+    description: 'Fuel locked — toll reconciliation still open for this week',
+  },
   Pending: {
     icon: <Clock className="h-4 w-4" />,
     color: 'text-amber-700',
@@ -122,7 +128,7 @@ export function PayoutPeriodDetail({
   if (!row) return null;
 
   const periodLabel = `${format(row.periodStart, 'MMM d')} – ${format(row.periodEnd, 'MMM d, yyyy')}`;
-  const cfg = statusConfig[row.status];
+  const cfg = statusConfig[row.status] ?? statusConfig.Pending;
   const isEstimate = Boolean(row.isEstimate && !row.isFinalized);
   const { settlement, adjCashBalance, netPayoutApplied } = getPeriodSettlementComponents(row, {
     includeEstimate: isEstimate,

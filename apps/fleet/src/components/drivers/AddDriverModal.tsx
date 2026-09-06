@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useForm, FormProvider } from 'react-hook-form';
+import { useQuery } from '@tanstack/react-query';
 import {
   Dialog,
   DialogContent,
@@ -35,10 +36,16 @@ export function AddDriverModal({ isOpen, onClose, onDriverAdded }: AddDriverModa
   const [isScanning, setIsScanning] = useState(false);
   const [step, setStep] = useState(1);
   const [licenseStep, setLicenseStep] = useState<LicenseSubStep>('front-upload');
-  const [existingDrivers, setExistingDrivers] = useState<unknown[]>([]);
   const [licenseFront, setLicenseFront] = useState<File | null>(null);
   const [licenseBack, setLicenseBack] = useState<File | null>(null);
   const [proofFile, setProofFile] = useState<File | null>(null);
+
+  const { data: existingDrivers = [] } = useQuery({
+    queryKey: ['drivers'],
+    queryFn: () => api.getDrivers(),
+    enabled: isOpen,
+    staleTime: 2 * 60 * 1000,
+  });
 
   const methods = useForm<AddDriverFormValues>({
     defaultValues: defaultAddDriverValues,
@@ -65,7 +72,6 @@ export function AddDriverModal({ isOpen, onClose, onDriverAdded }: AddDriverModa
       setStep(draft.step);
       setLicenseStep(draft.licenseStep);
     }
-    api.getDrivers().then(setExistingDrivers).catch(console.error);
   }, [isOpen, reset]);
 
   // Persist text fields (files stay in memory only)
@@ -251,7 +257,6 @@ export function AddDriverModal({ isOpen, onClose, onDriverAdded }: AddDriverModa
       toast.success('Driver account created successfully');
       handleClose(true);
     } catch (error) {
-      console.error(error);
       toast.error('Failed to create profile');
     } finally {
       setIsLoading(false);

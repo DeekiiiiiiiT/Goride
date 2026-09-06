@@ -1,6 +1,6 @@
 /** Shared types for Payout tab, Cash Wallet settlement, and period detail overlay. */
 
-export type PayoutStatus = 'Finalized' | 'Awaiting Cash' | 'Pending';
+export type PayoutStatus = 'Finalized' | 'Awaiting Cash' | 'Awaiting Tolls' | 'Pending';
 
 /** Matches `CashWeekData.breakdown` + FIFO/surplus — components that sum to Cash Paid (amountPaid). */
 export interface CashPaidBreakdown {

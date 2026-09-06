@@ -197,7 +197,6 @@ export function useDriverDetailMutations({
       void invalidateFinancialPeriods(driverId);
       toast.success('Transaction verified');
     } catch (e) {
-      console.error('Failed to verify transaction', e);
       toast.error('Failed to verify transaction');
       patchTransactionsCache((prev) => prev.map((t) => (t.id === id ? tx : t)));
     }
@@ -226,7 +225,6 @@ export function useDriverDetailMutations({
       );
     } catch (e) {
       queryClient.setQueryData(txQueryKey, originalRqSlice);
-      console.error('Failed to delete transaction', e);
       toast.error('Failed to delete transaction');
     } finally {
       setTransactionToDelete(null);
@@ -265,7 +263,6 @@ export function useDriverDetailMutations({
           : `Ledger ensure complete — 0 new rows (${loaded} trip(s) checked)`,
       );
     } catch (err: any) {
-      console.error('[DriverDetail] Ledger repair failed:', err);
       setRepairResult({ success: false, error: err.message });
       toast.error(err?.message || 'Ledger repair failed');
     } finally {
@@ -290,7 +287,6 @@ export function useDriverDetailMutations({
       setTripGapDiagOpen(true);
       if (!r?.success) toast.error(r?.error || 'Diagnostic failed');
     } catch (err: any) {
-      console.error('[TripLedgerGapDiag]', err);
       toast.error(err?.message || 'Diagnostic failed');
     } finally {
       setTripGapDiagLoading(false);

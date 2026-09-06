@@ -3,7 +3,7 @@
  * Extracted from DriverDetail (Round 4 Phase 3) — behavior unchanged.
  */
 import * as React from 'react';
-import { useMemo, useEffect, useRef, useState } from 'react';
+import { useMemo, useEffect, useRef } from 'react';
 import { format } from 'date-fns';
 import { useQuery } from '@tanstack/react-query';
 import type {
@@ -216,24 +216,19 @@ export function useDriverDetailShellData({
 
   const walletPayments = useDriverDetailWalletPayments(transactions);
 
-  const [tiers, setTiers] = useState<TierConfig[]>([]);
-  const [quotaConfig, setQuotaConfig] = useState<QuotaConfig | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    loadResolvedEarningsBundleForDriverWeek(
-      driverId,
-      undefined,
-      serviceLineParam as 'rideshare' | 'rush_delivery' | undefined,
-    )
-      .then((bundle) => {
-        if (cancelled) return;
-        setTiers(bundle.tiers || []);
-        setQuotaConfig(bundle.quotas || null);
-      })
-      .catch(console.error);
-    return () => { cancelled = true; };
-  }, [driverId, serviceLineParam]);
+  const earningsQuery = useQuery({
+    queryKey: ['driverEarningsBundle', driverId, serviceLineParam || ''] as const,
+    queryFn: () =>
+      loadResolvedEarningsBundleForDriverWeek(
+        driverId,
+        undefined,
+        serviceLineParam as 'rideshare' | 'rush_delivery' | undefined,
+      ),
+    enabled: Boolean(driverId),
+    staleTime: 5 * 60 * 1000,
+  });
+  const tiers = (earningsQuery.data?.tiers || []) as TierConfig[];
+  const quotaConfig = (earningsQuery.data?.quotas || null) as QuotaConfig | null;
 
   const { monthlyEarnings, currentTier } = useMemo(() => {
     const mEarnings = TierCalculations.calculateMonthlyEarnings(allTrips);
