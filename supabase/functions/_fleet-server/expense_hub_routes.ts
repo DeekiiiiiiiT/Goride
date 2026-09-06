@@ -21,14 +21,14 @@ import {
   canTransition,
   hubCategoryToCanonicalEventType,
   allocateEvenly,
-} from "../../../apps/fleet/src/utils/expenseHubJournal.ts";
+} from "../../../packages/finance-core/src/expenseHubJournal.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import {
   recordExpenseInputTax,
   reverseExpenseInputTax,
 } from "../_shared/gctInputLedger.ts";
 import { stampServiceLineFromTripLink } from "./service_line_attribution.ts";
-import type { FixedExpenseConfig } from "../../../apps/fleet/src/types/expenses.ts";
+import type { FixedExpenseConfig } from "../../../packages/types/src/expenses.ts";
 import type {
   ExpenseDocument,
   ExpensePayment,
@@ -37,13 +37,13 @@ import type {
   ExpenseVendor,
   ExpenseAuditEvent,
   ExpenseBulkPreview,
-} from "../../../apps/fleet/src/types/expenseHub.ts";
-import { buildFixedExpenseOccurrences } from "../../../apps/fleet/src/utils/fixedExpenseOccurrences.ts";
+} from "../../../packages/types/src/expenseHub.ts";
+import { buildFixedExpenseOccurrences } from "../../../packages/finance-core/src/fixedExpenseOccurrences.ts";
 import {
   buildExpenseSpendBreakdown,
   type CoverageRuleInput,
   type PointSpendEvent,
-} from "../../../apps/fleet/src/utils/expenseCoverageRunRate.ts";
+} from "../../../packages/finance-core/src/expenseCoverageRunRate.ts";
 import {
   listFleetVisibleVendors,
   mergeCategoryCatalog,

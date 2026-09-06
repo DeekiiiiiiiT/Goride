@@ -166,6 +166,13 @@ function majorToMinor(n: number): number {
   return Math.round((Number(n) || 0) * 100);
 }
 
+function numField(r: Record<string, unknown>, ...keys: string[]): number {
+  for (const k of keys) {
+    if (r[k] != null && Number.isFinite(Number(r[k]))) return Number(r[k]);
+  }
+  return 0;
+}
+
 function mapLegacyPeriodRow(r: Record<string, unknown>, collectKind?: 'driver_owes' | 'cash_held'): SettlementQueueRow {
   const periodAnchor = String(r.periodAnchor || r.period_anchor || '').slice(0, 10);
   const periodEnd = String(r.periodEnd || r.period_end || periodAnchor).slice(0, 10);
@@ -184,6 +191,7 @@ function mapLegacyPeriodRow(r: Record<string, unknown>, collectKind?: 'driver_ow
     settlementAmount: Number(r.settlementAmount) || 0,
     settlementPaid: Number(r.settlementPaid) || 0,
     cashCollected: Number(r.cashCollected) || 0,
+    cashReturned: Number(r.cashReturned) || 0,
     cashStillHeld: Number(r.cashStillHeld) || 0,
     tripCount: Number(r.tripCount) || 0,
     settlementStatus: r.settlementStatus != null ? String(r.settlementStatus) : undefined,
@@ -192,16 +200,37 @@ function mapLegacyPeriodRow(r: Record<string, unknown>, collectKind?: 'driver_ow
     overpaidAmount: Number(r.overpaidAmount) || undefined,
     cashSourceMismatch: Number(r.cashSourceMismatch) || undefined,
     metadata: (r.metadata as Record<string, unknown> | null) ?? null,
+    // Reconciled list extras (legacy reconciled endpoint)
+    earningsGross: numField(r, 'earningsGross'),
+    driverShare: numField(r, 'driverShare'),
+    fleetShare: numField(r, 'fleetShare'),
+    driverSharePercent: numField(r, 'driverSharePercent'),
+    fuelDeduction: numField(r, 'fuelDeduction'),
+    fuelFleetShare: numField(r, 'fuelFleetShare'),
+    tollChargedToDriver: numField(r, 'tollChargedToDriver'),
+    tollCashSpend: numField(r, 'tollCashSpend'),
+    cashWrittenOff: numField(r, 'cashWrittenOff'),
+    payoutNet: numField(r, 'payoutNet'),
+    tipsPaidToDriver: numField(r, 'tipsPaidToDriver'),
+    tipsWithheld: numField(r, 'tipsWithheld'),
   };
+}
+
+/** Legacy period list APIs return `{ data }` (and sometimes `{ rows }`). */
+function legacyPeriodList(res: { data?: unknown[]; rows?: unknown[] } | null | undefined): Record<string, unknown>[] {
+  const list = res?.data ?? res?.rows ?? [];
+  return (Array.isArray(list) ? list : []) as Record<string, unknown>[];
 }
 
 /** Until GET /settlements/queue ships, stitch legacy period list endpoints. */
 async function getQueueLegacy(params: SettlementQueueParams): Promise<SettlementQueueResponse> {
+  const serviceLine: 'rideshare' | 'rush_delivery' | undefined =
+    params.scope === 'rideshare' || params.scope === 'rush_delivery' ? params.scope : undefined;
   const periodOpts = {
     periodStart: params.weekFrom,
     periodEnd: params.weekTo,
     minAmount: params.minAmount,
-    serviceLine: params.scope === 'rideshare' || params.scope === 'rush_delivery' ? params.scope : undefined,
+    serviceLine,
     limit: 2000,
   };
 
@@ -209,25 +238,24 @@ async function getQueueLegacy(params: SettlementQueueParams): Promise<Settlement
 
   if (params.view === 'pay') {
     const res = await api.getCompanyOwesPeriods(periodOpts);
-    rows = (res?.rows || []).map((r: Record<string, unknown>) => mapLegacyPeriodRow(r));
+    rows = legacyPeriodList(res).map((r) => mapLegacyPeriodRow(r));
   } else if (params.view === 'reconciled') {
     const res = await api.getReconciledPeriods(periodOpts);
-    rows = (res?.rows || []).map((r: Record<string, unknown>) => mapLegacyPeriodRow(r));
+    rows = legacyPeriodList(res).map((r) => mapLegacyPeriodRow(r));
   } else {
-    // collect: driver_owes + cash_held
+    // collect: driver_owes + cash_held (prefer driver_owes when both exist)
     const [owes, held] = await Promise.all([
       api.getDriverOwesPeriods(periodOpts),
       api.getCashHeldPeriods(periodOpts),
     ]);
     const byKey = new Map<string, SettlementQueueRow>();
-    for (const r of owes?.rows || []) {
-      const mapped = mapLegacyPeriodRow(r as Record<string, unknown>, 'driver_owes');
+    for (const r of legacyPeriodList(held)) {
+      const mapped = mapLegacyPeriodRow(r, 'cash_held');
       byKey.set(`${mapped.driverId}|${mapped.periodAnchor}`, mapped);
     }
-    for (const r of held?.rows || []) {
-      const mapped = mapLegacyPeriodRow(r as Record<string, unknown>, 'cash_held');
-      const k = `${mapped.driverId}|${mapped.periodAnchor}`;
-      if (!byKey.has(k)) byKey.set(k, mapped);
+    for (const r of legacyPeriodList(owes)) {
+      const mapped = mapLegacyPeriodRow(r, 'driver_owes');
+      byKey.set(`${mapped.driverId}|${mapped.periodAnchor}`, mapped);
     }
     rows = [...byKey.values()];
   }

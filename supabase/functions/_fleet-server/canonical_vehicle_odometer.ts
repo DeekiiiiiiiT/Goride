@@ -7,7 +7,7 @@ import {
   canonicalOdometerFromMaps,
   parseNum,
   type OdometerSupplementMaps,
-} from "../../../apps/fleet/src/utils/canonicalOdometerMath.ts";
+} from "../../../packages/finance-core/src/canonicalOdometerMath.ts";
 import { getCurrentOdometer } from "./odometer_ledger.ts";
 import { fleetDb, fleetTable } from "./repos/baseRepo.ts";
 import { getOrgId } from "./org_scope.ts";

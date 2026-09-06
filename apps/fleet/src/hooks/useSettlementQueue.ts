@@ -21,6 +21,7 @@ export type SettlementQueueRow = {
   settlementAmount?: number;
   settlementPaid?: number;
   cashCollected?: number;
+  cashReturned?: number;
   cashStillHeld?: number;
   tripCount?: number;
   settlementStatus?: string;
@@ -29,6 +30,19 @@ export type SettlementQueueRow = {
   overpaidAmount?: number;
   cashSourceMismatch?: number;
   metadata?: Record<string, unknown> | null;
+  /** Reconciled view extras (optional). */
+  earningsGross?: number;
+  driverShare?: number;
+  fleetShare?: number;
+  driverSharePercent?: number;
+  fuelDeduction?: number;
+  fuelFleetShare?: number;
+  tollChargedToDriver?: number;
+  tollCashSpend?: number;
+  cashWrittenOff?: number;
+  payoutNet?: number;
+  tipsPaidToDriver?: number;
+  tipsWithheld?: number;
   /** Present when API (or client) rolls up by driver. */
   weekCount?: number;
   oldestPeriodEnd?: string;
@@ -94,7 +108,10 @@ export const settlementKeys = {
         scope: p.scope ?? '',
         search: p.search ?? '',
         page: p.page ?? 1,
+        pageSize: p.pageSize ?? null,
         groupBy: p.groupBy ?? 'week',
+        ageBucket: p.ageBucket ?? '',
+        sort: p.sort ?? '',
       },
     ] as const,
   movements: (p: SettlementMovementsParams = {}) =>

@@ -12,3 +12,9 @@ export {
   periodNotesStorageKey,
   type SettlementPeriodNotesProps,
 } from './SettlementPeriodNotes';
+export {
+  ReconciledTable,
+  type ReconciledTableProps,
+  type ReconciledTableRow,
+} from './ReconciledTable';
+export { useWindowedRows } from './useWindowedRows';

@@ -67,7 +67,7 @@ import {
   sumActiveTripSideCredits,
   computeDisputeMatchDetailFinancials,
 } from "./toll_settlement.ts";
-import { remainingTollShortfall } from "../../../apps/fleet/src/utils/tollSettlement.ts";
+import { remainingTollShortfall } from "../../../packages/toll-core/src/tollSettlement.ts";
 import { safeErrorResponse } from "./safe_error.ts";
 import { periodAnchorFor } from "./financial_ledger.ts";
 

@@ -134,8 +134,8 @@ import {
   computeIndriveWalletFeesFromLedgerEntries,
   computeIndriveWalletLoadsFromLedgerEntries,
   buildIndriveWalletFleetFromLedger,
-} from "../../../apps/fleet/src/utils/indriveWalletMetrics.ts";
-import { parseCatalogMonthFromUnknown } from "../../../apps/fleet/src/utils/catalogMonthParse.ts";
+} from "../../../packages/finance-core/src/indriveWalletMetrics.ts";
+import { parseCatalogMonthFromUnknown } from "../../../packages/types/src/catalogMonthParse.ts";
 import fuelApp from "./fuel_controller.tsx";
 import {
   fleetAutocompletePlaces,

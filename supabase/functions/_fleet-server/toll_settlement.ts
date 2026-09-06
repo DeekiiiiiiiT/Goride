@@ -13,7 +13,7 @@ import {
   type SettlementAllocationLike,
   type SettlementSourceType,
   SETTLEMENT_TOLERANCE,
-} from "../../../apps/fleet/src/utils/tollSettlement.ts";
+} from "../../../packages/toll-core/src/tollSettlement.ts";
 
 const supabase = createClient(
   Deno.env.get("SUPABASE_URL")!,
@@ -417,4 +417,4 @@ export {
   settlementIdempotencyKey,
   projectClaimFromSettlement,
   computeDisputeMatchDetailFinancials,
-} from "../../../apps/fleet/src/utils/tollSettlement.ts";
+} from "../../../packages/toll-core/src/tollSettlement.ts";

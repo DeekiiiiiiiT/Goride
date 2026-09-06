@@ -109,3 +109,11 @@ export type {
   ImpactPlazaLine,
   RateImpactPreview,
 } from './tollRateImpact.ts';
+export * from './tollSettlement.ts';
+export * from './tollPeriodBucket.ts';
+export * from './tollFleetLossNetting.ts';
+export * from './tollReconPeriodStatus.ts';
+export * from './tollPeriodStepTypes.ts';
+export * from './tollPeriodDisputeHelpers.ts';
+export * from './tollPeriodCounts.ts';
+export * from './unlinkedShortfallEligibility.ts';

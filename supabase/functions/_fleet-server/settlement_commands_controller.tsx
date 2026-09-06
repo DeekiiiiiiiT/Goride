@@ -173,12 +173,14 @@ async function findMovementByIdempotency(
 
 /**
  * Load-bearing CAS: claim period write lock before any movement insert.
+ * CAS must use the row_version observed when residual was computed — not a re-read.
  * Fails closed with STALE_RESIDUAL when another writer already bumped.
  */
 async function claimPeriodWriteLock(
   driverId: string,
   periodAnchor: string,
   organizationId: string | null,
+  expectedRowVersion: number,
 ): Promise<void> {
   const existing = await loadPeriodDb(driverId, periodAnchor, organizationId);
   if (!existing?.id) {
@@ -188,13 +190,18 @@ async function claimPeriodWriteLock(
       404,
     );
   }
-  const current = Number(existing.row_version) || 1;
-  const next = current + 1;
+  const expected = Number(expectedRowVersion) || 1;
+  const live = Number(existing.row_version) || 1;
+  // Early stale check — same semantics as UPDATE … WHERE row_version = expected.
+  if (live !== expected) {
+    assertPeriodCasClaimed(null);
+  }
+  const next = expected + 1;
   const { data, error } = await sb()
     .from("driver_financial_periods")
     .update({ row_version: next })
     .eq("id", existing.id)
-    .eq("row_version", current)
+    .eq("row_version", expected)
     .select("id")
     .maybeSingle();
   if (error) {
@@ -320,10 +327,17 @@ async function insertMovementAndDualWrite(
     approvalState?: string;
     status?: string;
     metadata?: Record<string, unknown>;
+    /** Version observed when residual/caps were computed — required for load-bearing CAS. */
+    expectedRowVersion: number;
   },
 ): Promise<{ movement: Record<string, unknown>; period: DriverFinancialPeriodRow | null }> {
   // Claim lock first — two concurrent pays must not both insert.
-  await claimPeriodWriteLock(opts.driverId, opts.weekAnchor, opts.organizationId);
+  await claimPeriodWriteLock(
+    opts.driverId,
+    opts.weekAnchor,
+    opts.organizationId,
+    opts.expectedRowVersion,
+  );
 
   const transactionId = crypto.randomUUID();
   const movementId = crypto.randomUUID();
@@ -465,6 +479,7 @@ app.post(`${BASE}/collect`, requireSettlementPerm("settlements.collect"), async 
     const owed = driverOwesResidual(settlementAmount);
     assertExpectedOutstanding(owed, expectedOutstanding);
     enforceCollectCap(owed, amount, allowOver, reason);
+    const observedVersion = Number(periodDb.row_version) || 1;
 
     const { movement, period } = await insertMovementAndDualWrite(c, {
       organizationId,
@@ -477,6 +492,7 @@ app.post(`${BASE}/collect`, requireSettlementPerm("settlements.collect"), async 
       reference,
       reason,
       idempotencyKey,
+      expectedRowVersion: observedVersion,
     });
     return c.json({ success: true, movement: mapMovement(movement), period: mapPeriod(period) });
   } catch (e) {
@@ -527,6 +543,7 @@ app.post(`${BASE}/pay`, requireSettlementPerm("settlements.pay"), async (c) => {
     assertExpectedOutstanding(residual, expectedOutstanding);
     // Entitlement = already paid + still owed (gross positive claim for the week).
     enforcePayCap(settlementPaid, settlementPaid + residual, amount);
+    const observedVersion = Number(periodDb.row_version) || 1;
 
     const needsApproval = requiresApproval(amount) && method !== "Cash";
     const { movement, period } = await insertMovementAndDualWrite(c, {
@@ -542,6 +559,7 @@ app.post(`${BASE}/pay`, requireSettlementPerm("settlements.pay"), async (c) => {
       idempotencyKey,
       approvalState: needsApproval ? "pending" : "none",
       status: needsApproval ? "pending" : method === "Cash" ? "posted" : "pending",
+      expectedRowVersion: observedVersion,
     });
     return c.json({
       success: true,
@@ -597,6 +615,7 @@ app.post(`${BASE}/write-off`, requireSettlementPerm("settlements.write_off"), as
     const owed = driverOwesResidual(settlementAmount);
     assertExpectedOutstanding(owed, expectedOutstanding);
     enforceCollectCap(owed, amount, false);
+    const observedVersion = Number(periodDb.row_version) || 1;
 
     const { movement, period } = await insertMovementAndDualWrite(c, {
       organizationId,
@@ -609,6 +628,7 @@ app.post(`${BASE}/write-off`, requireSettlementPerm("settlements.write_off"), as
       reference,
       reason,
       idempotencyKey,
+      expectedRowVersion: observedVersion,
     });
     return c.json({ success: true, movement: mapMovement(movement), period: mapPeriod(period) });
   } catch (e) {
@@ -675,7 +695,9 @@ app.post(`${BASE}/reverse`, requireSettlementPerm("settlements.reverse"), async 
         if (!driverId || !/^\d{4}-\d{2}-\d{2}$/.test(weekAnchor)) {
           return c.json({ error: "INVALID_TX", message: "Transaction missing driver/week for reverse" }, 400);
         }
-        await claimPeriodWriteLock(driverId, weekAnchor, organizationId);
+        const periodForLock = await loadPeriodDb(driverId, weekAnchor, organizationId);
+        const observedVersion = Number(periodForLock?.row_version) || 1;
+        await claimPeriodWriteLock(driverId, weekAnchor, organizationId, observedVersion);
         const next = {
           ...t,
           status: "Reversed",
@@ -741,8 +763,10 @@ app.post(`${BASE}/reverse`, requireSettlementPerm("settlements.reverse"), async 
       ? String(original.source_transaction_id)
       : null;
 
-    // Claim period lock before void + reverse insert.
-    await claimPeriodWriteLock(driverId, weekAnchor, organizationId);
+    // Claim period lock before void + reverse insert (version observed now).
+    const periodForLock = await loadPeriodDb(driverId, weekAnchor, organizationId);
+    const observedVersion = Number(periodForLock?.row_version) || 1;
+    await claimPeriodWriteLock(driverId, weekAnchor, organizationId, observedVersion);
 
     // Mark original void (append-only: row stays, status flips).
     await sb()
@@ -927,7 +951,9 @@ app.post(`${BASE}/verify`, requireSettlementPerm("settlements.pay"), async (c) =
       return c.json({ error: "VERIFY_TARGET_INVALID", message: "Could not resolve driver/week for verify" }, 400);
     }
 
-    await claimPeriodWriteLock(resolvedDriver, resolvedWeek, organizationId);
+    const periodForLock = await loadPeriodDb(resolvedDriver, resolvedWeek, organizationId);
+    const observedVersion = Number(periodForLock?.row_version) || 1;
+    await claimPeriodWriteLock(resolvedDriver, resolvedWeek, organizationId, observedVersion);
 
     const amountMinor = targetMovement
       ? Number(targetMovement.amount_minor) || 0
@@ -1062,6 +1088,7 @@ app.post(`${BASE}/runs`, requireSettlementPerm("settlements.pay"), async (c) => 
           assertExpectedOutstanding(residual, expectedOutstanding);
           const settlementPaid = Number(periodDb.settlement_paid) || 0;
           enforcePayCap(settlementPaid, settlementPaid + residual, amount);
+          const observedVersion = Number(periodDb.row_version) || 1;
           const { movement } = await insertMovementAndDualWrite(c, {
             organizationId,
             actorId: user.userId,
@@ -1071,12 +1098,14 @@ app.post(`${BASE}/runs`, requireSettlementPerm("settlements.pay"), async (c) => 
             amount,
             method,
             idempotencyKey: rowKey,
+            expectedRowVersion: observedVersion,
           });
           movementId = String(movement.id);
         } else {
           const owed = driverOwesResidual(settlementAmount);
           assertExpectedOutstanding(owed, expectedOutstanding);
           enforceCollectCap(owed, amount, false);
+          const observedVersion = Number(periodDb.row_version) || 1;
           const { movement } = await insertMovementAndDualWrite(c, {
             organizationId,
             actorId: user.userId,
@@ -1086,6 +1115,7 @@ app.post(`${BASE}/runs`, requireSettlementPerm("settlements.pay"), async (c) => 
             amount,
             method,
             idempotencyKey: rowKey,
+            expectedRowVersion: observedVersion,
           });
           movementId = String(movement.id);
         }
@@ -1189,6 +1219,13 @@ app.post(`${BASE}/:movementId/approve`, requireSettlementPerm("settlements.appro
     if (error) throw new Error(error.message);
     if (!movement) return c.json({ error: "MOVEMENT_NOT_FOUND" }, 404);
 
+    const driverId = String(movement.driver_id);
+    const weekAnchor = String(movement.period_anchor).slice(0, 10);
+    // Claim period before posting/voiding so approve cannot race a concurrent pay.
+    const periodForLock = await loadPeriodDb(driverId, weekAnchor, organizationId);
+    const observedVersion = Number(periodForLock?.row_version) || 1;
+    await claimPeriodWriteLock(driverId, weekAnchor, organizationId, observedVersion);
+
     const { data: updated, error: updErr } = await sb()
       .from("settlement_movements")
       .update({
@@ -1219,10 +1256,7 @@ app.post(`${BASE}/:movementId/approve`, requireSettlementPerm("settlements.appro
           isReconciled: true,
         };
         await kv.set(`transaction:${txId}`, stampOrg(next, c));
-        await syncPeriodCashFromTransactions(
-          String(updated.driver_id),
-          String(updated.period_anchor).slice(0, 10),
-        );
+        await syncPeriodCashFromTransactions(driverId, weekAnchor);
       }
     }
     if (txId && decision === "rejected") {
@@ -1234,17 +1268,11 @@ app.post(`${BASE}/:movementId/approve`, requireSettlementPerm("settlements.appro
           isReconciled: false,
         };
         await kv.set(`transaction:${txId}`, stampOrg(next, c));
-        await syncPeriodCashFromTransactions(
-          String(updated.driver_id),
-          String(updated.period_anchor).slice(0, 10),
-        );
+        await syncPeriodCashFromTransactions(driverId, weekAnchor);
       }
     }
 
-    const period = await getDriverFinancialPeriodDetail(
-      String(updated.driver_id),
-      String(updated.period_anchor).slice(0, 10),
-    );
+    const period = await getDriverFinancialPeriodDetail(driverId, weekAnchor);
     return c.json({
       success: true,
       movement: mapMovement(updated as Record<string, unknown>),
@@ -1301,6 +1329,7 @@ app.get(`${BASE}/queue`, requirePermission("transactions.view"), async (c) => {
       settlementAmount?: number;
       settlementPaid?: number;
       cashCollected?: number;
+      cashReturned?: number;
       cashStillHeld?: number;
       tripCount?: number;
       settlementStatus?: string;
@@ -1309,6 +1338,18 @@ app.get(`${BASE}/queue`, requirePermission("transactions.view"), async (c) => {
       overpaidAmount?: number;
       cashSourceMismatch?: number;
       metadata?: Record<string, unknown> | null;
+      earningsGross?: number;
+      driverShare?: number;
+      fleetShare?: number;
+      driverSharePercent?: number;
+      fuelDeduction?: number;
+      fuelFleetShare?: number;
+      tollChargedToDriver?: number;
+      tollCashSpend?: number;
+      cashWrittenOff?: number;
+      payoutNet?: number;
+      tipsPaidToDriver?: number;
+      tipsWithheld?: number;
     };
 
     let raw: RawRow[] = [];
@@ -1343,12 +1384,27 @@ app.get(`${BASE}/queue`, requirePermission("transactions.view"), async (c) => {
         settlementAmount: r.settlementAmount,
         settlementPaid: r.settlementPaid,
         cashCollected: r.cashCollected,
+        cashReturned: (r as { cashReturned?: number }).cashReturned,
         cashStillHeld: r.cashStillHeld,
         tripCount: r.tripCount,
         settlementStatus: r.settlementStatus,
         fuelFinalized: r.fuelFinalized,
         overpaidAmount: r.overpaidAmount,
         cashSourceMismatch: r.cashSourceMismatch,
+        // Rich fields for ReconciledTable — avoid a second legacy list query (R-9).
+        earningsGross: r.earningsGross,
+        driverShare: r.driverShare,
+        fleetShare: r.fleetShare,
+        driverSharePercent: r.driverSharePercent,
+        fuelDeduction: r.fuelDeduction,
+        fuelFleetShare: r.fuelFleetShare,
+        tollChargedToDriver: r.tollChargedToDriver,
+        tollCashSpend: r.tollCashSpend,
+        cashWrittenOff: r.cashWrittenOff,
+        payoutNet: (r as { payoutNet?: number }).payoutNet,
+        tipsPaidToDriver: r.tipsPaidToDriver,
+        tipsWithheld: r.tipsWithheld,
+        metadata: (r as { metadata?: Record<string, unknown> | null }).metadata ?? null,
       }));
     } else {
       const [owes, held] = await Promise.all([

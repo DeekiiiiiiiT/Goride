@@ -120,7 +120,7 @@ import {
   type TollEventSourceSystem,
   type TollFinancialEvent,
   type TollUnifiedEventsMeta,
-} from "../../../apps/fleet/src/types/tollFinancialEvent.ts";
+} from "../../../packages/types/src/tollFinancialEvent.ts";
 import {
   buildTollContentFingerprint,
   ensureTollContentFingerprint,
@@ -131,7 +131,7 @@ import {
   quarantineReasonFor,
   isSuspiciousVineyardsCashRate,
   isTollQuarantined,
-} from "../../../apps/fleet/src/utils/tollLedgerIntegrity.ts";
+} from "../../../packages/finance-core/src/tollLedgerIntegrity.ts";
 
 const app = new Hono();
 
@@ -8806,7 +8806,7 @@ async function applyUnlinkedRefundToTargets(
   const tripRefund = Math.abs(Number(trip.tollCharges) || 0);
 
   // Server-side multi-target validation (duplicate / over-budget shares).
-  const { validateMultiTargetShares } = await import("../../../apps/fleet/src/utils/tollSettlement.ts");
+  const { validateMultiTargetShares } = await import("../../../packages/toll-core/src/tollSettlement.ts");
   const shareCheck = validateMultiTargetShares(
     tripRefund,
     targets

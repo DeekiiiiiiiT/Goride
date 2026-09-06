@@ -137,6 +137,21 @@ export function assertPeriodCasClaimed(
   }
 }
 
+/**
+ * Pure CAS bump: succeeds only when liveVersion === expectedRowVersion.
+ * Callers must CAS against the version observed when residual was computed —
+ * never against a fresh re-read (that lets two observers of v1 both win).
+ */
+export function casBumpRowVersion(
+  liveVersion: number,
+  expectedRowVersion: number,
+): { next: number } | null {
+  const live = Number(liveVersion) || 1;
+  const expected = Number(expectedRowVersion) || 1;
+  if (live !== expected) return null;
+  return { next: expected + 1 };
+}
+
 /** Company-owes residual (pay queue). */
 export function companyOwesResidual(settlementAmount: number): number {
   return Math.max(0, Number(settlementAmount) || 0);
@@ -286,4 +301,41 @@ export function isSameIdempotencyScope(
     String(a.organizationId) === String(b.organizationId) &&
     String(a.idempotencyKey).trim() === String(b.idempotencyKey).trim()
   );
+}
+
+/**
+ * Residual impact of a posted movement (minor units).
+ * Pay reduces company-owes; collect/write_off reduce driver-owes.
+ * Void/pending contribute nothing. Reverse uses {@link reverseResidualDeltaMinor}.
+ */
+export function residualDeltaMinor(
+  kind: Exclude<SettlementMovementKind, "reverse" | "verify">,
+  amountMinor: number,
+  status: SettlementMovementStatus | string,
+): number {
+  const st = String(status || "").toLowerCase();
+  if (st === "void" || st === "pending") return 0;
+  const a = Math.trunc(Math.abs(Number(amountMinor) || 0));
+  if (kind === "pay") return -a;
+  return a; // collect | write_off
+}
+
+/** Reverse undoes the original's residual impact (same absolute minor amount). */
+export function reverseResidualDeltaMinor(
+  originalKind: Exclude<SettlementMovementKind, "reverse" | "verify">,
+  amountMinor: number,
+): number {
+  return -residualDeltaMinor(originalKind, amountMinor, "posted");
+}
+
+/**
+ * Posted movement + matching reverse nets to zero on the period residual projection.
+ */
+export function movementReversalPairNetsToZero(
+  originalKind: Exclude<SettlementMovementKind, "reverse" | "verify">,
+  amountMinor: number,
+): boolean {
+  const posted = residualDeltaMinor(originalKind, amountMinor, "posted");
+  const reverse = reverseResidualDeltaMinor(originalKind, amountMinor);
+  return posted + reverse === 0 && posted !== 0;
 }

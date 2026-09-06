@@ -30,6 +30,9 @@ jobs:
         with:
           deno-version: v2.x
 
+      - name: Check no edge→fleet imports
+        run: node scripts/check-no-edge-fleet-imports.mjs
+
       - name: Run Deno test suites
         # Several modules build a Supabase client at import time, so the client
         # constructor needs a URL and key present before the graph is evaluated.

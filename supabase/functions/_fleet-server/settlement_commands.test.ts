@@ -10,6 +10,9 @@ import {
   SettlementCommandError,
   companyOwesResidual,
   driverOwesResidual,
+  movementReversalPairNetsToZero,
+  residualDeltaMinor,
+  reverseResidualDeltaMinor,
 } from "./settlement_commands.ts";
 
 Deno.test("toMinor rounds major units to cents", () => {
@@ -135,5 +138,18 @@ Deno.test("buildMovementRow requires idempotency key and scopes uniquely", () =>
       { organizationId: "org-b", idempotencyKey: "k1" },
     ),
     false,
+  );
+});
+
+Deno.test("movement + reverse net to zero on residual projection", () => {
+  assertEquals(movementReversalPairNetsToZero("pay", 12_500), true);
+  assertEquals(movementReversalPairNetsToZero("collect", 9_999), true);
+  assertEquals(movementReversalPairNetsToZero("write_off", 100), true);
+  assertEquals(residualDeltaMinor("pay", 5000, "posted"), -5000);
+  assertEquals(residualDeltaMinor("pay", 5000, "void"), 0);
+  assertEquals(reverseResidualDeltaMinor("pay", 5000), 5000);
+  assertEquals(
+    residualDeltaMinor("pay", 5000, "posted") + reverseResidualDeltaMinor("pay", 5000),
+    0,
   );
 });

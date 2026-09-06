@@ -13,7 +13,15 @@
     "./tollCategoryHelper": "./src/tollCategoryHelper.ts",
     "./tollDate": "./src/tollDate.ts",
     "./tollLedgerRecord": "./src/tollLedgerRecord.ts",
-    "./tollRateImpact": "./src/tollRateImpact.ts"
+    "./tollRateImpact": "./src/tollRateImpact.ts",
+    "./tollSettlement": "./src/tollSettlement.ts",
+    "./tollPeriodBucket": "./src/tollPeriodBucket.ts",
+    "./tollFleetLossNetting": "./src/tollFleetLossNetting.ts",
+    "./tollReconPeriodStatus": "./src/tollReconPeriodStatus.ts",
+    "./tollPeriodStepTypes": "./src/tollPeriodStepTypes.ts",
+    "./tollPeriodDisputeHelpers": "./src/tollPeriodDisputeHelpers.ts",
+    "./tollPeriodCounts": "./src/tollPeriodCounts.ts",
+    "./unlinkedShortfallEligibility": "./src/unlinkedShortfallEligibility.ts"
   },
 
   "scripts": {

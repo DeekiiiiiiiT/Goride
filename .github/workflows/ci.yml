@@ -26,6 +26,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Check no edge→fleet imports
+        run: node scripts/check-no-edge-fleet-imports.mjs
+
       - name: Check toll-core parity
         run: node scripts/check-toll-core-parity.mjs
 

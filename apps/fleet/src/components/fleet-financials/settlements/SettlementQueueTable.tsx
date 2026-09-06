@@ -17,6 +17,7 @@ import { cn } from '../../ui/utils';
 import { agingBucket, daysOverdue, type AgingBucket } from '../../../utils/settlementAging';
 import { payOutstandingAmount } from '../../../utils/driverSettlementsPayAmount';
 import type { SettlementQueueRow } from '../../../hooks/useSettlementQueue';
+import { useWindowedRows } from './useWindowedRows';
 
 const MONEY = (n: number | null | undefined) => {
   if (n == null || !Number.isFinite(n)) return '—';
@@ -40,9 +41,9 @@ function rowKey(r: Pick<SettlementQueueRow, 'driverId' | 'periodAnchor'>) {
 }
 
 function owedMajor(r: SettlementQueueRow, mode: 'collect' | 'pay'): number {
-  if (mode === 'pay') return payOutstandingAmount(r);
   if (r.amountOwed != null && Number.isFinite(r.amountOwed)) return Math.max(0, Number(r.amountOwed));
   if (r.amountOwedMinor != null) return Math.max(0, (Number(r.amountOwedMinor) || 0) / 100);
+  if (mode === 'pay') return payOutstandingAmount(r);
   return Math.max(0, Math.abs(Number(r.settlementAmount) || 0));
 }
 
@@ -157,6 +158,11 @@ export function SettlementQueueTable({
     [rows, mode],
   );
 
+  const flatWindow = useWindowedRows(groupByDriver ? [] : rows);
+  const rollupWindow = useWindowedRows(rollups || []);
+  const windowed = groupByDriver ? rollupWindow : flatWindow;
+  const colSpan = groupByDriver ? 8 : 6;
+
   const toggleExpand = (id: string) => {
     setExpanded((prev) => {
       const next = new Set(prev);
@@ -176,7 +182,10 @@ export function SettlementQueueTable({
       <p className="text-xs text-slate-500 tabular-nums">
         showing {showN} of {showM} · {MONEY(showX)} of {MONEY(showY)}
       </p>
-      <div className="rounded-lg border border-slate-200 overflow-auto bg-white max-h-[70vh]">
+      <div
+        className={`rounded-lg border border-slate-200 overflow-auto bg-white ${windowed.maxHeightClass}`}
+        onScroll={windowed.windowed ? windowed.onScroll : undefined}
+      >
         <Table>
           <TableHeader className="sticky top-0 z-10 bg-slate-50 shadow-sm">
             <TableRow className="bg-slate-50">
@@ -201,19 +210,28 @@ export function SettlementQueueTable({
           <TableBody>
             {loading ? (
               <TableRow>
-                <TableCell colSpan={groupByDriver ? 8 : 6} className="h-24 text-center text-slate-500">
+                <TableCell colSpan={colSpan} className="h-24 text-center text-slate-500">
                   <Loader2 className="h-4 w-4 animate-spin inline mr-2" />
                   Loading…
                 </TableCell>
               </TableRow>
             ) : rows.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={groupByDriver ? 8 : 6} className="h-24 text-center text-slate-500">
+                <TableCell colSpan={colSpan} className="h-24 text-center text-slate-500">
                   No outstanding {mode === 'collect' ? 'collections' : 'payouts'} in this range.
                 </TableCell>
               </TableRow>
             ) : groupByDriver && rollups ? (
-              rollups.map((g) => {
+              <>
+                {rollupWindow.padTop > 0 ? (
+                  <TableRow aria-hidden>
+                    <TableCell
+                      colSpan={colSpan}
+                      style={{ height: rollupWindow.padTop, padding: 0, border: 0 }}
+                    />
+                  </TableRow>
+                ) : null}
+                {rollupWindow.visible.map((g) => {
                 const open = expanded.has(g.driverId);
                 const weekKeysForDriver = g.weeks.map(rowKey);
                 const driverAllSelected =
@@ -384,9 +402,27 @@ export function SettlementQueueTable({
                       : null}
                   </React.Fragment>
                 );
-              })
+              })}
+                {rollupWindow.padBottom > 0 ? (
+                  <TableRow aria-hidden>
+                    <TableCell
+                      colSpan={colSpan}
+                      style={{ height: rollupWindow.padBottom, padding: 0, border: 0 }}
+                    />
+                  </TableRow>
+                ) : null}
+              </>
             ) : (
-              rows.map((r) => {
+              <>
+                {flatWindow.padTop > 0 ? (
+                  <TableRow aria-hidden>
+                    <TableCell
+                      colSpan={colSpan}
+                      style={{ height: flatWindow.padTop, padding: 0, border: 0 }}
+                    />
+                  </TableRow>
+                ) : null}
+                {flatWindow.visible.map((r) => {
                 const k = rowKey(r);
                 const bucket = agingBucket(r.periodEnd);
                 const amt = owedMajor(r, mode);
@@ -459,7 +495,16 @@ export function SettlementQueueTable({
                     </TableCell>
                   </TableRow>
                 );
-              })
+              })}
+                {flatWindow.padBottom > 0 ? (
+                  <TableRow aria-hidden>
+                    <TableCell
+                      colSpan={colSpan}
+                      style={{ height: flatWindow.padBottom, padding: 0, border: 0 }}
+                    />
+                  </TableRow>
+                ) : null}
+              </>
             )}
           </TableBody>
           {rows.length > 0 ? (

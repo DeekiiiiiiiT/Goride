@@ -27,7 +27,7 @@ import {
   FLEET_SERVICES_ATTENTION_CAP,
   sortFleetServiceAttention,
   type FleetServiceAttentionItem,
-} from "../../../apps/fleet/src/utils/maintenanceOverdueDetails.ts";
+} from "../../../packages/finance-core/src/maintenanceOverdueDetails.ts";
 import { resolveCatalogIdForKvVehicle } from "./vehicle_catalog_resolve.ts";
 import { executeMaintenanceBootstrap } from "./maintenance_bootstrap_core.ts";
 import { requireCatalogMatched } from "./vehicle_catalog_gate.ts";
@@ -35,7 +35,7 @@ import {
   appendCanonicalMaintenanceIfEligible,
 } from "./canonical_from_ops.ts";
 import { deleteCanonicalLedgerBySource } from "./ledger_canonical.ts";
-import { isMaintenanceLedgerEligible } from "../../../apps/fleet/src/utils/canonicalMaintenanceLedger.ts";
+import { isMaintenanceLedgerEligible } from "../../../packages/finance-core/src/canonicalMaintenanceLedger.ts";
 import { projectFromMaintenanceLog, voidOdometerReading } from "./odometer_ledger.ts";
 
 // Wave 5: DRY — use shared assertPlatformStaffResponse from rbac_middleware

@@ -4,17 +4,17 @@
  */
 import type { Context } from "npm:hono";
 import { appendCanonicalLedgerEvents, canonicalEventExistsByIdemKey } from "./ledger_canonical.ts";
-import type { FixedExpenseConfig } from "../../../apps/fleet/src/types/expenses.ts";
-import { buildFixedExpenseOccurrences } from "../../../apps/fleet/src/utils/fixedExpenseOccurrences.ts";
+import type { FixedExpenseConfig } from "../../../packages/types/src/expenses.ts";
+import { buildFixedExpenseOccurrences } from "../../../packages/finance-core/src/fixedExpenseOccurrences.ts";
 import { classifyPostedBusinessTransaction } from "../../../packages/finance-core/src/businessTransactionAccounting.ts";
 import {
   buildCanonicalMaintenanceEvent,
   type MaintenanceLedgerRecordInput,
-} from "../../../apps/fleet/src/utils/canonicalMaintenanceLedger.ts";
+} from "../../../packages/finance-core/src/canonicalMaintenanceLedger.ts";
 import { normalizeFuelPaymentSourceEnum } from "./fuel_payment_source.ts";
 
-export { buildCanonicalMaintenanceEvent, isMaintenanceLedgerEligible } from "../../../apps/fleet/src/utils/canonicalMaintenanceLedger.ts";
-export type { MaintenanceLedgerRecordInput } from "../../../apps/fleet/src/utils/canonicalMaintenanceLedger.ts";
+export { buildCanonicalMaintenanceEvent, isMaintenanceLedgerEligible } from "../../../packages/finance-core/src/canonicalMaintenanceLedger.ts";
+export type { MaintenanceLedgerRecordInput } from "../../../packages/finance-core/src/canonicalMaintenanceLedger.ts";
 
 function isCompletedTripStatus(status: unknown): boolean {
   const s = String(status ?? "").trim().toLowerCase();

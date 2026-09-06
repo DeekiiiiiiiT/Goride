@@ -10,6 +10,7 @@ import {
 import {
   assertExpectedOutstanding,
   assertPeriodCasClaimed,
+  casBumpRowVersion,
   enforcePayCap,
   SettlementCommandError,
 } from "./settlement_commands.ts";
@@ -35,6 +36,44 @@ Deno.test("concurrency: CAS null fails; claimed row succeeds (two pays → one)"
     assertEquals((e as SettlementCommandError).code, "STALE_RESIDUAL");
     assertEquals((e as SettlementCommandError).status, 409);
   }
+});
+
+Deno.test("concurrency: two observers of v1 → exactly one CAS win (N-5)", () => {
+  let dbVersion = 1;
+
+  /** Correct lock: CAS against the version residual was computed from. */
+  function claim(expectedRowVersion: number): { id: string } | null {
+    const bump = casBumpRowVersion(dbVersion, expectedRowVersion);
+    if (!bump) return null;
+    dbVersion = bump.next;
+    return { id: "period" };
+  }
+
+  const observedA = 1;
+  const observedB = 1; // both saw residual under v1
+
+  assertPeriodCasClaimed(claim(observedA)); // wins → dbVersion = 2
+  try {
+    assertPeriodCasClaimed(claim(observedB)); // must fail
+    throw new Error("expected STALE_RESIDUAL");
+  } catch (e) {
+    assertEquals((e as SettlementCommandError).code, "STALE_RESIDUAL");
+    assertEquals((e as SettlementCommandError).status, 409);
+  }
+  assertEquals(dbVersion, 2);
+
+  // Broken re-read CAS would let both win — prove casBump rejects that pattern.
+  let broken = 1;
+  function claimBrokenReRead(): { id: string } | null {
+    const current = broken; // re-read at claim time
+    const bump = casBumpRowVersion(broken, current);
+    if (!bump) return null;
+    broken = bump.next;
+    return { id: "period" };
+  }
+  assertPeriodCasClaimed(claimBrokenReRead());
+  assertPeriodCasClaimed(claimBrokenReRead()); // both succeed — documents why N-5 mattered
+  assertEquals(broken, 3);
 });
 
 Deno.test("R-1 semantics: STALE_RESIDUAL and pay cap are 4xx business errors", () => {

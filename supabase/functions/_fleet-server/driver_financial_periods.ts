@@ -37,6 +37,10 @@ import {
 import {
   STATUS_CASH_HELD_EPS,
 } from "../../../packages/finance-core/src/money.ts";
+import {
+  PERIOD_LIST_SELECT,
+  RECONCILED_PERIOD_LIST_SELECT,
+} from "./settlement_period_select.ts";
 import { derivePeriodStatus } from "./period_projector.ts";
 import { persistPeriodRowWithVersion, updatePeriodCashWithVersion } from "./period_persist.ts";
 import { getServiceClientWithSchema } from "./service_client.ts";
@@ -1834,9 +1838,7 @@ export async function listCompanyOwesPeriods(opts?: {
   const limit = Math.min(Math.max(Number(opts?.limit) || 500, 1), 2000);
   let q = sb()
     .from("driver_financial_periods")
-    .select(
-      "driver_id, period_anchor, period_end, settlement_amount, settlement_paid, cash_collected, cash_returned, cash_still_held, payout_net, settlement_status, fuel_finalized, trip_count, metadata",
-    )
+    .select(PERIOD_LIST_SELECT)
     .eq("settlement_status", "company_owes")
     .gt("settlement_amount", 0.005)
     .order("period_anchor", { ascending: false })
@@ -1980,9 +1982,7 @@ export async function listReconciledSettlementPeriods(opts?: {
   const limit = Math.min(Math.max(Number(opts?.limit) || 500, 1), 2000);
   let q = sb()
     .from("driver_financial_periods")
-    .select(
-      "driver_id, period_anchor, period_end, settlement_amount, settlement_paid, cash_collected, cash_returned, cash_still_held, cash_written_off, payout_net, settlement_status, fuel_finalized, trip_count, earnings_gross, driver_share, fleet_share, driver_share_percent, fuel_deduction, fuel_fleet_share, toll_charged_to_driver, toll_cash_spend, tips_paid_to_driver, tips_withheld, metadata",
-    )
+    .select(RECONCILED_PERIOD_LIST_SELECT)
     .eq("settlement_status", "settled")
     .order("period_anchor", { ascending: false })
     .order("driver_id", { ascending: true })
@@ -2088,9 +2088,7 @@ export async function listDriverOwesPeriods(opts?: {
   const limit = Math.min(Math.max(Number(opts?.limit) || 500, 1), 2000);
   let q = sb()
     .from("driver_financial_periods")
-    .select(
-      "driver_id, period_anchor, period_end, settlement_amount, settlement_paid, cash_collected, cash_returned, cash_still_held, payout_net, settlement_status, fuel_finalized, trip_count, metadata",
-    )
+    .select(PERIOD_LIST_SELECT)
     .eq("settlement_status", "driver_owes")
     .lt("settlement_amount", -0.005)
     .order("period_anchor", { ascending: false })
@@ -2138,10 +2136,7 @@ export async function listCashHeldPeriods(opts?: {
   const limit = Math.min(Math.max(Number(opts?.limit) || 500, 1), 2000);
   let q = sb()
     .from("driver_financial_periods")
-    .select(
-      // S1-9: metadata required for cashSourceMismatch / overpaid in mapPeriodListRow
-      "driver_id, period_anchor, period_end, settlement_amount, settlement_paid, cash_collected, cash_returned, cash_still_held, payout_net, settlement_status, fuel_finalized, trip_count, metadata",
-    )
+    .select(PERIOD_LIST_SELECT)
     .gt("cash_still_held", STATUS_CASH_HELD_EPS)
     .or("settlement_status.eq.pending,fuel_finalized.eq.false")
     .order("period_anchor", { ascending: false })

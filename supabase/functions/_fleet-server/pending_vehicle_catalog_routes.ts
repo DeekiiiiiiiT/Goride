@@ -18,8 +18,8 @@ import {
   stripVehicleCatalogOptionalMigrationColumns,
   VEHICLE_CATALOG_SUPABASE_SELECT,
 } from "./vehicle_catalog_schema_fallback.ts";
-import { filterCatalogRowsByFleetMonth, type CatalogVariantRow } from "../../../apps/fleet/src/utils/vehicleCatalogResolution.ts";
-import { parseCatalogMonthFromUnknown } from "../../../apps/fleet/src/utils/catalogMonthParse.ts";
+import { filterCatalogRowsByFleetMonth, type CatalogVariantRow } from "../../../packages/types/src/vehicleCatalogResolution.ts";
+import { parseCatalogMonthFromUnknown } from "../../../packages/types/src/catalogMonthParse.ts";
 import { isEnforcementEnabled, listRecentCatalogGateEvents } from "./vehicle_catalog_gate.ts";
 
 const KEYS = [

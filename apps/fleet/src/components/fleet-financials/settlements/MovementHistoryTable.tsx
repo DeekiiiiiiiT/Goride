@@ -21,6 +21,7 @@ import {
 } from '../../ui/dialog';
 import { Label } from '../../ui/label';
 import { Textarea } from '../../ui/textarea';
+import { useWindowedRows } from './useWindowedRows';
 
 const MONEY = (n: number | null | undefined) => {
   if (n == null || !Number.isFinite(n)) return '—';
@@ -109,6 +110,7 @@ export function MovementHistoryTable({
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
   const [undoTarget, setUndoTarget] = useState<SettlementMovementRow | null>(null);
   const [undoReason, setUndoReason] = useState('');
+  const { visible, padTop, padBottom, windowed, onScroll, maxHeightClass } = useWindowedRows(groups);
 
   const toggle = (key: string) => {
     setExpanded((prev) => {
@@ -142,9 +144,12 @@ export function MovementHistoryTable({
 
   return (
     <>
-      <div className="rounded-lg border border-slate-200 overflow-hidden bg-white">
+      <div
+        className={`rounded-lg border border-slate-200 overflow-auto bg-white ${maxHeightClass}`}
+        onScroll={windowed ? onScroll : undefined}
+      >
         <Table>
-          <TableHeader>
+          <TableHeader className="sticky top-0 z-10 bg-slate-50 shadow-sm">
             <TableRow className="bg-slate-50">
               <TableHead className="w-10" />
               <TableHead>Week</TableHead>
@@ -163,101 +168,115 @@ export function MovementHistoryTable({
                 </TableCell>
               </TableRow>
             ) : (
-              groups.map((g) => {
-                const open = expanded.has(g.key);
-                return (
-                  <React.Fragment key={g.key}>
-                    <TableRow
-                      className="bg-slate-50/80 hover:bg-slate-100 cursor-pointer"
-                      tabIndex={0}
-                      aria-expanded={open}
-                      onClick={() => toggle(g.key)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                          e.preventDefault();
-                          toggle(g.key);
-                        }
-                      }}
-                    >
-                      <TableCell className="w-10 pr-0">
-                        {open ? (
-                          <ChevronDown className="h-4 w-4 text-slate-500" />
-                        ) : (
-                          <ChevronRight className="h-4 w-4 text-slate-500" />
-                        )}
-                      </TableCell>
-                      <TableCell className="font-medium text-slate-900">{g.label}</TableCell>
-                      <TableCell className="text-sm text-slate-500">
-                        {g.rows.length} movement{g.rows.length !== 1 ? 's' : ''}
-                      </TableCell>
-                      <TableCell className={`text-right tabular-nums font-semibold ${amountTone}`}>
-                        {MONEY(g.total)}
-                      </TableCell>
-                      <TableCell />
-                      <TableCell />
-                      <TableCell />
-                    </TableRow>
-                    {open
-                      ? g.rows.map((row) => (
-                          <TableRow key={row.id} className="bg-white">
-                            <TableCell />
-                            <TableCell className="text-sm text-slate-500">
-                              {ymdKey(row.date) || '—'}
-                            </TableCell>
-                            <TableCell>
-                              <button
-                                type="button"
-                                className="text-left font-medium text-slate-900 hover:text-indigo-600"
-                                onClick={() => row.driverId && onOpenDriver?.(row.driverId)}
+              <>
+                {padTop > 0 ? (
+                  <TableRow aria-hidden>
+                    <TableCell colSpan={7} style={{ height: padTop, padding: 0, border: 0 }} />
+                  </TableRow>
+                ) : null}
+                {visible.map((g) => {
+                  const open = expanded.has(g.key);
+                  return (
+                    <React.Fragment key={g.key}>
+                      <TableRow
+                        className="bg-slate-50/80 hover:bg-slate-100 cursor-pointer"
+                        tabIndex={0}
+                        aria-expanded={open}
+                        onClick={() => toggle(g.key)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            toggle(g.key);
+                          }
+                        }}
+                      >
+                        <TableCell className="w-10 pr-0">
+                          {open ? (
+                            <ChevronDown className="h-4 w-4 text-slate-500" />
+                          ) : (
+                            <ChevronRight className="h-4 w-4 text-slate-500" />
+                          )}
+                        </TableCell>
+                        <TableCell className="font-medium text-slate-900">{g.label}</TableCell>
+                        <TableCell className="text-sm text-slate-500">
+                          {g.rows.length} movement{g.rows.length !== 1 ? 's' : ''}
+                        </TableCell>
+                        <TableCell className={`text-right tabular-nums font-semibold ${amountTone}`}>
+                          {MONEY(g.total)}
+                        </TableCell>
+                        <TableCell />
+                        <TableCell />
+                        <TableCell />
+                      </TableRow>
+                      {open
+                        ? g.rows.map((row) => (
+                            <TableRow key={row.id} className="bg-white">
+                              <TableCell />
+                              <TableCell className="text-sm text-slate-500">
+                                {ymdKey(row.date) || '—'}
+                              </TableCell>
+                              <TableCell>
+                                <button
+                                  type="button"
+                                  className="text-left font-medium text-slate-900 hover:text-indigo-600"
+                                  onClick={() => row.driverId && onOpenDriver?.(row.driverId)}
+                                >
+                                  {row.driverName || row.driverId || '—'}
+                                </button>
+                              </TableCell>
+                              <TableCell
+                                className={`text-right tabular-nums font-semibold ${amountTone}`}
                               >
-                                {row.driverName || row.driverId || '—'}
-                              </button>
-                            </TableCell>
-                            <TableCell className={`text-right tabular-nums font-semibold ${amountTone}`}>
-                              {MONEY(row.amount)}
-                            </TableCell>
-                            <TableCell className="text-sm text-slate-600">
-                              {row.method || '—'}
-                            </TableCell>
-                            <TableCell>
-                              <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200 font-normal">
-                                {row.status || 'Cleared'}
-                              </Badge>
-                            </TableCell>
-                            <TableCell>
-                              <div className="flex flex-wrap gap-1">
-                                {onVerify &&
-                                String(row.status || '').toLowerCase() !== 'verified' &&
-                                String(row.status || '').toLowerCase() !== 'cleared' ? (
+                                {MONEY(row.amount)}
+                              </TableCell>
+                              <TableCell className="text-sm text-slate-600">
+                                {row.method || '—'}
+                              </TableCell>
+                              <TableCell>
+                                <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200 font-normal">
+                                  {row.status || 'Cleared'}
+                                </Badge>
+                              </TableCell>
+                              <TableCell>
+                                <div className="flex flex-wrap gap-1">
+                                  {onVerify &&
+                                  String(row.status || '').toLowerCase() !== 'verified' &&
+                                  String(row.status || '').toLowerCase() !== 'cleared' ? (
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      variant="outline"
+                                      className="h-8"
+                                      onClick={() => onVerify(row)}
+                                    >
+                                      Verify
+                                    </Button>
+                                  ) : null}
                                   <Button
                                     type="button"
                                     size="sm"
                                     variant="outline"
-                                    className="h-8"
-                                    onClick={() => onVerify(row)}
+                                    className="h-8 text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700"
+                                    title="Undo — requires reason"
+                                    onClick={() => requestUndo(row)}
                                   >
-                                    Verify
+                                    <Trash2 className="h-3.5 w-3.5 mr-1" />
+                                    Undo
                                   </Button>
-                                ) : null}
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  variant="outline"
-                                  className="h-8 text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700"
-                                  title="Undo — requires reason"
-                                  onClick={() => requestUndo(row)}
-                                >
-                                  <Trash2 className="h-3.5 w-3.5 mr-1" />
-                                  Undo
-                                </Button>
-                              </div>
-                            </TableCell>
-                          </TableRow>
-                        ))
-                      : null}
-                  </React.Fragment>
-                );
-              })
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          ))
+                        : null}
+                    </React.Fragment>
+                  );
+                })}
+                {padBottom > 0 ? (
+                  <TableRow aria-hidden>
+                    <TableCell colSpan={7} style={{ height: padBottom, padding: 0, border: 0 }} />
+                  </TableRow>
+                ) : null}
+              </>
             )}
           </TableBody>
         </Table>

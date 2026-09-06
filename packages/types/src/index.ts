@@ -57,3 +57,7 @@ export * from './haulage';
 export * from './evidence';
 export * from './freight';
 export * from './logistics';
+export * from './expenseHub';
+export * from './catalogMonthParse';
+export * from './vehicleCatalogResolution';
+export * from './vehicleCatalogGate';

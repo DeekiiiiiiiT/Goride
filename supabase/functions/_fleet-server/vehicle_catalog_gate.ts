@@ -24,7 +24,7 @@ import {
   isVehicleCatalogMatched,
   VEHICLE_PENDING_CATALOG_ERROR_CODE,
   type CatalogGateVehicleShape,
-} from "../../../apps/fleet/src/utils/vehicleCatalogGate.ts";
+} from "../../../packages/types/src/vehicleCatalogGate.ts";
 
 /** Permission that lets platform operators temporarily bypass the gate (rare). */
 export const CATALOG_GATE_BYPASS_PERMISSION: Permission =
