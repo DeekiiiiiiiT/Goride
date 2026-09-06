@@ -32,6 +32,15 @@ export {
   isSettlementPaidForWeek,
   isPendingDriverPayoutForWeek,
 } from './driverCashPayment.ts';
+export {
+  EXPENSE_CATEGORIES,
+  INCOME_CATEGORIES,
+  classifyPostedBusinessTransaction,
+} from './businessTransactionAccounting.ts';
+export type {
+  BusinessTransactionEventType,
+  BusinessTransactionClassification,
+} from './businessTransactionAccounting.ts';
 export { computePeriodSettlement, computePeriodSettlementMinor } from './driverPeriodSettlement.ts';
 export type { PeriodSettlementInput, PeriodSettlementResult, PeriodSettlementMinorResult } from './driverPeriodSettlement.ts';
 export {

@@ -173,6 +173,8 @@ export type DriverFinancialPeriodRow = {
   tollStatus: string;
   sourceEventHash: string;
   projectionVersion: number;
+  /** Settlement command optimistic lock (ledger.driver_financial_periods.row_version). */
+  rowVersion?: number;
   projectedAt: string;
   metadata?: Record<string, unknown>;
   lines: Array<{
@@ -496,8 +498,14 @@ async function loadDriverTransactionsForSettlement(
   aliasIdSet: Set<string>,
 ): Promise<any[]> {
   if (settlementTxTableReadEnabled()) {
-    const mirrored = await loadMirroredDriverTransactions(driverId);
-    return mirrored.filter((t) => aliasIdSet.has(String(t.driverId || "")));
+    try {
+      const mirrored = await loadMirroredDriverTransactions(driverId);
+      return mirrored.filter((t) => aliasIdSet.has(String(t.driverId || "")));
+    } catch (e: any) {
+      console.warn(
+        `[DriverFinancialPeriods] settlement mirror read failed — falling back to KV scan: ${e?.message || e}`,
+      );
+    }
   }
   const allTx = await kv.getByPrefix("transaction:");
   return (allTx || []).filter((t: any) => t && aliasIdSet.has(String(t.driverId || "")));
@@ -1493,6 +1501,7 @@ function mapDbPeriod(r: any): DriverFinancialPeriodRow {
     tollStatus: r.toll_status,
     sourceEventHash: r.source_event_hash,
     projectionVersion: r.projection_version,
+    rowVersion: Number(r.row_version) || 1,
     projectedAt: r.projected_at,
     metadata: r.metadata && typeof r.metadata === "object" ? r.metadata : {},
     lines: [],
@@ -1886,6 +1895,8 @@ export async function listRecentlyPaidSettlementPeriods(opts?: {
   periodStart?: string;
   periodEnd?: string;
   limit?: number;
+  organizationId?: string | null;
+  serviceLine?: "rideshare" | "rush_delivery";
 }): Promise<CompanyOwesPeriodRow[]> {
   const limit = Math.min(Math.max(Number(opts?.limit) || 300, 1), 1000);
   let q = sb()
@@ -1899,6 +1910,9 @@ export async function listRecentlyPaidSettlementPeriods(opts?: {
     .order("driver_id", { ascending: true })
     .limit(limit);
 
+  if (opts?.organizationId) {
+    q = q.eq("organization_id", opts.organizationId);
+  }
   if (opts?.periodStart && /^\d{4}-\d{2}-\d{2}$/.test(opts.periodStart)) {
     q = q.gte("period_anchor", opts.periodStart);
   }
@@ -1911,7 +1925,7 @@ export async function listRecentlyPaidSettlementPeriods(opts?: {
     console.error("[DriverFinancialPeriods] paid settlements list:", error.message);
     throw new Error(error.message);
   }
-  return (data || []).map((r: any) => {
+  const mapped = (data || []).map((r: any) => {
     const oa = Number(r.metadata?.financeCore?.overpaidAmount);
     return {
       driverId: String(r.driver_id),
@@ -1929,6 +1943,10 @@ export async function listRecentlyPaidSettlementPeriods(opts?: {
       overpaidAmount: Number.isFinite(oa) && oa > 0 ? oa : 0,
     };
   });
+  if (!opts?.serviceLine) return mapped;
+  return mapped.filter((_, i) =>
+    periodMetadataMatchesServiceLine((data as any[])?.[i]?.metadata, opts.serviceLine!),
+  );
 }
 
 /** Closed weeks (residual ≈ 0) — Driver Settlements → Reconciled tab. */
@@ -1957,6 +1975,7 @@ export async function listReconciledSettlementPeriods(opts?: {
   minAmount?: number;
   limit?: number;
   organizationId?: string | null;
+  serviceLine?: "rideshare" | "rush_delivery";
 }): Promise<ReconciledPeriodRow[]> {
   const limit = Math.min(Math.max(Number(opts?.limit) || 500, 1), 2000);
   let q = sb()
@@ -1988,7 +2007,7 @@ export async function listReconciledSettlementPeriods(opts?: {
     console.error("[DriverFinancialPeriods] reconciled list:", error.message);
     throw new Error(error.message);
   }
-  return (data || []).map((r: any) => ({
+  const mapped = (data || []).map((r: any) => ({
     ...mapPeriodListRow(r),
     earningsGross: Number(r.earnings_gross) || 0,
     driverShare: Number(r.driver_share) || 0,
@@ -2007,6 +2026,10 @@ export async function listReconciledSettlementPeriods(opts?: {
       Number(r.tips_withheld) || Number(r.metadata?.financeCore?.tipsWithheld) || 0,
     cashSourceMismatch: Number(r.metadata?.financeCore?.cashSourceMismatch) || 0,
   }));
+  if (!opts?.serviceLine) return mapped;
+  return mapped.filter((_, i) =>
+    periodMetadataMatchesServiceLine((data as any[])?.[i]?.metadata, opts.serviceLine!),
+  );
 }
 
 export type DriverOwesPeriodRow = CompanyOwesPeriodRow & {
@@ -2060,6 +2083,7 @@ export async function listDriverOwesPeriods(opts?: {
   minAmount?: number;
   limit?: number;
   organizationId?: string | null;
+  serviceLine?: "rideshare" | "rush_delivery";
 }): Promise<DriverOwesPeriodRow[]> {
   const limit = Math.min(Math.max(Number(opts?.limit) || 500, 1), 2000);
   let q = sb()
@@ -2083,7 +2107,7 @@ export async function listDriverOwesPeriods(opts?: {
     console.error("[DriverFinancialPeriods] driver_owes list:", error.message);
     throw new Error(error.message);
   }
-  return (data || []).map((r: any) => {
+  const mapped = (data || []).map((r: any) => {
     const row = mapPeriodListRow(r);
     const oa = Number(r.metadata?.financeCore?.overpaidAmount);
     return {
@@ -2092,6 +2116,10 @@ export async function listDriverOwesPeriods(opts?: {
       overpaidAmount: Number.isFinite(oa) && oa > 0 ? oa : 0,
     };
   });
+  if (!opts?.serviceLine) return mapped;
+  return mapped.filter((_, i) =>
+    periodMetadataMatchesServiceLine((data as any[])?.[i]?.metadata, opts.serviceLine!),
+  );
 }
 
 /**
@@ -2105,12 +2133,14 @@ export async function listCashHeldPeriods(opts?: {
   minAmount?: number;
   limit?: number;
   organizationId?: string | null;
+  serviceLine?: "rideshare" | "rush_delivery";
 }): Promise<DriverOwesPeriodRow[]> {
   const limit = Math.min(Math.max(Number(opts?.limit) || 500, 1), 2000);
   let q = sb()
     .from("driver_financial_periods")
     .select(
-      "driver_id, period_anchor, period_end, settlement_amount, settlement_paid, cash_collected, cash_returned, cash_still_held, payout_net, settlement_status, fuel_finalized, trip_count",
+      // S1-9: metadata required for cashSourceMismatch / overpaid in mapPeriodListRow
+      "driver_id, period_anchor, period_end, settlement_amount, settlement_paid, cash_collected, cash_returned, cash_still_held, payout_net, settlement_status, fuel_finalized, trip_count, metadata",
     )
     .gt("cash_still_held", STATUS_CASH_HELD_EPS)
     .or("settlement_status.eq.pending,fuel_finalized.eq.false")
@@ -2128,16 +2158,30 @@ export async function listCashHeldPeriods(opts?: {
     console.error("[DriverFinancialPeriods] cash_held list:", error.message);
     throw new Error(error.message);
   }
-  return (data || [])
+  const mapped = (data || [])
     .map((r: any) => {
       const row = mapPeriodListRow(r);
       const status = String(row.settlementStatus || "").toLowerCase();
       if (status === "company_owes" || status === "driver_owes" || status === "settled") {
         return null;
       }
-      return { ...row, amountOwed: Math.max(0, row.cashStillHeld) };
+      const oa = Number(r.metadata?.financeCore?.overpaidAmount);
+      return {
+        ...row,
+        amountOwed: Math.max(0, row.cashStillHeld),
+        overpaidAmount: Number.isFinite(oa) && oa > 0 ? oa : 0,
+      };
     })
     .filter(Boolean) as DriverOwesPeriodRow[];
+  if (!opts?.serviceLine) return mapped;
+  return mapped.filter((_, i) => {
+    const raw = (data as any[])?.find(
+      (r) =>
+        String(r.driver_id) === mapped[i].driverId &&
+        String(r.period_anchor).slice(0, 10) === mapped[i].periodAnchor,
+    );
+    return periodMetadataMatchesServiceLine(raw?.metadata, opts.serviceLine!);
+  });
 }
 
 export function isSingleFleetWeek(startDate: string, endDate: string): boolean {

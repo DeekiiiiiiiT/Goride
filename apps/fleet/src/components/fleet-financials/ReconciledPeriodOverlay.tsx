@@ -13,7 +13,9 @@ import {
 } from '../ui/sheet';
 import { Separator } from '../ui/separator';
 import { Badge } from '../ui/badge';
-import { Loader2, CheckCircle2, Building2, User } from 'lucide-react';
+import { Button } from '../ui/button';
+import { Loader2, CheckCircle2, Building2, User, Download } from 'lucide-react';
+import { toast } from 'sonner';
 import type { FinancialTransaction } from '../../types/data';
 import {
   isCashReturnedForWeek,
@@ -22,6 +24,11 @@ import {
 } from '../../utils/driverCashPayment';
 import { cn } from '../ui/utils';
 import { OVERPAID_BADGE_TOOLTIP, overpaidBadgeLabel } from '../../utils/settlementDeskUx';
+import {
+  buildRemittanceAdvice,
+  remittanceAdvicePlainText,
+} from '../../utils/settlementEnterprise';
+import { SettlementPeriodNotes } from './settlements';
 
 export type ReconciledPeriodDetail = {
   driverId: string;
@@ -229,6 +236,44 @@ export function ReconciledPeriodOverlay({
     };
   }, [detail, transactions]);
 
+  const downloadRemittance = () => {
+    if (!detail) return;
+    const advice = buildRemittanceAdvice({
+      driverId: detail.driverId,
+      driverName: driverName || detail.driverId,
+      organizationName: 'Fleet',
+      lines: [
+        {
+          periodAnchor: detail.periodAnchor,
+          periodEnd: detail.periodEnd,
+          description: 'Net payout',
+          amountMinor: Math.round((Number(detail.payoutNet) || 0) * 100),
+        },
+        {
+          periodAnchor: detail.periodAnchor,
+          periodEnd: detail.periodEnd,
+          description: 'Settlement paid',
+          amountMinor: Math.round((Number(detail.settlementPaid) || 0) * 100),
+        },
+        {
+          periodAnchor: detail.periodAnchor,
+          periodEnd: detail.periodEnd,
+          description: 'Cash returned',
+          amountMinor: Math.round((Number(detail.cashReturned) || 0) * 100),
+        },
+      ].filter((l) => l.amountMinor !== 0),
+    });
+    const text = remittanceAdvicePlainText(advice);
+    const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `remittance-${detail.driverId}-${detail.periodAnchor}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success('Remittance advice downloaded');
+  };
+
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="right" className="w-full sm:max-w-xl overflow-y-auto">
@@ -253,6 +298,13 @@ export function ReconciledPeriodOverlay({
                 incomplete.
               </p>
             ) : null}
+            <div className="flex justify-end">
+              <Button type="button" variant="outline" size="sm" className="h-8" onClick={downloadRemittance}>
+                <Download className="h-3.5 w-3.5 mr-1.5" />
+                Remittance .txt
+              </Button>
+            </div>
+            <SettlementPeriodNotes driverId={detail.driverId} periodAnchor={detail.periodAnchor} />
             {Number(detail.overpaidAmount) > 0.005 ? (
               <p
                 className="text-[11px] text-violet-900 rounded-md bg-violet-50 px-3 py-2 border border-violet-100"

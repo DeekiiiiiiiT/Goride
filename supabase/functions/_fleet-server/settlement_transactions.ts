@@ -68,8 +68,9 @@ export async function loadMirroredDriverTransactions(
     .select("payload")
     .eq("driver_id", driverId);
   if (error) {
+    // Throw so callers can fall back to KV — returning [] silently zeros settlement_paid.
     console.error("[settlement_transactions] load failed:", error.message);
-    return [];
+    throw new Error(`settlement mirror load failed: ${error.message}`);
   }
   return (data || []).map((r: { payload: Record<string, unknown> }) => r.payload).filter(Boolean);
 }

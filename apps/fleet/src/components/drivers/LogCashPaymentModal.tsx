@@ -78,6 +78,7 @@ export function LogCashPaymentModal({
   const [workPeriodEnd, setWorkPeriodEnd] = useState('');
   const [selectedPeriod, setSelectedPeriod] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [overCollectReason, setOverCollectReason] = useState('');
 
   const activePeriods = periods.filter(p => p.amountOwed > 0);
 
@@ -187,11 +188,35 @@ export function LogCashPaymentModal({
     }
   }, [isOpen, initialWorkPeriodStart, initialWorkPeriodEnd, initialAmount, initialTransaction]);
 
+  // Get the currently selected period object (for the detail card + over-collect cap)
+  const selectedPeriodObj = selectedPeriod
+    ? periods.find(p => new Date(p.start).toISOString() === selectedPeriod) 
+    : null;
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!amount || parseFloat(amount) <= 0) {
       toast.error("Please enter a valid amount");
       return;
+    }
+
+    const parsed = parseFloat(amount);
+    // S1-5: cap Log Cash against owed — soft warn + hard block above tolerance.
+    const owedCap =
+      transactionType === "payment"
+        ? Math.max(
+            0,
+            Number(selectedPeriodObj?.balance ?? cashOwed) || 0,
+          )
+        : Infinity;
+    const OVER_COLLECT_HARD_TOLERANCE = 0.005;
+    if (transactionType === "payment" && owedCap > 0 && parsed > owedCap + OVER_COLLECT_HARD_TOLERANCE) {
+      if (!overCollectReason.trim()) {
+        toast.error(
+          `Amount exceeds cash owed ($${owedCap.toFixed(2)}). Enter a reason to allow over-collection, or lower the amount.`,
+        );
+        return;
+      }
     }
 
     // Cash Collection must be tagged to a Settlement Week (Cash Returned SSOT)
@@ -207,11 +232,18 @@ export function LogCashPaymentModal({
 
     setIsSubmitting(true);
     try {
+      const notesWithOver =
+        transactionType === "payment" &&
+        owedCap > 0 &&
+        parsed > owedCap + OVER_COLLECT_HARD_TOLERANCE &&
+        overCollectReason.trim()
+          ? `${notes ? notes + "\n" : ""}[Over-collection] ${overCollectReason.trim()}`
+          : notes;
       await onSave({
         id: initialTransaction?.id,
-        amount: parseFloat(amount),
+        amount: parsed,
         date: date, // Keep as YYYY-MM-DD string to avoid UTC shift in constructor
-        notes,
+        notes: notesWithOver,
         paymentMethod,
         referenceNumber: referenceNumber || undefined,
         transactionType,
@@ -252,13 +284,6 @@ export function LogCashPaymentModal({
     }
   };
 
-  // Format a period for display in the dropdown
-  const formatPeriodLabel = (period: SettlementPeriod): string => {
-    const start = new Date(period.start);
-    const end = new Date(period.end);
-    return `${format(start, "MMM d")} – ${format(end, "MMM d, yyyy")}`;
-  };
-
   const getStatusEmoji = (period: SettlementPeriod): string => {
     switch (period.status) {
       case 'Paid': return '🟢';
@@ -269,16 +294,18 @@ export function LogCashPaymentModal({
     }
   };
 
+  // Format a period for display in the dropdown
+  const formatPeriodLabel = (period: SettlementPeriod): string => {
+    const start = new Date(period.start);
+    const end = new Date(period.end);
+    return `${format(start, "MMM d")} – ${format(end, "MMM d, yyyy")}`;
+  };
+
   const formatPeriodSublabel = (period: SettlementPeriod): string => {
     if (period.status === 'Paid' || period.status === 'Over-collected') return 'Collected';
     if (period.balance > 0.005) return `$${period.balance.toFixed(2)} collection gap`;
     return 'No gap';
   };
-
-  // Get the currently selected period object (for the detail card)
-  const selectedPeriodObj = selectedPeriod
-    ? periods.find(p => new Date(p.start).toISOString() === selectedPeriod) 
-    : null;
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -372,6 +399,20 @@ export function LogCashPaymentModal({
                 />
             </div>
           </div>
+
+          {transactionType === 'payment' &&
+            Number(amount) > Math.max(0, Number(selectedPeriodObj?.balance ?? cashOwed) || 0) + 0.005 && (
+            <div className="space-y-2 rounded-md border border-amber-200 bg-amber-50 p-3">
+              <Label htmlFor="over-collect-reason">Over-collection reason *</Label>
+              <Textarea
+                id="over-collect-reason"
+                value={overCollectReason}
+                onChange={(e) => setOverCollectReason(e.target.value)}
+                placeholder="Required when collecting more than the week owes"
+                rows={2}
+              />
+            </div>
+          )}
           
           {/* Settlement Week — required for Cash Collection */}
           <div className="space-y-2">

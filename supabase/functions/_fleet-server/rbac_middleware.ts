@@ -48,6 +48,8 @@ export type Permission =
   | 'toll.manage' | 'toll.view'
   | 'transactions.approve' | 'transactions.reject' | 'transactions.edit'
   | 'transactions.view' | 'transactions.export'
+  | 'settlements.collect' | 'settlements.pay' | 'settlements.write_off'
+  | 'settlements.reverse' | 'settlements.approve'
   | 'reports.generate' | 'reports.export' | 'reports.view'
   | 'settings.edit'
   | 'users.invite' | 'users.edit_role' | 'users.remove'
@@ -254,6 +256,9 @@ const ALL_CUSTOMER_PERMISSIONS: Permission[] = [
   'toll.manage', 'toll.view',
   'transactions.approve', 'transactions.reject', 'transactions.edit',
   'transactions.view', 'transactions.export',
+  // Settlement desk writes — same holders as transactions.edit (not accountant)
+  'settlements.collect', 'settlements.pay', 'settlements.write_off',
+  'settlements.reverse', 'settlements.approve',
   'reports.generate', 'reports.export', 'reports.view',
   'settings.edit',
   'users.invite', 'users.edit_role', 'users.remove',

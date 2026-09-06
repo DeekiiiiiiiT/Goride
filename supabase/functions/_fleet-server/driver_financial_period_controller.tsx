@@ -313,10 +313,11 @@ app.get(`${BASE}/cash-held`, requirePermission('transactions.view'), async (c) =
 
 app.get(`${BASE}/settlement-paid`, requirePermission('transactions.view'), async (c) => {
   try {
-    const periodStart = c.req.query("periodStart") || undefined;
-    const periodEnd = c.req.query("periodEnd") || undefined;
-    const limit = c.req.query("limit") ? Number(c.req.query("limit")) : 300;
-    const rows = await listRecentlyPaidSettlementPeriods({ periodStart, periodEnd, limit });
+    const opts = queueListQuery(c);
+    const rows = await listRecentlyPaidSettlementPeriods({
+      ...opts,
+      limit: opts.limit ?? 300,
+    });
     const nameById = await loadDriverNameMap();
     const data = rows.map((r) => ({
       ...r,
@@ -340,10 +341,9 @@ app.get(`${BASE}/settlement-paid`, requirePermission('transactions.view'), async
 app.get(`${BASE}/reconciled`, requirePermission('transactions.view'), async (c) => {
   try {
     const opts = queueListQuery(c);
+    // S1-3: must forward organizationId (and serviceLine) — previously dropped → cross-tenant leak.
     const rows = await listReconciledSettlementPeriods({
-      periodStart: opts.periodStart,
-      periodEnd: opts.periodEnd,
-      minAmount: opts.minAmount,
+      ...opts,
       limit: opts.limit ?? 500,
     });
     const nameById = await loadDriverNameMap();
@@ -501,8 +501,8 @@ app.post(`${BASE}/rebuild`, requirePermission('transactions.edit'), async (c) =>
 /**
  * Heal Fleet owes after Undo: settlement mirror rows were left behind when txs deleted,
  * so settlement_paid stayed high. Purge orphans in range and re-sync those weeks.
- * Lives here (not settlement_transactions) so deno check does not pull toll via
- * settlement_transactions → driver_financial_periods cycle.
+ * Also re-sync drivers that still have live/mirrored payouts but settlement_paid stuck at 0
+ * (mirror table permission failures used to wipe paid to zero).
  */
 app.post(`${BASE}/repair-orphan-mirrors`, requirePermission('transactions.edit'), async (c) => {
   try {
@@ -517,39 +517,89 @@ app.post(`${BASE}/repair-orphan-mirrors`, requirePermission('transactions.edit')
     const periodEnd =
       typeof body.periodEnd === "string" ? body.periodEnd.slice(0, 10) : undefined;
 
-    let q = getServiceClient()
-      .from("driver_financial_periods")
-      .select("driver_id")
-      .gt("settlement_paid", 0.005)
-      .limit(limit * 4);
-    if (periodStart && /^\d{4}-\d{2}-\d{2}$/.test(periodStart)) {
-      q = q.gte("period_anchor", periodStart);
-    }
-    if (periodEnd && /^\d{4}-\d{2}-\d{2}$/.test(periodEnd)) {
-      q = q.lte("period_anchor", periodEnd);
-    }
-    const { data, error } = await q;
-    if (error) throw new Error(error.message);
+    const sb = getServiceClient();
+    const driverIds = new Set<string>();
 
-    const driverIds = [
-      ...new Set(
-        (data || []).map((r: { driver_id: string }) => String(r.driver_id)).filter(Boolean),
-      ),
-    ].slice(0, limit);
+    // 1) Drivers with settlement_paid > 0 (classic orphan case)
+    {
+      let q = sb
+        .from("driver_financial_periods")
+        .select("driver_id")
+        .gt("settlement_paid", 0.005)
+        .limit(limit * 4);
+      if (periodStart && /^\d{4}-\d{2}-\d{2}$/.test(periodStart)) {
+        q = q.gte("period_anchor", periodStart);
+      }
+      if (periodEnd && /^\d{4}-\d{2}-\d{2}$/.test(periodEnd)) {
+        q = q.lte("period_anchor", periodEnd);
+      }
+      const { data, error } = await q;
+      if (error) throw new Error(error.message);
+      for (const r of data || []) {
+        const id = String((r as { driver_id: string }).driver_id || "");
+        if (id) driverIds.add(id);
+      }
+    }
 
+    // 2) Drivers with mirrored settlement txs in range (covers settlement_paid stuck at 0)
+    {
+      let q = sb
+        .from("driver_settlement_transactions")
+        .select("driver_id, period_anchor")
+        .limit(limit * 20);
+      if (periodStart && /^\d{4}-\d{2}-\d{2}$/.test(periodStart)) {
+        q = q.gte("period_anchor", periodStart);
+      }
+      if (periodEnd && /^\d{4}-\d{2}-\d{2}$/.test(periodEnd)) {
+        q = q.lte("period_anchor", periodEnd);
+      }
+      const { data, error } = await q;
+      if (error) {
+        console.warn("[DFP] repair mirror driver list failed:", error.message);
+      } else {
+        for (const r of data || []) {
+          const id = String((r as { driver_id: string }).driver_id || "");
+          if (id) driverIds.add(id);
+        }
+      }
+    }
+
+    const limitedDrivers = [...driverIds].slice(0, limit);
     let purged = 0;
     let weeksSynced = 0;
-    for (const driverId of driverIds) {
+    for (const driverId of limitedDrivers) {
       const result = await purgeOrphanSettlementMirrorsForDriver(driverId);
       purged += result.purgedCount;
-      for (const anchor of result.periodAnchors) {
+      const anchors = new Set<string>(result.periodAnchors);
+
+      // Re-sync every mirrored week in range for this driver (heal zeroed settlement_paid)
+      {
+        let q = sb
+          .from("driver_settlement_transactions")
+          .select("period_anchor")
+          .eq("driver_id", driverId)
+          .limit(500);
+        if (periodStart && /^\d{4}-\d{2}-\d{2}$/.test(periodStart)) {
+          q = q.gte("period_anchor", periodStart);
+        }
+        if (periodEnd && /^\d{4}-\d{2}-\d{2}$/.test(periodEnd)) {
+          q = q.lte("period_anchor", periodEnd);
+        }
+        const { data } = await q;
+        for (const r of data || []) {
+          const a = String((r as { period_anchor: string }).period_anchor || "").slice(0, 10);
+          if (/^\d{4}-\d{2}-\d{2}$/.test(a)) anchors.add(a);
+        }
+      }
+
+      for (const anchor of anchors) {
         await syncPeriodCashFromTransactions(driverId, anchor);
         weeksSynced += 1;
       }
     }
     return c.json({
       success: true,
-      drivers: driverIds.length,
+      drivers: limitedDrivers.length,
       purged,
       weeksSynced,
     });

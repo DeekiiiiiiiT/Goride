@@ -6,7 +6,7 @@ import type { Context } from "npm:hono";
 import { appendCanonicalLedgerEvents, canonicalEventExistsByIdemKey } from "./ledger_canonical.ts";
 import type { FixedExpenseConfig } from "../../../apps/fleet/src/types/expenses.ts";
 import { buildFixedExpenseOccurrences } from "../../../apps/fleet/src/utils/fixedExpenseOccurrences.ts";
-import { classifyPostedBusinessTransaction } from "../../../apps/fleet/src/utils/businessTransactionAccounting.ts";
+import { classifyPostedBusinessTransaction } from "../../../packages/finance-core/src/businessTransactionAccounting.ts";
 import {
   buildCanonicalMaintenanceEvent,
   type MaintenanceLedgerRecordInput,

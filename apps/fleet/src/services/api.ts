@@ -2619,12 +2619,14 @@ export const api = {
     periodEnd?: string;
     minAmount?: number;
     limit?: number;
+    serviceLine?: 'rideshare' | 'rush_delivery';
   }) {
     const qs = new URLSearchParams();
     if (opts?.periodStart) qs.set("periodStart", opts.periodStart);
     if (opts?.periodEnd) qs.set("periodEnd", opts.periodEnd);
     if (opts?.minAmount != null) qs.set("minAmount", String(opts.minAmount));
     if (opts?.limit != null) qs.set("limit", String(opts.limit));
+    if (opts?.serviceLine) qs.set("serviceLine", opts.serviceLine);
     const response = await fetchWithRetry(
       `${API_ENDPOINTS.financial}/driver-financial-periods/reconciled?${qs.toString()}`,
       { headers: await requireAuthHeaders(null) },

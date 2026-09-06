@@ -296,6 +296,12 @@ export type Permission =
   | 'transactions.edit'
   | 'transactions.view'
   | 'transactions.export'
+  // Driver Settlements desk (Phase 3) — write perms; accountant does NOT get these
+  | 'settlements.collect'
+  | 'settlements.pay'
+  | 'settlements.write_off'
+  | 'settlements.reverse'
+  | 'settlements.approve'
   // Reports
   | 'reports.generate'
   | 'reports.export'
@@ -364,6 +370,7 @@ const ALL_CUSTOMER_PERMISSIONS: Permission[] = [
   'fuel.approve', 'fuel.reject', 'fuel.create_entry', 'fuel.edit_entry', 'fuel.delete_entry', 'fuel.view', 'fuel.export',
   'toll.manage', 'toll.view',
   'transactions.approve', 'transactions.reject', 'transactions.edit', 'transactions.view', 'transactions.export',
+  'settlements.collect', 'settlements.pay', 'settlements.write_off', 'settlements.reverse', 'settlements.approve',
   'reports.generate', 'reports.export', 'reports.view',
   'settings.edit',
   'users.invite', 'users.edit_role', 'users.remove',

@@ -123,6 +123,10 @@ import {
   listDriverFinancialPeriods,
 } from "./driver_financial_periods.ts";
 import {
+  isSettlementDeskCategory,
+  mayMutateTransactionOrg,
+} from "./settlement_desk_security.ts";
+import {
   isFinanceReadProjectionOverview,
   isFinanceShadowProjection,
 } from "../_shared/unifiedLedger/flags.ts";
@@ -200,6 +204,7 @@ import { resolveDriverFromFleetRecords } from "./driver_identity.ts";
 import disputeRefundApp from "./dispute_refund_controller.tsx";
 import tollPeriodApp from "./toll_period_controller.tsx";
 import driverFinancialPeriodApp from "./driver_financial_period_controller.tsx";
+import settlementCommandsApp from "./settlement_commands_controller.tsx";
 import paymentLedgerLineApp from "./payment_ledger_line_controller.tsx";
 import apiCenterApp from "./api_command_center.tsx";
 import { getFleetTimezone, naiveToUtc, fleetCalendarDay, toFleetCalendarDay } from "./timezone_helper.tsx";
@@ -1522,6 +1527,7 @@ app.route("/", tollApp);
 app.route("/", disputeRefundApp);
 app.route("/", tollPeriodApp);
 app.route("/", driverFinancialPeriodApp);
+app.route("/", settlementCommandsApp);
 app.route("/", paymentLedgerLineApp);
 app.route("/", apiCenterApp);
 
@@ -3142,11 +3148,22 @@ app.get("/make-server-37f42386/transactions", requireAuth({ requireOrg: true }),
             'type.in.(Payment_Received,Payout,Cash_Write_Off),category.in.("Cash Collection","Driver Payouts","Cash Write Off")',
         });
       }
+      // S1-10: settlement desk filters by settlement week tag, not transaction date.
       const res = await queryFleet("transactions", {
         org: orgId || undefined,
-        dateFrom: startDate || undefined,
-        dateTo: endDate || undefined,
-        filters,
+        dateFrom: isSettlementDesk ? undefined : (startDate || undefined),
+        dateTo: isSettlementDesk ? undefined : (endDate || undefined),
+        filters: isSettlementDesk && (startDate || endDate)
+          ? [
+              ...filters,
+              ...(startDate
+                ? [{ op: "gte" as const, col: "metadata->>workPeriodStart", value: startDate }]
+                : []),
+              ...(endDate
+                ? [{ op: "lte" as const, col: "metadata->>workPeriodStart", value: `${endDate}T23:59:59.999` }]
+                : []),
+            ]
+          : filters,
         order: { col: "date", ascending: false },
         limit,
         offset,
@@ -3169,8 +3186,14 @@ app.get("/make-server-37f42386/transactions", requireAuth({ requireOrg: true }),
     if (isSettlementDesk) {
         query = query.or(SETTLEMENT_KV_OR);
     }
-    if (startDate) query = query.gte("value->>date", startDate);
-    if (endDate) query = query.lte("value->>date", `${endDate}T23:59:59.999`);
+    // S1-10: Done/Awaiting must key off settlement week (workPeriodStart), not posting date.
+    if (isSettlementDesk) {
+      if (startDate) query = query.gte("value->metadata->>workPeriodStart", startDate);
+      if (endDate) query = query.lte("value->metadata->>workPeriodStart", `${endDate}T23:59:59.999`);
+    } else {
+      if (startDate) query = query.gte("value->>date", startDate);
+      if (endDate) query = query.lte("value->>date", `${endDate}T23:59:59.999`);
+    }
 
     const { data, error } = await query
         .order("value->>date", { ascending: false })
@@ -3412,7 +3435,7 @@ async function rebuildFinancialPeriodsForCashTx(next: unknown, previous: unknown
   }
 }
 
-app.post("/make-server-37f42386/transactions", requireAuth(), async (c) => {
+app.post("/make-server-37f42386/transactions", requireAuth({ requireOrg: true }), async (c) => {
   try {
     const transaction = await c.req.json();
     if (!transaction.id) {
@@ -3441,6 +3464,22 @@ app.post("/make-server-37f42386/transactions", requireAuth(), async (c) => {
             if (!transaction.metadata) transaction.metadata = {};
             transaction.metadata._futureDateWarning = true;
             transaction.metadata._originalDate = transaction.date;
+        }
+    }
+
+    // S1-1: settlement desk posts must require transactions.edit (was JWT-only).
+    if (isSettlementDeskCategory(transaction.category)) {
+        const rbacUser = c.get("rbacUser") as RbacUser | undefined;
+        if (!rbacUser || !hasPermission(rbacUser.resolvedRole, "transactions.edit")) {
+            return c.json(
+                {
+                    error: "Forbidden",
+                    message:
+                        'Posting settlement desk transactions (collect / pay / write-off) requires the "transactions.edit" permission.',
+                    required: "transactions.edit",
+                },
+                403,
+            );
         }
     }
 
@@ -3979,19 +4018,37 @@ async function requireDeleteTransactionPermission(c: Context, next: Next) {
   return next();
 }
 
-app.delete("/make-server-37f42386/transactions/:id", requireAuth(), requireDeleteTransactionPermission, async (c) => {
+app.delete("/make-server-37f42386/transactions/:id", requireAuth({ requireOrg: true }), requireDeleteTransactionPermission, async (c) => {
   const id = c.req.param("id");
   try {
+    const callerOrgId = getOrgId(c);
+
     // Phase 6: Check toll_ledger first (tolls are now stored there, not in transaction:*)
     const tollEntry = await getTollLedgerEntry(id);
     if (tollEntry) {
+      // S1-2b: org ownership before mutating another tenant's money row.
+      if (!mayMutateTransactionOrg(tollEntry.organizationId, callerOrgId)) {
+        return c.json({ error: "Not found" }, 404);
+      }
       await deleteTollLedgerEntry(id);
       console.log(`[TollLedger] Deleted toll_ledger:${id}`);
       return c.json({ success: true });
     }
     
     const tx = await kv.get(`transaction:${id}`);
-    if (tx && isEvidenceTtlEnabled()) {
+    if (!tx) {
+      return c.json({ error: "Not found" }, 404);
+    }
+    // S1-2b: cross-tenant IDOR guard — never delete another org's transaction by id.
+    const txOrg =
+      tx && typeof tx === "object"
+        ? (tx as Record<string, unknown>).organizationId
+        : undefined;
+    if (!mayMutateTransactionOrg(txOrg, callerOrgId)) {
+      return c.json({ error: "Not found" }, 404);
+    }
+
+    if (isEvidenceTtlEnabled()) {
       const urls = extractEvidenceUrlsFromRecord(tx);
       await cleanupEphemeralPathsOnDelete(supabase, urls);
     }
