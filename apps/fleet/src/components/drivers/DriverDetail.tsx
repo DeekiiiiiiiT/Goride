@@ -110,7 +110,7 @@ import { loadResolvedEarningsBundleForDriverWeek } from '../../utils/loadResolve
 import { useServiceLineScopeParam } from '../../hooks/useServiceLineScopeParam';
 import { getEffectiveTripEarnings } from '../../utils/tripEarnings';
 import { normalizePlatform } from '../../utils/normalizePlatform';
-import { getTripPhysicalCashCollected, sumTripPhysicalCashCollected } from '../../utils/tripPhysicalCash';
+import * as tripPhysicalCash from '../../utils/tripPhysicalCash';
 import { expandDriverTransactionIds } from '../../utils/expandDriverTransactionIds';
 import { isCashWriteOffTransaction, isDriverCashPaymentTransaction, isDriverPayoutTransaction } from '../../utils/driverCashPayment';
 import {
@@ -365,10 +365,7 @@ function DriverDetailInner({
 
   const ledgerDateRangeStrings = financialDateRangeStrings;
 
-  // ────────────────────────────────────────────────────────────
-  // Server-side trip fetching: load ALL trips for this driver
-  // so we aren't limited by the initial 1,000-trip page load.
-  // ────────────────────────────────────────────────────────────
+  // Server trips for the selected period (+ pad) — not full history (ROAM-FLEET-10 trips/search).
   const [serverTrips, setServerTrips] = useState<Trip[]>([]);
   const [serverTripsLoaded, setServerTripsLoaded] = useState(false);
   const [ledgerOverview, setLedgerOverview] = useState<LedgerDriverOverview | null>(null);
@@ -382,31 +379,58 @@ function DriverDetailInner({
 
   useEffect(() => {
     let cancelled = false;
-    const fetchAllDriverTrips = async () => {
-      // === SINGLE OR QUERY: search all IDs + name at once ===
+    if (!financialDateRangeStrings?.startDate || !financialDateRangeStrings?.endDate) {
+      setServerTrips([]);
+      setServerTripsLoaded(false);
+      return;
+    }
+
+    const fetchDriverTripsForPeriod = async () => {
       try {
         const allIds: string[] = [driverId];
         if (driver?.uberDriverId) allIds.push(driver.uberDriverId);
         if (driver?.inDriveDriverId) allIds.push(driver.inDriveDriverId);
-        const resolvedName = driver?.name || (driver?.firstName ? [driver.firstName, driver.lastName].filter(Boolean).join(' ') : '') || driverName || '';
+        const resolvedName =
+          driver?.name ||
+          (driver?.firstName
+            ? [driver.firstName, driver.lastName].filter(Boolean).join(' ')
+            : '') ||
+          driverName ||
+          '';
 
-        // Paginate in 1,000-trip pages to get ALL trips (PostgREST caps at 1,000)
+        // Pad before period start for gap / continuity math without loading forever.
+        const padDays = 60;
+        const start = new Date(`${financialDateRangeStrings.startDate}T00:00:00Z`);
+        start.setUTCDate(start.getUTCDate() - padDays);
+        const startDate = start.toISOString().slice(0, 10);
+        const endDate = financialDateRangeStrings.endDate;
+
         const PAGE_SIZE = 1000;
         const seen = new Set<string>();
         const merged: Trip[] = [];
         let pageOffset = 0;
         while (true) {
-          const result = await api.getTripsFiltered({ driverIds: allIds, driverName: resolvedName || undefined, limit: PAGE_SIZE, offset: pageOffset }).catch(() => ({ data: [] as Trip[], total: 0 }));
+          const result = await api
+            .getTripsFiltered({
+              driverIds: allIds,
+              driverName: resolvedName || undefined,
+              startDate,
+              endDate,
+              limit: PAGE_SIZE,
+              offset: pageOffset,
+            })
+            .catch(() => ({ data: [] as Trip[], total: 0 }));
           if (cancelled) return;
           const page = result.data || [];
           for (const trip of page) {
-            if (trip.id && !seen.has(trip.id)) { seen.add(trip.id); merged.push(trip); }
+            if (trip.id && !seen.has(trip.id)) {
+              seen.add(trip.id);
+              merged.push(trip);
+            }
           }
-          // If we got fewer than PAGE_SIZE, we've fetched everything
           if (page.length < PAGE_SIZE) break;
           pageOffset += PAGE_SIZE;
-          // Safety cap at 10,000 trips
-          if (pageOffset >= 10000) break;
+          if (pageOffset >= 4000) break;
         }
 
         setServerTrips(merged);
@@ -416,9 +440,26 @@ function DriverDetailInner({
         if (!cancelled) setServerTripsLoaded(true);
       }
     };
-    fetchAllDriverTrips();
-    return () => { cancelled = true; };
-  }, [driverId, driver?.uberDriverId, driver?.inDriveDriverId, driver?.name, driver?.firstName, driver?.lastName, driverName]);
+
+    // Yield so roster/shell requests claim connections first (HTTP/1.1 overhead).
+    const timer = window.setTimeout(() => {
+      void fetchDriverTripsForPeriod();
+    }, 400);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [
+    driverId,
+    driver?.uberDriverId,
+    driver?.inDriveDriverId,
+    driver?.name,
+    driver?.firstName,
+    driver?.lastName,
+    driverName,
+    financialDateRangeStrings?.startDate,
+    financialDateRangeStrings?.endDate,
+  ]);
 
 
   const allTrips = useMemo(() => {
@@ -966,7 +1007,7 @@ function DriverDetailInner({
                 isWithinInterval(startOfDay(d), { start: periodStart, end: periodEnd })
               );
             })
-            .reduce((sum, t) => sum + getTripPhysicalCashCollected(t), 0);
+            .reduce((sum, t) => sum + tripPhysicalCash.getTripPhysicalCashCollected(t), 0);
         }
       }
 
@@ -1026,7 +1067,7 @@ function DriverDetailInner({
             ? ledgerOverview.lifetime.tripRecordCount
             : metrics.lifetimeTrips,
         lifetimeCashCollected: (() => {
-          const tripCash = sumTripPhysicalCashCollected(allTrips);
+          const tripCash = tripPhysicalCash.sumTripPhysicalCashCollected(allTrips);
           return tripCash > 0.005 ? tripCash : ledgerOverview.lifetime.cashCollected;
         })(),
         lifetimeTolls: ledgerOverview.lifetime.tolls,

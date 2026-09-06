@@ -1041,3 +1041,5 @@ function TierBadge({ tier }: { tier: string }) {
         </Badge>
     )
 }
+
+export default DriversPage;

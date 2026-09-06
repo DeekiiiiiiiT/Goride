@@ -32,7 +32,7 @@ import {
 import type { TimeFilterValue } from '../components/drivers/TimeFilterDropdown';
 import { isHourInTimeFilter } from '../components/drivers/TimeFilterDropdown';
 import { normalizePlatform } from './normalizePlatform';
-import { getTripPhysicalCashCollected } from './tripPhysicalCash';
+import * as tripPhysicalCash from './tripPhysicalCash';
 import { isDriverCashPaymentTransaction } from './driverCashPayment';
 import { isUberCashEligibleMetricPeriod, isValidDriverMetricPeriod } from './driverMetricPeriod';
 import { resolveUberPeriodCashCollected } from './resolveUberPeriodCash';
@@ -437,7 +437,7 @@ export function computeDriverOperationalMetrics(input: ComputeDriverOperationalM
       if (isNaN(tripDateObj.getTime())) return;
       
       // Physical cash: explicit cashCollected or paymentMethod Cash only (not all Roam trips).
-      const effectiveCash = getTripPhysicalCashCollected(trip);
+      const effectiveCash = tripPhysicalCash.getTripPhysicalCashCollected(trip);
 
       // Lifetime stats
       // For InDrive trips with fee data, use true profit (net income) instead of full fare

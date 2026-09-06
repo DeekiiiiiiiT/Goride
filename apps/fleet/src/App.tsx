@@ -47,9 +47,7 @@ import { PAGE_PERMISSION_MAP } from './utils/permissions';
 
 import { isPassengerOnlyMetadataRole } from '@roam/auth-client';
 
-const DriversPage = lazy(() =>
-  import('./components/drivers/DriversPage').then((m) => ({ default: m.DriversPage })),
-);
+const DriversPage = lazy(() => import('./components/drivers/DriversPage'));
 const DriverAnalytics = lazy(() =>
   import('./components/drivers/analytics/DriverAnalytics').then((m) => ({
     default: m.DriverAnalytics,
