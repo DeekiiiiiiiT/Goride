@@ -1,3 +1,4 @@
+import { formatJMD } from '../../utils/formatJMD';
 import React, { useState, useEffect } from 'react';
 import { 
   Dialog, 
@@ -230,7 +231,7 @@ export function LogCashPaymentModal({
     if (transactionType === "payment" && owedCap > 0 && parsed > owedCap + OVER_COLLECT_HARD_TOLERANCE) {
       if (!overCollectReason.trim()) {
         toast.error(
-          `Amount exceeds cash owed ($${owedCap.toFixed(2)}). Enter a reason to allow over-collection, or lower the amount.`,
+          `Amount exceeds cash owed (${formatJMD(owedCap, 2)}). Enter a reason to allow over-collection, or lower the amount.`,
         );
         return;
       }
@@ -338,7 +339,7 @@ export function LogCashPaymentModal({
 
   const formatPeriodSublabel = (period: SettlementPeriod): string => {
     if (period.status === 'Paid' || period.status === 'Over-collected') return 'Collected';
-    if (period.balance > 0.005) return `$${period.balance.toFixed(2)} collection gap`;
+    if (period.balance > 0.005) return `${formatJMD(period.balance, 2)} collection gap`;
     return 'No gap';
   };
 
@@ -358,7 +359,7 @@ export function LogCashPaymentModal({
                 <p className="text-sm text-slate-600">Owed by driver</p>
             </div>
             <div className="text-right">
-                <p className="text-xl font-bold text-slate-900">${(cashOwed || 0).toFixed(2)}</p>
+                <p className="text-xl font-bold text-slate-900">{formatJMD((cashOwed || 0), 2)}</p>
             </div>
         </div>
 
@@ -513,16 +514,16 @@ export function LogCashPaymentModal({
                 <div className="grid grid-cols-3 gap-2 text-center">
                   <div>
                     <p className="text-slate-400 text-[10px] uppercase tracking-wide">Passenger</p>
-                    <p className="font-semibold text-slate-700">${selectedPeriodObj.amountOwed.toFixed(2)}</p>
+                    <p className="font-semibold text-slate-700">{formatJMD(selectedPeriodObj.amountOwed, 2)}</p>
                   </div>
                   <div>
                     <p className="text-slate-400 text-[10px] uppercase tracking-wide">Returned</p>
-                    <p className="font-semibold text-emerald-600">${selectedPeriodObj.amountPaid.toFixed(2)}</p>
+                    <p className="font-semibold text-emerald-600">{formatJMD(selectedPeriodObj.amountPaid, 2)}</p>
                   </div>
                   <div>
                     <p className="text-slate-400 text-[10px] uppercase tracking-wide">Gap</p>
                     <p className={`font-semibold ${selectedPeriodObj.balance > 0 ? 'text-red-600' : 'text-emerald-600'}`}>
-                      ${selectedPeriodObj.balance.toFixed(2)}
+                      {formatJMD(selectedPeriodObj.balance, 2)}
                     </p>
                   </div>
                 </div>

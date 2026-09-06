@@ -59,4 +59,35 @@ export function registerDriversAuditRoutes(app: Hono) {
       return c.json({ success: true, orgId: getOrgId(c), data: events });
     },
   );
+
+  app.post(
+    `${PREFIX}/drivers/:id/audit`,
+    requireAuth({ requireOrg: true }),
+    // Money + compliance mutations already gated client-side; accept either write role.
+    async (c: Context) => {
+      const driverId = String(c.req.param("id") || "").trim();
+      if (!driverId) return c.json({ error: "driverId required" }, 400);
+      let body: Record<string, unknown> = {};
+      try {
+        body = (await c.req.json()) || {};
+      } catch {
+        body = {};
+      }
+      const action = String(body.action || "").trim();
+      if (!action) return c.json({ error: "action required" }, 400);
+      const actorId =
+        (c.get("userId") as string | undefined) ||
+        (c.get("user") as { id?: string } | undefined)?.id ||
+        undefined;
+      const event = await appendDriverAuditEvent(c, {
+        driverId,
+        actorId,
+        action,
+        reason: body.reason != null ? String(body.reason) : undefined,
+        before: body.before,
+        after: body.after,
+      });
+      return c.json({ success: true, orgId: getOrgId(c), data: event });
+    },
+  );
 }

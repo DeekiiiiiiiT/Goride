@@ -1,3 +1,4 @@
+import { formatJMD } from '../../utils/formatJMD';
 import React, { useMemo, useState, useEffect, startTransition } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
@@ -483,7 +484,7 @@ export function DriverExpensesHistory({
               <div>
                 <p className="text-xs text-slate-500 font-medium">Total Expenses</p>
                 <p className="text-xl font-bold text-rose-600 mt-0.5">
-                  ${totals.total.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                  {formatJMD(totals.total, 2)}
                 </p>
               </div>
               <div className="h-9 w-9 rounded-full bg-rose-50 flex items-center justify-center">
@@ -507,7 +508,7 @@ export function DriverExpensesHistory({
               <div>
                 <p className="text-xs text-slate-500 font-medium">Toll Expenses</p>
                 <p className="text-xl font-bold text-amber-600 mt-0.5">
-                  ${totals.toll.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                  {formatJMD(totals.toll, 2)}
                 </p>
               </div>
               <div className="h-9 w-9 rounded-full bg-amber-50 flex items-center justify-center">
@@ -532,7 +533,7 @@ export function DriverExpensesHistory({
             )}
             {totals.tollCharged > 0 && (
               <p className="text-[10px] text-rose-600 mt-1 font-medium">
-                Charged to driver: ${totals.tollCharged.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                Charged to driver: {formatJMD(totals.tollCharged, 2)}
               </p>
             )}
             {totals.disputeRefundTotal > 0 && (
@@ -569,7 +570,7 @@ export function DriverExpensesHistory({
                 ) : (
                   <p className={`text-xl font-bold mt-0.5 ${totals.fuel > 0 ? 'text-red-600' : 'text-slate-300'}`}>
                     {totals.fuel > 0
-                      ? `$${totals.fuel.toLocaleString(undefined, { minimumFractionDigits: 2 })}`
+                      ? formatJMD(totals.fuel, 2)
                       : '-'}
                   </p>
                 )}
@@ -593,7 +594,7 @@ export function DriverExpensesHistory({
             )}
             {!fuelCoreLoading && !fuelDraftLoading && totals.fuelDraftPending > 0.005 && (
               <p className="text-[10px] text-amber-600 font-medium mt-0.5">
-                +${totals.fuelDraftPending.toLocaleString(undefined, { minimumFractionDigits: 2 })} pending reconciliation (not yet finalized)
+                +{formatJMD(totals.fuelDraftPending, 2)} pending reconciliation (not yet finalized)
               </p>
             )}
           </CardContent>
@@ -773,17 +774,17 @@ export function DriverExpensesHistory({
                             </TableCell>
                             <TableCell className="px-3 text-right tabular-nums text-amber-600">
                               {row.tollExpenses > 0
-                                ? `$${row.tollExpenses.toLocaleString(undefined, { minimumFractionDigits: 2 })}`
+                                ? formatJMD(row.tollExpenses, 2)
                                 : <span className="text-slate-300">-</span>}
                             </TableCell>
                             <TableCell className="px-3 text-right tabular-nums text-sky-700">
                               {row.tollCashSpent > 0
-                                ? `$${row.tollCashSpent.toLocaleString(undefined, { minimumFractionDigits: 2 })}`
+                                ? formatJMD(row.tollCashSpent, 2)
                                 : <span className="text-slate-300">-</span>}
                             </TableCell>
                             <TableCell className="px-3 text-right tabular-nums text-slate-700">
                               {row.tollTagSpent > 0
-                                ? `$${row.tollTagSpent.toLocaleString(undefined, { minimumFractionDigits: 2 })}`
+                                ? formatJMD(row.tollTagSpent, 2)
                                 : <span className="text-slate-300">-</span>}
                             </TableCell>
                             <TableCell className="px-3 text-xs text-center">
@@ -806,7 +807,7 @@ export function DriverExpensesHistory({
                             <TableCell className="px-3 text-right tabular-nums">
                               {row.tollCharged > 0.005 ? (
                                 <span className="text-rose-600">
-                                  ${row.tollCharged.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                  {formatJMD(row.tollCharged, 2)}
                                 </span>
                               ) : (row.tollReconciled + row.tollUnreconciled) > 0 &&
                                 row.tollUnreconciled === 0 &&
@@ -931,18 +932,20 @@ export function DriverExpensesHistory({
                                 : 'text-slate-300'
                             }`}>
                               {row.fuelStatus === 'finalized' && row.fuelDeduction > 0.005 ? (
-                                `$${row.fuelDeduction.toLocaleString(undefined, { minimumFractionDigits: 2 })}`
+                                formatJMD(row.fuelDeduction, 2)
                               ) : row.fuelStatus !== 'finalized' &&
                                 (row.fuelDraftEstimate > 0.005 || row.fuelDeduction > 0.005) ? (
                                 <TooltipProvider>
                                   <Tooltip>
                                     <TooltipTrigger asChild>
                                       <span className="text-amber-600 font-medium cursor-help">
-                                        ~$
-                                        {(row.fuelDraftEstimate > 0.005
-                                          ? row.fuelDraftEstimate
-                                          : row.fuelDeduction
-                                        ).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                        ~
+                                        {formatJMD(
+                                          row.fuelDraftEstimate > 0.005
+                                            ? row.fuelDraftEstimate
+                                            : row.fuelDeduction,
+                                          2,
+                                        )}
                                       </span>
                                     </TooltipTrigger>
                                     <TooltipContent side="top" className="max-w-[260px] text-xs">
@@ -956,24 +959,24 @@ export function DriverExpensesHistory({
                             </TableCell>
                             <TableCell className="px-3 text-right tabular-nums text-slate-700">
                               {row.fuelStatus === 'finalized' && row.fuelFleetShare > 0.005
-                                ? `$${row.fuelFleetShare.toLocaleString(undefined, { minimumFractionDigits: 2 })}`
+                                ? formatJMD(row.fuelFleetShare, 2)
                                 : <span className="text-slate-300">-</span>}
                             </TableCell>
                             <TableCell className="px-3 text-right tabular-nums text-slate-600">
                               {row.fuelStatus === 'finalized' && row.fuelGasCardSpend > 0.005
-                                ? `$${row.fuelGasCardSpend.toLocaleString(undefined, { minimumFractionDigits: 2 })}`
+                                ? formatJMD(row.fuelGasCardSpend, 2)
                                 : <span className="text-slate-300">-</span>}
                             </TableCell>
                             <TableCell className="px-3 text-right tabular-nums text-slate-600">
                               {row.fuelStatus === 'finalized' && row.fuelDriverSpend > 0.005
-                                ? `$${row.fuelDriverSpend.toLocaleString(undefined, { minimumFractionDigits: 2 })}`
+                                ? formatJMD(row.fuelDriverSpend, 2)
                                 : <span className="text-slate-300">-</span>}
                             </TableCell>
                             <TableCell className="px-3 text-right tabular-nums">
                               {row.fuelStatus === 'finalized' &&
                               (row.fuelDeduction > 0 || row.fuelDriverSpend > 0.005) ? (
                                 <span className={`font-medium ${row.fuelNetPay >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
-                                  {row.fuelNetPay >= 0 ? '+' : '-'}${Math.abs(row.fuelNetPay).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                  {row.fuelNetPay >= 0 ? '+' : '-'}{formatJMD(Math.abs(row.fuelNetPay), 2)}
                                 </span>
                               ) : <span className="text-slate-300">-</span>}
                             </TableCell>

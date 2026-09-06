@@ -944,6 +944,31 @@ export const api = {
     return response.json();
   },
 
+  /** Append an ops audit event (write-off, payout, delete tx, compliance verify, etc.). */
+  async appendDriverAudit(
+    driverId: string,
+    payload: {
+      action: string;
+      reason?: string;
+      before?: unknown;
+      after?: unknown;
+    },
+  ) {
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.fleet}/drivers/${encodeURIComponent(driverId)}/audit`,
+      {
+        method: 'POST',
+        headers: await requireAuthHeaders(),
+        body: JSON.stringify(payload),
+      },
+    );
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || 'Failed to append driver audit');
+    }
+    return response.json();
+  },
+
   async getDriverNotes(driverId: string) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/drivers/${encodeURIComponent(driverId)}/notes`, {
       headers: await requireAuthHeaders(null),
@@ -954,15 +979,24 @@ export const api = {
     }
     return response.json() as Promise<{
       success: boolean;
-      notes: Array<{ id: string; text: string; createdAt: string; createdBy: string }>;
+      notes: Array<{
+        id: string;
+        text: string;
+        createdAt: string;
+        createdBy: string;
+        followUpDate?: string | null;
+      }>;
     }>;
   },
 
-  async addDriverNote(driverId: string, text: string) {
+  async addDriverNote(driverId: string, text: string, followUpDate?: string) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/drivers/${encodeURIComponent(driverId)}/notes`, {
       method: 'POST',
       headers: await requireAuthHeaders(),
-      body: JSON.stringify({ text }),
+      body: JSON.stringify({
+        text,
+        ...(followUpDate ? { followUpDate } : {}),
+      }),
     });
     if (!response.ok) {
       const err = await response.json().catch(() => ({}));
@@ -1022,15 +1056,25 @@ export const api = {
     return response.json();
   },
 
-  /** Paginate until exhausted — cash payment history must not be truncated at 5k rows. */
-  async getAllTransactionsForDrivers(driverIdOrIds: string | string[], pageSize = 5000, maxRows = 50000) {
+  /** Paginate until exhausted — optional date window shrinks payload for driver detail. */
+  async getAllTransactionsForDrivers(
+    driverIdOrIds: string | string[],
+    pageSize = 5000,
+    maxRows = 50000,
+    opts?: { startDate?: string; endDate?: string },
+  ) {
     const ids = Array.isArray(driverIdOrIds) ? driverIdOrIds.filter(Boolean) : [driverIdOrIds].filter(Boolean);
     if (ids.length === 0) return [] as FinancialTransaction[];
 
     const all: FinancialTransaction[] = [];
     let offset = 0;
     while (offset < maxRows) {
-      const page = await this.getTransactions(ids, { limit: pageSize, offset });
+      const page = await this.getTransactions(ids, {
+        limit: pageSize,
+        offset,
+        startDate: opts?.startDate,
+        endDate: opts?.endDate,
+      });
       const batch = Array.isArray(page) ? page.filter(Boolean) : [];
       all.push(...batch);
       if (batch.length < pageSize) break;
@@ -2919,6 +2963,9 @@ export const api = {
     tagId?: string;
     scope?: 'tag';
     driverId?: string;
+    /** Batch filter — one request for many driver IDs (aliases). */
+    driverIds?: string[];
+    ids?: string[];
     category?: string;
     limit?: number;
     offset?: number;
@@ -2929,6 +2976,11 @@ export const api = {
     if (params?.tagId) qs.set('tagId', params.tagId);
     if (params?.scope) qs.set('scope', params.scope);
     if (params?.driverId) qs.set('driverId', params.driverId);
+    const batchIds = [
+      ...(params?.driverIds || []),
+      ...(params?.ids || []),
+    ].filter(Boolean);
+    if (batchIds.length > 0) qs.set('driverIds', [...new Set(batchIds)].join(','));
     if (params?.category) qs.set('category', params.category);
     if (params?.limit !== undefined) qs.set('limit', params.limit.toString());
     if (params?.offset !== undefined) qs.set('offset', params.offset.toString());
@@ -5508,24 +5560,25 @@ export const api = {
     return response.json();
   },
 
-  // Phase 6.3: Targeted per-driver ledger repair
-  async repairDriverLedger(driverId: string, tripIds?: string[], force?: boolean): Promise<{ success: boolean; driverId: string; stats: any; durationMs: number }> {
-    console.log(`[Ledger] Starting ${force ? 'FORCE ' : ''}repair for driver ${driverId}${tripIds ? ` with ${tripIds.length} client-supplied tripIds` : ''}...`);
-    const response = await fetch(
-      `${API_ENDPOINTS.financial}/ledger/repair-driver`,
-      {
-        method: 'POST',
-        headers: await requireAuthHeaders(),
-        body: JSON.stringify({ driverId, ...(tripIds ? { tripIds } : {}), ...(force ? { force: true } : {}) }),
-      }
+  // Phase 6.3: Deprecated — repair-driver returns 410. Prefer ensureLedgerFromTripIds.
+  async repairDriverLedger(
+    driverId: string,
+    tripIds?: string[],
+    _force?: boolean,
+  ): Promise<{ success: boolean; driverId: string; stats: any; durationMs: number }> {
+    console.warn(
+      '[Ledger] repairDriverLedger is deprecated; forwarding to ensureLedgerFromTripIds',
     );
-    if (!response.ok) {
-      const errText = await response.text();
-      throw new Error(`Ledger repair failed: ${errText}`);
-    }
-    const result = await response.json();
-    console.log('[Ledger] Repair complete:', result);
-    return result;
+    const ids = tripIds?.length
+      ? tripIds
+      : [];
+    const result = await this.ensureLedgerFromTripIds(ids);
+    return {
+      success: result.success,
+      driverId,
+      stats: result.stats,
+      durationMs: result.durationMs,
+    };
   },
 
   /**

@@ -3,6 +3,8 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../services/api';
 import { useVocab } from '../../utils/vocabulary';
 import { formatJMD } from '../../utils/formatJMD';
+import { exportToCSV } from '../../utils/csvHelpers';
+import { format } from 'date-fns';
 import { 
   Loader2, 
   Search, 
@@ -13,7 +15,7 @@ import {
   ChevronRight,
   Download,
   Eye,
-  MessageSquare,
+  StickyNote,
   AlertCircle,
 } from 'lucide-react';
 import { 
@@ -266,10 +268,25 @@ export function DriversPage({
     refetchOnMount: false,
   });
 
+  const loading = rosterLoading;
+  // Second wave after roster settles — avoids stacking earnings-policies with
+  // the roster call on /drivers mount (ROAM-FLEET-10).
+  const [enrichReady, setEnrichReady] = useState(false);
+  useEffect(() => {
+    if (rosterLoading) {
+      setEnrichReady(false);
+      return;
+    }
+    const t = window.setTimeout(() => setEnrichReady(true), 450);
+    return () => window.clearTimeout(t);
+  }, [rosterLoading]);
+  const enrichEnabled = enrichReady;
+
   // Keep getDrivers for mutations / detail profile merge (bankInfo, etc.)
   const { data: manualDrivers = [], isError: driversLoadError, error: driversError } = useQuery({
     queryKey: ['drivers'],
     queryFn: () => api.getDrivers(),
+    enabled: enrichEnabled,
     staleTime: 5 * 60 * 1000,
     gcTime: 15 * 60 * 1000,
     refetchOnWindowFocus: false,
@@ -295,6 +312,7 @@ export function DriversPage({
   const { data: importedMetrics = [] } = useQuery({
     queryKey: ['driverMetrics'],
     queryFn: () => api.getDriverMetrics().catch(() => []),
+    enabled: enrichEnabled,
     staleTime: 5 * 60 * 1000,
     gcTime: 15 * 60 * 1000,
     refetchOnWindowFocus: false,
@@ -304,6 +322,7 @@ export function DriversPage({
   const { data: vehicleMetrics = [] } = useQuery({
     queryKey: ['vehicleMetrics'],
     queryFn: () => api.getVehicleMetrics().catch(() => []),
+    enabled: enrichEnabled,
     staleTime: 5 * 60 * 1000,
     gcTime: 15 * 60 * 1000,
     refetchOnWindowFocus: false,
@@ -313,13 +332,13 @@ export function DriversPage({
   const { data: earningsPolicyCtx } = useQuery({
     queryKey: ['earningsPolicyRuntimeContext'],
     queryFn: () => loadEarningsPolicyRuntimeContext(),
+    enabled: enrichEnabled,
     staleTime: 10 * 60 * 1000,
     gcTime: 30 * 60 * 1000,
     refetchOnWindowFocus: false,
     refetchOnMount: false,
   });
 
-  const loading = rosterLoading;
   const safeManualDrivers = asArray<DriverProfile>(manualDrivers);
   const safeImportedMetrics = asArray<import('../../types/data').DriverMetrics>(importedMetrics);
   const safeRoster = asArray<DriverProfile>(rosterRaw);
@@ -477,36 +496,27 @@ export function DriversPage({
       });
   }, [orgValidatedDrivers, searchQuery, statusFilter, tierFilter, performanceFilter]);
 
-  // Export Function
+  // Export Function — Papa CSV via exportToCSV; gated for export / view roles
   const handleExport = () => {
-    const headers = ['ID', 'Name', 'Status', 'Vehicle', 'Phone', 'Email', 'Total Trips', 'Total Earnings', 'Acceptance Rate', 'Tier'];
-    const csvContent = [
-      headers.join(','),
-      ...filteredDrivers.map(d => [
-        d.id,
-        `"${d.name}"`,
-        d.status,
-        d.vehicle,
-        d.phone,
-        d.email,
-        d.totalTrips,
-        d.totalEarnings.toFixed(2),
-        `${d.acceptanceRate}%`,
-        d.tier
-      ].join(','))
-    ].join('\n');
-
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    if (link.download !== undefined) {
-      const url = URL.createObjectURL(blob);
-      link.setAttribute('href', url);
-      link.setAttribute('download', 'drivers_export.csv');
-      link.style.visibility = 'hidden';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+    if (!can('transactions.export') && !can('drivers.view')) {
+      return;
     }
+    const rows = filteredDrivers.map((d) => ({
+      ID: d.id,
+      Name: d.name,
+      Status: d.status,
+      Vehicle: d.vehicle,
+      Phone: d.phone,
+      Email: d.email,
+      'Total Trips': d.totalTrips,
+      'Total Earnings': Number(d.totalEarnings || 0).toFixed(2),
+      'Acceptance Rate': `${d.acceptanceRate}%`,
+      Tier: d.tier,
+      'License Number': d.licenseNumber || '',
+      'License Expiry': d.licenseExpiry || '',
+      'Member Since': d.createdAt || '',
+    }));
+    exportToCSV(rows, 'drivers_export.csv');
   };
 
   // Pagination Logic
@@ -664,6 +674,7 @@ export function DriversPage({
                   </SelectContent>
                 </Select>
 
+                {(can('transactions.export') || can('drivers.view')) && (
                 <Button 
                     variant="outline" 
                     size="sm" 
@@ -673,6 +684,7 @@ export function DriversPage({
                     <Download className="h-4 w-4 mr-2" />
                     Export
                 </Button>
+                )}
             </div>
 
             {/* Search (Right) */}
@@ -717,9 +729,30 @@ export function DriversPage({
                                         </Avatar>
                                         <div>
                                             <p className="font-medium text-slate-900 dark:text-slate-100 group-hover:text-indigo-600 transition-colors">{driver.name}</p>
-                                            <p className="text-xs text-slate-500 dark:text-slate-400 truncate max-w-[120px] font-mono">
+                                            <p className="text-xs text-slate-500 dark:text-slate-400 truncate max-w-[160px] font-mono">
                                                 {driver.phone}
                                             </p>
+                                            {(driver.licenseNumber || driver.licenseExpiry || driver.createdAt) && (
+                                              <p className="text-[10px] text-slate-400 mt-0.5 truncate max-w-[200px]">
+                                                {driver.licenseNumber ? `#${driver.licenseNumber}` : ''}
+                                                {driver.licenseNumber && driver.licenseExpiry ? ' · ' : ''}
+                                                {driver.licenseExpiry
+                                                  ? `Exp ${String(driver.licenseExpiry).slice(0, 10)}`
+                                                  : ''}
+                                                {(driver.licenseNumber || driver.licenseExpiry) && driver.createdAt
+                                                  ? ' · '
+                                                  : ''}
+                                                {driver.createdAt
+                                                  ? `Since ${(() => {
+                                                      try {
+                                                        return format(new Date(driver.createdAt), 'MMM yyyy');
+                                                      } catch {
+                                                        return String(driver.createdAt).slice(0, 10);
+                                                      }
+                                                    })()}`
+                                                  : ''}
+                                              </p>
+                                            )}
                                         </div>
                                     </div>
                                 </TableCell>
@@ -756,8 +789,18 @@ export function DriversPage({
                                         >
                                             <Eye className="h-4 w-4" />
                                         </Button>
-                                        <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400">
-                                            <MessageSquare className="h-4 w-4" />
+                                        <Button
+                                           variant="ghost"
+                                           size="icon"
+                                           className="h-8 w-8 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400"
+                                           title="Add note"
+                                           aria-label="Add note"
+                                           onClick={(e) => {
+                                             e.stopPropagation();
+                                             openDriver(driver.id, 'profile');
+                                           }}
+                                        >
+                                            <StickyNote className="h-4 w-4" />
                                         </Button>
                                         <DropdownMenu>
                                             <DropdownMenuTrigger asChild>

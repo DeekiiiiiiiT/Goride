@@ -1,3 +1,4 @@
+import { formatJMD } from '../../utils/formatJMD';
 import React, { useMemo, useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
@@ -424,9 +425,9 @@ export function DriverEarningsHistory({
               <div className="flex items-center gap-2">
                 <Target className={`h-4 w-4 ${isViewingSelected ? 'text-indigo-500' : 'text-slate-500'}`} />
                 <span className="text-sm font-medium text-slate-700">
-                  {barLabel}: ${displayRow.periodEarnings.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                  {barLabel}: {formatJMD(displayRow.periodEarnings, 2)}
                   {' / '}
-                  ${displayRow.quotaTarget.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                  {formatJMD(displayRow.quotaTarget, 2)}
                   {displayRow.quotaPercent !== null && (
                     <span className={`ml-1.5 font-semibold ${displayRow.quotaPercent >= 100 ? 'text-emerald-600' : displayRow.quotaPercent >= 70 ? 'text-amber-600' : 'text-rose-600'}`}>
                       ({displayRow.quotaPercent.toFixed(0)}%)
@@ -517,18 +518,18 @@ export function DriverEarningsHistory({
 
                   {/* Period Earnings — same SSOT as Driver Detail / PA */}
                   <TableCell className="text-right text-slate-700 font-medium tabular-nums">
-                    ${row.periodEarnings.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                    {formatJMD(row.periodEarnings, 2)}
                   </TableCell>
 
                   {/* Fare gross — base for driver/fleet share tiers */}
                   <TableCell className="text-right text-slate-400 tabular-nums text-xs">
-                    ${row.grossRevenue.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                    {formatJMD(row.grossRevenue, 2)}
                   </TableCell>
 
                   {/* Driver Share with tier % badge */}
                   <TableCell className="text-right text-emerald-600">
                     <span className="font-medium">
-                      ${row.driverShare.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                      {formatJMD(row.driverShare, 2)}
                     </span>
                     <Badge variant="outline" className="ml-1.5 text-[10px] px-1 py-0 bg-emerald-50 text-emerald-600 border-emerald-200">
                       {row.tier.sharePercentage}%
@@ -537,7 +538,7 @@ export function DriverEarningsHistory({
 
                   <TableCell className="text-right text-slate-600 tabular-nums">
                     {row.fleetShare > 0.005
-                      ? `$${row.fleetShare.toLocaleString(undefined, { minimumFractionDigits: 2 })}`
+                      ? formatJMD(row.fleetShare, 2)
                       : <span className="text-slate-300">—</span>}
                   </TableCell>
 
@@ -562,7 +563,7 @@ export function DriverEarningsHistory({
                   {/* Ledger bank/cash payouts — informational, not Net Payout */}
                   <TableCell className="text-right text-slate-400 text-xs">
                     {row.payouts > 0
-                      ? `$${row.payouts.toLocaleString(undefined, { minimumFractionDigits: 2 })}`
+                      ? formatJMD(row.payouts, 2)
                       : '-'}
                   </TableCell>
 

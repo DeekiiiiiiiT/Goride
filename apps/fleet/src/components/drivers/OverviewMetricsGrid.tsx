@@ -1,3 +1,4 @@
+import { formatJMD } from '../../utils/formatJMD';
 import { useIndriveWallet, type IndriveWalletDateRange } from '../../hooks/useIndriveWallet';
 import { useDriverFinancialPeriods } from '../../hooks/useDriverFinancialPeriods';
 import React, { useMemo, useState } from 'react';
@@ -47,7 +48,7 @@ export const getPlatformColor = (platform: string) => PLATFORM_COLORS[platform] 
 // ── PieChart wrapper removed — use RawPieChart directly with explicit keys ──
 
 function fmtMoney(n: number) {
-  return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return formatJMD(Number(n) || 0, 2);
 }
 
 function BreakdownMoneyRow({
@@ -71,7 +72,7 @@ function BreakdownMoneyRow({
           valueClassName,
         )}
       >
-        ${fmtMoney(value)}
+        {fmtMoney(value)}
       </span>
     </div>
   );
@@ -83,7 +84,7 @@ function DeductionRow({ label, magnitude }: { label: string; magnitude: number }
     <div className="flex justify-between gap-4 text-sm">
       <span className="text-slate-600 dark:text-slate-400">{label}</span>
       <span className="tabular-nums font-medium text-rose-700 dark:text-rose-400">
-        −${fmtMoney(magnitude)}
+        −{fmtMoney(magnitude)}
       </span>
     </div>
   );
@@ -112,7 +113,7 @@ function PeriodBreakdownCollapsible({
         <span className="flex items-center gap-2 shrink-0">
           {!hideHeaderAmount && headerAmount !== undefined && (
             <span className="font-semibold tabular-nums text-slate-900 dark:text-slate-100">
-              ${fmtMoney(headerAmount)}
+              {fmtMoney(headerAmount)}
             </span>
           )}
           <ChevronDown className="period-breakdown-chevron h-4 w-4 shrink-0 text-slate-400 transition-transform duration-200" />
@@ -145,7 +146,7 @@ function PeriodBreakdownSubLine({
           valueClassName,
         )}
       >
-        ${fmtMoney(value)}
+        {fmtMoney(value)}
       </span>
     </li>
   );
@@ -327,7 +328,7 @@ export function OverviewMetricsGrid({
       .filter(([_, stats]: [string, any]) => stats.earnings > 0 || stats.completed > 0)
       .map(([label, stats]: [string, any]) => ({
         label,
-        value: `$${stats.earnings.toFixed(2)}`,
+        value: formatJMD(stats.earnings, 2),
         color: getPlatformColor(label)
       })),
     [resolvedFinancials]
@@ -338,7 +339,7 @@ export function OverviewMetricsGrid({
       .filter(([_, stats]: [string, any]) => stats.cashCollected > 0)
       .map(([label, stats]: [string, any]) => ({
         label,
-        value: `$${stats.cashCollected.toFixed(2)}`,
+        value: formatJMD(stats.cashCollected, 2),
         color: '#f43f5e'
       })),
     [resolvedFinancials]
@@ -351,13 +352,13 @@ export function OverviewMetricsGrid({
       const cashSpent = Number(weekPeriod.tollCashSpend) || 0;
       const support = Number(resolvedFinancials.disputeRefunds) || 0;
       const rows: Array<{ label: string; value: string; color: string }> = [
-        { label: 'Tag spent', value: `$${fmtMoney(tagSpent)}`, color: '#64748b' },
-        { label: 'Tag credited', value: `$${fmtMoney(tagCredited)}`, color: '#10b981' },
-        { label: 'Cash spent', value: `$${fmtMoney(cashSpent)}`, color: '#0ea5e9' },
-        { label: 'Cash washed', value: `$${fmtMoney(cashWash)}`, color: '#38bdf8' },
+        { label: 'Tag spent', value: fmtMoney(tagSpent), color: '#64748b' },
+        { label: 'Tag credited', value: fmtMoney(tagCredited), color: '#10b981' },
+        { label: 'Cash spent', value: fmtMoney(cashSpent), color: '#0ea5e9' },
+        { label: 'Cash washed', value: fmtMoney(cashWash), color: '#38bdf8' },
       ];
       if (support > 0.005) {
-        rows.push({ label: 'Uber/support', value: `$${fmtMoney(support)}`, color: '#3b82f6' });
+        rows.push({ label: 'Uber/support', value: fmtMoney(support), color: '#3b82f6' });
       }
       return rows;
     }
@@ -366,7 +367,7 @@ export function OverviewMetricsGrid({
     return [
       {
         label: 'Uber/support',
-        value: `$${dr.toFixed(2)}`,
+        value: formatJMD(dr, 2),
         color: getPlatformColor('Uber'),
       },
     ];
@@ -702,7 +703,7 @@ export function OverviewMetricsGrid({
 
                               <div className="flex justify-between gap-4 pt-3 text-sm font-semibold text-slate-900 dark:text-slate-100">
                                 <span>Total</span>
-                                <span className="tabular-nums">${fmtMoney(uberGrandTotal)}</span>
+                                <span className="tabular-nums">{fmtMoney(uberGrandTotal)}</span>
                               </div>
 
                               {(u?.earnings || 0) > 0.005 && (
@@ -743,8 +744,8 @@ export function OverviewMetricsGrid({
                           {statementMismatch && (
                             <p className="pt-2 text-[10px] leading-snug text-amber-700 dark:text-amber-500">
                               <span className="font-semibold">Statement vs posted ledger: </span>
-                              imported &ldquo;Total earnings&rdquo; (${fmtMoney(csv!.totalEarnings)}) vs Uber
-                              components shown above (${fmtMoney(ul!.fareComponents + ul!.tips + ul!.promotions + priorAdj)}
+                              imported &ldquo;Total earnings&rdquo; ({fmtMoney(csv!.totalEarnings)}) vs Uber
+                              components shown above ({fmtMoney(ul!.fareComponents + ul!.tips + ul!.promotions + priorAdj)}
                               ) — date range, rounding, or read-model rules may differ.
                             </p>
                           )}
@@ -771,13 +772,13 @@ export function OverviewMetricsGrid({
                         {gap > 0.005 && (
                           <div className="flex justify-between gap-4 text-xs">
                             <span className="text-slate-500">Gross − net on fare</span>
-                            <span className="tabular-nums text-slate-600">${fmtMoney(gap)}</span>
+                            <span className="tabular-nums text-slate-600">{fmtMoney(gap)}</span>
                           </div>
                         )}
                         {fee > 0.005 && (
                           <div className="flex justify-between gap-4 text-xs">
                             <span className="text-slate-500">Platform fees (ledger)</span>
-                            <span className="tabular-nums text-slate-600">${fmtMoney(fee)}</span>
+                            <span className="tabular-nums text-slate-600">{fmtMoney(fee)}</span>
                           </div>
                         )}
                         {(s.tolls || 0) > 0.005 && (
@@ -787,7 +788,7 @@ export function OverviewMetricsGrid({
                           <div className="flex justify-between gap-4 text-[11px] text-slate-500">
                             <span>Cash collected (trips)</span>
                             <span className="tabular-nums font-medium text-slate-600 dark:text-slate-400">
-                              ${fmtMoney(s.cashCollected)}
+                              {fmtMoney(s.cashCollected)}
                             </span>
                           </div>
                         )}
@@ -815,13 +816,13 @@ export function OverviewMetricsGrid({
                                 <div className="mt-1 flex justify-between gap-2 text-[11px] text-slate-600 dark:text-slate-400">
                                   <span>Wallet API (period fees)</span>
                                   <span className="tabular-nums font-medium text-slate-800 dark:text-slate-200">
-                                    ${fmtMoney(walletData.periodFees)}
+                                    {fmtMoney(walletData.periodFees)}
                                   </span>
                                 </div>
                                 <div className="flex justify-between gap-2 text-[11px] text-slate-600 dark:text-slate-400">
                                   <span>Same rule from ledger rows</span>
                                   <span className="tabular-nums font-medium text-slate-800 dark:text-slate-200">
-                                    ${fmtMoney(inDriveFeesFromLedgerOverlay)}
+                                    {fmtMoney(inDriveFeesFromLedgerOverlay)}
                                   </span>
                                 </div>
                                 {!platformFilterAllPlatforms && (
@@ -863,18 +864,18 @@ export function OverviewMetricsGrid({
                     <div className="flex justify-between gap-4">
                       <span className="text-slate-600 dark:text-slate-400">Gross fare</span>
                       <span className="font-medium tabular-nums">
-                        ${fmtMoney(resolvedFinancials.totalBaseFare || 0)}
+                        {fmtMoney(resolvedFinancials.totalBaseFare || 0)}
                       </span>
                     </div>
                     <div className="flex justify-between gap-4">
                       <span className="text-slate-600 dark:text-slate-400">Net fare</span>
                       <span className="font-semibold tabular-nums">
-                        ${fmtMoney(resolvedFinancials.periodEarnings)}
+                        {fmtMoney(resolvedFinancials.periodEarnings)}
                       </span>
                     </div>
                     <div className="flex justify-between gap-4 text-xs">
                       <span className="text-slate-500">Implied on fare</span>
-                      <span className="tabular-nums text-slate-600">${fmtMoney(fareGrossMinusNet)}</span>
+                      <span className="tabular-nums text-slate-600">{fmtMoney(fareGrossMinusNet)}</span>
                     </div>
                     {(resolvedFinancials.platformFees || 0) > 0 && (
                       <div className="text-xs">
@@ -895,7 +896,7 @@ export function OverviewMetricsGrid({
                             Platform fee entries
                           </span>
                           <span className="shrink-0 tabular-nums text-slate-600">
-                            ${fmtMoney(resolvedFinancials.platformFees)}
+                            {fmtMoney(resolvedFinancials.platformFees)}
                           </span>
                         </button>
                         {platformFeesExpanded && (
@@ -918,7 +919,7 @@ export function OverviewMetricsGrid({
                                       {label}
                                     </span>
                                     <span className="tabular-nums font-medium text-slate-700">
-                                      ${fmtMoney(amt as number)}
+                                      {fmtMoney(amt as number)}
                                     </span>
                                   </div>
                                 ))}
@@ -942,7 +943,7 @@ export function OverviewMetricsGrid({
                                       {label}
                                     </span>
                                     <span className="tabular-nums font-medium text-slate-700">
-                                      ${fmtMoney(amt as number)}
+                                      {fmtMoney(amt as number)}
                                     </span>
                                   </div>
                                 ))}
@@ -962,17 +963,17 @@ export function OverviewMetricsGrid({
                     <div className="flex justify-between gap-4">
                       <span className="text-slate-600 dark:text-slate-400">Tips (all platforms)</span>
                       <span className="font-medium tabular-nums">
-                        ${fmtMoney(resolvedFinancials.totalTips || 0)}
+                        {fmtMoney(resolvedFinancials.totalTips || 0)}
                       </span>
                     </div>
                     <div className="flex justify-between gap-4 border-t border-slate-200 pt-2 dark:border-slate-700">
                       <span className="text-slate-700 dark:text-slate-300">Net fare + tips</span>
                       <span className="font-semibold tabular-nums">
-                        ${fmtMoney(resolvedFinancials.periodEarnings || 0)}
+                        {fmtMoney(resolvedFinancials.periodEarnings || 0)}
                       </span>
                     </div>
                     <p className="text-[11px] leading-snug text-slate-500">
-                      Sum of platform trip earnings lines: ${fmtMoney(platformEarningsSum)} (includes tips on fare
+                      Sum of platform trip earnings lines: {fmtMoney(platformEarningsSum)} (includes tips on fare
                       lines).
                     </p>
                   </div>
@@ -983,7 +984,7 @@ export function OverviewMetricsGrid({
                   <div className="space-y-2 rounded-lg border border-slate-100 p-3 dark:border-slate-800">
                     <div className="flex justify-between gap-4">
                       <span className="text-slate-600 dark:text-slate-400">Total cash collected</span>
-                      <span className="font-semibold tabular-nums">${fmtMoney(resolvedFinancials.cashCollected || 0)}</span>
+                      <span className="font-semibold tabular-nums">{fmtMoney(resolvedFinancials.cashCollected || 0)}</span>
                     </div>
                     <Separator className="my-1 bg-slate-100 dark:bg-slate-800" />
                     {cashByPlatformRows.map(([label, stats]: [string, any]) => (
@@ -995,13 +996,13 @@ export function OverviewMetricsGrid({
                           />
                           {label}
                         </span>
-                        <span className="tabular-nums font-medium">${fmtMoney(stats.cashCollected)}</span>
+                        <span className="tabular-nums font-medium">{fmtMoney(stats.cashCollected)}</span>
                       </div>
                     ))}
                     {resolvedFinancials.cashSourceMismatch && (
                       <p className="text-[11px] text-amber-700">
-                        CSV Uber cash ${fmtMoney(resolvedFinancials.cashSourceMismatch.csv)} disagrees with
-                        ledger payout_cash ${fmtMoney(resolvedFinancials.cashSourceMismatch.ledger)} — ledger wins.
+                        CSV Uber cash {fmtMoney(resolvedFinancials.cashSourceMismatch.csv)} disagrees with
+                        ledger payout_cash {fmtMoney(resolvedFinancials.cashSourceMismatch.ledger)} — ledger wins.
                       </p>
                     )}
                   </div>
@@ -1050,14 +1051,14 @@ export function OverviewMetricsGrid({
                   <div className="flex flex-wrap items-baseline justify-between gap-2">
                     <span className="text-slate-600 dark:text-slate-400">Total cash collected</span>
                     <span className="text-xl font-bold tabular-nums text-slate-900 dark:text-slate-100">
-                      ${fmtMoney(cashAdminDetail.cashTotal)}
+                      {fmtMoney(cashAdminDetail.cashTotal)}
                     </span>
                   </div>
                   <div className="space-y-1.5 text-[11px] text-slate-600 dark:text-slate-400">
                     <div className="flex justify-between gap-4">
                       <span>Net fare + tips (same period, ledger)</span>
                       <span className="tabular-nums font-medium text-slate-800 dark:text-slate-200">
-                        ${fmtMoney(cashAdminDetail.accruedTripRevenue)}
+                        {fmtMoney(cashAdminDetail.accruedTripRevenue)}
                       </span>
                     </div>
                     {cashAdminDetail.cashVsAccruedPct != null && (
@@ -1101,7 +1102,7 @@ export function OverviewMetricsGrid({
                             {row.label}
                           </span>
                           <span className="tabular-nums text-slate-800 dark:text-slate-100">
-                            ${fmtMoney(row.cash)}
+                            {fmtMoney(row.cash)}
                           </span>
                           <span className="text-right tabular-nums text-slate-600 dark:text-slate-400">
                             {row.mixPct == null ? '—' : `${row.mixPct.toFixed(0)}%`}
@@ -1146,7 +1147,7 @@ export function OverviewMetricsGrid({
                 ? `Ledger incomplete${resolvedFinancials.missingPlatforms?.length > 0 ? ` (missing: ${resolvedFinancials.missingPlatforms.join(", ")})` : ""}`
                 : "Unavailable"
         }
-        value={showFinancialValues ? `$${resolvedFinancials.periodEarnings.toFixed(2)}` : '—'}
+        value={showFinancialValues ? formatJMD(resolvedFinancials.periodEarnings, 2) : '—'}
         trend={showFinancialValues ? `${resolvedFinancials.trendPercent}% vs prev` : undefined}
         trendUp={resolvedFinancials.trendUp}
         icon={<DollarSign className="h-4 w-4 text-slate-500" />}
@@ -1159,7 +1160,7 @@ export function OverviewMetricsGrid({
       {/* Card 2: Cash Collected — dedicated admin cash detail */}
       <MetricCard
         title="Cash Collected"
-        value={showFinancialValues ? `$${resolvedFinancials.cashCollected.toFixed(2)}` : '—'}
+        value={showFinancialValues ? formatJMD(resolvedFinancials.cashCollected, 2) : '—'}
         icon={<DollarSign className="h-4 w-4 text-slate-500" />}
         tooltip="Passenger cash on the saved pay week — same number as Settlements"
         loading={earningsBusy}
@@ -1297,8 +1298,8 @@ export function OverviewMetricsGrid({
         value={
           showFinancialValues
             ? weekPeriod
-              ? `$${fmtMoney(Number(weekPeriod.tollChargedToDriver) || 0)}`
-              : `$${(resolvedFinancials.disputeRefunds || 0).toFixed(2)}`
+              ? fmtMoney(Number(weekPeriod.tollChargedToDriver) || 0)
+              : formatJMD((resolvedFinancials.disputeRefunds || 0), 2)
             : '—'
         }
         subtext={

@@ -1,4 +1,5 @@
 // Settlement Summary View — uses shared payout pipeline (useDriverPayoutPeriodRows).
+import { formatJMD } from '../../utils/formatJMD';
 import React, { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../ui/card";
@@ -234,8 +235,7 @@ export function SettlementSummaryView({
   }, [settlementRows]);
 
   // ── Currency formatter helper ──
-  const fmtCurrency = (n: number) =>
-    '$' + Math.abs(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const fmtCurrency = (n: number) => formatJMD(Math.abs(n), 2);
 
   // ── Phase 6: Pagination ──
   const PAGE_SIZE = 12;

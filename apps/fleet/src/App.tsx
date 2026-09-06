@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense, lazy } from 'react';
 // Build stability ping: 2026-03-17 transaction-review-wizard
 import { AuthProvider, useAuth } from './components/auth/AuthContext';
 import { BusinessConfigProvider } from './components/auth/BusinessConfigContext';
@@ -13,7 +13,6 @@ import { Dashboard } from './components/dashboard/Dashboard';
 import { ImportsPage } from './components/imports/ImportsPage';
 import { TripLogsPage } from './components/trips/TripLogsPage';
 import { SettingsPage } from './components/settings/SettingsPage';
-import { DriversPage } from './components/drivers/DriversPage';
 import { VehiclesPage } from './components/vehicles/VehiclesPage';
 import { FleetMaintenanceHub } from './components/vehicles/FleetMaintenanceHub';
 import { FleetPage } from './components/fleet/FleetPage';
@@ -30,7 +29,6 @@ import { TollAnalytics } from './components/toll/TollAnalytics';
 import { TollRateDriftPage } from './pages/TollRateDriftPage';
 import { TollLowBalancePage } from './pages/TollLowBalancePage';
 import { VehicleAnalytics } from './components/vehicles/VehicleAnalytics';
-import { DriverAnalytics } from './components/drivers/analytics/DriverAnalytics';
 import { FleetFinancialsPage } from './components/fleet-financials/FleetFinancialsPage';
 import { DriverSettlementsPage } from './components/fleet-financials/DriverSettlementsPage';
 import { IndriveWalletCenterPage } from './components/fleet-financials/IndriveWalletCenterPage';
@@ -48,6 +46,15 @@ import { PermissionGate } from './components/auth/PermissionGate';
 import { PAGE_PERMISSION_MAP } from './utils/permissions';
 
 import { isPassengerOnlyMetadataRole } from '@roam/auth-client';
+
+const DriversPage = lazy(() =>
+  import('./components/drivers/DriversPage').then((m) => ({ default: m.DriversPage })),
+);
+const DriverAnalytics = lazy(() =>
+  import('./components/drivers/analytics/DriverAnalytics').then((m) => ({
+    default: m.DriverAnalytics,
+  })),
+);
 import { PlatformMaintenanceSplash } from './components/PlatformMaintenanceSplash';
 import { FeatureFlagProvider } from './components/auth/FeatureFlagContext';
 import { WrongProductLineGate } from './components/auth/WrongProductLineGate';
@@ -492,24 +499,28 @@ function AppContent() {
         )}
         {currentPage === 'drivers' && (
           <PermissionGate permission="nav.drivers" onNavigate={setCurrentPage}>
-            <DriversPage
-              initialDriverId={driverIdForDetail}
-              initialTab={driverDetailTab}
-              onDriverDeepLinkChange={(driverId, tab) => {
-                setDriverIdForDetail(driverId);
-                setDriverDetailTab(tab);
-              }}
-            />
+            <Suspense fallback={<div className="p-6 text-sm text-slate-500">Loading drivers…</div>}>
+              <DriversPage
+                initialDriverId={driverIdForDetail}
+                initialTab={driverDetailTab}
+                onDriverDeepLinkChange={(driverId, tab) => {
+                  setDriverIdForDetail(driverId);
+                  setDriverDetailTab(tab);
+                }}
+              />
+            </Suspense>
           </PermissionGate>
         )}
         {currentPage === 'driver-analytics' && (
           <PermissionGate permission="nav.drivers" onNavigate={setCurrentPage}>
-            <DriverAnalytics
-              onNavigate={setCurrentPage}
-              onSelectDriver={(driverId) => {
-                openDriverDetail(driverId);
-              }}
-            />
+            <Suspense fallback={<div className="p-6 text-sm text-slate-500">Loading analytics…</div>}>
+              <DriverAnalytics
+                onNavigate={setCurrentPage}
+                onSelectDriver={(driverId) => {
+                  openDriverDetail(driverId);
+                }}
+              />
+            </Suspense>
           </PermissionGate>
         )}
         {currentPage === 'vehicles' && (

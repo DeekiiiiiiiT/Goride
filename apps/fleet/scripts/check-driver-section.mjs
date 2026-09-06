@@ -1,6 +1,7 @@
 /**
- * Soft guardrail for driver-section dead / unreachable JSX patterns.
- * Fails on `{false &&` (dead branches). Soft-warns on count of `false &&` without braces.
+ * Soft guardrail for driver-section dead / unreachable JSX patterns and money formatting.
+ * Fails on `{false &&` (dead branches) and hand-rolled `` `$${ `` money templates.
+ * Soft-warns on count of `false &&` without braces and oversized DriverDetail.tsx.
  *
  * Usage: node apps/fleet/scripts/check-driver-section.mjs
  */
@@ -13,6 +14,10 @@ const ROOT = path.resolve(__dirname, '../src/components/drivers');
 
 const HARD_FAIL = /\{false\s*&&/;
 const SOFT_WARN = /false\s*&&/g;
+/** Hand-rolled USD-looking money: `$` immediately followed by `${` inside a template literal. */
+const MONEY_TEMPLATE = /`[^`]*\$\$\{/;
+const DRIVER_DETAIL = path.join(ROOT, 'DriverDetail.tsx');
+const DRIVER_DETAIL_LINE_WARN = 2000;
 
 function walk(dir, out = []) {
   for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -36,6 +41,21 @@ for (const file of files) {
   const softHits = text.match(SOFT_WARN);
   if (softHits && softHits.length > 2) {
     warnings.push(`${rel}: ${softHits.length} "false &&" occurrences (soft warning)`);
+  }
+  if (MONEY_TEMPLATE.test(text)) {
+    const hits = text.match(new RegExp(MONEY_TEMPLATE.source, 'g')) || [];
+    failures.push(
+      `${rel}: ${hits.length} hand-rolled \`$\${ money template(s) — use formatJMD()`,
+    );
+  }
+}
+
+if (fs.existsSync(DRIVER_DETAIL)) {
+  const lines = fs.readFileSync(DRIVER_DETAIL, 'utf8').split(/\r?\n/).length;
+  if (lines > DRIVER_DETAIL_LINE_WARN) {
+    warnings.push(
+      `src/components/drivers/DriverDetail.tsx: ${lines} lines (> ${DRIVER_DETAIL_LINE_WARN}) — consider further extraction`,
+    );
   }
 }
 

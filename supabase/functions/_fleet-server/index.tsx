@@ -116,6 +116,11 @@ import {
   canonicalEventInSelectedWindow,
 } from "./ledger_money_aggregate.ts";
 import {
+  fetchAllLedgerEventValuesForDrivers,
+  fetchCanonicalFareEarningAll,
+  fetchCanonicalLedgerEventsInPeriod,
+} from "./ledger_driver_events.ts";
+import {
   getDriverFinancialPeriodDetail,
   isSingleFleetWeek,
   overlayOverviewFromPeriod,
@@ -4737,8 +4742,6 @@ app.get("/make-server-37f42386/ledger/driver-overview", requireAuth(), async (c)
     }
 
     try {
-      const lifetimeValsCanon = await fetchAllLedgerEventValuesForDrivers(allDriverIdsCanonExpanded, c);
-
       const startDC = new Date(startDate + "T00:00:00Z");
       const endDC = new Date(endDate + "T23:59:59Z");
       const daysDiffC = Math.round((endDC.getTime() - startDC.getTime()) / (1000 * 60 * 60 * 24)) + 1;
@@ -4749,17 +4752,28 @@ app.get("/make-server-37f42386/ledger/driver-overview", requireAuth(), async (c)
       const prevStartC = prevStartDC.toISOString().slice(0, 10);
       const prevEndC = prevEndDC.toISOString().slice(0, 10);
 
-      const periodValsCanon = lifetimeValsCanon.filter((v: any) =>
+      // P-1: SQL from/to — rolling lookback (covers prev+period; bounds lifetime KPIs).
+      const lookbackDC = new Date(endDC);
+      lookbackDC.setUTCDate(lookbackDC.getUTCDate() - 400);
+      const lookbackC = lookbackDC.toISOString().slice(0, 10);
+      const rangeFromC = lookbackC < prevStartC ? lookbackC : prevStartC;
+
+      const windowValsCanon = await fetchAllLedgerEventValuesForDrivers(allDriverIdsCanonExpanded, c, {
+        from: `${rangeFromC}T00:00:00.000Z`,
+        to: `${endDate}T23:59:59.999Z`,
+      });
+
+      const periodValsCanon = windowValsCanon.filter((v: any) =>
         canonicalEventInSelectedWindow(v as Record<string, unknown>, startDate, endDate),
       );
-      const prevValsCanon = lifetimeValsCanon.filter((v: any) =>
+      const prevValsCanon = windowValsCanon.filter((v: any) =>
         canonicalEventInSelectedWindow(v as Record<string, unknown>, prevStartC, prevEndC),
       );
 
       const resultCanon = aggregateCanonicalEventsToLedgerDriverOverview(
         periodValsCanon,
         prevValsCanon,
-        lifetimeValsCanon,
+        windowValsCanon,
         platformsParam || undefined,
       ) as Record<string, unknown>;
       console.log(
@@ -5655,59 +5669,6 @@ app.post("/make-server-37f42386/ledger/ensure-from-trip-ids", async (c) => {
 app.get("/make-server-37f42386/diagnostic/unresolvable-driver-map", requireAuth(), async (c) => {
   return c.json({ error: "Retired: unresolvable-driver-map scanned ledger_event KV.", retired: true }, 410);
 });
-
-async function fetchAllLedgerEventValuesForDrivers(
-  driverIds: string[],
-  c: any,
-  opts?: { from?: string; to?: string; maxRows?: number },
-): Promise<any[]> {
-  if (!driverIds.length) return [];
-  const { listAllUnifiedCanonicalEvents } = await import("../_shared/unifiedLedger/queries.ts");
-  const seen = new Set<string>();
-  const all: any[] = [];
-  const maxRows = opts?.maxRows ?? 50_000;
-  const from = opts?.from;
-  const to = opts?.to;
-  for (const did of driverIds) {
-    const rows = await listAllUnifiedCanonicalEvents({
-      products: ["roam_driver", "roam_fleet"],
-      driverId: did,
-      from,
-      to,
-      maxRows,
-    });
-    for (const r of rows) {
-      const id = String(r.id || "");
-      if (id && seen.has(id)) continue;
-      if (id) seen.add(id);
-      all.push(r);
-    }
-  }
-  return filterByOrg(all, c);
-}
-
-/** Load org-scoped fare_earning rows from ledger.entries. */
-async function fetchCanonicalFareEarningAll(c: any): Promise<any[]> {
-  const { listAllUnifiedCanonicalEvents } = await import("../_shared/unifiedLedger/queries.ts");
-  const rows = await listAllUnifiedCanonicalEvents({
-    products: ["roam_driver", "roam_fleet"],
-    entryTypes: ["fare_earning"],
-    maxRows: 100_000,
-  });
-  return filterByOrg(rows, c);
-}
-
-/** Load ledger.entries in [periodStart, periodEnd], org-scoped. */
-async function fetchCanonicalLedgerEventsInPeriod(c: any, periodStart: string, periodEnd: string): Promise<any[]> {
-  const { listAllUnifiedCanonicalEvents } = await import("../_shared/unifiedLedger/queries.ts");
-  const rows = await listAllUnifiedCanonicalEvents({
-    products: ["roam_driver", "roam_fleet"],
-    from: `${periodStart}T00:00:00.000Z`,
-    to: `${periodEnd}T23:59:59.999Z`,
-    maxRows: 100_000,
-  });
-  return filterByOrg(rows, c);
-}
 
 /** Same aggregation shape as GET /ledger/fleet-summary (canonical ledger_event rows). */
 function aggregateFleetSummaryFromLedgerLikeEntries(entries: any[]): {

@@ -1,9 +1,10 @@
 /**
- * Driver Profile tab — documents, personal info, notes, compliance verify.
+ * Driver Profile tab — documents, personal info, notes, compliance verify, audit trail.
  */
-import React, { useCallback, useEffect, useState } from 'react';
-import { format } from 'date-fns';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { format, differenceInCalendarDays, isValid } from 'date-fns';
 import {
+  AlertTriangle,
   CheckCircle2,
   CreditCard as CreditCardIcon,
   Download,
@@ -11,6 +12,7 @@ import {
   FileText,
   Loader2,
   Plus,
+  ShieldAlert,
 } from 'lucide-react';
 import { Button } from '../../ui/button';
 import { Input } from '../../ui/input';
@@ -40,6 +42,39 @@ function parseDisplayDate(dateStr: string | Date | undefined | null): Date | nul
   return Number.isNaN(d.getTime()) ? null : d;
 }
 
+function daysUntilExpiry(expiryRaw: string | null | undefined): number | null {
+  if (!expiryRaw) return null;
+  const d = parseDisplayDate(expiryRaw);
+  if (!d) return null;
+  return differenceInCalendarDays(d, new Date());
+}
+
+function expiryCue(days: number | null): { label: string; className: string } | null {
+  if (days == null) return null;
+  if (days < 0) {
+    return {
+      label: `Expired ${Math.abs(days)} day${Math.abs(days) === 1 ? '' : 's'} ago`,
+      className: 'bg-rose-50 text-rose-800 border-rose-200',
+    };
+  }
+  if (days === 0) {
+    return { label: 'Expires today', className: 'bg-rose-50 text-rose-800 border-rose-200' };
+  }
+  if (days <= 30) {
+    return {
+      label: `Renew within ${days} day${days === 1 ? '' : 's'}`,
+      className: 'bg-amber-50 text-amber-900 border-amber-200',
+    };
+  }
+  if (days <= 90) {
+    return {
+      label: `Renewal due in ${days} days`,
+      className: 'bg-slate-50 text-slate-700 border-slate-200',
+    };
+  }
+  return null;
+}
+
 export type DriverDocument = {
   id: string;
   name: string;
@@ -57,6 +92,15 @@ type DriverNote = {
   text: string;
   createdAt: string;
   createdBy: string;
+  followUpDate?: string | null;
+};
+
+type AuditEvent = {
+  id?: string;
+  action?: string;
+  actorId?: string;
+  reason?: string;
+  at?: string;
 };
 
 export type DriverProfileTabProps = {
@@ -69,6 +113,8 @@ export type DriverProfileTabProps = {
   canEditDrivers: boolean;
   /** Refresh parent documents after verify (parent rebuilds from driver record). */
   onComplianceChanged?: () => void;
+  /** Open Notes sub-tab when set (e.g. "Add note" from header). */
+  initialSubTab?: 'documents' | 'personal-info' | 'notes';
 };
 
 function maskAccountNumber(raw: string, canEdit: boolean): string {
@@ -88,17 +134,56 @@ export function DriverProfileTab({
   setSelectedDocument,
   canEditDrivers,
   onComplianceChanged,
+  initialSubTab = 'documents',
 }: DriverProfileTabProps) {
   const [notes, setNotes] = useState<DriverNote[]>([]);
   const [notesLoading, setNotesLoading] = useState(false);
   const [noteText, setNoteText] = useState('');
+  const [followUpDate, setFollowUpDate] = useState('');
   const [savingNote, setSavingNote] = useState(false);
   const [verifyingId, setVerifyingId] = useState<string | null>(null);
   const [localDocs, setLocalDocs] = useState<DriverDocument[]>(documents);
+  const [subTab, setSubTab] = useState(initialSubTab);
+  const [auditEvents, setAuditEvents] = useState<AuditEvent[]>([]);
+  const [auditLoading, setAuditLoading] = useState(false);
+  const [complianceExpiry, setComplianceExpiry] = useState<string | null>(
+    driver?.licenseExpiry ? String(driver.licenseExpiry).slice(0, 10) : null,
+  );
+
+  useEffect(() => {
+    setSubTab(initialSubTab);
+  }, [initialSubTab]);
 
   useEffect(() => {
     setLocalDocs(documents);
   }, [documents]);
+
+  useEffect(() => {
+    if (driver?.licenseExpiry) {
+      setComplianceExpiry(String(driver.licenseExpiry).slice(0, 10));
+    }
+  }, [driver?.licenseExpiry]);
+
+  // Prefer server compliance documents; fall back to parent-built list.
+  useEffect(() => {
+    if (!driverId) return;
+    let cancelled = false;
+    api
+      .getDriverCompliance(driverId)
+      .then((res) => {
+        if (cancelled) return;
+        if (res?.licenseExpiry) setComplianceExpiry(String(res.licenseExpiry).slice(0, 10));
+        if (Array.isArray(res?.documents) && res.documents.length > 0) {
+          setLocalDocs(res.documents as DriverDocument[]);
+        }
+      })
+      .catch(() => {
+        /* keep parent/buildDriverDocuments fallback */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [driverId]);
 
   const loadNotes = useCallback(async () => {
     if (!driverId) return;
@@ -113,18 +198,41 @@ export function DriverProfileTab({
     }
   }, [driverId]);
 
+  const loadAudit = useCallback(async () => {
+    if (!driverId) return;
+    setAuditLoading(true);
+    try {
+      const res = await api.getDriverAudit(driverId);
+      const rows = Array.isArray(res?.data) ? res.data : Array.isArray(res?.events) ? res.events : [];
+      setAuditEvents(rows);
+    } catch {
+      setAuditEvents([]);
+    } finally {
+      setAuditLoading(false);
+    }
+  }, [driverId]);
+
   useEffect(() => {
     void loadNotes();
   }, [loadNotes]);
+
+  useEffect(() => {
+    void loadAudit();
+  }, [loadAudit]);
+
+  const licenseDays = useMemo(() => daysUntilExpiry(complianceExpiry), [complianceExpiry]);
+  const licenseExpired = licenseDays != null && licenseDays < 0;
+  const licenseCue = expiryCue(licenseDays);
 
   const handleAddNote = async () => {
     const text = noteText.trim();
     if (!text || !canEditDrivers) return;
     setSavingNote(true);
     try {
-      const res = await api.addDriverNote(driverId, text);
+      const res = await api.addDriverNote(driverId, text, followUpDate || undefined);
       setNotes(Array.isArray(res?.notes) ? res.notes : res?.note ? [res.note, ...notes] : notes);
       setNoteText('');
+      setFollowUpDate('');
       toast.success('Note saved');
     } catch (e: any) {
       toast.error(e?.message || 'Failed to save note');
@@ -155,6 +263,13 @@ export function DriverProfileTab({
         );
       }
       toast.success(`${doc.name} marked verified`);
+      void api
+        .appendDriverAudit(driverId, {
+          action: 'compliance_verify',
+          after: { documentId: doc.id, status: 'Verified' },
+        })
+        .then(() => loadAudit())
+        .catch(() => {});
       onComplianceChanged?.();
     } catch (e: any) {
       toast.error(e?.message || 'Verify failed');
@@ -165,7 +280,55 @@ export function DriverProfileTab({
 
   return (
     <>
-      <Tabs defaultValue="documents" className="w-full">
+      {/* Compliance lifecycle — mirror courier blocker tone */}
+      <div className="rounded-xl border border-slate-200 dark:border-slate-700 p-4 mb-6 space-y-3">
+        <div className="flex flex-wrap items-center gap-2">
+          {licenseExpired ? (
+            <Badge variant="destructive" className="gap-1">
+              <AlertTriangle className="h-3 w-3" />
+              Cannot dispatch
+            </Badge>
+          ) : (
+            <Badge className="bg-emerald-600">License clear for dispatch</Badge>
+          )}
+          {complianceExpiry && (
+            <span className="text-sm text-slate-600 dark:text-slate-400">
+              License expires{' '}
+              {(() => {
+                const d = parseDisplayDate(complianceExpiry);
+                return d ? format(d, 'MMM d, yyyy') : complianceExpiry;
+              })()}
+            </span>
+          )}
+          {licenseCue && (
+            <Badge variant="outline" className={licenseCue.className}>
+              {licenseCue.label}
+            </Badge>
+          )}
+        </div>
+        {licenseExpired ? (
+          <div
+            className="rounded-lg bg-rose-50 dark:bg-rose-500/10 px-3 py-2 text-sm border border-rose-200 dark:border-rose-900/40"
+            role="alert"
+          >
+            <p className="font-medium text-rose-900 dark:text-rose-200 flex items-center gap-2">
+              <ShieldAlert className="h-4 w-4 shrink-0" />
+              Driver licence expired — cannot dispatch
+            </p>
+            <p className="mt-0.5 text-rose-800/80 dark:text-rose-200/80">
+              Renew the licence and update the expiry date before assigning trips. Fleet cannot override this
+              blocker from here.
+            </p>
+          </div>
+        ) : (
+          <p className="text-sm text-slate-600 dark:text-slate-400">
+            No licence expiry blocker on record
+            {licenseCue ? ` — ${licenseCue.label.toLowerCase()}.` : '.'}
+          </p>
+        )}
+      </div>
+
+      <Tabs value={subTab} onValueChange={(v) => setSubTab(v as typeof subTab)} className="w-full">
         <TabsList className="w-full justify-start border-b rounded-none bg-transparent h-auto p-0 mb-6">
           <TabsTrigger
             value="documents"
@@ -199,7 +362,7 @@ export function DriverProfileTab({
             </CardHeader>
             <CardContent>
               {localDocs.length === 0 ? (
-                <div className="text-center py-10 text-sm text-slate-500">
+                <div className="text-center py-10 text-sm text-slate-500" data-testid="profile-docs-empty">
                   No documents on file for this driver.
                 </div>
               ) : (
@@ -214,84 +377,136 @@ export function DriverProfileTab({
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {localDocs.map((doc) => (
-                      <TableRow key={doc.id}>
-                        <TableCell className="font-medium">
-                          <div className="flex items-center gap-2">
-                            <FileText className="h-4 w-4 text-slate-400" />
-                            {doc.name}
-                          </div>
-                        </TableCell>
-                        <TableCell>{doc.type}</TableCell>
-                        <TableCell>
-                          <Badge
-                            variant="outline"
+                    {localDocs.map((doc) => {
+                      const docDays = daysUntilExpiry(doc.expiryDate);
+                      const cue = expiryCue(docDays);
+                      const expired =
+                        doc.status === 'Expired' || (docDays != null && docDays < 0);
+                      return (
+                        <TableRow key={doc.id}>
+                          <TableCell className="font-medium">
+                            <div className="flex items-center gap-2">
+                              <FileText className="h-4 w-4 text-slate-400" />
+                              {doc.name}
+                            </div>
+                          </TableCell>
+                          <TableCell>{doc.type}</TableCell>
+                          <TableCell>
+                            <div className="flex flex-col gap-1 items-start">
+                              <Badge
+                                variant="outline"
+                                className={
+                                  expired
+                                    ? 'bg-rose-50 text-rose-700 border-rose-200'
+                                    : doc.status === 'Verified'
+                                      ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                      : doc.status === 'Pending'
+                                        ? 'bg-amber-50 text-amber-700 border-amber-200'
+                                        : 'bg-slate-50 text-slate-700'
+                                }
+                              >
+                                {expired && doc.status !== 'Expired' ? 'Expired' : doc.status}
+                              </Badge>
+                              {cue && (
+                                <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded border ${cue.className}`}>
+                                  {cue.label}
+                                </span>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell
                             className={
-                              doc.status === 'Verified'
-                                ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                                : doc.status === 'Expired'
-                                  ? 'bg-rose-50 text-rose-700 border-rose-200'
-                                  : doc.status === 'Pending'
-                                    ? 'bg-amber-50 text-amber-700 border-amber-200'
-                                    : 'bg-slate-50 text-slate-700'
+                              expired ? 'text-rose-600 font-medium' : cue && docDays != null && docDays <= 30
+                                ? 'text-amber-700 font-medium'
+                                : ''
                             }
                           >
-                            {doc.status}
-                          </Badge>
-                        </TableCell>
-                        <TableCell
-                          className={
-                            doc.expiryDate && new Date(doc.expiryDate) < new Date()
-                              ? 'text-rose-600 font-medium'
-                              : ''
-                          }
-                        >
-                          {(() => {
-                            if (!doc.expiryDate) return '—';
-                            const d = parseDisplayDate(doc.expiryDate);
-                            return d ? format(d, 'MMM d, yyyy') : '—';
-                          })()}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex items-center justify-end gap-1">
-                            {doc.url ? (
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-8 w-8 hover:bg-slate-100"
-                                aria-label={`View ${doc.name}`}
-                                onClick={() => setSelectedDocument(doc)}
-                              >
-                                <Eye className="h-4 w-4" />
-                              </Button>
-                            ) : (
-                              <span className="text-xs text-slate-400">—</span>
-                            )}
-                            {canEditDrivers && doc.status !== 'Verified' && doc.status !== 'Expired' && (
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="h-8 text-emerald-700"
-                                disabled={verifyingId === doc.id}
-                                onClick={() => handleVerify(doc)}
-                                aria-label={`Verify ${doc.name}`}
-                              >
-                                {verifyingId === doc.id ? (
-                                  <Loader2 className="h-4 w-4 animate-spin" />
-                                ) : (
-                                  <>
-                                    <CheckCircle2 className="h-4 w-4 mr-1" />
-                                    Verify
-                                  </>
-                                )}
-                              </Button>
-                            )}
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                            {(() => {
+                              if (!doc.expiryDate) return '—';
+                              const d = parseDisplayDate(doc.expiryDate);
+                              return d ? format(d, 'MMM d, yyyy') : '—';
+                            })()}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex items-center justify-end gap-1">
+                              {doc.url ? (
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8 hover:bg-slate-100"
+                                  aria-label={`View ${doc.name}`}
+                                  onClick={() => setSelectedDocument(doc)}
+                                >
+                                  <Eye className="h-4 w-4" />
+                                </Button>
+                              ) : (
+                                <span className="text-xs text-slate-400">—</span>
+                              )}
+                              {canEditDrivers && doc.status !== 'Verified' && !expired && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-8 text-emerald-700"
+                                  disabled={verifyingId === doc.id}
+                                  onClick={() => handleVerify(doc)}
+                                  aria-label={`Verify ${doc.name}`}
+                                >
+                                  {verifyingId === doc.id ? (
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                  ) : (
+                                    <>
+                                      <CheckCircle2 className="h-4 w-4 mr-1" />
+                                      Verify
+                                    </>
+                                  )}
+                                </Button>
+                              )}
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
                   </TableBody>
                 </Table>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card className="mt-6">
+            <CardHeader>
+              <CardTitle>Audit trail</CardTitle>
+              <CardDescription>Recent ops actions for this driver (verify, write-off, payout, etc.).</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {auditLoading ? (
+                <div className="flex justify-center py-8 text-slate-500">
+                  <Loader2 className="h-6 w-6 animate-spin" />
+                </div>
+              ) : auditEvents.length === 0 ? (
+                <p className="text-sm text-slate-500 text-center py-8" data-testid="profile-audit-empty">
+                  No audit events yet.
+                </p>
+              ) : (
+                <ul className="relative border-l border-slate-200 dark:border-slate-700 ml-2 space-y-4">
+                  {auditEvents.slice(0, 40).map((ev, idx) => {
+                    const at = parseDisplayDate(ev.at);
+                    return (
+                      <li key={ev.id || `${ev.at}-${idx}`} className="pl-4 relative">
+                        <span className="absolute -left-1.5 top-1.5 h-3 w-3 rounded-full bg-indigo-500 ring-2 ring-white dark:ring-slate-900" />
+                        <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                          {ev.action || 'event'}
+                        </p>
+                        <p className="text-xs text-slate-500">
+                          {at ? format(at, 'MMM d, yyyy HH:mm') : ev.at || '—'}
+                          {ev.actorId ? ` · ${ev.actorId}` : ''}
+                        </p>
+                        {ev.reason ? (
+                          <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">{ev.reason}</p>
+                        ) : null}
+                      </li>
+                    );
+                  })}
+                </ul>
               )}
             </CardContent>
           </Card>
@@ -323,6 +538,31 @@ export function DriverProfileTab({
                   <div className="space-y-2">
                     <Label>Driver ID</Label>
                     <Input value={driverId} readOnly className="bg-slate-50 font-mono" />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>License Number</Label>
+                    <Input
+                      value={driver?.licenseNumber || '—'}
+                      readOnly
+                      className="bg-slate-50 font-mono"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>License Expiry</Label>
+                    <Input
+                      value={
+                        complianceExpiry
+                          ? (() => {
+                              const d = parseDisplayDate(complianceExpiry);
+                              return d ? format(d, 'MMM d, yyyy') : complianceExpiry;
+                            })()
+                          : '—'
+                      }
+                      readOnly
+                      className="bg-slate-50"
+                    />
                   </div>
                 </div>
               </div>
@@ -399,26 +639,40 @@ export function DriverProfileTab({
             </CardHeader>
             <CardContent className="space-y-4">
               {canEditDrivers && (
-                <div className="flex flex-col sm:flex-row gap-2">
-                  <Textarea
-                    value={noteText}
-                    onChange={(e) => setNoteText(e.target.value)}
-                    placeholder="Add a note…"
-                    className="min-h-[80px]"
-                    aria-label="New driver note"
-                  />
-                  <Button
-                    className="shrink-0 self-end"
-                    disabled={!noteText.trim() || savingNote}
-                    onClick={() => void handleAddNote()}
-                  >
-                    {savingNote ? (
-                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                    ) : (
-                      <Plus className="h-4 w-4 mr-2" />
-                    )}
-                    Add note
-                  </Button>
+                <div className="space-y-2">
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <Textarea
+                      value={noteText}
+                      onChange={(e) => setNoteText(e.target.value)}
+                      placeholder="Add a note…"
+                      className="min-h-[80px]"
+                      aria-label="New driver note"
+                    />
+                    <Button
+                      className="shrink-0 self-end"
+                      disabled={!noteText.trim() || savingNote}
+                      onClick={() => void handleAddNote()}
+                    >
+                      {savingNote ? (
+                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                      ) : (
+                        <Plus className="h-4 w-4 mr-2" />
+                      )}
+                      Add note
+                    </Button>
+                  </div>
+                  <div className="flex items-center gap-2 max-w-xs">
+                    <Label htmlFor="note-follow-up" className="text-xs text-slate-500 whitespace-nowrap">
+                      Follow-up (optional)
+                    </Label>
+                    <Input
+                      id="note-follow-up"
+                      type="date"
+                      value={followUpDate}
+                      onChange={(e) => setFollowUpDate(e.target.value)}
+                      className="h-8"
+                    />
+                  </div>
                 </div>
               )}
               {notesLoading ? (
@@ -426,17 +680,21 @@ export function DriverProfileTab({
                   <Loader2 className="h-6 w-6 animate-spin" />
                 </div>
               ) : notes.length === 0 ? (
-                <p className="text-sm text-slate-500 text-center py-8">No notes yet.</p>
+                <p className="text-sm text-slate-500 text-center py-8" data-testid="profile-notes-empty">
+                  No notes yet.
+                </p>
               ) : (
                 <ul className="divide-y divide-slate-100">
                   {notes.map((n) => {
                     const d = parseDisplayDate(n.createdAt);
+                    const fu = n.followUpDate ? parseDisplayDate(n.followUpDate) : null;
                     return (
                       <li key={n.id} className="py-3 space-y-1">
                         <p className="text-sm text-slate-800 whitespace-pre-wrap">{n.text}</p>
                         <p className="text-xs text-slate-400">
                           {d ? format(d, 'MMM d, yyyy HH:mm') : n.createdAt}
                           {n.createdBy ? ` · ${n.createdBy}` : ''}
+                          {fu && isValid(fu) ? ` · Follow-up ${format(fu, 'MMM d, yyyy')}` : ''}
                         </p>
                       </li>
                     );

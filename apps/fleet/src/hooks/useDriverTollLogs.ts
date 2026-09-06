@@ -1,6 +1,6 @@
 /**
  * Shared React Query cache for per-driver toll logs (ledger + legacy merge on server).
- * getTollLogs accepts a single driverId — batch via fetchTollLogsForDriverIds helper.
+ * Batches via getTollLogs({ driverIds }) — one request for all expanded aliases.
  */
 import { useQuery } from '@tanstack/react-query';
 import { useMemo } from 'react';
@@ -12,19 +12,16 @@ export function driverTollLogsQueryKey(expandedIds: string[]) {
   return ['driverTollLogs', key] as const;
 }
 
-/**
- * Batch helper: one request per id (server has no multi-driverId query yet).
- * TODO: when GET /toll-logs supports driverIds=, collapse to a single fetch.
- */
+/** One batched GET /toll-logs?driverIds=… (falls back to empty on error). */
 export async function fetchTollLogsForDriverIds(ids: string[]): Promise<any[]> {
   const unique = [...new Set(ids.filter(Boolean))];
   if (unique.length === 0) return [];
-  const responses = await Promise.all(
-    unique.map((id) =>
-      api.getTollLogs({ driverId: id }).catch(() => ({ data: [] as any[] })),
-    ),
-  );
-  return (responses || []).flatMap((r: any) => (r && Array.isArray(r.data) ? r.data : []));
+  try {
+    const res = await api.getTollLogs({ driverIds: unique });
+    return Array.isArray(res?.data) ? res.data : [];
+  } catch {
+    return [];
+  }
 }
 
 export function useDriverTollLogs(

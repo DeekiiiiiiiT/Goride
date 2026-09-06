@@ -1,13 +1,15 @@
 /**
  * Driver Service Quality tab — metric cards + cancelled trips list.
  */
-import React from 'react';
+import React, { useMemo } from 'react';
 import { format } from 'date-fns';
 import { AlertTriangle, CheckCircle2, Star, ThumbsUp } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../../ui/card';
 import { Badge } from '../../ui/badge';
 import { MetricCard } from '../OverviewMetricsGrid';
 import { ContentVisibilityList } from '../ContentVisibilityList';
+import { PeriodWeekDropdown } from '../../ui/PeriodWeekDropdown';
+import type { PeriodWeekOption } from '../../../utils/periodWeekOptions';
 import type { Trip } from '../../../types/data';
 
 function parseDisplayDate(dateStr: string | Date | undefined | null): Date | null {
@@ -17,6 +19,16 @@ function parseDisplayDate(dateStr: string | Date | undefined | null): Date | nul
   return Number.isNaN(d.getTime()) ? null : d;
 }
 
+const PLATFORM_PREFERRED_ORDER = ['Uber', 'InDrive'];
+const PLATFORM_PALETTE = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#64748b'];
+
+export type PlatformStat = {
+  ratingCount?: number;
+  ratingSum?: number;
+  trips: number;
+  completed: number;
+};
+
 export type ServiceQualityMetrics = {
   currentRating: number;
   completionRate: number;
@@ -24,26 +36,90 @@ export type ServiceQualityMetrics = {
   acceptanceRate: number | null;
   totalTrips: number;
   cancellationRate: number;
-  platformStats: {
-    Uber: { ratingCount: number; ratingSum: number; trips: number; completed: number };
-    InDrive: { ratingCount: number; ratingSum: number; trips: number; completed: number };
-    [key: string]: { ratingCount?: number; ratingSum?: number; trips: number; completed: number };
-  };
+  platformStats: Record<string, PlatformStat>;
 };
 
 export type DriverServiceQualityTabProps = {
   metrics: ServiceQualityMetrics;
   cancelledTripsInPeriod: Trip[];
   serverTripsLoaded: boolean;
+  periodFrom?: Date;
+  periodTo?: Date;
+  onPeriodSelect?: (period: PeriodWeekOption) => void;
 };
+
+/** Prefer Uber / InDrive order when present; include any other platforms dynamically. */
+export function orderedPlatformKeys(platformStats: Record<string, PlatformStat> | undefined | null): string[] {
+  const keys = Object.keys(platformStats || {});
+  const preferred = PLATFORM_PREFERRED_ORDER.filter((k) => keys.includes(k));
+  const rest = keys.filter((k) => !PLATFORM_PREFERRED_ORDER.includes(k)).sort((a, b) => a.localeCompare(b));
+  return [...preferred, ...rest];
+}
+
+function platformColor(index: number, key: string): string {
+  if (key === 'Uber') return '#3b82f6';
+  if (key === 'InDrive') return '#10b981';
+  return PLATFORM_PALETTE[index % PLATFORM_PALETTE.length];
+}
 
 export function DriverServiceQualityTab({
   metrics,
   cancelledTripsInPeriod,
   serverTripsLoaded,
+  periodFrom,
+  periodTo,
+  onPeriodSelect,
 }: DriverServiceQualityTabProps) {
+  const platforms = useMemo(() => orderedPlatformKeys(metrics.platformStats), [metrics.platformStats]);
+
+  const ratingBreakdown = platforms.map((key, i) => {
+    const s = metrics.platformStats[key] || { ratingCount: 0, ratingSum: 0, trips: 0, completed: 0 };
+    const count = s.ratingCount || 0;
+    const sum = s.ratingSum || 0;
+    return {
+      label: key,
+      value: count > 0 ? (sum / count).toFixed(1) : '—',
+      color: platformColor(i, key),
+    };
+  });
+
+  const acceptanceBreakdown = platforms.map((key, i) => {
+    const s = metrics.platformStats[key] || { trips: 0, completed: 0 };
+    return {
+      label: key,
+      value: s.trips > 0 ? `${Math.round((s.completed / s.trips) * 100)}%` : '-',
+      color: platformColor(i, key),
+    };
+  });
+
+  const cancellationBreakdown = platforms.map((key, i) => {
+    const s = metrics.platformStats[key] || { trips: 0, completed: 0 };
+    return {
+      label: key,
+      value:
+        s.trips > 0
+          ? `${(((s.trips - s.completed) / s.trips) * 100).toFixed(1)}%`
+          : '-',
+      color: platformColor(i, key),
+    };
+  });
+
   return (
     <div className="space-y-6">
+      {periodFrom && onPeriodSelect && (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs font-medium text-slate-500 whitespace-nowrap">Period</span>
+          <PeriodWeekDropdown
+            selectedStart={format(periodFrom, 'yyyy-MM-dd')}
+            selectedEnd={format(periodTo || periodFrom, 'yyyy-MM-dd')}
+            onSelect={onPeriodSelect}
+            weekCount={24}
+            allowCustomRange
+            placeholder="Select period"
+            buttonClassName="h-9"
+          />
+        </div>
+      )}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <MetricCard
           title="Customer Rating"
@@ -51,26 +127,7 @@ export function DriverServiceQualityTab({
           subtext="Last 4 weeks"
           icon={<Star className="h-4 w-4 text-slate-500" />}
           loading={!serverTripsLoaded}
-          breakdown={[
-            {
-              label: 'Uber',
-              value:
-                metrics.platformStats.Uber.ratingCount > 0
-                  ? (metrics.platformStats.Uber.ratingSum / metrics.platformStats.Uber.ratingCount).toFixed(1)
-                  : metrics.currentRating.toFixed(1),
-              color: '#3b82f6',
-            },
-            {
-              label: 'InDrive',
-              value:
-                metrics.platformStats.InDrive.ratingCount > 0
-                  ? (
-                      metrics.platformStats.InDrive.ratingSum / metrics.platformStats.InDrive.ratingCount
-                    ).toFixed(1)
-                  : metrics.currentRating.toFixed(1),
-              color: '#10b981',
-            },
-          ]}
+          breakdown={ratingBreakdown.length ? ratingBreakdown : undefined}
         />
         <MetricCard
           title="Completion Rate"
@@ -110,26 +167,7 @@ export function DriverServiceQualityTab({
             )
           }
           loading={!serverTripsLoaded}
-          breakdown={[
-            {
-              label: 'Uber',
-              value:
-                metrics.platformStats.Uber.trips > 0
-                  ? `${Math.round((metrics.platformStats.Uber.completed / metrics.platformStats.Uber.trips) * 100)}%`
-                  : '-',
-              color: '#3b82f6',
-            },
-            {
-              label: 'InDrive',
-              value:
-                metrics.platformStats.InDrive.trips > 0
-                  ? `${Math.round(
-                      (metrics.platformStats.InDrive.completed / metrics.platformStats.InDrive.trips) * 100,
-                    )}%`
-                  : '-',
-              color: '#10b981',
-            },
-          ]}
+          breakdown={acceptanceBreakdown.length ? acceptanceBreakdown : undefined}
         />
         <MetricCard
           title="Cancellation Rate"
@@ -140,32 +178,7 @@ export function DriverServiceQualityTab({
           tooltip={`Calculated from ${metrics.periodCancelledTrips} cancelled trips out of ${metrics.totalTrips} total trips in the selected period.`}
           icon={<AlertTriangle className="h-4 w-4 text-slate-500" />}
           loading={!serverTripsLoaded}
-          breakdown={[
-            {
-              label: 'Uber',
-              value:
-                metrics.platformStats.Uber.trips > 0
-                  ? `${(
-                      ((metrics.platformStats.Uber.trips - metrics.platformStats.Uber.completed) /
-                        metrics.platformStats.Uber.trips) *
-                      100
-                    ).toFixed(1)}%`
-                  : '-',
-              color: '#3b82f6',
-            },
-            {
-              label: 'InDrive',
-              value:
-                metrics.platformStats.InDrive.trips > 0
-                  ? `${(
-                      ((metrics.platformStats.InDrive.trips - metrics.platformStats.InDrive.completed) /
-                        metrics.platformStats.InDrive.trips) *
-                      100
-                    ).toFixed(1)}%`
-                  : '-',
-              color: '#10b981',
-            },
-          ]}
+          breakdown={cancellationBreakdown.length ? cancellationBreakdown : undefined}
         />
       </div>
 
@@ -175,7 +188,7 @@ export function DriverServiceQualityTab({
         </CardHeader>
         <CardContent>
           {cancelledTripsInPeriod.length === 0 ? (
-            <div className="text-center py-8 text-slate-500">
+            <div className="text-center py-8 text-slate-500" data-testid="service-quality-empty">
               <CheckCircle2 className="h-12 w-12 text-emerald-100 fill-emerald-500 mx-auto mb-3" />
               <p>No cancelled trips in this period. Great job!</p>
             </div>

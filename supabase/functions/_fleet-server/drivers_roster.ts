@@ -184,11 +184,12 @@ async function loadTripBuckets(
   c: Context,
   aliasMap: Map<string, string>,
   today: string,
-): Promise<Map<string, TripBucket>> {
+): Promise<{ buckets: Map<string, TripBucket>; truncated: boolean }> {
   const orgId = getOrgId(c);
   const PAGE = 1000;
   const MAX_ROWS = 100_000;
   const buckets = new Map<string, TripBucket>();
+  let truncated = false;
 
   let offset = 0;
   for (;;) {
@@ -198,13 +199,19 @@ async function loadTripBuckets(
     }
     const { data, error } = await query.range(offset, offset + PAGE - 1);
     if (error) throw error;
-    const page = (data || []).map((d: any) => d?.value ?? d);
+    const page = data || [];
     if (page.length === 0) break;
 
-    for (const t of page) {
-      const rawId = asStr(t?.driverId).trim();
-      if (!rawId || rawId === "unknown") continue;
-      const canonical = aliasMap.get(rawId);
+    for (const row of page) {
+      // Map immediately to {driverId, status, date} — do not retain full trip blobs.
+      const v = (row as any)?.value ?? row;
+      const slim = {
+        driverId: asStr(v?.driverId).trim(),
+        status: asStr(v?.status),
+        date: asStr(v?.date).substring(0, 10),
+      };
+      if (!slim.driverId || slim.driverId === "unknown") continue;
+      const canonical = aliasMap.get(slim.driverId);
       if (!canonical) continue; // only roster drivers
 
       let bucket = buckets.get(canonical);
@@ -213,21 +220,20 @@ async function loadTripBuckets(
         buckets.set(canonical, bucket);
       }
       bucket.total += 1;
-      const status = asStr(t?.status);
-      if (status === "Completed") bucket.completed += 1;
-      else if (status === "Cancelled") bucket.cancelled += 1;
-      const tripDate = asStr(t?.date).substring(0, 10);
-      if (tripDate === today) bucket.todaysTrips += 1;
+      if (slim.status === "Completed") bucket.completed += 1;
+      else if (slim.status === "Cancelled") bucket.cancelled += 1;
+      if (slim.date === today) bucket.todaysTrips += 1;
     }
 
     if (page.length < PAGE) break;
     offset += PAGE;
     if (offset >= MAX_ROWS) {
       console.warn(`[drivers/roster] trip scan hit MAX_ROWS=${MAX_ROWS}`);
+      truncated = true;
       break;
     }
   }
-  return buckets;
+  return { buckets, truncated };
 }
 
 function pickEarnings(
@@ -252,10 +258,12 @@ export async function handleDriversRoster(c: Context) {
     const drivers = await loadOrgDrivers(c);
     const aliasMap = buildAliasMap(drivers);
 
-    const [earningsMap, tripBuckets] = await Promise.all([
+    const [earningsMap, tripScan] = await Promise.all([
       loadEarningsByDriver(c, today),
       loadTripBuckets(c, aliasMap, today),
     ]);
+    const tripBuckets = tripScan.buckets;
+    const tripsTruncated = tripScan.truncated;
 
     const roster: DriverRosterRow[] = drivers.map((d) => {
       const id = asStr(d.id);
@@ -340,6 +348,7 @@ export async function handleDriversRoster(c: Context) {
         totalDrivers: filtered.length,
         dateUsed: today,
         durationMs,
+        truncated: tripsTruncated,
       },
     });
   } catch (e: any) {

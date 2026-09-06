@@ -20,16 +20,41 @@ async function fetchWithRetry(url: string, options: RequestInit = {}, retries = 
   }
 }
 
+const POLICIES_TTL_MS = 60_000;
+let policiesInflight: Promise<EarningsPolicy[]> | null = null;
+let policiesCache: { at: number; data: EarningsPolicy[] } | null = null;
+
+/** Drop cache after save/delete so desks see fresh policies. */
+export function clearEarningsPoliciesCache() {
+  policiesCache = null;
+  policiesInflight = null;
+}
+
 export const earningsPolicyService = {
   async getEarningsPolicies(): Promise<EarningsPolicy[]> {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/earnings-policies`, {
-      headers: await requireAuthHeaders(null)
-    });
-    if (!response.ok) throw new Error("Failed to fetch earnings policies");
-    const items = await response.json();
-    return (Array.isArray(items) ? items : []).map((p: EarningsPolicy) =>
-      normalizePolicyVersions(p),
-    );
+    if (policiesCache && Date.now() - policiesCache.at < POLICIES_TTL_MS) {
+      return policiesCache.data;
+    }
+    if (policiesInflight) return policiesInflight;
+
+    policiesInflight = (async () => {
+      try {
+        const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/earnings-policies`, {
+          headers: await requireAuthHeaders(null),
+        });
+        if (!response.ok) throw new Error('Failed to fetch earnings policies');
+        const items = await response.json();
+        const data = (Array.isArray(items) ? items : []).map((p: EarningsPolicy) =>
+          normalizePolicyVersions(p),
+        );
+        policiesCache = { at: Date.now(), data };
+        return data;
+      } finally {
+        policiesInflight = null;
+      }
+    })();
+
+    return policiesInflight;
   },
 
   async saveEarningsPolicy(policy: EarningsPolicy): Promise<EarningsPolicy> {
@@ -46,6 +71,7 @@ export const earningsPolicyService = {
     }
     const result = await response.json();
     const saved = result.data || result;
+    clearEarningsPoliciesCache();
     return normalizePolicyVersions(saved);
   },
 
@@ -58,5 +84,6 @@ export const earningsPolicyService = {
       const errBody = await response.json().catch(() => null);
       throw new Error(errBody?.error || "Failed to delete earnings policy");
     }
+    clearEarningsPoliciesCache();
   },
 };

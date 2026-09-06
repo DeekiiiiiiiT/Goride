@@ -2,8 +2,10 @@
 
 **Scope:** `apps/fleet` → Driver Operations (Drivers list, Driver Detail, Driver Analytics) and the
 server + hook + util layer that feeds them.
-**Date:** 2026-09-06
-**Status:** Audit only. No code was modified.
+**Date:** 2026-09-06 (original audit) · **Verified:** 2026-09-06 (post-remediation pass — see §0.5)
+**Status:** Audit only. No code was modified by this document.
+**Remediation state:** Phases 0–1 complete; Phases 2–4 substantially done; 6 findings confirmed
+still open, 5 partially done, plus 4 new issues introduced by the remediation. See §0.5.
 **Reviewers' lenses applied:** systems architecture, data integrity / finance correctness,
 performance & scale, security & RBAC, UI/UX, code health, testability.
 
@@ -56,6 +58,221 @@ whose results are never read, and a network request whose response is discarded.
 | 🟠 High | 14 | Scale ceilings, RBAC gaps, architectural coupling |
 | 🟡 Medium | 17 | UX incoherence, redundancy, inconsistent money formatting |
 | 🔵 Low | 11 | Dead imports, logging, polish |
+
+---
+
+## 0.5 Remediation Verification — 2026-09-06
+
+Everything below was re-checked against the working tree after the remediation commit
+(`b3b176cb`, +4,405 / −2,466 across 31 files). Sections 1–9 are preserved as the **original**
+audit; this section records what changed.
+
+### Headline movement
+
+| Metric | Before | After |
+|---|---|---|
+| `DriverDetail.tsx` | 4,453 lines | **2,763** (−38%) |
+| `{false && …}` dead JSX blocks | 7 | **0** |
+| Dead memos / state / fetches | 6 | **0** |
+| `useState` / `useMemo` in DriverDetail | 35 / 26 | **27 / 22** |
+| Permission checks in DriverDetail | 0 | **`transactions.edit` + `drivers.edit`** |
+| Driver detail URL | `/drivers` | **`/drivers/:driverId/:tab?from=&to=`** |
+| Extracted tab components | 0 | **3** (Cash Wallet, Profile, Service Quality — all `React.lazy`) |
+| New server modules | 0 | **6** (`drivers_roster`, `_compliance`, `_notes`, `_audit`, `_reconciliation`, `driver_operational_periods`) |
+| Driver-section unit tests | 2 files | **3 files, 16 tests — all passing** |
+| CI guardrail | none | `npm run check:drivers` — **passing** (37 files) |
+
+This is real, substantial work. Phase 0 and Phase 1 are done properly, and Phases 2–4 are further
+along than the roadmap expected at this point. The verification below is about what remains.
+
+---
+
+### ✅ Confirmed FIXED (11)
+
+| ID | Evidence |
+|---|---|
+| **C-1** | `GET /drivers/roster` exists (`drivers_roster.ts:352`), registered (`index.tsx:500`), and `DriversPage.tsx:260` consumes it. The 200-trip `api.getTrips` sample and the client aggregation memo are gone. The server now scans all org trips and all canonical fare rows per driver. |
+| **C-2** | Both sides of the Uber reconciliation now use the Financials window. `DriverDetail.tsx:878–899` adds a dedicated `financialUberLedger` fetch keyed on `financialDateRangeStrings`; `FinancialSubTabs.tsx:157–161` replaced `startOfWeek/endOfWeek` widening with `startOfDay/endOfDay`. Badge corrected to "Financials period" (`:486`). |
+| **C-3** | `MOCK_DOCUMENTS` deleted. `buildDriverDocuments()` (`DriverDetail.tsx:263`) builds from the real driver record, reads `complianceVerifications`, and derives `Expired` from `licenseExpiry`. `POST /drivers/:id/compliance/verify` is wired to the UI and gated on `drivers.edit`. |
+| **C-4** | All four fabricated values removed — no matches for `Toyota Sienta`, `Member Since: Oct`, `Safety Score`, `98/100`. |
+| **C-8** | `usePermissions` now in `DriverDetail.tsx:372`; `canEditTransactions` / `canEditDrivers` gate the mutation handlers and are passed into the tabs. Server-side `POST /transactions` now carries `requirePermission('transactions.edit')` (`index.tsx:3467`). Bank account number masked behind `canEditDrivers` (`DriverProfileTab.tsx:74, 372`). |
+| **A-6** | `pageRegistry.ts:81–106` parses `/drivers/:driverId/:tab`; `App.tsx:138` pushes state; `:248` handles `popstate`. Period is URL-synced via `DriverPeriodContext`. |
+| **D-1** | Every item on the dead-code inventory verified absent: `groupedTollTransactions`, `cashTollTransactions`, `dateFilteredTransactions`, `walletMetrics`, `ledgerSummary`, `showHidden`, `processingIds`, `expandedRows`, duplicate `MetricCard` / `PLATFORM_COLORS`. |
+| **P-5** | `useFleetClaims.ts:39` adds a driver-scoped `api.getClaims(driverId)` variant. |
+| **P-6** | Both discarded fetches removed — no `getLedgerSummary` in `DriverDetail`, no `tollAutomationSettings` query in `useDriverFinancialBundle`. |
+| **U-1 / U-2 / U-7** | Duplicate hardcoded `Active` badge gone; inert Export/Message CTAs replaced with a deferral comment (`DriverDetail.tsx:2374`); "Recent Trip Issues" now renders `cancelledTripsInPeriod` through `ContentVisibilityList`. |
+| **U-10** | No `dicebear` references remain in `components/drivers/`. |
+
+---
+
+### 🟠 PARTIALLY fixed (5) — these still need work
+
+#### V-1 · C-5 — the per-vehicle fuel economy lookup is a no-op
+
+The constants were correctly extracted to `config/driverOpsDefaults.ts`. The lookup that replaced
+the hardcoded `12` does not work:
+
+```ts
+// DriverDetail.tsx:1407
+const vehicleEconomy =
+  (vehicleMetrics || []).find((v: any) => v?.fuel_economy_km_per_l != null)?.fuel_economy_km_per_l
+  ?? (driver as any)?.fuelEconomyKmPerL ?? null;
+```
+
+Two defects:
+
+1. **The field does not exist on that type.** `tsc` reports
+   `DriverDetail.tsx(1408,83): TS2339: Property 'fuel_economy_km_per_l' does not exist on type
+   'VehicleMetrics'`. `fuel_economy_km_per_l` lives on `types/vehicleCatalog.ts:59`, not
+   `types/data.ts:404 VehicleMetrics`. The `.find()` never matches, so `resolveFuelEconomyKmPerL`
+   always returns `DEFAULT_FUEL_ECONOMY_KM_PER_L = 12` — **identical behaviour to before the fix.**
+2. **Even if the field existed, it is not this driver's vehicle.** `.find(v => …!= null)` takes the
+   *first vehicle in the fleet-wide array* with a value. That would be an arbitrary vehicle's
+   economy applied to every driver — harder to notice than the old documented constant.
+
+**To close:** resolve the driver's assigned vehicle (`useDriverFinancialBundle` already computes
+`driverVehicles`), read economy from the vehicle catalog record, and fix the type.
+
+#### V-2 · C-7 — Cash Wallet period is now labelled, but still not controllable from that tab
+
+Real progress: `DriverPeriodContext` (`context/DriverPeriodContext.tsx`) is wired
+(`DriverDetail.tsx:354, 375`), URL-synced as `?from=&to=`, and shared by Financials + Cash Wallet.
+The tab now states its range and the cards say "open weeks in period above"
+(`DriverCashWalletTab.tsx:155, 174`).
+
+Still open: `showOverviewDateControls` (`DriverDetail.tsx:436`) is unchanged, so there is no picker
+on the Cash Wallet tab. The code says so itself:
+
+> `// (same range as Financials). Change it on the Financials tab until the shared period control ships.`
+
+The context that makes this a one-line change already exists. Render a `PeriodWeekDropdown` bound to
+`setPeriod` on the Cash Wallet tab (and Service Quality — see V-4).
+
+#### V-3 · A-1 — decomposition is a third done
+
+4,453 → 2,763 lines is genuine, and 3 tabs are extracted and lazy-loaded. But the largest single
+construct is untouched: the `metrics` `useMemo` still spans **`DriverDetail.tsx:910–1722` — 812
+lines**, with a 9-entry dependency array including `transactions`, `activeTab` and
+`selectedPlatforms`. §P-9 (recompute on every filter toggle) is unchanged. `driverOperationalMetrics.ts`
+extracted only the 49-line rate helpers.
+
+Overview and Financials tabs are still inline. Target from §7.3 was a ~200-line shell.
+
+#### V-4 · U-3 / U-4 — down from three period concepts to two
+
+`weekBounds` no longer uses `new Date()` — it anchors to the Financials period end
+(`FinancialSubTabs.tsx:97–103`), which closes the third window. Two remain: `dateRange` (Overview,
+InDrive, **and Service Quality**) and `period` (Financials, Cash Wallet).
+
+Service Quality still reads `dateRange`-scoped `metrics` while `showOverviewDateControls` hides the
+calendar on that tab — the original U-4 defect, unchanged.
+
+#### V-5 · P-4 / P-8 — improved but not resolved
+
+- `useDriverTollLogs.ts:20` now de-duplicates ids before fanning out, but it is still
+  `Promise.all(ids.map(...))` — one HTTP request per id.
+- `ContentVisibilityList.tsx` was created and is a sound approach, but it has **exactly one call
+  site** (`DriverServiceQualityTab.tsx:183`). The tables that actually get long — Payments Log,
+  Expenses, Settlement, Payout — still render every row.
+
+---
+
+### 🔴 Confirmed STILL OPEN (6)
+
+| ID | Status |
+|---|---|
+| **C-6** | **Not fixed, and now more prominent.** `api.repairDriverLedger` (`api.ts:5512`) still POSTs to `/ledger/repair-driver`, which still returns **410** (`index.tsx:5562`). The redesigned integrity banner wires "Repair Now" to it at `DriverDetail.tsx:2502`. `POST /ledger/canonical-backfill` exists at `index.tsx:6833` — repoint the client at it (note it requires `data.backfill`) or remove the button. |
+| **A-3** | **Not fixed — and now harder to unwind.** React Query data is still copied into `useState` (`DriverDetail.tsx:702`), and there are now **8 additional `setTransactions(prev => …)` optimistic mutations** (`:728, 732, 747, 761, 779, 789, 800, 811`) writing to that local copy. Migrating to `useMutation` + `setQueryData` gets more expensive with each one added. |
+| **P-1** | **Not fixed — and now called twice.** `driver-overview` still does a lifetime `fetchAllLedgerEventValuesForDrivers` with no `from`/`to` (`index.tsx:4740`). The C-2 fix added a *second* call of it on the Financials tab, so opening Financials now triggers two full-lifetime ledger scans per driver. |
+| **P-2** | Unchanged: `fetchCanonicalFareEarningAll` still pulls up to 100k org-wide fare rows with in-JS aggregation (`index.tsx:17562`), and the new roster reuses the same pattern. |
+| **P-3** | Unchanged: `getAllTransactionsForDrivers(ids, 5000, 50000)` (`api.ts:1026`). |
+| **A-7 / A-8** | `_fleet-server/index.tsx` is **18,721 lines** (grew by 10 — the 6 new modules were correctly split out, the monolith was not). `App.tsx` still has **zero** `React.lazy`; the only code splitting in the app is the 3 driver tab chunks. |
+
+Also unchanged from §5/§6: **U-5** (14 hardcoded `platformStats.Uber` / `.InDrive` references in
+`DriverServiceQualityTab.tsx`), **U-6** (per-platform rating still falls back to
+`metrics.currentRating` labelled as that platform's), **U-11** (0 `useVocab` calls in
+`DriverDetail`), **U-14** (`AddDriverModal` untouched at 1,045 lines, still collects a password),
+**U-15** (CSV export still string-concatenated, `DriversPage.tsx:498`, no injection guard, no
+`transactions.export` check), **A-5** (still four aggregation engines — the roster replaced the
+list's, it did not consolidate the others).
+
+---
+
+### 🆕 New issues introduced by the remediation (4)
+
+#### N-1 · 41 unused imports left behind by the tab extraction — *do this first, it's free*
+
+`DriverDetail.tsx` still imports what moved out. Verified by direct reference count (1 = import
+only):
+
+```
+Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter,
+Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+Input, Separator, AvatarImage, DriverEarningsHistory, DriverExpensesHistory,
+formatJMD, calculateAverageEnroute, DriverDetailTab, DriverMetrics,
++ 20 lucide icons (Download, MessageSquare, Shield, Landmark, Eye, Upload,
+  FileText, Trash2, Pencil, Plus, ThumbsUp, ThumbsDown, Clock, DollarSign,
+  RefreshCw, ChevronRight, MoreHorizontal, MapPin, Share2, TrendingUp)
+```
+
+This matters beyond tidiness: `DriverDetail` still pulls the whole `Card` and `Table` module graph
+into the eager chunk, partially cancelling the benefit of the lazy tab split. And **`formatJMD` is
+imported and never called** — the money-formatter fix was started and abandoned in this file.
+
+#### N-2 · Four new server modules are built but never reached
+
+| Module | Server | Client method | UI call sites |
+|---|---|---|---|
+| `drivers_compliance.ts` (202 lines) | registered | `api.getDriverCompliance` | **0** — the Profile tab builds documents client-side instead |
+| `drivers_reconciliation.ts` (64 lines) | registered | `api.getDriverReconciliation` | **0** — `FinancialSubTabs` still computes SSOT client-side |
+| `drivers_audit.ts` (62 lines) | registered | `api.getDriverAudit` | **0** — and `appendDriverAuditEvent` is **never called from anywhere**, so the audit log is permanently empty |
+| `driver_operational_periods.ts` (85 lines) | **never imported or registered** | — | **0** — orphan file |
+
+The `GET /drivers/:id/reconciliation` endpoint in particular is the clean fix for C-2 that §7.2
+recommended; the client-side workaround was shipped instead and the endpoint left dark. The audit
+trail is the Phase-6 capability the roadmap called out, and its write path was never connected.
+
+**Decide per module:** wire it, or delete it. Registered-but-unreachable routes are attack surface
+and future confusion.
+
+#### N-3 · `drivers/roster` reads full trip payloads
+
+`drivers_roster.ts:196` — the comment says *"only keeps driverId/status/date in memory"*, but the
+query is `fromKvStore().select("value").like("key", "trip:%")`, paging 100 × 1,000 rows. It
+transfers the **entire trip JSON** for up to 100,000 trips on every Drivers page load, then reads
+three fields. Select only the needed keys, or better, aggregate in SQL.
+
+Correctness is now right (that was the point of C-1) — this is the cost side of it.
+
+#### N-4 · The new tests and guardrail are thinner than they look
+
+- **0 component tests** in `components/drivers/` — unchanged. The 3 extracted tabs are exactly the
+  units that are now testable, and none has a test.
+- `e2e/driver-detail-smoke.spec.ts` is named for driver detail but only asserts that the **Drivers
+  list** renders after sign-in. It never opens a driver, and it `test.skip`s entirely without
+  `E2E_FLEET_EMAIL` / `E2E_FLEET_PASSWORD`, so in most CI runs it asserts nothing.
+- `check-driver-section.mjs` only greps for `{false &&`. The §7.4 guardrails that would have caught
+  N-1 and the remaining U-8 debt (component line budget, no unused imports, no `` `$${ ``) are not
+  implemented. Money formatting in the section is still **31 hand-rolled `` `$${ `` + 43
+  `toLocaleString`** against 6 files using `formatJMD`.
+
+---
+
+### Recommended next slice (roughly one day, ordered)
+
+1. **N-1** — strip the 41 unused imports. Pure deletion, shrinks the eager chunk.
+2. **C-6** — repoint `repairDriverLedger` at `/ledger/canonical-backfill` or remove the button.
+   It is currently a guaranteed error toast on the most safety-critical banner in the section.
+3. **V-1** — fix the fuel-economy lookup (type + per-driver vehicle). It reads as fixed and is not.
+4. **V-2 / V-4** — render the period picker on Cash Wallet and Service Quality. `DriverPeriodContext`
+   already exists; this is wiring, not design.
+5. **N-2** — wire or delete the four dark server modules. Wiring
+   `GET /drivers/:id/reconciliation` also retires the duplicate `driver-overview` call from P-1.
+6. **U-6** — stop labelling the overall rating as a per-platform rating.
+
+Then the next substantial block is **V-3** (extract the 812-line `metrics` memo) and **A-3**
+(retire the `useState` mirror), in that order — the memo extraction makes the mutation migration
+tractable.
 
 ---
 
@@ -900,35 +1117,61 @@ Current state: **0 component tests** for the driver section. The util layer is w
 
 ## 9. Quick Reference — Findings Index
 
-| ID | Severity | Finding | Primary location |
+Status column verified 2026-09-06 post-remediation. ✅ fixed · 🟠 partial · 🔴 open · 🆕 new.
+Line references are the **original** audit's; see §0.5 for current ones.
+
+| ID | Sev | Finding | Status |
 |---|---|---|---|
-| C-1 | 🔴 | Drivers list built from 200-trip fleet sample | `DriversPage.tsx:213` |
-| C-2 | 🔴 | Reconciliation compares two different date windows | `FinancialSubTabs.tsx:150`, `DriverDetail.tsx:3543` |
-| C-3 | 🔴 | Documents tab is mock data with stock photos | `DriverDetail.tsx:312` |
-| C-4 | 🔴 | Hardcoded vehicle / member-since / rating / safety score | `DriverDetail.tsx:2834, 2835, 2855, 4027` |
-| C-5 | 🔴 | Fleet-wide fuel economy hardcoded to one vehicle | `DriverDetail.tsx:1784` |
-| C-6 | 🔴 | "Repair Now" calls a retired 410 endpoint | `index.tsx:5551`, `DriverDetail.tsx:2596` |
-| C-7 | 🔴 | Cash Wallet totals driven by a hidden filter on another tab | `DriverDetail.tsx:2411` |
-| C-8 | 🔴 | No RBAC gating in Driver Detail; `POST /transactions` ungated | `DriverDetail.tsx` (0 refs), `index.tsx:3457` |
-| A-1 | 🟠 | 4,453-line God component | `DriverDetail.tsx` |
-| A-2 | 🟠 | Three data-fetching paradigms | section-wide |
-| A-3 | 🟠 | React Query data copied into `useState` | `DriverDetail.tsx:803` |
-| A-4 | 🟠 | `refreshData` double-fires all requests | `DriverDetail.tsx:817` |
-| A-5 | 🟠 | Four independent driver-aggregation engines | 4 files |
-| A-6 | 🟠 | No routing for driver detail | `App.tsx:92` |
-| A-7 | 🟠 | 18,711-line edge function | `_fleet-server/index.tsx` |
-| A-8 | 🟠 | 6.1 MB single bundle, no code splitting | `vite.config.ts` |
-| P-1 | 🟠 | Lifetime ledger scan per date change | `index.tsx:4729` |
-| P-2 | 🟠 | Org-wide lifetime fare scan per list load; silent 100k truncation | `index.tsx:17553` |
-| P-3 | 🟠 | Up to 50k transactions into browser memory | `api.ts:889` |
-| P-4 | 🟠 | Client-side N+1 on toll logs | `useDriverTollLogs.ts:26` |
-| P-5 | 🟠 | Fleet-wide claims fetched for one driver | `useFleetClaims.ts:15` |
-| P-6 | 🟠 | Dead network requests (ledger summary, toll settings) | `DriverDetail.tsx:493`, `useDriverFinancialBundle.ts:110` |
-| P-7 | 🟠 | 10k-trip fetch on mount, not tab-gated | `DriverDetail.tsx:452` |
-| P-8 | 🟠 | No virtualization on any table | section-wide |
-| P-9 | 🟠 | 830-line metrics memo recomputes on filter toggle | `DriverDetail.tsx:1287` |
-| U-1…U-17 | 🟡 | UI/UX — see §5 | |
-| D-1…D-4 | 🔵 | Dead code — see §6 | |
+| C-1 | 🔴 | Drivers list built from 200-trip fleet sample | ✅ `GET /drivers/roster` |
+| C-2 | 🔴 | Reconciliation compares two different date windows | ✅ both sides on Financials period |
+| C-3 | 🔴 | Documents tab is mock data with stock photos | ✅ real docs + verify workflow |
+| C-4 | 🔴 | Hardcoded vehicle / member-since / rating / safety score | ✅ all four removed |
+| C-5 | 🔴 | Fleet-wide fuel economy hardcoded to one vehicle | 🟠 **V-1** — lookup is a no-op (TS2339, wrong array) |
+| C-6 | 🔴 | "Repair Now" calls a retired 410 endpoint | 🔴 **open** — still wired at `DriverDetail.tsx:2502` |
+| C-7 | 🔴 | Cash Wallet totals driven by a hidden filter | 🟠 **V-2** — labelled + URL-synced, no picker on tab |
+| C-8 | 🔴 | No RBAC in Driver Detail; `POST /transactions` ungated | ✅ client `can()` + server `requirePermission` + bank masking |
+| A-1 | 🟠 | 4,453-line God component | 🟠 **V-3** — 2,763 lines; 812-line `metrics` memo remains |
+| A-2 | 🟠 | Three data-fetching paradigms | 🔴 open — a new raw effect was added (`financialUberLedger`) |
+| A-3 | 🟠 | React Query data copied into `useState` | 🔴 open — plus 8 new optimistic mutations on the copy |
+| A-4 | 🟠 | `refreshData` double-fires all requests | 🔴 open |
+| A-5 | 🟠 | Four independent driver-aggregation engines | 🔴 open — roster replaced one, did not consolidate |
+| A-6 | 🟠 | No routing for driver detail | ✅ `/drivers/:id/:tab?from=&to=` |
+| A-7 | 🟠 | 18,711-line edge function | 🔴 open — now 18,721 |
+| A-8 | 🟠 | 6.1 MB single bundle, no code splitting | 🟠 3 lazy tab chunks; 0 `React.lazy` in `App.tsx` |
+| P-1 | 🟠 | Lifetime ledger scan per date change | 🔴 open — **now fires twice** on Financials |
+| P-2 | 🟠 | Org-wide lifetime fare scan; silent 100k truncation | 🔴 open — roster reuses the pattern |
+| P-3 | 🟠 | Up to 50k transactions into browser memory | 🔴 open |
+| P-4 | 🟠 | Client-side N+1 on toll logs | 🟠 **V-5** — deduped, still one request per id |
+| P-5 | 🟠 | Fleet-wide claims fetched for one driver | ✅ driver-scoped variant added |
+| P-6 | 🟠 | Dead network requests | ✅ both removed |
+| P-7 | 🟠 | 10k-trip fetch on mount, not tab-gated | 🔴 open |
+| P-8 | 🟠 | No virtualization on any table | 🟠 **V-5** — `ContentVisibilityList` built, 1 call site |
+| P-9 | 🟠 | 830-line metrics memo recomputes on filter toggle | 🔴 open — 812 lines, same deps |
+| U-1 | 🟡 | Duplicate status badges | ✅ |
+| U-2 | 🟡 | Inert Export / Message buttons | ✅ removed |
+| U-3 | 🟡 | Three date-range concepts | 🟠 **V-4** — down to two |
+| U-4 | 🟡 | Service Quality shows an invisible period | 🔴 open |
+| U-5 | 🟡 | Platform breakdowns hardcoded to Uber + InDrive | 🔴 open — 14 refs |
+| U-6 | 🟡 | Per-platform rating falls back to overall rating | 🔴 open |
+| U-7 | 🟡 | Empty "Recent Trip Issues" card | ✅ |
+| U-8 | 🟡 | Money formatted four different ways | 🔴 open — 31 `` `$${ `` + 43 `toLocaleString`; `formatJMD` imported unused |
+| U-9 | 🟡 | Partial dark mode | 🟠 improved in extracted tabs |
+| U-10 | 🟡 | dicebear third-party avatar with driver id | ✅ removed |
+| U-11 | 🟡 | No vocab / i18n in Driver Detail | 🔴 open — 0 `useVocab` |
+| U-12 | 🟡 | Accessibility | 🟠 14 `aria-label`, 2 `role=` (was 1 / 0) |
+| U-13 | 🟡 | Uncontrolled tabs, duplicated state | ✅ controlled + URL-backed |
+| U-14 | 🟡 | 1,045-line `AddDriverModal`, collects password | 🔴 open — untouched |
+| U-15 | 🟡 | Naive CSV export, no injection guard | 🔴 open |
+| U-16 | 🟡 | All-or-nothing loading | 🔴 open |
+| U-17 | 🟡 | Silent server-error degradation | 🟠 roster now toasts on error |
+| D-1 | 🔵 | ~1,300 dead lines | ✅ all verified removed + CI guardrail |
+| D-2 | 🔵 | Legacy USD tier ladder | ✅ roster owns tier |
+| D-3 | 🔵 | Orphan components (~1,900 lines) | 🔴 open — `FuelLedgerView` etc. still in `components/drivers/` |
+| D-4 | 🔵 | `console.log` in production | 🟠 reduced |
+| **N-1** | 🆕 | 41 unused imports left by the tab extraction | 🔴 open |
+| **N-2** | 🆕 | 4 server modules built but never reached; audit log never written | 🔴 open |
+| **N-3** | 🆕 | `drivers/roster` transfers full trip JSON for ≤100k rows | 🔴 open |
+| **N-4** | 🆕 | 0 component tests; e2e "driver detail" spec never opens a driver | 🔴 open |
 
 ---
 
@@ -950,3 +1193,28 @@ the four missing models and let the component collapse to a shell around them.
 
 Phases 0 and 1 alone — roughly four days, almost entirely deletion — remove every fabricated number
 on the screen and shrink the hardest file by a third. That is where to start.
+
+---
+
+## 11. Post-Remediation Assessment — 2026-09-06
+
+Phases 0 and 1 landed exactly as recommended, and Phases 2–4 went further than the roadmap
+expected. Every fabricated number is gone from the screen, the Drivers list is finally aggregated
+from real data, the reconciliation card can now actually reconcile, driver detail is deep-linkable,
+and the money controls are permission-gated on both ends. `DriverDetail.tsx` is 38% smaller with a
+CI guardrail keeping the dead JSX out. That is the hard part of this work and it is done.
+
+The remaining risk has changed shape. It is no longer "the screen shows things that aren't true" —
+it is now **"things that look done aren't wired."** Four server modules are registered and
+unreachable, an audit-log write path exists that nothing calls, a fuel-economy lookup reads as
+fixed while always returning the old constant, and 41 imports from the extracted tabs still anchor
+the module graph they were supposed to leave behind. Each of these will read as complete to the
+next person who opens the file.
+
+The single most valuable habit for the next slice is to **finish the wire, not just build the
+part** — for each of C-6, V-1 and N-2, either connect it end to end or delete it. A registered
+route with no caller and a helper that always returns its fallback are both worse than the honest
+gap they replaced, because neither shows up as a bug.
+
+After that, V-3 (the 812-line `metrics` memo) and A-3 (the `useState` mirror) are the two structural
+knots left, and they should be untied in that order.

@@ -25,6 +25,8 @@ export type DriverNote = {
   text: string;
   createdAt: string;
   createdBy: string;
+  /** Optional YYYY-MM-DD follow-up for ops reminders. */
+  followUpDate?: string | null;
   organizationId?: string | null;
 };
 
@@ -73,6 +75,9 @@ async function handlePostNote(c: Context) {
 
     const rbacUser = c.get("rbacUser") as { userId?: string; email?: string } | undefined;
     const createdBy = asStr(body?.createdBy) || asStr(rbacUser?.email) || asStr(rbacUser?.userId) || "unknown";
+    const followUpRaw = asStr(body?.followUpDate).trim();
+    const followUpDate =
+      followUpRaw && /^\d{4}-\d{2}-\d{2}$/.test(followUpRaw) ? followUpRaw : null;
     const note: DriverNote = stampOrg(
       {
         id: crypto.randomUUID(),
@@ -80,6 +85,7 @@ async function handlePostNote(c: Context) {
         text,
         createdAt: new Date().toISOString(),
         createdBy,
+        followUpDate,
       },
       c,
     ) as DriverNote;

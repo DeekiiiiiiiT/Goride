@@ -1,3 +1,4 @@
+import { formatJMD } from '../../utils/formatJMD';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { format, parseISO } from 'date-fns';
 import { ArrowDownLeft, ArrowUpRight, Filter, Loader2, Trash2, Wallet } from 'lucide-react';
@@ -21,7 +22,7 @@ import {
 import { cn } from '../ui/utils';
 
 function fmtMoney(n: number) {
-  return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return formatJMD(Number(n) || 0, 2);
 }
 
 function entrySortTs(e: LedgerEntry): number {
@@ -459,19 +460,19 @@ export function DriverIndriveWalletTab({
               <div>
                 <p className="text-[11px] uppercase tracking-wide text-slate-500">Period top ups</p>
                 <p className="text-lg font-semibold text-emerald-700 dark:text-emerald-400 tabular-nums">
-                  ${fmtMoney(walletData.periodLoads)}
+                  {fmtMoney(walletData.periodLoads)}
                 </p>
               </div>
               <div>
                 <p className="text-[11px] uppercase tracking-wide text-slate-500">Period fees</p>
                 <p className="text-lg font-semibold text-rose-700 dark:text-rose-400 tabular-nums">
-                  −${fmtMoney(walletData.periodFees)}
+                  −{fmtMoney(walletData.periodFees)}
                 </p>
               </div>
               <div>
                 <p className="text-[11px] uppercase tracking-wide text-slate-500">Est. balance</p>
                 <p className="text-lg font-semibold text-slate-900 dark:text-slate-100 tabular-nums">
-                  ${fmtMoney(walletData.estimatedBalance)}
+                  {fmtMoney(walletData.estimatedBalance)}
                 </p>
               </div>
             </div>
@@ -579,7 +580,7 @@ export function DriverIndriveWalletTab({
                                       : 'text-rose-600 dark:text-rose-400'
                                   )}
                                 >
-                                  {row.signedAmount >= 0 ? '+' : '-'}${fmtMoney(row.amount)}{' '}
+                                  {row.signedAmount >= 0 ? '+' : '-'}{fmtMoney(row.amount)}{' '}
                                   <span className="text-[11px] font-normal text-slate-400">{row.currency}</span>
                                 </p>
                                 <p className="text-[11px] text-slate-400 mt-0.5 tabular-nums">{row.timeLabel}</p>
@@ -595,7 +596,7 @@ export function DriverIndriveWalletTab({
                                   onClick={() => {
                                     setTopUpPending({
                                       transactionId: row.transactionId!,
-                                      amountLabel: `$${fmtMoney(row.amount)} ${row.currency}`,
+                                      amountLabel: `${fmtMoney(row.amount)} ${row.currency}`,
                                     });
                                     setTopUpDeleteOpen(true);
                                   }}

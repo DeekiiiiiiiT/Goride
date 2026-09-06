@@ -1,3 +1,4 @@
+import { formatJMD } from '../../utils/formatJMD';
 import React, { useEffect, useMemo, useState, startTransition } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
@@ -48,8 +49,7 @@ interface DriverPayoutHistoryProps {
   weeklyPeriodData?: PayoutPeriodRow[];
 }
 
-const money = (n: number) =>
-  n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const money = (n: number) => formatJMD(Number(n) || 0, 2);
 
 function HeaderTip({ label, tip, align = 'left' }: { label: string; tip: string; align?: 'left' | 'right' | 'center' }) {
   return (
@@ -329,7 +329,7 @@ export function DriverPayoutHistory({
               <div className="space-y-1">
                 <p className="text-sm font-medium text-slate-500">Net Take-Home</p>
                 <p className="text-2xl font-bold text-emerald-700">
-                  ${money(summaryTotals.netTakeHome)}
+                  {money(summaryTotals.netTakeHome)}
                 </p>
                 <p className="text-xs text-slate-400">
                   {summaryTotals.fuelLockedCount > 0
@@ -354,7 +354,7 @@ export function DriverPayoutHistory({
               <div className="space-y-1">
                 <p className="text-sm font-medium text-slate-500">Fuel Deducted</p>
                 <p className="text-2xl font-bold text-rose-700">
-                  ${money(summaryTotals.fuelDeducted)}
+                  {money(summaryTotals.fuelDeducted)}
                 </p>
                 <p className="text-xs text-slate-400">
                   Driver fuel share across fuel-confirmed periods
@@ -382,7 +382,7 @@ export function DriverPayoutHistory({
                   }`}
                 >
                   {summaryTotals.openBalance < -0.005 ? '−' : summaryTotals.openBalance > 0.005 ? '+' : ''}
-                  ${money(Math.abs(summaryTotals.openBalance))}
+                  {money(Math.abs(summaryTotals.openBalance))}
                 </p>
                 <p className="text-xs text-slate-400">{openBalanceSub}</p>
               </div>
@@ -533,12 +533,12 @@ export function DriverPayoutHistory({
                           {formatPeriodLabel(row)}
                         </TableCell>
                         <TableCell className="text-xs text-right tabular-nums font-medium">
-                          ${money(row.driverShare)}
+                          {money(row.driverShare)}
                         </TableCell>
                         <TableCell className="text-xs text-right tabular-nums">
                           {showMoney ? (
                             <span className={fuelDed > 0.005 ? 'text-rose-600' : 'text-slate-400'}>
-                              {fuelDed > 0.005 ? `−$${money(fuelDed)}` : '$0.00'}
+                              {fuelDed > 0.005 ? `−${money(fuelDed)}` : formatJMD(0, 2)}
                               {est && (
                                 <span className="ml-1 text-[10px] text-amber-600 font-normal">
                                   est.
@@ -552,7 +552,7 @@ export function DriverPayoutHistory({
                         <TableCell className="text-xs text-right tabular-nums">
                           {chargedToDriver > 0.005 ? (
                             <span className="text-rose-700 font-medium">
-                              ${money(chargedToDriver)}
+                              {money(chargedToDriver)}
                             </span>
                           ) : (
                             <span className="text-slate-300">—</span>
@@ -565,7 +565,7 @@ export function DriverPayoutHistory({
                                 row.netPayout >= 0 ? 'text-emerald-700' : 'text-rose-700'
                               }
                             >
-                              ${money(row.netPayout)}
+                              {money(row.netPayout)}
                               {est && (
                                 <span className="ml-1 text-[10px] text-amber-600 font-normal">
                                   est.
@@ -584,7 +584,7 @@ export function DriverPayoutHistory({
                                   stillHeld > 0.005 ? 'text-rose-700' : 'text-slate-400'
                                 }
                               >
-                                ${money(stillHeld)}
+                                {money(stillHeld)}
                                 {est && (
                                   <span className="ml-1 text-[10px] text-amber-600 font-normal">
                                     est.
@@ -609,7 +609,7 @@ export function DriverPayoutHistory({
                                 }
                               >
                                 {amountDue < -0.005 ? '−' : amountDue > 0.005 ? '+' : ''}
-                                ${money(Math.abs(amountDue))}
+                                {money(Math.abs(amountDue))}
                                 {est && (
                                   <span className="ml-1 text-[10px] text-amber-600 font-normal">
                                     est.

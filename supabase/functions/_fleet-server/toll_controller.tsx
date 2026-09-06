@@ -2654,6 +2654,14 @@ app.get(`${BASE}/toll-logs`, async (c) => {
     const tagId = c.req.query("tagId") || undefined;
     const scope = c.req.query("scope") || undefined;
     const driverId = c.req.query("driverId") || undefined;
+    const driverIdsRaw = c.req.query("driverIds") || c.req.query("ids") || "";
+    const driverIdSet = new Set(
+      String(driverIdsRaw)
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean),
+    );
+    if (driverId) driverIdSet.add(driverId);
     const category = c.req.query("category") || undefined;
     const limit = c.req.query("limit") ? parseInt(c.req.query("limit"), 10) : undefined;
     const offset = parseInt(c.req.query("offset") || "0", 10);
@@ -2697,8 +2705,8 @@ app.get(`${BASE}/toll-logs`, async (c) => {
       }
     }
 
-    if (driverId) {
-      tollTx = tollTx.filter((tx: any) => tx.driverId === driverId);
+    if (driverIdSet.size > 0) {
+      tollTx = tollTx.filter((tx: any) => tx.driverId && driverIdSet.has(String(tx.driverId)));
     }
 
     if (category) {
@@ -2763,11 +2771,12 @@ app.get(`${BASE}/toll-logs`, async (c) => {
     });
 
     const withTrips = enriched.filter((tx: any) => tx.linkedTrip !== null).length;
+    const driverIdsFilter = [...driverIdSet];
     console.log(
       `[TollLogs] GET /toll-logs: Loaded ${total} toll transactions (${withTrips} with linked trips)` +
         (vehicleId ? `, vehicleId=${vehicleId}` : "") +
         (tagNumber ? `, tagNumber=${tagNumber}` : "") +
-        (driverId ? `, driverId=${driverId}` : "") +
+        (driverIdsFilter.length ? `, driverIds=${driverIdsFilter.join(",")}` : "") +
         (category ? `, category=${category}` : ""),
     );
 
@@ -2777,7 +2786,15 @@ app.get(`${BASE}/toll-logs`, async (c) => {
       total,
       // scope=tag: how many of the vehicle's tolls were paid off-tag (excluded above).
       offTagCount,
-      filters: { vehicleId: vehicleId || null, tagNumber: tagNumber || null, tagId: tagId || null, scope: scope || null, driverId: driverId || null, category: category || null },
+      filters: {
+        vehicleId: vehicleId || null,
+        tagNumber: tagNumber || null,
+        tagId: tagId || null,
+        scope: scope || null,
+        driverId: driverId || null,
+        driverIds: driverIdsFilter.length ? driverIdsFilter : null,
+        category: category || null,
+      },
     });
   } catch (e: any) {
     console.log(`[TollLogs] GET /toll-logs error: ${e.message}`);
