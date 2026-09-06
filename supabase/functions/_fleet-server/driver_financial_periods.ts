@@ -2381,8 +2381,13 @@ export type DriverFinancialLifetimeTotals = {
   tolls: number;
 };
 
+/**
+ * Org-scoped lifetime SUM over driver_financial_periods.
+ * L-1: never sum without organization_id — missing org returns empty (no cross-tenant leak).
+ */
 export async function sumDriverFinancialPeriodLifetime(
   driverId: string,
+  organizationId: string | null,
 ): Promise<DriverFinancialLifetimeTotals> {
   const empty: DriverFinancialLifetimeTotals = {
     earnings: 0,
@@ -2390,16 +2395,39 @@ export async function sumDriverFinancialPeriodLifetime(
     cashCollected: 0,
     tolls: 0,
   };
-  if (!driverId) return empty;
+  if (!driverId || !organizationId) return empty;
 
+  // Prefer SQL RPC aggregate (one round-trip, org-scoped).
+  const { data: rpcRows, error: rpcErr } = await sb().rpc("fleet_driver_lifetime_totals", {
+    p_driver_id: driverId,
+    p_org_id: organizationId,
+  });
+  if (!rpcErr && Array.isArray(rpcRows) && rpcRows[0]) {
+    const r = rpcRows[0] as Record<string, unknown>;
+    return {
+      earnings: round2(Number(r.lifetime_earnings) || 0),
+      tripCount: Math.round(Number(r.lifetime_trip_count) || 0),
+      cashCollected: round2(Number(r.lifetime_cash_collected) || 0),
+      tolls: round2(Number(r.lifetime_tolls) || 0),
+    };
+  }
+  if (rpcErr) {
+    console.warn(
+      `[DriverFinancialPeriods] lifetime RPC failed driver=${driverId}:`,
+      rpcErr.message,
+    );
+  }
+
+  // Fallback: filtered row sum (still org-scoped — never unscoped).
   const { data, error } = await sb()
     .from("driver_financial_periods")
     .select("earnings_gross, trip_count, cash_collected, toll_spend")
-    .eq("driver_id", driverId);
+    .eq("driver_id", driverId)
+    .eq("organization_id", organizationId);
 
   if (error) {
     console.warn(
-      `[DriverFinancialPeriods] lifetime sum failed driver=${driverId}:`,
+      `[DriverFinancialPeriods] lifetime sum failed driver=${driverId} org=${organizationId}:`,
       error.message,
     );
     return empty;

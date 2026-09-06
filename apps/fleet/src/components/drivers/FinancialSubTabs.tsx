@@ -240,7 +240,32 @@ export function FinancialSubTabs({
             <CardContent>
               {platformBreakdownData.length > 0 ? (
                 <div className="flex flex-col md:flex-row items-center gap-6">
-                  <div className="relative w-full md:w-1/2 h-[260px]">
+                  <div
+                    className="relative w-full md:w-1/2 h-[260px]"
+                    role="img"
+                    aria-label={`Earnings by platform totaling ${formatJMD(platformTotalEarnings, 0)}. ${platformBreakdownData.map((d) => `${d.name} ${formatJMD(d.value, 0)}`).join('; ')}.`}
+                  >
+                    <table className="sr-only">
+                      <caption>Earnings by platform</caption>
+                      <thead>
+                        <tr>
+                          <th>Platform</th>
+                          <th>Earnings</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {platformBreakdownData.map((d) => (
+                          <tr key={`a11y-${d.name}`}>
+                            <td>{d.name}</td>
+                            <td>{formatJMD(d.value, 2)}</td>
+                          </tr>
+                        ))}
+                        <tr>
+                          <td>Total</td>
+                          <td>{formatJMD(platformTotalEarnings, 2)}</td>
+                        </tr>
+                      </tbody>
+                    </table>
                     <ResponsiveContainer width="100%" height="100%">
                       <PieChart>
                         <Pie
@@ -257,10 +282,10 @@ export function FinancialSubTabs({
                           ))}
                         </Pie>
                         <Tooltip
-                          formatter={(value: number) => [
-                            formatJMD(value, 2),
-                            'Earnings',
-                          ]}
+                          formatter={(value) => {
+                            const n = typeof value === 'number' ? value : Number(value) || 0;
+                            return [formatJMD(n, 2), 'Earnings'];
+                          }}
                         />
                       </PieChart>
                     </ResponsiveContainer>

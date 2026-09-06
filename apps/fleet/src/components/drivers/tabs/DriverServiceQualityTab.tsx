@@ -1,8 +1,9 @@
 /**
  * Driver Service Quality tab — metric cards + cancelled trips list.
+ * Cancelled-in-period list derived here (Round 4 Phase 3).
  */
 import React, { useMemo } from 'react';
-import { format } from 'date-fns';
+import { format, isWithinInterval, startOfDay, endOfDay } from 'date-fns';
 import { AlertTriangle, CheckCircle2, Star, ThumbsUp } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../../ui/card';
 import { Badge } from '../../ui/badge';
@@ -11,6 +12,7 @@ import { ContentVisibilityList } from '../ContentVisibilityList';
 import { PeriodWeekDropdown } from '../../ui/PeriodWeekDropdown';
 import type { PeriodWeekOption } from '../../../utils/periodWeekOptions';
 import type { Trip } from '../../../types/data';
+import { parseTripDate } from '../../../utils/driverOperationalMetrics';
 
 function parseDisplayDate(dateStr: string | Date | undefined | null): Date | null {
   if (!dateStr) return null;
@@ -41,7 +43,7 @@ export type ServiceQualityMetrics = {
 
 export type DriverServiceQualityTabProps = {
   metrics: ServiceQualityMetrics;
-  cancelledTripsInPeriod: Trip[];
+  allTrips: Trip[];
   serverTripsLoaded: boolean;
   periodFrom?: Date;
   periodTo?: Date;
@@ -64,12 +66,25 @@ function platformColor(index: number, key: string): string {
 
 export function DriverServiceQualityTab({
   metrics,
-  cancelledTripsInPeriod,
+  allTrips,
   serverTripsLoaded,
   periodFrom,
   periodTo,
   onPeriodSelect,
 }: DriverServiceQualityTabProps) {
+  const cancelledTripsInPeriod = useMemo(() => {
+    if (!periodFrom) return [] as Trip[];
+    const start = startOfDay(periodFrom);
+    const end = endOfDay(periodTo || periodFrom);
+    return allTrips
+      .filter((t) => {
+        if (t.status !== 'Cancelled') return false;
+        const d = parseTripDate((t as any).requestTime || t.date);
+        return d ? isWithinInterval(d, { start, end }) : false;
+      })
+      .slice(0, 25);
+  }, [allTrips, periodFrom, periodTo]);
+
   const platforms = useMemo(() => orderedPlatformKeys(metrics.platformStats), [metrics.platformStats]);
 
   const ratingBreakdown = platforms.map((key, i) => {

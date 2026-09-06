@@ -11,6 +11,7 @@ import {
 } from "./rbac_middleware.ts";
 import { appendCanonicalLedgerEvents } from "./ledger_canonical.ts";
 import { buildCanonicalTripFareEventsFromTrip } from "./canonical_from_ops.ts";
+import { jwtRoleClaim } from "./jwt_role_claim.ts";
 
 const PREFIX = "/make-server-37f42386";
 
@@ -88,19 +89,7 @@ export function requireImportAnonOrServiceKey() {
   };
 }
 
-function jwtRoleClaim(token: string): string | null {
-  try {
-    const parts = token.split(".");
-    if (parts.length < 2) return null;
-    const b64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
-    const pad = b64.length % 4 === 0 ? "" : "=".repeat(4 - (b64.length % 4));
-    const json = atob(b64 + pad);
-    const payload = JSON.parse(json) as { role?: string };
-    return typeof payload.role === "string" ? payload.role : null;
-  } catch {
-    return null;
-  }
-}
+export { jwtRoleClaim } from "./jwt_role_claim.ts";
 
 async function handleEnsureFromTripIds(c: Context) {
   const startMs = Date.now();

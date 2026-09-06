@@ -125,7 +125,10 @@ function PlatformBars({
               />
               <Tooltip
                 cursor={{ fill: '#f1f5f9' }}
-                formatter={(value: number) => [`${Number(value).toFixed(2)} km`, 'Distance']}
+                formatter={(value) => {
+                  const n = typeof value === 'number' ? value : Number(value) || 0;
+                  return [`${n.toFixed(2)} km`, 'Distance'];
+                }}
                 labelFormatter={(label) => String(label)}
                 contentStyle={{
                   borderRadius: '8px',

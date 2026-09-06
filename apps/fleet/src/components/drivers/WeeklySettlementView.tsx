@@ -124,11 +124,24 @@ export function WeeklySettlementView({
                         !!onPayDriver;
 
                     return (
-                    <Card key={idx} className={cn(
+                    <Card
+                      key={idx}
+                      className={cn(
                         "transition-all hover:shadow-md",
                         cashOwed > 0.005 ? "border-amber-200 bg-amber-50/20" : "",
                         fleetOwes > 0.005 ? "border-emerald-200 bg-emerald-50/10" : "",
-                    )}>
+                    )}
+                      role="region"
+                      aria-label={`Cash wallet week ${format(week.start, "MMM d")} to ${format(week.end, "MMM d, yyyy")}: ${
+                        isSettled
+                          ? 'settled'
+                          : cashOwed > 0.005
+                            ? `driver owes ${plainAmount(cashOwed)}`
+                            : fleetOwes > 0.005
+                              ? `fleet owes ${plainAmount(fleetOwes)}`
+                              : 'no outstanding cash'
+                      }`}
+                    >
                         <CardContent className="p-4 sm:p-6 space-y-4">
                             {/* Header: week + actions stay on one band so Log Cash never drops into the metrics column */}
                             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -175,6 +188,7 @@ export function WeeklySettlementView({
                                         size="sm"
                                         className="h-8 gap-1.5 text-xs border-slate-300 hover:bg-slate-100 hover:border-emerald-300 hover:text-emerald-700 transition-colors"
                                         onClick={(e) => { e.stopPropagation(); setSelectedWalletWeek(week); }}
+                                        aria-label={`Open cash detail for week ${format(week.start, "MMM d")} to ${format(week.end, "MMM d, yyyy")}`}
                                     >
                                         <Eye className="h-3.5 w-3.5" />
                                         Details

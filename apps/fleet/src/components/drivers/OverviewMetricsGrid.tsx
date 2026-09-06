@@ -389,8 +389,9 @@ export function OverviewMetricsGrid({
 
   /** Period earnings modal — Cash allocation section (same as before dedicated Cash card). */
   const cashByPlatformRows = useMemo(() => {
-    return Object.entries(resolvedFinancials.platformStats || {})
-      .filter(([, stats]: [string, any]) => (stats?.cashCollected || 0) > 0)
+    const statsMap = (resolvedFinancials.platformStats || {}) as Record<string, { cashCollected?: number }>;
+    return Object.entries(statsMap)
+      .filter(([, stats]) => (stats?.cashCollected || 0) > 0)
       .sort((a, b) => (b[1].cashCollected || 0) - (a[1].cashCollected || 0));
   }, [resolvedFinancials.platformStats]);
 
@@ -418,15 +419,17 @@ export function OverviewMetricsGrid({
   }, [resolvedFinancials]);
 
   const platformFeesLedgerRows = useMemo(() => {
-    return Object.entries(resolvedFinancials.platformFeesByPlatform || {})
+    const fees = (resolvedFinancials.platformFeesByPlatform || {}) as Record<string, number>;
+    return Object.entries(fees)
       .filter(([, v]) => (v || 0) > 0)
-      .sort((a, b) => (b[1] as number) - (a[1] as number));
+      .sort((a, b) => b[1] - a[1]);
   }, [resolvedFinancials.platformFeesByPlatform]);
 
   const fareGapByPlatformRows = useMemo(() => {
-    return Object.entries(resolvedFinancials.fareGrossMinusNetByPlatform || {})
+    const gaps = (resolvedFinancials.fareGrossMinusNetByPlatform || {}) as Record<string, number>;
+    return Object.entries(gaps)
       .filter(([, v]) => (v || 0) > 0.005)
-      .sort((a, b) => (b[1] as number) - (a[1] as number));
+      .sort((a, b) => b[1] - a[1]);
   }, [resolvedFinancials.fareGrossMinusNetByPlatform]);
 
   /** Same rule as GET /ledger/driver-indrive-wallet `periodFees` (ledger platform_fee or fare gross−net for InDrive). */
@@ -1191,12 +1194,32 @@ export function OverviewMetricsGrid({
           <CardTitle className="text-sm font-medium text-slate-500">Time Metrics</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="h-[180px] w-full relative">
+          <div
+            className="h-[180px] w-full relative"
+            role="img"
+            aria-label={`Time metrics: ${metrics.tripRatio.totalOnline.toFixed(2)} hours online. Open ${metrics.tripRatio.available.toFixed(2)}h, enroute ${metrics.tripRatio.toTrip.toFixed(2)}h, on trip ${metrics.tripRatio.onTrip.toFixed(2)}h, unavailable ${metrics.tripRatio.unavailable.toFixed(2)}h.`}
+          >
             {tripsBusy && (
               <div className="absolute inset-0 bg-white/50 dark:bg-slate-900/50 flex items-center justify-center z-10 backdrop-blur-[1px]">
                 <Loader2 className="h-6 w-6 animate-spin text-indigo-600" />
               </div>
             )}
+            <table className="sr-only">
+              <caption>Time metrics breakdown</caption>
+              <thead>
+                <tr>
+                  <th>Segment</th>
+                  <th>Hours</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr><td>Open</td><td>{metrics.tripRatio.available.toFixed(2)}</td></tr>
+                <tr><td>Enroute</td><td>{metrics.tripRatio.toTrip.toFixed(2)}</td></tr>
+                <tr><td>On trip</td><td>{metrics.tripRatio.onTrip.toFixed(2)}</td></tr>
+                <tr><td>Unavailable</td><td>{metrics.tripRatio.unavailable.toFixed(2)}</td></tr>
+                <tr><td>Total online</td><td>{metrics.tripRatio.totalOnline.toFixed(2)}</td></tr>
+              </tbody>
+            </table>
             <ResponsiveContainer width="100%" height="100%">
               <RawPieChart>
                 <Pie
@@ -1218,7 +1241,15 @@ export function OverviewMetricsGrid({
                   stroke="none"
                 >
                 </Pie>
-                <Tooltip key="tt-time" formatter={(value: number) => [value.toFixed(2) + ' hrs', 'Duration']} contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} itemStyle={{ color: '#64748b' }} />
+                <Tooltip
+                  key="tt-time"
+                  formatter={(value) => {
+                    const n = typeof value === 'number' ? value : Number(value) || 0;
+                    return [n.toFixed(2) + ' hrs', 'Duration'];
+                  }}
+                  contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                  itemStyle={{ color: '#64748b' }}
+                />
               </RawPieChart>
             </ResponsiveContainer>
             <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-center pointer-events-none">

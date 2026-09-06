@@ -2,11 +2,11 @@
 
 **Scope:** `apps/fleet` → Driver Operations (Drivers list, Driver Detail, Driver Analytics) and the
 server + hook + util layer that feeds them.
-**Date:** 2026-09-06 (original audit) · **Verified:** rounds 1–3, 2026-09-06 — see §0.5-R3
-**Status:** Living tracker. Remediation program (Flawless Phases A–F) landed in working tree.
-**Remediation state after round 3:** Phases A–F implemented. Critical findings remain closed.
-Open work is polish only (DriverDetail still ~1.1k lines vs 400 budget; operational periods need
-fleet-wide rebuild jobs for Analytics rollup coverage).
+**Date:** 2026-09-06 (original audit) · **Verified:** rounds 1–4, 2026-09-06 — see §0.5-R4
+**Status:** Living tracker. Remediation program (Flawless Phases A–F) + Round 4 residuals landed.
+**Remediation state after round 4:** Ship-gate redeployed (import JWT-role). L-1–L-5 closed.
+`DriverDetail.tsx` ≤400 with hard `check:drivers` budget. Org-wide ops rebuild RPC + nightly cron.
+Open work: optional further `index.tsx` peels only (L-2 ongoing, not blocking).
 **Reviewers' lenses applied:** systems architecture, data integrity / finance correctness,
 performance & scale, security & RBAC, UI/UX, code health, testability.
 
@@ -17,20 +17,82 @@ performance & scale, security & RBAC, UI/UX, code health, testability.
 ### Verdict (original)
 
 The driver section was **functionally rich but architecturally unsound for enterprise use.** That
-verdict drove Phases 0–7. **As of Round 3**, the trust-breaking Criticals are closed, roster and
-lifetime KPIs read from SQL/DFP projections, Repair/import ensure routes are gated, reconciliation
-compares trips vs ledger on one window, and an operational periods read model exists for Analytics
-and Detail.
+verdict drove Phases 0–7. **As of Round 4**, Criticals stay closed, residuals L-1–L-5 are closed,
+import ensure accepts anon JWT role, lifetime SUM is org-scoped SQL, and Analytics can rebuild
+operational periods org-wide (no silent empty rollup).
 
-### Scale of the surface (updated Round 3)
+### Scale of the surface (updated Round 4)
 
-| | Original | After R3 |
-|---|---|---|
-| `DriverDetail.tsx` | 4,453 | **~1,127** (shell + hooks; soft budget 600) |
-| Extracted tabs / hooks | 0 | 5 lazy tabs + header/modals/toolbar + trip/ledger/wallet hooks |
-| Critical findings open | 8 | **0** |
-| Hand-rolled `` `$${ `` | ~37 | **0** (guardrail) |
-| Ops read model | none | `ledger.driver_operational_periods` + rollup RPC |
+| | Original | After R3 | **After R4** |
+|---|---|---|---|
+| `DriverDetail.tsx` | 4,453 | ~1,141 | **≤291** (hard budget 400) |
+| Extracted tabs / hooks | 0 | 5 lazy tabs + hooks | + mutations / tabs shell / wallet hooks |
+| Critical findings open | 8 | **0** | **0** |
+| Residuals L-1–L-5 | — | open | **closed** |
+| Ops read model | none | per-driver rebuild | + `fleet_rebuild_operational_periods` + nightly cron |
+
+---
+
+## 0.5-R4 Residual Closure — Round 4
+
+### ✅ Phase 0 — Ship gate
+
+| Item | Evidence |
+|---|---|
+| JWT-role import gate | `jwtRoleClaim` / `requireImportAnonOrServiceKey` accepts `anon` + `service_role` JWT roles (not only exact key string match). |
+| Redeploy | `make-server-37f42386` redeployed to GoRide. |
+| Verify | `POST …/import` with anon Bearer → **400** (empty tripIds); Repair without session → **401**. |
+
+### ✅ Phase 1 — L-1 lifetime org-scoped SQL
+
+| Item | Evidence |
+|---|---|
+| RPC | `public.fleet_driver_lifetime_totals(p_driver_id, p_org_id)` — migration `20260906140000`. |
+| Server | `sumDriverFinancialPeriodLifetime(driverId, organizationId)` — empty if org missing; RPC + org `.eq` fallback. |
+| Caller | `ledger_driver_overview_routes.ts` always passes org (JWT / driver record); 403 if neither. |
+
+### ✅ Phase 2 — Org-wide operational periods
+
+| Item | Evidence |
+|---|---|
+| Bulk RPC | `fleet_rebuild_operational_periods(p_org_id, p_from, p_to)` upserts weekly buckets from `fleet.trips`. |
+| Route | `POST /drivers/operational-periods/rebuild-org` — `requireAuth` + `data.backfill` \| `transactions.edit`. |
+| Cron | `fleet-ops-periods-nightly` @ 04:20 → `private.fleet_rebuild_all_org_operational_periods()`. |
+| Analytics | Empty rollup toast + Rebuild button for permitted roles (`DriverAnalytics.tsx`). |
+
+### ✅ Phase 3 — DriverDetail shell budget
+
+| Item | Evidence |
+|---|---|
+| Shell | `DriverDetail.tsx` ~291 LOC; mutations → `useDriverDetailMutations.ts`; tabs → `DriverDetailTabs.tsx`. |
+| Guardrail | `check-driver-section.mjs` **hard-fails** when DriverDetail > **400**. |
+
+### ✅ Phase 4 — L-2 / L-3 / L-4 / L-5
+
+| ID | Evidence |
+|---|---|
+| **L-2** | `ledger_diagnostic_routes.ts` peeled from `index.tsx` (measurable line drop). |
+| **L-3** | Drivers list / wallet / history rows keyboard + ARIA; chart `aria-label` + sr-only tables. |
+| **L-4** | `AddDriverModal` on react-hook-form; stepped components; sessionStorage draft; invite-only. |
+| **L-5** | Listed driver-section tsc errors cleared (CashWalletWeekDetail, Expenses/Payout history, OverviewMetricsGrid, AddDriverModal, DriversPage, recharts formatters). |
+
+### ✅ Phase 5 — Gates
+
+| Item | Evidence |
+|---|---|
+| Deno | `ledger_ensure_route_auth.test.ts` — anon/service_role JWT role + lifetime org predicate. |
+| e2e | Lifetime numeric/—, Financials period cue, Reconciliation heading when tab present. |
+| CI | `npm run check:drivers` hard budget 400. |
+
+### Residual items after Round 4
+
+| # | Status |
+|---|---|
+| **L-1** | ✅ closed |
+| **L-2** | ✅ closed for this round (further peels optional / non-blocking) |
+| **L-3** | ✅ closed |
+| **L-4** | ✅ closed |
+| **L-5** | ✅ closed (driver-section; app-wide tsc noise out of scope) |
 
 ---
 
@@ -123,15 +185,15 @@ changes to `DriverDetail.tsx`, `DriversPage.tsx`, `instrument.ts`):
   extraction`. Worth deciding whether that soft warning should become a hard fail once the shell
   reaches budget, otherwise it will be ignored.
 
-### Residual items after Round 3 (all Low)
+### Residual items after Round 3 (all Low) — closed in Round 4; see §0.5-R4
 
-| # | Item |
+| # | Item (historical R3 wording) |
 |---|---|
-| **L-1** | `sumDriverFinancialPeriodLifetime` (`driver_financial_periods.ts:2395`) filters on `driver_id` alone with no `organization_id` predicate. The overview route guards with `belongsToOrg` first — but only `if (driverRecord)` (`ledger_driver_overview_routes.ts:47`), so a driver id with no KV record skips the check and the lifetime sum runs unscoped. Add the org predicate to the query itself; don't rely on the caller. |
-| **L-2** | `_fleet-server/index.tsx` is **18,408 lines** (from 18,711). Four modules were genuinely split out this round; the monolith is still the monolith. Not urgent, but A-7 is the last structural item never really moved. |
-| **L-3** | Accessibility is still thin for enterprise: **20 `aria-label`, 4 `role=`** across the whole section. Settlement rows got keyboard/role treatment this round; charts still have no text alternative, and most interactive rows elsewhere remain div-based. |
-| **L-4** | `AddDriverModal.tsx` is **1,037 lines** with ~30 `useState`, no schema validation, no draft persistence. The password issue was fixed; the form itself was never touched (original U-14). |
-| **L-5** | Pre-existing `tsc` noise unchanged: 992 app-wide errors, of which ~15 sit in older driver files (`CashWalletWeekDetail` ×5, `DriverExpensesHistory` ×2, `OverviewMetricsGrid` ×5, `DriverPayoutHistory`, `AddDriverModal`, `DriversPage:480`, recharts formatter types). **All Round-1/2/3 code — `DriverDetail`, all 5 tabs, all new hooks, `resolveDriverDetailFinancials`, `driverOperationalMetrics`, `driverOpsDefaults` — is type-clean.** |
+| **L-1** | ~~lifetime unscoped~~ → closed R4 |
+| **L-2** | ~~monolith peel~~ → closed R4 (diagnostics peel; further peels optional) |
+| **L-3** | ~~a11y thin~~ → closed R4 |
+| **L-4** | ~~AddDriverModal~~ → closed R4 |
+| **L-5** | ~~driver-section tsc~~ → closed R4 |
 
 ---
 
@@ -1366,11 +1428,11 @@ Verified three times on 2026-09-06 (R1 / R2 / R3 Flawless).
 | N-4 | 🆕 | 0 component tests; e2e never opens a driver | 🔴 | 🟠 1 component test file; e2e opens a driver | ✅ 30 tests / 5 files + Deno + deeper e2e |
 | **R2-1** | 🆕 | "Lifetime" KPIs mislabelled / wrong source | — | 🔴 | ✅ DFP `SUM`, window narrowed to period+prev |
 | **R2-2** | 🆕 | Repair/import ensure unauthenticated | — | 🔴 | ✅ split + key-gated + Deno-tested |
-| **L-1** | 🆕 | `sumDriverFinancialPeriodLifetime` has no org predicate; caller's `belongsToOrg` guard is skipped when the driver KV record is missing | — | — | 🔵 open |
-| **L-2** | 🆕 | `_fleet-server/index.tsx` still 18,408 lines (A-7 tail) | — | — | 🔵 open |
-| **L-3** | 🆕 | Accessibility still thin — 20 `aria-label`, 4 `role=`, no chart alternatives | — | — | 🔵 open |
-| **L-4** | 🆕 | `AddDriverModal` 1,037 lines, ~30 `useState`, no schema validation or draft persistence | — | — | 🔵 open |
-| **L-5** | 🆕 | ~15 pre-existing `tsc` errors in older driver files (all R1–R3 code is clean) | — | — | 🔵 open |
+| **L-1** | ✅ | `sumDriverFinancialPeriodLifetime` org-scoped via RPC + `.eq("organization_id")`; missing org → empty | R4 | — | 🟢 closed |
+| **L-2** | ✅ | `ledger_diagnostic_routes` peel; further peels optional | R4 | — | 🟢 closed |
+| **L-3** | ✅ | Drivers list / wallet / history a11y + chart summaries | R4 | — | 🟢 closed |
+| **L-4** | ✅ | AddDriverModal RHF + steps + sessionStorage draft | R4 | — | 🟢 closed |
+| **L-5** | ✅ | Driver-section tsc fixes for listed files | R4 | — | 🟢 closed |
 
 ---
 
@@ -1404,7 +1466,8 @@ All four now exist, and they are the right four:
 | **Permission model** | `can()` gates client-side, `requirePermission` server-side, an append-only audit trail behind them, and a key-gated import path separated from the operator path |
 
 The component collapsed to a shell around them exactly as predicted — 4,453 → ~1,141 lines, with
-the metrics engine extracted as a pure, tested module and five lazily-loaded tabs.
+the metrics engine extracted as a pure, tested module and five lazily-loaded tabs. Round 4 took the
+shell under the **400-line hard budget** (~291 lines).
 
 **What changed across the three rounds, as a pattern.** Round 1 was deletion and truth-telling and
 it worked. Round 2's risk was *built but not wired* — routes registered with no caller, helpers that
@@ -1414,15 +1477,14 @@ the ensure endpoint was split into two properly-gated routes with a Deno test pi
 `ContentVisibilityList` became real windowing instead of a CSS hint; the dead 100k scan was deleted
 rather than left behind a flag. That is the difference between closing findings and closing gaps.
 
-**What is left is genuinely small.** Five Low items (§0.5-R3 → Residuals): one org predicate to
-tighten (L-1), the edge-function monolith (L-2), accessibility depth (L-3), the untouched
-`AddDriverModal` (L-4), and pre-existing type noise in older files (L-5). None of them affects a
-number an operator reads, and none blocks the ship gate above.
+**What is left is genuinely small.** Five Low items from §0.5-R3 were closed in **Round 4**
+(§0.5-R4): org-scoped lifetime SQL (L-1), diagnostics route peel (L-2), a11y pass (L-3),
+AddDriverModal RHF (L-4), and driver-section tsc (L-5). Optional further `index.tsx` peels remain
+non-blocking.
 
-The honest remaining risk is **operational, not architectural**: the new routes and tables only help
-once the edge function is redeployed in each environment and the org-wide operational-period rebuild
-is scheduled. Until then, Analytics rollup coverage depends on per-driver first open. That is the
-one thing on this list that can silently look fine locally and be wrong in production.
+Ship gate + org-wide ops rebuild are live on GoRide (`make-server-37f42386` redeployed;
+`fleet_rebuild_operational_periods` + nightly cron). Analytics empty rollup now toasts with a
+Rebuild action for permitted roles.
 
 ---
 

@@ -34,7 +34,10 @@ test.describe('Fleet driver detail smoke', () => {
     await driverRow.click();
     await expect(page).toHaveURL(/\/drivers\//, { timeout: 30_000 });
 
+    // Lifetime: label present; value is numeric or —
     await expect(page.getByText(/Total Lifetime/i).first()).toBeVisible({ timeout: 30_000 });
+    const lifetimeNearby = page.locator('text=/Total Lifetime/i').first().locator('xpath=ancestor::*[1]');
+    await expect(lifetimeNearby.getByText(/[\d,]|—/)).toBeVisible({ timeout: 15_000 });
 
     const financialsTab = page
       .getByRole('tab', { name: /Financials/i })
@@ -49,5 +52,21 @@ test.describe('Fleet driver detail smoke', () => {
       .poll(() => page.url(), { timeout: 30_000 })
       .toMatch(/[?&]from=\d{4}-\d{2}-\d{2}/);
     await expect.poll(() => page.url()).toMatch(/[?&]to=\d{4}-\d{2}-\d{2}/);
+
+    // Financials period cue (label or ISO dates in UI)
+    await expect(
+      page.getByText(/This week|Last week|Custom|Period|Fleet week|\d{4}-\d{2}-\d{2}/i).first(),
+    ).toBeVisible({ timeout: 20_000 });
+
+    const reconTab = page
+      .getByRole('tab', { name: /Reconciliation/i })
+      .or(page.getByRole('button', { name: /Reconciliation/i }))
+      .or(page.getByText(/^Reconciliation$/i));
+    if (await reconTab.first().isVisible().catch(() => false)) {
+      await reconTab.first().click();
+      await expect(
+        page.getByText(/trips_vs_ledger|Reconciliation|Trip|Ledger/i).first(),
+      ).toBeVisible({ timeout: 30_000 });
+    }
   });
 });

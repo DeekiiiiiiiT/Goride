@@ -81,13 +81,19 @@ export function useDriverAnalytics() {
   });
 
   // Prefer server operational rollup for trip/rate KPIs (A-5) — trips still feed earnings/heatmap.
-  const { data: opsRollup = [], refetch: refetchOps } = useQuery({
+  const {
+    data: opsRollup = [],
+    isFetched: opsRollupFetched,
+    refetch: refetchOps,
+  } = useQuery({
     queryKey: ['fleetOperationalRollup', period.startYmd, period.endYmd],
     queryFn: () =>
       api.getFleetOperationalRollup(period.startYmd, period.endYmd).catch(() => []),
     staleTime: 2 * 60 * 1000,
     refetchOnWindowFocus: false,
   });
+
+  const opsRollupEmpty = opsRollupFetched && opsRollup.length === 0;
 
   const loading = tripsLoading || driversLoading || metricsLoading;
 
@@ -218,5 +224,6 @@ export function useDriverAnalytics() {
     tenure,
     refresh,
     exportCsv,
+    opsRollupEmpty,
   };
 }

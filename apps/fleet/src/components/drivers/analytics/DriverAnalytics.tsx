@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Users, Loader2, RefreshCw } from 'lucide-react';
 import { Button } from '../../ui/button';
 import { useDriverAnalytics } from '../../../hooks/useDriverAnalytics';
@@ -7,6 +7,8 @@ import { DriverAnalyticsKpiGrid } from './DriverAnalyticsKpiGrid';
 import { DriverAnalyticsLeaderboard } from './DriverAnalyticsLeaderboard';
 import { DriverAnalyticsPanels } from './DriverAnalyticsPanels';
 import { toast } from 'sonner';
+import { usePermissions } from '../../../hooks/usePermissions';
+import { api } from '../../../services/api';
 
 export function DriverAnalytics({
   onNavigate,
@@ -16,6 +18,10 @@ export function DriverAnalytics({
   onSelectDriver?: (driverId: string) => void;
 }) {
   const analytics = useDriverAnalytics();
+  const { canAny } = usePermissions();
+  const canRebuildOps = canAny('data.backfill', 'transactions.edit');
+  const [rebuildingOps, setRebuildingOps] = useState(false);
+  const emptyToastShown = useRef(false);
   const {
     loading,
     hasData,
@@ -38,14 +44,54 @@ export function DriverAnalytics({
     tenure,
     refresh,
     exportCsv,
+    opsRollupEmpty,
   } = analytics;
+
+  const rebuildOps = async () => {
+    setRebuildingOps(true);
+    try {
+      const res = await api.rebuildOrgOperationalPeriods(period.startYmd, period.endYmd);
+      toast.success(
+        `Operational periods rebuilt (${res.weeksUpserted} weeks · ${res.driversTouched} drivers)`,
+      );
+      emptyToastShown.current = false;
+      refresh();
+    } catch (e: any) {
+      toast.error(e?.message || 'Rebuild failed');
+    } finally {
+      setRebuildingOps(false);
+    }
+  };
+
+  useEffect(() => {
+    if (loading || !opsRollupEmpty || emptyToastShown.current) return;
+    emptyToastShown.current = true;
+    if (canRebuildOps) {
+      toast.message('Operational periods not rebuilt yet', {
+        description: 'Trip/rate Analytics KPIs stay empty until weekly ops periods are rebuilt.',
+        action: {
+          label: 'Rebuild now',
+          onClick: () => {
+            void rebuildOps();
+          },
+        },
+        duration: 12_000,
+      });
+    } else {
+      toast.message('Operational periods not rebuilt yet', {
+        description: 'Ask an admin with backfill permission to rebuild org operational periods.',
+        duration: 10_000,
+      });
+    }
+    // One toast per empty rollup load; rebuildOps is stable enough via refresh.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, opsRollupEmpty, canRebuildOps]);
 
   const openDriver = (driverId: string) => {
     if (onSelectDriver) {
       onSelectDriver(driverId);
       return;
     }
-    // Soft handoff: Drivers page can read selection from session
     try {
       sessionStorage.setItem('driver_analytics_focus_id', driverId);
     } catch {
@@ -97,10 +143,27 @@ export function DriverAnalytics({
             </p>
           </div>
         </div>
-        <Button variant="outline" className="min-h-11 w-full sm:w-auto" onClick={refresh}>
-          <RefreshCw className="h-4 w-4 mr-2" />
-          Refresh
-        </Button>
+        <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+          {opsRollupEmpty && canRebuildOps ? (
+            <Button
+              variant="secondary"
+              className="min-h-11 w-full sm:w-auto"
+              disabled={rebuildingOps}
+              onClick={() => void rebuildOps()}
+            >
+              {rebuildingOps ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <RefreshCw className="h-4 w-4 mr-2" />
+              )}
+              Rebuild ops periods
+            </Button>
+          ) : null}
+          <Button variant="outline" className="min-h-11 w-full sm:w-auto" onClick={refresh}>
+            <RefreshCw className="h-4 w-4 mr-2" />
+            Refresh
+          </Button>
+        </div>
       </div>
 
       <DriverAnalyticsToolbar

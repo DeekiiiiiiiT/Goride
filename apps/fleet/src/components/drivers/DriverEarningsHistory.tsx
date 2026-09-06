@@ -497,7 +497,17 @@ export function DriverEarningsHistory({
               {filteredPeriodData.map((row, idx) => (
                 <TableRow
                   key={idx}
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`Earnings period ${formatPeriodLabel(row)}, ${row.tripCount} trips`}
+                  aria-expanded={selectedRowIdx === idx}
                   onClick={() => setSelectedRowIdx(selectedRowIdx === idx ? null : idx)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      setSelectedRowIdx(selectedRowIdx === idx ? null : idx);
+                    }
+                  }}
                   className={`cursor-pointer transition-colors ${
                     selectedRowIdx === idx
                       ? 'bg-indigo-50 hover:bg-indigo-100'

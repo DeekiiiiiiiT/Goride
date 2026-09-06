@@ -473,11 +473,15 @@ export function DriversPage({
       const monthlyEarnings = asNumber(row.monthlyEarnings);
       let tier = row.tier || profile?.tier || 'Bronze';
       if (earningsPolicyCtx) {
+        const serviceLineForBundle =
+          earningsServiceLine === 'rideshare' || earningsServiceLine === 'rush_delivery'
+            ? earningsServiceLine
+            : undefined;
         const bundle = resolveBundleFromContext(
           earningsPolicyCtx as EarningsPolicyRuntimeContext,
           row.id,
           undefined,
-          earningsServiceLine,
+          serviceLineForBundle,
         );
         const t = TierCalculations.getTierForEarnings(monthlyEarnings, bundle.tiers);
         tier = t?.name ?? 'Bronze';
@@ -1010,7 +1014,20 @@ export function DriversPage({
                 <TableBody>
                     {paginatedDrivers.length > 0 ? (
                         paginatedDrivers.map((driver) => (
-                            <TableRow key={driver.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/50 cursor-pointer" onClick={() => openDriver(driver.id)}>
+                            <TableRow
+                              key={driver.id}
+                              className="hover:bg-slate-50/50 dark:hover:bg-slate-800/50 cursor-pointer"
+                              role="button"
+                              tabIndex={0}
+                              aria-label={`Open driver ${driver.name}`}
+                              onClick={() => openDriver(driver.id)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter' || e.key === ' ') {
+                                  e.preventDefault();
+                                  openDriver(driver.id);
+                                }
+                              }}
+                            >
                                 <TableCell
                                   className="pl-4"
                                   onClick={(e) => e.stopPropagation()}

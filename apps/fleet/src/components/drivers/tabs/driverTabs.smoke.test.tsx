@@ -69,7 +69,7 @@ describe('DriverServiceQualityTab empty state', () => {
           cancellationRate: 0,
           platformStats: {},
         }}
-        cancelledTripsInPeriod={[]}
+        allTrips={[]}
         serverTripsLoaded
       />,
     );
@@ -132,8 +132,7 @@ describe('DriverFinancialsTab smoke', () => {
         transactions={[]}
         allTrips={[]}
         quotaConfig={null}
-        platformBreakdownData={[]}
-        platformTotalEarnings={0}
+        lifetimePlatformStats={null}
         onFinancialPeriodSelect={() => {}}
         financialBundle={null}
         weeklyPeriodData={null}

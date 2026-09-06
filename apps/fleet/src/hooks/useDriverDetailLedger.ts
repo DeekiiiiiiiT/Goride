@@ -1,6 +1,6 @@
 /**
  * Ledger driver-overview fetch for Driver Detail (Phase 14 — date-range aware).
- * Repair handlers stay in DriverDetail (need allTrips); they bump refreshKey via setLedgerRefreshKey.
+ * Repair handlers live in useDriverDetailMutations; they bump refreshKey via setLedgerRefreshKey.
  */
 import * as React from 'react';
 import type { LedgerDriverOverview } from '../types/data';

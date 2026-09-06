@@ -1,10 +1,13 @@
 /** Namespace lucide — Vite HMR must not TDZ named icons on driver detail. */
+import * as React from 'react';
+import { format, startOfDay } from 'date-fns';
 import * as Lucide from 'lucide-react';
 import { Badge } from '../ui/badge';
 import { Avatar, AvatarFallback } from '../ui/avatar';
 import { Skeleton } from '../ui/skeleton';
 import { cn } from '../ui/utils';
 import { DriverFuelPolicySelect } from './DriverFuelPolicySelect';
+import { parseTripDate } from '../../utils/driverOperationalMetrics';
 
 const {
   Star,
@@ -19,12 +22,6 @@ export type DriverDetailHeaderProps = {
   driverId: string;
   driverName: string;
   driver?: any;
-  vehicleLabel: string | null;
-  memberSinceLabel: string | null;
-  licenseNumberLabel: string | null;
-  licenseExpiryLabel: string | null;
-  licenseExpired: boolean;
-  dispatchBlockReason?: string;
   tierName?: string | null;
   lifetimeTrips: number | null;
   performanceLoading: boolean;
@@ -40,12 +37,6 @@ export function DriverDetailHeader({
   driverId,
   driverName,
   driver,
-  vehicleLabel,
-  memberSinceLabel,
-  licenseNumberLabel,
-  licenseExpiryLabel,
-  licenseExpired,
-  dispatchBlockReason,
   tierName,
   lifetimeTrips,
   performanceLoading,
@@ -55,6 +46,44 @@ export function DriverDetailHeader({
   ratingLabel,
   periodCompletedCount,
 }: DriverDetailHeaderProps) {
+  const vehicleLabel = React.useMemo(() => {
+    const fromDriver = String(driver?.vehicle || '').trim();
+    if (fromDriver && fromDriver !== 'Unassigned') return fromDriver;
+    return null;
+  }, [driver?.vehicle]);
+
+  const memberSinceLabel = React.useMemo(() => {
+    const raw = driver?.createdAt || driver?.joinedAt || driver?.memberSince || driver?.created_at;
+    if (!raw) return null;
+    const d = parseTripDate(String(raw));
+    return d ? format(d, 'MMM d, yyyy') : null;
+  }, [driver]);
+
+  const licenseExpiryLabel = React.useMemo(() => {
+    const raw = driver?.licenseExpiry;
+    if (!raw) return null;
+    const d = parseTripDate(String(raw).slice(0, 10));
+    return d ? format(d, 'MMM d, yyyy') : String(raw).slice(0, 10);
+  }, [driver?.licenseExpiry]);
+
+  const licenseNumberLabel = React.useMemo(() => {
+    const n = String(driver?.licenseNumber || '').trim();
+    return n || null;
+  }, [driver?.licenseNumber]);
+
+  const licenseExpired = React.useMemo(() => {
+    if (driver?.dispatchBlocked === true) return true;
+    const raw = driver?.licenseExpiry;
+    if (!raw) return false;
+    const d = parseTripDate(String(raw).slice(0, 10));
+    if (!d) return false;
+    return d < startOfDay(new Date());
+  }, [driver?.dispatchBlocked, driver?.licenseExpiry]);
+
+  const dispatchBlockReason =
+    (typeof driver?.dispatchBlockReason === 'string' && driver.dispatchBlockReason) ||
+    (licenseExpired ? 'License expired' : undefined);
+
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-6 bg-white dark:bg-slate-900 p-6 rounded-xl border shadow-sm">
       <div className="flex items-start gap-4 col-span-1 md:col-span-2">

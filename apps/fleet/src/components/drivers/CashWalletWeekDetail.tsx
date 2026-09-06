@@ -98,11 +98,14 @@ export function CashWalletWeekDetail({
   onDeleteWriteOff,
   onDeletePayout,
 }: CashWalletWeekDetailProps) {
+  // FinancialTransaction.metadata is a wider shape than CashPaymentLike — cast at the boundary.
+  const asCash = (t: FinancialTransaction) => t as Parameters<typeof isCashReturnedForWeek>[0];
+
   const payments = useMemo(() => {
     if (!week) return [];
     const monday = format(week.start, 'yyyy-MM-dd');
     return (transactions || [])
-      .filter((t) => isCashReturnedForWeek(t, monday))
+      .filter((t) => isCashReturnedForWeek(asCash(t), monday))
       .sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
   }, [week, transactions]);
 
@@ -110,7 +113,7 @@ export function CashWalletWeekDetail({
     if (!week) return [];
     const monday = format(week.start, 'yyyy-MM-dd');
     return (transactions || [])
-      .filter((t) => isCashWriteOffForWeek(t, monday))
+      .filter((t) => isCashWriteOffForWeek(asCash(t), monday))
       .sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
   }, [week, transactions]);
 
@@ -120,7 +123,7 @@ export function CashWalletWeekDetail({
     return (transactions || [])
       .filter(
         (t) =>
-          isSettlementPaidForWeek(t, monday) || isPendingDriverPayoutForWeek(t, monday),
+          isSettlementPaidForWeek(asCash(t), monday) || isPendingDriverPayoutForWeek(asCash(t), monday),
       )
       .sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
   }, [week, transactions]);
@@ -129,8 +132,8 @@ export function CashWalletWeekDetail({
     if (!week) return [];
     const monday = format(week.start, 'yyyy-MM-dd');
     return (transactions || []).filter((t) => {
-      if (!isDriverCashPaymentTransaction(t)) return false;
-      if (cashPaymentWeekKey(t) !== monday) return false;
+      if (!isDriverCashPaymentTransaction(asCash(t))) return false;
+      if (cashPaymentWeekKey(asCash(t)) !== monday) return false;
       const st = String(t.status || '').toLowerCase();
       return st === 'pending';
     });

@@ -997,6 +997,27 @@ export const api = {
     return response.json();
   },
 
+  async rebuildOrgOperationalPeriods(from?: string, to?: string) {
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.fleet}/drivers/operational-periods/rebuild-org`,
+      {
+        method: 'POST',
+        headers: await requireAuthHeaders(),
+        body: JSON.stringify({ from, to }),
+      },
+    );
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || err.message || 'Failed to rebuild org operational periods');
+    }
+    return response.json() as Promise<{
+      success: boolean;
+      organizationId: string;
+      weeksUpserted: number;
+      driversTouched: number;
+    }>;
+  },
+
   async getFleetOperationalRollup(from: string, to: string) {
     const qs = new URLSearchParams({ from, to });
     const response = await fetchWithRetry(

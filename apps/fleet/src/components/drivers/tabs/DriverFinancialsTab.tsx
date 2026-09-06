@@ -1,10 +1,12 @@
 /**
  * Driver Financials tab — wraps FinancialSubTabs for lazy load.
+ * Platform donut inputs computed here (Round 4 Phase 3).
  */
 import React from 'react';
 import { FinancialSubTabs } from '../FinancialSubTabs';
 import type { PeriodWeekOption } from '../../../utils/periodWeekOptions';
 import type { FinancialTransaction, QuotaConfig, Trip, DriverMetrics } from '../../../types/data';
+import { useDriverPlatformBreakdown } from './useDriverPlatformBreakdown';
 
 export type DriverFinancialsTabProps = {
   driverId: string;
@@ -12,8 +14,8 @@ export type DriverFinancialsTabProps = {
   transactions: FinancialTransaction[];
   allTrips: Trip[];
   quotaConfig: QuotaConfig | null;
-  platformBreakdownData: any[];
-  platformTotalEarnings: number;
+  /** Ledger lifetime per-platform stats — donut hybrid override. */
+  lifetimePlatformStats?: Record<string, any> | null;
   csvMetrics?: DriverMetrics[];
   periodFrom?: Date;
   periodTo?: Date;
@@ -24,6 +26,11 @@ export type DriverFinancialsTabProps = {
 };
 
 export function DriverFinancialsTab(props: DriverFinancialsTabProps) {
+  const { platformBreakdownData, platformTotalEarnings } = useDriverPlatformBreakdown(
+    props.allTrips,
+    props.lifetimePlatformStats,
+  );
+
   return (
     <FinancialSubTabs
       driverId={props.driverId}
@@ -31,8 +38,8 @@ export function DriverFinancialsTab(props: DriverFinancialsTabProps) {
       transactions={props.transactions}
       allTrips={props.allTrips}
       quotaConfig={props.quotaConfig}
-      platformBreakdownData={props.platformBreakdownData}
-      platformTotalEarnings={props.platformTotalEarnings}
+      platformBreakdownData={platformBreakdownData}
+      platformTotalEarnings={platformTotalEarnings}
       csvMetrics={props.csvMetrics}
       periodFrom={props.periodFrom}
       periodTo={props.periodTo}

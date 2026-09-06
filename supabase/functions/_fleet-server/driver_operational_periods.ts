@@ -3,7 +3,11 @@
  * Money stays on driver_financial_periods; settlements desk stays on money periods.
  */
 import type { Context, Hono } from "npm:hono";
-import { requireAuth } from "./rbac_middleware.ts";
+import {
+  requireAuth,
+  hasPermission,
+  type RbacUser,
+} from "./rbac_middleware.ts";
 import { getOrgId } from "./org_scope.ts";
 import { getServiceClient } from "./service_client.ts";
 import { periodKeyFor, periodEndForAnchor, DEFAULT_FLEET_TZ } from "../../../packages/finance-core/src/periodKey.ts";
@@ -260,6 +264,26 @@ export async function fleetOperationalRollup(
   }));
 }
 
+/** Org-wide SQL rebuild of weekly operational periods (trailing window default 400 days). */
+export async function rebuildOrgOperationalPeriods(
+  orgId: string,
+  opts?: { from?: string; to?: string },
+): Promise<{ weeksUpserted: number; driversTouched: number }> {
+  if (!orgId) throw new Error("organizationId required");
+  const sb = getServiceClient();
+  const { data, error } = await sb.rpc("fleet_rebuild_operational_periods", {
+    p_org_id: orgId,
+    p_from: opts?.from || null,
+    p_to: opts?.to || null,
+  });
+  if (error) throw new Error(error.message);
+  const row = Array.isArray(data) ? data[0] : data;
+  return {
+    weeksUpserted: Number((row as any)?.weeks_upserted) || 0,
+    driversTouched: Number((row as any)?.drivers_touched) || 0,
+  };
+}
+
 export function registerDriverOperationalPeriodRoutes(app: Hono) {
   app.get(
     `${PREFIX}/drivers/:id/operational-periods`,
@@ -313,6 +337,40 @@ export function registerDriverOperationalPeriodRoutes(app: Hono) {
         return c.json({ success: true, data, from, to });
       } catch (e: any) {
         return c.json({ error: e?.message || "operational-rollup failed" }, 500);
+      }
+    },
+  );
+
+  // Org-wide rebuild — admins with data.backfill (closes Analytics silent-empty).
+  app.post(
+    `${PREFIX}/drivers/operational-periods/rebuild-org`,
+    requireAuth({ requireOrg: true }),
+    async (c: Context) => {
+      const rbacUser = c.get("rbacUser") as RbacUser | undefined;
+      const allowed =
+        !!rbacUser &&
+        (hasPermission(rbacUser.resolvedRole, "data.backfill") ||
+          hasPermission(rbacUser.resolvedRole, "transactions.edit"));
+      if (!allowed) {
+        return c.json(
+          {
+            error: "Forbidden",
+            message: "Requires data.backfill or transactions.edit",
+            currentRole: rbacUser?.resolvedRole || "(none)",
+          },
+          403,
+        );
+      }
+      const orgId = getOrgId(c);
+      if (!orgId) return c.json({ error: "organization required" }, 400);
+      try {
+        const body = await c.req.json().catch(() => ({}));
+        const from = asStr((body as any)?.from).slice(0, 10) || undefined;
+        const to = asStr((body as any)?.to).slice(0, 10) || undefined;
+        const result = await rebuildOrgOperationalPeriods(orgId, { from, to });
+        return c.json({ success: true, organizationId: orgId, ...result });
+      } catch (e: any) {
+        return c.json({ error: e?.message || "rebuild-org failed" }, 500);
       }
     },
   );

@@ -5,7 +5,7 @@
 import type { Hono } from "npm:hono";
 import * as kv from "./kv_store.tsx";
 import { requireAuth } from "./rbac_middleware.ts";
-import { belongsToOrg } from "./org_scope.ts";
+import { belongsToOrg, getOrgId } from "./org_scope.ts";
 import {
   aggregateCanonicalEventsToLedgerDriverOverview,
   canonicalEventInSelectedWindow,
@@ -24,6 +24,10 @@ import {
 
 const PREFIX = "/make-server-37f42386";
 
+function asStr(v: unknown): string {
+  return typeof v === "string" ? v : v != null ? String(v) : "";
+}
+
 export function registerLedgerDriverOverviewRoutes(app: Hono) {
   // ─── GET /ledger/driver-overview — Aggregated financials for Driver Detail ──
   app.get(`${PREFIX}/ledger/driver-overview`, requireAuth(), async (c) => {
@@ -41,6 +45,8 @@ export function registerLedgerDriverOverviewRoutes(app: Hono) {
         `[Ledger DriverOverview] driverId=${driverId} range=${startDate}..${endDate} platforms=${platformsParam || "all"} source=ledger.entries`,
       );
 
+      const readerOrgId = getOrgId(c);
+      let driverOrgId: string | null = readerOrgId;
       const allDriverIdsCanon: string[] = [driverId];
       try {
         const driverRecord = await kv.get(`driver:${driverId}`);
@@ -50,6 +56,12 @@ export function registerLedgerDriverOverviewRoutes(app: Hono) {
         if (driverRecord) {
           if (driverRecord.uberDriverId) allDriverIdsCanon.push(driverRecord.uberDriverId);
           if (driverRecord.inDriveDriverId) allDriverIdsCanon.push(driverRecord.inDriveDriverId);
+          const fromDriver =
+            asStr((driverRecord as any).organizationId || (driverRecord as any).organization_id).trim();
+          if (fromDriver) driverOrgId = fromDriver;
+        } else if (!readerOrgId) {
+          // No KV record and no JWT org — refuse unscoped lifetime (L-1).
+          return c.json({ error: "Forbidden" }, 403);
         }
       } catch (lookupErr) {
         console.warn(`[Ledger DriverOverview] driver lookup ${driverId}:`, lookupErr);
@@ -87,8 +99,8 @@ export function registerLedgerDriverOverviewRoutes(app: Hono) {
           canonicalEventInSelectedWindow(v as Record<string, unknown>, prevStartC, prevEndC),
         );
 
-        // Lifetime KPIs: cheap all-time aggregate over driver_financial_periods (not event window).
-        const lifetimeTotals = await sumDriverFinancialPeriodLifetime(driverId);
+        // Lifetime KPIs: org-scoped SQL SUM (L-1) — never unscoped.
+        const lifetimeTotals = await sumDriverFinancialPeriodLifetime(driverId, driverOrgId);
 
         const resultCanon = aggregateCanonicalEventsToLedgerDriverOverview(
           periodValsCanon,

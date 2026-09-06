@@ -300,9 +300,9 @@ export function DriverExpensesHistory({
       // Net wallet Toll Charge projections (include reversals — they are positive
       // Adjustments excluded from expenseTx above).
       const periodChargeTx = transactions.filter(
-        (t) => t?.date && isDriverTollChargeRow(t) && inThisPeriod(t.date),
+        (t) => t?.date && isDriverTollChargeRow(t as Parameters<typeof isDriverTollChargeRow>[0]) && inThisPeriod(t.date),
       );
-      const tollCharged = netDriverTollCharges(periodChargeTx);
+      const tollCharged = netDriverTollCharges(periodChargeTx as Parameters<typeof netDriverTollCharges>[0]);
 
       // ── Fuel: from finalized reports (canonical shared aggregator — same
       // logic used by SettlementSummaryView/PayoutPeriodDetail so all three
@@ -491,7 +491,17 @@ export function DriverExpensesHistory({
         </Card>
         <Card
           className={`cursor-pointer transition-shadow hover:shadow-md ${expenseView === 'toll' ? 'ring-1 ring-amber-200' : ''}`}
+          role="button"
+          tabIndex={0}
+          aria-label="Show toll expenses history"
+          aria-pressed={expenseView === 'toll'}
           onClick={() => setExpenseView('toll')}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              setExpenseView('toll');
+            }
+          }}
         >
           <CardContent className="pt-4 pb-3 px-4">
             <div className="flex items-center justify-between">
@@ -546,7 +556,17 @@ export function DriverExpensesHistory({
         </Card>
         <Card
           className={`cursor-pointer transition-shadow hover:shadow-md ${expenseView === 'fuel' ? 'ring-1 ring-red-200' : ''}`}
+          role="button"
+          tabIndex={0}
+          aria-label="Show fuel expenses history"
+          aria-pressed={expenseView === 'fuel'}
           onClick={() => setExpenseView('fuel')}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              setExpenseView('fuel');
+            }
+          }}
         >
           <CardContent className="pt-4 pb-3 px-4">
             <div className="flex items-center justify-between">

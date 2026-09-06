@@ -1,8 +1,9 @@
 /**
  * Soft guardrail for driver-section dead / unreachable JSX patterns and money formatting.
  * Fails on `{false &&` (dead branches) and hand-rolled `` `$${ `` money templates.
- * Soft-warns on count of `false &&` without braces, oversized DriverDetail.tsx,
- * and leftover "Restoring rich performance dashboard" copy.
+ * Hard-fails when DriverDetail.tsx exceeds the 400-line shell budget.
+ * Soft-warns on count of `false &&` without braces and leftover
+ * "Restoring rich performance dashboard" copy.
  *
  * Usage: node apps/fleet/scripts/check-driver-section.mjs
  */
@@ -19,7 +20,7 @@ const SOFT_WARN = /false\s*&&/g;
 const MONEY_TEMPLATE = /`[^`]*\$\$\{/;
 const RICH_DASHBOARD_COPY = /Restoring rich performance dashboard/;
 const DRIVER_DETAIL = path.join(ROOT, 'DriverDetail.tsx');
-const DRIVER_DETAIL_LINE_WARN = 600;
+const DRIVER_DETAIL_LINE_MAX = 400;
 
 function walk(dir, out = []) {
   for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -59,9 +60,9 @@ for (const file of files) {
 
 if (fs.existsSync(DRIVER_DETAIL)) {
   const lines = fs.readFileSync(DRIVER_DETAIL, 'utf8').split(/\r?\n/).length;
-  if (lines > DRIVER_DETAIL_LINE_WARN) {
-    warnings.push(
-      `src/components/drivers/DriverDetail.tsx: ${lines} lines (> ${DRIVER_DETAIL_LINE_WARN}) — consider further extraction`,
+  if (lines > DRIVER_DETAIL_LINE_MAX) {
+    failures.push(
+      `src/components/drivers/DriverDetail.tsx: ${lines} lines (> ${DRIVER_DETAIL_LINE_MAX} shell budget)`,
     );
   }
 }

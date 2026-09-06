@@ -103,7 +103,7 @@ export function DriverPayoutHistory({
       periodType: periodType === 'monthly' && useMonthlyRollup ? 'weekly' : periodType,
       financialBundle,
       sharedWeekly:
-        useSharedForWeekly || useMonthlyRollup
+        (useSharedForWeekly || useMonthlyRollup) && weeklyPeriodData
           ? { periodData: weeklyPeriodData }
           : undefined,
       draftFuelByPeriod:
@@ -520,6 +520,9 @@ const est = Boolean(row.isEstimate && !row.isFinalized);
                           <table className="w-full"><tbody>
                       <TableRow
                         key={idx}
+                        role="button"
+                        tabIndex={0}
+                        aria-label={`Open payout details for ${formatPeriodLabel(row)}`}
                         className={`cursor-pointer transition-colors hover:bg-slate-100/60 ${
                           row.status === 'Pending'
                             ? 'bg-amber-50/30'
@@ -528,6 +531,12 @@ const est = Boolean(row.isEstimate && !row.isFinalized);
                               : ''
                         }`}
                         onClick={() => setSelectedRow(row)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            setSelectedRow(row);
+                          }
+                        }}
                       >
                         <TableCell className="text-xs font-medium whitespace-nowrap">
                           {formatPeriodLabel(row)}

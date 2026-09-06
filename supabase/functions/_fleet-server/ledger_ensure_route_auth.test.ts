@@ -36,3 +36,45 @@ Deno.test("import ensure-from-trip-ids is key-gated (not open)", async () => {
     );
   assertEquals(openImport, false, "Import ensure must not be registered without a key gate");
 });
+
+Deno.test("jwtRoleClaim accepts anon JWT payload shape", async () => {
+  const { jwtRoleClaim } = await import("./jwt_role_claim.ts");
+  const payload = btoa(JSON.stringify({ role: "anon", iss: "supabase" }))
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
+  const token = `eyJhbGciOiJub25lIn0.${payload}.x`;
+  assertEquals(jwtRoleClaim(token), "anon");
+});
+
+Deno.test("jwtRoleClaim accepts service_role JWT payload shape", async () => {
+  const { jwtRoleClaim } = await import("./jwt_role_claim.ts");
+  const payload = btoa(JSON.stringify({ role: "service_role" }))
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
+  const token = `eyJhbGciOiJub25lIn0.${payload}.x`;
+  assertEquals(jwtRoleClaim(token), "service_role");
+});
+
+Deno.test("lifetime sum requires organization_id in source", async () => {
+  const source = await Deno.readTextFile(
+    new URL("./driver_financial_periods.ts", import.meta.url),
+  );
+  assertEquals(
+    /organizationId:\s*string\s*\|\s*null/.test(source) ||
+      /organizationId:\s*string\s*\|\s*null/.test(source),
+    true,
+    "sumDriverFinancialPeriodLifetime must take organizationId",
+  );
+  assertEquals(
+    /eq\("organization_id"/.test(source) && /fleet_driver_lifetime_totals/.test(source),
+    true,
+    "Lifetime sum must org-filter via RPC and/or .eq organization_id",
+  );
+  assertEquals(
+    /if\s*\(\s*!driverId\s*\|\|\s*!organizationId\s*\)/.test(source),
+    true,
+    "Missing org must short-circuit to empty (no unscoped sum)",
+  );
+});
