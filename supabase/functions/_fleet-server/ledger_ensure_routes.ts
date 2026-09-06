@@ -2,7 +2,7 @@
  * POST /ledger/ensure-from-trip-ids (+ /import) — idempotent canonical fare backfill.
  * Extracted from index.tsx for a lighter split (A-7).
  */
-import type { Context, Hono } from "npm:hono";
+import type { Context, Hono, Next } from "npm:hono";
 import * as kv from "./kv_store.tsx";
 import {
   requireAuth,
@@ -47,11 +47,34 @@ export function tripHasMoneyForLedgerProjection(trip: any): boolean {
   return hasTripAmount || uberGrossForLedger > 0;
 }
 
+/**
+ * Import pipeline gate: Authorization Bearer must be the project anon or service role key.
+ * Mirrors the "key-checked" internal import pattern — not session RBAC.
+ */
+export function requireImportAnonOrServiceKey() {
+  return async (c: Context, next: Next) => {
+    const auth = c.req.header("Authorization") || "";
+    const token = auth.replace(/^Bearer\s+/i, "").trim();
+    const anon = (Deno.env.get("SUPABASE_ANON_KEY") || "").trim();
+    const service = (Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "").trim();
+    if (!token || (!anon && !service) || (token !== anon && token !== service)) {
+      return c.json(
+        {
+          error: "Unauthorized",
+          message: "POST /ledger/ensure-from-trip-ids/import requires the project anon or service role key.",
+        },
+        401,
+      );
+    }
+    return await next();
+  };
+}
+
 async function handleEnsureFromTripIds(c: Context) {
   const startMs = Date.now();
   try {
-    const body = await c.req.json();
-    const rawIds: unknown = body?.tripIds;
+    const body = (c.get("__cachedRequestBody") as unknown) ?? (await c.req.json());
+    const rawIds: unknown = (body as any)?.tripIds;
     if (!Array.isArray(rawIds) || rawIds.length === 0) {
       return c.json({ error: "Body must include non-empty tripIds: string[]" }, 400);
     }
@@ -151,6 +174,10 @@ export function registerLedgerEnsureRoutes(app: Hono) {
     return handleEnsureFromTripIds(c);
   });
 
-  // Import callers (admin/driver anon key) — no session RBAC; same pattern as fleet/sync.
-  app.post(`${PREFIX}/ledger/ensure-from-trip-ids/import`, async (c) => handleEnsureFromTripIds(c));
+  // Import callers (admin/driver anon or service key) — key-checked, not session RBAC.
+  app.post(
+    `${PREFIX}/ledger/ensure-from-trip-ids/import`,
+    requireImportAnonOrServiceKey(),
+    async (c) => handleEnsureFromTripIds(c),
+  );
 }

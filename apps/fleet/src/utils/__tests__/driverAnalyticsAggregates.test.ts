@@ -5,6 +5,7 @@ import {
   buildPlatformMix,
   pctDelta,
   latestMetricsByDriver,
+  mergeOperationalRollupIntoRows,
 } from '../driverAnalyticsAggregates';
 import type { Trip, DriverMetrics } from '../../types/data';
 
@@ -80,5 +81,31 @@ describe('driverAnalyticsAggregates', () => {
     ]);
     expect(slices[0].name).toBe('Uber');
     expect(slices[0].pct).toBe(75);
+  });
+
+  it('mergeOperationalRollupIntoRows prefers server ops counts', () => {
+    const base = buildDriverRows(
+      [trip({ id: 't1', driverId: 'd1', amount: 1000 })],
+      [{ id: 'd1', name: 'Alex' }],
+      new Map(),
+    );
+    const merged = mergeOperationalRollupIntoRows(base, [
+      {
+        driverId: 'd1',
+        tripCount: 40,
+        completedCount: 38,
+        cancelledCount: 2,
+        distanceKm: 500,
+        acceptanceRate: 0.95,
+        cancellationRate: 0.05,
+        ratingSum: 96,
+        ratingCount: 20,
+      },
+    ]);
+    expect(merged[0].trips).toBe(38);
+    expect(merged[0].cancelled).toBe(2);
+    expect(merged[0].distanceKm).toBe(500);
+    expect(merged[0].acceptanceRate).toBe(0.95);
+    expect(merged[0].rating).toBeCloseTo(4.8);
   });
 });

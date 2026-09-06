@@ -4,7 +4,7 @@
  */
 import type { Context, Hono } from "npm:hono";
 import * as kv from "./kv_store.tsx";
-import { requireAuth, requirePermission } from "./rbac_middleware.ts";
+import { requireAuth, requirePermission, hasPermission, type RbacUser } from "./rbac_middleware.ts";
 import { getOrgId, stampOrg } from "./org_scope.ts";
 
 const PREFIX = "/make-server-37f42386";
@@ -63,8 +63,25 @@ export function registerDriversAuditRoutes(app: Hono) {
   app.post(
     `${PREFIX}/drivers/:id/audit`,
     requireAuth({ requireOrg: true }),
-    // Money + compliance mutations already gated client-side; accept either write role.
+    // Append-only trail for money/compliance writes — drivers.edit OR transactions.edit.
     async (c: Context) => {
+      const rbacUser = c.get("rbacUser") as RbacUser | undefined;
+      if (!rbacUser) return c.json({ error: "Unauthorized: No user context" }, 401);
+      const canWrite =
+        hasPermission(rbacUser.resolvedRole, "drivers.edit") ||
+        hasPermission(rbacUser.resolvedRole, "transactions.edit");
+      if (!canWrite) {
+        return c.json(
+          {
+            error: "Forbidden",
+            message: 'Requires "drivers.edit" or "transactions.edit".',
+            required: ["drivers.edit", "transactions.edit"],
+            currentRole: rbacUser.resolvedRole,
+          },
+          403,
+        );
+      }
+
       const driverId = String(c.req.param("id") || "").trim();
       if (!driverId) return c.json({ error: "driverId required" }, 400);
       let body: Record<string, unknown> = {};
@@ -78,6 +95,7 @@ export function registerDriversAuditRoutes(app: Hono) {
       const actorId =
         (c.get("userId") as string | undefined) ||
         (c.get("user") as { id?: string } | undefined)?.id ||
+        rbacUser.userId ||
         undefined;
       const event = await appendDriverAuditEvent(c, {
         driverId,

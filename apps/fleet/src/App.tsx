@@ -10,26 +10,16 @@ import { isFleetPortalUser } from './utils/fleetOwnerUser';
 import { PassengerFleetSurfaceGate } from './components/auth/PassengerFleetSurfaceGate';
 import { AppLayout } from './components/layout/AppLayout';
 import { Dashboard } from './components/dashboard/Dashboard';
-import { TripLogsPage } from './components/trips/TripLogsPage';
 import { SettingsPage } from './components/settings/SettingsPage';
 import { FleetMaintenanceHub } from './components/vehicles/FleetMaintenanceHub';
 import { FleetPage } from './components/fleet/FleetPage';
 import { ReportsPage } from './components/reports/ReportsPage';
 import { TransactionsPage } from './components/transactions/TransactionsPage';
-import { TollReconciliation } from './pages/TollReconciliation';
-import { TagInventory } from './pages/TagInventory';
 import { UserManagementPage } from './components/users/UserManagementPage';
 import { EarningsPolicyConfiguration } from './components/earnings-policy';
 import { FuelAnalytics } from './components/fuel/analytics/FuelAnalytics';
-import { TollLogsPage } from './pages/TollLogs';
-import { TollAnalytics } from './components/toll/TollAnalytics';
-import { TollRateDriftPage } from './pages/TollRateDriftPage';
-import { TollLowBalancePage } from './pages/TollLowBalancePage';
 import { VehicleAnalytics } from './components/vehicles/VehicleAnalytics';
-import { FleetFinancialsPage } from './components/fleet-financials/FleetFinancialsPage';
 import { IndriveWalletCenterPage } from './components/fleet-financials/IndriveWalletCenterPage';
-import { BusinessFinancePage } from './components/business-finance/BusinessFinancePage';
-import { ExpenseHubPage } from './components/business-finance/expense-hub/ExpenseHubPage';
 import type { ExpenseHubSubview } from './components/business-finance/expense-hub/ExpenseHubShell';
 
 import { OfflineProvider } from './components/providers/OfflineProvider';
@@ -62,6 +52,42 @@ const DriverSettlementsPage = lazy(() =>
   import('./components/fleet-financials/DriverSettlementsPage').then((m) => ({
     default: m.DriverSettlementsPage,
   })),
+);
+const FleetFinancialsPage = lazy(() =>
+  import('./components/fleet-financials/FleetFinancialsPage').then((m) => ({
+    default: m.FleetFinancialsPage,
+  })),
+);
+const BusinessFinancePage = lazy(() =>
+  import('./components/business-finance/BusinessFinancePage').then((m) => ({
+    default: m.BusinessFinancePage,
+  })),
+);
+const ExpenseHubPage = lazy(() =>
+  import('./components/business-finance/expense-hub/ExpenseHubPage').then((m) => ({
+    default: m.ExpenseHubPage,
+  })),
+);
+const TripLogsPage = lazy(() =>
+  import('./components/trips/TripLogsPage').then((m) => ({ default: m.TripLogsPage })),
+);
+const TollReconciliation = lazy(() =>
+  import('./pages/TollReconciliation').then((m) => ({ default: m.TollReconciliation })),
+);
+const TollLogsPage = lazy(() =>
+  import('./pages/TollLogs').then((m) => ({ default: m.TollLogsPage })),
+);
+const TollAnalytics = lazy(() =>
+  import('./components/toll/TollAnalytics').then((m) => ({ default: m.TollAnalytics })),
+);
+const TollRateDriftPage = lazy(() =>
+  import('./pages/TollRateDriftPage').then((m) => ({ default: m.TollRateDriftPage })),
+);
+const TollLowBalancePage = lazy(() =>
+  import('./pages/TollLowBalancePage').then((m) => ({ default: m.TollLowBalancePage })),
+);
+const TagInventory = lazy(() =>
+  import('./pages/TagInventory').then((m) => ({ default: m.TagInventory })),
 );
 import { PlatformMaintenanceSplash } from './components/PlatformMaintenanceSplash';
 import { FeatureFlagProvider } from './components/auth/FeatureFlagContext';
@@ -557,7 +583,9 @@ function AppContent() {
         )}
         {currentPage === 'trips' && (
           <PermissionGate permission="nav.trips" onNavigate={setCurrentPage}>
-            <TripLogsPage />
+            <Suspense fallback={<div className="p-6 text-sm text-slate-500">Loading trips…</div>}>
+              <TripLogsPage />
+            </Suspense>
           </PermissionGate>
         )}
         {currentPage === 'reports' && (
@@ -567,31 +595,35 @@ function AppContent() {
         )}
         {currentPage === 'business-finance' && (
           <PermissionGate permission="nav.financial_analytics" onNavigate={setCurrentPage}>
-            <BusinessFinancePage
-              key={`${businessFinanceTab}:${expenseHubVehicleId || ''}`}
-              initialTab={businessFinanceTab}
-              expensesInitialVehicleId={expenseHubVehicleId ?? undefined}
-              onNavigate={(page, periodHint) => {
-                handleNavigate(page, periodHint);
-              }}
-              onOpenDriver={(driverId) => {
-                openDriverDetail(driverId);
-              }}
-            />
+            <Suspense fallback={<div className="p-6 text-sm text-slate-500">Loading business finance…</div>}>
+              <BusinessFinancePage
+                key={`${businessFinanceTab}:${expenseHubVehicleId || ''}`}
+                initialTab={businessFinanceTab}
+                expensesInitialVehicleId={expenseHubVehicleId ?? undefined}
+                onNavigate={(page, periodHint) => {
+                  handleNavigate(page, periodHint);
+                }}
+                onOpenDriver={(driverId) => {
+                  openDriverDetail(driverId);
+                }}
+              />
+            </Suspense>
           </PermissionGate>
         )}
         {currentPage === 'expense-hub' && (
           <PermissionGate permission="nav.financial_analytics" onNavigate={setCurrentPage}>
-            <ExpenseHubPage
-              key={`${expenseHubVehicleId || 'expense-hub'}:${expenseHubSubview || 'default'}`}
-              initialVehicleId={expenseHubVehicleId ?? undefined}
-              initialSubview={
-                expenseHubSubview || (expenseHubVehicleId ? 'register' : 'overview')
-              }
-              onNavigate={(page, periodHint) => {
-                handleNavigate(page, periodHint);
-              }}
-            />
+            <Suspense fallback={<div className="p-6 text-sm text-slate-500">Loading expense hub…</div>}>
+              <ExpenseHubPage
+                key={`${expenseHubVehicleId || 'expense-hub'}:${expenseHubSubview || 'default'}`}
+                initialVehicleId={expenseHubVehicleId ?? undefined}
+                initialSubview={
+                  expenseHubSubview || (expenseHubVehicleId ? 'register' : 'overview')
+                }
+                onNavigate={(page, periodHint) => {
+                  handleNavigate(page, periodHint);
+                }}
+              />
+            </Suspense>
           </PermissionGate>
         )}
         {currentPage === 'transaction-list' && (
@@ -601,36 +633,48 @@ function AppContent() {
         )}
         {currentPage === 'toll-tags' && (
           <PermissionGate permission="nav.toll_reconciliation" onNavigate={setCurrentPage}>
-            <TollReconciliation
-              focusVehicleId={tollReconFocus?.vehicleId}
-              focusDriverId={tollReconFocus?.driverId}
-              focusVehicleLabel={tollReconFocus?.vehicleLabel}
-            />
+            <Suspense fallback={<div className="p-6 text-sm text-slate-500">Loading toll reconciliation…</div>}>
+              <TollReconciliation
+                focusVehicleId={tollReconFocus?.vehicleId}
+                focusDriverId={tollReconFocus?.driverId}
+                focusVehicleLabel={tollReconFocus?.vehicleLabel}
+              />
+            </Suspense>
           </PermissionGate>
         )}
         {currentPage === 'tag-inventory' && (
           <PermissionGate permission="nav.toll_tag_inventory" onNavigate={setCurrentPage}>
-            <TagInventory onNavigate={handleNavigate} />
+            <Suspense fallback={<div className="p-6 text-sm text-slate-500">Loading tag inventory…</div>}>
+              <TagInventory onNavigate={handleNavigate} />
+            </Suspense>
           </PermissionGate>
         )}
         {currentPage === 'toll-logs' && (
           <PermissionGate permission="nav.toll_logs" onNavigate={setCurrentPage}>
-            <TollLogsPage />
+            <Suspense fallback={<div className="p-6 text-sm text-slate-500">Loading toll logs…</div>}>
+              <TollLogsPage />
+            </Suspense>
           </PermissionGate>
         )}
         {currentPage === 'toll-analytics' && (
           <PermissionGate permission="nav.toll_analytics" onNavigate={setCurrentPage}>
-            <TollAnalytics onNavigate={setCurrentPage} />
+            <Suspense fallback={<div className="p-6 text-sm text-slate-500">Loading toll analytics…</div>}>
+              <TollAnalytics onNavigate={setCurrentPage} />
+            </Suspense>
           </PermissionGate>
         )}
         {currentPage === 'toll-rate-drift' && (
           <PermissionGate permission="nav.toll_analytics" onNavigate={setCurrentPage}>
-            <TollRateDriftPage />
+            <Suspense fallback={<div className="p-6 text-sm text-slate-500">Loading toll rate drift…</div>}>
+              <TollRateDriftPage />
+            </Suspense>
           </PermissionGate>
         )}
         {currentPage === 'toll-low-balance' && (
           <PermissionGate permission="nav.toll_tag_inventory" onNavigate={setCurrentPage}>
-            <TollLowBalancePage onNavigate={handleNavigate} />
+            <Suspense fallback={<div className="p-6 text-sm text-slate-500">Loading toll low balance…</div>}>
+              <TollLowBalancePage onNavigate={handleNavigate} />
+            </Suspense>
           </PermissionGate>
         )}
         {currentPage === 'earnings-policy' && (
@@ -640,12 +684,14 @@ function AppContent() {
         )}
         {currentPage === 'fleet-financials' && (
           <PermissionGate permission="nav.financial_analytics" onNavigate={setCurrentPage}>
-            <FleetFinancialsPage
-              initialWeekFrom={financePeriodHint?.startYmd}
-              initialWeekTo={financePeriodHint?.endYmd}
-              onBackToBusinessFinance={() => handleNavigate('business-finance')}
-              onPeriodHintConsumed={() => setFinancePeriodHint(null)}
-            />
+            <Suspense fallback={<div className="p-6 text-sm text-slate-500">Loading fleet financials…</div>}>
+              <FleetFinancialsPage
+                initialWeekFrom={financePeriodHint?.startYmd}
+                initialWeekTo={financePeriodHint?.endYmd}
+                onBackToBusinessFinance={() => handleNavigate('business-finance')}
+                onPeriodHintConsumed={() => setFinancePeriodHint(null)}
+              />
+            </Suspense>
           </PermissionGate>
         )}
         {(currentPage === 'driver-settlements' || currentPage === 'driver-payouts') && (

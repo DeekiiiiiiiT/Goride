@@ -40,6 +40,11 @@ export type DriverRosterRow = {
   organizationId?: string;
   tier?: string;
   bankInfo?: unknown;
+  /** True when licenseExpiry (UTC YYYY-MM-DD) is before today. */
+  dispatchBlocked: boolean;
+  dispatchBlockReason?: string;
+  /** Notes with followUpDate <= today (UTC). */
+  overdueFollowUpCount: number;
 };
 
 type TripBucket = {
@@ -275,6 +280,48 @@ function pickEarnings(
   );
 }
 
+/** License past today (UTC calendar date) → block dispatch. */
+function licenseDispatchBlock(
+  licenseExpiry: unknown,
+  todayUtc: string,
+): { dispatchBlocked: boolean; dispatchBlockReason?: string } {
+  const expiry = asStr(licenseExpiry).trim().substring(0, 10);
+  if (!expiry || !/^\d{4}-\d{2}-\d{2}$/.test(expiry)) {
+    return { dispatchBlocked: false };
+  }
+  if (expiry < todayUtc) {
+    return { dispatchBlocked: true, dispatchBlockReason: "License expired" };
+  }
+  return { dispatchBlocked: false };
+}
+
+/** Count notes whose followUpDate is on or before today (UTC). */
+async function loadOverdueFollowUpCounts(
+  driverIds: string[],
+  todayUtc: string,
+): Promise<Map<string, number>> {
+  const counts = new Map<string, number>();
+  if (driverIds.length === 0) return counts;
+  const keys = driverIds.map((id) => `driver_notes:${id}`);
+  const CHUNK = 200;
+  for (let i = 0; i < keys.length; i += CHUNK) {
+    const slice = keys.slice(i, i + CHUNK);
+    const bags = await kv.mget(slice);
+    for (let j = 0; j < slice.length; j++) {
+      const driverId = driverIds[i + j];
+      const bag = bags[j] as { notes?: Array<{ followUpDate?: string | null }> } | null;
+      const notes = Array.isArray(bag?.notes) ? bag!.notes! : [];
+      let n = 0;
+      for (const note of notes) {
+        const fu = asStr(note?.followUpDate).trim().substring(0, 10);
+        if (fu && /^\d{4}-\d{2}-\d{2}$/.test(fu) && fu <= todayUtc) n += 1;
+      }
+      if (n > 0) counts.set(driverId, n);
+    }
+  }
+  return counts;
+}
+
 export async function handleDriversRoster(c: Context) {
   const t0 = Date.now();
   try {
@@ -282,9 +329,11 @@ export async function handleDriversRoster(c: Context) {
     const drivers = await loadOrgDrivers(c);
     const aliasMap = buildAliasMap(drivers);
 
-    const [earningsResult, tripScan] = await Promise.all([
+    const driverIds = drivers.map((d) => asStr(d.id)).filter(Boolean);
+    const [earningsResult, tripScan, overdueByDriver] = await Promise.all([
       loadEarningsByDriver(c, today),
       loadTripBuckets(c, aliasMap, today),
+      loadOverdueFollowUpCounts(driverIds, today),
     ]);
     const earningsMap = earningsResult.map;
     const tripBuckets = tripScan.buckets;
@@ -322,6 +371,9 @@ export async function handleDriversRoster(c: Context) {
         ? trips.todaysTrips
         : (earnings?.todayTripCount ?? 0);
 
+      const licenseExpiry = asStr(d.licenseExpiry) || undefined;
+      const block = licenseDispatchBlock(licenseExpiry, today);
+
       const row: DriverRosterRow = {
         id,
         name: asStr(d.name) || asStr(d.driverName) || "Unknown Driver",
@@ -342,12 +394,17 @@ export async function handleDriversRoster(c: Context) {
         uberDriverId: asStr(d.uberDriverId) || undefined,
         inDriveDriverId: asStr(d.inDriveDriverId) || undefined,
         createdAt: asStr(d.createdAt) || asStr(d.created_at) || asStr(d.joinedAt) || undefined,
-        licenseExpiry: asStr(d.licenseExpiry) || undefined,
+        licenseExpiry,
         licenseNumber: asStr(d.licenseNumber) || undefined,
         avatarUrl: asStr(d.avatarUrl) || undefined,
         organizationId: asStr(d.organizationId) || undefined,
         tier: asStr(d.tier) || undefined,
         bankInfo: d.bankInfo,
+        dispatchBlocked: block.dispatchBlocked,
+        ...(block.dispatchBlockReason
+          ? { dispatchBlockReason: block.dispatchBlockReason }
+          : {}),
+        overdueFollowUpCount: overdueByDriver.get(id) || 0,
       };
       return row;
     });

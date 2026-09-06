@@ -70,6 +70,41 @@ export type DriverRow = {
   status: 'active' | 'inactive';
 };
 
+export function mergeOperationalRollupIntoRows(
+  rows: DriverRow[],
+  rollup: Array<{
+    driverId: string;
+    tripCount: number;
+    completedCount: number;
+    cancelledCount: number;
+    distanceKm: number;
+    acceptanceRate: number | null;
+    cancellationRate: number | null;
+    ratingSum?: number;
+    ratingCount?: number;
+  }>,
+): DriverRow[] {
+  if (!rollup.length) return rows;
+  const byId = new Map(rollup.map((r) => [r.driverId, r]));
+  return rows.map((row) => {
+    const op = byId.get(row.driverId);
+    if (!op || op.tripCount <= 0) return row;
+    const rating =
+      op.ratingCount && op.ratingCount > 0 && op.ratingSum != null
+        ? op.ratingSum / op.ratingCount
+        : row.rating;
+    return {
+      ...row,
+      trips: op.completedCount || row.trips,
+      cancelled: op.cancelledCount || row.cancelled,
+      distanceKm: op.distanceKm > 0 ? op.distanceKm : row.distanceKm,
+      acceptanceRate: op.acceptanceRate != null ? op.acceptanceRate : row.acceptanceRate,
+      cancellationRate: op.cancellationRate != null ? op.cancellationRate : row.cancellationRate,
+      rating,
+    };
+  });
+}
+
 export function buildDriverRows(
   trips: Trip[],
   drivers: Array<{ id?: string; driverId?: string; name?: string; status?: string }>,

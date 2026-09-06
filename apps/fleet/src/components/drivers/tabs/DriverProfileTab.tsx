@@ -169,6 +169,7 @@ type DriverNote = {
   createdAt: string;
   createdBy: string;
   followUpDate?: string | null;
+  assignedTo?: string | null;
 };
 
 type AuditEvent = {
@@ -209,6 +210,7 @@ export function DriverProfileTab({
   const [notesLoading, setNotesLoading] = useState(false);
   const [noteText, setNoteText] = useState('');
   const [followUpDate, setFollowUpDate] = useState('');
+  const [assignedTo, setAssignedTo] = useState('');
   const [savingNote, setSavingNote] = useState(false);
   const [verifyingId, setVerifyingId] = useState<string | null>(null);
   const [localDocs, setLocalDocs] = useState<DriverDocument[]>([]);
@@ -294,10 +296,16 @@ export function DriverProfileTab({
     if (!text || !canEditDrivers) return;
     setSavingNote(true);
     try {
-      const res = await api.addDriverNote(driverId, text, followUpDate || undefined);
+      const res = await api.addDriverNote(
+        driverId,
+        text,
+        followUpDate || undefined,
+        assignedTo.trim() || undefined,
+      );
       setNotes(Array.isArray(res?.notes) ? res.notes : res?.note ? [res.note, ...notes] : notes);
       setNoteText('');
       setFollowUpDate('');
+      setAssignedTo('');
       toast.success('Note saved');
     } catch (e: any) {
       toast.error(e?.message || 'Failed to save note');
@@ -726,17 +734,32 @@ export function DriverProfileTab({
                       Add note
                     </Button>
                   </div>
-                  <div className="flex items-center gap-2 max-w-xs">
-                    <Label htmlFor="note-follow-up" className="text-xs text-slate-500 whitespace-nowrap">
-                      Follow-up (optional)
-                    </Label>
-                    <Input
-                      id="note-follow-up"
-                      type="date"
-                      value={followUpDate}
-                      onChange={(e) => setFollowUpDate(e.target.value)}
-                      className="h-8"
-                    />
+                  <div className="flex flex-wrap items-center gap-3">
+                    <div className="flex items-center gap-2 max-w-xs">
+                      <Label htmlFor="note-follow-up" className="text-xs text-slate-500 whitespace-nowrap">
+                        Follow-up (optional)
+                      </Label>
+                      <Input
+                        id="note-follow-up"
+                        type="date"
+                        value={followUpDate}
+                        onChange={(e) => setFollowUpDate(e.target.value)}
+                        className="h-8"
+                      />
+                    </div>
+                    <div className="flex items-center gap-2 max-w-xs">
+                      <Label htmlFor="note-assigned-to" className="text-xs text-slate-500 whitespace-nowrap">
+                        Assign to (user id)
+                      </Label>
+                      <Input
+                        id="note-assigned-to"
+                        value={assignedTo}
+                        onChange={(e) => setAssignedTo(e.target.value)}
+                        placeholder="Optional"
+                        className="h-8"
+                        aria-label="Assign note follow-up to user id"
+                      />
+                    </div>
                   </div>
                 </div>
               )}
@@ -760,6 +783,7 @@ export function DriverProfileTab({
                           {d ? format(d, 'MMM d, yyyy HH:mm') : n.createdAt}
                           {n.createdBy ? ` · ${n.createdBy}` : ''}
                           {fu && isValid(fu) ? ` · Follow-up ${format(fu, 'MMM d, yyyy')}` : ''}
+                          {n.assignedTo ? ` · Assigned ${n.assignedTo}` : ''}
                         </p>
                       </li>
                     );

@@ -30,6 +30,7 @@ import {
 import { Checkbox } from '../ui/checkbox';
 import {
   loadDriverSavedViews,
+  fetchDriverSavedViews,
   saveDriverSavedView,
   deleteDriverSavedView,
   type DriverSavedView,
@@ -151,6 +152,9 @@ function normalizeDriverProfile(driver: Partial<DriverProfile> & { id: string })
     licenseNumber: driver.licenseNumber,
     bankInfo: driver.bankInfo,
     organizationId: driver.organizationId,
+    dispatchBlocked: Boolean(driver.dispatchBlocked),
+    dispatchBlockReason: driver.dispatchBlockReason,
+    overdueFollowUpCount: asNumber(driver.overdueFollowUpCount),
   };
 }
 import {
@@ -196,6 +200,9 @@ interface DriverProfile {
   licenseNumber?: string;
   bankInfo?: unknown;
   organizationId?: string;
+  dispatchBlocked?: boolean;
+  dispatchBlockReason?: string;
+  overdueFollowUpCount?: number;
 }
 
 export function DriversPage({
@@ -263,6 +270,7 @@ export function DriversPage({
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [tierFilter, setTierFilter] = useState<string>('all');
   const [performanceFilter, setPerformanceFilter] = useState<string>('all');
+  const [overdueFollowUpsOnly, setOverdueFollowUpsOnly] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const rowsPerPage = 10;
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -273,6 +281,16 @@ export function DriversPage({
   const [saveViewName, setSaveViewName] = useState('');
   const [bulkStatusBusy, setBulkStatusBusy] = useState(false);
 
+  useEffect(() => {
+    let cancelled = false;
+    void fetchDriverSavedViews().then((views) => {
+      if (!cancelled) setSavedViews(views);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const [driverToDelete, setDriverToDelete] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [driverToRemove, setDriverToRemove] = useState<string | null>(null);
@@ -282,7 +300,7 @@ export function DriversPage({
   const earningsServiceLine = serviceLineParam;
 
   // Primary list source — server-aggregated roster (no client trip sample)
-  const { data: rosterRaw = [], isLoading: rosterLoading, isError: rosterError, error: rosterErr } = useQuery({
+  const { data: rosterPayload, isLoading: rosterLoading, isError: rosterError, error: rosterErr } = useQuery({
     queryKey: ['driversRoster'],
     queryFn: () => api.getDriversRoster(),
     staleTime: 2 * 60 * 1000,
@@ -290,6 +308,8 @@ export function DriversPage({
     refetchOnWindowFocus: false,
     refetchOnMount: false,
   });
+  const rosterRaw = rosterPayload?.data ?? [];
+  const rosterTruncated = Boolean(rosterPayload?.meta?.truncated);
 
   const loading = rosterLoading;
   // Second wave after roster settles — avoids stacking earnings-policies with
@@ -332,20 +352,32 @@ export function DriversPage({
     }
   }, [rosterError, rosterErr, driversLoadError, driversError]);
 
+  useEffect(() => {
+    if (rosterTruncated) {
+      toast.warning(
+        'Driver earnings/trip totals may be incomplete (server hit a scan limit). Refresh after periods rebuild, or contact support.',
+      );
+    }
+  }, [rosterTruncated]);
+
+  // List-tier enrich fights money-tab APIs for HTTP/1.1 slots on financial deep-links.
+  const onMoneyDeepLink =
+    Boolean(selectedDriverId) &&
+    (detailTab === 'financial' || detailTab === 'wallet');
+  // Ops tabs only — financial/wallet deep-links must not pull fleet vehicle-metrics (ROAM-FLEET-10).
+  const needsVehicleMetrics =
+    Boolean(selectedDriverId) &&
+    (detailTab === 'overview' || detailTab === 'quality');
+
   const { data: importedMetrics = [] } = useQuery({
     queryKey: ['driverMetrics'],
     queryFn: () => api.getDriverMetrics().catch(() => []),
-    enabled: enrichEnabled,
+    enabled: enrichEnabled && !onMoneyDeepLink,
     staleTime: 5 * 60 * 1000,
     gcTime: 15 * 60 * 1000,
     refetchOnWindowFocus: false,
     refetchOnMount: false,
   });
-
-  // Ops tabs only — financial/wallet/profile deep-links must not pull fleet vehicle-metrics (ROAM-FLEET-10).
-  const needsVehicleMetrics =
-    Boolean(selectedDriverId) &&
-    (detailTab === 'overview' || detailTab === 'quality');
 
   const { data: vehicleMetrics = [] } = useQuery({
     queryKey: ['vehicleMetrics'],
@@ -360,7 +392,7 @@ export function DriversPage({
   const { data: earningsPolicyCtx } = useQuery({
     queryKey: ['earningsPolicyRuntimeContext'],
     queryFn: () => loadEarningsPolicyRuntimeContext(),
-    enabled: enrichEnabled,
+    enabled: enrichEnabled && !onMoneyDeepLink,
     staleTime: 10 * 60 * 1000,
     gcTime: 30 * 60 * 1000,
     refetchOnWindowFocus: false,
@@ -485,6 +517,9 @@ export function DriversPage({
         createdAt: (row as any).createdAt ?? (profile as any)?.createdAt,
         licenseExpiry: (row as any).licenseExpiry ?? (profile as any)?.licenseExpiry,
         licenseNumber: (row as any).licenseNumber ?? (profile as any)?.licenseNumber,
+        dispatchBlocked: Boolean((row as any).dispatchBlocked),
+        dispatchBlockReason: (row as any).dispatchBlockReason,
+        overdueFollowUpCount: asNumber((row as any).overdueFollowUpCount),
       });
     });
   }, [safeRoster, safeManualDrivers, safeImportedMetrics, earningsPolicyCtx, earningsServiceLine]);
@@ -520,14 +555,22 @@ export function DriversPage({
              matchesPerformance = driver.acceptanceRate < 80;
           }
 
-          return matchesSearch && matchesStatus && matchesTier && matchesPerformance;
+          const matchesOverdue =
+            !overdueFollowUpsOnly || asNumber(driver.overdueFollowUpCount) > 0;
+
+          return matchesSearch && matchesStatus && matchesTier && matchesPerformance && matchesOverdue;
       });
-  }, [orgValidatedDrivers, searchQuery, statusFilter, tierFilter, performanceFilter]);
+  }, [orgValidatedDrivers, searchQuery, statusFilter, tierFilter, performanceFilter, overdueFollowUpsOnly]);
+
+  const overdueFollowUpDriverCount = useMemo(
+    () => orgValidatedDrivers.filter((d) => asNumber(d.overdueFollowUpCount) > 0).length,
+    [orgValidatedDrivers],
+  );
 
   // Export Function — Papa CSV via exportToCSV; gated for export / view roles
   // Formula-injection guard: prefix cells that Excel/Sheets would treat as formulas.
-  const csvSafe = (val: unknown): string | number => {
-    if (typeof val === 'number') return val;
+  // Formula-injection guard: neutralize cells Excel/Sheets would treat as formulas.
+  const csvSafe = (val: unknown): string => {
     const s = String(val ?? '');
     if (/^[=+\-@]/.test(s)) return `'${s}`;
     return s;
@@ -548,8 +591,8 @@ export function DriversPage({
       Vehicle: csvSafe(d.vehicle),
       Phone: csvSafe(d.phone),
       Email: csvSafe(d.email),
-      'Total Trips': d.totalTrips,
-      'Total Earnings': Number(d.totalEarnings || 0).toFixed(2),
+      'Total Trips': csvSafe(d.totalTrips),
+      'Total Earnings': csvSafe(Number(d.totalEarnings || 0).toFixed(2)),
       'Acceptance Rate': csvSafe(`${d.acceptanceRate}%`),
       Tier: csvSafe(d.tier),
       'License Number': csvSafe(d.licenseNumber || ''),
@@ -598,13 +641,14 @@ export function DriversPage({
   const applySavedView = (view: DriverSavedView) => {
     setStatusFilter(view.filters.status || 'all');
     setPerformanceFilter(view.filters.atRiskOnly ? 'risk' : 'all');
+    setOverdueFollowUpsOnly(Boolean(view.filters.overdueFollowUpsOnly));
     setTierFilter('all');
     setCurrentPage(1);
     setSelectedIds(new Set());
     toast.success(`Applied view “${view.name}”`);
   };
 
-  const handleSaveCurrentView = () => {
+  const handleSaveCurrentView = async () => {
     const name = saveViewName.trim();
     if (!name) {
       toast.error('Enter a name for this view');
@@ -616,23 +660,24 @@ export function DriversPage({
       filters: {
         status: statusFilter === 'all' ? undefined : statusFilter,
         atRiskOnly: performanceFilter === 'risk',
+        overdueFollowUpsOnly: overdueFollowUpsOnly || undefined,
       },
     };
-    const next = saveDriverSavedView(view);
+    const next = await saveDriverSavedView(view);
     setSavedViews(next);
     setSaveViewName('');
     setSaveViewOpen(false);
     toast.success(`Saved view “${name}”`);
   };
 
-  const handleDeleteSavedView = (id: string) => {
-    setSavedViews(deleteDriverSavedView(id));
+  const handleDeleteSavedView = async (id: string) => {
+    setSavedViews(await deleteDriverSavedView(id));
   };
 
   // Clear selection when filters change page contents
   useEffect(() => {
     setSelectedIds(new Set());
-  }, [searchQuery, statusFilter, tierFilter, performanceFilter, currentPage]);
+  }, [searchQuery, statusFilter, tierFilter, performanceFilter, overdueFollowUpsOnly, currentPage]);
 
   // Pagination Logic
   const totalPages = Math.ceil(filteredDrivers.length / rowsPerPage);
@@ -814,6 +859,22 @@ export function DriversPage({
                   </SelectContent>
                 </Select>
 
+                {overdueFollowUpDriverCount > 0 && (
+                  <Button
+                    variant={overdueFollowUpsOnly ? 'default' : 'outline'}
+                    size="sm"
+                    className="rounded-full"
+                    onClick={() => {
+                      setOverdueFollowUpsOnly((v) => !v);
+                      setCurrentPage(1);
+                    }}
+                    aria-pressed={overdueFollowUpsOnly}
+                  >
+                    <StickyNote className="h-4 w-4 mr-1.5" />
+                    Overdue notes ({overdueFollowUpDriverCount})
+                  </Button>
+                )}
+
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button variant="outline" size="sm" className="rounded-full">
@@ -843,7 +904,7 @@ export function DriversPage({
                             onPointerDown={(e) => e.preventDefault()}
                             onClick={(e) => {
                               e.stopPropagation();
-                              handleDeleteSavedView(view.id);
+                              void handleDeleteSavedView(view.id);
                             }}
                           >
                             <Trash2 className="h-3.5 w-3.5" />
@@ -1009,7 +1070,28 @@ export function DriversPage({
                                     </div>
                                 </TableCell>
                                 <TableCell>
-                                    <StatusBadge status={driver.status} />
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                      <StatusBadge status={driver.status} />
+                                      {driver.dispatchBlocked && (
+                                        <Badge
+                                          variant="destructive"
+                                          className="text-[10px] px-1.5 py-0"
+                                          title={driver.dispatchBlockReason || 'License expired'}
+                                        >
+                                          Dispatch blocked
+                                        </Badge>
+                                      )}
+                                      {asNumber(driver.overdueFollowUpCount) > 0 && (
+                                        <Badge
+                                          variant="outline"
+                                          className="text-[10px] px-1.5 py-0 gap-1 border-amber-300 text-amber-800 bg-amber-50"
+                                          title={`${driver.overdueFollowUpCount} overdue follow-up note(s)`}
+                                        >
+                                          <StickyNote className="h-3 w-3" />
+                                          {driver.overdueFollowUpCount}
+                                        </Badge>
+                                      )}
+                                    </div>
                                 </TableCell>
                                 <TableCell>
                                     <div className="font-medium text-slate-900 dark:text-slate-100">{formatJMD(driver.todaysEarnings, 2)}</div>

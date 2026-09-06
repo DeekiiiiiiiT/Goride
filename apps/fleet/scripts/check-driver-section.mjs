@@ -19,7 +19,7 @@ const SOFT_WARN = /false\s*&&/g;
 const MONEY_TEMPLATE = /`[^`]*\$\$\{/;
 const RICH_DASHBOARD_COPY = /Restoring rich performance dashboard/;
 const DRIVER_DETAIL = path.join(ROOT, 'DriverDetail.tsx');
-const DRIVER_DETAIL_LINE_WARN = 2000;
+const DRIVER_DETAIL_LINE_WARN = 600;
 
 function walk(dir, out = []) {
   for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -71,6 +71,22 @@ if (failures.length) {
   console.error('Driver section check FAILED:');
   for (const f of failures) console.error(`  ${f}`);
   process.exit(1);
+}
+
+// Phase F: roster + operational-periods SQL migrations must exist in repo.
+const migRoot = path.resolve(__dirname, '../../../supabase/migrations');
+const requiredMigs = [
+  'fleet_driver_roster_sql_aggregates',
+  'driver_operational_periods',
+];
+if (fs.existsSync(migRoot)) {
+  const migNames = fs.readdirSync(migRoot).join('\n');
+  for (const needle of requiredMigs) {
+    if (!migNames.includes(needle)) {
+      console.error(`Driver section check FAILED: missing migration matching ${needle}`);
+      process.exit(1);
+    }
+  }
 }
 
 console.log(`check:drivers OK (${files.length} files scanned)`);

@@ -27,6 +27,8 @@ export type DriverNote = {
   createdBy: string;
   /** Optional YYYY-MM-DD follow-up for ops reminders. */
   followUpDate?: string | null;
+  /** Optional assignee (fleet user id) for follow-up ownership. */
+  assignedTo?: string | null;
   organizationId?: string | null;
 };
 
@@ -78,6 +80,8 @@ async function handlePostNote(c: Context) {
     const followUpRaw = asStr(body?.followUpDate).trim();
     const followUpDate =
       followUpRaw && /^\d{4}-\d{2}-\d{2}$/.test(followUpRaw) ? followUpRaw : null;
+    const assignedToRaw = asStr(body?.assignedTo).trim();
+    const assignedTo = assignedToRaw || null;
     const note: DriverNote = stampOrg(
       {
         id: crypto.randomUUID(),
@@ -86,6 +90,7 @@ async function handlePostNote(c: Context) {
         createdAt: new Date().toISOString(),
         createdBy,
         followUpDate,
+        assignedTo,
       },
       c,
     ) as DriverNote;

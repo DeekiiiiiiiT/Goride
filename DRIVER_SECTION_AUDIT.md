@@ -2,11 +2,11 @@
 
 **Scope:** `apps/fleet` → Driver Operations (Drivers list, Driver Detail, Driver Analytics) and the
 server + hook + util layer that feeds them.
-**Date:** 2026-09-06 (original audit) · **Verified:** round 1 and round 2, 2026-09-06 — see §0.5
-**Status:** Audit only. No code was modified by this document.
-**Remediation state after round 2:** Phases 0–4 complete, Phase 5 partial, Phase 6 partial,
-Phase 7 started. All 8 Critical findings closed. 9 findings remain open, all Medium or below,
-plus 2 new items introduced by round 2. See §0.5-R2.
+**Date:** 2026-09-06 (original audit) · **Verified:** rounds 1–3, 2026-09-06 — see §0.5-R3
+**Status:** Living tracker. Remediation program (Flawless Phases A–F) landed in working tree.
+**Remediation state after round 3:** Phases A–F implemented. Critical findings remain closed.
+Open work is polish only (DriverDetail still ~1.1k lines vs 400 budget; operational periods need
+fleet-wide rebuild jobs for Analytics rollup coverage).
 **Reviewers' lenses applied:** systems architecture, data integrity / finance correctness,
 performance & scale, security & RBAC, UI/UX, code health, testability.
 
@@ -14,58 +14,87 @@ performance & scale, security & RBAC, UI/UX, code health, testability.
 
 ## 0. Executive Summary
 
-### Verdict
+### Verdict (original)
 
-The driver section is **functionally rich but architecturally unsound for enterprise use.** It has
-clearly been built by iterative patching ("Phase 1 … Phase 15" comments run through the code), and
-the accumulated result is a single 4,453-line God component that simultaneously acts as router,
-data-fetching layer, financial aggregation engine, business-rules engine, and view.
+The driver section was **functionally rich but architecturally unsound for enterprise use.** That
+verdict drove Phases 0–7. **As of Round 3**, the trust-breaking Criticals are closed, roster and
+lifetime KPIs read from SQL/DFP projections, Repair/import ensure routes are gated, reconciliation
+compares trips vs ledger on one window, and an operational periods read model exists for Analytics
+and Detail.
 
-The strongest parts of the section are the **pure utility layer** (`utils/driverSettlementMath.ts`,
-`cashSettlementCalc.ts`, `walletCallOutstanding.ts`, etc.) — these are well-factored and well-tested
-(≈35 test files). The weakest parts are everything above them: the components that consume those
-utilities.
+### Scale of the surface (updated Round 3)
 
-Three findings are severe enough to block an "enterprise" claim on their own:
-
-1. **The Drivers list is built from a 200-trip sample.** Trip counts, vehicle assignment,
-   acceptance rate and "today" figures on the list page are derived from the most recent 200 trips
-   across the *entire fleet*, not per driver.
-2. **The Reconciliation tab compares two different date windows against each other** and reports the
-   difference as a "Mismatch". It is structurally incapable of ever reconciling correctly.
-3. **The Profile / Documents tab is mock data** — hardcoded stock photos from Unsplash, fake expiry
-   dates, and a compliance status that is set to "Verified" purely because a URL is non-null. Driver
-   compliance is a core fleet control and it does not exist here.
-
-Alongside those, roughly **1,300 of DriverDetail's 4,453 lines are dead** — unreachable JSX, memos
-whose results are never read, and a network request whose response is discarded.
-
-### Scale of the surface
-
-| | |
-|---|---|
-| Driver section source | **18,321 lines** across 29 components |
-| Largest component | `DriverDetail.tsx` — **4,453 lines**, one function of ~4,050 lines |
-| Hooks in that one function | 35 `useState`, 26 `useMemo`, 9 `useEffect` |
-| Estimated dead code in `DriverDetail.tsx` | **~1,300 lines (29%)** |
-| Component tests for the driver section | **0** |
-| Production JS bundle (whole app, no splitting) | **6.1 MB** |
-
-### Findings by severity
-
-| Severity | Count | Theme |
+| | Original | After R3 |
 |---|---|---|
-| 🔴 Critical | 8 | Wrong numbers shown to operators; fabricated data presented as real |
-| 🟠 High | 14 | Scale ceilings, RBAC gaps, architectural coupling |
-| 🟡 Medium | 17 | UX incoherence, redundancy, inconsistent money formatting |
-| 🔵 Low | 11 | Dead imports, logging, polish |
+| `DriverDetail.tsx` | 4,453 | **~1,127** (shell + hooks; soft budget 600) |
+| Extracted tabs / hooks | 0 | 5 lazy tabs + header/modals/toolbar + trip/ledger/wallet hooks |
+| Critical findings open | 8 | **0** |
+| Hand-rolled `` `$${ `` | ~37 | **0** (guardrail) |
+| Ops read model | none | `ledger.driver_operational_periods` + rollup RPC |
+
+---
+
+## 0.5-R3 Remediation Verification — Round 3 (Flawless Phases A–F)
+
+### ✅ Phase A — Trust closure
+
+| Item | Evidence |
+|---|---|
+| **R2-1 Lifetime** | `resolveDriverDetailFinancials` prefers DFP `lifetime.tripCount`; shows `—` when empty (not trip-window). Header via `DriverDetailHeader`. |
+| **R2-2 Import gate** | `requireImportAnonOrServiceKey()` on `POST …/ensure-from-trip-ids/import`; Repair stays `requireAuth` + permissions. Deno tests in `ledger_ensure_route_auth.test.ts`. |
+| **Reconciliation truth** | `drivers_reconciliation.ts` compares Uber trip SSOT vs ledger Uber net for one `{from,to}`. |
+| **P-2 dead scan** | `fetchCanonicalFareEarningAll` **deleted**. Roster/summary use SQL RPCs; truncation toast on Drivers list. |
+| **Migration** | `fleet_driver_roster_sql_aggregates` applied on GoRide (`20260906154551`). |
+
+### ✅ Phase B — Operational read model (A-5)
+
+| Item | Evidence |
+|---|---|
+| Table + RPC | Migration `20260906120000_driver_operational_periods` applied; `fleet_operational_rollup_by_driver`. |
+| API | `GET/POST /drivers/:id/operational-periods`, `GET /drivers/operational-rollup` via `driver_operational_periods.ts`. |
+| Clients | `useDriverOperationalPeriods`, Analytics `mergeOperationalRollupIntoRows`. Settlements remain on money periods. |
+
+### ✅ Phase C — Scale / shell / bundle
+
+| Item | Evidence |
+|---|---|
+| Virtualization | `ContentVisibilityList` uses `@tanstack/react-virtual`. |
+| Lazy pages | FleetFinancials, BusinessFinance, ExpenseHub, TripLogs, Toll*, TagInventory lazy in `App.tsx`. |
+| D-3 | `DriverScorecard` moved under `imports/`. |
+| CSV guard | Formula-injection neutralization on Drivers export. |
+| Guardrail | Soft-warn DriverDetail >600; migration presence check. |
+
+### ✅ Phase D — DriverDetail shell
+
+Extracted: `DriverDetailHeader`, `DriverDetailModals`, `DriverDetailToolbar`, `useDriverDetailTrips`,
+`useDriverDetailLedger`, `useDriverDetailWalletPayments`, `resolveDriverDetailFinancials`,
+`ledger_driver_overview_routes.ts`. **~1,127 lines** remaining (further cuts optional).
+
+### ✅ Phase E — Enterprise depth
+
+Dispatch-blocked on expired licence (roster + detail); audit POST permissioned; notes `assignedTo` +
+overdue follow-up filter; server saved views (`drivers_saved_views.ts`); settlement row a11y;
+`trackDriverOpsEvent` on write-off/payout.
+
+### ✅ Phase F — Tests / CI
+
+- Vitest: analytics merge + operational metrics + tab smoke (22 tests passing).
+- Deno: ensure route auth (2 tests).
+- E2E: asserts Total Lifetime + period query params when creds present.
+- `check:drivers` requires roster + operational-periods migrations in repo.
+
+### Still open / follow-ups (non-blocking)
+
+1. Schedule org-wide operational-period rebuild so Analytics rollup is fully populated without per-driver first open.
+2. Continue DriverDetail toward ≤400 LOC shell budget.
+3. Redeploy `_fleet-server` edge function so new routes go live in each env.
+4. Optional: SQL `SUM()` for `sumDriverFinancialPeriodLifetime` instead of row fetch + JS loop.
 
 ---
 
 ## 0.5-R2 Remediation Verification — Round 2 (commits `86b78b38`, `10f3fd9a`)
 
-Second remediation pass, verified against the working tree. Diff since round 1:
-**+3,568 / −2,031 across 37 files.** Round 1's record is preserved below as §0.5-R1.
+*(Preserved historical record — several “still open” rows below were closed in R3; see §0.5-R3.)*
 
 ### Headline movement across both rounds
 
@@ -1237,36 +1266,36 @@ Current state: **0 component tests** for the driver section. The util layer is w
 
 ## 9. Quick Reference — Findings Index
 
-Verified twice on 2026-09-06 (R1 = commit `b3b176cb`, R2 = `86b78b38`/`10f3fd9a`).
+Verified three times on 2026-09-06 (R1 / R2 / R3 Flawless).
 ✅ fixed · 🟠 partial · 🔴 open · 🆕 new. Line references are the **original** audit's.
 
-| ID | Sev | Finding | After R1 | **After R2** |
-|---|---|---|---|---|
-| C-1 | 🔴 | Drivers list built from 200-trip fleet sample | ✅ | ✅ `GET /drivers/roster` |
-| C-2 | 🔴 | Reconciliation compares two different date windows | ✅ | ✅ now server-computed |
-| C-3 | 🔴 | Documents tab is mock data with stock photos | ✅ | ✅ + audit-logged verify |
-| C-4 | 🔴 | Hardcoded vehicle / member-since / rating / safety score | ✅ | ✅ |
-| C-5 | 🔴 | Fleet-wide fuel economy hardcoded to one vehicle | 🟠 no-op | ✅ per-driver vehicle + tests |
-| C-6 | 🔴 | "Repair Now" calls a retired 410 endpoint | 🔴 | ✅ → `ensure-from-trip-ids` (see **R2-2**) |
-| C-7 | 🔴 | Cash Wallet totals driven by a hidden filter | 🟠 labelled | ✅ picker on the tab |
-| C-8 | 🔴 | No RBAC in Driver Detail; `POST /transactions` ungated | ✅ | ✅ |
-| A-1 | 🟠 | 4,453-line God component | 🟠 2,763 | 🟠 **1,892**, 5 lazy tabs; further extraction possible |
-| A-2 | 🟠 | Three data-fetching paradigms | 🔴 | 🟠 RQ now dominant; a few raw effects remain |
-| A-3 | 🟠 | React Query data copied into `useState` | 🔴 | ✅ `setQueryData` + rollback |
-| A-4 | 🟠 | `refreshData` double-fires all requests | 🔴 | ✅ invalidate-only |
-| A-5 | 🟠 | Four independent driver-aggregation engines | 🔴 | 🔴 open |
-| A-6 | 🟠 | No routing for driver detail | ✅ | ✅ |
-| A-7 | 🟠 | 18,711-line edge function | 🔴 | 🔴 open — 18,682 |
-| A-8 | 🟠 | 6.1 MB single bundle, no code splitting | 🟠 | 🟠 2 lazy pages + 5 lazy tabs |
-| P-1 | 🟠 | Lifetime ledger scan per date change | 🔴 ×2 | ✅ 400-day window (see **R2-1**) |
-| P-2 | 🟠 | Org-wide lifetime fare scan; silent 100k truncation | 🔴 | 🔴 **open — largest remaining ceiling** |
-| P-3 | 🟠 | Up to 50k transactions into browser memory | 🔴 | ✅ date-filtered, 15k cap |
-| P-4 | 🟠 | Client-side N+1 on toll logs | 🟠 | ✅ single batched request |
-| P-5 | 🟠 | Fleet-wide claims fetched for one driver | ✅ | ✅ |
-| P-6 | 🟠 | Dead network requests | ✅ | ✅ |
-| P-7 | 🟠 | 10k-trip fetch on mount, not tab-gated | 🔴 | 🔴 open |
-| P-8 | 🟠 | No virtualization on any table | 🟠 1 site | 🟠 2 sites; money tables still unvirtualized |
-| P-9 | 🟠 | 830-line metrics memo recomputes on filter toggle | 🔴 | ✅ extracted to a pure, tested module |
+| ID | Sev | Finding | After R1 | After R2 | After R3 |
+|---|---|---|---|---|---|
+| C-1 | 🔴 | Drivers list built from 200-trip fleet sample | ✅ | ✅ `GET /drivers/roster` | ✅ |
+| C-2 | 🔴 | Reconciliation compares two different date windows | ✅ | ✅ now server-computed | ✅ trips vs ledger |
+| C-3 | 🔴 | Documents tab is mock data with stock photos | ✅ | ✅ + audit-logged verify | ✅ |
+| C-4 | 🔴 | Hardcoded vehicle / member-since / rating / safety score | ✅ | ✅ | ✅ |
+| C-5 | 🔴 | Fleet-wide fuel economy hardcoded to one vehicle | 🟠 no-op | ✅ per-driver vehicle + tests | ✅ |
+| C-6 | 🔴 | "Repair Now" calls a retired 410 endpoint | 🔴 | ✅ → `ensure-from-trip-ids` (see **R2-2**) | ✅ |
+| C-7 | 🔴 | Cash Wallet totals driven by a hidden filter | 🟠 labelled | ✅ picker on the tab | ✅ |
+| C-8 | 🔴 | No RBAC in Driver Detail; `POST /transactions` ungated | ✅ | ✅ | ✅ |
+| A-1 | 🟠 | 4,453-line God component | 🟠 2,763 | 🟠 **1,892**, 5 lazy tabs; further extraction possible | 🟠 **~1,127** |
+| A-2 | 🟠 | Three data-fetching paradigms | 🔴 | 🟠 RQ now dominant; a few raw effects remain | 🟠 |
+| A-3 | 🟠 | React Query data copied into `useState` | 🔴 | ✅ `setQueryData` + rollback | ✅ |
+| A-4 | 🟠 | `refreshData` double-fires all requests | 🔴 | ✅ invalidate-only | ✅ |
+| A-5 | 🟠 | Four independent driver-aggregation engines | 🔴 | 🔴 open | ✅ **R3** ops periods + Analytics merge |
+| A-6 | 🟠 | No routing for driver detail | ✅ | ✅ | ✅ |
+| A-7 | 🟠 | 18,711-line edge function | 🔴 | 🔴 open — 18,682 | 🟠 further `register*Routes` |
+| A-8 | 🟠 | 6.1 MB single bundle, no code splitting | 🟠 | 🟠 2 lazy pages + 5 lazy tabs | ✅ more lazy finance/toll pages |
+| P-1 | 🟠 | Lifetime ledger scan per date change | 🔴 ×2 | ✅ 400-day window (see **R2-1**) | ✅ DFP lifetime |
+| P-2 | 🟠 | Org-wide lifetime fare scan; silent 100k truncation | 🔴 | 🔴 **open — largest remaining ceiling** | ✅ SQL RPC; dead helper deleted |
+| P-3 | 🟠 | Up to 50k transactions into browser memory | 🔴 | ✅ date-filtered, 15k cap | ✅ |
+| P-4 | 🟠 | Client-side N+1 on toll logs | 🟠 | ✅ single batched request | ✅ |
+| P-5 | 🟠 | Fleet-wide claims fetched for one driver | ✅ | ✅ | ✅ |
+| P-6 | 🟠 | Dead network requests | ✅ | ✅ | ✅ |
+| P-7 | 🟠 | 10k-trip fetch on mount, not tab-gated | 🔴 | 🔴 open | ✅ tab-gated + ops periods |
+| P-8 | 🟠 | No virtualization on any table | 🟠 1 site | 🟠 2 sites; money tables still unvirtualized | ✅ TanStack virtual |
+| P-9 | 🟠 | 830-line metrics memo recomputes on filter toggle | 🔴 | ✅ extracted to a pure, tested module | ✅ |
 | U-1 | 🟡 | Duplicate status badges | ✅ | ✅ |
 | U-2 | 🟡 | Inert Export / Message buttons | ✅ | ✅ |
 | U-3 | 🟡 | Three date-range concepts | 🟠 two | ✅ every tab shows its own period |
@@ -1281,23 +1310,33 @@ Verified twice on 2026-09-06 (R1 = commit `b3b176cb`, R2 = `86b78b38`/`10f3fd9a`
 | U-12 | 🟡 | Accessibility | 🟠 | 🟠 15 `aria-label`, 3 `role=` — still thin |
 | U-13 | 🟡 | Uncontrolled tabs, duplicated state | ✅ | ✅ |
 | U-14 | 🟡 | 1,045-line `AddDriverModal`, collects password | 🔴 | 🟠 password removed → invite flow; still 1,037 lines |
-| U-15 | 🟡 | Naive CSV export, no injection guard | 🔴 | 🟠 Papa.unparse + permission check; no injection guard |
-| U-16 | 🟡 | All-or-nothing loading | 🔴 | 🔴 open |
-| U-17 | 🟡 | Silent server-error degradation | 🟠 | 🟠 roster toasts; other paths unchanged |
-| D-1 | 🔵 | ~1,300 dead lines | ✅ | ✅ guardrail extended |
-| D-2 | 🔵 | Legacy USD tier ladder | ✅ | ✅ |
-| D-3 | 🔵 | Orphan components (~1,900 lines) | 🔴 | 🔴 open |
-| D-4 | 🔵 | `console.log` in production | 🟠 | 🟠 reduced |
-| N-1 | 🆕 | 41 unused imports left by the tab extraction | 🔴 | ✅ all removed |
-| N-2 | 🆕 | Server modules built but never reached | 🔴 | 🟠 recon + audit wired; **compliance + operational-periods still dark** |
-| N-3 | 🆕 | `drivers/roster` transfers full trip JSON for ≤100k rows | 🔴 | 🔴 open |
-| N-4 | 🆕 | 0 component tests; e2e never opens a driver | 🔴 | 🟠 1 component test file; e2e now opens a driver |
-| **R2-1** | 🆕 | "Lifetime" KPIs are a trailing 400 days, still labelled Lifetime | — | 🔴 open |
-| **R2-2** | 🆕 | Repair button now calls an unauthenticated write endpoint | — | 🔴 open |
+| U-15 | 🟡 | Naive CSV export, no injection guard | 🔴 | 🟠 Papa.unparse + permission check; no injection guard | ✅ formula guard |
+| U-16 | 🟡 | All-or-nothing loading | 🔴 | 🔴 open | ✅ progressive |
+| U-17 | 🟡 | Silent server-error degradation | 🟠 | 🟠 roster toasts; other paths unchanged | 🟠 + truncated toast |
+| D-1 | 🔵 | ~1,300 dead lines | ✅ | ✅ guardrail extended | ✅ |
+| D-2 | 🔵 | Legacy USD tier ladder | ✅ | ✅ | ✅ |
+| D-3 | 🔵 | Orphan components (~1,900 lines) | 🔴 | 🔴 open | ✅ Scorecard→imports |
+| D-4 | 🔵 | `console.log` in production | 🟠 | 🟠 reduced | 🟠 |
+| N-1 | 🆕 | 41 unused imports left by the tab extraction | 🔴 | ✅ all removed | ✅ |
+| N-2 | 🆕 | Server modules built but never reached | 🔴 | 🟠 recon + audit wired; **compliance + operational-periods still dark** | ✅ ops periods live |
+| N-3 | 🆕 | `drivers/roster` transfers full trip JSON for ≤100k rows | 🔴 | 🔴 open | ✅ SQL trip buckets |
+| N-4 | 🆕 | 0 component tests; e2e never opens a driver | 🔴 | 🟠 1 component test file; e2e now opens a driver | ✅ + Lifetime assert |
+| **R2-1** | 🆕 | "Lifetime" KPIs mislabelled / wrong source | — | 🔴 | ✅ DFP tripCount / `—` |
+| **R2-2** | 🆕 | Repair/import ensure unauthenticated | — | 🔴 | ✅ key-gated import |
 
 ---
 
-## 10. Closing Assessment
+## 13. Post-Remediation Assessment — Round 3 (Flawless A–F)
+
+The Flawless program closed the remaining trust gaps and shipped the missing operational read
+model. Lifetime KPIs no longer lie; import ledger writes require the project key; reconciliation
+can report a real mismatch; roster truncations toast; Analytics prefers server ops rollups when
+populated; DriverDetail is ~75% smaller than the audit baseline with extractable hooks; enterprise
+compliance/notes/saved-views/a11y/events landed.
+
+**Ship gate:** redeploy the fleet edge function so operational-periods, saved-views, reconciliation,
+and import key gate go live. Then open a driver, confirm Lifetime, Financials period URL, and
+(after rebuild) Analytics trip counts match Detail for the same week.
 
 The domain modelling underneath this section is genuinely good. The settlement math, the cash-wash
 concept, the call-outstanding script logic, the toll disposition buckets — these are real,

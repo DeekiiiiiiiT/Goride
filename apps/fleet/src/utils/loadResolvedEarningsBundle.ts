@@ -6,7 +6,7 @@
 import type { ResolvedEarningsBundle } from '../types/earningsPolicy';
 import type { EarningsPolicy } from '../types/earningsPolicy';
 import { earningsPolicyService } from '../services/earningsPolicyService';
-import { tierService } from '../services/tierService';
+import { api } from '../services/api';
 import {
   resolveActiveEarningsBundleForDriverWeek,
   type LegacyEarningsConfig,
@@ -17,6 +17,7 @@ import {
   createEmptyQuotas,
   createDefaultPersonalAllowance,
 } from './earningsPolicyDefaults';
+import { mergePersonalAllowanceDefaults } from './personalAllowance';
 
 export type EarningsPolicyRuntimeContext = {
   policies: EarningsPolicy[];
@@ -24,12 +25,20 @@ export type EarningsPolicyRuntimeContext = {
 };
 
 export async function loadEarningsPolicyRuntimeContext(): Promise<EarningsPolicyRuntimeContext> {
-  const [policies, tiers, quotas, personalAllowance] = await Promise.all([
+  // Single prefs GET (also cached) — never fan out 3× getPreferences via tierService (ROAM-FLEET-10).
+  const [policies, prefs] = await Promise.all([
     earningsPolicyService.getEarningsPolicies().catch(() => [] as EarningsPolicy[]),
-    tierService.getTiers().catch(() => createDefaultTiers()),
-    tierService.getQuotaSettings().catch(() => createEmptyQuotas()),
-    tierService.getPersonalAllowanceSettings().catch(() => createDefaultPersonalAllowance()),
+    api.getPreferences().catch(() => ({}) as Record<string, unknown>),
   ]);
+
+  const tiers =
+    Array.isArray(prefs?.tiers) && prefs.tiers.length > 0
+      ? prefs.tiers
+      : createDefaultTiers();
+  const quotas = prefs?.quotas || createEmptyQuotas();
+  const personalAllowance = prefs?.personalAllowance
+    ? mergePersonalAllowanceDefaults(prefs.personalAllowance)
+    : createDefaultPersonalAllowance();
 
   return {
     policies,

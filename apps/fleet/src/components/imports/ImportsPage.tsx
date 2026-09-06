@@ -63,7 +63,7 @@ import { Checkbox } from "../ui/checkbox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
 import { Badge } from "../ui/badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "../ui/collapsible";
-import { DriverScorecard } from '../drivers/DriverScorecard';
+import { DriverScorecard } from './DriverScorecard';
 import { VehicleHealthCard } from '../vehicles/VehicleHealthCard';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "../ui/dialog";
 import { Label } from "../ui/label";

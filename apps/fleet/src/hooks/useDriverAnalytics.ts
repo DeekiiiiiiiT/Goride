@@ -13,6 +13,7 @@ import {
   buildPlatformMix,
   buildDriverAlerts,
   buildTenureDistribution,
+  mergeOperationalRollupIntoRows,
   type DriverRow,
   type DriverKpis,
 } from '../utils/driverAnalyticsAggregates';
@@ -79,6 +80,15 @@ export function useDriverAnalytics() {
     refetchOnWindowFocus: false,
   });
 
+  // Prefer server operational rollup for trip/rate KPIs (A-5) — trips still feed earnings/heatmap.
+  const { data: opsRollup = [], refetch: refetchOps } = useQuery({
+    queryKey: ['fleetOperationalRollup', period.startYmd, period.endYmd],
+    queryFn: () =>
+      api.getFleetOperationalRollup(period.startYmd, period.endYmd).catch(() => []),
+    staleTime: 2 * 60 * 1000,
+    refetchOnWindowFocus: false,
+  });
+
   const loading = tripsLoading || driversLoading || metricsLoading;
 
   const metricsMap = useMemo(() => latestMetricsByDriver(driverMetrics), [driverMetrics]);
@@ -87,10 +97,10 @@ export function useDriverAnalytics() {
   // prior trips already fetched for prior window
   const priorPeriodTrips = priorTrips;
 
-  const periodRows = useMemo(
-    () => buildDriverRows(periodTrips, drivers as any[], metricsMap),
-    [periodTrips, drivers, metricsMap],
-  );
+  const periodRows = useMemo(() => {
+    const base = buildDriverRows(periodTrips, drivers as any[], metricsMap);
+    return mergeOperationalRollupIntoRows(base, opsRollup);
+  }, [periodTrips, drivers, metricsMap, opsRollup]);
   const priorRows = useMemo(
     () => buildDriverRows(priorPeriodTrips, drivers as any[], metricsMap),
     [priorPeriodTrips, drivers, metricsMap],
@@ -143,7 +153,8 @@ export function useDriverAnalytics() {
     void refetchTrips();
     void refetchDrivers();
     void refetchMetrics();
-  }, [refetchTrips, refetchDrivers, refetchMetrics]);
+    void refetchOps();
+  }, [refetchTrips, refetchDrivers, refetchMetrics, refetchOps]);
 
   const exportCsv = useCallback(() => {
     const lines = [

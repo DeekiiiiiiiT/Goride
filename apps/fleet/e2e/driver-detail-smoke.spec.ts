@@ -35,6 +35,9 @@ test.describe('Fleet driver detail smoke', () => {
     await driverRow.click();
     await expect(page).toHaveURL(/\/drivers\//, { timeout: 30_000 });
 
+    // Overview Lifetime label must be present (DFP-backed; may show — if empty).
+    await expect(page.getByText(/Total Lifetime/i).first()).toBeVisible({ timeout: 30_000 });
+
     const financialsTab = page
       .getByRole('tab', { name: /Financials/i })
       .or(page.getByRole('button', { name: /Financials/i }))

@@ -21,6 +21,11 @@ import type {
 import { compressImage, OCR_COMPRESS_OPTS } from '../utils/compressImage';
 import { isTollCategory } from '../utils/tollCategoryHelper';
 import { appendUploadEvidenceMeta, type UploadEvidenceMeta } from '@roam/types/evidence';
+import {
+  clearPreferencesCache,
+  fetchPreferencesCached,
+  seedPreferencesCache,
+} from './preferencesClient';
 
 // Auth headers are centralized in utils/authHeaders (single source of truth for
 // session-JWT scoping + product-line headers; throws AuthRequiredError logged out).
@@ -835,33 +840,44 @@ export const api = {
   },
 
   /** Pre-aggregated Drivers list — one row per driver (trips + earnings server-side). */
-  async getDriversRoster(): Promise<Array<{
-    id: string;
-    name: string;
-    status: string;
-    phone: string;
-    email: string;
-    vehicle: string;
-    totalTrips: number;
-    todaysTrips: number;
-    acceptanceRate: number;
-    totalEarnings: number;
-    monthlyEarnings: number;
-    todaysEarnings: number;
-    licenseFrontUrl?: string;
-    licenseBackUrl?: string;
-    proofOfAddressUrl?: string;
-    proofOfAddressType?: string;
-    uberDriverId?: string;
-    inDriveDriverId?: string;
-    createdAt?: string;
-    licenseExpiry?: string;
-    licenseNumber?: string;
-    avatarUrl?: string;
-    organizationId?: string;
-    tier?: string;
-    bankInfo?: unknown;
-  }>> {
+  async getDriversRoster(): Promise<{
+    data: Array<{
+      id: string;
+      name: string;
+      status: string;
+      phone: string;
+      email: string;
+      vehicle: string;
+      totalTrips: number;
+      todaysTrips: number;
+      acceptanceRate: number;
+      totalEarnings: number;
+      monthlyEarnings: number;
+      todaysEarnings: number;
+      licenseFrontUrl?: string;
+      licenseBackUrl?: string;
+      proofOfAddressUrl?: string;
+      proofOfAddressType?: string;
+      uberDriverId?: string;
+      inDriveDriverId?: string;
+      createdAt?: string;
+      licenseExpiry?: string;
+      licenseNumber?: string;
+      avatarUrl?: string;
+      organizationId?: string;
+      tier?: string;
+      bankInfo?: unknown;
+      dispatchBlocked?: boolean;
+      dispatchBlockReason?: string;
+      overdueFollowUpCount?: number;
+    }>;
+    meta?: {
+      truncated?: boolean;
+      earningsSource?: string;
+      totalDrivers?: number;
+      durationMs?: number;
+    };
+  }> {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/drivers/roster`, {
       headers: await getHeaders(null, { requireAuth: true }),
     });
@@ -870,8 +886,10 @@ export const api = {
       throw new Error(`Failed to fetch drivers roster: ${errText || response.status}`);
     }
     const json = await response.json();
-    if (Array.isArray(json)) return json;
-    if (json?.success && Array.isArray(json.data)) return json.data;
+    if (Array.isArray(json)) return { data: json, meta: {} };
+    if (json?.success && Array.isArray(json.data)) {
+      return { data: json.data, meta: json.meta || {} };
+    }
     throw new Error(json?.error || 'Drivers roster returned unexpected shape');
   },
 
@@ -932,6 +950,78 @@ export const api = {
     return response.json();
   },
 
+  async getDriverOperationalPeriods(driverId: string, from?: string, to?: string) {
+    const qs = new URLSearchParams();
+    if (from) qs.set('from', from);
+    if (to) qs.set('to', to);
+    const q = qs.toString();
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.fleet}/drivers/${encodeURIComponent(driverId)}/operational-periods${q ? `?${q}` : ''}`,
+      { headers: await requireAuthHeaders(null) },
+    );
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || 'Failed to fetch operational periods');
+    }
+    const json = await response.json();
+    return (json?.data || []) as Array<{
+      driverId: string;
+      periodAnchor: string;
+      periodEnd: string;
+      tripCount: number;
+      completedCount: number;
+      cancelledCount: number;
+      distanceKm: number;
+      durationMinutes: number;
+      ratingSum: number;
+      ratingCount: number;
+      acceptanceRate: number | null;
+      cancellationRate: number | null;
+      platformBreakdown: Record<string, unknown>;
+    }>;
+  },
+
+  async rebuildDriverOperationalPeriods(driverId: string, from?: string, to?: string) {
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.fleet}/drivers/${encodeURIComponent(driverId)}/operational-periods/rebuild`,
+      {
+        method: 'POST',
+        headers: await requireAuthHeaders(),
+        body: JSON.stringify({ from, to }),
+      },
+    );
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || 'Failed to rebuild operational periods');
+    }
+    return response.json();
+  },
+
+  async getFleetOperationalRollup(from: string, to: string) {
+    const qs = new URLSearchParams({ from, to });
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.fleet}/drivers/operational-rollup?${qs}`,
+      { headers: await requireAuthHeaders(null) },
+    );
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || 'Failed to fetch operational rollup');
+    }
+    const json = await response.json();
+    return (json?.data || []) as Array<{
+      driverId: string;
+      tripCount: number;
+      completedCount: number;
+      cancelledCount: number;
+      distanceKm: number;
+      durationMinutes: number;
+      ratingSum: number;
+      ratingCount: number;
+      acceptanceRate: number | null;
+      cancellationRate: number | null;
+    }>;
+  },
+
   async getDriverAudit(driverId: string) {
     const response = await fetchWithRetry(
       `${API_ENDPOINTS.fleet}/drivers/${encodeURIComponent(driverId)}/audit`,
@@ -985,17 +1075,24 @@ export const api = {
         createdAt: string;
         createdBy: string;
         followUpDate?: string | null;
+        assignedTo?: string | null;
       }>;
     }>;
   },
 
-  async addDriverNote(driverId: string, text: string, followUpDate?: string) {
+  async addDriverNote(
+    driverId: string,
+    text: string,
+    followUpDate?: string,
+    assignedTo?: string,
+  ) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/drivers/${encodeURIComponent(driverId)}/notes`, {
       method: 'POST',
       headers: await requireAuthHeaders(),
       body: JSON.stringify({
         text,
         ...(followUpDate ? { followUpDate } : {}),
+        ...(assignedTo ? { assignedTo } : {}),
       }),
     });
     if (!response.ok) {
@@ -1327,21 +1424,26 @@ export const api = {
   },
 
   async getPreferences() {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.admin}/settings/preferences`, {
-        headers: await requireAuthHeaders(null)
+    return fetchPreferencesCached(async () => {
+      const response = await fetchWithRetry(`${API_ENDPOINTS.admin}/settings/preferences`, {
+          headers: await requireAuthHeaders(null)
+      });
+      if (!response.ok) throw new Error("Failed to fetch preferences");
+      return response.json();
     });
-    if (!response.ok) throw new Error("Failed to fetch preferences");
-    return response.json();
   },
 
   async savePreferences(preferences: any) {
+    clearPreferencesCache();
     const response = await fetchWithRetry(`${API_ENDPOINTS.admin}/settings/preferences`, {
         method: 'POST',
         headers: await requireAuthHeaders(),
         body: JSON.stringify(preferences)
     });
     if (!response.ok) throw new Error("Failed to save preferences");
-    return response.json();
+    const result = await response.json();
+    seedPreferencesCache(preferences);
+    return result;
   },
 
   async updateOrgServiceLines(serviceLines: Array<'rideshare' | 'rush_delivery'>) {

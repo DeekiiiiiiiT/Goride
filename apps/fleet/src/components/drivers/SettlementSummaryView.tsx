@@ -683,7 +683,16 @@ const key = format(row.periodStart, 'yyyy-MM-dd');
                       <TableRow
                         key={key}
                         className={`${rowBg} cursor-pointer transition-colors hover:bg-slate-100/60`}
+                        role="button"
+                        tabIndex={0}
+                        aria-label={`Open settlement details for ${formatPeriod(row)}`}
                         onClick={() => setSelectedRow(row)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            setSelectedRow(row);
+                          }
+                        }}
                       >
                         {/* Period */}
                         <TableCell className="text-xs font-medium whitespace-nowrap">

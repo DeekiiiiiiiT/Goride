@@ -63,17 +63,6 @@ export async function fetchAllLedgerEventValuesForDrivers(
   return filterByOrg(all, c);
 }
 
-/** Load org-scoped fare_earning rows from ledger.entries (raw — prefer aggregateCanonicalFareEarningsByDriver). */
-export async function fetchCanonicalFareEarningAll(c: Context | any): Promise<any[]> {
-  const { listAllUnifiedCanonicalEvents } = await import("../_shared/unifiedLedger/queries.ts");
-  const rows = await listAllUnifiedCanonicalEvents({
-    products: ["roam_driver", "roam_fleet"],
-    entryTypes: ["fare_earning"],
-    maxRows: 100_000,
-  });
-  return filterByOrg(rows, c);
-}
-
 function emptyBucket(): FareEarningsDriverBucket {
   return {
     lifetimeEarnings: 0,

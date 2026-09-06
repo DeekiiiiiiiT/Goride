@@ -35,44 +35,31 @@
 // Money display paths use canonical ledger APIs (ledger_event:*); not raw trip:* for posted money.
 // ════════════════════════════════════════════════════════════════════════════
 
-import React, { useState, useMemo, useEffect, useRef, Suspense } from 'react';
+import React, {
+  useState,
+  useMemo,
+  useEffect,
+  useRef,
+  Suspense,
+} from 'react';
 import {
-  ArrowLeft,
-  Star,
-  AlertTriangle,
-  Calendar as CalendarIcon,
-  Award,
-  Filter,
-  CreditCard as CreditCardIcon,
   Loader2,
-  Car as CarIcon,
-  ChevronDown,
-  Stethoscope,
 } from "lucide-react";
-import { Button } from "../ui/button";
-import { PeriodWeekDropdown } from '../ui/PeriodWeekDropdown';
 import type { PeriodWeekOption } from '../../utils/periodWeekOptions';
-import { Badge } from "../ui/badge";
-import { Avatar, AvatarFallback } from "../ui/avatar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
-import { 
-  DropdownMenu, 
-  DropdownMenuContent, 
-  DropdownMenuItem, 
-  DropdownMenuSeparator, 
-  DropdownMenuTrigger 
-} from "../ui/dropdown-menu";
-import { Trip, DriverMetrics, FinancialTransaction, QuotaConfig, LedgerDriverOverview } from '../../types/data';
+import { Trip, DriverMetrics, FinancialTransaction, QuotaConfig } from '../../types/data';
 import { format, isWithinInterval, startOfDay, endOfDay } from "date-fns";
-import { cn } from "../ui/utils";
 import { toast } from "sonner";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "../ui/dialog";
-import { LogCashPaymentModal } from './LogCashPaymentModal';
-import { CashWriteOffModal, type CashWriteOffSavePayload } from './CashWriteOffModal';
-import { RecordPayoutModal, type RecordPayoutSavePayload } from './RecordPayoutModal';
-import { PermissionGate } from '../auth/PermissionGate';
+import type { CashWriteOffSavePayload } from './CashWriteOffModal';
+import type { RecordPayoutSavePayload } from './RecordPayoutModal';
+import {
+  DriverDetailModals,
+  useDriverDetailModals,
+} from './DriverDetailModals';
+import { DriverDetailToolbar } from './DriverDetailToolbar';
 import { usePermissions } from '../../hooks/usePermissions';
 import { useVocab } from '../../utils/vocabulary';
+import { trackDriverOpsEvent } from '../../utils/driverOpsEvents';
 import { useDriverPayoutPeriodRows } from '../../hooks/useDriverPayoutPeriodRows';
 import { useDriverFinancialBundle } from '../../hooks/useDriverFinancialBundle';
 import { useInvalidateDriverFinancialPeriods } from '../../hooks/useDriverFinancialPeriods';
@@ -82,9 +69,12 @@ import {
 } from '../../hooks/useDriverTransactions';
 import { useQueryClient } from '@tanstack/react-query';
 import { useDriverTollLogs } from '../../hooks/useDriverTollLogs';
+import { useDriverDetailTrips } from '../../hooks/useDriverDetailTrips';
+import { useDriverDetailLedger } from '../../hooks/useDriverDetailLedger';
+import { useDriverDetailWalletPayments } from '../../hooks/useDriverDetailWalletPayments';
 import { buildWalletCallOutstandingByMonday } from '../../utils/walletCallOutstanding';
+import { resolveDriverDetailFinancials } from '../../utils/resolveDriverDetailFinancials';
 // TollRecoveryCard removed — Phase 8 uses platformStats injection instead
-// fetchDriverTrips.ts deleted in Phase 11 — logic inlined in the useEffect below
 import {
   DriverPeriodProvider,
   useDriverPeriod,
@@ -93,10 +83,9 @@ import {
   isDriverDetailTab,
   type DriverDetailTab,
 } from '../../navigation/pageRegistry';
-import { PLATFORM_COLORS } from './OverviewMetricsGrid';
 import { DriverIndriveWalletTab } from './DriverIndriveWalletTab';
-import { DriverFuelPolicySelect } from './DriverFuelPolicySelect';
-import { TimeFilterDropdown, TimeFilterValue } from './TimeFilterDropdown';
+import { DriverDetailHeader } from './DriverDetailHeader';
+import { TimeFilterValue } from './TimeFilterDropdown';
 import { api } from '../../services/api';
 import {
   computeDriverOperationalMetrics,
@@ -108,31 +97,19 @@ import { TierCalculations } from '../../utils/tierCalculations';
 import { TierConfig } from '../../types/data';
 import { loadResolvedEarningsBundleForDriverWeek } from '../../utils/loadResolvedEarningsBundle';
 import { useServiceLineScopeParam } from '../../hooks/useServiceLineScopeParam';
+import { useDriverOperationalPeriods } from '../../hooks/useDriverOperationalPeriods';
 import { getEffectiveTripEarnings } from '../../utils/tripEarnings';
 import { normalizePlatform } from '../../utils/normalizePlatform';
-import * as tripPhysicalCash from '../../utils/tripPhysicalCash';
 import { expandDriverTransactionIds } from '../../utils/expandDriverTransactionIds';
-import { isCashWriteOffTransaction, isDriverCashPaymentTransaction, isDriverPayoutTransaction } from '../../utils/driverCashPayment';
+import { isCashWriteOffTransaction } from '../../utils/driverCashPayment';
 import {
   buildCashCollectionTx,
   buildCashWriteOffTx,
   buildDriverPayoutTx,
 } from '../../utils/driverSettlementTx';
-import { Checkbox } from "../ui/checkbox";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "../ui/alert-dialog";
 
 import type { DriverDocument } from './tabs/DriverProfileTab';
 import { TabLoadingSkeleton } from '../ui/TabLoadingSkeleton';
-import { Skeleton } from '../ui/skeleton';
 
 export type { ReconstructedMetrics, DriverDocument };
 export { parseTripDate, getSortedTripsInRange };
@@ -215,25 +192,16 @@ function DriverDetailInner({
   const moneyTabActive = activeTab === 'financial' || activeTab === 'wallet';
   /** Overview + Service Quality need trip history; money tabs must not paginate trips. */
   const tripsTabActive = activeTab === 'overview' || activeTab === 'quality';
-  const [paymentModalState, setPaymentModalState] = useState<{
-      isOpen: boolean;
-      initialWorkPeriodStart?: string;
-      initialWorkPeriodEnd?: string;
-      initialAmount?: number;
-      editingTransaction?: FinancialTransaction;
-  }>({ isOpen: false });
-  const [writeOffModalState, setWriteOffModalState] = useState<{
-      isOpen: boolean;
-      workPeriodStart: string;
-      workPeriodEnd: string;
-      maxAmount: number;
-  }>({ isOpen: false, workPeriodStart: '', workPeriodEnd: '', maxAmount: 0 });
-  const [payoutModalState, setPayoutModalState] = useState<{
-      isOpen: boolean;
-      workPeriodStart: string;
-      workPeriodEnd: string;
-      maxAmount: number;
-  }>({ isOpen: false, workPeriodStart: '', workPeriodEnd: '', maxAmount: 0 });
+  const {
+    paymentModalState,
+    setPaymentModalState,
+    writeOffModalState,
+    setWriteOffModalState,
+    payoutModalState,
+    setPayoutModalState,
+    transactionToDelete,
+    setTransactionToDelete,
+  } = useDriverDetailModals();
   const [walletView, setWalletView] = useState<'ledger' | 'settlements'>('settlements');
   const [selectedPlatforms, setSelectedPlatforms] = useState<Set<string>>(new Set(['All']));
   const [timeFilter, setTimeFilter] = useState<TimeFilterValue>({ preset: 'all' });
@@ -292,110 +260,42 @@ function DriverDetailInner({
 
   const ledgerDateRangeStrings = financialDateRangeStrings;
 
+  const { totals: operationalTotals } = useDriverOperationalPeriods(
+    driverId,
+    financialDateRangeStrings?.startDate,
+    financialDateRangeStrings?.endDate,
+  );
+  /** Prefer server ops rollup for period trip counts when it has completed trips. */
+  const periodCompletedFromOps =
+    operationalTotals.completedCount > 0 ? operationalTotals.completedCount : null;
+
   // Server trips for the selected period (+ pad) — gated to Overview / Service Quality (P-7).
-  const [serverTrips, setServerTrips] = useState<Trip[]>([]);
-  const [serverTripsLoaded, setServerTripsLoaded] = useState(false);
-  const [ledgerOverview, setLedgerOverview] = useState<LedgerDriverOverview | null>(null);
-  const [ledgerOverviewLoaded, setLedgerOverviewLoaded] = useState(false);
+  const { serverTrips, serverTripsLoaded } = useDriverDetailTrips({
+    driverId,
+    driverName,
+    driver,
+    activeTab,
+    startDate: financialDateRangeStrings?.startDate,
+    endDate: financialDateRangeStrings?.endDate,
+  });
+
+  const {
+    ledgerOverview,
+    ledgerOverviewLoaded,
+    ledgerRefreshKey,
+    setLedgerRefreshKey,
+  } = useDriverDetailLedger({
+    driverId,
+    startDate: ledgerDateRangeStrings?.startDate,
+    endDate: ledgerDateRangeStrings?.endDate,
+    selectedPlatforms,
+  });
+
   const [repairInProgress, setRepairInProgress] = useState(false);
   const [repairResult, setRepairResult] = useState<any>(null);
-  const [ledgerRefreshKey, setLedgerRefreshKey] = useState(0);
   const [tripGapDiagOpen, setTripGapDiagOpen] = useState(false);
   const [tripGapDiagResult, setTripGapDiagResult] = useState<any>(null);
   const [tripGapDiagLoading, setTripGapDiagLoading] = useState(false);
-
-  useEffect(() => {
-    let cancelled = false;
-    // Inline tab check (not tripsTabActive) so Vite HMR cannot TDZ the gate (ROAM-FLEET-1T/1V).
-    const needsTripHistory = activeTab === 'overview' || activeTab === 'quality';
-    if (!needsTripHistory) {
-      setServerTripsLoaded(true);
-      return;
-    }
-    if (!financialDateRangeStrings?.startDate || !financialDateRangeStrings?.endDate) {
-      setServerTrips([]);
-      setServerTripsLoaded(false);
-      return;
-    }
-
-    setServerTripsLoaded(false);
-    const fetchDriverTripsForPeriod = async () => {
-      try {
-        const allIds: string[] = [driverId];
-        if (driver?.uberDriverId) allIds.push(driver.uberDriverId);
-        if (driver?.inDriveDriverId) allIds.push(driver.inDriveDriverId);
-        const resolvedName =
-          driver?.name ||
-          (driver?.firstName
-            ? [driver.firstName, driver.lastName].filter(Boolean).join(' ')
-            : '') ||
-          driverName ||
-          '';
-
-        // Pad before period start for gap / continuity math without loading forever.
-        const padDays = 60;
-        const start = new Date(`${financialDateRangeStrings.startDate}T00:00:00Z`);
-        start.setUTCDate(start.getUTCDate() - padDays);
-        const startDate = start.toISOString().slice(0, 10);
-        const endDate = financialDateRangeStrings.endDate;
-
-        const PAGE_SIZE = 1000;
-        const seen = new Set<string>();
-        const merged: Trip[] = [];
-        let pageOffset = 0;
-        while (true) {
-          const result = await api
-            .getTripsFiltered({
-              driverIds: allIds,
-              driverName: resolvedName || undefined,
-              startDate,
-              endDate,
-              limit: PAGE_SIZE,
-              offset: pageOffset,
-            })
-            .catch(() => ({ data: [] as Trip[], total: 0 }));
-          if (cancelled) return;
-          const page = result.data || [];
-          for (const trip of page) {
-            if (trip.id && !seen.has(trip.id)) {
-              seen.add(trip.id);
-              merged.push(trip);
-            }
-          }
-          if (page.length < PAGE_SIZE) break;
-          pageOffset += PAGE_SIZE;
-          if (pageOffset >= 4000) break;
-        }
-
-        setServerTrips(merged);
-      } catch (err) {
-        console.error('[DriverDetail] Failed to fetch server trips:', err);
-      } finally {
-        if (!cancelled) setServerTripsLoaded(true);
-      }
-    };
-
-    // Yield so roster/shell requests claim connections first (HTTP/1.1 overhead).
-    const timer = window.setTimeout(() => {
-      void fetchDriverTripsForPeriod();
-    }, 400);
-    return () => {
-      cancelled = true;
-      window.clearTimeout(timer);
-    };
-  }, [
-    activeTab,
-    driverId,
-    driver?.uberDriverId,
-    driver?.inDriveDriverId,
-    driver?.name,
-    driver?.firstName,
-    driver?.lastName,
-    driverName,
-    financialDateRangeStrings?.startDate,
-    financialDateRangeStrings?.endDate,
-  ]);
-
 
   const allTrips = useMemo(() => {
     const seen = new Set<string>();
@@ -475,105 +375,16 @@ function DriverDetailInner({
   };
   void refreshData; // available for header refresh wiring without unused-lint noise until UI binds it
 
-  // Phase 4: Payment Transactions
-  // Cash Returned + Cash Write Offs (write-offs are not cash collected; shown so ops can undo them).
-  const isBankTransferPaymentMethod = (pm?: string | null) => {
-    const m = String(pm || '').toLowerCase().trim();
-    return m === 'bank transfer' || m === 'mobile money' || m === 'check';
-  };
-
-  const paymentTransactions = useMemo(() => {
-    return (transactions || [])
-      .filter(
-        (t) =>
-          isDriverCashPaymentTransaction(t) ||
-          isCashWriteOffTransaction(t) ||
-          isDriverPayoutTransaction(t),
-      )
-      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }, [transactions]);
-
-  // Cash received: physical cash collections + write-offs + cash payouts.
-  const cashReceivedTransactions = useMemo(
-    () =>
-      paymentTransactions.filter((t) => {
-        if (isCashWriteOffTransaction(t)) return true;
-        if (isBankTransferPaymentMethod(t.paymentMethod)) return false;
-        return isDriverCashPaymentTransaction(t) || isDriverPayoutTransaction(t);
-      }),
-    [paymentTransactions],
-  );
-
-  // Bank transfers: Log Cash / payouts via bank, mobile money, or check (incl. awaiting verify).
-  const bankTransferTransactions = useMemo(
-    () =>
-      paymentTransactions.filter((t) => {
-        if (isCashWriteOffTransaction(t)) return false;
-        if (!isBankTransferPaymentMethod(t.paymentMethod)) return false;
-        return isDriverCashPaymentTransaction(t) || isDriverPayoutTransaction(t);
-      }),
-    [paymentTransactions],
-  );
-
-  const [paymentsLogTab, setPaymentsLogTab] = useState<'cash' | 'bank'>('cash');
-
-  // Group Payments Log rows by Settlement Week (period), newest period first, untagged last.
-  const groupWalletPaymentsByWeek = (rows: typeof paymentTransactions) => {
-    const groups = new Map<string, {
-      key: string;
-      label: string;
-      sortKey: number;
-      total: number;
-      writeOffTotal: number;
-      payoutTotal: number;
-      rows: typeof paymentTransactions;
-    }>();
-    for (const tx of rows) {
-      const s = tx.metadata?.workPeriodStart;
-      const e = tx.metadata?.workPeriodEnd;
-      const sd = s ? parseTripDate(String(s).split('T')[0]) : null;
-      const ed = e ? parseTripDate(String(e).split('T')[0]) : null;
-      const key = sd ? `${s}|${e || ''}` : '__untagged__';
-      const label = sd
-        ? (ed ? `${format(sd, 'MMM d')} – ${format(ed, 'MMM d, yyyy')}` : format(sd, 'MMM d, yyyy'))
-        : 'Untagged';
-      const sortKey = sd ? sd.getTime() : -Infinity;
-      let g = groups.get(key);
-      if (!g) {
-        g = { key, label, sortKey, total: 0, writeOffTotal: 0, payoutTotal: 0, rows: [] };
-        groups.set(key, g);
-      }
-      if (isCashWriteOffTransaction(tx)) g.writeOffTotal += Math.abs(Number(tx.amount) || 0);
-      else if (isDriverPayoutTransaction(tx)) g.payoutTotal += Math.abs(Number(tx.amount) || 0);
-      else g.total += Number(tx.amount) || 0;
-      g.rows.push(tx);
-    }
-    return Array.from(groups.values()).sort((a, b) => b.sortKey - a.sortKey);
-  };
-
-  const groupedCashReceivedTransactions = useMemo(
-    () => groupWalletPaymentsByWeek(cashReceivedTransactions),
-    [cashReceivedTransactions],
-  );
-  const groupedBankTransferTransactions = useMemo(
-    () => groupWalletPaymentsByWeek(bankTransferTransactions),
-    [bankTransferTransactions],
-  );
-
-  const activePaymentTransactions =
-    paymentsLogTab === 'cash' ? cashReceivedTransactions : bankTransferTransactions;
-  const groupedPaymentTransactions =
-    paymentsLogTab === 'cash' ? groupedCashReceivedTransactions : groupedBankTransferTransactions;
-
-  // Periods collapsed by default; track which ones the user expanded.
-  const [expandedPaymentGroups, setExpandedPaymentGroups] = useState<Set<string>>(new Set());
-  const togglePaymentGroup = (key: string) => {
-    setExpandedPaymentGroups(prev => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key); else next.add(key);
-      return next;
-    });
-  };
+  const {
+    paymentsLogTab,
+    setPaymentsLogTab,
+    cashReceivedTransactions,
+    bankTransferTransactions,
+    activePaymentTransactions,
+    groupedPaymentTransactions,
+    expandedPaymentGroups,
+    togglePaymentGroup,
+  } = useDriverDetailWalletPayments(transactions);
 
   // Phase 2: Tier from resolved earnings policy for this driver-week
   const [tiers, setTiers] = useState<TierConfig[]>([]);
@@ -650,6 +461,10 @@ function DriverDetailInner({
         reason: payload.notes,
         after: savedTx,
       }).catch(() => {});
+      trackDriverOpsEvent('cash_write_off_success', {
+        driverId,
+        amount: payload.amount,
+      });
   };
 
   const handleSaveDriverPayout = async (payload: RecordPayoutSavePayload) => {
@@ -670,6 +485,10 @@ function DriverDetailInner({
         reason: payload.notes,
         after: savedTx,
       }).catch(() => {});
+      trackDriverOpsEvent('driver_payout_success', {
+        driverId,
+        amount: payload.amount,
+      });
   };
 
   const handleEditTransaction = (tx: FinancialTransaction) => {
@@ -697,8 +516,6 @@ function DriverDetailInner({
           patchTransactionsCache((prev) => prev.map((t) => (t.id === id ? tx : t)));
       }
   };
-
-  const [transactionToDelete, setTransactionToDelete] = useState<string | null>(null);
 
   const confirmDeleteTransaction = async () => {
       if (!transactionToDelete) return;
@@ -760,12 +577,17 @@ function DriverDetailInner({
   }, [driver?.licenseNumber]);
 
   const licenseExpired = useMemo(() => {
+    if (driver?.dispatchBlocked === true) return true;
     const raw = driver?.licenseExpiry;
     if (!raw) return false;
     const d = parseTripDate(String(raw).slice(0, 10));
     if (!d) return false;
     return d < startOfDay(new Date());
-  }, [driver?.licenseExpiry]);
+  }, [driver?.dispatchBlocked, driver?.licenseExpiry]);
+
+  const dispatchBlockReason =
+    (typeof driver?.dispatchBlockReason === 'string' && driver.dispatchBlockReason) ||
+    (licenseExpired ? 'License expired' : undefined);
 
   const cancelledTripsInPeriod = useMemo(() => {
     if (!dateRange?.from) return [] as Trip[];
@@ -777,37 +599,10 @@ function DriverDetailInner({
       return d ? isWithinInterval(d, { start, end }) : false;
     }).slice(0, 25);
   }, [allTrips, dateRange]);
-  
-  // ── Ledger driver-overview fetch (Phase 14 — date-range aware) ──
-  useEffect(() => {
-    if (!ledgerDateRangeStrings) return;
-    let cancelled = false;
-    const fetchLedgerOverview = async () => {
-      try {
-        const { startDate, endDate } = ledgerDateRangeStrings;
-        const platforms = selectedPlatforms.has('All') ? undefined : Array.from(selectedPlatforms);
-        const result = await api.getLedgerDriverOverview({
-          driverId,
-          startDate,
-          endDate,
-          platforms,
-        });
-        if (!cancelled) {
-          setLedgerOverview(result);
-        }
-      } catch (err) {
-        console.error('[DriverDetail LEDGER] Overview fetch failed (non-blocking):', err);
-      } finally {
-        if (!cancelled) setLedgerOverviewLoaded(true);
-      }
-    };
-    setLedgerOverviewLoaded(false);
-    fetchLedgerOverview();
-    return () => { cancelled = true; };
-  }, [driverId, ledgerDateRangeStrings, selectedPlatforms, ledgerRefreshKey]);
 
+  // Skip vehicles/finalized/disputes until money or ops tabs need them (ROAM-FLEET-10).
   const sharedFinancialBundle = useDriverFinancialBundle(driverId, driver, {
-    enabled: true,
+    enabled: moneyTabActive || tripsTabActive,
   });
 
   const metrics = useMemo(
@@ -829,266 +624,18 @@ function DriverDetailInner({
     [allTrips, period, csvMetrics, transactions, vehicleMetrics, sharedFinancialBundle.vehicles, driver, selectedPlatforms, timeFilter, activeTab, monthlyEarnings, currentTier],
   );
 
-  const resolvedFinancials = useMemo(() => {
-    const ledgerHasData = !!ledgerOverview && (() => {
-      const period = ledgerOverview.period || {};
-      const lifetime = ledgerOverview.lifetime || {};
-      const platformStats = ledgerOverview.platformStats || {};
-      return (
-        (Number(period.tripCount) || 0) > 0 ||
-        (Number(lifetime.tripCount) || 0) > 0 ||
-        Math.abs(Number(period.earnings) || 0) > 0.0001 ||
-        Math.abs(Number(period.cashCollected) || 0) > 0.0001 ||
-        Math.abs(Number(period.baseFare) || 0) > 0.0001 ||
-        Object.keys(platformStats).length > 0
-      );
-    })();
-
-    // ── Phase 1 Completeness Guard: detect if ledger covers all platforms with trip data ──
-    // If any platform that has completed trips is missing from the ledger, the ledger is
-    // incomplete and we must fall back entirely to trips — never create a hybrid.
-    // Only require a platform in the ledger if it has COMPLETED trips in the period,
-    // because generateTripLedgerEntries() only creates entries for status === 'Completed'.
-    // Non-completed trips (Cancelled, In Progress) with non-zero amounts are expected
-    // to be absent from the ledger — that is NOT a data gap.
-    const tripPlatformsWithData = new Set<string>();
-    for (const [platform, stats] of Object.entries(metrics.platformStats) as [string, any][]) {
-      if (stats.completed > 0) {
-        tripPlatformsWithData.add(platform);
-      }
-    }
-    // TIGHTENED GUARD: Only check PERIOD-level ledger platforms, NOT lifetime.
-    // Previously this also included lifetime.platformStats, which caused a bug:
-    // if a platform had lifetime ledger entries (from old imports) but the CURRENT
-    // period's trips had no ledger entries (e.g. fleet/sync gap), the guard would
-    // pass and the period total would silently exclude that platform's earnings.
-    const ledgerPlatforms = new Set<string>();
-    if (ledgerOverview?.platformStats) {
-      for (const rawPlat of Object.keys(ledgerOverview.platformStats)) {
-        ledgerPlatforms.add(normalizePlatform(rawPlat));
-      }
-    }
-    const missingFromLedger: string[] = [];
-    for (const p of tripPlatformsWithData) {
-      // Uber period money follows `trip.date` (same behavior as Roam/InDrive), not canonical ledger windows.
-      if (p === 'Uber') continue;
-      if (!ledgerPlatforms.has(p)) {
-        missingFromLedger.push(p);
-      }
-    }
-    const isLedgerComplete = missingFromLedger.length === 0;
-    if (!isLedgerComplete && ledgerHasData) {
-      // Ledger incomplete — auto-repair regenerates missing platforms below.
-    }
-    if (ledgerHasData) {
-      // Merge ledger financial fields with trip-computed operational fields
-      const platformStats: Record<string, any> = {};
-      // Start with trip-computed platforms (keeps distance, ratings, completed counts)
-      for (const [platform, stats] of Object.entries(metrics.platformStats)) {
-        platformStats[platform] = { ...stats };
-      }
-      // Override financial fields from ledger for every platform (Uber included — trip ops stay for distance/ratings).
-      for (const [rawPlat, stats] of Object.entries(ledgerOverview.platformStats)) {
-        const platform = normalizePlatform(rawPlat);
-        if (!platformStats[platform]) {
-          platformStats[platform] = { earnings: 0, trips: 0, completed: 0, distance: 0, ratingSum: 0, ratingCount: 0, tolls: 0, cashCollected: 0 };
-        }
-        platformStats[platform].earnings = stats.earnings;
-        platformStats[platform].trips = stats.tripCount;
-        platformStats[platform].cashCollected = stats.cashCollected;
-        platformStats[platform].tolls = stats.tolls;
-      }
-
-      // Build chart data from ledger dailyEarnings
-      const weeklyEarningsData = ledgerOverview.dailyEarnings.filter((d: any) => !!d.date).map((d: any) => ({
-        day: (() => { try { return format(new Date(d.date + 'T00:00:00'), 'MMM d'); } catch { return d.date; } })(),
-        fullDate: d.date,
-        ...d.byPlatform,
-      }));
-
-      // Phase 8: Surface dispute / toll-support refunds in overview breakdown (tolls column).
-      const drAmt = Number(ledgerOverview.period.disputeRefunds) || 0;
-      if (drAmt > 0) {
-        platformStats['Dispute Recoveries'] = {
-          earnings: 0, trips: 0, completed: 0, distance: 0,
-          ratingSum: 0, ratingCount: 0, cashCollected: 0,
-          tolls: drAmt,
-        };
-      }
-
-      const uberCsvCash = metrics.uberCsvCashCollectedMagnitude;
-      const uberLedgerCash = Number(platformStats.Uber?.cashCollected) || 0;
-      const uberCashMismatch =
-        uberCsvCash != null && Math.abs(uberCsvCash - uberLedgerCash) > 0.01
-          ? { csv: uberCsvCash, ledger: uberLedgerCash, delta: uberCsvCash - uberLedgerCash }
-          : null;
-
-      // Ledger may count every Roam/InDrive fare as cash — trip evidence is a different cut.
-      // Saved-week overlay already set period.cashCollected; do not smash it with chip sum.
-      const fromSavedWeek = ledgerOverview.source === 'driver_financial_periods';
-      if (!fromSavedWeek && dateRange?.from) {
-        const periodStart = startOfDay(dateRange.from);
-        const periodEnd = dateRange.to ? endOfDay(dateRange.to) : endOfDay(dateRange.from);
-        for (const [platform, stats] of Object.entries(platformStats)) {
-          if (platform === 'Uber' || platform === 'Dispute Recoveries') continue;
-          stats.cashCollected = allTrips
-            .filter((t) => {
-              const d = new Date(t.date);
-              if (Number.isNaN(d.getTime())) return false;
-              return (
-                normalizePlatform(t.platform) === platform &&
-                isWithinInterval(startOfDay(d), { start: periodStart, end: periodEnd })
-              );
-            })
-            .reduce((sum, t) => sum + tripPhysicalCash.getTripPhysicalCashCollected(t), 0);
-        }
-      }
-
-      /** Headline = saved week when overlay is on; otherwise fare/tip SSOT. */
-      const displayPeriodEarnings = Number(ledgerOverview.period.earnings) || 0;
-      const sumMergedCash = (() => {
-        let t = 0;
-        for (const [name, s] of Object.entries(platformStats)) {
-          if (name === 'Dispute Recoveries') continue;
-          t += Number((s as any)?.cashCollected) || 0;
-        }
-        return t;
-      })();
-
-      const displayCashCollected = fromSavedWeek
-        ? Number(ledgerOverview.period.cashCollected) || 0
-        : sumMergedCash;
-      const prevEarningsNum = Number(ledgerOverview.prevPeriod.earnings) || 0;
-      const trendPercentMerged =
-        prevEarningsNum > 0
-          ? ((displayPeriodEarnings - prevEarningsNum) / prevEarningsNum) * 100
-          : displayPeriodEarnings > 0
-            ? 100
-            : 0;
-
-      return {
-        periodEarnings: displayPeriodEarnings,
-        prevPeriodEarnings: ledgerOverview.prevPeriod.earnings,
-        trendPercent: trendPercentMerged.toFixed(1),
-        trendUp: displayPeriodEarnings >= prevEarningsNum,
-        cashCollected: displayCashCollected,
-        totalTolls: ledgerOverview.period.tolls,
-        disputeRefunds: ledgerOverview.period.disputeRefunds || 0,
-        totalTips: ledgerOverview.period.tips,
-        totalBaseFare: ledgerOverview.period.baseFare,
-        /** Canonical: bank transfer magnitude from `payout_bank` (display as outflow with minus in UI). */
-        bankTransferred: ledgerOverview.period.bankTransferred ?? 0,
-        uberLedgerReconciliation: ledgerOverview.period.uber || undefined,
-        platformFees: ledgerOverview.period.platformFees ?? 0,
-        platformFeesByPlatform: ledgerOverview.period.platformFeesByPlatform || {},
-        fareGrossMinusNetByPlatform: ledgerOverview.period.fareGrossMinusNetByPlatform || {},
-        cashSourceMismatch: uberCashMismatch,
-        platformStats,
-        weeklyEarningsData,
-        tripCount: ledgerOverview.period.tripCount,
-        readModelSource: fromSavedWeek
-          ? 'driver_financial_periods'
-          : ledgerOverview.readModelSource,
-        source: 'ledger' as const,
-        isLedgerComplete,
-        dataIncomplete: !isLedgerComplete,
-        missingPlatforms: missingFromLedger,
-        lifetimeEarnings: ledgerOverview.lifetime.earnings,
-        // Trip Ledger totals use trip:* rows; lifetime.tripCount is fare_earning lines only.
-        lifetimeTrips:
-          ledgerOverview.lifetime.tripRecordCount != null
-            ? ledgerOverview.lifetime.tripRecordCount
-            : metrics.lifetimeTrips,
-        lifetimeCashCollected: (() => {
-          const tripCash = tripPhysicalCash.sumTripPhysicalCashCollected(allTrips);
-          return tripCash > 0.005 ? tripCash : ledgerOverview.lifetime.cashCollected;
-        })(),
-        lifetimeTolls: ledgerOverview.lifetime.tolls,
-        lifetimeDisputeRefunds: ledgerOverview.lifetime.disputeRefunds || 0,
-        lifetimePlatformStats: (ledgerOverview.lifetime as any).platformStats || {},
-        tripFallback: false as const,
-      };
-    }
-    // ⚠️ LEGACY FALLBACK — Phase 7 safety net. If this fires, ledger is incomplete.
-    // Phase 6 monitoring should detect & auto-repair. Investigate if this persists.
-    if (ledgerOverviewLoaded) {
-      // Awaiting ledger completeness — auto-repair resolves missing platforms when needed.
-    }
-
-    // ── Trip-sourced fallback (production): canonical ledger often empty until backfill; trip logs still match Trip Ledger. ──
-    const tripFinancialSignal =
-      (metrics.periodCompletedTrips || 0) > 0 ||
-      Math.abs(Number(metrics.periodEarnings) || 0) > 0.0001 ||
-      Math.abs(Number(metrics.cashCollected) || 0) > 0.0001 ||
-      Math.abs(Number(metrics.totalTolls) || 0) > 0.0001;
-
-    if (ledgerOverviewLoaded && !ledgerHasData && tripFinancialSignal) {
-      return {
-        periodEarnings: metrics.periodEarnings,
-        prevPeriodEarnings: metrics.prevPeriodEarnings,
-        trendPercent: metrics.trendPercent,
-        trendUp: metrics.trendUp,
-        cashCollected: metrics.cashCollected,
-        totalTolls: metrics.totalTolls,
-        disputeRefunds: 0,
-        totalTips: metrics.totalTips ?? 0,
-        totalBaseFare: metrics.totalBaseFare ?? 0,
-        bankTransferred: 0,
-        uberLedgerReconciliation: undefined,
-        platformFees: 0,
-        platformFeesByPlatform: {} as Record<string, number>,
-        fareGrossMinusNetByPlatform: {} as Record<string, number>,
-        platformStats: metrics.platformStats,
-        weeklyEarningsData: metrics.weeklyEarningsData,
-        tripCount: metrics.periodCompletedTrips,
-        readModelSource: "trip_logs",
-        source: "trips" as const,
-        tripFallback: true as const,
-        isLedgerComplete,
-        dataIncomplete: true,
-        missingPlatforms: missingFromLedger,
-        lifetimeEarnings: metrics.totalEarnings,
-        lifetimeTrips: metrics.lifetimeTrips,
-        lifetimeCashCollected: metrics.totalCashCollected,
-        lifetimeTolls: metrics.lifetimeTolls,
-        lifetimeDisputeRefunds: 0,
-        lifetimePlatformStats: {} as Record<string, any>,
-      };
-    }
-
-    return {
-      // No ledger and no usable trip signal in range — keep zeros
-      periodEarnings: 0,
-      prevPeriodEarnings: 0,
-      trendPercent: "0.0",
-      trendUp: true,
-      cashCollected: 0,
-      totalTolls: 0,
-      disputeRefunds: 0,
-      totalTips: 0,
-      totalBaseFare: 0,
-      bankTransferred: 0,
-      uberLedgerReconciliation: undefined,
-      platformFees: 0,
-      platformFeesByPlatform: {} as Record<string, number>,
-      fareGrossMinusNetByPlatform: {} as Record<string, number>,
-      platformStats: metrics.platformStats,
-      weeklyEarningsData: [],
-      tripCount: metrics.periodCompletedTrips,
-      readModelSource: undefined,
-      source: "trips" as const,
-      tripFallback: false as const,
-      isLedgerComplete,
-      dataIncomplete: true,
-      missingPlatforms: missingFromLedger,
-      lifetimeEarnings: 0,
-      lifetimeTrips: metrics.lifetimeTrips,
-      lifetimeCashCollected: 0,
-      lifetimeTolls: 0,
-      lifetimeDisputeRefunds: 0,
-      lifetimePlatformStats: {} as Record<string, any>,
-    };
-  }, [ledgerOverview, ledgerOverviewLoaded, metrics, allTrips, period]);
+  const resolvedFinancials = useMemo(
+    () =>
+      resolveDriverDetailFinancials({
+        ledgerOverview,
+        ledgerOverviewLoaded,
+        metrics,
+        allTrips,
+        period,
+        periodCompletedFromOps,
+      }),
+    [ledgerOverview, ledgerOverviewLoaded, metrics, allTrips, period, periodCompletedFromOps],
+  );
 
   // sharedFinancialBundle declared above
 
@@ -1340,217 +887,45 @@ function DriverDetailInner({
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
-      {/* Top Navigation */}
-      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-        <Button
-          variant="ghost"
-          onClick={onBack}
-          className="gap-2 pl-0 hover:pl-2 transition-all"
-          aria-label="Back to Drivers list"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Back to Drivers
-        </Button>
-        <div className="flex flex-wrap items-center gap-2">
-           {/* Platform Filter */}
-           <DropdownMenu>
-             <DropdownMenuTrigger asChild>
-               <Button variant="outline" className="w-[180px] justify-between">
-                 <div className="flex items-center gap-2">
-                   <Filter className="h-4 w-4" />
-                   <span className="truncate">
-                     {selectedPlatforms.has('All') 
-                       ? 'All Platforms' 
-                       : Array.from(selectedPlatforms).join(', ')}
-                   </span>
-                 </div>
-                 <ChevronDown className="h-4 w-4 opacity-50" />
-               </Button>
-             </DropdownMenuTrigger>
-             <DropdownMenuContent align="end" className="w-[200px]">
-               <DropdownMenuItem 
-                 onSelect={(e) => {
-                   e.preventDefault();
-                   setSelectedPlatforms(new Set(['All']));
-                 }}
-               >
-                 <div className="flex items-center gap-2">
-                   <Checkbox checked={selectedPlatforms.has('All')} />
-                   <span>All Platforms</span>
-                 </div>
-               </DropdownMenuItem>
-               <DropdownMenuSeparator />
-               {Object.keys(PLATFORM_COLORS).filter(k => k !== 'Other').map(platform => (
-                 <DropdownMenuItem
-                   key={platform}
-                   onSelect={(e) => {
-                     e.preventDefault();
-                     const newSet = new Set(selectedPlatforms);
-                     if (newSet.has('All')) newSet.delete('All');
-                     
-                     if (newSet.has(platform)) {
-                       newSet.delete(platform);
-                     } else {
-                       newSet.add(platform);
-                     }
-                     
-                     if (newSet.size === 0) newSet.add('All');
-                     setSelectedPlatforms(newSet);
-                   }}
-                 >
-                   <div className="flex items-center gap-2">
-                     <Checkbox checked={selectedPlatforms.has(platform)} />
-                     <span style={{ color: PLATFORM_COLORS[platform] }}>{platform}</span>
-                   </div>
-                 </DropdownMenuItem>
-               ))}
-               <DropdownMenuItem
-                   onSelect={(e) => {
-                     e.preventDefault();
-                     const newSet = new Set(selectedPlatforms);
-                     if (newSet.has('All')) newSet.delete('All');
-                     
-                     if (newSet.has('Other')) {
-                       newSet.delete('Other');
-                     } else {
-                       newSet.add('Other');
-                     }
-                     
-                     if (newSet.size === 0) newSet.add('All');
-                     setSelectedPlatforms(newSet);
-                   }}
-                 >
-                   <div className="flex items-center gap-2">
-                     <Checkbox checked={selectedPlatforms.has('Other')} />
-                     <span style={{ color: PLATFORM_COLORS['Other'] }}>Other</span>
-                   </div>
-                 </DropdownMenuItem>
-             </DropdownMenuContent>
-           </DropdownMenu>
-
-           <TimeFilterDropdown value={timeFilter} onChange={setTimeFilter} inactive={activeTab !== 'overview'} />
-           {/* Overview / InDrive date only — Financials uses its own filter inside the tab */}
-           {showOverviewDateControls && (
-           <div className="flex flex-wrap items-center gap-2">
-            {dateRange?.from && (
-              <PeriodWeekDropdown
-                selectedStart={format(dateRange.from, 'yyyy-MM-dd')}
-                selectedEnd={format(dateRange.to || dateRange.from, 'yyyy-MM-dd')}
-                onSelect={handlePeriodWeekSelect}
-                allowCustomRange
-                placeholder="Select week period"
-                buttonClassName="h-9"
-              />
-            )}
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="text-slate-500 hover:text-amber-700"
-              title="Trip ↔ Ledger diagnostic (same date range)"
-              onClick={handleTripLedgerGapDiagnostic}
-              disabled={tripGapDiagLoading}
-            >
-              {tripGapDiagLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Stethoscope className="h-4 w-4" />}
-            </Button>
-           </div>
-           )}
-
-           {/* Add note → Profile > Notes (Message CTA removed as inert) */}
-           <Button
-             type="button"
-             variant="outline"
-             size="sm"
-             className="h-9"
-             onClick={() => {
-               setProfileSubTab('notes');
-               handleTabChange('profile');
-             }}
-           >
-             Add note
-           </Button>
-
-        </div>
-      </div>
+      <DriverDetailToolbar
+        onBack={onBack}
+        selectedPlatforms={selectedPlatforms}
+        setSelectedPlatforms={setSelectedPlatforms}
+        timeFilter={timeFilter}
+        setTimeFilter={setTimeFilter}
+        activeTab={activeTab}
+        showOverviewDateControls={showOverviewDateControls}
+        dateFrom={dateRange?.from}
+        dateTo={dateRange?.to}
+        onPeriodWeekSelect={handlePeriodWeekSelect}
+        onTripLedgerGapDiagnostic={handleTripLedgerGapDiagnostic}
+        tripGapDiagLoading={tripGapDiagLoading}
+        onAddNote={() => {
+          setProfileSubTab('notes');
+          handleTabChange('profile');
+        }}
+      />
 
       {/* Driver Header */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 bg-white dark:bg-slate-900 p-6 rounded-xl border shadow-sm">
-        <div className="flex items-start gap-4 col-span-1 md:col-span-2">
-          <Avatar className="h-20 w-20 border-4 border-slate-50 dark:border-slate-800 shadow-md">
-             <AvatarFallback className="text-xl bg-indigo-100 text-indigo-700">{driverName.slice(0, 2)}</AvatarFallback>
-          </Avatar>
-          <div className="space-y-1">
-             <div className="flex items-center gap-2 flex-wrap">
-                <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">{driverName}</h1>
-                <Badge className={cn(
-                    "px-3 py-0.5 font-bold uppercase tracking-widest text-[10px]",
-                    driver?.status === 'Inactive' ? "bg-rose-600 text-white animate-pulse border-none shadow-lg shadow-rose-200" : "bg-emerald-100 text-emerald-700"
-                )}>
-                    {driver?.status === 'Inactive' ? 'TERMINATED' : driver?.status || 'Active'}
-                </Badge>
-                {licenseExpired && (
-                  <Badge variant="destructive" className="gap-1 text-[10px]">
-                    <AlertTriangle className="h-3 w-3" />
-                    Cannot dispatch — licence expired
-                  </Badge>
-                )}
-             </div>
-             <div className="text-sm text-slate-500 flex flex-col gap-1">
-                <span className="flex items-center gap-2"><CreditCardIcon className="h-3 w-3" /> ID: {driverId}</span>
-                {driver?.uberDriverId && (
-                   <span className="text-xs text-slate-400 ml-5 block">Uber UUID: {driver.uberDriverId}</span>
-                )}
-                {driver?.inDriveDriverId && (
-                   <span className="text-xs text-slate-400 ml-5 block">InDrive UUID: {driver.inDriveDriverId}</span>
-                )}
-                <span className="flex items-center gap-2">
-                  <CarIcon className="h-3 w-3" /> Vehicle: {vehicleLabel || '—'}
-                </span>
-                <span className="flex items-center gap-2">
-                  <CalendarIcon className="h-3 w-3" /> Member Since: {memberSinceLabel || '—'}
-                </span>
-                {licenseNumberLabel && (
-                  <span className="flex items-center gap-2 text-xs">
-                    License #: {licenseNumberLabel}
-                  </span>
-                )}
-                {licenseExpiryLabel && (
-                  <span className={cn('flex items-center gap-2 text-xs', licenseExpired && 'text-rose-600 font-medium')}>
-                    License expiry: {licenseExpiryLabel}
-                  </span>
-                )}
-             </div>
-          </div>
-        </div>
-        
-        <div className="col-span-1 border-t md:border-t-0 md:border-l pt-4 md:pt-0 md:pl-6 flex flex-col justify-center space-y-3">
-           <DriverFuelPolicySelect driver={driver} driverId={driverId} />
-           <div className="flex justify-between items-center">
-              <span className="text-sm text-slate-500">Performance Tier</span>
-              <Badge variant="outline" className="border-amber-200 bg-amber-50 text-amber-700 flex items-center gap-1">
-                 <Award className="h-3 w-3" /> {currentTier?.name.toUpperCase() || 'BRONZE'}
-              </Badge>
-           </div>
-           <div className="flex justify-between items-center">
-              <span className="text-sm text-slate-500">Total Lifetime {v('trips')}</span>
-              {performanceLoading ? (
-                <Skeleton className="h-5 w-12" />
-              ) : (
-                <span className="font-semibold">{resolvedFinancials.lifetimeTrips}</span>
-              )}
-           </div>
-           <div className="flex justify-between items-center">
-              <span className="text-sm text-slate-500">Current {v('rating')}</span>
-              <div className="flex items-center gap-1 text-amber-500 font-bold">
-                 {performanceLoading ? (
-                   <Skeleton className="h-5 w-14" />
-                 ) : serverTripsLoaded && metrics.currentRating > 0
-                   ? <>{metrics.currentRating.toFixed(1)} <Star className="h-4 w-4 fill-current" /></>
-                   : <span className="text-slate-400 font-medium">—</span>}
-              </div>
-           </div>
-        </div>
-      </div>
+      <DriverDetailHeader
+        driverId={driverId}
+        driverName={driverName}
+        driver={driver}
+        vehicleLabel={vehicleLabel}
+        memberSinceLabel={memberSinceLabel}
+        licenseNumberLabel={licenseNumberLabel}
+        licenseExpiryLabel={licenseExpiryLabel}
+        licenseExpired={licenseExpired}
+        dispatchBlockReason={dispatchBlockReason}
+        tierName={currentTier?.name}
+        lifetimeTrips={resolvedFinancials.lifetimeTrips}
+        performanceLoading={performanceLoading}
+        currentRating={metrics.currentRating}
+        ratingReady={serverTripsLoaded}
+        tripsLabel={v('trips')}
+        ratingLabel={v('rating')}
+        periodCompletedCount={periodCompletedFromOps}
+      />
 
       {/* Tabs */}
       <Tabs value={activeTab} className="space-y-4" onValueChange={handleTabChange}>
@@ -1686,9 +1061,15 @@ function DriverDetailInner({
                 metrics={{
                   currentRating: metrics.currentRating,
                   completionRate: metrics.completionRate,
-                  periodCancelledTrips: metrics.periodCancelledTrips,
+                  periodCancelledTrips:
+                    periodCompletedFromOps != null
+                      ? operationalTotals.cancelledCount
+                      : metrics.periodCancelledTrips,
                   acceptanceRate: metrics.acceptanceRate,
-                  totalTrips: metrics.totalTrips,
+                  totalTrips:
+                    periodCompletedFromOps != null
+                      ? operationalTotals.tripCount
+                      : metrics.totalTrips,
                   cancellationRate: metrics.cancellationRate,
                   platformStats: metrics.platformStats as any,
                 }}
@@ -1725,112 +1106,27 @@ function DriverDetailInner({
 
       
 
-      {/* Trip ↔ Ledger gap diagnostic (server: GET /ledger/diagnostic-trip-ledger-gap) */}
-      <Dialog open={tripGapDiagOpen} onOpenChange={setTripGapDiagOpen}>
-        <DialogContent className="max-w-3xl w-full max-h-[85vh] flex flex-col gap-2">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Stethoscope className="h-5 w-5 text-amber-600" />
-              Trip ↔ Ledger diagnostic
-            </DialogTitle>
-            <DialogDescription>
-              Same date range as the overview. Compares completed trips with money to <code className="text-xs">fare_earning</code> rows in{' '}
-              <code className="text-xs">ledger_event:*</code> (org scope via server filters).
-            </DialogDescription>
-          </DialogHeader>
-          <div className="rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 p-3 overflow-auto max-h-[60vh] text-xs font-mono leading-relaxed">
-            {tripGapDiagResult ? (
-              <pre className="whitespace-pre-wrap break-words text-slate-800 dark:text-slate-200">
-                {JSON.stringify(tripGapDiagResult, null, 2)}
-              </pre>
-            ) : (
-              <p className="text-slate-500">No data</p>
-            )}
-          </div>
-          <div className="flex justify-end gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() =>
-                tripGapDiagResult &&
-                navigator.clipboard.writeText(JSON.stringify(tripGapDiagResult, null, 2)).then(() => toast.success('Copied'))
-              }
-            >
-              Copy JSON
-            </Button>
-            <Button size="sm" onClick={() => setTripGapDiagOpen(false)}>Close</Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-
-      <PermissionGate permission="transactions.edit" fallback={null}>
-      <LogCashPaymentModal 
-        isOpen={paymentModalState.isOpen}
-        onClose={() => setPaymentModalState({ isOpen: false })}
-        onSave={handleSavePayment}
+      <DriverDetailModals
         driverName={driverName}
-        cashOwed={
-          paymentModalState.initialAmount != null
-            ? paymentModalState.initialAmount
-            : walletCollectionTotals.callOutstanding
-        }
-        initialWorkPeriodStart={paymentModalState.initialWorkPeriodStart}
-        initialWorkPeriodEnd={paymentModalState.initialWorkPeriodEnd}
-        initialAmount={paymentModalState.initialAmount}
-        initialTransaction={paymentModalState.editingTransaction}
-        periods={logCashPeriods}
+        callOutstanding={walletCollectionTotals.callOutstanding}
+        logCashPeriods={logCashPeriods}
+        transactions={transactions}
+        paymentModalState={paymentModalState}
+        setPaymentModalState={setPaymentModalState}
+        writeOffModalState={writeOffModalState}
+        setWriteOffModalState={setWriteOffModalState}
+        payoutModalState={payoutModalState}
+        setPayoutModalState={setPayoutModalState}
+        transactionToDelete={transactionToDelete}
+        setTransactionToDelete={setTransactionToDelete}
+        onSavePayment={handleSavePayment}
+        onSaveCashWriteOff={handleSaveCashWriteOff}
+        onSaveDriverPayout={handleSaveDriverPayout}
+        onConfirmDeleteTransaction={confirmDeleteTransaction}
+        tripGapDiagOpen={tripGapDiagOpen}
+        setTripGapDiagOpen={setTripGapDiagOpen}
+        tripGapDiagResult={tripGapDiagResult}
       />
-      <CashWriteOffModal
-        isOpen={writeOffModalState.isOpen}
-        onClose={() => setWriteOffModalState({ isOpen: false, workPeriodStart: '', workPeriodEnd: '', maxAmount: 0 })}
-        onSave={handleSaveCashWriteOff}
-        driverName={driverName}
-        maxAmount={writeOffModalState.maxAmount}
-        workPeriodStart={writeOffModalState.workPeriodStart}
-        workPeriodEnd={writeOffModalState.workPeriodEnd}
-      />
-      <RecordPayoutModal
-        isOpen={payoutModalState.isOpen}
-        onClose={() => setPayoutModalState({ isOpen: false, workPeriodStart: '', workPeriodEnd: '', maxAmount: 0 })}
-        onSave={handleSaveDriverPayout}
-        driverName={driverName}
-        maxAmount={payoutModalState.maxAmount}
-        workPeriodStart={payoutModalState.workPeriodStart}
-        workPeriodEnd={payoutModalState.workPeriodEnd}
-      />
-      </PermissionGate>
-        {/* Delete Confirmation Dialog */}
-      <PermissionGate permission="transactions.edit" fallback={null}>
-        <AlertDialog open={!!transactionToDelete} onOpenChange={(open) => !open && setTransactionToDelete(null)}>
-            <AlertDialogContent>
-                <AlertDialogHeader>
-                    <AlertDialogTitle>
-                      {transactionToDelete && isCashWriteOffTransaction(transactions.find((t) => t.id === transactionToDelete))
-                        ? 'Undo write-off?'
-                        : transactionToDelete && isDriverPayoutTransaction(transactions.find((t) => t.id === transactionToDelete))
-                          ? 'Undo payout?'
-                          : 'Delete Transaction?'}
-                    </AlertDialogTitle>
-                    <AlertDialogDescription>
-                        {transactionToDelete && isCashWriteOffTransaction(transactions.find((t) => t.id === transactionToDelete))
-                          ? 'This restores the cash still owed for that Settlement Week. Business Finance will update after delete.'
-                          : transactionToDelete && isDriverPayoutTransaction(transactions.find((t) => t.id === transactionToDelete))
-                            ? 'This restores the fleet-owes balance for that Settlement Week.'
-                            : 'Are you sure you want to delete this transaction? This action cannot be undone.'}
-                    </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                    <AlertDialogCancel>Cancel</AlertDialogCancel>
-                    <AlertDialogAction onClick={confirmDeleteTransaction} className="bg-red-600 hover:bg-red-700">
-                      {transactionToDelete && isCashWriteOffTransaction(transactions.find((t) => t.id === transactionToDelete))
-                        ? 'Undo write-off'
-                        : 'Delete'}
-                    </AlertDialogAction>
-                </AlertDialogFooter>
-            </AlertDialogContent>
-        </AlertDialog>
-      </PermissionGate>
     </div>
   );
 }
