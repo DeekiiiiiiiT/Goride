@@ -29,8 +29,8 @@ import { api } from '../../services/api';
 import { getDriverPortalTripEarnings } from '../../utils/tripEarnings';
 import { usePlatformConfig } from '../auth/PlatformConfigContext';
 import { WeeklySettlementView } from '../drivers/WeeklySettlementView';
-import { TransactionLedgerView } from '../drivers/TransactionLedgerView';
-import { FuelWalletView } from '../drivers/FuelWalletView';
+import { TransactionLedgerView } from './TransactionLedgerView';
+import { FuelWalletView } from './FuelWalletView';
 import {
   Sheet,
   SheetContent,

@@ -1,14 +1,16 @@
 /**
  * GET /drivers/roster — one pre-aggregated row per driver for the Drivers list.
- * Reuses canonical fare_earning earnings buckets (same source as /ledger/drivers-summary)
- * and lightweight trip status counts for acceptance / today trips.
+ * Reuses SQL fare / period earnings aggregates (same buckets as /ledger/drivers-summary)
+ * and SQL trip status counts — no full trip JSON payloads (N-3).
  */
 import type { Context, Hono } from "npm:hono";
 import * as kv from "./kv_store.tsx";
 import { fromKvStore } from "./fleet_sql_bridge.ts";
 import { requireAuth } from "./rbac_middleware.ts";
-import { filterByOrg, filterByOrgSafe, getOrgId } from "./org_scope.ts";
+import { filterByOrgSafe, getOrgId } from "./org_scope.ts";
 import { shouldReadTable, listByOrg } from "./repos/baseRepo.ts";
+import { getServiceClient } from "./service_client.ts";
+import { aggregateCanonicalFareEarningsByDriver } from "./ledger_driver_events.ts";
 
 const PREFIX = "/make-server-37f42386";
 
@@ -75,16 +77,18 @@ function normalizeStatus(raw: unknown): string {
   return s;
 }
 
+const DRIVER_LIST_CAP = 5000;
+
 async function loadOrgDrivers(c: Context): Promise<Record<string, unknown>[]> {
   let driversRaw: any[] = [];
   if (shouldReadTable("drivers")) {
     const orgId = getOrgId(c);
-    driversRaw = await listByOrg("drivers", orgId, { limit: 2000 });
+    driversRaw = await listByOrg("drivers", orgId, { limit: DRIVER_LIST_CAP });
   } else {
     const { data, error } = await fromKvStore()
       .select("value")
       .like("key", "driver:%")
-      .range(0, 1999);
+      .range(0, DRIVER_LIST_CAP - 1);
     if (error) throw error;
     driversRaw = data?.map((d: any) => d.value) || [];
   }
@@ -112,8 +116,8 @@ function buildAliasMap(drivers: Record<string, unknown>[]): Map<string, string> 
 async function loadEarningsByDriver(
   c: Context,
   today: string,
-): Promise<
-  Map<
+): Promise<{
+  map: Map<
     string,
     {
       lifetimeEarnings: number;
@@ -122,21 +126,12 @@ async function loadEarningsByDriver(
       lifetimeTripCount: number;
       todayTripCount: number;
     }
-  >
-> {
-  const monthStart = today.substring(0, 7) + "-01";
-  const [yr, mo] = today.substring(0, 7).split("-").map(Number);
-  const monthEnd = new Date(yr, mo, 0).toISOString().split("T")[0];
-
-  const { listAllUnifiedCanonicalEvents } = await import("../_shared/unifiedLedger/queries.ts");
-  const rows = await listAllUnifiedCanonicalEvents({
-    products: ["roam_driver", "roam_fleet"],
-    entryTypes: ["fare_earning"],
-    maxRows: 100_000,
-  });
-  const entryValues = filterByOrg(rows, c);
-
-  const driverMap = new Map<
+  >;
+  truncated: boolean;
+  source: string;
+}> {
+  const agg = await aggregateCanonicalFareEarningsByDriver(c, { today, preferPeriods: true });
+  const map = new Map<
     string,
     {
       lifetimeEarnings: number;
@@ -146,73 +141,102 @@ async function loadEarningsByDriver(
       todayTripCount: number;
     }
   >();
-
-  for (const e of entryValues) {
-    if (!e) continue;
-    const driverId = asStr(e.driverId).trim();
-    if (!driverId || driverId === "unknown") continue;
-    const gross = Number(e.grossAmount) || 0;
-    const entryDate = asStr(e.date).substring(0, 10);
-    if (!entryDate || entryDate.length !== 10) continue;
-
-    let bucket = driverMap.get(driverId);
-    if (!bucket) {
-      bucket = {
-        lifetimeEarnings: 0,
-        monthlyEarnings: 0,
-        todayEarnings: 0,
-        lifetimeTripCount: 0,
-        todayTripCount: 0,
-      };
-      driverMap.set(driverId, bucket);
-    }
-    bucket.lifetimeEarnings += gross;
-    bucket.lifetimeTripCount += 1;
-    if (entryDate >= monthStart && entryDate <= monthEnd) {
-      bucket.monthlyEarnings += gross;
-    }
-    if (entryDate === today) {
-      bucket.todayEarnings += gross;
-      bucket.todayTripCount += 1;
-    }
+  for (const [id, b] of agg.byDriver) {
+    map.set(id, {
+      lifetimeEarnings: b.lifetimeEarnings,
+      monthlyEarnings: b.monthlyEarnings,
+      todayEarnings: b.todayEarnings,
+      lifetimeTripCount: b.lifetimeTripCount,
+      todayTripCount: b.todayTripCount,
+    });
   }
-  return driverMap;
+  return { map, truncated: agg.truncated, source: agg.source };
 }
 
-/** Org-scoped trip status counts — only keeps driverId/status/date in memory. */
+/**
+ * Org-scoped trip status counts via SQL GROUP BY on fleet.trips (N-3).
+ * Fallback: slim column select only (never retain full trip blobs).
+ */
 async function loadTripBuckets(
   c: Context,
   aliasMap: Map<string, string>,
   today: string,
 ): Promise<{ buckets: Map<string, TripBucket>; truncated: boolean }> {
   const orgId = getOrgId(c);
+  const buckets = new Map<string, TripBucket>();
+
+  const absorb = (rawDriverId: string, patch: Partial<TripBucket> & { total?: number }) => {
+    const slimId = asStr(rawDriverId).trim();
+    if (!slimId || slimId === "unknown") return;
+    const canonical = aliasMap.get(slimId);
+    if (!canonical) return;
+    let bucket = buckets.get(canonical);
+    if (!bucket) {
+      bucket = { total: 0, completed: 0, cancelled: 0, todaysTrips: 0 };
+      buckets.set(canonical, bucket);
+    }
+    bucket.total += Number(patch.total) || 0;
+    bucket.completed += Number(patch.completed) || 0;
+    bucket.cancelled += Number(patch.cancelled) || 0;
+    bucket.todaysTrips += Number(patch.todaysTrips) || 0;
+  };
+
+  // Prefer SQL aggregate — one row per driver, no trip JSON.
+  try {
+    const sb = getServiceClient();
+    const { data, error } = await sb.rpc("fleet_trip_status_buckets_by_driver", {
+      p_org_id: orgId,
+      p_today: today,
+    });
+    if (!error && data) {
+      for (const row of data) {
+        absorb(String((row as any).driver_id || ""), {
+          total: Number((row as any).total) || 0,
+          completed: Number((row as any).completed) || 0,
+          cancelled: Number((row as any).cancelled) || 0,
+          todaysTrips: Number((row as any).todays_trips) || 0,
+        });
+      }
+      return { buckets, truncated: false };
+    }
+    if (error) {
+      console.warn(`[drivers/roster] trip SQL aggregate failed: ${error.message}`);
+    }
+  } catch (e: any) {
+    console.warn(`[drivers/roster] trip SQL aggregate threw: ${e?.message || e}`);
+  }
+
+  // Fallback: select only driver_id/status/date columns from fleet_trips (no payload_json).
   const PAGE = 1000;
   const MAX_ROWS = 100_000;
-  const buckets = new Map<string, TripBucket>();
   let truncated = false;
-
   let offset = 0;
+  const sb = getServiceClient();
+
   for (;;) {
-    let query = fromKvStore().select("value").like("key", "trip:%");
+    let query = sb
+      .from("fleet_trips")
+      .select("driver_id, status, date")
+      .order("legacy_kv_id", { ascending: true })
+      .range(offset, offset + PAGE - 1);
     if (orgId) {
-      query = query.or(`value->>organizationId.eq.${orgId},value->>organizationId.is.null`);
+      query = query.or(`organization_id.eq.${orgId},organization_id.is.null`);
     }
-    const { data, error } = await query.range(offset, offset + PAGE - 1);
+    const { data, error } = await query;
     if (error) throw error;
     const page = data || [];
     if (page.length === 0) break;
 
     for (const row of page) {
-      // Map immediately to {driverId, status, date} — do not retain full trip blobs.
-      const v = (row as any)?.value ?? row;
+      // Map immediately — never push full trip objects into memory arrays.
       const slim = {
-        driverId: asStr(v?.driverId).trim(),
-        status: asStr(v?.status),
-        date: asStr(v?.date).substring(0, 10),
+        driverId: asStr((row as any).driver_id).trim(),
+        status: asStr((row as any).status),
+        date: asStr((row as any).date).substring(0, 10),
       };
       if (!slim.driverId || slim.driverId === "unknown") continue;
       const canonical = aliasMap.get(slim.driverId);
-      if (!canonical) continue; // only roster drivers
+      if (!canonical) continue;
 
       let bucket = buckets.get(canonical);
       if (!bucket) {
@@ -258,12 +282,15 @@ export async function handleDriversRoster(c: Context) {
     const drivers = await loadOrgDrivers(c);
     const aliasMap = buildAliasMap(drivers);
 
-    const [earningsMap, tripScan] = await Promise.all([
+    const [earningsResult, tripScan] = await Promise.all([
       loadEarningsByDriver(c, today),
       loadTripBuckets(c, aliasMap, today),
     ]);
+    const earningsMap = earningsResult.map;
     const tripBuckets = tripScan.buckets;
     const tripsTruncated = tripScan.truncated;
+    const earningsTruncated = earningsResult.truncated;
+    const truncated = tripsTruncated || earningsTruncated;
 
     const roster: DriverRosterRow[] = drivers.map((d) => {
       const id = asStr(d.id);
@@ -338,7 +365,7 @@ export async function handleDriversRoster(c: Context) {
 
     const durationMs = Date.now() - t0;
     console.log(
-      `[drivers/roster] ${filtered.length} drivers in ${durationMs}ms (earnings=${earningsMap.size}, tripBuckets=${tripBuckets.size})`,
+      `[drivers/roster] ${filtered.length} drivers in ${durationMs}ms (earnings=${earningsMap.size} src=${earningsResult.source}, tripBuckets=${tripBuckets.size}, truncated=${truncated})`,
     );
 
     return c.json({
@@ -348,7 +375,15 @@ export async function handleDriversRoster(c: Context) {
         totalDrivers: filtered.length,
         dateUsed: today,
         durationMs,
-        truncated: tripsTruncated,
+        truncated,
+        earningsSource: earningsResult.source,
+        /** Soft cap on driver rows loaded; raise or paginate if orgs grow past this. */
+        driverListCap: DRIVER_LIST_CAP,
+        driverListMayBeTruncated: drivers.length >= DRIVER_LIST_CAP,
+        note:
+          drivers.length >= DRIVER_LIST_CAP
+            ? `Driver list capped at ${DRIVER_LIST_CAP}; pagination not yet available.`
+            : undefined,
       },
     });
   } catch (e: any) {

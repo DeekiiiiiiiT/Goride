@@ -12,6 +12,7 @@ import {
   type CashWeekData,
 } from '../../utils/cashSettlementCalc';
 import { useFleetTimezone } from '../../utils/timezoneDisplay';
+import { formatJMD } from '../../utils/formatJMD';
 import { CashWalletWeekDetail } from './CashWalletWeekDetail';
 import type { WalletCallOutstanding } from '../../utils/walletCallOutstanding';
 
@@ -38,7 +39,7 @@ interface WeeklySettlementViewProps {
 }
 
 function plainAmount(n: number) {
-    return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    return formatJMD(n, 2);
 }
 
 export function WeeklySettlementView({

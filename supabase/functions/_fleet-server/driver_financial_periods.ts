@@ -2372,3 +2372,53 @@ export async function forceReleaseDriverPeriod(params: {
     persistLines: true,
   } as RebuildContext);
 }
+
+/** Cheap all-time KPI rollup for driver-overview header (not a 400-day event window). */
+export type DriverFinancialLifetimeTotals = {
+  earnings: number;
+  tripCount: number;
+  cashCollected: number;
+  tolls: number;
+};
+
+export async function sumDriverFinancialPeriodLifetime(
+  driverId: string,
+): Promise<DriverFinancialLifetimeTotals> {
+  const empty: DriverFinancialLifetimeTotals = {
+    earnings: 0,
+    tripCount: 0,
+    cashCollected: 0,
+    tolls: 0,
+  };
+  if (!driverId) return empty;
+
+  const { data, error } = await sb()
+    .from("driver_financial_periods")
+    .select("earnings_gross, trip_count, cash_collected, toll_spend")
+    .eq("driver_id", driverId);
+
+  if (error) {
+    console.warn(
+      `[DriverFinancialPeriods] lifetime sum failed driver=${driverId}:`,
+      error.message,
+    );
+    return empty;
+  }
+
+  let earnings = 0;
+  let tripCount = 0;
+  let cashCollected = 0;
+  let tolls = 0;
+  for (const r of data || []) {
+    earnings += Number(r.earnings_gross) || 0;
+    tripCount += Number(r.trip_count) || 0;
+    cashCollected += Number(r.cash_collected) || 0;
+    tolls += Number(r.toll_spend) || 0;
+  }
+  return {
+    earnings: round2(earnings),
+    tripCount,
+    cashCollected: round2(cashCollected),
+    tolls: round2(tolls),
+  };
+}

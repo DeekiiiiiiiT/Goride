@@ -131,6 +131,8 @@ import {
 } from "../ui/alert-dialog";
 
 import type { DriverDocument } from './tabs/DriverProfileTab';
+import { TabLoadingSkeleton } from '../ui/TabLoadingSkeleton';
+import { Skeleton } from '../ui/skeleton';
 
 export type { ReconstructedMetrics, DriverDocument };
 export { parseTripDate, getSortedTripsInRange };
@@ -150,82 +152,6 @@ const DriverOverviewTab = React.lazy(() =>
 const DriverFinancialsTab = React.lazy(() =>
   import('./tabs/DriverFinancialsTab').then((m) => ({ default: m.DriverFinancialsTab })),
 );
-
-/** Build documents from real driver record only — never invent Unsplash / mock rows. */
-function buildDriverDocuments(driver: any): DriverDocument[] {
-  if (!driver) return [];
-  const docs: DriverDocument[] = [];
-  const expiry = String(driver.licenseExpiry || '').slice(0, 10);
-  const verifications = (driver.complianceVerifications || {}) as Record<
-    string,
-    { status?: string; verifiedAt?: string; verifiedBy?: string }
-  >;
-  const expiryExpired = (() => {
-    if (!expiry) return false;
-    const d = parseTripDate(expiry);
-    return !!(d && d < new Date());
-  })();
-
-  const resolveStatus = (
-    docId: string,
-    fallback: DriverDocument['status'],
-  ): DriverDocument['status'] => {
-    const v = verifications[docId];
-    if (v?.status === 'Verified' || v?.status === 'Rejected' || v?.status === 'Pending') {
-      if (expiryExpired && (docId === 'license-front' || docId === 'license-back')) return 'Expired';
-      return v.status;
-    }
-    if (expiryExpired && (docId === 'license-front' || docId === 'license-back')) return 'Expired';
-    return fallback;
-  };
-
-  if (driver.licenseFrontUrl) {
-    const id = 'license-front';
-    const v = verifications[id];
-    docs.push({
-      id,
-      name: 'Driver License (Front)',
-      type: 'License',
-      status: resolveStatus(id, 'Pending'),
-      expiryDate: expiry || '',
-      uploadDate: '',
-      url: driver.licenseFrontUrl,
-      verifiedAt: v?.verifiedAt,
-      verifiedBy: v?.verifiedBy,
-    });
-  }
-  if (driver.licenseBackUrl) {
-    const id = 'license-back';
-    const v = verifications[id];
-    docs.push({
-      id,
-      name: 'Driver License (Back)',
-      type: 'License Back',
-      status: resolveStatus(id, 'Pending'),
-      expiryDate: expiry || '',
-      uploadDate: '',
-      url: driver.licenseBackUrl,
-      verifiedAt: v?.verifiedAt,
-      verifiedBy: v?.verifiedBy,
-    });
-  }
-  if (driver.proofOfAddressUrl || driver.addressDocUrl) {
-    const id = 'proof-address';
-    const v = verifications[id];
-    docs.push({
-      id,
-      name: `Proof of Address (${driver.proofOfAddressType || 'Document'})`,
-      type: 'Address Proof',
-      status: resolveStatus(id, 'Pending'),
-      expiryDate: '',
-      uploadDate: '',
-      url: driver.proofOfAddressUrl || driver.addressDocUrl,
-      verifiedAt: v?.verifiedAt,
-      verifiedBy: v?.verifiedBy,
-    });
-  }
-  return docs;
-}
 
 interface DriverDetailProps {
   driverId: string;
@@ -287,7 +213,8 @@ function DriverDetailInner({
 
   /** Financials / Cash Wallet — gates money supporting APIs off Overview. */
   const moneyTabActive = activeTab === 'financial' || activeTab === 'wallet';
-  const [selectedDocument, setSelectedDocument] = useState<DriverDocument | null>(null);
+  /** Overview + Service Quality need trip history; money tabs must not paginate trips. */
+  const tripsTabActive = activeTab === 'overview' || activeTab === 'quality';
   const [paymentModalState, setPaymentModalState] = useState<{
       isOpen: boolean;
       initialWorkPeriodStart?: string;
@@ -365,7 +292,7 @@ function DriverDetailInner({
 
   const ledgerDateRangeStrings = financialDateRangeStrings;
 
-  // Server trips for the selected period (+ pad) — not full history (ROAM-FLEET-10 trips/search).
+  // Server trips for the selected period (+ pad) — gated to Overview / Service Quality (P-7).
   const [serverTrips, setServerTrips] = useState<Trip[]>([]);
   const [serverTripsLoaded, setServerTripsLoaded] = useState(false);
   const [ledgerOverview, setLedgerOverview] = useState<LedgerDriverOverview | null>(null);
@@ -379,12 +306,19 @@ function DriverDetailInner({
 
   useEffect(() => {
     let cancelled = false;
+    // Inline tab check (not tripsTabActive) so Vite HMR cannot TDZ the gate (ROAM-FLEET-1T/1V).
+    const needsTripHistory = activeTab === 'overview' || activeTab === 'quality';
+    if (!needsTripHistory) {
+      setServerTripsLoaded(true);
+      return;
+    }
     if (!financialDateRangeStrings?.startDate || !financialDateRangeStrings?.endDate) {
       setServerTrips([]);
       setServerTripsLoaded(false);
       return;
     }
 
+    setServerTripsLoaded(false);
     const fetchDriverTripsForPeriod = async () => {
       try {
         const allIds: string[] = [driverId];
@@ -450,6 +384,7 @@ function DriverDetailInner({
       window.clearTimeout(timer);
     };
   }, [
+    activeTab,
     driverId,
     driver?.uberDriverId,
     driver?.inDriveDriverId,
@@ -798,8 +733,6 @@ function DriverDetailInner({
   const handleDeleteTransaction = (id: string) => {
       setTransactionToDelete(id);
   };
-
-  const documents = useMemo(() => buildDriverDocuments(driver), [driver]);
 
   const vehicleLabel = useMemo(() => {
     const fromDriver = String(driver?.vehicle || '').trim();
@@ -1397,14 +1330,9 @@ function DriverDetailInner({
     }
   };
 
-  if (!serverTripsLoaded && (!metrics || metrics.totalTrips === 0)) {
-    return (
-      <div className="flex flex-col items-center justify-center h-[60vh] space-y-4">
-        <Loader2 className="h-10 w-10 animate-spin text-indigo-600" />
-        <p className="text-slate-500 font-medium">Restoring rich performance dashboard...</p>
-      </div>
-    );
-  }
+  // U-16: progressive shell — never full-page-block on trip restore; money tabs already skip trips (P-7).
+  const performanceLoading =
+    tripsTabActive && !serverTripsLoaded && (!metrics || metrics.totalTrips === 0);
 
   if (!dateRange?.from) return <div className="flex h-[50vh] items-center justify-center text-muted-foreground">Please select a date range to view driver metrics.</div>;
 
@@ -1605,12 +1533,18 @@ function DriverDetailInner({
            </div>
            <div className="flex justify-between items-center">
               <span className="text-sm text-slate-500">Total Lifetime {v('trips')}</span>
-              <span className="font-semibold">{resolvedFinancials.lifetimeTrips}</span>
+              {performanceLoading ? (
+                <Skeleton className="h-5 w-12" />
+              ) : (
+                <span className="font-semibold">{resolvedFinancials.lifetimeTrips}</span>
+              )}
            </div>
            <div className="flex justify-between items-center">
               <span className="text-sm text-slate-500">Current {v('rating')}</span>
               <div className="flex items-center gap-1 text-amber-500 font-bold">
-                 {serverTripsLoaded && metrics.currentRating > 0
+                 {performanceLoading ? (
+                   <Skeleton className="h-5 w-14" />
+                 ) : serverTripsLoaded && metrics.currentRating > 0
                    ? <>{metrics.currentRating.toFixed(1)} <Star className="h-4 w-4 fill-current" /></>
                    : <span className="text-slate-400 font-medium">—</span>}
               </div>
@@ -1630,6 +1564,12 @@ function DriverDetailInner({
          </TabsList>
 
          <TabsContent value="overview" className="space-y-6">
+            {performanceLoading ? (
+              <div className="space-y-3">
+                <p className="text-sm text-slate-500">Loading driver performance…</p>
+                <TabLoadingSkeleton />
+              </div>
+            ) : (
             <Suspense fallback={<div className="flex justify-center py-12"><Loader2 className="h-8 w-8 animate-spin text-indigo-600" /></div>}>
               <DriverOverviewTab
                 driverStatus={driver?.status}
@@ -1650,6 +1590,7 @@ function DriverDetailInner({
                 platformFilterAllPlatforms={selectedPlatforms.has('All')}
               />
             </Suspense>
+            )}
          </TabsContent>
 
          <TabsContent value="financial" className="space-y-6">
@@ -1731,6 +1672,12 @@ function DriverDetailInner({
 
 
          <TabsContent value="quality" className="space-y-6">
+            {performanceLoading ? (
+              <div className="space-y-3">
+                <p className="text-sm text-slate-500">Loading driver performance…</p>
+                <TabLoadingSkeleton />
+              </div>
+            ) : (
             <Suspense fallback={<div className="flex justify-center py-12"><Loader2 className="h-8 w-8 animate-spin text-indigo-600" /></div>}>
               <DriverServiceQualityTab
                 periodFrom={financialDateRange?.from}
@@ -1749,6 +1696,7 @@ function DriverDetailInner({
                 serverTripsLoaded={serverTripsLoaded}
               />
             </Suspense>
+            )}
          </TabsContent>
 
 
@@ -1768,9 +1716,6 @@ function DriverDetailInner({
                 driverId={driverId}
                 driverName={driverName}
                 driver={driver}
-                documents={documents}
-                selectedDocument={selectedDocument}
-                setSelectedDocument={setSelectedDocument}
                 canEditDrivers={canEditDrivers}
                 initialSubTab={profileSubTab}
               />

@@ -34,5 +34,19 @@ test.describe('Fleet driver detail smoke', () => {
 
     await driverRow.click();
     await expect(page).toHaveURL(/\/drivers\//, { timeout: 30_000 });
+
+    const financialsTab = page
+      .getByRole('tab', { name: /Financials/i })
+      .or(page.getByRole('button', { name: /Financials/i }))
+      .or(page.getByText(/^Financials$/i));
+    if (await financialsTab.first().isVisible().catch(() => false)) {
+      await financialsTab.first().click();
+    }
+
+    // Period is stamped on driver detail via ?from=&to= (DriverPeriodContext)
+    await expect
+      .poll(() => page.url(), { timeout: 30_000 })
+      .toMatch(/[?&]from=\d{4}-\d{2}-\d{2}/);
+    await expect.poll(() => page.url()).toMatch(/[?&]to=\d{4}-\d{2}-\d{2}/);
   });
 });

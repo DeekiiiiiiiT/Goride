@@ -5582,8 +5582,8 @@ export const api = {
   },
 
   /**
-   * After import: optional call to legacy ensure endpoint (trip→`ledger:%` writes are retired; expect 403 or no-op).
-   * Canonical money is written via `ledger_event:*` append in import flows. Chunks large id lists for Edge limits.
+   * Repair Now / authenticated backfill — POST /ledger/ensure-from-trip-ids (session + RBAC).
+   * Import pipelines use admin/driver clients → `/ledger/ensure-from-trip-ids/import`.
    */
   async ensureLedgerFromTripIds(
     tripIds: string[],

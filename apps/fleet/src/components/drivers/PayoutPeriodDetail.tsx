@@ -28,6 +28,7 @@ import {
 import type { PayoutPeriodRow, PayoutStatus } from '../../types/driverPayoutPeriod';
 import { getPeriodSettlementComponents } from '../../utils/driverSettlementMath';
 import { payoutStatusLabel } from '../../utils/computePayoutSummaryTotals';
+import { formatJMD } from '../../utils/formatJMD';
 
 interface PayoutPeriodDetailProps {
   row: PayoutPeriodRow | null;
@@ -37,8 +38,7 @@ interface PayoutPeriodDetailProps {
   showCash?: boolean;
 }
 
-const fmt = (n: number) =>
-  '$' + Math.abs(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const fmt = (n: number) => formatJMD(Math.abs(n), 2);
 
 const statusConfig: Record<
   PayoutStatus,
@@ -195,7 +195,7 @@ export function PayoutPeriodDetail({
                     row.isFinalized || isEstimate
                       ? row.fuelDeduction > 0.005
                         ? `−${fmt(row.fuelDeduction)}`
-                        : '$0.00'
+                        : fmt(0)
                       : 'Pending'
                   }
                   valueColor={
@@ -209,7 +209,7 @@ export function PayoutPeriodDetail({
                 <LineItem
                   icon={<Scale className="h-4 w-4" />}
                   label="Charged to Driver"
-                  value={tollPersonal > 0.005 ? fmt(tollPersonal) : '$0.00'}
+                  value={tollPersonal > 0.005 ? fmt(tollPersonal) : fmt(0)}
                   valueColor={tollPersonal > 0.005 ? 'text-rose-700' : 'text-slate-400'}
                   sub="Personal / non-trip tag tolls — settles on cash below, not in Net Take-Home"
                 />
@@ -265,18 +265,18 @@ export function PayoutPeriodDetail({
                   <LineItem
                     icon={<Wallet className="h-4 w-4" />}
                     label="− Cash Returned"
-                    value={cashReturned > 0.005 ? `−${fmt(cashReturned)}` : '$0.00'}
+                    value={cashReturned > 0.005 ? `−${fmt(cashReturned)}` : fmt(0)}
                     valueColor={cashReturned > 0.005 ? 'text-emerald-700' : 'text-slate-400'}
                   />
                   <LineItem
                     icon={<Fuel className="h-4 w-4" />}
                     label="− Fleet fuel credit"
-                    value={fuelCredits > 0.005 ? `−${fmt(fuelCredits)}` : '$0.00'}
+                    value={fuelCredits > 0.005 ? `−${fmt(fuelCredits)}` : fmt(0)}
                     valueColor={fuelCredits > 0.005 ? 'text-emerald-700' : 'text-slate-400'}
                   />
                   <LineItem
                     label="− Cash toll credit"
-                    value={cashTollWash > 0.005 ? `−${fmt(cashTollWash)}` : '$0.00'}
+                    value={cashTollWash > 0.005 ? `−${fmt(cashTollWash)}` : fmt(0)}
                     valueColor={cashTollWash > 0.005 ? 'text-emerald-700' : 'text-slate-400'}
                     sub="Same as Expenses Cash Tolls — plaza cash wash for this week"
                   />
@@ -290,7 +290,7 @@ export function PayoutPeriodDetail({
                   ) : (
                     <LineItem
                       label="+ Personal toll charged"
-                      value="$0.00"
+                      value={fmt(0)}
                       valueColor="text-slate-400"
                       sub="Same as Charged to Driver when personal tag tolls are billed"
                     />
@@ -321,7 +321,7 @@ export function PayoutPeriodDetail({
                     row.isFinalized || isEstimate
                       ? netTakeHome > 0.005
                         ? fmt(netTakeHome)
-                        : '$0.00'
+                        : fmt(0)
                       : 'Pending ($0)'
                   }
                   valueColor={
@@ -331,7 +331,7 @@ export function PayoutPeriodDetail({
                 <LineItem
                   icon={<TrendingDown className="h-4 w-4" />}
                   label="− Cash Still Held"
-                  value={adjCashBalance > 0.005 ? `−${fmt(adjCashBalance)}` : '$0.00'}
+                  value={adjCashBalance > 0.005 ? `−${fmt(adjCashBalance)}` : fmt(0)}
                   valueColor={adjCashBalance > 0.005 ? 'text-rose-700' : 'text-slate-400'}
                 />
               </div>

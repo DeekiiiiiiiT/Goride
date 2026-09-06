@@ -1,3 +1,9 @@
+/**
+ * ARCHITECTURE:
+ * - List = GET /drivers/roster (this page)
+ * - Detail ops = driverOperationalMetrics; money = ledger overview / financial periods
+ * - Analytics should reuse those helpers (see driverAnalyticsAggregates) — not re-derive rates
+ */
 import React, { useEffect, useState, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../services/api';
@@ -17,7 +23,17 @@ import {
   Eye,
   StickyNote,
   AlertCircle,
+  Bookmark,
+  BookmarkPlus,
+  Trash2,
 } from 'lucide-react';
+import { Checkbox } from '../ui/checkbox';
+import {
+  loadDriverSavedViews,
+  saveDriverSavedView,
+  deleteDriverSavedView,
+  type DriverSavedView,
+} from './driverSavedViews';
 import { 
   Table, 
   TableBody, 
@@ -249,6 +265,13 @@ export function DriversPage({
   const [performanceFilter, setPerformanceFilter] = useState<string>('all');
   const [currentPage, setCurrentPage] = useState(1);
   const rowsPerPage = 10;
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [savedViews, setSavedViews] = useState<DriverSavedView[]>(() =>
+    typeof window !== 'undefined' ? loadDriverSavedViews() : [],
+  );
+  const [saveViewOpen, setSaveViewOpen] = useState(false);
+  const [saveViewName, setSaveViewName] = useState('');
+  const [bulkStatusBusy, setBulkStatusBusy] = useState(false);
 
   const [driverToDelete, setDriverToDelete] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -319,10 +342,15 @@ export function DriversPage({
     refetchOnMount: false,
   });
 
+  // Ops tabs only — financial/wallet/profile deep-links must not pull fleet vehicle-metrics (ROAM-FLEET-10).
+  const needsVehicleMetrics =
+    Boolean(selectedDriverId) &&
+    (detailTab === 'overview' || detailTab === 'quality');
+
   const { data: vehicleMetrics = [] } = useQuery({
     queryKey: ['vehicleMetrics'],
     queryFn: () => api.getVehicleMetrics().catch(() => []),
-    enabled: enrichEnabled,
+    enabled: enrichEnabled && needsVehicleMetrics,
     staleTime: 5 * 60 * 1000,
     gcTime: 15 * 60 * 1000,
     refetchOnWindowFocus: false,
@@ -497,27 +525,114 @@ export function DriversPage({
   }, [orgValidatedDrivers, searchQuery, statusFilter, tierFilter, performanceFilter]);
 
   // Export Function — Papa CSV via exportToCSV; gated for export / view roles
+  // Formula-injection guard: prefix cells that Excel/Sheets would treat as formulas.
+  const csvSafe = (val: unknown): string | number => {
+    if (typeof val === 'number') return val;
+    const s = String(val ?? '');
+    if (/^[=+\-@]/.test(s)) return `'${s}`;
+    return s;
+  };
+
   const handleExport = () => {
     if (!can('transactions.export') && !can('drivers.view')) {
       return;
     }
-    const rows = filteredDrivers.map((d) => ({
-      ID: d.id,
-      Name: d.name,
-      Status: d.status,
-      Vehicle: d.vehicle,
-      Phone: d.phone,
-      Email: d.email,
+    exportDriverRows(filteredDrivers, 'drivers_export.csv');
+  };
+
+  const exportDriverRows = (driversToExport: DriverProfile[], filename: string) => {
+    const rows = driversToExport.map((d) => ({
+      ID: csvSafe(d.id),
+      Name: csvSafe(d.name),
+      Status: csvSafe(d.status),
+      Vehicle: csvSafe(d.vehicle),
+      Phone: csvSafe(d.phone),
+      Email: csvSafe(d.email),
       'Total Trips': d.totalTrips,
       'Total Earnings': Number(d.totalEarnings || 0).toFixed(2),
-      'Acceptance Rate': `${d.acceptanceRate}%`,
-      Tier: d.tier,
-      'License Number': d.licenseNumber || '',
-      'License Expiry': d.licenseExpiry || '',
-      'Member Since': d.createdAt || '',
+      'Acceptance Rate': csvSafe(`${d.acceptanceRate}%`),
+      Tier: csvSafe(d.tier),
+      'License Number': csvSafe(d.licenseNumber || ''),
+      'License Expiry': csvSafe(d.licenseExpiry || ''),
+      'Member Since': csvSafe(d.createdAt || ''),
     }));
-    exportToCSV(rows, 'drivers_export.csv');
+    exportToCSV(rows, filename);
   };
+
+  const handleExportSelected = () => {
+    if (!can('transactions.export') && !can('drivers.view')) return;
+    const selected = filteredDrivers.filter((d) => selectedIds.has(d.id));
+    if (!selected.length) {
+      toast.error('Select at least one driver');
+      return;
+    }
+    exportDriverRows(selected, 'drivers_selected_export.csv');
+    toast.success(`Exported ${selected.length} driver${selected.length === 1 ? '' : 's'}`);
+  };
+
+  const handleBulkStatusChange = async (nextStatus: 'Active' | 'Inactive') => {
+    if (!can('drivers.edit')) {
+      toast.error('You do not have permission to change driver status');
+      return;
+    }
+    const selected = filteredDrivers.filter((d) => selectedIds.has(d.id));
+    if (!selected.length) return;
+    setBulkStatusBusy(true);
+    try {
+      let ok = 0;
+      for (const d of selected) {
+        await api.saveDriver({ ...d, status: nextStatus });
+        ok += 1;
+      }
+      queryClient.invalidateQueries({ queryKey: ['drivers'] });
+      queryClient.invalidateQueries({ queryKey: ['driversRoster'] });
+      setSelectedIds(new Set());
+      toast.success(`Updated ${ok} driver${ok === 1 ? '' : 's'} to ${nextStatus}`);
+    } catch (err: any) {
+      toast.error(err?.message || 'Bulk status update failed');
+    } finally {
+      setBulkStatusBusy(false);
+    }
+  };
+
+  const applySavedView = (view: DriverSavedView) => {
+    setStatusFilter(view.filters.status || 'all');
+    setPerformanceFilter(view.filters.atRiskOnly ? 'risk' : 'all');
+    setTierFilter('all');
+    setCurrentPage(1);
+    setSelectedIds(new Set());
+    toast.success(`Applied view “${view.name}”`);
+  };
+
+  const handleSaveCurrentView = () => {
+    const name = saveViewName.trim();
+    if (!name) {
+      toast.error('Enter a name for this view');
+      return;
+    }
+    const view: DriverSavedView = {
+      id: `view_${Date.now()}`,
+      name,
+      filters: {
+        status: statusFilter === 'all' ? undefined : statusFilter,
+        atRiskOnly: performanceFilter === 'risk',
+      },
+    };
+    const next = saveDriverSavedView(view);
+    setSavedViews(next);
+    setSaveViewName('');
+    setSaveViewOpen(false);
+    toast.success(`Saved view “${name}”`);
+  };
+
+  const handleDeleteSavedView = (id: string) => {
+    setSavedViews(deleteDriverSavedView(id));
+  };
+
+  // Clear selection when filters change page contents
+  useEffect(() => {
+    setSelectedIds(new Set());
+  }, [searchQuery, statusFilter, tierFilter, performanceFilter, currentPage]);
 
   // Pagination Logic
   const totalPages = Math.ceil(filteredDrivers.length / rowsPerPage);
@@ -525,6 +640,31 @@ export function DriversPage({
       (currentPage - 1) * rowsPerPage, 
       currentPage * rowsPerPage
   );
+
+  const pageIds = paginatedDrivers.map((d) => d.id);
+  const allPageSelected = pageIds.length > 0 && pageIds.every((id) => selectedIds.has(id));
+  const somePageSelected = pageIds.some((id) => selectedIds.has(id));
+
+  const toggleSelectAllPage = (checked: boolean) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (checked) {
+        for (const id of pageIds) next.add(id);
+      } else {
+        for (const id of pageIds) next.delete(id);
+      }
+      return next;
+    });
+  };
+
+  const toggleSelectOne = (id: string, checked: boolean) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  };
 
   const handleNextPage = () => {
       if (currentPage < totalPages) setCurrentPage(prev => prev + 1);
@@ -674,6 +814,56 @@ export function DriversPage({
                   </SelectContent>
                 </Select>
 
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="sm" className="rounded-full">
+                      <Bookmark className="h-4 w-4 mr-2" />
+                      Views
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" className="w-56">
+                    <DropdownMenuLabel>Saved views</DropdownMenuLabel>
+                    {savedViews.length === 0 ? (
+                      <DropdownMenuItem disabled>No saved views yet</DropdownMenuItem>
+                    ) : (
+                      savedViews.map((view) => (
+                        <DropdownMenuItem
+                          key={view.id}
+                          className="flex items-center justify-between gap-2"
+                          onSelect={(e) => {
+                            e.preventDefault();
+                            applySavedView(view);
+                          }}
+                        >
+                          <span className="truncate">{view.name}</span>
+                          <button
+                            type="button"
+                            className="p-1 text-slate-400 hover:text-rose-600"
+                            aria-label={`Delete ${view.name}`}
+                            onPointerDown={(e) => e.preventDefault()}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteSavedView(view.id);
+                            }}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </DropdownMenuItem>
+                      ))
+                    )}
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      onSelect={(e) => {
+                        e.preventDefault();
+                        setSaveViewOpen(true);
+                      }}
+                    >
+                      <BookmarkPlus className="h-4 w-4 mr-2" />
+                      Save current filters…
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+
                 {(can('transactions.export') || can('drivers.view')) && (
                 <Button 
                     variant="outline" 
@@ -700,12 +890,64 @@ export function DriversPage({
         </div>
       </div>
 
+      {/* --- BULK ACTIONS --- */}
+      {selectedIds.size > 0 && (
+        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-indigo-200 bg-indigo-50/80 px-4 py-2.5 dark:border-indigo-800 dark:bg-indigo-950/40">
+          <span className="text-sm font-medium text-indigo-900 dark:text-indigo-100">
+            {selectedIds.size} selected
+          </span>
+          {(can('transactions.export') || can('drivers.view')) && (
+            <Button variant="outline" size="sm" onClick={handleExportSelected}>
+              <Download className="h-4 w-4 mr-1.5" />
+              Export selected
+            </Button>
+          )}
+          {can('drivers.edit') && (
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={bulkStatusBusy}
+                onClick={() => handleBulkStatusChange('Active')}
+              >
+                {bulkStatusBusy ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : null}
+                Set Active
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={bulkStatusBusy}
+                onClick={() => handleBulkStatusChange('Inactive')}
+              >
+                Set Inactive
+              </Button>
+            </>
+          )}
+          <Button
+            variant="ghost"
+            size="sm"
+            className="ml-auto text-slate-600"
+            onClick={() => setSelectedIds(new Set())}
+          >
+            Clear
+          </Button>
+        </div>
+      )}
+
       {/* --- TABLE --- */}
       <Card className="border-none shadow-sm ring-1 ring-slate-200 dark:ring-slate-700">
           <CardContent className="p-0">
             <Table>
                 <TableHeader className="bg-slate-50 dark:bg-slate-800/50">
                     <TableRow>
+                        <TableHead className="w-[48px] pl-4">
+                          <Checkbox
+                            checked={allPageSelected ? true : somePageSelected ? 'indeterminate' : false}
+                            onCheckedChange={(v) => toggleSelectAllPage(v === true)}
+                            aria-label="Select all drivers on this page"
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                        </TableHead>
                         <TableHead className="w-[250px] font-semibold text-slate-700 dark:text-slate-300">Driver</TableHead>
                         <TableHead className="w-[100px] font-semibold text-slate-700 dark:text-slate-300">Status</TableHead>
                         <TableHead className="font-semibold text-slate-700 dark:text-slate-300">Earnings (Today)</TableHead>
@@ -719,6 +961,16 @@ export function DriversPage({
                     {paginatedDrivers.length > 0 ? (
                         paginatedDrivers.map((driver) => (
                             <TableRow key={driver.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/50 cursor-pointer" onClick={() => openDriver(driver.id)}>
+                                <TableCell
+                                  className="pl-4"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <Checkbox
+                                    checked={selectedIds.has(driver.id)}
+                                    onCheckedChange={(v) => toggleSelectOne(driver.id, v === true)}
+                                    aria-label={`Select ${driver.name}`}
+                                  />
+                                </TableCell>
                                 <TableCell>
                                     <div className="flex items-center gap-3">
                                         <Avatar className="h-10 w-10 border border-slate-200 dark:border-slate-700">
@@ -842,7 +1094,7 @@ export function DriversPage({
                         ))
                     ) : (
                         <TableRow>
-                            <TableCell colSpan={7} className="h-24 text-center text-slate-500 dark:text-slate-400">
+                            <TableCell colSpan={8} className="h-24 text-center text-slate-500 dark:text-slate-400">
                                 No drivers found matching your criteria.
                             </TableCell>
                         </TableRow>
@@ -897,6 +1149,38 @@ export function DriversPage({
         onClose={() => setIsAddModalOpen(false)}
         onDriverAdded={handleDriverAdded}
       />
+
+      <Dialog open={saveViewOpen} onOpenChange={setSaveViewOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Save filter view</DialogTitle>
+            <DialogDescription>
+              Save the current status and performance filters as a named view on this device.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 py-2">
+            <Label htmlFor="save-view-name">View name</Label>
+            <Input
+              id="save-view-name"
+              value={saveViewName}
+              onChange={(e) => setSaveViewName(e.target.value)}
+              placeholder="e.g. At-risk Active"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  handleSaveCurrentView();
+                }
+              }}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSaveViewOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleSaveCurrentView}>Save view</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Phase 10: Claim Driver Dialog */}
       <Dialog open={isClaimOpen} onOpenChange={setIsClaimOpen}>

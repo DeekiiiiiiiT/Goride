@@ -1,7 +1,8 @@
 /**
  * Soft guardrail for driver-section dead / unreachable JSX patterns and money formatting.
  * Fails on `{false &&` (dead branches) and hand-rolled `` `$${ `` money templates.
- * Soft-warns on count of `false &&` without braces and oversized DriverDetail.tsx.
+ * Soft-warns on count of `false &&` without braces, oversized DriverDetail.tsx,
+ * and leftover "Restoring rich performance dashboard" copy.
  *
  * Usage: node apps/fleet/scripts/check-driver-section.mjs
  */
@@ -16,6 +17,7 @@ const HARD_FAIL = /\{false\s*&&/;
 const SOFT_WARN = /false\s*&&/g;
 /** Hand-rolled USD-looking money: `$` immediately followed by `${` inside a template literal. */
 const MONEY_TEMPLATE = /`[^`]*\$\$\{/;
+const RICH_DASHBOARD_COPY = /Restoring rich performance dashboard/;
 const DRIVER_DETAIL = path.join(ROOT, 'DriverDetail.tsx');
 const DRIVER_DETAIL_LINE_WARN = 2000;
 
@@ -46,6 +48,11 @@ for (const file of files) {
     const hits = text.match(new RegExp(MONEY_TEMPLATE.source, 'g')) || [];
     failures.push(
       `${rel}: ${hits.length} hand-rolled \`$\${ money template(s) — use formatJMD()`,
+    );
+  }
+  if (RICH_DASHBOARD_COPY.test(text)) {
+    warnings.push(
+      `${rel}: leftover "Restoring rich performance dashboard" copy — replace with a plain loading state`,
     );
   }
 }

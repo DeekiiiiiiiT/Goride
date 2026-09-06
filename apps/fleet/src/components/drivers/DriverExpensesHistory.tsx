@@ -1,7 +1,7 @@
 import { formatJMD } from '../../utils/formatJMD';
 import React, { useMemo, useState, useEffect, startTransition } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
+import { Table, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
 import { Button } from "../ui/button";
 import { Download, ChevronDown, ChevronLeft, ChevronRight, TrendingDown, Fuel, Navigation, Loader2, CheckCircle, Clock, Info, LinkIcon, Unlink } from "lucide-react";
 import { FinancialTransaction, Trip, DisputeRefund } from "../../types/data";
@@ -26,6 +26,7 @@ import type { DriverFinancialBundle, DriverLike } from '../../hooks/useDriverFin
 import { useDriverFinancialBundle } from '../../hooks/useDriverFinancialBundle';
 import { useDriverFinancialPeriods } from '../../hooks/useDriverFinancialPeriods';
 import { useDriverFuelEntries } from '../../hooks/useDriverFuelEntries';
+import { ContentVisibilityList } from './ContentVisibilityList';
 
 type PeriodType = 'daily' | 'weekly' | 'monthly';
 
@@ -72,7 +73,6 @@ export function DriverExpensesHistory({
   financialBundle: bundleProp,
 }: DriverExpensesHistoryProps) {
   const [periodType, setPeriodType] = React.useState<PeriodType>('weekly');
-  const [visibleCount, setVisibleCount] = React.useState(12);
   const [expenseView, setExpenseView] = React.useState<ExpenseView>('toll');
   const fleetTz = useFleetTimezone();
 
@@ -190,11 +190,8 @@ export function DriverExpensesHistory({
     return Array.from(byWeek.values()).sort((a, b) => a.start.getTime() - b.start.getTime());
   }, [trips, transactions, disputeRefunds, periodType, fleetTz]);
 
-  const defaultPageSize = (pt: PeriodType) => pt === 'daily' ? 14 : pt === 'monthly' ? 6 : 12;
-
   const handlePeriodChange = (pt: PeriodType) => {
     setPeriodType(pt);
-    setVisibleCount(defaultPageSize(pt));
   };
 
   // ────────────────────────────────────────────────────────────
@@ -463,13 +460,6 @@ export function DriverExpensesHistory({
     exportToCSV(data, `driver_expenses_history_${periodType}_${driverId}`);
     toast.success("Expenses Exported");
   };
-
-  // ────────────────────────────────────────────────────────────
-  // Pagination
-  // ────────────────────────────────────────────────────────────
-  const visibleRows = periodData.slice(0, visibleCount);
-  const hasMore = periodData.length > visibleCount;
-  const remainingCount = periodData.length - visibleCount;
 
   // ────────────────────────────────────────────────────────────
   // Render
@@ -766,8 +756,14 @@ export function DriverExpensesHistory({
                           <TableHead className="w-[15%] px-3 text-right">Charged to Driver</TableHead>
                         </TableRow>
                       </TableHeader>
-                      <TableBody>
-                        {visibleRows.map((row, idx) => (
+                    </Table>
+                    <ContentVisibilityList
+                      items={periodData}
+                      maxHeightPx={480}
+                      estimateRowPx={44}
+                      getKey={(row, idx) => `toll-${format(row.periodStart, 'yyyy-MM-dd')}-${idx}`}
+                      renderRow={(row, idx) => (
+                        <table className="w-full table-fixed"><tbody>
                           <TableRow key={`toll-${idx}`} className="hover:bg-slate-50/60">
                             <TableCell className="px-3 font-medium text-xs whitespace-nowrap">
                               {formatPeriodLabel(row)}
@@ -831,9 +827,10 @@ export function DriverExpensesHistory({
                               )}
                             </TableCell>
                           </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
+                        </tbody></table>
+                      )}
+                    />
+
                   </div>
 
                   {/* ── Fuel panel ── */}
@@ -920,8 +917,14 @@ export function DriverExpensesHistory({
                           </TableHead>
                         </TableRow>
                       </TableHeader>
-                      <TableBody>
-                        {visibleRows.map((row, idx) => (
+                    </Table>
+                    <ContentVisibilityList
+                      items={periodData}
+                      maxHeightPx={480}
+                      estimateRowPx={44}
+                      getKey={(row, idx) => `fuel-${format(row.periodStart, 'yyyy-MM-dd')}-${idx}`}
+                      renderRow={(row, idx) => (
+                        <table className="w-full table-fixed"><tbody>
                           <TableRow key={`fuel-${idx}`} className={row.fuelStatus !== 'finalized' && row.fuelStatus !== 'n/a' ? 'bg-amber-50/30' : 'hover:bg-slate-50/60'}>
                             <TableCell className="px-3 font-medium text-xs whitespace-nowrap">
                               {formatPeriodLabel(row)}
@@ -998,26 +1001,14 @@ export function DriverExpensesHistory({
                               )}
                             </TableCell>
                           </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
+                        </tbody></table>
+                      )}
+                    />
+
                   </div>
                 </div>
               </div>
 
-              {hasMore && (
-                <div className="flex justify-center pt-2">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="text-slate-500 hover:text-slate-700"
-                    onClick={() => setVisibleCount(prev => prev + defaultPageSize(periodType))}
-                  >
-                    <ChevronDown className="h-4 w-4 mr-1.5" />
-                    Show more ({remainingCount} remaining)
-                  </Button>
-                </div>
-              )}
             </>
           )}
         </CardContent>

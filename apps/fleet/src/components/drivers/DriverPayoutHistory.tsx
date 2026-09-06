@@ -37,6 +37,7 @@ import {
 import { fuelService } from '../../services/fuelService';
 import type { DriverFinancialBundle, DriverLike } from '../../hooks/useDriverFinancialBundle';
 import { useDriverFuelEntries } from '../../hooks/useDriverFuelEntries';
+import { ContentVisibilityList } from './ContentVisibilityList';
 
 interface DriverPayoutHistoryProps {
   driverId: string;
@@ -83,7 +84,6 @@ export function DriverPayoutHistory({
   weeklyPeriodData,
 }: DriverPayoutHistoryProps) {
   const [periodType, setPeriodType] = useState<PeriodType>('weekly');
-  const [visibleCount, setVisibleCount] = useState(12);
   const [draftFuelByPeriod, setDraftFuelByPeriod] = useState<
     Record<string, { deduction: number; fleetShare?: number }>
   >({});
@@ -207,11 +207,8 @@ export function DriverPayoutHistory({
   }, [periodType, weeklyPeriodData, hookPeriodData, draftFuelByPeriod, unifiedToll]);
   const summaryTotals = useMemo(() => computePayoutSummaryTotals(periodData), [periodData]);
 
-  const defaultPageSize = (pt: PeriodType) => (pt === 'daily' ? 14 : pt === 'monthly' ? 6 : 12);
-
   const handlePeriodChange = (pt: PeriodType) => {
     setPeriodType(pt);
-    setVisibleCount(defaultPageSize(pt));
   };
 
   const formatPeriodLabel = (row: PayoutPeriodRow): string => {
@@ -302,9 +299,6 @@ export function DriverPayoutHistory({
       </Card>
     );
   }
-
-  const visibleRows = periodData.slice(0, visibleCount);
-  const hasMore = periodData.length > visibleCount;
 
   const openBalanceSub =
     summaryTotals.openBalance < -0.005
@@ -444,7 +438,7 @@ export function DriverPayoutHistory({
             </p>
           )}
 
-          {visibleRows.length > 0 && (
+          {periodData.length > 0 && (
             <div className="border rounded-lg overflow-hidden">
               <Table>
                 <TableHeader>
@@ -507,9 +501,14 @@ export function DriverPayoutHistory({
                     </TableHead>
                   </TableRow>
                 </TableHeader>
-                <TableBody>
-                  {visibleRows.map((row, idx) => {
-                    const est = Boolean(row.isEstimate && !row.isFinalized);
+                    </Table>
+                    <ContentVisibilityList
+                      items={periodData}
+                      maxHeightPx={480}
+                      estimateRowPx={48}
+                      getKey={(row, idx) => `payout-${format(row.periodStart, 'yyyy-MM-dd')}-${idx}`}
+                      renderRow={(row, idx) => {
+const est = Boolean(row.isEstimate && !row.isFinalized);
                     const showMoney = row.isFinalized || est;
                     const settled = settleForRow(row);
                     const fuelDed = row.fuelDeduction;
@@ -518,6 +517,7 @@ export function DriverPayoutHistory({
                     const stillHeld = settled.adjCashBalance;
 
                     return (
+                          <table className="w-full"><tbody>
                       <TableRow
                         key={idx}
                         className={`cursor-pointer transition-colors hover:bg-slate-100/60 ${
@@ -637,23 +637,10 @@ export function DriverPayoutHistory({
                           )}
                         </TableCell>
                       </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-
-          {hasMore && (
-            <div className="flex justify-center pt-2">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setVisibleCount((prev) => prev + defaultPageSize(periodType))}
-              >
-                <ChevronDown className="h-4 w-4 mr-1" />
-                Show more ({periodData.length - visibleCount} remaining)
-              </Button>
+                          </tbody></table>
+                        );
+                      }}
+                    />
             </div>
           )}
 

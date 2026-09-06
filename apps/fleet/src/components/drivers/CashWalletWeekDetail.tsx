@@ -15,6 +15,7 @@ import { Badge } from '../ui/badge';
 import { Calendar, Phone, Ban, Trash2, Banknote } from 'lucide-react';
 import type { CashWeekData } from '../../utils/cashSettlementCalc';
 import type { FinancialTransaction } from '../../types/data';
+import { formatJMD } from '../../utils/formatJMD';
 import {
   cashPaymentWeekKey,
   isCashReturnedForWeek,
@@ -39,8 +40,7 @@ interface CashWalletWeekDetailProps {
   onDeletePayout?: (txId: string) => void;
 }
 
-const fmt = (n: number) =>
-  Math.abs(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const fmt = (n: number) => formatJMD(Math.abs(n), 2);
 
 function Row({
   label,

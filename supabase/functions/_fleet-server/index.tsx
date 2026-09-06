@@ -117,7 +117,6 @@ import {
 } from "./ledger_money_aggregate.ts";
 import {
   fetchAllLedgerEventValuesForDrivers,
-  fetchCanonicalFareEarningAll,
   fetchCanonicalLedgerEventsInPeriod,
 } from "./ledger_driver_events.ts";
 import {
@@ -126,6 +125,7 @@ import {
   overlayOverviewFromPeriod,
   findSignedWeeksTouchedByEvents,
   listDriverFinancialPeriods,
+  sumDriverFinancialPeriodLifetime,
 } from "./driver_financial_periods.ts";
 import {
   isSettlementDeskCategory,
@@ -263,6 +263,10 @@ import { registerDriversReconciliationRoutes } from "./drivers_reconciliation.ts
 import { registerDriversAuditRoutes } from "./drivers_audit.ts";
 import { registerPlatformVendorRoutes } from "./platform_vendor_routes.ts";
 import { registerUberFleetRoutes } from "./uber_fleet_routes.ts";
+import {
+  registerLedgerEnsureRoutes,
+  tripHasMoneyForLedgerProjection,
+} from "./ledger_ensure_routes.ts";
 import {
   provisionFleetOwner,
   enableDriverForFleetOwner,
@@ -507,6 +511,7 @@ registerDriversComplianceRoutes(app);
 registerDriversNotesRoutes(app);
 registerDriversReconciliationRoutes(app);
 registerDriversAuditRoutes(app);
+registerLedgerEnsureRoutes(app);
 
 // ─── Toll Ledger Primary Write Helper (Phase 6) ──────────────────────────
 // Tolls are now written ONLY to toll_ledger:* (single source of truth).
@@ -606,21 +611,9 @@ function normalizeTripStatusForStorage(status: unknown): string {
   return raw || "Completed";
 }
 
-function isCompletedTripStatus(status: unknown): boolean {
-  const s = String(status ?? "").trim().toLowerCase();
-  if (!s) return false;
-  if (s.includes("cancel") || s.includes("fail")) return false;
-  return s.includes("complet") || s === "complete";
-}
-
 function isUberPlatform(platform: unknown): boolean {
   const p = String(platform ?? "").trim().toLowerCase();
   return p === "uber" || p.startsWith("uber ");
-}
-
-function coerceAmount(amount: unknown): number {
-  const n = Number(amount);
-  return Number.isFinite(n) ? n : 0;
 }
 
 /**
@@ -646,22 +639,7 @@ function isAdminManualFuelWithProvidedOdometer(transaction: any): boolean {
   return false;
 }
 
-/**
- * Same eligibility as GET /ledger/driver-overview completeness + repair-driver stats:
- * completed trip with amount &gt; 0, or Uber with positive sum of fare/tip/prior components.
- * Keeps trip:* vs ledger:* fare_earning counts aligned with the integrity banner.
- */
-function tripHasMoneyForLedgerProjection(trip: any): boolean {
-  if (!isCompletedTripStatus(trip?.status)) return false;
-  const amt = coerceAmount(trip?.amount);
-  const hasTripAmount = amt > 0;
-  if (!isUberPlatform(trip?.platform)) return hasTripAmount;
-  const uberGrossForLedger =
-    coerceAmount(trip?.uberFareComponents) +
-    coerceAmount(trip?.uberTips) +
-    coerceAmount(trip?.uberPriorPeriodAdjustment);
-  return hasTripAmount || uberGrossForLedger > 0;
-}
+// tripHasMoneyForLedgerProjection — imported from ledger_ensure_routes.ts (A-7)
 
 // Enable logger - DISABLED to prevent OOM on large payloads
 // app.use('*', logger(console.log));
@@ -4752,11 +4730,8 @@ app.get("/make-server-37f42386/ledger/driver-overview", requireAuth(), async (c)
       const prevStartC = prevStartDC.toISOString().slice(0, 10);
       const prevEndC = prevEndDC.toISOString().slice(0, 10);
 
-      // P-1: SQL from/to — rolling lookback (covers prev+period; bounds lifetime KPIs).
-      const lookbackDC = new Date(endDC);
-      lookbackDC.setUTCDate(lookbackDC.getUTCDate() - 400);
-      const lookbackC = lookbackDC.toISOString().slice(0, 10);
-      const rangeFromC = lookbackC < prevStartC ? lookbackC : prevStartC;
+      // Windowed events cover selected period + previous only (lifetime comes from DFP SUM).
+      const rangeFromC = prevStartC;
 
       const windowValsCanon = await fetchAllLedgerEventValuesForDrivers(allDriverIdsCanonExpanded, c, {
         from: `${rangeFromC}T00:00:00.000Z`,
@@ -4770,14 +4745,30 @@ app.get("/make-server-37f42386/ledger/driver-overview", requireAuth(), async (c)
         canonicalEventInSelectedWindow(v as Record<string, unknown>, prevStartC, prevEndC),
       );
 
+      // Lifetime KPIs: cheap all-time aggregate over driver_financial_periods (not event window).
+      const lifetimeTotals = await sumDriverFinancialPeriodLifetime(driverId);
+
       const resultCanon = aggregateCanonicalEventsToLedgerDriverOverview(
         periodValsCanon,
         prevValsCanon,
-        windowValsCanon,
+        [],
         platformsParam || undefined,
       ) as Record<string, unknown>;
+
+      const priorLifetime =
+        resultCanon.lifetime && typeof resultCanon.lifetime === "object"
+          ? (resultCanon.lifetime as Record<string, unknown>)
+          : {};
+      resultCanon.lifetime = {
+        ...priorLifetime,
+        earnings: lifetimeTotals.earnings,
+        tripCount: lifetimeTotals.tripCount,
+        cashCollected: lifetimeTotals.cashCollected,
+        tolls: lifetimeTotals.tolls,
+      };
+
       console.log(
-        `[Ledger DriverOverview] OK — period earnings=${(resultCanon.period as any)?.earnings} events=${periodValsCanon.length}`,
+        `[Ledger DriverOverview] OK — period earnings=${(resultCanon.period as any)?.earnings} events=${periodValsCanon.length} lifetimeTrips=${lifetimeTotals.tripCount}`,
       );
 
       if (isSingleFleetWeek(startDate, endDate) && isFinanceReadProjectionOverview()) {
@@ -5580,90 +5571,7 @@ app.post("/make-server-37f42386/ledger/repair-driver", requireAuth(), async (c) 
     );
 });
 
-// ─── POST /ledger/ensure-from-trip-ids — Idempotent canonical ledger backfill for a list of trip UUIDs ─────────
-// Used after CSV / fleet import so drivers do not need manual "Repair Now" for missing fare_earning rows.
-// Writes to canonical ledger_event:* for all platforms (Uber included — trip fare SSOT).
-// Auth: none (matches POST /trips / fleet/sync — anon import key).
-app.post("/make-server-37f42386/ledger/ensure-from-trip-ids", async (c) => {
-    const startMs = Date.now();
-    try {
-        const body = await c.req.json();
-        const rawIds: unknown = body?.tripIds;
-        if (!Array.isArray(rawIds) || rawIds.length === 0) {
-            return c.json({ error: "Body must include non-empty tripIds: string[]" }, 400);
-        }
-        const tripIds = [...new Set(rawIds.map((id) => String(id).trim()).filter(Boolean))];
-        if (tripIds.length > 12_000) {
-            return c.json({ error: "Max 12000 trip ids per request — split the import batch" }, 400);
-        }
-
-        const stats = {
-            tripIdsRequested: tripIds.length,
-            tripsLoaded: 0,
-            skippedNoMoney: 0,
-            ledgerRowsWritten: 0,
-            unresolvedAfterGenerate: 0,
-            errors: 0,
-        };
-
-        const CHUNK = 100;
-        for (let i = 0; i < tripIds.length; i += CHUNK) {
-            const chunk = tripIds.slice(i, i + CHUNK);
-            const keys = chunk.map((id) => `trip:${id}`);
-            let values: any[] = [];
-            try {
-                const got = await kv.mget(keys);
-                values = Array.isArray(got) ? got.filter(Boolean) : [];
-            } catch (e) {
-                console.warn("[Ledger EnsureTripIds] mget failed, falling back to per-key get:", e);
-                for (const key of keys) {
-                    try {
-                        const v = await kv.get(key);
-                        if (v) values.push(v);
-                    } catch {
-                        /* skip */
-                    }
-                }
-            }
-            stats.tripsLoaded += values.length;
-
-            const toAppend: Record<string, unknown>[] = [];
-            for (const trip of values) {
-                if (!trip?.id) continue;
-                if (!tripHasMoneyForLedgerProjection(trip)) {
-                    stats.skippedNoMoney += 1;
-                    continue;
-                }
-                const evs = buildCanonicalTripFareEventsFromTrip(trip as Record<string, unknown>);
-                if (evs.length === 0) {
-                    stats.unresolvedAfterGenerate += 1;
-                } else {
-                    toAppend.push(...evs);
-                }
-            }
-            const MAX = 200;
-            for (let j = 0; j < toAppend.length; j += MAX) {
-                const slice = toAppend.slice(j, j + MAX);
-                try {
-                    const r = await appendCanonicalLedgerEvents(slice, c);
-                    stats.ledgerRowsWritten += r.inserted;
-                } catch (loopErr: any) {
-                    stats.errors += 1;
-                    console.error(`[Ledger EnsureTripIds] canonical append:`, loopErr?.message || loopErr);
-                }
-            }
-        }
-
-        const durationMs = Date.now() - startMs;
-        console.log(
-            `[Ledger EnsureTripIds] OK — requested=${stats.tripIdsRequested} loaded=${stats.tripsLoaded} rows=${stats.ledgerRowsWritten} skipped=${stats.skippedNoMoney} unresolved=${stats.unresolvedAfterGenerate} errors=${stats.errors} (${durationMs}ms)`,
-        );
-        return c.json({ success: true, stats, durationMs });
-    } catch (e: any) {
-        console.error("[Ledger EnsureTripIds] Fatal:", e);
-        return c.json({ error: e?.message || "ensure-from-trip-ids failed" }, 500);
-    }
-});
+// ensure-from-trip-ids (+ /import) registered via registerLedgerEnsureRoutes(app) — see ledger_ensure_routes.ts
 
 // ─── GET /diagnostic/unresolvable-driver-map — RETIRED ──
 app.get("/make-server-37f42386/diagnostic/unresolvable-driver-map", requireAuth(), async (c) => {
@@ -17517,77 +17425,19 @@ app.get("/make-server-37f42386/ledger/drivers-summary", requireAuth({ requireOrg
     const monthEnd = monthEndDate.toISOString().split("T")[0];
 
     console.log(
-      `[Ledger DriversSummary] Starting — readModel=canonical today=${today}, month=${monthStart}..${monthEnd}`,
+      `[Ledger DriversSummary] Starting — SQL aggregate today=${today}, month=${monthStart}..${monthEnd}`,
     );
 
-    const entryValues = await fetchCanonicalFareEarningAll(c);
-    console.log(`[Ledger DriversSummary] Canonical fare_earning rows: ${entryValues.length} (${Date.now() - t0}ms)`);
+    // P-2: SQL GROUP BY / periods SUM — no 100k JS fare fold
+    const { aggregateCanonicalFareEarningsByDriver } = await import("./ledger_driver_events.ts");
+    const agg = await aggregateCanonicalFareEarningsByDriver(c, { today, preferPeriods: true });
+    console.log(
+      `[Ledger DriversSummary] source=${agg.source} drivers=${agg.byDriver.size} truncated=${agg.truncated} (${Date.now() - t0}ms)`,
+    );
 
-    // ── Aggregate by driver ────────────────────────────────────────
-    const driverMap = new Map<string, {
-      lifetimeEarnings: number;
-      monthlyEarnings: number;
-      todayEarnings: number;
-      lifetimeTripCount: number;
-      monthlyTripCount: number;
-      todayTripCount: number;
-    }>();
-
-    let skippedNoDriver = 0;
-    let skippedBadDate = 0;
-
-    for (const e of entryValues) {
-      if (!e) continue;
-
-      const driverId = e.driverId;
-      if (!driverId || driverId === "unknown") {
-        skippedNoDriver++;
-        continue;
-      }
-
-      const gross = Number(e.grossAmount) || 0;
-      const entryDate = (e.date || "").substring(0, 10);
-
-      if (!entryDate || entryDate.length !== 10) {
-        skippedBadDate++;
-        continue;
-      }
-
-      // Get or create driver bucket
-      let bucket = driverMap.get(driverId);
-      if (!bucket) {
-        bucket = {
-          lifetimeEarnings: 0,
-          monthlyEarnings: 0,
-          todayEarnings: 0,
-          lifetimeTripCount: 0,
-          monthlyTripCount: 0,
-          todayTripCount: 0,
-        };
-        driverMap.set(driverId, bucket);
-      }
-
-      // Lifetime
-      bucket.lifetimeEarnings += gross;
-      bucket.lifetimeTripCount += 1;
-
-      // Monthly
-      if (entryDate >= monthStart && entryDate <= monthEnd) {
-        bucket.monthlyEarnings += gross;
-        bucket.monthlyTripCount += 1;
-      }
-
-      // Today
-      if (entryDate === today) {
-        bucket.todayEarnings += gross;
-        bucket.todayTripCount += 1;
-      }
-    }
-
-    // ── Build response object ──────────────────────────────────────
     const result: Record<string, any> = {};
     let totalLifetime = 0;
-    for (const [driverId, bucket] of driverMap) {
+    for (const [driverId, bucket] of agg.byDriver) {
       result[driverId] = {
         lifetimeEarnings: Number(bucket.lifetimeEarnings.toFixed(2)),
         monthlyEarnings: Number(bucket.monthlyEarnings.toFixed(2)),
@@ -17600,20 +17450,21 @@ app.get("/make-server-37f42386/ledger/drivers-summary", requireAuth({ requireOrg
     }
 
     const durationMs = Date.now() - t0;
-    console.log(`[Ledger DriversSummary] Returning summaries for ${driverMap.size} drivers, total lifetime earnings $${totalLifetime.toFixed(2)}, skipped ${skippedNoDriver} no-driver / ${skippedBadDate} bad-date, duration ${durationMs}ms`);
+    console.log(
+      `[Ledger DriversSummary] Returning summaries for ${agg.byDriver.size} drivers, total lifetime earnings $${totalLifetime.toFixed(2)}, duration ${durationMs}ms`,
+    );
 
     return c.json({
       success: true,
       data: result,
       meta: {
-        totalDrivers: driverMap.size,
-        totalEntriesProcessed: entryValues.length,
+        totalDrivers: agg.byDriver.size,
+        totalEntriesProcessed: agg.totalEntriesProcessed,
         dateUsed: today,
         monthRange: `${monthStart}..${monthEnd}`,
-        skippedNoDriver,
-        skippedBadDate,
         durationMs,
-        readModel: "ledger.entries",
+        readModel: agg.source,
+        truncated: agg.truncated,
       },
     });
   } catch (e: any) {

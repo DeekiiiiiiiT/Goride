@@ -1,4 +1,9 @@
 /**
+ * ARCHITECTURE:
+ * - Drivers list = GET /drivers/roster (DriversPage)
+ * - Driver detail ops = driverOperationalMetrics (+ ledger overview APIs for money)
+ * - Analytics should reuse helpers from driverOperationalMetrics / this module — do not re-derive rates ad hoc
+ *
  * Pure Driver Analytics aggregators — trips + imported DriverMetrics only.
  * No invented CX/onboarding fields.
  */
@@ -7,6 +12,7 @@ import type { Trip, DriverMetrics } from '../types/data';
 import type { BusinessFinancePeriod } from '../components/business-finance/types';
 import { inPeriod, ymd } from '../components/business-finance/periodRange';
 import { getTripGrossRevenue } from './tripEarnings';
+import { computeServiceQualityRates } from './driverOperationalMetrics';
 
 export function pctDelta(current: number, previous: number): number | null {
   if (previous <= 0) return null;
@@ -103,10 +109,14 @@ export function buildDriverRows(
         ? (onTripHours / onlineHours) * 100
         : null;
 
-    const tripCancelRate =
-      completed.length + cancelled.length > 0
-        ? cancelled.length / (completed.length + cancelled.length)
-        : null;
+    const rates = computeServiceQualityRates(
+      { completed: completed.length, cancelled: cancelled.length },
+      m?.acceptanceRate,
+    );
+    // DriverRow rates are 0–1; shared helper returns 0–100 percent.
+    const tripCancelRate = rates.totalTrips > 0 ? rates.cancellationRate / 100 : null;
+    const acceptanceFromShared =
+      rates.acceptanceRate != null ? rates.acceptanceRate / 100 : null;
 
     const name =
       nameById.get(driverId) ||
@@ -125,7 +135,9 @@ export function buildDriverRows(
       onlineHours,
       onTripHours,
       utilizationPct,
-      acceptanceRate: m?.acceptanceRate != null ? m.acceptanceRate : null,
+      acceptanceRate: m?.acceptanceRate != null
+        ? (m.acceptanceRate <= 1 ? m.acceptanceRate : m.acceptanceRate / 100)
+        : acceptanceFromShared,
       cancellationRate: m?.cancellationRate != null ? m.cancellationRate : tripCancelRate,
       rating: m?.ratingLast500 != null && m.ratingLast500 > 0 ? m.ratingLast500 : m?.ratingLast4Weeks || null,
       tier: m?.tier || null,

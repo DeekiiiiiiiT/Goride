@@ -18,6 +18,31 @@ vi.mock('../../../services/api', () => ({
   },
 }));
 
+vi.mock('../OverviewMetricsGrid', () => ({
+  OverviewMetricsGrid: () => <div data-testid="overview-metrics-smoke">Overview metrics</div>,
+  MetricCard: ({ title, value }: { title?: string; value?: React.ReactNode }) => (
+    <div data-testid="metric-card">
+      {title}: {value}
+    </div>
+  ),
+}));
+
+vi.mock('../DistanceByPlatform', () => ({
+  DistanceByPlatform: () => <div data-testid="overview-distance-smoke">Distance</div>,
+}));
+
+vi.mock('../FinancialSubTabs', () => ({
+  FinancialSubTabs: () => <div data-testid="financials-tab-smoke">Financials period</div>,
+}));
+
+vi.mock('../WeeklySettlementView', () => ({
+  WeeklySettlementView: () => <div data-testid="wallet-settlements-empty">No weeks in period</div>,
+}));
+
+vi.mock('../../ui/PeriodWeekDropdown', () => ({
+  PeriodWeekDropdown: () => <div data-testid="period-week-dropdown-smoke">Period</div>,
+}));
+
 describe('orderedPlatformKeys', () => {
   it('prefers Uber then InDrive, then other keys sorted', () => {
     expect(
@@ -64,13 +89,95 @@ describe('DriverProfileTab empty states', () => {
       <DriverProfileTab
         driverId="d1"
         driverName="Test Driver"
-        documents={[]}
-        selectedDocument={null}
-        setSelectedDocument={() => undefined}
         canEditDrivers={false}
       />,
     );
     expect(await screen.findByTestId('profile-docs-empty')).toBeTruthy();
     expect(screen.getByText(/No documents on file/i)).toBeTruthy();
+  });
+});
+
+describe('DriverOverviewTab smoke', () => {
+  it('renders metrics shell while ledger is loading', async () => {
+    const { DriverOverviewTab } = await import('./DriverOverviewTab');
+    render(
+      <DriverOverviewTab
+        driverId="d1"
+        ledgerOverview={null}
+        ledgerOverviewLoaded={false}
+        serverTripsLoaded={false}
+        repairInProgress={false}
+        repairResult={null}
+        tripGapDiagLoading={false}
+        onTripLedgerGapDiagnostic={() => {}}
+        onRepairLedger={() => {}}
+        resolvedFinancials={{}}
+        metrics={{ perPlatformDistance: {} }}
+        isToday={false}
+        walletRange={null}
+        platformFilterAllPlatforms
+      />,
+    );
+    expect(screen.getByTestId('overview-metrics-smoke')).toBeTruthy();
+    expect(screen.getByTestId('overview-distance-smoke')).toBeTruthy();
+  });
+});
+
+describe('DriverFinancialsTab smoke', () => {
+  it('renders financials shell with empty props', async () => {
+    const { DriverFinancialsTab } = await import('./DriverFinancialsTab');
+    render(
+      <DriverFinancialsTab
+        driverId="d1"
+        transactions={[]}
+        allTrips={[]}
+        quotaConfig={null}
+        platformBreakdownData={[]}
+        platformTotalEarnings={0}
+        onFinancialPeriodSelect={() => {}}
+        financialBundle={null}
+        weeklyPeriodData={null}
+        weeklyCashWeeks={[]}
+      />,
+    );
+    expect(screen.getByTestId('financials-tab-smoke')).toBeTruthy();
+    expect(screen.getByText(/Financials period/i)).toBeTruthy();
+  });
+});
+
+describe('DriverCashWalletTab smoke', () => {
+  it('renders KPI row with empty wallet totals', async () => {
+    const { DriverCashWalletTab } = await import('./DriverCashWalletTab');
+    render(
+      <DriverCashWalletTab
+        walletCollectionTotals={{ callOutstanding: 0, fleetOwes: 0, cashReturned: 0 }}
+        pendingClearance={0}
+        walletView="settlements"
+        setWalletView={() => {}}
+        allTrips={[]}
+        transactions={[]}
+        walletCashWeeks={[]}
+        callOutstandingByMonday={{}}
+        canEditTransactions={false}
+        paymentsLogTab="cash"
+        setPaymentsLogTab={() => {}}
+        cashReceivedTransactions={[]}
+        bankTransferTransactions={[]}
+        activePaymentTransactions={[]}
+        groupedPaymentTransactions={[]}
+        expandedPaymentGroups={new Set()}
+        togglePaymentGroup={() => {}}
+        openWalletPeriodPrefill={null}
+        openFleetOwesPrefill={null}
+        onOpenLogPayment={() => {}}
+        onOpenPayout={() => {}}
+        onVerifyTransaction={() => {}}
+        onEditTransaction={() => {}}
+        onDeleteTransaction={() => {}}
+      />,
+    );
+    expect(screen.getAllByText(/Driver owes/i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/Financial Records/i)).toBeTruthy();
+    expect(screen.getByTestId('wallet-settlements-empty')).toBeTruthy();
   });
 });

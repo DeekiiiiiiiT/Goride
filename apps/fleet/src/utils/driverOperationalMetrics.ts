@@ -158,7 +158,7 @@ export function computeServiceQualityRates(
   return { totalTrips, completionRate, cancellationRate, acceptanceRate };
 }
 
-/** Trip shape for operational period rollups (mirrors server driver_operational_periods). */
+/** Trip shape for operational period rollups (client-side; server stub deleted). */
 export type OperationalTripLike = {
   status?: string | null;
   date?: string | null;
@@ -193,7 +193,6 @@ function ymdInRange(day: string, from: string, to: string): boolean {
 
 /**
  * Build an operational period rollup from trips in [from, to] (inclusive YMD).
- * Client port of supabase `driver_operational_periods.ts` — keep math in sync.
  */
 export function buildOperationalPeriodSummary(
   trips: OperationalTripLike[],

@@ -27,6 +27,7 @@ import {
 } from 'lucide-react';
 import type { SettlementRow, SettlementStatus } from './SettlementSummaryView';
 import type { BankSettledDisplay } from '../../utils/fleetBankReceive';
+import { formatJMD } from '../../utils/formatJMD';
 
 interface SettlementPeriodDetailProps {
   row: SettlementRow | null;
@@ -36,8 +37,7 @@ interface SettlementPeriodDetailProps {
   onOpenChange: (open: boolean) => void;
 }
 
-const fmt = (n: number) =>
-  '$' + Math.abs(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const fmt = (n: number) => formatJMD(Math.abs(n), 2);
 
 const statusConfig: Record<
   SettlementStatus,
@@ -177,14 +177,14 @@ export function SettlementPeriodDetail({
             icon={<TrendingDown className="h-4 w-4" />}
             label="Fuel Deduction"
             value={
-              row.expenseDeductions > 0.005 ? `−${fmt(row.expenseDeductions)}` : '$0.00'
+              row.expenseDeductions > 0.005 ? `−${fmt(row.expenseDeductions)}` : fmt(0)
             }
             valueColor={row.expenseDeductions > 0.005 ? 'text-rose-600' : 'text-slate-400'}
             sub="Driver fuel share — Share − Fuel Deduction = Net Payout"
           />
           <LineItem
             label="Charged to Driver"
-            value={row.chargedToDriver > 0.005 ? fmt(row.chargedToDriver) : '$0.00'}
+            value={row.chargedToDriver > 0.005 ? fmt(row.chargedToDriver) : fmt(0)}
             valueColor={row.chargedToDriver > 0.005 ? 'text-rose-700' : 'text-slate-400'}
             sub="Personal / non-trip tag tolls — settles on the cash side below, not in Net Payout"
           />
@@ -242,7 +242,7 @@ export function SettlementPeriodDetail({
           <LineItem
             icon={<Wallet className="h-4 w-4" />}
             label="− Cash Returned"
-            value={row.cashHandbacks > 0.005 ? `−${fmt(row.cashHandbacks)}` : '$0.00'}
+            value={row.cashHandbacks > 0.005 ? `−${fmt(row.cashHandbacks)}` : fmt(0)}
             valueColor={row.cashHandbacks > 0.005 ? 'text-emerald-700' : 'text-slate-400'}
             sub="Log Cash Payment rows tagged to this Settlement Week only"
           />
@@ -250,14 +250,14 @@ export function SettlementPeriodDetail({
             icon={<Fuel className="h-4 w-4" />}
             label="− Fleet fuel credit"
             value={
-              row.fuelCreditsApplied > 0.005 ? `−${fmt(row.fuelCreditsApplied)}` : '$0.00'
+              row.fuelCreditsApplied > 0.005 ? `−${fmt(row.fuelCreditsApplied)}` : fmt(0)
             }
             valueColor={row.fuelCreditsApplied > 0.005 ? 'text-emerald-700' : 'text-slate-400'}
             sub="Company fuel share — separate from Cash Returned"
           />
           <LineItem
             label="− Cash toll credit"
-            value={row.cashTollCredits > 0.005 ? `−${fmt(row.cashTollCredits)}` : '$0.00'}
+            value={row.cashTollCredits > 0.005 ? `−${fmt(row.cashTollCredits)}` : fmt(0)}
             valueColor={row.cashTollCredits > 0.005 ? 'text-emerald-700' : 'text-slate-400'}
             sub="Cash plaza tolls from Toll Reconciliation — separate from Cash Returned"
           />
@@ -271,7 +271,7 @@ export function SettlementPeriodDetail({
           ) : (
             <LineItem
               label="+ Personal toll charged"
-              value="$0.00"
+              value={fmt(0)}
               valueColor="text-slate-400"
               sub="Same as Charged to Driver when personal tag tolls are billed"
             />
@@ -293,7 +293,7 @@ export function SettlementPeriodDetail({
               row.isFinalized
                 ? netApplied > 0.005
                   ? `−${fmt(netApplied)}`
-                  : '$0.00'
+                  : fmt(0)
                 : 'Pending (treated as $0)'
             }
             valueColor={row.isFinalized ? 'text-emerald-700' : 'text-amber-600'}

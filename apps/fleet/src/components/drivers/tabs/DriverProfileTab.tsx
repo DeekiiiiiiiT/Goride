@@ -87,6 +87,82 @@ export type DriverDocument = {
   verifiedBy?: string;
 };
 
+/** Network-error fallback only — compliance API is the primary document source. */
+export function buildDriverDocuments(driver: any): DriverDocument[] {
+  if (!driver) return [];
+  const docs: DriverDocument[] = [];
+  const expiry = String(driver.licenseExpiry || '').slice(0, 10);
+  const verifications = (driver.complianceVerifications || {}) as Record<
+    string,
+    { status?: string; verifiedAt?: string; verifiedBy?: string }
+  >;
+  const expiryExpired = (() => {
+    if (!expiry) return false;
+    const d = parseDisplayDate(expiry);
+    return !!(d && d < new Date());
+  })();
+
+  const resolveStatus = (
+    docId: string,
+    fallback: DriverDocument['status'],
+  ): DriverDocument['status'] => {
+    const v = verifications[docId];
+    if (v?.status === 'Verified' || v?.status === 'Rejected' || v?.status === 'Pending') {
+      if (expiryExpired && (docId === 'license-front' || docId === 'license-back')) return 'Expired';
+      return v.status;
+    }
+    if (expiryExpired && (docId === 'license-front' || docId === 'license-back')) return 'Expired';
+    return fallback;
+  };
+
+  if (driver.licenseFrontUrl) {
+    const id = 'license-front';
+    const v = verifications[id];
+    docs.push({
+      id,
+      name: 'Driver License (Front)',
+      type: 'License',
+      status: resolveStatus(id, 'Pending'),
+      expiryDate: expiry || '',
+      uploadDate: '',
+      url: driver.licenseFrontUrl,
+      verifiedAt: v?.verifiedAt,
+      verifiedBy: v?.verifiedBy,
+    });
+  }
+  if (driver.licenseBackUrl) {
+    const id = 'license-back';
+    const v = verifications[id];
+    docs.push({
+      id,
+      name: 'Driver License (Back)',
+      type: 'License Back',
+      status: resolveStatus(id, 'Pending'),
+      expiryDate: expiry || '',
+      uploadDate: '',
+      url: driver.licenseBackUrl,
+      verifiedAt: v?.verifiedAt,
+      verifiedBy: v?.verifiedBy,
+    });
+  }
+  if (driver.proofOfAddressUrl || driver.addressDocUrl) {
+    const id = 'proof-address';
+    const v = verifications[id];
+    docs.push({
+      id,
+      name: `Proof of Address (${driver.proofOfAddressType || 'Document'})`,
+      type: 'Address Proof',
+      status: resolveStatus(id, 'Pending'),
+      expiryDate: '',
+      uploadDate: '',
+      url: driver.proofOfAddressUrl || driver.addressDocUrl,
+      verifiedAt: v?.verifiedAt,
+      verifiedBy: v?.verifiedBy,
+    });
+  }
+  return docs;
+}
+
 type DriverNote = {
   id: string;
   text: string;
@@ -107,11 +183,7 @@ export type DriverProfileTabProps = {
   driverId: string;
   driverName: string;
   driver?: any;
-  documents: DriverDocument[];
-  selectedDocument: DriverDocument | null;
-  setSelectedDocument: (doc: DriverDocument | null) => void;
   canEditDrivers: boolean;
-  /** Refresh parent documents after verify (parent rebuilds from driver record). */
   onComplianceChanged?: () => void;
   /** Open Notes sub-tab when set (e.g. "Add note" from header). */
   initialSubTab?: 'documents' | 'personal-info' | 'notes';
@@ -129,9 +201,6 @@ export function DriverProfileTab({
   driverId,
   driverName,
   driver,
-  documents,
-  selectedDocument,
-  setSelectedDocument,
   canEditDrivers,
   onComplianceChanged,
   initialSubTab = 'documents',
@@ -142,7 +211,8 @@ export function DriverProfileTab({
   const [followUpDate, setFollowUpDate] = useState('');
   const [savingNote, setSavingNote] = useState(false);
   const [verifyingId, setVerifyingId] = useState<string | null>(null);
-  const [localDocs, setLocalDocs] = useState<DriverDocument[]>(documents);
+  const [localDocs, setLocalDocs] = useState<DriverDocument[]>([]);
+  const [selectedDocument, setSelectedDocument] = useState<DriverDocument | null>(null);
   const [subTab, setSubTab] = useState(initialSubTab);
   const [auditEvents, setAuditEvents] = useState<AuditEvent[]>([]);
   const [auditLoading, setAuditLoading] = useState(false);
@@ -155,16 +225,12 @@ export function DriverProfileTab({
   }, [initialSubTab]);
 
   useEffect(() => {
-    setLocalDocs(documents);
-  }, [documents]);
-
-  useEffect(() => {
     if (driver?.licenseExpiry) {
       setComplianceExpiry(String(driver.licenseExpiry).slice(0, 10));
     }
   }, [driver?.licenseExpiry]);
 
-  // Prefer server compliance documents; fall back to parent-built list.
+  // Primary: GET /drivers/:id/compliance. Fallback: buildDriverDocuments only on network error.
   useEffect(() => {
     if (!driverId) return;
     let cancelled = false;
@@ -173,12 +239,11 @@ export function DriverProfileTab({
       .then((res) => {
         if (cancelled) return;
         if (res?.licenseExpiry) setComplianceExpiry(String(res.licenseExpiry).slice(0, 10));
-        if (Array.isArray(res?.documents) && res.documents.length > 0) {
-          setLocalDocs(res.documents as DriverDocument[]);
-        }
+        setLocalDocs(Array.isArray(res?.documents) ? (res.documents as DriverDocument[]) : []);
       })
       .catch(() => {
-        /* keep parent/buildDriverDocuments fallback */
+        if (cancelled) return;
+        setLocalDocs(buildDriverDocuments(driver));
       });
     return () => {
       cancelled = true;

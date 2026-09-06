@@ -2880,8 +2880,8 @@ export const api = {
   },
 
   /**
-   * After import: optional call to legacy ensure endpoint (trip→`ledger:%` writes are retired; expect 403 or no-op).
-   * Canonical money is written via `ledger_event:*` append in import flows. Chunks large id lists for Edge limits.
+   * After import: POST /ledger/ensure-from-trip-ids/import (anon key).
+   * Fleet Repair Now uses the authenticated `/ledger/ensure-from-trip-ids` route instead.
    */
   async ensureLedgerFromTripIds(
     tripIds: string[],
@@ -2902,7 +2902,7 @@ export const api = {
       forceDeleted: 0,
     };
     for (let i = 0; i < ids.length; i += SLICE) {
-      const url = `${API_ENDPOINTS.fleet}/ledger/ensure-from-trip-ids`;
+      const url = `${API_ENDPOINTS.fleet}/ledger/ensure-from-trip-ids/import`;
       const response = await fetchWithRetry(url, {
         method: 'POST',
         headers: {

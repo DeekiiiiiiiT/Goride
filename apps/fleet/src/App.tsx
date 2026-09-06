@@ -10,10 +10,8 @@ import { isFleetPortalUser } from './utils/fleetOwnerUser';
 import { PassengerFleetSurfaceGate } from './components/auth/PassengerFleetSurfaceGate';
 import { AppLayout } from './components/layout/AppLayout';
 import { Dashboard } from './components/dashboard/Dashboard';
-import { ImportsPage } from './components/imports/ImportsPage';
 import { TripLogsPage } from './components/trips/TripLogsPage';
 import { SettingsPage } from './components/settings/SettingsPage';
-import { VehiclesPage } from './components/vehicles/VehiclesPage';
 import { FleetMaintenanceHub } from './components/vehicles/FleetMaintenanceHub';
 import { FleetPage } from './components/fleet/FleetPage';
 import { ReportsPage } from './components/reports/ReportsPage';
@@ -22,7 +20,6 @@ import { TollReconciliation } from './pages/TollReconciliation';
 import { TagInventory } from './pages/TagInventory';
 import { UserManagementPage } from './components/users/UserManagementPage';
 import { EarningsPolicyConfiguration } from './components/earnings-policy';
-import { FuelManagement } from './pages/FuelManagement';
 import { FuelAnalytics } from './components/fuel/analytics/FuelAnalytics';
 import { TollLogsPage } from './pages/TollLogs';
 import { TollAnalytics } from './components/toll/TollAnalytics';
@@ -30,7 +27,6 @@ import { TollRateDriftPage } from './pages/TollRateDriftPage';
 import { TollLowBalancePage } from './pages/TollLowBalancePage';
 import { VehicleAnalytics } from './components/vehicles/VehicleAnalytics';
 import { FleetFinancialsPage } from './components/fleet-financials/FleetFinancialsPage';
-import { DriverSettlementsPage } from './components/fleet-financials/DriverSettlementsPage';
 import { IndriveWalletCenterPage } from './components/fleet-financials/IndriveWalletCenterPage';
 import { BusinessFinancePage } from './components/business-finance/BusinessFinancePage';
 import { ExpenseHubPage } from './components/business-finance/expense-hub/ExpenseHubPage';
@@ -51,6 +47,20 @@ const DriversPage = lazy(() => import('./components/drivers/DriversPage'));
 const DriverAnalytics = lazy(() =>
   import('./components/drivers/analytics/DriverAnalytics').then((m) => ({
     default: m.DriverAnalytics,
+  })),
+);
+const ImportsPage = lazy(() =>
+  import('./components/imports/ImportsPage').then((m) => ({ default: m.ImportsPage })),
+);
+const VehiclesPage = lazy(() =>
+  import('./components/vehicles/VehiclesPage').then((m) => ({ default: m.VehiclesPage })),
+);
+const FuelManagement = lazy(() =>
+  import('./pages/FuelManagement').then((m) => ({ default: m.FuelManagement })),
+);
+const DriverSettlementsPage = lazy(() =>
+  import('./components/fleet-financials/DriverSettlementsPage').then((m) => ({
+    default: m.DriverSettlementsPage,
   })),
 );
 import { PlatformMaintenanceSplash } from './components/PlatformMaintenanceSplash';
@@ -492,7 +502,9 @@ function AppContent() {
         {currentPage === 'dashboard' && <Dashboard />}
         {currentPage === 'imports' && (
           <PermissionGate permission="nav.imports" onNavigate={setCurrentPage}>
-            <ImportsPage onNavigate={setCurrentPage} />
+            <Suspense fallback={<div className="p-6 text-sm text-slate-500">Loading imports…</div>}>
+              <ImportsPage onNavigate={setCurrentPage} />
+            </Suspense>
           </PermissionGate>
         )}
         {currentPage === 'drivers' && (
@@ -523,7 +535,9 @@ function AppContent() {
         )}
         {currentPage === 'vehicles' && (
           <PermissionGate permission="nav.vehicles" onNavigate={setCurrentPage}>
-            <VehiclesPage onNavigateToExpenseHub={openExpenseHubForVehicle} />
+            <Suspense fallback={<div className="p-6 text-sm text-slate-500">Loading vehicles…</div>}>
+              <VehiclesPage onNavigateToExpenseHub={openExpenseHubForVehicle} />
+            </Suspense>
           </PermissionGate>
         )}
         {currentPage === 'vehicle-analytics' && (
@@ -636,12 +650,14 @@ function AppContent() {
         )}
         {(currentPage === 'driver-settlements' || currentPage === 'driver-payouts') && (
           <PermissionGate permission="nav.financial_analytics" onNavigate={setCurrentPage}>
-            <DriverSettlementsPage
-              onBackToBusinessFinance={() => handleNavigate('business-finance')}
-              onOpenDriver={(driverId) => {
-                openDriverDetail(driverId);
-              }}
-            />
+            <Suspense fallback={<div className="p-6 text-sm text-slate-500">Loading settlements…</div>}>
+              <DriverSettlementsPage
+                onBackToBusinessFinance={() => handleNavigate('business-finance')}
+                onOpenDriver={(driverId) => {
+                  openDriverDetail(driverId);
+                }}
+              />
+            </Suspense>
           </PermissionGate>
         )}
         {currentPage === 'indrive-wallet' && (
@@ -663,24 +679,26 @@ function AppContent() {
 
         {['fuel-reconciliation', 'fuel-cards', 'fuel-logs', 'fuel-configuration', 'fuel-reimbursements'].includes(currentPage) && (
           <PermissionGate permission={PAGE_PERMISSION_MAP[currentPage] || 'nav.fuel_overview'} onNavigate={setCurrentPage}>
-            <FuelManagement 
-                defaultTab={
-                    currentPage === 'fuel-reconciliation' ? 'reconciliation' :
-                    currentPage === 'fuel-reimbursements' ? 'reimbursements' :
-                    currentPage === 'fuel-cards' ? 'cards' :
-                    currentPage === 'fuel-logs' ? 'logs' :
-                    currentPage === 'fuel-configuration' ? 'configuration' :
-                    'logs'
-                }
-                onTabChange={(t) => {
-                    setCurrentPage(`fuel-${t}`);
-                    setDriverIdForDetail(null);
-                    setDriverDetailTab(undefined);
-                }}
-                onViewDriverLedger={(driverId) => {
-                    openDriverDetail(driverId);
-                }}
-            />
+            <Suspense fallback={<div className="p-6 text-sm text-slate-500">Loading fuel…</div>}>
+              <FuelManagement 
+                  defaultTab={
+                      currentPage === 'fuel-reconciliation' ? 'reconciliation' :
+                      currentPage === 'fuel-reimbursements' ? 'reimbursements' :
+                      currentPage === 'fuel-cards' ? 'cards' :
+                      currentPage === 'fuel-logs' ? 'logs' :
+                      currentPage === 'fuel-configuration' ? 'configuration' :
+                      'logs'
+                  }
+                  onTabChange={(t) => {
+                      setCurrentPage(`fuel-${t}`);
+                      setDriverIdForDetail(null);
+                      setDriverDetailTab(undefined);
+                  }}
+                  onViewDriverLedger={(driverId) => {
+                      openDriverDetail(driverId);
+                  }}
+              />
+            </Suspense>
           </PermissionGate>
         )}
 

@@ -416,7 +416,7 @@ export function FinancialSubTabs({
                 <div className="rounded-lg border border-slate-200 p-3">
                   <p className="text-[11px] font-medium text-slate-500 uppercase tracking-wider">Unreimbursed tolls</p>
                   <p className="text-lg font-bold mt-1 text-slate-800">
-                    ${Math.max(0, (Number(thisWeekSharedPeriod.tollSpend) || 0) - (Number(thisWeekSharedPeriod.tollReimbursed) || 0)).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                    {formatJMD(Math.max(0, (Number(thisWeekSharedPeriod.tollSpend) || 0) - (Number(thisWeekSharedPeriod.tollReimbursed) || 0)), 2)}
                   </p>
                 </div>
                 <div className="rounded-lg border border-slate-200 p-3">
@@ -428,13 +428,13 @@ export function FinancialSubTabs({
                 <div className="rounded-lg border border-slate-200 p-3">
                   <p className="text-[11px] font-medium text-slate-500 uppercase tracking-wider">Charged to driver</p>
                   <p className="text-lg font-bold mt-1 text-rose-600">
-                    ${(Number(thisWeekSharedPeriod.tollChargedToDriver) || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                    {formatJMD(Number(thisWeekSharedPeriod.tollChargedToDriver) || 0, 2)}
                   </p>
                 </div>
                 <div className="rounded-lg border border-slate-200 p-3">
                   <p className="text-[11px] font-medium text-slate-500 uppercase tracking-wider">Fuel deduction</p>
                   <p className="text-lg font-bold mt-1 text-slate-800">
-                    ${(Number(thisWeekSharedPeriod.fuelDeduction) || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                    {formatJMD(Number(thisWeekSharedPeriod.fuelDeduction) || 0, 2)}
                   </p>
                 </div>
               </div>
@@ -482,7 +482,7 @@ export function FinancialSubTabs({
                   <div key={item.label} className="rounded-lg border border-slate-200 p-3">
                     <p className="text-[11px] font-medium text-slate-500 uppercase tracking-wider">{item.label}</p>
                     <p className={`text-lg font-bold mt-1 ${item.tone}`}>
-                      ${item.value.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                      {formatJMD(item.value, 2)}
                     </p>
                     <p className="text-[10px] text-slate-400 mt-0.5">{item.hint}</p>
                   </div>
@@ -516,7 +516,7 @@ export function FinancialSubTabs({
                 <div className="pt-2 flex justify-between text-sm">
                   <span className="font-semibold">Net Earnings</span>
                   <span className="font-semibold">
-                    ${(serverRecon?.ssotNet ?? 0).toFixed(2)}
+                    {formatJMD(serverRecon?.ssotNet ?? 0, 2)}
                   </span>
                 </div>
                 {serverRecon?.source && (
@@ -531,7 +531,7 @@ export function FinancialSubTabs({
                 <div className="pt-2 flex justify-between text-sm">
                   <span className="font-semibold">Net Earnings</span>
                   <span className="font-semibold">
-                    ${(serverRecon?.ledgerNet ?? 0).toFixed(2)}
+                    {formatJMD(serverRecon?.ledgerNet ?? 0, 2)}
                   </span>
                 </div>
                 {serverReconLoading && (

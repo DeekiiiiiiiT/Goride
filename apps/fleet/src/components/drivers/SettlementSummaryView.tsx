@@ -23,6 +23,7 @@ import {
 } from '../../utils/fleetBankReceive';
 import { useAuth } from '../auth/AuthContext';
 import { STATUS_SETTLED_EPS } from '@roam/finance-core';
+import { ContentVisibilityList } from './ContentVisibilityList';
 
 export type SettlementStatus =
   | 'Settled'
@@ -237,11 +238,7 @@ export function SettlementSummaryView({
   // ── Currency formatter helper ──
   const fmtCurrency = (n: number) => formatJMD(Math.abs(n), 2);
 
-  // ── Phase 6: Pagination ──
-  const PAGE_SIZE = 12;
-  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
-  const visibleRows = settlementRows.slice(0, visibleCount);
-  const hasMore = settlementRows.length > visibleCount;
+  // P-8: virtualized via ContentVisibilityList
 
   // ── Period label formatter (matches Payout tab style) ──
   const formatPeriod = (row: SettlementRow) => {
@@ -666,9 +663,14 @@ export function SettlementSummaryView({
                     </TableHead>
                   </TableRow>
                 </TableHeader>
-                <TableBody>
-                  {visibleRows.map((row) => {
-                    const key = format(row.periodStart, 'yyyy-MM-dd');
+                    </Table>
+                    <ContentVisibilityList
+                      items={settlementRows}
+                      maxHeightPx={480}
+                      estimateRowPx={48}
+                      getKey={(row) => format(row.periodStart, 'yyyy-MM-dd')}
+                      renderRow={(row, idx) => {
+const key = format(row.periodStart, 'yyyy-MM-dd');
                     // Row background per spec (Phase 7 preview — subtle tinting)
                     const rowBg =
                       row.settlementStatus === 'Driver Owes' ? 'bg-rose-50/30'
@@ -677,6 +679,7 @@ export function SettlementSummaryView({
                       : 'hover:bg-slate-50/60';
 
                     return (
+                          <table className="w-full"><tbody>
                       <TableRow
                         key={key}
                         className={`${rowBg} cursor-pointer transition-colors hover:bg-slate-100/60`}
@@ -795,25 +798,11 @@ export function SettlementSummaryView({
                           ) : null}
                         </TableCell>
                       </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
+                          </tbody></table>
+                        );
+                      }}
+                    />
             </div>
-
-            {/* Show more button */}
-            {hasMore && (
-              <div className="flex justify-center pt-2">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setVisibleCount(prev => prev + PAGE_SIZE)}
-                >
-                  <ChevronDown className="h-4 w-4 mr-1" />
-                  Show more ({settlementRows.length - visibleCount} remaining)
-                </Button>
-              </div>
-            )}
           </div>
         )}
       </CardContent>
