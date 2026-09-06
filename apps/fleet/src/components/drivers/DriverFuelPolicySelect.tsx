@@ -1,10 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { Label } from '../ui/label';
 import { Badge } from '../ui/badge';
 import { Fuel, Loader2 } from 'lucide-react';
-import { api } from '../../services/api';
-import { fuelService } from '../../services/fuelService';
-import type { FuelScenario } from '../../types/fuel';
+import { useFuelScenarios } from '../../hooks/useFuelScenarios';
 import {
   mondayYmdForDate,
   resolveDriverVersionForWeek,
@@ -20,33 +18,8 @@ export function DriverFuelPolicySelect({
   onDriverUpdated?: (next: any) => void;
 }) {
   const resolvedId = driverId || driver?.id;
-  const [scenarios, setScenarios] = useState<FuelScenario[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    fuelService.getFuelScenarios().then(setScenarios).catch(() => setScenarios([]));
-  }, []);
-
-  useEffect(() => {
-    if (!resolvedId) {
-      setLoading(false);
-      return;
-    }
-    let cancelled = false;
-    setLoading(true);
-    (async () => {
-      try {
-        await api.getDrivers();
-      } catch {
-        /* badge still works from scenarios */
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [resolvedId]);
+  // Shared RQ cache — avoids a duplicate /scenarios (+ wasted getDrivers) on every detail open.
+  const { scenarios, loading } = useFuelScenarios(Boolean(resolvedId));
 
   if (!resolvedId) return null;
 

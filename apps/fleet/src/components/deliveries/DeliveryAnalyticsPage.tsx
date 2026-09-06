@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { LineChart, Loader2, RefreshCw } from 'lucide-react';
 import { api } from '../../services/api';
@@ -36,6 +36,20 @@ export function DeliveryAnalyticsPage() {
     },
   });
 
+  // Derived before any early return so render path never changes hook count (Fixes ROAM-FLEET-20, ROAM-FLEET-21).
+  const kpis = [
+    { label: 'Deliveries today', value: String(data?.todayCount ?? 0) },
+    {
+      label: 'Courier revenue (recent)',
+      value: data?.revenue7d ? `J$${data.revenue7d.toFixed(0)}` : '—',
+    },
+    { label: 'Completed trips', value: String(data?.tripCount ?? 0) },
+    {
+      label: 'Cancellation rate',
+      value: data?.cancelRate != null ? `${data.cancelRate.toFixed(1)}%` : '—',
+    },
+  ];
+
   if (isLoading) {
     return (
       <div className="flex min-h-[320px] items-center justify-center">
@@ -43,22 +57,6 @@ export function DeliveryAnalyticsPage() {
       </div>
     );
   }
-
-  const kpis = useMemo(
-    () => [
-      { label: 'Deliveries today', value: String(data?.todayCount ?? 0) },
-      {
-        label: 'Courier revenue (recent)',
-        value: data?.revenue7d ? `J$${data.revenue7d.toFixed(0)}` : '—',
-      },
-      { label: 'Completed trips', value: String(data?.tripCount ?? 0) },
-      {
-        label: 'Cancellation rate',
-        value: data?.cancelRate != null ? `${data.cancelRate.toFixed(1)}%` : '—',
-      },
-    ],
-    [data],
-  );
 
   return (
     <div className="space-y-6">

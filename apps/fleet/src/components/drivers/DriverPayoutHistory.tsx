@@ -16,7 +16,7 @@ import {
   Scale,
 } from 'lucide-react';
 import { FinancialTransaction, Trip, DriverMetrics } from '../../types/data';
-import type { FuelEntry, MileageAdjustment, FuelScenario } from '../../types/fuel';
+import type { MileageAdjustment } from '../../types/fuel';
 import { format } from 'date-fns';
 import { exportToCSV } from '../../utils/csvHelpers';
 import { toast } from 'sonner';
@@ -34,9 +34,10 @@ import {
   buildDraftFuelByPeriod,
   rollupWeeklyPayoutRowsToMonthly,
 } from '../../utils/payoutDraftFuel';
-import { fuelService } from '../../services/fuelService';
 import type { DriverFinancialBundle, DriverLike } from '../../hooks/useDriverFinancialBundle';
 import { useDriverFuelEntries } from '../../hooks/useDriverFuelEntries';
+import { useFuelScenarios } from '../../hooks/useFuelScenarios';
+import { useMileageAdjustments } from '../../hooks/useMileageAdjustments';
 import { ContentVisibilityList } from './ContentVisibilityList';
 
 interface DriverPayoutHistoryProps {
@@ -134,59 +135,63 @@ export function DriverPayoutHistory({
     vehicleIdsForDraft
   );
 
+  const pendingDraftWeeks = useMemo(
+    () => weeksForDraft.filter((r) => !r.isFinalized),
+    [weeksForDraft],
+  );
+  const draftFetchEnabled =
+    pendingDraftWeeks.length > 0 && !fuelCoreLoading && vehicles.length > 0;
+  // Shared RQ with header Fuel Policy badge — one /scenarios for the page (ROAM-FLEET-10).
+  const { scenarios: sharedScenarios, loading: scenariosLoading } = useFuelScenarios(draftFetchEnabled);
+  const { adjustments: sharedAdjustments, loading: adjustmentsLoading } =
+    useMileageAdjustments(draftFetchEnabled);
+
   // Draft fuel for Pending Fuel weeks (Payout estimates; Settlement stays locked).
   useEffect(() => {
-    const pending = weeksForDraft.filter((r) => !r.isFinalized);
-    if (!pending.length || fuelCoreLoading || !vehicles.length) {
+    if (!draftFetchEnabled) {
       setDraftFuelByPeriod({});
+      setDraftLoading(false);
       return;
     }
-    if (fuelEntriesLoading) return;
-
-    let cancelled = false;
-    const load = async () => {
+    if (fuelEntriesLoading || scenariosLoading || adjustmentsLoading) {
       setDraftLoading(true);
-      try {
-        const adjustments = await fuelService.getMileageAdjustments().catch(
-          () => [] as MileageAdjustment[]
-        );
-        const scenarios = await fuelService.getFuelScenarios().catch(() => [] as FuelScenario[]);
-        if (cancelled) return;
+      return;
+    }
 
-        const draft = buildDraftFuelByPeriod({
-          periods: pending.map((r) => ({ periodStart: r.periodStart, periodEnd: r.periodEnd })),
-          vehicles,
-          trips,
-          fuelEntries: cachedFuelEntries,
-          adjustments: (adjustments || []).filter((a: MileageAdjustment) =>
-            vehicleIdsForDraft.includes(a.vehicleId),
-          ),
-          scenarios: scenarios || [],
-        });
-        startTransition(() => {
-          if (!cancelled) {
-            setDraftFuelByPeriod(draft);
-            setDraftLoading(false);
-          }
-        });
-      } catch (e) {
-        console.error('[DriverPayoutHistory] Draft fuel load failed:', e);
-        if (!cancelled) setDraftLoading(false);
-      }
-    };
-    load();
-    return () => {
-      cancelled = true;
-    };
+    try {
+      const draft = buildDraftFuelByPeriod({
+        periods: pendingDraftWeeks.map((r) => ({
+          periodStart: r.periodStart,
+          periodEnd: r.periodEnd,
+        })),
+        vehicles,
+        trips,
+        fuelEntries: cachedFuelEntries,
+        adjustments: (sharedAdjustments || []).filter((a: MileageAdjustment) =>
+          vehicleIdsForDraft.includes(a.vehicleId),
+        ),
+        scenarios: sharedScenarios || [],
+      });
+      startTransition(() => {
+        setDraftFuelByPeriod(draft);
+        setDraftLoading(false);
+      });
+    } catch (e) {
+      console.error('[DriverPayoutHistory] Draft fuel load failed:', e);
+      setDraftLoading(false);
+    }
   }, [
-    weeksForDraft,
-    fuelCoreLoading,
+    draftFetchEnabled,
+    pendingDraftWeeks,
     fuelEntriesLoading,
+    scenariosLoading,
+    adjustmentsLoading,
     vehicles,
     trips,
-    driverId,
     cachedFuelEntries,
     vehicleIdsForDraft,
+    sharedAdjustments,
+    sharedScenarios,
   ]);
 
   const periodData = useMemo(() => {

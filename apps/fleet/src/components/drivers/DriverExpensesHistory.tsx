@@ -6,7 +6,6 @@ import { Button } from "../ui/button";
 import { Download, ChevronDown, ChevronLeft, ChevronRight, TrendingDown, Fuel, Navigation, Loader2, CheckCircle, Clock, Info, LinkIcon, Unlink } from "lucide-react";
 import { FinancialTransaction, Trip, DisputeRefund } from "../../types/data";
 import type { FuelEntry, MileageAdjustment, FuelScenario } from "../../types/fuel";
-import { fuelService } from "../../services/fuelService";
 import { FuelCalculationService } from "../../services/fuelCalculationService";
 import {
   format,
@@ -26,6 +25,8 @@ import type { DriverFinancialBundle, DriverLike } from '../../hooks/useDriverFin
 import { useDriverFinancialBundle } from '../../hooks/useDriverFinancialBundle';
 import { useDriverFinancialPeriods } from '../../hooks/useDriverFinancialPeriods';
 import { useDriverFuelEntries } from '../../hooks/useDriverFuelEntries';
+import { useFuelScenarios } from '../../hooks/useFuelScenarios';
+import { useMileageAdjustments } from '../../hooks/useMileageAdjustments';
 import { ContentVisibilityList } from './ContentVisibilityList';
 
 type PeriodType = 'daily' | 'weekly' | 'monthly';
@@ -117,37 +118,42 @@ export function DriverExpensesHistory({
     Array.from(vehicleIdSet)
   );
 
+  // Shared RQ — same /scenarios + adjustments as header badge / Payout (ROAM-FLEET-10).
+  const fuelDraftEnabled = expenseView === 'fuel' && !fuelCoreLoading;
+  const { scenarios: sharedScenarios, loading: scenariosLoading } = useFuelScenarios(fuelDraftEnabled);
+  const { adjustments: sharedAdjustments, loading: adjustmentsLoading } =
+    useMileageAdjustments(fuelDraftEnabled);
+
   useEffect(() => {
     if (expenseView !== 'fuel') return;
-    if (fuelCoreLoading || fuelEntriesLoading) return;
+    if (fuelCoreLoading || fuelEntriesLoading || scenariosLoading || adjustmentsLoading) {
+      if (expenseView === 'fuel') setFuelDraftLoading(true);
+      return;
+    }
 
-    let cancelled = false;
-    const loadDraft = async () => {
-      setFuelDraftLoading(true);
-      try {
-        const adjustments = await fuelService.getMileageAdjustments().catch(() => []);
-        const scenarios = await fuelService.getFuelScenarios().catch(() => []);
-        if (cancelled) return;
-        const byId = new Map<string, FuelEntry>();
-        for (const e of cachedFuelEntries) {
-          if (e?.id) byId.set(String(e.id), e);
-        }
-        startTransition(() => {
-          setDraftFuelEntries(Array.from(byId.values()));
-          setDraftAdjustments(
-            (adjustments || []).filter((a: MileageAdjustment) => vehicleIdSet.has(a.vehicleId))
-          );
-          setDraftScenarios(scenarios || []);
-          if (!cancelled) setFuelDraftLoading(false);
-        });
-      } catch (e) {
-        console.error('[DriverExpensesHistory] Failed to load draft fuel estimates:', e);
-        if (!cancelled) setFuelDraftLoading(false);
-      }
-    };
-    loadDraft();
-    return () => { cancelled = true; };
-  }, [expenseView, fuelCoreLoading, fuelEntriesLoading, cachedFuelEntries, vehicleIdSet]);
+    const byId = new Map<string, FuelEntry>();
+    for (const e of cachedFuelEntries) {
+      if (e?.id) byId.set(String(e.id), e);
+    }
+    startTransition(() => {
+      setDraftFuelEntries(Array.from(byId.values()));
+      setDraftAdjustments(
+        (sharedAdjustments || []).filter((a: MileageAdjustment) => vehicleIdSet.has(a.vehicleId))
+      );
+      setDraftScenarios(sharedScenarios || []);
+      setFuelDraftLoading(false);
+    });
+  }, [
+    expenseView,
+    fuelCoreLoading,
+    fuelEntriesLoading,
+    scenariosLoading,
+    adjustmentsLoading,
+    cachedFuelEntries,
+    vehicleIdSet,
+    sharedAdjustments,
+    sharedScenarios,
+  ]);
 
   // ── Compute time buckets (fleet timezone — same Monday keys as Reconciliation) ──
   const timeBuckets: { start: Date; end: Date }[] = useMemo(() => {
