@@ -76,6 +76,54 @@ Deno.test("concurrency: two observers of v1 → exactly one CAS win (N-5)", () =
   assertEquals(broken, 3);
 });
 
+/**
+ * Wiring-level: two concurrent "pay" handlers that each observed residual under v1,
+ * then an approve that observes the post-pay version — same CAS helper as claimPeriodWriteLock.
+ */
+Deno.test("concurrency: dual pay handlers + approve share observed-version CAS", () => {
+  let dbVersion = 1;
+  const winners: string[] = [];
+
+  function claimHandler(label: string, observedVersion: number): void {
+    const bump = casBumpRowVersion(dbVersion, observedVersion);
+    if (!bump) {
+      assertPeriodCasClaimed(null);
+      return;
+    }
+    dbVersion = bump.next;
+    winners.push(label);
+    assertPeriodCasClaimed({ id: label });
+  }
+
+  const observedPayA = 1;
+  const observedPayB = 1;
+  claimHandler("pay-a", observedPayA);
+  try {
+    claimHandler("pay-b", observedPayB);
+    throw new Error("expected second pay STALE_RESIDUAL");
+  } catch (e) {
+    assertEquals((e as SettlementCommandError).code, "STALE_RESIDUAL");
+    assertEquals((e as SettlementCommandError).status, 409);
+  }
+  assertEquals(winners, ["pay-a"]);
+  assertEquals(dbVersion, 2);
+
+  // Approve loads period after pay won — observes v2, claims successfully.
+  const approveObserved = dbVersion;
+  claimHandler("approve", approveObserved);
+  assertEquals(winners, ["pay-a", "approve"]);
+  assertEquals(dbVersion, 3);
+
+  // Stale approve that still held v1 must fail.
+  try {
+    claimHandler("approve-stale", 1);
+    throw new Error("expected stale approve STALE_RESIDUAL");
+  } catch (e) {
+    assertEquals((e as SettlementCommandError).code, "STALE_RESIDUAL");
+  }
+  assertEquals(winners, ["pay-a", "approve"]);
+});
+
 Deno.test("R-1 semantics: STALE_RESIDUAL and pay cap are 4xx business errors", () => {
   try {
     assertExpectedOutstanding(100, 50);

@@ -436,9 +436,15 @@ function periodMetadataMatchesServiceLine(
 }
 
 async function resolveDriverOrganizationId(driverId: string): Promise<string | null> {
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const asUuid = (v: unknown): string | null => {
+    const s = String(v || "").trim();
+    return uuidRe.test(s) ? s : null;
+  };
   try {
     const dr: any = await kv.get(`driver:${driverId}`);
-    if (dr?.organizationId) return String(dr.organizationId);
+    const fromKv = asUuid(dr?.organizationId ?? dr?.organization_id);
+    if (fromKv) return fromKv;
   } catch {
     /* ignore */
   }
@@ -448,11 +454,49 @@ async function resolveDriverOrganizationId(driverId: string): Promise<string | n
       .select("organization_id")
       .eq("id", driverId)
       .maybeSingle();
-    if (data?.organization_id) return String(data.organization_id);
+    const fromFleet = asUuid(data?.organization_id);
+    if (fromFleet) return fromFleet;
   } catch {
     /* ignore */
   }
   return null;
+}
+
+/** N-6: sole-tenant fallback — only when exactly one organization exists. */
+async function resolveSoleOrganizationId(): Promise<string | null> {
+  try {
+    const { data, error } = await sb()
+      .from("organizations")
+      .select("id")
+      .limit(2);
+    if (error || !data || data.length !== 1) return null;
+    const id = String(data[0]?.id || "").trim();
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)
+      ? id
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * N-6: never persist a period with NULL organization_id (org-scoped queues exclude NULL).
+ * Resolves driver org → sole org fallback → throw (fail closed).
+ */
+export async function requirePeriodOrganizationId(
+  driverId: string,
+  current: string | null | undefined,
+): Promise<string> {
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const cur = String(current || "").trim();
+  if (uuidRe.test(cur)) return cur;
+  const fromDriver = await resolveDriverOrganizationId(driverId);
+  if (fromDriver) return fromDriver;
+  const sole = await resolveSoleOrganizationId();
+  if (sole) return sole;
+  throw new Error(
+    `Missing organization_id for driver ${driverId} — refusing NULL-org period write (N-6)`,
+  );
 }
 
 const DEFAULT_TIERS_EH = [
@@ -1233,7 +1277,7 @@ export async function rebuildDriverFinancialPeriod(
     period_anchor: periodAnchor,
     period_end: periodEnd,
     timezone,
-    organization_id: context.organizationId,
+    organization_id: await requirePeriodOrganizationId(driverId, context.organizationId),
     status: cashPersist.status,
     toll_spend: row.tollSpend,
     toll_cash_spend: row.tollCashSpend,

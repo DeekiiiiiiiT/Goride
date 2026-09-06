@@ -435,6 +435,14 @@ export function DriverSettlementsPage({
     { enabled: deskMode === 'reconciled' },
   );
 
+  // N-6: surface hidden NULL-org periods so KPIs are not silently incomplete.
+  const healthQuery = useQuery({
+    queryKey: settlementKeys.health(),
+    queryFn: () => settlementCommandsApi.getHealth(),
+    staleTime: 60_000,
+  });
+  const nullOrgPeriodCount = healthQuery.data?.nullOrgPeriodCount ?? 0;
+
   const movementsQuery = useQuery({
     queryKey: settlementKeys.movements({
       weekFrom,
@@ -1485,6 +1493,19 @@ export function DriverSettlementsPage({
           <span className="ml-2">Refresh</span>
         </Button>
       </div>
+
+      {nullOrgPeriodCount > 0 ? (
+        <div
+          role="status"
+          className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950"
+        >
+          Some settlement weeks are missing org tags and are hidden from totals — refresh after
+          repair.
+          <span className="ml-1 text-amber-800/80">
+            ({nullOrgPeriodCount} untagged week{nullOrgPeriodCount === 1 ? '' : 's'})
+          </span>
+        </div>
+      ) : null}
 
       <SettlementKpiBar
         settledOwes={settledOwesTotal}

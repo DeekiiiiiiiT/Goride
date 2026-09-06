@@ -129,6 +129,7 @@ export const settlementKeys = {
       },
     ] as const,
   runs: (runId: string) => [...settlementKeys.all, 'runs', runId] as const,
+  health: () => [...settlementKeys.all, 'health'] as const,
 };
 
 export function useSettlementQueue(params: SettlementQueueParams, options?: { enabled?: boolean }) {

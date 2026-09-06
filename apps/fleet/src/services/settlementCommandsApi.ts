@@ -428,4 +428,21 @@ export const settlementCommandsApi = {
     if (response.status === 404) return getQueueLegacy(params);
     throw new Error(await parseError(response, 'Failed to load settlement queue'));
   },
+
+  /** N-6: NULL-org period health for desk alert. */
+  async getHealth(): Promise<{
+    success: boolean;
+    nullOrgPeriodCount: number;
+    totalPeriods: number;
+    sampleDriverIds: string[];
+  }> {
+    const response = await fetchWithRetry(`${BASE}/health`, {
+      headers: await requireAuthHeaders(null),
+    });
+    if (!response.ok) {
+      const { message, code } = await parseErrorBody(response, 'Failed to load settlement health');
+      throw new SettlementCommandApiError(message, response.status, code);
+    }
+    return response.json();
+  },
 };

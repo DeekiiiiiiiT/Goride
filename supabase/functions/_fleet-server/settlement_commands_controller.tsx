@@ -1619,4 +1619,47 @@ app.get(`${BASE}/movements`, requirePermission("transactions.view"), async (c) =
   }
 });
 
+/** N-6: NULL-org period rows are invisible on every queue — surface count for ops. */
+app.get(`${BASE}/health`, requirePermission("transactions.view"), async (c) => {
+  try {
+    const { count: totalPeriods, error: totalErr } = await sb()
+      .from("driver_financial_periods")
+      .select("id", { count: "exact", head: true });
+    if (totalErr) throw new Error(totalErr.message);
+
+    const { count: nullOrgPeriodCount, error: nullErr } = await sb()
+      .from("driver_financial_periods")
+      .select("id", { count: "exact", head: true })
+      .is("organization_id", null);
+    if (nullErr) throw new Error(nullErr.message);
+
+    let sampleDriverIds: string[] = [];
+    if ((nullOrgPeriodCount || 0) > 0) {
+      const { data: samples } = await sb()
+        .from("driver_financial_periods")
+        .select("driver_id")
+        .is("organization_id", null)
+        .limit(40);
+      const seen = new Set<string>();
+      for (const r of samples || []) {
+        const id = String((r as { driver_id?: string }).driver_id || "").trim();
+        if (id && !seen.has(id)) {
+          seen.add(id);
+          sampleDriverIds.push(id);
+          if (sampleDriverIds.length >= 20) break;
+        }
+      }
+    }
+
+    return c.json({
+      success: true,
+      nullOrgPeriodCount: nullOrgPeriodCount || 0,
+      totalPeriods: totalPeriods || 0,
+      sampleDriverIds,
+    });
+  } catch (e) {
+    return commandErrorResponse(c, e);
+  }
+});
+
 export default app;

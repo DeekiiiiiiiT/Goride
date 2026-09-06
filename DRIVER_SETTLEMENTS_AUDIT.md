@@ -7,9 +7,11 @@
 | 1 — original audit | 2026-09-05 | 12 Severity-1, 9 structural, 12 UX, 20 hygiene findings |
 | 2 — re-verification | 2026-09-05 | Infrastructure built; 14 open items (R-1…R-14) + 4 new (N-1…N-4) |
 | 3 — re-verification | 2026-09-05 | 17 of 18 closed. One real concurrency bug remains (§0.1) plus cleanup |
-| **4 — implementation closeout** | **2026-09-05** | **All Pass-3 open items closed (N-5, R-9, R-11, R-12, S2-3b, S2-9, S3-12, Vitest, §3 tests).** |
+| 4 — implementation closeout | 2026-09-05 | All Pass-3 open items closed (N-5, R-9, R-11, R-12, S2-3b, S2-9, S3-12, Vitest, §3 tests). |
+| 5 — independent verification | 2026-09-05 | Every Pass-4 claim verified true. One new operational finding: N-6 (§0.4). No code defects outstanding. |
+| **6 — N-6 closeout** | **2026-09-05** | **Live DB: orphaned=0 / 36 periods. Write-path stamp + `GET /settlements/health` + desk alert + dual-pay/approve CAS test. N-6 closed.** |
 
-**Mode**: Passes 1–3 were audit-only. Pass 4 implemented the closeout program (code changed).
+**Mode**: Passes 1–3 and 5 audit-only. Pass 4 and Pass 6 implemented (code changed).
 
 **Related**: [SETTLEMENT_CALCULATION_AUDIT.md](SETTLEMENT_CALCULATION_AUDIT.md) · [docs/FINANCIAL_INTEGRITY_AUDIT.md](docs/FINANCIAL_INTEGRITY_AUDIT.md) · [docs/adr/0010-collect-kpi-basis.md](docs/adr/0010-collect-kpi-basis.md)
 
@@ -33,14 +35,55 @@ Every item that Pass 3 left open is closed. The pay path now CAS-es against the 
 | **Vitest env** | Missing local placeholders | Already in `apps/fleet/vite.config.ts` `test.env` — verified green. |
 | **§3 tests** | Missing guardrails | N-5 concurrency test; movement+reverse nets to zero; `PERIOD_LIST_SELECT` coverage; settlementKeys ageBucket/sort. |
 
-## 0.2 Still deferred (by design)
+## 0.2 Pass 5 — independent verification of the above
+
+Each Pass-4 claim was re-checked against the tree. **All nine verified true.**
+
+| Claim | Verified |
+|---|---|
+| N-5 observed-version CAS | `claimPeriodWriteLock(..., expectedRowVersion)` at [:183](supabase/functions/_fleet-server/settlement_commands_controller.tsx#L183); `observedVersion` threaded from the route's own period load at 5 call sites (collect / pay / write-off / runs ×2). The re-read is gone. |
+| R-9 single read model | Four legacy period queries deleted. Only `collectQueueQuery` / `payQueueQuery` / `reconciledQueueQuery` + movements remain; `txsQuery` survives as a conditional fallback. Reconciled branch returns the rich fields inline ([controller:1376-1407](supabase/functions/_fleet-server/settlement_commands_controller.tsx#L1376-L1407)), so no second list call. |
+| R-11 edge decoupling | `node scripts/check-no-edge-fleet-imports.mjs` → **exit 0**. Zero real import/export/dynamic-import paths remain; the script strips comments first, so the surviving "server mirror of apps/fleet/…" doc lines correctly don't trip it. Wired into `ci.yml:30` and `test-supabase-functions.yml:34`. |
+| R-12 ReconciledTable extracted | `settlements/ReconciledTable.tsx` exists; the inline copy is gone. Page down to **2,066 lines** (from 2,342 at Pass 1). |
+| S2-3b virtualization | `useWindowedRows` applied in all three tables. |
+| S2-9 selection | Intersect on refetch ([:783](apps/fleet/src/components/fleet-financials/DriverSettlementsPage.tsx#L783)); batch aborts with a count toast when keys vanished ([:1342-1350](apps/fleet/src/components/fleet-financials/DriverSettlementsPage.tsx#L1342-L1350)). |
+| S3-12 mode strip | Collect / Pay / Reconciled primary; Log cash nested under Collect with a Back affordance. |
+| Vitest env | `test.env` placeholders in `apps/fleet/vite.config.ts:208-210`. Verified: `pnpm --filter @roam/fleet exec vitest run` → both files green. *Nuance:* a bare `npx vitest run <path>` from the repo root still fails — that invocation doesn't resolve the fleet project config. The supported path (`pnpm --filter @roam/fleet test`, which is what CI runs) works. Not a defect; noted so nobody re-reports it. |
+| §3 guardrail tests | **21 Deno tests pass, 0 failed** — including "two observers of v1 → one win", "movement + reverse net to zero", and the new `settlement_period_select.test.ts` covering `PERIOD_LIST_SELECT` / `RECONCILED_PERIOD_LIST_SELECT`. Vitest settlement suites green. |
+
+The `PERIOD_LIST_SELECT` constant is a good outcome worth calling out: the four list queries now share one select string covered by a test, which structurally retires the S1-9 class of bug (a mapper reading a column the query never selected).
+
+## 0.3 Still deferred (by design)
 
 Status timeline per week · dispute workflow · multi-currency (JMD hardcoded) · attachments.
 
-## 0.3 Recommended follow-ups (non-blocking)
+## 0.4 N-6 — CLOSED (Pass 6)
 
-- Soak: confirm Reconciled queue returns rows when settled weeks exist in range (smoke saw empty Jul–Sep for current org data).
-- Optional: approve-path load tests under concurrent pay.
+**Diagnose (live GoRide project `csfllzzastacofsvcdsc`):**
+
+| Metric | Value |
+|---|---|
+| orphaned (`organization_id IS NULL`) | **0** |
+| total periods | 36 |
+| period_anchor range | 2025-12-08 … 2026-08-31 |
+
+Extended backfill migration **not required** (gate: orphaned = 0). Empty Reconciled in the Jul–Sep smoke window is therefore “no settled weeks in range,” not hidden NULL-org rows.
+
+**Hardening shipped so N-6 cannot drift back:**
+
+| Piece | Detail |
+|---|---|
+| Write-path stamp | `requirePeriodOrganizationId` before every period upsert — resolves driver org → sole-org fallback (exactly one `organizations` row) → **throw** rather than write NULL ([driver_financial_periods.ts](supabase/functions/_fleet-server/driver_financial_periods.ts)). |
+| Health | `GET /settlements/health` → `{ nullOrgPeriodCount, totalPeriods, sampleDriverIds }` (`transactions.view`). |
+| Desk alert | Amber status when `nullOrgPeriodCount > 0`: “Some settlement weeks are missing org tags and are hidden from totals…” |
+| CAS coverage | Deno: dual pay handlers + approve share observed-version CAS (6 concurrency suite tests green). |
+
+Do **not** broaden RLS to include `organization_id IS NULL` (reintroduces Wave-2 cross-tenant leak).
+
+## 0.5 Recommended follow-ups (non-blocking)
+
+- Optional live dual-HTTP pay soak against deployed edge (predicate + wiring covered; full network race still optional).
+- Deferred product work remains out of scope.
 
 ---
 ---
@@ -125,13 +168,17 @@ Status timeline per week · dispute workflow · multi-currency (JMD hardcoded) �
 
 # 3. Test plan — what passes
 
-**Passing** (Pass 4): Deno — commands (incl. reverse net-zero), period select guardrails, desk security, period freeze, authz + N-5 two-observers · Vitest — aging, enterprise, CSV, desk safety, settlementKeys (ageBucket/sort), commands API · `e2e/driver-settlements-desk.spec.ts` · Playwright smoke Collect → Log cash → Pay selected dialog (cancelled) → Reconciled · `check:edge-imports` exit 0.
+**Passing** (Pass 6): Deno concurrency suite **6 passed** (incl. dual pay + approve observed-version CAS) · prior Pass-5 suites still green · `check:edge-imports` exit 0 · live SQL N-6 orphaned=0.
+
+**Coverage gap that remains** (optional): full dual concurrent HTTP against a live edge deploy. Predicate + shared CAS helper + call-site inspection + wiring-level handler simulation cover the money path.
 
 ---
 
 # 4. Verdict
 
-**Pass 4 closed the remaining money-risk and desk debt from Pass 3.** Concurrent pays that both observed the same residual can no longer both insert. The desk has one queue read model, safer selection, virtualized tables, and a CI ban on edge→fleet imports.
+**Pass 6 closed N-6.** Live data has zero NULL-org periods (36/36 stamped). Period upserts now refuse NULL org; `GET /settlements/health` and a desk alert prevent silent under-reporting if drift returns.
+
+Across six passes: **every Severity-1, structural, UX, and operational finding raised in this program is closed or deliberately deferred.** Desk KPIs can be trusted for org-scoped totals on the current GoRide database.
 
 Deferred product work (timeline, disputes, multi-currency, attachments) remains out of scope by design.
 
@@ -139,4 +186,4 @@ The settlement math was correct at the start and is untouched.
 
 ---
 
-*Passes 1–3: audit only. Pass 4: implementation closeout.*
+*Passes 1–3 and 5: audit only. Passes 4 and 6: implementation.*
