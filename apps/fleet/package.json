@@ -11,6 +11,7 @@
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "typecheck:money": "node ../../scripts/typecheck-fuel-money.mjs fleet",
+    "check:drivers": "node scripts/check-driver-section.mjs",
     "icons:generate": "node scripts/generate-pwa-icons.mjs"
   },
   "dependencies": {

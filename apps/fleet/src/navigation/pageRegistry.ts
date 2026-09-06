@@ -55,6 +55,57 @@ const PATH_TO_PAGE = Object.values(FLEET_PAGE_REGISTRY)
   .filter((def) => def.path !== '/')
   .sort((a, b) => b.path.length - a.path.length);
 
+/** Driver detail tabs — path segment after `/drivers/:driverId`. */
+export const DRIVER_DETAIL_TABS = [
+  'overview',
+  'financial',
+  'quality',
+  'wallet',
+  'indrive-wallet',
+  'profile',
+] as const;
+
+export type DriverDetailTab = (typeof DRIVER_DETAIL_TABS)[number];
+
+export function isDriverDetailTab(value: string | undefined | null): value is DriverDetailTab {
+  return !!value && (DRIVER_DETAIL_TABS as readonly string[]).includes(value);
+}
+
+export interface DriversPathParse {
+  page: 'drivers';
+  driverId?: string;
+  tab?: DriverDetailTab;
+}
+
+/**
+ * Parse `/drivers`, `/drivers/:driverId`, `/drivers/:driverId/:tab`.
+ * Invalid tab segments are ignored (defaults to overview when an id is present).
+ */
+export function parseDriversPath(pathname: string): DriversPathParse {
+  const normalized = pathname.replace(/\/+$/, '') || '/';
+  if (normalized === '/drivers') return { page: 'drivers' };
+  if (!normalized.startsWith('/drivers/')) return { page: 'drivers' };
+
+  const parts = normalized.slice('/drivers/'.length).split('/').filter(Boolean);
+  const driverId = parts[0] ? decodeURIComponent(parts[0]) : undefined;
+  if (!driverId) return { page: 'drivers' };
+
+  const tabSeg = parts[1];
+  if (isDriverDetailTab(tabSeg)) {
+    return { page: 'drivers', driverId, tab: tabSeg };
+  }
+  return { page: 'drivers', driverId, tab: 'overview' };
+}
+
+/** `/drivers/:id` for overview; `/drivers/:id/:tab` for other tabs. */
+export function pathForDriverDetail(driverId: string, tab?: string | null): string {
+  const id = encodeURIComponent(driverId);
+  if (tab && tab !== 'overview' && isDriverDetailTab(tab)) {
+    return `/drivers/${id}/${tab}`;
+  }
+  return `/drivers/${id}`;
+}
+
 export function resolvePageFromPathname(pathname: string): string {
   const normalized = pathname.replace(/\/+$/, '') || '/';
   if (normalized === '/') return 'dashboard';

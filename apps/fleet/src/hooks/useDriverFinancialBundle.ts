@@ -113,13 +113,6 @@ export function useDriverFinancialBundle(
     enabled: enabled && expandedIds.length > 0,
   });
 
-  const settingsQuery = useQuery({
-    queryKey: ['tollAutomationSettings'],
-    queryFn: () => api.getTollAutomationSettings(),
-    staleTime: DRIVER_FINANCIAL_STALE_MS,
-    enabled,
-  });
-
   const finalizedReports = useMemo(() => {
     const all = finalizedQuery.data || [];
     const nativeSet = new Set(nativeIds);
@@ -135,10 +128,7 @@ export function useDriverFinancialBundle(
 
   const isCoreLoading =
     enabled &&
-    (vehiclesQuery.isLoading ||
-      finalizedQuery.isLoading ||
-      disputeQuery.isLoading ||
-      settingsQuery.isLoading);
+    (vehiclesQuery.isLoading || finalizedQuery.isLoading || disputeQuery.isLoading);
 
   const isCoreError =
     vehiclesQuery.isError ||

@@ -1,5 +1,6 @@
 /**
  * Shared React Query cache for per-driver toll logs (ledger + legacy merge on server).
+ * getTollLogs accepts a single driverId — batch via fetchTollLogsForDriverIds helper.
  */
 import { useQuery } from '@tanstack/react-query';
 import { useMemo } from 'react';
@@ -11,28 +12,34 @@ export function driverTollLogsQueryKey(expandedIds: string[]) {
   return ['driverTollLogs', key] as const;
 }
 
+/**
+ * Batch helper: one request per id (server has no multi-driverId query yet).
+ * TODO: when GET /toll-logs supports driverIds=, collapse to a single fetch.
+ */
+export async function fetchTollLogsForDriverIds(ids: string[]): Promise<any[]> {
+  const unique = [...new Set(ids.filter(Boolean))];
+  if (unique.length === 0) return [];
+  const responses = await Promise.all(
+    unique.map((id) =>
+      api.getTollLogs({ driverId: id }).catch(() => ({ data: [] as any[] })),
+    ),
+  );
+  return (responses || []).flatMap((r: any) => (r && Array.isArray(r.data) ? r.data : []));
+}
+
 export function useDriverTollLogs(
   expandedIds: string[],
-  options?: { enabled?: boolean }
+  options?: { enabled?: boolean },
 ) {
   const ids = useMemo(
     () => [...expandedIds].filter(Boolean).sort(),
-    [expandedIds]
+    [expandedIds],
   );
   const enabled = options?.enabled !== false && ids.length > 0;
 
   const query = useQuery({
     queryKey: driverTollLogsQueryKey(ids),
-    queryFn: async () => {
-      const responses = await Promise.all(
-        ids.map((id) =>
-          api.getTollLogs({ driverId: id }).catch(() => ({ data: [] as any[] }))
-        )
-      );
-      return (responses || []).flatMap((r: any) =>
-        r && Array.isArray(r.data) ? r.data : []
-      );
-    },
+    queryFn: () => fetchTollLogsForDriverIds(ids),
     staleTime: DRIVER_FINANCIAL_STALE_MS,
     enabled,
   });

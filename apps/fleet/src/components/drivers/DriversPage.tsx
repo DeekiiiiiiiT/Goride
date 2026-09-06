@@ -1,8 +1,8 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../services/api';
-import { Trip } from '../../types/data';
 import { useVocab } from '../../utils/vocabulary';
+import { formatJMD } from '../../utils/formatJMD';
 import { 
   Loader2, 
   Search, 
@@ -11,16 +11,10 @@ import {
   CheckCircle2, 
   ChevronLeft, 
   ChevronRight,
-  Filter,
   Download,
-  Phone,
-  Mail,
-  Car,
   Eye,
   MessageSquare,
   AlertCircle,
-  TrendingUp,
-  DollarSign
 } from 'lucide-react';
 import { 
   Table, 
@@ -52,7 +46,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "../ui/alert-dialog";
-import { projectId } from '../../utils/supabase/info';
 import { requireAuthHeaders } from '../../utils/authHeaders';
 import { API_ENDPOINTS } from '../../services/apiConfig';
 import { toast } from "sonner";
@@ -67,15 +60,17 @@ import { Card, CardContent } from "../ui/card";
 import { DriverDetail } from './DriverDetail';
 import { AddDriverModal } from './AddDriverModal';
 import {
+  isDriverDetailTab,
+  pathForDriverDetail,
+  type DriverDetailTab,
+} from '../../navigation/pageRegistry';
+import {
   loadEarningsPolicyRuntimeContext,
   resolveBundleFromContext,
   type EarningsPolicyRuntimeContext,
 } from '../../utils/loadResolvedEarningsBundle';
 import { useServiceLineScopeParam } from '../../hooks/useServiceLineScopeParam';
-import { filterTripsByServiceLineScope } from '../../utils/serviceLineTripFilter';
 import { TierCalculations } from '../../utils/tierCalculations';
-import { TierConfig } from '../../types/data';
-import { isSameMonth } from 'date-fns';
 import { usePermissions } from '../../hooks/usePermissions';
 import { useAuth } from '../auth/AuthContext';
 
@@ -105,11 +100,18 @@ function driverInitials(name: unknown): string {
 }
 
 function normalizeDriverProfile(driver: Partial<DriverProfile> & { id: string }): DriverProfile {
+  const statusRaw = String(driver.status ?? 'Active');
+  const status: DriverProfile['status'] =
+    statusRaw === 'Inactive' || statusRaw.toLowerCase() === 'inactive'
+      ? 'Inactive'
+      : statusRaw === 'Needs Attention' || statusRaw.toLowerCase().includes('attention')
+        ? 'Needs Attention'
+        : 'Active';
   return {
     id: driver.id,
     name: driverDisplayName(driver.name),
     avatarUrl: driver.avatarUrl,
-    status: driver.status ?? 'Active',
+    status,
     vehicle: driver.vehicle ?? 'Unassigned',
     phone: driver.phone ?? '—',
     email: driver.email ?? '',
@@ -126,7 +128,11 @@ function normalizeDriverProfile(driver: Partial<DriverProfile> & { id: string })
     proofOfAddressType: driver.proofOfAddressType,
     uberDriverId: driver.uberDriverId,
     inDriveDriverId: driver.inDriveDriverId,
-    linkedTrips: driver.linkedTrips,
+    createdAt: driver.createdAt,
+    licenseExpiry: driver.licenseExpiry,
+    licenseNumber: driver.licenseNumber,
+    bankInfo: driver.bankInfo,
+    organizationId: driver.organizationId,
   };
 }
 import {
@@ -167,12 +173,22 @@ interface DriverProfile {
   // External Platform IDs (For Matching)
   uberDriverId?: string;
   inDriveDriverId?: string;
-
-  // Linked Trips (To ensure detail view matches list view aggregation)
-  linkedTrips?: Trip[];
+  createdAt?: string;
+  licenseExpiry?: string;
+  licenseNumber?: string;
+  bankInfo?: unknown;
+  organizationId?: string;
 }
 
-export function DriversPage({ initialDriverId }: { initialDriverId?: string | null }) {
+export function DriversPage({
+  initialDriverId,
+  initialTab,
+  onDriverDeepLinkChange,
+}: {
+  initialDriverId?: string | null;
+  initialTab?: DriverDetailTab;
+  onDriverDeepLinkChange?: (driverId: string | null, tab?: DriverDetailTab) => void;
+}) {
   const { v } = useVocab();
   const queryClient = useQueryClient();
   const { can } = usePermissions();
@@ -188,13 +204,41 @@ export function DriversPage({ initialDriverId }: { initialDriverId?: string | nu
 
   // Navigation State
   const [selectedDriverId, setSelectedDriverId] = useState<string | null>(initialDriverId || null);
+  const [detailTab, setDetailTab] = useState<DriverDetailTab>(initialTab || 'overview');
 
-  // Update selected driver if initialDriverId changes
+  // Sync from App (deep link / popstate / nav back to list)
   useEffect(() => {
-    if (initialDriverId) {
-      setSelectedDriverId(initialDriverId);
-    }
+    setSelectedDriverId(initialDriverId || null);
   }, [initialDriverId]);
+
+  useEffect(() => {
+    if (initialTab && isDriverDetailTab(initialTab)) {
+      setDetailTab(initialTab);
+    }
+  }, [initialTab]);
+
+  const openDriver = (driverId: string, tab: DriverDetailTab = 'overview') => {
+    setSelectedDriverId(driverId);
+    setDetailTab(tab);
+    onDriverDeepLinkChange?.(driverId, tab);
+    if (typeof window !== 'undefined') {
+      const nextPath = pathForDriverDetail(driverId, tab);
+      if (window.location.pathname !== nextPath) {
+        window.history.pushState({ page: 'drivers', driverId, tab }, '', nextPath);
+      }
+    }
+  };
+
+  const backToList = () => {
+    setSelectedDriverId(null);
+    setDetailTab('overview');
+    onDriverDeepLinkChange?.(null);
+    if (typeof window !== 'undefined') {
+      if (window.location.pathname !== '/drivers') {
+        window.history.pushState({ page: 'drivers' }, '', '/drivers');
+      }
+    }
+  };
 
   // Filtering & Pagination State
   const [searchQuery, setSearchQuery] = useState('');
@@ -209,45 +253,45 @@ export function DriversPage({ initialDriverId }: { initialDriverId?: string | nu
   const [driverToRemove, setDriverToRemove] = useState<string | null>(null);
   const [isRemoving, setIsRemoving] = useState(false);
 
-  const { scope, serviceLineParam } = useServiceLineScopeParam();
+  const { serviceLineParam } = useServiceLineScopeParam();
+  const earningsServiceLine = serviceLineParam;
 
-  // Phase 7.1: React Query for trips data
-  const { data: tripsRaw = [], isLoading: tripsLoading } = useQuery({
-    queryKey: ['trips', 200, scope],
-    queryFn: () => api.getTrips({ limit: 200 }),
-    staleTime: 3 * 60 * 1000, // 3 minutes
-    gcTime: 10 * 60 * 1000, // 10 minutes
+  // Primary list source — server-aggregated roster (no client trip sample)
+  const { data: rosterRaw = [], isLoading: rosterLoading, isError: rosterError, error: rosterErr } = useQuery({
+    queryKey: ['driversRoster'],
+    queryFn: () => api.getDriversRoster(),
+    staleTime: 2 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
     refetchOnWindowFocus: false,
     refetchOnMount: false,
   });
 
-  const trips = useMemo(
-    () => filterTripsByServiceLineScope(tripsRaw, scope),
-    [tripsRaw, scope],
-  );
-
-  const earningsServiceLine = serviceLineParam;
+  // Keep getDrivers for mutations / detail profile merge (bankInfo, etc.)
   const { data: manualDrivers = [], isError: driversLoadError, error: driversError } = useQuery({
     queryKey: ['drivers'],
     queryFn: () => api.getDrivers(),
-    // Do not swallow auth/CORS failures as an empty fleet — surface the error instead.
-    staleTime: 5 * 60 * 1000, // 5 minutes
-    gcTime: 15 * 60 * 1000, // 15 minutes
+    staleTime: 5 * 60 * 1000,
+    gcTime: 15 * 60 * 1000,
     refetchOnWindowFocus: false,
     refetchOnMount: false,
   });
 
   useEffect(() => {
-    if (driversLoadError) {
+    if (rosterError) {
+      toast.error(
+        rosterErr instanceof Error
+          ? `Could not load driver roster: ${rosterErr.message}`
+          : 'Could not load driver roster — check login / network.',
+      );
+    } else if (driversLoadError) {
       toast.error(
         driversError instanceof Error
           ? `Could not load drivers: ${driversError.message}`
           : 'Could not load drivers — check login / network (not deleted).',
       );
     }
-  }, [driversLoadError, driversError]);
+  }, [rosterError, rosterErr, driversLoadError, driversError]);
 
-  // Phase 7.1: React Query for driver metrics
   const { data: importedMetrics = [] } = useQuery({
     queryKey: ['driverMetrics'],
     queryFn: () => api.getDriverMetrics().catch(() => []),
@@ -257,7 +301,6 @@ export function DriversPage({ initialDriverId }: { initialDriverId?: string | nu
     refetchOnMount: false,
   });
 
-  // Phase 7.1: React Query for vehicle metrics
   const { data: vehicleMetrics = [] } = useQuery({
     queryKey: ['vehicleMetrics'],
     queryFn: () => api.getVehicleMetrics().catch(() => []),
@@ -267,7 +310,6 @@ export function DriversPage({ initialDriverId }: { initialDriverId?: string | nu
     refetchOnMount: false,
   });
 
-  // Earnings policy context (per-driver ladder resolve for current week)
   const { data: earningsPolicyCtx } = useQuery({
     queryKey: ['earningsPolicyRuntimeContext'],
     queryFn: () => loadEarningsPolicyRuntimeContext(),
@@ -277,36 +319,10 @@ export function DriversPage({ initialDriverId }: { initialDriverId?: string | nu
     refetchOnMount: false,
   });
 
-  // Phase 7.1: React Query for ledger summary
-  const { data: ledgerData, isLoading: ledgerLoading, isError: ledgerErrorQuery } = useQuery({
-    queryKey: ['ledgerDriversSummary'],
-    queryFn: async () => {
-      try {
-        const result = await api.getLedgerDriversSummary();
-        if (result.success && result.data) {
-          console.log(`[DriversPage] Ledger summary loaded: ${result.meta.totalDrivers} drivers, ${result.meta.totalEntriesProcessed} entries in ${result.meta.durationMs}ms`);
-          return result.data;
-        }
-        console.warn('[DriversPage] Ledger summary unavailable — earnings may show $0');
-        return {};
-      } catch (e) {
-        console.warn('[DriversPage] Ledger summary fetch failed:', e);
-        return {};
-      }
-    },
-    staleTime: 2 * 60 * 1000, // 2 minutes (financial data should be fresher)
-    gcTime: 5 * 60 * 1000,
-    refetchOnWindowFocus: false,
-    refetchOnMount: false,
-  });
-
-  const ledgerSummary = ledgerData || {};
-  const ledgerLoaded = !ledgerLoading && !ledgerErrorQuery;
-  const ledgerError = ledgerErrorQuery;
-  const loading = tripsLoading;
-
+  const loading = rosterLoading;
   const safeManualDrivers = asArray<DriverProfile>(manualDrivers);
   const safeImportedMetrics = asArray<import('../../types/data').DriverMetrics>(importedMetrics);
+  const safeRoster = asArray<DriverProfile>(rosterRaw);
 
   const handleDeleteDriver = async () => {
     if (!driverToDelete) return;
@@ -326,6 +342,7 @@ export function DriversPage({ initialDriverId }: { initialDriverId?: string | nu
       
       // Phase 7.1: Invalidate React Query cache after deletion
       queryClient.invalidateQueries({ queryKey: ['drivers'] });
+      queryClient.invalidateQueries({ queryKey: ['driversRoster'] });
       toast.success("Driver deleted successfully");
       setDriverToDelete(null);
     } catch (error: any) {
@@ -349,6 +366,7 @@ export function DriversPage({ initialDriverId }: { initialDriverId?: string | nu
       if (!response.ok) throw new Error(data.error || 'Failed to remove driver');
 
       queryClient.invalidateQueries({ queryKey: ['drivers'] });
+      queryClient.invalidateQueries({ queryKey: ['driversRoster'] });
       toast.success('Driver removed from your fleet');
       setDriverToRemove(null);
     } catch (error: any) {
@@ -359,301 +377,70 @@ export function DriversPage({ initialDriverId }: { initialDriverId?: string | nu
     }
   };
 
-  // Transform Trips into Unique Drivers List with Real Metrics
+  // Roster is primary list source; merge profile extras from getDrivers + CSV acceptance overlay
   const drivers: DriverProfile[] = useMemo(() => {
-    // 1. Index Manual Drivers by Name AND External IDs
-    const manualDriverMap = new Map<string, DriverProfile>(); // Name -> Driver
-    const externalIdMap = new Map<string, DriverProfile>();   // External ID -> Driver
-    
-    // Index Metrics for fast lookup
-    const metricsMap = new Map<string, import('../../types/data').DriverMetrics>();
-    (safeImportedMetrics).forEach(m => {
-        if (m?.driverId) metricsMap.set(m.driverId, m);
-    });
-
-    safeManualDrivers.forEach(d => {
-        if (!d || typeof d !== 'object') return;
-        // Index by Name
-        if (d.name) manualDriverMap.set(String(d.name).toLowerCase().trim(), d);
-        
-        // Index by External IDs (Prioritized)
-        if (d.uberDriverId) externalIdMap.set(d.uberDriverId, d);
-        if (d.inDriveDriverId) externalIdMap.set(d.inDriveDriverId, d);
-    });
-
-    const driverMap = new Map<string, DriverProfile>();
-    const driverStats = new Map<string, { completed: number, cancelled: number }>();
-    const today = new Date().toISOString().split('T')[0];
-    const now = new Date();
-
-    // Process trips to extract unique drivers and aggregate data
-    // Sort by date desc so we get latest vehicle/info
-    const safeTrips = Array.isArray(trips) ? trips : [];
-    const sortedTrips = [...safeTrips].sort((a, b) => {
-      const tb = a?.date ? new Date(a.date).getTime() : 0;
-      const ta = b?.date ? new Date(b.date).getTime() : 0;
-      return (Number.isFinite(tb) ? tb : 0) - (Number.isFinite(ta) ? ta : 0);
-    });
-
-    sortedTrips.forEach(trip => {
-        if (!trip || !trip.driverId || trip.driverId === 'unknown') return;
-
-        // Try to match with a Manual Driver Profile
-        let driverId = trip.driverId;
-        let matchedManualDriver = null;
-
-        // STRATEGY 1: Match by External ID (Exact Match)
-        if (externalIdMap.has(trip.driverId)) {
-            matchedManualDriver = externalIdMap.get(trip.driverId)!;
-        }
-        
-        // STRATEGY 2: Match by Name (Fuzzy/Failsafe)
-        if (!matchedManualDriver && trip.driverName) {
-            const normalizedTripName = trip.driverName.toLowerCase().trim();
-            
-            // Check for exact name match
-            if (manualDriverMap.has(normalizedTripName)) {
-                matchedManualDriver = manualDriverMap.get(normalizedTripName)!;
-            } else {
-                // Check if any manual driver name is a prefix of the trip name 
-                // (handles "NAME 5179KZ" or "NAME (ID)")
-                for (const [manualName, manualDriver] of manualDriverMap.entries()) {
-                    if (normalizedTripName.startsWith(manualName) || manualName.startsWith(normalizedTripName)) {
-                        matchedManualDriver = manualDriver;
-                        break;
-                    }
-                }
-            }
-        }
-
-        if (matchedManualDriver) {
-             driverId = matchedManualDriver.id; // Use Manual ID to aggregate stats
-        }
-
-        // Initialize driver profile if not exists
-        if (!driverMap.has(driverId)) {
-            if (matchedManualDriver) {
-                 // Use Manual Profile Data
-                 driverMap.set(driverId, {
-                    ...matchedManualDriver,
-                    name: driverDisplayName(matchedManualDriver.name),
-                    // Reset calculated metrics (will be summed up below)
-                    totalTrips: 0,
-                    totalEarnings: 0,
-                    todaysEarnings: 0,
-                    todaysTrips: 0,
-                    monthlyEarnings: 0,
-                    linkedTrips: [], // Initialize list
-                    // Keep status from manual unless logic overrides? 
-                    // We'll keep manual status but update acceptanceRate
-                 });
-                 driverStats.set(driverId, { completed: 0, cancelled: 0 });
-            } else {
-                // PHASE 5 FIX: Do NOT synthesize driver profiles from trip data.
-                // This was causing "random drivers" to appear in fleet portals.
-                // Only show drivers that have explicit driver profiles.
-                // Skip this trip's driver - they don't have a manual profile.
-                return;
-            }
-        }
-
-        const driver = driverMap.get(driverId)!;
-        
-        // Capture Platform IDs if missing from profile
-        // This ensures that even if we matched a manual driver or started with another platform,
-        // we collect all associated UUIDs.
-        if (trip.platform === 'Uber' && !driver.uberDriverId) {
-            driver.uberDriverId = trip.driverId;
-        } else if (trip.platform === 'InDrive' && !driver.inDriveDriverId) {
-            driver.inDriveDriverId = trip.driverId;
-        }
-
-        let stats = driverStats.get(driverId);
-        
-        // Safety check if stats missing (shouldn't happen)
-        if (!stats) {
-            stats = { completed: 0, cancelled: 0 };
-            driverStats.set(driverId, stats);
-        }
-
-        const tripDate = trip.date ? String(trip.date).split('T')[0] : '';
-
-        // Update Totals
-        driver.totalTrips += 1;
-        // Phase 6: Trip-based earnings fallback removed — ledger is sole source
-        
-        // Link Trip
-        if (driver.linkedTrips) {
-            driver.linkedTrips.push(trip);
-        }
-
-        // Update Today's Metrics
-        if (tripDate === today) {
-            // Phase 6: Trip-based todaysEarnings fallback removed — ledger is sole source
-            driver.todaysTrips += 1;
-        }
-
-        // Update Monthly Earnings (for Tier Calc)
-        try {
-             if (isSameMonth(new Date(trip.date), now)) {
-                 // Phase 6: Trip-based monthlyEarnings fallback removed — ledger is sole source
-             }
-        } catch (e) {
-             // Ignore invalid dates
-        }
-
-        // Update Status Stats
-        if (trip.status === 'Completed') stats.completed++;
-        else if (trip.status === 'Cancelled') stats.cancelled++;
-
-        // Update Vehicle (use the most recent one since we sorted desc)
-        if (trip.vehicleId && (driver.vehicle === 'Unassigned' || !driver.vehicle)) {
-            driver.vehicle = trip.vehicleId;
-        }
-    });
-
-    // Phase 2: Overlay ledger-sourced earnings onto driver profiles
-    if (ledgerLoaded && !ledgerError) {
-      for (const [, driver] of driverMap) {
-        // Try matching by driver's Roam ID first, then by external platform IDs
-        const summary = ledgerSummary[driver.id]
-          || (driver.uberDriverId ? ledgerSummary[driver.uberDriverId] : undefined)
-          || (driver.inDriveDriverId ? ledgerSummary[driver.inDriveDriverId] : undefined);
-        if (summary) {
-          driver.totalEarnings = asNumber(summary.lifetimeEarnings);
-          driver.todaysEarnings = asNumber(summary.todayEarnings);
-          driver.monthlyEarnings = asNumber(summary.monthlyEarnings);
-        }
-        // If no ledger summary for this driver, earnings stay at 0 (not trip-based)
-      }
-    } else if (!ledgerLoaded) {
-      // Phase 6: Still loading — earnings stay at 0 until ledger loads
-    } else {
-      console.error('[DriversPage] Ledger unavailable — earnings will show $0 (no trip fallback)');
+    const profileById = new Map<string, DriverProfile>();
+    for (const d of safeManualDrivers) {
+      if (d?.id) profileById.set(d.id, d);
     }
 
-    // Finalize Metrics (Rate, Tier, Status)
-    const processedDrivers = Array.from(driverMap.values()).map(driver => {
-        const stats = driverStats.get(driver.id) || { completed: 0, cancelled: 0 };
-        const total = stats.completed + stats.cancelled;
-        
-        // Find matched metric from CSV
-        let metric = metricsMap.get(driver.id);
-        if (!metric && driver.uberDriverId) metric = metricsMap.get(driver.uberDriverId);
-        if (!metric && driver.inDriveDriverId) metric = metricsMap.get(driver.inDriveDriverId);
+    const metricsMap = new Map<string, import('../../types/data').DriverMetrics>();
+    for (const m of safeImportedMetrics) {
+      if (m?.driverId) metricsMap.set(m.driverId, m);
+    }
 
-        // Acceptance Rate Strategy:
-        // 1. Prefer CSV Metric (True Acceptance Rate)
-        // 2. Fallback to Calculated Completion Rate (Trip Logs)
-        if (metric && metric.acceptanceRate !== undefined) {
-             // metric.acceptanceRate is 0.0-1.0
-             driver.acceptanceRate = Math.round(metric.acceptanceRate * 100);
-        } else {
-             driver.acceptanceRate = total > 0 ? Math.round((stats.completed / total) * 100) : 100;
-        }
+    return safeRoster.map((row) => {
+      const profile = profileById.get(row.id);
+      let acceptanceRate = asNumber(row.acceptanceRate, 100);
+      let metric = metricsMap.get(row.id);
+      if (!metric && row.uberDriverId) metric = metricsMap.get(row.uberDriverId);
+      if (!metric && row.inDriveDriverId) metric = metricsMap.get(row.inDriveDriverId);
+      if (metric?.acceptanceRate != null) {
+        acceptanceRate = Math.round(Number(metric.acceptanceRate) <= 1
+          ? Number(metric.acceptanceRate) * 100
+          : Number(metric.acceptanceRate));
+      }
 
-        // Tier Logic — resolve this driver's scheduled policy for the current week
-        if (earningsPolicyCtx) {
-            const bundle = resolveBundleFromContext(
-              earningsPolicyCtx as EarningsPolicyRuntimeContext,
-              driver.id,
-              undefined,
-              earningsServiceLine,
-            );
-            const tier = TierCalculations.getTierForEarnings(
-              driver.monthlyEarnings ?? 0,
-              bundle.tiers,
-            );
-            driver.tier = tier?.name ?? 'Bronze';
-        } else if (metric && metric.tier) {
-             // Priority 2: Imported Metric Fallback
-            driver.tier = metric.tier;
-        } else {
-            // Fallback Legacy
-            if (driver.totalEarnings > 5000) driver.tier = 'Platinum';
-            else if (driver.totalEarnings > 3000) driver.tier = 'Gold';
-            else if (driver.totalEarnings > 1000) driver.tier = 'Silver';
-            else driver.tier = 'Bronze';
-        }
+      const monthlyEarnings = asNumber(row.monthlyEarnings);
+      let tier = row.tier || profile?.tier || 'Bronze';
+      if (earningsPolicyCtx) {
+        const bundle = resolveBundleFromContext(
+          earningsPolicyCtx as EarningsPolicyRuntimeContext,
+          row.id,
+          undefined,
+          earningsServiceLine,
+        );
+        const t = TierCalculations.getTierForEarnings(monthlyEarnings, bundle.tiers);
+        tier = t?.name ?? 'Bronze';
+      } else if (metric?.tier) {
+        tier = metric.tier;
+      }
 
-        // Status Logic (Only override if Active)
-        if (driver.status === 'Active' && driver.acceptanceRate < 70) {
-            driver.status = 'Needs Attention';
-        }
-        
-        return driver;
+      let status = (row.status as DriverProfile['status']) || 'Active';
+      if (status === 'Active' && acceptanceRate < 70) status = 'Needs Attention';
+
+      return normalizeDriverProfile({
+        ...profile,
+        ...row,
+        name: driverDisplayName(row.name || profile?.name),
+        status,
+        vehicle: row.vehicle || profile?.vehicle || 'Unassigned',
+        phone: row.phone || profile?.phone || '—',
+        email: row.email || profile?.email || '',
+        totalTrips: asNumber(row.totalTrips),
+        totalEarnings: asNumber(row.totalEarnings),
+        todaysEarnings: asNumber(row.todaysEarnings),
+        todaysTrips: asNumber(row.todaysTrips),
+        monthlyEarnings,
+        acceptanceRate,
+        tier,
+        bankInfo: (row as any).bankInfo ?? (profile as any)?.bankInfo,
+        createdAt: (row as any).createdAt ?? (profile as any)?.createdAt,
+        licenseExpiry: (row as any).licenseExpiry ?? (profile as any)?.licenseExpiry,
+        licenseNumber: (row as any).licenseNumber ?? (profile as any)?.licenseNumber,
+      });
     });
-
-    // Add Orphaned Manual Drivers (No trips found)
-    const processedIds = new Set(processedDrivers.map(d => d.id));
-    // @ts-ignore
-    const orphanedDrivers = safeManualDrivers
-      .filter(d => d?.id && !processedIds.has(d.id)).map(d => {
-        // Try to find imported metrics for orphan
-        let metric = metricsMap.get(d.id);
-        if (!metric && d.uberDriverId) metric = metricsMap.get(d.uberDriverId);
-        
-        // Use manual driver tier if available, otherwise default
-        let tier = d.tier || 'Bronze';
-        if (metric && metric.tier) tier = metric.tier;
-        else if (earningsPolicyCtx && d.totalEarnings !== undefined) {
-             // For orphans without trips loaded, we might default to their 'totalEarnings' field 
-             // if it represents monthly, but usually it's lifetime.
-             // Safest to rely on manual 'tier' field or calculate if we had monthly data.
-             // If we have no trips, monthlyEarnings is effectively 0 unless manually set.
-             // We'll stick to existing logic or manual set tier.
-             // If manual driver has a tier set, use it.
-             if (!d.tier) {
-                 const bundle = resolveBundleFromContext(
-                   earningsPolicyCtx as EarningsPolicyRuntimeContext,
-                   d.id,
-                   undefined,
-                   earningsServiceLine,
-                 );
-                 const t = TierCalculations.getTierForEarnings(0, bundle.tiers);
-                 tier = t?.name ?? 'Bronze';
-             }
-        }
-
-        return {
-            ...d,
-            totalEarnings: d.totalEarnings || 0,
-            totalTrips: d.totalTrips || 0,
-            todaysEarnings: 0,
-            todaysTrips: 0,
-            monthlyEarnings: 0, // No trips = 0 monthly
-            acceptanceRate: metric?.acceptanceRate != null ? Math.round(metric.acceptanceRate * 100) : 100,
-            tier: tier,
-            status: d.status || 'Active'
-        };
-    }).map(orphan => {
-        // Phase 2: Overlay ledger earnings for orphaned drivers too
-        if (ledgerLoaded && !ledgerError) {
-            const summary = ledgerSummary[orphan.id]
-              || (orphan.uberDriverId ? ledgerSummary[orphan.uberDriverId] : undefined)
-              || (orphan.inDriveDriverId ? ledgerSummary[orphan.inDriveDriverId] : undefined);
-            if (summary) {
-                orphan.totalEarnings = asNumber(summary.lifetimeEarnings);
-                orphan.todaysEarnings = asNumber(summary.todayEarnings);
-                orphan.monthlyEarnings = asNumber(summary.monthlyEarnings);
-                // Re-calculate tier with ledger monthly earnings + this driver's policy
-                if (earningsPolicyCtx) {
-                    const bundle = resolveBundleFromContext(
-                      earningsPolicyCtx as EarningsPolicyRuntimeContext,
-                      orphan.id,
-                      undefined,
-                      earningsServiceLine,
-                    );
-                    const t = TierCalculations.getTierForEarnings(summary.monthlyEarnings, bundle.tiers);
-                    orphan.tier = t?.name ?? 'Bronze';
-                }
-            }
-        }
-        return orphan;
-    });
-
-    return [...processedDrivers, ...orphanedDrivers].map((d) => normalizeDriverProfile(d));
-  }, [trips, safeManualDrivers, safeImportedMetrics, earningsPolicyCtx, ledgerSummary, ledgerLoaded, ledgerError, earningsServiceLine]);
+  }, [safeRoster, safeManualDrivers, safeImportedMetrics, earningsPolicyCtx, earningsServiceLine]);
 
   // Phase 5: Apply org validation first, then other filters
   const orgValidatedDrivers = useMemo(() => {
@@ -738,8 +525,8 @@ export function DriversPage({ initialDriverId }: { initialDriverId?: string | nu
   };
 
   const handleDriverAdded = (driver: any) => {
-    // Phase 7.1: Invalidate React Query cache to refetch drivers list
     queryClient.invalidateQueries({ queryKey: ['drivers'] });
+    queryClient.invalidateQueries({ queryKey: ['driversRoster'] });
   };
 
   if (loading) {
@@ -750,17 +537,18 @@ export function DriversPage({ initialDriverId }: { initialDriverId?: string | nu
     );
   }
 
-  // If a driver is selected, show the detail view with filtered trips
+  // If a driver is selected, show the detail view (detail fetches its own trips)
   if (selectedDriverId) {
     const selectedDriver = drivers.find(d => 
         d.id === selectedDriverId || 
         d.uberDriverId === selectedDriverId || 
         d.inDriveDriverId === selectedDriverId
+    ) || safeManualDrivers.find(d =>
+        d.id === selectedDriverId ||
+        d.uberDriverId === selectedDriverId ||
+        d.inDriveDriverId === selectedDriverId
     );
-    // Use trips that were explicitly linked to this driver during aggregation
-    const driverTrips = selectedDriver?.linkedTrips || [];
     
-    // Find relevant metrics for this driver
     const driverMetrics = safeImportedMetrics.filter(m => 
         m.driverId === selectedDriver?.id || 
         (selectedDriver?.uberDriverId && m.driverId === selectedDriver.uberDriverId) ||
@@ -772,10 +560,27 @@ export function DriversPage({ initialDriverId }: { initialDriverId?: string | nu
         driverId={selectedDriverId} 
         driverName={selectedDriver?.name || 'Unknown'} 
         driver={selectedDriver}
-        trips={driverTrips}
+        trips={[]}
         metrics={driverMetrics}
         vehicleMetrics={vehicleMetrics}
-        onBack={() => setSelectedDriverId(null)}
+        initialTab={detailTab}
+        onTabChange={(tab) => {
+          setDetailTab(tab);
+          onDriverDeepLinkChange?.(selectedDriverId, tab);
+          if (typeof window !== 'undefined' && selectedDriverId) {
+            const nextPath = pathForDriverDetail(selectedDriverId, tab);
+            const search = window.location.search;
+            const next = `${nextPath}${search}`;
+            if (`${window.location.pathname}${window.location.search}` !== next) {
+              window.history.pushState(
+                { page: 'drivers', driverId: selectedDriverId, tab },
+                '',
+                next,
+              );
+            }
+          }
+        }}
+        onBack={backToList}
       />
     );
   }
@@ -901,7 +706,7 @@ export function DriversPage({ initialDriverId }: { initialDriverId?: string | nu
                 <TableBody>
                     {paginatedDrivers.length > 0 ? (
                         paginatedDrivers.map((driver) => (
-                            <TableRow key={driver.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/50 cursor-pointer" onClick={() => setSelectedDriverId(driver.id)}>
+                            <TableRow key={driver.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/50 cursor-pointer" onClick={() => openDriver(driver.id)}>
                                 <TableCell>
                                     <div className="flex items-center gap-3">
                                         <Avatar className="h-10 w-10 border border-slate-200 dark:border-slate-700">
@@ -922,7 +727,7 @@ export function DriversPage({ initialDriverId }: { initialDriverId?: string | nu
                                     <StatusBadge status={driver.status} />
                                 </TableCell>
                                 <TableCell>
-                                    <div className="font-medium text-slate-900 dark:text-slate-100">${driver.todaysEarnings.toFixed(2)}</div>
+                                    <div className="font-medium text-slate-900 dark:text-slate-100">{formatJMD(driver.todaysEarnings, 2)}</div>
                                 </TableCell>
                                 <TableCell>
                                     <div className="text-slate-600 dark:text-slate-300">{driver.todaysTrips}</div>
@@ -946,7 +751,7 @@ export function DriversPage({ initialDriverId }: { initialDriverId?: string | nu
                                            className="h-8 w-8 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400"
                                            onClick={(e) => {
                                              e.stopPropagation();
-                                             setSelectedDriverId(driver.id);
+                                             openDriver(driver.id);
                                            }}
                                         >
                                             <Eye className="h-4 w-4" />
@@ -961,7 +766,7 @@ export function DriversPage({ initialDriverId }: { initialDriverId?: string | nu
                                                 </Button>
                                             </DropdownMenuTrigger>
                                             <DropdownMenuContent align="end">
-                                                <DropdownMenuItem onClick={() => setSelectedDriverId(driver.id)}>View Analysis</DropdownMenuItem>
+                                                <DropdownMenuItem onClick={() => openDriver(driver.id)}>View Analysis</DropdownMenuItem>
                                                 <DropdownMenuItem>View History</DropdownMenuItem>
                                                 <DropdownMenuSeparator />
                                                 {can('drivers.delete') && (
@@ -1068,6 +873,7 @@ export function DriversPage({ initialDriverId }: { initialDriverId?: string | nu
               setIsClaimOpen(false);
               setClaimEmail('');
               queryClient.invalidateQueries({ queryKey: ['drivers'] });
+              queryClient.invalidateQueries({ queryKey: ['driversRoster'] });
             } catch (error: any) {
               console.error(error);
               toast.error(error.message || "Failed to claim driver");

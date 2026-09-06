@@ -834,6 +834,143 @@ export const api = {
     try { return JSON.parse(txt); } catch (e) { console.error(`getDrivers JSON parse error, len=${txt.length}, snippet=${txt.slice(0, 200)}`); throw new Error(`Drivers response is not valid JSON (len=${txt.length})`); }
   },
 
+  /** Pre-aggregated Drivers list — one row per driver (trips + earnings server-side). */
+  async getDriversRoster(): Promise<Array<{
+    id: string;
+    name: string;
+    status: string;
+    phone: string;
+    email: string;
+    vehicle: string;
+    totalTrips: number;
+    todaysTrips: number;
+    acceptanceRate: number;
+    totalEarnings: number;
+    monthlyEarnings: number;
+    todaysEarnings: number;
+    licenseFrontUrl?: string;
+    licenseBackUrl?: string;
+    proofOfAddressUrl?: string;
+    proofOfAddressType?: string;
+    uberDriverId?: string;
+    inDriveDriverId?: string;
+    createdAt?: string;
+    licenseExpiry?: string;
+    licenseNumber?: string;
+    avatarUrl?: string;
+    organizationId?: string;
+    tier?: string;
+    bankInfo?: unknown;
+  }>> {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/drivers/roster`, {
+      headers: await getHeaders(null, { requireAuth: true }),
+    });
+    if (!response.ok) {
+      const errText = await response.text().catch(() => '');
+      throw new Error(`Failed to fetch drivers roster: ${errText || response.status}`);
+    }
+    const json = await response.json();
+    if (Array.isArray(json)) return json;
+    if (json?.success && Array.isArray(json.data)) return json.data;
+    throw new Error(json?.error || 'Drivers roster returned unexpected shape');
+  },
+
+  async getDriverCompliance(driverId: string) {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/drivers/${encodeURIComponent(driverId)}/compliance`, {
+      headers: await requireAuthHeaders(null),
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || 'Failed to fetch driver compliance');
+    }
+    return response.json() as Promise<{
+      success: boolean;
+      driverId: string;
+      licenseNumber: string | null;
+      licenseExpiry: string | null;
+      documents: Array<{
+        id: string;
+        name: string;
+        type: string;
+        status: string;
+        expiryDate: string;
+        uploadDate: string;
+        url?: string;
+        verifiedAt?: string;
+        verifiedBy?: string;
+      }>;
+      complianceVerifications?: Record<string, unknown>;
+    }>;
+  },
+
+  async verifyDriverDocument(driverId: string, documentId: string, status: 'Verified' | 'Rejected' = 'Verified') {
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.fleet}/drivers/${encodeURIComponent(driverId)}/compliance/verify`,
+      {
+        method: 'POST',
+        headers: await requireAuthHeaders(),
+        body: JSON.stringify({ documentId, status }),
+      },
+    );
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || 'Failed to verify document');
+    }
+    return response.json();
+  },
+
+  async getDriverReconciliation(driverId: string, from: string, to: string) {
+    const qs = new URLSearchParams({ from, to });
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.fleet}/drivers/${encodeURIComponent(driverId)}/reconciliation?${qs}`,
+      { headers: await requireAuthHeaders(null) },
+    );
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || 'Failed to fetch driver reconciliation');
+    }
+    return response.json();
+  },
+
+  async getDriverAudit(driverId: string) {
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.fleet}/drivers/${encodeURIComponent(driverId)}/audit`,
+      { headers: await requireAuthHeaders(null) },
+    );
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || 'Failed to fetch driver audit');
+    }
+    return response.json();
+  },
+
+  async getDriverNotes(driverId: string) {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/drivers/${encodeURIComponent(driverId)}/notes`, {
+      headers: await requireAuthHeaders(null),
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || 'Failed to fetch driver notes');
+    }
+    return response.json() as Promise<{
+      success: boolean;
+      notes: Array<{ id: string; text: string; createdAt: string; createdBy: string }>;
+    }>;
+  },
+
+  async addDriverNote(driverId: string, text: string) {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/drivers/${encodeURIComponent(driverId)}/notes`, {
+      method: 'POST',
+      headers: await requireAuthHeaders(),
+      body: JSON.stringify({ text }),
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || 'Failed to add driver note');
+    }
+    return response.json();
+  },
+
   async saveDriver(driver: any) {
     // Phase 1: Use JWT for proper org scoping
     const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/drivers`, {

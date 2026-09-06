@@ -251,6 +251,11 @@ import { detectFileMagicBytes, extForMime, IMAGE_AND_PDF_MIMES } from "./file_ma
 import { registerPendingVehicleCatalogRoutes } from "./pending_vehicle_catalog_routes.ts";
 import { registerPartSourcingRoutes } from "./part_sourcing_routes.ts";
 import { registerExpenseHubRoutes } from "./expense_hub_routes.ts";
+import { registerDriversRosterRoutes } from "./drivers_roster.ts";
+import { registerDriversComplianceRoutes } from "./drivers_compliance.ts";
+import { registerDriversNotesRoutes } from "./drivers_notes.ts";
+import { registerDriversReconciliationRoutes } from "./drivers_reconciliation.ts";
+import { registerDriversAuditRoutes } from "./drivers_audit.ts";
 import { registerPlatformVendorRoutes } from "./platform_vendor_routes.ts";
 import { registerUberFleetRoutes } from "./uber_fleet_routes.ts";
 import {
@@ -492,6 +497,11 @@ registerPendingVehicleCatalogRoutes(app, supabase);
 registerPartSourcingRoutes(app, supabase);
 registerUberFleetRoutes(app);
 registerExpenseHubRoutes(app);
+registerDriversRosterRoutes(app);
+registerDriversComplianceRoutes(app);
+registerDriversNotesRoutes(app);
+registerDriversReconciliationRoutes(app);
+registerDriversAuditRoutes(app);
 
 // ─── Toll Ledger Primary Write Helper (Phase 6) ──────────────────────────
 // Tolls are now written ONLY to toll_ledger:* (single source of truth).
@@ -3454,7 +3464,7 @@ async function rebuildFinancialPeriodsForCashTx(next: unknown, previous: unknown
   }
 }
 
-app.post("/make-server-37f42386/transactions", requireAuth({ requireOrg: true }), async (c) => {
+app.post("/make-server-37f42386/transactions", requireAuth({ requireOrg: true }), requirePermission('transactions.edit'), async (c) => {
   try {
     const transaction = await c.req.json();
     if (!transaction.id) {

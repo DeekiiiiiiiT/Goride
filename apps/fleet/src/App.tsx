@@ -59,7 +59,13 @@ import { AuthRecoveryGate } from '@roam/auth-client';
 import { requiresSessionGate } from './middleware/sessionGate';
 import { PwaProvider } from './components/pwa/PwaProvider';
 import { ServiceLineScopeProvider } from './contexts/ServiceLineScopeContext';
-import { pathForPageId, resolvePageFromPathname } from './navigation/pageRegistry';
+import {
+  pathForDriverDetail,
+  pathForPageId,
+  parseDriversPath,
+  resolvePageFromPathname,
+  type DriverDetailTab,
+} from './navigation/pageRegistry';
 import { CouriersPage } from './components/couriers/CouriersPage';
 import { CourierAnalyticsPage } from './components/couriers/CourierAnalyticsPage';
 import { CourierSettlementsPage } from './components/couriers/CourierSettlementsPage';
@@ -92,7 +98,16 @@ function AppContent() {
   const [currentPage, setCurrentPage] = useState(() =>
     typeof window !== 'undefined' ? resolvePageFromPathname(window.location.pathname) : 'dashboard',
   );
-  const [driverIdForDetail, setDriverIdForDetail] = useState<string | null>(null);
+  const [driverIdForDetail, setDriverIdForDetail] = useState<string | null>(() => {
+    if (typeof window === 'undefined') return null;
+    if (resolvePageFromPathname(window.location.pathname) !== 'drivers') return null;
+    return parseDriversPath(window.location.pathname).driverId ?? null;
+  });
+  const [driverDetailTab, setDriverDetailTab] = useState<DriverDetailTab | undefined>(() => {
+    if (typeof window === 'undefined') return undefined;
+    if (resolvePageFromPathname(window.location.pathname) !== 'drivers') return undefined;
+    return parseDriversPath(window.location.pathname).tab;
+  });
   const [businessFinanceTab, setBusinessFinanceTab] = useState<'overview' | 'workbench' | 'expenses'>('overview');
   /** Period handoff when leaving BF hub for Bank / Wallet */
   const [financePeriodHint, setFinancePeriodHint] = useState<{ startYmd: string; endYmd: string } | null>(
@@ -111,6 +126,24 @@ function AppContent() {
   type NavigateOpts =
     | { startYmd: string; endYmd: string }
     | { vehicleId?: string; driverId?: string; vehicleLabel?: string };
+
+  /** Open driver detail with URL `/drivers/:id` (clears stale list-only state). */
+  const openDriverDetail = (driverId: string, tab: DriverDetailTab = 'overview') => {
+    setDriverIdForDetail(driverId);
+    setDriverDetailTab(tab);
+    setCurrentPage('drivers');
+    if (typeof window !== 'undefined') {
+      const nextPath = pathForDriverDetail(driverId, tab);
+      if (window.location.pathname !== nextPath) {
+        window.history.pushState({ page: 'drivers', driverId, tab }, '', nextPath);
+      }
+    }
+  };
+
+  const clearDriverDetail = () => {
+    setDriverIdForDetail(null);
+    setDriverDetailTab(undefined);
+  };
 
   const handleNavigate = (page: string, opts?: NavigateOpts) => {
     const periodHint =
@@ -140,6 +173,7 @@ function AppContent() {
     if (page === 'transactions') {
       // Legacy Financial Analytics → Workbench (one set of books)
       setBusinessFinanceTab('workbench');
+      clearDriverDetail();
       setCurrentPage('business-finance');
       return;
     }
@@ -158,20 +192,27 @@ function AppContent() {
       setExpenseHubVehicleId(null);
       setExpenseHubSubview('recurring');
       setFinancePeriodHint(null);
+      clearDriverDetail();
       setCurrentPage('expense-hub');
       return;
     }
     // Legacy Fuel Overview / Fuel Management hub → Fuel Analytics
     if (page === 'fuel-overview' || page === 'fuel-management') {
+      clearDriverDetail();
       setCurrentPage('fuel-analytics');
       return;
     }
     // Station catalogue is Roam platform reference data (Dominion Super Admin only).
     // Fleet apps consume stations; they must not own or edit the shared DB.
     if (page === 'fuel-stations') {
+      clearDriverDetail();
       setCurrentPage('fuel-analytics');
       return;
     }
+
+    // Nav away from drivers OR click Drivers → always list (drop detail deep link)
+    clearDriverDetail();
+
     setCurrentPage(page);
     if (typeof window !== 'undefined') {
       const nextPath = pathForPageId(page);
@@ -189,10 +230,20 @@ function AppContent() {
     setCurrentPage('expense-hub');
   };
 
-  // Sync browser back/forward with in-app page state
+  // Sync browser back/forward with in-app page state (+ driver detail deep links)
   useEffect(() => {
     const onPopState = () => {
-      setCurrentPage(resolvePageFromPathname(window.location.pathname));
+      const pathname = window.location.pathname;
+      const page = resolvePageFromPathname(pathname);
+      setCurrentPage(page);
+      if (page === 'drivers') {
+        const parsed = parseDriversPath(pathname);
+        setDriverIdForDetail(parsed.driverId ?? null);
+        setDriverDetailTab(parsed.tab);
+      } else {
+        setDriverIdForDetail(null);
+        setDriverDetailTab(undefined);
+      }
     };
     window.addEventListener('popstate', onPopState);
     return () => window.removeEventListener('popstate', onPopState);
@@ -430,6 +481,7 @@ function AppContent() {
         onRecoverNavigate={() => {
           setCurrentPage('dashboard');
           setDriverIdForDetail(null);
+          setDriverDetailTab(undefined);
         }}
       >
         {currentPage === 'dashboard' && <Dashboard />}
@@ -440,7 +492,14 @@ function AppContent() {
         )}
         {currentPage === 'drivers' && (
           <PermissionGate permission="nav.drivers" onNavigate={setCurrentPage}>
-            <DriversPage initialDriverId={driverIdForDetail} />
+            <DriversPage
+              initialDriverId={driverIdForDetail}
+              initialTab={driverDetailTab}
+              onDriverDeepLinkChange={(driverId, tab) => {
+                setDriverIdForDetail(driverId);
+                setDriverDetailTab(tab);
+              }}
+            />
           </PermissionGate>
         )}
         {currentPage === 'driver-analytics' && (
@@ -448,8 +507,7 @@ function AppContent() {
             <DriverAnalytics
               onNavigate={setCurrentPage}
               onSelectDriver={(driverId) => {
-                setDriverIdForDetail(driverId);
-                setCurrentPage('drivers');
+                openDriverDetail(driverId);
               }}
             />
           </PermissionGate>
@@ -492,11 +550,9 @@ function AppContent() {
               expensesInitialVehicleId={expenseHubVehicleId ?? undefined}
               onNavigate={(page, periodHint) => {
                 handleNavigate(page, periodHint);
-                setDriverIdForDetail(null);
               }}
               onOpenDriver={(driverId) => {
-                setDriverIdForDetail(driverId);
-                setCurrentPage('drivers');
+                openDriverDetail(driverId);
               }}
             />
           </PermissionGate>
@@ -511,7 +567,6 @@ function AppContent() {
               }
               onNavigate={(page, periodHint) => {
                 handleNavigate(page, periodHint);
-                setDriverIdForDetail(null);
               }}
             />
           </PermissionGate>
@@ -575,8 +630,7 @@ function AppContent() {
             <DriverSettlementsPage
               onBackToBusinessFinance={() => handleNavigate('business-finance')}
               onOpenDriver={(driverId) => {
-                setDriverIdForDetail(driverId);
-                setCurrentPage('drivers');
+                openDriverDetail(driverId);
               }}
             />
           </PermissionGate>
@@ -612,10 +666,10 @@ function AppContent() {
                 onTabChange={(t) => {
                     setCurrentPage(`fuel-${t}`);
                     setDriverIdForDetail(null);
+                    setDriverDetailTab(undefined);
                 }}
                 onViewDriverLedger={(driverId) => {
-                    setDriverIdForDetail(driverId);
-                    setCurrentPage('drivers');
+                    openDriverDetail(driverId);
                 }}
             />
           </PermissionGate>

@@ -19,7 +19,7 @@ import { useDriverFinancialBundle, type DriverFinancialBundle, type DriverLike }
 import { useDriverFinancialPeriods } from '../../hooks/useDriverFinancialPeriods';
 import type { PayoutPeriodRow } from '../../types/driverPayoutPeriod';
 import type { CashWeekData } from '../../utils/cashSettlementCalc';
-import { endOfWeek, format, startOfWeek } from 'date-fns';
+import { endOfWeek, format, startOfDay, endOfDay, startOfWeek } from 'date-fns';
 import { resolvePeriodTollCashWash } from '../../utils/periodTollCashSpend';
 import { PeriodWeekDropdown } from '../ui/PeriodWeekDropdown';
 import type { PeriodWeekOption } from '../../utils/periodWeekOptions';
@@ -91,16 +91,16 @@ export function FinancialSubTabs({
   const financialBundle = financialBundleProp ?? localBundle;
   const sharedPeriodsQuery = useDriverFinancialPeriods(driverId);
 
-  // Toll cards default to all-time; toggle This week so admins aren't misled.
+  // Toll cards: "This week" = Monday–Sunday of the Financials period end (not calendar now).
   const [reconScope, setReconScope] = React.useState<ReconScope>('all');
 
   const weekBounds = React.useMemo(() => {
-    const now = new Date();
+    const anchor = periodTo || periodFrom || new Date();
     return {
-      from: startOfWeek(now, { weekStartsOn: 1 }),
-      to: endOfWeek(now, { weekStartsOn: 1 }),
+      from: startOfWeek(anchor, { weekStartsOn: 1 }),
+      to: endOfWeek(anchor, { weekStartsOn: 1 }),
     };
-  }, []);
+  }, [periodFrom, periodTo]);
 
   const thisWeekSharedPeriod = React.useMemo(() => {
     const anchor = format(weekBounds.from, 'yyyy-MM-dd');
@@ -147,17 +147,18 @@ export function FinancialSubTabs({
     return Number(resolvePeriodTollCashWash(period) || 0);
   }, [reconScope, weekBounds.from, sharedPeriodsQuery.data]);
 
+  // Uber SSOT uses the exact Financials from/to — same window as ledger side (no silent week widening).
   const uberSsotReconciliation = React.useMemo(() => {
     let fareComponents = 0;
     let tips = 0;
     let promotions = 0;
     let refundExpense = 0;
 
-    const fromMs = periodFrom ? startOfWeek(periodFrom, { weekStartsOn: 1 }).getTime() : null;
+    const fromMs = periodFrom ? startOfDay(periodFrom).getTime() : null;
     const toMs = periodTo
-      ? endOfWeek(periodTo, { weekStartsOn: 1 }).getTime()
+      ? endOfDay(periodTo).getTime()
       : periodFrom
-        ? endOfWeek(periodFrom, { weekStartsOn: 1 }).getTime()
+        ? endOfDay(periodFrom).getTime()
         : null;
 
     for (const t of allTrips) {
@@ -357,8 +358,8 @@ export function FinancialSubTabs({
       <TabsContent value="reconciliation" className="space-y-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <p className="text-xs text-slate-500">
-            Toll disposition cards follow the scope below. Uber SSOT vs Ledger uses the Financials period
-            (same control as Earnings), not lifetime.
+            Toll disposition cards follow the scope below. Uber SSOT vs Ledger uses the exact Financials period
+            (same control as Earnings) — both sides share one from/to window.
           </p>
           <div className="flex p-1 bg-slate-100 rounded-lg">
             <Button
@@ -368,7 +369,7 @@ export function FinancialSubTabs({
               className={`h-7 px-3 text-xs ${reconScope === 'week' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500'}`}
               onClick={() => setReconScope('week')}
             >
-              This week
+              Financials week
             </Button>
             <Button
               type="button"
@@ -393,7 +394,7 @@ export function FinancialSubTabs({
                 </span>
               </CardTitle>
               <CardDescription className="text-xs text-slate-500">
-                Shared projection for this Monday–Sunday week (toll status: {thisWeekSharedPeriod.tollStatus || '—'}).
+                Shared projection for the Monday–Sunday week of the Financials period end (toll status: {thisWeekSharedPeriod.tollStatus || '—'}).
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -433,13 +434,13 @@ export function FinancialSubTabs({
             <CardTitle className="flex items-center gap-2">
               Toll Reconciliation
               <span className="text-[10px] font-medium uppercase tracking-wider text-slate-400 bg-slate-100 px-2 py-0.5 rounded">
-                {reconScope === 'week' ? 'This week' : 'All-time'}
+                {reconScope === 'week' ? 'Financials week' : 'All-time'}
               </span>
             </CardTitle>
             <CardDescription className="text-xs text-slate-500">
               How this driver's tolls were resolved by the admin
               {reconScope === 'week'
-                ? ` (${format(weekBounds.from, 'MMM d')} – ${format(weekBounds.to, 'MMM d')}).`
+                ? ` (Mon–Sun of Financials period end: ${format(weekBounds.from, 'MMM d')} – ${format(weekBounds.to, 'MMM d')}).`
                 : ' across all time.'}
             </CardDescription>
           </CardHeader>
@@ -482,13 +483,13 @@ export function FinancialSubTabs({
             <CardTitle className="flex items-center gap-2">
               Uber Reconciliation (SSOT vs Ledger)
               <span className="text-[10px] font-medium uppercase tracking-wider text-slate-400 bg-slate-100 px-2 py-0.5 rounded">
-                Overview period
+                Financials period
               </span>
             </CardTitle>
             <CardDescription className="text-xs text-slate-500">
               {reconciliationStatus.label}
               {periodFrom
-                ? ` · ${format(periodFrom, 'MMM d')}${periodTo ? ` – ${format(periodTo, 'MMM d')}` : ''}`
+                ? ` · exact range ${format(periodFrom, 'MMM d')}${periodTo ? ` – ${format(periodTo, 'MMM d')}` : ''} (no week widening)`
                 : ''}
             </CardDescription>
           </CardHeader>
