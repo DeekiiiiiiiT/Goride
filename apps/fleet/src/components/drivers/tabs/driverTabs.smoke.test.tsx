@@ -4,8 +4,14 @@
 import React from 'react';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { DriverServiceQualityTab } from './DriverServiceQualityTab';
 import { orderedPlatformKeys } from './DriverServiceQualityTab';
+
+function renderWithQuery(ui: React.ReactElement) {
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return render(<QueryClientProvider client={qc}>{ui}</QueryClientProvider>);
+}
 
 vi.mock('../../../services/api', () => ({
   api: {
@@ -85,7 +91,7 @@ describe('DriverProfileTab empty states', () => {
 
   it('shows empty documents and notes', async () => {
     const { DriverProfileTab } = await import('./DriverProfileTab');
-    render(
+    renderWithQuery(
       <DriverProfileTab
         driverId="d1"
         driverName="Test Driver"
