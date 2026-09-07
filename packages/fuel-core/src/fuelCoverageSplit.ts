@@ -161,8 +161,12 @@ export function sumCategoryShare(side: CategoryCosts): number {
   );
 }
 
+import { floorMiscForSplit, isOverExplainedFuelWeek } from './fuelFinalizeGate.ts';
+
 /**
  * Week money from spend + category $ + policy — browser and Deno must match.
+ * Negative misc is floored for the split (C-2); over-explained magnitude is
+ * returned separately and must never hit driverShare via Math.abs.
  */
 export function assembleLeftoverWeekMoney(input: {
   totalSpend: number;
@@ -173,6 +177,8 @@ export function assembleLeftoverWeekMoney(input: {
   rule?: FuelCoverageRule | null;
 }): {
   miscellaneousCost: number;
+  overExplainedCost: number;
+  overExplained: boolean;
   companyShare: number;
   driverShare: number;
   costs: CategoryCosts;
@@ -184,16 +190,19 @@ export function assembleLeftoverWeekMoney(input: {
     deadhead: input.deadheadCost,
     personal: input.personalUsageCost,
   });
+  const { miscForSplit, overExplainedCost } = floorMiscForSplit(miscellaneousCost);
   const costs: CategoryCosts = {
     rideShare: input.rideShareCost,
     companyUsage: input.companyUsageCost,
     deadhead: input.deadheadCost,
     personal: input.personalUsageCost,
-    misc: miscellaneousCost,
+    misc: miscForSplit,
   };
   const split = splitAllCategoryCosts(costs, input.rule || undefined);
   return {
     miscellaneousCost,
+    overExplainedCost,
+    overExplained: isOverExplainedFuelWeek(input.totalSpend, miscellaneousCost),
     companyShare: sumCategoryShare(split.company),
     driverShare: sumCategoryShare(split.driver),
     costs,

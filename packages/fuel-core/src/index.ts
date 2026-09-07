@@ -71,3 +71,11 @@ export {
   type FuelExpenseStatus,
   type FuelReconPeriodLockRow,
 } from './fuelReconPeriodStatus.ts';
+
+export {
+  FUEL_MISC_MAX_RATIO,
+  isOverExplainedFuelWeek,
+  isFuelMiscWithinGate,
+  floorMiscForSplit,
+  type FlooredMiscSplit,
+} from './fuelFinalizeGate.ts';

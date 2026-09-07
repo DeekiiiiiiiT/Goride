@@ -45,22 +45,40 @@ export interface PeriodSettlementMinorResult {
   settlementMinor: MoneyMinor;
 }
 
-function toMinorNonNeg(n: number): MoneyMinor {
-  return toMoneyMinor(Math.max(0, n));
+/**
+ * C-7: fields that historically got clamped to >= 0. Negative values here are
+ * real money (refunds / fleet-owes / write-backs) and must pass through signed.
+ */
+const SIGN_DRIFT_FIELDS = [
+  'tipsPaidToDriver',
+  'tollPersonal',
+  'tollCashWash',
+  'fuelCredits',
+  'cashWrittenOff',
+  'settlementPaid',
+] as const;
+
+/**
+ * Report which previously-clamped inputs arrived negative, so callers can write
+ * drift records instead of silently swallowing the sign.
+ */
+export function collectSettlementSignDrift(i: PeriodSettlementInput): string[] {
+  return SIGN_DRIFT_FIELDS.filter((f) => (Number(i[f]) || 0) < 0);
 }
 
 /** Integer minor-unit settlement math — authoritative for persist (A-3). */
 export function computePeriodSettlementMinor(i: PeriodSettlementInput): PeriodSettlementMinorResult {
-  const tipsPaidMinor = toMinorNonNeg(i.tipsPaidToDriver || 0);
+  const tipsPaidMinor = toMoneyMinor(i.tipsPaidToDriver || 0);
   const driverShareMinor = toMoneyMinor(i.driverShare || 0);
   const fuelDedMinor = toMoneyMinor(i.fuelDeduction || 0);
   const netPayoutMinor = (driverShareMinor - fuelDedMinor + tipsPaidMinor) as MoneyMinor;
 
-  const tollPersonalMinor = toMinorNonNeg(i.tollPersonal || 0);
-  const tollCashWashMinor = toMinorNonNeg(i.tollCashWash || 0);
-  const fuelCreditsMinor = toMinorNonNeg(i.fuelCredits || 0);
-  const cashWrittenOffMinor = toMinorNonNeg(i.cashWrittenOff || 0);
-  const settlementPaidMinor = toMinorNonNeg(i.settlementPaid || 0);
+  // C-7: signed pass-through (no Math.max(0, …) clamps).
+  const tollPersonalMinor = toMoneyMinor(i.tollPersonal || 0);
+  const tollCashWashMinor = toMoneyMinor(i.tollCashWash || 0);
+  const fuelCreditsMinor = toMoneyMinor(i.fuelCredits || 0);
+  const cashWrittenOffMinor = toMoneyMinor(i.cashWrittenOff || 0);
+  const settlementPaidMinor = toMoneyMinor(i.settlementPaid || 0);
 
   const cashOwedMinor = (toMoneyMinor(i.baseCashOwed || 0) + tollPersonalMinor) as MoneyMinor;
   const cashPaidMinor = (toMoneyMinor(i.baseCashPaid || 0) + tollCashWashMinor) as MoneyMinor;

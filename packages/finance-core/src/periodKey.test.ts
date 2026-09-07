@@ -24,4 +24,17 @@ describe('periodKeyFor — fleet TZ Mon–Sun', () => {
   it('UTC evening that is still Jamaica calendar day stays on that day', () => {
     expect(fleetCalendarDay('2026-08-03T23:30:00-05:00', 'America/Jamaica')).toBe('2026-08-03');
   });
+
+  // W4: bucketing must be stable regardless of viewer/host timezone. A UTC
+  // timestamp late on Aug 31 is 6:30pm Jamaica — still Aug 31, NOT Sep 1.
+  it('does not roll a late-UTC timestamp forward a day in Jamaica (W4)', () => {
+    expect(fleetCalendarDay('2026-08-31T23:30:00.000Z', 'America/Jamaica')).toBe('2026-08-31');
+    // …and therefore stays in the Aug 31 (Mon) week, not the next week.
+    expect(periodKeyFor('2026-08-31T23:30:00.000Z', 'America/Jamaica')).toBe('2026-08-31');
+  });
+
+  it('is host-timezone independent (same key whatever the process TZ)', () => {
+    const key = periodKeyFor('2026-08-31T23:30:00.000Z', 'America/Jamaica');
+    expect(key).toBe('2026-08-31');
+  });
 });

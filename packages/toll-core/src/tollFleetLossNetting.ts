@@ -4,6 +4,11 @@
  * reimbursement coverage (same identity as Spend vs Reimbursed cards).
  */
 
+// One-week rule (ADR 0007): event → fleet calendar day must be tz-explicit.
+// A UTC timestamp naively `.slice(0,10)`'d lands on the wrong Jamaica day near
+// midnight and misbuckets the week — route every date through fleetCalendarDay.
+import { fleetCalendarDay, DEFAULT_FLEET_TZ } from '../../finance-core/src/periodKey.ts';
+
 export type TollLedgerLikeEvent = Record<string, unknown>;
 
 export type TollFleetLossNetting = {
@@ -12,6 +17,8 @@ export type TollFleetLossNetting = {
   reinstated: number;
   /** Unrecovered fleet toll cost (floored at $0). */
   net: number;
+  /** SIGNED raw net (gross − recovered + reinstated) — negative when over-recovered. */
+  rawNet: number;
   clipped: boolean;
   /** Unmatched Uber trip tolls counted as reimbursement, not extra spend. */
   provisional: number;
@@ -22,8 +29,14 @@ function num(v: unknown): number {
   return Number.isFinite(n) ? n : 0;
 }
 
-export function tollEventDate(e: TollLedgerLikeEvent): string {
-  return String(e.date || e.postingAt || e.createdAt || '').slice(0, 10);
+/** Fleet-calendar day (yyyy-MM-dd, America/Jamaica) for a canonical toll event. */
+export function tollEventDate(
+  e: TollLedgerLikeEvent,
+  fleetTz: string = DEFAULT_FLEET_TZ,
+): string {
+  const raw = String(e.date || e.postingAt || e.createdAt || '');
+  if (!raw) return '';
+  return fleetCalendarDay(raw, fleetTz);
 }
 
 export function tollEventAmount(e: TollLedgerLikeEvent): number {
@@ -56,6 +69,46 @@ export function isUberTollReimbursement(e: TollLedgerLikeEvent): boolean {
 
 export function isTripSourcedTollCharge(e: TollLedgerLikeEvent): boolean {
   return isUberTollReimbursement(e);
+}
+
+/**
+ * H-9: canonical "charged to drivers" from wallet events (single source).
+ *
+ * `toll_charged_to_driver` posts the wallet debit; `toll_charge_reversed` backs
+ * it out. This mirrors Business Finance P&L (businessFinancePnL.ts) so the
+ * Toll Reconciliation "Charged to Drivers" card can be driven off the SAME
+ * canonical ledger instead of re-deriving it from resolved "Charge Driver"
+ * claims.
+ *
+ * Migration path: toll_period_controller currently sums `claim.amount` for
+ * Resolved/"Charge Driver" claims (requires charge-sync ON for parity). Prefer
+ * this helper whenever canonical `toll_charged_to_driver` events are present for
+ * the week; fall back to the claim sum only for legacy periods with no events.
+ * Once every fleet has charge-sync on, delete the claim-derived path.
+ */
+export function isTollChargedToDriverEvent(e: TollLedgerLikeEvent): boolean {
+  const t = String(e.eventType || '');
+  return t === 'toll_charged_to_driver' || t === 'toll_charge_reversed';
+}
+
+/** Signed-safe sum of wallet toll charges (charged − reversed), floored at $0. */
+export function sumTollChargedToDriversFromEvents(
+  events: TollLedgerLikeEvent[] | undefined | null,
+): number {
+  let total = 0;
+  for (const e of events || []) {
+    const t = String(e.eventType || '');
+    if (t === 'toll_charged_to_driver') total += tollEventAmount(e);
+    else if (t === 'toll_charge_reversed') total -= tollEventAmount(e);
+  }
+  return round2(Math.max(0, total));
+}
+
+/** True when the week has any canonical wallet-charge event (prefer over claims). */
+export function hasCanonicalChargedToDriverEvents(
+  events: TollLedgerLikeEvent[] | undefined | null,
+): boolean {
+  return (events || []).some(isTollChargedToDriverEvent);
 }
 
 /**
@@ -136,6 +189,7 @@ export function computeTollFleetLossNetting(scoped: TollLedgerLikeEvent[]): Toll
     recovered: round2(recovered),
     reinstated: round2(reinstated),
     net,
+    rawNet: round2(rawNet),
     clipped,
     provisional,
   };

@@ -18,6 +18,9 @@ const FUEL_EVENT_TYPES = new Set([
   "fuel_gas_card_spend",
 ]);
 
+/** Mirror packages/finance-core MONEY_EPS — post any non-zero share (C-1). */
+const MONEY_EPS = 0.005;
+
 function sb() {
   return createClient(
     Deno.env.get("SUPABASE_URL")!,
@@ -262,7 +265,11 @@ export async function postFuelFinalizedEventsFromReport(
     "finalized",
   );
 
-  if (deduction > 0) {
+  // C-1: post whenever the share is materially non-zero (either sign). Event
+  // convention: a positive driver deduction is a debit to the driver, posted as a
+  // NEGATIVE amountMajor (outflow). A negative deduction means the fleet owes the
+  // driver, so amountMajor flips positive (inflow / credit to driver).
+  if (Math.abs(deduction) > MONEY_EPS) {
     check(
       await postFinancialEvent({
         idempotencyKey: `${keyBase}|deduction`,
@@ -273,7 +280,7 @@ export async function postFuelFinalizedEventsFromReport(
         driverId,
         occurredAt: weekKey,
         amountMajor: -deduction,
-        direction: "outflow",
+        direction: deduction >= 0 ? "outflow" : "inflow",
         debitAccountKey: "platform:driver_receivable",
         creditAccountKey: "platform:fleet_fuel_expense",
         allocations: [{
@@ -286,7 +293,9 @@ export async function postFuelFinalizedEventsFromReport(
       "deduction",
     );
   }
-  if (fleetShare > 0) {
+  // C-1 / M-2: fleet share posted signed with an explicit debit/credit pair so the
+  // ledger balances (fleet expense vs. what the fleet effectively owes the driver).
+  if (Math.abs(fleetShare) > MONEY_EPS) {
     check(
       await postFinancialEvent({
         idempotencyKey: `${keyBase}|fleet_share`,
@@ -297,7 +306,9 @@ export async function postFuelFinalizedEventsFromReport(
         driverId,
         occurredAt: weekKey,
         amountMajor: -fleetShare,
-        direction: "outflow",
+        direction: fleetShare >= 0 ? "outflow" : "inflow",
+        debitAccountKey: "platform:fleet_fuel_expense",
+        creditAccountKey: "platform:driver_payable",
         allocations: [{
           allocation_type: "fleet_share",
           amount_minor: Math.round(fleetShare * 100),

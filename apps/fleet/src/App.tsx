@@ -58,6 +58,9 @@ const FleetFinancialsPage = lazy(() =>
     default: m.FleetFinancialsPage,
   })),
 );
+const CloseWeekPage = lazy(() =>
+  import('./pages/CloseWeekPage').then((m) => ({ default: m.CloseWeekPage })),
+);
 const BusinessFinancePage = lazy(() =>
   import('./components/business-finance/BusinessFinancePage').then((m) => ({
     default: m.BusinessFinancePage,
@@ -703,6 +706,13 @@ function AppContent() {
                   openDriverDetail(driverId);
                 }}
               />
+            </Suspense>
+          </PermissionGate>
+        )}
+        {currentPage === 'close-week' && (
+          <PermissionGate permission="nav.financial_analytics" onNavigate={setCurrentPage}>
+            <Suspense fallback={<div className="p-6 text-sm text-slate-500">Loading close week…</div>}>
+              <CloseWeekPage onNavigate={(page, opts) => handleNavigate(page, opts)} />
             </Suspense>
           </PermissionGate>
         )}

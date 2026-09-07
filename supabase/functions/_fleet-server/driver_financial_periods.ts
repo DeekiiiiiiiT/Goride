@@ -224,6 +224,14 @@ type RebuildContext = {
   periodMetaByAnchor?: Map<string, Record<string, unknown>>;
   /** When set, trips and fare entries are filtered to this line (omit for combined settlement). */
   filterServiceLine?: "rideshare" | "rush_delivery";
+  /** Perf: spend-included tolls pre-bucketed by week key (avoids per-week rescan). */
+  tollsByWeek?: Map<string, any[]>;
+  /** Perf: all reconcilable tolls (incl. quarantine) pre-bucketed by week key. */
+  allTollsByWeek?: Map<string, any[]>;
+  /** Perf: driver toll-charge transactions pre-bucketed by week key. */
+  chargeTxByWeek?: Map<string, any[]>;
+  /** Perf: finalized fuel reports pre-bucketed by their week-start anchor. */
+  fuelReportsByWeek?: Map<string, any[]>;
 };
 
 function inferTripServiceLine(trip: Record<string, unknown>): "rideshare" | "rush_delivery" {
@@ -243,6 +251,33 @@ function buildTripServiceLineMap(trips: any[]): Map<string, "rideshare" | "rush_
   for (const t of trips || []) {
     const id = String(t?.id ?? "");
     if (id) map.set(id, inferTripServiceLine(t));
+  }
+  return map;
+}
+
+/**
+ * Pre-bucket rows by fleet week key (Monday anchor) so the rebuild loops can do
+ * a single Map lookup per week instead of re-filtering the full array for every
+ * one of W weeks (turns O(W×N) rescans into O(N) bucketing + O(1) lookup).
+ * The date extractor returns the row's occurred-at; rows without a resolvable
+ * week key are skipped. Bucket key === periodKeyFor(fleetCalendarDay(date)),
+ * which is identical to the `d >= anchor && d <= end` range test used inline.
+ */
+function bucketByWeekKey<T>(
+  rows: T[],
+  getDate: (row: T) => string | null | undefined,
+  timezone: string,
+): Map<string, T[]> {
+  const map = new Map<string, T[]>();
+  for (const row of rows || []) {
+    const raw = getDate(row);
+    if (!raw) continue;
+    const day = fleetCalendarDay(String(raw), timezone);
+    const key = periodKeyFor(day, timezone);
+    if (!key) continue;
+    const bucket = map.get(key);
+    if (bucket) bucket.push(row);
+    else map.set(key, [row]);
   }
   return map;
 }
@@ -658,6 +693,20 @@ async function loadRebuildContext(
     );
   }
 
+  // Perf: pre-bucket the big per-week rescans once (tolls, charges, fuel) so
+  // rebuild does a Map lookup per week instead of filtering the whole array W times.
+  const tollsByWeek = bucketByWeekKey(scopedTolls, (t: any) => t?.date, timezone);
+  const allTollsByWeek = bucketByWeekKey(allScopedTolls, (t: any) => t?.date, timezone);
+  const chargeTxByWeek = bucketByWeekKey(chargeTxAll, (t: any) => t?.date, timezone);
+  const fuelReportsByWeek = new Map<string, any[]>();
+  for (const r of fuelReports || []) {
+    const start = String(r?.weekStart || r?.periodStart || r?.startDate || "").slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(start)) continue;
+    const bucket = fuelReportsByWeek.get(start);
+    if (bucket) bucket.push(r);
+    else fuelReportsByWeek.set(start, [r]);
+  }
+
   return {
     timezone,
     scopedTolls,
@@ -678,12 +727,21 @@ async function loadRebuildContext(
     persistLines: false,
     periodMetaByAnchor,
     filterServiceLine: opts?.serviceLine,
+    tollsByWeek,
+    allTollsByWeek,
+    chargeTxByWeek,
+    fuelReportsByWeek,
   };
 }
 
 /**
  * Rebuild one driver-week projection from operational SSOT + financial_events.
  * Always reopens if unmatched toll usage remains.
+ *
+ * PERF: callers rebuilding more than one week for a driver MUST pass a shared
+ * `ctx` (from `loadRebuildContext`) so the full toll ledger / transactions /
+ * fuel reports load once instead of per week. For a single ad-hoc week, use
+ * `rebuildOneDriverPeriod(driverId, anchor)` which loads ctx once when missing.
  */
 export async function rebuildDriverFinancialPeriod(
   driverId: string,
@@ -695,14 +753,19 @@ export async function rebuildDriverFinancialPeriod(
   const periodEnd = periodEndForAnchor(periodAnchor);
   const persistLines = !!context.persistLines;
   const scopedTolls = context.scopedTolls;
-  const weekTolls = scopedTolls.filter((tx: any) => {
-    const d = fleetCalendarDay(String(tx.date || ""), timezone);
-    return d >= periodAnchor && d <= periodEnd;
-  });
-  const allWeekTolls = (context.allScopedTolls || scopedTolls).filter((tx: any) => {
-    const d = fleetCalendarDay(String(tx.date || ""), timezone);
-    return d >= periodAnchor && d <= periodEnd;
-  });
+  // Prefer O(1) week bucket; fall back to a scan when ctx was built externally.
+  const weekTolls = context.tollsByWeek
+    ? context.tollsByWeek.get(periodAnchor) ?? []
+    : scopedTolls.filter((tx: any) => {
+        const d = fleetCalendarDay(String(tx.date || ""), timezone);
+        return d >= periodAnchor && d <= periodEnd;
+      });
+  const allWeekTolls = context.allTollsByWeek
+    ? context.allTollsByWeek.get(periodAnchor) ?? []
+    : (context.allScopedTolls || scopedTolls).filter((tx: any) => {
+        const d = fleetCalendarDay(String(tx.date || ""), timezone);
+        return d >= periodAnchor && d <= periodEnd;
+      });
   const { excludedCashSpend, excludedCashCount } = sumExcludedCashFromWeek(
     allWeekTolls,
     (t) => isTollIncludedInSpend(t as any),
@@ -812,10 +875,12 @@ export async function rebuildDriverFinancialPeriod(
     }
   }
 
-  const chargeTx = context.chargeTxAll.filter((t: any) => {
-    const d = fleetCalendarDay(String(t.date || ""), timezone);
-    return d >= periodAnchor && d <= periodEnd;
-  });
+  const chargeTx = context.chargeTxByWeek
+    ? context.chargeTxByWeek.get(periodAnchor) ?? []
+    : context.chargeTxAll.filter((t: any) => {
+        const d = fleetCalendarDay(String(t.date || ""), timezone);
+        return d >= periodAnchor && d <= periodEnd;
+      });
   let tollChargedToDriver = 0;
   for (const t of chargeTx) {
     const amt = Number(t.amount) || 0;
@@ -974,14 +1039,24 @@ export async function rebuildDriverFinancialPeriod(
   ) {
     fuelSource = "snapshot";
     const seenFuelKeys = new Set<string>();
-    for (const r of context.fuelReports) {
+    // Bucketed by week-start anchor already equals periodAnchor; fall back to full scan.
+    const weekFuelReports = context.fuelReportsByWeek
+      ? context.fuelReportsByWeek.get(periodAnchor) ?? []
+      : context.fuelReports;
+    for (const r of weekFuelReports) {
       const start = String(r.weekStart || r.periodStart || r.startDate || "").slice(0, 10);
-      if (!(start >= periodAnchor && start <= periodEnd)) continue;
+      // H-6: a fuel report belongs to exactly one week — its start must equal the
+      // period anchor. The old range test pulled neighbouring weeks' reports into
+      // this period, double-counting fuel money.
+      if (start !== periodAnchor) continue;
       const key = String(r.id || r.reportId || `${start}:${r.driverId || ""}`);
       if (seenFuelKeys.has(key)) continue;
       seenFuelKeys.add(key);
-      fuelDeduction = round2(fuelDeduction + Math.abs(Number(r.driverShare) || 0));
-      fuelFleetShare = round2(fuelFleetShare + Math.abs(Number(r.companyShare) || 0));
+      // C-1: shares are signed (a negative driverShare means fleet owes the driver).
+      // Math.abs here silently flipped fleet-owes weeks into driver-debt. Spend
+      // fields stay abs because they are magnitude-only cash outflows.
+      fuelDeduction = round2(fuelDeduction + (Number(r.driverShare) || 0));
+      fuelFleetShare = round2(fuelFleetShare + (Number(r.companyShare) || 0));
       fuelDriverSpend = round2(
         fuelDriverSpend +
           Math.abs(
@@ -1049,7 +1124,9 @@ export async function rebuildDriverFinancialPeriod(
     baseCashOwed: cashCollected,
     baseCashPaid: cashReturned,
     tollCashWash: tollCashWashEligible,
-    tollPersonal: Math.max(0, tollChargedToDriver),
+    // C-7: pass the signed toll charge. A negative charge (fleet-owes / refund)
+    // must flow through settlement instead of being clamped to zero.
+    tollPersonal: tollChargedToDriver,
     fuelCredits: fuelFleetShare,
     cashWrittenOff,
     settlementPaid: settlementPaidRaw,
@@ -1188,7 +1265,8 @@ export async function rebuildDriverFinancialPeriod(
     tollCashSpend: round2(tollCashSpend),
     tollTagSpend: round2(tollTagSpend),
     tollReimbursed: round2(tollReimbursed),
-    tollChargedToDriver: round2(Math.max(0, tollChargedToDriver)),
+    // C-7: persist signed toll charge (allow negative = fleet owes driver).
+    tollChargedToDriver: round2(tollChargedToDriver),
     tollUnmatchedCount,
     tollReconciledCount,
     tollWorkflowActionable,
@@ -1374,6 +1452,20 @@ export async function rebuildDriverFinancialPeriod(
   }
 
   return row;
+}
+
+/**
+ * Convenience wrapper for a single ad-hoc week rebuild. Loads shared context once
+ * (with week buckets + persisted lines) when no ctx is supplied. Prefer passing a
+ * shared ctx directly when rebuilding many weeks for the same driver.
+ */
+export async function rebuildOneDriverPeriod(
+  driverId: string,
+  periodAnchor: string,
+  ctx?: RebuildContext,
+): Promise<DriverFinancialPeriodRow> {
+  const context = ctx || { ...(await loadRebuildContext(driverId)), persistLines: true };
+  return rebuildDriverFinancialPeriod(driverId, periodAnchor, context);
 }
 
 /** Drain pending outbox jobs (period_projection_refresh) — one context load per driver. */

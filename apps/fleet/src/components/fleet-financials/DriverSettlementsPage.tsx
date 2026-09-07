@@ -23,6 +23,7 @@ import {
   settlementPeriodOpenMessage,
 } from '../../utils/settlementPeriodGate';
 import { api } from '../../services/api';
+import { mergeDoneCashHistory } from '../../utils/settlementDoneHistory';
 import {
   isClearedDriverCashPayment,
   isClearedDriverPayout,
@@ -478,7 +479,7 @@ export function DriverSettlementsPage({
   const txsQuery = useQuery({
     queryKey: ['driverSettlementsTransactions', weekFrom, weekTo, scope],
     queryFn: async () => {
-      // Cap at one page — prefer movementsQuery for awaiting/done/cleared KPIs.
+      // Always load for Collect/Pay — Done must union Cash Collection logs with movements.
       const page = await api.getTransactions(undefined, {
         limit: 5000,
         offset: 0,
@@ -490,11 +491,11 @@ export function DriverSettlementsPage({
       return (Array.isArray(page) ? page : page?.data || []) as FinancialTransaction[];
     },
     enabled:
-      movementsQuery.isError ||
-      (movementsQuery.isSuccess && (movementsQuery.data?.rows?.length ?? 0) === 0) ||
+      deskMode === 'collect' ||
+      deskMode === 'pay' ||
       deskMode === 'reconciled' ||
-      reconciledOverlay.open ||
-      deskMode === 'log-cash',
+      deskMode === 'log-cash' ||
+      reconciledOverlay.open,
   });
 
   const driversQuery = useQuery({
@@ -626,75 +627,21 @@ export function DriverSettlementsPage({
       });
   }, [apiMovementRows, txsQuery.data, search, direction]);
 
+  // Root cause fix: always union Log Cash txs with settlement_movements.
+  // Previously any movement row short-circuited Done and hid months of Cash Collections.
   const doneMovementRows = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (apiMovementRows.length > 0) {
-      return apiMovementRows
-        .filter((m) => {
-          const st = String(m.status || '').toLowerCase();
-          const ap = String(m.approvalState || '').toLowerCase();
-          if (st === 'void' || st === 'pending') return false;
-          if (ap === 'pending' || ap === 'rejected') return false;
-          if (direction === 'pay' && m.kind !== 'pay' && m.kind !== 'reverse') return false;
-          if (
-            direction === 'collect' &&
-            m.kind !== 'collect' &&
-            m.kind !== 'write_off' &&
-            m.kind !== 'reverse'
-          )
-            return false;
-          if (!q) return true;
-          return (
-            String(m.driverName || '').toLowerCase().includes(q) ||
-            String(m.driverId || '').toLowerCase().includes(q) ||
-            String(m.periodAnchor || '').includes(q)
-          );
-        })
-        .sort((a, b) => {
-          const week = ymdKey(b.periodAnchor).localeCompare(ymdKey(a.periodAnchor));
-          if (week !== 0) return week;
-          return String(b.date || '').localeCompare(String(a.date || ''));
-        });
-    }
-    const legacy =
-      direction === 'pay'
-        ? (txsQuery.data || []).filter((t) => {
-            if (!isClearedDriverPayout(t)) return false;
-            const week = txSettlementWeekStart(t);
-            if (week && (week < weekFrom || week > weekTo)) return false;
-            if (!week) {
-              const d = String(t.date || '').slice(0, 10);
-              if (d < weekFrom || d > weekTo) return false;
-            }
-            if (!q) return true;
-            return (
-              String(t.driverName || '').toLowerCase().includes(q) ||
-              String(t.driverId || '').toLowerCase().includes(q) ||
-              week.includes(q)
-            );
-          })
-        : (txsQuery.data || []).filter((t) => {
-            if (!isClearedDriverCashPayment(t)) return false;
-            const week = txSettlementWeekStart(t);
-            if (week && (week < weekFrom || week > weekTo)) return false;
-            if (!week) {
-              const d = String(t.date || '').slice(0, 10);
-              if (d < weekFrom || d > weekTo) return false;
-            }
-            if (!q) return true;
-            return (
-              String(t.driverName || '').toLowerCase().includes(q) ||
-              String(t.driverId || '').toLowerCase().includes(q) ||
-              week.includes(q)
-            );
-          });
-    return legacy
-      .map((t) => txToMovementRow(t, direction))
-      .sort((a, b) => {
-        const week = ymdKey(b.periodAnchor).localeCompare(ymdKey(a.periodAnchor));
-        if (week !== 0) return week;
-        return String(b.date || '').localeCompare(String(a.date || ''));
-      });
+    return mergeDoneCashHistory({
+      direction,
+      movements: apiMovementRows,
+      legacyTxs: txsQuery.data || [],
+      weekFrom,
+      weekTo,
+      search,
+      isClearedTx: (t) =>
+        direction === 'pay'
+          ? isClearedDriverPayout(t as FinancialTransaction)
+          : isClearedDriverCashPayment(t as FinancialTransaction),
+    }) as SettlementMovementRow[];
   }, [apiMovementRows, txsQuery.data, search, direction, weekFrom, weekTo]);
 
   const reconciledRows = useMemo(() => {
@@ -719,6 +666,15 @@ export function DriverSettlementsPage({
   const cashHeldWeekCount = collectQueueRows.filter((r) => r.collectKind === 'cash_held').length;
   const fleetOwesWeekCount =
     payQueueQuery.data?.page?.total ?? payQueueQuery.data?.rows?.length ?? 0;
+  // H-2: total fleet exposure is gate-blind — sum every week regardless of the
+  // moneyUnlocked / fuelFinalized gate, and call out the blocked portion.
+  const totalExposure = settledOwesTotal + cashHeldKpiTotal + fleetOwesTotal;
+  const blockedExposure = [
+    ...collectQueueRows,
+    ...(payQueueQuery.data?.rows || []),
+  ]
+    .filter((r) => r.fuelFinalized === false || r.moneyUnlocked === false)
+    .reduce((s, r) => s + queueOwedMajor(r, r.collectKind ? 'collect' : 'pay'), 0);
   const awaitingPayTotal = apiMovementRows.length
     ? apiMovementRows
         .filter(
@@ -749,38 +705,18 @@ export function DriverSettlementsPage({
         )
         .reduce((s, t) => s + Math.abs(Number(t.amount) || 0), 0);
   const awaitingTotal = direction === 'pay' ? awaitingPayTotal : awaitingCollectTotal;
-  const clearedPayThisWeek = apiMovementRows.length
-    ? apiMovementRows
-        .filter((m) => {
-          if (m.kind !== 'pay') return false;
-          const st = String(m.status || '').toLowerCase();
-          if (st !== 'posted' && st !== 'completed' && st !== 'verified') return false;
-          return String(m.date || '').slice(0, 10) >= thisMonday;
-        })
-        .reduce((s, m) => s + Math.abs(Number(m.amount) || 0), 0)
-    : (txsQuery.data || [])
-        .filter((t) => {
-          if (!isDriverPayoutTransaction(t)) return false;
-          const st = String(t.status || '').toLowerCase();
-          if (st !== 'completed' && st !== 'verified') return false;
-          return String(t.date || '').slice(0, 10) >= thisMonday;
-        })
-        .reduce((s, t) => s + Math.abs(Number(t.amount) || 0), 0);
-  const clearedCollectThisWeek = apiMovementRows.length
-    ? apiMovementRows
-        .filter((m) => {
-          if (m.kind !== 'collect') return false;
-          const st = String(m.status || '').toLowerCase();
-          if (st !== 'posted' && st !== 'completed' && st !== 'verified') return false;
-          return String(m.date || '').slice(0, 10) >= thisMonday;
-        })
-        .reduce((s, m) => s + Math.abs(Number(m.amount) || 0), 0)
-    : (txsQuery.data || [])
-        .filter((t) => {
-          if (!isClearedDriverCashPayment(t)) return false;
-          return String(t.date || '').slice(0, 10) >= thisMonday;
-        })
-        .reduce((s, t) => s + Math.abs(Number(t.amount) || 0), 0);
+  const clearedPayThisWeek = doneMovementRows
+    .filter((m) => {
+      if (String(m.kind).toLowerCase() !== 'pay') return false;
+      return String(m.date || '').slice(0, 10) >= thisMonday;
+    })
+    .reduce((s, m) => s + Math.abs(Number(m.amount) || 0), 0);
+  const clearedCollectThisWeek = doneMovementRows
+    .filter((m) => {
+      if (String(m.kind).toLowerCase() !== 'collect') return false;
+      return String(m.date || '').slice(0, 10) >= thisMonday;
+    })
+    .reduce((s, m) => s + Math.abs(Number(m.amount) || 0), 0);
   const clearedThisWeek = direction === 'pay' ? clearedPayThisWeek : clearedCollectThisWeek;
 
   // Per-basis errors — don't blank Collect KPIs when only the tx history query fails.
@@ -1570,6 +1506,21 @@ export function DriverSettlementsPage({
           </span>
         </div>
       ) : null}
+
+      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 rounded-lg border border-slate-200 bg-white px-4 py-3">
+        <span className="text-xs font-medium uppercase tracking-wide text-slate-500">
+          Total exposure
+        </span>
+        <span className="text-lg font-semibold tabular-nums text-slate-900">
+          {collectKpiError || payKpiError ? '—' : MONEY(totalExposure)}
+        </span>
+        <span className="text-[11px] text-slate-400">fleet owes + drivers owe + cash held · all weeks in range</span>
+        {blockedExposure > MONEY_EPS ? (
+          <span className="ml-auto rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-800">
+            {MONEY(blockedExposure)} blocked / not finalized
+          </span>
+        ) : null}
+      </div>
 
       <SettlementKpiBar
         settledOwes={settledOwesTotal}

@@ -4,6 +4,7 @@
  */
 import { getServiceClient } from "./service_client.ts";
 import { appendPeriodRevisionIfNeeded } from "./period_revision.ts";
+import { assertPeriodNotFrozen } from "./settlement_period_freeze.ts";
 
 function sb() {
   return getServiceClient();
@@ -20,15 +21,25 @@ export async function persistPeriodRowWithVersion(
   periodAnchor: string,
   body: Record<string, unknown>,
   maxRetries = 3,
+  opts: { allowFrozen?: boolean } = {},
 ): Promise<PersistPeriodResult> {
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     const { data: existing, error: loadErr } = await sb()
       .from("driver_financial_periods")
-      .select("id, projection_version, settlement_paid, settlement_amount, payout_net")
+      .select("id, projection_version, settlement_paid, settlement_amount, payout_net, status, metadata, closed_at")
       .eq("driver_id", driverId)
       .eq("period_anchor", periodAnchor)
       .maybeSingle();
     if (loadErr) throw new Error(loadErr.message);
+
+    // A signed/closed week is immutable — new facts must go through restatement
+    // (week_statements version n+1), never an in-place projection overwrite (H-4).
+    if (!opts.allowFrozen && existing?.id) {
+      assertPeriodNotFrozen({
+        metadata: (existing.metadata as Record<string, unknown> | null) ?? null,
+        settlementStatus: (existing.status as string | null) ?? null,
+      });
+    }
 
     if (existing?.id) {
       const expected = Number(existing.projection_version) || 0;
@@ -68,16 +79,23 @@ export async function updatePeriodCashWithVersion(
   periodAnchor: string,
   body: Record<string, unknown>,
   maxRetries = 3,
+  opts: { allowFrozen?: boolean } = {},
 ): Promise<PersistPeriodResult> {
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     const { data: existing, error: loadErr } = await sb()
       .from("driver_financial_periods")
-      .select("id, projection_version, settlement_paid, settlement_amount, payout_net")
+      .select("id, projection_version, settlement_paid, settlement_amount, payout_net, status, metadata, closed_at")
       .eq("driver_id", driverId)
       .eq("period_anchor", periodAnchor)
       .maybeSingle();
     if (loadErr) throw new Error(loadErr.message);
     if (!existing?.id) throw new Error("period row missing for cash sync");
+    if (!opts.allowFrozen) {
+      assertPeriodNotFrozen({
+        metadata: (existing.metadata as Record<string, unknown> | null) ?? null,
+        settlementStatus: (existing.status as string | null) ?? null,
+      });
+    }
 
     const expected = Number(existing.projection_version) || 0;
     const nextVersion = expected + 1;

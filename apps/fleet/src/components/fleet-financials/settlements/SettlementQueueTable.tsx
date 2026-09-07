@@ -38,6 +38,23 @@ function weekOpenTitle(r: Pick<SettlementQueueRow, 'periodAnchor' | 'periodEnd'>
   });
 }
 
+/** H-1: reconciliation-close gate — collecting on an unfinalized week is banned. */
+function collectGateBlocked(r: Pick<SettlementQueueRow, 'moneyUnlocked'>): boolean {
+  return r.moneyUnlocked === false;
+}
+
+/** Collect is allowed only when the calendar week ended AND the money is unlocked. */
+function canCollect(r: Pick<SettlementQueueRow, 'periodAnchor' | 'periodEnd' | 'moneyUnlocked'>): boolean {
+  return weekActionable(r) && !collectGateBlocked(r);
+}
+
+const GATE_TITLE = 'Fuel / toll not finalized — money is locked until reconciliation closes.';
+
+/** Row label distinguishing custody (cash held) from a settled receivable (H-1). */
+function collectKindLabel(r: Pick<SettlementQueueRow, 'collectKind'>): string {
+  return r.collectKind === 'cash_held' ? 'Cash held' : 'Driver owes';
+}
+
 const MONEY = (n: number | null | undefined) => {
   if (n == null || !Number.isFinite(n)) return '—';
   const body = Math.abs(n).toLocaleString(undefined, {
@@ -256,6 +273,7 @@ export function SettlementQueueTable({
                 const actionableWeeks = g.weeks.filter(weekActionable);
                 const weekKeysForDriver = actionableWeeks.map(rowKey);
                 const firstActionable = actionableWeeks[0] || null;
+                const firstCollectable = actionableWeeks.find((w) => !collectGateBlocked(w)) || null;
                 const driverAllSelected =
                   weekKeysForDriver.length > 0 && weekKeysForDriver.every((k) => selected.has(k));
                 const parentOpenTitle = firstActionable
@@ -338,9 +356,9 @@ export function SettlementQueueTable({
                               type="button"
                               size="sm"
                               className="h-8 bg-rose-700 hover:bg-rose-800"
-                              disabled={!firstActionable}
-                              title={parentOpenTitle}
-                              onClick={() => firstActionable && onCollect?.(firstActionable)}
+                              disabled={!firstCollectable}
+                              title={!firstCollectable && firstActionable ? GATE_TITLE : parentOpenTitle}
+                              onClick={() => firstCollectable && onCollect?.(firstCollectable)}
                             >
                               Collect
                             </Button>
@@ -379,10 +397,14 @@ export function SettlementQueueTable({
                               </TableCell>
                               <TableCell />
                               <TableCell className="text-sm text-slate-500 pl-6">
-                                {r.collectKind === 'cash_held' ? 'Cash held' : 'Week'}
+                                {mode === 'collect' ? collectKindLabel(r) : 'Week'}
                                 {!canAct ? (
                                   <span className="ml-2 text-[10px] font-medium uppercase tracking-wide text-amber-700">
                                     Still open
+                                  </span>
+                                ) : mode === 'collect' && collectGateBlocked(r) ? (
+                                  <span className="ml-2 text-[10px] font-medium uppercase tracking-wide text-rose-700">
+                                    Locked
                                   </span>
                                 ) : null}
                               </TableCell>
@@ -411,9 +433,9 @@ export function SettlementQueueTable({
                                         type="button"
                                         size="sm"
                                         className="h-8 bg-rose-700 hover:bg-rose-800"
-                                        disabled={!canAct}
-                                        title={openTitle}
-                                        onClick={() => canAct && onCollect?.(r)}
+                                        disabled={!canCollect(r)}
+                                        title={collectGateBlocked(r) ? GATE_TITLE : openTitle}
+                                        onClick={() => canCollect(r) && onCollect?.(r)}
                                       >
                                         Collect
                                       </Button>
@@ -523,9 +545,9 @@ export function SettlementQueueTable({
                               type="button"
                               size="sm"
                               className="h-8 bg-rose-700 hover:bg-rose-800"
-                              disabled={!canAct}
-                              title={openTitle}
-                              onClick={() => canAct && onCollect?.(r)}
+                              disabled={!canCollect(r)}
+                              title={collectGateBlocked(r) ? GATE_TITLE : openTitle}
+                              onClick={() => canCollect(r) && onCollect?.(r)}
                             >
                               Collect
                             </Button>

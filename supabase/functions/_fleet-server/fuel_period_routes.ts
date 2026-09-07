@@ -22,6 +22,7 @@ import {
   resolveDualApprovalUiMode,
   secondApproverThresholdFromPrefs,
 } from "./fuel_org_preferences.ts";
+import { publishWeekStatement } from "./week_statements.ts";
 
 const BASE = "/make-server-37f42386";
 const CRON_SECRET = () => Deno.env.get("FLEET_CRON_SECRET") || Deno.env.get("CRON_SECRET") || "";
@@ -388,6 +389,38 @@ async function processJobRow(job: Record<string, unknown>) {
     for (const snap of snapshots) {
       try {
         await commitFinalizedSnapshotMoney(snap, orgId);
+        // Phase 4: publish immutable fuel statement for the week close contract.
+        const driverId = String(snap?.driverId || "").trim();
+        const weekKey = ymd(snap?.weekStart || period.week_start);
+        if (driverId && weekKey) {
+          try {
+            const driverShare = Number(snap.driverShare) || 0;
+            const companyShare = Number(snap.companyShare) || 0;
+            await publishWeekStatement({
+              kind: "fuel",
+              organizationId: orgId,
+              driverId,
+              weekKey,
+              amountsMinor: {
+                driverShare: Math.round(driverShare * 100),
+                companyShare: Math.round(companyShare * 100),
+                totalSpend: Math.round(
+                  (Number(snap.totalGasCardCost) ||
+                    Number(snap.gasCardSpend) ||
+                    Number(snap.driverSpend) ||
+                    0) * 100,
+                ),
+                miscellaneousCost: Math.round((Number(snap.miscellaneousCost) || 0) * 100),
+              },
+              sourceRowIds: [String(snap.id || `${driverId}_${weekKey}`)],
+              status: "closed",
+              closedBy: actor,
+              closeReason: "fuel_period_finalize",
+            });
+          } catch (stmtErr) {
+            console.warn("[fuel_period] week statement publish failed (non-fatal)", driverId, stmtErr);
+          }
+        }
       } catch (e: any) {
         console.error("[fuel_period] money commit failed", snap?.driverId, e);
         const moneyFailures = [

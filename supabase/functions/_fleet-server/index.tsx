@@ -182,6 +182,7 @@ import disputeRefundApp from "./dispute_refund_controller.tsx";
 import tollPeriodApp from "./toll_period_controller.tsx";
 import driverFinancialPeriodApp from "./driver_financial_period_controller.tsx";
 import settlementCommandsApp from "./settlement_commands_controller.tsx";
+import weekCloseApp from "./week_close_controller.tsx";
 import paymentLedgerLineApp from "./payment_ledger_line_controller.tsx";
 import apiCenterApp from "./api_command_center.tsx";
 import { getFleetTimezone, naiveToUtc, fleetCalendarDay, toFleetCalendarDay } from "./timezone_helper.tsx";
@@ -1512,6 +1513,7 @@ app.route("/", disputeRefundApp);
 app.route("/", tollPeriodApp);
 app.route("/", driverFinancialPeriodApp);
 app.route("/", settlementCommandsApp);
+app.route("/", weekCloseApp);
 app.route("/", paymentLedgerLineApp);
 app.route("/", apiCenterApp);
 
@@ -3965,6 +3967,19 @@ app.post("/make-server-37f42386/transactions", requireAuth({ requireOrg: true })
     // Log Cash / edits / verifies never move the projected week. Rebuild the tagged
     // Settlement Week anchors (new + previous when retagged). Non-fatal on error.
     await rebuildFinancialPeriodsForCashTx(transaction, previousTransaction);
+
+    // Mirror cleared Log Cash / Driver Payout into settlement_movements so Done
+    // never loses cash history when the Collect command ledger also has rows.
+    try {
+      const { syncSettlementMovementFromCashTx } = await import("./settlement_cash_mirror.ts");
+      const orgId = getOrgId(c) || String(transaction.organizationId || transaction.orgId || "") || null;
+      await syncSettlementMovementFromCashTx(transaction, orgId);
+      if (previousTransaction && typeof previousTransaction === "object") {
+        await syncSettlementMovementFromCashTx(previousTransaction, orgId);
+      }
+    } catch (mirrorErr) {
+      console.warn("[transactions] settlement_movements mirror failed (non-fatal)", mirrorErr);
+    }
 
     return c.json({ success: true, data: transaction });
   } catch (e: any) {

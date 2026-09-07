@@ -115,18 +115,59 @@ export function disputeRefundPeriodWeekKey(
   return dateWeekKey(refund.date, fleetTz || 'America/Jamaica') || '1970-01-01';
 }
 
+export type DisputeRefundAnchor = Pick<
+  { date?: string; matchedTollId?: string | null; matchedClaimId?: string | null },
+  'date' | 'matchedTollId' | 'matchedClaimId'
+>;
+
 /**
- * Period visibility for dispute refunds — mirrors period_reset inventory:
- * toll-first when matched to a period toll, else refund-date week key.
+ * The ONE week a dispute refund belongs to (exclusive priority, C-5).
+ *
+ * A refund is anchored to exactly one period, never two:
+ *   1. its matched toll's week (if the toll's week is resolvable),
+ *   2. else its matched claim's week (if resolvable),
+ *   3. else its own refund-date week.
+ *
+ * Callers pass optional id→weekKey maps so the toll/claim anchor can be looked
+ * up. When a refund is toll/claim-anchored but that anchor's week is not in the
+ * supplied map, the anchor still wins (returns null) rather than silently
+ * double-booking the refund into its own date-week — that OR-fallthrough was the
+ * source of the double-count (see RECONCILIATION_SYSTEM_AUDIT.md).
+ */
+export function disputeRefundPeriodKey(
+  refund: DisputeRefundAnchor,
+  opts: {
+    fleetTz?: string;
+    tollWeekKeyById?: ReadonlyMap<string, string> | null;
+    claimWeekKeyById?: ReadonlyMap<string, string> | null;
+  } = {},
+): string | null {
+  const fleetTz = opts.fleetTz || 'America/Jamaica';
+  if (refund.matchedTollId) {
+    return opts.tollWeekKeyById?.get(String(refund.matchedTollId)) ?? null;
+  }
+  if (refund.matchedClaimId) {
+    return opts.claimWeekKeyById?.get(String(refund.matchedClaimId)) ?? null;
+  }
+  return disputeRefundPeriodWeekKey(refund, fleetTz);
+}
+
+/**
+ * Period visibility for dispute refunds — exclusive priority (C-5).
+ *
+ * toll-anchor FIRST (only ever in the matched toll's period), else claim-anchor,
+ * else the refund-date week. This is an ELSE chain, not an OR: a toll-anchored
+ * refund whose matched toll is not in THIS period is NOT re-shown via its own
+ * date-week, so each refund lands in exactly one week.
  */
 export function isDisputeRefundInWizardPeriod(
-  refund: Pick<{ date?: string; matchedTollId?: string | null; matchedClaimId?: string | null }, 'date' | 'matchedTollId' | 'matchedClaimId'>,
+  refund: DisputeRefundAnchor,
   periodWeekKey: string,
   fleetTz: string,
   periodTollIds?: ReadonlySet<string>,
   periodClaimIds?: ReadonlySet<string>,
 ): boolean {
-  if (refund.matchedTollId && periodTollIds?.has(refund.matchedTollId)) return true;
-  if (refund.matchedClaimId && periodClaimIds?.has(refund.matchedClaimId)) return true;
+  if (refund.matchedTollId) return !!periodTollIds?.has(String(refund.matchedTollId));
+  if (refund.matchedClaimId) return !!periodClaimIds?.has(String(refund.matchedClaimId));
   return disputeRefundPeriodWeekKey(refund, fleetTz) === periodWeekKey;
 }

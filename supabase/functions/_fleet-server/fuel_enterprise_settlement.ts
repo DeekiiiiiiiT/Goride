@@ -61,31 +61,50 @@ export async function reverseEnterpriseFuelSyncForSnapshot(
   ]);
 
   const txs = await listDriverTransactions(driverId);
-  const toDelete: string[] = [];
+
+  // H-3: money rows are append-only. Instead of kv.del (which destroys audit
+  // trail and cannot be replayed), post an offsetting reversal transaction that
+  // negates the original amount and links back via metadata.reversesTransactionId.
+  const alreadyReversed = new Set<string>();
   for (const tx of txs) {
-    if (!tx?.id) continue;
-    const rid = tx.metadata?.reportId ? String(tx.metadata.reportId) : "";
-    if (rid && reportIdCandidates.has(rid)) {
-      toDelete.push(String(tx.id));
-      continue;
-    }
-    if (tx.metadata?.settlementType === "Enterprise_Fuel_Sync") {
-      const wp = ymd(tx.metadata?.workPeriodStart);
-      if (wp === weekKey) toDelete.push(String(tx.id));
-    }
+    const r = tx?.metadata?.reversesTransactionId
+      ? String(tx.metadata.reversesTransactionId)
+      : "";
+    if (r) alreadyReversed.add(r);
   }
 
-  for (const id of toDelete) {
-    try {
-      await kv.del(`transaction:fuel-credit-${id}`);
-    } catch {
-      /* ignore */
+  const toReverse: any[] = [];
+  for (const tx of txs) {
+    if (!tx?.id) continue;
+    if (tx.metadata?.reversesTransactionId) continue; // never reverse a reversal
+    const rid = tx.metadata?.reportId ? String(tx.metadata.reportId) : "";
+    let match = rid ? reportIdCandidates.has(rid) : false;
+    if (!match && tx.metadata?.settlementType === "Enterprise_Fuel_Sync") {
+      match = ymd(tx.metadata?.workPeriodStart) === weekKey;
     }
-    try {
-      await kv.del(`transaction:${id}`);
-    } catch {
-      /* ignore */
-    }
+    if (match) toReverse.push(tx);
+  }
+
+  let reversed = 0;
+  for (const orig of toReverse) {
+    if (alreadyReversed.has(String(orig.id))) continue; // idempotent re-runs
+    const id = crypto.randomUUID();
+    const reversal = {
+      ...orig,
+      id,
+      amount: -(Number(orig.amount) || 0),
+      status: "Approved",
+      isReconciled: true,
+      metadata: {
+        ...(orig.metadata || {}),
+        reversesTransactionId: String(orig.id),
+        reversalReason: "enterprise_fuel_snapshot_reset",
+        reversedAt: new Date().toISOString(),
+        idempotencyKey: `reversal:${orig.id}`,
+      },
+    };
+    await kv.set(`transaction:${id}`, reversal);
+    reversed += 1;
   }
 
   const entries = ((await kv.getByPrefix("fuel_entry:")) || []) as any[];
@@ -96,10 +115,10 @@ export async function reverseEnterpriseFuelSyncForSnapshot(
     const fbr = entry.metadata?.finalizedByReport
       ? String(entry.metadata.finalizedByReport)
       : "";
-    const match =
-      (fbr && reportIdCandidates.has(fbr)) ||
-      (entry.reconciliationStatus === "Verified" &&
-        String(entry.driverId || "") === driverId);
+    // H-3: only reset entries this report actually finalized. The old broad
+    // "any Verified entry for this driver" fallback clobbered entries owned by
+    // other reports/weeks, corrupting their reconciliation state.
+    const match = !!fbr && reportIdCandidates.has(fbr);
     if (!match) continue;
     const meta = { ...(entry.metadata || {}) };
     delete meta.finalizedAt;
@@ -114,7 +133,7 @@ export async function reverseEnterpriseFuelSyncForSnapshot(
     await kv.set(`fuel_entry:${entry.id}`, updated);
   }
 
-  return toDelete.length;
+  return reversed;
 }
 
 /**

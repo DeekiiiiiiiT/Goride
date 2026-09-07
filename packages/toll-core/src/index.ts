@@ -21,6 +21,7 @@ export {
   getTollTransactionDate,
   ymdToLocalDate,
   normalizeWallClockTime,
+  zonedWallClockToDate,
 } from './tollDate.ts';
 export type { TollDateSource } from './tollDate.ts';
 
@@ -112,8 +113,18 @@ export type {
 export * from './tollSettlement.ts';
 export * from './tollPeriodBucket.ts';
 export * from './tollFleetLossNetting.ts';
+export * from './tollWeekNetting.ts';
 export * from './tollReconPeriodStatus.ts';
 export * from './tollPeriodStepTypes.ts';
 export * from './tollPeriodDisputeHelpers.ts';
 export * from './tollPeriodCounts.ts';
 export * from './unlinkedShortfallEligibility.ts';
+
+export {
+  computeTollCardIdentityResidual,
+  TOLL_CARD_IDENTITY_EPS,
+} from './tollCardIdentity.ts';
+export type {
+  TollCardIdentityInput,
+  TollCardIdentityResult,
+} from './tollCardIdentity.ts';

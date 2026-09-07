@@ -1,3 +1,45 @@
+export const DEFAULT_FLEET_TZ = 'America/Jamaica';
+
+/** Offset (tz − UTC) in ms at a given instant, via Intl (no date-fns). */
+function tzOffsetMs(instant: Date, timeZone: string): number {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    hourCycle: 'h23',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  }).formatToParts(instant);
+  const get = (t: string) => Number(parts.find((p) => p.type === t)?.value);
+  const asUtc = Date.UTC(get('year'), get('month') - 1, get('day'), get('hour'), get('minute'), get('second'));
+  return asUtc - instant.getTime();
+}
+
+/**
+ * Build the exact instant for a wall clock in `timeZone` (fleet-tz explicit).
+ * Host-timezone independent: the same yyyy-MM-dd + HH:mm:ss always resolves to
+ * the same America/Jamaica instant on any CI/browser, so day/week bucketing is
+ * stable. Falls back to a naive local construction only if Intl is unavailable.
+ */
+export function zonedWallClockToDate(
+  ymd: string,
+  timeHms: string = '12:00:00',
+  timeZone: string = DEFAULT_FLEET_TZ,
+): Date {
+  const [y, m, d] = ymd.split('-').map(Number);
+  const [hh, mm, ss] = String(timeHms || '12:00:00').split(':').map(Number);
+  if (!y || !m || !d) return new Date(NaN);
+  try {
+    const guess = Date.UTC(y, m - 1, d, hh || 0, mm || 0, ss || 0);
+    const offset = tzOffsetMs(new Date(guess), timeZone);
+    return new Date(guess - offset);
+  } catch {
+    return new Date(y, m - 1, d, hh || 0, mm || 0, ss || 0);
+  }
+}
+
 /** yyyy-MM-dd → local calendar Date (avoids UTC-midnight shifting the day). */
 export function ymdToLocalDate(ymd: string): Date {
   const [y, m, d] = ymd.split('-').map(Number);

@@ -41,6 +41,9 @@ jobs:
       - name: Check fuel-core parity
         run: node scripts/check-fuel-core-parity.mjs
 
+      - name: Check no naive date slice (one-week rule)
+        run: node scripts/check-no-naive-date-slice.mjs
+
       - name: Check toll org-scope
         run: node scripts/check-toll-org-scope.mjs
 

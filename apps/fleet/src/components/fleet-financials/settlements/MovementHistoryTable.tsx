@@ -164,7 +164,8 @@ export function MovementHistoryTable({
             {groups.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={7} className="h-24 text-center text-slate-500">
-                  No cleared movements in this range.
+                  No cash collections or payouts in this range.
+                  Log cash and Collect receipts both show here.
                 </TableCell>
               </TableRow>
             ) : (

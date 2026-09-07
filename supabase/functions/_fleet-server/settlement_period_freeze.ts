@@ -32,6 +32,45 @@ export function assertPeriodNotFrozen(period: Parameters<typeof isPeriodFrozen>[
   }
 }
 
+export type FreezeMetaInput = {
+  actorId: string;
+  reason: string;
+  /** H-4 close hash of the complete row + input ids/versions. */
+  closeHash: string;
+  /** Defaults to now(). */
+  signedAt?: string;
+};
+
+/**
+ * Merge freeze/signature metadata into a period row's metadata blob (pure —
+ * caller persists the returned object). Sets:
+ *   metadata.periodFrozen         = true
+ *   metadata.signedWeek           = true
+ *   metadata.financeCore.signedAt = ISO timestamp
+ *   metadata.financeCore.closeHash / closedBy / closeReason
+ * After this, isPeriodFrozen() returns true and assertPeriodNotFrozen() blocks
+ * further movements.
+ */
+export function markPeriodFrozen(
+  row: { metadata?: Record<string, unknown> | null } | null | undefined,
+  { actorId, reason, closeHash, signedAt }: FreezeMetaInput,
+): Record<string, unknown> {
+  const meta = { ...(row?.metadata || {}) } as Record<string, unknown>;
+  const financeCore = { ...((meta.financeCore as Record<string, unknown>) || {}) };
+  const signedTs = signedAt || new Date().toISOString();
+
+  financeCore.periodFrozen = true;
+  financeCore.signedAt = signedTs;
+  financeCore.closeHash = closeHash;
+  financeCore.closedBy = actorId;
+  financeCore.closeReason = reason;
+
+  meta.periodFrozen = true;
+  meta.signedWeek = true;
+  meta.financeCore = financeCore;
+  return meta;
+}
+
 /** Collect / Pay / Write-off / runs — week must be fully over (periodEnd + 1). */
 export function assertPeriodEndedForSettlement(
   weekAnchor: string,

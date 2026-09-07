@@ -39,10 +39,14 @@ import { getServiceClient } from "./service_client.ts";
 import {
   computeTollFleetLossFromEvents,
   filterTollEventsInDateRange,
+  hasCanonicalChargedToDriverEvents,
+  isTollChargedToDriverEvent,
   isTollFleetLossEvent,
+  sumTollChargedToDriversFromEvents,
   tollEventDate,
   type TollLedgerLikeEvent,
 } from "../../../packages/toll-core/src/tollFleetLossNetting.ts";
+import { computeTollWeekNetting } from "../../../packages/toll-core/src/tollWeekNetting.ts";
 import { isTollIncludedInSpend } from "../../../packages/finance-core/src/tollLedgerIntegrity.ts";
 import {
   loadTollLedgerWithTrips,
@@ -262,7 +266,10 @@ function bucketFleetLossEventsByWeek(
 ): Map<string, TollLedgerLikeEvent[]> {
   const buckets = new Map<string, TollLedgerLikeEvent[]>();
   for (const e of events) {
-    if (!isTollFleetLossEvent(e)) continue;
+    // Net-loss consumers re-filter with isTollFleetLossEvent, so also carrying
+    // canonical wallet-charge events here lets computeTollWeekNetting derive
+    // "Charged to Drivers" from the SAME bucket (H-9) without a second query.
+    if (!isTollFleetLossEvent(e) && !isTollChargedToDriverEvent(e)) continue;
     const d = tollEventDate(e);
     if (!d) continue;
     const { key } = weekKeyFor(d, timezone);
@@ -285,7 +292,15 @@ async function loadTollFleetLossLedgerEvents(opts?: {
   const { listAllUnifiedCanonicalEvents } = await import("../_shared/unifiedLedger/queries.ts");
   return await listAllUnifiedCanonicalEvents({
     products: ["roam_driver", "roam_fleet"],
-    entryTypes: ["toll_charge", "toll_refund", "toll_charge_offset", "toll_reimbursement"],
+    entryTypes: [
+      "toll_charge",
+      "toll_refund",
+      "toll_charge_offset",
+      "toll_reimbursement",
+      // H-9: canonical wallet recoveries so "Charged to Drivers" can prefer events.
+      "toll_charged_to_driver",
+      "toll_charge_reversed",
+    ],
     driverId: opts?.driverId,
     from: opts?.from,
     to: opts?.to,
@@ -522,6 +537,12 @@ app.get(`${BASE}/periods`, requirePermission('toll.view'), async (c) => {
         const weekEvents =
           fleetLossByWeek.get(id) ??
           filterTollEventsInDateRange(scopedFleetLossEvents, startDate, endDate);
+        const weekNet = computeTollWeekNetting(weekEvents);
+        // H-9: prefer canonical toll_charged_to_driver events; fall back to the
+        // resolved-claim sum only for legacy weeks with no wallet events.
+        const chargedToDrivers = hasCanonicalChargedToDriverEvents(weekEvents)
+          ? sumTollChargedToDriversFromEvents(weekEvents)
+          : round2(f.chargedToDrivers);
         return {
           id,
           startDate,
@@ -534,9 +555,14 @@ app.get(`${BASE}/periods`, requirePermission('toll.view'), async (c) => {
             tollSpend: round2(f.tollSpend),
             reimbursedByPlatform: round2(reimbursedByPlatform),
             matchedDisputeRefundAmount: round2(f.matchedDisputeRefundAmount),
-            chargedToDrivers: round2(f.chargedToDrivers),
+            chargedToDrivers,
             // Same formula as Business Finance P&L Tolls (canonical ledger netting).
             netTollLoss: computeTollFleetLossFromEvents(weekEvents).net,
+            // Signed raw net + four-card identity residual (C-3/C-4): lets the UI
+            // detect when the cards don't reconcile instead of asserting they do.
+            netTollLossSigned: weekNet.netLoss,
+            identityResidual: weekNet.residual,
+            netTollLossClipped: weekNet.clipped,
             resolvedRefundsAmount: round2(f.resolvedRefundsAmount),
           },
         };

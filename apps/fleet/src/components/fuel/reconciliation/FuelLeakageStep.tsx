@@ -8,6 +8,7 @@ import { CompactVehicleList, type CompactVehicleRow } from './CompactVehicleList
 import { FuelGapAttribution } from './FuelGapAttribution';
 import { BucketReconciliationView } from '../BucketReconciliationView';
 import { unexplainedLabel } from '../../../utils/fuelReconGlossary';
+import { isOverExplainedFuelWeek } from '@roam/fuel-core';
 import type { FuelEntry, MileageAdjustment } from '../../../types/fuel';
 import type { Trip } from '../../../types/data';
 import type { Vehicle } from '../../../types/vehicle';
@@ -15,6 +16,8 @@ import type { DateRange } from 'react-day-picker';
 
 export type FuelLeakageStepProps = {
   leakage: number;
+  /** Total fuel spend for the week — used for the C-2 magnitude gate. */
+  totalSpend?: number;
   leakageRows: CompactVehicleRow[];
   queueIndex: number;
   vehicleSnaps: Array<{ vehicleId: string; misc: number }>;
@@ -36,6 +39,7 @@ export type FuelLeakageStepProps = {
 export function FuelLeakageStep(props: FuelLeakageStepProps) {
   const {
     leakage,
+    totalSpend = 0,
     leakageRows,
     queueIndex,
     vehicleSnaps,
@@ -54,8 +58,21 @@ export function FuelLeakageStep(props: FuelLeakageStepProps) {
     onRefresh,
   } = props;
 
+  const overExplained = isOverExplainedFuelWeek(totalSpend, leakage);
+  const overPct =
+    totalSpend > 0 ? Math.round((Math.abs(leakage) / totalSpend) * 100) : null;
+
   return (
     <div className="space-y-3">
+      {overExplained && (
+        <div
+          role="alert"
+          className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-[13px] text-amber-950"
+        >
+          Unexplained is {overPct != null ? `${overPct}%` : 'beyond'} of spend — this week
+          is not fit to finalize until efficiency / distance inputs are fixed.
+        </div>
+      )}
       <h3 className="px-1 text-[12px] font-semibold uppercase tracking-wide text-slate-500">
         Vehicles with {unexplainedLabel(leakage).toLowerCase()} gaps
       </h3>
@@ -86,8 +103,9 @@ export function FuelLeakageStep(props: FuelLeakageStepProps) {
         })}
       </div>
       <p className="text-[11px] text-slate-400">
-        Accept acknowledges leftover fuel spend; the unexplained amount stays on the week (not zeroed).
-        Gap acceptance is saved for the org when online. Keys: j/k queue · a accept · e edit · Enter continue
+        {overExplained
+          ? 'Do not accept this week — the residual is a modelling artefact, not real leakage. Fix odometer / efficiency data first.'
+          : 'Accept acknowledges leftover fuel spend; the unexplained amount stays on the week (not zeroed). Gap acceptance is saved for the org when online. Keys: j/k queue · a accept · e edit · Enter continue'}
       </p>
       {leakageRows.length > 0 && (
         <Button type="button" variant="outline" className="min-h-11" onClick={onToggleGapDetail}>

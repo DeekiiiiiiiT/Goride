@@ -1,0 +1,268 @@
+/**
+ * Cross-system close invariants (audit §6.4).
+ *
+ * `checkPeriodInvariants` (periodInvariants.ts) only checks a period row against
+ * ITSELF. §6.4 requires that the period projection also ties to the independent
+ * fuel / toll / earnings statements and to the week P&L — enforced as a
+ * PRECONDITION of closing, not overnight. Any failure blocks the close and
+ * produces a named, actionable drift record.
+ *
+ *   close(week) requires, for every driver:
+ *     |period.fuel_deduction         − fuelStatement.driverShare|       ≤ ε
+ *     |period.fuel_fleet_share       − fuelStatement.companyShare|      ≤ ε
+ *     |period.toll_spend             − tollStatement.totalSpend|        ≤ ε
+ *     |period.toll_charged_to_driver − tollStatement.chargedToDriver|   ≤ ε
+ *     |period.cash_collected         − earningsStatement.passengerCash| ≤ ε
+ *     earnings_gross = driver_share + fleet_share + tips_paid
+ *     Σ statement amounts by account = 0                (true double-entry)
+ *     Σ driver settlements for week  = BusinessFinance week P&L
+ */
+import { round2 } from './money.ts';
+
+/** JMD closing tolerance (1 cent). */
+export const CLOSE_INVARIANT_EPS = 0.01;
+
+export type CloseInvariantSeverity = 'block' | 'warn';
+
+export type CloseBlocker = {
+  /** Stable machine code, e.g. FUEL_DRIVER_SHARE_MISMATCH. */
+  code: string;
+  severity: CloseInvariantSeverity;
+  driverId?: string;
+  week?: string;
+  /** Value on the persisted period projection. */
+  persisted: number;
+  /** Value the independent source (statement / identity) expects. */
+  expected: number;
+  /** persisted − expected, rounded. */
+  delta: number;
+  message: string;
+};
+
+/** Period projection fields consumed by the close invariants (major units). */
+export type ClosePeriodRow = {
+  driver_id?: string | null;
+  period_anchor?: string | null;
+  fuel_deduction?: number | null;
+  fuel_fleet_share?: number | null;
+  toll_spend?: number | null;
+  toll_charged_to_driver?: number | null;
+  cash_collected?: number | null;
+  driver_share?: number | null;
+  fleet_share?: number | null;
+  tips_paid_to_driver?: number | null;
+  earnings_gross?: number | null;
+  settlement_amount?: number | null;
+};
+
+/** Independent statement values (major units) the period must tie to. */
+export type CloseFuelStatement = { driverShare: number; companyShare: number };
+export type CloseTollStatement = {
+  totalSpend: number;
+  chargedToDriver: number;
+  reimbursed?: number;
+  netLoss?: number;
+  cashWashSpend?: number;
+  tagSpend?: number;
+};
+export type CloseEarningsStatement = {
+  passengerCash: number;
+  driverShare?: number;
+  companyShare?: number;
+  tipsPaidToDriver?: number;
+};
+
+export type CloseInvariantInput = {
+  period: ClosePeriodRow;
+  fuelStatement?: CloseFuelStatement | null;
+  tollStatement?: CloseTollStatement | null;
+  earningsStatement?: CloseEarningsStatement | null;
+  /**
+   * Sum of every posted statement amount by account for the week. True
+   * double-entry closes to 0; a nonzero value is an unbalanced book.
+   */
+  statementAccountSum?: number | null;
+  /** Sum of driver settlements for the week — must equal businessWeekPnl. */
+  settlementSumForWeek?: number | null;
+  /** BusinessFinance week P&L for the same week. */
+  businessWeekPnl?: number | null;
+  eps?: number;
+};
+
+function num(v: unknown): number {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function pushIfDrift(
+  out: CloseBlocker[],
+  eps: number,
+  ctx: { driverId?: string; week?: string },
+  code: string,
+  message: string,
+  persisted: number,
+  expected: number,
+  severity: CloseInvariantSeverity = 'block',
+) {
+  const delta = round2(persisted - expected);
+  if (Math.abs(delta) <= eps) return;
+  out.push({
+    code,
+    severity,
+    driverId: ctx.driverId,
+    week: ctx.week,
+    persisted: round2(persisted),
+    expected: round2(expected),
+    delta,
+    message,
+  });
+}
+
+/**
+ * Run all §6.4 cross-system invariants for one driver-week. Returns every
+ * blocker; an empty array means the week ties and may close. Missing statements
+ * are themselves blockers — you cannot close a week whose sources are absent.
+ */
+export function checkCloseInvariants(input: CloseInvariantInput): CloseBlocker[] {
+  const eps = input.eps ?? CLOSE_INVARIANT_EPS;
+  const p = input.period;
+  const ctx = {
+    driverId: p.driver_id != null ? String(p.driver_id) : undefined,
+    week: p.period_anchor != null ? String(p.period_anchor).slice(0, 10) : undefined,
+  };
+  const out: CloseBlocker[] = [];
+
+  // ── Fuel lane ──────────────────────────────────────────────────────────────
+  if (!input.fuelStatement) {
+    out.push({
+      code: 'FUEL_STATEMENT_MISSING',
+      severity: 'block',
+      driverId: ctx.driverId,
+      week: ctx.week,
+      persisted: num(p.fuel_deduction),
+      expected: 0,
+      delta: round2(num(p.fuel_deduction)),
+      message: 'No fuel statement published for this driver-week',
+    });
+  } else {
+    pushIfDrift(
+      out, eps, ctx,
+      'FUEL_DRIVER_SHARE_MISMATCH',
+      'period.fuel_deduction ≠ fuelStatement.driverShare',
+      num(p.fuel_deduction), num(input.fuelStatement.driverShare),
+    );
+    pushIfDrift(
+      out, eps, ctx,
+      'FUEL_FLEET_SHARE_MISMATCH',
+      'period.fuel_fleet_share ≠ fuelStatement.companyShare',
+      num(p.fuel_fleet_share), num(input.fuelStatement.companyShare),
+    );
+  }
+
+  // ── Toll lane ────────────────────────────────────────────────────────────────
+  if (!input.tollStatement) {
+    out.push({
+      code: 'TOLL_STATEMENT_MISSING',
+      severity: 'block',
+      driverId: ctx.driverId,
+      week: ctx.week,
+      persisted: num(p.toll_spend),
+      expected: 0,
+      delta: round2(num(p.toll_spend)),
+      message: 'No toll statement published for this driver-week',
+    });
+  } else {
+    pushIfDrift(
+      out, eps, ctx,
+      'TOLL_SPEND_MISMATCH',
+      'period.toll_spend ≠ tollStatement.totalSpend',
+      num(p.toll_spend), num(input.tollStatement.totalSpend),
+    );
+    pushIfDrift(
+      out, eps, ctx,
+      'TOLL_CHARGED_MISMATCH',
+      'period.toll_charged_to_driver ≠ tollStatement.chargedToDriver',
+      num(p.toll_charged_to_driver), num(input.tollStatement.chargedToDriver),
+    );
+    // Toll four-card identity: Spend − Reimbursed − ChargedToDrivers − NetLoss ≈ 0
+    if (
+      input.tollStatement.reimbursed != null ||
+      input.tollStatement.netLoss != null
+    ) {
+      const residual = round2(
+        num(input.tollStatement.totalSpend) -
+          num(input.tollStatement.reimbursed) -
+          num(input.tollStatement.chargedToDriver) -
+          num(input.tollStatement.netLoss),
+      );
+      pushIfDrift(
+        out, eps, ctx,
+        'TOLL_IDENTITY_UNBALANCED',
+        'Spend − Reimbursed − ChargedToDrivers − NetLoss ≠ 0',
+        residual, 0,
+      );
+    }
+  }
+
+  // ── Earnings / cash lane ──────────────────────────────────────────────────────
+  if (!input.earningsStatement) {
+    out.push({
+      code: 'EARNINGS_STATEMENT_MISSING',
+      severity: 'block',
+      driverId: ctx.driverId,
+      week: ctx.week,
+      persisted: num(p.cash_collected),
+      expected: 0,
+      delta: round2(num(p.cash_collected)),
+      message: 'No earnings statement published for this driver-week',
+    });
+  } else {
+    pushIfDrift(
+      out, eps, ctx,
+      'CASH_COLLECTED_MISMATCH',
+      'period.cash_collected ≠ earningsStatement.passengerCash',
+      num(p.cash_collected), num(input.earningsStatement.passengerCash),
+    );
+  }
+
+  // ── earnings_gross = driver_share + fleet_share + tips_paid ────────────────────
+  const gross = num(p.earnings_gross);
+  if (gross > 0) {
+    const identity = round2(
+      num(p.driver_share) + num(p.fleet_share) + num(p.tips_paid_to_driver),
+    );
+    pushIfDrift(
+      out, eps, ctx,
+      'EARNINGS_GROSS_IDENTITY',
+      'earnings_gross ≠ driver_share + fleet_share + tips_paid',
+      gross, identity,
+    );
+  }
+
+  // ── Σ statement amounts by account = 0 (true double-entry) ─────────────────────
+  if (input.statementAccountSum != null) {
+    pushIfDrift(
+      out, eps, ctx,
+      'STATEMENT_ACCOUNTS_UNBALANCED',
+      'Σ statement amounts by account ≠ 0',
+      num(input.statementAccountSum), 0,
+    );
+  }
+
+  // ── Σ driver settlements for week = BusinessFinance week P&L ────────────────────
+  if (input.settlementSumForWeek != null && input.businessWeekPnl != null) {
+    pushIfDrift(
+      out, eps, ctx,
+      'SETTLEMENT_PNL_MISMATCH',
+      'Σ driver settlements for week ≠ BusinessFinance week P&L',
+      num(input.settlementSumForWeek), num(input.businessWeekPnl),
+    );
+  }
+
+  return out;
+}
+
+/** True when the week ties and no blocking invariant failed. */
+export function canCloseWeek(blockers: readonly CloseBlocker[]): boolean {
+  return !blockers.some((b) => b.severity === 'block');
+}

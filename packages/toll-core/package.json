@@ -17,6 +17,7 @@
     "./tollSettlement": "./src/tollSettlement.ts",
     "./tollPeriodBucket": "./src/tollPeriodBucket.ts",
     "./tollFleetLossNetting": "./src/tollFleetLossNetting.ts",
+    "./tollWeekNetting": "./src/tollWeekNetting.ts",
     "./tollReconPeriodStatus": "./src/tollReconPeriodStatus.ts",
     "./tollPeriodStepTypes": "./src/tollPeriodStepTypes.ts",
     "./tollPeriodDisputeHelpers": "./src/tollPeriodDisputeHelpers.ts",

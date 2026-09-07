@@ -5,6 +5,7 @@ import {
   driverShareRatioFromFuelRule,
   weekSnapshotMoneyDelta,
 } from './weekSnapshotEngine';
+import { getCategoryCoverageSplit } from './fuelCoverageSplit.ts';
 
 describe('weekSnapshotEngine', () => {
   it('Percentage 70% company → 30% driver ratio', () => {
@@ -85,5 +86,54 @@ describe('weekSnapshotEngine', () => {
       ]),
     });
     expect(raw[0].driverShare).toBeCloseTo(400, 5);
+  });
+
+  it('Fixed_Amount routes through getCategoryCoverageSplit (H-5, not flat 50%)', () => {
+    // $1000 spend, $600 weekly allowance → company covers 600, driver bears 400.
+    const rule = { coverageType: 'Fixed_Amount', coverageValue: 600 };
+    const expected = getCategoryCoverageSplit('rideShare', 1000, rule);
+
+    const snaps = assembleWeekSnapshotsFromRawEntries({
+      weekStart: '2026-08-25',
+      weekEnd: '2026-08-31',
+      orgId: 'org1',
+      entries: [
+        { id: 'e1', amount: 400, date: '2026-08-25', driverId: 'd1', vehicleId: 'v1' },
+        { id: 'e2', amount: 600, date: '2026-08-26', driverId: 'd1', vehicleId: 'v1' },
+      ],
+      fuelRuleByDriver: new Map([['d1', rule]]),
+    });
+
+    expect(snaps[0].totalGasCardCost).toBe(1000);
+    // Parity: assembler driver/company shares equal the category-split result…
+    expect(snaps[0].driverShare).toBeCloseTo(expected.driver, 5); // 400
+    expect(snaps[0].companyShare).toBeCloseTo(expected.company, 5); // 600
+    // …and are NOT the old broken flat 50% split.
+    expect(snaps[0].driverShare).not.toBeCloseTo(500, 5);
+  });
+
+  it('Fixed_Amount honours per-entry stamped ratios over the allowance', () => {
+    const rule = { coverageType: 'Fixed_Amount', coverageValue: 600 };
+    const snaps = assembleWeekSnapshotsFromRawEntries({
+      weekStart: '2026-08-25',
+      weekEnd: '2026-08-31',
+      orgId: 'org1',
+      entries: [
+        // stamped 100% driver → contributes full 200 to driverShare
+        {
+          id: 'e1',
+          amount: 200,
+          date: '2026-08-25',
+          driverId: 'd1',
+          vehicleId: 'v1',
+          driverShareRatio: 1,
+        },
+        // unstamped 800 → allowance 600 covers company, driver bears 200
+        { id: 'e2', amount: 800, date: '2026-08-26', driverId: 'd1', vehicleId: 'v1' },
+      ],
+      fuelRuleByDriver: new Map([['d1', rule]]),
+    });
+    expect(snaps[0].driverShare).toBeCloseTo(200 + 200, 5); // 400
+    expect(snaps[0].companyShare).toBeCloseTo(600, 5);
   });
 });

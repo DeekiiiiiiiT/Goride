@@ -122,6 +122,45 @@ export type {
   CashSettlementPersistFields,
   BuildCashSettlementPersistInput,
 } from './periodPersistBody.ts';
+export {
+  canonicalStringify,
+  buildCloseHash,
+  buildPeriodCloseHashPayload,
+} from './closeHash.ts';
+export type { PeriodCloseHashRow } from './closeHash.ts';
+export {
+  WEEK_STATEMENT_KINDS,
+  StatementsNotClosedError,
+  assertStatementsClosedForSettlement,
+  mapRowToWeekStatement,
+  weekStatementToRow,
+  hashWeekStatement,
+  shadowCompareStatementVsProjection,
+  shadowCompareStatementsVsProjection,
+  statementAmountMajor,
+} from './weekStatement.ts';
+export type {
+  WeekStatement,
+  WeekStatementKind,
+  WeekStatementStatus,
+  StatementAmountsMinor,
+  StatementShadowDrift,
+  LegacyProjectionForShadow,
+} from './weekStatement.ts';
+export {
+  CLOSE_INVARIANT_EPS,
+  checkCloseInvariants,
+  canCloseWeek,
+} from './closeInvariants.ts';
+export type {
+  CloseBlocker,
+  CloseInvariantSeverity,
+  CloseInvariantInput,
+  ClosePeriodRow,
+  CloseFuelStatement,
+  CloseTollStatement,
+  CloseEarningsStatement,
+} from './closeInvariants.ts';
 export * from './fixedExpenseOccurrences.ts';
 export * from './ledgerMoneyAggregate.ts';
 export * from './expenseHubJournal.ts';

@@ -26,6 +26,8 @@ export type SettlementQueueRow = {
   tripCount?: number;
   settlementStatus?: string;
   fuelFinalized?: boolean;
+  /** H-1: reconciliation-close gate. When false, `collect` must be blocked. */
+  moneyUnlocked?: boolean;
   collectKind?: 'driver_owes' | 'cash_held';
   overpaidAmount?: number;
   cashSourceMismatch?: number;

@@ -1292,7 +1292,15 @@ app.post(`${BASE}/:movementId/approve`, requireSettlementPerm("settlements.appro
 /** Phase 4: one queue read model — server filter/sort/page/aggregate in minor units. */
 app.get(`${BASE}/queue`, requirePermission("transactions.view"), async (c) => {
   try {
+    // M-4: fail-closed tenant scope. Without an org, the period list queries run
+    // unscoped and leak every tenant's settlement rows — refuse instead.
     const orgId = getOrgId(c);
+    if (!orgId) {
+      return c.json(
+        { error: "ORG_REQUIRED", message: "organizationId is required for the settlement queue" },
+        400,
+      );
+    }
     const view = (c.req.query("view") || "collect") as "collect" | "pay" | "reconciled";
     const groupBy = (c.req.query("groupBy") || "week") as "driver" | "week";
     const periodStart = c.req.query("periodStart") || c.req.query("weekFrom") || undefined;
@@ -1321,7 +1329,7 @@ app.get(`${BASE}/queue`, requirePermission("transactions.view"), async (c) => {
       periodEnd,
       minAmount,
       limit: 2000,
-      organizationId: orgId || undefined,
+      organizationId: orgId,
       serviceLine,
     };
 

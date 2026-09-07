@@ -5,6 +5,7 @@
 
 import {
   assembleLeftoverWeekMoney,
+  getCategoryCoverageSplit,
   type FuelCoverageRule,
 } from './fuelCoverageSplit.ts';
 
@@ -85,7 +86,14 @@ export type BuiltWeekSnapshot = {
 
 const EPS = 0.009;
 
-/** Company coverage % for rideshare-heavy weeks (primary gas-card bucket). */
+/**
+ * Company coverage % for rideshare-heavy weeks (primary gas-card bucket).
+ * H-5: Fixed_Amount is an absolute weekly allowance and CANNOT be expressed as a
+ * flat percentage — callers must route Fixed_Amount through getCategoryCoverageSplit
+ * (see the Fixed_Amount branch in assembleWeekSnapshotsFromCalcInput). This helper
+ * is only a percentage fallback for Percentage/Full rules; the 50 returned for
+ * Fixed_Amount is never used by the assembler.
+ */
 export function companyCoveragePercentFromFuelRule(rule?: WeekSnapFuelRule | null): number {
   if (!rule) return 50;
   if (rule.coverageType === 'Full') return 100;
@@ -159,6 +167,33 @@ export function assembleWeekSnapshotsFromCalcInput(input: {
       companyShare = money.companyShare;
       driverShare = money.driverShare;
       miscellaneousCost = money.miscellaneousCost;
+    } else if (rule?.coverageType === 'Fixed_Amount') {
+      // H-5: Fixed_Amount is an absolute weekly allowance, not a percentage. The
+      // old ratio path fell back to a flat 50% split (via companyCoveragePercent…)
+      // which is wrong. Apply the allowance once through getCategoryCoverageSplit
+      // over the settleable spend (treated as the rideShare bucket). Per-entry
+      // stamped ratios from browser calc still win.
+      let stampedDriver = 0;
+      let unstampedSpend = 0;
+      for (const e of entries) {
+        const amt = Number(e.amount) || 0;
+        if (amt <= 0) continue;
+        const stamped = Number(e.driverShareRatio);
+        if (Number.isFinite(stamped) && stamped >= 0 && stamped <= 1) {
+          stampedDriver += amt * stamped;
+        } else {
+          unstampedSpend += amt;
+        }
+      }
+      const split = getCategoryCoverageSplit(
+        'rideShare',
+        unstampedSpend,
+        rule as FuelCoverageRule,
+      );
+      driverShare = stampedDriver + split.driver;
+      companyShare = Math.max(0, totalGasCardCost - driverShare);
+      const explicitMisc = Number(ctx.miscellaneousCost);
+      miscellaneousCost = Number.isFinite(explicitMisc) ? explicitMisc : 0;
     } else {
       driverShare = 0;
       for (const e of entries) {

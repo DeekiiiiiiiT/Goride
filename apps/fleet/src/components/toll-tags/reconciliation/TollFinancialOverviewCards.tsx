@@ -14,6 +14,12 @@ export interface TollFinancialOverviewCardsProps {
   scopedDisputeRefund: number;
   chargedToDrivers: number;
   netTollLoss: number;
+  /**
+   * Four-card identity residual (Spend − Reimbursed − Charged − NetTollLoss).
+   * When |residual| > 1¢ the cards do NOT reconcile to a clean P&L identity, so
+   * the Net Toll Loss tooltip drops its "same as Business Finance P&L" claim.
+   */
+  identityResidual?: number;
   needsReviewCount: number;
   tollsNeedingReviewCount: number;
   refundsNeedingReviewCount: number;
@@ -71,12 +77,15 @@ export function TollFinancialOverviewCards({
   scopedDisputeRefund,
   chargedToDrivers,
   netTollLoss,
+  identityResidual,
   needsReviewCount,
   tollsNeedingReviewCount,
   refundsNeedingReviewCount,
   resolvedRefundsAmount,
   showNeedsReviewCard = true,
 }: TollFinancialOverviewCardsProps) {
+  // Only claim the P&L identity when the four cards actually reconcile.
+  const identityCloses = identityResidual == null || Math.abs(identityResidual) <= 0.01;
   const gridCols = showNeedsReviewCard
     ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-5'
     : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-4';
@@ -178,16 +187,29 @@ export function TollFinancialOverviewCards({
                 <HelpCircle className="h-3.5 w-3.5 text-rose-400 transition-colors hover:text-rose-600" />
               </TooltipTrigger>
               <TooltipContent>
-                <p className="max-w-[240px] text-xs">
-                  Fleet toll loss — same number as Business Finance → Profit &amp; Loss → Tolls
-                  (canonical charges minus cash-washes, personal, and real refunds). Spend /
-                  Reimbursed / Charged above are operational breakdown only.
-                </p>
+                {identityCloses ? (
+                  <p className="max-w-[240px] text-xs">
+                    Fleet toll loss — same number as Business Finance → Profit &amp; Loss → Tolls
+                    (canonical charges minus cash-washes, personal, and real refunds). Spend /
+                    Reimbursed / Charged above are operational breakdown only.
+                  </p>
+                ) : (
+                  <p className="max-w-[240px] text-xs">
+                    Fleet toll loss from the canonical ledger (charges minus cash-washes, personal,
+                    and real refunds). The four cards above don&apos;t fully reconcile this week
+                    ({formatJMD(Math.abs(identityResidual ?? 0), 2)} unexplained), so this is not yet
+                    a clean Business Finance P&amp;L identity — finish the week to close the gap.
+                  </p>
+                )}
               </TooltipContent>
             </Tooltip>
           </div>
           <h4 className="mt-1 text-2xl font-bold tracking-tight text-rose-600 tabular-nums">{formatJMD(netTollLoss, 2)}</h4>
-          <p className="mt-2 text-[11px] font-medium text-slate-500">Same as Business Finance P&amp;L</p>
+          <p className="mt-2 text-[11px] font-medium text-slate-500">
+            {identityCloses
+              ? 'Same as Business Finance P&L'
+              : `Cards off by ${formatJMD(Math.abs(identityResidual ?? 0), 2)} — not yet reconciled`}
+          </p>
         </GlassStatCard>
 
         {showNeedsReviewCard && (

@@ -27,6 +27,25 @@ describe('leftover / misc engine', () => {
     // rideShare company 60% of 700 = 420; personal 0%; misc 50% of 200 = 100
     expect(money.companyShare).toBeCloseTo(520, 5);
     expect(money.driverShare).toBeCloseTo(480, 5);
+    expect(money.overExplained).toBe(false);
+    expect(money.overExplainedCost).toBe(0);
+  });
+
+  it('floors negative misc for split and flags over-explained (C-2)', () => {
+    const money = assembleLeftoverWeekMoney({
+      totalSpend: 8000,
+      rideShareCost: 30000,
+      companyUsageCost: 2000,
+      deadheadCost: 2000,
+      personalUsageCost: 1898.73,
+      rule: { coverageType: 'Percentage', coverageValue: 50 },
+    });
+    expect(money.miscellaneousCost).toBeLessThan(0);
+    expect(money.overExplainedCost).toBeCloseTo(-money.miscellaneousCost, 2);
+    expect(money.costs.misc).toBe(0);
+    expect(money.overExplained).toBe(true);
+    expect(money.driverShare).toBeGreaterThanOrEqual(0);
+    expect(money.companyShare).toBeGreaterThanOrEqual(0);
   });
 
   it('weekSnapshotEngine preserves leftover when categoryCosts provided', () => {
