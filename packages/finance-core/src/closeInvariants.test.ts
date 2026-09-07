@@ -261,4 +261,103 @@ describe('checkCloseInvariants (§6.4)', () => {
     expect(orphan?.delta).toBe(8500);
     expect(canCloseWeek(blockers)).toBe(false);
   });
+
+  it('blocks when a live toll row has no money event (understated spend)', () => {
+    const blockers = checkCloseInvariants({
+      ...tyingWeek,
+      tollEventLedger: {
+        orphanCount: 0,
+        orphanAmountMajor: 0,
+        eventSpendMajor: 4620,
+        ledgerSpendMajor: 5260,
+        missingEventCount: 2,
+        missingEventAmountMajor: 640,
+      },
+    });
+    const missing = blockers.find((b) => b.code === 'TOLL_EVENT_MISSING');
+    expect(missing).toBeTruthy();
+    expect(missing?.severity).toBe('block');
+    expect(missing?.delta).toBe(640);
+    // One cause must not raise two blockers.
+    expect(blockers.filter((b) => b.code === 'TOLL_EVENT_ORPHANED')).toHaveLength(0);
+    expect(canCloseWeek(blockers)).toBe(false);
+  });
+
+  it('blocks when toll_usage events sit on quarantined ledger rows', () => {
+    const blockers = checkCloseInvariants({
+      ...tyingWeek,
+      tollEventLedger: {
+        orphanCount: 0,
+        orphanAmountMajor: 0,
+        eventSpendMajor: 10580,
+        ledgerSpendMajor: 5060,
+        ineligibleEventCount: 12,
+        ineligibleEventAmountMajor: 5520,
+      },
+    });
+    const ineligible = blockers.find((b) => b.code === 'TOLL_EVENT_INELIGIBLE');
+    expect(ineligible).toBeTruthy();
+    expect(ineligible?.severity).toBe('block');
+    expect(ineligible?.delta).toBe(5520);
+    expect(blockers.filter((b) => b.code === 'TOLL_EVENT_ORPHANED')).toHaveLength(0);
+    expect(canCloseWeek(blockers)).toBe(false);
+  });
+
+  it('blocks when toll_usage amount ≠ live ledger amount', () => {
+    const blockers = checkCloseInvariants({
+      ...tyingWeek,
+      tollEventLedger: {
+        orphanCount: 0,
+        orphanAmountMajor: 0,
+        eventSpendMajor: 5910,
+        ledgerSpendMajor: 5060,
+        amountMismatchCount: 1,
+        amountMismatchAmountMajor: 850,
+      },
+    });
+    const mismatch = blockers.find((b) => b.code === 'TOLL_EVENT_AMOUNT_MISMATCH');
+    expect(mismatch).toBeTruthy();
+    expect(mismatch?.severity).toBe('block');
+    expect(mismatch?.delta).toBe(850);
+    expect(blockers.filter((b) => b.code === 'TOLL_EVENT_ORPHANED')).toHaveLength(0);
+    expect(canCloseWeek(blockers)).toBe(false);
+  });
+
+  it('names the missing payment method instead of a bare split mismatch', () => {
+    const blockers = checkCloseInvariants({
+      ...tyingWeek,
+      period: {
+        ...tyingWeek.period,
+        toll_spend: 5260,
+        toll_cash_spend: 640,
+        toll_tag_spend: 4250,
+      },
+      tollUnknownPmCount: 1,
+      tollUnknownPmAmount: 370,
+    });
+    const unknown = blockers.find((b) => b.code === 'TOLL_PAYMENT_METHOD_UNKNOWN');
+    expect(unknown).toBeTruthy();
+    expect(unknown?.severity).toBe('block');
+    expect(unknown?.delta).toBe(370);
+    expect(unknown?.message).toContain('payment method');
+    // The split gap is fully explained — do not also raise TOLL_SPEND_SPLIT.
+    expect(blockers.filter((b) => b.code === 'TOLL_SPEND_SPLIT')).toHaveLength(0);
+    expect(canCloseWeek(blockers)).toBe(false);
+  });
+
+  it('still raises TOLL_SPEND_SPLIT when unknown PM does not explain the gap', () => {
+    const blockers = checkCloseInvariants({
+      ...tyingWeek,
+      period: {
+        ...tyingWeek.period,
+        toll_spend: 5260,
+        toll_cash_spend: 640,
+        toll_tag_spend: 3000,
+      },
+      tollUnknownPmCount: 1,
+      tollUnknownPmAmount: 370,
+    });
+    expect(blockers.some((b) => b.code === 'TOLL_PAYMENT_METHOD_UNKNOWN')).toBe(true);
+    expect(blockers.some((b) => b.code === 'TOLL_SPEND_SPLIT')).toBe(true);
+  });
 });

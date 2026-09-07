@@ -270,7 +270,12 @@ Deno.serve(async (req) => {
                     periodAnchor: week,
                     driverId: String(p.driver_id),
                   });
-                  if (sum.orphanCount > 0 || Math.abs(sum.eventSpendMajor - sum.ledgerSpendMajor) > 0.01) {
+                  if (
+                    sum.orphanCount > 0 ||
+                    sum.ineligibleEventCount > 0 ||
+                    sum.amountMismatchCount > 0 ||
+                    Math.abs(sum.eventSpendMajor - sum.ledgerSpendMajor) > 0.01
+                  ) {
                     const { upsertFinanceReconDrifts } = await import(
                       "../_fleet-server/finance_recon_drift.ts"
                     );
@@ -286,7 +291,9 @@ Deno.serve(async (req) => {
                           statementMinor: Math.round(sum.eventSpendMajor * 100),
                           engineMinor: Math.round(sum.ledgerSpendMajor * 100),
                           deltaMinor: Math.round(
-                            (sum.orphanAmountMajor || sum.eventSpendMajor - sum.ledgerSpendMajor) *
+                            (sum.orphanAmountMajor ||
+                              sum.ineligibleEventAmountMajor ||
+                              sum.eventSpendMajor - sum.ledgerSpendMajor) *
                               100,
                           ),
                         },
@@ -298,6 +305,12 @@ Deno.serve(async (req) => {
                     orphanAmountMajor: sum.orphanAmountMajor,
                     eventSpendMajor: sum.eventSpendMajor,
                     ledgerSpendMajor: sum.ledgerSpendMajor,
+                    missingEventCount: sum.missingEventCount,
+                    missingEventAmountMajor: sum.missingEventAmountMajor,
+                    ineligibleEventCount: sum.ineligibleEventCount,
+                    ineligibleEventAmountMajor: sum.ineligibleEventAmountMajor,
+                    amountMismatchCount: sum.amountMismatchCount,
+                    amountMismatchAmountMajor: sum.amountMismatchAmountMajor,
                   };
                 } catch {
                   return null;

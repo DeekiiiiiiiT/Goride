@@ -813,4 +813,78 @@ app.post(
   },
 );
 
+// ─── GET|POST /toll/periods/:weekKey/ineligible-usage-report ───────────────
+// Audit §10: dry-run (default) lists active toll_usage on quarantined/voided/
+// amount-mismatched ledger rows. POST ?apply=1 (or body.apply) reverses them.
+app.get(
+  `/make-server-37f42386/toll/periods/:weekKey/ineligible-usage-report`,
+  requirePermission("toll.manage"),
+  async (c: Context) => {
+    try {
+      const orgId = getOrgId(c);
+      if (!orgId) return c.json({ error: "ORG_REQUIRED" }, 400);
+      const weekKey = String(c.req.param("weekKey") || "").slice(0, 10);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(weekKey)) {
+        return c.json({ error: "weekKey (YYYY-MM-DD Monday) is required" }, 400);
+      }
+      const sampleLimit = Math.min(
+        Math.max(Number(c.req.query("sampleLimit") || 50) || 50, 1),
+        500,
+      );
+      const driverId = c.req.query("driverId") || null;
+      const { reportOrReverseIneligibleTollUsage } = await import("./toll_financial_reset.ts");
+      const report = await reportOrReverseIneligibleTollUsage({
+        periodAnchor: weekKey,
+        driverId,
+        apply: false,
+        sampleLimit,
+        organizationId: orgId,
+      });
+      return c.json({ success: true, weekKey, ...report });
+    } catch (e: any) {
+      return safeErrorResponse(c, e, "TollPeriodController.ineligibleUsageReportGet");
+    }
+  },
+);
+
+app.post(
+  `/make-server-37f42386/toll/periods/:weekKey/ineligible-usage-report`,
+  requirePermission("toll.manage"),
+  async (c: Context) => {
+    try {
+      const orgId = getOrgId(c);
+      if (!orgId) return c.json({ error: "ORG_REQUIRED" }, 400);
+      const weekKey = String(c.req.param("weekKey") || "").slice(0, 10);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(weekKey)) {
+        return c.json({ error: "weekKey (YYYY-MM-DD Monday) is required" }, 400);
+      }
+      const body = (await c.req.json().catch(() => ({}))) as {
+        driverId?: string;
+        apply?: boolean;
+        rebuild?: boolean;
+        sampleLimit?: number;
+      };
+      const apply =
+        body.apply === true ||
+        c.req.query("apply") === "1";
+      const { reportOrReverseIneligibleTollUsage } = await import("./toll_financial_reset.ts");
+      const report = await reportOrReverseIneligibleTollUsage({
+        periodAnchor: weekKey,
+        driverId: body.driverId || null,
+        apply,
+        rebuild: body.rebuild !== false,
+        sampleLimit: body.sampleLimit,
+        organizationId: orgId,
+      });
+      return c.json({
+        success: (report.errors || []).length === 0,
+        weekKey,
+        ...report,
+      });
+    } catch (e: any) {
+      return safeErrorResponse(c, e, "TollPeriodController.ineligibleUsageReportPost");
+    }
+  },
+);
+
 export default app;

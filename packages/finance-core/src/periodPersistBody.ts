@@ -24,6 +24,13 @@ export type FinanceCoreMetaInput = {
   cashSourceMismatch?: number;
   overpaidAmount: number;
   tollCashWashEligible: number;
+  /**
+   * Toll rows counted in spend whose paymentMethod is neither cash nor tag.
+   * They land in toll_spend but in neither split bucket, so TOLL_SPEND_SPLIT
+   * would fire with no diagnosis — these carry the reason (toll audit §6.3).
+   */
+  tollUnknownPmCount?: number;
+  tollUnknownPmAmount?: number;
   tollsClear: boolean;
   moneyUnlocked: boolean;
   cashHeldClamped: boolean;
@@ -90,6 +97,8 @@ export function buildPeriodMetadata(input: BuildPeriodMetadataInput): Record<str
       unclampedCashHeld: fc.unclampedCashHeld,
       overpaidAmount: round2(fc.overpaidAmount),
       tollCashWashEligible: round2(fc.tollCashWashEligible),
+      tollUnknownPmCount: Number(fc.tollUnknownPmCount) || 0,
+      tollUnknownPmAmount: round2(Number(fc.tollUnknownPmAmount) || 0),
       tollsClear: fc.tollsClear,
       moneyUnlocked: fc.moneyUnlocked,
       ...(fc.projectionSources ? { projectionSources: fc.projectionSources } : {}),

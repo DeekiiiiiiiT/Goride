@@ -155,8 +155,10 @@ app.get(BASE, async (c) => {
     const access = await assertCanReadDriverPeriods(user, driverId);
     if (!access.ok) return c.json(access.body, access.status);
 
-    // Drain a tiny outbox slice — list must stay fast for Expenses/Settlement.
-    await processFinancialOutbox(8);
+    // List must stay fast for Expenses/Settlement. Do NOT drain outbox here —
+    // processFinancialOutbox loads full rebuild context and 546s the worker
+    // after large reverse batches, which forces Expenses onto a stale tx-sum
+    // fallback that ignores quarantine. Outbox is drained by rebuild/cron paths.
     let periods = await listPeriodsAcrossAliases(driverId, access.aliasMap);
     if (periods.length === 0) {
       // First paint: rebuild once for the requested id (shared context).

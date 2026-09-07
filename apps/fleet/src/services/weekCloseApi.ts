@@ -246,4 +246,134 @@ export const weekCloseApi = {
       errors: Array.isArray(j.errors) ? j.errors.map(String) : [],
     };
   },
+
+  /**
+   * Audit §10 — dry-run sample of active toll_usage on quarantined/voided/
+   * amount-mismatched ledger rows (tag vs cash impact).
+   */
+  async ineligibleTollUsageReport(
+    weekKey: string,
+    opts?: { driverId?: string; sampleLimit?: number },
+  ): Promise<{
+    dryRun: boolean;
+    totals: {
+      count: number;
+      amountMajor: number;
+      tagAmountMajor: number;
+      cashAmountMajor: number;
+    };
+    byWeek: Array<{
+      weekKey: string;
+      count: number;
+      amountMajor: number;
+      tagAmountMajor: number;
+      cashAmountMajor: number;
+    }>;
+    rows: Array<{
+      sourceId: string;
+      eventId: string;
+      reason: string;
+      eventAmountMajor: number;
+      paymentBucket: string;
+      quarantineReason: string | null;
+      plaza: string | null;
+      date: string | null;
+    }>;
+  }> {
+    const qs = new URLSearchParams();
+    if (opts?.driverId) qs.set('driverId', opts.driverId);
+    qs.set('sampleLimit', String(opts?.sampleLimit ?? 50));
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.financial}/toll/periods/${encodeURIComponent(weekKey)}/ineligible-usage-report?${qs}`,
+      { headers: await requireAuthHeaders(null) },
+    );
+    if (!response.ok) {
+      const err = await parseErrorPayload(response, 'Ineligible toll usage report failed');
+      throw new WeekCloseApiError(err.message, response.status, err.code, err.details);
+    }
+    return response.json() as Promise<{
+      dryRun: boolean;
+      totals: {
+        count: number;
+        amountMajor: number;
+        tagAmountMajor: number;
+        cashAmountMajor: number;
+      };
+      byWeek: Array<{
+        weekKey: string;
+        count: number;
+        amountMajor: number;
+        tagAmountMajor: number;
+        cashAmountMajor: number;
+      }>;
+      rows: Array<{
+        sourceId: string;
+        eventId: string;
+        reason: string;
+        eventAmountMajor: number;
+        paymentBucket: string;
+        quarantineReason: string | null;
+        plaza: string | null;
+        date: string | null;
+      }>;
+    }>;
+  },
+
+  /**
+   * Reverse ineligible / amount-mismatch toll_usage for a week, then rebuild.
+   * Re-open closed weeks first; force-seal tolls after.
+   */
+  async repairIneligibleTollEvents(
+    weekKey: string,
+    opts?: { driverId?: string; rebuild?: boolean },
+  ): Promise<{
+    eventsReversed: number;
+    periodsRebuilt: number;
+    totals: {
+      count: number;
+      amountMajor: number;
+      tagAmountMajor: number;
+      cashAmountMajor: number;
+    };
+    errors: string[];
+  }> {
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.financial}/toll/periods/${encodeURIComponent(weekKey)}/ineligible-usage-report`,
+      {
+        method: 'POST',
+        headers: await requireAuthHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({
+          driverId: opts?.driverId,
+          apply: true,
+          rebuild: opts?.rebuild !== false,
+        }),
+      },
+    );
+    if (!response.ok) {
+      const err = await parseErrorPayload(response, 'Repair ineligible toll events failed');
+      throw new WeekCloseApiError(err.message, response.status, err.code, err.details);
+    }
+    const j = (await response.json()) as {
+      eventsReversed?: number;
+      periodsRebuilt?: number;
+      totals?: {
+        count?: number;
+        amountMajor?: number;
+        tagAmountMajor?: number;
+        cashAmountMajor?: number;
+      };
+      errors?: string[];
+    };
+    return {
+      eventsReversed: Number(j.eventsReversed) || 0,
+      periodsRebuilt: Number(j.periodsRebuilt) || 0,
+      totals: {
+        count: Number(j.totals?.count) || 0,
+        amountMajor: Number(j.totals?.amountMajor) || 0,
+        tagAmountMajor: Number(j.totals?.tagAmountMajor) || 0,
+        cashAmountMajor: Number(j.totals?.cashAmountMajor) || 0,
+      },
+      errors: Array.isArray(j.errors) ? j.errors.map(String) : [],
+    };
+  },
 };

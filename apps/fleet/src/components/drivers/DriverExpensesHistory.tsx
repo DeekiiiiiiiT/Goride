@@ -93,7 +93,13 @@ export function DriverExpensesHistory({
 
   // Shared weekly financial projection (SQL) — same SSOT as Settlement/Payout/Toll Recon.
   const sharedPeriodsQuery = useDriverFinancialPeriods(driverId);
-  const sharedPeriods = sharedPeriodsQuery.isError ? null : (sharedPeriodsQuery.data ?? null);
+  // Never treat "loading / error" as "no periods" — that used to fall through to a
+  // client tx-sum that ignores quarantine and inflated Expenses (Audit §10).
+  const sharedPeriods = sharedPeriodsQuery.data ?? null;
+  const weeklySsotPending =
+    periodType === 'weekly' &&
+    (sharedPeriodsQuery.isPending || (sharedPeriodsQuery.isFetching && !sharedPeriods));
+  const weeklySsotFailed = periodType === 'weekly' && sharedPeriodsQuery.isError && !sharedPeriods;
 
   /** Monday keys locked via recon (fuel_status=finalized) — used for daily/monthly fallback. */
   const lockedWeekStarts = useMemo(() => {
@@ -205,40 +211,46 @@ export function DriverExpensesHistory({
   // Prefer shared SQL projection when available (enterprise SSOT).
   // ────────────────────────────────────────────────────────────
   const periodData: ExpensePeriodRow[] = useMemo(() => {
-    if (periodType === 'weekly' && sharedPeriods && sharedPeriods.length > 0) {
-      return sharedPeriods.map((p: any) => {
-        const start = ymdToLocalDate(String(p.periodAnchor).slice(0, 10));
-        const end = ymdToLocalDate(String(p.periodEnd).slice(0, 10));
-        const unmatched = Number(p.tollUnmatchedCount) || 0;
-        const reconciled = Number(p.tollReconciledCount) || 0;
-        return {
-          periodStart: start,
-          periodEnd: end,
-          tollExpenses: Number(p.tollSpend) || 0,
-          tollCharged: Number(p.tollChargedToDriver) || 0,
-          fuelDeduction: Number(p.fuelDeduction) || 0,
-          fuelFleetShare: Number(p.fuelFleetShare) || 0,
-          fuelDriverSpend: Number(p.fuelDriverSpend) || 0,
-          fuelGasCardSpend: Number(p.fuelGasCardSpend) || 0,
-          fuelNetPay: Number(p.fuelNetPay) || 0,
-          fuelDraftEstimate: 0,
-          // SoT is fuelStatus from recon lock — do not trust legacy fuelFinalized alone.
-          isFinalized: String(p.fuelStatus || '').toLowerCase() === 'finalized',
-          fuelStatus: String(p.fuelStatus || 'n/a'),
-          totalExpenses:
-            Math.max(0, (Number(p.tollSpend) || 0) - (Number(p.tollReimbursed) || 0)) +
-            (Number(p.fuelDeduction) || 0) +
-            (Number(p.tollChargedToDriver) || 0),
-          transactionCount: reconciled + unmatched,
-          tollReconciled: reconciled,
-          tollUnreconciled: unmatched,
-          tollInProgress: String(p.tollStatus || '') === 'in_progress',
-          tollCashSpent: Number(p.tollCashSpend) || 0,
-          tollTagSpent: Number(p.tollTagSpend) || 0,
-          disputeRefundMatched: Number(p.disputeRefundMatched) || 0,
-          disputeRefundUnmatched: Number(p.disputeRefundUnmatched) || 0,
-        } as ExpensePeriodRow;
-      });
+    if (periodType === 'weekly') {
+      if (weeklySsotPending) return [];
+      if (weeklySsotFailed) return [];
+      if (sharedPeriods && sharedPeriods.length > 0) {
+        return sharedPeriods.map((p: any) => {
+          const start = ymdToLocalDate(String(p.periodAnchor).slice(0, 10));
+          const end = ymdToLocalDate(String(p.periodEnd).slice(0, 10));
+          const unmatched = Number(p.tollUnmatchedCount) || 0;
+          const reconciled = Number(p.tollReconciledCount) || 0;
+          return {
+            periodStart: start,
+            periodEnd: end,
+            tollExpenses: Number(p.tollSpend) || 0,
+            tollCharged: Number(p.tollChargedToDriver) || 0,
+            fuelDeduction: Number(p.fuelDeduction) || 0,
+            fuelFleetShare: Number(p.fuelFleetShare) || 0,
+            fuelDriverSpend: Number(p.fuelDriverSpend) || 0,
+            fuelGasCardSpend: Number(p.fuelGasCardSpend) || 0,
+            fuelNetPay: Number(p.fuelNetPay) || 0,
+            fuelDraftEstimate: 0,
+            // SoT is fuelStatus from recon lock — do not trust legacy fuelFinalized alone.
+            isFinalized: String(p.fuelStatus || '').toLowerCase() === 'finalized',
+            fuelStatus: String(p.fuelStatus || 'n/a'),
+            totalExpenses:
+              Math.max(0, (Number(p.tollSpend) || 0) - (Number(p.tollReimbursed) || 0)) +
+              (Number(p.fuelDeduction) || 0) +
+              (Number(p.tollChargedToDriver) || 0),
+            transactionCount: reconciled + unmatched,
+            tollReconciled: reconciled,
+            tollUnreconciled: unmatched,
+            tollInProgress: String(p.tollStatus || '') === 'in_progress',
+            tollCashSpent: Number(p.tollCashSpend) || 0,
+            tollTagSpent: Number(p.tollTagSpend) || 0,
+            disputeRefundMatched: Number(p.disputeRefundMatched) || 0,
+            disputeRefundUnmatched: Number(p.disputeRefundUnmatched) || 0,
+          } as ExpensePeriodRow;
+        });
+      }
+      // Successful empty SSOT — do not invent toll money from raw txs.
+      return [];
     }
 
     if (timeBuckets.length === 0) return [];
@@ -379,7 +391,7 @@ export function DriverExpensesHistory({
   }, [
     transactions, trips, timeBuckets, finalizedReports, disputeRefunds, periodType, fleetTz,
     driverVehicleList, draftFuelEntries, draftAdjustments, draftScenarios, sharedPeriods,
-    lockedWeekStarts,
+    lockedWeekStarts, weeklySsotPending, weeklySsotFailed,
   ]);
 
   // ────────────────────────────────────────────────────────────
@@ -716,7 +728,16 @@ export function DriverExpensesHistory({
 
           {periodData.length === 0 ? (
             <div className="text-center py-12 text-slate-400 text-sm">
-              No expense transactions found.
+              {weeklySsotPending ? (
+                <span className="inline-flex items-center gap-2">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Loading weekly expenses…
+                </span>
+              ) : weeklySsotFailed ? (
+                'Could not load weekly expenses — refresh and try again.'
+              ) : (
+                'No expense transactions found.'
+              )}
             </div>
           ) : (
             <>

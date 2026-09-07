@@ -791,6 +791,8 @@ export async function rebuildDriverFinancialPeriod(
   let tollCashSpend = 0;
   let tollTagSpend = 0;
   let tollCashWashEligible = 0;
+  let tollUnknownPmCount = 0;
+  let tollUnknownPmAmount = 0;
   let tollReconciledCount = 0;
   let tollUnmatchedCount = 0;
   let tollWorkflowActionable = 0;
@@ -808,7 +810,13 @@ export async function rebuildDriverFinancialPeriod(
       tollSpend += amt;
       if (cash) tollCashSpend += amt;
       else if (pmClass === "tag") tollTagSpend += amt;
-      // unknown PM: counts in total only → toll_spend_split blocks close
+      else {
+        // Unknown PM counts in total only, so the split breaks by exactly this
+        // amount. Track it so close reports TOLL_PAYMENT_METHOD_UNKNOWN (which
+        // names the fix) rather than a bare TOLL_SPEND_SPLIT.
+        tollUnknownPmCount += 1;
+        tollUnknownPmAmount += amt;
+      }
       if (cash && handled) tollCashWashEligible += amt;
     }
     if (isPlatformReimbursedPlazaToll(tx)) plazaReimbursed += amt;
@@ -1014,6 +1022,11 @@ export async function rebuildDriverFinancialPeriod(
       tollSpend = round2(tollSpend + amt);
       if (cash) tollCashSpend = round2(tollCashSpend + amt);
       else if (pmClass === "tag") tollTagSpend = round2(tollTagSpend + amt);
+      else {
+        // Same split break as the ledger path — carry the reason to close.
+        tollUnknownPmCount += 1;
+        tollUnknownPmAmount = round2(tollUnknownPmAmount + amt);
+      }
       if (cash && handled) tollCashWashEligible = round2(tollCashWashEligible + amt);
     }
   }
@@ -1285,6 +1298,8 @@ export async function rebuildDriverFinancialPeriod(
       cashSourceMismatch: cashBase.cashSourceMismatch,
       overpaidAmount,
       tollCashWashEligible,
+      tollUnknownPmCount,
+      tollUnknownPmAmount: round2(tollUnknownPmAmount),
       tollsClear: derived.tollsClear,
       moneyUnlocked: derived.moneyUnlocked,
       cashHeldClamped: settled.adjCashBalance < -0.005,

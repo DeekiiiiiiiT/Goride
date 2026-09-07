@@ -3,7 +3,7 @@
 **Reported:** Aug 10 – Aug 16, 2026 shows **Tag Tolls $13,120.00** on the driver Expenses screen — visibly out of line with every other week.
 **Driver:** `73e5b1dc-01b4-45ee-a34a-25a3256b9841` · **Org:** `8cfa606a-f6ea-4ccb-a2b2-1d2cc323a823`
 **Date:** 2026-09-07
-**Mode:** Read-only audit — code inspection plus read-only SQL against production. **No code changed, no data changed.**
+**Mode:** Diagnosis was read-only. Aug 10 orphan repair **was applied in production** (see §6.6 / remediation doc). **Audit §10 remains open:** Expenses still counts quarantined/voided `toll_usage` that Toll Recon excludes (~$116k fleet-wide) — remediated via reverse-on-quarantine restatement + eligibility close blockers.
 
 ---
 
@@ -271,9 +271,75 @@ I could not confirm this fires today — Aug 10's cash figure ($640) matches its
 
 ---
 
+## 6.6 Implementation status — verified 2026-09-07
+
+Re-audited at `8f178574` plus working-tree changes. **All five code recommendations are implemented and wired.** Verification: `finance-core` **136/136** · `fuel-core` **38/38** · `toll-core` **53/53** · `@roam/fleet` **1,306 passed / 1 skipped** · **9/9 CI guards pass**.
+
+| Item | Status | Where |
+|---|---|---|
+| §6.1 cutover overwrites cash/tag split | ✅ Done | `driver_financial_periods.ts` — statement `cashWashSpend` / `tagSpend` now consumed |
+| §6.2 `TOLL_SPEND_SPLIT` close blocker | ✅ Done | `closeInvariants.ts` |
+| §6.3 quarantine applies to all payment methods | ✅ Done | `matchesSyntheticTollStructuralSignature` |
+| §7.2 reverse events when a toll dies | ✅ Done | new `toll_financial_reset.ts`, wired to delete / void / period-reset / bulk-delete / nightly |
+| §7.3 engine-vs-ledger orphan check | ✅ Done | new `tollEventLedgerRecon.ts` + `TOLL_EVENT_ORPHANED` block, at close preview, close and nightly |
+
+### Three gaps found during verification — now also fixed
+
+**1. `TOLL_SPEND_SPLIT` fired with no diagnosis.** §6.3 introduced an `unknown` payment-method class that deliberately lands in `toll_spend` but in neither split bucket, so the split blocker trips. That is the right instinct — fail loud — but the operator saw only *"period.toll_spend ≠ toll_cash_spend + toll_tag_spend"*, which names no cause and offers no fix. A single toll row with a blank `paymentMethod` would have hard-blocked the week with nothing to act on.
+
+Added `TOLL_PAYMENT_METHOD_UNKNOWN` (severity `block`):
+
+> `1 toll row(s) have no cash/tag payment method ($370.00) — set the payment method on each, then rebuild the week before close`
+
+The projection now counts unknown-PM rows on **both** the ledger and events paths into `metadata.financeCore.tollUnknownPm{Count,Amount}`. When the split gap is fully explained by those rows, `TOLL_SPEND_SPLIT` is suppressed so one cause raises one blocker; when it is *not* fully explained, both fire.
+
+*Blast radius checked: **zero** unknown-PM rows in production today (0 of 284 ledger rows, 0 of 460 events). This trap was latent, not active.*
+
+**2. The orphan check was one-directional.** `summarizeTollUsageOrphansForWeek` walked the event set and asked "does a ledger row still exist?" — so it caught *overstatement* (your $8,500) but was blind to the opposite: a live toll row with **no** money event, which understates spend and would never have been noticed. `ledgerSpendMajor` was computed only over ids that already had events, so the two sides always agreed.
+
+The probe now scans the full week's `fleet.toll_ledger` and reports `missingEventCount` / `missingEventAmountMajor`, surfaced as `TOLL_EVENT_MISSING` (severity `block`):
+
+> `2 live toll row(s) have no money event ($640.00 of spend not counted) — re-post before close`
+
+Same one-cause-one-blocker rule applies: when a gap is explained by missing events, the generic `TOLL_EVENT_ORPHANED` drift is suppressed.
+
+**3. `cashSourceMismatch` was never declared on `CloseInvariantInput`.** It is read at `closeInvariants.ts:457` and `:462` to power the M-1 block, but the field was missing from the type — the doc comment sat directly above the next field with nothing under it. Every caller passing it was an excess-property type error, and the read inside the function was untyped. **M-1's cash-mismatch block was not type-safe.** Declared it.
+
+Deno typecheck on `week_close.ts` went from **62 → 59** errors: none added, three pre-existing removed. The remaining 59 (and 57 on `driver_financial_periods.ts`) pre-date this work — mostly `unifiedLedger/queries.ts` `driverId` optionality — and are out of scope here.
+
+### One gap deliberately **not** fixed — needs your decision
+
+**Quarantine is inert on the events path.** When `PROJECTION_EVENTS_TOLLS` is on (it is), the projection sums `financial_events` and applies **no** `isTollIncludedInSpend` gate. The KV/ledger path filters quarantined rows via `scopedTolls`; the events path does not filter at all. So the whole Audit 1.1 quarantine — including the §6.3 improvement just made — **has no effect on live numbers today.**
+
+> ### ⚠️ CORRECTION (see §10)
+>
+> **The sentence above is wrong, and it was the most consequential error in this
+> document.** "No effect on live numbers" was an assumption I did not test. It has
+> a **$116,480** effect across 32 weeks — it is the single largest defect in the
+> toll lane, larger than the $8,500 orphan this audit was opened for. I ranked it
+> as a latent decision item when it was an active, visible, six-figure divergence.
+> §10 has the measured numbers.
+
+I did not change this, because applying quarantine to the events path would **retroactively remove spend from historical closed weeks**. That is a money change on signed data and it is your call, not mine. Two options:
+
+- **Filter at read** — skip events whose `source_id` resolves to a quarantined toll. Immediate, retroactive, changes closed weeks.
+- **Filter at write** — reverse the `toll_usage` events for any toll that becomes quarantined (the `toll_financial_reset.ts` machinery already does exactly this for delete and void). Forward-only, leaves history alone, and each change is an auditable reversal rather than a silent recompute.
+
+The second is more consistent with the append-only rule the toll module already follows everywhere else. Either way it should be a deliberate, dated cutover — not a quiet behaviour change.
+
+---
+
 ## 7. What to fix, in order
 
-### 7.1 Correct the data (one week)
+> **Status:** §7.2, §7.3 and §7.4 are **done and verified** (see §6.6). What
+> remains is §7.1 (the data repair — needs your go-ahead), §7.5 (housekeeping),
+> the quarantine cutover decision in §6.6, and deploying the edge functions.
+
+### 7.1 Correct the data (one week) — ⏳ **NOT DONE — needs your go-ahead**
+
+I deliberately did not touch production. This reverses money events and thaws a
+signed, frozen week, which is not something to do on my own initiative. The code
+to do it safely now exists; say the word and I will run it, or you can.
 
 The 24 orphan events should be **reversed, not deleted** — same rule the toll module already documents for itself. Identify them with:
 
@@ -295,11 +361,11 @@ Then, through the normal reversal path (not raw SQL):
 
 Driver settlement should not move. If it does, stop — that means something else is wrong.
 
-### 7.2 Close the hole that allowed it
+### 7.2 Close the hole that allowed it — ✅ **DONE**
 
 **Reverse events when their source row dies.** Every toll delete / period reset / re-import path must reverse the `toll_usage` events for the rows it removes. This is the actual root cause; everything else here is detection.
 
-### 7.3 Add the missing rung to the integrity ladder
+### 7.3 Add the missing rung to the integrity ladder — ✅ **DONE**
 
 Pass 5 established *statement vs engine*. This incident shows the need for **engine vs operational ledger**:
 
@@ -311,13 +377,13 @@ for each (driver, week):
 
 Run it in nightly `finance-recon`, persist to `ledger.finance_recon_drift` (the table already exists), and make it a **close blocker** via a new `TOLL_EVENT_ORPHANED` code. That single check would have caught this the night it happened, and would have refused to close the week.
 
-### 7.4 The three smaller fixes
+### 7.4 The three smaller fixes — ✅ **DONE** (plus three more found in review, §6.6)
 
 - **§6.1** — consume `tagSpend` / `cashWashSpend` from the toll statement in the cutover block.
 - **§6.2** — add the `toll_spend_split` check to `closeInvariants` as `severity: 'block'`.
 - **§6.3** — split the synthetic-row detector so the structural signals (fabricated `manual_*` trip id, highway-as-plaza, no batch) apply to **all** payment methods; keep only the genuinely cash-specific rules behind the cash gate. Separately, treat a missing `paymentMethod` as `unknown` rather than silently tag.
 
-### 7.5 Housekeeping
+### 7.5 Housekeeping — ⏳ **NOT DONE**
 
 Search for statements sealed by the pre-Pass-3 code path and re-seal them so they carry real provenance:
 
@@ -345,8 +411,132 @@ Anything in that set was closed without the independence guarantees that Pass 3 
 | Why did no control catch it? | Every toll control reads `financial_events`. **Nothing reconciles events against `fleet.toll_ledger`.** |
 | Is it contained? | Yes — one week, one driver, and the amount is known to the cent. |
 
-There is one separate, unrelated defect: **week 2026-08-31** has `toll_spend $0` against `toll_tag_spend $1,110` (§6.1). That week is still open, so it can be fixed by a rebuild once §6.1 lands.
+There is one separate, unrelated defect: **week 2026-08-31** has `toll_spend $0` against `toll_tag_spend $1,110` (§6.1). §6.1 has now landed, and that week is still open, so a rebuild should clear it.
 
 ---
 
-*Read-only audit. No source files and no data were modified. All figures verified by direct query against production `csfllzzastacofsvcdsc` on 2026-09-07.*
+## 10. The Aug 17–23 divergence — Toll Reconciliation vs Expenses
+
+**Reported:** Aug 17 – Aug 23 shows **$10,580** on driver Expenses, while the Toll Reconciliation wizard for the same week shows **Toll Spend $5,060**.
+
+### 10.1 First — what changed and what did not
+
+I need to answer this precisely, because the report was that a number "was perfectly fine before".
+
+| Week | Earlier screenshot | Now | Verdict |
+|---|---|---|---|
+| Aug 31 – Sep 6 | Total **"–"**, Tag $1,110 | Total **$1,110**, Tag $1,110 | **Fixed** — §6.1 split repair |
+| Aug 24 – 30 | $6,195 / tag $6,195 | $6,195 / tag $6,195 | Unchanged |
+| **Aug 17 – 23** | **$10,580** / cash $5,920 / tag $4,660 | **$10,580** / cash $5,920 / tag $4,660 | **Identical — not changed** |
+| Aug 10 – 16 | $13,760 / tag **$13,120** | $5,260 / tag **$4,620** | **Fixed** — orphan repair |
+| Toll Expenses card | $214,855 | $207,465 | −$7,390 = −8,500 orphan +1,110 split |
+
+`ledger.driver_financial_periods` confirms it: **Aug 17's row has `updated_at = 2026-09-06 15:19:21`** — the day before this session began. It has not been rewritten by anything done here, and the value is byte-identical in both of your screenshots.
+
+So the $10,580 is not new and was not introduced by this work. **But you are right that it is wrong**, and the reason it now looks wrong is that the week beside it got fixed — Aug 10 dropping from $13,760 to its true $5,260 made the untouched $10,580 stand out. The bug was always there; the repair made it visible.
+
+**Where I was wrong:** §6.6 said this gap had "no effect on live numbers today." That was an assumption I never measured, and it is false. Below is what it actually costs.
+
+### 10.2 The real defect — two spend gates, only one enforced
+
+The two screens do not disagree about the *tolls*. They disagree about **which tolls count as spend**.
+
+| | Toll Reconciliation | Driver Expenses |
+|---|---|---|
+| Reads | `fleet.toll_ledger` via `loadMergedTollTxArray` | `financial_events` (`toll_usage`) |
+| Applies `isTollIncludedInSpend`? | **Yes** — `.filter(isReconcilableTollExpense).filter(isTollIncludedInSpend)` | **No — no gate at all** |
+| Aug 17–23 result | **$5,060** | **$10,580** |
+
+Tag agrees exactly: Recon's Uber $4,660 == Expenses' Tag $4,660. The entire $5,520 gap is on the **cash** side, and it is composed of rows the ledger has explicitly marked as not-spend.
+
+Every active `toll_usage` event for Aug 17–23, joined to its ledger row:
+
+| Payment | Ledger `quarantined` | Ledger `status` | Events | Amount |
+|---|---|---|---|---|
+| cash | **true** | pending | 6 | **$4,090** |
+| cash | **true** | **voided** | 1 | **$850** |
+| cash | **true** | rejected | 2 | **$580** |
+| cash | — | rejected | 1 | $400 |
+| tag_balance | — | reconciled | 12 | $4,660 |
+| | | | **22** | **$10,580** |
+
+$4,090 + $850 + $580 + $400 = **$5,920** — exactly the Cash Tolls figure on screen. Recon keeps only the one non-quarantined cash row ($400) plus tag ($4,660) = **$5,060**.
+
+### 10.3 Three distinct classes, all on the events path
+
+**Class 1 — quarantined rows counted as spend.** Nine cash rows for this week carry `metadata.quarantined = true` (Audit 1.1 synthetic-cash signature: Transjam-highway-as-plaza, no batch id). Toll Recon excludes them. Expenses counts every one.
+
+**Class 2 — a voided row whose event still carries the original amount.** Row `419794d1` is `status = voided` with `amount = 0`, but its `toll_usage` event still posts **$850**. The void zeroed the ledger and left the money event standing.
+
+This one matters beyond this week: **the orphan check added in §7.3 cannot catch it.** That check asks "does `source_id` still resolve to a ledger row?" — and here it does. The row exists; it is simply voided and zeroed. Fleet-wide there are exactly **2 such rows, $1,230**, where the event amount exceeds the ledger amount. The check needs to compare *amount and status*, not just existence.
+
+**Class 3 — rejected rows counted as spend.** `status = rejected` rows are still summed ($980 this week).
+
+### 10.4 Blast radius — measured, fleet-wide
+
+Every active `toll_usage` event joined to its ledger row:
+
+| Bucket | Amount | Share |
+|---|---|---|
+| **Clean** — live, non-quarantined, not voided/rejected | **$58,265** | 33.3% |
+| Quarantined but counted | **$101,870** | 58.3% |
+| Rejected but counted | **$13,380** | 7.7% |
+| Voided (ledger zeroed, event alive) | **$1,230** | 0.7% |
+| Orphaned (no ledger row) | **$0** | 0% ✅ |
+| **Total counted by Expenses** | **$174,745** | |
+
+**$116,480 — 66.7% of all toll spend Expenses reports — is excluded by Toll Reconciliation.** It affects **32 of 36 weeks**. Several weeks are 100% quarantined: Jul 13 ($4,320), Jun 8 ($3,040), Jun 1 ($5,890), May 25, May 18, May 11, Mar 30, Mar 23, Mar 16, Mar 9, Feb 16 — for those the entire Expenses toll figure is rows the ledger says should not count.
+
+The orphan row is the good news: **$0**. The Aug 10 repair worked and no orphans remain fleet-wide.
+
+### 10.5 When this started
+
+The quarantine flags were written on **2026-09-01 and 2026-09-02** — 157 rows. Before that date nothing was flagged, so both screens agreed and the numbers looked fine. The Audit 1.1 remediation correctly marked the synthetic rows, Toll Recon immediately honoured it, and Expenses never did.
+
+That is why "it was fine before" is a fair description of what you saw: **the divergence has existed since Sep 1–2**, five days before this session, and it became conspicuous only when the neighbouring week was corrected.
+
+### 10.6 Why no control catches it
+
+Same root as §3.3, one level deeper. Every toll control reads `financial_events`, and the quarantine flag lives on `fleet.toll_ledger`:
+
+- `computeTollWeekNetting`, `sealTollWeek` — canonical/financial events, no quarantine gate.
+- Statement↔engine compare — both sides event-derived, so they agree.
+- `TOLL_EVENT_ORPHANED` (§7.3) — existence-only; a quarantined or voided row still *exists*.
+- `TOLL_SPEND_SPLIT` — internally consistent ($5,920 + $4,660 = $10,580), so silent.
+
+The one control that would catch it is the §7.3 check extended from *existence* to *eligibility and amount*.
+
+### 10.7 What to decide — nothing here is safe to change unilaterally
+
+This is a **$116,480 restatement across 32 weeks, most of them closed and signed**. It needs your decision, not mine.
+
+1. **Confirm the quarantine calls are correct.** 157 rows, $58,025 of ledger value, flagged Sep 1–2 by the Transjam-highway heuristic. If any were flagged wrongly, fixing Expenses would wrongly *remove* real spend. Verify a sample before anything else.
+2. **Choose a direction** (unchanged from §6.6, but now with the real price tag):
+   - *Reverse-on-quarantine* — reverse the `toll_usage` events for quarantined rows. Forward-only, auditable, reuses `toll_financial_reset.ts`. Restates closed weeks via explicit reversals.
+   - *Filter-at-read* — apply the gate in the events aggregation. Immediate and retroactive, but silently restates history with no audit trail. **Not recommended.**
+3. **Extend the §7.3 check** from existence to eligibility: flag when an event's ledger row is quarantined, voided, rejected, or when the event amount ≠ the ledger amount. That closes Classes 1–3 and the "zeroed but alive" hole in one place.
+4. **Decide the `rejected` policy explicitly.** Recon excludes rejected rows; whether a rejected toll is fleet spend is a business question this audit cannot answer.
+
+### 10.8 On my changes
+
+To be straightforward about it: the working tree has **my** uncommitted edits to `closeInvariants.ts` (+ its test), `periodPersistBody.ts`, `driver_financial_periods.ts`, `toll_financial_reset.ts` and `week_close.ts`, alongside **your** edits to `CloseWeekPage.tsx`, `weekCloseBlockers.ts`, `toll_controller.tsx` and `toll_quarantine_reverse.test.ts`.
+
+Mine add detection only — new close blockers, a counter, and a type declaration. None of them alter `tollSpend` / `tollCashSpend` / `tollTagSpend` arithmetic, and none are deployed. They are not the cause of anything on these screens, but if you want them out while you work, say so and I will revert only my files and leave yours untouched.
+
+---
+
+## 9. What is left for you
+
+| # | Item | Status |
+|---|---|---|
+| 1 | **§7.1 Aug 10 orphan data repair** | **Done in production** — 24 orphans reversed; DFP 5260 / 4620 / 640; settlement unchanged. |
+| 2 | **Quarantine cutover** (§6.6) | **Locked:** reverse-on-quarantine (forward path shipped). Filter-at-read rejected. |
+| 3 | **Rebuild week 2026-08-31** | **Done** — split 1110 = tag. |
+| 4 | **Deploy edge functions** | Prior cut deployed; §10 finish redeploys with ineligible report + blockers. |
+| 5 | **§7.5 housekeeping** | Bare `toll_week_seal` / `close_precondition` inventory **0**. |
+| 6 | *(optional)* Pre-existing Deno type errors | Non-blocking. |
+| **7** | **§10 ineligible restatement** | **Done 2026-09-07:** sample OK → reversed 281 events → DFP rebuilt → Aug 17 = **$5,060**. Remaining ineligible active **0**. Still click: Close Week **Re-open → Force-seal tolls → Close** on restated weeks for seal/charged/close-hash refresh. Rejected policy: keep as spend. |
+
+---
+
+*Diagnosis: verified against production `csfllzzastacofsvcdsc` on 2026-09-07. Aug 10 orphan repair and forward reverse-on-quarantine are in production. Audit §10 historical restatement + eligibility close blockers are the remaining toll-lane money work.*

@@ -103,7 +103,19 @@ export type CloseInvariantInput = {
   /**
    * M-1: absolute trip-CSV vs ledger cash disagreement on the period.
    * Values above ε block close (badge-only was the old intentional behavior).
+   * Declared explicitly — it is read below but the field was missing, so every
+   * caller passing it was an excess-property type error.
    */
+  cashSourceMismatch?: number | null;
+  /**
+   * Toll rows in spend whose payment method is neither cash nor tag. They break
+   * the toll_spend = cash + tag identity by exactly this amount, so they are
+   * reported as TOLL_PAYMENT_METHOD_UNKNOWN (actionable) instead of a bare
+   * TOLL_SPEND_SPLIT (which names no cause). Read from
+   * metadata.financeCore.tollUnknownPm*.
+   */
+  tollUnknownPmCount?: number | null;
+  tollUnknownPmAmount?: number | null;
   /**
    * Pass 5: statement↔engine drifts for closed lanes. Each becomes a block
    * (FUEL_ENGINE_DRIFT / TOLL_ENGINE_DRIFT / EARNINGS_ENGINE_DRIFT).
@@ -120,13 +132,22 @@ export type CloseInvariantInput = {
   }> | null;
   /**
    * Engine vs operational ledger (toll inflation audit): active toll_usage
-   * events must resolve to live toll_ledger rows.
+   * events must resolve to live spend-eligible toll_ledger rows at matching amounts.
    */
   tollEventLedger?: {
     orphanCount: number;
     orphanAmountMajor: number;
     eventSpendMajor: number;
     ledgerSpendMajor: number;
+    /** Live toll rows with no active toll_usage event — spend understated. */
+    missingEventCount?: number;
+    missingEventAmountMajor?: number;
+    /** Active events on quarantined / non-spend ledger rows (Audit §10). */
+    ineligibleEventCount?: number;
+    ineligibleEventAmountMajor?: number;
+    /** Live spend rows where abs(event) ≠ abs(ledger). */
+    amountMismatchCount?: number;
+    amountMismatchAmountMajor?: number;
   } | null;
   eps?: number;
 };
@@ -274,19 +295,103 @@ export function checkCloseInvariants(input: CloseInvariantInput): CloseBlocker[]
     const tollSpend = num(p.toll_spend);
     const tollCash = num(p.toll_cash_spend);
     const tollTag = num(p.toll_tag_spend);
+    const unknownCount = Math.max(0, Math.trunc(num(input.tollUnknownPmCount)));
+    const unknownAmount = round2(num(input.tollUnknownPmAmount));
+
+    // A row with no payment method lands in toll_spend but in neither bucket, so
+    // the split below breaks by exactly that amount. Name the real cause first —
+    // a bare "spend ≠ cash + tag" gives an operator nothing to act on.
+    if (unknownCount > 0 || Math.abs(unknownAmount) > eps) {
+      out.push({
+        code: 'TOLL_PAYMENT_METHOD_UNKNOWN',
+        severity: 'block',
+        driverId: ctx.driverId,
+        week: ctx.week,
+        persisted: round2(tollCash + tollTag),
+        expected: tollSpend,
+        delta: unknownAmount,
+        message:
+          `${unknownCount} toll row(s) have no cash/tag payment method ` +
+          `($${Math.abs(unknownAmount).toFixed(2)}) — set the payment method on each, ` +
+          `then rebuild the week before close`,
+      });
+    }
+
     if (tollSpend > 0 || tollCash > 0 || tollTag > 0) {
-      pushIfDrift(
-        out, eps, ctx,
-        'TOLL_SPEND_SPLIT',
-        'period.toll_spend ≠ toll_cash_spend + toll_tag_spend',
-        tollSpend, round2(tollCash + tollTag),
-      );
+      const splitGap = round2(tollSpend - round2(tollCash + tollTag));
+      // Only report the raw split when it is NOT already explained by unknown-PM
+      // rows — otherwise the operator gets two blockers for one cause.
+      const explainedByUnknownPm =
+        (unknownCount > 0 || Math.abs(unknownAmount) > eps) &&
+        Math.abs(splitGap - unknownAmount) <= eps;
+      if (!explainedByUnknownPm) {
+        pushIfDrift(
+          out, eps, ctx,
+          'TOLL_SPEND_SPLIT',
+          'period.toll_spend ≠ toll_cash_spend + toll_tag_spend',
+          tollSpend, round2(tollCash + tollTag),
+        );
+      }
     }
   }
 
-  // Engine vs live toll ledger — orphaned toll_usage events inflate spend.
+  // Engine vs live toll ledger — orphaned / ineligible / mismatched toll_usage.
   if (input.tollEventLedger) {
     const tel = input.tollEventLedger;
+
+    const ineligibleCount = Math.max(0, Math.trunc(num(tel.ineligibleEventCount)));
+    const ineligibleAmount = round2(num(tel.ineligibleEventAmountMajor));
+    if (ineligibleCount > 0 || Math.abs(ineligibleAmount) > eps) {
+      out.push({
+        code: 'TOLL_EVENT_INELIGIBLE',
+        severity: 'block',
+        driverId: ctx.driverId,
+        week: ctx.week,
+        persisted: round2(tel.eventSpendMajor),
+        expected: round2(tel.ledgerSpendMajor),
+        delta: ineligibleAmount,
+        message:
+          `${ineligibleCount} toll money event(s) sit on quarantined/voided rows ` +
+          `($${Math.abs(ineligibleAmount).toFixed(2)}) — reverse before close`,
+      });
+    }
+
+    const mismatchCount = Math.max(0, Math.trunc(num(tel.amountMismatchCount)));
+    const mismatchAmount = round2(num(tel.amountMismatchAmountMajor));
+    if (mismatchCount > 0 || Math.abs(mismatchAmount) > eps) {
+      out.push({
+        code: 'TOLL_EVENT_AMOUNT_MISMATCH',
+        severity: 'block',
+        driverId: ctx.driverId,
+        week: ctx.week,
+        persisted: round2(tel.eventSpendMajor),
+        expected: round2(tel.ledgerSpendMajor),
+        delta: mismatchAmount,
+        message:
+          `${mismatchCount} toll money event(s) amount ≠ live ledger ` +
+          `($${Math.abs(mismatchAmount).toFixed(2)}) — repair before close`,
+      });
+    }
+
+    // Opposite direction: a live toll with no event is spend never counted.
+    const missingCount = Math.max(0, Math.trunc(num(tel.missingEventCount)));
+    const missingAmount = round2(num(tel.missingEventAmountMajor));
+    if (missingCount > 0 || Math.abs(missingAmount) > eps) {
+      out.push({
+        code: 'TOLL_EVENT_MISSING',
+        severity: 'block',
+        driverId: ctx.driverId,
+        week: ctx.week,
+        persisted: round2(tel.eventSpendMajor),
+        expected: round2(tel.ledgerSpendMajor),
+        delta: missingAmount,
+        message:
+          `${missingCount} live toll row(s) have no money event ` +
+          `($${Math.abs(missingAmount).toFixed(2)} of spend not counted) — ` +
+          `re-post before close`,
+      });
+    }
+
     if (tel.orphanCount > 0 || Math.abs(tel.orphanAmountMajor) > eps) {
       out.push({
         code: 'TOLL_EVENT_ORPHANED',
@@ -298,7 +403,15 @@ export function checkCloseInvariants(input: CloseInvariantInput): CloseBlocker[]
         delta: round2(tel.orphanAmountMajor || tel.eventSpendMajor - tel.ledgerSpendMajor),
         message: `${tel.orphanCount} toll money event(s) have no live toll row ($${round2(tel.orphanAmountMajor).toFixed(2)}) — repair before close`,
       });
-    } else {
+    } else if (
+      missingCount === 0 &&
+      Math.abs(missingAmount) <= eps &&
+      ineligibleCount === 0 &&
+      Math.abs(ineligibleAmount) <= eps &&
+      mismatchCount === 0 &&
+      Math.abs(mismatchAmount) <= eps
+    ) {
+      // Skip when the gap is already explained by a more specific blocker.
       pushIfDrift(
         out, eps, ctx,
         'TOLL_EVENT_ORPHANED',

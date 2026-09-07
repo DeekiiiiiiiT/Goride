@@ -431,8 +431,19 @@ export async function previewWeekClose(orgId: string, weekKey: string): Promise<
           orphanAmountMajor: sum.orphanAmountMajor,
           eventSpendMajor: sum.eventSpendMajor,
           ledgerSpendMajor: sum.ledgerSpendMajor,
+          missingEventCount: sum.missingEventCount,
+          missingEventAmountMajor: sum.missingEventAmountMajor,
+          ineligibleEventCount: sum.ineligibleEventCount,
+          ineligibleEventAmountMajor: sum.ineligibleEventAmountMajor,
+          amountMismatchCount: sum.amountMismatchCount,
+          amountMismatchAmountMajor: sum.amountMismatchAmountMajor,
         };
-        if (sum.orphanCount > 0 || Math.abs(sum.eventSpendMajor - sum.ledgerSpendMajor) > CLOSE_INVARIANT_EPS) {
+        if (
+          sum.orphanCount > 0 ||
+          sum.ineligibleEventCount > 0 ||
+          sum.amountMismatchCount > 0 ||
+          Math.abs(sum.eventSpendMajor - sum.ledgerSpendMajor) > CLOSE_INVARIANT_EPS
+        ) {
           await upsertFinanceReconDrifts({
             organizationId: orgId,
             driverId,
@@ -467,6 +478,14 @@ export async function previewWeekClose(orgId: string, weekKey: string): Promise<
       ) || 0,
       engineDrifts: engineBlockers,
       tollEventLedger,
+      tollUnknownPmCount: Number(
+        (meta as { financeCore?: { tollUnknownPmCount?: number } } | null)
+          ?.financeCore?.tollUnknownPmCount,
+      ) || 0,
+      tollUnknownPmAmount: Number(
+        (meta as { financeCore?: { tollUnknownPmAmount?: number } } | null)
+          ?.financeCore?.tollUnknownPmAmount,
+      ) || 0,
       ...((!frozen || acceptRestatementDrafts) && !pnlWarnEmitted
         ? businessWeekPnl != null
           ? { settlementSumForWeek, businessWeekPnl }
@@ -651,8 +670,19 @@ export async function closeWeek(
         orphanAmountMajor: sum.orphanAmountMajor,
         eventSpendMajor: sum.eventSpendMajor,
         ledgerSpendMajor: sum.ledgerSpendMajor,
+        missingEventCount: sum.missingEventCount,
+        missingEventAmountMajor: sum.missingEventAmountMajor,
+        ineligibleEventCount: sum.ineligibleEventCount,
+        ineligibleEventAmountMajor: sum.ineligibleEventAmountMajor,
+        amountMismatchCount: sum.amountMismatchCount,
+        amountMismatchAmountMajor: sum.amountMismatchAmountMajor,
       };
-      if (sum.orphanCount > 0 || Math.abs(sum.eventSpendMajor - sum.ledgerSpendMajor) > CLOSE_INVARIANT_EPS) {
+      if (
+        sum.orphanCount > 0 ||
+        sum.ineligibleEventCount > 0 ||
+        sum.amountMismatchCount > 0 ||
+        Math.abs(sum.eventSpendMajor - sum.ledgerSpendMajor) > CLOSE_INVARIANT_EPS
+      ) {
         await upsertFinanceReconDrifts({
           organizationId: orgId,
           driverId,
@@ -686,6 +716,14 @@ export async function closeWeek(
       ) || 0,
       engineDrifts: engineBlockers,
       tollEventLedger,
+      tollUnknownPmCount: Number(
+        (meta as { financeCore?: { tollUnknownPmCount?: number } } | null)
+          ?.financeCore?.tollUnknownPmCount,
+      ) || 0,
+      tollUnknownPmAmount: Number(
+        (meta as { financeCore?: { tollUnknownPmAmount?: number } } | null)
+          ?.financeCore?.tollUnknownPmAmount,
+      ) || 0,
       ...(!pnlWarnEmitted
         ? businessWeekPnl != null
           ? { settlementSumForWeek, businessWeekPnl }

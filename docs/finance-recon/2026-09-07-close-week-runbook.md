@@ -16,6 +16,10 @@
 | `EARNINGS_STATEMENT_MISSING` / `UNVERIFIED` | No closed earnings seal | Close Week auto-seals from engines; or wait for seal |
 | `FUEL_ENGINE_DRIFT` / `TOLL_ENGINE_DRIFT` / `EARNINGS_ENGINE_DRIFT` | Closed seal ≠ fresh engine | Reseal that lane before close |
 | `TOLL_EVENT_ORPHANED` | Toll money events don’t match live tolls | Re-open if closed → **Repair orphan toll events** → force-seal tolls (not Restatement) |
+| `TOLL_EVENT_MISSING` | Live tolls have no money event | Re-save / re-post those toll rows (or clear quarantine and save), then rebuild |
+| `TOLL_EVENT_INELIGIBLE` | Events still on quarantined/voided rows | Re-open if closed → **Review sample & repair** → force-seal (not Restatement) |
+| `TOLL_EVENT_AMOUNT_MISMATCH` | Event amount ≠ live ledger | Same repair path as ineligible (reverse + re-post) |
+| `TOLL_PAYMENT_METHOD_UNKNOWN` | Toll rows missing cash/tag payment method | Set payment method on each row, then rebuild |
 | `TOLL_SPEND_SPLIT` | `toll_spend ≠ cash + tag` | Rebuild period after statement cutover; check tag/cash overwrite |
 | `*_MISMATCH` | Period ≠ independent statement | Investigate drift; do not force-close |
 | `CASH_SOURCE_MISMATCH` | Trip CSV vs ledger cash | Resolve cash source before close |
@@ -34,7 +38,20 @@ If Close Week shows **Toll money events don’t match live tolls**:
 
 Ops write-up: [2026-09-07-toll-orphan-remediation.md](./2026-09-07-toll-orphan-remediation.md).
 
-**Until reverse-on-delete is deployed:** avoid Delete Center / bulk delete of toll transactions for closed weeks.
+**Quarantine:** Stamping a toll quarantined reverses its `toll_usage` (forward-only). Clearing quarantine and saving re-posts a new generation — closed weeks are not silently refiltered at read.
+
+## Ineligible toll events (Expenses vs Recon — Audit §10)
+
+If Close Week shows **Ineligible toll events still on books** (`TOLL_EVENT_INELIGIBLE` / `TOLL_EVENT_AMOUNT_MISMATCH`):
+
+1. Do **not** use Restatement Queue.
+2. If the week is closed → **Re-open week** first.
+3. Press **Review sample & repair** — spot-check quarantine reasons (fabricated trip id, Transjam plaza, etc.) and note **tag vs cash** impact.
+4. Confirm → reverses ineligible `toll_usage`, rebuilds periods, force-reseals tolls.
+5. Pause if cash impact looks wrong (settlement can move for cash quarantines).
+6. Refresh → blockers clear → **Close week** again.
+
+Ops write-up: [2026-09-07-toll-orphan-remediation.md](./2026-09-07-toll-orphan-remediation.md).
 
 ## How to restate (money correction — week stays frozen)
 
@@ -61,6 +78,10 @@ Statements sealed before Pass 3 may show bare `close_reason` values (`toll_week_
 select kind, count(*)
 from ledger.week_statements
 where status = 'closed'
-  and close_reason in ('toll_week_seal','close_precondition','commission_cash_engines')
+  and close_reason in ('toll_week_seal','close_precondition')
 group by kind;
 ```
+
+Residual for bare `toll_week_seal` / `close_precondition` should be **0** after housekeeping.
+
+**Status 2026-09-07:** inventory query returns **0** rows for those bare reasons. Toll weeks `2026-08-10` / `2026-08-17` carry `toll_week_seal_financial_events`. Earnings use `commission_cash_engines`. To refresh a close hash after book fixes, Re-open → Close that week on Close Week.

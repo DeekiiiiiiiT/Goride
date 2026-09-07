@@ -232,6 +232,23 @@ export function CloseWeekPage({
   const [settlementRiskPrompt, setSettlementRiskPrompt] = useState(false);
   const [orphanRepairOpen, setOrphanRepairOpen] = useState(false);
   const [orphanRepairing, setOrphanRepairing] = useState(false);
+  const [ineligibleRepairOpen, setIneligibleRepairOpen] = useState(false);
+  const [ineligibleRepairing, setIneligibleRepairing] = useState(false);
+  const [ineligibleSample, setIneligibleSample] = useState<{
+    count: number;
+    amountMajor: number;
+    tagAmountMajor: number;
+    cashAmountMajor: number;
+    rows: Array<{
+      sourceId: string;
+      reason: string;
+      eventAmountMajor: number;
+      paymentBucket: string;
+      quarantineReason: string | null;
+      plaza: string | null;
+      date: string | null;
+    }>;
+  } | null>(null);
 
   // ── Fuel / Toll lanes + cross-system blockers (read-only preview) ──────────
   const previewQuery = useQuery({
@@ -300,6 +317,28 @@ export function CloseWeekPage({
   const orphanBlockers = (preview?.blockers || []).filter((b) => b.code === 'TOLL_EVENT_ORPHANED');
   const orphanImpact = orphanBlockers.reduce((s, b) => s + Math.abs(Number(b.delta) || 0), 0);
   const hasOrphanBlocker = orphanBlockers.length > 0;
+  const missingEventBlockers = (preview?.blockers || []).filter((b) => b.code === 'TOLL_EVENT_MISSING');
+  const ineligibleBlockers = (preview?.blockers || []).filter(
+    (b) => b.code === 'TOLL_EVENT_INELIGIBLE' || b.code === 'TOLL_EVENT_AMOUNT_MISMATCH',
+  );
+  const unknownPmBlockers = (preview?.blockers || []).filter(
+    (b) => b.code === 'TOLL_PAYMENT_METHOD_UNKNOWN',
+  );
+  const hasMissingEventBlocker = missingEventBlockers.length > 0;
+  const hasIneligibleBlocker = ineligibleBlockers.length > 0;
+  const hasUnknownPmBlocker = unknownPmBlockers.length > 0;
+  const missingEventImpact = missingEventBlockers.reduce(
+    (s, b) => s + Math.abs(Number(b.delta) || 0),
+    0,
+  );
+  const ineligibleImpact = ineligibleBlockers.reduce(
+    (s, b) => s + Math.abs(Number(b.delta) || 0),
+    0,
+  );
+  const unknownPmImpact = unknownPmBlockers.reduce(
+    (s, b) => s + Math.abs(Number(b.delta) || 0),
+    0,
+  );
   const totalBlockers = blockingCount(preview?.blockers);
   const laneBlockLabels = (lane: CloseLane) =>
     byLane[lane].filter((b) => b.severity !== 'warn').map(humanBlockerLabel);
@@ -360,6 +399,70 @@ export function CloseWeekPage({
       toast.error(e instanceof Error ? e.message : 'Repair orphan toll events failed');
     } finally {
       setOrphanRepairing(false);
+    }
+  };
+
+  const openIneligibleReview = async () => {
+    try {
+      const report = await weekCloseApi.ineligibleTollUsageReport(weekKey, { sampleLimit: 20 });
+      setIneligibleSample({
+        count: report.totals.count,
+        amountMajor: report.totals.amountMajor,
+        tagAmountMajor: report.totals.tagAmountMajor,
+        cashAmountMajor: report.totals.cashAmountMajor,
+        rows: report.rows.slice(0, 20).map((r) => ({
+          sourceId: r.sourceId,
+          reason: r.reason,
+          eventAmountMajor: r.eventAmountMajor,
+          paymentBucket: r.paymentBucket,
+          quarantineReason: r.quarantineReason,
+          plaza: r.plaza,
+          date: r.date,
+        })),
+      });
+      setIneligibleRepairOpen(true);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not load ineligible toll sample');
+    }
+  };
+
+  const doRepairIneligible = async () => {
+    setIneligibleRepairing(true);
+    try {
+      if (weekAlreadyClosed) {
+        toast.message(
+          'Re-open the week first, then reverse ineligible toll events and force-seal — do not use Restatement.',
+        );
+        setIneligibleRepairOpen(false);
+        return;
+      }
+      if ((ineligibleSample?.cashAmountMajor || 0) > MONEY_EPS) {
+        toast.message(
+          `Cash impact ${MONEY(ineligibleSample?.cashAmountMajor)} — confirm quarantine flags before continuing.`,
+        );
+      }
+      const repair = await weekCloseApi.repairIneligibleTollEvents(weekKey);
+      if (repair.errors.length) {
+        toast.error(`Repair finished with errors: ${repair.errors.slice(0, 2).join('; ')}`);
+      } else {
+        toast.success(
+          `Reversed ${repair.eventsReversed} ineligible toll event(s)` +
+            (repair.totals.amountMajor > 0 ? ` (${MONEY(repair.totals.amountMajor)})` : ''),
+        );
+      }
+      try {
+        const sealed = await weekCloseApi.sealToll(weekKey, { force: true });
+        toast.message(`Toll lane re-sealed (${sealed.published} statement(s))`);
+      } catch (sealErr) {
+        toast.error(sealErr instanceof Error ? sealErr.message : 'Toll re-seal failed — run seal manually');
+      }
+      setIneligibleRepairOpen(false);
+      setIneligibleSample(null);
+      void previewQuery.refetch();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Repair ineligible toll events failed');
+    } finally {
+      setIneligibleRepairing(false);
     }
   };
 
@@ -554,6 +657,58 @@ export function CloseWeekPage({
           >
             Repair orphan toll events
           </Button>
+        </div>
+      ) : null}
+
+      {hasMissingEventBlocker ? (
+        <div
+          role="status"
+          className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950"
+        >
+          <p className="font-medium">Live tolls have no money event</p>
+          <p className="mt-1 text-amber-900/90">
+            About {MONEY(missingEventImpact)} of plaza spend is not counted in money events.
+            Re-save or re-post those toll rows (or clear quarantine and save), then rebuild the week — do not use Restatement.
+          </p>
+        </div>
+      ) : null}
+
+      {hasIneligibleBlocker ? (
+        <div
+          role="status"
+          className="flex flex-col gap-3 rounded-md border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-950 sm:flex-row sm:items-center sm:justify-between"
+        >
+          <div>
+            <p className="font-medium">Ineligible toll events still on books</p>
+            <p className="mt-1 text-rose-900/90">
+              About {MONEY(ineligibleImpact)} of toll spend sits on quarantined, voided, or
+              amount-mismatched rows that Toll Recon already excludes. Review a sample, then
+              reverse — re-open if closed; do not use Restatement. Tag-only reverses should not
+              move settlement; pause if cash impact looks wrong.
+            </p>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            className="h-10 shrink-0 border-rose-300 bg-white"
+            disabled={previewUnavailable || ineligibleRepairing}
+            onClick={() => void openIneligibleReview()}
+          >
+            Review sample &amp; repair
+          </Button>
+        </div>
+      ) : null}
+
+      {hasUnknownPmBlocker ? (
+        <div
+          role="status"
+          className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950"
+        >
+          <p className="font-medium">Toll payment method missing</p>
+          <p className="mt-1 text-amber-900/90">
+            About {MONEY(unknownPmImpact)} sits in toll spend without cash or tag.
+            Set each row’s payment method to Cash or Tag Balance, then rebuild the week before close.
+          </p>
         </div>
       ) : null}
 
@@ -797,6 +952,71 @@ export function CloseWeekPage({
                 : orphanRepairing
                   ? 'Repairing…'
                   : 'Repair and re-seal'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={ineligibleRepairOpen}
+        onOpenChange={(open) => {
+          if (ineligibleRepairing) return;
+          setIneligibleRepairOpen(open);
+          if (!open) setIneligibleSample(null);
+        }}
+      >
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Review ineligible toll events</DialogTitle>
+            <DialogDescription>
+              Week of {weekLabel(weekKey)}. Spot-check the sample below, then reverse so Expenses
+              matches Toll Recon. Tag {MONEY(ineligibleSample?.tagAmountMajor)} · Cash{' '}
+              {MONEY(ineligibleSample?.cashAmountMajor)} · Total{' '}
+              {MONEY(ineligibleSample?.amountMajor)} ({ineligibleSample?.count ?? 0} events).
+            </DialogDescription>
+          </DialogHeader>
+          {ineligibleSample?.rows?.length ? (
+            <ul className="max-h-48 space-y-2 overflow-y-auto rounded-md border border-slate-200 bg-slate-50 p-3 text-xs text-slate-700">
+              {ineligibleSample.rows.map((r, idx) => (
+                <li key={`${r.sourceId}-${idx}`} className="leading-snug">
+                  <span className="font-medium">{r.reason}</span>
+                  {r.quarantineReason ? ` · ${r.quarantineReason}` : ''}
+                  {' · '}
+                  {MONEY(r.eventAmountMajor)} {r.paymentBucket}
+                  {r.date ? ` · ${r.date}` : ''}
+                  {r.plaza ? ` · ${r.plaza}` : ''}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-sm text-slate-600">No sample rows returned for this week.</p>
+          )}
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={ineligibleRepairing}
+              onClick={() => {
+                setIneligibleRepairOpen(false);
+                setIneligibleSample(null);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              className="bg-indigo-700 hover:bg-indigo-800"
+              disabled={ineligibleRepairing || weekAlreadyClosed || !(ineligibleSample?.count)}
+              onClick={() => void doRepairIneligible()}
+            >
+              {ineligibleRepairing ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : null}
+              {weekAlreadyClosed
+                ? 'Re-open week first'
+                : ineligibleRepairing
+                  ? 'Repairing…'
+                  : 'Reverse and re-seal'}
             </Button>
           </DialogFooter>
         </DialogContent>

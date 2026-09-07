@@ -3069,25 +3069,25 @@ async function saveTollLedgerEntry(entry: TollLedgerRecord, c?: Context): Promis
     const abs = Math.abs(Number(entry.amount) || 0);
     if (abs > 0 && entry.driverId) {
       if (t === "usage") {
-        await postFinancialEvent({
-          idempotencyKey: `toll_ledger:${entry.id}|toll_usage`,
-          domain: "toll",
-          eventType: "toll_usage",
-          sourceSystem: "toll_workflow",
-          sourceId: String(entry.id),
-          driverId: String(entry.driverId),
-          vehicleId: entry.vehicleId || null,
-          occurredAt: entry.date,
-          amountMajor: -abs,
-          direction: "outflow",
-          debitAccountKey: "platform:fleet_toll_expense",
-          creditAccountKey: "platform:toll_tag_clearing",
-          payload: {
-            description: entry.location || entry.plaza,
-            paymentMethod: entry.paymentMethod,
-            workflowStage: entry.workflowStage,
-          },
-        });
+        if (isTollQuarantined(entry)) {
+          // Quarantined rows must not keep an active toll_usage (events path).
+          try {
+            const { reverseTollUsageEventsForQuarantine } = await import("./toll_financial_reset.ts");
+            await reverseTollUsageEventsForQuarantine([String(entry.id)]);
+          } catch (qErr: any) {
+            console.warn(
+              `[TollLedgerStorage] quarantine reverse skipped:`,
+              qErr?.message || qErr,
+            );
+          }
+        } else {
+          // First post uses stable key; re-post after reverse uses generation suffix.
+          const { ensureActiveTollUsagePostedForEntry } = await import("./toll_financial_reset.ts");
+          const ensured = await ensureActiveTollUsagePostedForEntry(entry);
+          if (ensured.error) {
+            console.warn(`[TollLedgerStorage] toll_usage ensure failed:`, ensured.error);
+          }
+        }
       } else if (t === "top_up") {
         await postFinancialEvent({
           idempotencyKey: `toll_ledger:${entry.id}|tag_top_up`,
@@ -4895,7 +4895,7 @@ app.get(`${BASE}/toll-ledger/quarantine-report`, async (c) => {
         alreadyQuarantined,
       });
 
-      if (stamp) {
+      if (stamp && !alreadyQuarantined) {
         const meta = { ...(entry.metadata || {}) };
         meta.quarantined = true;
         meta.tollQuarantined = true;
@@ -4904,7 +4904,30 @@ app.get(`${BASE}/toll-ledger/quarantine-report`, async (c) => {
         meta.quarantinedAt = new Date().toISOString();
         entry.metadata = meta;
         await saveTollLedgerEntry(entry);
+        try {
+          const { reverseTollUsageEventsForQuarantine } = await import("./toll_financial_reset.ts");
+          const rev = await reverseTollUsageEventsForQuarantine([String(entry.id)]);
+          if (rev.errors.length) {
+            console.warn(
+              `[TollLedgerQuarantine] reverse warnings toll_ledger=${entry.id}:`,
+              rev.errors.join("; "),
+            );
+          }
+        } catch (revErr: any) {
+          console.warn(
+            `[TollLedgerQuarantine] reverse failed toll_ledger=${entry.id}:`,
+            revErr?.message || revErr,
+          );
+        }
         stamped++;
+      } else if (stamp && alreadyQuarantined) {
+        // Already stamped — ensure events are reversed (idempotent sweep).
+        try {
+          const { reverseTollUsageEventsForQuarantine } = await import("./toll_financial_reset.ts");
+          await reverseTollUsageEventsForQuarantine([String(entry.id)]);
+        } catch {
+          /* non-fatal */
+        }
       }
     }
 
