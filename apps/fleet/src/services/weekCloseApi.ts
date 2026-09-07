@@ -94,4 +94,36 @@ export const weekCloseApi = {
     }
     return response.json() as Promise<WeekCloseResult>;
   },
+
+  /** Heal fuel lane from Consumption money-strip amounts (force restates closed weeks). */
+  async sealFuel(
+    weekKey: string,
+    opts?: {
+      force?: boolean;
+      amountsByDriver?: Record<
+        string,
+        {
+          driverShare?: number;
+          companyShare?: number;
+          totalSpend?: number;
+          miscellaneousCost?: number;
+        }
+      >;
+    },
+  ): Promise<{ published: number }> {
+    const response = await fetchWithRetry(`${BASE}/seal-fuel`, {
+      method: 'POST',
+      headers: await requireAuthHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({
+        weekKey,
+        force: opts?.force === true,
+        amountsByDriver: opts?.amountsByDriver,
+      }),
+    });
+    if (!response.ok) {
+      throw new WeekCloseApiError(await parseError(response, 'Fuel seal failed'), response.status);
+    }
+    const j = (await response.json()) as { published?: number };
+    return { published: Number(j.published) || 0 };
+  },
 };

@@ -147,7 +147,24 @@ export function stampOrgRequired<T extends Record<string, unknown>>(
  * Use `filterByOrgStrict()` for new strict behavior with feature flags.
  *
  * Usage: `const scoped = filterByOrg(allRecords, c);`
+ *
+ * When you only have an organization id (cron / seal / rebuild), use
+ * {@link filterRecordsByOrganizationId} instead — this function requires Hono Context.
  */
+export function filterRecordsByOrganizationId<T extends Record<string, unknown>>(
+  records: T[],
+  orgId: string | null | undefined,
+): T[] {
+  const id = String(orgId || "").trim();
+  if (!id) return records;
+  return records.filter((r) => {
+    const rid = r.organizationId ?? r.orgId ?? r.org_id;
+    if (rid == null || rid === "") return true; // pre-backfill
+    if (isLegacyOrgPlaceholder(rid)) return true;
+    return String(rid) === id;
+  });
+}
+
 export function filterByOrg<T extends Record<string, unknown>>(
   records: T[],
   c: Context,

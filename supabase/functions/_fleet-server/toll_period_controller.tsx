@@ -38,6 +38,7 @@ import { requireAuth, requirePermission, type RbacUser } from "./rbac_middleware
 import { getServiceClient } from "./service_client.ts";
 import { getOrgId } from "./org_scope.ts";
 import { sealTollWeek } from "./toll_week_seal.ts";
+import { sumActiveTollChargedToDriverMajor } from "./toll_charged_from_financial_events.ts";
 import {
   filterTollEventsInDateRange,
   hasCanonicalChargedToDriverEvents,
@@ -527,6 +528,24 @@ app.get(`${BASE}/periods`, requirePermission('toll.view'), async (c) => {
 
     const round2 = (n: number) => Math.round(n * 100) / 100;
 
+    // H-9: wallet financial_events per week (org or driver-scoped) — same SoT as Close seal.
+    const orgIdForWallet = getOrgId(c) || undefined;
+    const walletByWeek = new Map<string, number>();
+    await Promise.all(
+      Array.from(periods.keys()).map(async (weekId) => {
+        try {
+          const w = await sumActiveTollChargedToDriverMajor({
+            weekKey: weekId,
+            driverId,
+            organizationId: orgIdForWallet,
+          });
+          if (w.hasEvents) walletByWeek.set(weekId, w.charged);
+        } catch (e) {
+          console.warn("[toll-periods] wallet charged load failed", weekId, e);
+        }
+      }),
+    );
+
     const periodsOut = Array.from(periods.entries())
       .map(([id, acc]) => {
         const actionableTotal = STEP_IDS.reduce((sum, stepId) => sum + acc.counts[stepId].actionable, 0);
@@ -539,11 +558,24 @@ app.get(`${BASE}/periods`, requirePermission('toll.view'), async (c) => {
           fleetLossByWeek.get(id) ??
           filterTollEventsInDateRange(scopedFleetLossEvents, startDate, endDate);
         const weekNet = computeTollWeekNetting(weekEvents);
-        // H-9: prefer canonical toll_charged_to_driver events; fall back to the
-        // resolved-claim sum only for legacy weeks with no wallet events.
-        const chargedToDrivers = hasCanonicalChargedToDriverEvents(weekEvents)
-          ? sumTollChargedToDriversFromEvents(weekEvents)
-          : round2(f.chargedToDrivers);
+        // C-3: Spend / Reimbursed from weekNet; Charged from wallet financial_events
+        // when present (H-9), else unified events, else resolved-claim sum.
+        const tollSpend = round2(weekNet.tagSpend + weekNet.cashWashSpend);
+        const reimbursedByPlatformNet = round2(
+          weekNet.platformReimbursed + weekNet.disputeRecovered,
+        );
+        const walletCharged = walletByWeek.get(id);
+        const chargedToDrivers =
+          walletCharged != null
+            ? round2(walletCharged)
+            : hasCanonicalChargedToDriverEvents(weekEvents)
+              ? sumTollChargedToDriversFromEvents(weekEvents)
+              : round2(f.chargedToDrivers);
+        // Recompute net with the charged figure actually shown on the card.
+        const netTollLoss = round2(tollSpend - reimbursedByPlatformNet - chargedToDrivers);
+        const identityResidual = round2(
+          tollSpend - reimbursedByPlatformNet - chargedToDrivers - netTollLoss,
+        );
         return {
           id,
           startDate,
@@ -553,21 +585,18 @@ app.get(`${BASE}/periods`, requirePermission('toll.view'), async (c) => {
           actionableTotal,
           counts: acc.counts,
           financials: {
-            tollSpend: round2(f.tollSpend),
-            reimbursedByPlatform: round2(reimbursedByPlatform),
+            tollSpend,
+            reimbursedByPlatform: reimbursedByPlatformNet,
             matchedDisputeRefundAmount: round2(f.matchedDisputeRefundAmount),
             chargedToDrivers,
-            // C-3/C-4 (LOCKED): headline Net Toll Loss is the SIGNED week netting with
-            // chargedToDrivers folded in as a P&L recovery — NOT the floored fleet-loss
-            // engine that ignored wallet recovery. Negative = fleet over-recovered.
-            netTollLoss: round2(weekNet.netLoss),
-            netTollLossSigned: round2(weekNet.netLoss),
-            // Four-card identity residual (should ≈ 0) + over-recovery flag so the UI
-            // can surface clipping instead of silently flooring a real credit.
-            identityResidual: round2(weekNet.residual),
-            netTollLossClipped: weekNet.clipped,
-            overRecoveredAmount: weekNet.netLoss < -0.005 ? round2(-weekNet.netLoss) : 0,
+            netTollLoss,
+            netTollLossSigned: netTollLoss,
+            identityResidual,
+            netTollLossClipped: netTollLoss < -0.005,
+            overRecoveredAmount: netTollLoss < -0.005 ? round2(-netTollLoss) : 0,
             resolvedRefundsAmount: round2(f.resolvedRefundsAmount),
+            legacyTollSpend: round2(f.tollSpend),
+            legacyReimbursedByPlatform: round2(reimbursedByPlatform),
           },
         };
       })

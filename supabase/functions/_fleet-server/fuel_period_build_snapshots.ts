@@ -4,7 +4,7 @@
  * (stamped entry ratios still win via resolveEntryDriverRatio).
  */
 import * as kv from "./kv_store.tsx";
-import { filterByOrg } from "./org_scope.ts";
+import { filterRecordsByOrganizationId } from "./org_scope.ts";
 import { assembleWeekSnapshotsFromRawEntries } from "../_shared/fuelCore.ts";
 
 function ymd(v: unknown): string {
@@ -49,7 +49,7 @@ export async function loadWeekFuelEntries(
   weekEnd: string,
 ): Promise<Record<string, unknown>[]> {
   const raw = ((await kv.getByPrefix("fuel_entry:")) || []) as Record<string, unknown>[];
-  const scoped = filterByOrg(raw, orgId);
+  const scoped = filterRecordsByOrganizationId(raw, orgId);
   return scoped.filter((e) => {
     const d = ymd(e.date);
     if (!inWeek(d, weekStart, weekEnd)) return false;

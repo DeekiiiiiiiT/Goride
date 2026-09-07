@@ -14,6 +14,7 @@ import { requireAuth, requirePermission, type RbacUser } from "./rbac_middleware
 import { getOrgId } from "./org_scope.ts";
 import { safeErrorResponse } from "./safe_error.ts";
 import { closeWeek, previewWeekClose } from "./week_close.ts";
+import { sealFuelWeek } from "./fuel_week_seal.ts";
 import {
   listPendingRestatements,
   requestRestatement,
@@ -66,6 +67,44 @@ app.post(BASE, requirePermission("transactions.edit"), async (c) => {
     return c.json(result);
   } catch (e) {
     return safeErrorResponse(c, e, "week-close");
+  }
+});
+
+// ── POST /week-close/seal-fuel ──────────────────────────────────────────────
+// Force-publish fuel week_statements from the live week rebuild (same engine as
+// Consumption). Used to heal closed weeks sealed from stale DFP $0 deductions.
+app.post(`${BASE}/seal-fuel`, requirePermission("transactions.edit"), async (c) => {
+  try {
+    const org = requireOrg(c);
+    if (typeof org !== "string") return org;
+    const user = c.get("rbacUser") as RbacUser;
+    const body = (await c.req.json().catch(() => ({}))) as {
+      weekKey?: string;
+      force?: boolean;
+      amountsByDriver?: Record<
+        string,
+        {
+          driverShare?: number;
+          companyShare?: number;
+          totalSpend?: number;
+          miscellaneousCost?: number;
+        }
+      >;
+    };
+    const weekKey = String(body.weekKey || "").slice(0, 10);
+    if (!WEEK_RE.test(weekKey)) {
+      return c.json({ error: "weekKey (YYYY-MM-DD) is required" }, 400);
+    }
+    const result = await sealFuelWeek({
+      organizationId: org,
+      weekKey,
+      actorId: user.userId,
+      force: body.force === true,
+      amountsByDriver: body.amountsByDriver,
+    });
+    return c.json({ success: true, weekKey, ...result });
+  } catch (e) {
+    return safeErrorResponse(c, e, "week-close-seal-fuel");
   }
 });
 

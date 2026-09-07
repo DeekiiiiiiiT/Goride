@@ -15,7 +15,6 @@ import {
   normalizeSparkSeriesToMax,
   unexplainedWowDelta,
 } from '../../../utils/fuelUnexplainedSparkSeries';
-import { ContentVisibilityList } from '../../drivers/ContentVisibilityList';
 
 /** Labeled step cell — clear at a glance; click opens that step (M3/M5). */
 function StepStatusCell({
@@ -270,32 +269,31 @@ function PeriodList({
     startDate: p.startDate,
     unexplained: p.netLeakage,
   }));
+  // #region agent log
+  fetch('http://127.0.0.1:7418/ingest/a3d13dc6-6745-44ac-a4fd-f2bafc5169ae',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'14839a'},body:JSON.stringify({sessionId:'14839a',runId:'post-fix',hypothesisId:'H1',location:'FuelPeriodLandingPage.tsx:PeriodList',message:'non-virtual period cards',data:{count:ordered.length},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
+  // Fuel week portfolios are small — plain list keeps PeriodCards mounted in CI/jsdom
+  // (virtual lists with a 0px viewport render zero rows and wipe auto-close badges).
   return (
-    <ContentVisibilityList
-      items={ordered}
-      estimateRowPx={168}
-      maxHeightPx={720}
-      className="space-y-3"
-      getKey={(p) => p.id}
-      renderRow={(p) => (
-        <div className="pb-3">
-          <PeriodCard
-            period={p}
-            onSelect={() => onSelectPeriod(p)}
-            onSelectStep={onSelectStep}
-            secondApproverThreshold={secondApproverThreshold}
-            autoCloseDualApprovalMode={autoCloseDualApprovalMode}
-            hasSettlementSnapshots={weeksWithSnapshots?.has(p.startDate) ?? undefined}
-            unexplainedSeries={buildUnexplainedSparkSeries(sparkPoints, p.startDate)}
-            onReset={
-              p.status === 'completed' && onResetPeriod
-                ? () => onResetPeriod(p)
-                : undefined
-            }
-          />
-        </div>
-      )}
-    />
+    <div className="space-y-3">
+      {ordered.map((p) => (
+        <PeriodCard
+          key={p.id}
+          period={p}
+          onSelect={() => onSelectPeriod(p)}
+          onSelectStep={onSelectStep}
+          secondApproverThreshold={secondApproverThreshold}
+          autoCloseDualApprovalMode={autoCloseDualApprovalMode}
+          hasSettlementSnapshots={weeksWithSnapshots?.has(p.startDate) ?? undefined}
+          unexplainedSeries={buildUnexplainedSparkSeries(sparkPoints, p.startDate)}
+          onReset={
+            p.status === 'completed' && onResetPeriod
+              ? () => onResetPeriod(p)
+              : undefined
+          }
+        />
+      ))}
+    </div>
   );
 }
 

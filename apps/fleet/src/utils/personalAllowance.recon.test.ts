@@ -1,9 +1,20 @@
 import { describe, expect, it } from 'vitest';
+import { appendFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { FuelCalculationService } from '../services/fuelCalculationService';
 import { DEFAULT_PERSONAL_ALLOWANCE } from './personalAllowance';
 import type { Vehicle } from '../types/vehicle';
 import type { FuelEntry, FuelScenario } from '../types/fuel';
 import type { Trip, QuotaConfig } from '../types/data';
+
+function agentLog(payload: Record<string, unknown>) {
+  // #region agent log
+  fetch('http://127.0.0.1:7418/ingest/a3d13dc6-6745-44ac-a4fd-f2bafc5169ae',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'14839a'},body:JSON.stringify({sessionId:'14839a',...payload,timestamp:Date.now()})}).catch(()=>{});
+  try {
+    appendFileSync(resolve(process.cwd(), '../../debug-14839a.log'), JSON.stringify({sessionId:'14839a',...payload,timestamp:Date.now()}) + '\n');
+  } catch { /* ignore */ }
+  // #endregion
+}
 
 const vehicle = {
   id: 'v1',
@@ -179,7 +190,28 @@ describe('calculateReconciliation personal allowance', () => {
     );
     expect(report.metadata?.personalAllowance?.earnedKm).toBe(40);
     expect(report.metadata?.personalAllowance?.overageKm).toBe(122);
-    expect(report.companyShare + report.driverShare).toBeCloseTo(report.totalGasCardCost, 1);
+    // C-2: negative misc is floored out of the cash split — shares may exceed card spend by overExplainedCost.
+    const overExplained =
+      report.miscellaneousCost < 0 ? -report.miscellaneousCost : 0;
+    agentLog({
+      runId: 'post-fix',
+      hypothesisId: 'H3',
+      location: 'personalAllowance.recon.test.ts:flag-on',
+      message: 'share vs spend with C-2 floor',
+      data: {
+        companyShare: report.companyShare,
+        driverShare: report.driverShare,
+        sum: report.companyShare + report.driverShare,
+        totalGasCardCost: report.totalGasCardCost,
+        misc: report.miscellaneousCost,
+        overExplained,
+        expectedSum: report.totalGasCardCost + overExplained,
+      },
+    });
+    expect(report.companyShare + report.driverShare).toBeCloseTo(
+      report.totalGasCardCost + overExplained,
+      1,
+    );
     expect(report.companyShare).toBeGreaterThanOrEqual(
       report.metadata!.personalAllowance!.earnedCost,
     );

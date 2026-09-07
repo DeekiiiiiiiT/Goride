@@ -5,7 +5,7 @@
  * Coverage / ratio math lives only in packages/fuel-core (via _shared/fuelCore twin).
  */
 import * as kv from "./kv_store.tsx";
-import { filterByOrg } from "./org_scope.ts";
+import { filterRecordsByOrganizationId } from "./org_scope.ts";
 import { classifyFuelWeek } from "../fuel-brain/classify.ts";
 import { closeOpenCyclesForWeek } from "./fuel_cycle_stamp.ts";
 import {
@@ -48,17 +48,17 @@ function pickFuelRule(scenario: Record<string, unknown> | null): WeekSnapFuelRul
 
 async function loadOrgScenarios(orgId: string): Promise<Record<string, unknown>[]> {
   const raw = ((await kv.getByPrefix("fuel_scenario:")) || []) as Record<string, unknown>[];
-  return filterByOrg(raw, orgId);
+  return filterRecordsByOrganizationId(raw, orgId);
 }
 
 async function loadOrgDrivers(orgId: string): Promise<Record<string, unknown>[]> {
   const raw = ((await kv.getByPrefix("driver:")) || []) as Record<string, unknown>[];
-  return filterByOrg(raw, orgId);
+  return filterRecordsByOrganizationId(raw, orgId);
 }
 
 async function loadOrgVehicles(orgId: string): Promise<Record<string, unknown>[]> {
   const raw = ((await kv.getByPrefix("vehicle:")) || []) as Record<string, unknown>[];
-  return filterByOrg(raw, orgId);
+  return filterRecordsByOrganizationId(raw, orgId);
 }
 
 function resolveScenarioForDriver(

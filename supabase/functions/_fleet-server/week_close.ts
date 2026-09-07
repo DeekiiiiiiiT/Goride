@@ -17,6 +17,7 @@ import {
   WEEK_STATEMENT_ENGINE_VERSION,
 } from "./week_statements.ts";
 import { sealTollWeek } from "./toll_week_seal.ts";
+import { sealFuelWeek } from "./fuel_week_seal.ts";
 import {
   buildCloseHash,
   buildPeriodCloseHashPayload,
@@ -130,10 +131,12 @@ export type WeekClosePreview = {
 
 /**
  * Close Program Pass 2 precondition: make sure every active driver-week has
- * fuel / earnings / toll statements before invariants run. Fuel normally
- * publishes at finalize; historical weeks that finalized before Pass 2 still
- * need a zero-or-period backfill so Close Week is not blocked by a missing lane.
- * Publishes ONLY when a lane is absent (never re-versions a standing statement).
+ * fuel / earnings / toll statements before invariants run.
+ *
+ * Fuel + Toll: re-seal from live rebuild/events while the week is still open
+ * (force=false skips unchanged amounts). Closed/frozen weeks are never
+ * auto-restated — force-seal or Restatement Queue.
+ * Earnings: publish ONLY when a lane is absent.
  */
 async function ensureCloseLaneStatements(
   orgId: string,
@@ -143,38 +146,31 @@ async function ensureCloseLaneStatements(
   const { data: periods, error } = await sb()
     .from("driver_financial_periods")
     .select(
-      "driver_id, cash_collected, driver_share, fleet_share, tips_paid_to_driver, earnings_gross, settlement_amount, fuel_deduction, fuel_fleet_share, fuel_finalized",
+      "driver_id, cash_collected, driver_share, fleet_share, tips_paid_to_driver, earnings_gross, settlement_amount, fuel_deduction, fuel_fleet_share, fuel_finalized, settlement_status, metadata",
     )
     .eq("organization_id", orgId)
     .eq("period_anchor", week);
   if (error) throw new Error(error.message);
 
   let tollLaneMissing = false;
+  let fuelLaneMissing = false;
+  let anyOpenDriver = false;
   for (const p of periods ?? []) {
     const driverId = String(p.driver_id || "");
     if (!driverId) continue;
+    const meta = (p.metadata as Record<string, unknown> | null) || null;
+    const fc = (meta?.financeCore as Record<string, unknown> | undefined) || {};
+    const frozen = isPeriodFrozen({
+      metadata: meta,
+      settlementStatus: p.settlement_status ? String(p.settlement_status) : null,
+      signedAt: fc.signedAt ? String(fc.signedAt) : null,
+    });
+    if (!frozen) anyOpenDriver = true;
+
     const statements = await getLatestWeekStatements(orgId, driverId, week);
     const kinds = new Set(statements.map((s) => s.kind));
 
-    if (!kinds.has("fuel")) {
-      try {
-        await publishWeekStatement({
-          kind: "fuel",
-          organizationId: orgId,
-          driverId,
-          weekKey: week,
-          amountsMinor: {
-            driverShare: Math.round((Number(p.fuel_deduction) || 0) * 100),
-            companyShare: Math.round((Number(p.fuel_fleet_share) || 0) * 100),
-          },
-          status: "closed",
-          closedBy: actorId ?? "week_close_autoseal",
-          closeReason: p.fuel_finalized ? "close_precondition_fuel_finalized" : "close_precondition_fuel",
-        });
-      } catch (e) {
-        console.warn("[week_close] fuel auto-publish failed (non-fatal)", driverId, week, e);
-      }
-    }
+    if (!kinds.has("fuel")) fuelLaneMissing = true;
 
     if (!kinds.has("earnings")) {
       try {
@@ -203,7 +199,16 @@ async function ensureCloseLaneStatements(
     if (!kinds.has("toll")) tollLaneMissing = true;
   }
 
-  if (tollLaneMissing) {
+  if (anyOpenDriver || fuelLaneMissing) {
+    try {
+      await sealFuelWeek({ organizationId: orgId, weekKey: week, actorId });
+    } catch (e) {
+      console.warn("[week_close] fuel auto-seal failed (non-fatal)", week, e);
+    }
+  }
+
+  // Refresh toll statement from events while open; only backfill if missing when frozen.
+  if (anyOpenDriver || tollLaneMissing) {
     try {
       await sealTollWeek({ organizationId: orgId, weekKey: week, actorId });
     } catch (e) {
