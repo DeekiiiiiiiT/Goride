@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
+import { zonedWallClockToDate } from '@roam/toll-core';
 import { findTollMatches } from './tollReconciliation';
 import { FinancialTransaction, Trip } from '../types/data';
 
 /**
- * Trip and transaction timestamps must be built in the same clock. `findTollMatches`
- * parses a toll's `date` + `time` as local, so trip fixtures use naive (no-Z) ISO
- * strings — a `Z` suffix here silently shifts every window by the runner's offset.
+ * Trip and toll fixtures share America/Jamaica wall clock (same as parseTollDate).
+ * Naive `yyyy-MM-ddThh:mm:ss` is host-local and fails on UTC CI once tolls are fleet-tz.
  */
 const createTx = (
   id: string,
@@ -28,13 +28,8 @@ const createTx = (
     isReconciled: false,
   }) as FinancialTransaction;
 
-const addMinutes = (date: string, time: string, minutes: number): string => {
-  const [h, m, s] = time.split(':').map(Number);
-  const d = new Date(`${date}T${time}`);
-  d.setHours(h, m + minutes, s);
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${date}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
-};
+const fleetInstantIso = (date: string, time: string, minutes = 0): string =>
+  new Date(zonedWallClockToDate(date, time).getTime() + minutes * 60_000).toISOString();
 
 const createTrip = (
   id: string,
@@ -43,12 +38,12 @@ const createTrip = (
   tollAmount: number,
   vehicleId: string = 'V1',
 ): Trip => {
-  const start = `${date}T${startTime}`;
+  const start = fleetInstantIso(date, startTime);
   return {
     id,
     date: start,
     requestTime: start,
-    dropoffTime: addMinutes(date, startTime, 20),
+    dropoffTime: fleetInstantIso(date, startTime, 20),
     amount: 50,
     tollCharges: tollAmount,
     vehicleId,
