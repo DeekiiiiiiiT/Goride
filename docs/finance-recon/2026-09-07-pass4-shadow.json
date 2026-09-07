@@ -1,0 +1,65 @@
+{
+  "ranAt": "2026-09-07T14:00:00.000Z",
+  "project": "csfllzzastacofsvcdsc",
+  "organizationId": "8cfa606a-f6ea-4ccb-a2b2-1d2cc323a823",
+  "driverId": "73e5b1dc-01b4-45ee-a34a-25a3256b9841",
+  "window": { "from": "2026-08-10", "to": "2026-08-31" },
+  "gate": "FAIL",
+  "flagRecommendation": "keep PROJECTION_READS_WEEK_STATEMENTS=false",
+  "cleanWeeks": ["2026-08-10", "2026-08-17"],
+  "dirtyWeeks": [
+    {
+      "weekKey": "2026-08-24",
+      "fields": [
+        {
+          "kind": "fuel",
+          "field": "driverShare",
+          "statementMajor": 5784.98,
+          "projectionMajor": 0,
+          "deltaMajor": 5784.98,
+          "closeReason": "fuel_week_seal:consumption_strip"
+        },
+        {
+          "kind": "fuel",
+          "field": "companyShare",
+          "statementMajor": 29211.62,
+          "projectionMajor": 14213.32,
+          "deltaMajor": 14998.3,
+          "closeReason": "fuel_week_seal:consumption_strip"
+        },
+        {
+          "kind": "toll",
+          "field": "totalSpend",
+          "statementMajor": 5920,
+          "projectionMajor": 6210,
+          "deltaMajor": -290,
+          "closeReason": "toll_week_seal_events"
+        },
+        {
+          "kind": "toll",
+          "field": "chargedToDriver",
+          "statementMajor": 2190,
+          "projectionMajor": 0,
+          "deltaMajor": 2190,
+          "closeReason": "toll_week_seal_events"
+        },
+        {
+          "kind": "toll",
+          "field": "reimbursed",
+          "statementMajor": 8350,
+          "projectionMajor": 3605,
+          "deltaMajor": 4745,
+          "closeReason": "toll_week_seal_events"
+        }
+      ],
+      "writtenReason": "Period not rebuilt after independent consumption_strip fuel seal and toll event reseals; statements are ahead of projection."
+    }
+  ],
+  "missingLanes": [
+    {
+      "weekKey": "2026-08-31",
+      "missing": ["toll"],
+      "note": "Period toll fields are also 0 — confirm zero activity vs publish explicit zero toll statement"
+    }
+  ]
+}

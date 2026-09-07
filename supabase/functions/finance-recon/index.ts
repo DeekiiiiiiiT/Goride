@@ -207,10 +207,10 @@ Deno.serve(async (req) => {
             .eq("week_key", week)
             .in("status", ["closed", "draft"])
             .order("version", { ascending: false });
-          const byKind = new Map<string, { amounts_minor?: Record<string, number> }>();
+          const byKind = new Map<string, { amounts_minor?: Record<string, number>; status?: string }>();
           for (const s of stmts || []) {
             const k = String(s.kind);
-            if (!byKind.has(k)) byKind.set(k, s as { amounts_minor?: Record<string, number> });
+            if (!byKind.has(k)) byKind.set(k, s as { amounts_minor?: Record<string, number>; status?: string });
           }
           const fuel = byKind.get("fuel");
           const toll = byKind.get("toll");
@@ -235,15 +235,27 @@ Deno.serve(async (req) => {
               fuelStatement: {
                 driverShare: (Number(fuelAmt.driverShare) || 0) / 100,
                 companyShare: (Number(fuelAmt.companyShare) || 0) / 100,
+                status: String((fuel as { status?: string }).status || 'closed') as
+                  | 'draft'
+                  | 'closed'
+                  | 'restated',
               },
               tollStatement: {
                 totalSpend: (Number(tollAmt.totalSpend) || 0) / 100,
                 chargedToDriver: (Number(tollAmt.chargedToDriver) || 0) / 100,
                 reimbursed: (Number(tollAmt.reimbursed) || 0) / 100,
                 netLoss: (Number(tollAmt.netLoss) || 0) / 100,
+                status: String((toll as { status?: string }).status || 'closed') as
+                  | 'draft'
+                  | 'closed'
+                  | 'restated',
               },
               earningsStatement: {
                 passengerCash: (Number(earnAmt.passengerCash) || 0) / 100,
+                status: String((earnings as { status?: string }).status || 'closed') as
+                  | 'draft'
+                  | 'closed'
+                  | 'restated',
               },
               cashSourceMismatch: Number(
                 (p.metadata as { financeCore?: { cashSourceMismatch?: number } } | null)

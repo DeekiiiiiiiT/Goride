@@ -2193,8 +2193,29 @@ app.patch(`${BASE_PATH}/fuel-reconciliation/settings`, requirePermission("fuel.e
 /** Period health for Business Finance risk signals. */
 app.get(`${BASE_PATH}/fuel-reconciliation/periods-health`, requirePermission("fuel.view"), async (c) => {
   try {
+    const { queryFleet } = await import("./repos/baseRepo.ts");
     const snapshotsRaw = (await kv.getByPrefix("finalized_report:")) || [];
-    const allEntriesRaw = (await kv.getByPrefix("fuel_entry:")) || [];
+    const cutoff = new Date();
+    cutoff.setUTCDate(cutoff.getUTCDate() - 90);
+    const cutoffYmd = cutoff.toISOString().slice(0, 10);
+    const todayYmd = new Date().toISOString().slice(0, 10);
+    const orgFilter = getOrgId(c) || "";
+    const fuelFilters: import("./repos/baseRepo.ts").FleetQueryFilter[] = [];
+    if (orgFilter && !isPlatformCaller(c)) {
+      fuelFilters.push({ op: "orOrg", orgId: orgFilter });
+    } else if (orgFilter && isPlatformCaller(c)) {
+      fuelFilters.push({ op: "eq", col: "organization_id", value: orgFilter });
+    }
+    // P-2: org+date SQL instead of full fuel_entry: prefix scan.
+    const entriesRes = await queryFleet("fuel_entries", {
+      legacyPrefix: "fuel_entry:",
+      dateFrom: cutoffYmd,
+      dateTo: todayYmd,
+      filters: fuelFilters,
+      limit: 50_000,
+      offset: 0,
+    });
+    const allEntriesRaw = entriesRes.data || [];
     const snapshots = narrowPlatformOrg(
       filterByOrg(snapshotsRaw as Record<string, unknown>[], c, {
         endpoint: "/fuel-reconciliation/periods-health",
@@ -2211,11 +2232,6 @@ app.get(`${BASE_PATH}/fuel-reconciliation/periods-health`, requirePermission("fu
     let missingCanonicalExpenseCount = 0;
     let unresolvedLeakageVehicleWeeks = 0;
     let actionableFinalizeCount = 0;
-
-    // Sample recent fills (last ~90 days) for missing fuel_expense
-    const cutoff = new Date();
-    cutoff.setUTCDate(cutoff.getUTCDate() - 90);
-    const cutoffYmd = cutoff.toISOString().slice(0, 10);
 
     for (const entry of allEntries as any[]) {
       if (!entry?.id) continue;

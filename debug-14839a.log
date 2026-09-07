@@ -1,2 +1,0 @@
-{"sessionId":"14839a","runId":"post-fix","hypothesisId":"H1","location":"FuelPeriodLandingPage.test.tsx:second-approval","message":"badge found after non-virtual PeriodList","data":{"found":true},"timestamp":1788791749992}
-{"sessionId":"14839a","runId":"post-fix","hypothesisId":"H3","location":"personalAllowance.recon.test.ts:flag-on","message":"share vs spend with C-2 floor","data":{"companyShare":1800,"driverShare":3440,"sum":5240,"totalGasCardCost":4000,"misc":-1240,"overExplained":1240,"expectedSum":5240},"timestamp":1788791750239}

@@ -77,6 +77,7 @@ function weekLabel(weekKey: string): string {
 const STATUS_CHROME: Record<CloseLaneStatus, { dot: string; text: string; label: string }> = {
   clear: { dot: 'bg-emerald-500', text: 'text-emerald-700', label: 'Clear' },
   blocked: { dot: 'bg-rose-500', text: 'text-rose-700', label: 'Blocked' },
+  unverified: { dot: 'bg-amber-500', text: 'text-amber-800', label: 'Unverified' },
   pending: { dot: 'bg-amber-500', text: 'text-amber-700', label: 'Pending' },
   loading: { dot: 'bg-slate-300', text: 'text-slate-500', label: 'Loading' },
 };
@@ -87,6 +88,8 @@ function LaneCard({
   status,
   metrics,
   blockerLabels,
+  warnLabels,
+  provenance,
   onReview,
 }: {
   lane: CloseLane;
@@ -94,6 +97,8 @@ function LaneCard({
   status: CloseLaneStatus;
   metrics: { label: string; value: string; tone?: 'default' | 'warn' }[];
   blockerLabels: string[];
+  warnLabels?: string[];
+  provenance?: string;
   onReview: () => void;
 }) {
   const chrome = STATUS_CHROME[status];
@@ -109,6 +114,10 @@ function LaneCard({
           {status === 'loading' ? 'Loading…' : chrome.label}
         </span>
       </div>
+
+      {provenance ? (
+        <p className="mt-1 text-[11px] text-slate-500">{provenance}</p>
+      ) : null}
 
       <dl className="mt-3 space-y-1.5">
         {metrics.map((m) => (
@@ -129,9 +138,20 @@ function LaneCard({
       {blockerLabels.length > 0 ? (
         <ul className="mt-3 space-y-1 border-t border-slate-100 pt-2">
           {blockerLabels.map((b, i) => (
-            <li key={i} className="flex items-start gap-1.5 text-xs text-rose-700">
+            <li key={`b-${i}`} className="flex items-start gap-1.5 text-xs text-rose-700">
               <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
               <span>{b}</span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+
+      {(warnLabels || []).length > 0 ? (
+        <ul className={cn('mt-2 space-y-1', blockerLabels.length === 0 && 'border-t border-slate-100 pt-2')}>
+          {(warnLabels || []).map((w, i) => (
+            <li key={`w-${i}`} className="flex items-start gap-1.5 text-xs text-amber-800">
+              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              <span>{w}</span>
             </li>
           ))}
         </ul>
@@ -254,7 +274,12 @@ export function CloseWeekPage({
   }, [preview]);
 
   const pnlBlocker = (preview?.blockers || []).find((b) => b.code === 'SETTLEMENT_PNL_MISMATCH');
+  const pnlUnavailable = (preview?.blockers || []).find((b) => b.code === 'BUSINESS_WEEK_PNL_UNAVAILABLE');
   const totalBlockers = blockingCount(preview?.blockers);
+  const laneBlockLabels = (lane: CloseLane) =>
+    byLane[lane].filter((b) => b.severity !== 'warn').map(humanBlockerLabel);
+  const laneWarnLabels = (lane: CloseLane) =>
+    byLane[lane].filter((b) => b.severity === 'warn').map(humanBlockerLabel);
   const weekAlreadyClosed = Boolean(preview?.weekClosed);
   const canClose =
     !previewLoading &&
@@ -359,31 +384,36 @@ export function CloseWeekPage({
           lane="fuel"
           icon={<Fuel className="h-4 w-4" />}
           status={fuelStatus}
+          provenance="Fuel from finalize snapshot / week rebuild"
           metrics={[
             { label: 'Driver share', value: MONEY(preview?.fuel.driverShare) },
             { label: 'Fleet share', value: MONEY(preview?.fuel.fleetShare) },
             { label: 'Finalized', value: preview ? (preview.fuel.finalized ? 'Yes' : 'No') : '—', tone: preview && !preview.fuel.finalized ? 'warn' : 'default' },
           ]}
-          blockerLabels={byLane.fuel.map(humanBlockerLabel)}
+          blockerLabels={laneBlockLabels('fuel')}
+          warnLabels={laneWarnLabels('fuel')}
           onReview={() => reviewLane('fuel')}
         />
         <LaneCard
           lane="toll"
           icon={<Receipt className="h-4 w-4" />}
           status={tollStatus}
+          provenance="Tolls from canonical events (H-9)"
           metrics={[
             { label: 'Spend', value: MONEY(preview?.toll.spend) },
             { label: 'Reimbursed', value: MONEY(preview?.toll.reimbursed) },
             { label: 'Charged to drivers', value: MONEY(preview?.toll.chargedToDrivers) },
             { label: 'Net toll loss', value: MONEY(preview?.toll.netLoss) },
           ]}
-          blockerLabels={byLane.toll.map(humanBlockerLabel)}
+          blockerLabels={laneBlockLabels('toll')}
+          warnLabels={laneWarnLabels('toll')}
           onReview={() => reviewLane('toll')}
         />
         <LaneCard
           lane="settlement"
           icon={<Banknote className="h-4 w-4" />}
           status={settlementStatus}
+          provenance="Earnings from commission + cash engines"
           metrics={[
             { label: 'Fleet owes', value: MONEY(settlement.fleetOwes) },
             { label: 'Drivers owe', value: MONEY(settlement.driversOwe) },
@@ -393,7 +423,8 @@ export function CloseWeekPage({
               ? [{ label: 'Blocked / pending', value: MONEY(settlement.blockedExposure), tone: 'warn' as const }]
               : []),
           ]}
-          blockerLabels={byLane.settlement.map(humanBlockerLabel)}
+          blockerLabels={laneBlockLabels('settlement')}
+          warnLabels={laneWarnLabels('settlement')}
           onReview={() => reviewLane('settlement')}
         />
       </div>
@@ -409,8 +440,16 @@ export function CloseWeekPage({
           />
           <IdentityRow
             label="Σ driver settlements ↔ Business Finance P&L"
-            value={pnlBlocker ? MONEY(pnlBlocker.delta) : preview ? MONEY(0) : '—'}
-            ok={!!preview && !pnlBlocker}
+            value={
+              pnlBlocker
+                ? MONEY(pnlBlocker.delta)
+                : pnlUnavailable
+                  ? 'P&L not available'
+                  : preview
+                    ? MONEY(0)
+                    : '—'
+            }
+            ok={!!preview && !pnlBlocker && !pnlUnavailable}
           />
         </div>
       </div>

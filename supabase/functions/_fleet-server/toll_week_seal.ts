@@ -162,6 +162,11 @@ export async function sealTollWeek(opts: {
       Math.abs(reimbursed) > 0.005;
     if (!hasActivity) continue;
 
+    // Pass 3 / H-7: period-column fallback is never a closed truth when the
+    // driver-week has activity — publish draft so closeInvariants blocks.
+    const independent = source === "events" || source === "financial_events";
+    const status: "draft" | "closed" = independent ? "closed" : "draft";
+
     const amountsMinor = {
       totalSpend: cents(tollSpend),
       chargedToDriver: cents(chargedToDriver),
@@ -175,7 +180,7 @@ export async function sealTollWeek(opts: {
       const latest = await getLatestWeekStatement(organizationId, driverId, weekKey, "toll");
       const unchanged =
         latest &&
-        latest.status === "closed" &&
+        latest.status === status &&
         JSON.stringify(latest.amountsMinor) === JSON.stringify(amountsMinor);
       if (unchanged) continue;
     }
@@ -186,9 +191,14 @@ export async function sealTollWeek(opts: {
       driverId,
       weekKey,
       amountsMinor,
-      status: "closed",
-      closedBy: opts.actorId ?? "toll_week_seal",
-      closeReason: source === "events" ? "toll_week_seal_events" : "toll_week_seal",
+      status,
+      closedBy: status === "closed" ? (opts.actorId ?? "toll_week_seal") : null,
+      closeReason:
+        status === "closed"
+          ? source === "events"
+            ? "toll_week_seal_events"
+            : "toll_week_seal_financial_events"
+          : "toll_week_seal_unverified_period_columns",
     });
     published += 1;
   }

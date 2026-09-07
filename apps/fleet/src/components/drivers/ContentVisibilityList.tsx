@@ -28,10 +28,6 @@ export function ContentVisibilityList<T>({
   const parentRef = useRef<HTMLDivElement>(null);
   const shouldVirtualize = items.length >= VIRTUALIZE_MIN_ITEMS;
 
-  // #region agent log
-  fetch('http://127.0.0.1:7418/ingest/a3d13dc6-6745-44ac-a4fd-f2bafc5169ae',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'14839a'},body:JSON.stringify({sessionId:'14839a',runId:'post-fix',hypothesisId:'H1',location:'ContentVisibilityList.tsx:gate',message:'virtualize decision',data:{itemCount:items.length,shouldVirtualize,minItems:VIRTUALIZE_MIN_ITEMS},timestamp:Date.now()})}).catch(()=>{});
-  // #endregion
-
   const virtualizer = useVirtualizer({
     count: shouldVirtualize ? items.length : 0,
     getScrollElement: () => parentRef.current,

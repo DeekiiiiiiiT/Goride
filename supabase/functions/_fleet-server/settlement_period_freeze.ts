@@ -73,6 +73,15 @@ export async function assertFrozenPeriodHashIntact(period: {
     return;
   }
 
+  const fc = (period.metadata?.financeCore as Record<string, unknown> | undefined) || {};
+  const storedIds = Array.isArray(fc.closeSourceRowIds)
+    ? (fc.closeSourceRowIds as unknown[]).map(String)
+    : [];
+  const storedEngine =
+    typeof fc.closeEngineVersion === "string" && fc.closeEngineVersion.trim()
+      ? String(fc.closeEngineVersion)
+      : "week-statement@1";
+
   const result = await verifyPeriodCloseHash({
     row: {
       tollSpend: Number(period.toll_spend) || 0,
@@ -94,8 +103,8 @@ export async function assertFrozenPeriodHashIntact(period: {
       payoutNet: Number(period.payout_net) || 0,
     },
     storedHash: stored,
-    sourceRowIds: [],
-    engineVersion: "period-close@1",
+    sourceRowIds: storedIds,
+    engineVersion: storedEngine,
   });
 
   if (!result.ok) {
@@ -115,6 +124,10 @@ export type FreezeMetaInput = {
   closeHash: string;
   /** Defaults to now(). */
   signedAt?: string;
+  /** Same sourceRowIds used when building closeHash (H-4 verify-on-read). */
+  sourceRowIds?: string[];
+  /** Same engineVersion used when building closeHash. */
+  engineVersion?: string;
 };
 
 /**
@@ -124,12 +137,13 @@ export type FreezeMetaInput = {
  *   metadata.signedWeek           = true
  *   metadata.financeCore.signedAt = ISO timestamp
  *   metadata.financeCore.closeHash / closedBy / closeReason
+ *   metadata.financeCore.closeSourceRowIds / closeEngineVersion (H-4)
  * After this, isPeriodFrozen() returns true and assertPeriodNotFrozen() blocks
  * further movements.
  */
 export function markPeriodFrozen(
   row: { metadata?: Record<string, unknown> | null } | null | undefined,
-  { actorId, reason, closeHash, signedAt }: FreezeMetaInput,
+  { actorId, reason, closeHash, signedAt, sourceRowIds, engineVersion }: FreezeMetaInput,
 ): Record<string, unknown> {
   const meta = { ...(row?.metadata || {}) } as Record<string, unknown>;
   const financeCore = { ...((meta.financeCore as Record<string, unknown>) || {}) };
@@ -140,6 +154,12 @@ export function markPeriodFrozen(
   financeCore.closeHash = closeHash;
   financeCore.closedBy = actorId;
   financeCore.closeReason = reason;
+  if (sourceRowIds) {
+    financeCore.closeSourceRowIds = [...sourceRowIds].map(String).sort();
+  }
+  if (engineVersion) {
+    financeCore.closeEngineVersion = engineVersion;
+  }
 
   meta.periodFrozen = true;
   meta.signedWeek = true;

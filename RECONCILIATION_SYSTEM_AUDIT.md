@@ -148,7 +148,10 @@ Phase 4 statement publishers for **toll** and **earnings**; the projection readi
 
 ---
 
-## 0.6 Remediation status — Pass 2, verified 2026-09-07 (current)
+## 0.6 Remediation status — Pass 2, verified 2026-09-07 (superseded by §0.7)
+
+> **Superseded.** Pass 3 closed H-7 independence, H-4 verify alignment, and M-4.
+> Read **§0.7** for current status.
 
 Re-audited against working tree at `c1db22ab` (clean). **52 files changed since Pass 1, +2,513 / −299.**
 
@@ -1117,12 +1120,12 @@ SETTLEMENT
 |---|---|---|---|---|
 | 1 | C-1 | Fuel share sign inversion / silent drop | S | ✅ closed |
 | 2 | C-2 | Unbounded unexplained fuel → negative shares | M | ✅ closed |
-| 3 | C-6 | No real week close | L | 🟡 **closes, but lanes self-derived** |
+| 3 | C-6 | No real week close | L | ✅ closes with honest independent blockers |
 | 4 | C-3 | Toll cards satisfy no identity | M | ✅ closed (decision locked) |
 | 5 | C-5 | Dispute refund double-counted across weeks | S | ✅ closed |
 | 6 | C-7 | Reversal clamps eat driver credits | S | ✅ closed |
 | 7 | C-4 | Net loss floored then summed | S | ✅ closed |
-| 8 | H-7 | No cross-system invariants | M | 🟡 **wired but tautological** |
+| 8 | H-7 | No cross-system invariants | M | ✅ independent lanes; draft blocks |
 | 9 | H-1 | Collect queue mixes settled + unfinalized | S | ✅ closed |
 | 10 | H-3 | Fuel reversal hard-deletes money rows | S | ✅ closed |
 | 11 | H-8 | Toll events use a different week rule | S | ✅ closed (+ CI guard) |
@@ -1130,9 +1133,9 @@ SETTLEMENT
 | 13 | H-5 | Fixed_Amount → 50/50 on server | S | ✅ closed |
 | 14 | H-9 | Three sources for "charged to driver" | M | ✅ closed |
 | 15 | H-6 | Fuel snapshot matched by range | XS | ✅ closed |
-| 16 | H-4 | Dead integrity hash | S | ✅ closed (verify-on-read) |
+| 16 | H-4 | Dead integrity hash | S | ✅ closed (verify-on-read aligned) |
 | 17 | P-1 | Full-table scans per rebuild | M | ✅ closed |
-| 18 | P-3 | Whole dataset in React state | L | ⬜ open |
+| 18 | P-3 | Whole dataset in React state | L | ✅ server-only landing when SQL covers |
 | 19 | U-2 | No unified week-close screen | M | ✅ closed |
 
 ---
@@ -1161,6 +1164,32 @@ After that: `M-4` (org fail-closed) is a one-line tenant-isolation fix, and the 
 
 ---
 
+## 0.7 Remediation status — Pass 3, verified 2026-09-07 (current)
+
+**Goal:** Close Week checks can fail (H-7). Draft statements cannot greenwash a close.
+
+### Scoreboard (delta from Pass 2)
+
+| ID | Finding | Pass 2 | Pass 3 |
+|---|---|---|---|
+| **H-7** | Cross-system invariants tautological | 🟡 | ✅ **Closed** — independent publishers; draft unverified blocks |
+| **H-4** | Close hash verify payload skew | ✅ (write) / 🟡 (verify) | ✅ **Closed** — verify uses stored sourceRowIds + engineVersion |
+| **M-4** | Org fail-closed | ⬜ | ✅ **Closed** |
+| **M-5** | Deep-link step gating | ⬜ | ✅ **Closed** (wizard clamp + e2e + unit) |
+| **P-2** | KV prefix scans | 🟡 | 🟡 Partial — periods-health migrated to SQL |
+| **P-3** | Dual-truth fuel landing | ⬜ | ✅ **Closed** — server-only when SQL covers range |
+| **P-4/P-5** | Virtualize toll/fuel | ⬜ | 🟡 Partial — FuelSettlementTable windowed |
+| **C-6** | Real week close | 🟡 | ✅ **Closes with honest blockers** |
+
+**Still open / follow-on:** flip `PROJECTION_READS_WEEK_STATEMENTS` after shadow drift (Pass 4 cutover); Business Finance P&L feed for settlement↔P&L block; remaining `fuel_entry:` admin scans; TollBucketPanel virtualization.
+
+### Docs
+
+- `docs/finance-recon/2026-09-07-pass3-independence.md`
+- `docs/finance-recon/2026-09-07-close-week-runbook.md`
+
+---
+
 ## 11. Post-remediation note — Pass 1, 2026-09-07
 
 Phase 0 was done properly (baseline fixture, goldens, blast-radius scripts, a "before" report), which is what made this re-audit possible at all. Nine findings are genuinely closed, including all four of the pure week-rule and data-integrity defects, and the two structural UX gaps.
@@ -1179,4 +1208,4 @@ One item does still need a decision rather than code: **C-3.** Whether `chargedT
 
 ---
 
-*Original audit: read-only, no source files modified. §0.5 / §11 (Pass 1) and §0.6 / §12 (Pass 2) added 2026-09-07 after verifying each remediation against the working tree; also read-only. §0.6 is the current status.*
+*Original audit: read-only, no source files modified. §0.5 / §11 (Pass 1), §0.6 / §12 (Pass 2), and §0.7 (Pass 3) added 2026-09-07 after verifying each remediation against the working tree. §0.7 is the current status.*

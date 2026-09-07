@@ -41,7 +41,10 @@ PROJECTION_READS_WEEK_STATEMENTS=true
 
 ## Rollout checklist
 
+0. **Pass 3 first** — independent statement publishers + draft unverified blockers
+   (`docs/finance-recon/2026-09-07-pass3-independence.md`). Do not flip the flag
+   while auto-seal still copies period columns.
 1. Publish fuel / toll / earnings statements for a quiet week; run rebuilds; confirm shadow logs clean.
 2. Flip `PROJECTION_READS_WEEK_STATEMENTS=true` in staging; rebuild one org-week; compare desk totals.
-3. Flip production; watch finance-recon for `FUEL_*` / statement drifts.
+3. Flip production; watch finance-recon for `FUEL_*` / statement drifts / `*_STATEMENT_UNVERIFIED`.
 4. Use Restatement Queue + Close Week for any post-close corrections.

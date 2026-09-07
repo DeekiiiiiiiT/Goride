@@ -168,6 +168,16 @@ export async function sealFuelWeek(opts: {
       Math.abs(amounts.totalSpend) > 0.005;
     if (!hasActivity && !p.fuel_finalized) continue;
 
+    // Pass 3 / H-7: only rebuild snapshot, finalized_report KV, or consumption
+    // strip overrides may close fuel. Period-column copies stay draft.
+    const verifiedSources = new Set([
+      "fuel_week_rebuild",
+      "finalized_report",
+      "consumption_strip",
+    ]);
+    const independent = verifiedSources.has(amounts.source);
+    const status: "draft" | "closed" = independent ? "closed" : "draft";
+
     const amountsMinor = {
       driverShare: cents(amounts.driverShare),
       companyShare: cents(amounts.companyShare),
@@ -179,7 +189,7 @@ export async function sealFuelWeek(opts: {
       const latest = await getLatestWeekStatement(organizationId, driverId, weekKey, "fuel");
       const unchanged =
         latest &&
-        latest.status === "closed" &&
+        latest.status === status &&
         JSON.stringify(latest.amountsMinor) === JSON.stringify(amountsMinor);
       if (unchanged) continue;
     }
@@ -190,9 +200,12 @@ export async function sealFuelWeek(opts: {
       driverId,
       weekKey,
       amountsMinor,
-      status: "closed",
-      closedBy: opts.actorId ?? "fuel_week_seal",
-      closeReason: `fuel_week_seal:${amounts.source}`,
+      status,
+      closedBy: status === "closed" ? (opts.actorId ?? "fuel_week_seal") : null,
+      closeReason:
+        status === "closed"
+          ? `fuel_week_seal:${amounts.source}`
+          : "close_precondition_unverified",
     });
     published += 1;
   }

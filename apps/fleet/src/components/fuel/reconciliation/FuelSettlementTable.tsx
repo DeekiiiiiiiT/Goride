@@ -1,7 +1,9 @@
 /**
  * Settlement preview / finalize table shared by wizard steps.
+ * P-4/P-5: window long lists with the shared settlements hook.
  */
 import { formatFuelMoney } from '../../../utils/formatFuelMoney';
+import { useWindowedRows } from '../../fleet-financials/settlements/useWindowedRows';
 
 export type FuelSettlementRow = {
   id: string;
@@ -20,10 +22,20 @@ export function FuelSettlementTable({
   rows: FuelSettlementRow[];
   showStatus?: boolean;
 }) {
+  const { visible, padTop, padBottom, onScroll, windowed } = useWindowedRows(rows, {
+    rowHeight: 48,
+    viewHeight: 420,
+    threshold: 30,
+  });
+
   return (
-    <div className="overflow-x-auto rounded-lg border border-slate-200">
+    <div
+      className="overflow-auto rounded-lg border border-slate-200"
+      style={windowed ? { maxHeight: 420 } : undefined}
+      onScroll={windowed ? onScroll : undefined}
+    >
       <table className="w-full min-w-[520px] text-left text-sm">
-        <thead className="bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <thead className="sticky top-0 bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
           <tr>
             <th className="px-3 py-2">Vehicle</th>
             <th className="px-3 py-2 text-right">Cash from earnings</th>
@@ -33,7 +45,12 @@ export function FuelSettlementTable({
           </tr>
         </thead>
         <tbody>
-          {rows.map((r) => (
+          {windowed && padTop > 0 ? (
+            <tr aria-hidden>
+              <td colSpan={showStatus ? 5 : 4} style={{ height: padTop, padding: 0, border: 0 }} />
+            </tr>
+          ) : null}
+          {visible.map((r) => (
             <tr key={r.id} className="border-t border-slate-100">
               <td className="px-3 py-3 font-medium text-slate-900">{r.plate}</td>
               <td className="px-3 py-3 text-right tabular-nums">{formatFuelMoney(r.cashFromEarnings)}</td>
@@ -48,6 +65,11 @@ export function FuelSettlementTable({
               )}
             </tr>
           ))}
+          {windowed && padBottom > 0 ? (
+            <tr aria-hidden>
+              <td colSpan={showStatus ? 5 : 4} style={{ height: padBottom, padding: 0, border: 0 }} />
+            </tr>
+          ) : null}
         </tbody>
       </table>
     </div>

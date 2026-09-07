@@ -2,22 +2,11 @@
  * @vitest-environment jsdom
  */
 import React from 'react';
-import { appendFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { FuelPeriodLandingPage } from './FuelPeriodLandingPage';
 import { emptyFuelStepCounts } from '../../../utils/fuelPeriodGating';
 import type { FuelReconciliationPeriod } from '../../../utils/fuelPeriodStatus';
-
-function agentLog(payload: Record<string, unknown>) {
-  // #region agent log
-  fetch('http://127.0.0.1:7418/ingest/a3d13dc6-6745-44ac-a4fd-f2bafc5169ae',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'14839a'},body:JSON.stringify({sessionId:'14839a',...payload,timestamp:Date.now()})}).catch(()=>{});
-  try {
-    appendFileSync(resolve(process.cwd(), '../../debug-14839a.log'), JSON.stringify({sessionId:'14839a',...payload,timestamp:Date.now()}) + '\n');
-  } catch { /* ignore */ }
-  // #endregion
-}
 
 function period(partial: Partial<FuelReconciliationPeriod>): FuelReconciliationPeriod {
   return {
@@ -53,7 +42,6 @@ describe('FuelPeriodLandingPage auto-close badges', () => {
       />,
     );
     expect(screen.getByText(/needs second approval/i)).toBeTruthy();
-    agentLog({runId:'post-fix',hypothesisId:'H1',location:'FuelPeriodLandingPage.test.tsx:second-approval',message:'badge found after non-virtual PeriodList',data:{found:true}});
   });
 
   it('shows eligible when money week lacks client snapshots but under threshold', () => {

@@ -167,4 +167,57 @@ describe('checkCloseInvariants (§6.4)', () => {
     expect(blockers.some((b) => b.code === 'CASH_SOURCE_MISMATCH')).toBe(true);
     expect(canCloseWeek(blockers)).toBe(false);
   });
+
+  // Pass 3 / H-7: draft statements must block close (cannot greenwash).
+  it('draft fuel statement blocks close as FUEL_STATEMENT_UNVERIFIED', () => {
+    const blockers = checkCloseInvariants({
+      ...tyingWeek,
+      fuelStatement: { driverShare: 1200, companyShare: 800, status: 'draft' },
+    });
+    expect(blockers.some((b) => b.code === 'FUEL_STATEMENT_UNVERIFIED')).toBe(true);
+    expect(canCloseWeek(blockers)).toBe(false);
+  });
+
+  it('draft toll statement blocks close as TOLL_STATEMENT_UNVERIFIED', () => {
+    const blockers = checkCloseInvariants({
+      ...tyingWeek,
+      tollStatement: {
+        totalSpend: 5920,
+        chargedToDriver: 2340,
+        reimbursed: 3580,
+        netLoss: 0,
+        status: 'draft',
+      },
+    });
+    expect(blockers.some((b) => b.code === 'TOLL_STATEMENT_UNVERIFIED')).toBe(true);
+    expect(canCloseWeek(blockers)).toBe(false);
+  });
+
+  it('deliberately mismatched statement amounts block close (non-tautological)', () => {
+    const blockers = checkCloseInvariants({
+      ...tyingWeek,
+      fuelStatement: { driverShare: 9999, companyShare: 800, status: 'closed' },
+      earningsStatement: { passengerCash: 8000, status: 'closed' },
+      tollStatement: {
+        totalSpend: 5920,
+        chargedToDriver: 2340,
+        reimbursed: 3580,
+        netLoss: 0,
+        status: 'closed',
+      },
+    });
+    expect(blockers.some((b) => b.code === 'FUEL_DRIVER_SHARE_MISMATCH')).toBe(true);
+    expect(canCloseWeek(blockers)).toBe(false);
+  });
+
+  it('warns when settlement sum is present but Business Finance P&L is unavailable', () => {
+    const blockers = checkCloseInvariants({
+      ...tyingWeek,
+      settlementSumForWeek: 11109.21,
+      businessWeekPnlUnavailable: true,
+    });
+    const w = blockers.find((b) => b.code === 'BUSINESS_WEEK_PNL_UNAVAILABLE');
+    expect(w?.severity).toBe('warn');
+    expect(canCloseWeek(blockers)).toBe(true);
+  });
 });

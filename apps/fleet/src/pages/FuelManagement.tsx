@@ -333,8 +333,7 @@ function FuelManagementInner({ defaultTab = 'logs', onViewDriverLedger, onTabCha
       Boolean(landingPeriodRange.from && landingPeriodRange.to),
   });
 
-  // P-3: when SQL has rows for the active range, land server-only; derive only fills
-  // weeks with no server row (mergeServerFirst never dual-merges over server money).
+  // P-3: when SQL covers every week option, land server-only (no browser derive).
   const fuelReconPeriods = useMemo(() => {
     const serverByWeek = new Map(
       serverFuelPeriods.map((r) => [weekStartYmd(r.weekStart), r] as const),
@@ -346,9 +345,11 @@ function FuelManagementInner({ defaultTab = 'logs', onViewDriverLedger, onTabCha
     const needDeriveGaps = reconciliationWeekOptions.some(
       (w) => !serverByWeek.has(w.startDate),
     );
-    // Prefer skipping the browser week engine entirely when every option already has SQL.
+    if (!needDeriveGaps) {
+      return mergeServerFirstLandingPeriods(serverFuelPeriods, []);
+    }
     const derived =
-      needDeriveGaps && (vehicles.length > 0 || logs.length > 0)
+      vehicles.length > 0 || logs.length > 0
         ? deriveFuelReconciliationPeriods({
             weekOptions: reconciliationWeekOptions,
             vehicles,

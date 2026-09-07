@@ -134,7 +134,7 @@ export async function verifyPeriodCloseHash(input: {
     row: input.row,
     sourceRowIds: input.sourceRowIds ?? [],
     sourceVersions: input.sourceVersions,
-    engineVersion: input.engineVersion || 'period-close@1',
+    engineVersion: input.engineVersion || 'week-statement@1',
   });
   const expected = await buildCloseHash(payload);
   return {

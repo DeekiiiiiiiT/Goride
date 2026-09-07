@@ -227,8 +227,15 @@ app.get(`${BASE}/health`, requirePermission('transactions.view'), async (c) => {
 app.get(`${BASE}/company-owes`, requirePermission('transactions.view'), async (c) => {
   try {
     const opts = queueListQuery(c);
+    if (!opts.organizationId) {
+      return c.json(
+        { error: "ORG_REQUIRED", message: "organizationId is required for period list queries" },
+        400,
+      );
+    }
     const rows = await listCompanyOwesPeriods({
       ...opts,
+      organizationId: opts.organizationId,
       limit: opts.limit ?? 500,
     });
     const nameById = await loadDriverNameMap();
@@ -249,6 +256,9 @@ app.get(`${BASE}/company-owes`, requirePermission('transactions.view'), async (c
     });
   } catch (e: any) {
     console.error("[DFP] company-owes error:", e.message);
+    if (String(e.message || "").startsWith("ORG_REQUIRED")) {
+      return c.json({ error: "ORG_REQUIRED", message: e.message }, 400);
+    }
     return c.json({ error: e.message }, 500);
   }
 });
@@ -256,8 +266,15 @@ app.get(`${BASE}/company-owes`, requirePermission('transactions.view'), async (c
 app.get(`${BASE}/driver-owes`, requirePermission('transactions.view'), async (c) => {
   try {
     const opts = queueListQuery(c);
+    if (!opts.organizationId) {
+      return c.json(
+        { error: "ORG_REQUIRED", message: "organizationId is required for period list queries" },
+        400,
+      );
+    }
     const rows = await listDriverOwesPeriods({
       ...opts,
+      organizationId: opts.organizationId,
       limit: opts.limit ?? 500,
     });
     const nameById = await loadDriverNameMap();
@@ -278,6 +295,9 @@ app.get(`${BASE}/driver-owes`, requirePermission('transactions.view'), async (c)
     });
   } catch (e: any) {
     console.error("[DFP] driver-owes error:", e.message);
+    if (String(e.message || "").startsWith("ORG_REQUIRED")) {
+      return c.json({ error: "ORG_REQUIRED", message: e.message }, 400);
+    }
     return c.json({ error: e.message }, 500);
   }
 });
@@ -285,8 +305,15 @@ app.get(`${BASE}/driver-owes`, requirePermission('transactions.view'), async (c)
 app.get(`${BASE}/cash-held`, requirePermission('transactions.view'), async (c) => {
   try {
     const opts = queueListQuery(c);
+    if (!opts.organizationId) {
+      return c.json(
+        { error: "ORG_REQUIRED", message: "organizationId is required for period list queries" },
+        400,
+      );
+    }
     const rows = await listCashHeldPeriods({
       ...opts,
+      organizationId: opts.organizationId,
       limit: opts.limit ?? 500,
     });
     const nameById = await loadDriverNameMap();
@@ -307,6 +334,9 @@ app.get(`${BASE}/cash-held`, requirePermission('transactions.view'), async (c) =
     });
   } catch (e: any) {
     console.error("[DFP] cash-held error:", e.message);
+    if (String(e.message || "").startsWith("ORG_REQUIRED")) {
+      return c.json({ error: "ORG_REQUIRED", message: e.message }, 400);
+    }
     return c.json({ error: e.message }, 500);
   }
 });
@@ -314,8 +344,15 @@ app.get(`${BASE}/cash-held`, requirePermission('transactions.view'), async (c) =
 app.get(`${BASE}/settlement-paid`, requirePermission('transactions.view'), async (c) => {
   try {
     const opts = queueListQuery(c);
+    if (!opts.organizationId) {
+      return c.json(
+        { error: "ORG_REQUIRED", message: "organizationId is required for period list queries" },
+        400,
+      );
+    }
     const rows = await listRecentlyPaidSettlementPeriods({
       ...opts,
+      organizationId: opts.organizationId,
       limit: opts.limit ?? 300,
     });
     const nameById = await loadDriverNameMap();
@@ -334,6 +371,9 @@ app.get(`${BASE}/settlement-paid`, requirePermission('transactions.view'), async
     });
   } catch (e: any) {
     console.error("[DFP] settlement-paid error:", e.message);
+    if (String(e.message || "").startsWith("ORG_REQUIRED")) {
+      return c.json({ error: "ORG_REQUIRED", message: e.message }, 400);
+    }
     return c.json({ error: e.message }, 500);
   }
 });
@@ -341,9 +381,16 @@ app.get(`${BASE}/settlement-paid`, requirePermission('transactions.view'), async
 app.get(`${BASE}/reconciled`, requirePermission('transactions.view'), async (c) => {
   try {
     const opts = queueListQuery(c);
+    if (!opts.organizationId) {
+      return c.json(
+        { error: "ORG_REQUIRED", message: "organizationId is required for period list queries" },
+        400,
+      );
+    }
     // S1-3: must forward organizationId (and serviceLine) — previously dropped → cross-tenant leak.
     const rows = await listReconciledSettlementPeriods({
       ...opts,
+      organizationId: opts.organizationId,
       limit: opts.limit ?? 500,
     });
     const nameById = await loadDriverNameMap();

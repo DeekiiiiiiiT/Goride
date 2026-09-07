@@ -13,7 +13,6 @@ import { isPeriodFrozen, markPeriodFrozen } from "./settlement_period_freeze.ts"
 import {
   closeWeekStatements,
   getLatestWeekStatements,
-  publishWeekStatement,
   WEEK_STATEMENT_ENGINE_VERSION,
 } from "./week_statements.ts";
 import { sealTollWeek } from "./toll_week_seal.ts";
@@ -45,6 +44,7 @@ function fuelFromStatement(s: WeekStatement | undefined): CloseFuelStatement | n
   return {
     driverShare: minorToMajor(s.amountsMinor.driverShare),
     companyShare: minorToMajor(s.amountsMinor.companyShare),
+    status: s.status,
   };
 }
 
@@ -57,6 +57,7 @@ function tollFromStatement(s: WeekStatement | undefined): CloseTollStatement | n
     netLoss: minorToMajor(s.amountsMinor.netLoss),
     cashWashSpend: minorToMajor(s.amountsMinor.cashWashSpend),
     tagSpend: minorToMajor(s.amountsMinor.tagSpend),
+    status: s.status,
   };
 }
 
@@ -67,6 +68,7 @@ function earningsFromStatement(s: WeekStatement | undefined): CloseEarningsState
     driverShare: minorToMajor(s.amountsMinor.driverShare),
     companyShare: minorToMajor(s.amountsMinor.companyShare),
     tipsPaidToDriver: minorToMajor(s.amountsMinor.tipsPaidToDriver),
+    status: s.status,
   };
 }
 
@@ -130,13 +132,9 @@ export type WeekClosePreview = {
 };
 
 /**
- * Close Program Pass 2 precondition: make sure every active driver-week has
- * fuel / earnings / toll statements before invariants run.
- *
- * Fuel + Toll: re-seal from live rebuild/events while the week is still open
- * (force=false skips unchanged amounts). Closed/frozen weeks are never
- * auto-restated — force-seal or Restatement Queue.
- * Earnings: publish ONLY when a lane is absent.
+ * Close Program Pass 3 precondition: refresh fuel/toll from independent
+ * sources while the week is open. Earnings are published only by DFP rebuild
+ * from commission/cash engines — never copied from period columns here (H-7).
  */
 async function ensureCloseLaneStatements(
   orgId: string,
@@ -146,7 +144,7 @@ async function ensureCloseLaneStatements(
   const { data: periods, error } = await sb()
     .from("driver_financial_periods")
     .select(
-      "driver_id, cash_collected, driver_share, fleet_share, tips_paid_to_driver, earnings_gross, settlement_amount, fuel_deduction, fuel_fleet_share, fuel_finalized, settlement_status, metadata",
+      "driver_id, fuel_finalized, settlement_status, metadata",
     )
     .eq("organization_id", orgId)
     .eq("period_anchor", week);
@@ -171,31 +169,8 @@ async function ensureCloseLaneStatements(
     const kinds = new Set(statements.map((s) => s.kind));
 
     if (!kinds.has("fuel")) fuelLaneMissing = true;
-
-    if (!kinds.has("earnings")) {
-      try {
-        await publishWeekStatement({
-          kind: "earnings",
-          organizationId: orgId,
-          driverId,
-          weekKey: week,
-          amountsMinor: {
-            passengerCash: Math.round((Number(p.cash_collected) || 0) * 100),
-            driverShare: Math.round((Number(p.driver_share) || 0) * 100),
-            companyShare: Math.round((Number(p.fleet_share) || 0) * 100),
-            tipsPaidToDriver: Math.round((Number(p.tips_paid_to_driver) || 0) * 100),
-            gross: Math.round((Number(p.earnings_gross) || 0) * 100),
-            settlementAmount: Math.round((Number(p.settlement_amount) || 0) * 100),
-          },
-          status: "closed",
-          closedBy: actorId ?? "week_close_autoseal",
-          closeReason: "close_precondition",
-        });
-      } catch (e) {
-        console.warn("[week_close] earnings auto-publish failed (non-fatal)", driverId, week, e);
-      }
-    }
-
+    // Earnings: do NOT auto-copy from period columns (H-7 tautology). Missing
+    // lane surfaces as EARNINGS_STATEMENT_MISSING until DFP rebuild publishes.
     if (!kinds.has("toll")) tollLaneMissing = true;
   }
 
@@ -248,6 +223,14 @@ export async function previewWeekClose(orgId: string, weekKey: string): Promise<
   let tollCharged = 0;
   let tollNetLoss = 0;
 
+  // Pass 4 §6.4: week-level settlement sum for P&L tie (warn when P&L feed absent).
+  const settlementSumForWeek = rows.reduce(
+    (s, p) => s + (Number(p.settlement_amount) || 0),
+    0,
+  );
+
+  let pnlWarnEmitted = false;
+
   for (const period of rows) {
     const driverId = String(period.driver_id);
     const meta = (period.metadata as Record<string, unknown> | null) || null;
@@ -284,7 +267,11 @@ export async function previewWeekClose(orgId: string, weekKey: string): Promise<
         (meta as { financeCore?: { cashSourceMismatch?: number } } | null)
           ?.financeCore?.cashSourceMismatch,
       ) || 0,
+      ...(!frozen && !pnlWarnEmitted
+        ? { settlementSumForWeek, businessWeekPnlUnavailable: true as const }
+        : {}),
     });
+    if (!frozen && !pnlWarnEmitted) pnlWarnEmitted = true;
     // Already-frozen drivers are not "blockers" for close — they are done.
     if (!frozen) {
       blockers.push(...driverBlockers);
@@ -375,8 +362,14 @@ export async function closeWeek(
 
   const perDriver: DriverCloseResult[] = [];
   const allBlockers: CloseBlocker[] = [];
+  const periodRows = periods ?? [];
+  const settlementSumForWeek = periodRows.reduce(
+    (s, p) => s + (Number(p.settlement_amount) || 0),
+    0,
+  );
+  let pnlWarnEmitted = false;
 
-  for (const period of periods ?? []) {
+  for (const period of periodRows) {
     const driverId = String(period.driver_id);
     const meta = (period.metadata as Record<string, unknown> | null) || null;
     const fc = (meta?.financeCore as Record<string, unknown> | undefined) || {};
@@ -413,7 +406,11 @@ export async function closeWeek(
         (meta as { financeCore?: { cashSourceMismatch?: number } } | null)
           ?.financeCore?.cashSourceMismatch,
       ) || 0,
+      ...(!pnlWarnEmitted
+        ? { settlementSumForWeek, businessWeekPnlUnavailable: true as const }
+        : {}),
     });
+    pnlWarnEmitted = true;
 
     // M-2: refuse close when active fuel_* events lack account keys.
     try {
@@ -471,6 +468,8 @@ export async function closeWeek(
       actorId,
       reason,
       closeHash,
+      sourceRowIds,
+      engineVersion: WEEK_STATEMENT_ENGINE_VERSION,
     });
 
     const { error: updErr } = await sb()

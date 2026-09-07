@@ -1569,20 +1569,28 @@ export async function rebuildDriverFinancialPeriod(
   const periodId = saved?.id as string;
   row.id = periodId;
 
-  // Close Program Pass 2: publish the earnings week_statement so Close Week's
-  // cross-system invariants find an independent earnings lane (fuel publishes at
-  // finalize; toll via toll_week_seal). Canonical keys mirror closeInvariants /
-  // shadow-compare readers. Idempotent: skip when the standing statement already
-  // matches, so a routine rebuild does not spawn a new version every event.
+  // Close Program Pass 3 / H-7: publish earnings from commission + cash engine
+  // outputs (share / cashBase), not from the persisted period id alone. Source
+  // ids are the fare/tip/trip inputs that produced the amounts.
   if (organizationIdResolved && periodId) {
     try {
+      const fareIds = (context.fareEntries || [])
+        .map((e: { id?: string; sourceId?: string }) => String(e.id || e.sourceId || ""))
+        .filter(Boolean)
+        .slice(0, 200);
+      const tipIds = (context.tipEntries || [])
+        .map((e: { id?: string; sourceId?: string }) => String(e.id || e.sourceId || ""))
+        .filter(Boolean)
+        .slice(0, 100);
+      const sourceRowIds = [...new Set([...fareIds, ...tipIds, `cash:${periodAnchor}`])];
+
       const earningsAmountsMinor = {
-        passengerCash: Math.round(round2(Math.max(0, row.cashCollected)) * 100),
-        driverShare: Math.round(row.driverShare * 100),
-        companyShare: Math.round(row.fleetShare * 100),
-        tipsPaidToDriver: Math.round((Number(share.tipsPaidToDriver) || 0) * 100),
-        gross: Math.round(row.earningsGross * 100),
-        settlementAmount: Math.round(row.settlementAmount * 100),
+        passengerCash: Math.round(round2(Math.max(0, cashCollected)) * 100),
+        driverShare: Math.round(round2(driverShare) * 100),
+        companyShare: Math.round(round2(fleetShare) * 100),
+        tipsPaidToDriver: Math.round(round2(Number(share.tipsPaidToDriver) || 0) * 100),
+        gross: Math.round(round2(earningsGross) * 100),
+        settlementAmount: Math.round(round2(row.settlementAmount) * 100),
       };
       const latestEarnings = await getLatestWeekStatement(
         organizationIdResolved,
@@ -1601,10 +1609,10 @@ export async function rebuildDriverFinancialPeriod(
           driverId,
           weekKey: periodAnchor,
           amountsMinor: earningsAmountsMinor,
-          sourceRowIds: [String(periodId)],
+          sourceRowIds,
           status: "closed",
           closedBy: "dfp_rebuild",
-          closeReason: "period_rebuild",
+          closeReason: "commission_cash_engines",
         });
       }
     } catch (stmtErr) {
@@ -1870,6 +1878,17 @@ export async function getDriverFinancialPeriodDetail(
         metadata: row.metadata as Record<string, unknown> | null,
       });
       if (stored) {
+        const fcMeta =
+          ((row.metadata as Record<string, unknown> | null)?.financeCore as
+            | Record<string, unknown>
+            | undefined) || {};
+        const storedIds = Array.isArray(fcMeta.closeSourceRowIds)
+          ? (fcMeta.closeSourceRowIds as unknown[]).map(String)
+          : [];
+        const storedEngine =
+          typeof fcMeta.closeEngineVersion === "string" && fcMeta.closeEngineVersion.trim()
+            ? String(fcMeta.closeEngineVersion)
+            : "week-statement@1";
         const result = await verifyPeriodCloseHash({
           row: {
             tollSpend: row.tollSpend,
@@ -1891,8 +1910,8 @@ export async function getDriverFinancialPeriodDetail(
             payoutNet: row.payoutNet,
           },
           storedHash: stored,
-          sourceRowIds: [],
-          engineVersion: "period-close@1",
+          sourceRowIds: storedIds,
+          engineVersion: storedEngine,
         });
         if (!result.ok) {
           const meta = { ...(row.metadata || {}) } as Record<string, unknown>;
@@ -2219,17 +2238,24 @@ export type CompanyOwesPeriodRow = {
   cashSourceMismatch?: number;
 };
 
+/** M-4: fail-closed org scope for every period list query. */
+function requirePeriodListOrganizationId(opts?: { organizationId?: string | null }): string {
+  const orgId = String(opts?.organizationId || "").trim();
+  if (!orgId) {
+    throw new Error("ORG_REQUIRED: organizationId is required for period list queries");
+  }
+  return orgId;
+}
+
 /** Org-wide company_owes queue — single SQL query (not N+1 per driver). */
 export async function listCompanyOwesPeriods(opts?: PeriodListQueryOpts): Promise<CompanyOwesPeriodRow[]> {
+  const organizationId = requirePeriodListOrganizationId(opts);
   let q = sb()
     .from("driver_financial_periods")
     .select(PERIOD_LIST_SELECT)
     .eq("settlement_status", "company_owes")
-    .gt("settlement_amount", 0.005);
-
-  if (opts?.organizationId) {
-    q = q.eq("organization_id", opts.organizationId);
-  }
+    .gt("settlement_amount", 0.005)
+    .eq("organization_id", organizationId);
 
   if (opts?.periodAnchor && /^\d{4}-\d{2}-\d{2}$/.test(opts.periodAnchor)) {
     q = q.eq("period_anchor", opts.periodAnchor);
@@ -2284,6 +2310,7 @@ export async function listRecentlyPaidSettlementPeriods(opts?: {
   organizationId?: string | null;
   serviceLine?: "rideshare" | "rush_delivery";
 }): Promise<CompanyOwesPeriodRow[]> {
+  const organizationId = requirePeriodListOrganizationId(opts);
   const limit = Math.min(Math.max(Number(opts?.limit) || 300, 1), 1000);
   let q = sb()
     .from("driver_financial_periods")
@@ -2292,13 +2319,11 @@ export async function listRecentlyPaidSettlementPeriods(opts?: {
     )
     .eq("settlement_status", "settled")
     .gt("settlement_paid", 0.005)
+    .eq("organization_id", organizationId)
     .order("period_anchor", { ascending: false })
     .order("driver_id", { ascending: true })
     .limit(limit);
 
-  if (opts?.organizationId) {
-    q = q.eq("organization_id", opts.organizationId);
-  }
   if (opts?.periodStart && /^\d{4}-\d{2}-\d{2}$/.test(opts.periodStart)) {
     q = q.gte("period_anchor", opts.periodStart);
   }
@@ -2356,14 +2381,13 @@ export type ReconciledPeriodRow = CompanyOwesPeriodRow & {
  * Overpaid recovery weeks stay on Collect via driver_owes residual.
  */
 export async function listReconciledSettlementPeriods(opts?: PeriodListQueryOpts): Promise<ReconciledPeriodRow[]> {
+  const organizationId = requirePeriodListOrganizationId(opts);
   let q = sb()
     .from("driver_financial_periods")
     .select(RECONCILED_PERIOD_LIST_SELECT)
-    .eq("settlement_status", "settled");
+    .eq("settlement_status", "settled")
+    .eq("organization_id", organizationId);
 
-  if (opts?.organizationId) {
-    q = q.eq("organization_id", opts.organizationId);
-  }
   if (opts?.periodStart && /^\d{4}-\d{2}-\d{2}$/.test(opts.periodStart)) {
     q = q.gte("period_anchor", opts.periodStart);
   }
@@ -2416,9 +2440,12 @@ function applyPeriodRangeFilters(
   q: any,
   opts?: { periodAnchor?: string; periodStart?: string; periodEnd?: string; organizationId?: string | null },
 ) {
-  if (opts?.organizationId) {
-    q = q.eq("organization_id", opts.organizationId);
+  // M-4: fail-closed — never query periods without an org scope.
+  const orgId = String(opts?.organizationId || "").trim();
+  if (!orgId) {
+    throw new Error("ORG_REQUIRED: organizationId is required for period list queries");
   }
+  q = q.eq("organization_id", orgId);
   if (opts?.periodAnchor && /^\d{4}-\d{2}-\d{2}$/.test(opts.periodAnchor)) {
     return q.eq("period_anchor", opts.periodAnchor);
   }
@@ -2462,6 +2489,7 @@ export type PeriodListQueryOpts = {
   limit?: number;
   offset?: number;
   sort?: string;
+  /** Required at runtime (M-4 fail-closed). */
   organizationId?: string | null;
   serviceLine?: "rideshare" | "rush_delivery";
 };

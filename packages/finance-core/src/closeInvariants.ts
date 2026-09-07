@@ -56,7 +56,12 @@ export type ClosePeriodRow = {
 };
 
 /** Independent statement values (major units) the period must tie to. */
-export type CloseFuelStatement = { driverShare: number; companyShare: number };
+export type CloseFuelStatement = {
+  driverShare: number;
+  companyShare: number;
+  /** Pass 3: draft/unverified statements cannot close the week. */
+  status?: 'draft' | 'closed' | 'restated';
+};
 export type CloseTollStatement = {
   totalSpend: number;
   chargedToDriver: number;
@@ -64,12 +69,14 @@ export type CloseTollStatement = {
   netLoss?: number;
   cashWashSpend?: number;
   tagSpend?: number;
+  status?: 'draft' | 'closed' | 'restated';
 };
 export type CloseEarningsStatement = {
   passengerCash: number;
   driverShare?: number;
   companyShare?: number;
   tipsPaidToDriver?: number;
+  status?: 'draft' | 'closed' | 'restated';
 };
 
 export type CloseInvariantInput = {
@@ -86,6 +93,11 @@ export type CloseInvariantInput = {
   settlementSumForWeek?: number | null;
   /** BusinessFinance week P&L for the same week. */
   businessWeekPnl?: number | null;
+  /**
+   * When settlementSumForWeek is set but P&L feed is unavailable, emit an
+   * explicit warn (never a silent pass that looks like the lanes tied).
+   */
+  businessWeekPnlUnavailable?: boolean;
   /**
    * M-1: absolute trip-CSV vs ledger cash disagreement on the period.
    * Values above ε block close (badge-only was the old intentional behavior).
@@ -149,6 +161,18 @@ export function checkCloseInvariants(input: CloseInvariantInput): CloseBlocker[]
       delta: round2(num(p.fuel_deduction)),
       message: 'No fuel statement published for this driver-week',
     });
+  } else if (input.fuelStatement.status && input.fuelStatement.status !== 'closed') {
+    // Pass 3: draft/unverified fuel cannot close (H-7 independence).
+    out.push({
+      code: 'FUEL_STATEMENT_UNVERIFIED',
+      severity: 'block',
+      driverId: ctx.driverId,
+      week: ctx.week,
+      persisted: num(p.fuel_deduction),
+      expected: num(input.fuelStatement.driverShare),
+      delta: round2(num(p.fuel_deduction) - num(input.fuelStatement.driverShare)),
+      message: 'Fuel statement is draft/unverified — finalize fuel before close',
+    });
   } else {
     pushIfDrift(
       out, eps, ctx,
@@ -175,6 +199,17 @@ export function checkCloseInvariants(input: CloseInvariantInput): CloseBlocker[]
       expected: 0,
       delta: round2(num(p.toll_spend)),
       message: 'No toll statement published for this driver-week',
+    });
+  } else if (input.tollStatement.status && input.tollStatement.status !== 'closed') {
+    out.push({
+      code: 'TOLL_STATEMENT_UNVERIFIED',
+      severity: 'block',
+      driverId: ctx.driverId,
+      week: ctx.week,
+      persisted: num(p.toll_spend),
+      expected: num(input.tollStatement.totalSpend),
+      delta: round2(num(p.toll_spend) - num(input.tollStatement.totalSpend)),
+      message: 'Toll statement is draft/unverified — seal from canonical events before close',
     });
   } else {
     pushIfDrift(
@@ -221,6 +256,17 @@ export function checkCloseInvariants(input: CloseInvariantInput): CloseBlocker[]
       delta: round2(num(p.cash_collected)),
       message: 'No earnings statement published for this driver-week',
     });
+  } else if (input.earningsStatement.status && input.earningsStatement.status !== 'closed') {
+    out.push({
+      code: 'EARNINGS_STATEMENT_UNVERIFIED',
+      severity: 'block',
+      driverId: ctx.driverId,
+      week: ctx.week,
+      persisted: num(p.cash_collected),
+      expected: num(input.earningsStatement.passengerCash),
+      delta: round2(num(p.cash_collected) - num(input.earningsStatement.passengerCash)),
+      message: 'Earnings statement is draft/unverified — rebuild must publish from engines',
+    });
   } else {
     pushIfDrift(
       out, eps, ctx,
@@ -262,6 +308,21 @@ export function checkCloseInvariants(input: CloseInvariantInput): CloseBlocker[]
       'Σ driver settlements for week ≠ BusinessFinance week P&L',
       num(input.settlementSumForWeek), num(input.businessWeekPnl),
     );
+  } else if (
+    input.settlementSumForWeek != null &&
+    input.businessWeekPnl == null &&
+    input.businessWeekPnlUnavailable
+  ) {
+    out.push({
+      code: 'BUSINESS_WEEK_PNL_UNAVAILABLE',
+      severity: 'warn',
+      driverId: ctx.driverId,
+      week: ctx.week,
+      persisted: num(input.settlementSumForWeek),
+      expected: 0,
+      delta: round2(num(input.settlementSumForWeek)),
+      message: 'Business Finance week P&L not available — settlement↔P&L tie skipped',
+    });
   }
 
   // ── M-1: cash source mismatch blocks close ─────────────────────────────────────

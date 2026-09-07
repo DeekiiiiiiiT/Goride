@@ -269,9 +269,6 @@ function PeriodList({
     startDate: p.startDate,
     unexplained: p.netLeakage,
   }));
-  // #region agent log
-  fetch('http://127.0.0.1:7418/ingest/a3d13dc6-6745-44ac-a4fd-f2bafc5169ae',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'14839a'},body:JSON.stringify({sessionId:'14839a',runId:'post-fix',hypothesisId:'H1',location:'FuelPeriodLandingPage.tsx:PeriodList',message:'non-virtual period cards',data:{count:ordered.length},timestamp:Date.now()})}).catch(()=>{});
-  // #endregion
   // Fuel week portfolios are small — plain list keeps PeriodCards mounted in CI/jsdom
   // (virtual lists with a 0px viewport render zero rows and wipe auto-close badges).
   return (

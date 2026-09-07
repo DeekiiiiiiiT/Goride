@@ -51,8 +51,23 @@ test.describe('Fleet fuel recon wizard', () => {
     await signInFleet(page);
     await openFuelReconciliation(page, { week: week!, step: 'finalize' });
     await expect(
-      page.getByText(/Ready to lock|Can’t finalize|Week is locked|second approval|system second/i).first(),
+      page.getByText(/Ready to lock|Can’t finalize|Week is locked|second approval|system second|Data looks clear|Review flagged|Exception fills|Unexplained/i).first(),
     ).toBeVisible({ timeout: 90_000 });
+  });
+
+  // M-5: when prior steps still have work, finalize deep-link must not jump past gates.
+  // Unit coverage: fuelPeriodGating.test.ts clampFuelStepToGates('finalize') → first incomplete.
+  test('deep-link step=finalize clamps when earlier steps incomplete', async ({ page }) => {
+    const week = process.env.E2E_FUEL_WEEK?.trim();
+    test.skip(!week, 'E2E_FUEL_WEEK not set');
+    await signInFleet(page);
+    await openFuelReconciliation(page, { week: week!, step: 'finalize' });
+    await expect(page.getByRole('button', { name: /Continue|Finalize|Review/i }).first()).toBeVisible({
+      timeout: 90_000,
+    });
+    await expect(page.getByText(/Data quality|Disputes|Policy|Unexplained|Settlement|Finalize/i).first()).toBeVisible({
+      timeout: 30_000,
+    });
   });
 
   test('destructive finalize gated', async ({ page }) => {
