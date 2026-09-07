@@ -32,6 +32,82 @@ export function assertPeriodNotFrozen(period: Parameters<typeof isPeriodFrozen>[
   }
 }
 
+/**
+ * H-4: frozen weeks must still match their stored close hash. Call after
+ * assertPeriodNotFrozen on money paths that load a full period row.
+ * Throws HASH_MISMATCH (409) when recomputed hash disagrees.
+ */
+export async function assertFrozenPeriodHashIntact(period: {
+  metadata?: Record<string, unknown> | null;
+  source_event_hash?: string | null;
+  sourceEventHash?: string | null;
+  toll_spend?: number | null;
+  toll_cash_spend?: number | null;
+  toll_reimbursed?: number | null;
+  toll_charged_to_driver?: number | null;
+  fuel_deduction?: number | null;
+  fuel_fleet_share?: number | null;
+  driver_share?: number | null;
+  fleet_share?: number | null;
+  earnings_gross?: number | null;
+  tips_paid_to_driver?: number | null;
+  cash_collected?: number | null;
+  cash_returned?: number | null;
+  cash_written_off?: number | null;
+  cash_still_held?: number | null;
+  settlement_paid?: number | null;
+  settlement_amount?: number | null;
+  payout_net?: number | null;
+} | null | undefined): Promise<void> {
+  if (!period || !isPeriodFrozen(period)) return;
+
+  const {
+    verifyPeriodCloseHash,
+    storedCloseHashFromPeriod,
+  } = await import("../../../packages/finance-core/src/closeHash.ts");
+
+  const stored = storedCloseHashFromPeriod(period);
+  if (!stored) {
+    // Legacy freeze without hash — allow movements to stay blocked by freeze,
+    // but do not hard-fail verify until all closes write hashes.
+    return;
+  }
+
+  const result = await verifyPeriodCloseHash({
+    row: {
+      tollSpend: Number(period.toll_spend) || 0,
+      tollCashSpend: Number(period.toll_cash_spend) || 0,
+      tollReimbursed: Number(period.toll_reimbursed) || 0,
+      tollChargedToDriver: Number(period.toll_charged_to_driver) || 0,
+      fuelDeduction: Number(period.fuel_deduction) || 0,
+      fuelFleetShare: Number(period.fuel_fleet_share) || 0,
+      driverShare: Number(period.driver_share) || 0,
+      fleetShare: Number(period.fleet_share) || 0,
+      earningsGross: Number(period.earnings_gross) || 0,
+      tipsPaidToDriver: Number(period.tips_paid_to_driver) || 0,
+      cashCollected: Number(period.cash_collected) || 0,
+      cashReturned: Number(period.cash_returned) || 0,
+      cashWrittenOff: Number(period.cash_written_off) || 0,
+      cashStillHeld: Number(period.cash_still_held) || 0,
+      settlementPaid: Number(period.settlement_paid) || 0,
+      settlementAmount: Number(period.settlement_amount) || 0,
+      payoutNet: Number(period.payout_net) || 0,
+    },
+    storedHash: stored,
+    sourceRowIds: [],
+    engineVersion: "period-close@1",
+  });
+
+  if (!result.ok) {
+    throw new SettlementCommandError(
+      "HASH_MISMATCH",
+      "Closed week hash no longer matches stored close hash — refuse money movement",
+      409,
+      { stored: result.stored, expected: result.expected },
+    );
+  }
+}
+
 export type FreezeMetaInput = {
   actorId: string;
   reason: string;

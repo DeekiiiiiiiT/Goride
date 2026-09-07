@@ -91,7 +91,11 @@ export function isTollChargedToDriverEvent(e: TollLedgerLikeEvent): boolean {
   return t === 'toll_charged_to_driver' || t === 'toll_charge_reversed';
 }
 
-/** Signed-safe sum of wallet toll charges (charged − reversed), floored at $0. */
+/**
+ * Signed sum of wallet toll charges (charged − reversed).
+ * C-7: NO floor — a net-negative (more reversed than charged) is a real credit
+ * to drivers and must survive as a signed recovery, not be clamped to $0.
+ */
 export function sumTollChargedToDriversFromEvents(
   events: TollLedgerLikeEvent[] | undefined | null,
 ): number {
@@ -101,7 +105,7 @@ export function sumTollChargedToDriversFromEvents(
     if (t === 'toll_charged_to_driver') total += tollEventAmount(e);
     else if (t === 'toll_charge_reversed') total -= tollEventAmount(e);
   }
-  return round2(Math.max(0, total));
+  return round2(total);
 }
 
 /** True when the week has any canonical wallet-charge event (prefer over claims). */

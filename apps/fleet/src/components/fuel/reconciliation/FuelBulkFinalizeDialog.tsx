@@ -280,6 +280,24 @@ export function FuelBulkFinalizeDialog({
               continue;
             }
 
+            // C-2: an over-explained week's residual is a modelling artefact, not
+            // real cash — refuse to finalize regardless of leakage acceptance.
+            if (gateResult.hasOverExplainedBlockers) {
+              const first = gateResult.overExplainedBlockers[0];
+              const extra =
+                gateResult.overExplainedBlockers.length > 1
+                  ? ` (+${gateResult.overExplainedBlockers.length - 1} more)`
+                  : '';
+              const pct = first?.pctOfSpend != null ? `${first.pctOfSpend}% of spend` : 'beyond spend';
+              weekResults.push({
+                id: period.id,
+                label,
+                status: 'failed',
+                message: `Blocked — over-explained week (unexplained ${pct})${extra}. Fix odometer / efficiency inputs first.`,
+              });
+              continue;
+            }
+
             const earlyFail = bulkEarlyGateFailure(
               periodForGate,
               reports,

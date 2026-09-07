@@ -36,6 +36,11 @@ export const FLEET_PAGE_REGISTRY: Record<string, FleetPageDef> = {
     path: '/close-week',
     permission: 'nav.financial_analytics',
   },
+  'restatement-queue': {
+    id: 'restatement-queue',
+    path: '/restatement-queue',
+    permission: 'nav.financial_analytics',
+  },
   'supply-health': { id: 'supply-health', path: '/supply-health', permission: 'nav.supply_health' },
   'fuel-reconciliation': {
     id: 'fuel-reconciliation',

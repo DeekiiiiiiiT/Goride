@@ -140,8 +140,8 @@ export function serverRowsToLandingPeriods(rows: FuelPeriodRow[]): FuelReconcili
 }
 
 /**
- * Server cards win for money/lock. Derived fills gaps (weeks not yet in SQL)
- * and can refresh step counts when present.
+ * P-3: server cards are SoT for any week present in SQL.
+ * Derived only fills weeks with NO server row — never dual-merges money/chips over server.
  */
 export function mergeServerFirstLandingPeriods(
   serverRows: FuelPeriodRow[],
@@ -152,32 +152,9 @@ export function mergeServerFirstLandingPeriods(
   for (const p of serverCards) byWeek.set(p.startDate, p);
 
   for (const d of derived) {
-    const existing = byWeek.get(d.startDate);
-    if (!existing) {
-      byWeek.set(d.startDate, d);
-      continue;
-    }
-    // Prefer server money; keep richer derived step chips when server counts were empty/provisional
-    const serverHadCounts =
-      serverRows.find((r) => weekStartYmd(r.weekStart) === d.startDate)?.counts &&
-      Object.keys(
-        serverRows.find((r) => weekStartYmd(r.weekStart) === d.startDate)?.counts || {},
-      ).length > 0;
-    byWeek.set(d.startDate, {
-      ...existing,
-      counts: serverHadCounts ? existing.counts : d.counts,
-      actionableTotal: serverHadCounts ? existing.actionableTotal : d.actionableTotal,
-      exceptionCount: serverHadCounts ? existing.exceptionCount : d.exceptionCount,
-      // SQL lock only — never promote derived snapshot "lock" to Completed.
-      locked: existing.locked,
-      status: existing.locked
-        ? 'completed'
-        : existing.status === 'outstanding' || d.status === 'outstanding'
-          ? 'outstanding'
-          : existing.status === 'in_progress' || d.status === 'in_progress'
-            ? 'in_progress'
-            : existing.status,
-    });
+    // Gap-fill only — do not overwrite or dual-merge server weeks.
+    if (byWeek.has(d.startDate)) continue;
+    byWeek.set(d.startDate, d);
   }
 
   return [...byWeek.values()].sort((a, b) => b.startDate.localeCompare(a.startDate));

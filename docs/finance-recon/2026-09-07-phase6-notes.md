@@ -40,3 +40,12 @@ Notes:
 - Bucketing added here is safe to keep after migration — the maps just get built from SQL rows instead.
 - Do each migration behind a projection flag with a `periodBaseline.golden` parity assertion so
   settlement/payout numbers can be diffed before cutover.
+
+## Pass 2 note (2026-09-07)
+
+**M-3 settlement queue SQL pagination landed.** `GET /settlements/queue` no longer loads
+`limit: 2000` then filters/sorts/pages in memory as the primary path. `listCompanyOwesPeriods`,
+`listDriverOwesPeriods`, `listCashHeldPeriods`, and `listReconciledSettlementPeriods` accept
+`offset` + `limit` + `sort` and push range/order into Supabase via `.range(from,to)`. Search and
+`ageBucket` remain light post-filters on a small SQL window. Collect still merges owes+held pages
+in memory after SQL paging (not a full 2k scan).

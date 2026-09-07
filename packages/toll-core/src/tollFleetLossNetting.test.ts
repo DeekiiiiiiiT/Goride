@@ -60,7 +60,7 @@ describe('computeTollFleetLossNetting — signed rawNet', () => {
 });
 
 describe('sumTollChargedToDriversFromEvents — H-9 canonical wallet path', () => {
-  it('sums charged minus reversed, floored at 0', () => {
+  it('sums charged minus reversed (signed, no floor)', () => {
     const events = [
       { eventType: 'toll_charged_to_driver', netAmount: -900 },
       { eventType: 'toll_charged_to_driver', netAmount: -100 },
@@ -68,6 +68,15 @@ describe('sumTollChargedToDriversFromEvents — H-9 canonical wallet path', () =
     ];
     expect(sumTollChargedToDriversFromEvents(events)).toBeCloseTo(750, 2);
     expect(hasCanonicalChargedToDriverEvents(events)).toBe(true);
+  });
+
+  it('C-7: returns a SIGNED negative when reversals exceed charges (no $0 clamp)', () => {
+    const events = [
+      { eventType: 'toll_charged_to_driver', netAmount: -100 },
+      { eventType: 'toll_charge_reversed', netAmount: 300 },
+    ];
+    // 100 charged − 300 reversed = −200 net credit back to drivers.
+    expect(sumTollChargedToDriversFromEvents(events)).toBeCloseTo(-200, 2);
   });
 
   it('reports no canonical events when only fleet-loss events exist', () => {

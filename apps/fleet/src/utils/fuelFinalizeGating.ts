@@ -10,6 +10,7 @@ import type {
 } from '../types/fuel';
 import { isSameFuelStatement, reportWeekYmdBounds, toEntryYmd } from './fuelWeekPeriod';
 import { FUEL_MONEY_EPS } from './fuelMoneyEpsilon';
+import { isOverExplainedFuelWeek } from '@roam/fuel-core';
 import {
   fuelPaymentSourceDisplayLabel,
   resolveFuelPaymentSource,
@@ -43,14 +44,46 @@ export type FuelExceptionBlocker = {
   reason: string;
 };
 
+/** One over-explained week — |misc| too large vs spend; a HARD finalize blocker (C-2). */
+export type FuelOverExplainedBlocker = {
+  vehicleId: string;
+  driverId?: string;
+  totalSpend: number;
+  miscellaneousCost: number;
+  /** |misc| as a whole-number percent of spend (null when spend ≤ 0). */
+  pctOfSpend: number | null;
+};
+
 export type FuelFinalizeGateResult = {
   reFinalizeWarnings: FuelReFinalizeWarning[];
   dataQualityWarnings: FuelDataQualityWarning[];
   /** Concrete fills — UI must list these; never only a vague banner. */
   exceptionBlockers: FuelExceptionBlocker[];
   hasExceptionBlockers: boolean;
+  /** Weeks whose residual is a modelling artefact — finalize is refused (C-2). */
+  overExplainedBlockers: FuelOverExplainedBlocker[];
+  hasOverExplainedBlockers: boolean;
   hasBlockingWarnings: boolean;
 };
+
+/** Over-explained weeks in the batch — never allow these to finalize. */
+export function listOverExplainedBlockers(
+  reports: WeeklyFuelReport[],
+): FuelOverExplainedBlocker[] {
+  return reports
+    .filter((r) => isOverExplainedFuelWeek(r.totalGasCardCost, r.miscellaneousCost))
+    .map((r) => {
+      const spend = Number(r.totalGasCardCost) || 0;
+      const misc = Number(r.miscellaneousCost) || 0;
+      return {
+        vehicleId: r.vehicleId,
+        driverId: r.driverId,
+        totalSpend: spend,
+        miscellaneousCost: misc,
+        pctOfSpend: spend > 0 ? Math.round((Math.abs(misc) / spend) * 100) : null,
+      };
+    });
+}
 
 export function findDisputeForReport(
   disputes: FuelDispute[],
@@ -198,9 +231,15 @@ export function evaluateFuelFinalizeGating(opts: {
     return acc;
   }, [] as FuelDataQualityWarning[]);
 
+  const overExplainedBlockers = listOverExplainedBlockers(opts.reports);
+
   const hasExceptionBlockers = exceptionBlockers.length > 0;
+  const hasOverExplainedBlockers = overExplainedBlockers.length > 0;
+  // C-2: an over-explained week is a HARD blocker — the residual is a modelling
+  // artefact, not real cash, and must never be split/finalized.
   const hasBlockingWarnings =
     dataQualityWarnings.length > 0 ||
+    hasOverExplainedBlockers ||
     reFinalizeWarnings.some((w) => Math.abs(w.delta) > FUEL_MONEY_EPS);
 
   return {
@@ -208,6 +247,8 @@ export function evaluateFuelFinalizeGating(opts: {
     dataQualityWarnings,
     exceptionBlockers,
     hasExceptionBlockers,
+    overExplainedBlockers,
+    hasOverExplainedBlockers,
     hasBlockingWarnings,
   };
 }

@@ -43,6 +43,7 @@ import {
 } from "./settlement_commands.ts";
 import {
   assertPeriodNotFrozen,
+  assertFrozenPeriodHashIntact,
   assertPeriodEndedForSettlement,
 } from "./settlement_period_freeze.ts";
 import {
@@ -481,6 +482,7 @@ app.post(`${BASE}/collect`, requireSettlementPerm("settlements.collect"), async 
       settlementStatus: String(periodDb.settlement_status || ""),
       signedAt: periodDb.signed_at ? String(periodDb.signed_at) : null,
     });
+    await assertFrozenPeriodHashIntact(periodDb as Parameters<typeof assertFrozenPeriodHashIntact>[0]);
     const settlementAmount = Number(periodDb.settlement_amount) || 0;
     const owed = driverOwesResidual(settlementAmount);
     assertExpectedOutstanding(owed, expectedOutstanding);
@@ -543,6 +545,7 @@ app.post(`${BASE}/pay`, requireSettlementPerm("settlements.pay"), async (c) => {
       settlementStatus: String(periodDb.settlement_status || ""),
       signedAt: periodDb.signed_at ? String(periodDb.signed_at) : null,
     });
+    await assertFrozenPeriodHashIntact(periodDb as Parameters<typeof assertFrozenPeriodHashIntact>[0]);
     const settlementAmount = Number(periodDb.settlement_amount) || 0;
     const settlementPaid = Number(periodDb.settlement_paid) || 0;
     const residual = companyOwesResidual(settlementAmount);
@@ -617,6 +620,7 @@ app.post(`${BASE}/write-off`, requireSettlementPerm("settlements.write_off"), as
       settlementStatus: String(periodDb.settlement_status || ""),
       signedAt: periodDb.signed_at ? String(periodDb.signed_at) : null,
     });
+    await assertFrozenPeriodHashIntact(periodDb as Parameters<typeof assertFrozenPeriodHashIntact>[0]);
     const settlementAmount = Number(periodDb.settlement_amount) || 0;
     const owed = driverOwesResidual(settlementAmount);
     assertExpectedOutstanding(owed, expectedOutstanding);
@@ -1316,6 +1320,12 @@ app.get(`${BASE}/queue`, requirePermission("transactions.view"), async (c) => {
     const page = Math.max(1, Number(c.req.query("page") || 1));
     const pageSize = Math.min(Math.max(Number(c.req.query("pageSize") || 50), 1), 200);
     const sort = c.req.query("sort") || "age_desc";
+    // M-3: page from SQL — never load limit:2000 then filter/slice in memory.
+    const offset = (page - 1) * pageSize;
+    // Search/ageBucket stay light post-filters; over-fetch a small window when needed.
+    const needsPostFilter = Boolean(search || ageBucket);
+    const sqlLimit = needsPostFilter ? Math.min(pageSize * 3, 300) : pageSize;
+    const sqlOffset = needsPostFilter ? 0 : offset;
 
     const {
       listCompanyOwesPeriods,
@@ -1328,7 +1338,9 @@ app.get(`${BASE}/queue`, requirePermission("transactions.view"), async (c) => {
       periodStart,
       periodEnd,
       minAmount,
-      limit: 2000,
+      limit: sqlLimit,
+      offset: sqlOffset,
+      sort,
       organizationId: orgId,
       serviceLine,
     };
@@ -1508,12 +1520,15 @@ app.get(`${BASE}/queue`, requirePermission("transactions.view"), async (c) => {
       return true;
     });
 
-    if (sort === "age_desc") {
-      filtered.sort((a, b) => daysOverdue(b.periodEnd) - daysOverdue(a.periodEnd));
-    } else if (sort === "amount_desc") {
-      filtered.sort((a, b) => b.amountOwedMinor - a.amountOwedMinor);
-    } else {
-      filtered.sort((a, b) => String(b.periodAnchor).localeCompare(String(a.periodAnchor)));
+    // SQL already ordered; only re-sort when post-filter mixed two collect sources.
+    if (view === "collect" || needsPostFilter) {
+      if (sort === "age_desc") {
+        filtered.sort((a, b) => daysOverdue(b.periodEnd) - daysOverdue(a.periodEnd));
+      } else if (sort === "amount_desc") {
+        filtered.sort((a, b) => b.amountOwedMinor - a.amountOwedMinor);
+      } else {
+        filtered.sort((a, b) => String(b.periodAnchor).localeCompare(String(a.periodAnchor)));
+      }
     }
 
     const byAge: Record<string, number> = { "0-30": 0, "31-60": 0, "61-90": 0, "90+": 0 };
@@ -1566,9 +1581,30 @@ app.get(`${BASE}/queue`, requirePermission("transactions.view"), async (c) => {
       );
     }
 
-    const total = rowsOut.length;
-    const start = (page - 1) * pageSize;
-    const pageRows = rowsOut.slice(start, start + pageSize);
+    // Post-filter / collect-merge / groupBy need a final slice; pure SQL pages do not.
+    const mustSlice =
+      needsPostFilter || groupBy === "driver" || view === "collect";
+    let pageRows: unknown[];
+    let total: number;
+    let hasMore: boolean;
+    if (mustSlice) {
+      // Collect: SQL already returned one page from each source — merge then take pageSize.
+      // Post-filter/groupBy: window was fetched from offset 0 (or SQL page) — slice for page.
+      const start =
+        view === "collect" && !needsPostFilter && groupBy !== "driver"
+          ? 0
+          : (page - 1) * pageSize;
+      total = rowsOut.length;
+      pageRows = rowsOut.slice(start, start + pageSize);
+      hasMore =
+        start + pageSize < total ||
+        (view === "collect" && raw.length >= sqlLimit) ||
+        (needsPostFilter && raw.length >= sqlLimit);
+    } else {
+      pageRows = rowsOut;
+      total = offset + pageRows.length + (raw.length >= sqlLimit ? pageSize : 0);
+      hasMore = raw.length >= sqlLimit;
+    }
     const totalMinor = filtered.reduce((s, r) => s + r.amountOwedMinor, 0);
 
     return c.json({
@@ -1585,8 +1621,8 @@ app.get(`${BASE}/queue`, requirePermission("transactions.view"), async (c) => {
       aggregates: { byAge, byDriver },
       page: {
         total,
-        hasMore: start + pageSize < total,
-        truncated: raw.length >= 2000,
+        hasMore,
+        truncated: false,
         page,
         pageSize,
       },

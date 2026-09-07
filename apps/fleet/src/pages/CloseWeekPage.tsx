@@ -7,7 +7,7 @@
  * the blocker list come from the read-only /week-close/preview endpoint;
  * the Settlement lane reuses the trusted settlement-queue hooks.
  */
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { addDays, format, parseISO, startOfWeek, subWeeks } from 'date-fns';
 import {
@@ -170,11 +170,23 @@ function IdentityRow({ label, value, ok }: { label: string; value: string; ok: b
 
 export function CloseWeekPage({
   onNavigate,
+  initialWeekKey,
 }: {
-  onNavigate?: (page: string, opts?: { startYmd: string; endYmd: string }) => void;
+  onNavigate?: (page: string, opts?: { startYmd: string; endYmd: string } | { weekKey: string }) => void;
+  initialWeekKey?: string;
 }) {
   const weekKeys = useMemo(() => recentWeekKeys(), []);
-  const [weekKey, setWeekKey] = useState(weekKeys[1] ?? weekKeys[0]); // default: last completed week
+  const [weekKey, setWeekKey] = useState(
+    initialWeekKey && weekKeys.includes(initialWeekKey)
+      ? initialWeekKey
+      : weekKeys[1] ?? weekKeys[0],
+  ); // default: last completed week
+
+  useEffect(() => {
+    if (initialWeekKey && weekKeys.includes(initialWeekKey)) {
+      setWeekKey(initialWeekKey);
+    }
+  }, [initialWeekKey, weekKeys]);
   const periodEnd = useMemo(() => format(addDays(parseISO(`${weekKey}T12:00:00`), 6), 'yyyy-MM-dd'), [weekKey]);
   const [closing, setClosing] = useState(false);
   const [result, setResult] = useState<WeekCloseResult | null>(null);
@@ -243,9 +255,26 @@ export function CloseWeekPage({
 
   const pnlBlocker = (preview?.blockers || []).find((b) => b.code === 'SETTLEMENT_PNL_MISMATCH');
   const totalBlockers = blockingCount(preview?.blockers);
-  const canClose = !previewLoading && !previewQuery.isError && totalBlockers === 0 && (preview?.driversTotal ?? 0) > 0;
+  const weekAlreadyClosed = Boolean(preview?.weekClosed);
+  const canClose =
+    !previewLoading &&
+    !previewQuery.isError &&
+    !weekAlreadyClosed &&
+    totalBlockers === 0 &&
+    (preview?.driversTotal ?? 0) > 0;
+
+  const closedAtLabel = (() => {
+    const raw = preview?.closedAt;
+    if (!raw) return null;
+    try {
+      return format(parseISO(raw), 'MMM d, yyyy · h:mm a');
+    } catch {
+      return raw.slice(0, 16);
+    }
+  })();
 
   const doClose = async () => {
+    if (weekAlreadyClosed) return;
     setClosing(true);
     setResult(null);
     try {
@@ -281,7 +310,9 @@ export function CloseWeekPage({
             Close the Week
           </h1>
           <p className="mt-0.5 text-sm text-slate-500">
-            One week, three lanes. Closing is blocked until every identity ties.
+            {weekAlreadyClosed
+              ? 'This week is signed and frozen. Review lanes below; restatements go through the Restatement Queue.'
+              : 'One week, three lanes. Closing is blocked until every identity ties.'}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -385,12 +416,28 @@ export function CloseWeekPage({
       </div>
 
       {/* Close action */}
-      <div className="flex flex-col gap-3 rounded-lg border border-slate-200 bg-slate-50 p-4 sm:flex-row sm:items-center sm:justify-between">
+      <div
+        className={cn(
+          'flex flex-col gap-3 rounded-lg border p-4 sm:flex-row sm:items-center sm:justify-between',
+          weekAlreadyClosed
+            ? 'border-emerald-200 bg-emerald-50'
+            : 'border-slate-200 bg-slate-50',
+        )}
+      >
         <div className="text-sm text-slate-600">
           {previewLoading ? (
             'Checking cross-system invariants…'
           ) : previewQuery.isError && !previewUnavailable ? (
             <span className="text-rose-700">Could not load preview — try Refresh.</span>
+          ) : weekAlreadyClosed ? (
+            <span className="text-emerald-800">
+              Already closed
+              {preview?.driversFrozen != null
+                ? ` — ${preview.driversFrozen} driver${preview.driversFrozen === 1 ? '' : 's'} frozen`
+                : ''}
+              {closedAtLabel ? ` · signed ${closedAtLabel}` : ''}.
+              Money for this week is locked; use Restatement Queue for approved revisions.
+            </span>
           ) : totalBlockers > 0 ? (
             <span className="text-rose-700">
               {totalBlockers} blocker{totalBlockers === 1 ? '' : 's'} across {preview?.driversBlocked ?? 0} driver
@@ -406,16 +453,29 @@ export function CloseWeekPage({
         </div>
         <Button
           type="button"
-          className="h-10 bg-indigo-700 hover:bg-indigo-800 disabled:opacity-50"
-          disabled={!canClose || closing || previewUnavailable}
+          className={cn(
+            'h-10 disabled:opacity-50',
+            weekAlreadyClosed
+              ? 'bg-emerald-700 hover:bg-emerald-700 cursor-default'
+              : 'bg-indigo-700 hover:bg-indigo-800',
+          )}
+          disabled={!canClose || closing || previewUnavailable || weekAlreadyClosed}
           onClick={() => void doClose()}
         >
-          {closing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Lock className="mr-2 h-4 w-4" />}
-          {closing ? 'Closing…' : `Close week of ${weekLabel(weekKey)}`}
+          {closing ? (
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+          ) : (
+            <Lock className="mr-2 h-4 w-4" />
+          )}
+          {closing
+            ? 'Closing…'
+            : weekAlreadyClosed
+              ? `Week of ${weekLabel(weekKey)} already closed`
+              : `Close week of ${weekLabel(weekKey)}`}
         </Button>
       </div>
 
-      {result ? (
+      {result && !weekAlreadyClosed ? (
         <div
           role="status"
           className={cn(

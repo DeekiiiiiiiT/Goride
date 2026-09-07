@@ -17,7 +17,6 @@ import { ReportsPage } from './components/reports/ReportsPage';
 import { TransactionsPage } from './components/transactions/TransactionsPage';
 import { UserManagementPage } from './components/users/UserManagementPage';
 import { EarningsPolicyConfiguration } from './components/earnings-policy';
-import { FuelAnalytics } from './components/fuel/analytics/FuelAnalytics';
 import { VehicleAnalytics } from './components/vehicles/VehicleAnalytics';
 import { IndriveWalletCenterPage } from './components/fleet-financials/IndriveWalletCenterPage';
 import type { ExpenseHubSubview } from './components/business-finance/expense-hub/ExpenseHubShell';
@@ -48,6 +47,9 @@ const VehiclesPage = lazy(() =>
 const FuelManagement = lazy(() =>
   import('./pages/FuelManagement').then((m) => ({ default: m.FuelManagement })),
 );
+const FuelAnalytics = lazy(() =>
+  import('./components/fuel/analytics/FuelAnalytics').then((m) => ({ default: m.FuelAnalytics })),
+);
 const DriverSettlementsPage = lazy(() =>
   import('./components/fleet-financials/DriverSettlementsPage').then((m) => ({
     default: m.DriverSettlementsPage,
@@ -60,6 +62,9 @@ const FleetFinancialsPage = lazy(() =>
 );
 const CloseWeekPage = lazy(() =>
   import('./pages/CloseWeekPage').then((m) => ({ default: m.CloseWeekPage })),
+);
+const RestatementQueuePage = lazy(() =>
+  import('./pages/RestatementQueuePage').then((m) => ({ default: m.RestatementQueuePage })),
 );
 const BusinessFinancePage = lazy(() =>
   import('./components/business-finance/BusinessFinancePage').then((m) => ({
@@ -168,8 +173,11 @@ function AppContent() {
   } | null>(null);
 
   type NavigateOpts =
-    | { startYmd: string; endYmd: string }
+    | { startYmd: string; endYmd?: string }
+    | { weekKey: string }
     | { vehicleId?: string; driverId?: string; vehicleLabel?: string };
+
+  const [closeWeekKeyHint, setCloseWeekKeyHint] = useState<string | null>(null);
 
   /** Open driver detail with URL `/drivers/:id` (clears stale list-only state). */
   const openDriverDetail = (driverId: string, tab: DriverDetailTab = 'overview') => {
@@ -192,10 +200,18 @@ function AppContent() {
   const handleNavigate = (page: string, opts?: NavigateOpts) => {
     const periodHint =
       opts && 'startYmd' in opts && typeof opts.startYmd === 'string'
-        ? { startYmd: opts.startYmd, endYmd: opts.endYmd }
+        ? { startYmd: opts.startYmd, endYmd: opts.endYmd || opts.startYmd }
         : undefined;
+    if (opts && 'weekKey' in opts && typeof opts.weekKey === 'string') {
+      setCloseWeekKeyHint(opts.weekKey);
+    } else if (page !== 'close-week') {
+      setCloseWeekKeyHint(null);
+    }
     const tollFocus =
-      opts && ('vehicleId' in opts || 'driverId' in opts || 'vehicleLabel' in opts) && !('startYmd' in opts)
+      opts &&
+      !('startYmd' in opts) &&
+      !('weekKey' in opts) &&
+      ('vehicleId' in opts || 'driverId' in opts || 'vehicleLabel' in opts)
         ? {
             vehicleId: opts.vehicleId,
             driverId: opts.driverId,
@@ -712,7 +728,17 @@ function AppContent() {
         {currentPage === 'close-week' && (
           <PermissionGate permission="nav.financial_analytics" onNavigate={setCurrentPage}>
             <Suspense fallback={<div className="p-6 text-sm text-slate-500">Loading close week…</div>}>
-              <CloseWeekPage onNavigate={(page, opts) => handleNavigate(page, opts)} />
+              <CloseWeekPage
+                initialWeekKey={closeWeekKeyHint || undefined}
+                onNavigate={(page, opts) => handleNavigate(page, opts)}
+              />
+            </Suspense>
+          </PermissionGate>
+        )}
+        {currentPage === 'restatement-queue' && (
+          <PermissionGate permission="nav.financial_analytics" onNavigate={setCurrentPage}>
+            <Suspense fallback={<div className="p-6 text-sm text-slate-500">Loading restatements…</div>}>
+              <RestatementQueuePage onNavigate={(page, opts) => handleNavigate(page, opts)} />
             </Suspense>
           </PermissionGate>
         )}
@@ -729,7 +755,9 @@ function AppContent() {
         
         {currentPage === 'fuel-analytics' && (
           <PermissionGate permission="nav.fuel_reports" onNavigate={setCurrentPage}>
-            <FuelAnalytics onNavigate={setCurrentPage} />
+            <Suspense fallback={<div className="p-6 text-sm text-slate-500">Loading fuel analytics…</div>}>
+              <FuelAnalytics onNavigate={setCurrentPage} />
+            </Suspense>
           </PermissionGate>
         )}
 

@@ -12,6 +12,7 @@ import { FUEL_SPEND_EPS } from '../../../utils/fuelMoneyEpsilon';
 import {
   FUEL_STEP_LABELS,
   FUEL_STEP_ORDER,
+  clampFuelStepToGates,
   pickInitialFuelStep,
   type FuelStepId,
 } from '../../../utils/fuelPeriodGating';
@@ -239,7 +240,9 @@ function FuelPeriodWizardInner({
     setLeakageReviewMeta({});
     // Prefer locked / explicit deep-link; otherwise wait for server hydrate (H9) before pickInitial.
     if (sessionKey > 0 || periodLocked) {
-      const startId: FuelStepId = periodLocked ? 'finalize' : initialStepId || 'data-quality';
+      const startId: FuelStepId = periodLocked
+        ? 'finalize'
+        : clampFuelStepToGates(initialStepId, gatedStates);
       setActiveStepId(startId);
       setProgressIndex(
         periodLocked ? FUEL_STEP_ORDER.length - 1 : Math.max(0, FUEL_STEP_ORDER.indexOf(startId)),
@@ -248,8 +251,10 @@ function FuelPeriodWizardInner({
       return;
     }
     if (initialStepId && FUEL_STEP_ORDER.includes(initialStepId)) {
-      setActiveStepId(initialStepId);
-      setProgressIndex(FUEL_STEP_ORDER.indexOf(initialStepId));
+      // M-5: deep-link cannot jump past incomplete prior steps.
+      const clamped = clampFuelStepToGates(initialStepId, gatedStates);
+      setActiveStepId(clamped);
+      setProgressIndex(FUEL_STEP_ORDER.indexOf(clamped));
       return;
     }
     // Offline fallback until hydrate; local cache must not win over server SoT.
@@ -258,7 +263,7 @@ function FuelPeriodWizardInner({
     if (local) {
       setLeakageReviewMeta({ at: local.reviewedAt, by: local.actorLabel, note: local.note });
     }
-    const initial = pickInitialFuelStep(gatedStates);
+    const initial = clampFuelStepToGates(undefined, gatedStates);
     const idx = FUEL_STEP_ORDER.indexOf(initial);
     setActiveStepId(initial);
     setProgressIndex(Math.max(0, idx));
@@ -477,6 +482,10 @@ function FuelPeriodWizardInner({
     if (gate.hasExceptionBlockers) {
       return;
     }
+    // C-2: over-explained week is a HARD blocker — cannot be overridden by ack.
+    if (gate.hasOverExplainedBlockers) {
+      return;
+    }
     if (gate.hasBlockingWarnings && !financeWarningAcknowledged) {
       return;
     }
@@ -601,6 +610,16 @@ function FuelPeriodWizardInner({
                 body: `Resolve the ${exceptionBlockers.length} exception fill(s) listed below in this week — then Finalize.`,
                 actionLabel: undefined,
               }
+            : gateResult.hasOverExplainedBlockers
+            ? {
+                title: 'Can’t finalize — over-explained week',
+                body: `Unexplained fuel is ${
+                  gateResult.overExplainedBlockers[0]?.pctOfSpend != null
+                    ? `${gateResult.overExplainedBlockers[0].pctOfSpend}% of spend`
+                    : 'beyond spend'
+                }. The residual is a modelling artefact, not real cash — fix odometer / efficiency / distance inputs first.`,
+                actionLabel: undefined,
+              }
             : {
                 title: 'Ready to lock this week',
                 body: 'Finalize posts pending fuel to settlements and freezes this week. If driver payouts already exist and the leftover would change, you will confirm Reopen settlement first.',
@@ -610,6 +629,7 @@ function FuelPeriodWizardInner({
                   finalizing ||
                   liveReports.length === 0 ||
                   !!gateResult.hasExceptionBlockers ||
+                  !!gateResult.hasOverExplainedBlockers ||
                   (!!gateResult.hasBlockingWarnings && !financeWarningAcknowledged) ||
                   (needsHumanSecondApprover(
                     strip.totalSpend,

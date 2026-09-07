@@ -171,12 +171,14 @@ function sumsFromActiveFuelEvents(active: any[]): {
   let driverSpend = 0;
   let gasCard = 0;
   for (const ev of active) {
-    const major = Math.abs(minorToMajor(Number(ev.amount_minor) || 0));
+    // C-1: preserve sign so a fleet-owes-driver week (negative share) is not
+    // silently flattened; staleness compare must see the real magnitude+sign.
+    const major = minorToMajor(Number(ev.amount_minor) || 0);
     const et = String(ev.event_type || "");
     if (et === "fuel_deduction") deduction += major;
     else if (et === "fuel_fleet_share") fleetShare += major;
-    else if (et === "fuel_driver_spend") driverSpend += major;
-    else if (et === "fuel_gas_card_spend") gasCard += major;
+    else if (et === "fuel_driver_spend") driverSpend += Math.abs(major);
+    else if (et === "fuel_gas_card_spend") gasCard += Math.abs(major);
   }
   return { deduction, fleetShare, driverSpend, gasCard };
 }
@@ -200,8 +202,10 @@ export async function postFuelFinalizedEventsFromReport(
   }
   const weekKey = String(report.weekStart).split("T")[0];
   const driverId = String(report.driverId);
-  const deduction = Math.abs(Number(report.driverShare) || 0);
-  const fleetShare = Math.abs(Number(report.companyShare) || 0);
+  // C-1: shares are SIGNED. A negative driverShare means the fleet owes the
+  // driver — Math.abs here flipped fleet-owes weeks into a driver debt.
+  const deduction = Number(report.driverShare) || 0;
+  const fleetShare = Number(report.companyShare) || 0;
   const driverSpend = reportDriverSpendMajor(report);
   const gasCard = Math.abs(Number(report.gasCardSpend) || 0);
   const results: PostFinancialEventResult[] = [];
@@ -216,8 +220,8 @@ export async function postFuelFinalizedEventsFromReport(
       roundCentsEqual(curr.gasCard, gasCard);
     if (amountsMatch) {
       // Already closed with matching amounts — refresh Expenses projection only.
-      const { rebuildDriverFinancialPeriod } = await import("./driver_financial_periods.ts");
-      await rebuildDriverFinancialPeriod(driverId, weekKey);
+      const { rebuildOneDriverPeriod } = await import("./driver_financial_periods.ts");
+      await rebuildOneDriverPeriod(driverId, weekKey);
       return { weekKey, driverId, results };
     }
     // Stale / incomplete ledger (e.g. first finalize then more fills, or missing driverSpend) —
@@ -330,6 +334,9 @@ export async function postFuelFinalizedEventsFromReport(
         occurredAt: weekKey,
         amountMajor: -driverSpend,
         direction: "outflow",
+        // M-2: every fuel event type must carry balanced account keys for trial balance.
+        debitAccountKey: "platform:fleet_fuel_expense",
+        creditAccountKey: "platform:driver_cash_outlay",
       }),
       "driver_spend",
     );
@@ -353,8 +360,8 @@ export async function postFuelFinalizedEventsFromReport(
     );
   }
 
-  const { rebuildDriverFinancialPeriod } = await import("./driver_financial_periods.ts");
-  await rebuildDriverFinancialPeriod(driverId, weekKey);
+  const { rebuildOneDriverPeriod } = await import("./driver_financial_periods.ts");
+  await rebuildOneDriverPeriod(driverId, weekKey);
 
   return { weekKey, driverId, results };
 }

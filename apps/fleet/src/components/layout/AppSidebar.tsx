@@ -266,6 +266,10 @@ export function AppSidebar({
       id: 'close-week',
       label: 'Close Week',
     },
+    (canView('driver-settlements') || canView('fuel-reconciliation')) && {
+      id: 'restatement-queue',
+      label: 'Restatement Queue',
+    },
     canView('courier-settlements') &&
       hasRushDeliveryLine &&
       isModuleEnabled('rush_courier_settlements') && {

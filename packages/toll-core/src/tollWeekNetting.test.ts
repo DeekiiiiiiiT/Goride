@@ -43,15 +43,43 @@ describe('computeTollWeekNetting — one netting, all four cards', () => {
     expect(tollWeekIdentityCloses(r)).toBe(true);
   });
 
-  it('residual surfaces the wallet-recovery gap that breaks the P&L identity', () => {
+  it('folds charged-to-drivers into net loss as a P&L recovery (identity closes)', () => {
     const r = computeTollWeekNetting([
       { eventType: 'toll_charge', sourceType: 'transaction', netAmount: -500 },
       { eventType: 'toll_charged_to_driver', netAmount: -300 },
     ]);
     expect(r.chargedToDrivers).toBeCloseTo(300, 2);
-    // Spend 500 − Reimbursed 0 − Charged 300 − NetLoss 500 = −300.
-    expect(r.residual).toBeCloseTo(-300, 2);
-    expect(tollWeekIdentityCloses(r)).toBe(false);
+    // LOCKED: chargedToDrivers recovers P&L → NetLoss 500 − 300 = 200.
+    expect(r.netLoss).toBeCloseTo(200, 2);
+    // Spend 500 − Reimbursed 0 − Charged 300 − NetLoss 200 = 0.
+    expect(r.residual).toBeCloseTo(0, 2);
+    expect(tollWeekIdentityCloses(r)).toBe(true);
+  });
+
+  it('over-recovers (signed negative net) when drivers are charged more than fleet spend', () => {
+    const r = computeTollWeekNetting([
+      { eventType: 'toll_charge', sourceType: 'transaction', netAmount: -200 },
+      { eventType: 'toll_charged_to_driver', netAmount: -300 },
+    ]);
+    expect(r.chargedToDrivers).toBeCloseTo(300, 2);
+    // 200 − 300 = −100 → over-recovered, displayed loss floors to $0.
+    expect(r.netLoss).toBeCloseTo(-100, 2);
+    expect(r.clipped).toBe(true);
+    expect(r.residual).toBeCloseTo(0, 2);
+  });
+
+  it('nets reversed wallet charges signed (charge − reversed) into recovery', () => {
+    const r = computeTollWeekNetting([
+      { eventType: 'toll_charge', sourceType: 'transaction', netAmount: -500 },
+      { eventType: 'toll_charged_to_driver', netAmount: -300 },
+      { eventType: 'toll_charge_reversed', netAmount: 100 },
+    ]);
+    // 300 charged − 100 reversed = 200 net recovery.
+    expect(r.chargedToDrivers).toBeCloseTo(200, 2);
+    // NetLoss 500 − 200 = 300; identity still closes.
+    expect(r.netLoss).toBeCloseTo(300, 2);
+    expect(r.residual).toBeCloseTo(0, 2);
+    expect(tollWeekIdentityCloses(r)).toBe(true);
   });
 
   it('is empty-safe', () => {

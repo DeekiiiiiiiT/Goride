@@ -31,13 +31,14 @@
  *   GET /toll-reconciliation/periods?driverId= – per-period step counts
  */
 
-import { Hono } from "npm:hono";
+import { Hono, type Context } from "npm:hono";
 import { startOfWeek, endOfWeek, format } from "npm:date-fns";
 import { getFleetTimezone } from "./timezone_helper.tsx";
 import { requireAuth, requirePermission, type RbacUser } from "./rbac_middleware.ts";
 import { getServiceClient } from "./service_client.ts";
+import { getOrgId } from "./org_scope.ts";
+import { sealTollWeek } from "./toll_week_seal.ts";
 import {
-  computeTollFleetLossFromEvents,
   filterTollEventsInDateRange,
   hasCanonicalChargedToDriverEvents,
   isTollChargedToDriverEvent,
@@ -556,13 +557,16 @@ app.get(`${BASE}/periods`, requirePermission('toll.view'), async (c) => {
             reimbursedByPlatform: round2(reimbursedByPlatform),
             matchedDisputeRefundAmount: round2(f.matchedDisputeRefundAmount),
             chargedToDrivers,
-            // Same formula as Business Finance P&L Tolls (canonical ledger netting).
-            netTollLoss: computeTollFleetLossFromEvents(weekEvents).net,
-            // Signed raw net + four-card identity residual (C-3/C-4): lets the UI
-            // detect when the cards don't reconcile instead of asserting they do.
-            netTollLossSigned: weekNet.netLoss,
-            identityResidual: weekNet.residual,
+            // C-3/C-4 (LOCKED): headline Net Toll Loss is the SIGNED week netting with
+            // chargedToDrivers folded in as a P&L recovery — NOT the floored fleet-loss
+            // engine that ignored wallet recovery. Negative = fleet over-recovered.
+            netTollLoss: round2(weekNet.netLoss),
+            netTollLossSigned: round2(weekNet.netLoss),
+            // Four-card identity residual (should ≈ 0) + over-recovery flag so the UI
+            // can surface clipping instead of silently flooring a real credit.
+            identityResidual: round2(weekNet.residual),
             netTollLossClipped: weekNet.clipped,
+            overRecoveredAmount: weekNet.netLoss < -0.005 ? round2(-weekNet.netLoss) : 0,
             resolvedRefundsAmount: round2(f.resolvedRefundsAmount),
           },
         };
@@ -579,7 +583,11 @@ app.get(`${BASE}/periods`, requirePermission('toll.view'), async (c) => {
         sum.matchedDisputeRefundAmount += p.financials.matchedDisputeRefundAmount;
         sum.chargedToDrivers += p.financials.chargedToDrivers;
         sum.resolvedRefundsAmount += p.financials.resolvedRefundsAmount;
+        // C-3/C-4: fleet totals sum the SIGNED per-week nets (over-recovery in one
+        // week nets against loss in another) instead of flooring each week first.
         sum.netTollLoss += p.financials.netTollLoss;
+        sum.identityResidual += p.financials.identityResidual;
+        if (p.financials.netTollLossClipped) sum.clippedWeekCount += 1;
         return sum;
       },
       {
@@ -589,6 +597,8 @@ app.get(`${BASE}/periods`, requirePermission('toll.view'), async (c) => {
         chargedToDrivers: 0,
         resolvedRefundsAmount: 0,
         netTollLoss: 0,
+        identityResidual: 0,
+        clippedWeekCount: 0,
       },
     );
     const netTollLoss = round2(totalsAcc.netTollLoss);
@@ -630,6 +640,13 @@ app.get(`${BASE}/periods`, requirePermission('toll.view'), async (c) => {
         matchedDisputeRefundAmount: round2(totalsAcc.matchedDisputeRefundAmount),
         chargedToDrivers: round2(totalsAcc.chargedToDrivers),
         netTollLoss: round2(netTollLoss),
+        // C-3/C-4: expose signed total, over-recovery, and identity health so the
+        // dashboard can show a credit / flag when the four cards stop reconciling.
+        netTollLossSigned: round2(netTollLoss),
+        netTollLossClipped: netTollLoss < -0.005,
+        overRecoveredAmount: netTollLoss < -0.005 ? round2(-netTollLoss) : 0,
+        clippedWeekCount: totalsAcc.clippedWeekCount,
+        identityResidual: round2(totalsAcc.identityResidual),
         needsReviewCount: tollsNeedingReviewCount + refundsNeedingReviewCount,
         tollsNeedingReviewCount,
         refundsNeedingReviewCount,
@@ -639,6 +656,37 @@ app.get(`${BASE}/periods`, requirePermission('toll.view'), async (c) => {
     });
   } catch (e: any) {
     return safeErrorResponse(c, e, "TollPeriodController.periods");
+  }
+});
+
+// ─── POST /toll/periods/:weekKey/seal ───────────────────────────────────────
+// Seal a toll week: publish immutable toll week_statements per active driver so
+// Close Week's invariants have an independent toll lane (Close Program Pass 2).
+app.post(`/make-server-37f42386/toll/periods/:weekKey/seal`, requirePermission("toll.manage"), async (c: Context) => {
+  try {
+    const orgId = getOrgId(c);
+    if (!orgId) return c.json({ error: "ORG_REQUIRED" }, 400);
+    const weekKey = String(c.req.param("weekKey") || "").slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(weekKey)) {
+      return c.json({ error: "weekKey (YYYY-MM-DD Monday) is required" }, 400);
+    }
+    const body = (await c.req.json().catch(() => ({}))) as {
+      chargedAmountsMajor?: Record<string, number>;
+      nettingByDriver?: Record<string, { reimbursed?: number; netLoss?: number }>;
+      force?: boolean;
+    };
+    const user = c.get("rbacUser") as RbacUser | undefined;
+    const result = await sealTollWeek({
+      organizationId: orgId,
+      weekKey,
+      actorId: user?.userId,
+      chargedAmountsMajor: body.chargedAmountsMajor,
+      nettingByDriver: body.nettingByDriver,
+      force: body.force === true,
+    });
+    return c.json({ success: true, weekKey, ...result });
+  } catch (e: any) {
+    return safeErrorResponse(c, e, "TollPeriodController.seal");
   }
 });
 

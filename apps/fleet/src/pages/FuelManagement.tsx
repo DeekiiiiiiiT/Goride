@@ -333,8 +333,8 @@ function FuelManagementInner({ defaultTab = 'logs', onViewDriverLedger, onTabCha
       Boolean(landingPeriodRange.from && landingPeriodRange.to),
   });
 
-  // No browser week-engines on landing mount (was N engines × trips/PA/brain → multi-second trickle).
-  // Money/chips: SQL periods first; entry-derived snapshots fill gaps (provisional unexplained).
+  // P-3: when SQL has rows for the active range, land server-only; derive only fills
+  // weeks with no server row (mergeServerFirst never dual-merges over server money).
   const fuelReconPeriods = useMemo(() => {
     const serverByWeek = new Map(
       serverFuelPeriods.map((r) => [weekStartYmd(r.weekStart), r] as const),
@@ -343,8 +343,12 @@ function FuelManagementInner({ defaultTab = 'logs', onViewDriverLedger, onTabCha
     for (const w of listFuelLeakageReviewedWeeks()) {
       if (!serverByWeek.has(w)) leakageReviewedWeeks.add(w);
     }
+    const needDeriveGaps = reconciliationWeekOptions.some(
+      (w) => !serverByWeek.has(w.startDate),
+    );
+    // Prefer skipping the browser week engine entirely when every option already has SQL.
     const derived =
-      vehicles.length > 0 || logs.length > 0
+      needDeriveGaps && (vehicles.length > 0 || logs.length > 0)
         ? deriveFuelReconciliationPeriods({
             weekOptions: reconciliationWeekOptions,
             vehicles,
@@ -354,7 +358,7 @@ function FuelManagementInner({ defaultTab = 'logs', onViewDriverLedger, onTabCha
             scenarios,
             liveReportsByWeek: undefined,
             leakageReviewedWeeks,
-          })
+          }).filter((d) => !serverByWeek.has(d.startDate))
         : [];
     return mergeServerFirstLandingPeriods(serverFuelPeriods, derived);
   }, [

@@ -9,12 +9,14 @@
  * metadata is written so no further movement can post to the week.
  */
 import { getServiceClient } from "./service_client.ts";
-import { markPeriodFrozen } from "./settlement_period_freeze.ts";
+import { isPeriodFrozen, markPeriodFrozen } from "./settlement_period_freeze.ts";
 import {
   closeWeekStatements,
   getLatestWeekStatements,
+  publishWeekStatement,
   WEEK_STATEMENT_ENGINE_VERSION,
 } from "./week_statements.ts";
+import { sealTollWeek } from "./toll_week_seal.ts";
 import {
   buildCloseHash,
   buildPeriodCloseHashPayload,
@@ -115,18 +117,110 @@ export type WeekClosePreview = {
   driversTotal: number;
   driversReady: number;
   driversBlocked: number;
+  /** Drivers whose period is already frozen / signed (week close done). */
+  driversFrozen: number;
+  /** True when every driver-period for the week is frozen. */
+  weekClosed: boolean;
+  /** Earliest freeze timestamp across frozen drivers, if any. */
+  closedAt: string | null;
   fuel: WeekCloseFuelLane;
   toll: WeekCloseTollLane;
   blockers: CloseBlocker[];
 };
 
 /**
+ * Close Program Pass 2 precondition: make sure every active driver-week has
+ * fuel / earnings / toll statements before invariants run. Fuel normally
+ * publishes at finalize; historical weeks that finalized before Pass 2 still
+ * need a zero-or-period backfill so Close Week is not blocked by a missing lane.
+ * Publishes ONLY when a lane is absent (never re-versions a standing statement).
+ */
+async function ensureCloseLaneStatements(
+  orgId: string,
+  week: string,
+  actorId?: string,
+): Promise<void> {
+  const { data: periods, error } = await sb()
+    .from("driver_financial_periods")
+    .select(
+      "driver_id, cash_collected, driver_share, fleet_share, tips_paid_to_driver, earnings_gross, settlement_amount, fuel_deduction, fuel_fleet_share, fuel_finalized",
+    )
+    .eq("organization_id", orgId)
+    .eq("period_anchor", week);
+  if (error) throw new Error(error.message);
+
+  let tollLaneMissing = false;
+  for (const p of periods ?? []) {
+    const driverId = String(p.driver_id || "");
+    if (!driverId) continue;
+    const statements = await getLatestWeekStatements(orgId, driverId, week);
+    const kinds = new Set(statements.map((s) => s.kind));
+
+    if (!kinds.has("fuel")) {
+      try {
+        await publishWeekStatement({
+          kind: "fuel",
+          organizationId: orgId,
+          driverId,
+          weekKey: week,
+          amountsMinor: {
+            driverShare: Math.round((Number(p.fuel_deduction) || 0) * 100),
+            companyShare: Math.round((Number(p.fuel_fleet_share) || 0) * 100),
+          },
+          status: "closed",
+          closedBy: actorId ?? "week_close_autoseal",
+          closeReason: p.fuel_finalized ? "close_precondition_fuel_finalized" : "close_precondition_fuel",
+        });
+      } catch (e) {
+        console.warn("[week_close] fuel auto-publish failed (non-fatal)", driverId, week, e);
+      }
+    }
+
+    if (!kinds.has("earnings")) {
+      try {
+        await publishWeekStatement({
+          kind: "earnings",
+          organizationId: orgId,
+          driverId,
+          weekKey: week,
+          amountsMinor: {
+            passengerCash: Math.round((Number(p.cash_collected) || 0) * 100),
+            driverShare: Math.round((Number(p.driver_share) || 0) * 100),
+            companyShare: Math.round((Number(p.fleet_share) || 0) * 100),
+            tipsPaidToDriver: Math.round((Number(p.tips_paid_to_driver) || 0) * 100),
+            gross: Math.round((Number(p.earnings_gross) || 0) * 100),
+            settlementAmount: Math.round((Number(p.settlement_amount) || 0) * 100),
+          },
+          status: "closed",
+          closedBy: actorId ?? "week_close_autoseal",
+          closeReason: "close_precondition",
+        });
+      } catch (e) {
+        console.warn("[week_close] earnings auto-publish failed (non-fatal)", driverId, week, e);
+      }
+    }
+
+    if (!kinds.has("toll")) tollLaneMissing = true;
+  }
+
+  if (tollLaneMissing) {
+    try {
+      await sealTollWeek({ organizationId: orgId, weekKey: week, actorId });
+    } catch (e) {
+      console.warn("[week_close] toll auto-seal failed (non-fatal)", week, e);
+    }
+  }
+}
+
+/**
  * Read-only dry run of {@link closeWeek}: computes per-driver cross-system
  * blockers and the aggregated fuel / toll lanes for the Close Week screen.
- * Writes nothing — safe to poll from the UI.
+ * Auto-seals missing earnings/toll lanes first (idempotent), then reads.
  */
 export async function previewWeekClose(orgId: string, weekKey: string): Promise<WeekClosePreview> {
   const week = String(weekKey).slice(0, 10);
+
+  await ensureCloseLaneStatements(orgId, week);
 
   const { data: periods, error } = await sb()
     .from("driver_financial_periods")
@@ -138,6 +232,8 @@ export async function previewWeekClose(orgId: string, weekKey: string): Promise<
   const rows = periods ?? [];
   const blockers: CloseBlocker[] = [];
   let driversReady = 0;
+  let driversFrozen = 0;
+  let closedAt: string | null = null;
 
   let fuelDriverShare = 0;
   let fuelFleetShare = 0;
@@ -149,6 +245,25 @@ export async function previewWeekClose(orgId: string, weekKey: string): Promise<
 
   for (const period of rows) {
     const driverId = String(period.driver_id);
+    const meta = (period.metadata as Record<string, unknown> | null) || null;
+    const fc = (meta?.financeCore as Record<string, unknown> | undefined) || {};
+    const frozen = isPeriodFrozen({
+      metadata: meta,
+      settlementStatus: period.settlement_status ? String(period.settlement_status) : null,
+      signedAt: period.signed_at
+        ? String(period.signed_at)
+        : fc.signedAt
+          ? String(fc.signedAt)
+          : null,
+    });
+    if (frozen) {
+      driversFrozen += 1;
+      const signed =
+        (fc.signedAt ? String(fc.signedAt) : null) ||
+        (period.signed_at ? String(period.signed_at) : null);
+      if (signed && (!closedAt || signed < closedAt)) closedAt = signed;
+    }
+
     const statements = await getLatestWeekStatements(orgId, driverId, week);
     const byKind = new Map<string, WeekStatement>(statements.map((s) => [s.kind, s]));
 
@@ -160,9 +275,16 @@ export async function previewWeekClose(orgId: string, weekKey: string): Promise<
       fuelStatement,
       tollStatement,
       earningsStatement: earningsFromStatement(byKind.get("earnings")),
+      cashSourceMismatch: Number(
+        (meta as { financeCore?: { cashSourceMismatch?: number } } | null)
+          ?.financeCore?.cashSourceMismatch,
+      ) || 0,
     });
-    blockers.push(...driverBlockers);
-    if (canCloseWeek(driverBlockers)) driversReady += 1;
+    // Already-frozen drivers are not "blockers" for close — they are done.
+    if (!frozen) {
+      blockers.push(...driverBlockers);
+      if (canCloseWeek(driverBlockers)) driversReady += 1;
+    }
 
     if (fuelStatement) {
       fuelDriverShare += fuelStatement.driverShare;
@@ -180,12 +302,16 @@ export async function previewWeekClose(orgId: string, weekKey: string): Promise<
 
   const identityResidual =
     Math.round((tollSpend - tollReimbursed - tollCharged - tollNetLoss) * 100) / 100;
+  const weekClosed = rows.length > 0 && driversFrozen === rows.length;
 
   return {
     weekKey: week,
     driversTotal: rows.length,
     driversReady,
-    driversBlocked: rows.length - driversReady,
+    driversBlocked: rows.length - driversReady - driversFrozen,
+    driversFrozen,
+    weekClosed,
+    closedAt,
     fuel: {
       driverShare: Math.round(fuelDriverShare * 100) / 100,
       fleetShare: Math.round(fuelFleetShare * 100) / 100,
@@ -233,6 +359,8 @@ export async function closeWeek(
 ): Promise<CloseWeekResult> {
   const week = String(weekKey).slice(0, 10);
 
+  await ensureCloseLaneStatements(orgId, week, actorId);
+
   const { data: periods, error } = await sb()
     .from("driver_financial_periods")
     .select("*")
@@ -245,6 +373,29 @@ export async function closeWeek(
 
   for (const period of periods ?? []) {
     const driverId = String(period.driver_id);
+    const meta = (period.metadata as Record<string, unknown> | null) || null;
+    const fc = (meta?.financeCore as Record<string, unknown> | undefined) || {};
+    if (
+      isPeriodFrozen({
+        metadata: meta,
+        settlementStatus: period.settlement_status ? String(period.settlement_status) : null,
+        signedAt: period.signed_at
+          ? String(period.signed_at)
+          : fc.signedAt
+            ? String(fc.signedAt)
+            : null,
+      })
+    ) {
+      // Idempotent: already frozen — count as closed, do not re-hash / re-write.
+      perDriver.push({
+        driverId,
+        closed: true,
+        closeHash: String(period.source_event_hash || fc.closeHash || "") || undefined,
+        blockers: [],
+      });
+      continue;
+    }
+
     const statements = await getLatestWeekStatements(orgId, driverId, week);
     const byKind = new Map<string, WeekStatement>(statements.map((s) => [s.kind, s]));
 
@@ -253,7 +404,45 @@ export async function closeWeek(
       fuelStatement: fuelFromStatement(byKind.get("fuel")),
       tollStatement: tollFromStatement(byKind.get("toll")),
       earningsStatement: earningsFromStatement(byKind.get("earnings")),
+      cashSourceMismatch: Number(
+        (meta as { financeCore?: { cashSourceMismatch?: number } } | null)
+          ?.financeCore?.cashSourceMismatch,
+      ) || 0,
     });
+
+    // M-2: refuse close when active fuel_* events lack account keys.
+    try {
+      const { data: fuelEv } = await sb()
+        .from("financial_events")
+        .select("id, debit_account_key, credit_account_key, reverses_event_id, reversed_at")
+        .eq("driver_id", driverId)
+        .eq("period_anchor", week)
+        .like("event_type", "fuel_%");
+      const reversed = new Set(
+        (fuelEv || []).filter((e) => e.reverses_event_id).map((e) => String(e.reverses_event_id)),
+      );
+      const missing = (fuelEv || []).filter(
+        (e) =>
+          !e.reverses_event_id &&
+          !e.reversed_at &&
+          !reversed.has(String(e.id)) &&
+          (!e.debit_account_key || !e.credit_account_key),
+      );
+      if (missing.length > 0) {
+        blockers.push({
+          code: "FUEL_EVENT_MISSING_ACCOUNTS",
+          severity: "block",
+          driverId,
+          week,
+          persisted: missing.length,
+          expected: 0,
+          delta: missing.length,
+          message: `${missing.length} active fuel_* event(s) missing debit/credit account keys`,
+        });
+      }
+    } catch {
+      /* non-fatal — finance-recon still catches */
+    }
 
     if (!canCloseWeek(blockers)) {
       allBlockers.push(...blockers);

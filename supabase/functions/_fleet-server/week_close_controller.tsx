@@ -14,6 +14,10 @@ import { requireAuth, requirePermission, type RbacUser } from "./rbac_middleware
 import { getOrgId } from "./org_scope.ts";
 import { safeErrorResponse } from "./safe_error.ts";
 import { closeWeek, previewWeekClose } from "./week_close.ts";
+import {
+  listPendingRestatements,
+  requestRestatement,
+} from "./week_statements.ts";
 
 const app = new Hono();
 app.use("*", requireAuth({ strict: true }));
@@ -62,6 +66,64 @@ app.post(BASE, requirePermission("transactions.edit"), async (c) => {
     return c.json(result);
   } catch (e) {
     return safeErrorResponse(c, e, "week-close");
+  }
+});
+
+// ── Restatement queue (Pass E) ──────────────────────────────────────────────
+app.get(`${BASE}/restatements`, requirePermission("transactions.view"), async (c) => {
+  try {
+    const org = requireOrg(c);
+    if (typeof org !== "string") return org;
+    const page = Math.max(1, Number(c.req.query("page") || 1));
+    const pageSize = Math.min(Math.max(Number(c.req.query("pageSize") || 50), 1), 200);
+    const offset = (page - 1) * pageSize;
+    const rows = await listPendingRestatements(org, { limit: pageSize, offset });
+    return c.json({
+      success: true,
+      rows: rows.map((s) => ({
+        id: s.id,
+        driverId: s.driverId,
+        weekKey: s.weekKey,
+        kind: s.kind,
+        version: s.version,
+        status: s.status,
+        reason: s.closeReason,
+        createdAt: s.createdAt,
+      })),
+      page: { page, pageSize, hasMore: rows.length >= pageSize },
+    });
+  } catch (e) {
+    return safeErrorResponse(c, e, "week-close-restatements");
+  }
+});
+
+app.post(`${BASE}/restatements`, requirePermission("transactions.edit"), async (c) => {
+  try {
+    const org = requireOrg(c);
+    if (typeof org !== "string") return org;
+    const user = c.get("rbacUser") as RbacUser;
+    const body = (await c.req.json()) as {
+      statementId?: string;
+      reason?: string;
+      amountsMinor?: Record<string, number>;
+    };
+    const statementId = String(body.statementId || "").trim();
+    const reason = String(body.reason || "").trim();
+    if (!statementId || !reason) {
+      return c.json({ error: "statementId and reason are required" }, 400);
+    }
+    const draft = await requestRestatement({
+      statementId,
+      actorId: user.userId,
+      reason,
+      amountsMinor: body.amountsMinor,
+    });
+    if (draft.organizationId !== org) {
+      return c.json({ error: "ORG_MISMATCH", message: "Statement belongs to another organization" }, 403);
+    }
+    return c.json({ success: true, data: draft });
+  } catch (e) {
+    return safeErrorResponse(c, e, "week-close-restatement-request");
   }
 });
 

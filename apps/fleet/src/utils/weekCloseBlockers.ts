@@ -41,14 +41,15 @@ export function laneForBlockerCode(code: string): CloseLane {
 
 /** Plain-English label for each known blocker code (falls back to the raw message). */
 const BLOCKER_LABELS: Record<string, string> = {
-  FUEL_STATEMENT_MISSING: 'Fuel week not finalized',
+  FUEL_STATEMENT_MISSING: 'Fuel statement not published',
   FUEL_DRIVER_SHARE_MISMATCH: 'Fuel driver share does not tie to statement',
   FUEL_FLEET_SHARE_MISMATCH: 'Fuel fleet share does not tie to statement',
-  TOLL_STATEMENT_MISSING: 'Toll week not reconciled',
+  TOLL_STATEMENT_MISSING: 'Toll statement not published',
   TOLL_SPEND_MISMATCH: 'Toll spend does not tie to statement',
   TOLL_CHARGED_MISMATCH: 'Toll charged-to-driver does not tie to statement',
   TOLL_IDENTITY_UNBALANCED: 'Toll cards do not balance (Spend − Reimbursed − Charged − Net Loss ≠ 0)',
-  EARNINGS_STATEMENT_MISSING: 'Earnings week not published',
+  EARNINGS_STATEMENT_MISSING: 'Earnings statement not published',
+  CASH_SOURCE_MISMATCH: 'Trip CSV cash disagrees with ledger cash',
   CASH_COLLECTED_MISMATCH: 'Cash collected does not tie to earnings statement',
   EARNINGS_GROSS_IDENTITY: 'Gross ≠ driver share + fleet share + tips',
   STATEMENT_ACCOUNTS_UNBALANCED: 'Statement accounts do not net to zero',

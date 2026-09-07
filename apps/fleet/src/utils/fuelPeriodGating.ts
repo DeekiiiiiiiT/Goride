@@ -89,3 +89,19 @@ export function pickInitialFuelStep(states: FuelGatedStepState[]): FuelStepId {
   if (current) return current.id;
   return (states[states.length - 1] ?? states[0]).id;
 }
+
+/**
+ * M-5: deep-link / resume must not jump past incomplete prior steps.
+ * Locked requested steps fall back to pickInitialFuelStep.
+ */
+export function clampFuelStepToGates(
+  requested: FuelStepId | undefined | null,
+  gatedStates: FuelGatedStepState[],
+): FuelStepId {
+  if (!requested || !FUEL_STEP_ORDER.includes(requested)) {
+    return pickInitialFuelStep(gatedStates);
+  }
+  const hit = gatedStates.find((s) => s.id === requested);
+  if (!hit || hit.locked) return pickInitialFuelStep(gatedStates);
+  return requested;
+}

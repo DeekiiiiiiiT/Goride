@@ -34,6 +34,117 @@ There are **four separate money engines** producing numbers for these three scre
 
 ---
 
+## 0.5 Remediation status — verified 2026-09-07
+
+Re-audited against working tree at `6fd0aaab` (clean, 2 commits after the audit baseline `6d718714`). **87 files changed, +9,811 / −1,438.**
+
+**Verification run:** `finance-core` 112/112 ✅ · `fuel-core` 38/38 ✅ · `toll-core` 50/50 ✅ (200 tests) · `check-no-naive-date-slice` ✅ · `check-fuel-core-parity` ✅ · `check-toll-core-parity` ✅ (8 shims).
+
+### Scoreboard
+
+| ID | Finding | Status |
+|---|---|---|
+| **C-1** | Fuel share sign inversion | 🟡 **Partial — primary path still inverts** |
+| **C-2** | Unbounded unexplained fuel | 🟡 **Partial — PA path + no hard gate** |
+| **C-3** | Toll cards satisfy no identity | 🟡 **Partial — residual can never close** |
+| **C-4** | Net loss floored then summed | 🟡 **Partial — headline still floored** |
+| **C-5** | Dispute refund double-counted | ✅ **Closed** |
+| **C-6** | No real week close | 🟡 **Built but non-functional** |
+| **C-7** | Reversal clamps eat credits | 🟡 **Partial — cash-sync path still clamps** |
+| **H-1** | Collect mixes settled + unfinalized | ✅ **Closed** |
+| **H-2** | Blocked-week money invisible | ✅ **Closed** |
+| **H-3** | Fuel reversal hard-deletes | ✅ **Closed** |
+| **H-4** | Dead integrity hash | 🟡 **Partial — written, never verified** |
+| **H-5** | `Fixed_Amount` → 50/50 | ✅ **Closed** |
+| **H-6** | Fuel snapshot matched by range | ✅ **Closed** |
+| **H-7** | No cross-system invariants | 🟡 **Built, cannot fire** |
+| **H-8** | Toll events use different week rule | ✅ **Closed** |
+| **H-9** | Three "charged to driver" sources | 🟡 **Partial — 2 of 3 unified** |
+| **U-2** | No unified close screen | ✅ **Closed** |
+| **U-4** | Tooltip makes a false promise | ✅ **Closed** |
+| **P-1** | O(W×N) rebuild | 🟡 **Partial — bucketing done, ctx still optional** |
+| **P-6** | Unthrottled scroll windowing | ✅ **Closed** |
+| M-1…M-5, P-2…P-5 | — | ⬜ **Not started** |
+
+**9 closed · 10 partial · 9 not started.**
+
+### ⛔ Blocking issue — no week can close today
+
+`checkCloseInvariants` raises `TOLL_STATEMENT_MISSING` and `EARNINGS_STATEMENT_MISSING` at `severity: 'block'` (`closeInvariants.ts:165, 210`), and `canCloseWeek` returns false on any `block`. Only **one** publisher exists — `fuel_period_routes.ts:399` (`kind: "fuel"`). There is no toll publisher and no earnings publisher.
+
+Result: the entire close machinery — `week_close.ts`, `week_close_controller.tsx`, `CloseWeekPage.tsx`, `markPeriodFrozen`, `buildCloseHash` — is wired end-to-end and **will reject every week** with two permanent blockers. **This is the highest-priority remaining item; nothing else in Phase 5 can be validated until it lands.**
+
+### What closed cleanly
+
+- **C-5** `isDisputeRefundInWizardPeriod` is now exclusive (`if (matchedTollId) return has(...)`, `tollPeriodDisputeHelpers.ts:170-172`). Partitioning restored.
+- **H-3** `kv.del` replaced with offsetting reversal rows carrying `reversesTransactionId` + `reversalReason` + `idempotencyKey`, and a never-reverse-a-reversal guard (`fuel_enterprise_settlement.ts:65-106`).
+- **H-5** The assembler now branches Fixed_Amount to `getCategoryCoverageSplit` (`weekSnapshotEngine.ts:170`); the percentage helper is documented as unreachable for that type.
+- **H-6** `if (start !== periodAnchor) continue;` (`driver_financial_periods.ts:1051`).
+- **H-8** `tollEventDate` takes a `fleetTz` and routes through `fleetCalendarDay`; `scripts/check-no-naive-date-slice.mjs` is wired into CI (`ci.yml:45`) and passing.
+- **H-1** `collectGateBlocked` / `canCollect` on `moneyUnlocked`, cash-held rows relabelled as custody, gate tooltip on the disabled button.
+- **H-2** Gate-blind **Total exposure** KPI with a blocked-portion callout.
+- **U-2** `CloseWeekPage.tsx` (437 lines) registered in `pageRegistry` and `AppSidebar` — the unified close screen exists.
+- **U-4** The P&L claim is now conditional on `|identityResidual| ≤ 0.01`, otherwise the card reads *"Cards off by $X — not yet reconciled."* Honest.
+- **P-6** `useWindowedRows` rAF-throttled with proper cleanup.
+- **Phase 0 complete** — `docs/fixtures/periods-baseline-2026-09-07.json` (2,327 lines), `periodBaseline.golden.test.ts`, `docs/finance-recon/2026-09-07-before.md`, plus `fuel-misc-blast-radius.mjs` and `toll-card-identity-residual.mjs`.
+
+### What is still open, precisely
+
+**C-1 — the fix landed on the path that isn't used.** The snapshot fallback is now correctly signed (`driver_financial_periods.ts:1058-1059`, `Math.abs` removed). But the **events** path — the preferred one under `projectionReadsEventsForFuel()` — still inverts, in two places:
+
+1. `fuel_financial_reset.ts:203-204` strips the sign *before* posting:
+   ```ts
+   const deduction  = Math.abs(Number(report.driverShare)  || 0);
+   const fleetShare = Math.abs(Number(report.companyShare) || 0);
+   ```
+   The new sign-aware logic below it (`Math.abs(deduction) > MONEY_EPS`, `direction: deduction >= 0 ? "outflow" : "inflow"`) is therefore **unreachable for negative shares** — `deduction` can never be negative.
+2. `driver_financial_periods.ts:1020-1029` still aggregates with `Math.abs(major)`. Since a positive deduction posts as `amountMajor: -deduction`, a *negative* share posts as positive and `Math.abs` turns it back into a driver debit.
+
+`sumsFromActiveFuelEvents` (`fuel_financial_reset.ts:174`) also `Math.abs`es, so the staleness comparison cannot distinguish `+X` from `−X`.
+→ **The original defect is still live in the primary code path.** Remove the three `Math.abs` calls and let the sign flow.
+
+**C-2 — floored on one branch, not the other.** `assembleLeftoverWeekMoney` now floors misc and reports `overExplainedCost` / `overExplained` ✅. But `fuelCalculationService.ts:437` and `:661` call `splitAllCategoryCosts` with **raw** `miscellaneousCost` — that is the branch taken whenever Personal Allowance is active (`earnedAbsorbCompany !== 0 || personalForSplit !== personalUsageCost`). Negative misc still splits into negative shares there.
+Also, the gate is **advisory only**: `FuelLeakageStep.tsx:61` renders a banner reading *"Do not accept this week"* but nothing blocks accept or finalize — `isOverExplainedFuelWeek` appears in no gating module (`fuelFinalizeGating.ts`, `FuelBulkFinalizeDialog`, `FuelPeriodWizard` all clean).
+
+**C-3 — the residual is defined so it can never close.** `computeTollWeekNetting` is a genuine improvement: one scan, all pieces, no second engine. But `netLoss` is *defined* as `spend − reimbursed`, so
+```
+residual = spend − reimbursed − chargedToDrivers − netLoss  ≡  −chargedToDrivers
+```
+algebraically, always — the code comment concedes this. `tollWeekIdentityCloses` therefore returns true **only when `chargedToDrivers === 0`**, so every week with any driver charge shows *"Cards off by $25,740."* Honest, but permanently un-closable.
+→ The unresolved question is definitional: **is `chargedToDrivers` a P&L recovery** (then `netLoss = spend − reimbursed − chargedToDrivers` and the identity closes) **or a wallet movement outside the P&L** (then it is not a fourth term of this identity and should not be presented as one)? Pick one and encode it.
+
+**C-4 — the signed value is computed but not used.** `rawNet` and `clipped` are now returned ✅ and surfaced as `netTollLossSigned` / `netTollLossClipped` (`toll_period_controller.tsx:563-565`). But the headline `netTollLoss` still takes the **floored** `computeTollFleetLossFromEvents(weekEvents).net` (`:560`), and the fleet total still sums floored per-week values (`:582`). The upward bias is unchanged in the number the user reads.
+
+**C-6 — see the blocking issue above.** Everything else in this lane landed: `markPeriodFrozen` writes `periodFrozen` / `signedWeek` / `signedAt` / `closeHash` / `closedBy` / `closeReason` (`settlement_period_freeze.ts:56-64`), called from `week_close.ts:276`; `period_persist.ts` enforces `assertPeriodNotFrozen` on **both** persist paths (`:37, :93`); and there are **no `allowFrozen: true` callers** anywhere — the escape hatch exists but is unused. Good discipline.
+
+**C-7 — one clamp survived.** The formula is signed (`driverPeriodSettlement.ts:76`) and the rebuild passes `tollPersonal: tollChargedToDriver` unclamped (`:1129`) ✅. But `syncPeriodCashFromTransactions` still clamps: `tollPersonal: Math.max(0, Number(existing.toll_charged_to_driver) || 0)` (`:1882`). The Log-cash / Collect / Reverse path therefore recomputes settlement from a clamped input while the full rebuild uses the signed one — the same two-paths-two-answers shape as C-1, at smaller scale.
+Related: `sumTollChargedToDriversFromEvents` ends with `round2(Math.max(0, total))` (`tollFleetLossNetting.ts:104`) — over-reversal clamped again.
+
+**H-4 — written, never read.** `buildCloseHash` now hashes the complete row plus input ids (`closeHash.ts`), and `week_close.ts:287` stores it in `source_event_hash`. But grep finds **no verifier** — nothing recomputes and compares it when reading a closed week. The audit asked for verification on read; that half is missing.
+
+**H-7 — the right checks, unreachable.** `closeInvariants.ts` implements exactly the cross-system checks §6.4 called for (fuel driver/fleet share, toll spend/charged, earnings identity). They only run inside `closeWeek`, which cannot succeed (blocking issue). The nightly `finance-recon` was **not** extended to call them, so today nothing cross-checks the three subsystems in production.
+
+**H-9 — two of three sources unified.** The toll cards now read canonical `toll_charged_to_driver` / `toll_charge_reversed` events ✅. But the settlement projection still derives its own figure from KV: `driverTxAll.filter(t => t.category === "Toll Charge")` (`driver_financial_periods.ts:631-632`). Two read models remain.
+
+**P-1 — bucketing done, amplification not.** Per-week pre-bucketing is implemented (`tollsByWeek`, `allTollsByWeek`, `chargeTxByWeek`, `fuelReportsByWeek` — `driver_financial_periods.ts:228-234, 700-701`), which is the O(W×N) → O(N+W) win ✅. But `ctx` is **still optional** (`ctx?: RebuildContext`, `:749`) and there remain 7+ ctx-less callers that each trigger a full-dataset reload — including both calls inside the dispute-match loop (`dispute_refund_controller.tsx:536, 901`) and `fuel_financial_reset.ts:220, 357`. The bulk-match amplification described in §4.1 is unchanged.
+
+### Not started
+
+Phase 4 statement publishers for **toll** and **earnings**; the projection reading statements instead of raw operational data; M-1 (`cashSourceMismatch` blocking), M-2 (account keys / trial balance), M-3 (server-side pagination), M-4 (org fail-closed), M-5 (deep-link step gating); P-2 (KV prefix scans → indexed queries), P-3 (whole dataset in React state + `mergeServerFirstLandingPeriods` dual truth), P-4/P-5 (bundle splitting, virtualizing the toll and fuel tables).
+
+### Recommended order for the next pass
+
+1. **Toll + earnings statement publishers** — unblocks close, `closeInvariants`, `markPeriodFrozen` and the whole Phase 5 lane. Nothing else can be validated first.
+2. **C-1 events path** — three `Math.abs` removals; still a live money defect on the preferred path.
+3. **C-7 cash-sync clamp** (`:1882`) and the `sumTollChargedToDriversFromEvents` floor — same class, cheap.
+4. **C-2 Personal-Allowance branch** + promote the misc gate from banner to finalize blocker.
+5. **C-4** — make the headline and the total use the signed net.
+6. **C-3** — decide whether `chargedToDrivers` is a P&L term, then make the identity provable.
+7. **H-4** verify-on-read; **H-7** call `closeInvariants` from nightly `finance-recon` as a safety net.
+8. **P-1** make `ctx` required; then Phase 6 proper.
+
+---
+
 ## 1. How the system actually works today
 
 ### 1.1 The pipeline
@@ -891,27 +1002,29 @@ SETTLEMENT
 
 ## 9. Priority summary
 
-| Rank | ID | Finding | Effort |
-|---|---|---|---|
-| 1 | C-1 | Fuel share sign inversion / silent drop | S |
-| 2 | C-2 | Unbounded unexplained fuel → negative shares | M |
-| 3 | C-6 | No real week close | L |
-| 4 | C-3 | Toll cards satisfy no identity | M |
-| 5 | C-5 | Dispute refund double-counted across weeks | S |
-| 6 | C-7 | Reversal clamps eat driver credits | S |
-| 7 | C-4 | Net loss floored then summed | S |
-| 8 | H-7 | No cross-system invariants | M |
-| 9 | H-1 | Collect queue mixes settled + unfinalized | S |
-| 10 | H-3 | Fuel reversal hard-deletes money rows | S |
-| 11 | H-8 | Toll events use a different week rule | S |
-| 12 | H-2 | Blocked-week money invisible | S |
-| 13 | H-5 | Fixed_Amount → 50/50 on server | S |
-| 14 | H-9 | Three sources for "charged to driver" | M |
-| 15 | H-6 | Fuel snapshot matched by range | XS |
-| 16 | H-4 | Dead integrity hash | S |
-| 17 | P-1 | Full-table scans per rebuild | M |
-| 18 | P-3 | Whole dataset in React state | L |
-| 19 | U-2 | No unified week-close screen | M |
+*Original ranking, annotated with verified status as of 2026-09-07. See §0.5 for detail.*
+
+| Rank | ID | Finding | Effort | Status |
+|---|---|---|---|---|
+| 1 | C-1 | Fuel share sign inversion / silent drop | S | 🟡 snapshot fixed, **events path still inverts** |
+| 2 | C-2 | Unbounded unexplained fuel → negative shares | M | 🟡 default branch floored, **PA branch raw + no blocker** |
+| 3 | C-6 | No real week close | L | 🟡 **built end-to-end, blocked on 2 missing publishers** |
+| 4 | C-3 | Toll cards satisfy no identity | M | 🟡 one engine ✅, **residual ≡ −chargedToDrivers** |
+| 5 | C-5 | Dispute refund double-counted across weeks | S | ✅ closed |
+| 6 | C-7 | Reversal clamps eat driver credits | S | 🟡 **cash-sync path still clamps** |
+| 7 | C-4 | Net loss floored then summed | S | 🟡 signed value exposed, **headline still floored** |
+| 8 | H-7 | No cross-system invariants | M | 🟡 **written but unreachable** |
+| 9 | H-1 | Collect queue mixes settled + unfinalized | S | ✅ closed |
+| 10 | H-3 | Fuel reversal hard-deletes money rows | S | ✅ closed |
+| 11 | H-8 | Toll events use a different week rule | S | ✅ closed (+ CI guard) |
+| 12 | H-2 | Blocked-week money invisible | S | ✅ closed |
+| 13 | H-5 | Fixed_Amount → 50/50 on server | S | ✅ closed |
+| 14 | H-9 | Three sources for "charged to driver" | M | 🟡 **2 of 3 unified** |
+| 15 | H-6 | Fuel snapshot matched by range | XS | ✅ closed |
+| 16 | H-4 | Dead integrity hash | S | 🟡 **written, never verified** |
+| 17 | P-1 | Full-table scans per rebuild | M | 🟡 bucketing ✅, **ctx still optional** |
+| 18 | P-3 | Whole dataset in React state | L | ⬜ not started |
+| 19 | U-2 | No unified week-close screen | M | ✅ closed |
 
 ---
 
@@ -925,4 +1038,22 @@ The order matters: **Phase 0 first.** Without the goldens, Phase 1 will change n
 
 ---
 
-*Read-only audit. No source files were modified.*
+## 11. Post-remediation note — 2026-09-07
+
+Phase 0 was done properly (baseline fixture, goldens, blast-radius scripts, a "before" report), which is what made this re-audit possible at all. Nine findings are genuinely closed, including all four of the pure week-rule and data-integrity defects, and the two structural UX gaps.
+
+The pattern in what remains is worth naming: **the hard thinking landed, the last wiring step didn't.** In five separate cases the correct mechanism was built and then not connected to the path that actually runs —
+
+- C-1: signs fixed on the snapshot path; the *events* path (the preferred one) still calls `Math.abs`.
+- C-2: floored split shipped; the Personal-Allowance branch still passes raw misc, and the gate renders a warning instead of blocking.
+- C-4: `rawNet` and `clipped` computed and exposed; the headline card still reads the floored value.
+- C-6/H-7: close, freeze, hash and invariants all built and wired; two missing publishers make every close fail.
+- H-4: the hash is now real; nothing verifies it.
+
+None of these are design problems — they are one-line-to-one-function connections. The next pass is mostly short work, and the ordering in §0.5 matters: **the toll and earnings statement publishers come first**, because until they exist the close path cannot succeed and none of the Phase 5 work can be proven end-to-end.
+
+One item does still need a decision rather than code: **C-3.** Whether `chargedToDrivers` reduces fleet toll loss or sits outside the P&L as a wallet movement is a business question, not an engineering one. Until it is answered the four cards will keep reporting an unexplained gap exactly equal to the amount charged to drivers.
+
+---
+
+*Original audit: read-only, no source files modified. §0.5 and §11 added 2026-09-07 after verifying the remediation against the working tree; also read-only.*

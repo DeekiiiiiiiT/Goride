@@ -6,6 +6,10 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { requireInternalSecret } from "../_shared/requireInternalSecret.ts";
 import { checkPeriodInvariants } from "../../../packages/finance-core/src/periodInvariants.ts";
 import { checkPeriodVsLedgerEvents } from "../../../packages/finance-core/src/periodLedgerRecon.ts";
+import {
+  checkCloseInvariants,
+  type ClosePeriodRow,
+} from "../../../packages/finance-core/src/closeInvariants.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -115,12 +119,23 @@ Deno.serve(async (req) => {
 
     const { data: eventRows, error: evErr } = await supabase
       .from("financial_events")
-      .select("id, driver_id, period_anchor, event_type, amount_minor, reverses_event_id, reversed_at")
+      .select(
+        "id, driver_id, period_anchor, event_type, amount_minor, reverses_event_id, reversed_at, debit_account_key, credit_account_key",
+      )
       .gte("period_anchor", fromYmd)
       .lte("period_anchor", toYmd);
     if (evErr) throw evErr;
 
     const eventsByPeriod = new Map<string, Array<{ event_type: string; amount_minor: number }>>();
+    const activeFuelEventsByPeriod = new Map<
+      string,
+      Array<{
+        event_type: string;
+        amount_minor: number;
+        debit_account_key: string | null;
+        credit_account_key: string | null;
+      }>
+    >();
     const reversedIds = new Set<string>();
     for (const ev of eventRows || []) {
       if (ev?.reverses_event_id) reversedIds.add(String(ev.reverses_event_id));
@@ -136,6 +151,17 @@ Deno.serve(async (req) => {
         amount_minor: Number(ev.amount_minor) || 0,
       });
       eventsByPeriod.set(key, list);
+      const et = String(ev.event_type || "");
+      if (et.startsWith("fuel_")) {
+        const fuelList = activeFuelEventsByPeriod.get(key) || [];
+        fuelList.push({
+          event_type: et,
+          amount_minor: Number(ev.amount_minor) || 0,
+          debit_account_key: ev.debit_account_key != null ? String(ev.debit_account_key) : null,
+          credit_account_key: ev.credit_account_key != null ? String(ev.credit_account_key) : null,
+        });
+        activeFuelEventsByPeriod.set(key, fuelList);
+      }
     }
 
     const drifts: DriftRow[] = [];
@@ -166,6 +192,121 @@ Deno.serve(async (req) => {
           expected: d.expected,
           severity: "warning",
         });
+      }
+
+      // H-7: nightly close-invariant safety net (close remains the enforcement point).
+      try {
+        const week = String(p.period_anchor).slice(0, 10);
+        const orgId = p.organization_id ? String(p.organization_id) : null;
+        if (orgId) {
+          const { data: stmts } = await supabase
+            .from("week_statements")
+            .select("kind, status, amounts_minor, version")
+            .eq("organization_id", orgId)
+            .eq("driver_id", p.driver_id)
+            .eq("week_key", week)
+            .in("status", ["closed", "draft"])
+            .order("version", { ascending: false });
+          const byKind = new Map<string, { amounts_minor?: Record<string, number> }>();
+          for (const s of stmts || []) {
+            const k = String(s.kind);
+            if (!byKind.has(k)) byKind.set(k, s as { amounts_minor?: Record<string, number> });
+          }
+          const fuel = byKind.get("fuel");
+          const toll = byKind.get("toll");
+          const earnings = byKind.get("earnings");
+          if (!fuel || !toll || !earnings) {
+            drifts.push({
+              runId,
+              driverId: String(p.driver_id),
+              week,
+              kind: "CLOSE_STATEMENT_MISSING",
+              field: "week_statements",
+              persisted: [fuel, toll, earnings].filter(Boolean).length,
+              expected: 3,
+              severity: "warning",
+            });
+          } else {
+            const fuelAmt = fuel.amounts_minor || {};
+            const tollAmt = toll.amounts_minor || {};
+            const earnAmt = earnings.amounts_minor || {};
+            for (const b of checkCloseInvariants({
+              period: p as ClosePeriodRow,
+              fuelStatement: {
+                driverShare: (Number(fuelAmt.driverShare) || 0) / 100,
+                companyShare: (Number(fuelAmt.companyShare) || 0) / 100,
+              },
+              tollStatement: {
+                totalSpend: (Number(tollAmt.totalSpend) || 0) / 100,
+                chargedToDriver: (Number(tollAmt.chargedToDriver) || 0) / 100,
+                reimbursed: (Number(tollAmt.reimbursed) || 0) / 100,
+                netLoss: (Number(tollAmt.netLoss) || 0) / 100,
+              },
+              earningsStatement: {
+                passengerCash: (Number(earnAmt.passengerCash) || 0) / 100,
+              },
+              cashSourceMismatch: Number(
+                (p.metadata as { financeCore?: { cashSourceMismatch?: number } } | null)
+                  ?.financeCore?.cashSourceMismatch,
+              ) || 0,
+            })) {
+              drifts.push({
+                runId,
+                driverId: b.driverId ?? String(p.driver_id),
+                week: b.week ?? week,
+                kind: b.code,
+                field: b.code,
+                persisted: b.persisted,
+                expected: b.expected,
+                severity: b.severity === "block" ? "critical" : "warning",
+              });
+            }
+          }
+
+          // M-2: active fuel_* events must carry debit/credit account keys (trial-balance hygiene).
+          const fuelEv = activeFuelEventsByPeriod.get(`${p.driver_id}|${week}`) || [];
+          const missingAccounts = fuelEv.filter(
+            (ev) => !ev.debit_account_key || !ev.credit_account_key,
+          );
+          if (missingAccounts.length > 0) {
+            drifts.push({
+              runId,
+              driverId: String(p.driver_id),
+              week,
+              kind: "FUEL_EVENT_MISSING_ACCOUNTS",
+              field: "debit_account_key|credit_account_key",
+              persisted: missingAccounts.length,
+              expected: 0,
+              severity: "critical",
+            });
+          } else if (fuelEv.length > 0) {
+            // Trial balance: each keyed event posts +amt debit / −amt credit → Σ accounts = 0.
+            const byAcct = new Map<string, number>();
+            for (const ev of fuelEv) {
+              const amt = Number(ev.amount_minor) || 0;
+              const d = String(ev.debit_account_key);
+              const c = String(ev.credit_account_key);
+              byAcct.set(d, (byAcct.get(d) || 0) + amt);
+              byAcct.set(c, (byAcct.get(c) || 0) - amt);
+            }
+            let accountSum = 0;
+            for (const v of byAcct.values()) accountSum += v;
+            if (Math.abs(accountSum) > 0) {
+              drifts.push({
+                runId,
+                driverId: String(p.driver_id),
+                week,
+                kind: "STATEMENT_ACCOUNTS_UNBALANCED",
+                field: "fuel_event_accounts",
+                persisted: accountSum / 100,
+                expected: 0,
+                severity: "critical",
+              });
+            }
+          }
+        }
+      } catch (closeErr) {
+        console.warn("[finance-recon] H-7 close invariants skipped:", errMsg(closeErr));
       }
     }
 

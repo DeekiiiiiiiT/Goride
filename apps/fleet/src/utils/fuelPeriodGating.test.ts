@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   canAdvanceFuelStep,
+  clampFuelStepToGates,
   computeFuelGatedStepStates,
   emptyFuelStepCounts,
   fuelActionableTotal,
@@ -40,6 +41,14 @@ describe('fuelPeriodGating', () => {
     counts['adjustments-disputes'].actionable = 1;
     const states = computeFuelGatedStepStates(counts);
     expect(pickInitialFuelStep(states)).toBe('adjustments-disputes');
+  });
+
+  it('clampFuelStepToGates refuses locked deep-links', () => {
+    const counts = emptyFuelStepCounts();
+    counts['data-quality'].actionable = 1;
+    const states = computeFuelGatedStepStates(counts);
+    expect(clampFuelStepToGates('finalize', states)).toBe('data-quality');
+    expect(clampFuelStepToGates('data-quality', states)).toBe('data-quality');
   });
 });
 

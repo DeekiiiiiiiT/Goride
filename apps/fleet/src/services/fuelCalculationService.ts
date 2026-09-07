@@ -39,6 +39,7 @@ import {
   resolvePricePerLiter,
   assembleLeftoverWeekMoney,
   computeMiscellaneousCost,
+  floorMiscForSplit,
   splitAllCategoryCosts,
   getCategoryCoverageSplit as splitCategory,
   type FuelCoverageCategory,
@@ -434,13 +435,15 @@ export const FuelCalculationService = {
             companyShare = money.companyShare;
             driverShare = money.driverShare;
         } else {
+            // C-2: never split a negative misc as if it were real driver cash — a
+            // fleet-owes residual floors to 0 for the split (magnitude reported separately).
             const weekSplit = splitAllCategoryCosts(
                 {
                     rideShare: rideShareCost,
                     companyUsage: companyUsageCost,
                     deadhead: deadheadCost,
                     personal: personalForSplit,
-                    misc: miscellaneousCost,
+                    misc: floorMiscForSplit(miscellaneousCost).miscForSplit,
                 },
                 fuelRule || undefined,
             );
@@ -658,13 +661,14 @@ export const FuelCalculationService = {
         });
         if (allowanceSplit.skip) return report;
 
+        // C-2: floor a negative misc so an over-explained residual is never split as driver debt.
         const weekSplit = splitAllCategoryCosts(
             {
                 rideShare: report.rideShareCost,
                 companyUsage: report.companyUsageCost,
                 deadhead: report.deadheadCost || 0,
                 personal: allowanceSplit.overageCost,
-                misc: report.miscellaneousCost,
+                misc: floorMiscForSplit(report.miscellaneousCost).miscForSplit,
             },
             fuelRule,
         );

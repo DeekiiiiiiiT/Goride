@@ -21,6 +21,12 @@ export type WeekClosePreview = {
   driversTotal: number;
   driversReady: number;
   driversBlocked: number;
+  /** Drivers already frozen for this week. */
+  driversFrozen?: number;
+  /** True when every driver-period is frozen. */
+  weekClosed?: boolean;
+  /** Earliest freeze timestamp when weekClosed. */
+  closedAt?: string | null;
   fuel: FuelLaneMetrics;
   toll: TollLaneMetrics;
   blockers: CloseBlocker[];

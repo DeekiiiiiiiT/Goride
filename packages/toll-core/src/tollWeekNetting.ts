@@ -31,15 +31,24 @@ export type TollWeekNetting = {
   platformReimbursed: number;
   /** Operator refunds + inflow offsets, net of reinstated outflow offsets. */
   disputeRecovered: number;
-  /** Wallet recoveries from canonical toll_charged_to_driver events (H-9). */
+  /**
+   * Wallet recoveries from canonical toll_charged_to_driver events (H-9).
+   * LOCKED (C-3/C-4): this IS a P&L recovery — money the fleet recoups from
+   * drivers — so it reduces Net Toll Loss just like reimbursements/refunds.
+   */
   chargedToDrivers: number;
-  /** SIGNED raw net: tagSpend + cashWashSpend − platformReimbursed − disputeRecovered. */
+  /**
+   * SIGNED raw net toll loss:
+   *   tagSpend + cashWashSpend − platformReimbursed − disputeRecovered − chargedToDrivers.
+   * Negative when the fleet over-recovered.
+   */
   netLoss: number;
   /**
    * Four-card identity residual:
    *   Spend − Reimbursed − ChargedToDrivers − NetTollLoss.
-   * ≈ 0 only when wallet recoveries don't break the identity; otherwise this is
-   * the exact unexplained gap the UI must NOT paper over.
+   * With chargedToDrivers folded into netLoss this closes to ≈ 0 by construction;
+   * a non-zero residual means the event scan itself is inconsistent (must NOT be
+   * papered over).
    */
   residual: number;
   /** True when the fleet over-recovered (signed net < 0, displayed loss floors to $0). */
@@ -91,12 +100,16 @@ export function computeTollWeekNetting(
   }
 
   const disputeRecovered = refundsAndInflowOffsets - reinstated;
-  const netLoss = tagSpend + cashWashSpend - platformReimbursed - disputeRecovered;
   const chargedToDrivers = sumTollChargedToDriversFromEvents(scoped);
 
-  // Spend − Reimbursed − ChargedToDrivers − NetTollLoss. With netLoss defined as
-  // Spend − Reimbursed, this equals −chargedToDrivers: the wallet-recovery gap
-  // that stops the four cards reconciling to a clean P&L identity.
+  // C-3/C-4 (LOCKED): chargedToDrivers is a P&L recovery, so it reduces Net Toll
+  // Loss alongside reimbursements and refunds.
+  const netLoss =
+    tagSpend + cashWashSpend - platformReimbursed - disputeRecovered - chargedToDrivers;
+
+  // Spend − Reimbursed − ChargedToDrivers − NetTollLoss. With chargedToDrivers now
+  // inside netLoss this closes to ≈ 0 by construction; any drift means the event
+  // scan disagrees with itself and must surface, not be hidden.
   const spend = tagSpend + cashWashSpend;
   const reimbursed = platformReimbursed + disputeRecovered;
   const residual = spend - reimbursed - chargedToDrivers - netLoss;

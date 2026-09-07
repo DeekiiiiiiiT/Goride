@@ -5,6 +5,7 @@ import { useTollUnifiedEvents } from "../../../hooks/useTollUnifiedEvents";
 import type { TollEventWorkflowState, TollFinancialEvent } from "../../../types/tollFinancialEvent";
 
 import { formatJMD } from "../../../utils/formatJMD";
+import { ContentVisibilityList } from "../../drivers/ContentVisibilityList";
 
 function formatMoney(n: number): string {
   return formatJMD(n, 2);
@@ -128,19 +129,21 @@ export function UnifiedTollActivityTable({
         <p className="text-sm text-slate-500">No events for this filter.</p>
       ) : (
         <div className="overflow-x-auto rounded-xl border border-slate-200">
-          <table className="w-full min-w-[820px] text-left text-sm">
-            <thead className="border-b border-slate-200 bg-slate-50 text-xs font-medium uppercase tracking-wide text-slate-600">
-              <tr>
-                <th className="px-3 py-2">Date</th>
-                <th className="px-3 py-2">Kind</th>
-                <th className="px-3 py-2">Source</th>
-                <th className="px-3 py-2 text-right">Amount</th>
-                <th className="px-3 py-2">Status</th>
-                <th className="px-3 py-2">Linked to</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {data.map((row) => {
+          <div className="min-w-[820px]">
+            <div className="grid grid-cols-[140px_1fr_100px_100px_140px_minmax(180px,1.2fr)] gap-2 border-b border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium uppercase tracking-wide text-slate-600">
+              <div>Date</div>
+              <div>Kind</div>
+              <div>Source</div>
+              <div className="text-right">Amount</div>
+              <div>Status</div>
+              <div>Linked to</div>
+            </div>
+            <ContentVisibilityList
+              items={data}
+              estimateRowPx={56}
+              maxHeightPx={480}
+              getKey={(row) => row.eventId}
+              renderRow={(row) => {
                 const stateMeta = WORKFLOW_STATE_META[row.workflowState] ?? {
                   label: row.workflowState,
                   className: "bg-slate-100 text-slate-600 border-slate-200",
@@ -149,29 +152,27 @@ export function UnifiedTollActivityTable({
                   ? eventsById.get(`toll:${row.matchedTollId}`)
                   : undefined;
                 const linkedDisputes = disputesByTollId.get(row.eventId) || [];
-
                 return (
-                  <tr
-                    key={row.eventId}
+                  <div
                     ref={(el) => {
-                      rowRefs.current[row.eventId] = el;
+                      rowRefs.current[row.eventId] = el as unknown as HTMLTableRowElement | null;
                     }}
                     className={cn(
-                      "transition-colors duration-500",
+                      "grid grid-cols-[140px_1fr_100px_100px_140px_minmax(180px,1.2fr)] gap-2 border-b border-slate-100 px-3 py-2 text-sm transition-colors duration-500",
                       highlightedEventId === row.eventId
                         ? "bg-indigo-100/70"
                         : "hover:bg-slate-50/80",
                     )}
                   >
-                    <td className="whitespace-nowrap px-3 py-2 text-slate-700">
+                    <div className="whitespace-nowrap text-slate-700">
                       {row.occurredAt.slice(0, 16).replace("T", " ")}
-                    </td>
-                    <td className="px-3 py-2 text-slate-800">{row.kindLabel}</td>
-                    <td className="whitespace-nowrap px-3 py-2 text-slate-600">{row.sourceSystem}</td>
-                    <td className="whitespace-nowrap px-3 py-2 text-right font-medium tabular-nums text-slate-900">
+                    </div>
+                    <div className="text-slate-800">{row.kindLabel}</div>
+                    <div className="whitespace-nowrap text-slate-600">{row.sourceSystem}</div>
+                    <div className="whitespace-nowrap text-right font-medium tabular-nums text-slate-900">
                       {formatMoney(row.amount)}
-                    </td>
-                    <td className="px-3 py-2">
+                    </div>
+                    <div>
                       <span
                         className={cn(
                           "inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium",
@@ -180,15 +181,15 @@ export function UnifiedTollActivityTable({
                       >
                         {stateMeta.label}
                       </span>
-                    </td>
-                    <td className="max-w-[280px] px-3 py-2 text-xs">
+                    </div>
+                    <div className="max-w-[280px] text-xs">
                       <div className="flex flex-col gap-1">
-                        {row.matchedTollId && (
-                          linkedToll ? (
+                        {row.matchedTollId &&
+                          (linkedToll ? (
                             <button
                               type="button"
                               onClick={() => jumpToEvent(linkedToll.eventId)}
-                              className="inline-flex items-center gap-1 text-indigo-600 hover:text-indigo-800 hover:underline text-left"
+                              className="inline-flex items-center gap-1 text-left text-indigo-600 hover:text-indigo-800 hover:underline"
                               title="Jump to the toll transaction this was applied to"
                             >
                               <ArrowRight className="h-3 w-3 shrink-0" />
@@ -201,9 +202,7 @@ export function UnifiedTollActivityTable({
                             <span className="text-slate-400">
                               toll:{row.matchedTollId.slice(0, 8)}… (outside current page)
                             </span>
-                          )
-                        )}
-
+                          ))}
                         {linkedDisputes.length > 0 && (
                           <div className="flex flex-wrap gap-1">
                             {linkedDisputes.map((d) => (
@@ -220,18 +219,17 @@ export function UnifiedTollActivityTable({
                             ))}
                           </div>
                         )}
-
                         {row.tripId && <span className="text-slate-400">trip:{row.tripId.slice(0, 8)}…</span>}
                         <span className="text-slate-400">
                           {row.rawRef.store}:{row.rawRef.id.slice(0, 8)}…
                         </span>
                       </div>
-                    </td>
-                  </tr>
+                    </div>
+                  </div>
                 );
-              })}
-            </tbody>
-          </table>
+              }}
+            />
+          </div>
         </div>
       )}
     </div>

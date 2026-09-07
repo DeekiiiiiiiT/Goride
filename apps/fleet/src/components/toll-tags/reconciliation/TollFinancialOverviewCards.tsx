@@ -86,6 +86,11 @@ export function TollFinancialOverviewCards({
 }: TollFinancialOverviewCardsProps) {
   // Only claim the P&L identity when the four cards actually reconcile.
   const identityCloses = identityResidual == null || Math.abs(identityResidual) <= 0.01;
+  // C-3/C-4: Net Toll Loss is SIGNED — a negative value means the fleet
+  // over-recovered (charged drivers / refunds exceed spend) → show it as a credit.
+  const overRecovered = netTollLoss < -0.005;
+  const netTollLossLabel = overRecovered ? 'Net Toll Recovery' : 'Net Toll Loss';
+  const netTollLossValueClass = overRecovered ? 'text-emerald-600' : 'text-rose-600';
   const gridCols = showNeedsReviewCard
     ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-5'
     : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-4';
@@ -181,7 +186,7 @@ export function TollFinancialOverviewCards({
             </span>
           </div>
           <div className="flex items-center gap-1.5">
-            <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Net Toll Loss</p>
+            <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">{netTollLossLabel}</p>
             <Tooltip>
               <TooltipTrigger className="min-h-[44px] min-w-[44px] inline-flex items-center justify-center -m-2">
                 <HelpCircle className="h-3.5 w-3.5 text-rose-400 transition-colors hover:text-rose-600" />
@@ -204,9 +209,13 @@ export function TollFinancialOverviewCards({
               </TooltipContent>
             </Tooltip>
           </div>
-          <h4 className="mt-1 text-2xl font-bold tracking-tight text-rose-600 tabular-nums">{formatJMD(netTollLoss, 2)}</h4>
+          <h4 className={`mt-1 text-2xl font-bold tracking-tight tabular-nums ${netTollLossValueClass}`}>
+            {formatJMD(Math.abs(netTollLoss), 2)}
+          </h4>
           <p className="mt-2 text-[11px] font-medium text-slate-500">
-            {identityCloses
+            {overRecovered
+              ? 'Fleet over-recovered — net credit vs. Business Finance P&L'
+              : identityCloses
               ? 'Same as Business Finance P&L'
               : `Cards off by ${formatJMD(Math.abs(identityResidual ?? 0), 2)} — not yet reconciled`}
           </p>

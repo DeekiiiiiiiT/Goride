@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildUnexplainedSparkSeries,
+  normalizeSparkSeriesToMax,
   unexplainedWowDelta,
 } from './fuelUnexplainedSparkSeries';
 
@@ -23,5 +24,10 @@ describe('fuelUnexplainedSparkSeries', () => {
   it('computes WoW delta', () => {
     expect(unexplainedWowDelta([10, 25])).toBe(15);
     expect(unexplainedWowDelta([10])).toBeNull();
+  });
+
+  it('normalizes spark series to max abs', () => {
+    expect(normalizeSparkSeriesToMax([100, 50, -200])).toEqual([0.5, 0.25, -1]);
+    expect(normalizeSparkSeriesToMax([0, 0])).toEqual([0, 0]);
   });
 });

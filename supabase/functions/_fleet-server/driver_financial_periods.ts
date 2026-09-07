@@ -69,6 +69,11 @@ import {
   projectionReadsEventsForTolls,
 } from "./period_projection_flags.ts";
 import { isFeatureEnabled, FEATURE_FLAGS } from "./feature_flags.ts";
+import { publishWeekStatement, getLatestWeekStatement, getLatestWeekStatements, PROJECTION_READS_WEEK_STATEMENTS } from "./week_statements.ts";
+import {
+  shadowCompareStatementsVsProjection,
+  statementAmountMajor,
+} from "../../../packages/finance-core/src/weekStatement.ts";
 
 function sb() {
   return createClient(
@@ -194,7 +199,8 @@ export type DriverFinancialPeriodRow = {
   }>;
 };
 
-type RebuildContext = {
+/** Shared rebuild context — required by rebuildDriverFinancialPeriod (P-1). */
+export type RebuildContext = {
   timezone: string;
   scopedTolls: any[];
   /** Reconcilable tolls for the driver including spend-excluded (quarantine) rows. */
@@ -594,7 +600,7 @@ async function loadDriverTransactionsForSettlement(
   return (allTx || []).filter((t: any) => t && aliasIdSet.has(String(t.driverId || "")));
 }
 
-async function loadRebuildContext(
+export async function loadRebuildContext(
   driverId: string,
   opts?: { serviceLine?: "rideshare" | "rush_delivery" },
 ): Promise<RebuildContext> {
@@ -742,13 +748,14 @@ async function loadRebuildContext(
  * `ctx` (from `loadRebuildContext`) so the full toll ledger / transactions /
  * fuel reports load once instead of per week. For a single ad-hoc week, use
  * `rebuildOneDriverPeriod(driverId, anchor)` which loads ctx once when missing.
+ * P-1: `ctx` is required — do not call this without a loaded RebuildContext.
  */
 export async function rebuildDriverFinancialPeriod(
   driverId: string,
   periodAnchor: string,
-  ctx?: RebuildContext,
+  ctx: RebuildContext,
 ): Promise<DriverFinancialPeriodRow> {
-  const context = ctx || { ...(await loadRebuildContext(driverId)), persistLines: true };
+  const context = ctx;
   const timezone = context.timezone;
   const periodEnd = periodEndForAnchor(periodAnchor);
   const persistLines = !!context.persistLines;
@@ -881,22 +888,10 @@ export async function rebuildDriverFinancialPeriod(
         const d = fleetCalendarDay(String(t.date || ""), timezone);
         return d >= periodAnchor && d <= periodEnd;
       });
+  // H-9: amount filled after financial_events load — prefer toll_charged_to_driver
+  // events; KV "Toll Charge" txs are fallback only when no canonical events exist.
   let tollChargedToDriver = 0;
-  for (const t of chargeTx) {
-    const amt = Number(t.amount) || 0;
-    tollChargedToDriver = round2(tollChargedToDriver + (-amt)); // negative charge increases owed
-    if (persistLines) {
-      lines.push({
-        lineType: amt < 0 ? "driver_charge" : "driver_charge_reversal",
-        domain: "toll",
-        sourceSystem: "transaction",
-        sourceId: String(t.id),
-        description: t.description || "Toll Charge",
-        amount: amt,
-        occurredAt: t.date,
-      });
-    }
-  }
+  let tollChargedSource: "events" | "kv" = "kv";
 
   let disputeRefundMatched = 0;
   let disputeRefundUnmatched = 0;
@@ -1010,6 +1005,49 @@ export async function rebuildDriverFinancialPeriod(
     }
   }
 
+  // H-9: canonical wallet charges from financial_events (same identity as toll cards).
+  let eventsTollCharged = 0;
+  let hasCanonicalTollCharge = false;
+  for (const ev of activeFinEvents) {
+    const et = String(ev.event_type || "");
+    if (et !== "toll_charged_to_driver" && et !== "toll_charge_reversed") continue;
+    hasCanonicalTollCharge = true;
+    const major = minorToMajor(Number(ev.amount_minor) || 0);
+    // amountMajor is −charge (outflow); negate → driver-debt-positive projection.
+    eventsTollCharged = round2(eventsTollCharged - major);
+    if (persistLines) {
+      lines.push({
+        lineType: et === "toll_charged_to_driver" ? "driver_charge" : "driver_charge_reversal",
+        domain: "toll",
+        sourceSystem: "financial_events",
+        sourceId: String(ev.source_id || ev.id),
+        description: et === "toll_charged_to_driver" ? "Toll charged to driver" : "Toll charge reversed",
+        amount: -major,
+        occurredAt: ev.occurred_at,
+      });
+    }
+  }
+  if (hasCanonicalTollCharge || useTollEvents) {
+    tollChargedToDriver = eventsTollCharged;
+    tollChargedSource = "events";
+  } else {
+    for (const t of chargeTx) {
+      const amt = Number(t.amount) || 0;
+      tollChargedToDriver = round2(tollChargedToDriver + (-amt));
+      if (persistLines) {
+        lines.push({
+          lineType: amt < 0 ? "driver_charge" : "driver_charge_reversal",
+          domain: "toll",
+          sourceSystem: "transaction",
+          sourceId: String(t.id),
+          description: t.description || "Toll Charge",
+          amount: amt,
+          occurredAt: t.date,
+        });
+      }
+    }
+  }
+
   for (const ev of activeFinEvents) {
     const major = minorToMajor(Number(ev.amount_minor) || 0);
     const et = String(ev.event_type || "");
@@ -1017,10 +1055,14 @@ export async function rebuildDriverFinancialPeriod(
       tollReimbursed = round2(tollReimbursed + Math.abs(major));
     }
     if (et === "fuel_deduction") {
-      fuelDeduction = round2(fuelDeduction + Math.abs(major));
+      // C-1: the ledger stores the share as a SIGNED outflow (amountMajor = −deduction),
+      // so negate to recover the driver-debt-positive projection value — matching the
+      // snapshot path (+driverShare). A fleet-owes week posts a positive inflow →
+      // projects a negative deduction (credit), no longer flattened by Math.abs.
+      fuelDeduction = round2(fuelDeduction - major);
       fuelHasPostedMoney = true;
     }
-    if (et === "fuel_fleet_share") fuelFleetShare = round2(fuelFleetShare + Math.abs(major));
+    if (et === "fuel_fleet_share") fuelFleetShare = round2(fuelFleetShare - major);
     if (et === "fuel_driver_spend") {
       fuelDriverSpend = round2(fuelDriverSpend + Math.abs(major));
       fuelHasPostedMoney = true;
@@ -1118,7 +1160,7 @@ export async function rebuildDriverFinancialPeriod(
   const settlementPaidRaw = cashBase.settlementPaid;
 
   const fuelNetPay = round2(fuelDriverSpend - fuelDeduction);
-  const settled = computePeriodSettlement({
+  let settled = computePeriodSettlement({
     driverShare,
     fuelDeduction,
     baseCashOwed: cashCollected,
@@ -1238,6 +1280,7 @@ export async function rebuildDriverFinancialPeriod(
         fuel: fuelSource,
         cash: settlementTxTableReadEnabled() ? "table" : "kv",
         tolls: useTollEvents ? "events" : "ledger",
+        tollCharged: tollChargedSource,
         fares: projectionReadsEventsForFares() ? "events" : "events_or_trips",
       },
     },
@@ -1332,7 +1375,108 @@ export async function rebuildDriverFinancialPeriod(
     return row;
   }
 
-  // Upsert projection
+  // Upsert projection — org id first so Pass E can override before cashPersist.
+  const organizationIdResolved = await requirePeriodOrganizationId(
+    driverId,
+    context.organizationId,
+  );
+
+  // Pass E: shadow-compare when statements exist; when flag on, override amounts
+  // BEFORE cashPersist so settlement + metadata persist the statement SoT.
+  try {
+    if (organizationIdResolved) {
+      const statements = (await getLatestWeekStatements(
+        organizationIdResolved,
+        driverId,
+        periodAnchor,
+      )).filter((s) => s.status === "closed" || s.status === "draft");
+      if (statements.length > 0) {
+        const drifts = shadowCompareStatementsVsProjection(statements, {
+          fuel_deduction: row.fuelDeduction,
+          fuel_fleet_share: row.fuelFleetShare,
+          toll_spend: row.tollSpend,
+          toll_charged_to_driver: row.tollChargedToDriver,
+          toll_reimbursed: row.tollReimbursed,
+          cash_collected: row.cashCollected,
+          driver_share: row.driverShare,
+          fleet_share: row.fleetShare,
+          tips_paid_to_driver: row.tipsPaidToDriver,
+          earnings_gross: row.earningsGross,
+        });
+        if (drifts.length > 0) {
+          console.warn(
+            `[DriverFinancialPeriods] statement shadow drift driver=${driverId} week=${periodAnchor}`,
+            drifts,
+          );
+        }
+        if (PROJECTION_READS_WEEK_STATEMENTS) {
+          const byKind = new Map(statements.map((s) => [s.kind, s]));
+          const fuel = byKind.get("fuel");
+          const toll = byKind.get("toll");
+          const earnings = byKind.get("earnings");
+          if (fuel) {
+            row.fuelDeduction = statementAmountMajor(fuel, "driverShare");
+            row.fuelFleetShare = statementAmountMajor(fuel, "companyShare");
+            fuelSource = "events";
+          }
+          if (toll) {
+            row.tollSpend = statementAmountMajor(toll, "totalSpend");
+            row.tollChargedToDriver = statementAmountMajor(toll, "chargedToDriver");
+            row.tollReimbursed = statementAmountMajor(toll, "reimbursed");
+            tollChargedSource = "events";
+          }
+          if (earnings) {
+            row.driverShare = statementAmountMajor(earnings, "driverShare");
+            row.fleetShare = statementAmountMajor(earnings, "companyShare");
+            row.tipsPaidToDriver = statementAmountMajor(earnings, "tipsPaidToDriver");
+            row.cashCollected = statementAmountMajor(earnings, "passengerCash");
+            const gross = statementAmountMajor(earnings, "gross");
+            if (gross > 0) row.earningsGross = gross;
+          }
+          settled = computePeriodSettlement({
+            driverShare: row.driverShare,
+            fuelDeduction: row.fuelDeduction,
+            baseCashOwed: row.cashCollected,
+            baseCashPaid: row.cashReturned,
+            tollCashWash: tollCashWashEligible,
+            tollPersonal: row.tollChargedToDriver,
+            fuelCredits: row.fuelFleetShare,
+            cashWrittenOff: row.cashWrittenOff,
+            settlementPaid: settlementPaidRaw,
+            tipsPaidToDriver: row.tipsPaidToDriver || 0,
+          });
+          row.settlementAmount = round2(settled.settlement);
+          row.payoutNet = round2(settled.netPayout);
+          row.settlementPaid = round2(settled.settlementPaid);
+          row.cashStillHeld = round2(Math.max(0, settled.adjCashBalance));
+          const fc = (row.metadata?.financeCore || {}) as Record<string, unknown>;
+          row.metadata = {
+            ...row.metadata,
+            financeCore: {
+              ...fc,
+              overpaidAmount: settled.overpaidAmount,
+              projectionSources: {
+                ...((fc.projectionSources as Record<string, unknown>) || {}),
+                fuel: fuel ? "week_statement" : fuelSource,
+                tolls: toll ? "week_statement" : (useTollEvents ? "events" : "ledger"),
+                tollCharged: toll ? "week_statement" : tollChargedSource,
+                fares: earnings ? "week_statement" : undefined,
+                cash: settlementTxTableReadEnabled() ? "table" : "kv",
+              },
+            },
+          };
+          // Keep periodMetadata in sync for cashPersist.
+          Object.assign(periodMetadata, row.metadata);
+        }
+      }
+    }
+  } catch (shadowErr) {
+    console.warn(
+      "[DriverFinancialPeriods] statement shadow/override skipped:",
+      shadowErr instanceof Error ? shadowErr.message : String(shadowErr),
+    );
+  }
+
   const cashPersist = buildCashSettlementPersistFields({
     cashReturned: row.cashReturned,
     cashWrittenOff: row.cashWrittenOff,
@@ -1355,7 +1499,7 @@ export async function rebuildDriverFinancialPeriod(
     period_anchor: periodAnchor,
     period_end: periodEnd,
     timezone,
-    organization_id: await requirePeriodOrganizationId(driverId, context.organizationId),
+    organization_id: organizationIdResolved,
     status: cashPersist.status,
     toll_spend: row.tollSpend,
     toll_cash_spend: row.tollCashSpend,
@@ -1386,8 +1530,8 @@ export async function rebuildDriverFinancialPeriod(
     cash_written_off: cashPersist.cash_written_off,
     settlement_paid: cashPersist.settlement_paid,
     cash_still_held: cashPersist.cash_still_held,
-    tips_paid_to_driver: round2(Math.max(0, Number(share.tipsPaidToDriver) || 0)),
-    tips_withheld: round2(Math.max(0, Number(share.tipsWithheld) || 0)),
+    tips_paid_to_driver: round2(Math.max(0, Number(row.tipsPaidToDriver) || 0)),
+    tips_withheld: round2(Math.max(0, Number(row.tipsWithheld) || 0)),
     settlement_amount: cashPersist.settlement_amount,
     payout_net: cashPersist.payout_net,
     settlement_amount_minor: cashPersist.settlement_amount_minor,
@@ -1424,6 +1568,54 @@ export async function rebuildDriverFinancialPeriod(
 
   const periodId = saved?.id as string;
   row.id = periodId;
+
+  // Close Program Pass 2: publish the earnings week_statement so Close Week's
+  // cross-system invariants find an independent earnings lane (fuel publishes at
+  // finalize; toll via toll_week_seal). Canonical keys mirror closeInvariants /
+  // shadow-compare readers. Idempotent: skip when the standing statement already
+  // matches, so a routine rebuild does not spawn a new version every event.
+  if (organizationIdResolved && periodId) {
+    try {
+      const earningsAmountsMinor = {
+        passengerCash: Math.round(round2(Math.max(0, row.cashCollected)) * 100),
+        driverShare: Math.round(row.driverShare * 100),
+        companyShare: Math.round(row.fleetShare * 100),
+        tipsPaidToDriver: Math.round((Number(share.tipsPaidToDriver) || 0) * 100),
+        gross: Math.round(row.earningsGross * 100),
+        settlementAmount: Math.round(row.settlementAmount * 100),
+      };
+      const latestEarnings = await getLatestWeekStatement(
+        organizationIdResolved,
+        driverId,
+        periodAnchor,
+        "earnings",
+      );
+      const unchanged =
+        latestEarnings &&
+        latestEarnings.status === "closed" &&
+        JSON.stringify(latestEarnings.amountsMinor) === JSON.stringify(earningsAmountsMinor);
+      if (!unchanged) {
+        await publishWeekStatement({
+          kind: "earnings",
+          organizationId: organizationIdResolved,
+          driverId,
+          weekKey: periodAnchor,
+          amountsMinor: earningsAmountsMinor,
+          sourceRowIds: [String(periodId)],
+          status: "closed",
+          closedBy: "dfp_rebuild",
+          closeReason: "period_rebuild",
+        });
+      }
+    } catch (stmtErr) {
+      console.warn(
+        "[DriverFinancialPeriods] earnings week statement publish failed (non-fatal)",
+        driverId,
+        periodAnchor,
+        stmtErr,
+      );
+    }
+  }
 
   // Line drilldown only on single-period rebuild (bulk skips to stay under CPU limits).
   if (persistLines && periodId) {
@@ -1660,6 +1852,70 @@ export async function getDriverFinancialPeriodDetail(
     .maybeSingle();
   if (!data) return null;
   const row = mapDbPeriod(data);
+
+  // H-4 verify-on-read: flag frozen weeks whose close hash no longer matches.
+  try {
+    const { isPeriodFrozen } = await import("./settlement_period_freeze.ts");
+    if (isPeriodFrozen({
+      metadata: row.metadata as Record<string, unknown> | null,
+      settlementStatus: row.settlementStatus,
+      signedAt: (row.metadata as any)?.financeCore?.signedAt || (row.metadata as any)?.signedAt,
+    })) {
+      const {
+        verifyPeriodCloseHash,
+        storedCloseHashFromPeriod,
+      } = await import("../../../packages/finance-core/src/closeHash.ts");
+      const stored = storedCloseHashFromPeriod({
+        source_event_hash: row.sourceEventHash,
+        metadata: row.metadata as Record<string, unknown> | null,
+      });
+      if (stored) {
+        const result = await verifyPeriodCloseHash({
+          row: {
+            tollSpend: row.tollSpend,
+            tollCashSpend: row.tollCashSpend,
+            tollReimbursed: row.tollReimbursed,
+            tollChargedToDriver: row.tollChargedToDriver,
+            fuelDeduction: row.fuelDeduction,
+            fuelFleetShare: row.fuelFleetShare,
+            driverShare: row.driverShare,
+            fleetShare: row.fleetShare,
+            earningsGross: row.earningsGross,
+            tipsPaidToDriver: row.tipsPaidToDriver,
+            cashCollected: row.cashCollected,
+            cashReturned: row.cashReturned,
+            cashWrittenOff: row.cashWrittenOff,
+            cashStillHeld: row.cashStillHeld,
+            settlementPaid: row.settlementPaid,
+            settlementAmount: row.settlementAmount,
+            payoutNet: row.payoutNet,
+          },
+          storedHash: stored,
+          sourceRowIds: [],
+          engineVersion: "period-close@1",
+        });
+        if (!result.ok) {
+          const meta = { ...(row.metadata || {}) } as Record<string, unknown>;
+          const fc = { ...((meta.financeCore as Record<string, unknown>) || {}) };
+          fc.hashMismatch = true;
+          fc.hashStored = result.stored;
+          fc.hashExpected = result.expected;
+          meta.financeCore = fc;
+          row.metadata = meta;
+          console.error(
+            "[DriverFinancialPeriods] H-4 hash mismatch",
+            driverId,
+            periodAnchor,
+            result.stored,
+            result.expected,
+          );
+        }
+      }
+    }
+  } catch (e) {
+    console.warn("[DriverFinancialPeriods] H-4 verify-on-read failed", e);
+  }
+
   const { data: lines } = await sb()
     .from("driver_financial_period_lines")
     .select("*")
@@ -1833,7 +2089,7 @@ export async function syncPeriodCashFromTransactions(
     throw new Error(error.message);
   }
   if (!existing) {
-    await rebuildDriverFinancialPeriod(driverId, periodAnchor);
+    await rebuildOneDriverPeriod(driverId, periodAnchor);
     return "rebuilt";
   }
 
@@ -1879,7 +2135,9 @@ export async function syncPeriodCashFromTransactions(
     baseCashOwed: Number(existing.cash_collected) || 0,
     baseCashPaid: cashReturned,
     tollCashWash,
-    tollPersonal: Math.max(0, Number(existing.toll_charged_to_driver) || 0),
+    // C-7: pass signed — a negative charged-to-driver is a real reversal/credit,
+    // not something to clamp to zero (settlement math handles the sign).
+    tollPersonal: Number(existing.toll_charged_to_driver) || 0,
     fuelCredits: Number(existing.fuel_fleet_share) || 0,
     cashWrittenOff,
     settlementPaid: settlementPaidRaw,
@@ -1962,24 +2220,12 @@ export type CompanyOwesPeriodRow = {
 };
 
 /** Org-wide company_owes queue — single SQL query (not N+1 per driver). */
-export async function listCompanyOwesPeriods(opts?: {
-  periodAnchor?: string;
-  periodStart?: string;
-  periodEnd?: string;
-  minAmount?: number;
-  limit?: number;
-  organizationId?: string | null;
-  serviceLine?: "rideshare" | "rush_delivery";
-}): Promise<CompanyOwesPeriodRow[]> {
-  const limit = Math.min(Math.max(Number(opts?.limit) || 500, 1), 2000);
+export async function listCompanyOwesPeriods(opts?: PeriodListQueryOpts): Promise<CompanyOwesPeriodRow[]> {
   let q = sb()
     .from("driver_financial_periods")
     .select(PERIOD_LIST_SELECT)
     .eq("settlement_status", "company_owes")
-    .gt("settlement_amount", 0.005)
-    .order("period_anchor", { ascending: false })
-    .order("driver_id", { ascending: true })
-    .limit(limit);
+    .gt("settlement_amount", 0.005);
 
   if (opts?.organizationId) {
     q = q.eq("organization_id", opts.organizationId);
@@ -1998,6 +2244,8 @@ export async function listCompanyOwesPeriods(opts?: {
   if (opts?.minAmount != null && Number(opts.minAmount) > 0) {
     q = q.gte("settlement_amount", Number(opts.minAmount));
   }
+
+  q = applyPeriodListSortAndPage(q, opts, "settlement_amount");
 
   const { data, error } = await q;
   if (error) {
@@ -2107,22 +2355,11 @@ export type ReconciledPeriodRow = CompanyOwesPeriodRow & {
  * Settled weeks only — Driver Settlements → Reconciled tab.
  * Overpaid recovery weeks stay on Collect via driver_owes residual.
  */
-export async function listReconciledSettlementPeriods(opts?: {
-  periodStart?: string;
-  periodEnd?: string;
-  minAmount?: number;
-  limit?: number;
-  organizationId?: string | null;
-  serviceLine?: "rideshare" | "rush_delivery";
-}): Promise<ReconciledPeriodRow[]> {
-  const limit = Math.min(Math.max(Number(opts?.limit) || 500, 1), 2000);
+export async function listReconciledSettlementPeriods(opts?: PeriodListQueryOpts): Promise<ReconciledPeriodRow[]> {
   let q = sb()
     .from("driver_financial_periods")
     .select(RECONCILED_PERIOD_LIST_SELECT)
-    .eq("settlement_status", "settled")
-    .order("period_anchor", { ascending: false })
-    .order("driver_id", { ascending: true })
-    .limit(limit);
+    .eq("settlement_status", "settled");
 
   if (opts?.organizationId) {
     q = q.eq("organization_id", opts.organizationId);
@@ -2137,6 +2374,8 @@ export async function listReconciledSettlementPeriods(opts?: {
   if (opts?.minAmount != null && Number(opts.minAmount) > 0) {
     q = q.gte("earnings_gross", Number(opts.minAmount));
   }
+
+  q = applyPeriodListSortAndPage(q, opts, "earnings_gross");
 
   const { data, error } = await q;
   if (error) {
@@ -2192,6 +2431,41 @@ function applyPeriodRangeFilters(
   return q;
 }
 
+/** M-3: SQL order + `.range(offset, offset+limit-1)` — no client-side 2k fetch. */
+function applyPeriodListSortAndPage(
+  q: any,
+  opts: { limit?: number; offset?: number; sort?: string } | undefined,
+  amountColumn: string,
+) {
+  const limit = Math.min(Math.max(Number(opts?.limit) || 500, 1), 2000);
+  const offset = Math.max(0, Number(opts?.offset) || 0);
+  const sort = String(opts?.sort || "period_desc");
+  if (sort === "age_desc") {
+    // Oldest period_end first = most overdue.
+    q = q.order("period_end", { ascending: true }).order("driver_id", { ascending: true });
+  } else if (sort === "amount_desc") {
+    q = q
+      .order(amountColumn, { ascending: false })
+      .order("period_anchor", { ascending: false })
+      .order("driver_id", { ascending: true });
+  } else {
+    q = q.order("period_anchor", { ascending: false }).order("driver_id", { ascending: true });
+  }
+  return q.range(offset, offset + limit - 1);
+}
+
+export type PeriodListQueryOpts = {
+  periodAnchor?: string;
+  periodStart?: string;
+  periodEnd?: string;
+  minAmount?: number;
+  limit?: number;
+  offset?: number;
+  sort?: string;
+  organizationId?: string | null;
+  serviceLine?: "rideshare" | "rush_delivery";
+};
+
 function mapPeriodListRow(r: any): CompanyOwesPeriodRow {
   const mismatch = Number(r.metadata?.financeCore?.cashSourceMismatch);
   return {
@@ -2212,29 +2486,19 @@ function mapPeriodListRow(r: any): CompanyOwesPeriodRow {
 }
 
 /** Org-wide driver_owes queue — collect cash drivers still owe after finalize. */
-export async function listDriverOwesPeriods(opts?: {
-  periodAnchor?: string;
-  periodStart?: string;
-  periodEnd?: string;
-  minAmount?: number;
-  limit?: number;
-  organizationId?: string | null;
-  serviceLine?: "rideshare" | "rush_delivery";
-}): Promise<DriverOwesPeriodRow[]> {
-  const limit = Math.min(Math.max(Number(opts?.limit) || 500, 1), 2000);
+export async function listDriverOwesPeriods(opts?: PeriodListQueryOpts): Promise<DriverOwesPeriodRow[]> {
   let q = sb()
     .from("driver_financial_periods")
     .select(PERIOD_LIST_SELECT)
     .eq("settlement_status", "driver_owes")
-    .lt("settlement_amount", -0.005)
-    .order("period_anchor", { ascending: false })
-    .order("driver_id", { ascending: true })
-    .limit(limit);
+    .lt("settlement_amount", -0.005);
 
   q = applyPeriodRangeFilters(q, opts);
   if (opts?.minAmount != null && Number(opts.minAmount) > 0) {
     q = q.lte("settlement_amount", -Number(opts.minAmount));
   }
+
+  q = applyPeriodListSortAndPage(q, opts, "settlement_amount");
 
   const { data, error } = await q;
   if (error) {
@@ -2260,29 +2524,19 @@ export async function listDriverOwesPeriods(opts?: {
  * Pre-finalize collect queue — cash still held on pending / not-fuel-finalized weeks.
  * Excludes company_owes / driver_owes / settled so those stay on their own lists.
  */
-export async function listCashHeldPeriods(opts?: {
-  periodAnchor?: string;
-  periodStart?: string;
-  periodEnd?: string;
-  minAmount?: number;
-  limit?: number;
-  organizationId?: string | null;
-  serviceLine?: "rideshare" | "rush_delivery";
-}): Promise<DriverOwesPeriodRow[]> {
-  const limit = Math.min(Math.max(Number(opts?.limit) || 500, 1), 2000);
+export async function listCashHeldPeriods(opts?: PeriodListQueryOpts): Promise<DriverOwesPeriodRow[]> {
   let q = sb()
     .from("driver_financial_periods")
     .select(PERIOD_LIST_SELECT)
     .gt("cash_still_held", STATUS_CASH_HELD_EPS)
-    .or("settlement_status.eq.pending,fuel_finalized.eq.false")
-    .order("period_anchor", { ascending: false })
-    .order("driver_id", { ascending: true })
-    .limit(limit);
+    .or("settlement_status.eq.pending,fuel_finalized.eq.false");
 
   q = applyPeriodRangeFilters(q, opts);
   if (opts?.minAmount != null && Number(opts.minAmount) > 0) {
     q = q.gte("cash_still_held", Number(opts.minAmount));
   }
+
+  q = applyPeriodListSortAndPage(q, opts, "cash_still_held");
 
   const { data, error } = await q;
   if (error) {

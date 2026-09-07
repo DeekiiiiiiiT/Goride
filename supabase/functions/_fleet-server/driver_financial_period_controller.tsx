@@ -20,7 +20,7 @@ import * as kv from "./kv_store.tsx";
 import { requireAuth, requirePermission, hasPermission, type RbacUser } from "./rbac_middleware.ts";
 import { getServiceClient } from "./service_client.ts";
 import {
-  rebuildDriverFinancialPeriod,
+  rebuildOneDriverPeriod,
   rebuildAllPeriodsForDriver,
   rebuildPeriodsForAnchors,
   listDriverFinancialPeriods,
@@ -473,7 +473,7 @@ app.get(`${BASE}/:anchor`, requirePermission('transactions.view'), async (c) => 
     if (!driverId) return c.json({ error: "driverId is required" }, 400);
     let detail = await getDriverFinancialPeriodDetail(driverId, anchor);
     if (!detail) {
-      detail = await rebuildDriverFinancialPeriod(driverId, anchor);
+      detail = await rebuildOneDriverPeriod(driverId, anchor);
     }
     return c.json({ success: true, data: detail });
   } catch (e: any) {
@@ -487,7 +487,7 @@ app.post(`${BASE}/rebuild`, requirePermission('transactions.edit'), async (c) =>
     const driverId = body.driverId;
     if (!driverId) return c.json({ error: "driverId is required" }, 400);
     if (body.periodAnchor) {
-      const row = await rebuildDriverFinancialPeriod(driverId, body.periodAnchor);
+      const row = await rebuildOneDriverPeriod(driverId, body.periodAnchor);
       return c.json({ success: true, data: row });
     }
     const n = await rebuildAllPeriodsForDriver(driverId, { force: !!body.force });

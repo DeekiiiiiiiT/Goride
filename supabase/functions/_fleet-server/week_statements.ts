@@ -286,3 +286,24 @@ export async function requestRestatement(input: RequestRestatementInput): Promis
   }
   return draft;
 }
+
+/** Draft restatements awaiting close/sign (org-wide queue). */
+export async function listPendingRestatements(
+  organizationId: string,
+  opts?: { limit?: number; offset?: number },
+): Promise<WeekStatement[]> {
+  const limit = Math.min(Math.max(Number(opts?.limit) || 100, 1), 500);
+  const offset = Math.max(0, Number(opts?.offset) || 0);
+  // Restatement drafts always supersede a prior closed statement.
+  const { data, error } = await sb()
+    .from("week_statements")
+    .select("*")
+    .eq("organization_id", organizationId)
+    .eq("status", "draft")
+    .not("supersedes", "is", null)
+    .order("week_key", { ascending: false })
+    .order("version", { ascending: false })
+    .range(offset, offset + limit - 1);
+  if (error) throw new Error(error.message);
+  return (data ?? []).map((row) => mapRowToWeekStatement(row as Record<string, unknown>));
+}

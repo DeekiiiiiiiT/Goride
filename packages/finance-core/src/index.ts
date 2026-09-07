@@ -126,8 +126,10 @@ export {
   canonicalStringify,
   buildCloseHash,
   buildPeriodCloseHashPayload,
+  verifyPeriodCloseHash,
+  storedCloseHashFromPeriod,
 } from './closeHash.ts';
-export type { PeriodCloseHashRow } from './closeHash.ts';
+export type { PeriodCloseHashRow, PeriodCloseHashVerifyResult } from './closeHash.ts';
 export {
   WEEK_STATEMENT_KINDS,
   StatementsNotClosedError,

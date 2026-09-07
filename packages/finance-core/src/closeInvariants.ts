@@ -86,6 +86,11 @@ export type CloseInvariantInput = {
   settlementSumForWeek?: number | null;
   /** BusinessFinance week P&L for the same week. */
   businessWeekPnl?: number | null;
+  /**
+   * M-1: absolute trip-CSV vs ledger cash disagreement on the period.
+   * Values above ε block close (badge-only was the old intentional behavior).
+   */
+  cashSourceMismatch?: number | null;
   eps?: number;
 };
 
@@ -256,6 +261,16 @@ export function checkCloseInvariants(input: CloseInvariantInput): CloseBlocker[]
       'SETTLEMENT_PNL_MISMATCH',
       'Σ driver settlements for week ≠ BusinessFinance week P&L',
       num(input.settlementSumForWeek), num(input.businessWeekPnl),
+    );
+  }
+
+  // ── M-1: cash source mismatch blocks close ─────────────────────────────────────
+  if (input.cashSourceMismatch != null && Math.abs(num(input.cashSourceMismatch)) > eps) {
+    pushIfDrift(
+      out, eps, ctx,
+      'CASH_SOURCE_MISMATCH',
+      'trip CSV Uber cash disagrees with ledger payout_cash beyond ε',
+      num(input.cashSourceMismatch), 0,
     );
   }
 

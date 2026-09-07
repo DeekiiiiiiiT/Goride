@@ -106,3 +106,55 @@ export function buildPeriodCloseHashPayload(input: {
     sourceVersions: input.sourceVersions ?? {},
   };
 }
+
+export type PeriodCloseHashVerifyResult = {
+  ok: boolean;
+  /** True when the week is frozen but no stored hash exists (legacy close). */
+  missingStored?: boolean;
+  stored?: string;
+  expected?: string;
+};
+
+/**
+ * Recompute the close hash from a persisted period-shaped row and compare to
+ * the stored source_event_hash / metadata.financeCore.closeHash (H-4).
+ * Callers should only invoke this for frozen weeks.
+ */
+export async function verifyPeriodCloseHash(input: {
+  row: PeriodCloseHashRow;
+  storedHash?: string | null;
+  sourceRowIds?: string[];
+  sourceVersions?: Record<string, number>;
+  engineVersion?: string;
+}): Promise<PeriodCloseHashVerifyResult> {
+  const stored = String(input.storedHash || '').trim();
+  if (!stored) return { ok: false, missingStored: true };
+
+  const payload = buildPeriodCloseHashPayload({
+    row: input.row,
+    sourceRowIds: input.sourceRowIds ?? [],
+    sourceVersions: input.sourceVersions,
+    engineVersion: input.engineVersion || 'period-close@1',
+  });
+  const expected = await buildCloseHash(payload);
+  return {
+    ok: expected === stored,
+    stored,
+    expected,
+  };
+}
+
+/** Pull stored close hash from a DFP-like row (column or metadata). */
+export function storedCloseHashFromPeriod(period: {
+  source_event_hash?: string | null;
+  sourceEventHash?: string | null;
+  metadata?: Record<string, unknown> | null;
+} | null | undefined): string | null {
+  if (!period) return null;
+  const col = String(period.source_event_hash || period.sourceEventHash || '').trim();
+  if (col) return col;
+  const meta = period.metadata || {};
+  const fc = (meta.financeCore as Record<string, unknown> | undefined) || {};
+  const fromMeta = String(fc.closeHash || '').trim();
+  return fromMeta || null;
+}

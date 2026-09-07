@@ -18,7 +18,8 @@ function report(partial: Partial<WeeklyFuelReport> = {}): WeeklyFuelReport {
     personalUsageCost: 0,
     deadheadDistance: 0,
     deadheadCost: 0,
-    miscellaneousCost: 50,
+    // Within the C-2 gate by default (20% of spend < 25% ratio).
+    miscellaneousCost: 20,
     companyShare: 50,
     driverShare: 50,
     status: 'Draft',
@@ -158,7 +159,32 @@ describe('evaluateFuelFinalizeGating', () => {
   it('is clean when no issues', () => {
     const gate = evaluateFuelFinalizeGating({ reports: [report()] });
     expect(gate.hasExceptionBlockers).toBe(false);
+    expect(gate.hasOverExplainedBlockers).toBe(false);
     expect(gate.hasBlockingWarnings).toBe(false);
     expect(gate.exceptionBlockers).toEqual([]);
+  });
+
+  it('C-2: hard-blocks an over-explained week (|misc| > 25% of spend)', () => {
+    const gate = evaluateFuelFinalizeGating({
+      reports: [report({ totalGasCardCost: 100, miscellaneousCost: 60 })],
+    });
+    expect(gate.hasOverExplainedBlockers).toBe(true);
+    expect(gate.hasBlockingWarnings).toBe(true);
+    expect(gate.overExplainedBlockers).toHaveLength(1);
+    expect(gate.overExplainedBlockers[0]).toMatchObject({
+      vehicleId: 'v1',
+      driverId: 'd1',
+      totalSpend: 100,
+      miscellaneousCost: 60,
+      pctOfSpend: 60,
+    });
+  });
+
+  it('C-2: hard-blocks a NEGATIVE (fleet-owes) over-explained residual too', () => {
+    const gate = evaluateFuelFinalizeGating({
+      reports: [report({ totalGasCardCost: 100, miscellaneousCost: -40 })],
+    });
+    expect(gate.hasOverExplainedBlockers).toBe(true);
+    expect(gate.overExplainedBlockers[0].pctOfSpend).toBe(40);
   });
 });

@@ -117,4 +117,54 @@ describe('checkCloseInvariants (§6.4)', () => {
     });
     expect(blockers).toEqual([]);
   });
+
+  // Close Program Pass 2: the earnings + toll publishers derive their statement
+  // amounts straight from the persisted period columns (netLoss derived so the
+  // four-card identity balances). A week sealed that way must not block close.
+  it('a week sealed by the Pass 2 publishers ties with zero blockers', () => {
+    const period = {
+      driver_id: 'drv-9',
+      period_anchor: '2026-08-31',
+      fuel_deduction: 1200,
+      fuel_fleet_share: 800,
+      toll_spend: 5920,
+      toll_charged_to_driver: 2340,
+      toll_reimbursed: 1500,
+      cash_collected: 8000,
+      driver_share: 25000,
+      fleet_share: 4000,
+      tips_paid_to_driver: 300,
+      earnings_gross: 29300,
+      settlement_amount: 12345,
+    };
+    const blockers = checkCloseInvariants({
+      period,
+      fuelStatement: { driverShare: period.fuel_deduction, companyShare: period.fuel_fleet_share },
+      // sealTollWeek: netLoss = spend − reimbursed − chargedToDriver.
+      tollStatement: {
+        totalSpend: period.toll_spend,
+        chargedToDriver: period.toll_charged_to_driver,
+        reimbursed: period.toll_reimbursed,
+        netLoss: period.toll_spend - period.toll_reimbursed - period.toll_charged_to_driver,
+      },
+      // earnings publisher: passengerCash = cash_collected.
+      earningsStatement: {
+        passengerCash: period.cash_collected,
+        driverShare: period.driver_share,
+        companyShare: period.fleet_share,
+        tipsPaidToDriver: period.tips_paid_to_driver,
+      },
+    });
+    expect(blockers).toEqual([]);
+    expect(canCloseWeek(blockers)).toBe(true);
+  });
+
+  it('M-1: cashSourceMismatch beyond ε blocks close', () => {
+    const blockers = checkCloseInvariants({
+      ...tyingWeek,
+      cashSourceMismatch: 12.5,
+    });
+    expect(blockers.some((b) => b.code === 'CASH_SOURCE_MISMATCH')).toBe(true);
+    expect(canCloseWeek(blockers)).toBe(false);
+  });
 });

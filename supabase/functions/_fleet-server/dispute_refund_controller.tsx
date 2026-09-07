@@ -522,7 +522,9 @@ async function rebuildPeriodsForDisputeMatch(input: {
 }): Promise<void> {
   const driverId = input.driverId ? String(input.driverId) : "";
   if (!driverId) return;
-  const { rebuildDriverFinancialPeriod } = await import("./driver_financial_periods.ts");
+  const { rebuildOneDriverPeriod, loadRebuildContext } = await import(
+    "./driver_financial_periods.ts"
+  );
   const anchors = new Set<string>();
   for (const d of [input.tollDate, input.refundDate]) {
     if (!d) continue;
@@ -532,8 +534,11 @@ async function rebuildPeriodsForDisputeMatch(input: {
       // skip bad dates
     }
   }
+  if (anchors.size === 0) return;
+  // P-1: shared RebuildContext per driver.
+  const ctx = { ...(await loadRebuildContext(driverId)), persistLines: true };
   for (const anchor of anchors) {
-    await rebuildDriverFinancialPeriod(driverId, anchor);
+    await rebuildOneDriverPeriod(driverId, anchor, ctx);
   }
 }
 
@@ -894,16 +899,27 @@ app.post(`${BASE}/repair-settlements`, requirePermission('toll.manage'), async (
     }
 
     if (!dryRun && periodKeys.size > 0) {
-      const { rebuildDriverFinancialPeriod } = await import("./driver_financial_periods.ts");
+      const { rebuildOneDriverPeriod, loadRebuildContext } = await import(
+        "./driver_financial_periods.ts"
+      );
+      const byDriver = new Map<string, string[]>();
       for (const key of periodKeys) {
         const [driverId, anchor] = key.split("|");
+        const list = byDriver.get(driverId) || [];
+        list.push(anchor);
+        byDriver.set(driverId, list);
+      }
+      for (const [driverId, anchors] of byDriver) {
         try {
-          await rebuildDriverFinancialPeriod(driverId, anchor);
-          report.periodsRebuilt++;
+          const ctx = { ...(await loadRebuildContext(driverId)), persistLines: true };
+          for (const anchor of anchors) {
+            await rebuildOneDriverPeriod(driverId, anchor, ctx);
+            report.periodsRebuilt++;
+          }
         } catch (e: any) {
           report.exceptions.push({
             refundId: "period-rebuild",
-            reason: `${key}: ${e?.message || e}`,
+            reason: `${driverId}: ${e?.message || e}`,
           });
         }
       }
