@@ -70,6 +70,17 @@ if (fs.existsSync(DRIVER_DETAIL)) {
   }
 }
 
+// R5-1 / R6: Earnings History must page via useInfiniteQuery — no direct API load-more.
+const EARNINGS_HISTORY = path.join(ROOT, 'DriverEarningsHistory.tsx');
+if (fs.existsSync(EARNINGS_HISTORY)) {
+  const eh = fs.readFileSync(EARNINGS_HISTORY, 'utf8');
+  if (/from\s+['"].*services\/api['"]/.test(eh) || /\bapi\.getLedgerEarningsHistory\b/.test(eh)) {
+    failures.push(
+      'src/components/drivers/DriverEarningsHistory.tsx: must not import api or call getLedgerEarningsHistory — use useDriverEarningsHistory',
+    );
+  }
+}
+
 for (const w of warnings) console.warn(`WARN ${w}`);
 if (failures.length) {
   console.error('Driver section check FAILED:');

@@ -13,8 +13,6 @@ import {
 } from '../ui/sheet';
 import { Separator } from '../ui/separator';
 import {
-  CheckCircle,
-  Clock,
   Wallet,
   Fuel,
   Car,
@@ -25,10 +23,11 @@ import {
   Percent,
   Scale,
 } from 'lucide-react';
-import type { PayoutPeriodRow, PayoutStatus } from '../../types/driverPayoutPeriod';
+import type { PayoutPeriodRow } from '../../types/driverPayoutPeriod';
 import { getPeriodSettlementComponents } from '../../utils/driverSettlementMath';
 import { payoutStatusLabel } from '../../utils/computePayoutSummaryTotals';
 import { formatJMD } from '../../utils/formatJMD';
+import { payoutStatusConfig as statusConfig } from './payoutStatusConfig';
 
 interface PayoutPeriodDetailProps {
   row: PayoutPeriodRow | null;
@@ -39,36 +38,6 @@ interface PayoutPeriodDetailProps {
 }
 
 const fmt = (n: number) => formatJMD(Math.abs(n), 2);
-
-const statusConfig: Record<
-  PayoutStatus,
-  { icon: React.ReactNode; color: string; bg: string; description: string }
-> = {
-  Finalized: {
-    icon: <CheckCircle className="h-4 w-4" />,
-    color: 'text-emerald-700',
-    bg: 'bg-emerald-50',
-    description: 'Fuel confirmed and cash cleared — week is closed',
-  },
-  'Awaiting Cash': {
-    icon: <Wallet className="h-4 w-4" />,
-    color: 'text-blue-700',
-    bg: 'bg-blue-50',
-    description: 'Fuel confirmed — cash still needs to be settled',
-  },
-  'Awaiting Tolls': {
-    icon: <Clock className="h-4 w-4" />,
-    color: 'text-orange-800',
-    bg: 'bg-orange-50',
-    description: 'Fuel locked — toll reconciliation still open for this week',
-  },
-  Pending: {
-    icon: <Clock className="h-4 w-4" />,
-    color: 'text-amber-700',
-    bg: 'bg-amber-50',
-    description: 'Fuel report not finalized — numbers may be estimates',
-  },
-};
 
 function LineItem({
   icon,

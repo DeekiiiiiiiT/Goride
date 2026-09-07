@@ -1,17 +1,16 @@
 import { formatJMD } from '../../utils/formatJMD';
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
-import { Download, Target, CalendarDays, Database, AlertTriangle } from "lucide-react";
+import { Download, Target, CalendarDays, Database } from "lucide-react";
 import { TierConfig, QuotaConfig, Trip, FinancialTransaction } from "../../types/data";
 import { deriveDriverFinancialDateRange } from "../../utils/driverFinancialDateRange";
 import { format } from "date-fns";
 import { exportToCSV } from "../../utils/csvHelpers";
 import { toast } from "sonner";
 import { ScrollArea } from "../ui/scroll-area";
-import { api } from "../../services/api";
 import { useDriverEarningsHistory } from "../../hooks/useDriverEarningsHistory";
 
 interface DriverEarningsHistoryProps {
@@ -62,6 +61,39 @@ function toYmd(v: Date | string | null | undefined): string | null {
   return format(v, 'yyyy-MM-dd');
 }
 
+function convertRows(rows: any[]): PeriodRow[] {
+  return rows.map((row: any) => ({
+    periodStart: new Date(row.periodStart + 'T00:00:00'),
+    periodEnd: new Date(row.periodEnd + 'T23:59:59'),
+    grossRevenue: row.grossRevenue,
+    periodEarnings:
+      row.periodEarnings != null && Number.isFinite(Number(row.periodEarnings))
+        ? Number(row.periodEarnings)
+        : Number(row.grossRevenue) || 0,
+    driverShare: row.driverShare,
+    fleetShare: row.fleetShare,
+    expenses: row.expenses,
+    tier: {
+      id: row.tier.id,
+      name: row.tier.name,
+      minEarnings: 0,
+      maxEarnings: null,
+      sharePercentage: row.tier.sharePercentage,
+      color: row.tier.color,
+    } as TierConfig,
+    netEarnings: row.netEarnings,
+    payouts: row.payouts,
+    tripCount: row.tripCount,
+    transactionCount: row.transactionCount,
+    quotaTarget: row.quotaTarget ?? null,
+    quotaPercent: row.quotaPercent ?? null,
+    policyId: row.policyId,
+    versionId: row.versionId,
+    policyName: row.policyName,
+    policySource: row.policySource,
+  }));
+}
+
 export function DriverEarningsHistory({
   driverId,
   trips,
@@ -71,20 +103,6 @@ export function DriverEarningsHistory({
 }: DriverEarningsHistoryProps) {
   const [periodType, setPeriodType] = useState<PeriodType>('weekly');
   const [selectedRowIdx, setSelectedRowIdx] = useState<number | null>(null);
-  const [showMoreLoading, setShowMoreLoading] = useState(false);
-
-  // ────────────────────────────────────────────────────────────
-  // Phase 5: Server-side ledger earnings history (ONLY source)
-  // Phase 1: Overview range first; no full-lifetime auto-load
-  // Phase 1.2: React Query page + cursor pagination
-  // ────────────────────────────────────────────────────────────
-  const [serverPeriodData, setServerPeriodData] = useState<PeriodRow[]>([]);
-  const [serverDataLoaded, setServerDataLoaded] = useState(false);
-  const [serverDataLoading, setServerDataLoading] = useState(false);
-  const [hasMore, setHasMore] = useState(false);
-  const [nextCursor, setNextCursor] = useState<string | null>(null);
-  const [loadFailed, setLoadFailed] = useState(false);
-  const [dataSource, setDataSource] = useState<'loading' | 'ledger' | 'error' | 'waiting'>('waiting');
 
   /**
    * Financials period only (owned by Financials date control — not Overview header).
@@ -102,154 +120,56 @@ export function DriverEarningsHistory({
     return r ? `${r.startDate}|${r.endDate}` : "";
   }, [financialRangeKey, trips, transactions]);
 
-  const convertRows = (rows: any[]): PeriodRow[] =>
-    rows.map((row: any) => ({
-      periodStart: new Date(row.periodStart + 'T00:00:00'),
-      periodEnd: new Date(row.periodEnd + 'T23:59:59'),
-      grossRevenue: row.grossRevenue,
-      periodEarnings:
-        row.periodEarnings != null && Number.isFinite(Number(row.periodEarnings))
-          ? Number(row.periodEarnings)
-          : Number(row.grossRevenue) || 0,
-      driverShare: row.driverShare,
-      fleetShare: row.fleetShare,
-      expenses: row.expenses,
-      tier: {
-        id: row.tier.id,
-        name: row.tier.name,
-        minEarnings: 0,
-        maxEarnings: null,
-        sharePercentage: row.tier.sharePercentage,
-        color: row.tier.color,
-      } as TierConfig,
-      netEarnings: row.netEarnings,
-      payouts: row.payouts,
-      tripCount: row.tripCount,
-      transactionCount: row.transactionCount,
-      quotaTarget: row.quotaTarget ?? null,
-      quotaPercent: row.quotaPercent ?? null,
-      policyId: row.policyId,
-      versionId: row.versionId,
-      policyName: row.policyName,
-      policySource: row.policySource,
-    }));
+  const startDate = activityRangeKey ? activityRangeKey.split("|")[0] : undefined;
+  const endDate = activityRangeKey ? activityRangeKey.split("|")[1] : undefined;
 
-  // RQ first page (enabled only when Overview range is available)
-  const { rows: rqRows, hasMore: firstHasMore, nextCursor: firstCursor, loading: rqLoading, error: rqError } =
-    useDriverEarningsHistory({
-      driverId,
-      periodType,
-      startDate: activityRangeKey ? activityRangeKey.split("|")[0] : undefined,
-      endDate: activityRangeKey ? activityRangeKey.split("|")[1] : undefined,
-    });
+  const {
+    rows: rqRows,
+    hasNextPage,
+    fetchNextPage,
+    isFetchingNextPage,
+    loading: rqLoading,
+    error: rqError,
+    success: rqSuccess,
+  } = useDriverEarningsHistory({
+    driverId,
+    periodType,
+    startDate,
+    endDate,
+  });
 
-  // Sync RQ page into local server state
-  useEffect(() => {
-    if (!financialRangeKey && !activityRangeKey) {
-      setServerPeriodData([]);
-      setServerDataLoaded(true);
-      setServerDataLoading(false);
-      setDataSource('waiting');
-      return;
-    }
+  const activePeriodData = useMemo(() => convertRows(rqRows), [rqRows]);
 
-    if (rqLoading) {
-      setServerDataLoading(true);
-      setDataSource('loading');
-      return;
-    }
+  const waitingForRange = !financialRangeKey && !activityRangeKey;
+  const dataSource: 'waiting' | 'loading' | 'ledger' | 'error' = waitingForRange
+    ? 'waiting'
+    : rqLoading && activePeriodData.length === 0
+      ? 'loading'
+      : rqError
+        ? 'error'
+        : 'ledger';
 
-    if (rqError) {
-      setServerPeriodData([]);
-      setServerDataLoaded(true);
-      setDataSource('error');
-      setLoadFailed(true);
-      return;
-    }
-
-    // Empty success
-    if (!rqRows.length) {
-      setServerPeriodData([]);
-      setServerDataLoaded(true);
-      setServerDataLoading(false);
-      setDataSource('ledger');
-      return;
-    }
-
-    const converted = convertRows(rqRows);
-    setServerPeriodData(converted);
-    setServerDataLoaded(true);
-    setServerDataLoading(false);
-    setDataSource('ledger');
-    setHasMore(Boolean(firstHasMore));
-    setNextCursor(firstCursor);
-  }, [driverId, periodType, activityRangeKey, financialRangeKey, rqLoading, rqError, rqRows, firstHasMore, firstCursor]);
-
-  // Load more: next page via cursor (append unique period starts)
   const handleShowMore = () => {
-    if (!nextCursor || !serverPeriodData.length) return;
-    setShowMoreLoading(true);
-    const [startDate, endDate] = activityRangeKey.split("|");
-    api
-      .getLedgerEarningsHistory({
-        driverId,
-        periodType,
-        startDate,
-        endDate,
-        cursor: nextCursor,
-        mode: periodType === 'weekly' ? 'periods' : 'ledger',
-      })
-      .then((result) => {
-        if (!result.success || !result.data?.length) return;
-        const converted = convertRows(result.data);
-        setServerPeriodData((prev) => {
-          const seen = new Set(prev.map((p) => p.periodStart.getTime()));
-          const merged = [...prev];
-          for (const row of converted) {
-            if (!seen.has(row.periodStart.getTime())) {
-              seen.add(row.periodStart.getTime());
-              merged.push(row);
-            }
-          }
-          return merged;
-        });
-        setHasMore(Boolean(result.hasMore));
-        setNextCursor(result.nextCursor || null);
-      })
-      .catch(() => {
+    if (!hasNextPage || isFetchingNextPage) return;
+    void fetchNextPage().then((result) => {
+      if (result.isError) {
         toast.error("Couldn't load more earnings history.");
-      })
-      .finally(() => {
-        setShowMoreLoading(false);
-      });
+      }
+    });
   };
 
-  // Reset visible rows when switching period type
   const handlePeriodChange = (pt: PeriodType) => {
     setPeriodType(pt);
     setSelectedRowIdx(null);
-    setHasMore(false);
-    setNextCursor(null);
-    setServerDataLoaded(false);
   };
 
-  // Step 5.4: Client-side periodData fallback REMOVED — ledger only.
-  const activePeriodData = serverPeriodData;
-
-  // Quota column / bar: enabled when any ledger row has a policy quota target
   const quotaEnabled = useMemo(
     () => activePeriodData.some((r) => r.quotaTarget !== null && r.quotaTarget !== undefined),
     [activePeriodData],
   );
 
-  // ────────────────────────────────────────────────────────────
-  // Date SSOT: display full server result for Overview range
-  // ────────────────────────────────────────────────────────────
   const filteredPeriodData = activePeriodData;
 
-  // ────────────────────────────────────────────────────────────
-  // Period label formatting
-  // ────────────────────────────────────────────────────────────
   const formatPeriodLabel = (row: PeriodRow): string => {
     if (periodType === 'daily') {
       return format(row.periodStart, 'EEE, dd/MM/yyyy');
@@ -257,27 +177,18 @@ export function DriverEarningsHistory({
     if (periodType === 'monthly') {
       return format(row.periodStart, 'MMMM yyyy');
     }
-    // weekly
     return `${format(row.periodStart, 'MMM d')} – ${format(row.periodEnd, 'MMM d, yyyy')}`;
   };
 
   const periodColumnLabel = periodType === 'daily' ? 'Day' : periodType === 'monthly' ? 'Month' : 'Week';
   const periodLabel = periodType === 'daily' ? 'day' : periodType === 'weekly' ? 'week' : 'month';
 
-  // ────────────────────────────────────────────────────────────
-  // Latest period row (for summary card)
-  // ────────────────────────────────────────────────────────────
   const latestRow = activePeriodData.length > 0 ? activePeriodData[0] : null;
-
-  // ────────────────────────────────────────────────────────────
-  // Display row for the progress bar — selected row or latest
-  // ────────────────────────────────────────────────────────────
-  const displayRow = (selectedRowIdx !== null && activePeriodData[selectedRowIdx]) ? activePeriodData[selectedRowIdx] : latestRow;
+  const displayRow = (selectedRowIdx !== null && activePeriodData[selectedRowIdx])
+    ? activePeriodData[selectedRowIdx]
+    : latestRow;
   const isViewingSelected = selectedRowIdx !== null && activePeriodData[selectedRowIdx] !== undefined;
 
-  // ────────────────────────────────────────────────────────────
-  // CSV Export
-  // ────────────────────────────────────────────────────────────
   const handleExport = () => {
     const data = filteredPeriodData.map(row => {
       const base: Record<string, string | number> = {
@@ -309,9 +220,6 @@ export function DriverEarningsHistory({
     toast.success("History Exported");
   };
 
-  // ────────────────────────────────────────────────────────────
-  // Loading / error / empty (error must not use the generic empty copy)
-  // ───────────────────────────────────────────────────────────
   if (dataSource === 'waiting' && activePeriodData.length === 0) {
     return (
       <div className="text-center p-8 border border-dashed rounded-lg text-slate-400">
@@ -321,7 +229,7 @@ export function DriverEarningsHistory({
     );
   }
 
-  if (serverDataLoading && activePeriodData.length === 0) {
+  if (dataSource === 'loading') {
     return (
       <div className="text-center p-8 border border-dashed rounded-lg text-slate-400">
         <div className="animate-pulse">Loading earnings history...</div>
@@ -329,7 +237,7 @@ export function DriverEarningsHistory({
     );
   }
 
-  if (dataSource === 'error' && !serverDataLoading) {
+  if (dataSource === 'error') {
     return (
       <div className="text-center p-6 border border-dashed border-rose-200 rounded-lg bg-rose-50/50 text-slate-700 space-y-2">
         <p className="text-sm font-medium text-rose-800">Could not load earnings history</p>
@@ -340,7 +248,7 @@ export function DriverEarningsHistory({
     );
   }
 
-  if (activePeriodData.length === 0 && !serverDataLoading) {
+  if (rqSuccess && activePeriodData.length === 0) {
     return (
       <div className="text-center p-6 border border-dashed rounded-lg text-slate-600 space-y-2 max-w-lg mx-auto">
         <p className="text-sm font-medium text-slate-800">No earnings history for this range</p>
@@ -351,9 +259,6 @@ export function DriverEarningsHistory({
     );
   }
 
-  // ────────────────────────────────────────────────────────────
-  // Render
-  // ────────────────────────────────────────────────────────────
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between">
@@ -365,13 +270,7 @@ export function DriverEarningsHistory({
               Ledger Gross
             </Badge>
           )}
-          {dataSource === 'error' && (
-            <Badge variant="outline" className="text-[10px] px-1.5 py-0.5 bg-rose-50 text-rose-600 border-rose-200 font-normal">
-              <AlertTriangle className="h-3 w-3 mr-1" />
-              Error
-            </Badge>
-          )}
-          {dataSource === 'loading' && (
+          {isFetchingNextPage && (
             <Badge variant="outline" className="text-[10px] px-1.5 py-0.5 bg-slate-50 text-slate-400 border-slate-200 font-normal animate-pulse">
               Loading...
             </Badge>
@@ -383,7 +282,6 @@ export function DriverEarningsHistory({
         </Button>
       </CardHeader>
       <CardContent className="space-y-4">
-        {/* Period selector tabs + Date filter */}
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-lg w-fit">
             {(['daily', 'weekly', 'monthly'] as PeriodType[]).map(pt => (
@@ -411,7 +309,6 @@ export function DriverEarningsHistory({
           </div>
         </div>
 
-        {/* Quota summary card — only when quota is enabled and we have a display row */}
         {quotaEnabled && displayRow && displayRow.quotaTarget !== null && (() => {
           const barLabel = isViewingSelected
             ? formatPeriodLabel(displayRow)
@@ -458,7 +355,6 @@ export function DriverEarningsHistory({
                 )}
               </div>
             </div>
-            {/* Progress bar */}
             <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
               <div
                 className={`h-full rounded-full transition-all duration-500 ease-out ${
@@ -493,7 +389,7 @@ export function DriverEarningsHistory({
             <TableBody>
               {filteredPeriodData.map((row, idx) => (
                 <TableRow
-                  key={idx}
+                  key={`${row.periodStart.getTime()}-${idx}`}
                   role="button"
                   tabIndex={0}
                   aria-label={`Earnings period ${formatPeriodLabel(row)}, ${row.tripCount} trips`}
@@ -511,7 +407,6 @@ export function DriverEarningsHistory({
                       : 'hover:bg-slate-50'
                   }`}
                 >
-                  {/* Period label */}
                   <TableCell className="font-medium text-xs whitespace-nowrap">
                     {selectedRowIdx === idx && (
                       <span className="inline-block w-1.5 h-1.5 rounded-full bg-indigo-500 mr-1.5 align-middle" />
@@ -523,17 +418,14 @@ export function DriverEarningsHistory({
                     {row.tripCount > 0 ? row.tripCount : <span className="text-slate-300">—</span>}
                   </TableCell>
 
-                  {/* Period Earnings — same SSOT as Driver Detail / PA */}
                   <TableCell className="text-right text-slate-700 font-medium tabular-nums">
                     {formatJMD(row.periodEarnings, 2)}
                   </TableCell>
 
-                  {/* Fare gross — base for driver/fleet share tiers */}
                   <TableCell className="text-right text-slate-400 tabular-nums text-xs">
                     {formatJMD(row.grossRevenue, 2)}
                   </TableCell>
 
-                  {/* Driver Share with tier % badge */}
                   <TableCell className="text-right text-emerald-600">
                     <span className="font-medium">
                       {formatJMD(row.driverShare, 2)}
@@ -549,7 +441,6 @@ export function DriverEarningsHistory({
                       : <span className="text-slate-300">—</span>}
                   </TableCell>
 
-                  {/* Tier Applied + policy */}
                   <TableCell className="text-center">
                     <div className="inline-flex flex-col items-center gap-0.5">
                       <Badge
@@ -567,14 +458,12 @@ export function DriverEarningsHistory({
                     </div>
                   </TableCell>
 
-                  {/* Ledger bank/cash payouts — informational, not Net Payout */}
                   <TableCell className="text-right text-slate-400 text-xs">
                     {row.payouts > 0
                       ? formatJMD(row.payouts, 2)
                       : '-'}
                   </TableCell>
 
-                  {/* Quota % — only rendered when quota is enabled */}
                   {quotaEnabled && (
                     <TableCell className="text-right">
                       {row.quotaPercent !== null ? (
@@ -590,15 +479,15 @@ export function DriverEarningsHistory({
           </Table>
         </ScrollArea>
 
-        {hasMore && (
+        {hasNextPage && (
           <div className="flex justify-center pt-2">
             <Button
               variant="outline"
               size="sm"
               onClick={handleShowMore}
-              disabled={serverDataLoading || showMoreLoading}
+              disabled={isFetchingNextPage}
             >
-              {showMoreLoading ? 'Loading more…' : 'Show more history'}
+              {isFetchingNextPage ? 'Loading more…' : 'Show more history'}
             </Button>
           </div>
         )}

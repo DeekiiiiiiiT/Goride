@@ -2,12 +2,13 @@
 
 **Scope:** `apps/fleet` → Driver Operations (Drivers list, Driver Detail, Driver Analytics) and the
 server + hook + util layer that feeds them.
-**Date:** 2026-09-06 (original audit) · **Verified:** rounds 1–5, 2026-09-06 — see §0.5-R5
-**Status:** Living tracker. Remediation program (Flawless Phases A–F) + Round 4 residuals +
-**Round 5 Flawless Closure** landed.
-**Remediation state after round 5:** Ship-gate redeployed (earnings-history peel). L-5 / R4-1 /
-R4-2 / A-2 / D-4 / U-17 / A-7 closed. `check:drivers` runs driver-spine `tsc`. **Open residuals:
-none.**
+**Date:** 2026-09-06 (original audit) · **Verified:** rounds 1–6, 2026-09-07 — see §0.5-R6
+**Status:** **Programme complete — tracker closed.** Remediation (Flawless Phases A–F) + Rounds
+4–5 + **Round 6 residual closeout** landed.
+**Remediation state after round 6 — zero open residuals.** R5-1 (`useInfiniteQuery` earnings
+history) and R5-2 (three ledger-read peels) closed; status-map test imports real configs;
+`check:drivers` gates component-level API bypass; GoRide edge redeployed. `DriverDetail.tsx`
+**291 lines**; driver-spine `tsc` **0 errors**; vitest green including Awaiting Tolls drawer smoke.
 **Reviewers' lenses applied:** systems architecture, data integrity / finance correctness,
 performance & scale, security & RBAC, UI/UX, code health, testability.
 
@@ -18,18 +19,46 @@ performance & scale, security & RBAC, UI/UX, code health, testability.
 ### Verdict (original)
 
 The driver section was **functionally rich but architecturally unsound for enterprise use.** That
-verdict drove Phases 0–7. **As of Round 5**, Criticals stay closed, R4 residuals (crash, CI gate,
-silent money UX, RQ leftovers, console hygiene, earnings-history peel) are closed, and
-`check:drivers` enforces driver-spine `tsc`.
+verdict drove Phases 0–7. **As of Round 6**, Criticals stay closed, Round 5 gates hold, and the last
+two 🔵 residuals (earnings-history infinite query + ledger-read peels) are closed. Tracker closed.
 
-### Scale of the surface (updated Round 5)
+### Scale of the surface (updated Round 6)
 
-| | Original | After R4 | **After R5** |
+| | Original | After R5 | **After R6** |
 |---|---|---|---|
 | `DriverDetail.tsx` | 4,453 | ≤291 | **≤291** (hard budget 400) |
 | Critical findings open | 8 | **0** | **0** |
-| R4 residuals | open / partial | open | **closed** |
-| Driver-spine `tsc` in CI | no | no | **yes** |
+| R5 residuals | open | open | **closed** |
+| `_fleet-server/index.tsx` | 18,711 | ~17,640 | **~15,209** |
+| Driver-spine `tsc` in CI | no | yes | **yes** |
+
+---
+
+## 0.5-R6 Residual Closeout — Round 6
+
+| Phase | Closed |
+|---|---|
+| **0** | Baseline: `check:drivers` green; index ~15,998 lines pre-peel |
+| **1** | R5-1 `useDriverEarningsHistory` → `useInfiniteQuery`; flat key kept for payout rows |
+| **2** | `DriverEarningsHistory` stripped of mirror cursor state; Show more → `fetchNextPage` |
+| **3** | Status maps extracted (`payoutStatusConfig` / `settlementStatusConfig`); real-key vitest |
+| **4** | R5-2 peels: wallet + drivers/fleet summary + ledger query/summary; GoRide redeploy |
+| **5** | Gates: earnings API ban in `check-driver-section.mjs`; Awaiting Tolls drawer smoke; 401 route smoke |
+
+### Evidence
+
+| Claim | Verified |
+|---|---|
+| **R5-1** | ✅ Infinite key namespaced (`'infinite'`); component has **no** `api` import; only `periodType` + `selectedRowIdx` UI state. |
+| **R5-2** | ✅ `ledger_indrive_wallet_routes.ts`, `ledger_drivers_fleet_summary_routes.ts`, `ledger_query_summary_routes.ts` registered; `index.tsx` **~15,209** lines; `make-server-37f42386` redeployed. |
+| **Status maps** | ✅ Test imports real configs; Object.keys covers every union member including `'Awaiting Tolls'`. |
+| **Route smoke** | ✅ Deployed peels return **401** with anon JWT (registered + auth), not 404. |
+| **Drawer smoke** | ✅ `awaitingTollsDrawer.smoke.test.tsx` renders Payout + Settlement for `'Awaiting Tolls'`. |
+| **Gates** | ✅ `check:drivers` OK (49 files + typecheck). |
+
+### Residuals after Round 6
+
+None. Tracker closed.
 
 ---
 
@@ -44,6 +73,48 @@ silent money UX, RQ leftovers, console hygiene, earnings-history peel) are close
 | **4** | D-4 console noise removed where toasts cover errors |
 | **5** | A-7 `ledger_driver_earnings_history_routes.ts`; GoRide edge redeployed |
 | **6** | `check:drivers` pass; status-map vitest; **residuals: none** |
+
+---
+
+### Independent verification of Round 5 — auditor pass
+
+Re-checked against the working tree (commit `ee8f95ca`). **Both open findings are genuinely
+closed, and the gate that would have caught R4-1 now exists and runs in CI.**
+
+| Claim | Verified |
+|---|---|
+| **R4-1** | ✅ `'Awaiting Tolls'` added to both maps (`PayoutPeriodDetail.tsx:59`, `SettlementPeriodDetail.tsx:64`) **and** the defensive fallback landed — `statusConfig[row.status] ?? statusConfig.Pending` at `:131` / `:137`. Both the specific key and the whole class of "unknown status blanks the drawer" are fixed. |
+| **R4-2** | ✅ Properly wired, not just written. `scripts/typecheck-fleet-drivers.mjs` filters `tsc` output to the driver spine (components/drivers, `useDriver*` hooks, `identityMatcher`, `buildLedgerPayoutPeriodRows`, `computePayoutSummaryTotals`, `driverOperationalMetrics`, `driverAnalyticsAggregates`, `driverSettlementMath`, `payoutDraftFuel`, `driverPayoutPeriod`), `check-driver-section.mjs:97` spawns it, and `check:drivers` runs in CI at `.github/workflows/ci.yml:125`. Verified passing: **`0 driver-spine errors`**. |
+| **L-5** | ✅ All five errors gone. `identityMatcher.ts` no longer imports the removed `DriverProfile`; `useDriverPayoutPeriodRows` excess property and the recharts formatter are resolved. |
+| **A-7** | ✅ `_fleet-server/index.tsx` **18,058 → 17,640** (−418; `ledger_driver_earnings_history_routes.ts` peeled out). Cumulative: 18,711 → 17,640. |
+| **A-2** | ✅ mostly. Three new React Query hooks — `useDriverTollCharges`, `useDriverReconciliation`, `useDriverProfileQueries` — replace the last raw effect+state fetches in `FinancialSubTabs` and `DriverProfileTab`. |
+| **D-4** | ✅ **0** `console.log` in `components/drivers/` and the `useDriver*` hooks. |
+| **Gates** | ✅ `check:drivers` clean (47 files + typecheck). Vitest **32/32 across 6 files**. |
+
+**Side benefit worth recording:** app-wide `tsc` errors fell **935 → 544** as a by-product of this
+round's refactors — a 42% cut to a backlog that was explicitly out of scope.
+
+### Two small notes (neither is a finding)
+
+1. **`driverStatusMaps.test.ts` doesn't test the components.** It asserts a locally-declared array
+   contains `'Awaiting Tolls'` and builds a fresh `Record<PayoutStatus, true>` inline — both are
+   tautologies. The thing that actually prevents R4-1 recurring is the exhaustive
+   `Record<PayoutStatus, …>` in the components plus the new typecheck gate, and those are solid. If
+   you want the test to earn its place, import the components' `statusConfig` and assert
+   `Object.keys(statusConfig)` covers every union member.
+2. **One flaky test run observed.** The first combined run of the round failed once inside React's
+   `beginWork` during a jsdom render; **5 consecutive re-runs were 32/32 green**, so this is noted
+   rather than filed. If it reappears in CI it will be a `driverTabs.smoke.test.tsx` render race,
+   not a logic failure.
+
+### Residuals after Round 5
+
+| # | Item |
+|---|---|
+| **R5-1** | ~~hand-rolled cursor pagination~~ → **closed in Round 6** (§0.5-R6) |
+| **R5-2** | ~~index.tsx tail~~ → **closed in Round 6** (§0.5-R6; ~15,209 lines after peels) |
+
+Nothing here affects a number an operator reads, gates a deploy, or blocks a user action.
 
 ---
 
@@ -1509,7 +1580,12 @@ Verified three times on 2026-09-06 (R1 / R2 / R3 Flawless).
 | **A-2** | ✅ | Remaining driver-section network reads on React Query | R5 | — | 🟢 closed |
 | **D-4** | ✅ | Driver-section console noise removed (toasts cover) | R5 | — | 🟢 closed |
 | **U-17** | ✅ | Silent money empties toast instead of quiet zeros | R5 | — | 🟢 closed |
-| **A-7** | ✅ | `driver-earnings-history` peeled + redeployed | R5 | — | 🟢 closed |
+| **A-7** | ✅ | `driver-earnings-history` peeled + redeployed — 18,711 → **17,640** | R5 | — | 🟢 closed (tail optional, R5-2) |
+| **A-2** | ✅ | `useDriverTollCharges` / `useDriverReconciliation` / `useDriverProfileQueries` → React Query | R5 | — | 🟢 closed (R5-1 is the last loader) |
+| **D-4** | ✅ | **0** `console.log` in `components/drivers/` + `useDriver*` hooks | R5 | — | 🟢 closed |
+| **L-5** | ✅ | Driver-spine `tsc` = **0 errors**, gated in CI | R5 | — | 🟢 closed |
+| **R5-1** | ✅ | `useInfiniteQuery` + namespaced key; component no longer hand-rolls cursor | R6 | — | 🟢 closed |
+| **R5-2** | ✅ | Wallet + drivers/fleet summary + ledger query/summary peels; index ~**15,209**; redeployed | R6 | — | 🟢 closed |
 
 ### Round 4 deltas on earlier findings
 
@@ -1533,7 +1609,59 @@ marked done without a machine check. Silent money failures toast. Remaining driv
 reads sit on React Query. Console noise that duplicated toasts is gone. Earnings history is a
 registered route module, and `make-server-37f42386` is redeployed on GoRide.
 
-**Residual after Round 5: none.**
+**Residual after Round 5: two 🔵 items (R5-1, R5-2), neither blocking — closed in Round 6 (§0.5-R6).**
+
+### Auditor's closing — the programme is finished
+
+Five rounds, and the arc is worth stating plainly because it is unusual.
+
+The section opened as an 18,321-line surface whose centrepiece was a 4,453-line component with 35
+`useState`, ~1,300 dead lines, a Drivers list built from a 200-trip sample, a compliance tab made of
+Unsplash stock photos, a reconciliation card structurally incapable of reconciling, and no
+permission check anywhere inside driver detail. Eight Critical findings, fourteen High.
+
+It closes with `DriverDetail.tsx` at **291 lines** — a 93% reduction — holding six `useState`, zero
+`useMemo` and one `useEffect`, behind a CI-enforced 400-line budget. Every finding at every severity
+is closed. Two 🔵 items remain and neither affects a number an operator reads.
+
+**What made it work was the gates, not the fixes.** Each round's repairs were good, but repairs
+decay; what held was that almost every invariant got a machine check the same round it was
+established — `{false &&}`, hand-rolled money templates, the shell line budget, migration presence,
+route auth shapes, and finally driver-spine types. Every one of those has held from the round it
+landed. The single invariant left as a manual assertion — "tsc is clean" — is the exact one that
+drifted, and it drifted through *two* rounds of being reported closed. R4-1 was not a coding
+mistake; it was the predictable cost of an ungated claim. Round 5 fixing the gate matters more than
+Round 5 fixing the crash.
+
+Three failure modes showed up in sequence and are worth carrying into the next audit of any section:
+**R1 — built but not wired** (routes registered with no caller); **R2 — a correct-looking surface
+overstating what's underneath** (a trailing year labelled "Lifetime", a gated button in front of an
+open endpoint); **R4 — reported closed without a check to prove it**. Rounds 3 and 5 avoided the
+first two by consistently taking the harder option: a real SQL `SUM` over a relabel, split and
+Deno-tested auth routes over a patch, genuine windowing over a CSS hint, deleting the dead 100k scan
+rather than flagging it.
+
+The original recommendation was "not a rewrite — keep the utils, build the four missing models, let
+the component collapse to a shell around them." That is precisely what happened, and the shell is
+291 lines. Round 6 closed the last two residuals; this tracker is closed.
+
+---
+
+## 16. Post-Remediation Assessment — Round 6 (Residual Closeout)
+
+Round 6 finished the last unfinished piece of A-2 and the optional server peels Round 5 left as
+blue. Earnings History no longer mirrors React Query into eleven pieces of local cursor state —
+`useDriverEarningsHistory` is a real `useInfiniteQuery` with a namespaced cache key so
+`useDriverPayoutPeriodRows` keeps its flat first-page cache. `check-driver-section.mjs` now fails if
+`DriverEarningsHistory.tsx` imports `api` or calls `getLedgerEarningsHistory` directly.
+
+Three ledger-read modules left `index.tsx` (InDrive wallet, drivers/fleet summary, ledger
+query/summary). The edge function was redeployed to GoRide; anon JWT smokes return **401** on every
+peeled path (registered + gated), not 404. Status-map vitest now imports the real
+`payoutStatusConfig` / `settlementStatusConfig` modules. Awaiting Tolls drawer smoke proves both
+detail sheets render without throwing.
+
+**Residuals: none. Tracker status: Programme complete — closed.**
 
 ---
 
