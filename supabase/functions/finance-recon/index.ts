@@ -261,6 +261,48 @@ Deno.serve(async (req) => {
                 (p.metadata as { financeCore?: { cashSourceMismatch?: number } } | null)
                   ?.financeCore?.cashSourceMismatch,
               ) || 0,
+              tollEventLedger: await (async () => {
+                try {
+                  const { summarizeTollUsageOrphansForWeek } = await import(
+                    "../_fleet-server/toll_financial_reset.ts"
+                  );
+                  const sum = await summarizeTollUsageOrphansForWeek({
+                    periodAnchor: week,
+                    driverId: String(p.driver_id),
+                  });
+                  if (sum.orphanCount > 0 || Math.abs(sum.eventSpendMajor - sum.ledgerSpendMajor) > 0.01) {
+                    const { upsertFinanceReconDrifts } = await import(
+                      "../_fleet-server/finance_recon_drift.ts"
+                    );
+                    await upsertFinanceReconDrifts({
+                      organizationId: orgId,
+                      driverId: String(p.driver_id),
+                      weekKey: week,
+                      source: "nightly",
+                      drifts: [
+                        {
+                          kind: "toll",
+                          field: "orphan_event_spend",
+                          statementMinor: Math.round(sum.eventSpendMajor * 100),
+                          engineMinor: Math.round(sum.ledgerSpendMajor * 100),
+                          deltaMinor: Math.round(
+                            (sum.orphanAmountMajor || sum.eventSpendMajor - sum.ledgerSpendMajor) *
+                              100,
+                          ),
+                        },
+                      ],
+                    });
+                  }
+                  return {
+                    orphanCount: sum.orphanCount,
+                    orphanAmountMajor: sum.orphanAmountMajor,
+                    eventSpendMajor: sum.eventSpendMajor,
+                    ledgerSpendMajor: sum.ledgerSpendMajor,
+                  };
+                } catch {
+                  return null;
+                }
+              })(),
             })) {
               drifts.push({
                 runId,

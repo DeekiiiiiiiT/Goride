@@ -106,7 +106,7 @@ async function parseFinancialApiErrorBody(response: Response): Promise<string> {
  * render a consistent toast. Returns silently otherwise.
  */
 export async function throwIfCatalogGateBlocked(response: Response, fallbackMessage: string): Promise<void> {
-  if (response.status !== 403 && response.status !== 422) return;
+  if (response.status !== 403 && response.status !== 422 && response.status !== 404) return;
   let body: any = null;
   try { body = await response.clone().json(); } catch { /* ignore */ }
   if (!body || body.code !== 'VEHICLE_PENDING_CATALOG') return;

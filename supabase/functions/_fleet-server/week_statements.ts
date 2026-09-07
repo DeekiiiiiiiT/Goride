@@ -191,10 +191,21 @@ export async function closeWeekStatements(
       .eq("id", s.id)
       .eq("status", "draft");
     if (error) throw new Error(error.message);
+    // Restatement drafts supersede a prior closed row — retire it on sign.
+    if (s.supersedes) {
+      const { error: retireErr } = await sb()
+        .from("week_statements")
+        .update({ status: "restated" })
+        .eq("id", s.supersedes)
+        .eq("status", "closed");
+      if (retireErr) throw new Error(retireErr.message);
+    }
     closed++;
   }
   return closed;
 }
+
+export { hasPendingRestatementDrafts } from "../../../packages/finance-core/src/weekStatement.ts";
 
 // ── Shadow compare (Phase 4 flag rollout gate) ───────────────────────────────
 

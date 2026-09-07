@@ -185,7 +185,7 @@ export function FinancialSubTabs({
             <CardHeader>
               <CardTitle>Earnings Breakdown by Platform</CardTitle>
               <CardDescription className="text-xs text-slate-500">
-                All-time completed trip earnings across platforms
+                Completed trip earnings by platform for the selected financials period
               </CardDescription>
             </CardHeader>
             <CardContent>

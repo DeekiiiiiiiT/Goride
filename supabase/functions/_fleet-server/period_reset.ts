@@ -471,6 +471,40 @@ export async function executePeriodReconciliationReset(
       /* non-fatal */
     }
   }
+  // Sweep orphan toll_usage events for this week (ledger rows may already be gone).
+  try {
+    const { reverseOrphanTollUsageEventsForWeek } = await import("./toll_financial_reset.ts");
+    const driverList = [...driversToRebuild];
+    if (driverList.length === 0) {
+      const sweep = await reverseOrphanTollUsageEventsForWeek({
+        periodAnchor: opts.startDate,
+        reason: "period_reset_orphan_toll_usage",
+      });
+      if (sweep.eventsReversed > 0) {
+        console.log(
+          `[PeriodReset] Reversed ${sweep.eventsReversed} orphan toll_usage event(s) for ${opts.startDate}`,
+        );
+      }
+      if (sweep.errors.length) errors.push(...sweep.errors.map((e) => `toll orphan: ${e}`));
+    } else {
+      for (const driverId of driverList) {
+        const sweep = await reverseOrphanTollUsageEventsForWeek({
+          periodAnchor: opts.startDate,
+          driverId,
+          reason: "period_reset_orphan_toll_usage",
+        });
+        if (sweep.eventsReversed > 0) {
+          console.log(
+            `[PeriodReset] Reversed ${sweep.eventsReversed} orphan toll_usage for ${driverId}/${opts.startDate}`,
+          );
+        }
+        if (sweep.errors.length) errors.push(...sweep.errors.map((e) => `toll orphan: ${e}`));
+      }
+    }
+  } catch (e: any) {
+    errors.push(`toll orphan sweep: ${e?.message || e}`);
+  }
+
   let periodsRebuilt = 0;
   if (driversToRebuild.size > 0) {
     try {

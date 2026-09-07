@@ -41,6 +41,13 @@ export type WeekStatement = {
   createdAt?: string;
 };
 
+/** True when any latest lane is a draft that supersedes a prior closed statement. */
+export function hasPendingRestatementDrafts(
+  statements: Array<Pick<WeekStatement, 'status' | 'supersedes'>>,
+): boolean {
+  return statements.some((s) => s.status === 'draft' && Boolean(s.supersedes));
+}
+
 /** Map a DB row (snake_case public.week_statements) into a WeekStatement. */
 export function mapRowToWeekStatement(row: Record<string, unknown>): WeekStatement {
   return {

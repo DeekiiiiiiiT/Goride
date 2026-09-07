@@ -46,6 +46,8 @@ export type ClosePeriodRow = {
   fuel_deduction?: number | null;
   fuel_fleet_share?: number | null;
   toll_spend?: number | null;
+  toll_cash_spend?: number | null;
+  toll_tag_spend?: number | null;
   toll_charged_to_driver?: number | null;
   cash_collected?: number | null;
   driver_share?: number | null;
@@ -116,6 +118,16 @@ export type CloseInvariantInput = {
     delta: number;
     message: string;
   }> | null;
+  /**
+   * Engine vs operational ledger (toll inflation audit): active toll_usage
+   * events must resolve to live toll_ledger rows.
+   */
+  tollEventLedger?: {
+    orphanCount: number;
+    orphanAmountMajor: number;
+    eventSpendMajor: number;
+    ledgerSpendMajor: number;
+  } | null;
   eps?: number;
 };
 
@@ -253,6 +265,45 @@ export function checkCloseInvariants(input: CloseInvariantInput): CloseBlocker[]
         'TOLL_IDENTITY_UNBALANCED',
         'Spend − Reimbursed − ChargedToDrivers − NetLoss ≠ 0',
         residual, 0,
+      );
+    }
+  }
+
+  // toll_spend must equal cash + tag (audit §6.2 — close blocker, not nightly-only).
+  {
+    const tollSpend = num(p.toll_spend);
+    const tollCash = num(p.toll_cash_spend);
+    const tollTag = num(p.toll_tag_spend);
+    if (tollSpend > 0 || tollCash > 0 || tollTag > 0) {
+      pushIfDrift(
+        out, eps, ctx,
+        'TOLL_SPEND_SPLIT',
+        'period.toll_spend ≠ toll_cash_spend + toll_tag_spend',
+        tollSpend, round2(tollCash + tollTag),
+      );
+    }
+  }
+
+  // Engine vs live toll ledger — orphaned toll_usage events inflate spend.
+  if (input.tollEventLedger) {
+    const tel = input.tollEventLedger;
+    if (tel.orphanCount > 0 || Math.abs(tel.orphanAmountMajor) > eps) {
+      out.push({
+        code: 'TOLL_EVENT_ORPHANED',
+        severity: 'block',
+        driverId: ctx.driverId,
+        week: ctx.week,
+        persisted: round2(tel.eventSpendMajor),
+        expected: round2(tel.ledgerSpendMajor),
+        delta: round2(tel.orphanAmountMajor || tel.eventSpendMajor - tel.ledgerSpendMajor),
+        message: `${tel.orphanCount} toll money event(s) have no live toll row ($${round2(tel.orphanAmountMajor).toFixed(2)}) — repair before close`,
+      });
+    } else {
+      pushIfDrift(
+        out, eps, ctx,
+        'TOLL_EVENT_ORPHANED',
+        'Σ active toll_usage events ≠ Σ live toll_ledger spend',
+        num(tel.eventSpendMajor), num(tel.ledgerSpendMajor),
       );
     }
   }

@@ -76,6 +76,8 @@ export function RestatementQueuePage({
           <h1 className="text-xl font-semibold text-slate-900">Restatement queue</h1>
           <p className="mt-1 text-sm text-slate-500">
             Draft statement revisions after a week was closed. Sign them on Close Week — never approve outside that flow.
+            Open Close Week for that week and use <strong>Sign restatements</strong> (week stays frozen). Use{' '}
+            <strong>Re-open week</strong> only when you need to unlock Fuel/Tolls/Settlement edits.
           </p>
         </div>
         <Button

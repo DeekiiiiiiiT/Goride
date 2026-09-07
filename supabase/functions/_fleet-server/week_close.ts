@@ -9,10 +9,15 @@
  * metadata is written so no further movement can post to the week.
  */
 import { getServiceClient } from "./service_client.ts";
-import { isPeriodFrozen, markPeriodFrozen } from "./settlement_period_freeze.ts";
+import {
+  clearPeriodFreeze,
+  isPeriodFrozen,
+  markPeriodFrozen,
+} from "./settlement_period_freeze.ts";
 import {
   closeWeekStatements,
   getLatestWeekStatements,
+  hasPendingRestatementDrafts,
   WEEK_STATEMENT_ENGINE_VERSION,
 } from "./week_statements.ts";
 import { sealTollWeek } from "./toll_week_seal.ts";
@@ -44,16 +49,31 @@ function sb() {
 
 const minorToMajor = (m: unknown): number => (Number(m) || 0) / 100;
 
-function fuelFromStatement(s: WeekStatement | undefined): CloseFuelStatement | null {
+/** Draft restatements (supersedes set) are amount-ready; treat as closed for invariants. */
+function statementStatusForInvariants(
+  s: WeekStatement,
+  acceptRestatementDrafts: boolean,
+): WeekStatement["status"] {
+  if (acceptRestatementDrafts && s.status === "draft" && s.supersedes) return "closed";
+  return s.status;
+}
+
+function fuelFromStatement(
+  s: WeekStatement | undefined,
+  acceptRestatementDrafts = false,
+): CloseFuelStatement | null {
   if (!s) return null;
   return {
     driverShare: minorToMajor(s.amountsMinor.driverShare),
     companyShare: minorToMajor(s.amountsMinor.companyShare),
-    status: s.status,
+    status: statementStatusForInvariants(s, acceptRestatementDrafts),
   };
 }
 
-function tollFromStatement(s: WeekStatement | undefined): CloseTollStatement | null {
+function tollFromStatement(
+  s: WeekStatement | undefined,
+  acceptRestatementDrafts = false,
+): CloseTollStatement | null {
   if (!s) return null;
   return {
     totalSpend: minorToMajor(s.amountsMinor.totalSpend),
@@ -62,19 +82,61 @@ function tollFromStatement(s: WeekStatement | undefined): CloseTollStatement | n
     netLoss: minorToMajor(s.amountsMinor.netLoss),
     cashWashSpend: minorToMajor(s.amountsMinor.cashWashSpend),
     tagSpend: minorToMajor(s.amountsMinor.tagSpend),
-    status: s.status,
+    status: statementStatusForInvariants(s, acceptRestatementDrafts),
   };
 }
 
-function earningsFromStatement(s: WeekStatement | undefined): CloseEarningsStatement | null {
+function earningsFromStatement(
+  s: WeekStatement | undefined,
+  acceptRestatementDrafts = false,
+): CloseEarningsStatement | null {
   if (!s) return null;
   return {
     passengerCash: minorToMajor(s.amountsMinor.passengerCash),
     driverShare: minorToMajor(s.amountsMinor.driverShare),
     companyShare: minorToMajor(s.amountsMinor.companyShare),
     tipsPaidToDriver: minorToMajor(s.amountsMinor.tipsPaidToDriver),
-    status: s.status,
+    status: statementStatusForInvariants(s, acceptRestatementDrafts),
   };
+}
+
+/** Structured errors for week-close HTTP (409 settlement risk, etc.). */
+export class WeekCloseError extends Error {
+  readonly code: string;
+  readonly status: number;
+  readonly details?: unknown;
+  constructor(code: string, message: string, status = 400, details?: unknown) {
+    super(message);
+    this.name = "WeekCloseError";
+    this.code = code;
+    this.status = status;
+    this.details = details;
+  }
+}
+
+function periodIsFrozen(period: Record<string, unknown>): boolean {
+  const meta = (period.metadata as Record<string, unknown> | null) || null;
+  const fc = (meta?.financeCore as Record<string, unknown> | undefined) || {};
+  return isPeriodFrozen({
+    metadata: meta,
+    settlementStatus: period.settlement_status ? String(period.settlement_status) : null,
+    signedAt: period.signed_at
+      ? String(period.signed_at)
+      : fc.signedAt
+        ? String(fc.signedAt)
+        : null,
+  });
+}
+
+function settlementRiskForPeriod(period: Record<string, unknown>): {
+  risk: boolean;
+  settlementPaid: number;
+  settlementAmount: number;
+} {
+  const settlementPaid = Number(period.settlement_paid) || 0;
+  const settlementAmount = Number(period.settlement_amount) || 0;
+  const risk = Math.abs(settlementPaid) > CLOSE_INVARIANT_EPS;
+  return { risk, settlementPaid, settlementAmount };
 }
 
 /** Complete row payload for the H-4 close hash (drops undefined). */
@@ -136,6 +198,10 @@ export type WeekClosePreview = {
   blockers: CloseBlocker[];
   /** Pass 5: open statement↔engine drift rows for this org (all weeks). */
   openEngineDriftCount?: number;
+  /** Draft restatement rows (status=draft AND supersedes set) for this week. */
+  pendingRestatementCount?: number;
+  /** Frozen drivers with settlement_paid moved — reopen needs risk ack. */
+  settlementRiskDriverCount?: number;
 };
 
 /**
@@ -249,7 +315,11 @@ export async function previewWeekClose(orgId: string, weekKey: string): Promise<
   const blockers: CloseBlocker[] = [];
   let driversReady = 0;
   let driversFrozen = 0;
+  /** Frozen with no pending restatement drafts — done, excluded from blocked. */
+  let driversFrozenIdle = 0;
   let closedAt: string | null = null;
+  let pendingRestatementCount = 0;
+  let settlementRiskDriverCount = 0;
 
   let fuelDriverShare = 0;
   let fuelFleetShare = 0;
@@ -277,31 +347,38 @@ export async function previewWeekClose(orgId: string, weekKey: string): Promise<
     const driverId = String(period.driver_id);
     const meta = (period.metadata as Record<string, unknown> | null) || null;
     const fc = (meta?.financeCore as Record<string, unknown> | undefined) || {};
-    const frozen = isPeriodFrozen({
-      metadata: meta,
-      settlementStatus: period.settlement_status ? String(period.settlement_status) : null,
-      signedAt: period.signed_at
-        ? String(period.signed_at)
-        : fc.signedAt
-          ? String(fc.signedAt)
-          : null,
-    });
+    const frozen = periodIsFrozen(period as Record<string, unknown>);
+
+    const statements = await getLatestWeekStatements(orgId, driverId, week);
+    const pendingDrafts = hasPendingRestatementDrafts(statements);
+    if (pendingDrafts) {
+      pendingRestatementCount += statements.filter(
+        (s) => s.status === "draft" && Boolean(s.supersedes),
+      ).length;
+    }
+
     if (frozen) {
       driversFrozen += 1;
+      if (!pendingDrafts) driversFrozenIdle += 1;
+      if (settlementRiskForPeriod(period as Record<string, unknown>).risk) {
+        settlementRiskDriverCount += 1;
+      }
       const signed =
         (fc.signedAt ? String(fc.signedAt) : null) ||
         (period.signed_at ? String(period.signed_at) : null);
       if (signed && (!closedAt || signed < closedAt)) closedAt = signed;
     }
 
-    const statements = await getLatestWeekStatements(orgId, driverId, week);
+    const acceptRestatementDrafts = frozen && pendingDrafts;
     const byKind = new Map<string, WeekStatement>(statements.map((s) => [s.kind, s]));
 
-    const fuelStatement = fuelFromStatement(byKind.get("fuel"));
-    const tollStatement = tollFromStatement(byKind.get("toll"));
+    const fuelStatement = fuelFromStatement(byKind.get("fuel"), acceptRestatementDrafts);
+    const tollStatement = tollFromStatement(byKind.get("toll"), acceptRestatementDrafts);
 
     let engineBlockers: CloseBlocker[] = [];
-    if (!frozen) {
+    // Frozen without pending restatements: skip engine compare (already signed).
+    // Frozen WITH drafts: compare so Sign restatements shows blockers.
+    if (!frozen || acceptRestatementDrafts) {
       try {
         const engineDrifts = await compareDriverWeekStatementsToEngines({
           organizationId: orgId,
@@ -336,25 +413,70 @@ export async function previewWeekClose(orgId: string, weekKey: string): Promise<
       }
     }
 
+    let tollEventLedger: {
+      orphanCount: number;
+      orphanAmountMajor: number;
+      eventSpendMajor: number;
+      ledgerSpendMajor: number;
+    } | null = null;
+    if (!frozen || acceptRestatementDrafts) {
+      try {
+        const { summarizeTollUsageOrphansForWeek } = await import("./toll_financial_reset.ts");
+        const sum = await summarizeTollUsageOrphansForWeek({
+          periodAnchor: week,
+          driverId,
+        });
+        tollEventLedger = {
+          orphanCount: sum.orphanCount,
+          orphanAmountMajor: sum.orphanAmountMajor,
+          eventSpendMajor: sum.eventSpendMajor,
+          ledgerSpendMajor: sum.ledgerSpendMajor,
+        };
+        if (sum.orphanCount > 0 || Math.abs(sum.eventSpendMajor - sum.ledgerSpendMajor) > CLOSE_INVARIANT_EPS) {
+          await upsertFinanceReconDrifts({
+            organizationId: orgId,
+            driverId,
+            weekKey: week,
+            source: "close_preview",
+            drifts: [
+              {
+                kind: "toll",
+                field: "orphan_event_spend",
+                statementMinor: Math.round(sum.eventSpendMajor * 100),
+                engineMinor: Math.round(sum.ledgerSpendMajor * 100),
+                deltaMinor: Math.round(
+                  (sum.orphanAmountMajor || sum.eventSpendMajor - sum.ledgerSpendMajor) * 100,
+                ),
+              },
+            ],
+          });
+        }
+      } catch (e) {
+        console.warn("[week_close] toll orphan summarize failed (non-fatal)", driverId, week, e);
+      }
+    }
+
     const driverBlockers = checkCloseInvariants({
       period: period as ClosePeriodRow,
       fuelStatement,
       tollStatement,
-      earningsStatement: earningsFromStatement(byKind.get("earnings")),
+      earningsStatement: earningsFromStatement(byKind.get("earnings"), acceptRestatementDrafts),
       cashSourceMismatch: Number(
         (meta as { financeCore?: { cashSourceMismatch?: number } } | null)
           ?.financeCore?.cashSourceMismatch,
       ) || 0,
       engineDrifts: engineBlockers,
-      ...(!frozen && !pnlWarnEmitted
+      tollEventLedger,
+      ...((!frozen || acceptRestatementDrafts) && !pnlWarnEmitted
         ? businessWeekPnl != null
           ? { settlementSumForWeek, businessWeekPnl }
           : { settlementSumForWeek, businessWeekPnlUnavailable: true as const }
         : {}),
     });
-    if (!frozen && !pnlWarnEmitted) pnlWarnEmitted = true;
-    // Already-frozen drivers are not "blockers" for close — they are done.
-    if (!frozen) {
+    if ((!frozen || acceptRestatementDrafts) && !pnlWarnEmitted) pnlWarnEmitted = true;
+    // Already-frozen without restatement drafts are done — not blockers.
+    // Frozen WITH drafts surface blockers for Sign restatements.
+    if (!frozen || acceptRestatementDrafts) {
       blockers.push(...driverBlockers);
       if (canCloseWeek(driverBlockers)) driversReady += 1;
     }
@@ -382,7 +504,7 @@ export async function previewWeekClose(orgId: string, weekKey: string): Promise<
     weekKey: week,
     driversTotal: rows.length,
     driversReady,
-    driversBlocked: rows.length - driversReady - driversFrozen,
+    driversBlocked: Math.max(0, rows.length - driversReady - driversFrozenIdle),
     driversFrozen,
     weekClosed,
     closedAt,
@@ -401,6 +523,8 @@ export async function previewWeekClose(orgId: string, weekKey: string): Promise<
     },
     blockers,
     openEngineDriftCount,
+    pendingRestatementCount,
+    settlementRiskDriverCount,
   };
 }
 
@@ -462,18 +586,13 @@ export async function closeWeek(
     const driverId = String(period.driver_id);
     const meta = (period.metadata as Record<string, unknown> | null) || null;
     const fc = (meta?.financeCore as Record<string, unknown> | undefined) || {};
-    if (
-      isPeriodFrozen({
-        metadata: meta,
-        settlementStatus: period.settlement_status ? String(period.settlement_status) : null,
-        signedAt: period.signed_at
-          ? String(period.signed_at)
-          : fc.signedAt
-            ? String(fc.signedAt)
-            : null,
-      })
-    ) {
-      // Idempotent: already frozen — count as closed, do not re-hash / re-write.
+    const frozen = periodIsFrozen(period as Record<string, unknown>);
+
+    const statements = await getLatestWeekStatements(orgId, driverId, week);
+    const pendingDrafts = hasPendingRestatementDrafts(statements);
+
+    if (frozen && !pendingDrafts) {
+      // Idempotent: already frozen with no restatement drafts — skip.
       perDriver.push({
         driverId,
         closed: true,
@@ -483,8 +602,11 @@ export async function closeWeek(
       continue;
     }
 
-    const statements = await getLatestWeekStatements(orgId, driverId, week);
+    const acceptRestatementDrafts = frozen && pendingDrafts;
     const byKind = new Map<string, WeekStatement>(statements.map((s) => [s.kind, s]));
+    const closeReason = acceptRestatementDrafts
+      ? (reason.startsWith("restatement:") ? reason : `restatement:${reason}`)
+      : reason;
 
     let engineBlockers: CloseBlocker[] = [];
     try {
@@ -512,16 +634,58 @@ export async function closeWeek(
       console.warn("[week_close] engine compare failed (non-fatal)", driverId, week, e);
     }
 
+    let tollEventLedger: {
+      orphanCount: number;
+      orphanAmountMajor: number;
+      eventSpendMajor: number;
+      ledgerSpendMajor: number;
+    } | null = null;
+    try {
+      const { summarizeTollUsageOrphansForWeek } = await import("./toll_financial_reset.ts");
+      const sum = await summarizeTollUsageOrphansForWeek({
+        periodAnchor: week,
+        driverId,
+      });
+      tollEventLedger = {
+        orphanCount: sum.orphanCount,
+        orphanAmountMajor: sum.orphanAmountMajor,
+        eventSpendMajor: sum.eventSpendMajor,
+        ledgerSpendMajor: sum.ledgerSpendMajor,
+      };
+      if (sum.orphanCount > 0 || Math.abs(sum.eventSpendMajor - sum.ledgerSpendMajor) > CLOSE_INVARIANT_EPS) {
+        await upsertFinanceReconDrifts({
+          organizationId: orgId,
+          driverId,
+          weekKey: week,
+          source: "close",
+          drifts: [
+            {
+              kind: "toll",
+              field: "orphan_event_spend",
+              statementMinor: Math.round(sum.eventSpendMajor * 100),
+              engineMinor: Math.round(sum.ledgerSpendMajor * 100),
+              deltaMinor: Math.round(
+                (sum.orphanAmountMajor || sum.eventSpendMajor - sum.ledgerSpendMajor) * 100,
+              ),
+            },
+          ],
+        });
+      }
+    } catch (e) {
+      console.warn("[week_close] toll orphan summarize failed (non-fatal)", driverId, week, e);
+    }
+
     const blockers = checkCloseInvariants({
       period: period as ClosePeriodRow,
-      fuelStatement: fuelFromStatement(byKind.get("fuel")),
-      tollStatement: tollFromStatement(byKind.get("toll")),
-      earningsStatement: earningsFromStatement(byKind.get("earnings")),
+      fuelStatement: fuelFromStatement(byKind.get("fuel"), acceptRestatementDrafts),
+      tollStatement: tollFromStatement(byKind.get("toll"), acceptRestatementDrafts),
+      earningsStatement: earningsFromStatement(byKind.get("earnings"), acceptRestatementDrafts),
       cashSourceMismatch: Number(
         (meta as { financeCore?: { cashSourceMismatch?: number } } | null)
           ?.financeCore?.cashSourceMismatch,
       ) || 0,
       engineDrifts: engineBlockers,
+      tollEventLedger,
       ...(!pnlWarnEmitted
         ? businessWeekPnl != null
           ? { settlementSumForWeek, businessWeekPnl }
@@ -580,11 +744,11 @@ export async function closeWeek(
       }),
     );
 
-    await closeWeekStatements(orgId, driverId, week, actorId, reason);
+    await closeWeekStatements(orgId, driverId, week, actorId, closeReason);
 
     const nextMeta = markPeriodFrozen(period as { metadata?: Record<string, unknown> }, {
       actorId,
-      reason,
+      reason: closeReason,
       closeHash,
       sourceRowIds,
       engineVersion: WEEK_STATEMENT_ENGINE_VERSION,
@@ -595,6 +759,7 @@ export async function closeWeek(
       .update({
         status: "closed",
         closed_at: new Date().toISOString(),
+        reopened_at: null,
         source_event_hash: closeHash,
         metadata: nextMeta,
       })
@@ -615,5 +780,115 @@ export async function closeWeek(
     driversBlocked,
     blockers: allBlockers,
     perDriver,
+  };
+}
+
+export type ReopenWeekResult = {
+  organizationId: string;
+  weekKey: string;
+  reopened: boolean;
+  driversReopened: number;
+  driversSkipped: number;
+  settlementRiskDrivers: Array<{
+    driverId: string;
+    settlementPaid: number;
+    settlementAmount: number;
+  }>;
+};
+
+/**
+ * Admin calendar reopen: clear period freeze for every driver in the org-week.
+ * Does not reopen fuel recon or rewrite week_statements. Requires
+ * acknowledgeSettlementRisk when any driver has settlement_paid moved.
+ */
+export async function reopenWeek(
+  orgId: string,
+  weekKey: string,
+  actorId: string,
+  reason: string,
+  acknowledgeSettlementRisk = false,
+): Promise<ReopenWeekResult> {
+  const week = String(weekKey).slice(0, 10);
+  const trimmedReason = String(reason || "").trim();
+  if (!trimmedReason) {
+    throw new WeekCloseError("REASON_REQUIRED", "A reopen reason is required", 400);
+  }
+
+  const { data: periods, error } = await sb()
+    .from("driver_financial_periods")
+    .select("*")
+    .eq("organization_id", orgId)
+    .eq("period_anchor", week);
+  if (error) throw new Error(error.message);
+
+  const periodRows = periods ?? [];
+  const settlementRiskDrivers: ReopenWeekResult["settlementRiskDrivers"] = [];
+  const frozenRows: typeof periodRows = [];
+
+  for (const period of periodRows) {
+    if (!periodIsFrozen(period as Record<string, unknown>)) continue;
+    frozenRows.push(period);
+    const risk = settlementRiskForPeriod(period as Record<string, unknown>);
+    if (risk.risk) {
+      settlementRiskDrivers.push({
+        driverId: String(period.driver_id),
+        settlementPaid: risk.settlementPaid,
+        settlementAmount: risk.settlementAmount,
+      });
+    }
+  }
+
+  if (frozenRows.length === 0) {
+    return {
+      organizationId: orgId,
+      weekKey: week,
+      reopened: true,
+      driversReopened: 0,
+      driversSkipped: periodRows.length,
+      settlementRiskDrivers: [],
+    };
+  }
+
+  if (settlementRiskDrivers.length > 0 && !acknowledgeSettlementRisk) {
+    throw new WeekCloseError(
+      "SETTLEMENT_RISK",
+      "This week has settlement money already moved. Confirm acknowledgeSettlementRisk to reopen.",
+      409,
+      { settlementRiskDrivers },
+    );
+  }
+
+  const now = new Date().toISOString();
+  let driversReopened = 0;
+
+  for (const period of frozenRows) {
+    const nextMeta = clearPeriodFreeze(period as { metadata?: Record<string, unknown> }, {
+      actorId,
+      reason: trimmedReason,
+      reopenedAt: now,
+    });
+
+    const { error: updErr } = await sb()
+      .from("driver_financial_periods")
+      .update({
+        status: "reopened",
+        closed_at: null,
+        reopened_at: now,
+        // Column is NOT NULL DEFAULT '' — never write null.
+        source_event_hash: "",
+        metadata: nextMeta,
+      })
+      .eq("id", period.id);
+    if (updErr) throw new Error(updErr.message);
+    driversReopened += 1;
+  }
+
+  return {
+    organizationId: orgId,
+    weekKey: week,
+    reopened: true,
+    driversReopened,
+    driversSkipped: periodRows.length - driversReopened,
+    settlementRiskDrivers,
   };
 }

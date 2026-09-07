@@ -4,6 +4,8 @@
  * Routes under /make-server-37f42386/settlements/week-close:
  *   GET  /week-close/preview?weekKey=YYYY-MM-DD  → read-only lanes + blockers
  *   POST /week-close  { weekKey, reason }        → run invariants and sign week
+ *   POST /week-close/reopen { weekKey, reason, acknowledgeSettlementRisk? }
+ *                                               → admin unfreeze (audit trail)
  *
  * The POST is the only place a week is truly closed: it runs the cross-system
  * invariants as a precondition and signs an immutable statement + freeze hash
@@ -13,7 +15,7 @@ import { Hono, type Context } from "npm:hono";
 import { requireAuth, requirePermission, type RbacUser } from "./rbac_middleware.ts";
 import { getOrgId } from "./org_scope.ts";
 import { safeErrorResponse } from "./safe_error.ts";
-import { closeWeek, previewWeekClose } from "./week_close.ts";
+import { closeWeek, previewWeekClose, reopenWeek, WeekCloseError } from "./week_close.ts";
 import { sealFuelWeek } from "./fuel_week_seal.ts";
 import {
   listPendingRestatements,
@@ -66,7 +68,45 @@ app.post(BASE, requirePermission("transactions.edit"), async (c) => {
     const result = await closeWeek(org, weekKey, user.userId, reason);
     return c.json(result);
   } catch (e) {
+    if (e instanceof WeekCloseError) {
+      return c.json({ error: e.code, message: e.message, details: e.details }, e.status);
+    }
     return safeErrorResponse(c, e, "week-close");
+  }
+});
+
+// ── POST /week-close/reopen ─────────────────────────────────────────────────
+app.post(`${BASE}/reopen`, requirePermission("transactions.edit"), async (c) => {
+  try {
+    const org = requireOrg(c);
+    if (typeof org !== "string") return org;
+    const user = c.get("rbacUser") as RbacUser;
+    const body = (await c.req.json()) as {
+      weekKey?: string;
+      reason?: string;
+      acknowledgeSettlementRisk?: boolean;
+    };
+    const weekKey = String(body.weekKey || "").slice(0, 10);
+    if (!WEEK_RE.test(weekKey)) {
+      return c.json({ error: "weekKey (YYYY-MM-DD) is required" }, 400);
+    }
+    const reason = String(body.reason || "").trim();
+    if (!reason) {
+      return c.json({ error: "REASON_REQUIRED", message: "A reopen reason is required" }, 400);
+    }
+    const result = await reopenWeek(
+      org,
+      weekKey,
+      user.userId,
+      reason,
+      body.acknowledgeSettlementRisk === true,
+    );
+    return c.json(result);
+  } catch (e) {
+    if (e instanceof WeekCloseError) {
+      return c.json({ error: e.code, message: e.message, details: e.details }, e.status);
+    }
+    return safeErrorResponse(c, e, "week-close-reopen");
   }
 });
 

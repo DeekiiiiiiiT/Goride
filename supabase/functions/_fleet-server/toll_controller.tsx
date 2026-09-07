@@ -1467,14 +1467,20 @@ async function loadMergedTollTxArray(c?: Context): Promise<any[]> {
     loadAllByPrefix("transaction:"),
   ]);
   const byId = new Map<string, any>();
+  const { findDuplicateTollLedgerEntry } = await import(
+    "../../../packages/finance-core/src/tollLedgerIntegrity.ts"
+  );
+  const ledgerAsList: any[] = [];
   for (const e of ledgerEntries) {
     const tx = tollLedgerToTxShape(e);
     if (tx?.id != null && String(tx.id) !== "") {
       byId.set(String(tx.id), tx);
+      ledgerAsList.push(tx);
     }
   }
   let legacyAdded = 0;
   let linkBackfilled = 0;
+  let fingerprintCollapsed = 0;
   for (const tx of rawTx || []) {
     if (!tx || typeof tx !== "object") continue;
     if (!isTollCategory(tx.category)) continue;
@@ -1483,7 +1489,21 @@ async function loadMergedTollTxArray(c?: Context): Promise<any[]> {
     const sid = String(id);
     const existing = byId.get(sid);
     if (!existing) {
+      // §6.4: also collapse legacy twins that share content fingerprint but not id.
+      const dup = findDuplicateTollLedgerEntry(tx, ledgerAsList);
+      if (dup) {
+        fingerprintCollapsed++;
+        const keep = byId.get(String(dup.id)) || dup;
+        const legacyTripId = tx.tripId ?? tx.metadata?.tripId ?? null;
+        if (legacyTripId && !keep.tripId && !keep.metadata?.tripId) {
+          keep.tripId = String(legacyTripId);
+          keep.metadata = { ...(keep.metadata || {}), tripId: String(legacyTripId) };
+          linkBackfilled++;
+        }
+        continue;
+      }
       byId.set(sid, tx);
+      ledgerAsList.push(tx);
       legacyAdded++;
       continue;
     }
@@ -1506,10 +1526,13 @@ async function loadMergedTollTxArray(c?: Context): Promise<any[]> {
       linkBackfilled++;
     }
   }
-  if (legacyAdded > 0 || linkBackfilled > 0) {
+  if (legacyAdded > 0 || linkBackfilled > 0 || fingerprintCollapsed > 0) {
     console.log(
       `[TollMerge] Merged ${legacyAdded} toll transaction(s) from transaction:* not in toll_ledger` +
-        (linkBackfilled > 0 ? `; backfilled ${linkBackfilled} legacy trip link(s)` : ""),
+        (linkBackfilled > 0 ? `; backfilled ${linkBackfilled} legacy trip link(s)` : "") +
+        (fingerprintCollapsed > 0
+          ? `; fingerprint-collapsed ${fingerprintCollapsed} legacy twin(s)`
+          : ""),
     );
   }
   const merged = Array.from(byId.values());
@@ -3726,12 +3749,29 @@ export async function invalidateStaleTollMatchesForTrip(
 
 /**
  * Delete a toll ledger entry.
+ * Reverses active toll_usage financial_events before removing the ledger row
+ * (orphan events otherwise inflate tag spend forever — toll inflation audit).
  */
 async function deleteTollLedgerEntry(id: string): Promise<boolean> {
   const existing = await getTollLedgerEntry(id);
   if (!existing) return false;
   const ctx = getTollContext();
   if (ctx && !belongsToOrg(existing as unknown as Record<string, unknown>, ctx)) return false;
+  try {
+    const { reverseTollUsageEventsForSourceIds } = await import("./toll_financial_reset.ts");
+    const rev = await reverseTollUsageEventsForSourceIds([id], "toll_ledger_deleted");
+    if (rev.errors.length) {
+      console.warn(
+        `[TollLedgerStorage] toll_usage reverse warnings toll_ledger=${id}:`,
+        rev.errors.join("; "),
+      );
+    }
+  } catch (e: any) {
+    console.warn(
+      `[TollLedgerStorage] toll_usage reverse failed (continuing delete) toll_ledger=${id}:`,
+      e?.message || e,
+    );
+  }
   await kv.del(`${TOLL_LEDGER_PREFIX}${id}`);
   try {
     await deleteCanonicalLedgerBySource("transaction", [id]);
@@ -4395,6 +4435,17 @@ export async function voidTollLedgerEntryHandler(c: Context) {
         },
       ],
     };
+
+    // Reverse toll_usage before zeroing — saveTollLedgerEntry skips post when abs=0.
+    try {
+      const { reverseTollUsageEventsForSourceIds } = await import("./toll_financial_reset.ts");
+      const rev = await reverseTollUsageEventsForSourceIds([id], "toll_ledger_voided");
+      if (rev.errors.length) {
+        console.warn(`[voidToll] toll_usage reverse warnings:`, rev.errors.join("; "));
+      }
+    } catch (revErr: any) {
+      console.warn(`[voidToll] toll_usage reverse failed:`, revErr?.message || revErr);
+    }
 
     await saveTollLedgerEntry(updated, c);
 

@@ -112,10 +112,18 @@ function isHandledToll(tx: any): boolean {
   );
 }
 
+/** Classify payment method: cash | tag | unknown (missing PM is not silently tag). */
+export function classifyTollPaymentMethod(
+  paymentMethod: unknown,
+): 'cash' | 'tag' | 'unknown' {
+  const pm = String(paymentMethod ?? '').trim().toLowerCase();
+  if (!pm) return 'unknown';
+  if (pm.includes('cash')) return 'cash';
+  return 'tag';
+}
+
 function isCashPaid(tx: any): boolean {
-  const pm = String(tx?.paymentMethod || "").toLowerCase();
-  // Receipt is documentation only — payment method controls cash wash.
-  return pm.includes("cash");
+  return classifyTollPaymentMethod(tx?.paymentMethod) === 'cash';
 }
 
 function isTopUpLike(tx: any): boolean {
@@ -793,12 +801,14 @@ export async function rebuildDriverFinancialPeriod(
   for (const tx of weekTolls) {
     const amt = Math.abs(Number(tx.amount) || 0);
     const handled = isHandledToll(tx);
-    const cash = isCashPaid(tx);
+    const pmClass = classifyTollPaymentMethod(tx?.paymentMethod);
+    const cash = pmClass === "cash";
     // Spend from ledger unless PROJECTION_EVENTS_TOLLS (events aggregated after finEvents load).
     if (!useTollEvents) {
       tollSpend += amt;
       if (cash) tollCashSpend += amt;
-      else tollTagSpend += amt;
+      else if (pmClass === "tag") tollTagSpend += amt;
+      // unknown PM: counts in total only → toll_spend_split blocks close
       if (cash && handled) tollCashWashEligible += amt;
     }
     if (isPlatformReimbursedPlazaToll(tx)) plazaReimbursed += amt;
@@ -829,6 +839,7 @@ export async function rebuildDriverFinancialPeriod(
 
   // Cash-wash trips with no linked tag = extra plaza cash (same as Toll Recon).
   // Pending unlinked trips block finalization without crediting wash.
+  // When toll spend is event-sourced, trip wash must not double-count spend (§6.5).
   const linkedTripIds = collectLinkedTripIds(weekTolls);
   for (const trip of context.scopedTrips || []) {
     const anchorDate = fleetCalendarDay(String(trip.dropoffTime || trip.date || ""), timezone);
@@ -836,8 +847,10 @@ export async function rebuildDriverFinancialPeriod(
 
     if (isTripCashWashSpend(trip, linkedTripIds)) {
       const amt = Math.abs(Number(trip.tollCharges) || 0);
-      tollSpend += amt;
-      tollCashSpend += amt;
+      if (!useTollEvents) {
+        tollSpend += amt;
+        tollCashSpend += amt;
+      }
       tollCashWashEligible += amt;
       tollReconciledCount++;
       if (persistLines) {
@@ -990,8 +1003,8 @@ export async function rebuildDriverFinancialPeriod(
       const payload = (ev.payload && typeof ev.payload === "object"
         ? ev.payload
         : {}) as Record<string, unknown>;
-      const pm = String(payload.paymentMethod || "").toLowerCase();
-      const cash = pm.includes("cash");
+      const pmClass = classifyTollPaymentMethod(payload.paymentMethod);
+      const cash = pmClass === "cash";
       const stage = String(payload.workflowStage || "");
       const handled =
         isTerminalStage(stage) ||
@@ -1000,7 +1013,7 @@ export async function rebuildDriverFinancialPeriod(
         !!payload.resolution;
       tollSpend = round2(tollSpend + amt);
       if (cash) tollCashSpend = round2(tollCashSpend + amt);
-      else tollTagSpend = round2(tollTagSpend + amt);
+      else if (pmClass === "tag") tollTagSpend = round2(tollTagSpend + amt);
       if (cash && handled) tollCashWashEligible = round2(tollCashWashEligible + amt);
     }
   }
@@ -1381,6 +1394,62 @@ export async function rebuildDriverFinancialPeriod(
     context.organizationId,
   );
 
+  // Publish earnings draft from engine amounts BEFORE statement→projection override.
+  // Otherwise PROJECTION_READS_WEEK_STATEMENTS stamps the prior closed statement
+  // onto DFP while the matching draft is only written after upsert (cards stay stale).
+  if (organizationIdResolved) {
+    try {
+      const fareIds = (context.fareEntries || [])
+        .map((e: { id?: string; sourceId?: string }) => String(e.id || e.sourceId || ""))
+        .filter(Boolean)
+        .slice(0, 200);
+      const tipIds = (context.tipEntries || [])
+        .map((e: { id?: string; sourceId?: string }) => String(e.id || e.sourceId || ""))
+        .filter(Boolean)
+        .slice(0, 100);
+      const sourceRowIds = [...new Set([...fareIds, ...tipIds, `cash:${periodAnchor}`])];
+
+      const earningsAmountsMinor = {
+        passengerCash: Math.round(round2(Math.max(0, cashCollected)) * 100),
+        driverShare: Math.round(round2(driverShare) * 100),
+        companyShare: Math.round(round2(fleetShare) * 100),
+        tipsPaidToDriver: Math.round(round2(Number(share.tipsPaidToDriver) || 0) * 100),
+        gross: Math.round(round2(earningsGross) * 100),
+        settlementAmount: Math.round(round2(row.settlementAmount) * 100),
+      };
+      const latestEarnings = await getLatestWeekStatement(
+        organizationIdResolved,
+        driverId,
+        periodAnchor,
+        "earnings",
+      );
+      const unchanged =
+        latestEarnings &&
+        latestEarnings.status === "draft" &&
+        JSON.stringify(latestEarnings.amountsMinor) === JSON.stringify(earningsAmountsMinor);
+      if (!unchanged) {
+        await publishWeekStatement({
+          kind: "earnings",
+          organizationId: organizationIdResolved,
+          driverId,
+          weekKey: periodAnchor,
+          amountsMinor: earningsAmountsMinor,
+          sourceRowIds,
+          status: "draft",
+          closedBy: null,
+          closeReason: "commission_cash_engines_preview",
+        });
+      }
+    } catch (stmtErr) {
+      console.warn(
+        "[DriverFinancialPeriods] earnings week statement publish (pre-override) failed (non-fatal)",
+        driverId,
+        periodAnchor,
+        stmtErr,
+      );
+    }
+  }
+
   // Pass E: shadow-compare when statements exist; when flag on, override amounts
   // BEFORE cashPersist so settlement + metadata persist the statement SoT.
   try {
@@ -1446,6 +1515,9 @@ export async function rebuildDriverFinancialPeriod(
             row.tollSpend = statementAmountMajor(toll, "totalSpend");
             row.tollChargedToDriver = statementAmountMajor(toll, "chargedToDriver");
             row.tollReimbursed = statementAmountMajor(toll, "reimbursed");
+            // Statement carries cash/tag split — overwrite both so total and parts stay tied (§6.1).
+            row.tollCashSpend = statementAmountMajor(toll, "cashWashSpend");
+            row.tollTagSpend = statementAmountMajor(toll, "tagSpend");
             tollChargedSource = "events";
           }
           if (earnings) {
@@ -1592,62 +1664,7 @@ export async function rebuildDriverFinancialPeriod(
   const periodId = saved?.id as string;
   row.id = periodId;
 
-  // Close Program Pass 3 / H-7: publish earnings from commission + cash engine
-  // outputs (share / cashBase), not from the persisted period id alone. Source
-  // ids are the fare/tip/trip inputs that produced the amounts.
-  if (organizationIdResolved && periodId) {
-    try {
-      const fareIds = (context.fareEntries || [])
-        .map((e: { id?: string; sourceId?: string }) => String(e.id || e.sourceId || ""))
-        .filter(Boolean)
-        .slice(0, 200);
-      const tipIds = (context.tipEntries || [])
-        .map((e: { id?: string; sourceId?: string }) => String(e.id || e.sourceId || ""))
-        .filter(Boolean)
-        .slice(0, 100);
-      const sourceRowIds = [...new Set([...fareIds, ...tipIds, `cash:${periodAnchor}`])];
-
-      const earningsAmountsMinor = {
-        passengerCash: Math.round(round2(Math.max(0, cashCollected)) * 100),
-        driverShare: Math.round(round2(driverShare) * 100),
-        companyShare: Math.round(round2(fleetShare) * 100),
-        tipsPaidToDriver: Math.round(round2(Number(share.tipsPaidToDriver) || 0) * 100),
-        gross: Math.round(round2(earningsGross) * 100),
-        settlementAmount: Math.round(round2(row.settlementAmount) * 100),
-      };
-      const latestEarnings = await getLatestWeekStatement(
-        organizationIdResolved,
-        driverId,
-        periodAnchor,
-        "earnings",
-      );
-      const unchanged =
-        latestEarnings &&
-        latestEarnings.status === "draft" &&
-        JSON.stringify(latestEarnings.amountsMinor) === JSON.stringify(earningsAmountsMinor);
-      if (!unchanged) {
-        // Pass 5.2: rebuild publishes draft only — sealEarningsWeek closes independently.
-        await publishWeekStatement({
-          kind: "earnings",
-          organizationId: organizationIdResolved,
-          driverId,
-          weekKey: periodAnchor,
-          amountsMinor: earningsAmountsMinor,
-          sourceRowIds,
-          status: "draft",
-          closedBy: null,
-          closeReason: "commission_cash_engines_preview",
-        });
-      }
-    } catch (stmtErr) {
-      console.warn(
-        "[DriverFinancialPeriods] earnings week statement publish failed (non-fatal)",
-        driverId,
-        periodAnchor,
-        stmtErr,
-      );
-    }
-  }
+  // Earnings week_statement draft is published before statement→DFP override (above).
 
   // Line drilldown only on single-period rebuild (bulk skips to stay under CPU limits).
   if (persistLines && periodId) {

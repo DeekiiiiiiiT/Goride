@@ -249,16 +249,10 @@ function ocrPlazaName(t: TollIntegrityLike): string {
 }
 
 /**
- * Audit 1.1 signature: cash, no batch, highway-as-plaza (Transjam spelling soup)
- * and/or fabricated manual_* trip ids — exclude from spend until deleted.
- * Must work on both ledger rows and tollLedgerToTxShape API rows.
- *
- * merchantHighway / highway alone do NOT quarantine when a real (non-Transjam)
- * OCR or display plaza exists — that is normal SSOT metadata, not synthetic.
+ * Structural synthetic-row signals (fabricated manual_* trip ids, highway-as-plaza,
+ * no batch) — apply to ALL payment methods (toll inflation audit §6.3).
  */
-export function matchesSyntheticCashTollSignature(t: TollIntegrityLike): boolean {
-  const pm = String(t.paymentMethod || '').toLowerCase();
-  if (!pm.includes('cash')) return false;
+export function matchesSyntheticTollStructuralSignature(t: TollIntegrityLike): boolean {
   if (resolveTollBatchId(t)) return false;
   if (t.metadata?.quarantined === false) return false;
   if (t.metadata?.source === 'refund_resolution') return false;
@@ -277,14 +271,11 @@ export function matchesSyntheticCashTollSignature(t: TollIntegrityLike): boolean
     displayPrimary.toLowerCase() !== ocr.toLowerCase() &&
     looksLikeTransjamHighwayName(displayPrimary);
 
-  // Highway stuffed into plaza/vendor/ledgerPlaza (true synthetic / bad SSOT).
   if (displayIsHighway || plazaMismatch) return true;
 
-  // Real plaza already known — merchantHighway is expected SSOT, not quarantine.
   const hasNonHighwayDisplay = displayFields.some((n) => !looksLikeTransjamHighwayName(n));
   if (ocr || hasNonHighwayDisplay) return false;
 
-  // No real plaza anchor: highway-only merchant meta or migration junk.
   const meta = t.metadata || {};
   const merchantHighwayLike = [meta.highway, meta.merchantHighway].some((n) =>
     looksLikeTransjamHighwayName(n == null ? '' : String(n)),
@@ -293,6 +284,14 @@ export function matchesSyntheticCashTollSignature(t: TollIntegrityLike): boolean
   if (hasMigrationAuditSource(t) && merchantHighwayLike) return true;
 
   return false;
+}
+
+/**
+ * Audit 1.1 signature — structural signals for every payment method, plus any
+ * cash-only heuristics. Missing paymentMethod is not exempt (defaults were tag).
+ */
+export function matchesSyntheticCashTollSignature(t: TollIntegrityLike): boolean {
+  return matchesSyntheticTollStructuralSignature(t);
 }
 
 export function isTollQuarantined(t: TollIntegrityLike): boolean {

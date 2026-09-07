@@ -138,7 +138,7 @@ describe('DriverFinancialsTab smoke', () => {
         transactions={[]}
         allTrips={[]}
         quotaConfig={null}
-        lifetimePlatformStats={null}
+        periodPlatformStats={null}
         onFinancialPeriodSelect={() => {}}
         financialBundle={null}
         weeklyPeriodData={null}

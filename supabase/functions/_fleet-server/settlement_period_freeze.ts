@@ -167,6 +167,57 @@ export function markPeriodFrozen(
   return meta;
 }
 
+export type ClearFreezeMetaInput = {
+  actorId: string;
+  reason: string;
+  /** Defaults to now(). */
+  reopenedAt?: string;
+};
+
+/**
+ * Clear calendar freeze for an admin reopen (pure — caller persists).
+ * Archives the live seal into financeCore.reopenHistory[] and clears live
+ * freeze flags so isPeriodFrozen() returns false until the next close.
+ */
+export function clearPeriodFreeze(
+  row: { metadata?: Record<string, unknown> | null } | null | undefined,
+  { actorId, reason, reopenedAt }: ClearFreezeMetaInput,
+): Record<string, unknown> {
+  const meta = { ...(row?.metadata || {}) } as Record<string, unknown>;
+  const financeCore = { ...((meta.financeCore as Record<string, unknown>) || {}) };
+  const reopenedTs = reopenedAt || new Date().toISOString();
+
+  const prior = {
+    closeHash: financeCore.closeHash ?? null,
+    signedAt: financeCore.signedAt ?? null,
+    closedBy: financeCore.closedBy ?? null,
+    closeReason: financeCore.closeReason ?? null,
+    closeSourceRowIds: financeCore.closeSourceRowIds ?? null,
+    closeEngineVersion: financeCore.closeEngineVersion ?? null,
+    reopenedAt: reopenedTs,
+    reopenedBy: actorId,
+    reopenReason: reason,
+  };
+  const history = Array.isArray(financeCore.reopenHistory)
+    ? [...(financeCore.reopenHistory as unknown[])]
+    : [];
+  history.push(prior);
+  financeCore.reopenHistory = history;
+
+  financeCore.periodFrozen = false;
+  delete financeCore.signedAt;
+  delete financeCore.closeHash;
+  delete financeCore.closedBy;
+  delete financeCore.closeReason;
+  delete financeCore.closeSourceRowIds;
+  delete financeCore.closeEngineVersion;
+
+  meta.periodFrozen = false;
+  meta.signedWeek = false;
+  meta.financeCore = financeCore;
+  return meta;
+}
+
 /** Collect / Pay / Write-off / runs — week must be fully over (periodEnd + 1). */
 export function assertPeriodEndedForSettlement(
   weekAnchor: string,

@@ -238,6 +238,18 @@ describe('tollLedgerIntegrity', () => {
     expect(isTollIncludedInSpend(row)).toBe(false);
   });
 
+  it('quarantines tag rows with fabricated manual trip ids (structural, all PM)', () => {
+    const row = {
+      paymentMethod: 'tag_balance',
+      batchId: null,
+      plaza: 'TransJam Highways',
+      tripId: 'manual_abc',
+      metadata: {},
+    };
+    expect(matchesSyntheticCashTollSignature(row)).toBe(true);
+    expect(isTollIncludedInSpend(row)).toBe(false);
+  });
+
   it('flags Vineyards cash OCR $850 vs tag $780', () => {
     expect(
       isSuspiciousVineyardsCashRate({

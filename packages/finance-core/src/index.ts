@@ -111,6 +111,8 @@ export type { LedgerEventSumRow, LedgerReconDrift } from './periodLedgerRecon.ts
 export {
   isTollIncludedInSpend,
   isTollLedgerVoided,
+  matchesSyntheticCashTollSignature,
+  matchesSyntheticTollStructuralSignature,
 } from './tollLedgerIntegrity.ts';
 export type { TollIntegrityLike } from './tollLedgerIntegrity.ts';
 export { sumExcludedCashFromWeek, isCashPaidTollRow } from './periodTollCashSpend.ts';
@@ -137,6 +139,7 @@ export {
   mapRowToWeekStatement,
   weekStatementToRow,
   hashWeekStatement,
+  hasPendingRestatementDrafts,
   shadowCompareStatementVsProjection,
   shadowCompareStatementsVsProjection,
   statementAmountMajor,
@@ -175,6 +178,16 @@ export type {
   CloseTollStatement,
   CloseEarningsStatement,
 } from './closeInvariants.ts';
+export {
+  filterActiveTollUsageEvents,
+  reconcileTollUsageEventsVsLedger,
+  tollEventLedgerHasDrift,
+} from './tollEventLedgerRecon.ts';
+export type {
+  TollUsageEventLike,
+  TollLedgerSpendLike,
+  TollEventLedgerRecon,
+} from './tollEventLedgerRecon.ts';
 export * from './fixedExpenseOccurrences.ts';
 export * from './ledgerMoneyAggregate.ts';
 export * from './expenseHubJournal.ts';

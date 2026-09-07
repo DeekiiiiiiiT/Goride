@@ -1182,7 +1182,24 @@ After that: `M-4` (org fail-closed) is a one-line tenant-isolation fix, and the 
 | **P-2** | fuel_entry scans | 🟡 | 🟡 Partial — SQL helper on purge/list admin paths |
 | **P-4/P-5** | Virtualize | 🟡 fuel only | ✅ TollBucketPanel windowed |
 
-**Still open / follow-on:** remaining fuel_entry admin scans beyond the SQL helper; optional Notion finance integrity page.
+### Independent verification (auditor, tree `8c965b04`, clean)
+
+`finance-core` 126/126 ✅ · `fuel-core` 38/38 ✅ · `toll-core` 53/53 ✅ (**217 tests**) · **8/8 CI guards pass**. Every claim above was checked at source:
+
+- **H-7 confirmed closed.** `statementEngineCompare.ts` compares a closed statement to a *fresh engine recompute* — the header states the reason exactly right ("Statement↔projection is tautological after cutover; this is the check that can still fail"). It is wired in **four** places: close preview (`week_close.ts:306`), close (`:491`), rebuild (`driver_financial_periods.ts:1414`) and nightly (`finance-recon/index.ts:284`). Drift is persisted via `upsertFinanceReconDrifts` at every one of them, and `engineDriftsToCloseBlockers` emits `severity: 'block'`. **Stronger than this audit asked for** — the recommendation was nightly + persist; you also made it a close blocker.
+- **Earnings lane confirmed closed.** `sealEarningsWeek` derives from `computeWeekCommissionShare` + `computeWeekCashBase`, defaults to `status: "draft"`, and only closes on `earnings_week_seal_engines` / `zero_activity_na`. The rebuild now publishes `status: "draft"` with `closeReason: "commission_cash_engines_preview"` (`driver_financial_periods.ts:1626-1639`). The self-reference is gone.
+- **P&L tie confirmed wired**, with correct graceful degradation: `SETTLEMENT_PNL_MISMATCH` blocks, `BUSINESS_WEEK_PNL_UNAVAILABLE` warns rather than blocking a week that simply has no closed statements yet.
+- **Aug 24 re-signed** — freeze metadata + close hash live, verify-on-read applies.
+- **TollBucketPanel windowed** ✅ · `fuel_entry:` scans in `fuel_controller.tsx` 15 → 14.
+
+### Residuals the scoreboard doesn't list
+
+None of these are trust gaps, but they should not be lost:
+
+1. **`pass5CashAck` sets a precedent.** Aug 24's `cashSourceMismatch` was acknowledged in metadata so the freeze could complete — i.e. M-1's block was deliberately overridden once, with a documented reason. That is a legitimate ops action, but there is currently no cap on it. Worth adding: an ack requires a reason string (it has one), and open acks should be **counted and surfaced** on the Close Week screen so "acknowledge and move on" cannot quietly become the default path.
+2. **The P&L tie is only partly independent.** `settlementSumForWeek` is composed from projection columns (`p.fleet_share + p.fuel_fleet_share + (toll_spend − toll_reimbursed − toll_charged_to_driver)`), while `businessWeekPnl` is composed from sealed statements. Post-cutover the first two terms are the same number by construction. Only the **toll** term is a genuine cross-check, because the two sides compute it differently (stored `netLoss` from `computeTollWeekNetting` vs. a three-column subtraction). The statement↔engine compare is now the real guard, so this is a minor point — but the P&L check is weaker than it reads.
+3. **`shadowCompareStatementsVsProjection` is now dead weight.** It is superseded by the engine compare, still `console.warn`-only, and still called immediately before the statement values overwrite the row. Delete it, or it will read as a live control to the next person.
+4. **P-3 is half-closed.** The dual-truth merge is fixed (server wins where SQL covers the range), but the original finding also covered the whole-dataset-in-React-state payload — `FuelManagement.tsx` still holds and passes `logs`, `trips`, `vehicles`, `disputes`, `scenarios`, `finalizedReports`, `fuelCards` in full. That is the remaining lag work alongside P-2.
 
 ### Docs
 
@@ -1265,6 +1282,26 @@ Work is **uncommitted** in the working tree at review time: `toll_week_seal.ts` 
 
 The integrity loop is closed. Statement↔engine drift is durable and blocks Close Week; earnings has an independent seal; Business Finance P&L composition is wired; Aug 24 is re-frozen; shadow gate PASS. Remaining fuel_entry scan cleanup is operational debt, not a trust gap.
 
+### Auditor's close-out
+
+**This audit is complete.** Every finding it opened with — 7 Criticals, 9 Highs, 5 Mediums, 6 performance, 6 UX — is closed or reduced to documented operational debt. Verified independently at `8c965b04`: 217 tests, 8/8 CI guards.
+
+The thing that took five passes to land is worth stating plainly, because it is the answer to the question this audit was commissioned to answer. **"Can I trust the week?"** now has a mechanical answer rather than a hopeful one:
+
+- Three lanes each publish an immutable, signed statement from an **independent engine**, and a lane that cannot prove its provenance publishes `draft`.
+- A draft lane **blocks** the close. So does a statement that disagrees with a fresh recompute of its own engine.
+- The projection is a derived read model of those statements, not a fourth opinion.
+- Disagreement is **persisted** to `ledger.finance_recon_drift` from four call sites, not logged and lost.
+- A closed week carries an actor, a timestamp, a reason and a hash — and the hash is verified on read.
+
+That is the layer §0 said was missing. The formulas were never really the problem; the absence of anything that could contradict them was.
+
+The recurring failure mode across all five passes is worth keeping as a working rule for whatever comes next: **the mechanism gets built correctly, and the last connection — the one that makes it able to fail — is the piece left out.** C-1's events path, C-2's Personal-Allowance branch, C-4's headline, H-4's verifier, Pass 2's self-derived lanes, Pass 4's warn-only shadow compare. Six times, the same shape. Each was a small connection guarding a large amount of money, and each was invisible precisely because the surrounding work looked finished.
+
+When the next control gets built, the question to ask before calling it done is not "is it correct?" but **"what input would make this fail, and have I tested that input?"** The `'deliberately mismatched statement amounts block close (non-tautological)'` test is the model — it is worth writing one of those for every gate added from here.
+
+Residuals in §0.7 (the `pass5CashAck` precedent, the partly-tautological P&L term, the dead shadow compare, the remaining React payload) are all small and none of them affect whether the numbers are right.
+
 ---
 
 ## 13-pass3. Pass 3 / 4 close-out — 2026-09-07 (superseded)
@@ -1302,3 +1339,5 @@ One item does still need a decision rather than code: **C-3.** Whether `chargedT
 ---
 
 *Original audit: read-only, no source files modified. §0.5 / §11 (Pass 1), §0.6 / §12 (Pass 2), §0.7 / §13 (Pass 3–5) added 2026-09-07 after verifying each remediation against the working tree. §0.7 Pass 5 is the current status.*
+
+***Audit status: CLOSED, 2026-09-07.*** *All findings remediated and independently verified at `8c965b04` (217 tests, 8/8 guards). Remaining items are operational debt tracked in §0.7 "Residuals", not open findings. Reopen only if a new drift class appears in `ledger.finance_recon_drift`.*

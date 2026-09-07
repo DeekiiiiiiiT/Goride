@@ -721,4 +721,96 @@ app.post(`/make-server-37f42386/toll/periods/:weekKey/seal`, requirePermission("
   }
 });
 
+// ─── POST /toll/periods/:weekKey/repair-orphan-events ───────────────────────
+// Reverse active toll_usage events whose source_id no longer resolves to a live
+// toll_ledger row (toll tag inflation audit). Optional driverId scopes the sweep.
+app.post(
+  `/make-server-37f42386/toll/periods/:weekKey/repair-orphan-events`,
+  requirePermission("toll.manage"),
+  async (c: Context) => {
+    try {
+      const orgId = getOrgId(c);
+      if (!orgId) return c.json({ error: "ORG_REQUIRED" }, 400);
+      const weekKey = String(c.req.param("weekKey") || "").slice(0, 10);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(weekKey)) {
+        return c.json({ error: "weekKey (YYYY-MM-DD Monday) is required" }, 400);
+      }
+      const body = (await c.req.json().catch(() => ({}))) as {
+        driverId?: string;
+        reason?: string;
+        rebuild?: boolean;
+      };
+      const {
+        reverseOrphanTollUsageEventsForWeek,
+        summarizeTollUsageOrphansForWeek,
+      } = await import("./toll_financial_reset.ts");
+
+      const before = await summarizeTollUsageOrphansForWeek({
+        periodAnchor: weekKey,
+        driverId: body.driverId || null,
+      });
+      const result = await reverseOrphanTollUsageEventsForWeek({
+        periodAnchor: weekKey,
+        driverId: body.driverId || null,
+        reason: body.reason || "orphan_toll_usage_no_ledger_row",
+      });
+
+      let periodsRebuilt = 0;
+      const rebuildErrors: string[] = [];
+      if (body.rebuild !== false && result.eventsReversed > 0) {
+        try {
+          const { rebuildPeriodsForAnchors } = await import("./driver_financial_periods.ts");
+          if (body.driverId) {
+            periodsRebuilt = await rebuildPeriodsForAnchors(String(body.driverId), [weekKey]);
+          } else {
+            const { createClient } = await import("npm:@supabase/supabase-js@2");
+            const sbClient = createClient(
+              Deno.env.get("SUPABASE_URL")!,
+              Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+            );
+            const { data: periods } = await sbClient
+              .from("driver_financial_periods")
+              .select("driver_id")
+              .eq("period_anchor", weekKey)
+              .eq("organization_id", orgId);
+            const driverIds = [
+              ...new Set((periods || []).map((p) => String(p.driver_id || "")).filter(Boolean)),
+            ];
+            for (const driverId of driverIds) {
+              try {
+                periodsRebuilt += await rebuildPeriodsForAnchors(driverId, [weekKey]);
+              } catch (re: any) {
+                rebuildErrors.push(`rebuild ${driverId}: ${re?.message || re}`);
+              }
+            }
+          }
+        } catch (rebuildErr: any) {
+          rebuildErrors.push(`rebuild: ${rebuildErr?.message || rebuildErr}`);
+        }
+      }
+
+      const after = await summarizeTollUsageOrphansForWeek({
+        periodAnchor: weekKey,
+        driverId: body.driverId || null,
+      });
+
+      const errors = [...result.errors, ...rebuildErrors];
+      return c.json({
+        success: errors.length === 0,
+        weekKey,
+        before,
+        eventsReversed: result.eventsReversed,
+        orphanCount: result.orphanCount,
+        orphanAmountMajor: result.orphanAmountMajor,
+        reversedEventIds: result.reversedEventIds,
+        periodsRebuilt,
+        after,
+        errors,
+      });
+    } catch (e: any) {
+      return safeErrorResponse(c, e, "TollPeriodController.repairOrphanEvents");
+    }
+  },
+);
+
 export default app;

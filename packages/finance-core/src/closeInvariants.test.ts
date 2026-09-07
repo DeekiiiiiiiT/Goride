@@ -13,6 +13,8 @@ const tyingWeek: CloseInvariantInput = {
     fuel_deduction: 1200,
     fuel_fleet_share: 800,
     toll_spend: 5920,
+    toll_cash_spend: 640,
+    toll_tag_spend: 5280,
     toll_charged_to_driver: 2340,
     cash_collected: 8000,
     driver_share: 25000,
@@ -128,6 +130,8 @@ describe('checkCloseInvariants (§6.4)', () => {
       fuel_deduction: 1200,
       fuel_fleet_share: 800,
       toll_spend: 5920,
+      toll_cash_spend: 640,
+      toll_tag_spend: 5280,
       toll_charged_to_driver: 2340,
       toll_reimbursed: 1500,
       cash_collected: 8000,
@@ -219,5 +223,42 @@ describe('checkCloseInvariants (§6.4)', () => {
     const w = blockers.find((b) => b.code === 'BUSINESS_WEEK_PNL_UNAVAILABLE');
     expect(w?.severity).toBe('warn');
     expect(canCloseWeek(blockers)).toBe(true);
+  });
+
+  it('blocks when toll_spend ≠ cash + tag (TOLL_SPEND_SPLIT)', () => {
+    const blockers = checkCloseInvariants({
+      ...tyingWeek,
+      period: {
+        ...tyingWeek.period,
+        toll_spend: 0,
+        toll_cash_spend: 0,
+        toll_tag_spend: 1110,
+      },
+      tollStatement: {
+        totalSpend: 0,
+        chargedToDriver: 2340,
+        reimbursed: 0,
+        netLoss: 0,
+      },
+    });
+    expect(blockers.some((b) => b.code === 'TOLL_SPEND_SPLIT')).toBe(true);
+    expect(canCloseWeek(blockers)).toBe(false);
+  });
+
+  it('blocks when toll_usage events are orphaned from the ledger', () => {
+    const blockers = checkCloseInvariants({
+      ...tyingWeek,
+      tollEventLedger: {
+        orphanCount: 24,
+        orphanAmountMajor: 8500,
+        eventSpendMajor: 13760,
+        ledgerSpendMajor: 5260,
+      },
+    });
+    const orphan = blockers.find((b) => b.code === 'TOLL_EVENT_ORPHANED');
+    expect(orphan).toBeTruthy();
+    expect(orphan?.severity).toBe('block');
+    expect(orphan?.delta).toBe(8500);
+    expect(canCloseWeek(blockers)).toBe(false);
   });
 });

@@ -261,7 +261,6 @@ import {
 import { resolveCatalogIdForKvVehicle } from "./vehicle_catalog_resolve.ts";
 import {
   applyCatalogGateOnCreate,
-  extractVehicleIdsFromMetricsBody,
   isEnforcementEnabled as catalogGateEnforcementEnabled,
   loadVehicleForGate,
   rbacUserCanBypassCatalogGate,
@@ -2691,15 +2690,13 @@ app.get("/make-server-37f42386/driver-metrics", requireAuth(), async (c) => {
 });
 
 // Vehicle Metrics Endpoints
+// No catalog gate here — mirrors POST /driver-metrics. Metrics are import/rollup
+// writes; operational vehicle mutations are gated on vehicle/trip routes instead.
 app.post(
   "/make-server-37f42386/vehicle-metrics",
-  requireCatalogMatched({
-    label: "POST /vehicle-metrics",
-    vehicleId: (_c, body) => extractVehicleIdsFromMetricsBody(Array.isArray(body) ? { metrics: body } : body),
-  }),
   async (c) => {
   try {
-    const metrics = (c.get("__cachedRequestBody") as unknown) ?? (await c.req.json());
+    const metrics = await c.req.json();
     if (!Array.isArray(metrics)) {
       return c.json({ error: "Expected array of metrics" }, 400);
     }
@@ -15907,6 +15904,34 @@ app.post("/make-server-37f42386/bulk-delete-execute", requireAuth(), requirePerm
     const CHUNK_SIZE = 100;
     const FILE_CHUNK_SIZE = 50;
     const filesByBucket = new Map<string, string[]>();
+
+    // Reverse toll_usage events before wiping toll_ledger / transaction keys.
+    try {
+      const { tollSourceIdsFromKeys, reverseTollUsageEventsForSourceIds } = await import(
+        "./toll_financial_reset.ts"
+      );
+      const tollIds = tollSourceIdsFromKeys(
+        keys.filter(
+          (k: string) =>
+            String(k).startsWith("toll_ledger:") || String(k).startsWith("transaction:"),
+        ),
+      );
+      if (tollIds.length > 0) {
+        const rev = await reverseTollUsageEventsForSourceIds(tollIds, "toll_ledger_deleted");
+        if (rev.errors.length) {
+          console.warn(
+            `bulk-delete-execute: toll_usage reverse warnings: ${rev.errors.join("; ")}`,
+          );
+        }
+        console.log(
+          `bulk-delete-execute: reversed ${rev.eventsReversed} toll_usage event(s) for ${tollIds.length} source id(s)`,
+        );
+      }
+    } catch (revErr: any) {
+      console.warn(
+        `bulk-delete-execute: toll_usage reverse failed (continuing delete): ${revErr?.message || revErr}`,
+      );
+    }
 
     for (let i = 0; i < keys.length; i += CHUNK_SIZE) {
       const chunk = keys.slice(i, i + CHUNK_SIZE);

@@ -830,17 +830,32 @@ function ImportsPageInner({ onNavigate }: ImportsPageProps) {
           setCommitProgress(15);
           
           if (auditState) {
-              // PHASE 7: NEW SAVE FLOW (Mega-JSON)
-              const fleetState = {
-                  drivers: auditState.sanitized.drivers.map(d => d.data),
-                  vehicles: auditState.sanitized.vehicles.map(v => v.data),
-                  trips: tripsForSave,
-                  financials: auditState.sanitized.financials.data,
-                  metadata: auditState.sanitized.metadata,
-                  insights: auditState.sanitized.insights
-              };
-              
-              await api.saveFleetState(fleetState);
+              // PHASE 7 mega-JSON (/fleet/sync) returns empty gateway 503 on real Uber
+              // import payloads (~128KB) — edge isolate never serves the request.
+              // Use chunked legacy writes (same pattern as data-import-executor).
+              const drivers = auditState.sanitized.drivers.map(d => d.data);
+              const vehicles = auditState.sanitized.vehicles.map(v => v.data);
+              const financials = auditState.sanitized.financials.data;
+
+              const TRIP_CHUNK = 15;
+              for (let i = 0; i < tripsForSave.length; i += TRIP_CHUNK) {
+                  await api.saveTrips(tripsForSave.slice(i, i + TRIP_CHUNK));
+              }
+              if (drivers.length > 0) {
+                  await api.saveDriverMetrics(drivers);
+              }
+              if (vehicles.length > 0) {
+                  try {
+                      await api.saveVehicleMetrics(vehicles);
+                  } catch (vmErr: any) {
+                      // Catalog gate 404s when import metric vehicleId is not in roster;
+                      // trips already saved — do not abort the import for secondary metrics.
+                      console.warn('[Import] vehicle metrics save skipped (non-fatal):', vmErr);
+                  }
+              }
+              if (financials) {
+                  await api.saveFinancials(financials);
+              }
               setCommitProgress(40);
               
           } else {

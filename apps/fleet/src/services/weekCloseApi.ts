@@ -4,6 +4,7 @@
  * Talks to fleet-server /settlements/week-close:
  *   GET  /settlements/week-close/preview?weekKey=YYYY-MM-DD  → dry-run lanes + blockers
  *   POST /settlements/week-close  { weekKey, reason }        → sign the week
+ *   POST /settlements/week-close/reopen { weekKey, reason, acknowledgeSettlementRisk? }
  *
  * The route is registered in supabase/functions/_fleet-server/index.tsx via
  * week_close_controller.tsx. Preview is read-only; POST runs the cross-system
@@ -32,6 +33,10 @@ export type WeekClosePreview = {
   blockers: CloseBlocker[];
   /** Pass 5: open statement↔engine drift rows for this org-week. */
   openEngineDriftCount?: number;
+  /** Draft restatement rows awaiting sign for this week. */
+  pendingRestatementCount?: number;
+  /** Frozen drivers with settlement money already moved. */
+  settlementRiskDriverCount?: number;
 };
 
 export type WeekCloseResult = {
@@ -44,6 +49,19 @@ export type WeekCloseResult = {
   perDriver: Array<{ driverId: string; closed: boolean; closeHash?: string; blockers: CloseBlocker[] }>;
 };
 
+export type WeekReopenResult = {
+  organizationId: string;
+  weekKey: string;
+  reopened: boolean;
+  driversReopened: number;
+  driversSkipped: number;
+  settlementRiskDrivers: Array<{
+    driverId: string;
+    settlementPaid: number;
+    settlementAmount: number;
+  }>;
+};
+
 /** True when the endpoint is genuinely absent (route not deployed yet). */
 export function isWeekCloseUnavailable(err: unknown): boolean {
   if (err instanceof WeekCloseApiError) return err.status === 404 || err.status === 501;
@@ -53,24 +71,37 @@ export function isWeekCloseUnavailable(err: unknown): boolean {
 
 export class WeekCloseApiError extends Error {
   readonly status: number;
-  constructor(message: string, status: number) {
+  readonly code?: string;
+  readonly details?: unknown;
+  constructor(message: string, status: number, code?: string, details?: unknown) {
     super(message);
     this.name = 'WeekCloseApiError';
     this.status = status;
+    this.code = code;
+    this.details = details;
   }
 }
 
-async function parseError(response: Response, fallback: string): Promise<string> {
+async function parseErrorPayload(
+  response: Response,
+  fallback: string,
+): Promise<{ message: string; code?: string; details?: unknown }> {
   try {
     const j = await response.json();
     if (j && typeof j === 'object') {
-      if (typeof (j as { error?: string }).error === 'string') return (j as { error: string }).error;
-      if (typeof (j as { message?: string }).message === 'string') return (j as { message: string }).message;
+      const code = typeof (j as { error?: string }).error === 'string'
+        ? (j as { error: string }).error
+        : undefined;
+      const message =
+        typeof (j as { message?: string }).message === 'string'
+          ? (j as { message: string }).message
+          : code || fallback;
+      return { message, code, details: (j as { details?: unknown }).details };
     }
   } catch {
     /* ignore */
   }
-  return fallback;
+  return { message: fallback };
 }
 
 export const weekCloseApi = {
@@ -80,7 +111,8 @@ export const weekCloseApi = {
       headers: await requireAuthHeaders(null),
     });
     if (!response.ok) {
-      throw new WeekCloseApiError(await parseError(response, 'Failed to load close preview'), response.status);
+      const err = await parseErrorPayload(response, 'Failed to load close preview');
+      throw new WeekCloseApiError(err.message, response.status, err.code, err.details);
     }
     return response.json() as Promise<WeekClosePreview>;
   },
@@ -92,9 +124,27 @@ export const weekCloseApi = {
       body: JSON.stringify({ weekKey, reason }),
     });
     if (!response.ok) {
-      throw new WeekCloseApiError(await parseError(response, 'Close week failed'), response.status);
+      const err = await parseErrorPayload(response, 'Close week failed');
+      throw new WeekCloseApiError(err.message, response.status, err.code, err.details);
     }
     return response.json() as Promise<WeekCloseResult>;
+  },
+
+  async reopen(
+    weekKey: string,
+    reason: string,
+    acknowledgeSettlementRisk = false,
+  ): Promise<WeekReopenResult> {
+    const response = await fetchWithRetry(`${BASE}/reopen`, {
+      method: 'POST',
+      headers: await requireAuthHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ weekKey, reason, acknowledgeSettlementRisk }),
+    });
+    if (!response.ok) {
+      const err = await parseErrorPayload(response, 'Re-open week failed');
+      throw new WeekCloseApiError(err.message, response.status, err.code, err.details);
+    }
+    return response.json() as Promise<WeekReopenResult>;
   },
 
   /** Heal fuel lane from Consumption money-strip amounts (force restates closed weeks). */
@@ -123,9 +173,77 @@ export const weekCloseApi = {
       }),
     });
     if (!response.ok) {
-      throw new WeekCloseApiError(await parseError(response, 'Fuel seal failed'), response.status);
+      const err = await parseErrorPayload(response, 'Fuel seal failed');
+      throw new WeekCloseApiError(err.message, response.status, err.code, err.details);
     }
     const j = (await response.json()) as { published?: number };
     return { published: Number(j.published) || 0 };
+  },
+
+  /** Force re-seal toll week statements from events / plaza netting. */
+  async sealToll(
+    weekKey: string,
+    opts?: { force?: boolean },
+  ): Promise<{ published: number }> {
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.financial}/toll/periods/${encodeURIComponent(weekKey)}/seal`,
+      {
+        method: 'POST',
+        headers: await requireAuthHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ force: opts?.force === true }),
+      },
+    );
+    if (!response.ok) {
+      const err = await parseErrorPayload(response, 'Toll seal failed');
+      throw new WeekCloseApiError(err.message, response.status, err.code, err.details);
+    }
+    const j = (await response.json()) as { published?: number };
+    return { published: Number(j.published) || 0 };
+  },
+
+  /**
+   * Reverse orphan toll_usage events (no live toll_ledger row) for a week.
+   * Driver settlement should not move for tag-only orphans.
+   */
+  async repairOrphanTollEvents(
+    weekKey: string,
+    opts?: { driverId?: string; rebuild?: boolean },
+  ): Promise<{
+    eventsReversed: number;
+    orphanCount: number;
+    orphanAmountMajor: number;
+    periodsRebuilt: number;
+    errors: string[];
+  }> {
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.financial}/toll/periods/${encodeURIComponent(weekKey)}/repair-orphan-events`,
+      {
+        method: 'POST',
+        headers: await requireAuthHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({
+          driverId: opts?.driverId,
+          rebuild: opts?.rebuild !== false,
+          reason: 'orphan_toll_usage_no_ledger_row',
+        }),
+      },
+    );
+    if (!response.ok) {
+      const err = await parseErrorPayload(response, 'Repair orphan toll events failed');
+      throw new WeekCloseApiError(err.message, response.status, err.code, err.details);
+    }
+    const j = (await response.json()) as {
+      eventsReversed?: number;
+      orphanCount?: number;
+      orphanAmountMajor?: number;
+      periodsRebuilt?: number;
+      errors?: string[];
+    };
+    return {
+      eventsReversed: Number(j.eventsReversed) || 0,
+      orphanCount: Number(j.orphanCount) || 0,
+      orphanAmountMajor: Number(j.orphanAmountMajor) || 0,
+      periodsRebuilt: Number(j.periodsRebuilt) || 0,
+      errors: Array.isArray(j.errors) ? j.errors.map(String) : [],
+    };
   },
 };

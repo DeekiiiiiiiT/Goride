@@ -60,6 +60,8 @@ const BLOCKER_LABELS: Record<string, string> = {
   TOLL_SPEND_MISMATCH: 'Toll spend does not tie to statement',
   TOLL_CHARGED_MISMATCH: 'Toll charged-to-driver does not tie to statement',
   TOLL_IDENTITY_UNBALANCED: 'Toll cards do not balance (Spend − Reimbursed − Charged − Net Loss ≠ 0)',
+  TOLL_SPEND_SPLIT: 'Toll total does not equal cash + tag spend',
+  TOLL_EVENT_ORPHANED: 'Toll money events don’t match live tolls — repair before close',
   FUEL_ENGINE_DRIFT: 'Fuel seal no longer matches Consumption — reseal before close',
   TOLL_ENGINE_DRIFT: 'Toll seal no longer matches event netting — reseal before close',
   EARNINGS_ENGINE_DRIFT: 'Earnings seal no longer matches commission/cash engines — reseal before close',

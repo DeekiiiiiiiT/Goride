@@ -14,8 +14,8 @@ export type DriverFinancialsTabProps = {
   transactions: FinancialTransaction[];
   allTrips: Trip[];
   quotaConfig: QuotaConfig | null;
-  /** Ledger lifetime per-platform stats — donut hybrid override. */
-  lifetimePlatformStats?: Record<string, any> | null;
+  /** Period platformStats from resolveDriverDetailFinancials — same SSOT as Overview. */
+  periodPlatformStats?: Record<string, { earnings?: number } | null> | null;
   csvMetrics?: DriverMetrics[];
   periodFrom?: Date;
   periodTo?: Date;
@@ -28,7 +28,7 @@ export type DriverFinancialsTabProps = {
 export function DriverFinancialsTab(props: DriverFinancialsTabProps) {
   const { platformBreakdownData, platformTotalEarnings } = useDriverPlatformBreakdown(
     props.allTrips,
-    props.lifetimePlatformStats,
+    props.periodPlatformStats,
   );
 
   return (

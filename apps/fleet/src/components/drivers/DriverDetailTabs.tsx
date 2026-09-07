@@ -148,7 +148,7 @@ export function DriverDetailTabs(p: DriverDetailTabsProps) {
             transactions={p.transactions}
             allTrips={p.allTrips}
             quotaConfig={p.quotaConfig}
-            lifetimePlatformStats={p.resolvedFinancials.lifetimePlatformStats}
+            periodPlatformStats={p.resolvedFinancials.platformStats}
             csvMetrics={p.csvMetrics}
             periodFrom={p.financialDateRange?.from}
             periodTo={p.financialDateRange?.to}

@@ -3,6 +3,7 @@ import {
   StatementsNotClosedError,
   assertStatementsClosedForSettlement,
   hashWeekStatement,
+  hasPendingRestatementDrafts,
   shadowCompareStatementVsProjection,
   shadowCompareStatementsVsProjection,
   statementAmountMajor,
@@ -33,6 +34,14 @@ describe('assertStatementsClosedForSettlement', () => {
         stmt({ kind: 'earnings', status: 'closed' }),
       ]),
     ).not.toThrow();
+  });
+
+  it('detects pending restatement drafts via supersedes', () => {
+    expect(hasPendingRestatementDrafts([stmt({ status: 'closed' })])).toBe(false);
+    expect(hasPendingRestatementDrafts([stmt({ status: 'draft', supersedes: null })])).toBe(false);
+    expect(
+      hasPendingRestatementDrafts([stmt({ status: 'draft', supersedes: 'prior-id', version: 2 })]),
+    ).toBe(true);
   });
 
   it('throws listing missing lanes', () => {
