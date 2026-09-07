@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Label } from '../ui/label';
 import { Badge } from '../ui/badge';
 import { Fuel, Loader2 } from 'lucide-react';
@@ -18,8 +18,18 @@ export function DriverFuelPolicySelect({
   onDriverUpdated?: (next: any) => void;
 }) {
   const resolvedId = driverId || driver?.id;
-  // Shared RQ cache — avoids a duplicate /scenarios (+ wasted getDrivers) on every detail open.
-  const { scenarios, loading } = useFuelScenarios(Boolean(resolvedId));
+  // Defer /scenarios until after shell requests grab HTTP/1.1 slots (Fixes ROAM-FLEET-10).
+  const [scenariosReady, setScenariosReady] = useState(false);
+  useEffect(() => {
+    if (!resolvedId) {
+      setScenariosReady(false);
+      return;
+    }
+    setScenariosReady(false);
+    const t = window.setTimeout(() => setScenariosReady(true), 1800);
+    return () => window.clearTimeout(t);
+  }, [resolvedId]);
+  const { scenarios, loading } = useFuelScenarios(Boolean(resolvedId) && scenariosReady);
 
   if (!resolvedId) return null;
 
