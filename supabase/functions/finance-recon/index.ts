@@ -275,6 +275,59 @@ Deno.serve(async (req) => {
             }
           }
 
+          // Pass 5: statement ↔ fresh engine compare (durable drift).
+          try {
+            const { mapRowToWeekStatement } = await import(
+              "../../../packages/finance-core/src/weekStatement.ts"
+            );
+            const { compareDriverWeekStatementsToEngines } = await import(
+              "../_fleet-server/statement_engine_probe.ts"
+            );
+            const { upsertFinanceReconDrifts } = await import(
+              "../_fleet-server/finance_recon_drift.ts"
+            );
+            const statementRows = (stmts || []).map((row) =>
+              mapRowToWeekStatement({
+                ...row,
+                organization_id: orgId,
+                driver_id: p.driver_id,
+                week_key: week,
+              }),
+            );
+            // Keep highest version per kind only.
+            const latestByKind = new Map<string, ReturnType<typeof mapRowToWeekStatement>>();
+            for (const s of statementRows) {
+              if (!latestByKind.has(s.kind)) latestByKind.set(s.kind, s);
+            }
+            const engineDrifts = await compareDriverWeekStatementsToEngines({
+              organizationId: orgId,
+              driverId: String(p.driver_id),
+              weekKey: week,
+              statements: [...latestByKind.values()],
+            });
+            await upsertFinanceReconDrifts({
+              organizationId: orgId,
+              driverId: String(p.driver_id),
+              weekKey: week,
+              source: "nightly",
+              drifts: engineDrifts,
+            });
+            for (const d of engineDrifts) {
+              drifts.push({
+                runId,
+                driverId: String(p.driver_id),
+                week,
+                kind: `${d.kind.toUpperCase()}_ENGINE_DRIFT`,
+                field: d.field,
+                persisted: d.statementMinor / 100,
+                expected: d.engineMinor / 100,
+                severity: "critical",
+              });
+            }
+          } catch (engErr) {
+            console.warn("[finance-recon] engine compare skipped:", errMsg(engErr));
+          }
+
           // M-2: active fuel_* events must carry debit/credit account keys (trial-balance hygiene).
           const fuelEv = activeFuelEventsByPeriod.get(`${p.driver_id}|${week}`) || [];
           const missingAccounts = fuelEv.filter(

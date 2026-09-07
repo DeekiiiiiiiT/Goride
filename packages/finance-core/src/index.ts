@@ -150,6 +150,18 @@ export type {
   LegacyProjectionForShadow,
 } from './weekStatement.ts';
 export {
+  compareFuelStatementVsEngine,
+  compareTollStatementVsEngine,
+  compareEarningsStatementVsEngine,
+  engineDriftsToCloseBlockers,
+} from './statementEngineCompare.ts';
+export type {
+  StatementEngineDrift,
+  FuelEngineAmounts,
+  TollEngineAmounts,
+  EarningsEngineAmounts,
+} from './statementEngineCompare.ts';
+export {
   CLOSE_INVARIANT_EPS,
   checkCloseInvariants,
   canCloseWeek,

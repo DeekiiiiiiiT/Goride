@@ -15,8 +15,8 @@
 
 ## Cutover note (Pass 4)
 
-`PROJECTION_READS_WEEK_STATEMENTS` remains **off** by default. Flip only after shadow drift is clean
-for a full org-week (see `2026-09-07-pass2-cutover.md`).
+`PROJECTION_READS_WEEK_STATEMENTS` defaulted **off** until shadow was clean. GoRide cutover
+**complete** 2026-09-07 — see `2026-09-07-pass4-cutover-complete.md`.
 
 **Shadow run 2026-09-07:** FAIL — see [`2026-09-07-pass4-shadow.md`](./2026-09-07-pass4-shadow.md).
 Weeks `2026-08-10` / `2026-08-17` clean; `2026-08-24` fuel+toll drift; `2026-08-31` missing toll lane.

@@ -102,7 +102,20 @@ export type CloseInvariantInput = {
    * M-1: absolute trip-CSV vs ledger cash disagreement on the period.
    * Values above ε block close (badge-only was the old intentional behavior).
    */
-  cashSourceMismatch?: number | null;
+  /**
+   * Pass 5: statement↔engine drifts for closed lanes. Each becomes a block
+   * (FUEL_ENGINE_DRIFT / TOLL_ENGINE_DRIFT / EARNINGS_ENGINE_DRIFT).
+   */
+  engineDrifts?: Array<{
+    code: string;
+    severity: CloseInvariantSeverity;
+    driverId?: string;
+    week?: string;
+    persisted: number;
+    expected: number;
+    delta: number;
+    message: string;
+  }> | null;
   eps?: number;
 };
 
@@ -333,6 +346,22 @@ export function checkCloseInvariants(input: CloseInvariantInput): CloseBlocker[]
       'trip CSV Uber cash disagrees with ledger payout_cash beyond ε',
       num(input.cashSourceMismatch), 0,
     );
+  }
+
+  // ── Pass 5: statement ↔ fresh engine (post-cutover failability) ─────────────────
+  if (input.engineDrifts && input.engineDrifts.length > 0) {
+    for (const d of input.engineDrifts) {
+      out.push({
+        code: d.code,
+        severity: d.severity === 'warn' ? 'warn' : 'block',
+        driverId: d.driverId ?? ctx.driverId,
+        week: d.week ?? ctx.week,
+        persisted: round2(d.persisted),
+        expected: round2(d.expected),
+        delta: round2(d.delta),
+        message: d.message,
+      });
+    }
   }
 
   return out;

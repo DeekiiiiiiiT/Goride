@@ -84,6 +84,45 @@ async function amountsFromFinalizedKv(
   };
 }
 
+/** Rebuild that zeroes driver share while inventing a huge company share is not Consumption. */
+function isSuspiciousFuelRebuild(a: FuelAmounts): boolean {
+  return (
+    a.source === "fuel_week_rebuild" &&
+    Math.abs(a.driverShare) < 0.005 &&
+    Math.abs(a.companyShare) > 0.005
+  );
+}
+
+/** Last Consumption-strip seal for this driver-week (standing or restated history). */
+async function amountsFromConsumptionHistory(
+  organizationId: string,
+  driverId: string,
+  weekKey: string,
+): Promise<FuelAmounts | null> {
+  const { data, error } = await sb()
+    .from("week_statements")
+    .select("amounts_minor, close_reason")
+    .eq("organization_id", organizationId)
+    .eq("driver_id", driverId)
+    .eq("week_key", weekKey)
+    .eq("kind", "fuel")
+    .like("close_reason", "%consumption_strip%")
+    .order("version", { ascending: false })
+    .limit(1);
+  if (error || !data?.length) return null;
+  const minor = (data[0].amounts_minor || {}) as Record<string, number>;
+  const driverShare = round2((Number(minor.driverShare) || 0) / 100);
+  const companyShare = round2((Number(minor.companyShare) || 0) / 100);
+  if (Math.abs(driverShare) < 0.005 && Math.abs(companyShare) < 0.005) return null;
+  return {
+    driverShare,
+    companyShare,
+    totalSpend: round2((Number(minor.totalSpend) || 0) / 100),
+    miscellaneousCost: round2((Number(minor.miscellaneousCost) || 0) / 100),
+    source: "consumption_strip",
+  };
+}
+
 export async function sealFuelWeek(opts: {
   organizationId: string;
   weekKey: string;
@@ -125,9 +164,43 @@ export async function sealFuelWeek(opts: {
     const driverId = String(p.driver_id || "");
     if (!driverId) continue;
 
-    let amounts =
-      rebuilt.get(driverId) ||
-      (await amountsFromFinalizedKv(organizationId, weekKey, driverId));
+    const fromKv = await amountsFromFinalizedKv(organizationId, weekKey, driverId);
+    const fromRebuild = rebuilt.get(driverId) || null;
+
+    // Prefer live Consumption truth over rebuild: override → prior consumption_strip
+    // history → finalized KV with a real driver share → rebuild (when not suspicious)
+    // → period columns. Never let a $0-driver rebuild clobber Consumption.
+    let amounts: FuelAmounts | null = null;
+
+    const override = opts.amountsByDriver?.[driverId];
+    if (override) {
+      amounts = {
+        driverShare: round2(override.driverShare ?? 0),
+        companyShare: round2(override.companyShare ?? 0),
+        totalSpend: round2(override.totalSpend ?? 0),
+        miscellaneousCost: round2(override.miscellaneousCost ?? 0),
+        source: "consumption_strip",
+      };
+    }
+
+    if (!amounts) {
+      amounts = await amountsFromConsumptionHistory(organizationId, driverId, weekKey);
+    }
+
+    if (
+      !amounts &&
+      fromKv &&
+      Math.abs(fromKv.driverShare) > 0.005
+    ) {
+      amounts = fromKv;
+    }
+
+    if (!amounts && fromRebuild && !isSuspiciousFuelRebuild(fromRebuild)) {
+      amounts = fromRebuild;
+    } else if (!amounts && fromRebuild) {
+      // Suspicious $0-driver rebuild — keep KV if any, else last resort rebuild.
+      amounts = fromKv || fromRebuild;
+    }
 
     if (!amounts) {
       amounts = {
@@ -139,27 +212,15 @@ export async function sealFuelWeek(opts: {
       };
     }
 
-    // Prefer rebuild/KV when they carry a non-zero driver share but DFP is $0
-    // (wallet reset / bad finalize left the projection empty while Consumption
-    // still shows the live split).
+    // Prefer rebuild only when it carries a non-zero driver share but current
+    // pick is $0 (wallet reset) — never when rebuild itself is the $0 suspect.
     if (
       amounts.source !== "fuel_week_rebuild" &&
       Math.abs(amounts.driverShare) < 0.005 &&
-      rebuilt.has(driverId) &&
-      Math.abs(rebuilt.get(driverId)!.driverShare) > 0.005
+      fromRebuild &&
+      Math.abs(fromRebuild.driverShare) > 0.005
     ) {
-      amounts = rebuilt.get(driverId)!;
-    }
-
-    const override = opts.amountsByDriver?.[driverId];
-    if (override) {
-      amounts = {
-        driverShare: round2(override.driverShare ?? amounts.driverShare),
-        companyShare: round2(override.companyShare ?? amounts.companyShare),
-        totalSpend: round2(override.totalSpend ?? amounts.totalSpend),
-        miscellaneousCost: round2(override.miscellaneousCost ?? amounts.miscellaneousCost),
-        source: "consumption_strip",
-      };
+      amounts = fromRebuild;
     }
 
     const hasActivity =

@@ -4,7 +4,9 @@ How to flip from shadow compare to statement-backed projection, then run restate
 
 ## 1. Shadow (flag off — default)
 
-- `PROJECTION_READS_WEEK_STATEMENTS` is unset / not `true`.
+> **Status 2026-09-07:** GoRide production secret is **ON** after gate PASS — see `2026-09-07-pass4-cutover-complete.md`.
+
+- `PROJECTION_READS_WEEK_STATEMENTS` is unset / not `true` (pre-cutover default).
 - `rebuildDriverFinancialPeriod` still builds fuel / toll / earnings from the legacy path
   (events + KV / ledger).
 - When `week_statements` rows exist for the driver-week, rebuild **always** runs

@@ -477,11 +477,27 @@ app.patch(`${BASE_PATH}/jaa-unmatched/:id`, requirePlatformStaff(), async (c) =>
   }
 });
 
+/** Prefer SQL fuel_entries; fall back to KV prefix for admin repair paths (P-2). */
+async function loadFuelEntriesPreferSql(limit = 50_000): Promise<any[]> {
+  try {
+    const { queryFleet } = await import("./repos/baseRepo.ts");
+    const res = await queryFleet("fuel_entries", {
+      legacyPrefix: "fuel_entry:",
+      limit,
+      offset: 0,
+    });
+    if (Array.isArray(res.data) && res.data.length > 0) return res.data;
+  } catch (e) {
+    console.warn("[fuel] loadFuelEntriesPreferSql SQL miss — KV fallback", e);
+  }
+  return (await kv.getByPrefix("fuel_entry:")) || [];
+}
+
 /** Remove fuel_entry rows + ledger links matching a predicate (platform admin). */
 async function purgeFuelEntriesWhere(
   predicate: (entry: any) => boolean,
 ): Promise<{ deletedEntryIds: string[]; count: number }> {
-  const entries = (await kv.getByPrefix("fuel_entry:")) || [];
+  const entries = await loadFuelEntriesPreferSql();
   const deletedEntryIds: string[] = [];
   for (const entry of entries) {
     if (!entry?.id || !predicate(entry)) continue;
@@ -518,7 +534,7 @@ app.get(`${BASE_PATH}/jaa-csv-imports`, requirePlatformStaff(), async (c) => {
     );
 
     // Surface orphan JAA statement data (pre-tracking uploads + interrupted submits)
-    const entries = (await kv.getByPrefix("fuel_entry:")) || [];
+    const entries = await loadFuelEntriesPreferSql();
     const unmatched = (await kv.getByPrefix("jaa_unmatched:")) || [];
     const knownImportIds = new Set(imports.map((i: any) => String(i.id || "")));
     const orphanEntries = entries.filter(

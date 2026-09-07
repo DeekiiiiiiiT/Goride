@@ -1409,6 +1409,29 @@ export async function rebuildDriverFinancialPeriod(
             drifts,
           );
         }
+        // Pass 5: persist statement↔engine drifts (durable, not warn-only).
+        try {
+          const { compareDriverWeekStatementsToEngines } = await import("./statement_engine_probe.ts");
+          const { upsertFinanceReconDrifts } = await import("./finance_recon_drift.ts");
+          const engineDrifts = await compareDriverWeekStatementsToEngines({
+            organizationId: organizationIdResolved,
+            driverId,
+            weekKey: periodAnchor,
+            statements: statements.filter((s) => s.status === "closed"),
+          });
+          await upsertFinanceReconDrifts({
+            organizationId: organizationIdResolved,
+            driverId,
+            weekKey: periodAnchor,
+            source: "rebuild",
+            drifts: engineDrifts,
+          });
+        } catch (engErr) {
+          console.warn(
+            "[DriverFinancialPeriods] engine drift persist skipped:",
+            engErr instanceof Error ? engErr.message : String(engErr),
+          );
+        }
         if (PROJECTION_READS_WEEK_STATEMENTS) {
           const byKind = new Map(statements.map((s) => [s.kind, s]));
           const fuel = byKind.get("fuel");
@@ -1600,9 +1623,10 @@ export async function rebuildDriverFinancialPeriod(
       );
       const unchanged =
         latestEarnings &&
-        latestEarnings.status === "closed" &&
+        latestEarnings.status === "draft" &&
         JSON.stringify(latestEarnings.amountsMinor) === JSON.stringify(earningsAmountsMinor);
       if (!unchanged) {
+        // Pass 5.2: rebuild publishes draft only — sealEarningsWeek closes independently.
         await publishWeekStatement({
           kind: "earnings",
           organizationId: organizationIdResolved,
@@ -1610,9 +1634,9 @@ export async function rebuildDriverFinancialPeriod(
           weekKey: periodAnchor,
           amountsMinor: earningsAmountsMinor,
           sourceRowIds,
-          status: "closed",
-          closedBy: "dfp_rebuild",
-          closeReason: "commission_cash_engines",
+          status: "draft",
+          closedBy: null,
+          closeReason: "commission_cash_engines_preview",
         });
       }
     } catch (stmtErr) {

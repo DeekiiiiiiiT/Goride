@@ -177,7 +177,7 @@ import tollApp, {
   voidTollLedgerEntryHandler,
 } from "./toll_controller.tsx";
 import { replayFleetTripsWithRoutes } from "./fleet_trip_toll_replay.ts";
-import { resolveDriverFromFleetRecords } from "./driver_identity.ts";
+import { resolveDriverFromFleetRecords, collectDriverAliasIds } from "./driver_identity.ts";
 import disputeRefundApp from "./dispute_refund_controller.tsx";
 import tollPeriodApp from "./toll_period_controller.tsx";
 import driverFinancialPeriodApp from "./driver_financial_period_controller.tsx";
@@ -3440,7 +3440,57 @@ async function rebuildFinancialPeriodsForCashTx(next: unknown, previous: unknown
   }
 }
 
-app.post("/make-server-37f42386/transactions", requireAuth({ requireOrg: true }), requirePermission('transactions.edit'), async (c) => {
+
+/**
+ * Play Store / driver portal expense categories. Drivers have ROLE_PERMISSIONS.driver = []
+ * (no fleet RBAC). Blanket requirePermission(transactions.edit) on POST /transactions
+ * caused 403 Forbidden after receipt upload succeeded — same class of bug as the
+ * Aug fuel-entries gate. Allow only these self-expense categories for role=driver.
+ */
+const DRIVER_SELF_EXPENSE_CATEGORIES = new Set([
+  "Fuel",
+  "Fuel Reimbursement",
+  "Maintenance",
+  "Tolls",
+  "Other Expenses",
+]);
+
+async function driverMayPostSelfExpense(
+  rbacUser: RbacUser,
+  transaction: Record<string, unknown>,
+  previous: Record<string, unknown> | null | undefined,
+): Promise<boolean> {
+  if (rbacUser.resolvedRole !== "driver") return false;
+  const category = String(transaction.category || "").trim();
+  if (!DRIVER_SELF_EXPENSE_CATEGORIES.has(category)) return false;
+  const type = String(transaction.type || "Expense").trim();
+  if (type !== "Expense") return false;
+
+  const aliases = new Set<string>([rbacUser.userId]);
+  try {
+    const driverRec = await kv.get(`driver:${rbacUser.userId}`);
+    if (driverRec && typeof driverRec === "object") {
+      for (const id of collectDriverAliasIds(driverRec as Record<string, unknown>)) {
+        aliases.add(id);
+      }
+    }
+  } catch {
+    /* auth user id alone is enough for most fleet drivers */
+  }
+
+  const txDriverId = String(transaction.driverId || "").trim();
+  if (!txDriverId || !aliases.has(txDriverId)) return false;
+
+  if (previous && typeof previous === "object") {
+    const prevDriver = String(previous.driverId || "").trim();
+    if (prevDriver && !aliases.has(prevDriver)) return false;
+    const prevCat = String(previous.category || "").trim();
+    if (prevCat && !DRIVER_SELF_EXPENSE_CATEGORIES.has(prevCat)) return false;
+  }
+  return true;
+}
+
+app.post("/make-server-37f42386/transactions", requireAuth({ requireOrg: true }), async (c) => {
   try {
     const transaction = await c.req.json();
     if (!transaction.id) {
@@ -3449,6 +3499,35 @@ app.post("/make-server-37f42386/transactions", requireAuth({ requireOrg: true })
     const previousTransaction = await kv.get(`transaction:${transaction.id}`);
     if (!transaction.timestamp) {
         transaction.timestamp = new Date().toISOString();
+    }
+
+    // Drivers submit Fuel/expenses from the Play Store app; fleet staff use transactions.edit.
+    // Do not use blanket requirePermission — drivers intentionally have an empty permission list.
+    {
+      const rbacUser = c.get("rbacUser") as RbacUser | undefined;
+      if (!rbacUser) {
+        return c.json({ error: "Unauthorized: No user context" }, 401);
+      }
+      const canFleetEdit = hasPermission(rbacUser.resolvedRole, "transactions.edit");
+      const isDriverSelfExpense = await driverMayPostSelfExpense(
+        rbacUser,
+        transaction as Record<string, unknown>,
+        previousTransaction as Record<string, unknown> | null | undefined,
+      );
+      if (!canFleetEdit && !isDriverSelfExpense) {
+        console.log(
+          `[RBAC] FORBIDDEN: User ${rbacUser.userId} (role=${rbacUser.resolvedRole}) POST /transactions denied (not fleet editor / not self-expense)`,
+        );
+        return c.json(
+          {
+            error: "Forbidden",
+            message: 'You do not have the "transactions.edit" permission.',
+            required: "transactions.edit",
+            currentRole: rbacUser.resolvedRole,
+          },
+          403,
+        );
+      }
     }
 
     // Admin manual cash fuel: book as Expense debit (not positive Fuel_Manual_Entry credit).

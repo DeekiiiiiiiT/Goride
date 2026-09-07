@@ -1,0 +1,33 @@
+{
+  "ranAt": "2026-09-07T16:00:18.179Z",
+  "since": "2026-08-10",
+  "weekFilter": null,
+  "orgFilter": "8cfa606a-f6ea-4ccb-a2b2-1d2cc323a823",
+  "periodCount": 4,
+  "cleanCount": 4,
+  "driftCount": 0,
+  "missingLanes": [],
+  "drifts": [],
+  "cleanWeeks": [
+    {
+      "organizationId": "8cfa606a-f6ea-4ccb-a2b2-1d2cc323a823",
+      "driverId": "73e5b1dc-01b4-45ee-a34a-25a3256b9841",
+      "weekKey": "2026-08-10"
+    },
+    {
+      "organizationId": "8cfa606a-f6ea-4ccb-a2b2-1d2cc323a823",
+      "driverId": "73e5b1dc-01b4-45ee-a34a-25a3256b9841",
+      "weekKey": "2026-08-17"
+    },
+    {
+      "organizationId": "8cfa606a-f6ea-4ccb-a2b2-1d2cc323a823",
+      "driverId": "73e5b1dc-01b4-45ee-a34a-25a3256b9841",
+      "weekKey": "2026-08-24"
+    },
+    {
+      "organizationId": "8cfa606a-f6ea-4ccb-a2b2-1d2cc323a823",
+      "driverId": "73e5b1dc-01b4-45ee-a34a-25a3256b9841",
+      "weekKey": "2026-08-31"
+    }
+  ]
+}

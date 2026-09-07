@@ -558,12 +558,10 @@ app.get(`${BASE}/periods`, requirePermission('toll.view'), async (c) => {
           fleetLossByWeek.get(id) ??
           filterTollEventsInDateRange(scopedFleetLossEvents, startDate, endDate);
         const weekNet = computeTollWeekNetting(weekEvents);
-        // C-3: Spend / Reimbursed from weekNet; Charged from wallet financial_events
-        // when present (H-9), else unified events, else resolved-claim sum.
-        const tollSpend = round2(weekNet.tagSpend + weekNet.cashWashSpend);
-        const reimbursedByPlatformNet = round2(
-          weekNet.platformReimbursed + weekNet.disputeRecovered,
-        );
+        // Toll Management cards = plaza spend / trip reimbursed (wizard truth).
+        // Events netting kept as diagnostic only — it inflated Reimbursed vs cards.
+        const tollSpend = round2(f.tollSpend);
+        const reimbursedByPlatformNet = round2(reimbursedByPlatform);
         const walletCharged = walletByWeek.get(id);
         const chargedToDrivers =
           walletCharged != null
@@ -571,7 +569,6 @@ app.get(`${BASE}/periods`, requirePermission('toll.view'), async (c) => {
             : hasCanonicalChargedToDriverEvents(weekEvents)
               ? sumTollChargedToDriversFromEvents(weekEvents)
               : round2(f.chargedToDrivers);
-        // Recompute net with the charged figure actually shown on the card.
         const netTollLoss = round2(tollSpend - reimbursedByPlatformNet - chargedToDrivers);
         const identityResidual = round2(
           tollSpend - reimbursedByPlatformNet - chargedToDrivers - netTollLoss,
@@ -595,6 +592,11 @@ app.get(`${BASE}/periods`, requirePermission('toll.view'), async (c) => {
             netTollLossClipped: netTollLoss < -0.005,
             overRecoveredAmount: netTollLoss < -0.005 ? round2(-netTollLoss) : 0,
             resolvedRefundsAmount: round2(f.resolvedRefundsAmount),
+            eventsTollSpend: round2(weekNet.tagSpend + weekNet.cashWashSpend),
+            eventsReimbursedByPlatform: round2(
+              weekNet.platformReimbursed + weekNet.disputeRecovered,
+            ),
+            eventsNetTollLoss: round2(weekNet.netLoss),
             legacyTollSpend: round2(f.tollSpend),
             legacyReimbursedByPlatform: round2(reimbursedByPlatform),
           },

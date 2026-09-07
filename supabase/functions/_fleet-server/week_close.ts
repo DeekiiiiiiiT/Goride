@@ -17,6 +17,11 @@ import {
 } from "./week_statements.ts";
 import { sealTollWeek } from "./toll_week_seal.ts";
 import { sealFuelWeek } from "./fuel_week_seal.ts";
+import { sealEarningsWeek } from "./earnings_week_seal.ts";
+import { compareDriverWeekStatementsToEngines } from "./statement_engine_probe.ts";
+import { upsertFinanceReconDrifts, countOpenFinanceReconDrifts } from "./finance_recon_drift.ts";
+import { sumBusinessWeekPnlMajor } from "./business_week_pnl.ts";
+import { engineDriftsToCloseBlockers } from "../../../packages/finance-core/src/statementEngineCompare.ts";
 import {
   buildCloseHash,
   buildPeriodCloseHashPayload,
@@ -129,12 +134,13 @@ export type WeekClosePreview = {
   fuel: WeekCloseFuelLane;
   toll: WeekCloseTollLane;
   blockers: CloseBlocker[];
+  /** Pass 5: open statement↔engine drift rows for this org (all weeks). */
+  openEngineDriftCount?: number;
 };
 
 /**
- * Close Program Pass 3 precondition: refresh fuel/toll from independent
- * sources while the week is open. Earnings are published only by DFP rebuild
- * from commission/cash engines — never copied from period columns here (H-7).
+ * Close Program Pass 3/5 precondition: refresh fuel/toll/earnings from
+ * independent seals while the week is open.
  */
 async function ensureCloseLaneStatements(
   orgId: string,
@@ -152,6 +158,10 @@ async function ensureCloseLaneStatements(
 
   let tollLaneMissing = false;
   let fuelLaneMissing = false;
+  let earningsLaneMissing = false;
+  let fuelNeedsSeal = false;
+  let tollNeedsSeal = false;
+  let earningsNeedsSeal = false;
   let anyOpenDriver = false;
   for (const p of periods ?? []) {
     const driverId = String(p.driver_id || "");
@@ -166,15 +176,34 @@ async function ensureCloseLaneStatements(
     if (!frozen) anyOpenDriver = true;
 
     const statements = await getLatestWeekStatements(orgId, driverId, week);
-    const kinds = new Set(statements.map((s) => s.kind));
+    const byKind = new Map(statements.map((s) => [s.kind, s]));
+    const fuel = byKind.get("fuel");
+    const toll = byKind.get("toll");
+    const earnings = byKind.get("earnings");
 
-    if (!kinds.has("fuel")) fuelLaneMissing = true;
-    // Earnings: do NOT auto-copy from period columns (H-7 tautology). Missing
-    // lane surfaces as EARNINGS_STATEMENT_MISSING until DFP rebuild publishes.
-    if (!kinds.has("toll")) tollLaneMissing = true;
+    if (!fuel) {
+      fuelLaneMissing = true;
+      fuelNeedsSeal = true;
+    } else if (fuel.status !== "closed") {
+      fuelNeedsSeal = true;
+    }
+    if (!toll) {
+      tollLaneMissing = true;
+      tollNeedsSeal = true;
+    } else if (toll.status !== "closed") {
+      tollNeedsSeal = true;
+    }
+    if (!earnings) {
+      earningsLaneMissing = true;
+      earningsNeedsSeal = true;
+    } else if (earnings.status !== "closed") {
+      earningsNeedsSeal = true;
+    }
   }
 
-  if (anyOpenDriver || fuelLaneMissing) {
+  // Pass 5: never clobber a standing closed independent seal during close.
+  // Only seal missing/draft lanes (or when no closed statement exists).
+  if (fuelNeedsSeal || (anyOpenDriver && fuelLaneMissing)) {
     try {
       await sealFuelWeek({ organizationId: orgId, weekKey: week, actorId });
     } catch (e) {
@@ -182,12 +211,19 @@ async function ensureCloseLaneStatements(
     }
   }
 
-  // Refresh toll statement from events while open; only backfill if missing when frozen.
-  if (anyOpenDriver || tollLaneMissing) {
+  if (tollNeedsSeal || (anyOpenDriver && tollLaneMissing)) {
     try {
       await sealTollWeek({ organizationId: orgId, weekKey: week, actorId });
     } catch (e) {
       console.warn("[week_close] toll auto-seal failed (non-fatal)", week, e);
+    }
+  }
+
+  if (earningsNeedsSeal || (anyOpenDriver && earningsLaneMissing)) {
+    try {
+      await sealEarningsWeek({ organizationId: orgId, weekKey: week, actorId });
+    } catch (e) {
+      console.warn("[week_close] earnings auto-seal failed (non-fatal)", week, e);
     }
   }
 }
@@ -223,11 +259,17 @@ export async function previewWeekClose(orgId: string, weekKey: string): Promise<
   let tollCharged = 0;
   let tollNetLoss = 0;
 
-  // Pass 4 §6.4: week-level settlement sum for P&L tie (warn when P&L feed absent).
-  const settlementSumForWeek = rows.reduce(
-    (s, p) => s + (Number(p.settlement_amount) || 0),
-    0,
-  );
+  // Pass 5.4: desk fleet-P&L composition vs sealed statement fleet-P&L.
+  const settlementSumForWeek = rows.reduce((s, p) => {
+    const fleet = Number(p.fleet_share) || 0;
+    const fuel = Number(p.fuel_fleet_share) || 0;
+    const tollNet =
+      (Number(p.toll_spend) || 0) -
+      (Number(p.toll_reimbursed) || 0) -
+      (Number(p.toll_charged_to_driver) || 0);
+    return s + fleet + fuel + tollNet;
+  }, 0);
+  const businessWeekPnl = await sumBusinessWeekPnlMajor(orgId, week);
 
   let pnlWarnEmitted = false;
 
@@ -258,6 +300,42 @@ export async function previewWeekClose(orgId: string, weekKey: string): Promise<
     const fuelStatement = fuelFromStatement(byKind.get("fuel"));
     const tollStatement = tollFromStatement(byKind.get("toll"));
 
+    let engineBlockers: CloseBlocker[] = [];
+    if (!frozen) {
+      try {
+        const engineDrifts = await compareDriverWeekStatementsToEngines({
+          organizationId: orgId,
+          driverId,
+          weekKey: week,
+          statements,
+        });
+        if (engineDrifts.length) {
+          await upsertFinanceReconDrifts({
+            organizationId: orgId,
+            driverId,
+            weekKey: week,
+            source: "close_preview",
+            drifts: engineDrifts,
+            statementVersion: statements[0]?.version ?? null,
+          });
+          engineBlockers = engineDriftsToCloseBlockers(engineDrifts, {
+            driverId,
+            week,
+          }) as CloseBlocker[];
+        } else {
+          await upsertFinanceReconDrifts({
+            organizationId: orgId,
+            driverId,
+            weekKey: week,
+            source: "close_preview",
+            drifts: [],
+          });
+        }
+      } catch (e) {
+        console.warn("[week_close] engine compare failed (non-fatal)", driverId, week, e);
+      }
+    }
+
     const driverBlockers = checkCloseInvariants({
       period: period as ClosePeriodRow,
       fuelStatement,
@@ -267,8 +345,11 @@ export async function previewWeekClose(orgId: string, weekKey: string): Promise<
         (meta as { financeCore?: { cashSourceMismatch?: number } } | null)
           ?.financeCore?.cashSourceMismatch,
       ) || 0,
+      engineDrifts: engineBlockers,
       ...(!frozen && !pnlWarnEmitted
-        ? { settlementSumForWeek, businessWeekPnlUnavailable: true as const }
+        ? businessWeekPnl != null
+          ? { settlementSumForWeek, businessWeekPnl }
+          : { settlementSumForWeek, businessWeekPnlUnavailable: true as const }
         : {}),
     });
     if (!frozen && !pnlWarnEmitted) pnlWarnEmitted = true;
@@ -295,6 +376,7 @@ export async function previewWeekClose(orgId: string, weekKey: string): Promise<
   const identityResidual =
     Math.round((tollSpend - tollReimbursed - tollCharged - tollNetLoss) * 100) / 100;
   const weekClosed = rows.length > 0 && driversFrozen === rows.length;
+  const openEngineDriftCount = await countOpenFinanceReconDrifts(orgId, week);
 
   return {
     weekKey: week,
@@ -318,6 +400,7 @@ export async function previewWeekClose(orgId: string, weekKey: string): Promise<
       identityCloses: Math.abs(identityResidual) <= CLOSE_INVARIANT_EPS,
     },
     blockers,
+    openEngineDriftCount,
   };
 }
 
@@ -363,10 +446,16 @@ export async function closeWeek(
   const perDriver: DriverCloseResult[] = [];
   const allBlockers: CloseBlocker[] = [];
   const periodRows = periods ?? [];
-  const settlementSumForWeek = periodRows.reduce(
-    (s, p) => s + (Number(p.settlement_amount) || 0),
-    0,
-  );
+  const settlementSumForWeek = periodRows.reduce((s, p) => {
+    const fleet = Number(p.fleet_share) || 0;
+    const fuel = Number(p.fuel_fleet_share) || 0;
+    const tollNet =
+      (Number(p.toll_spend) || 0) -
+      (Number(p.toll_reimbursed) || 0) -
+      (Number(p.toll_charged_to_driver) || 0);
+    return s + fleet + fuel + tollNet;
+  }, 0);
+  const businessWeekPnl = await sumBusinessWeekPnlMajor(orgId, week);
   let pnlWarnEmitted = false;
 
   for (const period of periodRows) {
@@ -397,6 +486,32 @@ export async function closeWeek(
     const statements = await getLatestWeekStatements(orgId, driverId, week);
     const byKind = new Map<string, WeekStatement>(statements.map((s) => [s.kind, s]));
 
+    let engineBlockers: CloseBlocker[] = [];
+    try {
+      const engineDrifts = await compareDriverWeekStatementsToEngines({
+        organizationId: orgId,
+        driverId,
+        weekKey: week,
+        statements,
+      });
+      await upsertFinanceReconDrifts({
+        organizationId: orgId,
+        driverId,
+        weekKey: week,
+        source: "close",
+        drifts: engineDrifts,
+        statementVersion: statements[0]?.version ?? null,
+      });
+      if (engineDrifts.length) {
+        engineBlockers = engineDriftsToCloseBlockers(engineDrifts, {
+          driverId,
+          week,
+        }) as CloseBlocker[];
+      }
+    } catch (e) {
+      console.warn("[week_close] engine compare failed (non-fatal)", driverId, week, e);
+    }
+
     const blockers = checkCloseInvariants({
       period: period as ClosePeriodRow,
       fuelStatement: fuelFromStatement(byKind.get("fuel")),
@@ -406,8 +521,11 @@ export async function closeWeek(
         (meta as { financeCore?: { cashSourceMismatch?: number } } | null)
           ?.financeCore?.cashSourceMismatch,
       ) || 0,
+      engineDrifts: engineBlockers,
       ...(!pnlWarnEmitted
-        ? { settlementSumForWeek, businessWeekPnlUnavailable: true as const }
+        ? businessWeekPnl != null
+          ? { settlementSumForWeek, businessWeekPnl }
+          : { settlementSumForWeek, businessWeekPnlUnavailable: true as const }
         : {}),
     });
     pnlWarnEmitted = true;

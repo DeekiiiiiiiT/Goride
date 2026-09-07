@@ -30,6 +30,8 @@ export type WeekClosePreview = {
   fuel: FuelLaneMetrics;
   toll: TollLaneMetrics;
   blockers: CloseBlocker[];
+  /** Pass 5: open statement↔engine drift rows for this org-week. */
+  openEngineDriftCount?: number;
 };
 
 export type WeekCloseResult = {

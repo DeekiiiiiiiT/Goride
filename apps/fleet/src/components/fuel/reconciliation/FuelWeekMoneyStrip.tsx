@@ -59,7 +59,11 @@ export function FuelWeekMoneyStrip({
   priorMedian?: { totalSpend: number; unexplained: number };
 }) {
   const sourcesTie = Math.abs(gasCard + cashFromEarnings - totalSpend) <= FUEL_SPEND_EPS;
-  const splitTie = Math.abs(company + driver + leakage - totalSpend) <= FUEL_SPEND_EPS;
+  // Unexplained is an acknowledgment gap — some weeks already fold it into
+  // company/driver so company+driver ties total without adding leakage again.
+  const splitTie =
+    Math.abs(company + driver - totalSpend) <= FUEL_SPEND_EPS ||
+    Math.abs(company + driver + leakage - totalSpend) <= FUEL_SPEND_EPS;
   const spendDelta =
     priorMedian != null ? totalSpend - priorMedian.totalSpend : null;
   const unexplainedDelta =

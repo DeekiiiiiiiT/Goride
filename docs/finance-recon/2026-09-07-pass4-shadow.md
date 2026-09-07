@@ -4,11 +4,13 @@
 **Org:** `8cfa606a-f6ea-4ccb-a2b2-1d2cc323a823`  
 **Driver:** `73e5b1dc-01b4-45ee-a34a-25a3256b9841` (only active DFP driver in window)  
 **Window:** `2026-08-10` … `2026-08-31`  
-**Flag:** `PROJECTION_READS_WEEK_STATEMENTS` remains **OFF** (gate failed)
+**Flag (at first run):** `PROJECTION_READS_WEEK_STATEMENTS` **OFF** (gate failed)
+
+> **Superseded:** re-shadow after rebuild + flag flip → **PASS**. See `2026-09-07-pass4-cutover-complete.md` and `2026-09-07-shadow-week-statements.json`.
 
 Method: latest `closed`/`draft` `week_statements` per lane vs `ledger.driver_financial_periods` columns (1¢ tolerance), same field map as `shadowCompareStatementsVsProjection`.
 
-## Gate result: **FAIL — do not flip flag yet**
+## Gate result (first run): **FAIL — do not flip flag yet**
 
 | Week | Fuel | Toll | Earnings | Verdict |
 |------|------|------|----------|---------|

@@ -9,11 +9,13 @@
 
 ## 0. Verdict
 
-**Today: no.** Not because the formulas are wrong — most of them are individually careful, well-commented and unit-tested — but because **the three subsystems have no contract with each other.**
+**As of Pass 4 (2026-09-07): architecture live** — weekly statements are the contract, projection reads them on GoRide (`PROJECTION_READS_WEEK_STATEMENTS=true`), and Close Week can block on unverified/draft lanes. **Pass 5 closes the integrity loop:** statement↔engine checks that can still fail, durable drift, independent earnings seal, P&L tie, and freeze re-sign.
 
-Each one independently re-derives money from raw operational data using its own date rule, its own source-preference chain and its own sign conventions. Nothing in the system ever asserts that they agree. Nothing ever declares a week finished. When they disagree — and they demonstrably do, in your own screenshots — nothing alarms, nothing blocks, and the disagreement is written straight to the driver's balance.
+**Day-one verdict (kept for history):** At audit open the answer was **no** — not because the formulas were wrong, but because **the three subsystems had no contract with each other.**
 
-There are **four separate money engines** producing numbers for these three screens, **five distinct week-bucketing rules**, and **three independent answers to "how much was charged to this driver for tolls."** The remediation is not a rewrite of the math. It is the introduction of the one layer that is missing: **a signed, immutable weekly statement contract** that each subsystem publishes and settlement consumes.
+Each subsystem independently re-derived money from raw operational data using its own date rule, source-preference chain and sign conventions. Nothing asserted that they agreed. Nothing declared a week finished. When they disagreed, nothing alarmed, nothing blocked, and the disagreement was written straight to the driver's balance.
+
+There were **four separate money engines**, **five distinct week-bucketing rules**, and **three independent answers to "how much was charged to this driver for tolls."** The remediation was not a rewrite of the math: it was the signed, immutable weekly statement contract each subsystem publishes and settlement consumes.
 
 ### The three headline problems
 
@@ -1164,29 +1166,120 @@ After that: `M-4` (org fail-closed) is a one-line tenant-isolation fix, and the 
 
 ---
 
-## 0.7 Remediation status — Pass 3, verified 2026-09-07 (current)
+## 0.7 Remediation status — Pass 5, verified 2026-09-07 (current)
+
+**Goal:** Post-cutover integrity loop — checks that can still fail; three independent seals; P&L tie; Aug 24 re-signed.
+
+> Pass 3 section history retained below as §0.7-pass3. **Pass 5 is current.**
+
+### Scoreboard (Pass 5)
+
+| ID | Finding | Pass 3 | Pass 5 |
+|---|---|---|---|
+| **H-7** | Cross-system failability | 🟡 earnings self-ref | ✅ **Closed** — engine compare + sealEarningsWeek + draft rebuild |
+| **Pass 4 cutover** | Statement SSOT | ✅ flag on | ✅ shadow PASS; Aug 24 re-signed |
+| **P&L tie** | BUSINESS_WEEK_PNL | warn stub | ✅ **Wired** (statement vs desk composition) |
+| **P-2** | fuel_entry scans | 🟡 | 🟡 Partial — SQL helper on purge/list admin paths |
+| **P-4/P-5** | Virtualize | 🟡 fuel only | ✅ TollBucketPanel windowed |
+
+**Still open / follow-on:** remaining fuel_entry admin scans beyond the SQL helper; optional Notion finance integrity page.
+
+### Docs
+
+- `docs/finance-recon/2026-09-07-pass5-integrity-loop.md`
+- `docs/finance-recon/2026-09-07-pass5-aug24-resign.md`
+- `docs/finance-recon/2026-09-07-pass4-cutover-complete.md`
+
+---
+
+## 0.7-pass3 Remediation status — Pass 3 (superseded by Pass 5)
 
 **Goal:** Close Week checks can fail (H-7). Draft statements cannot greenwash a close.
 
+**Independently verified** at tree `b0b2ce4b` + uncommitted working changes: `finance-core` 122/122 ✅ · `fuel-core` 38/38 ✅ · `toll-core` 53/53 ✅ (213 tests) · **7/7 CI guards pass**.
+
 ### Scoreboard (delta from Pass 2)
 
-| ID | Finding | Pass 2 | Pass 3 |
-|---|---|---|---|
-| **H-7** | Cross-system invariants tautological | 🟡 | ✅ **Closed** — independent publishers; draft unverified blocks |
-| **H-4** | Close hash verify payload skew | ✅ (write) / 🟡 (verify) | ✅ **Closed** — verify uses stored sourceRowIds + engineVersion |
-| **M-4** | Org fail-closed | ⬜ | ✅ **Closed** |
-| **M-5** | Deep-link step gating | ⬜ | ✅ **Closed** (wizard clamp + e2e + unit) |
-| **P-2** | KV prefix scans | 🟡 | 🟡 Partial — periods-health migrated to SQL |
-| **P-3** | Dual-truth fuel landing | ⬜ | ✅ **Closed** — server-only when SQL covers range |
-| **P-4/P-5** | Virtualize toll/fuel | ⬜ | 🟡 Partial — FuelSettlementTable windowed |
-| **C-6** | Real week close | 🟡 | ✅ **Closes with honest blockers** |
+| ID | Finding | Pass 2 | Pass 3 | Verified |
+|---|---|---|---|---|
+| **H-7** | Cross-system invariants tautological | 🟡 | ✅ Closed — independent publishers; draft unverified blocks | 🟡 **fuel + toll yes, earnings no** |
+| **H-4** | Close hash verify payload skew | ✅ / 🟡 | ✅ Closed — verify uses stored sourceRowIds + engineVersion | ✅ confirmed |
+| **M-4** | Org fail-closed | ⬜ | ✅ Closed | ✅ confirmed (`ORG_REQUIRED` throw) |
+| **M-5** | Deep-link step gating | ⬜ | ✅ Closed (wizard clamp + e2e + unit) | ✅ confirmed (`clampFuelStepToGates`) |
+| **P-2** | KV prefix scans | 🟡 | 🟡 Partial — periods-health migrated to SQL | 🟡 confirmed (15 left in `fuel_controller`) |
+| **P-3** | Dual-truth fuel landing | ⬜ | ✅ Closed — server-only when SQL covers range | ✅ confirmed |
+| **P-4/P-5** | Virtualize toll/fuel | ⬜ | 🟡 Partial — FuelSettlementTable windowed | 🟡 confirmed |
+| **C-6** | Real week close | 🟡 | ✅ Closes with honest blockers | ✅ confirmed |
 
-**Still open / follow-on:** flip `PROJECTION_READS_WEEK_STATEMENTS` after shadow drift (Pass 4 cutover); Business Finance P&L feed for settlement↔P&L block; remaining `fuel_entry:` admin scans; TollBucketPanel virtualization.
+### What Pass 3 got right
+
+The independence fix is real and well-built:
+
+- **Fuel lane** — `sealFuelWeek` derives from `buildFuelPeriodSnapshots` (the actual snapshot engine), falling back to the `finalized_report:` KV snapshot. Only `fuel_week_rebuild` / `finalized_report` / `consumption_strip` mark `closed`; a projection-column fallback publishes **`draft`** with `closeReason: "close_precondition_unverified"`.
+- **Toll lane** — `sealTollWeek` uses `computeTollWeekNetting()` over canonical events plus `sumActiveTollChargedToDriverMajor()` from `financial_events`. Only `events` / `financial_events` mark `closed`; otherwise `draft`.
+- **`closeInvariants`** treats a draft lane as `severity: 'block'` via `FUEL_STATEMENT_UNVERIFIED` / `TOLL_STATEMENT_UNVERIFIED` / `EARNINGS_STATEMENT_UNVERIFIED` — **stronger than the `warn` this audit recommended.**
+- The suite now contains `'deliberately mismatched statement amounts block close (non-tautological)'` — the exact regression test that was missing.
+- Provenance is recorded in `closeReason` on every statement, so the source of any lane is auditable after the fact.
+
+### Correction: the earnings lane is still self-referential
+
+`H-7` is closed for two of three lanes, not three. The earnings statement is still published from inside `rebuildDriverFinancialPeriod` (`driver_financial_periods.ts:1587-1613`), from the same in-memory `driverShare` / `fleetShare` / `earningsGross` / `cashCollected` variables that populate the row it will be compared against, with `status: "closed"` hardcoded and **no draft path**.
+
+It is better than Pass 2 — it publishes the *engine outputs* rather than reading the persisted column back, and it records `sourceRowIds` (fare/tip event ids) and `closeReason: "commission_cash_engines"`. And it does catch a real class of drift: if the row is later mutated by cash-sync, a settlement command or a manual repair without republishing, the check will fire.
+
+But within a single rebuild, `period.driver_share ≟ earningsStatement.driverShare` is still `x ≟ x`. **Fix:** give earnings the same treatment as fuel and toll — publish from `computeWeekCommissionShare` / `computeWeekCashBase` in a separate `sealEarningsWeek`, and mark `draft` when the values came from the projection rather than a fresh engine run.
+
+### Pass 4 changes what the invariants mean
+
+`PROJECTION_READS_WEEK_STATEMENTS=true` (shipped on GoRide, shadow gate 4/4 clean) is a genuine architectural milestone — **§6.1's statement contract is now live.** With the flag on, `driver_financial_periods.ts:1412-1440` overwrites `fuelDeduction`, `fuelFleetShare`, `tollSpend`, `tollChargedToDriver`, `tollReimbursed`, `driverShare`, `fleetShare`, `tipsPaidToDriver` and `cashCollected` **from the statements**, then recomputes settlement. The projection is now a derived read model of the statements, exactly as designed.
+
+That is the right architecture, but it has a consequence worth stating plainly: **`closeInvariants` comparing projection to statement is now trivially true by construction for every cutover lane** — not because of a bug, but because they are the same number by design. The check has served its purpose and is now measuring the copy, not the computation.
+
+The real comparison moved to `shadowCompareStatementsVsProjection`, which runs immediately *before* the copy — and it only `console.warn`s. It is called in exactly one place, its result is never persisted, never alerted on, and never blocks. Post-cutover, the only thing between a wrong statement and a driver's balance is a log line.
+
+**Recommended next step (the remaining H-7 work):** move the cross-check upstream. Compare each **statement against its own source engine** — fuel statement vs. a fresh `buildFuelPeriodSnapshots`, toll statement vs. a fresh `computeTollWeekNetting` — rather than statement vs. projection. Persist `shadowCompareStatementsVsProjection` drift as `finance_recon_drift` rows so it is durable and alertable, and have nightly `finance-recon` run the upstream comparison. Without that, the cutover has removed the last check that could actually fail.
+
+### Housekeeping
+
+Work is **uncommitted** in the working tree at review time: `toll_week_seal.ts` (zero-activity weeks now seal as `closed $0` rather than being read as a missing lane — correct and benign), four `docs/finance-recon/` files, and two untracked docs. Commit before the freeze re-sign.
+
+**Pass 4 cutover (2026-09-07):** `PROJECTION_READS_WEEK_STATEMENTS=true` on GoRide; shadow gate **PASS** (4/4 weeks clean). See `docs/finance-recon/2026-09-07-pass4-cutover-complete.md`.
+
+**Still open / follow-on**, in priority order:
+
+1. **Move the cross-check upstream** (statement vs. source engine) and persist shadow drift durably — see above. Highest value; the cutover retired the last check that could fail.
+2. **`sealEarningsWeek`** — give earnings the independent-publisher + draft treatment fuel and toll already have.
+3. Re-sign Aug 24 freeze hash after thaw.
+4. Business Finance P&L feed for the settlement↔P&L block.
+5. Remaining `fuel_entry:` admin scans (15 in `fuel_controller.tsx`); TollBucketPanel virtualization.
 
 ### Docs
 
 - `docs/finance-recon/2026-09-07-pass3-independence.md`
 - `docs/finance-recon/2026-09-07-close-week-runbook.md`
+- `docs/finance-recon/2026-09-07-pass4-cutover-complete.md`
+
+---
+
+## 13. Pass 5 close-out — 2026-09-07
+
+The integrity loop is closed. Statement↔engine drift is durable and blocks Close Week; earnings has an independent seal; Business Finance P&L composition is wired; Aug 24 is re-frozen; shadow gate PASS. Remaining fuel_entry scan cleanup is operational debt, not a trust gap.
+
+---
+
+## 13-pass3. Pass 3 / 4 close-out — 2026-09-07 (superseded)
+
+Every Critical and every High from the original audit is now closed, along with four of the five Mediums and most of the performance work. The statement contract from §6.1 is live in production. That is the whole of the original audit delivered in four passes, and the quality of the independence work — provenance on every statement, draft-blocks-close, and a purpose-built non-tautological regression test — is better than what this document asked for.
+
+Two things are worth carrying forward.
+
+**The earnings lane never got the treatment the other two did.** Fuel and toll now have independent producers and a draft path; earnings still publishes `closed` from the rebuild's own variables. It is one `sealEarningsWeek` away from matching.
+
+**The cutover moved the goalposts, and the checks did not move with them.** Once the projection reads from statements, "does the projection match the statement" stops being a test and becomes a tautology by design. That is correct architecture — but it means the only remaining comparison that *could* fail is `shadowCompareStatementsVsProjection`, and it is a `console.warn` in a single call site. The check needs to move one level up: statement vs. the engine that produced it, run nightly, with drift persisted rather than logged.
+
+This is the same pattern the audit has flagged in every pass, and it is worth naming a fourth time because it keeps recurring in different clothes: **the mechanism gets built correctly, and the last connection — the one that makes it able to fail — is the piece left out.** C-1's events path, C-2's Personal-Allowance branch, C-4's headline, H-4's verifier, Pass 2's self-derived lanes, and now the post-cutover shadow compare. Each was a small connection guarding a large amount of money.
+
+The system is now in materially better shape than when this audit opened: the money is right, the weeks close honestly, and there is an immutable signed artefact behind each one. Finish the upstream check and the loop is genuinely closed.
 
 ---
 
@@ -1208,4 +1301,4 @@ One item does still need a decision rather than code: **C-3.** Whether `chargedT
 
 ---
 
-*Original audit: read-only, no source files modified. §0.5 / §11 (Pass 1), §0.6 / §12 (Pass 2), and §0.7 (Pass 3) added 2026-09-07 after verifying each remediation against the working tree. §0.7 is the current status.*
+*Original audit: read-only, no source files modified. §0.5 / §11 (Pass 1), §0.6 / §12 (Pass 2), §0.7 / §13 (Pass 3–5) added 2026-09-07 after verifying each remediation against the working tree. §0.7 Pass 5 is the current status.*

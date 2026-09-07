@@ -53,6 +53,7 @@ import {
 } from "../../ui/tooltip";
 import { groupTollsByWeek, parseTollDate, getTollTransactionDate } from "../../../utils/tollWeekPeriod";
 import { resolveTollDisplayDriverName } from "@roam/types/driverIdentity";
+import { useWindowedRows } from "../../fleet-financials/settlements/useWindowedRows";
 
 function needsTripPick(tx: FinancialTransaction, match?: MatchResult): boolean {
   return !!(match?.isAmbiguous && !isTripLinkConfirmed(tx));
@@ -477,6 +478,19 @@ export function TollBucketPanel({
     const otherWeekGroups = useMemo(() => groupTollsByWeek(otherTolls, fleetTz), [otherTolls, fleetTz]);
     const visibleOtherWeekGroups = otherWeekGroups.slice(0, visibleWeekCount);
 
+    // P-4/P-5: window long flat toll lists in unified period view.
+    const {
+      visible: windowedOtherTolls,
+      padTop: otherPadTop,
+      padBottom: otherPadBottom,
+      onScroll: onOtherScroll,
+      windowed: otherWindowed,
+    } = useWindowedRows(otherTolls, {
+      rowHeight: 52,
+      viewHeight: 480,
+      threshold: 40,
+    });
+
     const getMatchBadge = (match: MatchResult) => {
         switch (match.matchType) {
             case 'PERFECT_MATCH':
@@ -861,22 +875,38 @@ export function TollBucketPanel({
                             bulkLinkBusy={isBulkLinking}
                         />
                         {otherTolls.length > 0 && (
-                            <Table>
-                                <TableHeader>
-                                    <TableRow>
-                                        {canBulkSelect && <TableHead className="w-[40px]" />}
-                                        <TableHead>Date</TableHead>
-                                        <TableHead>Vehicle</TableHead>
-                                        <TableHead>Driver</TableHead>
-                                        <TableHead>Amount</TableHead>
-                                        <TableHead>Status</TableHead>
-                                        <TableHead className="text-right">Action</TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {otherTolls.map((tx) => renderTollDataRow(tx))}
-                                </TableBody>
-                            </Table>
+                            <div
+                              className="overflow-auto rounded-md border border-slate-100"
+                              style={otherWindowed ? { maxHeight: 480 } : undefined}
+                              onScroll={otherWindowed ? onOtherScroll : undefined}
+                            >
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow>
+                                            {canBulkSelect && <TableHead className="w-[40px]" />}
+                                            <TableHead>Date</TableHead>
+                                            <TableHead>Vehicle</TableHead>
+                                            <TableHead>Driver</TableHead>
+                                            <TableHead>Amount</TableHead>
+                                            <TableHead>Status</TableHead>
+                                            <TableHead className="text-right">Action</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {otherWindowed && otherPadTop > 0 ? (
+                                          <TableRow className="hover:bg-transparent border-0">
+                                            <TableCell colSpan={canBulkSelect ? 7 : 6} style={{ height: otherPadTop, padding: 0 }} />
+                                          </TableRow>
+                                        ) : null}
+                                        {(otherWindowed ? windowedOtherTolls : otherTolls).map((tx) => renderTollDataRow(tx))}
+                                        {otherWindowed && otherPadBottom > 0 ? (
+                                          <TableRow className="hover:bg-transparent border-0">
+                                            <TableCell colSpan={canBulkSelect ? 7 : 6} style={{ height: otherPadBottom, padding: 0 }} />
+                                          </TableRow>
+                                        ) : null}
+                                    </TableBody>
+                                </Table>
+                            </div>
                         )}
                         {filteredTolls.length === 0 && (
                             <p className="text-center text-slate-500 py-8 text-sm">No tolls match the current filter.</p>

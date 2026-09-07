@@ -451,6 +451,13 @@ export function CloseWeekPage({
             }
             ok={!!preview && !pnlBlocker && !pnlUnavailable}
           />
+          {(preview?.openEngineDriftCount ?? 0) > 0 ? (
+            <IdentityRow
+              label="Open statement ↔ engine drifts (nightly / close)"
+              value={String(preview?.openEngineDriftCount)}
+              ok={false}
+            />
+          ) : null}
         </div>
       </div>
 

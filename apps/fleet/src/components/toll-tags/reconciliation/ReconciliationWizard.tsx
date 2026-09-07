@@ -119,8 +119,6 @@ function ReconciliationWizardInner({ period, driverId, drivers, onExit }: Reconc
   const [platformFilter, setPlatformFilter] = useState<PlatformFilter>('all');
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
   const fleetTz = useFleetTimezone();
-  // Net Toll Loss from period landing financials (Wave 2 Dev D — no client re-fetch / recompute).
-  const [fleetLossNet] = useState<number | null>(period.financials?.netTollLoss ?? null);
 
   const {
     loading: tollsLoading,
@@ -1026,7 +1024,6 @@ function ReconciliationWizardInner({ period, driverId, drivers, onExit }: Reconc
   const {
     total: tollSpend,
     byPlatform: tollSpendByPlatform,
-    tagTotal: tagTollSpend,
   } = computeGrossTollSpendByPlatform({
     tolls: periodTolls,
     resolvePlatform: platformOfToll,
@@ -1053,10 +1050,10 @@ function ReconciliationWizardInner({ period, driverId, drivers, onExit }: Reconc
   const chargedToDrivers = pPeriodClaims
     .filter(c => c.status === 'Resolved' && c.resolutionReason === 'Charge Driver')
     .reduce((sum, c) => sum + Math.abs(c.amount || 0), 0);
-  // Seeded from period.financials.netTollLoss (no wizard-side ledger recompute).
-  const netTollLoss = fleetLossNet != null
-    ? fleetLossNet
-    : (period.financials?.netTollLoss ?? 0);
+  // Cards identity: Spend − Reimbursed − Charged = Net (same rule as Close Week).
+  const netTollLoss = Math.round((tollSpend - reimbursedByUber - chargedToDrivers) * 100) / 100;
+  const identityResidual = 0;
+
   const needsReviewCount = STEP_ORDER.reduce(
     (sum, id) => sum + (stepCounts[id]?.actionable || 0),
     0,
@@ -1419,6 +1416,7 @@ function ReconciliationWizardInner({ period, driverId, drivers, onExit }: Reconc
         scopedDisputeRefund={scopedDisputeFromCalc}
         chargedToDrivers={chargedToDrivers}
         netTollLoss={netTollLoss}
+        identityResidual={identityResidual}
         needsReviewCount={needsReviewCount}
         tollsNeedingReviewCount={tollsNeedingReviewCount}
         refundsNeedingReviewCount={refundsNeedingReviewCount}

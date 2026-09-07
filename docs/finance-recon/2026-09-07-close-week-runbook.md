@@ -13,10 +13,12 @@
 |------|---------|-----|
 | `FUEL_STATEMENT_MISSING` / `UNVERIFIED` | No closed fuel statement | Finalize Consumption Reconciliation |
 | `TOLL_STATEMENT_MISSING` / `UNVERIFIED` | No closed toll statement from events | Finish Toll Reconciliation / ensure events exist |
-| `EARNINGS_STATEMENT_MISSING` | Rebuild has not published earnings | Rebuild driver financial periods |
+| `EARNINGS_STATEMENT_MISSING` / `UNVERIFIED` | No closed earnings seal | Close Week auto-seals from engines; or wait for seal |
+| `FUEL_ENGINE_DRIFT` / `TOLL_ENGINE_DRIFT` / `EARNINGS_ENGINE_DRIFT` | Closed seal ≠ fresh engine | Reseal that lane before close |
 | `*_MISMATCH` | Period ≠ independent statement | Investigate drift; do not force-close |
 | `CASH_SOURCE_MISMATCH` | Trip CSV vs ledger cash | Resolve cash source before close |
-| `BUSINESS_WEEK_PNL_UNAVAILABLE` | Warn only — P&L feed not wired | Informational until Pass 4 P&L tie |
+| `SETTLEMENT_PNL_MISMATCH` | Desk fleet P&L ≠ sealed statement P&L | Align projection to statements / reseal |
+| `BUSINESS_WEEK_PNL_UNAVAILABLE` | Warn — no closed statements to build P&L | Seal lanes first |
 
 ## How to restate
 
