@@ -39,6 +39,7 @@ describe('mergeDoneCashHistory', () => {
     expect(rows[0].id).toBe('tx-1');
     expect(rows[0].amount).toBe(10000);
     expect(rows[0].periodAnchor).toBe('2026-08-03');
+    expect(rows[0].periodEnd).toBe('2026-08-09');
   });
 
   it('dedupes when movement already links sourceTransactionId', () => {

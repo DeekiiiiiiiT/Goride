@@ -22,6 +22,7 @@ import {
 import { Label } from '../../ui/label';
 import { Textarea } from '../../ui/textarea';
 import { useWindowedRows } from './useWindowedRows';
+import { periodEndForAnchor } from '@roam/finance-core';
 
 const MONEY = (n: number | null | undefined) => {
   if (n == null || !Number.isFinite(n)) return '—';
@@ -81,7 +82,9 @@ function groupByPeriod(rows: SettlementMovementRow[]) {
   >();
   for (const row of rows) {
     const start = ymdKey(row.periodAnchor);
-    const end = ymdKey(row.periodEnd || start);
+    const rawEnd = ymdKey(row.periodEnd || start);
+    // If end collapsed to Monday (movements API), derive Sunday for the label.
+    const end = start && (!rawEnd || rawEnd === start) ? periodEndForAnchor(start) : rawEnd;
     const key = start || '_none';
     const label = start ? weekLabel(start, end || start) : 'Untagged week';
     let g = map.get(key);

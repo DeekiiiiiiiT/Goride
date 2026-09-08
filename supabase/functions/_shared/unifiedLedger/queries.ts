@@ -207,16 +207,18 @@ export async function listUnifiedLedgerEntries(opts: {
   to?: string;
   limit?: number;
   offset?: number;
+  /** Skip exact COUNT(*) — required for bulk paging under statement_timeout pressure. */
+  skipCount?: boolean;
 }): Promise<{ entries: Record<string, unknown>[]; total: number }> {
   const client = unifiedLedgerClient();
 
   if (opts.driverId) {
-    return await listEntriesForDriver(client, opts);
+    return await listEntriesForDriver(client, { ...opts, skipCount: opts.skipCount });
   }
 
   let q = client
     .from("ledger_entries")
-    .select("*", { count: "exact" })
+    .select("*", opts.skipCount ? undefined : { count: "exact" })
     .order("effective_at", { ascending: false });
 
   if (opts.organizationId) q = q.eq("organization_id", opts.organizationId);
@@ -246,8 +248,8 @@ export async function listUnifiedLedgerEntries(opts: {
     q = q.in("id", ids);
   }
 
-  // Bank Deposits / Settlement page at 500; keep a hard cap for safety.
-  const limit = Math.min(opts.limit ?? 50, 500);
+  // Bank Deposits / Settlement page at 500; bulk scanners (periods) may request up to 1000.
+  const limit = Math.min(opts.limit ?? 50, 1000);
   const offset = opts.offset ?? 0;
   const { data, error, count } = await q.range(offset, offset + limit - 1);
 
@@ -272,6 +274,7 @@ async function listEntriesForDriver(
     to?: string;
     limit?: number;
     offset?: number;
+    skipCount?: boolean;
   },
 ): Promise<{ entries: Record<string, unknown>[]; total: number }> {
   const driverAccountKey = `user:${opts.driverId}:driver:`;
@@ -294,7 +297,7 @@ async function listEntriesForDriver(
 
   let q = client
     .from("ledger_entries")
-    .select("*", { count: "exact" })
+    .select("*", opts.skipCount ? undefined : { count: "exact" })
     .or(`debit_account_id.in.(${accountIds.join(",")}),credit_account_id.in.(${accountIds.join(",")})`)
     .order("effective_at", { ascending: false });
 
@@ -312,7 +315,7 @@ async function listEntriesForDriver(
   if (opts.from) q = q.gte("effective_at", opts.from);
   if (opts.to) q = q.lte("effective_at", opts.to);
 
-  const limit = Math.min(opts.limit ?? 50, 500);
+  const limit = Math.min(opts.limit ?? 50, 1000);
   const offset = opts.offset ?? 0;
   const { data, error, count } = await q.range(offset, offset + limit - 1);
 
@@ -435,13 +438,14 @@ export async function listAllUnifiedCanonicalEvents(opts: {
   maxRows?: number;
 }): Promise<Record<string, unknown>[]> {
   const client = unifiedLedgerClient();
-  const pageSize = 500;
+  // Larger pages + no exact COUNT — periods/rebuild were timing out on COUNT(*) under load.
+  const pageSize = 1000;
   const maxRows = opts.maxRows ?? 50_000;
   const out: Record<string, unknown>[] = [];
   const accountKeyById = new Map<string, string>();
 
   for (let offset = 0; offset < maxRows; offset += pageSize) {
-    const { entries, total } = await listUnifiedLedgerEntries({
+    const { entries } = await listUnifiedLedgerEntries({
       organizationId: opts.organizationId,
       products: opts.products ?? ["roam_driver", "roam_fleet"],
       entryTypes: opts.entryTypes,
@@ -450,6 +454,7 @@ export async function listAllUnifiedCanonicalEvents(opts: {
       to: opts.to,
       limit: pageSize,
       offset,
+      skipCount: true,
     });
     if (entries.length === 0) break;
 
@@ -478,7 +483,7 @@ export async function listAllUnifiedCanonicalEvents(opts: {
         }),
       );
     }
-    if (entries.length < pageSize || out.length >= total) break;
+    if (entries.length < pageSize) break;
   }
 
   return out;

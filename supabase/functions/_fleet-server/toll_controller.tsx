@@ -1589,9 +1589,83 @@ function shiftYmdUtc(ymd: string, days: number): string {
 }
 
 /**
- * Week-scoped trip load for the reconciliation wizard.
- * Toll ledger stays unbounded (small) so already-linked trips in other weeks
- * are not mis-listed as Unlinked Refunds.
+ * Merge ledger + legacy toll transactions into wizard tx shape (ledger wins by id).
+ * Used by date/driver-scoped loaders so we never full-scan fleet.transactions.
+ */
+function mergeTollLedgerAndLegacyTx(
+  ledgerEntries: TollLedgerRecord[],
+  legacyTollTx: any[],
+): any[] {
+  const byId = new Map<string, any>();
+  for (const e of ledgerEntries) {
+    const tx = tollLedgerToTxShape(e);
+    if (tx?.id != null && String(tx.id) !== "") byId.set(String(tx.id), tx);
+  }
+  for (const tx of legacyTollTx || []) {
+    if (!tx || typeof tx !== "object") continue;
+    if (!isTollCategory(tx.category)) continue;
+    const id = tx.id;
+    if (id == null || id === "") continue;
+    const sid = String(id);
+    const existing = byId.get(sid);
+    if (!existing) {
+      byId.set(sid, tx);
+      continue;
+    }
+    const legacyTripId = tx.tripId ?? tx.metadata?.tripId ?? null;
+    if (legacyTripId && !existing.tripId && !existing.metadata?.tripId) {
+      existing.tripId = String(legacyTripId);
+      existing.metadata = { ...(existing.metadata || {}), tripId: String(legacyTripId) };
+    }
+    const legacyPre = tx.preUnlinkedTripId ?? tx.metadata?.preUnlinkedTripId ?? null;
+    if (legacyPre && !existing.preUnlinkedTripId && !existing.metadata?.preUnlinkedTripId) {
+      existing.preUnlinkedTripId = String(legacyPre);
+      existing.metadata = {
+        ...(existing.metadata || {}),
+        preUnlinkedTripId: String(legacyPre),
+      };
+    }
+  }
+  return Array.from(byId.values());
+}
+
+/** Tolls linked to any of these trip ids (trip_id column) — keeps Unlinked Refunds honest. */
+async function findTollsLinkedToTripIds(tripIds: string[]): Promise<TollLedgerRecord[]> {
+  const ids = [...new Set(tripIds.map(String).filter(Boolean))];
+  if (!ids.length) return [];
+  const { iterateFleet } = await import("./repos/baseRepo.ts");
+  const out: TollLedgerRecord[] = [];
+  const CHUNK = 100;
+  for (let i = 0; i < ids.length; i += CHUNK) {
+    const chunk = ids.slice(i, i + CHUNK);
+    for await (const row of iterateFleet("toll_ledger", {
+      filters: [{ op: "in", col: "trip_id", value: chunk }],
+      order: { col: "legacy_kv_id", ascending: true },
+    })) {
+      out.push(row as TollLedgerRecord);
+    }
+  }
+  return out;
+}
+
+/** Date-scoped legacy toll rows from fleet.transactions (not a full prefix dump). */
+async function loadLegacyTollTxInDateRange(fromYmd: string, toYmd: string): Promise<any[]> {
+  const { iterateFleet } = await import("./repos/baseRepo.ts");
+  const out: any[] = [];
+  for await (const row of iterateFleet("transactions", {
+    dateFrom: fromYmd,
+    dateTo: toYmd,
+    order: { col: "date", ascending: true },
+  })) {
+    if (isTollCategory((row as { category?: string }).category)) out.push(row);
+  }
+  return out;
+}
+
+/**
+ * Week-scoped load for the reconciliation wizard / periods landing.
+ * Trips are date-ranged; tolls are date-ranged plus any tolls already linked to
+ * those trips (so Unlinked Refunds does not revive settled links).
  */
 async function loadTollLedgerWithTripsInRange(
   from?: string,
@@ -1606,12 +1680,73 @@ async function loadTollLedgerWithTripsInRange(
   const tripFrom = shiftYmdUtc(tollFrom, -RECON_TRIP_MATCH_PAD_DAYS);
   const tripTo = shiftYmdUtc(tollTo, RECON_TRIP_MATCH_PAD_DAYS);
 
-  const [tollTx, trips] = await Promise.all([
-    loadMergedTollTxArray(),
+  const [tollsInRange, trips, legacyInRange] = await Promise.all([
+    findTollsInDateRange(tollFrom, tollTo),
     findTripsInDateRange(tripFrom, tripTo),
+    loadLegacyTollTxInDateRange(tollFrom, tollTo),
+  ]);
+  const tripList = (trips || []).filter(Boolean);
+  const linkedExtra = await findTollsLinkedToTripIds(
+    tripList.map((t: any) => String(t?.id || "")).filter(Boolean),
+  );
+
+  const ledgerById = new Map<string, TollLedgerRecord>();
+  for (const e of [...(tollsInRange || []), ...linkedExtra] as TollLedgerRecord[]) {
+    if (e?.id != null && String(e.id) !== "") ledgerById.set(String(e.id), e);
+  }
+
+  return {
+    tollTx: mergeTollLedgerAndLegacyTx([...ledgerById.values()], legacyInRange),
+    trips: tripList,
+  };
+}
+
+/**
+ * Driver-scoped rebuild loader — never dumps the whole fleet into Expenses rebuild.
+ * Includes platform alias IDs (Uber/InDrive) when provided.
+ */
+async function loadTollLedgerWithTripsForDrivers(
+  driverIds: string[],
+): Promise<{ tollTx: any[]; trips: any[] }> {
+  const ids = [...new Set(driverIds.map(String).filter(Boolean))];
+  if (!ids.length) return { tollTx: [], trips: [] };
+
+  const { iterateFleet } = await import("./repos/baseRepo.ts");
+  const tollRows: TollLedgerRecord[] = [];
+  const tripRows: any[] = [];
+  const legacyTollTx: any[] = [];
+
+  await Promise.all([
+    (async () => {
+      for await (const row of iterateFleet("toll_ledger", {
+        filters: [{ op: "in", col: "driver_id", value: ids }],
+        order: { col: "date", ascending: true },
+      })) {
+        tollRows.push(row as TollLedgerRecord);
+      }
+    })(),
+    (async () => {
+      for await (const row of iterateFleet("trips", {
+        filters: [{ op: "in", col: "driver_id", value: ids }],
+        order: { col: "date", ascending: true },
+      })) {
+        tripRows.push(row);
+      }
+    })(),
+    (async () => {
+      for await (const row of iterateFleet("transactions", {
+        filters: [{ op: "in", col: "driver_id", value: ids }],
+        order: { col: "date", ascending: true },
+      })) {
+        if (isTollCategory((row as { category?: string }).category)) legacyTollTx.push(row);
+      }
+    })(),
   ]);
 
-  return { tollTx, trips: (trips || []).filter(Boolean) };
+  return {
+    tollTx: mergeTollLedgerAndLegacyTx(tollRows, legacyTollTx),
+    trips: tripRows.filter(Boolean),
+  };
 }
 
 /** Prefer week-scoped SQL when the wizard passes from/to. */
@@ -10257,6 +10392,7 @@ export {
   collectLinkedTripIds,
   loadAllTollLedgerWithTrips,
   loadTollLedgerWithTrips,
+  loadTollLedgerWithTripsForDrivers,
   getRefundAutomationSettings,
   buildUnresolvedRefundSuggestionStatuses,
 };

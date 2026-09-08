@@ -17,7 +17,7 @@ import {
   CheckCircle2,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { MONEY_EPS } from '@roam/finance-core';
+import { MONEY_EPS, periodEndForAnchor } from '@roam/finance-core';
 import {
   isSettlementPeriodEnded,
   settlementPeriodOpenMessage,
@@ -258,6 +258,8 @@ function queueOwedMajor(r: SettlementQueueRow, mode: MoneyDirection): number {
 }
 
 function txToMovementRow(t: FinancialTransaction, kind: 'collect' | 'pay'): SettlementMovementRow {
+  const periodAnchor = ymdKey(t.metadata?.workPeriodStart || t.date);
+  const storedEnd = ymdKey(t.metadata?.workPeriodEnd);
   return {
     id: String(t.id),
     kind,
@@ -267,8 +269,9 @@ function txToMovementRow(t: FinancialTransaction, kind: 'collect' | 'pay'): Sett
     method: t.paymentMethod,
     status: t.status,
     date: t.date,
-    periodAnchor: ymdKey(t.metadata?.workPeriodStart || t.date),
-    periodEnd: ymdKey(t.metadata?.workPeriodEnd || t.metadata?.workPeriodStart || t.date),
+    periodAnchor,
+    // Mon–Sun week label — never collapse end to the Monday anchor.
+    periodEnd: storedEnd && storedEnd !== periodAnchor ? storedEnd : periodEndForAnchor(periodAnchor),
     reference: t.referenceNumber,
     description: t.description,
   };
@@ -310,7 +313,8 @@ function mapApiMovementToRow(r: {
     status: r.status,
     date: r.createdAt ? String(r.createdAt).slice(0, 10) : undefined,
     periodAnchor: ymdKey(r.periodAnchor),
-    periodEnd: ymdKey(r.periodAnchor),
+    // Movements store Monday only — derive Sunday so Done shows Aug 24–30, not 24–24.
+    periodEnd: periodEndForAnchor(ymdKey(r.periodAnchor)),
     reference: r.reference || undefined,
     description: r.reason || undefined,
     approvalState: r.approvalState,
@@ -341,6 +345,8 @@ export function DriverSettlementsPage({
   const [weekTo, setWeekTo] = useState(
     format(endOfWeek(new Date(), { weekStartsOn: 1 }), 'yyyy-MM-dd'),
   );
+  /** When true, omit week bounds so cards + queues show all open unpaid weeks. */
+  const [allOpen, setAllOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [minAmount, setMinAmount] = useState('0');
   const [deskMode, setDeskMode] = useState<DeskMode>('collect');
@@ -353,6 +359,11 @@ export function DriverSettlementsPage({
   const [batchDate, setBatchDate] = useState(new Date().toISOString().split('T')[0]);
   const [batchRef, setBatchRef] = useState('');
   const [batchBusy, setBatchBusy] = useState(false);
+  const rangeWeekFrom = allOpen ? undefined : weekFrom;
+  const rangeWeekTo = allOpen ? undefined : weekTo;
+  const rangeScopeLabel = allOpen ? 'all open' : 'in selected range';
+  const exposureScopeLabel = allOpen ? 'all open weeks' : 'in selected weeks';
+  const exportRangeTag = allOpen ? 'all-open' : `${weekFrom}-to-${weekTo}`;
 
   const [payoutModal, setPayoutModal] = useState<{
     isOpen: boolean;
@@ -417,8 +428,8 @@ export function DriverSettlementsPage({
   const [reconciledDetailLoading, setReconciledDetailLoading] = useState(false);
 
   const queueParamsBase = {
-    weekFrom,
-    weekTo,
+    weekFrom: rangeWeekFrom,
+    weekTo: rangeWeekTo,
     minAmount: minAmount ? Number(minAmount) : 0,
     scope,
     search,
@@ -450,14 +461,14 @@ export function DriverSettlementsPage({
 
   const movementsQuery = useQuery({
     queryKey: settlementKeys.movements({
-      weekFrom,
-      weekTo,
+      weekFrom: rangeWeekFrom,
+      weekTo: rangeWeekTo,
       kind: direction === 'pay' ? 'pay' : 'collect',
     }),
     queryFn: () =>
       settlementCommandsApi.getMovements({
-        weekFrom,
-        weekTo,
+        weekFrom: rangeWeekFrom,
+        weekTo: rangeWeekTo,
         kind: direction === 'pay' ? 'pay' : 'collect',
         pageSize: 500,
       }),
@@ -465,11 +476,15 @@ export function DriverSettlementsPage({
   });
 
   const pendingApprovalsQuery = useQuery({
-    queryKey: settlementKeys.movements({ weekFrom, weekTo, approvalState: 'pending' }),
+    queryKey: settlementKeys.movements({
+      weekFrom: rangeWeekFrom,
+      weekTo: rangeWeekTo,
+      approvalState: 'pending',
+    }),
     queryFn: () =>
       settlementCommandsApi.getMovements({
-        weekFrom,
-        weekTo,
+        weekFrom: rangeWeekFrom,
+        weekTo: rangeWeekTo,
         approvalState: 'pending',
         pageSize: 200,
       }),
@@ -477,14 +492,14 @@ export function DriverSettlementsPage({
   });
 
   const txsQuery = useQuery({
-    queryKey: ['driverSettlementsTransactions', weekFrom, weekTo, scope],
+    queryKey: ['driverSettlementsTransactions', rangeWeekFrom ?? '', rangeWeekTo ?? '', scope, allOpen],
     queryFn: async () => {
       // Always load for Collect/Pay — Done must union Cash Collection logs with movements.
       const page = await api.getTransactions(undefined, {
         limit: 5000,
         offset: 0,
-        startDate: weekFrom,
-        endDate: weekTo,
+        ...(rangeWeekFrom ? { startDate: rangeWeekFrom } : {}),
+        ...(rangeWeekTo ? { endDate: rangeWeekTo } : {}),
         desk: 'settlements',
         ...(serviceLineParam ? { serviceLine: serviceLineParam } : {}),
       });
@@ -634,15 +649,15 @@ export function DriverSettlementsPage({
       direction,
       movements: apiMovementRows,
       legacyTxs: txsQuery.data || [],
-      weekFrom,
-      weekTo,
+      weekFrom: rangeWeekFrom ?? '',
+      weekTo: rangeWeekTo ?? '',
       search,
       isClearedTx: (t) =>
         direction === 'pay'
           ? isClearedDriverPayout(t as FinancialTransaction)
           : isClearedDriverCashPayment(t as FinancialTransaction),
     }) as SettlementMovementRow[];
-  }, [apiMovementRows, txsQuery.data, search, direction, weekFrom, weekTo]);
+  }, [apiMovementRows, txsQuery.data, search, direction, rangeWeekFrom, rangeWeekTo]);
 
   const reconciledRows = useMemo(() => {
     return (reconciledQueueQuery.data?.rows || [])
@@ -719,6 +734,16 @@ export function DriverSettlementsPage({
     .reduce((s, m) => s + Math.abs(Number(m.amount) || 0), 0);
   const clearedThisWeek = direction === 'pay' ? clearedPayThisWeek : clearedCollectThisWeek;
 
+  // Prefer server page flags — All open can exceed pageSize and under-count client KPI sums.
+  const kpiTotalsPossiblyIncomplete =
+    allOpen &&
+    Boolean(
+      collectQueueQuery.data?.page?.hasMore ||
+        collectQueueQuery.data?.page?.truncated ||
+        payQueueQuery.data?.page?.hasMore ||
+        payQueueQuery.data?.page?.truncated,
+    );
+
   // Per-basis errors — don't blank Collect KPIs when only the tx history query fails.
   const collectKpiError = collectQueueQuery.isError;
   const payKpiError = payQueueQuery.isError;
@@ -726,7 +751,7 @@ export function DriverSettlementsPage({
 
   useEffect(() => {
     setSelected(new Set());
-  }, [deskTab, deskMode, weekFrom, weekTo, search]);
+  }, [deskTab, deskMode, weekFrom, weekTo, search, allOpen]);
 
   // S2-9: keep selection intersected with live outstanding keys
   useEffect(() => {
@@ -836,8 +861,8 @@ export function DriverSettlementsPage({
   const refreshAll = async () => {
     try {
       const repair = await api.repairOrphanSettlementMirrors({
-        periodStart: weekFrom,
-        periodEnd: weekTo,
+        ...(rangeWeekFrom ? { periodStart: rangeWeekFrom } : {}),
+        ...(rangeWeekTo ? { periodEnd: rangeWeekTo } : {}),
       });
       if (repair?.purged || repair?.weeksSynced) {
         toast.success(
@@ -1025,7 +1050,7 @@ export function DriverSettlementsPage({
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `driver-settlements-${direction}-${weekFrom}-to-${weekTo}.csv`;
+    a.download = `driver-settlements-${direction}-${exportRangeTag}.csv`;
     a.click();
     URL.revokeObjectURL(url);
     toast.success(`Exported ${rows.length} row${rows.length !== 1 ? 's' : ''}`);
@@ -1068,7 +1093,7 @@ export function DriverSettlementsPage({
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `driver-settlements-done-${direction}-${weekFrom}-to-${weekTo}.csv`;
+    a.download = `driver-settlements-done-${direction}-${exportRangeTag}.csv`;
     a.click();
     URL.revokeObjectURL(url);
     toast.success(`Exported ${rows.length} row${rows.length !== 1 ? 's' : ''}`);
@@ -1116,7 +1141,7 @@ export function DriverSettlementsPage({
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `driver-settlements-reconciled-${weekFrom}-to-${weekTo}.csv`;
+    a.download = `driver-settlements-reconciled-${exportRangeTag}.csv`;
     a.click();
     URL.revokeObjectURL(url);
     toast.success(`Exported ${reconciledRows.length} row${reconciledRows.length !== 1 ? 's' : ''}`);
@@ -1507,6 +1532,59 @@ export function DriverSettlementsPage({
         </div>
       ) : null}
 
+      <SettlementFilters
+        weekFrom={weekFrom}
+        weekTo={weekTo}
+        minAmount={minAmount}
+        search={search}
+        allOpen={allOpen}
+        onWeekFromChange={setWeekFrom}
+        onWeekToChange={setWeekTo}
+        onMinAmountChange={setMinAmount}
+        onSearchChange={setSearch}
+        onAllOpenChange={setAllOpen}
+        trailing={
+          deskMode === 'reconciled' ? (
+            <Button type="button" variant="outline" size="sm" className="h-9" onClick={exportReconciledCsv}>
+              <Download className="h-4 w-4 mr-1.5" />
+              Export CSV
+            </Button>
+          ) : deskMode === 'collect' || deskMode === 'pay' ? (
+            deskTab === 'outstanding' ? (
+              <>
+                <Button type="button" variant="outline" size="sm" className="h-9" onClick={exportCsv}>
+                  <Download className="h-4 w-4 mr-1.5" />
+                  Export CSV
+                </Button>
+                {selectedRows.length > 0 ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    className={cn(
+                      'h-9',
+                      direction === 'collect'
+                        ? 'bg-rose-700 hover:bg-rose-800'
+                        : 'bg-emerald-700 hover:bg-emerald-800',
+                    )}
+                    onClick={() => {
+                      setBatchSelectedKeys([...selected]);
+                      setBatchOpen(true);
+                    }}
+                  >
+                    {direction === 'collect' ? 'Collect selected' : 'Pay selected'} ({selectedRows.length})
+                  </Button>
+                ) : null}
+              </>
+            ) : deskTab === 'done' ? (
+              <Button type="button" variant="outline" size="sm" className="h-9" onClick={exportDoneCsv}>
+                <Download className="h-4 w-4 mr-1.5" />
+                Export CSV
+              </Button>
+            ) : undefined
+          ) : undefined
+        }
+      />
+
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 rounded-lg border border-slate-200 bg-white px-4 py-3">
         <span className="text-xs font-medium uppercase tracking-wide text-slate-500">
           Total exposure
@@ -1514,7 +1592,9 @@ export function DriverSettlementsPage({
         <span className="text-lg font-semibold tabular-nums text-slate-900">
           {collectKpiError || payKpiError ? '—' : MONEY(totalExposure)}
         </span>
-        <span className="text-[11px] text-slate-400">fleet owes + drivers owe + cash held · all weeks in range</span>
+        <span className="text-[11px] text-slate-400">
+          fleet owes + drivers owe + cash held · {exposureScopeLabel}
+        </span>
         {blockedExposure > MONEY_EPS ? (
           <span className="ml-auto rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-800">
             {MONEY(blockedExposure)} blocked / not finalized
@@ -1534,16 +1614,29 @@ export function DriverSettlementsPage({
         fleetOwesError={payQueueQuery.isError}
         awaitingError={txKpiError}
         clearedError={txKpiError}
-        settledOwesSub={`${settledOwesWeekCount} weeks · period range`}
-        cashHeldSub={`${cashHeldWeekCount} weeks · period range`}
-        fleetOwesSub={`${fleetOwesWeekCount} weeks · period range`}
+        settledOwesSub={`${settledOwesWeekCount} weeks · ${rangeScopeLabel}`}
+        cashHeldSub={`${cashHeldWeekCount} weeks · ${rangeScopeLabel}`}
+        fleetOwesSub={`${fleetOwesWeekCount} weeks · ${rangeScopeLabel}`}
         awaitingSub={`${awaitingRows.length} pending (${direction})`}
-        clearedSub={direction === 'pay' ? 'Payouts since Mon' : 'Collections since Mon'}
+        clearedSub={
+          direction === 'pay'
+            ? 'Payouts since Mon · ignores week filter'
+            : 'Collections since Mon · ignores week filter'
+        }
         directionLabels={{
           awaiting: 'Awaiting bank clear',
-          cleared: 'Cleared this week',
+          cleared: 'Cleared since Monday',
         }}
       />
+
+      {kpiTotalsPossiblyIncomplete ? (
+        <div
+          role="status"
+          className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950"
+        >
+          Totals may be incomplete for All open — narrow the week range for exact numbers.
+        </div>
+      ) : null}
 
       {collectKpiError || payKpiError || txKpiError || reconciledQueueQuery.isError ? (
         <div
@@ -1633,57 +1726,6 @@ export function DriverSettlementsPage({
             : 'Pay = money you owe drivers'}
         </p>
       )}
-
-      <SettlementFilters
-        weekFrom={weekFrom}
-        weekTo={weekTo}
-        minAmount={minAmount}
-        search={search}
-        onWeekFromChange={setWeekFrom}
-        onWeekToChange={setWeekTo}
-        onMinAmountChange={setMinAmount}
-        onSearchChange={setSearch}
-        trailing={
-          deskMode === 'reconciled' ? (
-            <Button type="button" variant="outline" size="sm" className="h-9" onClick={exportReconciledCsv}>
-              <Download className="h-4 w-4 mr-1.5" />
-              Export CSV
-            </Button>
-          ) : deskMode === 'collect' || deskMode === 'pay' ? (
-            deskTab === 'outstanding' ? (
-              <>
-                <Button type="button" variant="outline" size="sm" className="h-9" onClick={exportCsv}>
-                  <Download className="h-4 w-4 mr-1.5" />
-                  Export CSV
-                </Button>
-                {selectedRows.length > 0 ? (
-                  <Button
-                    type="button"
-                    size="sm"
-                    className={cn(
-                      'h-9',
-                      direction === 'collect'
-                        ? 'bg-rose-700 hover:bg-rose-800'
-                        : 'bg-emerald-700 hover:bg-emerald-800',
-                    )}
-                    onClick={() => {
-                      setBatchSelectedKeys([...selected]);
-                      setBatchOpen(true);
-                    }}
-                  >
-                    {direction === 'collect' ? 'Collect selected' : 'Pay selected'} ({selectedRows.length})
-                  </Button>
-                ) : null}
-              </>
-            ) : deskTab === 'done' ? (
-              <Button type="button" variant="outline" size="sm" className="h-9" onClick={exportDoneCsv}>
-                <Download className="h-4 w-4 mr-1.5" />
-                Export CSV
-              </Button>
-            ) : undefined
-          ) : undefined
-        }
-      />
 
       {deskMode === 'log-cash' ? (
         <div className="space-y-4">

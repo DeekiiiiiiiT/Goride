@@ -7,7 +7,7 @@ import { format, addDays } from "npm:date-fns";
 import * as kv from "./kv_store.tsx";
 import { getFleetTimezone, fleetCalendarDay } from "./timezone_helper.tsx";
 import {
-  loadAllTollLedgerWithTrips,
+  loadTollLedgerWithTripsForDrivers,
   isReconcilableTollExpense,
   filterByDriver,
   loadDisputeRefundRecords,
@@ -625,7 +625,8 @@ export async function loadRebuildContext(
     prefsEH,
     policyItemsRaw,
   ] = await Promise.all([
-    loadAllTollLedgerWithTrips(),
+    // Driver-scoped — full-fleet dump was timing out Expenses rebuild after toll reconcile.
+    loadTollLedgerWithTripsForDrivers(driverIds),
     loadDisputeRefundRecords(),
     loadAllByPrefix("finalized_report:"),
     loadAllByPrefix("claim:"),

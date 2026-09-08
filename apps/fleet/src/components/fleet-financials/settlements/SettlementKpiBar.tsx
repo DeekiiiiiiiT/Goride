@@ -117,7 +117,7 @@ export function SettlementKpiBar({
         tone="pending"
       />
       <KpiTile
-        label={directionLabels?.cleared || 'Cleared this week'}
+        label={directionLabels?.cleared || 'Cleared since Monday'}
         value={e.value}
         sub={e.sub}
         tone="paid"

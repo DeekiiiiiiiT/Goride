@@ -306,7 +306,8 @@ async function loadTollFleetLossLedgerEvents(opts?: {
     driverId: opts?.driverId,
     from: opts?.from,
     to: opts?.to,
-    maxRows: 100_000,
+    // 26-week lookback — avoid 100k scan that stampeded statement_timeout.
+    maxRows: 25_000,
   });
 }
 
@@ -346,8 +347,7 @@ app.get(`${BASE}/periods`, requirePermission('toll.view'), async (c) => {
     const allDisputeRefunds = await loadDisputeRefundRecords();
     const disputeRefundsAll = filterByDriver(allDisputeRefunds, driverId);
 
-    // Tag credits (top-ups/refunds/adjustments) must not spawn periods or counts.
-    // Toll ledger loader is still unbounded; clip to lookback (trips already ranged).
+    // Clip to lookback (trips + tolls are date-ranged in loadTollLedgerWithTrips).
     // Exclude quarantined rows from period Toll Spend / counts.
     const tollTxDriver = filterByDriver(tollTx, driverId)
       .filter(isReconcilableTollExpense)

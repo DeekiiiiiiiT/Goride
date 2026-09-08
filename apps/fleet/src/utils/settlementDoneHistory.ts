@@ -3,6 +3,7 @@
  * / Driver Payout txs. Root cause of "invisible cash": Done preferred movements whenever
  * any row existed and never fell through to Cash Collection txs.
  */
+import { periodEndForAnchor } from '@roam/finance-core';
 
 export type DoneHistoryMovement = {
   id: string;
@@ -118,7 +119,11 @@ export function mergeDoneCashHistory(opts: {
       status: t.status || 'Completed',
       date: ymd(t.date),
       periodAnchor: week || ymd(t.date),
-      periodEnd: ymd(t.metadata?.workPeriodEnd || week || t.date),
+      periodEnd: (() => {
+        const start = week || ymd(t.date);
+        const stored = ymd(t.metadata?.workPeriodEnd);
+        return stored && stored !== start ? stored : periodEndForAnchor(start);
+      })(),
       reference: t.referenceNumber,
       description: t.description,
       sourceTransactionId: txId,

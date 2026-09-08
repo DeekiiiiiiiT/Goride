@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { Search } from 'lucide-react';
 import { Input } from '../../ui/input';
 import { Label } from '../../ui/label';
+import { Switch } from '../../ui/switch';
 
 export type SettlementFiltersValue = {
   weekFrom: string;
@@ -15,10 +16,12 @@ export type SettlementFiltersProps = {
   weekTo: string;
   minAmount: string;
   search: string;
+  allOpen?: boolean;
   onWeekFromChange: (value: string) => void;
   onWeekToChange: (value: string) => void;
   onMinAmountChange: (value: string) => void;
   onSearchChange: (value: string) => void;
+  onAllOpenChange?: (value: boolean) => void;
   /** Optional trailing actions (export / batch) — same row. */
   trailing?: ReactNode;
 };
@@ -29,10 +32,12 @@ export function SettlementFilters({
   weekTo,
   minAmount,
   search,
+  allOpen = false,
   onWeekFromChange,
   onWeekToChange,
   onMinAmountChange,
   onSearchChange,
+  onAllOpenChange,
   trailing,
 }: SettlementFiltersProps) {
   return (
@@ -44,6 +49,7 @@ export function SettlementFilters({
             type="date"
             className="h-9 w-[150px]"
             value={weekFrom}
+            disabled={allOpen}
             onChange={(e) => onWeekFromChange(e.target.value)}
           />
         </div>
@@ -53,9 +59,28 @@ export function SettlementFilters({
             type="date"
             className="h-9 w-[150px]"
             value={weekTo}
+            disabled={allOpen}
             onChange={(e) => onWeekToChange(e.target.value)}
           />
         </div>
+        {onAllOpenChange ? (
+          <div className="space-y-1">
+            <Label htmlFor="settlements-all-open" className="text-xs text-slate-500">
+              All open
+            </Label>
+            <div className="flex h-9 items-center gap-2">
+              <Switch
+                id="settlements-all-open"
+                checked={allOpen}
+                onCheckedChange={onAllOpenChange}
+                aria-label="Show all open weeks without a date limit"
+              />
+              <span className="text-[11px] text-slate-400">
+                {allOpen ? 'Dates ignored' : 'Selected weeks'}
+              </span>
+            </div>
+          </div>
+        ) : null}
         <div className="space-y-1">
           <Label className="text-xs text-slate-500">Min amount</Label>
           <Input
