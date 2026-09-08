@@ -3743,6 +3743,31 @@ app.post("/make-server-37f42386/transactions", requireAuth({ requireOrg: true })
                     }
                     transaction.metadata.learntLocationId = learntId;
                 }
+
+                // Merchant-name auto-heal when GPS miss / ambiguous / unverified match
+                try {
+                    const st = transaction.metadata?.locationStatus;
+                    if (st === 'review_required' || st === 'unverified' || st === 'unknown') {
+                        const { tryMerchantNameAutoHeal } = await import("./station_attach.ts");
+                        const verifiedOnly = allStationsCache.filter(
+                            (s: any) => s && (!s.status || s.status === 'verified'),
+                        );
+                        const heal = await tryMerchantNameAutoHeal(transaction, verifiedOnly);
+                        if (heal.healed) {
+                            const lid = transaction.metadata?.learntLocationId;
+                            if (lid) {
+                                await kv.del(`learnt_location:${lid}`);
+                                delete transaction.metadata.learntLocationId;
+                            }
+                            smartMatchedStation = verifiedOnly.find((s: any) => s.id === heal.stationId) || null;
+                            console.log(
+                                `[MerchantAutoHeal] Tx ${transaction.id} → ${heal.stationId} (${heal.merchantText})`,
+                            );
+                        }
+                    }
+                } catch (healErr) {
+                    console.warn("[MerchantAutoHeal] Driver tx path failed (non-fatal):", healErr);
+                }
             } catch (err) {
                 console.error("Geolocation Smart Matching Error:", err);
             }

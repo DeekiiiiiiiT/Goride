@@ -3,12 +3,27 @@
  * finalize / rebuild uses — NOT stale driver_financial_periods.fuel_deduction
  * (which can be $0 after wallet resets while the Consumption strip still shows
  * the live driver share).
+ *
+ * resolveFuelCloseAmounts is the single preference order for seal + Close Week
+ * engine probe (toll-style: probe and seal cannot diverge).
  */
 import { getServiceClient } from "./service_client.ts";
 import { publishWeekStatement, getLatestWeekStatement } from "./week_statements.ts";
 import { periodEndForAnchor } from "../../../packages/finance-core/src/periodKey.ts";
 import { buildFuelPeriodSnapshots } from "./fuel_period_build_snapshots.ts";
 import * as kv from "./kv_store.tsx";
+import {
+  pickFuelCloseAmounts,
+  type FuelCloseAmountOverride,
+  type FuelCloseAmounts,
+} from "./fuel_close_amounts.ts";
+
+export type { FuelCloseAmountOverride, FuelCloseAmounts } from "./fuel_close_amounts.ts";
+export {
+  buildFuelSealAmountsByDriver,
+  isSuspiciousFuelRebuild,
+  pickFuelCloseAmounts,
+} from "./fuel_close_amounts.ts";
 
 function sb() {
   return getServiceClient();
@@ -22,25 +37,17 @@ function finalizedReportKey(weekKey: string, driverId: string): string {
   return `finalized_report:${weekKey}:${driverId}`;
 }
 
-type FuelAmounts = {
-  driverShare: number;
-  companyShare: number;
-  totalSpend: number;
-  miscellaneousCost: number;
-  source: string;
-};
-
 async function amountsFromRebuild(
   organizationId: string,
   weekKey: string,
-): Promise<Map<string, FuelAmounts>> {
+): Promise<Map<string, FuelCloseAmounts>> {
   const weekEnd = periodEndForAnchor(weekKey);
   const built = await buildFuelPeriodSnapshots({
     orgId: organizationId,
     weekStart: weekKey,
     weekEnd,
   });
-  const out = new Map<string, FuelAmounts>();
+  const out = new Map<string, FuelCloseAmounts>();
   if (!built.ok) return out;
   for (const snap of built.snapshots) {
     const driverId = String(snap.driverId || "").trim();
@@ -65,7 +72,7 @@ async function amountsFromFinalizedKv(
   organizationId: string,
   weekKey: string,
   driverId: string,
-): Promise<FuelAmounts | null> {
+): Promise<FuelCloseAmounts | null> {
   const snap = await kv.get(finalizedReportKey(weekKey, driverId));
   if (!snap) return null;
   const snapOrg = String(snap.orgId || snap.org_id || "");
@@ -84,21 +91,12 @@ async function amountsFromFinalizedKv(
   };
 }
 
-/** Rebuild that zeroes driver share while inventing a huge company share is not Consumption. */
-function isSuspiciousFuelRebuild(a: FuelAmounts): boolean {
-  return (
-    a.source === "fuel_week_rebuild" &&
-    Math.abs(a.driverShare) < 0.005 &&
-    Math.abs(a.companyShare) > 0.005
-  );
-}
-
 /** Last Consumption-strip seal for this driver-week (standing or restated history). */
 async function amountsFromConsumptionHistory(
   organizationId: string,
   driverId: string,
   weekKey: string,
-): Promise<FuelAmounts | null> {
+): Promise<FuelCloseAmounts | null> {
   const { data, error } = await sb()
     .from("week_statements")
     .select("amounts_minor, close_reason")
@@ -123,21 +121,66 @@ async function amountsFromConsumptionHistory(
   };
 }
 
+/**
+ * Resolve Close Week fuel amounts for one driver (seal + probe share this).
+ * Pass `fromRebuild` when the caller already built the week map (seal batch).
+ */
+export async function resolveFuelCloseAmounts(opts: {
+  organizationId: string;
+  weekKey: string;
+  driverId: string;
+  override?: FuelCloseAmountOverride | null;
+  period?: {
+    fuel_deduction?: number | null;
+    fuel_fleet_share?: number | null;
+    fuel_finalized?: boolean | null;
+  } | null;
+  fromRebuild?: FuelCloseAmounts | null;
+}): Promise<FuelCloseAmounts> {
+  const organizationId = String(opts.organizationId || "").trim();
+  const weekKey = WEEK_KEY(opts.weekKey);
+  const driverId = String(opts.driverId || "").trim();
+
+  const fromKv = await amountsFromFinalizedKv(organizationId, weekKey, driverId);
+  const fromConsumption = await amountsFromConsumptionHistory(organizationId, driverId, weekKey);
+
+  // Seal passes fromRebuild (batch); probe omits it and loads once per call.
+  let fromRebuild: FuelCloseAmounts | null =
+    opts.fromRebuild !== undefined ? opts.fromRebuild : null;
+  if (opts.fromRebuild === undefined) {
+    try {
+      const map = await amountsFromRebuild(organizationId, weekKey);
+      fromRebuild = map.get(driverId) || null;
+    } catch {
+      fromRebuild = null;
+    }
+  }
+
+  const fuelFinalized = Boolean(opts.period?.fuel_finalized);
+  const periodFallback: FuelCloseAmounts = {
+    driverShare: round2(Number(opts.period?.fuel_deduction) || 0),
+    companyShare: round2(Number(opts.period?.fuel_fleet_share) || 0),
+    totalSpend: 0,
+    miscellaneousCost: 0,
+    source: fuelFinalized ? "period_fuel_finalized" : "period_columns",
+  };
+
+  return pickFuelCloseAmounts({
+    override: opts.override,
+    fromConsumption,
+    fromKv,
+    fromRebuild,
+    periodFallback,
+  });
+}
+
 export async function sealFuelWeek(opts: {
   organizationId: string;
   weekKey: string;
   actorId?: string;
   force?: boolean;
-  /** Optional per-driver overrides (major units) — e.g. Consumption money strip. */
-  amountsByDriver?: Record<
-    string,
-    {
-      driverShare?: number;
-      companyShare?: number;
-      totalSpend?: number;
-      miscellaneousCost?: number;
-    }
-  >;
+  /** Optional per-driver overrides (major units) — e.g. Finalize snapshots / Consumption strip. */
+  amountsByDriver?: Record<string, FuelCloseAmountOverride>;
 }): Promise<{ published: number }> {
   const organizationId = String(opts.organizationId || "").trim();
   const weekKey = WEEK_KEY(opts.weekKey);
@@ -152,7 +195,7 @@ export async function sealFuelWeek(opts: {
     .eq("period_anchor", weekKey);
   if (error) throw new Error(error.message);
 
-  let rebuilt = new Map<string, FuelAmounts>();
+  let rebuilt = new Map<string, FuelCloseAmounts>();
   try {
     rebuilt = await amountsFromRebuild(organizationId, weekKey);
   } catch (e) {
@@ -164,64 +207,14 @@ export async function sealFuelWeek(opts: {
     const driverId = String(p.driver_id || "");
     if (!driverId) continue;
 
-    const fromKv = await amountsFromFinalizedKv(organizationId, weekKey, driverId);
-    const fromRebuild = rebuilt.get(driverId) || null;
-
-    // Prefer live Consumption truth over rebuild: override → prior consumption_strip
-    // history → finalized KV with a real driver share → rebuild (when not suspicious)
-    // → period columns. Never let a $0-driver rebuild clobber Consumption.
-    let amounts: FuelAmounts | null = null;
-
-    const override = opts.amountsByDriver?.[driverId];
-    if (override) {
-      amounts = {
-        driverShare: round2(override.driverShare ?? 0),
-        companyShare: round2(override.companyShare ?? 0),
-        totalSpend: round2(override.totalSpend ?? 0),
-        miscellaneousCost: round2(override.miscellaneousCost ?? 0),
-        source: "consumption_strip",
-      };
-    }
-
-    if (!amounts) {
-      amounts = await amountsFromConsumptionHistory(organizationId, driverId, weekKey);
-    }
-
-    if (
-      !amounts &&
-      fromKv &&
-      Math.abs(fromKv.driverShare) > 0.005
-    ) {
-      amounts = fromKv;
-    }
-
-    if (!amounts && fromRebuild && !isSuspiciousFuelRebuild(fromRebuild)) {
-      amounts = fromRebuild;
-    } else if (!amounts && fromRebuild) {
-      // Suspicious $0-driver rebuild — keep KV if any, else last resort rebuild.
-      amounts = fromKv || fromRebuild;
-    }
-
-    if (!amounts) {
-      amounts = {
-        driverShare: round2(Number(p.fuel_deduction) || 0),
-        companyShare: round2(Number(p.fuel_fleet_share) || 0),
-        totalSpend: 0,
-        miscellaneousCost: 0,
-        source: p.fuel_finalized ? "period_fuel_finalized" : "period_columns",
-      };
-    }
-
-    // Prefer rebuild only when it carries a non-zero driver share but current
-    // pick is $0 (wallet reset) — never when rebuild itself is the $0 suspect.
-    if (
-      amounts.source !== "fuel_week_rebuild" &&
-      Math.abs(amounts.driverShare) < 0.005 &&
-      fromRebuild &&
-      Math.abs(fromRebuild.driverShare) > 0.005
-    ) {
-      amounts = fromRebuild;
-    }
+    const amounts = await resolveFuelCloseAmounts({
+      organizationId,
+      weekKey,
+      driverId,
+      override: opts.amountsByDriver?.[driverId] ?? null,
+      period: p,
+      fromRebuild: rebuilt.get(driverId) || null,
+    });
 
     const hasActivity =
       Math.abs(amounts.driverShare) > 0.005 ||

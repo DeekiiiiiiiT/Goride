@@ -75,6 +75,15 @@ import {
 } from "./fuel_enterprise_settlement.ts";
 import { periodAnchorFor, periodEndForAnchor } from "./financial_ledger.ts";
 import { getFleetTimezone } from "./timezone_helper.tsx";
+import {
+  attachRecordIdToStation,
+  tryMerchantNameAutoHeal,
+} from "./station_attach.ts";
+import {
+  matchUniqueVerifiedStationForRecord,
+} from "./merchant_station_match.ts";
+import { odometerSequenceHealthy } from "./odometer_health.ts";
+import { logAdminAction } from "./audit_log.ts";
 
 const app = new Hono();
 
@@ -1912,6 +1921,12 @@ app.post(`${BASE_PATH}/finalized-reports/reset-period`, requirePermission('trans
               reopen_reason: reopenReason || null,
               locked_at: null,
               locked_by: null,
+              // Reset review gate so landing returns to Outstanding (not stale In Progress / Done chips).
+              leakage_reviewed_at: null,
+              leakage_reviewed_by: null,
+              leakage_review_note: null,
+              counts: {},
+              current_step: "data-quality",
               version: nextVersion,
               updated_at: now,
             })
@@ -3147,156 +3162,7 @@ async function deleteGateHeldEvidenceTransaction(
     return { success: true, transactionDeleted: true, learntDeleted };
 }
 
-/**
- * After spatial bulk-assign stamps a fuel transaction with a station, ensure a `fuel_entry:*`
- * record exists and is linked so Transaction Logs (which load fuel_entry only) show the row.
- */
-async function ensureFuelEntryLinkedToTransaction(tx: any, station: any): Promise<void> {
-    if (!tx?.id || !station?.id) return;
-    const cat = tx.category;
-    if (cat !== "Fuel" && cat !== "Fuel Reimbursement") return;
-
-    const resolved = await resolveDriverVehicleAssignment(tx.driverId, {
-        organizationId: tx.organizationId,
-        hintVehicleId: tx.vehicleId,
-    });
-    if (resolved.vehicleId) {
-        tx.vehicleId = resolved.vehicleId;
-    }
-
-    if (!tx.vehicleId) {
-        console.log(`[BulkAssign-FuelEntry] Skip fuel_entry: no vehicleId on transaction ${tx.id} (assignment unresolved)`);
-        return;
-    }
-
-    let existing: any = null;
-    const linkedId = tx.metadata?.fuelEntryId;
-    if (linkedId) {
-        existing = await kv.get(`fuel_entry:${linkedId}`);
-        if (!canReuseLinkedFuelEntry(existing, tx.id)) {
-            if (existing) {
-                console.warn(
-                    `[BulkAssign-FuelEntry] metadata.fuelEntryId ${linkedId} mismatched transactionId ? searching by transactionId`
-                );
-            }
-            existing = null;
-        }
-    }
-
-    if (!existing) {
-        existing = await findFuelEntryByTransactionId(tx.id);
-    }
-
-    const stationName = station.name;
-
-    if (existing) {
-        const updated: any = {
-            ...existing,
-            vendor: stationName,
-            matchedStationId: station.id,
-            location:
-                !existing.location ||
-                (typeof existing.location === "string" && existing.location.toLowerCase().includes("unknown")) ||
-                existing.location === "Manual Entry"
-                    ? stationName
-                    : existing.location,
-            stationAddress: station.address || existing.stationAddress || tx.metadata?.stationLocation || "",
-            metadata: {
-                ...existing.metadata,
-                locationStatus: "verified",
-                verificationMethod: "manual_bulk_assign",
-                matchedStationId: station.id,
-                bulkAssignedAt: new Date().toISOString(),
-            },
-        };
-        delete updated.metadata?.ambiguityReason;
-
-        const confidence = fuelLogic.calculateConfidenceScore(updated, station);
-        updated.metadata = {
-            ...updated.metadata,
-            auditConfidenceScore: confidence.score,
-            auditConfidenceBreakdown: confidence.breakdown,
-            isHighlyTrusted: confidence.isHighlyTrusted,
-        };
-
-        updated.signature = await auditLogic.generateRecordHash(updated);
-        await kv.set(`fuel_entry:${existing.id}`, updated);
-        await syncLinkedExpenseTransaction(updated);
-
-        if (!tx.metadata?.fuelEntryId || tx.metadata.fuelEntryId !== existing.id) {
-            tx.metadata = { ...tx.metadata, fuelEntryId: existing.id };
-            tx.signature = await auditLogic.generateRecordHash(tx);
-            tx.signedAt = new Date().toISOString();
-            await kv.set(`transaction:${tx.id}`, tx);
-        }
-        console.log(`[BulkAssign-FuelEntry] Updated fuel_entry ${existing.id} for transaction ${tx.id}`);
-        return;
-    }
-
-    const quantity = Number(tx.quantity) || Number(tx.metadata?.fuelVolume) || 0;
-    const amount = Math.abs(Number(tx.amount) || Number(tx.metadata?.totalCost) || 0);
-    const pricePerLiter =
-        tx.metadata?.pricePerLiter || (quantity > 0 ? Number((amount / quantity).toFixed(3)) : 0);
-
-    const rawPaymentSource = tx.metadata?.paymentSource || tx.paymentMethod;
-    const paySrc = resolveFuelPaymentSource(rawPaymentSource);
-    const paymentSourceEnum = paySrc.enum;
-    const metadataPaymentSource = paySrc.meta;
-
-    const fuelEntryId = crypto.randomUUID();
-    const fuelEntry: any = {
-        id: fuelEntryId,
-        date: tx.date && tx.time
-            ? `${tx.date}T${tx.time}`
-            : tx.date || new Date().toISOString().split("T")[0],
-        type: "Reimbursement",
-        amount,
-        liters: quantity,
-        pricePerLiter,
-        odometer: Number(tx.odometer) || 0,
-        vendor: stationName,
-        location: stationName,
-        stationAddress: station.address || tx.metadata?.stationLocation || "",
-        vehicleId: tx.vehicleId,
-        driverId: tx.driverId,
-        transactionId: tx.id,
-        receiptUrl: tx.receiptUrl || tx.metadata?.receiptUrl,
-        odometerProofUrl: tx.odometerProofUrl || tx.metadata?.odometerProofUrl,
-        isVerified: true,
-        source: "Bulk Assign",
-        matchedStationId: station.id,
-        paymentSource: paymentSourceEnum,
-        entryMode: "Floating",
-        metadata: {
-            ...tx.metadata,
-            locationStatus: "verified",
-            verificationMethod: "manual_bulk_assign",
-            matchedStationId: station.id,
-            originalTransactionId: tx.id,
-            paymentSource: metadataPaymentSource,
-            stationName: stationName,
-        },
-    };
-    delete fuelEntry.metadata?.ambiguityReason;
-
-    const confidence = fuelLogic.calculateConfidenceScore(fuelEntry, station);
-    fuelEntry.metadata = {
-        ...fuelEntry.metadata,
-        auditConfidenceScore: confidence.score,
-        auditConfidenceBreakdown: confidence.breakdown,
-        isHighlyTrusted: confidence.isHighlyTrusted,
-    };
-
-    fuelEntry.signature = await auditLogic.generateRecordHash(fuelEntry);
-    await kv.set(`fuel_entry:${fuelEntryId}`, fuelEntry);
-
-    tx.metadata = { ...tx.metadata, fuelEntryId: fuelEntryId };
-    tx.signature = await auditLogic.generateRecordHash(tx);
-    tx.signedAt = new Date().toISOString();
-    await kv.set(`transaction:${tx.id}`, tx);
-    await syncLinkedExpenseTransaction(fuelEntry);
-    console.log(`[BulkAssign-FuelEntry] Created fuel_entry ${fuelEntryId} for transaction ${tx.id}`);
-}
+/** ensureFuelEntryLinkedToTransaction — imported from station_attach.ts */
 
 /**
  * Robust coordinate extraction from a fuel entry.
@@ -4359,6 +4225,20 @@ app.post(`${BASE_PATH}/fuel-entries`, async (c: Context) => {
       if (vendorFromMeta && (!entry.location || entry.location === "Unknown")) {
         entry.location = vendorFromMeta;
       }
+      // Merchant-name auto-heal for gas-card statement rows (no GPS)
+      try {
+        const godStations = ((await kv.getByPrefix("station:")) || []).filter(
+          (s: any) => s && s.id && (!s.status || s.status === "verified"),
+        );
+        const heal = await tryMerchantNameAutoHeal(entry, godStations);
+        if (heal.healed) {
+          console.log(
+            `[MerchantAutoHeal] JAA entry ${entry.id} → station ${heal.stationId} (${heal.merchantText}, score=${heal.score})`,
+          );
+        }
+      } catch (healErr) {
+        console.warn("[MerchantAutoHeal] JAA path failed (non-fatal):", healErr);
+      }
     }
     if (entry.matchedStationId) {
         const manualStation = await kv.get(`station:${entry.matchedStationId}`);
@@ -4503,6 +4383,29 @@ app.post(`${BASE_PATH}/fuel-entries`, async (c: Context) => {
                 verificationMethod: 'none',
                 learntLocationId: learntId
             };
+        }
+
+        // Merchant-name auto-heal after GPS miss / ambiguous — skip bad pin when merchant + odo healthy
+        try {
+            const statusNow = entry.metadata?.locationStatus;
+            if (statusNow === 'unknown' || statusNow === 'review_required') {
+                const heal = await tryMerchantNameAutoHeal(
+                    entry,
+                    allStationsForEntry.filter((s: any) => !s.status || s.status === 'verified'),
+                );
+                if (heal.healed) {
+                    const lid = entry.metadata?.learntLocationId;
+                    if (lid) {
+                        await kv.del(`learnt_location:${lid}`);
+                        delete entry.metadata.learntLocationId;
+                    }
+                    console.log(
+                        `[MerchantAutoHeal] Entry ${entry.id} → ${heal.stationId} (${heal.merchantText})`,
+                    );
+                }
+            }
+        } catch (healErr) {
+            console.warn("[MerchantAutoHeal] GPS-fail path failed (non-fatal):", healErr);
         }
     } else if (!skipGpsMatching) {
         // --- NO GPS COORDINATES: STATION GATE HOLD ---
@@ -5127,7 +5030,6 @@ app.post(`${BASE_PATH}/admin/spatial-review/delete`, requirePlatformStaff(), asy
 // --- BULK ASSIGN STATION (Manual Orphan Resolution) ---
 app.post(`${BASE_PATH}/admin/bulk-assign-station`, requirePlatformStaff(), async (c) => {
     try {
-        // Step 1: Parse request body
         let body: any;
         try {
             body = await c.req.json();
@@ -5137,28 +5039,23 @@ app.post(`${BASE_PATH}/admin/bulk-assign-station`, requirePlatformStaff(), async
 
         const { entryIds, stationId } = body;
 
-        // Step 2: Validate stationId
         if (!stationId || typeof stationId !== 'string' || stationId.trim().length === 0) {
             return c.json({ error: "Missing required field: stationId" }, 400);
         }
 
-        // Step 3: Validate entryIds
         if (!entryIds || !Array.isArray(entryIds) || entryIds.length === 0) {
             return c.json({ error: "Missing or empty required field: entryIds" }, 400);
         }
 
-        // Validate every element is a string
         const invalidEntry = entryIds.find((id: any) => typeof id !== 'string' || id.trim().length === 0);
         if (invalidEntry !== undefined) {
             return c.json({ error: "All entryIds must be non-empty strings" }, 400);
         }
 
-        // Cap batch size to prevent timeout
         if (entryIds.length > 200) {
             return c.json({ error: "Batch too large. Maximum 200 entries per request." }, 400);
         }
 
-        // Step 4: Validate target station exists in Master Ledger
         const station = await kv.get(`station:${stationId}`);
         if (!station) {
             return c.json({ error: "Target station not found in Master Ledger" }, 404);
@@ -5166,7 +5063,6 @@ app.post(`${BASE_PATH}/admin/bulk-assign-station`, requirePlatformStaff(), async
 
         console.log(`[BulkAssign] Target station: ${station.name} (${stationId}), assigning ${entryIds.length} entries`);
 
-        // Step 5: Process entries ? fetch, stamp, re-sign, persist
         let updatedCount = 0;
         let skippedNotFound = 0;
         let skippedAlreadyAssigned = 0;
@@ -5174,80 +5070,32 @@ app.post(`${BASE_PATH}/admin/bulk-assign-station`, requirePlatformStaff(), async
         let latestDate: string | null = null;
 
         for (const entryId of entryIds) {
-            // 5a. Fetch fuel entry first, then financial fuel transaction
-            let entry: any = await kv.get(`fuel_entry:${entryId}`);
-            let storageKey = `fuel_entry:${entryId}`;
-            if (!entry) {
-                entry = await kv.get(`transaction:${entryId}`);
-                storageKey = `transaction:${entryId}`;
-            }
-            if (!entry) {
-                skippedNotFound++;
-                errors.push({ entryId, reason: "Entry not found" });
-                continue;
-            }
-
-            if (storageKey.startsWith("transaction:")) {
-                const cat = entry.category;
-                if (cat !== "Fuel" && cat !== "Fuel Reimbursement") {
+            const result = await attachRecordIdToStation(entryId, station, {
+                method: "manual_bulk_assign",
+                dismissLearnt: true,
+            });
+            if (!result.ok) {
+                if (result.reason === "Entry not found") {
+                    skippedNotFound++;
+                    errors.push({ entryId, reason: "Entry not found" });
+                } else if (result.skipped === "already_assigned") {
+                    skippedAlreadyAssigned++;
+                } else if (result.skipped === "not_fuel") {
                     errors.push({ entryId, reason: "Not a fuel transaction" });
-                    continue;
+                } else {
+                    errors.push({ entryId, reason: result.reason || "Attach failed" });
                 }
-            }
-
-            // 5b. Idempotency ? skip if already assigned to this exact station
-            if (entry.matchedStationId === stationId || entry.metadata?.matchedStationId === stationId) {
-                skippedAlreadyAssigned++;
                 continue;
             }
-
-            // 5c. Stamp station metadata (mirrors reconciler pattern lines ~1265-1277)
-            entry.matchedStationId = stationId;
-            entry.vendor = station.name;
-
-            // Only overwrite location if it's falsy, contains "Unknown", or is "Manual Entry"
-            if (!entry.location || 
-                (typeof entry.location === 'string' && entry.location.toLowerCase().includes('unknown')) ||
-                entry.location === 'Manual Entry') {
-                entry.location = station.name;
-            }
-
-            entry.metadata = {
-                ...entry.metadata,
-                locationStatus: 'verified',
-                verificationMethod: 'manual_bulk_assign',
-                matchedStationId: stationId,
-                bulkAssignedAt: new Date().toISOString(),
-            };
-            delete entry.metadata.ambiguityReason;
-
-            // 5d. Re-sign with HMAC (cryptographic chain-of-custody)
-            entry.signature = await auditLogic.generateRecordHash(entry);
-            entry.signedAt = new Date().toISOString();
-
-            // 5e. Persist to KV
-            await kv.set(storageKey, entry);
             updatedCount++;
-
-            // 5f. Fuel transactions only exist as `transaction:*` until a fuel_entry is created;
-            //     ensure one exists so Transaction Logs / FuelLogTable show the assignment.
-            if (storageKey.startsWith("transaction:")) {
-                await ensureFuelEntryLinkedToTransaction(entry, station);
-            } else if (storageKey.startsWith("fuel_entry:")) {
-                await syncLinkedExpenseTransaction(entry);
-            }
-
-            // Track latest date for station stats (Phase 3)
-            if (entry.date) {
-                if (!latestDate || new Date(entry.date) > new Date(latestDate)) {
-                    latestDate = entry.date;
-                }
+            const date = (result.entry as any)?.date;
+            if (date && (!latestDate || new Date(date) > new Date(latestDate))) {
+                latestDate = date;
             }
         }
 
         console.log(`[BulkAssign] Complete: ${updatedCount} updated, ${skippedNotFound} not found, ${skippedAlreadyAssigned} already assigned`);
 
-        // Step 6: Update station visit stats
         const currentVisits = Number(station.stats?.totalVisits) || 0;
         const newTotalVisits = currentVisits + updatedCount;
 
@@ -5263,7 +5111,6 @@ app.post(`${BASE_PATH}/admin/bulk-assign-station`, requirePlatformStaff(), async
             await kv.set(`station:${stationId}`, station);
         }
 
-        // Step 7: Build response
         const message = updatedCount > 0
             ? `${updatedCount} entries successfully assigned to ${station.name}.`
             : "No entries were updated. All were either not found or already assigned to this station.";
@@ -5287,6 +5134,261 @@ app.post(`${BASE_PATH}/admin/bulk-assign-station`, requirePlatformStaff(), async
     } catch (e: any) {
         console.error("[BulkAssign Error]", e);
         return c.json({ error: `Bulk assign failed: ${e.message}` }, 500);
+    }
+});
+
+/**
+ * Dominion Silent Station Attach — platform ops override.
+ * Attaches fills to a Verified GOD station even when GPS is far; dismisses learnt pins;
+ * never changes money/liters/odo. Requires a reason for the Activity Log.
+ */
+app.post(`${BASE_PATH}/admin/platform-ops-attach-station`, requirePlatformStaff(), async (c) => {
+    try {
+        let body: any;
+        try {
+            body = await c.req.json();
+        } catch {
+            return c.json({ error: "Invalid JSON in request body" }, 400);
+        }
+
+        const { entryIds, stationId, reason, dismissLearnt = true } = body;
+        const reasonText = typeof reason === "string" ? reason.trim() : "";
+        if (!reasonText) {
+            return c.json({ error: "Missing required field: reason" }, 400);
+        }
+        if (!stationId || typeof stationId !== "string" || !stationId.trim()) {
+            return c.json({ error: "Missing required field: stationId" }, 400);
+        }
+        if (!entryIds || !Array.isArray(entryIds) || entryIds.length === 0) {
+            return c.json({ error: "Missing or empty required field: entryIds" }, 400);
+        }
+        if (entryIds.length > 200) {
+            return c.json({ error: "Batch too large. Maximum 200 entries per request." }, 400);
+        }
+
+        const station = await kv.get(`station:${stationId}`);
+        if (!station) {
+            return c.json({ error: "Target station not found in Master Ledger" }, 404);
+        }
+        if (station.status && station.status !== "verified") {
+            return c.json({ error: "Silent Attach only targets Verified GOD stations" }, 400);
+        }
+
+        const rbacUser = c.get("rbacUser") as RbacUser | undefined;
+        const actorId = rbacUser?.userId || "unknown";
+        const actorName = rbacUser?.email || "Platform ops";
+
+        let updated = 0;
+        let skipped = 0;
+        const errors: { entryId: string; reason: string }[] = [];
+        let latestDate: string | null = null;
+
+        for (const entryId of entryIds) {
+            if (typeof entryId !== "string" || !entryId.trim()) {
+                errors.push({ entryId: String(entryId), reason: "Invalid id" });
+                continue;
+            }
+            const result = await attachRecordIdToStation(entryId, station, {
+                method: "platform_ops_override",
+                actorId,
+                actorName,
+                reason: reasonText,
+                dismissLearnt: dismissLearnt !== false,
+            });
+            if (!result.ok) {
+                skipped++;
+                errors.push({ entryId, reason: result.reason || result.skipped || "skipped" });
+                continue;
+            }
+            updated++;
+            const date = (result.entry as any)?.date;
+            if (date && (!latestDate || new Date(date) > new Date(latestDate))) {
+                latestDate = date;
+            }
+        }
+
+        if (updated > 0) {
+            const currentVisits = Number(station.stats?.totalVisits) || 0;
+            station.stats = {
+                ...station.stats,
+                totalVisits: currentVisits + updated,
+                ...(latestDate && (!station.stats?.lastUpdated || new Date(latestDate) > new Date(station.stats.lastUpdated))
+                    ? { lastUpdated: latestDate }
+                    : {}),
+                lastPlatformOpsAttachAt: new Date().toISOString(),
+            };
+            await kv.set(`station:${stationId}`, station);
+        }
+
+        await logAdminAction({
+            actorId,
+            actorName,
+            action: "silent_station_attach",
+            targetId: stationId,
+            targetEmail: "N/A",
+            details: `${updated} fill(s) → ${station.name}. Reason: ${reasonText}`,
+        });
+
+        return c.json({
+            success: true,
+            summary: {
+                requested: entryIds.length,
+                updated,
+                skipped,
+                errors: errors.length,
+            },
+            errors,
+            station: { id: stationId, name: station.name },
+            message: updated > 0
+                ? `Silent Attach: ${updated} fill(s) verified at ${station.name}. Fleet logs will show verified.`
+                : "No fills were updated.",
+        });
+    } catch (e: any) {
+        console.error("[PlatformOpsAttach]", e);
+        return c.json({ error: e.message || "Silent Attach failed" }, 500);
+    }
+});
+
+/**
+ * Merchant-name auto-heal batch — dry-run or apply.
+ * Scans unknown / review_required / statement_vendor / unverified fills and attaches
+ * when unique GOD merchant match + healthy odometer sequence.
+ */
+app.post(`${BASE_PATH}/admin/autoheal-merchant-stations`, requirePlatformStaff(), async (c) => {
+    try {
+        let body: any = {};
+        try {
+            body = await c.req.json();
+        } catch {
+            body = {};
+        }
+        const dryRun = body.dryRun !== false; // default dry-run for safety unless dryRun:false
+        if (body.dryRun === false) {
+            // apply mode
+        }
+        const apply = body.dryRun === false;
+        const limit = Math.min(Number(body.limit) || 500, 2000);
+
+        const stations = ((await kv.getByPrefix("station:")) || []).filter(
+            (s: any) => s && s.id && (!s.status || s.status === "verified"),
+        );
+
+        const entries = ((await kv.getByPrefix("fuel_entry:")) || []).slice(0, 20000);
+        const healStatuses = new Set(["unknown", "review_required", "statement_vendor", "unverified"]);
+
+        const candidates: Array<{
+            entryId: string;
+            stationId: string;
+            stationName: string;
+            score: number;
+            merchantText: string;
+            odoHealthy: boolean;
+            isFirstFill: boolean;
+        }> = [];
+        let healed = 0;
+        let skipped = 0;
+        const errors: { entryId: string; reason: string }[] = [];
+
+        // Group by vehicle for odo timeline
+        const byVehicle = new Map<string, any[]>();
+        for (const e of entries) {
+            if (!e?.id || !e.vehicleId) continue;
+            if (!byVehicle.has(e.vehicleId)) byVehicle.set(e.vehicleId, []);
+            byVehicle.get(e.vehicleId)!.push(e);
+        }
+
+        for (const entry of entries) {
+            if (candidates.length + healed >= limit && apply) break;
+            if (!entry?.id) continue;
+            const status = entry.metadata?.locationStatus || "unknown";
+            if (!healStatuses.has(status)) continue;
+            if (entry.matchedStationId || entry.metadata?.matchedStationId) {
+                // already linked — skip unless status still not verified
+                if (status === "verified") continue;
+            }
+
+            const match = matchUniqueVerifiedStationForRecord(entry, stations);
+            if (!match) {
+                skipped++;
+                continue;
+            }
+
+            const timeline = byVehicle.get(entry.vehicleId) || [];
+            let odo = await odometerSequenceHealthy(entry, { vehicleTimeline: timeline });
+            // First fill requires stronger unique score (re-check)
+            if (odo.isFirstFill) {
+                const strong = matchUniqueVerifiedStationForRecord(entry, stations, { preferStrong: true });
+                if (!strong || strong.station.id !== match.station.id) {
+                    skipped++;
+                    continue;
+                }
+            }
+            if (!odo.healthy) {
+                skipped++;
+                continue;
+            }
+
+            const candidate = {
+                entryId: entry.id,
+                stationId: match.station.id,
+                stationName: match.station.name || match.station.id,
+                score: match.score,
+                merchantText: match.merchantText,
+                odoHealthy: true,
+                isFirstFill: odo.isFirstFill,
+            };
+
+            if (!apply) {
+                candidates.push(candidate);
+                if (candidates.length >= limit) break;
+                continue;
+            }
+
+            const stationFull = stations.find((s: any) => s.id === match.station.id) || match.station;
+            const result = await attachRecordIdToStation(entry.id, stationFull, {
+                method: "merchant_name_autoheal_batch",
+                autoHealScore: match.score,
+                autoHealMerchantText: match.merchantText,
+                reason: `Merchant auto-heal: ${match.merchantText}`,
+                dismissLearnt: true,
+            });
+            if (result.ok) healed++;
+            else {
+                skipped++;
+                errors.push({ entryId: entry.id, reason: result.reason || "skipped" });
+            }
+        }
+
+        const rbacUser = c.get("rbacUser") as RbacUser | undefined;
+        if (apply) {
+            await logAdminAction({
+                actorId: rbacUser?.userId || "unknown",
+                actorName: rbacUser?.email || "Platform ops",
+                action: "merchant_autoheal_batch",
+                targetId: "platform",
+                targetEmail: "N/A",
+                details: `Healed ${healed}; skipped ${skipped}; errors ${errors.length}`,
+            });
+        }
+
+        return c.json({
+            success: true,
+            dryRun: !apply,
+            summary: {
+                candidates: apply ? healed : candidates.length,
+                healed: apply ? healed : 0,
+                skipped,
+                errors: errors.length,
+            },
+            candidates: apply ? undefined : candidates,
+            errors: apply ? errors : undefined,
+            message: apply
+                ? `Merchant auto-heal applied: ${healed} fill(s).`
+                : `Dry-run: ${candidates.length} candidate(s) would heal.`,
+        });
+    } catch (e: any) {
+        console.error("[AutohealMerchant]", e);
+        return c.json({ error: e.message || "Auto-heal failed" }, 500);
     }
 });
 

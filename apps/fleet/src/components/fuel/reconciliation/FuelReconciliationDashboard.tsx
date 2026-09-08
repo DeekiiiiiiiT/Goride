@@ -64,6 +64,7 @@ export function FuelReconciliationDashboard({
   dataTruncated,
   secondApproverThreshold,
   autoCloseDualApprovalMode,
+  initialWeekStart,
 }: {
   outstanding: FuelReconciliationPeriod[];
   inProgress: FuelReconciliationPeriod[];
@@ -100,6 +101,8 @@ export function FuelReconciliationDashboard({
   dataTruncated?: boolean;
   secondApproverThreshold?: number;
   autoCloseDualApprovalMode?: FuelAutoCloseDualApprovalMode;
+  /** Monday week start from Close Week Review / Week Reconciliation hub. */
+  initialWeekStart?: string;
 }) {
   const [view, setView] = useState<View>({ kind: 'landing' });
   const [resetPeriod, setResetPeriod] = useState<FuelReconciliationPeriod | null>(null);
@@ -108,25 +111,34 @@ export function FuelReconciliationDashboard({
   const [wizardSession, setWizardSession] = useState(0);
   const [deepLinkConsumed, setDeepLinkConsumed] = useState(false);
 
+  useEffect(() => {
+    if (initialWeekStart) setDeepLinkConsumed(false);
+  }, [initialWeekStart]);
+
   const allPeriods = useMemo(
     () => [...outstanding, ...inProgress, ...completed],
     [outstanding, inProgress, completed],
   );
 
-  // Deep-link: /fuel-reconciliation?week=YYYY-MM-DD&step=finalize
+  // Deep-link: /fuel-reconciliation?week=YYYY-MM-DD&step=finalize OR initialWeekStart prop
   useEffect(() => {
     if (deepLinkConsumed || loading || allPeriods.length === 0) return;
-    if (typeof window === 'undefined') return;
-    const params = new URLSearchParams(window.location.search);
-    const week = String(params.get('week') || '').split('T')[0];
+    const fromQuery =
+      typeof window !== 'undefined'
+        ? String(new URLSearchParams(window.location.search).get('week') || '').split('T')[0]
+        : '';
+    const week = fromQuery || String(initialWeekStart || '').split('T')[0];
     if (!week) return;
     const period = allPeriods.find((p) => p.startDate === week);
     if (!period) return;
-    const stepId = parseDeepLinkStep(params.get('step'));
+    const stepId =
+      typeof window !== 'undefined'
+        ? parseDeepLinkStep(new URLSearchParams(window.location.search).get('step'))
+        : undefined;
     onSelectPeriodWeek?.(period);
     setView({ kind: 'wizard', period, initialStepId: stepId });
     setDeepLinkConsumed(true);
-  }, [allPeriods, deepLinkConsumed, loading, onSelectPeriodWeek]);
+  }, [allPeriods, deepLinkConsumed, loading, onSelectPeriodWeek, initialWeekStart]);
 
   const weeksWithSnapshots = useMemo(() => {
     const set = new Set<string>();

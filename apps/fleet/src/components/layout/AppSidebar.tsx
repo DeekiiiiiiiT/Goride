@@ -117,7 +117,11 @@ export function AppSidebar({
     canView('driver-settlements') ||
     canView('driver-payouts') ||
     canView('indrive-wallet') ||
-    canView('transaction-list');
+    canView('transaction-list') ||
+    canView('fuel-reconciliation') ||
+    canView('toll-tags');
+  const canSeeWeekReconciliation =
+    canView('fuel-reconciliation') || canView('toll-tags');
   const hasSharedOps = computeHasSharedOps({ rushVisible, rideshareVisible });
   const canSeeFleetOps = hasSharedOps && (canSeeFuelDesk || canSeeTollDesk);
   const canSeeDriverOps =
@@ -196,10 +200,6 @@ export function AppSidebar({
       id: 'fuel-reimbursements',
       label: 'Review Queue',
     },
-    canView('fuel-reconciliation') && {
-      id: 'fuel-reconciliation',
-      label: 'Consumption Reconciliation',
-    },
     canView('fuel-cards') && { id: 'fuel-cards', label: 'Fuel Cards' },
     canView('fuel-logs') && { id: 'fuel-logs', label: 'Transaction Logs' },
     canView('fuel-configuration') && {
@@ -210,7 +210,6 @@ export function AppSidebar({
 
   const tollItems: NavLeaf[] = [
     canView('toll-logs') && { id: 'toll-logs', label: 'Toll Logs' },
-    canView('toll-tags') && { id: 'toll-tags', label: 'Toll Reconciliation' },
     canView('tag-inventory') && { id: 'tag-inventory', label: 'Tag Inventory' },
     canView('toll-low-balance') && { id: 'toll-low-balance', label: 'Low Balance Queue' },
     canView('toll-rate-drift') && { id: 'toll-rate-drift', label: 'Rate Drift' },
@@ -258,18 +257,25 @@ export function AppSidebar({
       id: 'fleet-financials',
       label: 'Bank Deposits',
     },
+    canSeeWeekReconciliation && {
+      id: 'week-reconciliation',
+      label: 'Week Reconciliation',
+    },
     canView('driver-settlements') && rideshareVisible && {
       id: 'driver-settlements',
       label: 'Driver Settlements',
     },
-    (canView('driver-settlements') || canView('fuel-reconciliation')) && {
-      id: 'close-week',
-      label: 'Close Week',
-    },
-    (canView('driver-settlements') || canView('fuel-reconciliation')) && {
-      id: 'restatement-queue',
-      label: 'Restatement Queue',
-    },
+    // Close Week / Restatement live on Driver Settlements hub when that desk is shown
+    !(canView('driver-settlements') && rideshareVisible) &&
+      (canView('driver-settlements') || canView('fuel-reconciliation')) && {
+        id: 'close-week',
+        label: 'Close Week',
+      },
+    !(canView('driver-settlements') && rideshareVisible) &&
+      (canView('driver-settlements') || canView('fuel-reconciliation')) && {
+        id: 'restatement-queue',
+        label: 'Restatement Queue',
+      },
     canView('courier-settlements') &&
       hasRushDeliveryLine &&
       isModuleEnabled('rush_courier_settlements') && {

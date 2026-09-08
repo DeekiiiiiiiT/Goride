@@ -1382,7 +1382,8 @@ app.get(`${BASE}/queue`, requirePermission("transactions.view"), async (c) => {
     if (view === "pay") {
       const rows = await listCompanyOwesPeriods(opts);
       raw = rows.map((r) => {
-        const owed = Math.max(0, (Number(r.settlementAmount) || 0) - (Number(r.settlementPaid) || 0));
+        // settlement_amount is already residual (gross − settlement_paid). Do not subtract paid again.
+        const owed = companyOwesResidual(Number(r.settlementAmount) || 0);
         return {
           driverId: r.driverId,
           periodAnchor: r.periodAnchor,

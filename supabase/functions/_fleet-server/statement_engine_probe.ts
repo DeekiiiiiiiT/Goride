@@ -1,7 +1,6 @@
 /**
  * Pass 5: fresh engine recomputes for statement↔engine compare (no writes).
  */
-import { periodEndForAnchor } from "../../../packages/finance-core/src/periodKey.ts";
 import {
   compareFuelStatementVsEngine,
   compareTollStatementVsEngine,
@@ -13,32 +12,32 @@ import {
 } from "../../../packages/finance-core/src/statementEngineCompare.ts";
 import type { WeekStatement } from "../../../packages/finance-core/src/weekStatement.ts";
 import { computeTollWeekNetting } from "../../../packages/toll-core/src/tollWeekNetting.ts";
-import { buildFuelPeriodSnapshots } from "./fuel_period_build_snapshots.ts";
 import { sumActiveTollChargedToDriverMajor } from "./toll_charged_from_financial_events.ts";
 import { computeEarningsEngineAmountsForWeek } from "./earnings_week_seal.ts";
+import { resolveFuelCloseAmounts } from "./fuel_week_seal.ts";
 
 const round2 = (n: number): number => Math.round((Number(n) || 0) * 100) / 100;
 
+/** Same preference order as sealFuelWeek — locked weeks must not compare against a divergent rebuild. */
 async function probeFuelEngine(
   organizationId: string,
   weekKey: string,
   driverId: string,
 ): Promise<FuelEngineAmounts | null> {
-  const weekEnd = periodEndForAnchor(weekKey);
-  const built = await buildFuelPeriodSnapshots({
-    orgId: organizationId,
-    weekStart: weekKey,
-    weekEnd,
-  });
-  if (!built.ok) return null;
-  const snap = built.snapshots.find((s) => String(s.driverId || "") === driverId);
-  if (!snap) {
-    return { driverShare: 0, companyShare: 0 };
+  try {
+    const amounts = await resolveFuelCloseAmounts({
+      organizationId,
+      weekKey,
+      driverId,
+    });
+    return {
+      driverShare: round2(amounts.driverShare),
+      companyShare: round2(amounts.companyShare),
+    };
+  } catch (e) {
+    console.warn("[statement_engine_probe] fuel probe failed", driverId, weekKey, e);
+    return null;
   }
-  return {
-    driverShare: round2(Number(snap.driverShare) || 0),
-    companyShare: round2(Number(snap.companyShare) || 0),
-  };
 }
 
 async function loadCanonicalTollEventsForDriverWeek(

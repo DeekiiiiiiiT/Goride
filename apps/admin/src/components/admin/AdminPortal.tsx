@@ -51,6 +51,7 @@ import { FuelPricesPage } from './fuel-prices/FuelPricesPage';
 import { FuelCostAnalyticsPage } from './fuel-cost-analytics/FuelCostAnalyticsPage';
 import { EvidenceBridgeAnalytics } from './fuel-evidence-bridge/EvidenceBridgeAnalytics';
 import { AdminJaaGasCardsPage } from './fuel/AdminJaaGasCardsPage';
+import { SilentStationAttachPanel } from './fuel/SilentStationAttachPanel';
 import { TollBrainPage } from './toll-brain/TollBrainPage';
 import { DriverUsersPage } from './product-users/DriverUsersPage';
 import { DriverUserDetailPage } from './product-users/DriverUserDetailPage';
@@ -259,6 +260,11 @@ export function AdminPortal() {
             defaultTab={stationDbDefaultTab}
             defaultResolutionSubTab={resolutionSubTab}
           />
+        </div>
+      )}
+      {currentPage === 'fuel-silent-attach' && (
+        <div className="min-h-[600px] rounded-xl bg-white shadow-sm overflow-hidden dark:bg-card dark:shadow-none dark:ring-1 dark:ring-border">
+          <SilentStationAttachPanel />
         </div>
       )}
       {currentPage === 'fuel-analytics' && (

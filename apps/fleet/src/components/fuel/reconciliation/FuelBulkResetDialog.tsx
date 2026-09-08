@@ -14,6 +14,8 @@ import { reportWeekYmdBounds } from '../../../utils/fuelWeekPeriod';
 import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
 import { DRIVER_FINANCIAL_PERIODS_KEY } from '../../../hooks/useDriverFinancialPeriods';
+import { FUEL_PERIODS_KEY, FUEL_PERIOD_KEY } from '../../../hooks/useFuelPeriods';
+import { clearFuelLeakageReview } from '../../../utils/fuelLeakageReviewStore';
 import { BulkWeekActionDialog, type BulkWeekActionResult } from './BulkWeekActionDialog';
 import { formatFuelMoney } from '../../../utils/formatFuelMoney';
 
@@ -117,7 +119,14 @@ export function FuelBulkResetDialog({
         }
 
         void queryClient.invalidateQueries({ queryKey: [DRIVER_FINANCIAL_PERIODS_KEY] });
+        void queryClient.invalidateQueries({ queryKey: [FUEL_PERIODS_KEY] });
+        void queryClient.invalidateQueries({ queryKey: [FUEL_PERIOD_KEY] });
         void queryClient.invalidateQueries({ queryKey: ['finalizedReports'] });
+        for (const w of toReset) {
+          if (weekResults.some((r) => r.id === w.weekStart && r.status === 'ok')) {
+            clearFuelLeakageReview(String(w.weekStart).split('T')[0]);
+          }
+        }
 
         const ok = weekResults.filter((r) => r.status === 'ok').length;
         const failed = weekResults.filter((r) => r.status === 'failed').length;

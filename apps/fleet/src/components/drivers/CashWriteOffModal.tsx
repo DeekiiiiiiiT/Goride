@@ -65,11 +65,12 @@ export function CashWriteOffModal({
     setDate(new Date().toISOString().split('T')[0]);
     setReason('');
     setNotes('');
-    const cap = Math.max(0, Number(maxAmount) || 0);
-    setAmount(cap > 0.005 ? cap.toFixed(2) : '');
+    // Round to cents so HTML max= and prefilled amount never disagree (float noise).
+    const rounded = Math.round(Math.max(0, Number(maxAmount) || 0) * 100) / 100;
+    setAmount(rounded > 0.005 ? rounded.toFixed(2) : '');
   }, [isOpen, maxAmount, workPeriodStart]);
 
-  const cap = Math.max(0, Number(maxAmount) || 0);
+  const cap = Math.round(Math.max(0, Number(maxAmount) || 0) * 100) / 100;
   const periodDisplay =
     weekLabel ||
     (workPeriodStart && workPeriodEnd
@@ -159,7 +160,7 @@ export function CashWriteOffModal({
               type="number"
               step="0.01"
               min="0"
-              max={cap > 0 ? cap : undefined}
+              max={cap > 0 ? cap.toFixed(2) : undefined}
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
               required

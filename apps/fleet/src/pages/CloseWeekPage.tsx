@@ -9,7 +9,7 @@
  */
 import React, { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { addDays, format, parseISO, startOfWeek, subWeeks } from 'date-fns';
+import { addDays, format, parseISO } from 'date-fns';
 import {
   AlertTriangle,
   ArrowRight,
@@ -51,6 +51,13 @@ import {
   type WeekCloseResult,
 } from '../services/weekCloseApi';
 import {
+  closeWeekYearOptions,
+  defaultCloseWeekKey,
+  isCloseWeekEnded,
+  mondayWeekKeysForYear,
+  yearFromWeekKey,
+} from '../utils/closeWeekPicker';
+import {
   LANE_LABEL,
   LANE_REVIEW_PAGE,
   blockingCount,
@@ -71,14 +78,6 @@ const MONEY = (n: number | null | undefined) => {
   return `${n < 0 ? '-' : ''}$${body}`;
 };
 
-/** Recent Mondays (yyyy-MM-dd), newest first, for the week picker. */
-function recentWeekKeys(count = 12): string[] {
-  const thisMonday = startOfWeek(new Date(), { weekStartsOn: 1 });
-  return Array.from({ length: count }, (_, i) =>
-    format(subWeeks(thisMonday, i), 'yyyy-MM-dd'),
-  );
-}
-
 function weekLabel(weekKey: string): string {
   try {
     const start = parseISO(`${weekKey}T12:00:00`);
@@ -87,6 +86,16 @@ function weekLabel(weekKey: string): string {
   } catch {
     return weekKey;
   }
+}
+
+function pickDefaultWeekForYear(year: number, preferred?: string): string {
+  const keys = mondayWeekKeysForYear(year);
+  if (preferred && keys.includes(preferred)) return preferred;
+  const endedDefault = defaultCloseWeekKey();
+  if (keys.includes(endedDefault)) return endedDefault;
+  // Prefer newest fully ended week in that year; else newest available.
+  const ended = keys.find((k) => isCloseWeekEnded(k));
+  return ended ?? keys[0] ?? endedDefault;
 }
 
 const STATUS_CHROME: Record<CloseLaneStatus, { dot: string; text: string; label: string }> = {
@@ -206,23 +215,27 @@ function IdentityRow({ label, value, ok }: { label: string; value: string; ok: b
 export function CloseWeekPage({
   onNavigate,
   initialWeekKey,
+  embedded = false,
 }: {
   onNavigate?: (page: string, opts?: { startYmd: string; endYmd: string } | { weekKey: string }) => void;
   initialWeekKey?: string;
+  /** When true, omit page H1 / outer padding — Driver Settlements hub owns chrome. */
+  embedded?: boolean;
 }) {
-  const weekKeys = useMemo(() => recentWeekKeys(), []);
-  const [weekKey, setWeekKey] = useState(
-    initialWeekKey && weekKeys.includes(initialWeekKey)
-      ? initialWeekKey
-      : weekKeys[1] ?? weekKeys[0],
-  ); // default: last completed week
+  const yearOptions = useMemo(() => closeWeekYearOptions(), []);
+  const [year, setYear] = useState(() =>
+    initialWeekKey ? yearFromWeekKey(initialWeekKey) : yearFromWeekKey(defaultCloseWeekKey()),
+  );
+  const weekKeys = useMemo(() => mondayWeekKeysForYear(year), [year]);
+  const [weekKey, setWeekKey] = useState(() =>
+    pickDefaultWeekForYear(
+      initialWeekKey ? yearFromWeekKey(initialWeekKey) : yearFromWeekKey(defaultCloseWeekKey()),
+      initialWeekKey,
+    ),
+  );
 
-  useEffect(() => {
-    if (initialWeekKey && weekKeys.includes(initialWeekKey)) {
-      setWeekKey(initialWeekKey);
-    }
-  }, [initialWeekKey, weekKeys]);
   const periodEnd = useMemo(() => format(addDays(parseISO(`${weekKey}T12:00:00`), 6), 'yyyy-MM-dd'), [weekKey]);
+  const weekEnded = isCloseWeekEnded(weekKey);
   const [closing, setClosing] = useState(false);
   const [reopening, setReopening] = useState(false);
   const [result, setResult] = useState<WeekCloseResult | null>(null);
@@ -249,6 +262,24 @@ export function CloseWeekPage({
       date: string | null;
     }>;
   } | null>(null);
+
+  useEffect(() => {
+    if (!initialWeekKey) return;
+    const y = yearFromWeekKey(initialWeekKey);
+    setYear(y);
+    setWeekKey(pickDefaultWeekForYear(y, initialWeekKey));
+  }, [initialWeekKey]);
+
+  const onYearChange = (nextYear: number) => {
+    setYear(nextYear);
+    setWeekKey(pickDefaultWeekForYear(nextYear));
+    setResult(null);
+  };
+
+  const onWeekChange = (next: string) => {
+    setWeekKey(next);
+    setResult(null);
+  };
 
   // ── Fuel / Toll lanes + cross-system blockers (read-only preview) ──────────
   const previewQuery = useQuery({
@@ -351,6 +382,7 @@ export function CloseWeekPage({
     !previewLoading &&
     !previewQuery.isError &&
     !weekAlreadyClosed &&
+    weekEnded &&
     totalBlockers === 0 &&
     (preview?.driversTotal ?? 0) > 0;
   const canSignRestatements =
@@ -531,14 +563,16 @@ export function CloseWeekPage({
   };
 
   return (
-    <div className="mx-auto max-w-[1200px] space-y-6 p-4 sm:p-6">
+    <div className={cn(embedded ? 'space-y-6' : 'mx-auto max-w-[1200px] space-y-6 p-4 sm:p-6')}>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="flex items-center gap-2 text-xl font-semibold text-slate-900">
-            <Lock className="h-5 w-5 text-indigo-700" />
-            Close the Week
-          </h1>
-          <p className="mt-0.5 text-sm text-slate-500">
+          {!embedded ? (
+            <h1 className="flex items-center gap-2 text-xl font-semibold text-slate-900">
+              <Lock className="h-5 w-5 text-indigo-700" />
+              Close the Week
+            </h1>
+          ) : null}
+          <p className={cn('text-sm text-slate-500', !embedded && 'mt-0.5')}>
             {weekAlreadyClosed
               ? hasPendingRestatements
                 ? `This week is signed. ${pendingRestatementCount} restatement draft${pendingRestatementCount === 1 ? '' : 's'} await sign-off below.`
@@ -546,15 +580,31 @@ export function CloseWeekPage({
               : 'One week, three lanes. Closing is blocked until every identity ties.'}
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <Select value={weekKey} onValueChange={(v) => { setWeekKey(v); setResult(null); }}>
-            <SelectTrigger className="h-9 w-[220px]">
+        <div className="flex flex-wrap items-center gap-2">
+          <Select
+            value={String(year)}
+            onValueChange={(v) => onYearChange(Number(v))}
+          >
+            <SelectTrigger className="h-9 w-[110px]" aria-label="Close week year">
+              <SelectValue placeholder="Year" />
+            </SelectTrigger>
+            <SelectContent>
+              {yearOptions.map((y) => (
+                <SelectItem key={y} value={String(y)}>
+                  {y}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={weekKey} onValueChange={onWeekChange}>
+            <SelectTrigger className="h-9 w-[240px]" aria-label="Close week">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
               {weekKeys.map((k) => (
                 <SelectItem key={k} value={k}>
                   Week of {weekLabel(k)}
+                  {!isCloseWeekEnded(k) ? ' · in progress' : ''}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -768,6 +818,10 @@ export function CloseWeekPage({
               {hasPendingRestatements
                 ? ` ${pendingRestatementCount} restatement draft${pendingRestatementCount === 1 ? '' : 's'} ready to sign.`
                 : ' Money for this week is locked; use Restatement Queue for approved revisions, or Re-open to unlock edits.'}
+            </span>
+          ) : !weekEnded ? (
+            <span className="text-amber-800">
+              This week is still in progress — Close unlocks after the week ends and every lane ties.
             </span>
           ) : totalBlockers > 0 ? (
             <span className="text-rose-700">

@@ -41,6 +41,11 @@ export const FLEET_PAGE_REGISTRY: Record<string, FleetPageDef> = {
     path: '/restatement-queue',
     permission: 'nav.financial_analytics',
   },
+  'week-reconciliation': {
+    id: 'week-reconciliation',
+    path: '/week-reconciliation',
+    permission: 'nav.financial_analytics',
+  },
   'supply-health': { id: 'supply-health', path: '/supply-health', permission: 'nav.supply_health' },
   'fuel-reconciliation': {
     id: 'fuel-reconciliation',
@@ -58,6 +63,11 @@ export const FLEET_PAGE_REGISTRY: Record<string, FleetPageDef> = {
     id: 'fuel-reimbursements',
     path: '/fuel-reimbursements',
     permission: 'nav.fuel_overview',
+  },
+  'toll-tags': {
+    id: 'toll-tags',
+    path: '/toll-tags',
+    permission: 'nav.toll_reconciliation',
   },
 };
 

@@ -25,8 +25,12 @@ export function getTripPhysicalCashCollected(
   const pm = String(trip.paymentMethod ?? '').trim().toLowerCase();
   if (pm && NON_CASH_PAYMENT_METHODS.has(pm)) return 0;
 
-  const raw = Math.abs(Number(trip.cashCollected ?? 0));
-  if (raw > 0.005) return raw;
+  // Present cashCollected (including 0) is authoritative — never invent from fare.
+  // Amount fallback is only for legacy Cash trips that never had the field.
+  if (trip.cashCollected != null && Number.isFinite(Number(trip.cashCollected))) {
+    const raw = Math.abs(Number(trip.cashCollected));
+    return raw > 0.005 ? raw : 0;
+  }
 
   if (pm === 'cash') return Math.abs(Number(trip.amount ?? 0));
 

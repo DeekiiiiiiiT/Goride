@@ -1,15 +1,8 @@
-import React, { createContext, useCallback, useContext, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { format } from 'date-fns';
 import { generatePeriodWeekOptions } from '../../../utils/periodWeekOptions';
 
 export type DriverPeriodRange = { from: Date; to: Date };
-
-interface DriverPeriodContextValue {
-  period: DriverPeriodRange;
-  setPeriod: (range: DriverPeriodRange) => void;
-}
-
-const DriverPeriodContext = createContext<DriverPeriodContextValue | null>(null);
 
 /** Match Financials default: span of the last 12 Monday-start pay weeks. */
 export function defaultDriverPeriod(): DriverPeriodRange {
@@ -55,7 +48,15 @@ function initialPeriod(): DriverPeriodRange {
   return readPeriodFromLocationSearch() ?? defaultDriverPeriod();
 }
 
-export function DriverPeriodProvider({ children }: { children: React.ReactNode }) {
+/**
+ * Shared driver-detail date range + URL stamp.
+ * Hook-only (no Provider) so Vite HMR cannot desync createContext identity
+ * and crash with "must be used within DriverPeriodProvider" (ROAM-FLEET-22/23).
+ */
+export function useDriverPeriod(): {
+  period: DriverPeriodRange;
+  setPeriod: (range: DriverPeriodRange) => void;
+} {
   const [period, setPeriodState] = useState<DriverPeriodRange>(initialPeriod);
 
   const setPeriod = useCallback((range: DriverPeriodRange) => {
@@ -64,22 +65,10 @@ export function DriverPeriodProvider({ children }: { children: React.ReactNode }
   }, []);
 
   // Ensure deep-linked detail always has from/to in the URL for sharing
-  React.useEffect(() => {
+  useEffect(() => {
     writePeriodToUrl(period);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- stamp once on mount from initial state
   }, []);
 
-  const value = useMemo(() => ({ period, setPeriod }), [period, setPeriod]);
-
-  return (
-    <DriverPeriodContext.Provider value={value}>{children}</DriverPeriodContext.Provider>
-  );
-}
-
-export function useDriverPeriod(): DriverPeriodContextValue {
-  const ctx = useContext(DriverPeriodContext);
-  if (!ctx) {
-    throw new Error('useDriverPeriod must be used within DriverPeriodProvider');
-  }
-  return ctx;
+  return { period, setPeriod };
 }

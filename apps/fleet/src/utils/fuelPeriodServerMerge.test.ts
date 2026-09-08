@@ -6,11 +6,32 @@ import {
   mergeServerFirstLandingPeriods,
   serverRowsToLandingPeriods,
 } from './fuelPeriodServerMerge';
-import type { FuelPeriodRow } from '../hooks/useFuelPeriods';
 import { emptyFuelStepCounts } from './fuelPeriodGating';
 import type { FuelReconciliationPeriod } from './fuelPeriodStatus';
 
-function row(partial: Partial<FuelPeriodRow> & { weekStart: string }): FuelPeriodRow {
+/** Minimal row shape for tests — avoid importing useFuelPeriods (pulls Supabase env). */
+type TestFuelPeriodRow = {
+  id: string;
+  orgId: string;
+  weekStart: string;
+  weekEnd: string;
+  status: 'open' | 'in_review' | 'ready' | 'locked' | 'reopened';
+  version: number;
+  vehicleCount: number;
+  driverCount: number;
+  totalSpend: number;
+  gasCardSpend: number;
+  cashFromEarnings: number;
+  companyShare: number;
+  driverShare: number;
+  unexplained: number;
+  counts?: Record<string, { actionable: number; informational: number }>;
+  leakageReviewedAt?: string | null;
+  lockedAt?: string | null;
+  computedAt?: string | null;
+};
+
+function row(partial: Partial<TestFuelPeriodRow> & { weekStart: string }): TestFuelPeriodRow {
   return {
     id: partial.id || `org:${partial.weekStart}`,
     orgId: 'org',
@@ -177,5 +198,40 @@ describe('fuelPeriodServerMerge landing SoT', () => {
     ]);
     expect(locked[0].locked).toBe(true);
     expect(locked[0].leakageReviewed).toBe(true);
+  });
+
+  it('reopened week with cleared leakage review lands Outstanding (not stale In Progress)', () => {
+    const cards = serverRowsToLandingPeriods([
+      row({
+        weekStart: '2026-01-19',
+        weekEnd: '2026-01-25',
+        status: 'reopened',
+        lockedAt: null,
+        leakageReviewedAt: null,
+        unexplained: 2071.74,
+        totalSpend: 74500,
+        counts: {},
+      }),
+    ]);
+    expect(cards).toHaveLength(1);
+    expect(cards[0].locked).toBe(false);
+    expect(cards[0].status).toBe('outstanding');
+    expect(cards[0].counts['leakage-gap'].actionable).toBeGreaterThan(0);
+  });
+
+  it('locked week with leakage accepted stays Completed', () => {
+    const cards = serverRowsToLandingPeriods([
+      row({
+        weekStart: '2026-01-19',
+        weekEnd: '2026-01-25',
+        status: 'locked',
+        lockedAt: '2026-02-01T00:00:00Z',
+        leakageReviewedAt: '2026-02-01T00:00:00Z',
+        unexplained: 2071.74,
+        totalSpend: 74500,
+      }),
+    ]);
+    expect(cards[0].status).toBe('completed');
+    expect(cards[0].locked).toBe(true);
   });
 });

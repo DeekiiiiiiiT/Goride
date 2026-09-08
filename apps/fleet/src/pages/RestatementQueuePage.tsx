@@ -6,11 +6,12 @@ import { useQuery } from '@tanstack/react-query';
 import { addDays, format, parseISO } from 'date-fns';
 import { ArrowRight, Loader2, RefreshCw } from 'lucide-react';
 import { Button } from '../components/ui/button';
+import { cn } from '../components/ui/utils';
 import { requireAuthHeaders } from '../utils/authHeaders';
 import { fetchWithRetry } from '../services/api';
 import { API_ENDPOINTS } from '../services/apiConfig';
 
-type RestatementRow = {
+export type RestatementRow = {
   id?: string;
   driverId: string;
   driverName?: string;
@@ -22,7 +23,10 @@ type RestatementRow = {
   createdAt?: string;
 };
 
-async function listRestatements(): Promise<RestatementRow[]> {
+/** Shared with Driver Settlements hub badge — one React Query cache. */
+export const RESTATEMENT_QUEUE_QUERY_KEY = ['week-statement-restatements'] as const;
+
+export async function listWeekStatementRestatements(): Promise<RestatementRow[]> {
   const response = await fetchWithRetry(
     `${API_ENDPOINTS.financial}/settlements/week-close/restatements?pageSize=100`,
     { headers: await requireAuthHeaders(null) },
@@ -61,20 +65,25 @@ function StatusChip({ status }: { status: string }) {
 
 export function RestatementQueuePage({
   onNavigate,
+  embedded = false,
 }: {
   onNavigate: (page: string, opts?: { weekKey?: string }) => void;
+  /** When true, omit page H1 / outer padding — Driver Settlements hub owns chrome. */
+  embedded?: boolean;
 }) {
   const q = useQuery({
-    queryKey: ['week-statement-restatements'],
-    queryFn: listRestatements,
+    queryKey: RESTATEMENT_QUEUE_QUERY_KEY,
+    queryFn: listWeekStatementRestatements,
   });
 
   return (
-    <div className="mx-auto max-w-5xl space-y-4 p-4 sm:p-6">
+    <div className={cn(embedded ? 'space-y-4' : 'mx-auto max-w-5xl space-y-4 p-4 sm:p-6')}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold text-slate-900">Restatement queue</h1>
-          <p className="mt-1 text-sm text-slate-500">
+          {!embedded ? (
+            <h1 className="text-xl font-semibold text-slate-900">Restatement queue</h1>
+          ) : null}
+          <p className={cn('text-sm text-slate-500', !embedded && 'mt-1')}>
             Draft statement revisions after a week was closed. Sign them on Close Week — never approve outside that flow.
             Open Close Week for that week and use <strong>Sign restatements</strong> (week stays frozen). Use{' '}
             <strong>Re-open week</strong> only when you need to unlock Fuel/Tolls/Settlement edits.

@@ -1,8 +1,9 @@
 ﻿/**
  * Business Finance → Driver Settlements
  * Fleet-wide Collect (Log Cash) + Pay (Record Payout) queue — same txs as Cash Wallet.
+ * Hub tabs: Cash desk · Close Week · Restatements.
  */
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { format, parseISO, startOfWeek, endOfWeek, subWeeks } from 'date-fns';
 import {
@@ -35,7 +36,7 @@ import {
   buildCashWriteOffTx,
   buildDriverPayoutTx,
 } from '../../utils/driverSettlementTx';
-import { payOutstandingAmount } from '../../utils/driverSettlementsPayAmount';
+import { payOutstandingAmount, resolvePayQueueOwed } from '../../utils/driverSettlementsPayAmount';
 import { CSV_UTF8_BOM, csvRow } from '../../utils/csvSafeExport';
 import { DRIVER_FINANCIAL_PERIODS_KEY } from '../../hooks/useDriverFinancialPeriods';
 import {
@@ -107,10 +108,26 @@ import { Label } from '../ui/label';
 import { Textarea } from '../ui/textarea';
 import { cn } from '../ui/utils';
 import type { FinancialTransaction } from '../../types/data';
+import {
+  listWeekStatementRestatements,
+  RESTATEMENT_QUEUE_QUERY_KEY,
+} from '../../pages/RestatementQueuePage';
+
+const CloseWeekPageLazy = lazy(() =>
+  import('../../pages/CloseWeekPage').then((m) => ({ default: m.CloseWeekPage })),
+);
+const RestatementQueuePageLazy = lazy(() =>
+  import('../../pages/RestatementQueuePage').then((m) => ({ default: m.RestatementQueuePage })),
+);
 
 type MoneyDirection = 'collect' | 'pay';
 type DeskMode = MoneyDirection | 'log-cash' | 'reconciled';
 type DeskTab = 'outstanding' | 'awaiting' | 'done';
+export type SettlementsHubTab = 'cash' | 'close-week' | 'restatements';
+
+type SettlementsNavigateOpts =
+  | { startYmd: string; endYmd?: string }
+  | { weekKey: string };
 
 type PeriodRow = {
   driverId: string;
@@ -252,9 +269,11 @@ function queueToReconciledRow(r: SettlementQueueRow): ReconciledListRow {
 }
 
 function queueOwedMajor(r: SettlementQueueRow, mode: MoneyDirection): number {
+  // Pay: settlementAmount is already residual — ignore amountOwed so a bad queue cannot understate.
+  if (mode === 'pay') return resolvePayQueueOwed(r);
   if (r.amountOwed != null && Number.isFinite(r.amountOwed)) return Math.max(0, Number(r.amountOwed));
   if (r.amountOwedMinor != null) return Math.max(0, (Number(r.amountOwedMinor) || 0) / 100);
-  return mode === 'pay' ? payOutstandingAmount(r) : Math.max(0, Math.abs(Number(r.settlementAmount) || 0));
+  return Math.max(0, Math.abs(Number(r.settlementAmount) || 0));
 }
 
 function txToMovementRow(t: FinancialTransaction, kind: 'collect' | 'pay'): SettlementMovementRow {
@@ -331,14 +350,26 @@ type ReverseTarget = Pick<
 export function DriverSettlementsPage({
   onBackToBusinessFinance,
   onOpenDriver,
+  onNavigate,
+  initialHubTab,
+  initialWeekKey,
+  onSettlementsHintsConsumed,
 }: {
   onBackToBusinessFinance?: () => void;
   onOpenDriver?: (driverId: string) => void;
+  onNavigate?: (page: string, opts?: SettlementsNavigateOpts) => void;
+  initialHubTab?: SettlementsHubTab | null;
+  initialWeekKey?: string | null;
+  onSettlementsHintsConsumed?: () => void;
 }) {
   const qc = useQueryClient();
   const settlementCmds = useSettlementCommands();
   const { scope, serviceLineParam } = useServiceLineScopeParam();
   const thisMonday = format(startOfWeek(new Date(), { weekStartsOn: 1 }), 'yyyy-MM-dd');
+  const [hubTab, setHubTab] = useState<SettlementsHubTab>(initialHubTab || 'cash');
+  const [closeWeekKey, setCloseWeekKey] = useState<string | undefined>(
+    initialWeekKey || undefined,
+  );
   const [weekFrom, setWeekFrom] = useState(
     format(subWeeks(startOfWeek(new Date(), { weekStartsOn: 1 }), 8), 'yyyy-MM-dd'),
   );
@@ -353,6 +384,45 @@ export function DriverSettlementsPage({
   const direction: MoneyDirection = deskMode === 'pay' ? 'pay' : 'collect';
   const [deskTab, setDeskTab] = useState<DeskTab>('outstanding');
   const [selected, setSelected] = useState<Set<string>>(new Set());
+
+  // Deep-link / sidebar → hub tab + Close Week key
+  useEffect(() => {
+    if (!initialHubTab && !initialWeekKey) return;
+    if (initialHubTab) setHubTab(initialHubTab);
+    if (initialWeekKey) setCloseWeekKey(initialWeekKey);
+    onSettlementsHintsConsumed?.();
+  }, [initialHubTab, initialWeekKey, onSettlementsHintsConsumed]);
+
+  const restatementBadgeQuery = useQuery({
+    queryKey: RESTATEMENT_QUEUE_QUERY_KEY,
+    queryFn: listWeekStatementRestatements,
+    staleTime: 60_000,
+  });
+  const restatementDraftCount = (restatementBadgeQuery.data || []).filter(
+    (r) => String(r.status || 'draft').toLowerCase() === 'draft',
+  ).length;
+
+  const handleHubNavigate = (
+    page: string,
+    opts?: SettlementsNavigateOpts,
+  ) => {
+    if (page === 'close-week') {
+      if (opts && 'weekKey' in opts && typeof opts.weekKey === 'string') {
+        setCloseWeekKey(opts.weekKey);
+      }
+      setHubTab('close-week');
+      return;
+    }
+    if (page === 'restatement-queue') {
+      setHubTab('restatements');
+      return;
+    }
+    if (page === 'driver-settlements' || page === 'driver-payouts') {
+      setHubTab('cash');
+      return;
+    }
+    onNavigate?.(page, opts);
+  };
   const [batchOpen, setBatchOpen] = useState(false);
   const [batchSelectedKeys, setBatchSelectedKeys] = useState<string[]>([]);
   const [batchMethod, setBatchMethod] = useState('Cash');
@@ -1506,6 +1576,60 @@ export function DriverSettlementsPage({
     <div className="space-y-6 p-4 sm:p-6 max-w-[1400px] mx-auto">
       <BusinessFinanceDeskChrome deskLabel="Driver Settlements" onBack={onBackToBusinessFinance} />
 
+      <Tabs
+        value={hubTab}
+        onValueChange={(v) => setHubTab(v as SettlementsHubTab)}
+        className="space-y-4"
+      >
+        <TabsList className="h-auto flex-wrap gap-1">
+          <TabsTrigger value="cash">Cash desk</TabsTrigger>
+          <TabsTrigger value="close-week">Close Week</TabsTrigger>
+          <TabsTrigger value="restatements" className="gap-1.5">
+            Restatements
+            {restatementDraftCount > 0 ? (
+              <span className="inline-flex min-w-[1.25rem] items-center justify-center rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-amber-900">
+                {restatementDraftCount > 99 ? '99+' : restatementDraftCount}
+              </span>
+            ) : null}
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="close-week" className="mt-0 focus-visible:outline-none">
+          <Suspense
+            fallback={
+              <div className="flex h-40 items-center justify-center text-sm text-slate-500">
+                <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                Loading close week…
+              </div>
+            }
+          >
+            <CloseWeekPageLazy
+              embedded
+              initialWeekKey={closeWeekKey}
+              onNavigate={handleHubNavigate}
+            />
+          </Suspense>
+        </TabsContent>
+
+        <TabsContent value="restatements" className="mt-0 focus-visible:outline-none">
+          <Suspense
+            fallback={
+              <div className="flex h-40 items-center justify-center text-sm text-slate-500">
+                <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                Loading restatements…
+              </div>
+            }
+          >
+            <RestatementQueuePageLazy
+              embedded
+              onNavigate={(page, opts) =>
+                handleHubNavigate(page, opts?.weekKey ? { weekKey: opts.weekKey } : undefined)
+              }
+            />
+          </Suspense>
+        </TabsContent>
+
+        <TabsContent value="cash" className="mt-0 space-y-6 focus-visible:outline-none">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h1 className="text-xl font-semibold text-slate-900 flex items-center gap-2">
@@ -2008,6 +2132,8 @@ export function DriverSettlementsPage({
         </Tabs>
         </div>
       )}
+        </TabsContent>
+      </Tabs>
 
       <RecordPayoutModal
         isOpen={payoutModal.isOpen}

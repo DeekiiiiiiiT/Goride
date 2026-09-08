@@ -26,7 +26,7 @@ import {
   fuelListWindow,
   generateFuelWeekOptions,
 } from '../utils/fuelWeekPeriod';
-import { useFleetTimezone } from '../utils/timezoneDisplay';
+import { useFleetTimezone, ymdToLocalDate } from '../utils/timezoneDisplay';
 import { type PeriodWeekOption } from '../utils/periodWeekOptions';
 import { format } from 'date-fns';
 import { DisputeResolutionModal } from '../components/fuel/DisputeResolutionModal';
@@ -84,6 +84,10 @@ export function FuelManagement(props: {
   defaultTab?: string;
   onViewDriverLedger?: (driverId: string) => void;
   onTabChange?: (tab: string) => void;
+  /** When true, omit FuelLayout H1 — Week Reconciliation hub owns chrome. */
+  embedded?: boolean;
+  /** Monday week start (yyyy-MM-dd) from Close Week Review / deep link. */
+  initialWeekStart?: string;
 }) {
   return (
     <FuelReconBusyProvider>
@@ -92,10 +96,18 @@ export function FuelManagement(props: {
   );
 }
 
-function FuelManagementInner({ defaultTab = 'logs', onViewDriverLedger, onTabChange }: {
-    defaultTab?: string,
-    onViewDriverLedger?: (driverId: string) => void,
-    onTabChange?: (tab: string) => void
+function FuelManagementInner({
+  defaultTab = 'logs',
+  onViewDriverLedger,
+  onTabChange,
+  embedded = false,
+  initialWeekStart,
+}: {
+  defaultTab?: string;
+  onViewDriverLedger?: (driverId: string) => void;
+  onTabChange?: (tab: string) => void;
+  embedded?: boolean;
+  initialWeekStart?: string;
 }) {
   const queryClient = useQueryClient();
   const { runExclusive, setMessage } = useFuelReconBusy();
@@ -113,11 +125,30 @@ function FuelManagementInner({ defaultTab = 'logs', onViewDriverLedger, onTabCha
   // Shared active fuel week (Mon–Sun) — Logs / Recon / Reimbursements default from this.
   // Logs may temporarily diverge via allowCustomRange; recon week change resets logs override.
   const [activeFuelWeek, setActiveFuelWeek] = useState<DateRange | undefined>(() => {
+    const hint = String(initialWeekStart || '').split('T')[0];
+    if (/^\d{4}-\d{2}-\d{2}$/.test(hint)) {
+      const from = ymdToLocalDate(hint);
+      const to = ymdToLocalDate(hint);
+      to.setDate(to.getDate() + 6);
+      return { from, to };
+    }
     const range = currentFuelWeekRange();
     return { from: range.from, to: range.to };
   });
   const [logCustomOverride, setLogCustomOverride] = useState(false);
   const [logDateRangeOverride, setLogDateRangeOverride] = useState<DateRange | undefined>(undefined);
+
+  // Close Week / hub deep-link — apply Monday week when hint arrives or changes
+  useEffect(() => {
+    const hint = String(initialWeekStart || '').split('T')[0];
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(hint)) return;
+    const from = ymdToLocalDate(hint);
+    const to = ymdToLocalDate(hint);
+    to.setDate(to.getDate() + 6);
+    setLogCustomOverride(false);
+    setLogDateRangeOverride(undefined);
+    setActiveFuelWeek({ from, to });
+  }, [initialWeekStart]);
 
   // Align active week to fleet TZ once timezone is known
   useEffect(() => {
@@ -1411,6 +1442,7 @@ function FuelManagementInner({ defaultTab = 'logs', onViewDriverLedger, onTabCha
     <FuelLayout 
         title={pageTitle}
         description={pageDescription}
+        embedded={embedded}
         onAddTransaction={(activeTab === 'configuration' || activeTab === 'cards' || activeTab === 'reconciliation') ? undefined : () => {
             setEditingLog(null);
             setIsLogModalOpen(true);
@@ -1492,6 +1524,7 @@ function FuelManagementInner({ defaultTab = 'logs', onViewDriverLedger, onTabCha
           dataTruncated={fuelDataTruncated}
           secondApproverThreshold={secondApproverThreshold}
           autoCloseDualApprovalMode={autoCloseDualApprovalMode}
+          initialWeekStart={initialWeekStart}
           onRefresh={() => loadData(true)}
           onFinalize={handleFinalize}
           onAddAdjustment={() => { setAdjustmentDefaults({}); setIsAdjustmentModalOpen(true); }}

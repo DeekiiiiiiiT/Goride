@@ -1069,6 +1069,63 @@ export const api = {
     return response.json();
   },
 
+  /** Dominion Silent Station Attach — audited platform ops override. */
+  async platformOpsAttachStation(payload: {
+    entryIds: string[];
+    stationId: string;
+    reason: string;
+    dismissLearnt?: boolean;
+  }) {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/admin/platform-ops-attach-station`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${publicAnonKey}`,
+      },
+      body: JSON.stringify(payload),
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error((err as { error?: string }).error || 'Silent Attach failed');
+    }
+    return response.json() as Promise<{
+      success: boolean;
+      summary: { requested: number; updated: number; skipped: number; errors: number };
+      message: string;
+      station: { id: string; name: string };
+    }>;
+  },
+
+  /** Merchant-name auto-heal dry-run or apply. Default dryRun=true. */
+  async autohealMerchantStations(opts?: { dryRun?: boolean; limit?: number }) {
+    const dryRun = opts?.dryRun !== false;
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/admin/autoheal-merchant-stations`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${publicAnonKey}`,
+      },
+      body: JSON.stringify({ dryRun, limit: opts?.limit ?? 500 }),
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error((err as { error?: string }).error || 'Merchant auto-heal failed');
+    }
+    return response.json() as Promise<{
+      success: boolean;
+      dryRun: boolean;
+      summary: { candidates: number; healed: number; skipped: number; errors: number };
+      candidates?: Array<{
+        entryId: string;
+        stationId: string;
+        stationName: string;
+        score: number;
+        merchantText: string;
+      }>;
+      message: string;
+    }>;
+  },
+
   async saveStation(station: any) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/stations`, {
         method: 'POST',

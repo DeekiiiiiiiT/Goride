@@ -96,6 +96,13 @@ Deno.test("residual helpers split company vs driver owes", () => {
   assertEquals(driverOwesResidual(10), 0);
 });
 
+Deno.test("companyOwesResidual is pay residual; settlement_paid already netted into amount", () => {
+  // Kenny week shape: 8261.56 already after 2425.36 paid — residual is amount, not amount - paid.
+  assertEquals(companyOwesResidual(8261.56), 8261.56);
+  // Wrong queue formula (amount - paid) understates residual — do not use for pay owed.
+  assertEquals(Math.round((8261.56 - 2425.36) * 100) / 100, 5836.2);
+});
+
 Deno.test("buildMovementRow requires idempotency key and scopes uniquely", () => {
   const row = buildMovementRow({
     organizationId: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",

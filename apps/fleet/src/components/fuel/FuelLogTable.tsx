@@ -976,13 +976,29 @@ export function FuelLogTable({
         driverLabel={viewingEntry ? getDriverName(viewingEntry.driverId) : undefined}
         stationLabel={
           viewingEntry
-            ? viewingEntry.location ||
-              viewingEntry.vendor ||
-              viewingEntry.stationAddress ||
-              viewingEntry.metadata?.stationName
+            ? viewingEntry.vendor ||
+              viewingEntry.metadata?.stationName ||
+              viewingEntry.location ||
+              viewingEntry.stationAddress
             : undefined
         }
         paymentLabel={viewingEntry ? resolvePaymentLabel(viewingEntry) : undefined}
+        prevOdometer={
+          viewingEntry ? prevOdometerMap.get(viewingEntry.id)?.prevOdo ?? null : null
+        }
+        tankCapacity={(() => {
+          if (!viewingEntry) return 40;
+          const vehicle = vehicles.find((v) => v.id === viewingEntry.vehicleId);
+          const fromSpecs = Number(
+            (vehicle as { specifications?: { tankCapacity?: number } } | undefined)
+              ?.specifications?.tankCapacity,
+          );
+          const fromSettings = Number(
+            (vehicle as { fuelSettings?: { tankCapacity?: number } } | undefined)?.fuelSettings
+              ?.tankCapacity,
+          );
+          return fromSpecs || fromSettings || 40;
+        })()}
         corrections={corrections}
         correctionsLoading={correctionsLoading}
         correctionsError={correctionsError}

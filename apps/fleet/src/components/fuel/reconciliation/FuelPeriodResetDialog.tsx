@@ -20,6 +20,8 @@ import { useLockedDialog } from '../../shared/useLockedDialog';
 import { useFuelReconBusy } from './fuelReconBusyLock';
 import { useQueryClient } from '@tanstack/react-query';
 import { DRIVER_FINANCIAL_PERIODS_KEY } from '../../../hooks/useDriverFinancialPeriods';
+import { FUEL_PERIODS_KEY, FUEL_PERIOD_KEY } from '../../../hooks/useFuelPeriods';
+import { clearFuelLeakageReview } from '../../../utils/fuelLeakageReviewStore';
 import { runBackgroundJobToast } from '../../shared/runBackgroundJobToast';
 
 interface FuelPeriodResetDialogProps {
@@ -131,7 +133,15 @@ export function FuelPeriodResetDialog({
         `Reset ${period.label}: ${entries} log(s), ${txs} settlement row(s), ${snaps} snapshot(s) — back to Data quality`,
         { id: toastId },
       );
-      void queryClient.invalidateQueries({ queryKey: [DRIVER_FINANCIAL_PERIODS_KEY] });
+      const weekKey = period.startDate || period.id;
+      clearFuelLeakageReview(weekKey);
+      // Landing tabs SoT is SQL periods — must refetch or Completed sticks until hard reload.
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: [FUEL_PERIODS_KEY] }),
+        queryClient.invalidateQueries({ queryKey: [FUEL_PERIOD_KEY] }),
+        queryClient.invalidateQueries({ queryKey: ['finalizedReports'] }),
+        queryClient.invalidateQueries({ queryKey: [DRIVER_FINANCIAL_PERIODS_KEY] }),
+      ]);
 
       // Server already reverses fuel ledger + rebuilds Expenses (reverseFuelFinancialEventsAndRebuild).
       // Only retry from the client when that sync reported failure — a second rebuild after a
@@ -155,7 +165,6 @@ export function FuelPeriodResetDialog({
           'Week money was reversed but it still shows Completed — refresh and try Reopen week once more',
         );
       } else if (needsExpenseRetry) {
-        const weekKey = period.startDate || period.id;
         void runBackgroundJobToast(
           async () => {
             for (const id of driverIds) {

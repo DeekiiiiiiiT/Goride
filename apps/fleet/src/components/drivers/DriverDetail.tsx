@@ -19,10 +19,7 @@ import { useVocab } from '../../utils/vocabulary';
 import { useInvalidateDriverFinancialPeriods } from '../../hooks/useDriverFinancialPeriods';
 import { useDriverDetailShellData } from '../../hooks/useDriverDetailShellData';
 import { useQueryClient } from '@tanstack/react-query';
-import {
-  DriverPeriodProvider,
-  useDriverPeriod,
-} from './context/DriverPeriodContext';
+import { useDriverPeriod } from './context/DriverPeriodContext';
 import {
   isDriverDetailTab,
   type DriverDetailTab,
@@ -55,15 +52,7 @@ interface DriverDetailProps {
   onTabChange?: (tab: DriverDetailTab) => void;
 }
 
-export function DriverDetail(props: DriverDetailProps) {
-  return (
-    <DriverPeriodProvider>
-      <DriverDetailInner {...props} />
-    </DriverPeriodProvider>
-  );
-}
-
-function DriverDetailInner({
+export function DriverDetail({
   driverId,
   driverName,
   driver,

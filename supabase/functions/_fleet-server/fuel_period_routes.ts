@@ -22,7 +22,8 @@ import {
   resolveDualApprovalUiMode,
   secondApproverThresholdFromPrefs,
 } from "./fuel_org_preferences.ts";
-import { publishWeekStatement } from "./week_statements.ts";
+import { sealFuelWeek } from "./fuel_week_seal.ts";
+import { buildFuelSealAmountsByDriver } from "./fuel_close_amounts.ts";
 
 const BASE = "/make-server-37f42386";
 const CRON_SECRET = () => Deno.env.get("FLEET_CRON_SECRET") || Deno.env.get("CRON_SECRET") || "";
@@ -389,38 +390,6 @@ async function processJobRow(job: Record<string, unknown>) {
     for (const snap of snapshots) {
       try {
         await commitFinalizedSnapshotMoney(snap, orgId);
-        // Phase 4: publish immutable fuel statement for the week close contract.
-        const driverId = String(snap?.driverId || "").trim();
-        const weekKey = ymd(snap?.weekStart || period.week_start);
-        if (driverId && weekKey) {
-          try {
-            const driverShare = Number(snap.driverShare) || 0;
-            const companyShare = Number(snap.companyShare) || 0;
-            await publishWeekStatement({
-              kind: "fuel",
-              organizationId: orgId,
-              driverId,
-              weekKey,
-              amountsMinor: {
-                driverShare: Math.round(driverShare * 100),
-                companyShare: Math.round(companyShare * 100),
-                totalSpend: Math.round(
-                  (Number(snap.totalGasCardCost) ||
-                    Number(snap.gasCardSpend) ||
-                    Number(snap.driverSpend) ||
-                    0) * 100,
-                ),
-                miscellaneousCost: Math.round((Number(snap.miscellaneousCost) || 0) * 100),
-              },
-              sourceRowIds: [String(snap.id || `${driverId}_${weekKey}`)],
-              status: "closed",
-              closedBy: actor,
-              closeReason: "fuel_period_finalize",
-            });
-          } catch (stmtErr) {
-            console.warn("[fuel_period] week statement publish failed (non-fatal)", driverId, stmtErr);
-          }
-        }
       } catch (e: any) {
         console.error("[fuel_period] money commit failed", snap?.driverId, e);
         const moneyFailures = [
@@ -465,6 +434,26 @@ async function processJobRow(job: Record<string, unknown>) {
       })
       .eq("id", periodId)
       .eq("org_id", orgId);
+
+    const weekKey = ymd(period.week_start);
+    const amountsByDriver = buildFuelSealAmountsByDriver(snapshots);
+    let fuelSealPublished: number | null = null;
+    let fuelSealError: string | null = null;
+    try {
+      const sealed = await sealFuelWeek({
+        organizationId: orgId,
+        weekKey,
+        actorId: actor ?? undefined,
+        force: true,
+        amountsByDriver,
+      });
+      fuelSealPublished = sealed.published;
+    } catch (sealErr: any) {
+      // Money already committed — keep lock; surface seal failure in audit/job result.
+      fuelSealError = sealErr?.message || String(sealErr);
+      console.warn("[fuel_period] post-lock sealFuelWeek failed (non-fatal)", weekKey, sealErr);
+    }
+
     await insertAudit(
       orgId,
       periodId,
@@ -475,6 +464,8 @@ async function processJobRow(job: Record<string, unknown>) {
         failures,
         gapAccepted: Boolean(period.leakage_reviewed_at),
         moneyCommittedOnLock: true,
+        fuelSealPublished,
+        fuelSealError,
       },
       actor,
     );
@@ -497,7 +488,12 @@ async function processJobRow(job: Record<string, unknown>) {
     } catch (rebuildErr) {
       console.error("[fuel_period] post-lock expenses rebuild failed (non-fatal)", rebuildErr);
     }
-    return { ok: true, version: nextVersion };
+    return {
+      ok: true,
+      version: nextVersion,
+      ...(fuelSealError ? { fuelSealError } : {}),
+      ...(fuelSealPublished != null ? { fuelSealPublished } : {}),
+    };
   } else if (kind === "reopen") {
     const reason = String(cursor.reason || "");
     const weekStart = ymd(period.week_start);
@@ -532,6 +528,12 @@ async function processJobRow(job: Record<string, unknown>) {
         reopen_reason: reason,
         locked_at: null,
         locked_by: null,
+        // Same unlock contract as finalized-reports/reset-period — clear review so landing is Outstanding.
+        leakage_reviewed_at: null,
+        leakage_reviewed_by: null,
+        leakage_review_note: null,
+        counts: {},
+        current_step: "data-quality",
         version: nextVersion,
         updated_at: now,
       })

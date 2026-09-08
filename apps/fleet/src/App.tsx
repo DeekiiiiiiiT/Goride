@@ -29,8 +29,13 @@ import { withProductLineHeaders } from './config/productLine';
 
 import { PermissionGate } from './components/auth/PermissionGate';
 import { PAGE_PERMISSION_MAP } from './utils/permissions';
+import { usePermissions } from './hooks/usePermissions';
+import { useServiceLineScope } from './contexts/ServiceLineScopeContext';
 
 import { isPassengerOnlyMetadataRole } from '@roam/auth-client';
+
+type SettlementsHubTab = 'cash' | 'close-week' | 'restatements';
+type WeekReconciliationHubTab = 'fuel' | 'tolls';
 
 const DriversPage = lazy(() => import('./components/drivers/DriversPage'));
 const DriverAnalytics = lazy(() =>
@@ -53,6 +58,11 @@ const FuelAnalytics = lazy(() =>
 const DriverSettlementsPage = lazy(() =>
   import('./components/fleet-financials/DriverSettlementsPage').then((m) => ({
     default: m.DriverSettlementsPage,
+  })),
+);
+const WeekReconciliationPage = lazy(() =>
+  import('./components/fleet-financials/WeekReconciliationPage').then((m) => ({
+    default: m.WeekReconciliationPage,
   })),
 );
 const FleetFinancialsPage = lazy(() =>
@@ -78,9 +88,6 @@ const ExpenseHubPage = lazy(() =>
 );
 const TripLogsPage = lazy(() =>
   import('./components/trips/TripLogsPage').then((m) => ({ default: m.TripLogsPage })),
-);
-const TollReconciliation = lazy(() =>
-  import('./pages/TollReconciliation').then((m) => ({ default: m.TollReconciliation })),
 );
 const TollLogsPage = lazy(() =>
   import('./pages/TollLogs').then((m) => ({ default: m.TollLogsPage })),
@@ -143,6 +150,13 @@ function inferClientProductLine(meta: Record<string, unknown> | undefined): 'fle
 
 function AppContent() {
   const { user, role, resolvedRole, loading, needsProvision, signOut } = useAuth();
+  const { canView } = usePermissions();
+  const { rideshareVisible } = useServiceLineScope();
+  /** Close Week / Restatements live on Driver Settlements when that desk is available. */
+  const canUseSettlementsHub = canView('driver-settlements') && rideshareVisible;
+  /** Fuel / Toll recon live on Week Reconciliation hub. */
+  const canUseWeekReconHub =
+    canView('fuel-reconciliation') || canView('toll-tags');
   
   const [currentPage, setCurrentPage] = useState(() =>
     typeof window !== 'undefined' ? resolvePageFromPathname(window.location.pathname) : 'dashboard',
@@ -178,6 +192,11 @@ function AppContent() {
     | { vehicleId?: string; driverId?: string; vehicleLabel?: string };
 
   const [closeWeekKeyHint, setCloseWeekKeyHint] = useState<string | null>(null);
+  const [settlementsHubTabHint, setSettlementsHubTabHint] = useState<SettlementsHubTab | null>(null);
+  const [weekReconHubTabHint, setWeekReconHubTabHint] = useState<WeekReconciliationHubTab | null>(
+    null,
+  );
+  const [weekReconWeekHint, setWeekReconWeekHint] = useState<string | null>(null);
 
   /** Open driver detail with URL `/drivers/:id` (clears stale list-only state). */
   const openDriverDetail = (driverId: string, tab: DriverDetailTab = 'overview') => {
@@ -204,7 +223,7 @@ function AppContent() {
         : undefined;
     if (opts && 'weekKey' in opts && typeof opts.weekKey === 'string') {
       setCloseWeekKeyHint(opts.weekKey);
-    } else if (page !== 'close-week') {
+    } else if (page !== 'close-week' && page !== 'driver-settlements' && page !== 'driver-payouts') {
       setCloseWeekKeyHint(null);
     }
     const tollFocus =
@@ -227,7 +246,7 @@ function AppContent() {
 
     if (page === 'toll-tags') {
       setTollReconFocus(tollFocus || null);
-    } else {
+    } else if (page !== 'week-reconciliation') {
       setTollReconFocus(null);
     }
     if (page === 'transactions') {
@@ -268,6 +287,53 @@ function AppContent() {
       clearDriverDetail();
       setCurrentPage('fuel-analytics');
       return;
+    }
+
+    // Close Week / Restatement → Driver Settlements hub when that desk is available
+    if (canUseSettlementsHub && (page === 'close-week' || page === 'restatement-queue')) {
+      const hubTab: SettlementsHubTab =
+        page === 'close-week' ? 'close-week' : 'restatements';
+      setSettlementsHubTabHint(hubTab);
+      clearDriverDetail();
+      setCurrentPage('driver-settlements');
+      if (typeof window !== 'undefined') {
+        const nextPath = pathForPageId(page);
+        if (window.location.pathname !== nextPath) {
+          window.history.pushState({ page: 'driver-settlements', hubTab }, '', nextPath);
+        }
+      }
+      return;
+    }
+
+    // Fuel / Toll recon → Week Reconciliation hub
+    if (canUseWeekReconHub && (page === 'fuel-reconciliation' || page === 'toll-tags')) {
+      const hubTab: WeekReconciliationHubTab =
+        page === 'fuel-reconciliation' ? 'fuel' : 'tolls';
+      setWeekReconHubTabHint(hubTab);
+      if (periodHint?.startYmd) {
+        setWeekReconWeekHint(periodHint.startYmd);
+      }
+      clearDriverDetail();
+      setCurrentPage('week-reconciliation');
+      if (typeof window !== 'undefined') {
+        const nextPath = pathForPageId(page);
+        if (window.location.pathname !== nextPath) {
+          window.history.pushState({ page: 'week-reconciliation', hubTab }, '', nextPath);
+        }
+      }
+      return;
+    }
+
+    if (page === 'driver-settlements' || page === 'driver-payouts') {
+      setSettlementsHubTabHint('cash');
+    } else if (page !== 'close-week' && page !== 'restatement-queue') {
+      setSettlementsHubTabHint(null);
+    }
+
+    if (page === 'week-reconciliation') {
+      setWeekReconHubTabHint((prev) => prev || (canView('fuel-reconciliation') ? 'fuel' : 'tolls'));
+    } else if (page !== 'fuel-reconciliation' && page !== 'toll-tags') {
+      setWeekReconHubTabHint(null);
     }
 
     // Nav away from drivers OR click Drivers → always list (drop detail deep link)
@@ -345,6 +411,30 @@ function AppContent() {
       setCurrentPage('expense-hub');
     }
   }, [currentPage]);
+
+  // /close-week and /restatement-queue bookmarks → Driver Settlements hub tabs
+  useEffect(() => {
+    if (!canUseSettlementsHub) return;
+    if (currentPage === 'close-week') {
+      setSettlementsHubTabHint((prev) => prev || 'close-week');
+      setCurrentPage('driver-settlements');
+    } else if (currentPage === 'restatement-queue') {
+      setSettlementsHubTabHint((prev) => prev || 'restatements');
+      setCurrentPage('driver-settlements');
+    }
+  }, [currentPage, canUseSettlementsHub]);
+
+  // /fuel-reconciliation and /toll-tags bookmarks → Week Reconciliation hub tabs
+  useEffect(() => {
+    if (!canUseWeekReconHub) return;
+    if (currentPage === 'fuel-reconciliation') {
+      setWeekReconHubTabHint((prev) => prev || 'fuel');
+      setCurrentPage('week-reconciliation');
+    } else if (currentPage === 'toll-tags') {
+      setWeekReconHubTabHint((prev) => prev || 'tolls');
+      setCurrentPage('week-reconciliation');
+    }
+  }, [currentPage, canUseWeekReconHub]);
 
   // ── Maintenance Mode Check ────────────────────────────────────────────
   // Check if the platform is in maintenance mode.
@@ -650,16 +740,23 @@ function AppContent() {
             <TransactionsPage mode="list" onBackToBusinessFinance={() => handleNavigate('business-finance')} />
           </PermissionGate>
         )}
-        {currentPage === 'toll-tags' && (
-          <PermissionGate permission="nav.toll_reconciliation" onNavigate={setCurrentPage}>
-            <Suspense fallback={<div className="p-6 text-sm text-slate-500">Loading toll reconciliation…</div>}>
-              <TollReconciliation
-                focusVehicleId={tollReconFocus?.vehicleId}
-                focusDriverId={tollReconFocus?.driverId}
-                focusVehicleLabel={tollReconFocus?.vehicleLabel}
-              />
-            </Suspense>
-          </PermissionGate>
+        {currentPage === 'week-reconciliation' && canUseWeekReconHub && (
+          <Suspense fallback={<div className="p-6 text-sm text-slate-500">Loading week reconciliation…</div>}>
+            <WeekReconciliationPage
+              onBackToBusinessFinance={() => handleNavigate('business-finance')}
+              onNavigate={(page, opts) => handleNavigate(page, opts)}
+              initialHubTab={weekReconHubTabHint}
+              initialWeekStart={weekReconWeekHint}
+              tollFocus={tollReconFocus}
+              onHintsConsumed={() => {
+                setWeekReconHubTabHint(null);
+                setWeekReconWeekHint(null);
+              }}
+              onViewDriverLedger={(driverId) => {
+                openDriverDetail(driverId);
+              }}
+            />
+          </Suspense>
         )}
         {currentPage === 'tag-inventory' && (
           <PermissionGate permission="nav.toll_tag_inventory" onNavigate={setCurrentPage}>
@@ -721,11 +818,18 @@ function AppContent() {
                 onOpenDriver={(driverId) => {
                   openDriverDetail(driverId);
                 }}
+                onNavigate={(page, opts) => handleNavigate(page, opts)}
+                initialHubTab={settlementsHubTabHint}
+                initialWeekKey={closeWeekKeyHint}
+                onSettlementsHintsConsumed={() => {
+                  setSettlementsHubTabHint(null);
+                  setCloseWeekKeyHint(null);
+                }}
               />
             </Suspense>
           </PermissionGate>
         )}
-        {currentPage === 'close-week' && (
+        {currentPage === 'close-week' && !canUseSettlementsHub && (
           <PermissionGate permission="nav.financial_analytics" onNavigate={setCurrentPage}>
             <Suspense fallback={<div className="p-6 text-sm text-slate-500">Loading close week…</div>}>
               <CloseWeekPage
@@ -735,10 +839,14 @@ function AppContent() {
             </Suspense>
           </PermissionGate>
         )}
-        {currentPage === 'restatement-queue' && (
+        {currentPage === 'restatement-queue' && !canUseSettlementsHub && (
           <PermissionGate permission="nav.financial_analytics" onNavigate={setCurrentPage}>
             <Suspense fallback={<div className="p-6 text-sm text-slate-500">Loading restatements…</div>}>
-              <RestatementQueuePage onNavigate={(page, opts) => handleNavigate(page, opts)} />
+              <RestatementQueuePage
+                onNavigate={(page, opts) =>
+                  handleNavigate(page, opts?.weekKey ? { weekKey: opts.weekKey } : undefined)
+                }
+              />
             </Suspense>
           </PermissionGate>
         )}
@@ -761,12 +869,11 @@ function AppContent() {
           </PermissionGate>
         )}
 
-        {['fuel-reconciliation', 'fuel-cards', 'fuel-logs', 'fuel-configuration', 'fuel-reimbursements'].includes(currentPage) && (
+        {['fuel-cards', 'fuel-logs', 'fuel-configuration', 'fuel-reimbursements'].includes(currentPage) && (
           <PermissionGate permission={PAGE_PERMISSION_MAP[currentPage] || 'nav.fuel_overview'} onNavigate={setCurrentPage}>
             <Suspense fallback={<div className="p-6 text-sm text-slate-500">Loading fuel…</div>}>
               <FuelManagement 
                   defaultTab={
-                      currentPage === 'fuel-reconciliation' ? 'reconciliation' :
                       currentPage === 'fuel-reimbursements' ? 'reimbursements' :
                       currentPage === 'fuel-cards' ? 'cards' :
                       currentPage === 'fuel-logs' ? 'logs' :

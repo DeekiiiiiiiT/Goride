@@ -15,7 +15,7 @@ import {
 } from '../../ui/table';
 import { cn } from '../../ui/utils';
 import { agingBucket, daysOverdue, type AgingBucket } from '../../../utils/settlementAging';
-import { payOutstandingAmount } from '../../../utils/driverSettlementsPayAmount';
+import { resolvePayQueueOwed } from '../../../utils/driverSettlementsPayAmount';
 import {
   isSettlementPeriodEnded,
   settlementPeriodOpenMessage,
@@ -77,9 +77,10 @@ function rowKey(r: Pick<SettlementQueueRow, 'driverId' | 'periodAnchor'>) {
 }
 
 function owedMajor(r: SettlementQueueRow, mode: 'collect' | 'pay'): number {
+  // Pay: settlementAmount is already residual — ignore amountOwed so a bad queue cannot understate.
+  if (mode === 'pay') return resolvePayQueueOwed(r);
   if (r.amountOwed != null && Number.isFinite(r.amountOwed)) return Math.max(0, Number(r.amountOwed));
   if (r.amountOwedMinor != null) return Math.max(0, (Number(r.amountOwedMinor) || 0) / 100);
-  if (mode === 'pay') return payOutstandingAmount(r);
   return Math.max(0, Math.abs(Number(r.settlementAmount) || 0));
 }
 
