@@ -60,7 +60,7 @@ import {
   SettlementQueueTable,
   type SettlementMovementRow,
 } from './settlements';
-import { settlementCommandsApi, isSettlementCommandUnavailable } from '../../services/settlementCommandsApi';
+import { settlementCommandsApi, isSettlementCommandUnavailable, isPeriodFrozenError } from '../../services/settlementCommandsApi';
 import { useSettlementCommands, newIdempotencyKey } from '../../hooks/useSettlementCommands';
 import { useServiceLineScopeParam } from '../../hooks/useServiceLineScopeParam';
 import {
@@ -112,6 +112,10 @@ import {
   listWeekStatementRestatements,
   RESTATEMENT_QUEUE_QUERY_KEY,
 } from '../../pages/RestatementQueuePage';
+import {
+  PeriodFrozenDialog,
+  type PeriodFrozenDialogState,
+} from './settlements/PeriodFrozenDialog';
 
 const CloseWeekPageLazy = lazy(() =>
   import('../../pages/CloseWeekPage').then((m) => ({ default: m.CloseWeekPage })),
@@ -429,6 +433,15 @@ export function DriverSettlementsPage({
   const [batchDate, setBatchDate] = useState(new Date().toISOString().split('T')[0]);
   const [batchRef, setBatchRef] = useState('');
   const [batchBusy, setBatchBusy] = useState(false);
+  const [periodFrozenDialog, setPeriodFrozenDialog] = useState<PeriodFrozenDialogState>(null);
+
+  const showPeriodFrozen = (weekKey: string, driverName?: string) => {
+    setPeriodFrozenDialog({
+      weekKey: String(weekKey || '').slice(0, 10),
+      driverName: driverName || undefined,
+    });
+  };
+
   const rangeWeekFrom = allOpen ? undefined : weekFrom;
   const rangeWeekTo = allOpen ? undefined : weekTo;
   const rangeScopeLabel = allOpen ? 'all open' : 'in selected range';
@@ -1240,6 +1253,12 @@ export function DriverSettlementsPage({
       }
     } catch (err) {
       // Cutover: only when command endpoint is absent — never on business 4xx.
+      if (isPeriodFrozenError(err)) {
+        setPayoutModal((m) => ({ ...m, isOpen: false }));
+        showPeriodFrozen(weekAnchor, payoutModal.driverName);
+        // Handled — do not rethrow (RecordPayoutModal would toast the raw PERIOD_FROZEN text).
+        return;
+      }
       if (!isSettlementCommandUnavailable(err)) {
         toast.error(err instanceof Error ? err.message : 'Pay failed');
         throw err;
@@ -1316,6 +1335,11 @@ export function DriverSettlementsPage({
           serverAfter = owed;
         }
       } catch (err) {
+        if (isPeriodFrozenError(err)) {
+          setCollectModal((m) => ({ ...m, isOpen: false }));
+          showPeriodFrozen(weekStart, collectModal.driverName);
+          return;
+        }
         if (!isSettlementCommandUnavailable(err)) {
           toast.error(err instanceof Error ? err.message : 'Collect failed');
           throw err;
@@ -1376,6 +1400,11 @@ export function DriverSettlementsPage({
         expectedOutstanding: writeOffModal.maxAmount,
       });
     } catch (err) {
+      if (isPeriodFrozenError(err)) {
+        setWriteOffModal((m) => ({ ...m, isOpen: false }));
+        showPeriodFrozen(weekAnchor, writeOffModal.driverName);
+        return;
+      }
       if (!isSettlementCommandUnavailable(err)) {
         toast.error(err instanceof Error ? err.message : 'Write-off failed');
         throw err;
@@ -1497,16 +1526,29 @@ export function DriverSettlementsPage({
         );
       }
       if (failed > 0) {
-        const firstErr =
-          (res.rows || []).find((r) => r.error_message)?.error_message || 'Unknown error';
-        toast.error(`${failed} failed · ${firstErr}`);
+        const failedRow = (res.rows || []).find((r) => r.error_message);
+        const firstErr = failedRow?.error_message || 'Unknown error';
+        if (isPeriodFrozenError(firstErr) || /PERIOD_FROZEN/i.test(firstErr)) {
+          const week =
+            String((failedRow as { week_anchor?: string; weekAnchor?: string } | undefined)?.week_anchor
+              || (failedRow as { weekAnchor?: string } | undefined)?.weekAnchor
+              || selectedRows[0]?.periodAnchor
+              || '').slice(0, 10);
+          showPeriodFrozen(week, selectedRows[0]?.driverName);
+        } else {
+          toast.error(`${failed} failed · ${firstErr}`);
+        }
       }
       setBatchOpen(false);
       setSelected(new Set());
       setBatchSelectedKeys([]);
       refreshAll();
     } catch (e: any) {
-      toast.error(e?.message || 'Batch run failed');
+      if (isPeriodFrozenError(e)) {
+        showPeriodFrozen(selectedRows[0]?.periodAnchor || '', selectedRows[0]?.driverName);
+      } else {
+        toast.error(e?.message || 'Batch run failed');
+      }
     } finally {
       setBatchBusy(false);
     }
@@ -2016,7 +2058,12 @@ export function DriverSettlementsPage({
               showingAmount={outstandingShowingAmount}
               totalAmount={outstandingTotalAmount}
               onOpenDriver={onOpenDriver}
+              onWeekClosed={(r) => showPeriodFrozen(r.periodAnchor, r.driverName)}
               onPay={(r) => {
+                if (r.periodFrozen) {
+                  showPeriodFrozen(r.periodAnchor, r.driverName);
+                  return;
+                }
                 if (
                   !isSettlementPeriodEnded({
                     periodAnchor: r.periodAnchor,
@@ -2041,6 +2088,10 @@ export function DriverSettlementsPage({
                 });
               }}
               onCollect={(r) => {
+                if (r.periodFrozen) {
+                  showPeriodFrozen(r.periodAnchor, r.driverName);
+                  return;
+                }
                 if (
                   !isSettlementPeriodEnded({
                     periodAnchor: r.periodAnchor,
@@ -2065,6 +2116,10 @@ export function DriverSettlementsPage({
                 });
               }}
               onWriteOff={(r) => {
+                if (r.periodFrozen) {
+                  showPeriodFrozen(r.periodAnchor, r.driverName);
+                  return;
+                }
                 if (
                   !isSettlementPeriodEnded({
                     periodAnchor: r.periodAnchor,
@@ -2171,6 +2226,17 @@ export function DriverSettlementsPage({
         maxAmount={writeOffModal.maxAmount}
         workPeriodStart={writeOffModal.workPeriodStart}
         workPeriodEnd={writeOffModal.workPeriodEnd}
+      />
+
+      <PeriodFrozenDialog
+        state={periodFrozenDialog}
+        onOpenChange={(open) => {
+          if (!open) setPeriodFrozenDialog(null);
+        }}
+        onOpenCloseWeek={(weekKey) => {
+          setPeriodFrozenDialog(null);
+          handleHubNavigate('close-week', { weekKey });
+        }}
       />
 
       <ReconciledPeriodOverlay

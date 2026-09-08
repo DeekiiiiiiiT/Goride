@@ -55,6 +55,8 @@ export type ClosePeriodRow = {
   tips_paid_to_driver?: number | null;
   earnings_gross?: number | null;
   settlement_amount?: number | null;
+  /** Open cash still in driver custody — must clear before calendar freeze. */
+  cash_still_held?: number | null;
 };
 
 /** Independent statement values (major units) the period must tie to. */
@@ -107,6 +109,11 @@ export type CloseInvariantInput = {
    * caller passing it was an excess-property type error.
    */
   cashSourceMismatch?: number | null;
+  /**
+   * When re-signing restatements on an already-frozen week, skip desk open-balance
+   * gates (fleet owes / driver owes / cash held) — those apply to first close only.
+   */
+  skipSettlementDeskClear?: boolean;
   /**
    * Toll rows in spend whose payment method is neither cash nor tag. They break
    * the toll_spend = cash + tag identity by exactly this amount, so they are
@@ -510,6 +517,47 @@ export function checkCloseInvariants(input: CloseInvariantInput): CloseBlocker[]
       'trip CSV Uber cash disagrees with ledger payout_cash beyond ε',
       num(input.cashSourceMismatch), 0,
     );
+  }
+
+  // ── Settlement desk clear before freeze (PERIOD_FROZEN traps unpaid money) ──────
+  if (!input.skipSettlementDeskClear) {
+    const settlementAmount = num(p.settlement_amount);
+    if (settlementAmount > eps) {
+      out.push({
+        code: 'SETTLEMENT_FLEET_OWES',
+        severity: 'block',
+        driverId: ctx.driverId,
+        week: ctx.week,
+        persisted: round2(settlementAmount),
+        expected: 0,
+        delta: round2(settlementAmount),
+        message: 'Fleet still owes this driver — Pay remaining on Cash desk before close',
+      });
+    } else if (settlementAmount < -eps) {
+      out.push({
+        code: 'SETTLEMENT_DRIVER_OWES',
+        severity: 'block',
+        driverId: ctx.driverId,
+        week: ctx.week,
+        persisted: round2(settlementAmount),
+        expected: 0,
+        delta: round2(settlementAmount),
+        message: 'Driver still owes cash — Collect remaining on Cash desk before close',
+      });
+    }
+    const cashHeld = num(p.cash_still_held);
+    if (cashHeld > eps) {
+      out.push({
+        code: 'SETTLEMENT_CASH_HELD',
+        severity: 'block',
+        driverId: ctx.driverId,
+        week: ctx.week,
+        persisted: round2(cashHeld),
+        expected: 0,
+        delta: round2(cashHeld),
+        message: 'Cash still held — Collect or write off on Cash desk before close',
+      });
+    }
   }
 
   // ── Pass 5: statement ↔ fresh engine (post-cutover failability) ─────────────────

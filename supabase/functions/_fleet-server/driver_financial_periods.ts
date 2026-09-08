@@ -43,6 +43,7 @@ import {
 } from "./settlement_period_select.ts";
 import { derivePeriodStatus } from "./period_projector.ts";
 import { persistPeriodRowWithVersion, updatePeriodCashWithVersion } from "./period_persist.ts";
+import { isPeriodFrozen } from "./settlement_period_freeze.ts";
 import { getServiceClientWithSchema } from "./service_client.ts";
 import { isPlatformReimbursedPlazaToll } from "./toll_platform_reimbursed.ts";
 import {
@@ -2273,7 +2274,11 @@ export async function syncPeriodCashFromTransactions(
     existingClosedAt: existing.closed_at as string | null | undefined,
   });
 
-  await updatePeriodCashWithVersion(driverId, periodAnchor, cashPersist);
+  await updatePeriodCashWithVersion(driverId, periodAnchor, cashPersist, 3, {
+    // Desk already gated before insertMovement; never leave a posted movement without cash sync
+    // if Close Week races between insert and persist (orphan pay + PERIOD_FROZEN toast).
+    allowFrozen: true,
+  });
   return "synced";
 }
 
@@ -2293,6 +2298,9 @@ export type CompanyOwesPeriodRow = {
   /** Reporting flag — badge on desk; does not change queue routing. */
   overpaidAmount?: number;
   cashSourceMismatch?: number;
+  /** Calendar freeze from Close Week — Pay/Collect must be disabled. */
+  periodFrozen?: boolean;
+  moneyUnlocked?: boolean;
 };
 
 /** M-4: fail-closed org scope for every period list query. */
@@ -2336,20 +2344,10 @@ export async function listCompanyOwesPeriods(opts?: PeriodListQueryOpts): Promis
     throw new Error(error.message);
   }
   const mapped = (data || []).map((r: any) => {
+    const row = mapPeriodListRow(r);
     const oa = Number(r.metadata?.financeCore?.overpaidAmount);
     return {
-      driverId: String(r.driver_id),
-      periodAnchor: String(r.period_anchor).slice(0, 10),
-      periodEnd: String(r.period_end).slice(0, 10),
-      settlementAmount: Number(r.settlement_amount) || 0,
-      settlementPaid: Number(r.settlement_paid) || 0,
-      cashCollected: Number(r.cash_collected) || 0,
-      cashReturned: Number(r.cash_returned) || 0,
-      cashStillHeld: Number(r.cash_still_held) || 0,
-      payoutNet: Number(r.payout_net) || 0,
-      settlementStatus: String(r.settlement_status || ""),
-      fuelFinalized: !!r.fuel_finalized,
-      tripCount: Number(r.trip_count) || 0,
+      ...row,
       overpaidAmount: Number.isFinite(oa) && oa > 0 ? oa : 0,
     };
   });
@@ -2553,6 +2551,8 @@ export type PeriodListQueryOpts = {
 
 function mapPeriodListRow(r: any): CompanyOwesPeriodRow {
   const mismatch = Number(r.metadata?.financeCore?.cashSourceMismatch);
+  const meta = (r.metadata || {}) as Record<string, unknown>;
+  const fc = (meta.financeCore || {}) as Record<string, unknown>;
   return {
     driverId: String(r.driver_id),
     periodAnchor: String(r.period_anchor).slice(0, 10),
@@ -2567,6 +2567,11 @@ function mapPeriodListRow(r: any): CompanyOwesPeriodRow {
     fuelFinalized: !!r.fuel_finalized,
     tripCount: Number(r.trip_count) || 0,
     cashSourceMismatch: Number.isFinite(mismatch) ? mismatch : 0,
+    periodFrozen: isPeriodFrozen({
+      metadata: meta,
+      settlementStatus: String(r.settlement_status || ""),
+    }),
+    moneyUnlocked: fc.moneyUnlocked !== false,
   };
 }
 

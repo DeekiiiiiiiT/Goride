@@ -202,6 +202,16 @@ export async function closeWeekStatements(
     }
     closed++;
   }
+  // Older draft restatements for this week are history — retire so the queue stays clean.
+  const { error: dropErr } = await sb()
+    .from("week_statements")
+    .update({ status: "restated" })
+    .eq("organization_id", organizationId)
+    .eq("driver_id", driverId)
+    .eq("week_key", WEEK_KEY(weekKey))
+    .eq("status", "draft")
+    .not("supersedes", "is", null);
+  if (dropErr) throw new Error(dropErr.message);
   return closed;
 }
 
@@ -294,6 +304,16 @@ export async function requestRestatement(input: RequestRestatementInput): Promis
       .from("week_statements")
       .update({ close_reason: `restatement:${input.reason} (actor:${input.actorId})` })
       .eq("id", draft.id);
+    // Retire any older drafts for this lane so operators only see the latest.
+    await sb()
+      .from("week_statements")
+      .update({ status: "restated" })
+      .eq("organization_id", priorStmt.organizationId)
+      .eq("driver_id", priorStmt.driverId)
+      .eq("week_key", WEEK_KEY(priorStmt.weekKey))
+      .eq("kind", priorStmt.kind)
+      .eq("status", "draft")
+      .neq("id", draft.id);
   }
   return draft;
 }
@@ -316,5 +336,13 @@ export async function listPendingRestatements(
     .order("version", { ascending: false })
     .range(offset, offset + limit - 1);
   if (error) throw new Error(error.message);
-  return (data ?? []).map((row) => mapRowToWeekStatement(row as Record<string, unknown>));
+  // One actionable draft per driver / week / kind — older versions are history noise.
+  const byKey = new Map<string, WeekStatement>();
+  for (const row of data ?? []) {
+    const s = mapRowToWeekStatement(row as Record<string, unknown>);
+    const key = `${s.driverId}|${s.weekKey}|${s.kind}`;
+    const prev = byKey.get(key);
+    if (!prev || Number(s.version) > Number(prev.version)) byKey.set(key, s);
+  }
+  return [...byKey.values()];
 }

@@ -32,6 +32,9 @@ interface StationDatabaseViewProps {
   /** Top-level Station Database tab to open on load (e.g. resolution-queue for deep links). */
   defaultTab?: string;
   defaultResolutionSubTab?: ResolutionQueueSubTab;
+  /** Dominion-only: Silent Attach sub-tab inside Resolution Queue. */
+  enableSilentAttach?: boolean;
+  silentAttachPanel?: React.ReactNode;
 }
 
 export function StationDatabaseView({
@@ -39,6 +42,8 @@ export function StationDatabaseView({
   loading = false,
   defaultTab = 'spatial-audit',
   defaultResolutionSubTab = 'unresolved-stops',
+  enableSilentAttach = false,
+  silentAttachPanel,
 }: StationDatabaseViewProps) {
   const [selectedStation, setSelectedStation] = useState<StationProfile | null>(null);
   const [preferredStationIds, setPreferredStationIds] = useState<Set<string>>(new Set());
@@ -681,6 +686,8 @@ export function StationDatabaseView({
               onVerifyLocation={handleVerifyLearntLocation}
               onResolved={() => fetchData()}
               onCountChange={setResolutionQueueCount}
+              enableSilentAttach={enableSilentAttach}
+              silentAttachPanel={silentAttachPanel}
             />
           </TabsContent>
         </Tabs>

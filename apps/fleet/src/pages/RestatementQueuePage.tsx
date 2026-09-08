@@ -10,6 +10,7 @@ import { cn } from '../components/ui/utils';
 import { requireAuthHeaders } from '../utils/authHeaders';
 import { fetchWithRetry } from '../services/api';
 import { API_ENDPOINTS } from '../services/apiConfig';
+import { pickLatestRestatementDrafts } from '../utils/latestRestatementDrafts';
 
 export type RestatementRow = {
   id?: string;
@@ -35,7 +36,7 @@ export async function listWeekStatementRestatements(): Promise<RestatementRow[]>
     throw new Error(`Failed to load restatements (${response.status})`);
   }
   const json = (await response.json()) as { rows?: RestatementRow[] };
-  return json.rows || [];
+  return pickLatestRestatementDrafts(json.rows || []);
 }
 
 function weekLabel(weekKey: string): string {
@@ -84,9 +85,9 @@ export function RestatementQueuePage({
             <h1 className="text-xl font-semibold text-slate-900">Restatement queue</h1>
           ) : null}
           <p className={cn('text-sm text-slate-500', !embedded && 'mt-1')}>
-            Draft statement revisions after a week was closed. Sign them on Close Week — never approve outside that flow.
-            Open Close Week for that week and use <strong>Sign restatements</strong> (week stays frozen). Use{' '}
-            <strong>Re-open week</strong> only when you need to unlock Fuel/Tolls/Settlement edits.
+            Corrections waiting to be signed after a week was already closed. Open Close Week for that week and tap{' '}
+            <strong>Sign restatements</strong>. Use <strong>Re-open week</strong> only if you need to change Fuel,
+            Tolls, or Settlement money.
           </p>
         </div>
         <Button
@@ -143,7 +144,6 @@ export function RestatementQueuePage({
                   <td className="px-3 py-2 capitalize text-slate-700">{row.kind}</td>
                   <td className="px-3 py-2">
                     <StatusChip status={row.status} />
-                    <div className="mt-0.5 text-[11px] text-slate-400">v{row.version}</div>
                   </td>
                   <td className="max-w-[280px] truncate px-3 py-2 text-slate-500" title={row.reason || ''}>
                     {row.reason || '—'}

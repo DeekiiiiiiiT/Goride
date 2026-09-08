@@ -1360,6 +1360,8 @@ app.get(`${BASE}/queue`, requirePermission("transactions.view"), async (c) => {
       tripCount?: number;
       settlementStatus?: string;
       fuelFinalized?: boolean;
+      periodFrozen?: boolean;
+      moneyUnlocked?: boolean;
       collectKind?: string;
       overpaidAmount?: number;
       cashSourceMismatch?: number;
@@ -1397,6 +1399,8 @@ app.get(`${BASE}/queue`, requirePermission("transactions.view"), async (c) => {
           tripCount: r.tripCount,
           settlementStatus: r.settlementStatus,
           fuelFinalized: r.fuelFinalized,
+          periodFrozen: r.periodFrozen === true,
+          moneyUnlocked: r.moneyUnlocked !== false,
           overpaidAmount: r.overpaidAmount,
         };
       });
@@ -1416,6 +1420,8 @@ app.get(`${BASE}/queue`, requirePermission("transactions.view"), async (c) => {
         tripCount: r.tripCount,
         settlementStatus: r.settlementStatus,
         fuelFinalized: r.fuelFinalized,
+        periodFrozen: r.periodFrozen === true,
+        moneyUnlocked: r.moneyUnlocked !== false,
         overpaidAmount: r.overpaidAmount,
         cashSourceMismatch: r.cashSourceMismatch,
         // Rich fields for ReconciledTable — avoid a second legacy list query (R-9).
@@ -1454,6 +1460,8 @@ app.get(`${BASE}/queue`, requirePermission("transactions.view"), async (c) => {
           tripCount: r.tripCount,
           settlementStatus: r.settlementStatus,
           fuelFinalized: r.fuelFinalized,
+          periodFrozen: r.periodFrozen === true,
+          moneyUnlocked: r.moneyUnlocked !== false,
           collectKind: "cash_held",
           overpaidAmount: r.overpaidAmount,
           cashSourceMismatch: r.cashSourceMismatch,
@@ -1474,6 +1482,8 @@ app.get(`${BASE}/queue`, requirePermission("transactions.view"), async (c) => {
           tripCount: r.tripCount,
           settlementStatus: r.settlementStatus,
           fuelFinalized: r.fuelFinalized,
+          periodFrozen: r.periodFrozen === true,
+          moneyUnlocked: r.moneyUnlocked !== false,
           collectKind: "driver_owes",
           overpaidAmount: r.overpaidAmount,
           cashSourceMismatch: r.cashSourceMismatch,

@@ -45,6 +45,16 @@ export function isSettlementCommandUnavailable(err: unknown): boolean {
   return false;
 }
 
+/** Close Week freeze — show Open Close Week dialog, not a raw toast. */
+export function isPeriodFrozenError(err: unknown): boolean {
+  if (err instanceof SettlementCommandApiError && err.code === 'PERIOD_FROZEN') return true;
+  if (err instanceof Error) {
+    const m = err.message || '';
+    return m.includes('PERIOD_FROZEN') || /settlement week is closed/i.test(m);
+  }
+  return typeof err === 'string' && (err.includes('PERIOD_FROZEN') || /settlement week is closed/i.test(err));
+}
+
 export type SettlementCollectBody = {
   driverId: string;
   weekAnchor: string;

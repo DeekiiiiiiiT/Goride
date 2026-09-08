@@ -323,13 +323,26 @@ export function CloseWeekPage({
 
   const fuelStatus = laneStatusFromBlockers(byLane.fuel, { loading: previewLoading });
   const tollStatus = laneStatusFromBlockers(byLane.toll, { loading: previewLoading });
+  const openSettlementExposure =
+    settlement.fleetOwes + settlement.driversOwe + settlement.cashHeld > MONEY_EPS;
   const settlementStatus: CloseLaneStatus = settlementLoading
     ? 'loading'
     : blockingCount(byLane.settlement) > 0
       ? 'blocked'
-      : settlement.blockedExposure > MONEY_EPS
-        ? 'pending'
-        : 'clear';
+      : openSettlementExposure
+        ? 'blocked'
+        : settlement.blockedExposure > MONEY_EPS
+          ? 'pending'
+          : 'clear';
+
+  const openSettlementBalanceBlocked = (preview?.blockers || []).some((b) => {
+    const c = String(b.code || '').toUpperCase();
+    return (
+      c === 'SETTLEMENT_FLEET_OWES' ||
+      c === 'SETTLEMENT_DRIVER_OWES' ||
+      c === 'SETTLEMENT_CASH_HELD'
+    );
+  });
 
   // Toll identity strip — prefer preview residual, fall back to the pure helper.
   const tollIdentity = useMemo(() => {
@@ -384,6 +397,7 @@ export function CloseWeekPage({
     !weekAlreadyClosed &&
     weekEnded &&
     totalBlockers === 0 &&
+    !openSettlementExposure &&
     (preview?.driversTotal ?? 0) > 0;
   const canSignRestatements =
     !previewLoading &&
@@ -825,9 +839,14 @@ export function CloseWeekPage({
             </span>
           ) : totalBlockers > 0 ? (
             <span className="text-rose-700">
-              {totalBlockers} blocker{totalBlockers === 1 ? '' : 's'} across {preview?.driversBlocked ?? 0} driver
-              {(preview?.driversBlocked ?? 0) === 1 ? '' : 's'} — resolve before closing.
+              {openSettlementBalanceBlocked || openSettlementExposure
+                ? 'Finish Pay / Collect on Cash desk, then Refresh.'
+                : `${totalBlockers} blocker${totalBlockers === 1 ? '' : 's'} across ${preview?.driversBlocked ?? 0} driver${
+                    (preview?.driversBlocked ?? 0) === 1 ? '' : 's'
+                  } — resolve before closing.`}
             </span>
+          ) : openSettlementExposure ? (
+            <span className="text-rose-700">Finish Pay / Collect on Cash desk, then Refresh.</span>
           ) : (preview?.driversTotal ?? 0) === 0 ? (
             'No driver periods found for this week.'
           ) : (

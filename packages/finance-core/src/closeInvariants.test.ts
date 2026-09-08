@@ -21,6 +21,8 @@ const tyingWeek: CloseInvariantInput = {
     fleet_share: 4000,
     tips_paid_to_driver: 300,
     earnings_gross: 29300,
+    settlement_amount: 0,
+    cash_still_held: 0,
   },
   fuelStatement: { driverShare: 1200, companyShare: 800 },
   tollStatement: {
@@ -139,7 +141,8 @@ describe('checkCloseInvariants (§6.4)', () => {
       fleet_share: 4000,
       tips_paid_to_driver: 300,
       earnings_gross: 29300,
-      settlement_amount: 12345,
+      settlement_amount: 0,
+      cash_still_held: 0,
     };
     const blockers = checkCloseInvariants({
       period,
@@ -170,6 +173,66 @@ describe('checkCloseInvariants (§6.4)', () => {
     });
     expect(blockers.some((b) => b.code === 'CASH_SOURCE_MISMATCH')).toBe(true);
     expect(canCloseWeek(blockers)).toBe(false);
+  });
+
+  it('blocks close when fleet still owes (Pay residual)', () => {
+    const blockers = checkCloseInvariants({
+      ...tyingWeek,
+      period: { ...tyingWeek.period, settlement_amount: 955.48, cash_still_held: 0 },
+    });
+    const b = blockers.find((x) => x.code === 'SETTLEMENT_FLEET_OWES');
+    expect(b).toBeTruthy();
+    expect(b?.persisted).toBe(955.48);
+    expect(canCloseWeek(blockers)).toBe(false);
+  });
+
+  it('blocks close when driver still owes (Collect residual)', () => {
+    const blockers = checkCloseInvariants({
+      ...tyingWeek,
+      period: { ...tyingWeek.period, settlement_amount: -200, cash_still_held: 0 },
+    });
+    expect(blockers.some((b) => b.code === 'SETTLEMENT_DRIVER_OWES')).toBe(true);
+    expect(canCloseWeek(blockers)).toBe(false);
+  });
+
+  it('blocks close when cash is still held', () => {
+    const blockers = checkCloseInvariants({
+      ...tyingWeek,
+      period: { ...tyingWeek.period, settlement_amount: 0, cash_still_held: 1500 },
+    });
+    expect(blockers.some((b) => b.code === 'SETTLEMENT_CASH_HELD')).toBe(true);
+    expect(canCloseWeek(blockers)).toBe(false);
+  });
+
+  it('settled with zero cash held does not emit open-balance codes', () => {
+    const blockers = checkCloseInvariants({
+      ...tyingWeek,
+      period: { ...tyingWeek.period, settlement_amount: 0, cash_still_held: 0 },
+    });
+    expect(blockers.some((b) => b.code.startsWith('SETTLEMENT_FLEET') || b.code.startsWith('SETTLEMENT_DRIVER') || b.code === 'SETTLEMENT_CASH_HELD')).toBe(false);
+  });
+
+  it('sub-epsilon settlement residual does not block close', () => {
+    const blockers = checkCloseInvariants({
+      ...tyingWeek,
+      period: {
+        ...tyingWeek.period,
+        settlement_amount: CLOSE_INVARIANT_EPS / 2,
+        cash_still_held: CLOSE_INVARIANT_EPS / 2,
+      },
+    });
+    expect(blockers.some((b) => b.code === 'SETTLEMENT_FLEET_OWES')).toBe(false);
+    expect(blockers.some((b) => b.code === 'SETTLEMENT_CASH_HELD')).toBe(false);
+  });
+
+  it('skipSettlementDeskClear ignores open balances (restatement re-sign)', () => {
+    const blockers = checkCloseInvariants({
+      ...tyingWeek,
+      period: { ...tyingWeek.period, settlement_amount: 500, cash_still_held: 100 },
+      skipSettlementDeskClear: true,
+    });
+    expect(blockers.some((b) => b.code === 'SETTLEMENT_FLEET_OWES')).toBe(false);
+    expect(blockers.some((b) => b.code === 'SETTLEMENT_CASH_HELD')).toBe(false);
   });
 
   // Pass 3 / H-7: draft statements must block close (cannot greenwash).

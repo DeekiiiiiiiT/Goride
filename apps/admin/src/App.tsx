@@ -5,6 +5,7 @@ import { AuthProvider, useAuth } from './components/auth/AuthContext';
 import { AdminConfirmProvider } from '@roam/admin-core';
 import { AdminLoginPage } from './components/admin/AdminLoginPage';
 import { AdminPortal } from './components/admin/AdminPortal';
+import { Toaster } from './components/ui/sonner';
 // Soft path rules shared with apps/admin/middleware.js (Vercel Edge cookie gate).
 import { requiresSessionGate } from './middleware/sessionGate';
 
@@ -50,6 +51,7 @@ function AppContent() {
   return (
     <AdminConfirmProvider>
       <AdminPortal />
+      <Toaster richColors position="top-right" />
     </AdminConfirmProvider>
   );
 }

@@ -77,6 +77,9 @@ const BLOCKER_LABELS: Record<string, string> = {
   STATEMENT_ACCOUNTS_UNBALANCED: 'Statement accounts do not net to zero',
   SETTLEMENT_PNL_MISMATCH: 'Driver settlements do not tie to Business Finance P&L',
   BUSINESS_WEEK_PNL_UNAVAILABLE: 'Business Finance P&L not available for this week',
+  SETTLEMENT_FLEET_OWES: 'Fleet still owes — Pay remaining on Cash desk before close',
+  SETTLEMENT_DRIVER_OWES: 'Driver still owes — Collect remaining on Cash desk before close',
+  SETTLEMENT_CASH_HELD: 'Cash still held — Collect or write off before close',
 };
 
 export function humanBlockerLabel(blocker: Pick<CloseBlocker, 'code' | 'message'>): string {

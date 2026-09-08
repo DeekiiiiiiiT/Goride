@@ -77,13 +77,17 @@ import { periodAnchorFor, periodEndForAnchor } from "./financial_ledger.ts";
 import { getFleetTimezone } from "./timezone_helper.tsx";
 import {
   attachRecordIdToStation,
-  tryMerchantNameAutoHeal,
 } from "./station_attach.ts";
 import {
   matchUniqueVerifiedStationForRecord,
 } from "./merchant_station_match.ts";
 import { odometerSequenceHealthy } from "./odometer_health.ts";
 import { logAdminAction } from "./audit_log.ts";
+import {
+  expandLinkedFuelEntryIdsFromMap,
+  pickFleetVisibleEntryId,
+  resolveLinkedFuelEntryIdsUnion,
+} from "./fuel_entry_pair.ts";
 
 const app = new Hono();
 
@@ -4225,20 +4229,7 @@ app.post(`${BASE_PATH}/fuel-entries`, async (c: Context) => {
       if (vendorFromMeta && (!entry.location || entry.location === "Unknown")) {
         entry.location = vendorFromMeta;
       }
-      // Merchant-name auto-heal for gas-card statement rows (no GPS)
-      try {
-        const godStations = ((await kv.getByPrefix("station:")) || []).filter(
-          (s: any) => s && s.id && (!s.status || s.status === "verified"),
-        );
-        const heal = await tryMerchantNameAutoHeal(entry, godStations);
-        if (heal.healed) {
-          console.log(
-            `[MerchantAutoHeal] JAA entry ${entry.id} → station ${heal.stationId} (${heal.merchantText}, score=${heal.score})`,
-          );
-        }
-      } catch (healErr) {
-        console.warn("[MerchantAutoHeal] JAA path failed (non-fatal):", healErr);
-      }
+      // No automatic merchant attach — Dominion Silent Attach is manual-only.
     }
     if (entry.matchedStationId) {
         const manualStation = await kv.get(`station:${entry.matchedStationId}`);
@@ -4385,28 +4376,7 @@ app.post(`${BASE_PATH}/fuel-entries`, async (c: Context) => {
             };
         }
 
-        // Merchant-name auto-heal after GPS miss / ambiguous — skip bad pin when merchant + odo healthy
-        try {
-            const statusNow = entry.metadata?.locationStatus;
-            if (statusNow === 'unknown' || statusNow === 'review_required') {
-                const heal = await tryMerchantNameAutoHeal(
-                    entry,
-                    allStationsForEntry.filter((s: any) => !s.status || s.status === 'verified'),
-                );
-                if (heal.healed) {
-                    const lid = entry.metadata?.learntLocationId;
-                    if (lid) {
-                        await kv.del(`learnt_location:${lid}`);
-                        delete entry.metadata.learntLocationId;
-                    }
-                    console.log(
-                        `[MerchantAutoHeal] Entry ${entry.id} → ${heal.stationId} (${heal.merchantText})`,
-                    );
-                }
-            }
-        } catch (healErr) {
-            console.warn("[MerchantAutoHeal] GPS-fail path failed (non-fatal):", healErr);
-        }
+        // No automatic merchant attach after GPS miss — Dominion Silent Attach is manual-only.
     } else if (!skipGpsMatching) {
         // --- NO GPS COORDINATES: STATION GATE HOLD ---
         // Core rule: ALL fuel logs that don't match a verified gas station MUST go
@@ -4871,6 +4841,10 @@ app.get(`${BASE_PATH}/admin/spatial-review-queue`, requirePlatformStaff(), async
                 recordType: "fuel_entry",
                 id: e.id,
                 date: e.date,
+                time: e.time ?? null,
+                amount: e.amount != null ? Number(e.amount) : undefined,
+                liters: e.liters != null ? Number(e.liters) : undefined,
+                organizationId: e.organizationId,
                 vehicleId: e.vehicleId,
                 driverId: e.driverId,
                 vendor: e.vendor,
@@ -4881,6 +4855,8 @@ app.get(`${BASE_PATH}/admin/spatial-review-queue`, requirePlatformStaff(), async
                     ambiguityReason: e.metadata?.ambiguityReason,
                     matchDistance: e.metadata?.matchDistance,
                     matchConfidence: e.metadata?.matchConfidence,
+                    locationStatus: e.metadata?.locationStatus,
+                    verificationMethod: e.metadata?.verificationMethod,
                 },
             });
         }
@@ -4894,6 +4870,10 @@ app.get(`${BASE_PATH}/admin/spatial-review-queue`, requirePlatformStaff(), async
                 recordType: "transaction",
                 id: t.id,
                 date: t.date,
+                time: t.time ?? null,
+                amount: t.amount != null ? Number(t.amount) : undefined,
+                liters: t.liters != null ? Number(t.liters) : undefined,
+                organizationId: t.organizationId,
                 vehicleId: t.vehicleId,
                 driverId: t.driverId,
                 vendor: t.vendor,
@@ -5178,16 +5158,18 @@ app.post(`${BASE_PATH}/admin/platform-ops-attach-station`, requirePlatformStaff(
         const actorId = rbacUser?.userId || "unknown";
         const actorName = rbacUser?.email || "Platform ops";
 
+        const requestedIds = entryIds
+            .filter((id: unknown) => typeof id === "string" && id.trim())
+            .map((id: string) => id.trim());
+        const { ids: expandedIds, pairExpanded, twinIds } =
+            await resolveLinkedFuelEntryIdsUnion(requestedIds);
+
         let updated = 0;
         let skipped = 0;
         const errors: { entryId: string; reason: string }[] = [];
         let latestDate: string | null = null;
 
-        for (const entryId of entryIds) {
-            if (typeof entryId !== "string" || !entryId.trim()) {
-                errors.push({ entryId: String(entryId), reason: "Invalid id" });
-                continue;
-            }
+        for (const entryId of expandedIds) {
             const result = await attachRecordIdToStation(entryId, station, {
                 method: "platform_ops_override",
                 actorId,
@@ -5220,32 +5202,218 @@ app.post(`${BASE_PATH}/admin/platform-ops-attach-station`, requirePlatformStaff(
             await kv.set(`station:${stationId}`, station);
         }
 
+        const twinNote = pairExpanded > 0
+            ? ` (${pairExpanded} linked twin(s) expanded)`
+            : "";
         await logAdminAction({
             actorId,
             actorName,
             action: "silent_station_attach",
             targetId: stationId,
             targetEmail: "N/A",
-            details: `${updated} fill(s) → ${station.name}. Reason: ${reasonText}`,
+            details: `Silent Attach ${updated} fill(s)${twinNote} → ${station.name}. Reason: ${reasonText}`,
         });
 
         return c.json({
             success: true,
             summary: {
-                requested: entryIds.length,
+                requested: requestedIds.length,
+                pairExpanded,
                 updated,
                 skipped,
                 errors: errors.length,
+                twinIds,
             },
+            twinIds,
             errors,
             station: { id: stationId, name: station.name },
             message: updated > 0
-                ? `Silent Attach: ${updated} fill(s) verified at ${station.name}. Fleet logs will show verified.`
+                ? `Silent Attach: ${updated} fill(s)${twinNote} verified at ${station.name}. Fleet logs will show verified.`
                 : "No fills were updated.",
         });
     } catch (e: any) {
         console.error("[PlatformOpsAttach]", e);
         return c.json({ error: e.message || "Silent Attach failed" }, 500);
+    }
+});
+
+/**
+ * Dominion Silent Attach — permanently delete fuel fills from the system
+ * (fuel_entry and/or fuel transaction + linked learnt staging + ledger source rows).
+ * Not a queue dismiss — removes the money fill record itself.
+ */
+app.post(`${BASE_PATH}/admin/platform-ops-delete-fills`, requirePlatformStaff(), async (c) => {
+    try {
+        let body: any;
+        try {
+            body = await c.req.json();
+        } catch {
+            return c.json({ error: "Invalid JSON in request body" }, 400);
+        }
+
+        const idsRaw = body?.ids ?? body?.entryIds;
+        if (!Array.isArray(idsRaw) || idsRaw.length === 0) {
+            return c.json({ error: "Missing or empty required field: ids" }, 400);
+        }
+        if (idsRaw.length > 100) {
+            return c.json({ error: "Batch too large. Maximum 100 ids per request." }, 400);
+        }
+
+        const reasonText = typeof body?.reason === "string" ? body.reason.trim() : "";
+        const rbacUser = c.get("rbacUser") as RbacUser | undefined;
+        const actorId = rbacUser?.userId || "unknown";
+        const actorName = rbacUser?.email || "Platform ops";
+
+        const deleteLearntById = async (learntId: string) => {
+            const loc = await kv.get(`learnt_location:${learntId}`);
+            if (loc) await kv.del(`learnt_location:${learntId}`);
+        };
+
+        const cleanupOrphanLearnt = async (recordId: string, kind: "fuel_entry" | "transaction") => {
+            const learntAll = (await kv.getByPrefix("learnt_location:")) || [];
+            for (const loc of learntAll) {
+                if (!loc?.id) continue;
+                if (kind === "fuel_entry" && loc.sourceEntryId === recordId) {
+                    await kv.del(`learnt_location:${loc.id}`);
+                }
+                if (kind === "transaction" && loc.transactionId === recordId) {
+                    await kv.del(`learnt_location:${loc.id}`);
+                }
+            }
+        };
+
+        const purgeFuelEntry = async (id: string) => {
+            const entry = await kv.get(`fuel_entry:${id}`);
+            if (!entry) return false;
+            const lid = entry.metadata?.learntLocationId;
+            if (typeof lid === "string" && lid.length > 0) await deleteLearntById(lid);
+            await cleanupOrphanLearnt(id, "fuel_entry");
+            const linkedTxId =
+                (typeof entry.transactionId === "string" && entry.transactionId) ||
+                (typeof entry.metadata?.transactionId === "string" && entry.metadata.transactionId) ||
+                null;
+            await kv.del(`fuel_entry:${id}`);
+            if (linkedTxId) {
+                const tx = await kv.get(`transaction:${linkedTxId}`);
+                if (tx) {
+                    const tlid = tx.metadata?.learntLocationId;
+                    if (typeof tlid === "string" && tlid.length > 0) await deleteLearntById(tlid);
+                    await cleanupOrphanLearnt(linkedTxId, "transaction");
+                    await kv.del(`transaction:${linkedTxId}`);
+                    try {
+                        await deleteCanonicalLedgerBySource("transaction", [linkedTxId]);
+                    } catch (le: any) {
+                        console.warn(`[PlatformOpsDelete] Ledger cleanup linked tx failed:`, le?.message);
+                    }
+                }
+            }
+            try {
+                await deleteCanonicalLedgerBySource("transaction", [id]);
+            } catch (le: any) {
+                console.warn(`[PlatformOpsDelete] Ledger cleanup fuel_entry failed:`, le?.message);
+            }
+            return true;
+        };
+
+        const purgeFuelTransaction = async (id: string) => {
+            const tx = await kv.get(`transaction:${id}`);
+            if (!tx) return false;
+            const cat = tx.category;
+            if (cat !== "Fuel" && cat !== "Fuel Reimbursement") {
+                throw new Error("Not a fuel transaction");
+            }
+            const tlid = tx.metadata?.learntLocationId;
+            if (typeof tlid === "string" && tlid.length > 0) await deleteLearntById(tlid);
+            await cleanupOrphanLearnt(id, "transaction");
+            const linkedEntryId =
+                (typeof tx.metadata?.fuelEntryId === "string" && tx.metadata.fuelEntryId) ||
+                (typeof tx.fuelEntryId === "string" && tx.fuelEntryId) ||
+                null;
+            await kv.del(`transaction:${id}`);
+            if (linkedEntryId) {
+                const entry = await kv.get(`fuel_entry:${linkedEntryId}`);
+                if (entry) {
+                    const lid = entry.metadata?.learntLocationId;
+                    if (typeof lid === "string" && lid.length > 0) await deleteLearntById(lid);
+                    await cleanupOrphanLearnt(linkedEntryId, "fuel_entry");
+                    await kv.del(`fuel_entry:${linkedEntryId}`);
+                    try {
+                        await deleteCanonicalLedgerBySource("transaction", [linkedEntryId]);
+                    } catch (le: any) {
+                        console.warn(`[PlatformOpsDelete] Ledger cleanup linked entry failed:`, le?.message);
+                    }
+                }
+            }
+            try {
+                await deleteCanonicalLedgerBySource("transaction", [id]);
+            } catch (le: any) {
+                console.warn(`[PlatformOpsDelete] Ledger cleanup transaction failed:`, le?.message);
+            }
+            return true;
+        };
+
+        let deleted = 0;
+        let notFound = 0;
+        const errors: { id: string; reason: string }[] = [];
+
+        const seedIds = idsRaw
+            .filter((id: unknown) => typeof id === "string" && String(id).trim())
+            .map((id: string) => String(id).trim());
+        const { ids: expandedIds, pairExpanded, twinIds } =
+            await resolveLinkedFuelEntryIdsUnion(seedIds);
+
+        for (const id of expandedIds) {
+            try {
+                const hint = typeof body?.recordTypes?.[id] === "string" ? body.recordTypes[id] : null;
+                let ok = false;
+                if (hint === "transaction") {
+                    ok = await purgeFuelTransaction(id);
+                    if (!ok) ok = await purgeFuelEntry(id);
+                } else {
+                    ok = await purgeFuelEntry(id);
+                    if (!ok) ok = await purgeFuelTransaction(id);
+                }
+                if (ok) deleted++;
+                else {
+                    notFound++;
+                    errors.push({ id, reason: "Not found" });
+                }
+            } catch (err: any) {
+                errors.push({ id, reason: err?.message || "Delete failed" });
+            }
+        }
+
+        const twinNote = pairExpanded > 0
+            ? ` (expanded ${pairExpanded} linked twin(s))`
+            : "";
+        await logAdminAction({
+            actorId,
+            actorName,
+            action: "platform_ops_delete_fills",
+            targetId: seedIds[0] || "batch",
+            targetEmail: "N/A",
+            details: `Permanently deleted ${deleted} fuel fill(s)${twinNote}.${reasonText ? ` Reason: ${reasonText}` : ""}`,
+        });
+
+        return c.json({
+            success: true,
+            summary: {
+                requested: seedIds.length,
+                pairExpanded,
+                deleted,
+                notFound,
+                errors: errors.length,
+                twinIds,
+            },
+            twinIds,
+            errors,
+            message: deleted > 0
+                ? `Permanently deleted ${deleted} fuel fill(s)${twinNote} from the system.`
+                : "No fills were deleted.",
+        });
+    } catch (e: any) {
+        console.error("[PlatformOpsDelete]", e);
+        return c.json({ error: e.message || "Permanent delete failed" }, 500);
     }
 });
 
@@ -5264,9 +5432,12 @@ app.post(`${BASE_PATH}/admin/autoheal-merchant-stations`, requirePlatformStaff()
         }
         const dryRun = body.dryRun !== false; // default dry-run for safety unless dryRun:false
         if (body.dryRun === false) {
-            // apply mode
+            return c.json({
+                error: "Batch merchant auto-apply is disabled. Use Silent Attach manually with a reason.",
+                code: "AUTOHEAL_APPLY_DISABLED",
+            }, 400);
         }
-        const apply = body.dryRun === false;
+        const apply = false;
         const limit = Math.min(Number(body.limit) || 500, 2000);
 
         const stations = ((await kv.getByPrefix("station:")) || []).filter(
@@ -5284,6 +5455,13 @@ app.post(`${BASE_PATH}/admin/autoheal-merchant-stations`, requirePlatformStaff()
             merchantText: string;
             odoHealthy: boolean;
             isFirstFill: boolean;
+            date?: string;
+            time?: string | null;
+            amount?: number;
+            liters?: number;
+            linkedTwinIds?: string[];
+            fleetVisibleEntryId?: string;
+            linkage?: "jaa_pair" | "solo";
         }> = [];
         let healed = 0;
         let skipped = 0;
@@ -5291,8 +5469,11 @@ app.post(`${BASE_PATH}/admin/autoheal-merchant-stations`, requirePlatformStaff()
 
         // Group by vehicle for odo timeline
         const byVehicle = new Map<string, any[]>();
+        const byId = new Map<string, Record<string, unknown>>();
         for (const e of entries) {
-            if (!e?.id || !e.vehicleId) continue;
+            if (!e?.id) continue;
+            byId.set(String(e.id), e);
+            if (!e.vehicleId) continue;
             if (!byVehicle.has(e.vehicleId)) byVehicle.set(e.vehicleId, []);
             byVehicle.get(e.vehicleId)!.push(e);
         }
@@ -5336,6 +5517,10 @@ app.post(`${BASE_PATH}/admin/autoheal-merchant-stations`, requirePlatformStaff()
                 merchantText: match.merchantText,
                 odoHealthy: true,
                 isFirstFill: odo.isFirstFill,
+                date: entry.date ? String(entry.date) : undefined,
+                time: entry.time != null ? String(entry.time) : null,
+                amount: entry.amount != null ? Number(entry.amount) : undefined,
+                liters: entry.liters != null ? Number(entry.liters) : undefined,
             };
 
             if (!apply) {
@@ -5359,6 +5544,41 @@ app.post(`${BASE_PATH}/admin/autoheal-merchant-stations`, requirePlatformStaff()
             }
         }
 
+        // Prefer fleet-visible primary + twin metadata; dedupe linked pairs to one queue row.
+        let queueCandidates = candidates;
+        if (!apply && candidates.length > 0) {
+            const seenPrimary = new Set<string>();
+            const enriched: typeof candidates = [];
+            for (const c of candidates) {
+                const pairIds = expandLinkedFuelEntryIdsFromMap(c.entryId, byId);
+                const fleetId = pickFleetVisibleEntryId(pairIds, byId) || c.entryId;
+                if (seenPrimary.has(fleetId)) continue;
+                seenPrimary.add(fleetId);
+                const primary = byId.get(fleetId) || byId.get(c.entryId);
+                const linkedTwinIds = pairIds.filter((id) => id !== fleetId);
+                enriched.push({
+                    ...c,
+                    entryId: fleetId,
+                    linkedTwinIds,
+                    fleetVisibleEntryId: fleetId,
+                    linkage: linkedTwinIds.length > 0 ? "jaa_pair" : "solo",
+                    date: primary?.date != null ? String(primary.date) : c.date,
+                    time: primary?.time != null ? String(primary.time) : c.time,
+                    amount: primary?.amount != null ? Number(primary.amount) : c.amount,
+                    liters: primary?.liters != null ? Number(primary.liters) : c.liters,
+                    merchantText:
+                        String(
+                            (primary?.metadata as any)?.jaaStation ||
+                                primary?.vendor ||
+                                primary?.location ||
+                                c.merchantText ||
+                                "",
+                        ) || c.merchantText,
+                });
+            }
+            queueCandidates = enriched;
+        }
+
         const rbacUser = c.get("rbacUser") as RbacUser | undefined;
         if (apply) {
             await logAdminAction({
@@ -5375,12 +5595,12 @@ app.post(`${BASE_PATH}/admin/autoheal-merchant-stations`, requirePlatformStaff()
             success: true,
             dryRun: !apply,
             summary: {
-                candidates: apply ? healed : candidates.length,
+                candidates: apply ? healed : queueCandidates.length,
                 healed: apply ? healed : 0,
                 skipped,
                 errors: errors.length,
             },
-            candidates: apply ? undefined : candidates,
+            candidates: apply ? undefined : queueCandidates,
             errors: apply ? errors : undefined,
             message: apply
                 ? `Merchant auto-heal applied: ${healed} fill(s).`

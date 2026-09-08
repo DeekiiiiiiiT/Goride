@@ -29,6 +29,7 @@ import {
   isSettlementPeriodEnded,
   settlementPeriodOpenMessage,
 } from '../../utils/settlementPeriodGate';
+import { isPeriodFrozenError } from '../../services/settlementCommandsApi';
 
 export type RecordPayoutSavePayload = {
   amount: number;
@@ -143,6 +144,8 @@ export function RecordPayoutModal({
       );
       onClose();
     } catch (err: any) {
+      // Parent shows the Close Week overlay — do not also dump PERIOD_FROZEN as a toast.
+      if (isPeriodFrozenError(err)) return;
       toast.error(err?.message || 'Failed to save payout');
     } finally {
       setIsSubmitting(false);

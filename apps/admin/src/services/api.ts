@@ -998,8 +998,8 @@ export const api = {
   },
 
   async getStations() {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/stations`, {
-        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/stations?limit=5000&fields=list`, {
+        headers: await getHeaders(null)
     });
     if (!response.ok) throw new Error("Failed to fetch stations");
     return response.json();
@@ -1013,7 +1013,7 @@ export const api = {
     if (excludeId) params.append('excludeId', excludeId);
     if (category) params.append('category', category);
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/stations/check-duplicate?${params.toString()}`, {
-        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+        headers: await getHeaders(null)
     });
     if (!response.ok) throw new Error("Failed to check for station duplicates");
     return response.json();
@@ -1022,7 +1022,7 @@ export const api = {
   async reconcileLedgerOrphans() {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/admin/reconcile-ledger-orphans`, {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+        headers: await getHeaders(null)
     });
     if (!response.ok) throw new Error("Failed to reconcile orphans");
     return response.json();
@@ -1030,7 +1030,7 @@ export const api = {
 
   async getSpatialReviewQueue(): Promise<{ items: any[]; count: number }> {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/admin/spatial-review-queue`, {
-      headers: { 'Authorization': `Bearer ${publicAnonKey}` },
+      headers: await getHeaders(null),
     });
     if (!response.ok) throw new Error('Failed to fetch spatial review queue');
     return response.json();
@@ -1039,10 +1039,7 @@ export const api = {
   async deleteSpatialReviewRecord(payload: { recordType: 'fuel_entry' | 'transaction'; id: string }) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/admin/spatial-review/delete`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${publicAnonKey}`,
-      },
+      headers: await getHeaders(),
       body: JSON.stringify(payload),
     });
     if (!response.ok) {
@@ -1055,10 +1052,7 @@ export const api = {
   async bulkAssignStation(entryIds: string[], stationId: string) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/admin/bulk-assign-station`, {
         method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${publicAnonKey}`
-        },
+        headers: await getHeaders(),
         body: JSON.stringify({ entryIds, stationId })
     });
     if (!response.ok) {
@@ -1078,10 +1072,7 @@ export const api = {
   }) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/admin/platform-ops-attach-station`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${publicAnonKey}`,
-      },
+      headers: await getHeaders(),
       body: JSON.stringify(payload),
     });
     if (!response.ok) {
@@ -1090,9 +1081,47 @@ export const api = {
     }
     return response.json() as Promise<{
       success: boolean;
-      summary: { requested: number; updated: number; skipped: number; errors: number };
+      summary: {
+        requested: number;
+        pairExpanded?: number;
+        updated: number;
+        skipped: number;
+        errors: number;
+        twinIds?: string[];
+      };
+      twinIds?: string[];
       message: string;
       station: { id: string; name: string };
+    }>;
+  },
+
+  /** Dominion Silent Attach — permanently delete fills from the system (not queue-only). */
+  async platformOpsDeleteFills(payload: {
+    ids: string[];
+    reason?: string;
+    recordTypes?: Record<string, 'fuel_entry' | 'transaction'>;
+  }) {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/admin/platform-ops-delete-fills`, {
+      method: 'POST',
+      headers: await getHeaders(),
+      body: JSON.stringify(payload),
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error((err as { error?: string }).error || 'Permanent delete failed');
+    }
+    return response.json() as Promise<{
+      success: boolean;
+      summary: {
+        requested: number;
+        pairExpanded?: number;
+        deleted: number;
+        notFound: number;
+        errors: number;
+        twinIds?: string[];
+      };
+      twinIds?: string[];
+      message: string;
     }>;
   },
 
@@ -1101,10 +1130,7 @@ export const api = {
     const dryRun = opts?.dryRun !== false;
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/admin/autoheal-merchant-stations`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${publicAnonKey}`,
-      },
+      headers: await getHeaders(),
       body: JSON.stringify({ dryRun, limit: opts?.limit ?? 500 }),
     });
     if (!response.ok) {
@@ -1121,6 +1147,13 @@ export const api = {
         stationName: string;
         score: number;
         merchantText: string;
+        date?: string;
+        time?: string | null;
+        amount?: number;
+        liters?: number;
+        linkedTwinIds?: string[];
+        fleetVisibleEntryId?: string;
+        linkage?: 'jaa_pair' | 'solo';
       }>;
       message: string;
     }>;

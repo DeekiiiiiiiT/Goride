@@ -6,7 +6,7 @@ import { SpatialReviewTab } from './SpatialReviewTab';
 import { api } from '../../../services/api';
 import { buildUnresolvedStopRows } from './buildUnresolvedStopRows';
 
-export type ResolutionQueueSubTab = 'unresolved-stops' | 'spatial-review';
+export type ResolutionQueueSubTab = 'unresolved-stops' | 'spatial-review' | 'silent-attach';
 
 export interface ResolutionQueueTabProps {
   defaultSubTab?: ResolutionQueueSubTab;
@@ -14,6 +14,9 @@ export interface ResolutionQueueTabProps {
   onVerifyLocation?: (learntLocation: unknown) => void;
   onResolved?: () => void;
   onCountChange?: (count: number) => void;
+  /** Dominion-only: show Silent Station Attach sub-tab. */
+  enableSilentAttach?: boolean;
+  silentAttachPanel?: React.ReactNode;
 }
 
 export function ResolutionQueueTab({
@@ -22,10 +25,15 @@ export function ResolutionQueueTab({
   onVerifyLocation,
   onResolved,
   onCountChange,
+  enableSilentAttach = false,
+  silentAttachPanel,
 }: ResolutionQueueTabProps) {
-  const [subTab, setSubTab] = useState<ResolutionQueueSubTab>(defaultSubTab);
+  const initialSub =
+    defaultSubTab === 'silent-attach' && !enableSilentAttach ? 'unresolved-stops' : defaultSubTab;
+  const [subTab, setSubTab] = useState<ResolutionQueueSubTab>(initialSub);
   const [spatialCount, setSpatialCount] = useState(0);
   const [unresolvedCount, setUnresolvedCount] = useState(0);
+  const [silentCount, setSilentCount] = useState(0);
 
   const refreshCounts = useCallback(async () => {
     try {
@@ -41,19 +49,27 @@ export function ResolutionQueueTab({
       const spatialN = spatial?.count ?? spatial?.items?.length ?? 0;
       setUnresolvedCount(unresolved.length);
       setSpatialCount(spatialN);
-      onCountChange?.(unresolved.length + spatialN);
     } catch {
       /* counts are decorative */
     }
-  }, [onCountChange]);
+  }, []);
 
   useEffect(() => {
     void refreshCounts();
   }, [refreshCounts]);
 
   useEffect(() => {
-    setSubTab(defaultSubTab);
-  }, [defaultSubTab]);
+    const silentN = enableSilentAttach ? silentCount : 0;
+    onCountChange?.(unresolvedCount + spatialCount + silentN);
+  }, [unresolvedCount, spatialCount, silentCount, enableSilentAttach, onCountChange]);
+
+  useEffect(() => {
+    if (defaultSubTab === 'silent-attach' && !enableSilentAttach) {
+      setSubTab('unresolved-stops');
+    } else {
+      setSubTab(defaultSubTab);
+    }
+  }, [defaultSubTab, enableSilentAttach]);
 
   const handlePromoted = () => {
     void refreshCounts();
@@ -65,10 +81,24 @@ export function ResolutionQueueTab({
     onResolved?.();
   };
 
+  const handleSilentCount = useCallback((n: number) => {
+    setSilentCount(n);
+  }, []);
+
+  // Clone panel to inject count + resolved callbacks when it's a valid element.
+  const silentPanel =
+    enableSilentAttach && silentAttachPanel && React.isValidElement(silentAttachPanel)
+      ? React.cloneElement(silentAttachPanel as React.ReactElement<Record<string, unknown>>, {
+          embedded: true,
+          onCountChange: handleSilentCount,
+          onResolved: handleResolved,
+        })
+      : silentAttachPanel;
+
   return (
     <Tabs value={subTab} onValueChange={(v) => setSubTab(v as ResolutionQueueSubTab)} className="w-full">
       <div className="border-b border-slate-200 px-4 py-2 bg-white">
-        <TabsList className="h-9 bg-slate-100/80">
+        <TabsList className="h-auto min-h-9 bg-slate-100/80 flex-wrap gap-1">
           <TabsTrigger value="unresolved-stops" className="text-xs sm:text-sm gap-1.5">
             Unresolved stops
             {unresolvedCount > 0 && (
@@ -85,6 +115,16 @@ export function ResolutionQueueTab({
               </Badge>
             )}
           </TabsTrigger>
+          {enableSilentAttach && (
+            <TabsTrigger value="silent-attach" className="text-xs sm:text-sm gap-1.5">
+              Silent Attach
+              {silentCount > 0 && (
+                <Badge variant="secondary" className="h-4 px-1 text-[9px] bg-fuchsia-100 text-fuchsia-800 border-0">
+                  {silentCount}
+                </Badge>
+              )}
+            </TabsTrigger>
+          )}
         </TabsList>
       </div>
 
@@ -95,6 +135,16 @@ export function ResolutionQueueTab({
       <TabsContent value="spatial-review" className="m-0 p-0 border-0">
         <SpatialReviewTab onResolved={handleResolved} />
       </TabsContent>
+
+      {enableSilentAttach && (
+        <TabsContent
+          value="silent-attach"
+          forceMount
+          className={`m-0 p-0 border-0 ${subTab === 'silent-attach' ? '' : 'hidden'}`}
+        >
+          {silentPanel}
+        </TabsContent>
+      )}
     </Tabs>
   );
 }

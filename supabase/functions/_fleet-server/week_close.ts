@@ -476,6 +476,7 @@ export async function previewWeekClose(orgId: string, weekKey: string): Promise<
         (meta as { financeCore?: { cashSourceMismatch?: number } } | null)
           ?.financeCore?.cashSourceMismatch,
       ) || 0,
+      skipSettlementDeskClear: acceptRestatementDrafts,
       engineDrifts: engineBlockers,
       tollEventLedger,
       tollUnknownPmCount: Number(
@@ -714,6 +715,7 @@ export async function closeWeek(
         (meta as { financeCore?: { cashSourceMismatch?: number } } | null)
           ?.financeCore?.cashSourceMismatch,
       ) || 0,
+      skipSettlementDeskClear: acceptRestatementDrafts,
       engineDrifts: engineBlockers,
       tollEventLedger,
       tollUnknownPmCount: Number(

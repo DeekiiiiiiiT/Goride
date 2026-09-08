@@ -4,6 +4,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   SettlementCommandApiError,
+  isPeriodFrozenError,
   isSettlementCommandUnavailable,
 } from './settlementCommandsApi';
 
@@ -23,5 +24,17 @@ describe('isSettlementCommandUnavailable', () => {
 
   it('treats network TypeError as unavailable', () => {
     expect(isSettlementCommandUnavailable(new TypeError('Failed to fetch'))).toBe(true);
+  });
+});
+
+describe('isPeriodFrozenError', () => {
+  it('detects PERIOD_FROZEN from code or message', () => {
+    expect(isPeriodFrozenError(new SettlementCommandApiError('frozen', 409, 'PERIOD_FROZEN'))).toBe(true);
+    expect(
+      isPeriodFrozenError(
+        new Error('PERIOD_FROZEN: this settlement week is closed and cannot accept new movements'),
+      ),
+    ).toBe(true);
+    expect(isPeriodFrozenError(new SettlementCommandApiError('STALE', 409, 'STALE_RESIDUAL'))).toBe(false);
   });
 });

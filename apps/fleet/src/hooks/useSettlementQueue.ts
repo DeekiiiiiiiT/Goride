@@ -28,6 +28,8 @@ export type SettlementQueueRow = {
   fuelFinalized?: boolean;
   /** H-1: reconciliation-close gate. When false, `collect` must be blocked. */
   moneyUnlocked?: boolean;
+  /** Close Week freeze — Pay/Collect disabled until reopen. */
+  periodFrozen?: boolean;
   collectKind?: 'driver_owes' | 'cash_held';
   overpaidAmount?: number;
   cashSourceMismatch?: number;

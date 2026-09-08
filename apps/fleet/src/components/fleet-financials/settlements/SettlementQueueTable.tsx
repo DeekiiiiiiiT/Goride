@@ -43,12 +43,34 @@ function collectGateBlocked(r: Pick<SettlementQueueRow, 'moneyUnlocked'>): boole
   return r.moneyUnlocked === false;
 }
 
-/** Collect is allowed only when the calendar week ended AND the money is unlocked. */
-function canCollect(r: Pick<SettlementQueueRow, 'periodAnchor' | 'periodEnd' | 'moneyUnlocked'>): boolean {
-  return weekActionable(r) && !collectGateBlocked(r);
+/** Close Week freeze — no money movements until reopen. */
+function periodFrozenBlocked(r: Pick<SettlementQueueRow, 'periodFrozen'>): boolean {
+  return r.periodFrozen === true;
+}
+
+const FROZEN_TITLE = 'Week closed — reopen on Close Week to change money';
+
+/** Collect is allowed only when the calendar week ended AND the money is unlocked AND not frozen. */
+function canCollect(
+  r: Pick<SettlementQueueRow, 'periodAnchor' | 'periodEnd' | 'moneyUnlocked' | 'periodFrozen'>,
+): boolean {
+  return weekActionable(r) && !collectGateBlocked(r) && !periodFrozenBlocked(r);
+}
+
+function canPay(r: Pick<SettlementQueueRow, 'periodAnchor' | 'periodEnd' | 'periodFrozen'>): boolean {
+  return weekActionable(r) && !periodFrozenBlocked(r);
 }
 
 const GATE_TITLE = 'Fuel / toll not finalized — money is locked until reconciliation closes.';
+
+function actionTitle(
+  r: Pick<SettlementQueueRow, 'periodAnchor' | 'periodEnd' | 'moneyUnlocked' | 'periodFrozen'>,
+  mode: 'collect' | 'pay',
+): string | undefined {
+  if (periodFrozenBlocked(r)) return FROZEN_TITLE;
+  if (mode === 'collect' && collectGateBlocked(r)) return GATE_TITLE;
+  return weekOpenTitle(r);
+}
 
 /** Row label distinguishing custody (cash held) from a settled receivable (H-1). */
 function collectKindLabel(r: Pick<SettlementQueueRow, 'collectKind'>): string {
@@ -152,6 +174,8 @@ export type SettlementQueueTableProps = {
   onCollect?: (row: SettlementQueueRow) => void;
   onPay?: (row: SettlementQueueRow) => void;
   onWriteOff?: (row: SettlementQueueRow) => void;
+  /** Frozen week — open Close Week guidance instead of Pay/Collect. */
+  onWeekClosed?: (row: SettlementQueueRow) => void;
   onOpenDriver?: (driverId: string) => void;
   /** Default true — one row per driver with expandable weeks. */
   groupByDriver?: boolean;
@@ -172,6 +196,7 @@ export function SettlementQueueTable({
   onCollect,
   onPay,
   onWriteOff,
+  onWeekClosed,
   onOpenDriver,
   groupByDriver = true,
   showingCount,
@@ -186,7 +211,10 @@ export function SettlementQueueTable({
     [rows, mode, groupByDriver],
   );
 
-  const actionableRows = useMemo(() => rows.filter(weekActionable), [rows]);
+  const actionableRows = useMemo(
+    () => rows.filter((r) => (mode === 'collect' ? canCollect(r) : canPay(r))),
+    [rows, mode],
+  );
   const weekKeys = useMemo(() => actionableRows.map(rowKey), [actionableRows]);
   const allSelected = weekKeys.length > 0 && weekKeys.every((k) => selected.has(k));
   const someSelected = weekKeys.some((k) => selected.has(k)) && !allSelected;
@@ -271,18 +299,17 @@ export function SettlementQueueTable({
                 ) : null}
                 {rollupWindow.visible.map((g) => {
                 const open = expanded.has(g.driverId);
-                const actionableWeeks = g.weeks.filter(weekActionable);
+                const actionableWeeks = g.weeks.filter((w) =>
+                  mode === 'collect' ? canCollect(w) : canPay(w),
+                );
                 const weekKeysForDriver = actionableWeeks.map(rowKey);
                 const firstActionable = actionableWeeks[0] || null;
-                const firstCollectable = actionableWeeks.find((w) => !collectGateBlocked(w)) || null;
+                const firstCollectable = actionableWeeks.find((w) => canCollect(w)) || null;
                 const driverAllSelected =
                   weekKeysForDriver.length > 0 && weekKeysForDriver.every((k) => selected.has(k));
                 const parentOpenTitle = firstActionable
                   ? undefined
-                  : settlementPeriodOpenMessage({
-                      periodAnchor: g.weeks[0]?.periodAnchor,
-                      periodEnd: g.weeks[0]?.periodEnd || g.oldestPeriodEnd,
-                    });
+                  : actionTitle(g.weeks[0] || { periodAnchor: '', periodEnd: g.oldestPeriodEnd }, mode);
                 return (
                   <React.Fragment key={g.driverId}>
                     <TableRow
@@ -358,7 +385,11 @@ export function SettlementQueueTable({
                               size="sm"
                               className="h-8 bg-rose-700 hover:bg-rose-800"
                               disabled={!firstCollectable}
-                              title={!firstCollectable && firstActionable ? GATE_TITLE : parentOpenTitle}
+                              title={
+                                !firstCollectable && firstActionable
+                                  ? actionTitle(firstActionable, 'collect')
+                                  : parentOpenTitle
+                              }
                               onClick={() => firstCollectable && onCollect?.(firstCollectable)}
                             >
                               Collect
@@ -383,8 +414,8 @@ export function SettlementQueueTable({
                           const k = rowKey(r);
                           const bucket = agingBucket(r.periodEnd);
                           const amt = owedMajor(r, mode);
-                          const canAct = weekActionable(r);
-                          const openTitle = weekOpenTitle(r);
+                          const canAct = mode === 'collect' ? canCollect(r) : canPay(r);
+                          const openTitle = actionTitle(r, mode);
                           return (
                             <TableRow key={k} className="bg-white">
                               <TableCell>
@@ -399,9 +430,13 @@ export function SettlementQueueTable({
                               <TableCell />
                               <TableCell className="text-sm text-slate-500 pl-6">
                                 {mode === 'collect' ? collectKindLabel(r) : 'Week'}
-                                {!canAct ? (
+                                {!weekActionable(r) ? (
                                   <span className="ml-2 text-[10px] font-medium uppercase tracking-wide text-amber-700">
                                     Still open
+                                  </span>
+                                ) : periodFrozenBlocked(r) ? (
+                                  <span className="ml-2 text-[10px] font-medium uppercase tracking-wide text-slate-600">
+                                    Closed
                                   </span>
                                 ) : mode === 'collect' && collectGateBlocked(r) ? (
                                   <span className="ml-2 text-[10px] font-medium uppercase tracking-wide text-rose-700">
@@ -428,14 +463,25 @@ export function SettlementQueueTable({
                               </TableCell>
                               <TableCell>
                                 <div className="flex flex-wrap gap-1 justify-end">
-                                  {mode === 'collect' ? (
+                                  {periodFrozenBlocked(r) ? (
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      variant="outline"
+                                      className="h-8"
+                                      title={FROZEN_TITLE}
+                                      onClick={() => onWeekClosed?.(r)}
+                                    >
+                                      Week closed
+                                    </Button>
+                                  ) : mode === 'collect' ? (
                                     <>
                                       <Button
                                         type="button"
                                         size="sm"
                                         className="h-8 bg-rose-700 hover:bg-rose-800"
                                         disabled={!canCollect(r)}
-                                        title={collectGateBlocked(r) ? GATE_TITLE : openTitle}
+                                        title={actionTitle(r, 'collect')}
                                         onClick={() => canCollect(r) && onCollect?.(r)}
                                       >
                                         Collect
@@ -497,8 +543,8 @@ export function SettlementQueueTable({
                 const k = rowKey(r);
                 const bucket = agingBucket(r.periodEnd);
                 const amt = owedMajor(r, mode);
-                const canAct = weekActionable(r);
-                const openTitle = weekOpenTitle(r);
+                const canAct = mode === 'collect' ? canCollect(r) : canPay(r);
+                const openTitle = actionTitle(r, mode);
                 return (
                   <TableRow key={k}>
                     <TableCell>
@@ -521,9 +567,17 @@ export function SettlementQueueTable({
                     </TableCell>
                     <TableCell className="text-sm text-slate-600">
                       {weekLabel(r.periodAnchor, r.periodEnd)}
-                      {!canAct ? (
+                      {!weekActionable(r) ? (
                         <span className="ml-2 text-[10px] font-medium uppercase tracking-wide text-amber-700">
                           Still open
+                        </span>
+                      ) : periodFrozenBlocked(r) ? (
+                        <span className="ml-2 text-[10px] font-medium uppercase tracking-wide text-slate-600">
+                          Closed
+                        </span>
+                      ) : mode === 'collect' && collectGateBlocked(r) ? (
+                        <span className="ml-2 text-[10px] font-medium uppercase tracking-wide text-rose-700">
+                          Locked
                         </span>
                       ) : null}
                     </TableCell>
@@ -540,14 +594,25 @@ export function SettlementQueueTable({
                     </TableCell>
                     <TableCell>
                       <div className="flex flex-wrap gap-1 justify-end">
-                        {mode === 'collect' ? (
+                        {periodFrozenBlocked(r) ? (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="h-8"
+                            title={FROZEN_TITLE}
+                            onClick={() => onWeekClosed?.(r)}
+                          >
+                            Week closed
+                          </Button>
+                        ) : mode === 'collect' ? (
                           <>
                             <Button
                               type="button"
                               size="sm"
                               className="h-8 bg-rose-700 hover:bg-rose-800"
                               disabled={!canCollect(r)}
-                              title={collectGateBlocked(r) ? GATE_TITLE : openTitle}
+                              title={actionTitle(r, 'collect')}
                               onClick={() => canCollect(r) && onCollect?.(r)}
                             >
                               Collect

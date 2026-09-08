@@ -105,7 +105,6 @@ export const FUEL_MANAGEMENT_CHILDREN: NavChild[] = [
   { id: 'fuel-brain', label: 'Fuel Brain', icon: Brain },
   { id: 'fuel-prices', label: 'Prices', icon: DollarSign },
   { id: 'fuel-stations', label: 'Station Database', icon: Database },
-  { id: 'fuel-silent-attach', label: 'Silent Station Attach', icon: ShieldCheck },
   { id: 'fuel-analytics', label: 'Station Analytics', icon: BarChart3 },
   { id: 'fuel-cost-analytics', label: 'Fuel Cost Analytics', icon: Gauge },
   { id: 'fuel-evidence-bridge', label: 'Evidence Bridge', icon: ShieldCheck },
@@ -217,7 +216,6 @@ const SHARED_PLATFORM_PAGES = [
   'fuel-brain',
   'fuel-prices',
   'fuel-stations',
-  'fuel-silent-attach',
   'fuel-analytics',
   'fuel-cost-analytics',
   'fuel-evidence-bridge',
@@ -286,6 +284,8 @@ export const LEGACY_PAGE_REDIRECTS: Record<string, string> = {
   'settings-announcements': 'fleet-settings-announcements',
   'settings-danger': 'global-settings-danger',
   'expense-categories': 'vendor-database',
+  // Silent Attach lives under Station Database → Resolution Queue
+  'fuel-silent-attach': 'fuel-stations',
   // Fleet customer screens removed from Dominion — send bookmarks to Live Monitor
   'toll-analytics': 'toll-live-monitor',
   'toll-logs': 'toll-live-monitor',
