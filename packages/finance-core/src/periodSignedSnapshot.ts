@@ -37,8 +37,12 @@ export function resolveSignedSnapshot(input: ResolveSignedSnapshotInput): Signed
   return undefined;
 }
 
-/** Metadata keys preserved across full rebuilds (A-7 audit trail). */
-export const PRESERVED_PERIOD_META_KEYS = ['signedSnapshot'] as const;
+/** Metadata keys preserved across cash-sync rebuilds (A-7 + N-8 service-line). */
+export const PRESERVED_PERIOD_META_KEYS = [
+  'signedSnapshot',
+  'rushTripCount',
+  'rideshareTripCount',
+] as const;
 
 export function preservePeriodMetaKeys(
   priorMeta: Record<string, unknown> | null | undefined,
@@ -46,7 +50,10 @@ export function preservePeriodMetaKeys(
   const out: Record<string, unknown> = {};
   if (!priorMeta) return out;
   for (const key of PRESERVED_PERIOD_META_KEYS) {
-    if (priorMeta[key] != null) out[key] = priorMeta[key];
+    // Keep zeros — service-line SQL treats missing vs 0 differently if we drop them.
+    if (Object.prototype.hasOwnProperty.call(priorMeta, key) && priorMeta[key] !== undefined) {
+      out[key] = priorMeta[key];
+    }
   }
   return out;
 }

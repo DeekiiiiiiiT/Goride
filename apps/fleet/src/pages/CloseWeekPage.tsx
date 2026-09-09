@@ -68,6 +68,8 @@ import {
   type CloseLaneStatus,
   type SettlementLaneMetrics,
 } from '../utils/weekCloseBlockers';
+import { computeSettlementLaneMetrics } from '../utils/settlementLaneMetrics';
+import { resolvePayQueueOwed } from '../utils/driverSettlementsPayAmount';
 
 const MONEY = (n: number | null | undefined) => {
   if (n == null || !Number.isFinite(n)) return '—';
@@ -77,6 +79,19 @@ const MONEY = (n: number | null | undefined) => {
   });
   return `${n < 0 ? '-' : ''}$${body}`;
 };
+
+const CLOSE_CONFIRM_DRIVER_CAP = 20;
+
+function collectOwedMajor(r: {
+  amountOwed?: number | null;
+  collectKind?: string | null;
+  cashStillHeld?: number | null;
+  settlementAmount?: number | null;
+}): number {
+  if (r.amountOwed != null && Number.isFinite(r.amountOwed)) return Math.max(0, Number(r.amountOwed));
+  if (r.collectKind === 'cash_held') return Math.max(0, Number(r.cashStillHeld) || 0);
+  return Math.max(0, Math.abs(Number(r.settlementAmount) || 0));
+}
 
 function weekLabel(weekKey: string): string {
   try {
@@ -237,6 +252,13 @@ export function CloseWeekPage({
   const periodEnd = useMemo(() => format(addDays(parseISO(`${weekKey}T12:00:00`), 6), 'yyyy-MM-dd'), [weekKey]);
   const weekEnded = isCloseWeekEnded(weekKey);
   const [closing, setClosing] = useState(false);
+  const [closeConfirmOpen, setCloseConfirmOpen] = useState(false);
+  const [closeConfirmReason, setCloseConfirmReason] = useState('');
+  /** N-11: statements sealed but calendar freeze failed — show Retry freeze. */
+  const [freezePending, setFreezePending] = useState<{
+    message: string;
+    driversSealed?: number;
+  } | null>(null);
   const [reopening, setReopening] = useState(false);
   const [result, setResult] = useState<WeekCloseResult | null>(null);
   const [reopenOpen, setReopenOpen] = useState(false);
@@ -279,6 +301,7 @@ export function CloseWeekPage({
   const onWeekChange = (next: string) => {
     setWeekKey(next);
     setResult(null);
+    setFreezePending(null);
   };
 
   // ── Fuel / Toll lanes + cross-system blockers (read-only preview) ──────────
@@ -298,23 +321,73 @@ export function CloseWeekPage({
   const settlement: SettlementLaneMetrics = useMemo(() => {
     const collectRows = collectQuery.data?.rows || [];
     const payRows = payQuery.data?.rows || [];
-    const owed = (r: { amountOwed?: number; amountOwedMinor?: number }) =>
-      r.amountOwed != null && Number.isFinite(r.amountOwed)
-        ? Math.max(0, r.amountOwed)
-        : Math.max(0, (r.amountOwedMinor || 0) / 100);
-    const driversOwe = collectRows
-      .filter((r) => r.collectKind !== 'cash_held')
-      .reduce((s, r) => s + owed(r), 0);
-    const cashHeld = collectRows
-      .filter((r) => r.collectKind === 'cash_held')
-      .reduce((s, r) => s + owed(r), 0);
-    const fleetOwes = payRows.reduce((s, r) => s + owed(r), 0);
+    const m = computeSettlementLaneMetrics(collectRows, payRows);
+    // Prefer desk queue; when empty, surface amounts from close blockers (cash held can
+    // sit on company_owes weeks that Collect queue excludes).
+    let fleetOwes = m.fleetOwes;
+    let driversOwe = m.driversOwe;
+    let cashHeld = m.cashHeld;
+    for (const b of preview?.blockers || []) {
+      const code = String(b.code || '').toUpperCase();
+      const amt = Math.abs(Number(b.persisted) || 0);
+      if (amt <= MONEY_EPS) continue;
+      if (code === 'SETTLEMENT_FLEET_OWES' && fleetOwes <= MONEY_EPS) fleetOwes = amt;
+      if (code === 'SETTLEMENT_DRIVER_OWES' && driversOwe <= MONEY_EPS) driversOwe = amt;
+      if (code === 'SETTLEMENT_CASH_HELD' && cashHeld <= MONEY_EPS) cashHeld = amt;
+    }
     const totalExposure = fleetOwes + driversOwe + cashHeld;
-    // H-2: exposure sitting in unfinalized / gated weeks is still exposure.
-    const blockedExposure = [...collectRows, ...payRows]
-      .filter((r) => r.fuelFinalized === false || (r as { moneyUnlocked?: boolean }).moneyUnlocked === false)
-      .reduce((s, r) => s + owed(r), 0);
-    return { fleetOwes, driversOwe, cashHeld, totalExposure, blockedExposure };
+    return {
+      fleetOwes,
+      driversOwe,
+      cashHeld,
+      totalExposure,
+      blockedExposure: m.blockedExposure,
+    };
+  }, [collectQuery.data?.rows, payQuery.data?.rows, preview?.blockers]);
+
+  // U-5: compact ready-driver list for close confirm (from week collect/pay queues).
+  const closeConfirmDrivers = useMemo(() => {
+    type Row = {
+      driverId: string;
+      driverName?: string;
+      amountOwed?: number | null;
+      collectKind?: string | null;
+      cashStillHeld?: number | null;
+      settlementAmount?: number | null;
+    };
+    const byId = new Map<
+      string,
+      { driverId: string; name: string; owed: number; fleet: number }
+    >();
+    for (const r of (collectQuery.data?.rows || []) as Row[]) {
+      const id = String(r.driverId || '').trim();
+      if (!id) continue;
+      const cur = byId.get(id) || {
+        driverId: id,
+        name: String(r.driverName || id),
+        owed: 0,
+        fleet: 0,
+      };
+      if (r.driverName) cur.name = String(r.driverName);
+      cur.owed += collectOwedMajor(r);
+      byId.set(id, cur);
+    }
+    for (const r of (payQuery.data?.rows || []) as Row[]) {
+      const id = String(r.driverId || '').trim();
+      if (!id) continue;
+      const cur = byId.get(id) || {
+        driverId: id,
+        name: String(r.driverName || id),
+        owed: 0,
+        fleet: 0,
+      };
+      if (r.driverName) cur.name = String(r.driverName);
+      cur.fleet += resolvePayQueueOwed(r);
+      byId.set(id, cur);
+    }
+    return Array.from(byId.values()).sort((a, b) =>
+      a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }),
+    );
   }, [collectQuery.data?.rows, payQuery.data?.rows]);
 
   const byLane = useMemo(() => summarizeBlockersByLane(preview?.blockers), [preview?.blockers]);
@@ -356,8 +429,12 @@ export function CloseWeekPage({
     return res;
   }, [preview]);
 
-  const pnlBlocker = (preview?.blockers || []).find((b) => b.code === 'SETTLEMENT_PNL_MISMATCH');
-  const pnlUnavailable = (preview?.blockers || []).find((b) => b.code === 'BUSINESS_WEEK_PNL_UNAVAILABLE');
+  const pnlBlocker = [...(preview?.weekBlockers || []), ...(preview?.blockers || [])].find(
+    (b) => b.code === 'SETTLEMENT_PNL_MISMATCH',
+  );
+  const pnlUnavailable = [...(preview?.weekBlockers || []), ...(preview?.blockers || [])].find(
+    (b) => b.code === 'BUSINESS_WEEK_PNL_UNAVAILABLE',
+  );
   const orphanBlockers = (preview?.blockers || []).filter((b) => b.code === 'TOLL_EVENT_ORPHANED');
   const orphanImpact = orphanBlockers.reduce((s, b) => s + Math.abs(Number(b.delta) || 0), 0);
   const hasOrphanBlocker = orphanBlockers.length > 0;
@@ -383,7 +460,8 @@ export function CloseWeekPage({
     (s, b) => s + Math.abs(Number(b.delta) || 0),
     0,
   );
-  const totalBlockers = blockingCount(preview?.blockers);
+  const totalBlockers =
+    blockingCount(preview?.blockers) + blockingCount(preview?.weekBlockers);
   const laneBlockLabels = (lane: CloseLane) =>
     byLane[lane].filter((b) => b.severity !== 'warn').map(humanBlockerLabel);
   const laneWarnLabels = (lane: CloseLane) =>
@@ -515,6 +593,7 @@ export function CloseWeekPage({
   const doClose = async (reason: string) => {
     setClosing(true);
     setResult(null);
+    setFreezePending(null);
     try {
       const res = await weekCloseApi.close(weekKey, reason);
       setResult(res);
@@ -531,9 +610,38 @@ export function CloseWeekPage({
     } catch (e) {
       if (isWeekCloseUnavailable(e)) {
         toast.error('Close endpoint not deployed yet — deploy fleet-server to enable closing.');
+      } else if (e instanceof WeekCloseApiError && e.code === 'ATOMIC_FREEZE_FAILED') {
+        const sealed =
+          e.details && typeof e.details === 'object' && 'driversSealed' in e.details
+            ? Number((e.details as { driversSealed?: number }).driversSealed)
+            : undefined;
+        setFreezePending({
+          message: e.message,
+          driversSealed: Number.isFinite(sealed) ? sealed : undefined,
+        });
+        toast.error('Statements sealed — calendar freeze did not apply. Use Retry freeze.');
       } else {
         toast.error(e instanceof Error ? e.message : 'Close week failed');
       }
+    } finally {
+      setClosing(false);
+    }
+  };
+
+  const doRetryFreeze = async () => {
+    setClosing(true);
+    try {
+      const res = await weekCloseApi.retryFreeze(weekKey);
+      setFreezePending(null);
+      setResult(res);
+      if (res.closed) {
+        toast.success(`Freeze applied — ${res.driversClosed} drivers locked`);
+      } else {
+        toast.error(`Freeze incomplete — ${res.driversBlocked} still open`);
+      }
+      void previewQuery.refetch();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Retry freeze failed');
     } finally {
       setClosing(false);
     }
@@ -637,6 +745,24 @@ export function CloseWeekPage({
               <RefreshCw className="h-4 w-4" />
             )}
             <span className="ml-2">Refresh</span>
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-9"
+            disabled={previewUnavailable || previewLoading}
+            onClick={async () => {
+              try {
+                await weekCloseApi.prepare(weekKey);
+                toast.success('Lanes prepared');
+                void previewQuery.refetch();
+              } catch (e) {
+                toast.error(e instanceof Error ? e.message : 'Prepare failed');
+              }
+            }}
+          >
+            Prepare lanes
           </Button>
         </div>
       </div>
@@ -878,7 +1004,10 @@ export function CloseWeekPage({
               type="button"
               className="h-10 bg-indigo-700 hover:bg-indigo-800"
               disabled={closing || previewUnavailable}
-              onClick={() => void doClose('Signed restatements from Close Week')}
+              onClick={() => {
+                setCloseConfirmReason('Signed restatements from Close Week');
+                setCloseConfirmOpen(true);
+              }}
             >
               {closing ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -897,7 +1026,10 @@ export function CloseWeekPage({
                   : 'bg-indigo-700 hover:bg-indigo-800',
               )}
               disabled={!canClose || closing || previewUnavailable || weekAlreadyClosed}
-              onClick={() => void doClose('Closed from Close Week screen')}
+              onClick={() => {
+                setCloseConfirmReason('Closed from Close Week screen');
+                setCloseConfirmOpen(true);
+              }}
             >
               {closing ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -913,6 +1045,86 @@ export function CloseWeekPage({
           )}
         </div>
       </div>
+
+      <Dialog
+        open={closeConfirmOpen}
+        onOpenChange={(open) => {
+          if (closing) return;
+          setCloseConfirmOpen(open);
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {hasPendingRestatements
+                ? `Sign restatements for ${weekLabel(weekKey)}?`
+                : `Close week of ${weekLabel(weekKey)}?`}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2 text-sm text-slate-700">
+            <p>
+              This will freeze <strong>{preview?.driversReady ?? 0}</strong> driver-period
+              {preview?.driversReady === 1 ? '' : 's'} and lock Pay/Collect for the week.
+            </p>
+            <ul className="list-disc pl-5 text-slate-600 space-y-1">
+              <li>Fleet owes (pay lane): {MONEY(settlement.fleetOwes)}</li>
+              <li>Drivers owe: {MONEY(settlement.driversOwe)}</li>
+              <li>Cash held: {MONEY(settlement.cashHeld)}</li>
+            </ul>
+            {closeConfirmDrivers.length > 0 ? (
+              <div className="rounded-md border border-slate-200 bg-slate-50 max-h-40 overflow-y-auto">
+                <ul className="divide-y divide-slate-200 text-xs">
+                  {closeConfirmDrivers.slice(0, CLOSE_CONFIRM_DRIVER_CAP).map((d) => (
+                    <li
+                      key={d.driverId}
+                      className="flex items-start justify-between gap-2 px-2.5 py-1.5"
+                    >
+                      <span className="font-medium text-slate-800 truncate">{d.name}</span>
+                      <span className="shrink-0 tabular-nums text-slate-600 text-right">
+                        {d.owed > MONEY_EPS ? `owed ${MONEY(d.owed)}` : null}
+                        {d.owed > MONEY_EPS && d.fleet > MONEY_EPS ? ' · ' : null}
+                        {d.fleet > MONEY_EPS ? `fleet ${MONEY(d.fleet)}` : null}
+                        {d.owed <= MONEY_EPS && d.fleet <= MONEY_EPS ? '—' : null}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+                {closeConfirmDrivers.length > CLOSE_CONFIRM_DRIVER_CAP ? (
+                  <p className="px-2.5 py-1.5 text-[11px] text-slate-500 border-t border-slate-200">
+                    and {closeConfirmDrivers.length - CLOSE_CONFIRM_DRIVER_CAP} more
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
+            <p className="text-xs text-slate-500">
+              After close, open Restatements if a sealed fact needs a new version — do not re-open
+              casually when money has already moved.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={closing}
+              onClick={() => setCloseConfirmOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              className="bg-indigo-700 hover:bg-indigo-800"
+              disabled={closing}
+              onClick={() => {
+                setCloseConfirmOpen(false);
+                void doClose(closeConfirmReason || 'Closed from Close Week screen');
+              }}
+            >
+              {closing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Lock className="mr-2 h-4 w-4" />}
+              {hasPendingRestatements ? 'Sign restatements' : 'Close week'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog
         open={reopenOpen}
@@ -1095,7 +1307,33 @@ export function CloseWeekPage({
         </DialogContent>
       </Dialog>
 
-      {result && (!weekAlreadyClosed || hasPendingRestatements) ? (
+      {freezePending ? (
+        <div
+          role="alert"
+          className="rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950"
+        >
+          <p className="font-medium">Statements sealed — calendar freeze not applied</p>
+          <p className="mt-1 text-amber-900/90">
+            {freezePending.message}
+            {freezePending.driversSealed != null
+              ? ` (${freezePending.driversSealed} driver${freezePending.driversSealed === 1 ? '' : 's'} sealed).`
+              : ''}{' '}
+            Pay/Collect may still be open until freeze lands. Retry freeze only — do not re-run a full close.
+          </p>
+          <Button
+            type="button"
+            size="sm"
+            className="mt-2 h-8 bg-amber-800 hover:bg-amber-900"
+            disabled={closing}
+            onClick={() => void doRetryFreeze()}
+          >
+            {closing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Lock className="mr-2 h-4 w-4" />}
+            Retry freeze
+          </Button>
+        </div>
+      ) : null}
+
+      {result && !freezePending && (!weekAlreadyClosed || hasPendingRestatements) ? (
         <div
           role="status"
           className={cn(
@@ -1108,6 +1346,28 @@ export function CloseWeekPage({
           {result.closed
             ? `Week closed — ${result.driversClosed} driver-periods signed and frozen.`
             : `Close blocked — ${result.driversClosed} signed, ${result.driversBlocked} still blocked.`}
+          {result.closed && onNavigate ? (
+            <div className="mt-2 flex flex-wrap gap-2">
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="h-8 border-emerald-300 bg-white"
+                onClick={() => onNavigate('driver-settlements', { weekKey })}
+              >
+                Open Cash desk
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="h-8 border-emerald-300 bg-white"
+                onClick={() => onNavigate('restatement-queue')}
+              >
+                Restatements
+              </Button>
+            </div>
+          ) : null}
         </div>
       ) : null}
     </div>

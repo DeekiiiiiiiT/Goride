@@ -55,6 +55,16 @@ export function isPeriodFrozenError(err: unknown): boolean {
   return typeof err === 'string' && (err.includes('PERIOD_FROZEN') || /settlement week is closed/i.test(err));
 }
 
+/** Fuel/toll not cleared — show MoneyLockedDialog, not a raw MONEY_LOCKED toast. */
+export function isMoneyLockedError(err: unknown): boolean {
+  if (err instanceof SettlementCommandApiError && err.code === 'MONEY_LOCKED') return true;
+  if (err instanceof Error) {
+    const m = err.message || '';
+    return m.includes('MONEY_LOCKED') || /money is (still )?locked/i.test(m);
+  }
+  return typeof err === 'string' && (err.includes('MONEY_LOCKED') || /money is (still )?locked/i.test(err));
+}
+
 export type SettlementCollectBody = {
   driverId: string;
   weekAnchor: string;

@@ -61,4 +61,19 @@ describe('periodSignedSnapshot', () => {
     expect(kept.signedSnapshot).toEqual(prior.signedSnapshot);
     expect(kept.financeCore).toBeUndefined();
   });
+
+  // N-8: cash sync must not strip service-line trip counts H-8 SQL filters depend on.
+  it('preservePeriodMetaKeys keeps rushTripCount and rideshareTripCount including zeros', () => {
+    const prior = {
+      signedSnapshot: { at: 'x', settlement_paid: 1 },
+      rushTripCount: 0,
+      rideshareTripCount: 12,
+      financeCore: { noise: true },
+    };
+    const kept = preservePeriodMetaKeys(prior);
+    expect(kept.rushTripCount).toBe(0);
+    expect(kept.rideshareTripCount).toBe(12);
+    expect(kept.signedSnapshot).toEqual(prior.signedSnapshot);
+    expect(kept.financeCore).toBeUndefined();
+  });
 });

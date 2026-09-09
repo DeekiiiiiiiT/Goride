@@ -60,7 +60,7 @@ import {
   SettlementQueueTable,
   type SettlementMovementRow,
 } from './settlements';
-import { settlementCommandsApi, isSettlementCommandUnavailable, isPeriodFrozenError } from '../../services/settlementCommandsApi';
+import { settlementCommandsApi, isSettlementCommandUnavailable, isPeriodFrozenError, isMoneyLockedError } from '../../services/settlementCommandsApi';
 import { useSettlementCommands, newIdempotencyKey } from '../../hooks/useSettlementCommands';
 import { useServiceLineScopeParam } from '../../hooks/useServiceLineScopeParam';
 import {
@@ -116,6 +116,11 @@ import {
   PeriodFrozenDialog,
   type PeriodFrozenDialogState,
 } from './settlements/PeriodFrozenDialog';
+import {
+  MoneyLockedDialog,
+  type MoneyLockedDialogState,
+} from './settlements/MoneyLockedDialog';
+import { computeSettlementLaneMetrics } from '../../utils/settlementLaneMetrics';
 
 const CloseWeekPageLazy = lazy(() =>
   import('../../pages/CloseWeekPage').then((m) => ({ default: m.CloseWeekPage })),
@@ -434,9 +439,17 @@ export function DriverSettlementsPage({
   const [batchRef, setBatchRef] = useState('');
   const [batchBusy, setBatchBusy] = useState(false);
   const [periodFrozenDialog, setPeriodFrozenDialog] = useState<PeriodFrozenDialogState>(null);
+  const [moneyLockedDialog, setMoneyLockedDialog] = useState<MoneyLockedDialogState>(null);
 
   const showPeriodFrozen = (weekKey: string, driverName?: string) => {
     setPeriodFrozenDialog({
+      weekKey: String(weekKey || '').slice(0, 10),
+      driverName: driverName || undefined,
+    });
+  };
+
+  const showMoneyLocked = (weekKey: string, driverName?: string) => {
+    setMoneyLockedDialog({
       weekKey: String(weekKey || '').slice(0, 10),
       driverName: driverName || undefined,
     });
@@ -505,7 +518,8 @@ export function DriverSettlementsPage({
     driverId: string;
     driverName: string;
     periodAnchor: string;
-  }>({ open: false, driverId: '', driverName: '', periodAnchor: '' });
+    periodEnd: string;
+  }>({ open: false, driverId: '', driverName: '', periodAnchor: '', periodEnd: '' });
   const [reconciledDetail, setReconciledDetail] = useState<ReconciledPeriodDetail | null>(null);
   const [reconciledDetailPartial, setReconciledDetailPartial] = useState(false);
   const [reconciledDetailLoading, setReconciledDetailLoading] = useState(false);
@@ -577,9 +591,9 @@ export function DriverSettlementsPage({
   const txsQuery = useQuery({
     queryKey: ['driverSettlementsTransactions', rangeWeekFrom ?? '', rangeWeekTo ?? '', scope, allOpen],
     queryFn: async () => {
-      // Always load for Collect/Pay — Done must union Cash Collection logs with movements.
+      // Desk Done/Awaiting only — not the reconciled overlay (P-4).
       const page = await api.getTransactions(undefined, {
-        limit: 5000,
+        limit: 1000,
         offset: 0,
         ...(rangeWeekFrom ? { startDate: rangeWeekFrom } : {}),
         ...(rangeWeekTo ? { endDate: rangeWeekTo } : {}),
@@ -588,12 +602,28 @@ export function DriverSettlementsPage({
       });
       return (Array.isArray(page) ? page : page?.data || []) as FinancialTransaction[];
     },
-    enabled:
-      deskMode === 'collect' ||
-      deskMode === 'pay' ||
-      deskMode === 'reconciled' ||
-      deskMode === 'log-cash' ||
-      reconciledOverlay.open,
+    enabled: deskMode === 'collect' || deskMode === 'pay' || deskMode === 'log-cash',
+  });
+
+  // P-4: overlay txs scoped to driver + week — never the 5k desk dump.
+  const overlayTxsQuery = useQuery({
+    queryKey: [
+      'reconciledOverlayTxs',
+      reconciledOverlay.driverId,
+      reconciledOverlay.periodAnchor,
+      reconciledOverlay.periodEnd,
+    ],
+    queryFn: async () => {
+      const page = await api.getTransactions(reconciledOverlay.driverId, {
+        limit: 500,
+        offset: 0,
+        startDate: reconciledOverlay.periodAnchor,
+        endDate: reconciledOverlay.periodEnd || reconciledOverlay.periodAnchor,
+        desk: 'settlements',
+      });
+      return (Array.isArray(page) ? page : page?.data || []) as FinancialTransaction[];
+    },
+    enabled: reconciledOverlay.open && !!reconciledOverlay.driverId && !!reconciledOverlay.periodAnchor,
   });
 
   const driversQuery = useQuery({
@@ -613,23 +643,13 @@ export function DriverSettlementsPage({
       .filter(Boolean) as { id: string; name: string }[];
   }, [driversQuery.data]);
 
-  const collectOutstandingAll = useMemo(() => {
+  // R-4: queue rows for modals / selection — KPI totals come from API totals + laneMetrics.
+  const collectOutstanding = useMemo(() => {
     return (collectQueueQuery.data?.rows || [])
       .map(queueToPeriodRow)
       .filter((r) => collectAmount(r) > MONEY_EPS)
       .sort(compareBySettlementWeekDesc);
   }, [collectQueueQuery.data?.rows]);
-
-  const collectOutstanding = collectOutstandingAll;
-
-  const payOutstandingAll = useMemo(() => {
-    return (payQueueQuery.data?.rows || [])
-      .map(queueToPeriodRow)
-      .filter((r) => payOutstandingAmount(r) > MONEY_EPS)
-      .sort(compareBySettlementWeekDesc);
-  }, [payQueueQuery.data?.rows]);
-
-  const outstandingAllRows = direction === 'collect' ? collectOutstandingAll : payOutstandingAll;
 
   // Prefer API SettlementQueueRow[] directly for Collect/Pay outstanding table
   const outstandingQueueRows = useMemo(() => {
@@ -647,14 +667,9 @@ export function DriverSettlementsPage({
     0,
   );
   const outstandingTotalAmount =
-    activeQueueQuery.data?.totals?.amountOwedMinor != null &&
-    (activeQueueQuery.data?.rows?.length ?? 0) > 0
+    activeQueueQuery.data?.totals?.amountOwedMinor != null
       ? (activeQueueQuery.data.totals.amountOwedMinor || 0) / 100
-      : outstandingAllRows.reduce(
-          (s, r) =>
-            s + (direction === 'collect' ? collectAmount(r) : payOutstandingAmount(r)),
-          0,
-        );
+      : outstandingShowingAmount;
 
   const apiMovementRows = useMemo(() => {
     const raw = movementsQuery.data?.rows || [];
@@ -748,31 +763,24 @@ export function DriverSettlementsPage({
       .sort(compareBySettlementWeekDesc);
   }, [reconciledQueueQuery.data?.rows]);
 
-  // KPIs from queue rows (collect split by collectKind; fleet from pay)
+  // N-5 / U-4 / P-7: same lane metrics path as Close Week
   const collectQueueRows = collectQueueQuery.data?.rows || [];
-  const settledOwesTotal = collectQueueRows
-    .filter((r) => r.collectKind !== 'cash_held')
-    .reduce((s, r) => s + queueOwedMajor(r, 'collect'), 0);
-  const cashHeldKpiTotal = collectQueueRows
-    .filter((r) => r.collectKind === 'cash_held')
-    .reduce((s, r) => s + queueOwedMajor(r, 'collect'), 0);
+  const payQueueRows = payQueueQuery.data?.rows || [];
+  const laneMetrics = useMemo(
+    () => computeSettlementLaneMetrics(collectQueueRows, payQueueRows),
+    [collectQueueRows, payQueueRows],
+  );
+  const settledOwesTotal = laneMetrics.driversOwe;
+  const cashHeldKpiTotal = laneMetrics.cashHeld;
   const fleetOwesTotal =
     payQueueQuery.data?.totals?.amountOwedMinor != null
       ? (payQueueQuery.data.totals.amountOwedMinor || 0) / 100
-      : (payQueueQuery.data?.rows || []).reduce((s, r) => s + queueOwedMajor(r, 'pay'), 0);
+      : laneMetrics.fleetOwes;
   const settledOwesWeekCount = collectQueueRows.filter((r) => r.collectKind !== 'cash_held').length;
   const cashHeldWeekCount = collectQueueRows.filter((r) => r.collectKind === 'cash_held').length;
   const fleetOwesWeekCount =
     payQueueQuery.data?.page?.total ?? payQueueQuery.data?.rows?.length ?? 0;
-  // H-2: total fleet exposure is gate-blind — sum every week regardless of the
-  // moneyUnlocked / fuelFinalized gate, and call out the blocked portion.
-  const totalExposure = settledOwesTotal + cashHeldKpiTotal + fleetOwesTotal;
-  const blockedExposure = [
-    ...collectQueueRows,
-    ...(payQueueQuery.data?.rows || []),
-  ]
-    .filter((r) => r.fuelFinalized === false || r.moneyUnlocked === false)
-    .reduce((s, r) => s + queueOwedMajor(r, r.collectKind ? 'collect' : 'pay'), 0);
+  const blockedExposure = laneMetrics.blockedExposure;
   const awaitingPayTotal = apiMovementRows.length
     ? apiMovementRows
         .filter(
@@ -817,15 +825,13 @@ export function DriverSettlementsPage({
     .reduce((s, m) => s + Math.abs(Number(m.amount) || 0), 0);
   const clearedThisWeek = direction === 'pay' ? clearedPayThisWeek : clearedCollectThisWeek;
 
-  // Prefer server page flags — All open can exceed pageSize and under-count client KPI sums.
-  const kpiTotalsPossiblyIncomplete =
-    allOpen &&
-    Boolean(
-      collectQueueQuery.data?.page?.hasMore ||
-        collectQueueQuery.data?.page?.truncated ||
-        payQueueQuery.data?.page?.hasMore ||
-        payQueueQuery.data?.page?.truncated,
-    );
+  // C-4: incompleteness follows page.hasMore on any view (not only All open).
+  const kpiTotalsPossiblyIncomplete = Boolean(
+    collectQueueQuery.data?.page?.hasMore ||
+      collectQueueQuery.data?.page?.truncated ||
+      payQueueQuery.data?.page?.hasMore ||
+      payQueueQuery.data?.page?.truncated,
+  );
 
   // Per-basis errors — don't blank Collect KPIs when only the tx history query fails.
   const collectKpiError = collectQueueQuery.isError;
@@ -942,6 +948,14 @@ export function DriverSettlementsPage({
   const selectedTotal = selectedRows.reduce((s, r) => s + queueOwedMajor(r, direction), 0);
 
   const refreshAll = async () => {
+    // P-6: Refresh is invalidate-only — repair is a separate explicit action.
+    settlementCmds.invalidate();
+    void qc.invalidateQueries({ queryKey: settlementKeys.all });
+    void qc.invalidateQueries({ queryKey: ['driverSettlementsTransactions'] });
+    void qc.invalidateQueries({ queryKey: [DRIVER_FINANCIAL_PERIODS_KEY] });
+  };
+
+  const repairOrphanMirrors = async () => {
     try {
       const repair = await api.repairOrphanSettlementMirrors({
         ...(rangeWeekFrom ? { periodStart: rangeWeekFrom } : {}),
@@ -949,20 +963,18 @@ export function DriverSettlementsPage({
       });
       if (repair?.purged || repair?.weeksSynced) {
         toast.success(
-          `Settlements refreshed${repair.purged ? ` · cleaned ${repair.purged} stale pays` : ''}${
+          `Mirrors repaired${repair.purged ? ` · cleaned ${repair.purged} stale pays` : ''}${
             repair.weeksSynced ? ` · recalculated ${repair.weeksSynced} weeks` : ''
           }`,
         );
+      } else {
+        toast.success('No orphan mirrors found');
       }
     } catch (e: any) {
-      console.warn("[DriverSettlements] orphan mirror repair failed:", e?.message || e);
-      toast.error(e?.message || 'Could not fully refresh settlement totals');
+      console.warn('[DriverSettlements] orphan mirror repair failed:', e?.message || e);
+      toast.error(e?.message || 'Could not repair settlement mirrors');
     }
-    settlementCmds.invalidate();
-    void qc.invalidateQueries({ queryKey: settlementKeys.all });
-    void qc.invalidateQueries({ queryKey: ['driverSettlementsTransactions'] });
-    // Cash Wallet / Settlement tabs read the same period projection.
-    void qc.invalidateQueries({ queryKey: [DRIVER_FINANCIAL_PERIODS_KEY] });
+    await refreshAll();
   };
 
   const openReconciledPeriod = async (row: ReconciledListRow) => {
@@ -971,6 +983,7 @@ export function DriverSettlementsPage({
       driverId: row.driverId,
       driverName: row.driverName || row.driverId,
       periodAnchor: row.periodAnchor,
+      periodEnd: row.periodEnd,
     });
     setReconciledDetailLoading(true);
     setReconciledDetail(null);
@@ -1259,15 +1272,18 @@ export function DriverSettlementsPage({
         // Handled — do not rethrow (RecordPayoutModal would toast the raw PERIOD_FROZEN text).
         return;
       }
+      if (isMoneyLockedError(err)) {
+        setPayoutModal((m) => ({ ...m, isOpen: false }));
+        showMoneyLocked(weekAnchor, payoutModal.driverName);
+        return;
+      }
       if (!isSettlementCommandUnavailable(err)) {
         toast.error(err instanceof Error ? err.message : 'Pay failed');
         throw err;
       }
-      const newTx = buildDriverPayoutTx(payload, {
-        driverId: payoutModal.driverId,
-        driverName: payoutModal.driverName,
-      });
-      await api.saveTransaction(newTx);
+      // R-3: no legacy saveTransaction fallback — commands endpoint is required.
+      toast.error('Settlement commands unavailable — redeploy fleet-server');
+      throw err;
     }
     refreshAll();
   };
@@ -1294,7 +1310,7 @@ export function DriverSettlementsPage({
       payment.notes?.match(/\[Over-collection\]\s*(.+)/i)?.[1]?.trim() ||
       (overCollect ? String(payment.notes || '').trim() : undefined);
 
-    // Float/adjustment stay on intentional legacy path (no command yet) — not via catch.
+    // R-3: intentional float/adjustment only (no settlement command yet). Never a pay/collect fallback.
     if (payment.transactionType !== 'payment' || !weekStart) {
       const newTx = buildCashCollectionTx(
         {
@@ -1340,22 +1356,17 @@ export function DriverSettlementsPage({
           showPeriodFrozen(weekStart, collectModal.driverName);
           return;
         }
+        if (isMoneyLockedError(err)) {
+          setCollectModal((m) => ({ ...m, isOpen: false }));
+          showMoneyLocked(weekStart, collectModal.driverName);
+          return;
+        }
         if (!isSettlementCommandUnavailable(err)) {
           toast.error(err instanceof Error ? err.message : 'Collect failed');
           throw err;
         }
-        const newTx = buildCashCollectionTx(
-          {
-            ...payment,
-            workPeriodStart:
-              payment.workPeriodStart ||
-              `${collectModal.workPeriodStart}T12:00:00.000Z`,
-            workPeriodEnd:
-              payment.workPeriodEnd || `${collectModal.workPeriodEnd}T12:00:00.000Z`,
-          },
-          { driverId: collectModal.driverId, driverName: collectModal.driverName },
-        );
-        await api.saveTransaction(newTx);
+        toast.error('Settlement commands unavailable — redeploy fleet-server');
+        throw err;
       }
     }
     await Promise.all([
@@ -1405,16 +1416,17 @@ export function DriverSettlementsPage({
         showPeriodFrozen(weekAnchor, writeOffModal.driverName);
         return;
       }
+      if (isMoneyLockedError(err)) {
+        setWriteOffModal((m) => ({ ...m, isOpen: false }));
+        showMoneyLocked(weekAnchor, writeOffModal.driverName);
+        return;
+      }
       if (!isSettlementCommandUnavailable(err)) {
         toast.error(err instanceof Error ? err.message : 'Write-off failed');
         throw err;
       }
-      await api.saveTransaction(
-        buildCashWriteOffTx(payload, {
-          driverId: writeOffModal.driverId,
-          driverName: writeOffModal.driverName,
-        }),
-      );
+      toast.error('Settlement commands unavailable — redeploy fleet-server');
+      throw err;
     }
     refreshAll();
   };
@@ -1535,6 +1547,13 @@ export function DriverSettlementsPage({
               || selectedRows[0]?.periodAnchor
               || '').slice(0, 10);
           showPeriodFrozen(week, selectedRows[0]?.driverName);
+        } else if (isMoneyLockedError(firstErr) || /MONEY_LOCKED/i.test(firstErr)) {
+          const week =
+            String((failedRow as { week_anchor?: string; weekAnchor?: string } | undefined)?.week_anchor
+              || (failedRow as { weekAnchor?: string } | undefined)?.weekAnchor
+              || selectedRows[0]?.periodAnchor
+              || '').slice(0, 10);
+          showMoneyLocked(week, selectedRows[0]?.driverName);
         } else {
           toast.error(`${failed} failed · ${firstErr}`);
         }
@@ -1546,6 +1565,8 @@ export function DriverSettlementsPage({
     } catch (e: any) {
       if (isPeriodFrozenError(e)) {
         showPeriodFrozen(selectedRows[0]?.periodAnchor || '', selectedRows[0]?.driverName);
+      } else if (isMoneyLockedError(e)) {
+        showMoneyLocked(selectedRows[0]?.periodAnchor || '', selectedRows[0]?.driverName);
       } else {
         toast.error(e?.message || 'Batch run failed');
       }
@@ -1682,7 +1703,18 @@ export function DriverSettlementsPage({
       <Button type="button" variant="outline" size="sm" className="h-9" onClick={() => void refreshAll()} disabled={loading}>
           {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
           <span className="ml-2">Refresh</span>
-        </Button>
+      </Button>
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        className="h-9"
+        onClick={() => void repairOrphanMirrors()}
+        disabled={loading}
+        title="Repair orphan settlement mirrors"
+      >
+        Repair mirrors
+      </Button>
       </div>
 
       {nullOrgPeriodCount > 0 ? (
@@ -1751,15 +1783,38 @@ export function DriverSettlementsPage({
         }
       />
 
-      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 rounded-lg border border-slate-200 bg-white px-4 py-3">
-        <span className="text-xs font-medium uppercase tracking-wide text-slate-500">
-          Total exposure
+      <div className="flex flex-wrap items-baseline gap-x-4 gap-y-2 rounded-lg border border-slate-200 bg-white px-4 py-3">
+        <span className="text-xs font-medium uppercase tracking-wide text-slate-500 w-full sm:w-auto">
+          Exposure
         </span>
-        <span className="text-lg font-semibold tabular-nums text-slate-900">
-          {collectKpiError || payKpiError ? '—' : MONEY(totalExposure)}
+        <span className="text-sm tabular-nums text-emerald-800">
+          Fleet owes{' '}
+          <span className="font-semibold">
+            {payKpiError ? '—' : MONEY(fleetOwesTotal)}
+          </span>
         </span>
-        <span className="text-[11px] text-slate-400">
-          fleet owes + drivers owe + cash held · {exposureScopeLabel}
+        <span className="text-sm tabular-nums text-rose-700">
+          Drivers owe{' '}
+          <span className="font-semibold">
+            {collectKpiError ? '—' : MONEY(settledOwesTotal)}
+          </span>
+        </span>
+        <span className="text-sm tabular-nums text-amber-800">
+          Cash held{' '}
+          <span className="font-semibold">
+            {collectKpiError ? '—' : MONEY(cashHeldKpiTotal)}
+          </span>
+        </span>
+        <span className="text-sm tabular-nums text-slate-900">
+          Net{' '}
+          <span className="font-semibold">
+            {collectKpiError || payKpiError
+              ? '—'
+              : MONEY(fleetOwesTotal - settledOwesTotal)}
+          </span>
+          <span className="ml-1 text-[11px] font-normal text-slate-400">
+            (liability − receivable) · custody separate · {exposureScopeLabel}
+          </span>
         </span>
         {blockedExposure > MONEY_EPS ? (
           <span className="ml-auto rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-800">
@@ -1800,7 +1855,7 @@ export function DriverSettlementsPage({
           role="status"
           className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950"
         >
-          Totals may be incomplete for All open — narrow the week range for exact numbers.
+          Totals may be incomplete — narrow the week range for exact numbers.
         </div>
       ) : null}
 
@@ -2053,7 +2108,9 @@ export function DriverSettlementsPage({
               groupByDriver
               showingCount={outstandingQueueRows.length}
               totalCount={
-                activeQueueQuery.data?.page?.total ?? outstandingAllRows.length
+                activeQueueQuery.data?.page?.total ??
+                activeQueueQuery.data?.totals?.rowCount ??
+                outstandingQueueRows.length
               }
               showingAmount={outstandingShowingAmount}
               totalAmount={outstandingTotalAmount}
@@ -2239,6 +2296,17 @@ export function DriverSettlementsPage({
         }}
       />
 
+      <MoneyLockedDialog
+        state={moneyLockedDialog}
+        onOpenChange={(open) => {
+          if (!open) setMoneyLockedDialog(null);
+        }}
+        onOpenCloseWeek={(weekKey) => {
+          setMoneyLockedDialog(null);
+          handleHubNavigate('close-week', { weekKey });
+        }}
+      />
+
       <ReconciledPeriodOverlay
         open={reconciledOverlay.open}
         onOpenChange={(open) => {
@@ -2249,7 +2317,7 @@ export function DriverSettlementsPage({
         detail={reconciledDetail}
         loading={reconciledDetailLoading}
         partialData={reconciledDetailPartial}
-        transactions={txsQuery.data || []}
+        transactions={overlayTxsQuery.data || []}
       />
 
       <AlertDialog

@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Ban, ChevronDown, ChevronRight, Loader2 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { Button } from '../../ui/button';
@@ -38,9 +38,9 @@ function weekOpenTitle(r: Pick<SettlementQueueRow, 'periodAnchor' | 'periodEnd'>
   });
 }
 
-/** H-1: reconciliation-close gate — collecting on an unfinalized week is banned. */
+/** Reconciliation gate — fail closed when unlock flag is missing (C-5). */
 function collectGateBlocked(r: Pick<SettlementQueueRow, 'moneyUnlocked'>): boolean {
-  return r.moneyUnlocked === false;
+  return r.moneyUnlocked !== true;
 }
 
 /** Close Week freeze — no money movements until reopen. */
@@ -48,7 +48,25 @@ function periodFrozenBlocked(r: Pick<SettlementQueueRow, 'periodFrozen'>): boole
   return r.periodFrozen === true;
 }
 
+const GATE_TITLE = 'Not yet reconciled — fuel must be finalized and tolls clear before Collect.';
 const FROZEN_TITLE = 'Week closed — reopen on Close Week to change money';
+
+/** Row block reason shown as visible helper text (U-1), not only title tooltips. */
+export function settlementRowBlockReason(
+  r: Pick<SettlementQueueRow, 'periodAnchor' | 'periodEnd' | 'moneyUnlocked' | 'periodFrozen'>,
+  mode: 'collect' | 'pay',
+): string | undefined {
+  return actionTitle(r, mode);
+}
+
+function actionTitle(
+  r: Pick<SettlementQueueRow, 'periodAnchor' | 'periodEnd' | 'moneyUnlocked' | 'periodFrozen'>,
+  mode: 'collect' | 'pay',
+): string | undefined {
+  if (periodFrozenBlocked(r)) return FROZEN_TITLE;
+  if (mode === 'collect' && collectGateBlocked(r)) return GATE_TITLE;
+  return weekOpenTitle(r);
+}
 
 /** Collect is allowed only when the calendar week ended AND the money is unlocked AND not frozen. */
 function canCollect(
@@ -59,17 +77,6 @@ function canCollect(
 
 function canPay(r: Pick<SettlementQueueRow, 'periodAnchor' | 'periodEnd' | 'periodFrozen'>): boolean {
   return weekActionable(r) && !periodFrozenBlocked(r);
-}
-
-const GATE_TITLE = 'Fuel / toll not finalized — money is locked until reconciliation closes.';
-
-function actionTitle(
-  r: Pick<SettlementQueueRow, 'periodAnchor' | 'periodEnd' | 'moneyUnlocked' | 'periodFrozen'>,
-  mode: 'collect' | 'pay',
-): string | undefined {
-  if (periodFrozenBlocked(r)) return FROZEN_TITLE;
-  if (mode === 'collect' && collectGateBlocked(r)) return GATE_TITLE;
-  return weekOpenTitle(r);
 }
 
 /** Row label distinguishing custody (cash held) from a settled receivable (H-1). */
@@ -225,7 +232,24 @@ export function SettlementQueueTable({
   );
 
   const flatWindow = useWindowedRows(groupByDriver ? [] : rows);
-  const rollupWindow = useWindowedRows(rollups || []);
+  // P-5: flatten expanded rollups into a single row list, then window (fixed 52px rows).
+  type FlatRollupItem =
+    | { kind: 'header'; rollup: DriverRollup }
+    | { kind: 'week'; rollupId: string; row: SettlementQueueRow };
+
+  const flatRollupItems = useMemo((): FlatRollupItem[] => {
+    if (!groupByDriver || !rollups?.length) return [];
+    const out: FlatRollupItem[] = [];
+    for (const g of rollups) {
+      out.push({ kind: 'header', rollup: g });
+      if (expanded.has(g.driverId)) {
+        for (const r of g.weeks) out.push({ kind: 'week', rollupId: g.driverId, row: r });
+      }
+    }
+    return out;
+  }, [groupByDriver, rollups, expanded]);
+
+  const rollupWindow = useWindowedRows(flatRollupItems);
   const windowed = groupByDriver ? rollupWindow : flatWindow;
   const colSpan = groupByDriver ? 8 : 6;
 
@@ -297,77 +321,183 @@ export function SettlementQueueTable({
                     />
                   </TableRow>
                 ) : null}
-                {rollupWindow.visible.map((g) => {
-                const open = expanded.has(g.driverId);
-                const actionableWeeks = g.weeks.filter((w) =>
-                  mode === 'collect' ? canCollect(w) : canPay(w),
-                );
-                const weekKeysForDriver = actionableWeeks.map(rowKey);
-                const firstActionable = actionableWeeks[0] || null;
-                const firstCollectable = actionableWeeks.find((w) => canCollect(w)) || null;
-                const driverAllSelected =
-                  weekKeysForDriver.length > 0 && weekKeysForDriver.every((k) => selected.has(k));
-                const parentOpenTitle = firstActionable
-                  ? undefined
-                  : actionTitle(g.weeks[0] || { periodAnchor: '', periodEnd: g.oldestPeriodEnd }, mode);
-                return (
-                  <React.Fragment key={g.driverId}>
-                    <TableRow
-                      className="bg-slate-50/80 hover:bg-slate-100"
-                      tabIndex={0}
-                      aria-expanded={open}
-                      onClick={() => toggleExpand(g.driverId)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                          e.preventDefault();
-                          toggleExpand(g.driverId);
-                        }
-                      }}
-                    >
-                      <TableCell onClick={(e) => e.stopPropagation()}>
-                        <Checkbox
-                          checked={driverAllSelected}
-                          disabled={weekKeysForDriver.length === 0}
-                          onCheckedChange={() => {
-                            const allOn = weekKeysForDriver.every((k) => selected.has(k));
-                            for (const k of weekKeysForDriver) {
-                              if (allOn) {
-                                if (selected.has(k)) onToggle(k);
-                              } else if (!selected.has(k)) {
-                                onToggle(k);
+                {rollupWindow.visible.map((item) => {
+                  if (item.kind === 'header') {
+                    const g = item.rollup;
+                    const open = expanded.has(g.driverId);
+                    const actionableWeeks = g.weeks.filter((w) =>
+                      mode === 'collect' ? canCollect(w) : canPay(w),
+                    );
+                    const weekKeysForDriver = actionableWeeks.map(rowKey);
+                    const firstActionable = actionableWeeks[0] || null;
+                    const firstCollectable = actionableWeeks.find((w) => canCollect(w)) || null;
+                    const driverAllSelected =
+                      weekKeysForDriver.length > 0 &&
+                      weekKeysForDriver.every((k) => selected.has(k));
+                    const parentOpenTitle = firstActionable
+                      ? undefined
+                      : actionTitle(
+                          g.weeks[0] || { periodAnchor: '', periodEnd: g.oldestPeriodEnd },
+                          mode,
+                        );
+                    return (
+                      <TableRow
+                        key={`h:${g.driverId}`}
+                        className="bg-slate-50/80 hover:bg-slate-100"
+                        tabIndex={0}
+                        aria-expanded={open}
+                        onClick={() => toggleExpand(g.driverId)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            toggleExpand(g.driverId);
+                          }
+                        }}
+                      >
+                        <TableCell onClick={(e) => e.stopPropagation()}>
+                          <Checkbox
+                            checked={driverAllSelected}
+                            disabled={weekKeysForDriver.length === 0}
+                            onCheckedChange={() => {
+                              const allOn = weekKeysForDriver.every((k) => selected.has(k));
+                              for (const k of weekKeysForDriver) {
+                                if (allOn) {
+                                  if (selected.has(k)) onToggle(k);
+                                } else if (!selected.has(k)) {
+                                  onToggle(k);
+                                }
                               }
-                            }
-                          }}
-                          aria-label={`Select all weeks for ${g.driverName || g.driverId}`}
+                            }}
+                            aria-label={`Select all weeks for ${g.driverName || g.driverId}`}
+                          />
+                        </TableCell>
+                        <TableCell className="w-10 pr-0">
+                          {open ? (
+                            <ChevronDown className="h-4 w-4 text-slate-500" />
+                          ) : (
+                            <ChevronRight className="h-4 w-4 text-slate-500" />
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <button
+                            type="button"
+                            className="text-left font-medium text-slate-900 hover:text-indigo-600"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onOpenDriver?.(g.driverId);
+                            }}
+                          >
+                            {g.driverName || g.driverId}
+                          </button>
+                        </TableCell>
+                        <TableCell className="text-sm text-slate-600">
+                          {weekLabel(g.oldestPeriodAnchor, g.oldestPeriodEnd)}
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums text-slate-600">
+                          {g.weekCount}
+                        </TableCell>
+                        <TableCell>
+                          <Badge className={cn('font-normal', AGING_TONE[g.aging])}>{g.aging}</Badge>
+                        </TableCell>
+                        <TableCell
+                          className={cn(
+                            'text-right tabular-nums font-semibold',
+                            mode === 'collect' ? 'text-rose-700' : 'text-emerald-800',
+                          )}
+                        >
+                          {MONEY(g.owed)}
+                        </TableCell>
+                        <TableCell onClick={(e) => e.stopPropagation()}>
+                          {mode === 'collect' ? (
+                            <div className="flex flex-col items-end gap-1">
+                              <div className="flex flex-wrap gap-1 justify-end">
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  className="h-8 bg-rose-700 hover:bg-rose-800"
+                                  disabled={!firstCollectable}
+                                  title={
+                                    !firstCollectable && firstActionable
+                                      ? actionTitle(firstActionable, 'collect')
+                                      : parentOpenTitle
+                                  }
+                                  onClick={() => firstCollectable && onCollect?.(firstCollectable)}
+                                >
+                                  Collect
+                                </Button>
+                              </div>
+                              {/* U-1: visible block reason on rollup header when whole driver locked */}
+                              {parentOpenTitle ? (
+                                <p className="max-w-[11rem] text-right text-[11px] leading-snug text-amber-800">
+                                  {parentOpenTitle}
+                                </p>
+                              ) : null}
+                            </div>
+                          ) : (
+                            <div className="flex flex-col items-end gap-1">
+                              <Button
+                                type="button"
+                                size="sm"
+                                className="h-8 bg-emerald-700 hover:bg-emerald-800"
+                                disabled={!firstActionable}
+                                title={parentOpenTitle}
+                                onClick={() => firstActionable && onPay?.(firstActionable)}
+                              >
+                                Pay
+                              </Button>
+                              {parentOpenTitle ? (
+                                <p className="max-w-[11rem] text-right text-[11px] leading-snug text-amber-800">
+                                  {parentOpenTitle}
+                                </p>
+                              ) : null}
+                            </div>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  }
+
+                  // item.kind === 'week' — sibling row in the flat window list
+                  const r = item.row;
+                  const k = rowKey(r);
+                  const bucket = agingBucket(r.periodEnd);
+                  const amt = owedMajor(r, mode);
+                  const canAct = mode === 'collect' ? canCollect(r) : canPay(r);
+                  const openTitle = actionTitle(r, mode);
+                  return (
+                    <TableRow key={`w:${item.rollupId}:${k}`} className="bg-white">
+                      <TableCell>
+                        <Checkbox
+                          checked={selected.has(k)}
+                          disabled={!canAct}
+                          title={openTitle}
+                          onCheckedChange={() => canAct && onToggle(k)}
+                          aria-label={`Select ${r.driverName} ${r.periodAnchor}`}
                         />
                       </TableCell>
-                      <TableCell className="w-10 pr-0">
-                        {open ? (
-                          <ChevronDown className="h-4 w-4 text-slate-500" />
-                        ) : (
-                          <ChevronRight className="h-4 w-4 text-slate-500" />
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <button
-                          type="button"
-                          className="text-left font-medium text-slate-900 hover:text-indigo-600"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onOpenDriver?.(g.driverId);
-                          }}
-                        >
-                          {g.driverName || g.driverId}
-                        </button>
+                      <TableCell />
+                      <TableCell className="text-sm text-slate-500 pl-6">
+                        {mode === 'collect' ? collectKindLabel(r) : 'Week'}
+                        {!weekActionable(r) ? (
+                          <span className="ml-2 text-[10px] font-medium uppercase tracking-wide text-amber-700">
+                            Still open
+                          </span>
+                        ) : periodFrozenBlocked(r) ? (
+                          <span className="ml-2 text-[10px] font-medium uppercase tracking-wide text-slate-600">
+                            Closed
+                          </span>
+                        ) : mode === 'collect' && collectGateBlocked(r) ? (
+                          <span className="ml-2 text-[10px] font-medium uppercase tracking-wide text-rose-700">
+                            Locked
+                          </span>
+                        ) : null}
                       </TableCell>
                       <TableCell className="text-sm text-slate-600">
-                        {weekLabel(g.oldestPeriodAnchor, g.oldestPeriodEnd)}
+                        {weekLabel(r.periodAnchor, r.periodEnd)}
                       </TableCell>
-                      <TableCell className="text-right tabular-nums text-slate-600">
-                        {g.weekCount}
-                      </TableCell>
+                      <TableCell />
                       <TableCell>
-                        <Badge className={cn('font-normal', AGING_TONE[g.aging])}>{g.aging}</Badge>
+                        <Badge className={cn('font-normal', AGING_TONE[bucket])}>{bucket}</Badge>
                       </TableCell>
                       <TableCell
                         className={cn(
@@ -375,151 +505,70 @@ export function SettlementQueueTable({
                           mode === 'collect' ? 'text-rose-700' : 'text-emerald-800',
                         )}
                       >
-                        {MONEY(g.owed)}
+                        {MONEY(amt)}
                       </TableCell>
-                      <TableCell onClick={(e) => e.stopPropagation()}>
-                        {mode === 'collect' ? (
+                      <TableCell>
+                        <div className="flex flex-col items-end gap-1">
                           <div className="flex flex-wrap gap-1 justify-end">
-                            <Button
-                              type="button"
-                              size="sm"
-                              className="h-8 bg-rose-700 hover:bg-rose-800"
-                              disabled={!firstCollectable}
-                              title={
-                                !firstCollectable && firstActionable
-                                  ? actionTitle(firstActionable, 'collect')
-                                  : parentOpenTitle
-                              }
-                              onClick={() => firstCollectable && onCollect?.(firstCollectable)}
-                            >
-                              Collect
-                            </Button>
-                          </div>
-                        ) : (
-                          <Button
-                            type="button"
-                            size="sm"
-                            className="h-8 bg-emerald-700 hover:bg-emerald-800"
-                            disabled={!firstActionable}
-                            title={parentOpenTitle}
-                            onClick={() => firstActionable && onPay?.(firstActionable)}
-                          >
-                            Pay
-                          </Button>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                    {open
-                      ? g.weeks.map((r) => {
-                          const k = rowKey(r);
-                          const bucket = agingBucket(r.periodEnd);
-                          const amt = owedMajor(r, mode);
-                          const canAct = mode === 'collect' ? canCollect(r) : canPay(r);
-                          const openTitle = actionTitle(r, mode);
-                          return (
-                            <TableRow key={k} className="bg-white">
-                              <TableCell>
-                                <Checkbox
-                                  checked={selected.has(k)}
+                            {periodFrozenBlocked(r) ? (
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                className="h-8"
+                                title={FROZEN_TITLE}
+                                onClick={() => onWeekClosed?.(r)}
+                              >
+                                Week closed
+                              </Button>
+                            ) : mode === 'collect' ? (
+                              <>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  className="h-8 bg-rose-700 hover:bg-rose-800"
+                                  disabled={!canCollect(r)}
+                                  title={actionTitle(r, 'collect')}
+                                  onClick={() => canCollect(r) && onCollect?.(r)}
+                                >
+                                  Collect
+                                </Button>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-8"
                                   disabled={!canAct}
                                   title={openTitle}
-                                  onCheckedChange={() => canAct && onToggle(k)}
-                                  aria-label={`Select ${r.driverName} ${r.periodAnchor}`}
-                                />
-                              </TableCell>
-                              <TableCell />
-                              <TableCell className="text-sm text-slate-500 pl-6">
-                                {mode === 'collect' ? collectKindLabel(r) : 'Week'}
-                                {!weekActionable(r) ? (
-                                  <span className="ml-2 text-[10px] font-medium uppercase tracking-wide text-amber-700">
-                                    Still open
-                                  </span>
-                                ) : periodFrozenBlocked(r) ? (
-                                  <span className="ml-2 text-[10px] font-medium uppercase tracking-wide text-slate-600">
-                                    Closed
-                                  </span>
-                                ) : mode === 'collect' && collectGateBlocked(r) ? (
-                                  <span className="ml-2 text-[10px] font-medium uppercase tracking-wide text-rose-700">
-                                    Locked
-                                  </span>
-                                ) : null}
-                              </TableCell>
-                              <TableCell className="text-sm text-slate-600">
-                                {weekLabel(r.periodAnchor, r.periodEnd)}
-                              </TableCell>
-                              <TableCell />
-                              <TableCell>
-                                <Badge className={cn('font-normal', AGING_TONE[bucket])}>
-                                  {bucket}
-                                </Badge>
-                              </TableCell>
-                              <TableCell
-                                className={cn(
-                                  'text-right tabular-nums font-semibold',
-                                  mode === 'collect' ? 'text-rose-700' : 'text-emerald-800',
-                                )}
+                                  onClick={() => canAct && onWriteOff?.(r)}
+                                >
+                                  <Ban className="h-3.5 w-3.5 mr-1" />
+                                  Write off
+                                </Button>
+                              </>
+                            ) : (
+                              <Button
+                                type="button"
+                                size="sm"
+                                className="h-8 bg-emerald-700 hover:bg-emerald-800"
+                                disabled={!canAct}
+                                title={openTitle}
+                                onClick={() => canAct && onPay?.(r)}
                               >
-                                {MONEY(amt)}
-                              </TableCell>
-                              <TableCell>
-                                <div className="flex flex-wrap gap-1 justify-end">
-                                  {periodFrozenBlocked(r) ? (
-                                    <Button
-                                      type="button"
-                                      size="sm"
-                                      variant="outline"
-                                      className="h-8"
-                                      title={FROZEN_TITLE}
-                                      onClick={() => onWeekClosed?.(r)}
-                                    >
-                                      Week closed
-                                    </Button>
-                                  ) : mode === 'collect' ? (
-                                    <>
-                                      <Button
-                                        type="button"
-                                        size="sm"
-                                        className="h-8 bg-rose-700 hover:bg-rose-800"
-                                        disabled={!canCollect(r)}
-                                        title={actionTitle(r, 'collect')}
-                                        onClick={() => canCollect(r) && onCollect?.(r)}
-                                      >
-                                        Collect
-                                      </Button>
-                                      <Button
-                                        type="button"
-                                        size="sm"
-                                        variant="outline"
-                                        className="h-8"
-                                        disabled={!canAct}
-                                        title={openTitle}
-                                        onClick={() => canAct && onWriteOff?.(r)}
-                                      >
-                                        <Ban className="h-3.5 w-3.5 mr-1" />
-                                        Write off
-                                      </Button>
-                                    </>
-                                  ) : (
-                                    <Button
-                                      type="button"
-                                      size="sm"
-                                      className="h-8 bg-emerald-700 hover:bg-emerald-800"
-                                      disabled={!canAct}
-                                      title={openTitle}
-                                      onClick={() => canAct && onPay?.(r)}
-                                    >
-                                      Pay
-                                    </Button>
-                                  )}
-                                </div>
-                              </TableCell>
-                            </TableRow>
-                          );
-                        })
-                      : null}
-                  </React.Fragment>
-                );
-              })}
+                                Pay
+                              </Button>
+                            )}
+                          </div>
+                          {openTitle ? (
+                            <p className="text-[11px] text-slate-500 text-right max-w-[220px] leading-snug">
+                              {openTitle}
+                            </p>
+                          ) : null}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
                 {rollupWindow.padBottom > 0 ? (
                   <TableRow aria-hidden>
                     <TableCell
@@ -593,55 +642,62 @@ export function SettlementQueueTable({
                       {MONEY(amt)}
                     </TableCell>
                     <TableCell>
-                      <div className="flex flex-wrap gap-1 justify-end">
-                        {periodFrozenBlocked(r) ? (
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            className="h-8"
-                            title={FROZEN_TITLE}
-                            onClick={() => onWeekClosed?.(r)}
-                          >
-                            Week closed
-                          </Button>
-                        ) : mode === 'collect' ? (
-                          <>
-                            <Button
-                              type="button"
-                              size="sm"
-                              className="h-8 bg-rose-700 hover:bg-rose-800"
-                              disabled={!canCollect(r)}
-                              title={actionTitle(r, 'collect')}
-                              onClick={() => canCollect(r) && onCollect?.(r)}
-                            >
-                              Collect
-                            </Button>
+                      <div className="flex flex-col items-end gap-1">
+                        <div className="flex flex-wrap gap-1 justify-end">
+                          {periodFrozenBlocked(r) ? (
                             <Button
                               type="button"
                               size="sm"
                               variant="outline"
                               className="h-8"
+                              title={FROZEN_TITLE}
+                              onClick={() => onWeekClosed?.(r)}
+                            >
+                              Week closed
+                            </Button>
+                          ) : mode === 'collect' ? (
+                            <>
+                              <Button
+                                type="button"
+                                size="sm"
+                                className="h-8 bg-rose-700 hover:bg-rose-800"
+                                disabled={!canCollect(r)}
+                                title={actionTitle(r, 'collect')}
+                                onClick={() => canCollect(r) && onCollect?.(r)}
+                              >
+                                Collect
+                              </Button>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                className="h-8"
+                                disabled={!canAct}
+                                title={openTitle}
+                                onClick={() => canAct && onWriteOff?.(r)}
+                              >
+                                <Ban className="h-3.5 w-3.5 mr-1" />
+                                Write off
+                              </Button>
+                            </>
+                          ) : (
+                            <Button
+                              type="button"
+                              size="sm"
+                              className="h-8 bg-emerald-700 hover:bg-emerald-800"
                               disabled={!canAct}
                               title={openTitle}
-                              onClick={() => canAct && onWriteOff?.(r)}
+                              onClick={() => canAct && onPay?.(r)}
                             >
-                              <Ban className="h-3.5 w-3.5 mr-1" />
-                              Write off
+                              Pay
                             </Button>
-                          </>
-                        ) : (
-                          <Button
-                            type="button"
-                            size="sm"
-                            className="h-8 bg-emerald-700 hover:bg-emerald-800"
-                            disabled={!canAct}
-                            title={openTitle}
-                            onClick={() => canAct && onPay?.(r)}
-                          >
-                            Pay
-                          </Button>
-                        )}
+                          )}
+                        </div>
+                        {openTitle ? (
+                          <p className="text-[11px] text-slate-500 text-right max-w-[220px] leading-snug">
+                            {openTitle}
+                          </p>
+                        ) : null}
                       </div>
                     </TableCell>
                   </TableRow>

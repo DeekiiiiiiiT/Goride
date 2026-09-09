@@ -1,0 +1,26 @@
+{
+  "description": "Phase 3 H-1 — preview is pure read; prepare seals/writes.",
+  "previewWeekClose": {
+    "documentedAs": "Read-only dry run",
+    "actuallyWrites": [],
+    "calledOnMount": true,
+    "staleTimeOverride": null
+  },
+  "prepareWeekClose": {
+    "writes": [
+      "ensureCloseLaneStatements → sealFuelWeek / sealTollWeek / sealEarningsWeek",
+      "upsertFinanceReconDrifts per driver"
+    ]
+  },
+  "closedWeekSample": {
+    "weekAnchor": "2026-08-24",
+    "expectFrozenDrivers": true,
+    "expectPeriodFrozenBlockers": true
+  },
+  "blockedWeekSample": {
+    "weekAnchor": "2026-09-01",
+    "expectStatementMissingOrDrift": true
+  },
+  "phase": 3,
+  "status": "fixed"
+}

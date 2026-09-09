@@ -7,6 +7,11 @@
  * returns named, actionable drift records — no freeze is written. When every
  * driver ties, statements are signed, an H-4 close hash is stored, and freeze
  * metadata is written so no further movement can post to the week.
+ *
+ * N-11 honesty: calendar freeze is applied in one Postgres RPC (atomic freeze).
+ * Statement sealing runs per-driver before that RPC (at-least-once statements).
+ * If the freeze RPC fails after seals, use retryFreezeWeek — do not claim the
+ * whole close was a single transaction.
  */
 import { getServiceClient } from "./service_client.ts";
 import {
@@ -17,6 +22,7 @@ import {
 import {
   closeWeekStatements,
   getLatestWeekStatements,
+  getLatestWeekStatementsForOrgWeek,
   hasPendingRestatementDrafts,
   WEEK_STATEMENT_ENGINE_VERSION,
 } from "./week_statements.ts";
@@ -25,8 +31,10 @@ import { sealFuelWeek } from "./fuel_week_seal.ts";
 import { sealEarningsWeek } from "./earnings_week_seal.ts";
 import { compareDriverWeekStatementsToEngines } from "./statement_engine_probe.ts";
 import { upsertFinanceReconDrifts, countOpenFinanceReconDrifts } from "./finance_recon_drift.ts";
-import { sumBusinessWeekPnlMajor } from "./business_week_pnl.ts";
+import { weekPnlTieSides } from "./business_week_pnl.ts";
+import { summarizeTollUsageOrphansForWeek } from "./toll_financial_reset.ts";
 import { engineDriftsToCloseBlockers } from "../../../packages/finance-core/src/statementEngineCompare.ts";
+import type { StatementEngineDrift } from "../../../packages/finance-core/src/statementEngineCompare.ts";
 import {
   buildCloseHash,
   buildPeriodCloseHashPayload,
@@ -48,6 +56,25 @@ function sb() {
 }
 
 const minorToMajor = (m: unknown): number => (Number(m) || 0) / 100;
+
+/** P-1: run async work in chunks to bound concurrency. */
+async function mapPool<T, R>(
+  items: readonly T[],
+  concurrency: number,
+  fn: (item: T, index: number) => Promise<R>,
+): Promise<R[]> {
+  const out: R[] = new Array(items.length);
+  let next = 0;
+  const workers = Array.from({ length: Math.min(concurrency, Math.max(1, items.length)) }, async () => {
+    while (true) {
+      const i = next++;
+      if (i >= items.length) return;
+      out[i] = await fn(items[i]!, i);
+    }
+  });
+  await Promise.all(workers);
+  return out;
+}
 
 /** Draft restatements (supersedes set) are amount-ready; treat as closed for invariants. */
 function statementStatusForInvariants(
@@ -117,14 +144,11 @@ export class WeekCloseError extends Error {
 function periodIsFrozen(period: Record<string, unknown>): boolean {
   const meta = (period.metadata as Record<string, unknown> | null) || null;
   const fc = (meta?.financeCore as Record<string, unknown> | undefined) || {};
+  // R-2: do not read period.signed_at — column is never written; freeze is metadata-only.
   return isPeriodFrozen({
     metadata: meta,
     settlementStatus: period.settlement_status ? String(period.settlement_status) : null,
-    signedAt: period.signed_at
-      ? String(period.signed_at)
-      : fc.signedAt
-        ? String(fc.signedAt)
-        : null,
+    signedAt: fc.signedAt ? String(fc.signedAt) : null,
   });
 }
 
@@ -132,11 +156,21 @@ function settlementRiskForPeriod(period: Record<string, unknown>): {
   risk: boolean;
   settlementPaid: number;
   settlementAmount: number;
+  cashCollected: number;
+  cashWrittenOff: number;
 } {
+  // H-10: reopen risk includes payouts, collections, and write-offs — not payouts alone.
   const settlementPaid = Number(period.settlement_paid) || 0;
   const settlementAmount = Number(period.settlement_amount) || 0;
-  const risk = Math.abs(settlementPaid) > CLOSE_INVARIANT_EPS;
-  return { risk, settlementPaid, settlementAmount };
+  const cashCollected = Number(period.cash_collected) || 0;
+  const cashReturned = Number(period.cash_returned) || 0;
+  const cashWrittenOff = Number(period.cash_written_off) || 0;
+  const risk =
+    Math.abs(settlementPaid) > CLOSE_INVARIANT_EPS ||
+    Math.abs(cashReturned) > CLOSE_INVARIANT_EPS ||
+    Math.abs(cashWrittenOff) > CLOSE_INVARIANT_EPS ||
+    (Math.abs(cashCollected) > CLOSE_INVARIANT_EPS && Math.abs(cashReturned) > CLOSE_INVARIANT_EPS);
+  return { risk, settlementPaid, settlementAmount, cashCollected, cashWrittenOff };
 }
 
 /** Complete row payload for the H-4 close hash (drops undefined). */
@@ -196,6 +230,8 @@ export type WeekClosePreview = {
   fuel: WeekCloseFuelLane;
   toll: WeekCloseTollLane;
   blockers: CloseBlocker[];
+  /** H-3: week-level facts (P&L tie, etc.) — not attributed to a random driver. */
+  weekBlockers?: CloseBlocker[];
   /** Pass 5: open statement↔engine drift rows for this org (all weeks). */
   openEngineDriftCount?: number;
   /** Draft restatement rows (status=draft AND supersedes set) for this week. */
@@ -295,14 +331,11 @@ async function ensureCloseLaneStatements(
 }
 
 /**
- * Read-only dry run of {@link closeWeek}: computes per-driver cross-system
- * blockers and the aggregated fuel / toll lanes for the Close Week screen.
- * Auto-seals missing earnings/toll lanes first (idempotent), then reads.
+ * H-1: Pure read preview — does NOT seal lanes or write recon drifts.
+ * Use {@link prepareWeekClose} before close when lanes need sealing.
  */
 export async function previewWeekClose(orgId: string, weekKey: string): Promise<WeekClosePreview> {
   const week = String(weekKey).slice(0, 10);
-
-  await ensureCloseLaneStatements(orgId, week);
 
   const { data: periods, error } = await sb()
     .from("driver_financial_periods")
@@ -313,6 +346,7 @@ export async function previewWeekClose(orgId: string, weekKey: string): Promise<
 
   const rows = periods ?? [];
   const blockers: CloseBlocker[] = [];
+  const weekBlockers: CloseBlocker[] = [];
   let driversReady = 0;
   let driversFrozen = 0;
   /** Frozen with no pending restatement drafts — done, excluded from blocked. */
@@ -329,19 +363,39 @@ export async function previewWeekClose(orgId: string, weekKey: string): Promise<
   let tollCharged = 0;
   let tollNetLoss = 0;
 
-  // Pass 5.4: desk fleet-P&L composition vs sealed statement fleet-P&L.
-  const settlementSumForWeek = rows.reduce((s, p) => {
-    const fleet = Number(p.fleet_share) || 0;
-    const fuel = Number(p.fuel_fleet_share) || 0;
-    const tollNet =
-      (Number(p.toll_spend) || 0) -
-      (Number(p.toll_reimbursed) || 0) -
-      (Number(p.toll_charged_to_driver) || 0);
-    return s + fleet + fuel + tollNet;
-  }, 0);
-  const businessWeekPnl = await sumBusinessWeekPnlMajor(orgId, week);
+  // H-4 + N-4: one statement batch; settlement = statements, business = engines.
+  const driverIds = rows.map((p) => String(p.driver_id)).filter(Boolean);
+  const { statementsByDriver, settlementSumForWeek, businessWeekPnl } = await weekPnlTieSides(
+    orgId,
+    week,
+    driverIds,
+  );
 
-  let pnlWarnEmitted = false;
+  // H-3 / N-3: week-level P&L — block on mismatch (non-tautological statements↔engines).
+  if (businessWeekPnl != null && Math.abs(settlementSumForWeek - businessWeekPnl) > CLOSE_INVARIANT_EPS) {
+    weekBlockers.push({
+      code: "SETTLEMENT_PNL_MISMATCH",
+      severity: "block",
+      week,
+      persisted: settlementSumForWeek,
+      expected: businessWeekPnl,
+      delta: settlementSumForWeek - businessWeekPnl,
+      message: "Week settlement composition (statements) does not tie to engine week P&L",
+    });
+  } else if (businessWeekPnl == null && settlementSumForWeek !== 0) {
+    weekBlockers.push({
+      code: "BUSINESS_WEEK_PNL_UNAVAILABLE",
+      severity: "warn",
+      week,
+      persisted: settlementSumForWeek,
+      expected: 0,
+      delta: settlementSumForWeek,
+      message: "Engine week P&L unavailable for settlement tie-out",
+    });
+  }
+
+  // Dedup restatement drafts (U-6) — latest version per driver/week/kind.
+  const draftKeys = new Set<string>();
 
   for (const period of rows) {
     const driverId = String(period.driver_id);
@@ -349,12 +403,18 @@ export async function previewWeekClose(orgId: string, weekKey: string): Promise<
     const fc = (meta?.financeCore as Record<string, unknown> | undefined) || {};
     const frozen = periodIsFrozen(period as Record<string, unknown>);
 
-    const statements = await getLatestWeekStatements(orgId, driverId, week);
+    const statements = statementsByDriver.get(driverId) ?? [];
     const pendingDrafts = hasPendingRestatementDrafts(statements);
     if (pendingDrafts) {
-      pendingRestatementCount += statements.filter(
-        (s) => s.status === "draft" && Boolean(s.supersedes),
-      ).length;
+      for (const s of statements) {
+        if (s.status === "draft" && Boolean(s.supersedes)) {
+          const key = `${driverId}|${week}|${s.kind}`;
+          if (!draftKeys.has(key)) {
+            draftKeys.add(key);
+            pendingRestatementCount += 1;
+          }
+        }
+      }
     }
 
     if (frozen) {
@@ -363,9 +423,7 @@ export async function previewWeekClose(orgId: string, weekKey: string): Promise<
       if (settlementRiskForPeriod(period as Record<string, unknown>).risk) {
         settlementRiskDriverCount += 1;
       }
-      const signed =
-        (fc.signedAt ? String(fc.signedAt) : null) ||
-        (period.signed_at ? String(period.signed_at) : null);
+      const signed = fc.signedAt ? String(fc.signedAt) : null;
       if (signed && (!closedAt || signed < closedAt)) closedAt = signed;
     }
 
@@ -376,8 +434,7 @@ export async function previewWeekClose(orgId: string, weekKey: string): Promise<
     const tollStatement = tollFromStatement(byKind.get("toll"), acceptRestatementDrafts);
 
     let engineBlockers: CloseBlocker[] = [];
-    // Frozen without pending restatements: skip engine compare (already signed).
-    // Frozen WITH drafts: compare so Sign restatements shows blockers.
+    // H-1: preview is read-only — compare engines but do NOT upsert drifts.
     if (!frozen || acceptRestatementDrafts) {
       try {
         const engineDrifts = await compareDriverWeekStatementsToEngines({
@@ -387,26 +444,10 @@ export async function previewWeekClose(orgId: string, weekKey: string): Promise<
           statements,
         });
         if (engineDrifts.length) {
-          await upsertFinanceReconDrifts({
-            organizationId: orgId,
-            driverId,
-            weekKey: week,
-            source: "close_preview",
-            drifts: engineDrifts,
-            statementVersion: statements[0]?.version ?? null,
-          });
           engineBlockers = engineDriftsToCloseBlockers(engineDrifts, {
             driverId,
             week,
           }) as CloseBlocker[];
-        } else {
-          await upsertFinanceReconDrifts({
-            organizationId: orgId,
-            driverId,
-            weekKey: week,
-            source: "close_preview",
-            drifts: [],
-          });
         }
       } catch (e) {
         console.warn("[week_close] engine compare failed (non-fatal)", driverId, week, e);
@@ -421,7 +462,6 @@ export async function previewWeekClose(orgId: string, weekKey: string): Promise<
     } | null = null;
     if (!frozen || acceptRestatementDrafts) {
       try {
-        const { summarizeTollUsageOrphansForWeek } = await import("./toll_financial_reset.ts");
         const sum = await summarizeTollUsageOrphansForWeek({
           periodAnchor: week,
           driverId,
@@ -444,23 +484,7 @@ export async function previewWeekClose(orgId: string, weekKey: string): Promise<
           sum.amountMismatchCount > 0 ||
           Math.abs(sum.eventSpendMajor - sum.ledgerSpendMajor) > CLOSE_INVARIANT_EPS
         ) {
-          await upsertFinanceReconDrifts({
-            organizationId: orgId,
-            driverId,
-            weekKey: week,
-            source: "close_preview",
-            drifts: [
-              {
-                kind: "toll",
-                field: "orphan_event_spend",
-                statementMinor: Math.round(sum.eventSpendMajor * 100),
-                engineMinor: Math.round(sum.ledgerSpendMajor * 100),
-                deltaMinor: Math.round(
-                  (sum.orphanAmountMajor || sum.eventSpendMajor - sum.ledgerSpendMajor) * 100,
-                ),
-              },
-            ],
-          });
+          // H-1: preview does not write drifts — surface via engineBlockers only on prepare/close.
         }
       } catch (e) {
         console.warn("[week_close] toll orphan summarize failed (non-fatal)", driverId, week, e);
@@ -487,13 +511,8 @@ export async function previewWeekClose(orgId: string, weekKey: string): Promise<
         (meta as { financeCore?: { tollUnknownPmAmount?: number } } | null)
           ?.financeCore?.tollUnknownPmAmount,
       ) || 0,
-      ...((!frozen || acceptRestatementDrafts) && !pnlWarnEmitted
-        ? businessWeekPnl != null
-          ? { settlementSumForWeek, businessWeekPnl }
-          : { settlementSumForWeek, businessWeekPnlUnavailable: true as const }
-        : {}),
+      // H-3: P&L is in weekBlockers — do not attribute to a driver here.
     });
-    if ((!frozen || acceptRestatementDrafts) && !pnlWarnEmitted) pnlWarnEmitted = true;
     // Already-frozen without restatement drafts are done — not blockers.
     // Frozen WITH drafts surface blockers for Sign restatements.
     if (!frozen || acceptRestatementDrafts) {
@@ -542,10 +561,78 @@ export async function previewWeekClose(orgId: string, weekKey: string): Promise<
       identityCloses: Math.abs(identityResidual) <= CLOSE_INVARIANT_EPS,
     },
     blockers,
+    weekBlockers,
     openEngineDriftCount,
     pendingRestatementCount,
     settlementRiskDriverCount,
   };
+}
+
+/**
+ * H-1: Explicit prepare — seals missing lanes and persists recon drifts.
+ * Call before close when operators want lanes ready; preview stays pure.
+ */
+export async function prepareWeekClose(
+  orgId: string,
+  weekKey: string,
+  actorId: string,
+): Promise<WeekClosePreview> {
+  const week = String(weekKey).slice(0, 10);
+  await ensureCloseLaneStatements(orgId, week, actorId);
+
+  const { data: periods, error } = await sb()
+    .from("driver_financial_periods")
+    .select("driver_id")
+    .eq("organization_id", orgId)
+    .eq("period_anchor", week);
+  if (error) throw new Error(error.message);
+
+  const driverIds = (periods ?? []).map((p) => String(p.driver_id || "")).filter(Boolean);
+  const statementsByDriver = await getLatestWeekStatementsForOrgWeek(orgId, week);
+  const pendingDrifts: Array<{
+    driverId: string;
+    drifts: StatementEngineDrift[];
+    statementVersion: number | null;
+  }> = [];
+
+  await mapPool(driverIds, 8, async (driverId) => {
+    try {
+      const statements = statementsByDriver.get(driverId) ?? [];
+      const engineDrifts = await compareDriverWeekStatementsToEngines({
+        organizationId: orgId,
+        driverId,
+        weekKey: week,
+        statements,
+      });
+      if (engineDrifts.length) {
+        pendingDrifts.push({
+          driverId,
+          drifts: engineDrifts,
+          statementVersion: statements[0]?.version ?? null,
+        });
+      }
+    } catch (e) {
+      console.warn("[week_close] prepare drift upsert failed (non-fatal)", driverId, week, e);
+    }
+  });
+
+  // Single batch of drift upserts (one call per driver that drifted — still fewer round-trips than inline).
+  for (const row of pendingDrifts) {
+    try {
+      await upsertFinanceReconDrifts({
+        organizationId: orgId,
+        driverId: row.driverId,
+        weekKey: week,
+        source: "close_prepare",
+        drifts: row.drifts,
+        statementVersion: row.statementVersion,
+      });
+    } catch (e) {
+      console.warn("[week_close] prepare batch drift upsert failed", row.driverId, e);
+    }
+  }
+
+  return previewWeekClose(orgId, week);
 }
 
 export type DriverCloseResult = {
@@ -590,17 +677,62 @@ export async function closeWeek(
   const perDriver: DriverCloseResult[] = [];
   const allBlockers: CloseBlocker[] = [];
   const periodRows = periods ?? [];
-  const settlementSumForWeek = periodRows.reduce((s, p) => {
-    const fleet = Number(p.fleet_share) || 0;
-    const fuel = Number(p.fuel_fleet_share) || 0;
-    const tollNet =
-      (Number(p.toll_spend) || 0) -
-      (Number(p.toll_reimbursed) || 0) -
-      (Number(p.toll_charged_to_driver) || 0);
-    return s + fleet + fuel + tollNet;
-  }, 0);
-  const businessWeekPnl = await sumBusinessWeekPnlMajor(orgId, week);
-  let pnlWarnEmitted = false;
+  const driverIds = periodRows.map((p) => String(p.driver_id)).filter(Boolean);
+  const { statementsByDriver, settlementSumForWeek, businessWeekPnl } = await weekPnlTieSides(
+    orgId,
+    week,
+    driverIds,
+  );
+
+  // H-3 / N-3: week-level P&L — block before any freeze (never partial-close past a P&L fail).
+  if (businessWeekPnl != null && Math.abs(settlementSumForWeek - businessWeekPnl) > CLOSE_INVARIANT_EPS) {
+    allBlockers.push({
+      code: "SETTLEMENT_PNL_MISMATCH",
+      severity: "block",
+      week,
+      persisted: settlementSumForWeek,
+      expected: businessWeekPnl,
+      delta: settlementSumForWeek - businessWeekPnl,
+      message: "Week settlement composition (statements) does not tie to engine week P&L",
+    });
+    return {
+      organizationId: orgId,
+      weekKey: week,
+      closed: false,
+      driversClosed: 0,
+      driversBlocked: periodRows.length,
+      blockers: allBlockers,
+      perDriver: periodRows.map((p) => ({
+        driverId: String(p.driver_id),
+        closed: false,
+        blockers: allBlockers,
+      })),
+    };
+  } else if (businessWeekPnl == null) {
+    allBlockers.push({
+      code: "BUSINESS_WEEK_PNL_UNAVAILABLE",
+      severity: "warn",
+      week,
+      persisted: settlementSumForWeek,
+      expected: 0,
+      delta: settlementSumForWeek,
+      message: "Engine week P&L unavailable for settlement tie-out",
+    });
+  }
+
+  const closeDriftBatch: Array<{
+    driverId: string;
+    drifts: StatementEngineDrift[];
+    statementVersion: number | null;
+  }> = [];
+  /** H-2: collect freezes then apply in one RPC — never leave a half-closed week. */
+  const freezeBatch: Array<{
+    id: string;
+    driverId: string;
+    closeHash: string;
+    metadata: Record<string, unknown>;
+    closedAt: string;
+  }> = [];
 
   for (const period of periodRows) {
     const driverId = String(period.driver_id);
@@ -608,7 +740,7 @@ export async function closeWeek(
     const fc = (meta?.financeCore as Record<string, unknown> | undefined) || {};
     const frozen = periodIsFrozen(period as Record<string, unknown>);
 
-    const statements = await getLatestWeekStatements(orgId, driverId, week);
+    const statements = statementsByDriver.get(driverId) ?? [];
     const pendingDrafts = hasPendingRestatementDrafts(statements);
 
     if (frozen && !pendingDrafts) {
@@ -636,15 +768,12 @@ export async function closeWeek(
         weekKey: week,
         statements,
       });
-      await upsertFinanceReconDrifts({
-        organizationId: orgId,
-        driverId,
-        weekKey: week,
-        source: "close",
-        drifts: engineDrifts,
-        statementVersion: statements[0]?.version ?? null,
-      });
       if (engineDrifts.length) {
+        closeDriftBatch.push({
+          driverId,
+          drifts: engineDrifts,
+          statementVersion: statements[0]?.version ?? null,
+        });
         engineBlockers = engineDriftsToCloseBlockers(engineDrifts, {
           driverId,
           week,
@@ -661,7 +790,6 @@ export async function closeWeek(
       ledgerSpendMajor: number;
     } | null = null;
     try {
-      const { summarizeTollUsageOrphansForWeek } = await import("./toll_financial_reset.ts");
       const sum = await summarizeTollUsageOrphansForWeek({
         periodAnchor: week,
         driverId,
@@ -684,11 +812,8 @@ export async function closeWeek(
         sum.amountMismatchCount > 0 ||
         Math.abs(sum.eventSpendMajor - sum.ledgerSpendMajor) > CLOSE_INVARIANT_EPS
       ) {
-        await upsertFinanceReconDrifts({
-          organizationId: orgId,
+        closeDriftBatch.push({
           driverId,
-          weekKey: week,
-          source: "close",
           drifts: [
             {
               kind: "toll",
@@ -700,6 +825,7 @@ export async function closeWeek(
               ),
             },
           ],
+          statementVersion: statements[0]?.version ?? null,
         });
       }
     } catch (e) {
@@ -726,13 +852,8 @@ export async function closeWeek(
         (meta as { financeCore?: { tollUnknownPmAmount?: number } } | null)
           ?.financeCore?.tollUnknownPmAmount,
       ) || 0,
-      ...(!pnlWarnEmitted
-        ? businessWeekPnl != null
-          ? { settlementSumForWeek, businessWeekPnl }
-          : { settlementSumForWeek, businessWeekPnlUnavailable: true as const }
-        : {}),
+      // H-3: P&L handled once above — not per driver.
     });
-    pnlWarnEmitted = true;
 
     // M-2: refuse close when active fuel_* events lack account keys.
     try {
@@ -794,19 +915,61 @@ export async function closeWeek(
       engineVersion: WEEK_STATEMENT_ENGINE_VERSION,
     });
 
-    const { error: updErr } = await sb()
-      .from("driver_financial_periods")
-      .update({
-        status: "closed",
-        closed_at: new Date().toISOString(),
-        reopened_at: null,
-        source_event_hash: closeHash,
-        metadata: nextMeta,
-      })
-      .eq("id", period.id);
-    if (updErr) throw new Error(updErr.message);
-
+    freezeBatch.push({
+      id: String(period.id),
+      driverId,
+      closeHash,
+      metadata: nextMeta,
+      closedAt: new Date().toISOString(),
+    });
     perDriver.push({ driverId, closed: true, closeHash, blockers: [] });
+  }
+
+  if (freezeBatch.length > 0) {
+    const { data: frozenCount, error: freezeErr } = await sb().rpc("freeze_settlement_periods_batch", {
+      p_rows: freezeBatch.map((f) => ({
+        id: f.id,
+        close_hash: f.closeHash,
+        metadata: f.metadata,
+        closed_at: f.closedAt,
+      })),
+    });
+    if (freezeErr) {
+      // N-11: statements sealed, calendar freeze not applied — retryFreezeWeek recovers.
+      throw new WeekCloseError(
+        "ATOMIC_FREEZE_FAILED",
+        `Statements sealed for ${freezeBatch.length} driver(s) but calendar freeze did not apply — use Retry freeze`,
+        409,
+        {
+          driversSealed: freezeBatch.length,
+          driverIds: freezeBatch.map((f) => f.driverId),
+          freezeError: freezeErr.message,
+        },
+      );
+    }
+    if (Number(frozenCount) !== freezeBatch.length) {
+      console.warn(
+        "[week_close] freeze batch count mismatch",
+        frozenCount,
+        freezeBatch.length,
+      );
+    }
+  }
+
+  // Flush recon drifts after the driver loop (P-2).
+  for (const row of closeDriftBatch) {
+    try {
+      await upsertFinanceReconDrifts({
+        organizationId: orgId,
+        driverId: row.driverId,
+        weekKey: week,
+        source: "close",
+        drifts: row.drifts,
+        statementVersion: row.statementVersion,
+      });
+    } catch (e) {
+      console.warn("[week_close] close drift upsert failed", row.driverId, e);
+    }
   }
 
   const driversClosed = perDriver.filter((d) => d.closed).length;
@@ -819,6 +982,147 @@ export async function closeWeek(
     driversClosed,
     driversBlocked,
     blockers: allBlockers,
+    perDriver,
+  };
+}
+
+/**
+ * N-11: apply calendar freeze only for drivers whose statements are already sealed
+ * but periods are not frozen (recovery after ATOMIC_FREEZE_FAILED). Idempotent.
+ */
+export async function retryFreezeWeek(
+  orgId: string,
+  weekKey: string,
+  actorId: string,
+  reason: string,
+): Promise<CloseWeekResult> {
+  const week = String(weekKey).slice(0, 10);
+  const closeReason = String(reason || "").trim() || "Retry freeze after ATOMIC_FREEZE_FAILED";
+
+  const { data: periods, error } = await sb()
+    .from("driver_financial_periods")
+    .select("*")
+    .eq("organization_id", orgId)
+    .eq("period_anchor", week);
+  if (error) throw new Error(error.message);
+
+  const periodRows = periods ?? [];
+  const statementsByDriver = await getLatestWeekStatementsForOrgWeek(orgId, week);
+  const freezeBatch: Array<{
+    id: string;
+    driverId: string;
+    closeHash: string;
+    metadata: Record<string, unknown>;
+    closedAt: string;
+  }> = [];
+  const perDriver: DriverCloseResult[] = [];
+
+  for (const period of periodRows) {
+    const driverId = String(period.driver_id);
+    const meta = (period.metadata as Record<string, unknown> | null) || null;
+    const fc = (meta?.financeCore as Record<string, unknown> | undefined) || {};
+    const frozen = periodIsFrozen(period as Record<string, unknown>);
+    const statements = statementsByDriver.get(driverId) ?? [];
+
+    if (frozen) {
+      perDriver.push({
+        driverId,
+        closed: true,
+        closeHash: String(period.source_event_hash || fc.closeHash || "") || undefined,
+        blockers: [],
+      });
+      continue;
+    }
+
+    const closedLanes = statements.filter((s) => s.status === "closed");
+    if (closedLanes.length === 0) {
+      perDriver.push({
+        driverId,
+        closed: false,
+        blockers: [{
+          code: "RETRY_FREEZE_NO_STATEMENTS",
+          severity: "block",
+          driverId,
+          week,
+          persisted: 0,
+          expected: 3,
+          delta: -3,
+          message: "No sealed statements — run Close week first, not Retry freeze",
+        }],
+      });
+      continue;
+    }
+
+    const sourceRowIds = statements.flatMap((s) => s.sourceRowIds);
+    const existingHash = String(period.source_event_hash || fc.closeHash || "").trim();
+    const closeHash = existingHash || await buildCloseHash(
+      buildPeriodCloseHashPayload({
+        row: closeHashRowFrom(period as Record<string, unknown>),
+        sourceRowIds,
+        engineVersion: WEEK_STATEMENT_ENGINE_VERSION,
+      }),
+    );
+
+    const nextMeta = markPeriodFrozen(period as { metadata?: Record<string, unknown> }, {
+      actorId,
+      reason: closeReason,
+      closeHash,
+      sourceRowIds,
+      engineVersion: WEEK_STATEMENT_ENGINE_VERSION,
+    });
+
+    freezeBatch.push({
+      id: String(period.id),
+      driverId,
+      closeHash,
+      metadata: nextMeta,
+      closedAt: new Date().toISOString(),
+    });
+    perDriver.push({ driverId, closed: true, closeHash, blockers: [] });
+  }
+
+  if (freezeBatch.length === 0) {
+    const blocked = perDriver.filter((d) => !d.closed).length;
+    return {
+      organizationId: orgId,
+      weekKey: week,
+      closed: blocked === 0 && perDriver.length > 0,
+      driversClosed: perDriver.filter((d) => d.closed).length,
+      driversBlocked: blocked,
+      blockers: perDriver.flatMap((d) => d.blockers),
+      perDriver,
+    };
+  }
+
+  const { data: frozenCount, error: freezeErr } = await sb().rpc("freeze_settlement_periods_batch", {
+    p_rows: freezeBatch.map((f) => ({
+      id: f.id,
+      close_hash: f.closeHash,
+      metadata: f.metadata,
+      closed_at: f.closedAt,
+    })),
+  });
+  if (freezeErr) {
+    throw new WeekCloseError(
+      "ATOMIC_FREEZE_FAILED",
+      `Retry freeze failed: ${freezeErr.message}`,
+      409,
+      { driversSealed: freezeBatch.length, freezeError: freezeErr.message },
+    );
+  }
+  if (Number(frozenCount) !== freezeBatch.length) {
+    console.warn("[week_close] retry freeze count mismatch", frozenCount, freezeBatch.length);
+  }
+
+  const driversClosed = perDriver.filter((d) => d.closed).length;
+  const driversBlocked = perDriver.length - driversClosed;
+  return {
+    organizationId: orgId,
+    weekKey: week,
+    closed: driversBlocked === 0 && perDriver.length > 0,
+    driversClosed,
+    driversBlocked,
+    blockers: perDriver.flatMap((d) => d.blockers),
     perDriver,
   };
 }

@@ -26,9 +26,45 @@ export function isPeriodFrozen(period: {
 
 export function assertPeriodNotFrozen(period: Parameters<typeof isPeriodFrozen>[0]): void {
   if (isPeriodFrozen(period)) {
-    const err = new Error("PERIOD_FROZEN: this settlement week is closed and cannot accept new movements");
-    (err as Error & { code?: string }).code = "PERIOD_FROZEN";
-    throw err;
+    throw new SettlementCommandError(
+      "PERIOD_FROZEN",
+      "PERIOD_FROZEN: this settlement week is closed and cannot accept new movements",
+      409,
+    );
+  }
+}
+
+/**
+ * Single money-path chokepoint (audit C-1 / C-5):
+ * period ended ∧ moneyUnlocked ∧ not frozen.
+ * Hash integrity is async — callers await assertFrozenPeriodHashIntact after this.
+ */
+export function assertMovementAllowed(opts: {
+  weekAnchor: string;
+  period: Parameters<typeof isPeriodFrozen>[0] & {
+    metadata?: Record<string, unknown> | null;
+  };
+  /** Collect / batch-collect require unlock; pay/write-off/reverse/verify/approve skip. */
+  requireMoneyUnlocked?: boolean;
+  now?: Date | string;
+}): void {
+  assertPeriodEndedForSettlement(opts.weekAnchor, opts.now);
+  assertPeriodNotFrozen(opts.period);
+
+  if (opts.requireMoneyUnlocked) {
+    const fc = (opts.period?.metadata?.financeCore || {}) as Record<string, unknown>;
+    const meta = opts.period?.metadata || {};
+    const forceRelease = !!(meta.forceRelease || fc.forceRelease);
+    // Fail closed: missing flag ⇒ locked (C-5).
+    const moneyUnlocked = fc.moneyUnlocked === true || forceRelease;
+    if (!moneyUnlocked) {
+      throw new SettlementCommandError(
+        "MONEY_LOCKED",
+        "Week is not yet reconciled — Collect is blocked until fuel is finalized and tolls are clear (or force-released)",
+        409,
+        { weekAnchor: opts.weekAnchor },
+      );
+    }
   }
 }
 
@@ -203,6 +239,10 @@ export function clearPeriodFreeze(
     : [];
   history.push(prior);
   financeCore.reopenHistory = history;
+  // H-9: keep prior close hash for re-close tamper check.
+  if (prior.closeHash) {
+    financeCore.priorCloseHash = prior.closeHash;
+  }
 
   financeCore.periodFrozen = false;
   delete financeCore.signedAt;

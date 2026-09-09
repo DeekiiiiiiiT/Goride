@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { ChevronDown, ChevronRight, Trash2 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { Button } from '../../ui/button';
@@ -113,7 +113,25 @@ export function MovementHistoryTable({
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
   const [undoTarget, setUndoTarget] = useState<SettlementMovementRow | null>(null);
   const [undoReason, setUndoReason] = useState('');
-  const { visible, padTop, padBottom, windowed, onScroll, maxHeightClass } = useWindowedRows(groups);
+
+  // N-12: flatten period headers + expanded children, then window (no MAX_SAFE_INTEGER bandage).
+  type FlatItem =
+    | { kind: 'header'; group: (typeof groups)[number] }
+    | { kind: 'row'; groupKey: string; row: SettlementMovementRow };
+
+  const flatItems = useMemo((): FlatItem[] => {
+    const out: FlatItem[] = [];
+    for (const g of groups) {
+      out.push({ kind: 'header', group: g });
+      if (expanded.has(g.key)) {
+        for (const row of g.rows) out.push({ kind: 'row', groupKey: g.key, row });
+      }
+    }
+    return out;
+  }, [groups, expanded]);
+
+  const { visible, padTop, padBottom, windowed, onScroll, maxHeightClass } =
+    useWindowedRows(flatItems);
 
   const toggle = (key: string) => {
     setExpanded((prev) => {
@@ -178,11 +196,13 @@ export function MovementHistoryTable({
                     <TableCell colSpan={7} style={{ height: padTop, padding: 0, border: 0 }} />
                   </TableRow>
                 ) : null}
-                {visible.map((g) => {
-                  const open = expanded.has(g.key);
-                  return (
-                    <React.Fragment key={g.key}>
+                {visible.map((item) => {
+                  if (item.kind === 'header') {
+                    const g = item.group;
+                    const open = expanded.has(g.key);
+                    return (
                       <TableRow
+                        key={`h:${g.key}`}
                         className="bg-slate-50/80 hover:bg-slate-100 cursor-pointer"
                         tabIndex={0}
                         aria-expanded={open}
@@ -212,67 +232,62 @@ export function MovementHistoryTable({
                         <TableCell />
                         <TableCell />
                       </TableRow>
-                      {open
-                        ? g.rows.map((row) => (
-                            <TableRow key={row.id} className="bg-white">
-                              <TableCell />
-                              <TableCell className="text-sm text-slate-500">
-                                {ymdKey(row.date) || '—'}
-                              </TableCell>
-                              <TableCell>
-                                <button
-                                  type="button"
-                                  className="text-left font-medium text-slate-900 hover:text-indigo-600"
-                                  onClick={() => row.driverId && onOpenDriver?.(row.driverId)}
-                                >
-                                  {row.driverName || row.driverId || '—'}
-                                </button>
-                              </TableCell>
-                              <TableCell
-                                className={`text-right tabular-nums font-semibold ${amountTone}`}
-                              >
-                                {MONEY(row.amount)}
-                              </TableCell>
-                              <TableCell className="text-sm text-slate-600">
-                                {row.method || '—'}
-                              </TableCell>
-                              <TableCell>
-                                <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200 font-normal">
-                                  {row.status || 'Cleared'}
-                                </Badge>
-                              </TableCell>
-                              <TableCell>
-                                <div className="flex flex-wrap gap-1">
-                                  {onVerify &&
-                                  String(row.status || '').toLowerCase() !== 'verified' &&
-                                  String(row.status || '').toLowerCase() !== 'cleared' ? (
-                                    <Button
-                                      type="button"
-                                      size="sm"
-                                      variant="outline"
-                                      className="h-8"
-                                      onClick={() => onVerify(row)}
-                                    >
-                                      Verify
-                                    </Button>
-                                  ) : null}
-                                  <Button
-                                    type="button"
-                                    size="sm"
-                                    variant="outline"
-                                    className="h-8 text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700"
-                                    title="Undo — requires reason"
-                                    onClick={() => requestUndo(row)}
-                                  >
-                                    <Trash2 className="h-3.5 w-3.5 mr-1" />
-                                    Undo
-                                  </Button>
-                                </div>
-                              </TableCell>
-                            </TableRow>
-                          ))
-                        : null}
-                    </React.Fragment>
+                    );
+                  }
+                  const row = item.row;
+                  return (
+                    <TableRow key={row.id} className="bg-white">
+                      <TableCell />
+                      <TableCell className="text-sm text-slate-500">
+                        {ymdKey(row.date) || '—'}
+                      </TableCell>
+                      <TableCell>
+                        <button
+                          type="button"
+                          className="text-left font-medium text-slate-900 hover:text-indigo-600"
+                          onClick={() => row.driverId && onOpenDriver?.(row.driverId)}
+                        >
+                          {row.driverName || row.driverId || '—'}
+                        </button>
+                      </TableCell>
+                      <TableCell className={`text-right tabular-nums font-semibold ${amountTone}`}>
+                        {MONEY(row.amount)}
+                      </TableCell>
+                      <TableCell className="text-sm text-slate-600">{row.method || '—'}</TableCell>
+                      <TableCell>
+                        <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200 font-normal">
+                          {row.status || 'Cleared'}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex flex-wrap gap-1">
+                          {onVerify &&
+                          String(row.status || '').toLowerCase() !== 'verified' &&
+                          String(row.status || '').toLowerCase() !== 'cleared' ? (
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              className="h-8"
+                              onClick={() => onVerify(row)}
+                            >
+                              Verify
+                            </Button>
+                          ) : null}
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="h-8 text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700"
+                            title="Undo — requires reason"
+                            onClick={() => requestUndo(row)}
+                          >
+                            <Trash2 className="h-3.5 w-3.5 mr-1" />
+                            Undo
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
                   );
                 })}
                 {padBottom > 0 ? (

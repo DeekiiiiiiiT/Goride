@@ -57,6 +57,8 @@ export type ClosePeriodRow = {
   settlement_amount?: number | null;
   /** Open cash still in driver custody — must clear before calendar freeze. */
   cash_still_held?: number | null;
+  /** Used for H-5 cashHeldClamped close blocker. */
+  metadata?: Record<string, unknown> | null;
 };
 
 /** Independent statement values (major units) the period must tie to. */
@@ -556,6 +558,23 @@ export function checkCloseInvariants(input: CloseInvariantInput): CloseBlocker[]
         expected: 0,
         delta: round2(cashHeld),
         message: 'Cash still held — Collect or write off on Cash desk before close',
+      });
+    }
+
+    // H-5: clamped-negative cash held was recorded but never blocked close.
+    const fc = (p.metadata?.financeCore || {}) as Record<string, unknown>;
+    if (fc.cashHeldClamped === true) {
+      const unclamped = num(fc.unclampedCashHeld);
+      out.push({
+        code: 'CASH_HELD_OVER_RETURNED',
+        severity: 'block',
+        driverId: ctx.driverId,
+        week: ctx.week,
+        persisted: round2(unclamped),
+        expected: 0,
+        delta: round2(unclamped),
+        message:
+          'Fleet returned more cash than the driver held — resolve over-return before close',
       });
     }
   }

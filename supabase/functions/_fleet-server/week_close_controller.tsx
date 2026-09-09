@@ -15,7 +15,7 @@ import { Hono, type Context } from "npm:hono";
 import { requireAuth, requirePermission, type RbacUser } from "./rbac_middleware.ts";
 import { getOrgId } from "./org_scope.ts";
 import { safeErrorResponse } from "./safe_error.ts";
-import { closeWeek, previewWeekClose, reopenWeek, WeekCloseError } from "./week_close.ts";
+import { closeWeek, previewWeekClose, prepareWeekClose, reopenWeek, retryFreezeWeek, WeekCloseError } from "./week_close.ts";
 import { sealFuelWeek } from "./fuel_week_seal.ts";
 import {
   listPendingRestatements,
@@ -53,6 +53,24 @@ app.get(`${BASE}/preview`, requirePermission("transactions.view"), async (c) => 
   }
 });
 
+// ── POST /week-close/prepare — seal lanes + persist drifts (H-1) ─────────────
+app.post(`${BASE}/prepare`, requirePermission("transactions.edit"), async (c) => {
+  try {
+    const org = requireOrg(c);
+    if (typeof org !== "string") return org;
+    const user = c.get("rbacUser") as RbacUser;
+    const body = (await c.req.json().catch(() => ({}))) as { weekKey?: string };
+    const weekKey = String(body.weekKey || c.req.query("weekKey") || "").slice(0, 10);
+    if (!WEEK_RE.test(weekKey)) {
+      return c.json({ error: "weekKey (YYYY-MM-DD) is required" }, 400);
+    }
+    const preview = await prepareWeekClose(org, weekKey, user.userId);
+    return c.json(preview);
+  } catch (e) {
+    return safeErrorResponse(c, e, "week-close-prepare");
+  }
+});
+
 // ── POST /week-close ────────────────────────────────────────────────────────
 app.post(BASE, requirePermission("transactions.edit"), async (c) => {
   try {
@@ -72,6 +90,28 @@ app.post(BASE, requirePermission("transactions.edit"), async (c) => {
       return c.json({ error: e.code, message: e.message, details: e.details }, e.status);
     }
     return safeErrorResponse(c, e, "week-close");
+  }
+});
+
+/** N-11: calendar freeze only after statements were sealed but freeze RPC failed. */
+app.post(`${BASE}/retry-freeze`, requirePermission("transactions.edit"), async (c) => {
+  try {
+    const org = requireOrg(c);
+    if (typeof org !== "string") return org;
+    const user = c.get("rbacUser") as RbacUser;
+    const body = (await c.req.json().catch(() => ({}))) as { weekKey?: string; reason?: string };
+    const weekKey = String(body.weekKey || "").slice(0, 10);
+    if (!WEEK_RE.test(weekKey)) {
+      return c.json({ error: "weekKey (YYYY-MM-DD) is required" }, 400);
+    }
+    const reason = String(body.reason || "").trim() || "Retry freeze after ATOMIC_FREEZE_FAILED";
+    const result = await retryFreezeWeek(org, weekKey, user.userId, reason);
+    return c.json(result);
+  } catch (e) {
+    if (e instanceof WeekCloseError) {
+      return c.json({ error: e.code, message: e.message, details: e.details }, e.status);
+    }
+    return safeErrorResponse(c, e, "week-close-retry-freeze");
   }
 });
 

@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Search } from 'lucide-react';
 import { Input } from '../../ui/input';
 import { Label } from '../../ui/label';
@@ -26,6 +26,8 @@ export type SettlementFiltersProps = {
   trailing?: ReactNode;
 };
 
+const DEBOUNCE_MS = 300;
+
 /** Single filter bar for Driver Settlements (rendered once — kills H-5). */
 export function SettlementFilters({
   weekFrom,
@@ -40,6 +42,27 @@ export function SettlementFilters({
   onAllOpenChange,
   trailing,
 }: SettlementFiltersProps) {
+  // P-8: debounce search + minAmount so each keystroke does not fire /queue.
+  const [localSearch, setLocalSearch] = useState(search);
+  const [localMinAmount, setLocalMinAmount] = useState(minAmount);
+  const searchDebounceRef = useRef<ReturnType<typeof setTimeout>>();
+  const minDebounceRef = useRef<ReturnType<typeof setTimeout>>();
+
+  useEffect(() => {
+    setLocalSearch(search);
+  }, [search]);
+
+  useEffect(() => {
+    setLocalMinAmount(minAmount);
+  }, [minAmount]);
+
+  useEffect(() => {
+    return () => {
+      if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+      if (minDebounceRef.current) clearTimeout(minDebounceRef.current);
+    };
+  }, []);
+
   return (
     <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
       <div className="flex flex-wrap gap-3 items-end">
@@ -88,8 +111,13 @@ export function SettlementFilters({
             step="0.01"
             className="h-9 w-[110px]"
             placeholder="0 = show all"
-            value={minAmount}
-            onChange={(e) => onMinAmountChange(e.target.value)}
+            value={localMinAmount}
+            onChange={(e) => {
+              const val = e.target.value;
+              setLocalMinAmount(val);
+              if (minDebounceRef.current) clearTimeout(minDebounceRef.current);
+              minDebounceRef.current = setTimeout(() => onMinAmountChange(val), DEBOUNCE_MS);
+            }}
           />
         </div>
         <div className="space-y-1">
@@ -99,8 +127,13 @@ export function SettlementFilters({
             <Input
               className="h-9 w-[200px] pl-8"
               placeholder="Driver or week…"
-              value={search}
-              onChange={(e) => onSearchChange(e.target.value)}
+              value={localSearch}
+              onChange={(e) => {
+                const val = e.target.value;
+                setLocalSearch(val);
+                if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+                searchDebounceRef.current = setTimeout(() => onSearchChange(val), DEBOUNCE_MS);
+              }}
             />
           </div>
         </div>

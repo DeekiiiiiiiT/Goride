@@ -44,6 +44,7 @@ import {
 import {
   assertPeriodNotFrozen,
   assertFrozenPeriodHashIntact,
+  assertMovementAllowed,
   assertPeriodEndedForSettlement,
 } from "./settlement_period_freeze.ts";
 import {
@@ -335,8 +336,22 @@ async function insertMovementAndDualWrite(
     expectedRowVersion: number;
   },
 ): Promise<{ movement: Record<string, unknown>; period: DriverFinancialPeriodRow | null }> {
-  // Calendar close first — open weeks cannot Collect / Pay / Write-off / batch.
-  assertPeriodEndedForSettlement(opts.weekAnchor);
+  // C-1/C-5: single chokepoint — ended ∧ unlocked(collect) ∧ not-frozen ∧ hash intact.
+  const periodForGate = await loadPeriodDb(opts.driverId, opts.weekAnchor, opts.organizationId);
+  assertMovementAllowed({
+    weekAnchor: opts.weekAnchor,
+    period: {
+      metadata: (periodForGate?.metadata as Record<string, unknown>) || null,
+      settlementStatus: periodForGate ? String(periodForGate.settlement_status || "") : null,
+      signedAt: periodForGate?.signed_at ? String(periodForGate.signed_at) : null,
+    },
+    requireMoneyUnlocked: opts.kind === "collect",
+  });
+  if (periodForGate) {
+    await assertFrozenPeriodHashIntact(
+      periodForGate as Parameters<typeof assertFrozenPeriodHashIntact>[0],
+    );
+  }
 
   // Claim lock first — two concurrent pays must not both insert.
   await claimPeriodWriteLock(
@@ -706,6 +721,19 @@ app.post(`${BASE}/reverse`, requireSettlementPerm("settlements.reverse"), async 
           return c.json({ error: "INVALID_TX", message: "Transaction missing driver/week for reverse" }, 400);
         }
         const periodForLock = await loadPeriodDb(driverId, weekAnchor, organizationId);
+        assertMovementAllowed({
+          weekAnchor,
+          period: {
+            metadata: (periodForLock?.metadata as Record<string, unknown>) || null,
+            settlementStatus: periodForLock ? String(periodForLock.settlement_status || "") : null,
+            signedAt: periodForLock?.signed_at ? String(periodForLock.signed_at) : null,
+          },
+        });
+        if (periodForLock) {
+          await assertFrozenPeriodHashIntact(
+            periodForLock as Parameters<typeof assertFrozenPeriodHashIntact>[0],
+          );
+        }
         const observedVersion = Number(periodForLock?.row_version) || 1;
         await claimPeriodWriteLock(driverId, weekAnchor, organizationId, observedVersion);
         const next = {
@@ -775,6 +803,19 @@ app.post(`${BASE}/reverse`, requireSettlementPerm("settlements.reverse"), async 
 
     // Claim period lock before void + reverse insert (version observed now).
     const periodForLock = await loadPeriodDb(driverId, weekAnchor, organizationId);
+    assertMovementAllowed({
+      weekAnchor,
+      period: {
+        metadata: (periodForLock?.metadata as Record<string, unknown>) || null,
+        settlementStatus: periodForLock ? String(periodForLock.settlement_status || "") : null,
+        signedAt: periodForLock?.signed_at ? String(periodForLock.signed_at) : null,
+      },
+    });
+    if (periodForLock) {
+      await assertFrozenPeriodHashIntact(
+        periodForLock as Parameters<typeof assertFrozenPeriodHashIntact>[0],
+      );
+    }
     const observedVersion = Number(periodForLock?.row_version) || 1;
     await claimPeriodWriteLock(driverId, weekAnchor, organizationId, observedVersion);
 
@@ -962,6 +1003,19 @@ app.post(`${BASE}/verify`, requireSettlementPerm("settlements.pay"), async (c) =
     }
 
     const periodForLock = await loadPeriodDb(resolvedDriver, resolvedWeek, organizationId);
+    assertMovementAllowed({
+      weekAnchor: resolvedWeek,
+      period: {
+        metadata: (periodForLock?.metadata as Record<string, unknown>) || null,
+        settlementStatus: periodForLock ? String(periodForLock.settlement_status || "") : null,
+        signedAt: periodForLock?.signed_at ? String(periodForLock.signed_at) : null,
+      },
+    });
+    if (periodForLock) {
+      await assertFrozenPeriodHashIntact(
+        periodForLock as Parameters<typeof assertFrozenPeriodHashIntact>[0],
+      );
+    }
     const observedVersion = Number(periodForLock?.row_version) || 1;
     await claimPeriodWriteLock(resolvedDriver, resolvedWeek, organizationId, observedVersion);
 
@@ -1233,6 +1287,19 @@ app.post(`${BASE}/:movementId/approve`, requireSettlementPerm("settlements.appro
     const weekAnchor = String(movement.period_anchor).slice(0, 10);
     // Claim period before posting/voiding so approve cannot race a concurrent pay.
     const periodForLock = await loadPeriodDb(driverId, weekAnchor, organizationId);
+    assertMovementAllowed({
+      weekAnchor,
+      period: {
+        metadata: (periodForLock?.metadata as Record<string, unknown>) || null,
+        settlementStatus: periodForLock ? String(periodForLock.settlement_status || "") : null,
+        signedAt: periodForLock?.signed_at ? String(periodForLock.signed_at) : null,
+      },
+    });
+    if (periodForLock) {
+      await assertFrozenPeriodHashIntact(
+        periodForLock as Parameters<typeof assertFrozenPeriodHashIntact>[0],
+      );
+    }
     const observedVersion = Number(periodForLock?.row_version) || 1;
     await claimPeriodWriteLock(driverId, weekAnchor, organizationId, observedVersion);
 
@@ -1332,6 +1399,9 @@ app.get(`${BASE}/queue`, requirePermission("transactions.view"), async (c) => {
       listDriverOwesPeriods,
       listCashHeldPeriods,
       listReconciledSettlementPeriods,
+      aggregateCompanyOwesPeriods,
+      aggregateDriverOwesPeriods,
+      aggregateCashHeldPeriods,
     } = await import("./driver_financial_periods.ts");
 
     const opts = {
@@ -1400,7 +1470,7 @@ app.get(`${BASE}/queue`, requirePermission("transactions.view"), async (c) => {
           settlementStatus: r.settlementStatus,
           fuelFinalized: r.fuelFinalized,
           periodFrozen: r.periodFrozen === true,
-          moneyUnlocked: r.moneyUnlocked !== false,
+          moneyUnlocked: r.moneyUnlocked === true,
           overpaidAmount: r.overpaidAmount,
         };
       });
@@ -1421,7 +1491,7 @@ app.get(`${BASE}/queue`, requirePermission("transactions.view"), async (c) => {
         settlementStatus: r.settlementStatus,
         fuelFinalized: r.fuelFinalized,
         periodFrozen: r.periodFrozen === true,
-        moneyUnlocked: r.moneyUnlocked !== false,
+        moneyUnlocked: r.moneyUnlocked === true,
         overpaidAmount: r.overpaidAmount,
         cashSourceMismatch: r.cashSourceMismatch,
         // Rich fields for ReconciledTable — avoid a second legacy list query (R-9).
@@ -1461,7 +1531,7 @@ app.get(`${BASE}/queue`, requirePermission("transactions.view"), async (c) => {
           settlementStatus: r.settlementStatus,
           fuelFinalized: r.fuelFinalized,
           periodFrozen: r.periodFrozen === true,
-          moneyUnlocked: r.moneyUnlocked !== false,
+          moneyUnlocked: r.moneyUnlocked === true,
           collectKind: "cash_held",
           overpaidAmount: r.overpaidAmount,
           cashSourceMismatch: r.cashSourceMismatch,
@@ -1483,7 +1553,7 @@ app.get(`${BASE}/queue`, requirePermission("transactions.view"), async (c) => {
           settlementStatus: r.settlementStatus,
           fuelFinalized: r.fuelFinalized,
           periodFrozen: r.periodFrozen === true,
-          moneyUnlocked: r.moneyUnlocked !== false,
+          moneyUnlocked: r.moneyUnlocked === true,
           collectKind: "driver_owes",
           overpaidAmount: r.overpaidAmount,
           cashSourceMismatch: r.cashSourceMismatch,
@@ -1492,13 +1562,20 @@ app.get(`${BASE}/queue`, requirePermission("transactions.view"), async (c) => {
       raw = [...byKey.values()];
     }
 
-    // Attach driver names
+    // P-3: targeted driver-name fetch for page ids only (not full driver: prefix scan).
     try {
-      const drivers = await kv.getByPrefix("driver:");
+      const ids = [...new Set(raw.map((r) => r.driverId).filter(Boolean))];
       const nameById = new Map<string, string>();
-      for (const d of drivers as any[]) {
-        if (d?.id && d?.name) nameById.set(String(d.id), String(d.name));
-      }
+      await Promise.all(
+        ids.map(async (id) => {
+          try {
+            const d = (await kv.get(`driver:${id}`)) as { name?: string } | null;
+            if (d?.name) nameById.set(id, String(d.name));
+          } catch {
+            /* ignore */
+          }
+        }),
+      );
       for (const r of raw) {
         r.driverName = nameById.get(r.driverId) || r.driverId;
       }
@@ -1542,14 +1619,7 @@ app.get(`${BASE}/queue`, requirePermission("transactions.view"), async (c) => {
       }
     }
 
-    const byAge: Record<string, number> = { "0-30": 0, "31-60": 0, "61-90": 0, "90+": 0 };
-    const byDriver: Record<string, number> = {};
-    for (const r of filtered) {
-      const b = bucketOf(daysOverdue(r.periodEnd));
-      byAge[b] = (byAge[b] || 0) + r.amountOwedMinor;
-      byDriver[r.driverId] = (byDriver[r.driverId] || 0) + r.amountOwedMinor;
-    }
-
+    // N-7: byAge/byDriver removed — they were page-window scoped and unused by the desk.
     let rowsOut: unknown[] = filtered;
     if (groupBy === "driver") {
       const groups = new Map<string, {
@@ -1599,37 +1669,59 @@ app.get(`${BASE}/queue`, requirePermission("transactions.view"), async (c) => {
     let total: number;
     let hasMore: boolean;
     if (mustSlice) {
-      // Collect: SQL already returned one page from each source — merge then take pageSize.
-      // Post-filter/groupBy: window was fetched from offset 0 (or SQL page) — slice for page.
       const start =
         view === "collect" && !needsPostFilter && groupBy !== "driver"
           ? 0
           : (page - 1) * pageSize;
-      total = rowsOut.length;
       pageRows = rowsOut.slice(start, start + pageSize);
       hasMore =
-        start + pageSize < total ||
+        start + pageSize < rowsOut.length ||
         (view === "collect" && raw.length >= sqlLimit) ||
         (needsPostFilter && raw.length >= sqlLimit);
     } else {
       pageRows = rowsOut;
-      total = offset + pageRows.length + (raw.length >= sqlLimit ? pageSize : 0);
       hasMore = raw.length >= sqlLimit;
     }
-    const totalMinor = filtered.reduce((s, r) => s + r.amountOwedMinor, 0);
+
+    const amountDisplayedMinor = (pageRows as RawRow[]).reduce(
+      (s, r) => s + (Number(r.amountOwedMinor) || 0),
+      0,
+    );
+
+    // C-4: query-scoped totals (not page sum). Search/age still use filtered window.
+    let totalsAmountOwedMinor = filtered.reduce((s, r) => s + r.amountOwedMinor, 0);
+    let totalsRowCount = filtered.length;
+    if (!needsPostFilter && !search && !ageBucket) {
+      try {
+        if (view === "pay") {
+          const agg = await aggregateCompanyOwesPeriods(opts);
+          totalsAmountOwedMinor = agg.amountOwedMinor;
+          totalsRowCount = agg.count;
+        } else if (view === "collect") {
+          const [owesAgg, heldAgg] = await Promise.all([
+            aggregateDriverOwesPeriods(opts),
+            aggregateCashHeldPeriods(opts),
+          ]);
+          totalsAmountOwedMinor = owesAgg.amountOwedMinor + heldAgg.amountOwedMinor;
+          totalsRowCount = owesAgg.count + heldAgg.count;
+        }
+      } catch (aggErr) {
+        console.warn(
+          "[settlements/queue] aggregate totals failed, using page window:",
+          aggErr instanceof Error ? aggErr.message : String(aggErr),
+        );
+      }
+    }
+    total = totalsRowCount;
 
     return c.json({
       success: true,
       rows: pageRows,
       totals: {
-        amountOwedMinor: totalMinor,
-        amountDisplayedMinor: pageRows.reduce(
-          (s: number, r: any) => s + (Number(r.amountOwedMinor) || 0),
-          0,
-        ),
-        rowCount: total,
+        amountOwedMinor: totalsAmountOwedMinor,
+        amountDisplayedMinor,
+        rowCount: totalsRowCount,
       },
-      aggregates: { byAge, byDriver },
       page: {
         total,
         hasMore,

@@ -61,10 +61,6 @@ export type SettlementQueueResponse = {
     amountDisplayedMinor?: number;
     rowCount: number;
   };
-  aggregates?: {
-    byAge?: Partial<Record<AgingBucket, number>>;
-    byDriver?: Record<string, number>;
-  };
   page: {
     total: number;
     hasMore: boolean;

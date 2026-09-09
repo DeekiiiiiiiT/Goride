@@ -38,9 +38,13 @@ const COLUMNS = [
   "cash_still_held",
   "payout_net",
   "settlement_amount",
+  "settlement_paid",
   "settlement_status",
+  "status",
+  "closed_at",
   "fuel_fleet_share",
   "fuel_deduction",
+  "metadata",
 ].join(", ");
 
 const { data, error } = await sb

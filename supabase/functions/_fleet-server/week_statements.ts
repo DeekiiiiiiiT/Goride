@@ -11,9 +11,6 @@ import { getServiceClient } from "./service_client.ts";
 import {
   hashWeekStatement,
   mapRowToWeekStatement,
-  shadowCompareStatementsVsProjection,
-  type LegacyProjectionForShadow,
-  type StatementShadowDrift,
   type WeekStatement,
   type WeekStatementKind,
 } from "../../../packages/finance-core/src/weekStatement.ts";
@@ -165,6 +162,42 @@ export async function getLatestWeekStatements(
   return [...byKind.values()];
 }
 
+export type WeekStatementsByDriver = Map<string, WeekStatement[]>;
+
+/**
+ * N-4: one org-week statement query — latest version per (driver, kind).
+ * Reuse across P&L sum, engine compare, and restatement draft counts.
+ */
+export async function getLatestWeekStatementsForOrgWeek(
+  organizationId: string,
+  weekKey: string,
+): Promise<WeekStatementsByDriver> {
+  const { data, error } = await sb()
+    .from("week_statements")
+    .select("*")
+    .eq("organization_id", organizationId)
+    .eq("week_key", WEEK_KEY(weekKey))
+    .order("version", { ascending: false });
+  if (error) throw new Error(error.message);
+
+  /** driverId → kind → latest statement */
+  const nested = new Map<string, Map<string, WeekStatement>>();
+  for (const row of data ?? []) {
+    const s = mapRowToWeekStatement(row as Record<string, unknown>);
+    let byKind = nested.get(s.driverId);
+    if (!byKind) {
+      byKind = new Map();
+      nested.set(s.driverId, byKind);
+    }
+    if (!byKind.has(s.kind)) byKind.set(s.kind, s);
+  }
+  const out: WeekStatementsByDriver = new Map();
+  for (const [driverId, byKind] of nested) {
+    out.set(driverId, [...byKind.values()]);
+  }
+  return out;
+}
+
 /**
  * Mark statements closed for a driver-week (called by the close path). Only
  * `draft` rows advance to `closed`; already-closed rows are left untouched.
@@ -216,44 +249,6 @@ export async function closeWeekStatements(
 }
 
 export { hasPendingRestatementDrafts } from "../../../packages/finance-core/src/weekStatement.ts";
-
-// ── Shadow compare (Phase 4 flag rollout gate) ───────────────────────────────
-
-export type WeekStatementShadowReport = {
-  driverId: string;
-  weekKey: string;
-  drifts: StatementShadowDrift[];
-  clean: boolean;
-};
-
-/**
- * Load the latest lane statements + the legacy projection row and return every
- * field that drifts. Zero drift over a full week is the gate for turning
- * PROJECTION_READS_WEEK_STATEMENTS on.
- */
-export async function shadowCompareWeek(
-  organizationId: string,
-  driverId: string,
-  weekKey: string,
-): Promise<WeekStatementShadowReport> {
-  const week = WEEK_KEY(weekKey);
-  const statements = await getLatestWeekStatements(organizationId, driverId, week);
-  const { data: period, error } = await sb()
-    .from("driver_financial_periods")
-    .select(
-      "fuel_deduction, fuel_fleet_share, toll_spend, toll_charged_to_driver, toll_reimbursed, cash_collected, driver_share, fleet_share, tips_paid_to_driver, earnings_gross",
-    )
-    .eq("driver_id", driverId)
-    .eq("period_anchor", week)
-    .maybeSingle();
-  if (error) throw new Error(error.message);
-
-  const drifts = shadowCompareStatementsVsProjection(
-    statements,
-    (period ?? {}) as LegacyProjectionForShadow,
-  );
-  return { driverId, weekKey: week, drifts, clean: drifts.length === 0 };
-}
 
 // ── Restatement (Phase 5.5) ───────────────────────────────────────────────────
 

@@ -19,7 +19,7 @@ import { resolveFuelCloseAmounts } from "./fuel_week_seal.ts";
 const round2 = (n: number): number => Math.round((Number(n) || 0) * 100) / 100;
 
 /** Same preference order as sealFuelWeek — locked weeks must not compare against a divergent rebuild. */
-async function probeFuelEngine(
+export async function probeFuelEngineAmounts(
   organizationId: string,
   weekKey: string,
   driverId: string,
@@ -40,6 +40,14 @@ async function probeFuelEngine(
   }
 }
 
+async function probeFuelEngine(
+  organizationId: string,
+  weekKey: string,
+  driverId: string,
+): Promise<FuelEngineAmounts | null> {
+  return probeFuelEngineAmounts(organizationId, weekKey, driverId);
+}
+
 async function loadCanonicalTollEventsForDriverWeek(
   driverId: string,
   weekKey: string,
@@ -49,7 +57,7 @@ async function loadCanonicalTollEventsForDriverWeek(
   return load(driverId, weekKey);
 }
 
-async function probeTollEngine(
+export async function probeTollEngineAmounts(
   organizationId: string,
   weekKey: string,
   driverId: string,
@@ -75,6 +83,14 @@ async function probeTollEngine(
     console.warn("[statement_engine_probe] toll probe failed", driverId, weekKey, e);
   }
   return { totalSpend: tollSpend, chargedToDriver, reimbursed };
+}
+
+async function probeTollEngine(
+  organizationId: string,
+  weekKey: string,
+  driverId: string,
+): Promise<TollEngineAmounts> {
+  return probeTollEngineAmounts(organizationId, weekKey, driverId);
 }
 
 /**

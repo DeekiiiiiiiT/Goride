@@ -29,14 +29,15 @@ export function getPeriodSettlementComponents(
       ? row.passengerCash
       : row.cashOwed;
 
-  const cashReturned = Math.max(0, row.cashPaid || 0);
+  const cashReturned = row.cashPaid || 0;
   // Row builders already produce cashTollWash as the settlement credit (single netting).
   // Do not subtract cashPaidBreakdown.tollCredits again.
-  const tollCashWash = Math.max(0, row.cashTollWash ?? 0);
-  const tollPersonal = Math.max(0, row.personalTollCharge ?? 0);
-  const fuelCredits = Math.max(0, row.fuelCredits || 0);
-  const cashWrittenOff = Math.max(0, row.cashWrittenOff || 0);
-  const settlementPaid = Math.max(0, row.settlementPaid || 0);
+  const tollCashWash = row.cashTollWash ?? 0;
+  const tollPersonal = row.personalTollCharge ?? 0;
+  const fuelCredits = row.fuelCredits || 0;
+  const cashWrittenOff = row.cashWrittenOff || 0;
+  // H-6 / C-2: pass signed settlementPaid — no Math.max(0) clamp.
+  const settlementPaid = row.settlementPaid || 0;
 
   const r = computePeriodSettlement({
     driverShare: netPayoutApplied,

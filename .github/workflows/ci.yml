@@ -35,6 +35,12 @@ jobs:
       - name: Check settlement predicate parity
         run: node scripts/verify_settlement_predicate_parity.mjs
 
+      - name: Check service-line filter parity
+        run: node scripts/verify_service_line_filter_parity.mjs
+
+      - name: Check ledger view invoker
+        run: node scripts/assert-ledger-view-invoker.mjs
+
       - name: Check projection flags wired
         run: node scripts/check-projection-flags-wired.mjs
 

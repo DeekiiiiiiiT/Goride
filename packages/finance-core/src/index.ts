@@ -101,6 +101,7 @@ export type { SignedSnapshot, ResolveSignedSnapshotInput } from './periodSignedS
 export {
   buildPeriodMetadata,
   buildCashSettlementPersistFields,
+  reconciliationStatusFromDerived,
 } from './periodPersistBody.ts';
 export { deriveDirectionalSettlementStatus } from './settlementStatusRepair.ts';
 export {
@@ -140,8 +141,6 @@ export {
   weekStatementToRow,
   hashWeekStatement,
   hasPendingRestatementDrafts,
-  shadowCompareStatementVsProjection,
-  shadowCompareStatementsVsProjection,
   statementAmountMajor,
 } from './weekStatement.ts';
 export type {
@@ -149,8 +148,6 @@ export type {
   WeekStatementKind,
   WeekStatementStatus,
   StatementAmountsMinor,
-  StatementShadowDrift,
-  LegacyProjectionForShadow,
 } from './weekStatement.ts';
 export {
   compareFuelStatementVsEngine,

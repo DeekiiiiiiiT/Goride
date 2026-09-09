@@ -44,7 +44,7 @@ export function mapPersistedRowToSettlementInput(row: PersistedPeriodRow) {
   const meta = row.metadata;
   const fc = (meta?.financeCore || {}) as Record<string, unknown>;
   const tipsPaidToDriver = round2(
-    Math.max(0, Number(row.tips_paid_to_driver) || Number(fc.tipsPaidToDriver) || 0),
+    Number(row.tips_paid_to_driver) || Number(fc.tipsPaidToDriver) || 0,
   );
   return {
     driverShare: Number(row.driver_share) || 0,
@@ -55,7 +55,8 @@ export function mapPersistedRowToSettlementInput(row: PersistedPeriodRow) {
       tollCashSpend: row.toll_cash_spend,
       metadata: meta,
     }),
-    tollPersonal: Math.max(0, Number(row.toll_charged_to_driver) || 0),
+    // H-6: no clamps — signed values match rebuild path.
+    tollPersonal: Number(row.toll_charged_to_driver) || 0,
     fuelCredits: Number(row.fuel_fleet_share) || 0,
     cashWrittenOff: Number(row.cash_written_off) || 0,
     settlementPaid: Number(row.settlement_paid) || 0,
@@ -98,6 +99,16 @@ export function checkPeriodInvariants(row: PersistedPeriodRow): PeriodInvariantD
   );
   pushDrift(drifts, row, 'settlement_amount', Number(row.settlement_amount) || 0, settled.settlement);
   pushDrift(drifts, row, 'payout_net', Number(row.payout_net) || 0, settled.netPayout);
+
+  // C-2 identity on persisted columns: settlement == grossSettlement − settlement_paid
+  const paidPersisted = Number(row.settlement_paid) || 0;
+  pushDrift(
+    drifts,
+    row,
+    'settlement_paid_identity',
+    Number(row.settlement_amount) || 0,
+    round2(settled.grossSettlement - paidPersisted),
+  );
 
   const tollCash = Number(row.toll_cash_spend) || 0;
   const tollTag = Number(row.toll_tag_spend) || 0;

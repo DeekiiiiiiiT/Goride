@@ -4,8 +4,6 @@ import {
   assertStatementsClosedForSettlement,
   hashWeekStatement,
   hasPendingRestatementDrafts,
-  shadowCompareStatementVsProjection,
-  shadowCompareStatementsVsProjection,
   statementAmountMajor,
   type WeekStatement,
 } from './weekStatement.ts';
@@ -76,51 +74,6 @@ describe('assertStatementsClosedForSettlement', () => {
         stmt({ kind: 'earnings', status: 'closed' }),
       ]),
     ).not.toThrow();
-  });
-});
-
-describe('shadowCompareStatementVsProjection', () => {
-  const projection = {
-    fuel_deduction: 12,
-    fuel_fleet_share: 8,
-    toll_spend: 59.2,
-    toll_charged_to_driver: 23.4,
-    cash_collected: 80,
-  };
-
-  it('returns no drift when statement matches the projection', () => {
-    const fuel = stmt({ kind: 'fuel', amountsMinor: { driverShare: 1200, companyShare: 800 } });
-    expect(shadowCompareStatementVsProjection(fuel, projection)).toEqual([]);
-  });
-
-  it('reports each drifting field with signed delta in minor units', () => {
-    const fuel = stmt({ kind: 'fuel', amountsMinor: { driverShare: 1500, companyShare: 800 } });
-    const drifts = shadowCompareStatementVsProjection(fuel, projection);
-    expect(drifts).toHaveLength(1);
-    expect(drifts[0]).toMatchObject({
-      kind: 'fuel',
-      field: 'driverShare',
-      statementMinor: 1500,
-      projectionMinor: 1200,
-      deltaMinor: 300,
-    });
-  });
-
-  it('tolerates a 1-cent rounding difference', () => {
-    const toll = stmt({ kind: 'toll', amountsMinor: { totalSpend: 5921, chargedToDriver: 2340 } });
-    expect(shadowCompareStatementVsProjection(toll, projection)).toEqual([]);
-  });
-
-  it('aggregates drift across every lane statement', () => {
-    const drifts = shadowCompareStatementsVsProjection(
-      [
-        stmt({ kind: 'fuel', amountsMinor: { driverShare: 1300, companyShare: 800 } }),
-        stmt({ kind: 'toll', amountsMinor: { totalSpend: 5920, chargedToDriver: 2340 } }),
-        stmt({ kind: 'earnings', amountsMinor: { passengerCash: 8500 } }),
-      ],
-      projection,
-    );
-    expect(drifts.map((d) => d.field).sort()).toEqual(['driverShare', 'passengerCash']);
   });
 });
 

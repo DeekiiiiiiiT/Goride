@@ -16,12 +16,48 @@ Deno.test("isPeriodFrozen detects signed / frozen metadata", () => {
   assertEquals(isPeriodFrozen({ metadata: { financeCore: { signedAt: "x" } } }), true);
 });
 
-Deno.test("assertPeriodNotFrozen throws PERIOD_FROZEN", () => {
+Deno.test("assertPeriodNotFrozen throws PERIOD_FROZEN SettlementCommandError 409", () => {
   try {
     assertPeriodNotFrozen({ signedAt: "2026-09-01" });
     throw new Error("expected throw");
   } catch (e) {
-    assertEquals((e as Error & { code?: string }).code, "PERIOD_FROZEN");
+    assertEquals(e instanceof SettlementCommandError, true);
+    assertEquals((e as SettlementCommandError).code, "PERIOD_FROZEN");
+    assertEquals((e as SettlementCommandError).status, 409);
+  }
+});
+
+Deno.test("assertMovementAllowed fails closed when moneyUnlocked missing", async () => {
+  const { assertMovementAllowed } = await import("./settlement_period_freeze.ts");
+  try {
+    assertMovementAllowed({
+      weekAnchor: "2026-08-24",
+      period: { metadata: { financeCore: {} } },
+      requireMoneyUnlocked: true,
+      now: "2026-09-08",
+    });
+    throw new Error("expected throw");
+  } catch (e) {
+    assertEquals(e instanceof SettlementCommandError, true);
+    assertEquals((e as SettlementCommandError).code, "MONEY_LOCKED");
+  }
+});
+
+Deno.test("assertMovementAllowed blocks frozen week with 409", async () => {
+  const { assertMovementAllowed } = await import("./settlement_period_freeze.ts");
+  try {
+    assertMovementAllowed({
+      weekAnchor: "2026-08-24",
+      period: {
+        metadata: { financeCore: { moneyUnlocked: true, periodFrozen: true } },
+      },
+      now: "2026-09-08",
+    });
+    throw new Error("expected throw");
+  } catch (e) {
+    assertEquals(e instanceof SettlementCommandError, true);
+    assertEquals((e as SettlementCommandError).code, "PERIOD_FROZEN");
+    assertEquals((e as SettlementCommandError).status, 409);
   }
 });
 

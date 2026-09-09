@@ -31,6 +31,8 @@ export type WeekClosePreview = {
   fuel: FuelLaneMetrics;
   toll: TollLaneMetrics;
   blockers: CloseBlocker[];
+  /** H-3: week-level blockers (P&L, etc.) — not attributed to a driver. */
+  weekBlockers?: CloseBlocker[];
   /** Pass 5: open statement↔engine drift rows for this org-week. */
   openEngineDriftCount?: number;
   /** Draft restatement rows awaiting sign for this week. */
@@ -117,6 +119,20 @@ export const weekCloseApi = {
     return response.json() as Promise<WeekClosePreview>;
   },
 
+  /** H-1: seal lanes + persist drifts before close (preview stays read-only). */
+  async prepare(weekKey: string): Promise<WeekClosePreview> {
+    const response = await fetchWithRetry(`${BASE}/prepare`, {
+      method: 'POST',
+      headers: await requireAuthHeaders(),
+      body: JSON.stringify({ weekKey }),
+    });
+    if (!response.ok) {
+      const err = await parseErrorPayload(response, 'Prepare week close failed');
+      throw new WeekCloseApiError(err.message, response.status, err.code, err.details);
+    }
+    return response.json() as Promise<WeekClosePreview>;
+  },
+
   async close(weekKey: string, reason: string): Promise<WeekCloseResult> {
     const response = await fetchWithRetry(BASE, {
       method: 'POST',
@@ -125,6 +141,23 @@ export const weekCloseApi = {
     });
     if (!response.ok) {
       const err = await parseErrorPayload(response, 'Close week failed');
+      throw new WeekCloseApiError(err.message, response.status, err.code, err.details);
+    }
+    return response.json() as Promise<WeekCloseResult>;
+  },
+
+  /** N-11: apply calendar freeze only after statements sealed but freeze failed. */
+  async retryFreeze(weekKey: string, reason?: string): Promise<WeekCloseResult> {
+    const response = await fetchWithRetry(`${BASE}/retry-freeze`, {
+      method: 'POST',
+      headers: await requireAuthHeaders(),
+      body: JSON.stringify({
+        weekKey,
+        reason: reason || 'Retry freeze after ATOMIC_FREEZE_FAILED',
+      }),
+    });
+    if (!response.ok) {
+      const err = await parseErrorPayload(response, 'Retry freeze failed');
       throw new WeekCloseApiError(err.message, response.status, err.code, err.details);
     }
     return response.json() as Promise<WeekCloseResult>;

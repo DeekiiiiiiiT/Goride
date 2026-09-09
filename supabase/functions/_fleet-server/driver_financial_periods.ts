@@ -71,10 +71,7 @@ import {
 } from "./period_projection_flags.ts";
 import { isFeatureEnabled, FEATURE_FLAGS } from "./feature_flags.ts";
 import { publishWeekStatement, getLatestWeekStatement, getLatestWeekStatements, PROJECTION_READS_WEEK_STATEMENTS } from "./week_statements.ts";
-import {
-  shadowCompareStatementsVsProjection,
-  statementAmountMajor,
-} from "../../../packages/finance-core/src/weekStatement.ts";
+import { statementAmountMajor } from "../../../packages/finance-core/src/weekStatement.ts";
 
 function sb() {
   return createClient(
@@ -475,14 +472,60 @@ function computeCommissionShareForRebuild(
   return { share: combined, serviceLineBreakdown };
 }
 
-function periodMetadataMatchesServiceLine(
-  metadata: Record<string, unknown> | null | undefined,
-  serviceLine: "rideshare" | "rush_delivery",
-): boolean {
-  const rush = Number(metadata?.rushTripCount ?? 0);
-  const ride = Number(metadata?.rideshareTripCount ?? 0);
-  if (rush === 0 && ride === 0) return true;
-  return serviceLine === "rush_delivery" ? rush > 0 : ride > 0;
+/**
+ * H-8 / N-8: push service-line into SQL before `.range()` so pages stay full size.
+ * Must match SQL `dfp_service_line_matches`:
+ *   - both counts 0 OR both keys absent → match-all
+ *   - else require the active lane count > 0
+ * PostgREST `->>` yields NULL when missing; without `.is.null` those rows were
+ * excluded from the list while RPC COALESCE included them in totals.
+ */
+function applyServiceLineSqlFilter(
+  q: any,
+  serviceLine?: "rideshare" | "rush_delivery" | null,
+): any {
+  if (!serviceLine) return q;
+  // Match-all when both trip counts are zero OR either key is missing (NULL).
+  const bothZeroOrAbsent =
+    "and(or(metadata->>rushTripCount.eq.0,metadata->>rushTripCount.is.null),or(metadata->>rideshareTripCount.eq.0,metadata->>rideshareTripCount.is.null))";
+  if (serviceLine === "rush_delivery") {
+    return q.or(`${bothZeroOrAbsent},metadata->>rushTripCount.gt.0`);
+  }
+  return q.or(`${bothZeroOrAbsent},metadata->>rideshareTripCount.gt.0`);
+}
+
+async function rpcSettlementQueueTotals(
+  lane: "pay" | "driver_owes" | "cash_held",
+  opts?: PeriodListQueryOpts,
+): Promise<{ count: number; amountOwedMinor: number } | null> {
+  const organizationId = requirePeriodListOrganizationId(opts);
+  const { data, error } = await sb().rpc("sum_settlement_queue_totals", {
+    p_organization_id: organizationId,
+    p_lane: lane === "pay" ? "company_owes" : lane,
+    p_period_start: opts?.periodStart && /^\d{4}-\d{2}-\d{2}$/.test(opts.periodStart)
+      ? opts.periodStart
+      : null,
+    p_period_end: opts?.periodEnd && /^\d{4}-\d{2}-\d{2}$/.test(opts.periodEnd)
+      ? opts.periodEnd
+      : null,
+    p_period_anchor: opts?.periodAnchor && /^\d{4}-\d{2}-\d{2}$/.test(opts.periodAnchor)
+      ? opts.periodAnchor
+      : null,
+    p_min_amount: opts?.minAmount != null && Number(opts.minAmount) > 0
+      ? Number(opts.minAmount)
+      : null,
+    p_service_line: opts?.serviceLine ?? null,
+  });
+  if (error) {
+    console.warn("[DriverFinancialPeriods] sum_settlement_queue_totals RPC failed:", error.message);
+    return null;
+  }
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row) return { count: 0, amountOwedMinor: 0 };
+  return {
+    count: Number(row.row_count) || 0,
+    amountOwedMinor: Number(row.amount_owed_minor) || 0,
+  };
 }
 
 async function resolveDriverOrganizationId(driverId: string): Promise<string | null> {
@@ -1322,6 +1365,8 @@ export async function rebuildDriverFinancialPeriod(
         }
       : undefined,
     }),
+    // N-8: cash sync preserves these via PRESERVED_PERIOD_META_KEYS; a full rebuild
+    // (Repair / rebuild open weeks) is what restores counts if they were historically stripped.
     rushTripCount,
     rideshareTripCount,
     serviceLineBreakdown,
@@ -1467,8 +1512,8 @@ export async function rebuildDriverFinancialPeriod(
     }
   }
 
-  // Pass E: shadow-compare when statements exist; when flag on, override amounts
-  // BEFORE cashPersist so settlement + metadata persist the statement SoT.
+  // Pass E: when statements exist, override amounts BEFORE cashPersist (statement SoT).
+  // R-1: shadowCompareStatementsVsProjection removed — statementEngineCompare is the live control.
   try {
     if (organizationIdResolved) {
       const statements = (await getLatestWeekStatements(
@@ -1477,24 +1522,6 @@ export async function rebuildDriverFinancialPeriod(
         periodAnchor,
       )).filter((s) => s.status === "closed" || s.status === "draft");
       if (statements.length > 0) {
-        const drifts = shadowCompareStatementsVsProjection(statements, {
-          fuel_deduction: row.fuelDeduction,
-          fuel_fleet_share: row.fuelFleetShare,
-          toll_spend: row.tollSpend,
-          toll_charged_to_driver: row.tollChargedToDriver,
-          toll_reimbursed: row.tollReimbursed,
-          cash_collected: row.cashCollected,
-          driver_share: row.driverShare,
-          fleet_share: row.fleetShare,
-          tips_paid_to_driver: row.tipsPaidToDriver,
-          earnings_gross: row.earningsGross,
-        });
-        if (drifts.length > 0) {
-          console.warn(
-            `[DriverFinancialPeriods] statement shadow drift driver=${driverId} week=${periodAnchor}`,
-            drifts,
-          );
-        }
         // Pass 5: persist statement↔engine drifts (durable, not warn-only).
         try {
           const { compareDriverWeekStatementsToEngines } = await import("./statement_engine_probe.ts");
@@ -1602,7 +1629,6 @@ export async function rebuildDriverFinancialPeriod(
       moneyUnlocked: derived.moneyUnlocked,
     },
     metadata: periodMetadata,
-    existingClosedAt: existing?.closed_at as string | null | undefined,
     now: row.projectedAt,
   });
 
@@ -1612,7 +1638,8 @@ export async function rebuildDriverFinancialPeriod(
     period_end: periodEnd,
     timezone,
     organization_id: organizationIdResolved,
-    status: cashPersist.status,
+    // C-3: do not write calendar status/closed_at here — closeWeek/reopenWeek own those.
+    reconciliation_status: cashPersist.reconciliation_status,
     toll_spend: row.tollSpend,
     toll_cash_spend: row.tollCashSpend,
     toll_tag_spend: row.tollTagSpend,
@@ -1655,11 +1682,7 @@ export async function rebuildDriverFinancialPeriod(
     source_event_hash: sourceEventHash,
     projected_at: row.projectedAt,
     updated_at: cashPersist.updated_at,
-    reopened_at:
-      existing?.status === "closed" && periodStatus !== "closed"
-        ? row.projectedAt
-        : null,
-    closed_at: cashPersist.closed_at,
+    // C-3: calendar closed_at / status only via closeWeek/reopenWeek.
     metadata: cashPersist.metadata,
   };
 
@@ -2271,7 +2294,6 @@ export async function syncPeriodCashFromTransactions(
       moneyUnlocked,
     },
     metadata: periodMetadata,
-    existingClosedAt: existing.closed_at as string | null | undefined,
   });
 
   await updatePeriodCashWithVersion(driverId, periodAnchor, cashPersist, 3, {
@@ -2312,6 +2334,95 @@ function requirePeriodListOrganizationId(opts?: { organizationId?: string | null
   return orgId;
 }
 
+/** C-4 / N-2: query-scoped count + sum for company_owes via SQL RPC (no row transfer). */
+export async function aggregateCompanyOwesPeriods(
+  opts?: PeriodListQueryOpts,
+): Promise<{ count: number; amountOwedMinor: number }> {
+  const rpc = await rpcSettlementQueueTotals("pay", opts);
+  if (rpc) return rpc;
+  // Fallback only if RPC missing — hard-cap + truncated signal for callers.
+  const organizationId = requirePeriodListOrganizationId(opts);
+  let q = sb()
+    .from("driver_financial_periods")
+    .select("settlement_amount")
+    .eq("settlement_status", "company_owes")
+    .gt("settlement_amount", 0.005)
+    .eq("organization_id", organizationId);
+  q = applyPeriodRangeFilters(q, opts);
+  q = applyServiceLineSqlFilter(q, opts?.serviceLine);
+  if (opts?.minAmount != null && Number(opts.minAmount) > 0) {
+    q = q.gte("settlement_amount", Number(opts.minAmount));
+  }
+  q = q.limit(5000);
+  const { data, error } = await q;
+  if (error) throw new Error(error.message);
+  const rows = data || [];
+  const amountOwedMinor = rows.reduce(
+    (s: number, r: any) => s + Math.round((Number(r.settlement_amount) || 0) * 100),
+    0,
+  );
+  return { count: rows.length, amountOwedMinor };
+}
+
+/** C-4 / N-2: driver_owes aggregate. */
+export async function aggregateDriverOwesPeriods(
+  opts?: PeriodListQueryOpts,
+): Promise<{ count: number; amountOwedMinor: number }> {
+  const rpc = await rpcSettlementQueueTotals("driver_owes", opts);
+  if (rpc) return rpc;
+  const organizationId = requirePeriodListOrganizationId(opts);
+  let q = sb()
+    .from("driver_financial_periods")
+    .select("settlement_amount")
+    .eq("settlement_status", "driver_owes")
+    .lt("settlement_amount", -0.005)
+    .eq("organization_id", organizationId);
+  q = applyPeriodRangeFilters(q, opts);
+  q = applyServiceLineSqlFilter(q, opts?.serviceLine);
+  if (opts?.minAmount != null && Number(opts.minAmount) > 0) {
+    q = q.lte("settlement_amount", -Number(opts.minAmount));
+  }
+  q = q.limit(5000);
+  const { data, error } = await q;
+  if (error) throw new Error(error.message);
+  const rows = data || [];
+  const amountOwedMinor = rows.reduce(
+    (s: number, r: any) => s + Math.round(Math.abs(Number(r.settlement_amount) || 0) * 100),
+    0,
+  );
+  return { count: rows.length, amountOwedMinor };
+}
+
+/** C-4 / N-2: cash-held aggregate (same SQL exclusions as listCashHeldPeriods). */
+export async function aggregateCashHeldPeriods(
+  opts?: PeriodListQueryOpts,
+): Promise<{ count: number; amountOwedMinor: number }> {
+  const rpc = await rpcSettlementQueueTotals("cash_held", opts);
+  if (rpc) return rpc;
+  const organizationId = requirePeriodListOrganizationId(opts);
+  let q = sb()
+    .from("driver_financial_periods")
+    .select("cash_still_held")
+    .gt("cash_still_held", STATUS_CASH_HELD_EPS)
+    .or("settlement_status.eq.pending,fuel_finalized.eq.false")
+    .not("settlement_status", "in", '("company_owes","driver_owes","settled")')
+    .eq("organization_id", organizationId);
+  q = applyPeriodRangeFilters(q, opts);
+  q = applyServiceLineSqlFilter(q, opts?.serviceLine);
+  if (opts?.minAmount != null && Number(opts.minAmount) > 0) {
+    q = q.gte("cash_still_held", Number(opts.minAmount));
+  }
+  q = q.limit(5000);
+  const { data, error } = await q;
+  if (error) throw new Error(error.message);
+  const rows = data || [];
+  const amountOwedMinor = rows.reduce(
+    (s: number, r: any) => s + Math.round(Math.max(0, Number(r.cash_still_held) || 0) * 100),
+    0,
+  );
+  return { count: rows.length, amountOwedMinor };
+}
+
 /** Org-wide company_owes queue — single SQL query (not N+1 per driver). */
 export async function listCompanyOwesPeriods(opts?: PeriodListQueryOpts): Promise<CompanyOwesPeriodRow[]> {
   const organizationId = requirePeriodListOrganizationId(opts);
@@ -2336,6 +2447,7 @@ export async function listCompanyOwesPeriods(opts?: PeriodListQueryOpts): Promis
     q = q.gte("settlement_amount", Number(opts.minAmount));
   }
 
+  q = applyServiceLineSqlFilter(q, opts?.serviceLine);
   q = applyPeriodListSortAndPage(q, opts, "settlement_amount");
 
   const { data, error } = await q;
@@ -2343,7 +2455,7 @@ export async function listCompanyOwesPeriods(opts?: PeriodListQueryOpts): Promis
     console.error("[DriverFinancialPeriods] company_owes list:", error.message);
     throw new Error(error.message);
   }
-  const mapped = (data || []).map((r: any) => {
+  return (data || []).map((r: any) => {
     const row = mapPeriodListRow(r);
     const oa = Number(r.metadata?.financeCore?.overpaidAmount);
     return {
@@ -2351,10 +2463,6 @@ export async function listCompanyOwesPeriods(opts?: PeriodListQueryOpts): Promis
       overpaidAmount: Number.isFinite(oa) && oa > 0 ? oa : 0,
     };
   });
-  if (!opts?.serviceLine) return mapped;
-  return mapped.filter((_, i) =>
-    periodMetadataMatchesServiceLine((data as any[])?.[i]?.metadata, opts.serviceLine!),
-  );
 }
 
 /** Recently paid company-owes weeks (settled with settlement_paid > 0). */
@@ -2386,12 +2494,14 @@ export async function listRecentlyPaidSettlementPeriods(opts?: {
     q = q.lte("period_anchor", opts.periodEnd);
   }
 
+  q = applyServiceLineSqlFilter(q, opts?.serviceLine);
+
   const { data, error } = await q;
   if (error) {
     console.error("[DriverFinancialPeriods] paid settlements list:", error.message);
     throw new Error(error.message);
   }
-  const mapped = (data || []).map((r: any) => {
+  return (data || []).map((r: any) => {
     const oa = Number(r.metadata?.financeCore?.overpaidAmount);
     return {
       driverId: String(r.driver_id),
@@ -2409,10 +2519,6 @@ export async function listRecentlyPaidSettlementPeriods(opts?: {
       overpaidAmount: Number.isFinite(oa) && oa > 0 ? oa : 0,
     };
   });
-  if (!opts?.serviceLine) return mapped;
-  return mapped.filter((_, i) =>
-    periodMetadataMatchesServiceLine((data as any[])?.[i]?.metadata, opts.serviceLine!),
-  );
 }
 
 /** Closed weeks (residual ≈ 0) — Driver Settlements → Reconciled tab. */
@@ -2454,6 +2560,7 @@ export async function listReconciledSettlementPeriods(opts?: PeriodListQueryOpts
     q = q.gte("earnings_gross", Number(opts.minAmount));
   }
 
+  q = applyServiceLineSqlFilter(q, opts?.serviceLine);
   q = applyPeriodListSortAndPage(q, opts, "earnings_gross");
 
   const { data, error } = await q;
@@ -2461,7 +2568,7 @@ export async function listReconciledSettlementPeriods(opts?: PeriodListQueryOpts
     console.error("[DriverFinancialPeriods] reconciled list:", error.message);
     throw new Error(error.message);
   }
-  const mapped = (data || []).map((r: any) => ({
+  return (data || []).map((r: any) => ({
     ...mapPeriodListRow(r),
     earningsGross: Number(r.earnings_gross) || 0,
     driverShare: Number(r.driver_share) || 0,
@@ -2480,10 +2587,6 @@ export async function listReconciledSettlementPeriods(opts?: PeriodListQueryOpts
       Number(r.tips_withheld) || Number(r.metadata?.financeCore?.tipsWithheld) || 0,
     cashSourceMismatch: Number(r.metadata?.financeCore?.cashSourceMismatch) || 0,
   }));
-  if (!opts?.serviceLine) return mapped;
-  return mapped.filter((_, i) =>
-    periodMetadataMatchesServiceLine((data as any[])?.[i]?.metadata, opts.serviceLine!),
-  );
 }
 
 export type DriverOwesPeriodRow = CompanyOwesPeriodRow & {
@@ -2571,23 +2674,26 @@ function mapPeriodListRow(r: any): CompanyOwesPeriodRow {
       metadata: meta,
       settlementStatus: String(r.settlement_status || ""),
     }),
-    moneyUnlocked: fc.moneyUnlocked !== false,
+    moneyUnlocked: fc.moneyUnlocked === true,
   };
 }
 
 /** Org-wide driver_owes queue — collect cash drivers still owe after finalize. */
 export async function listDriverOwesPeriods(opts?: PeriodListQueryOpts): Promise<DriverOwesPeriodRow[]> {
+  const organizationId = requirePeriodListOrganizationId(opts);
   let q = sb()
     .from("driver_financial_periods")
     .select(PERIOD_LIST_SELECT)
     .eq("settlement_status", "driver_owes")
-    .lt("settlement_amount", -0.005);
+    .lt("settlement_amount", -0.005)
+    .eq("organization_id", organizationId);
 
   q = applyPeriodRangeFilters(q, opts);
   if (opts?.minAmount != null && Number(opts.minAmount) > 0) {
     q = q.lte("settlement_amount", -Number(opts.minAmount));
   }
 
+  q = applyServiceLineSqlFilter(q, opts?.serviceLine);
   q = applyPeriodListSortAndPage(q, opts, "settlement_amount");
 
   const { data, error } = await q;
@@ -2595,7 +2701,7 @@ export async function listDriverOwesPeriods(opts?: PeriodListQueryOpts): Promise
     console.error("[DriverFinancialPeriods] driver_owes list:", error.message);
     throw new Error(error.message);
   }
-  const mapped = (data || []).map((r: any) => {
+  return (data || []).map((r: any) => {
     const row = mapPeriodListRow(r);
     const oa = Number(r.metadata?.financeCore?.overpaidAmount);
     return {
@@ -2604,10 +2710,6 @@ export async function listDriverOwesPeriods(opts?: PeriodListQueryOpts): Promise
       overpaidAmount: Number.isFinite(oa) && oa > 0 ? oa : 0,
     };
   });
-  if (!opts?.serviceLine) return mapped;
-  return mapped.filter((_, i) =>
-    periodMetadataMatchesServiceLine((data as any[])?.[i]?.metadata, opts.serviceLine!),
-  );
 }
 
 /**
@@ -2615,17 +2717,22 @@ export async function listDriverOwesPeriods(opts?: PeriodListQueryOpts): Promise
  * Excludes company_owes / driver_owes / settled so those stay on their own lists.
  */
 export async function listCashHeldPeriods(opts?: PeriodListQueryOpts): Promise<DriverOwesPeriodRow[]> {
+  const organizationId = requirePeriodListOrganizationId(opts);
   let q = sb()
     .from("driver_financial_periods")
     .select(PERIOD_LIST_SELECT)
     .gt("cash_still_held", STATUS_CASH_HELD_EPS)
-    .or("settlement_status.eq.pending,fuel_finalized.eq.false");
+    .or("settlement_status.eq.pending,fuel_finalized.eq.false")
+    // H-7: exclude statuses in SQL before paging (was post-filter after .range()).
+    .not("settlement_status", "in", '("company_owes","driver_owes","settled")')
+    .eq("organization_id", organizationId);
 
   q = applyPeriodRangeFilters(q, opts);
   if (opts?.minAmount != null && Number(opts.minAmount) > 0) {
     q = q.gte("cash_still_held", Number(opts.minAmount));
   }
 
+  q = applyServiceLineSqlFilter(q, opts?.serviceLine);
   q = applyPeriodListSortAndPage(q, opts, "cash_still_held");
 
   const { data, error } = await q;
@@ -2633,29 +2740,14 @@ export async function listCashHeldPeriods(opts?: PeriodListQueryOpts): Promise<D
     console.error("[DriverFinancialPeriods] cash_held list:", error.message);
     throw new Error(error.message);
   }
-  const mapped = (data || [])
-    .map((r: any) => {
-      const row = mapPeriodListRow(r);
-      const status = String(row.settlementStatus || "").toLowerCase();
-      if (status === "company_owes" || status === "driver_owes" || status === "settled") {
-        return null;
-      }
-      const oa = Number(r.metadata?.financeCore?.overpaidAmount);
-      return {
-        ...row,
-        amountOwed: Math.max(0, row.cashStillHeld),
-        overpaidAmount: Number.isFinite(oa) && oa > 0 ? oa : 0,
-      };
-    })
-    .filter(Boolean) as DriverOwesPeriodRow[];
-  if (!opts?.serviceLine) return mapped;
-  return mapped.filter((_, i) => {
-    const raw = (data as any[])?.find(
-      (r) =>
-        String(r.driver_id) === mapped[i].driverId &&
-        String(r.period_anchor).slice(0, 10) === mapped[i].periodAnchor,
-    );
-    return periodMetadataMatchesServiceLine(raw?.metadata, opts.serviceLine!);
+  return (data || []).map((r: any) => {
+    const row = mapPeriodListRow(r);
+    const oa = Number(r.metadata?.financeCore?.overpaidAmount);
+    return {
+      ...row,
+      amountOwed: Math.max(0, row.cashStillHeld),
+      overpaidAmount: Number.isFinite(oa) && oa > 0 ? oa : 0,
+    };
   });
 }
 

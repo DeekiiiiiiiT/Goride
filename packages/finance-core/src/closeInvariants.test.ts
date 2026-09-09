@@ -195,12 +195,19 @@ describe('checkCloseInvariants (§6.4)', () => {
     expect(canCloseWeek(blockers)).toBe(false);
   });
 
-  it('blocks close when cash is still held', () => {
+  it('blocks close when cashHeldClamped (H-5)', () => {
     const blockers = checkCloseInvariants({
       ...tyingWeek,
-      period: { ...tyingWeek.period, settlement_amount: 0, cash_still_held: 1500 },
+      period: {
+        ...tyingWeek.period,
+        settlement_amount: 0,
+        cash_still_held: 0,
+        metadata: {
+          financeCore: { cashHeldClamped: true, unclampedCashHeld: -500 },
+        },
+      },
     });
-    expect(blockers.some((b) => b.code === 'SETTLEMENT_CASH_HELD')).toBe(true);
+    expect(blockers.some((b) => b.code === 'CASH_HELD_OVER_RETURNED')).toBe(true);
     expect(canCloseWeek(blockers)).toBe(false);
   });
 
@@ -286,6 +293,17 @@ describe('checkCloseInvariants (§6.4)', () => {
     const w = blockers.find((b) => b.code === 'BUSINESS_WEEK_PNL_UNAVAILABLE');
     expect(w?.severity).toBe('warn');
     expect(canCloseWeek(blockers)).toBe(true);
+  });
+
+  it('blocks when settlement sum deliberately mismatches week P&L (non-tautological)', () => {
+    const blockers = checkCloseInvariants({
+      ...tyingWeek,
+      settlementSumForWeek: 11109.21,
+      businessWeekPnl: 9000,
+    });
+    const m = blockers.find((b) => b.code === 'SETTLEMENT_PNL_MISMATCH');
+    expect(m?.severity).toBe('block');
+    expect(canCloseWeek(blockers)).toBe(false);
   });
 
   it('blocks when toll_spend ≠ cash + tag (TOLL_SPEND_SPLIT)', () => {

@@ -1,0 +1,11 @@
+{
+  "description": "Phase 2 — GET /queue totals are query-scoped (C-4 fixed). amountDisplayedMinor is page sum; totals.amountOwedMinor is full predicate.",
+  "scenario": "company_owes page",
+  "pageSize": 5,
+  "matchingRowCount": 12,
+  "pageRowsAmountOwedMinor": [10000, 20000, 30000, 40000, 50000],
+  "expectedBuggyTotalsAmountOwedMinor": 150000,
+  "expectedCorrectTotalsAmountOwedMinor": 780000,
+  "phase": 2,
+  "status": "fixed"
+}

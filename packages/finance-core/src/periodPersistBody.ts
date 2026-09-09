@@ -5,6 +5,7 @@ import { preservePeriodMetaKeys, resolveSignedSnapshot } from './periodSignedSna
 export type DerivedPeriodStatusLike = {
   settlementStatus: string;
   payoutStatus: string;
+  /** Reconciliation gate state — NOT calendar close (C-3). */
   periodStatus: 'open' | 'closed' | 'reopened';
   cashStillHeld: number;
   tollsClear: boolean;
@@ -107,6 +108,15 @@ export function buildPeriodMetadata(input: BuildPeriodMetadataInput): Record<str
   };
 }
 
+/** Maps projector periodStatus → reconciliation_status column (C-3). */
+export function reconciliationStatusFromDerived(
+  periodStatus: DerivedPeriodStatusLike['periodStatus'],
+): 'open' | 'cleared' | 'reopened' {
+  if (periodStatus === 'closed') return 'cleared';
+  if (periodStatus === 'reopened') return 'reopened';
+  return 'open';
+}
+
 export type CashSettlementPersistFields = {
   cash_returned: number;
   cash_written_off: number;
@@ -119,8 +129,8 @@ export type CashSettlementPersistFields = {
   cash_still_held_minor: number;
   settlement_status: string;
   payout_status: string;
-  status: string;
-  closed_at: string | null;
+  /** Toll/fuel gate — never calendar close (C-3). */
+  reconciliation_status: 'open' | 'cleared' | 'reopened';
   metadata: Record<string, unknown>;
   updated_at: string;
 };
@@ -131,11 +141,14 @@ export type BuildCashSettlementPersistInput = {
   settled: PeriodSettlementResult;
   derived: DerivedPeriodStatusLike;
   metadata: Record<string, unknown>;
-  existingClosedAt?: string | null;
   now?: string;
 };
 
-/** Overlapping persist fields shared by rebuild upsert and cash sync update. */
+/**
+ * Overlapping persist fields shared by rebuild upsert and cash sync update.
+ * Does NOT write calendar `status` / `closed_at` — only closeWeek/reopenWeek own those (C-3).
+ * Persists signed settlement_paid (C-2) — no Math.max(0) clamp.
+ */
 export function buildCashSettlementPersistFields(
   input: BuildCashSettlementPersistInput,
 ): CashSettlementPersistFields {
@@ -147,7 +160,7 @@ export function buildCashSettlementPersistFields(
   return {
     cash_returned: round2(input.cashReturned),
     cash_written_off: round2(input.cashWrittenOff),
-    settlement_paid: round2(Math.max(0, input.settled.settlementPaid)),
+    settlement_paid: round2(input.settled.settlementPaid),
     cash_still_held: cashStillHeld,
     settlement_amount: settlementAmount,
     payout_net: payoutNet,
@@ -156,9 +169,7 @@ export function buildCashSettlementPersistFields(
     cash_still_held_minor: toMoneyMinor(cashStillHeld),
     settlement_status: input.derived.settlementStatus,
     payout_status: input.derived.payoutStatus,
-    status: input.derived.periodStatus,
-    closed_at:
-      input.derived.periodStatus === 'closed' ? input.existingClosedAt || now : null,
+    reconciliation_status: reconciliationStatusFromDerived(input.derived.periodStatus),
     metadata: input.metadata,
     updated_at: now,
   };
