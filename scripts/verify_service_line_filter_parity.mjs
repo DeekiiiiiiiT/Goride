@@ -9,29 +9,7 @@ import { fileURLToPath } from "node:url";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 
-/** Mirrors public.dfp_service_line_matches */
-function rpcMatches(metadata, serviceLine) {
-  if (!serviceLine || !String(serviceLine).trim()) return true;
-  const rush = Number(metadata?.rushTripCount ?? 0);
-  const ride = Number(metadata?.rideshareTripCount ?? 0);
-  // Absent keys → COALESCE 0; both zero → match-all
-  if (
-    (metadata?.rushTripCount == null || Number(metadata.rushTripCount) === 0) &&
-    (metadata?.rideshareTripCount == null || Number(metadata.rideshareTripCount) === 0)
-  ) {
-    // both absent or zero — but if both absent, COALESCE treats as 0,0 → match-all
-    if (metadata?.rushTripCount == null && metadata?.rideshareTripCount == null) return true;
-    if (Number(metadata?.rushTripCount ?? 0) === 0 && Number(metadata?.rideshareTripCount ?? 0) === 0) {
-      return true;
-    }
-  }
-  if (Number(metadata?.rushTripCount ?? 0) === 0 && Number(metadata?.rideshareTripCount ?? 0) === 0) {
-    return true;
-  }
-  return serviceLine === "rush_delivery" ? rush > 0 : ride > 0;
-}
-
-/** Simpler RPC mirror matching SQL COALESCE exactly */
+/** Mirrors public.dfp_service_line_matches (SQL COALESCE) */
 function rpcMatchesCoalesce(metadata, serviceLine) {
   if (!serviceLine || !String(serviceLine).trim()) return true;
   const rush = Number(metadata?.rushTripCount ?? 0);

@@ -6,7 +6,9 @@
 | 2 — implementation | 2026-09-08 | owner implemented | Phase 0–3 largely shipped |
 | 3 — verification | 2026-09-08 | audit only | All 5 Criticals closed & tested. 12 open, 7 new findings |
 | 4 — implementation | 2026-09-08 | owner implemented | N-1…N-7, H-2, H-4, H-8, P-1/2/4/5/7, R-1/R-2, U-3, U-6 |
-| **5 — verification** | **2026-09-08** | **audit only** | **✅ Deploy blocker cleared. 19 more closed. 4 open, 5 new — §0.3** |
+| 5 — verification | 2026-09-08 | audit only | ✅ Deploy blocker cleared. 19 more closed. 4 open, 5 new |
+| 6 — implementation | 2026-09-08 | owner implemented | N-8…N-12, R-4, U-5 (commit `55361643`) |
+| **7 — verification** | **2026-09-09** | **audit only** | **✅ 45 closed · 2 open (R-3, U-1) · 1 trivial new. Section is done — §0.1** |
 
 **Scope:** The Driver Settlements hub (Cash desk · Close Week · Restatements), the settlement queue read model, the week-close engine, the period projection, and every money-write endpoint behind them.
 
@@ -25,7 +27,56 @@
 
 ---
 
-## 0.3 Pass 5 — verification (current status)
+## 0.1 Pass 7 — verification (current status)
+
+**Method:** every Pass-5 open finding re-checked against commit `55361643` (working tree clean). Executed: **150 finance-core + 1,321 fleet vitest**, **8 Deno freeze tests**, and both CI guards.
+
+```
+verify_service_line_filter_parity: OK (9 fixtures)
+assert-ledger-view-invoker:        OK (476 migrations, 15 wrapper views)
+deno test settlement_period_freeze: ok | 8 passed | 0 failed
+```
+
+### Verdict — this section is done
+
+**Every Critical, High, Performance and Redundancy finding across seven passes is now closed.** Two cosmetic items remain (R-3, U-1), neither affecting money, correctness, or speed. One trivial new item (N-13).
+
+Three of the five Pass-5 fixes were done *better* than specified:
+
+- **N-8** — the actual bug (metadata destruction) was fixed at the root, and the preservation guard uses `hasOwnProperty` rather than a truthiness check, so a legitimate **`0` trip count is preserved rather than dropped**. That subtlety is what would have made a naive fix silently re-introduce the divergence. The new `verify_service_line_filter_parity.mjs` doesn't just mirror both predicates in JS — it **reads the real source** and asserts `metadata->>rushTripCount.is.null` is present in the TS filter, `COALESCE((p_metadata->>'rushTripCount')` in the migration, and both keys in `PRESERVED_PERIOD_META_KEYS`. That anchoring is what stops it becoming a mirror-of-a-mirror.
+- **N-11** — I asked for *"batch the statements, or document the limitation."* You did both, plus built the recovery: `retryFreezeWeek` (`week_close.ts:993`) freezes only drivers whose statements are already sealed, wired end-to-end through `POST /retry-freeze` → `weekCloseApi.retryFreeze` → a CloseWeekPage handler that catches `ATOMIC_FREEZE_FAILED` and offers the retry. It batches its statement reads via `getLatestWeekStatementsForOrgWeek`, so the recovery path didn't reintroduce the N+1.
+- **N-12** — I flagged `threshold: Number.MAX_SAFE_INTEGER` as an acceptable correctness-first trade. You replaced it with the real `FlatItem` flatten pattern instead; the code comment reads *"no MAX_SAFE_INTEGER bandage."*
+
+### Status
+
+| ID | Item | Status | Evidence |
+|---|---|---|---|
+| **N-8** | Cash sync strips service-line keys | ✅ **Closed** | `PRESERVED_PERIOD_META_KEYS` +2 keys with `hasOwnProperty` zero-safety (`periodSignedSnapshot.ts:41-55`); null-tolerant filter (`driver_financial_periods.ts:489-494`); parity guard with source anchors. |
+| **N-9** | Invoker guard not in CI | ✅ **Closed** | `.github/workflows/ci.yml:39,41` — both new guards alongside the eight existing ones. |
+| **N-10** | Batch freeze could write NULL | ✅ **Closed** | `COALESCE(NULLIF(r->>'close_hash',''), '')` + follow-up migration `20260908240000`. |
+| **N-11** | Atomic boundary excluded statements | ✅ **Closed** | Documented at `week_close.ts:12` **plus** `retryFreezeWeek` + `/retry-freeze` route + UI recovery. |
+| **N-12** | Virtualization disabled, not fixed | ✅ **Closed** | `MovementHistoryTable.tsx:117-134` — flattened, then windowed. |
+| **R-4** | Redundant fallback row set | ✅ **Closed** | `outstandingAllRows` removed. |
+| **U-5** | No diff of what a close did | ✅ **Closed** | Confirm dialog lists per-driver amounts to be frozen before signing (`CloseWeekPage.tsx:349, 1050-1094`). |
+| **R-3** | Legacy `saveTransaction` fallbacks | ❌ **Open** | 3 sites: `DriverSettlementsPage.tsx:1280, 1364, 1424`. |
+| **U-1** | Blocked reason only in `title` | ❌ **Open** | Disabled buttons still carry the reason only in `title=`; the chips (`:482-490`) name the state ("Locked") but not the action. |
+| **N-13** | *(new, trivial)* | ❌ **Open** | `scripts/verify_service_line_filter_parity.mjs:12-32` — `rpcMatches` is dead code with redundant branches; only `rpcMatchesCoalesce` is used. Dead logic inside a guard is exactly what R-1 was about. Delete it. |
+
+**Cumulative across 7 passes: 45 closed · 2 open · 1 trivial.**
+
+### What's left — all optional
+
+| # | Item | Effort | Why it can wait |
+|---|---|---|---|
+| 1 | **R-3** — remove the 3 legacy `saveTransaction` fallbacks | ~30 min | Each is a second write path that bypasses movements, CAS and the freeze — but it only fires when the commands endpoint returns *unavailable*, which hasn't happened since the cutover. Worth deleting so it can't silently become the live path. |
+| 2 | **U-1** — make the blocked-row reason reachable | ~1 hr | Accessibility, not correctness. Move the reason out of `title` on a disabled control — either an `aria-describedby` chip or an enabled-and-explaining button. |
+| 3 | **N-13** — delete `rpcMatches` | 2 min | Cosmetic. |
+
+Nothing here blocks a deploy, and nothing here affects a number on screen.
+
+---
+
+## 0.3 Pass 5 — verification *(historical)*
 
 **Method:** every Pass-3 open/partial/new finding re-checked against the working tree. Tests executed: **148 finance-core + 1,321 fleet, green** (finance-core dropped 151→148 because R-1's `shadowCompare` tests were removed with the dead code — expected). Invoker guard executed: `OK (475 migrations, 15 wrapper views, all latest defs invoker)`.
 
@@ -652,6 +703,8 @@ Everything else in this document is a bug or a tuning item within that architect
 
 ## 8. Remediation plan
 
+> **Pass 7 — superseded.** Everything in the Pass 5 list below is now closed except **R-3** and **U-1**, plus trivial **N-13**. See §0.1 for the live list. The plan below is retained as the record of how the work was sequenced.
+>
 > **Pass 5 update — what's left.** Every Critical and every High is closed. No deploy blockers remain. The list below is all that is outstanding, in order.
 >
 > ### 🟠 Correctness — do these first
@@ -772,19 +825,30 @@ Each item is a test that must be *able to fail*. **Pass 3 status marked.**
 
 - [ ] Period metadata retains `rushTripCount` / `rideshareTripCount` after a `/collect` **(N-8)**
 - [ ] With a service-line scope active: `Σ rows.amountOwedMinor` over all pages **equals** `totals.amountOwedMinor`, including rows whose trip-count keys are absent **(N-8 — this is the test that fails today)**
-- [ ] `freeze_settlement_periods_batch` with an empty `close_hash` → does **not** abort the batch **(N-10)**
-- [ ] CI fails on a PR that recreates a wrapper view without `security_invoker` **(N-9)**
+- [x] `freeze_settlement_periods_batch` with an empty `close_hash` → does **not** abort the batch **(N-10)** — `COALESCE(NULLIF(…), '')`
+- [x] CI fails on a PR that recreates a wrapper view without `security_invoker` **(N-9)** — `ci.yml:41`
+
+### Checks added by Pass 5 — Pass 7 status
+
+- [x] Period metadata retains `rushTripCount` / `rideshareTripCount` after a `/collect` **(N-8)** — `PRESERVED_PERIOD_META_KEYS`, `periodSignedSnapshot.test.ts`
+- [x] List filter and totals RPC agree on absent / zero / nonzero trip counts **(N-8)** — `verify_service_line_filter_parity.mjs`, 9 fixtures + source anchors, in CI
+- [ ] **Live check still worth running once after deploy:** a second authenticated tenant cannot `SELECT` another org's row from `public.driver_financial_periods` **(N-1 — the static guard proves the migration text, not the deployed state)**
 
 ---
 
-*Passes 1, 3 and 5 produced without modifying any source file. Pass 5 line references are against the working tree as of 2026-09-08, after the owner's second implementation round (28 modified files + 12 new, incl. migrations `20260908200000` / `210000` / `220000` / `230000` and `scripts/assert-ledger-view-invoker.mjs`).*
+*Passes 1, 3, 5 and 7 produced without modifying any source file. Pass 7 line references are against commit `55361643` (working tree clean).*
 
-*Test state at Pass 5 verification: **148 finance-core + 1,321 fleet passing, 1 skipped**; `assert-ledger-view-invoker` OK across 475 migrations / 15 wrapper views. finance-core moved 151 → 148 because R-1's `shadowCompare` tests were deleted with the dead code.*
+*Test state at Pass 7 verification: **150 finance-core + 1,321 fleet passing (1 skipped)**, **8 Deno freeze tests passing**, `verify_service_line_filter_parity` OK (9 fixtures), `assert-ledger-view-invoker` OK (476 migrations / 15 wrapper views).*
 
 ---
 
 ### Closing note
 
-Across five passes this section went from **5 Critical / 10 High** to **zero of either**, with every control backed by a test that can fail. The recurring failure mode named at the end of the previous audit — *"the mechanism gets built correctly and the last connection, the one that makes it able to fail, is what gets left out"* — did not recur in Pass 4: `mapPool`, the invoker guard, the batch-freeze error message and the restored `block` severity were all wired to fail on the first attempt.
+Across seven passes this section went from **5 Critical / 10 High** to **zero of either, zero Performance, zero Redundancy** — 45 findings closed, 2 cosmetic open. Every control is backed by a test or CI guard that can actually fail, and the two highest-risk mechanisms (the freeze chokepoint and the atomic close) now have explicit, wired recovery paths rather than just error messages.
 
-**N-8 is the one finding worth pausing on**, because it is that pattern inverted: H-8's SQL predicate is correct, but the *data* it reads is destroyed by an unrelated write path. The lesson to carry forward is the mirror of the old one — **when you move a check into SQL, verify that what it reads is durably maintained by every writer, not just the one that created it.***
+The failure mode this codebase kept repeating — *"the mechanism gets built correctly, and the last connection, the one that makes it able to fail, is what gets left out"* — **did not recur in Passes 4 or 6.** In Pass 6 the work went past the spec three times: the `hasOwnProperty` guard that preserves a legitimate `0`, the parity script that reads real source strings instead of mirroring logic in JS, and `retryFreezeWeek` where documenting the limitation would have sufficed.
+
+**Two lessons worth carrying to the next section audit:**
+
+1. **When you move a check into SQL, verify the data it reads is durably maintained by every writer — not just the one that created it.** N-8 was the old pattern inverted: H-8's predicate was correct, but an unrelated write path destroyed its input. A correct check over destroyed data is worse than no check, because it reports confidently.
+2. **A guard that re-implements the thing it guards is a mirror, not a test.** `verify_service_line_filter_parity.mjs` avoids this by asserting against the actual TS filter string and the actual migration text. Copy that shape — fixtures *plus* source anchors — for the next parity guard.

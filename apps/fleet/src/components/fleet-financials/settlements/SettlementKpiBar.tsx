@@ -107,9 +107,9 @@ export function SettlementKpiBar({
 
   return (
     <div className="grid grid-cols-2 lg:grid-cols-5 gap-3" aria-live="polite">
-      <KpiTile label="Driver owes (settled)" value={a.value} sub={a.sub} tone="owed" />
-      <KpiTile label="Cash held (not finalized)" value={b.value} sub={b.sub} tone="pending" />
-      <KpiTile label="Fleet owes" value={c.value} sub={c.sub} tone="pay" />
+      <KpiTile label="Driver owes (after share)" value={a.value} sub={a.sub} tone="owed" />
+      <KpiTile label="Cash held (before share)" value={b.value} sub={b.sub} tone="pending" />
+      <KpiTile label="Fleet owes (after share)" value={c.value} sub={c.sub} tone="pay" />
       <KpiTile
         label={directionLabels?.awaiting || 'Awaiting bank clear'}
         value={d.value}

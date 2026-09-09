@@ -106,6 +106,27 @@ export function compareTollStatementVsEngine(
   return out;
 }
 
+/** True when toll engine still has spend/charge/reimburse activity (major units). */
+export function isTollEngineActivity(engine: TollEngineAmounts, epsMajor = 0.005): boolean {
+  return (
+    Math.abs(Number(engine.totalSpend) || 0) > epsMajor ||
+    Math.abs(Number(engine.chargedToDriver) || 0) > epsMajor ||
+    Math.abs(Number(engine.reimbursed) || 0) > epsMajor
+  );
+}
+
+/**
+ * Skip engine compare for genuine empty-week N/A seals only.
+ * Late tolls after a $0 seal must NOT skip — that is TOLL_STALE_ZERO_SEAL.
+ */
+export function shouldSkipZeroActivityTollCompare(
+  closeReason: string | null | undefined,
+  engine: TollEngineAmounts,
+): boolean {
+  if (String(closeReason || '') !== 'zero_activity_na') return false;
+  return !isTollEngineActivity(engine);
+}
+
 export function compareEarningsStatementVsEngine(
   statement: Pick<WeekStatement, 'amountsMinor' | 'kind'>,
   engine: EarningsEngineAmounts,
@@ -163,12 +184,25 @@ export function engineDriftsToCloseBlockers(
   delta: number;
   message: string;
 }> {
-  const codeFor = (kind: WeekStatementKind): string => {
+  const codeFor = (kind: WeekStatementKind, d: StatementEngineDrift): string => {
     if (kind === 'fuel') return 'FUEL_ENGINE_DRIFT';
-    if (kind === 'toll') return 'TOLL_ENGINE_DRIFT';
+    if (kind === 'toll') {
+      // $0 N/A seal vs live engine spend — late tolls after zero seal.
+      if (
+        d.field === 'totalSpend' &&
+        Math.abs(d.statementMinor) <= ENGINE_EPS_MINOR &&
+        d.engineMinor > ENGINE_EPS_MINOR
+      ) {
+        return 'TOLL_STALE_ZERO_SEAL';
+      }
+      return 'TOLL_ENGINE_DRIFT';
+    }
     return 'EARNINGS_ENGINE_DRIFT';
   };
-  const msgFor = (kind: WeekStatementKind, field: string): string => {
+  const msgFor = (kind: WeekStatementKind, field: string, code: string): string => {
+    if (code === 'TOLL_STALE_ZERO_SEAL') {
+      return 'Late tolls after $0 seal — tap Prepare lanes to re-seal';
+    }
     if (kind === 'fuel') {
       return `Fuel seal no longer matches Consumption engine (${field}) — reseal before close`;
     }
@@ -180,15 +214,16 @@ export function engineDriftsToCloseBlockers(
   return drifts.map((d) => {
     const persisted = round2(d.statementMinor / 100);
     const expected = round2(d.engineMinor / 100);
+    const code = codeFor(d.kind, d);
     return {
-      code: codeFor(d.kind),
+      code,
       severity: 'block' as const,
       driverId: ctx.driverId,
       week: ctx.week,
       persisted,
       expected,
       delta: round2(persisted - expected),
-      message: msgFor(d.kind, d.field),
+      message: msgFor(d.kind, d.field, code),
     };
   });
 }

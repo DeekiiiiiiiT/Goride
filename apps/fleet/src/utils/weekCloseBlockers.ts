@@ -68,6 +68,7 @@ const BLOCKER_LABELS: Record<string, string> = {
   TOLL_PAYMENT_METHOD_UNKNOWN: 'Toll rows missing cash/tag payment method — set method and rebuild',
   FUEL_ENGINE_DRIFT: 'Fuel seal no longer matches Consumption — reseal before close',
   TOLL_ENGINE_DRIFT: 'Toll seal no longer matches event netting — reseal before close',
+  TOLL_STALE_ZERO_SEAL: 'Late tolls after $0 seal — tap Prepare lanes to re-seal',
   EARNINGS_ENGINE_DRIFT: 'Earnings seal no longer matches commission/cash engines — reseal before close',
   EARNINGS_STATEMENT_MISSING: 'Earnings statement not published',
   EARNINGS_STATEMENT_UNVERIFIED: 'Earnings statement unverified — seal from engines before close',

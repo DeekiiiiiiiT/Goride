@@ -51,6 +51,11 @@ function periodFrozenBlocked(r: Pick<SettlementQueueRow, 'periodFrozen'>): boole
 const GATE_TITLE = 'Not yet reconciled — fuel must be finalized and tolls clear before Collect.';
 const FROZEN_TITLE = 'Week closed — reopen on Close Week to change money';
 
+/** Short action-oriented chip labels (U-1) — what to do, not only state. */
+const CHIP_OPEN = 'Week still open — act after it ends';
+const CHIP_LOCKED = 'Reconcile fuel/tolls before Collect';
+const CHIP_CLOSED = 'Reopen on Close Week';
+
 /** Row block reason shown as visible helper text (U-1), not only title tooltips. */
 export function settlementRowBlockReason(
   r: Pick<SettlementQueueRow, 'periodAnchor' | 'periodEnd' | 'moneyUnlocked' | 'periodFrozen'>,
@@ -68,6 +73,26 @@ function actionTitle(
   return weekOpenTitle(r);
 }
 
+function blockReasonChip(
+  r: Pick<SettlementQueueRow, 'periodAnchor' | 'periodEnd' | 'moneyUnlocked' | 'periodFrozen'>,
+  mode: 'collect' | 'pay',
+): { label: string; className: string } | undefined {
+  if (!weekActionable(r)) {
+    return { label: CHIP_OPEN, className: 'text-amber-700' };
+  }
+  if (periodFrozenBlocked(r)) {
+    return { label: CHIP_CLOSED, className: 'text-slate-600' };
+  }
+  if (mode === 'collect' && collectGateBlocked(r)) {
+    return { label: CHIP_LOCKED, className: 'text-rose-700' };
+  }
+  return undefined;
+}
+
+function blockReasonDomId(scope: string, key: string): string {
+  return `sq-block-${scope}-${key.replace(/[^a-zA-Z0-9_-]/g, '_')}`;
+}
+
 /** Collect is allowed only when the calendar week ended AND the money is unlocked AND not frozen. */
 function canCollect(
   r: Pick<SettlementQueueRow, 'periodAnchor' | 'periodEnd' | 'moneyUnlocked' | 'periodFrozen'>,
@@ -79,9 +104,9 @@ function canPay(r: Pick<SettlementQueueRow, 'periodAnchor' | 'periodEnd' | 'peri
   return weekActionable(r) && !periodFrozenBlocked(r);
 }
 
-/** Row label distinguishing custody (cash held) from a settled receivable (H-1). */
+/** Row label: before-share float vs residual after share (driver-share-first). */
 function collectKindLabel(r: Pick<SettlementQueueRow, 'collectKind'>): string {
-  return r.collectKind === 'cash_held' ? 'Cash held' : 'Driver owes';
+  return r.collectKind === 'cash_held' ? 'Cash held (before share)' : 'Driver owes (after share)';
 }
 
 const MONEY = (n: number | null | undefined) => {
@@ -340,6 +365,8 @@ export function SettlementQueueTable({
                           g.weeks[0] || { periodAnchor: '', periodEnd: g.oldestPeriodEnd },
                           mode,
                         );
+                    const headerReasonId = blockReasonDomId('h', g.driverId);
+                    const headerBlocked = Boolean(parentOpenTitle);
                     return (
                       <TableRow
                         key={`h:${g.driverId}`}
@@ -369,6 +396,11 @@ export function SettlementQueueTable({
                               }
                             }}
                             aria-label={`Select all weeks for ${g.driverName || g.driverId}`}
+                            aria-describedby={
+                              weekKeysForDriver.length === 0 && headerBlocked
+                                ? headerReasonId
+                                : undefined
+                            }
                           />
                         </TableCell>
                         <TableCell className="w-10 pr-0">
@@ -416,19 +448,19 @@ export function SettlementQueueTable({
                                   size="sm"
                                   className="h-8 bg-rose-700 hover:bg-rose-800"
                                   disabled={!firstCollectable}
-                                  title={
-                                    !firstCollectable && firstActionable
-                                      ? actionTitle(firstActionable, 'collect')
-                                      : parentOpenTitle
+                                  aria-describedby={
+                                    !firstCollectable && headerBlocked ? headerReasonId : undefined
                                   }
                                   onClick={() => firstCollectable && onCollect?.(firstCollectable)}
                                 >
                                   Collect
                                 </Button>
                               </div>
-                              {/* U-1: visible block reason on rollup header when whole driver locked */}
                               {parentOpenTitle ? (
-                                <p className="max-w-[11rem] text-right text-[11px] leading-snug text-amber-800">
+                                <p
+                                  id={headerReasonId}
+                                  className="max-w-[11rem] text-right text-[11px] leading-snug text-amber-800"
+                                >
                                   {parentOpenTitle}
                                 </p>
                               ) : null}
@@ -440,13 +472,18 @@ export function SettlementQueueTable({
                                 size="sm"
                                 className="h-8 bg-emerald-700 hover:bg-emerald-800"
                                 disabled={!firstActionable}
-                                title={parentOpenTitle}
+                                aria-describedby={
+                                  !firstActionable && headerBlocked ? headerReasonId : undefined
+                                }
                                 onClick={() => firstActionable && onPay?.(firstActionable)}
                               >
                                 Pay
                               </Button>
                               {parentOpenTitle ? (
-                                <p className="max-w-[11rem] text-right text-[11px] leading-snug text-amber-800">
+                                <p
+                                  id={headerReasonId}
+                                  className="max-w-[11rem] text-right text-[11px] leading-snug text-amber-800"
+                                >
                                   {parentOpenTitle}
                                 </p>
                               ) : null}
@@ -464,31 +501,30 @@ export function SettlementQueueTable({
                   const amt = owedMajor(r, mode);
                   const canAct = mode === 'collect' ? canCollect(r) : canPay(r);
                   const openTitle = actionTitle(r, mode);
+                  const chip = blockReasonChip(r, mode);
+                  const reasonId = blockReasonDomId('w', k);
                   return (
                     <TableRow key={`w:${item.rollupId}:${k}`} className="bg-white">
                       <TableCell>
                         <Checkbox
                           checked={selected.has(k)}
                           disabled={!canAct}
-                          title={openTitle}
                           onCheckedChange={() => canAct && onToggle(k)}
                           aria-label={`Select ${r.driverName} ${r.periodAnchor}`}
+                          aria-describedby={!canAct && openTitle ? reasonId : undefined}
                         />
                       </TableCell>
                       <TableCell />
                       <TableCell className="text-sm text-slate-500 pl-6">
                         {mode === 'collect' ? collectKindLabel(r) : 'Week'}
-                        {!weekActionable(r) ? (
-                          <span className="ml-2 text-[10px] font-medium uppercase tracking-wide text-amber-700">
-                            Still open
-                          </span>
-                        ) : periodFrozenBlocked(r) ? (
-                          <span className="ml-2 text-[10px] font-medium uppercase tracking-wide text-slate-600">
-                            Closed
-                          </span>
-                        ) : mode === 'collect' && collectGateBlocked(r) ? (
-                          <span className="ml-2 text-[10px] font-medium uppercase tracking-wide text-rose-700">
-                            Locked
+                        {chip ? (
+                          <span
+                            className={cn(
+                              'ml-2 text-[10px] font-medium uppercase tracking-wide',
+                              chip.className,
+                            )}
+                          >
+                            {chip.label}
                           </span>
                         ) : null}
                       </TableCell>
@@ -516,7 +552,7 @@ export function SettlementQueueTable({
                                 size="sm"
                                 variant="outline"
                                 className="h-8"
-                                title={FROZEN_TITLE}
+                                aria-describedby={reasonId}
                                 onClick={() => onWeekClosed?.(r)}
                               >
                                 Week closed
@@ -528,7 +564,9 @@ export function SettlementQueueTable({
                                   size="sm"
                                   className="h-8 bg-rose-700 hover:bg-rose-800"
                                   disabled={!canCollect(r)}
-                                  title={actionTitle(r, 'collect')}
+                                  aria-describedby={
+                                    !canCollect(r) && openTitle ? reasonId : undefined
+                                  }
                                   onClick={() => canCollect(r) && onCollect?.(r)}
                                 >
                                   Collect
@@ -539,7 +577,7 @@ export function SettlementQueueTable({
                                   variant="outline"
                                   className="h-8"
                                   disabled={!canAct}
-                                  title={openTitle}
+                                  aria-describedby={!canAct && openTitle ? reasonId : undefined}
                                   onClick={() => canAct && onWriteOff?.(r)}
                                 >
                                   <Ban className="h-3.5 w-3.5 mr-1" />
@@ -552,7 +590,7 @@ export function SettlementQueueTable({
                                 size="sm"
                                 className="h-8 bg-emerald-700 hover:bg-emerald-800"
                                 disabled={!canAct}
-                                title={openTitle}
+                                aria-describedby={!canAct && openTitle ? reasonId : undefined}
                                 onClick={() => canAct && onPay?.(r)}
                               >
                                 Pay
@@ -560,7 +598,10 @@ export function SettlementQueueTable({
                             )}
                           </div>
                           {openTitle ? (
-                            <p className="text-[11px] text-slate-500 text-right max-w-[220px] leading-snug">
+                            <p
+                              id={reasonId}
+                              className="text-[11px] text-slate-500 text-right max-w-[220px] leading-snug"
+                            >
                               {openTitle}
                             </p>
                           ) : null}
@@ -594,15 +635,17 @@ export function SettlementQueueTable({
                 const amt = owedMajor(r, mode);
                 const canAct = mode === 'collect' ? canCollect(r) : canPay(r);
                 const openTitle = actionTitle(r, mode);
+                const chip = blockReasonChip(r, mode);
+                const reasonId = blockReasonDomId('f', k);
                 return (
                   <TableRow key={k}>
                     <TableCell>
                       <Checkbox
                         checked={selected.has(k)}
                         disabled={!canAct}
-                        title={openTitle}
                         onCheckedChange={() => canAct && onToggle(k)}
                         aria-label={`Select ${r.driverName}`}
+                        aria-describedby={!canAct && openTitle ? reasonId : undefined}
                       />
                     </TableCell>
                     <TableCell>
@@ -616,17 +659,14 @@ export function SettlementQueueTable({
                     </TableCell>
                     <TableCell className="text-sm text-slate-600">
                       {weekLabel(r.periodAnchor, r.periodEnd)}
-                      {!weekActionable(r) ? (
-                        <span className="ml-2 text-[10px] font-medium uppercase tracking-wide text-amber-700">
-                          Still open
-                        </span>
-                      ) : periodFrozenBlocked(r) ? (
-                        <span className="ml-2 text-[10px] font-medium uppercase tracking-wide text-slate-600">
-                          Closed
-                        </span>
-                      ) : mode === 'collect' && collectGateBlocked(r) ? (
-                        <span className="ml-2 text-[10px] font-medium uppercase tracking-wide text-rose-700">
-                          Locked
+                      {chip ? (
+                        <span
+                          className={cn(
+                            'ml-2 text-[10px] font-medium uppercase tracking-wide',
+                            chip.className,
+                          )}
+                        >
+                          {chip.label}
                         </span>
                       ) : null}
                     </TableCell>
@@ -650,7 +690,7 @@ export function SettlementQueueTable({
                               size="sm"
                               variant="outline"
                               className="h-8"
-                              title={FROZEN_TITLE}
+                              aria-describedby={reasonId}
                               onClick={() => onWeekClosed?.(r)}
                             >
                               Week closed
@@ -662,7 +702,9 @@ export function SettlementQueueTable({
                                 size="sm"
                                 className="h-8 bg-rose-700 hover:bg-rose-800"
                                 disabled={!canCollect(r)}
-                                title={actionTitle(r, 'collect')}
+                                aria-describedby={
+                                  !canCollect(r) && openTitle ? reasonId : undefined
+                                }
                                 onClick={() => canCollect(r) && onCollect?.(r)}
                               >
                                 Collect
@@ -673,7 +715,7 @@ export function SettlementQueueTable({
                                 variant="outline"
                                 className="h-8"
                                 disabled={!canAct}
-                                title={openTitle}
+                                aria-describedby={!canAct && openTitle ? reasonId : undefined}
                                 onClick={() => canAct && onWriteOff?.(r)}
                               >
                                 <Ban className="h-3.5 w-3.5 mr-1" />
@@ -686,7 +728,7 @@ export function SettlementQueueTable({
                               size="sm"
                               className="h-8 bg-emerald-700 hover:bg-emerald-800"
                               disabled={!canAct}
-                              title={openTitle}
+                              aria-describedby={!canAct && openTitle ? reasonId : undefined}
                               onClick={() => canAct && onPay?.(r)}
                             >
                               Pay
@@ -694,7 +736,10 @@ export function SettlementQueueTable({
                           )}
                         </div>
                         {openTitle ? (
-                          <p className="text-[11px] text-slate-500 text-right max-w-[220px] leading-snug">
+                          <p
+                            id={reasonId}
+                            className="text-[11px] text-slate-500 text-right max-w-[220px] leading-snug"
+                          >
                             {openTitle}
                           </p>
                         ) : null}

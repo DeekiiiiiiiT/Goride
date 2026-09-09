@@ -55,7 +55,10 @@ export type ClosePeriodRow = {
   tips_paid_to_driver?: number | null;
   earnings_gross?: number | null;
   settlement_amount?: number | null;
-  /** Open cash still in driver custody — must clear before calendar freeze. */
+  /**
+   * Passenger cash still with the driver after share math (adjCashBalance).
+   * When settlement residual is settled, this is applied share — not a close Collect gate.
+   */
   cash_still_held?: number | null;
   /** Used for H-5 cashHeldClamped close blocker. */
   metadata?: Record<string, unknown> | null;
@@ -547,19 +550,10 @@ export function checkCloseInvariants(input: CloseInvariantInput): CloseBlocker[]
         message: 'Driver still owes cash — Collect remaining on Cash desk before close',
       });
     }
-    const cashHeld = num(p.cash_still_held);
-    if (cashHeld > eps) {
-      out.push({
-        code: 'SETTLEMENT_CASH_HELD',
-        severity: 'block',
-        driverId: ctx.driverId,
-        week: ctx.week,
-        persisted: round2(cashHeld),
-        expected: 0,
-        delta: round2(cashHeld),
-        message: 'Cash still held — Collect or write off on Cash desk before close',
-      });
-    }
+    // Driver-share-first: cash_still_held after residual≈0 is passenger cash already
+    // applied to the driver’s share — not fleet Collect. Open residuals are gated only by
+    // SETTLEMENT_FLEET_OWES / SETTLEMENT_DRIVER_OWES (do not also SETTLEMENT_CASH_HELD).
+    // (Intentionally no SETTLEMENT_CASH_HELD here.)
 
     // H-5: clamped-negative cash held was recorded but never blocked close.
     const fc = (p.metadata?.financeCore || {}) as Record<string, unknown>;

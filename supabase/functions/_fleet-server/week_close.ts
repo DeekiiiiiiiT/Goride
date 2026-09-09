@@ -24,6 +24,7 @@ import {
   getLatestWeekStatements,
   getLatestWeekStatementsForOrgWeek,
   hasPendingRestatementDrafts,
+  listPendingRestatements,
   WEEK_STATEMENT_ENGINE_VERSION,
 } from "./week_statements.ts";
 import { sealTollWeek } from "./toll_week_seal.ts";
@@ -248,6 +249,7 @@ async function ensureCloseLaneStatements(
   orgId: string,
   week: string,
   actorId?: string,
+  opts?: { forceTollReseal?: boolean },
 ): Promise<void> {
   const { data: periods, error } = await sb()
     .from("driver_financial_periods")
@@ -263,6 +265,7 @@ async function ensureCloseLaneStatements(
   let earningsLaneMissing = false;
   let fuelNeedsSeal = false;
   let tollNeedsSeal = false;
+  let tollStaleZeroNa = false;
   let earningsNeedsSeal = false;
   let anyOpenDriver = false;
   for (const p of periods ?? []) {
@@ -294,6 +297,9 @@ async function ensureCloseLaneStatements(
       tollNeedsSeal = true;
     } else if (toll.status !== "closed") {
       tollNeedsSeal = true;
+    } else if (String(toll.closeReason || "") === "zero_activity_na") {
+      // May be stale if late toll_usage arrived — sealTollWeek re-checks events.
+      tollStaleZeroNa = true;
     }
     if (!earnings) {
       earningsLaneMissing = true;
@@ -305,6 +311,7 @@ async function ensureCloseLaneStatements(
 
   // Pass 5: never clobber a standing closed independent seal during close.
   // Only seal missing/draft lanes (or when no closed statement exists).
+  // Exception: zero_activity_na may be stale after late toll posts — re-run seal.
   if (fuelNeedsSeal || (anyOpenDriver && fuelLaneMissing)) {
     try {
       await sealFuelWeek({ organizationId: orgId, weekKey: week, actorId });
@@ -313,9 +320,14 @@ async function ensureCloseLaneStatements(
     }
   }
 
-  if (tollNeedsSeal || (anyOpenDriver && tollLaneMissing)) {
+  if (tollNeedsSeal || tollStaleZeroNa || opts?.forceTollReseal || (anyOpenDriver && tollLaneMissing)) {
     try {
-      await sealTollWeek({ organizationId: orgId, weekKey: week, actorId });
+      await sealTollWeek({
+        organizationId: orgId,
+        weekKey: week,
+        actorId,
+        force: Boolean(tollStaleZeroNa || opts?.forceTollReseal),
+      });
     } catch (e) {
       console.warn("[week_close] toll auto-seal failed (non-fatal)", week, e);
     }
@@ -568,6 +580,97 @@ export async function previewWeekClose(orgId: string, weekKey: string): Promise<
   };
 }
 
+export type ClosedWeekSummary = {
+  weekKey: string;
+  driversTotal: number;
+  driversFrozen: number;
+  closedAt: string | null;
+  pendingRestatementCount: number;
+};
+
+const WEEK_RE_INTERNAL = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * Year-scoped directory of fully closed weeks (every driver-period frozen).
+ * Not the Restatements queue — weeks with no drafts still appear here.
+ */
+export async function listClosedWeeks(
+  orgId: string,
+  opts?: { year?: number },
+): Promise<ClosedWeekSummary[]> {
+  const year = opts?.year && Number.isFinite(opts.year) ? Math.trunc(opts.year) : undefined;
+  const from = year != null ? `${year}-01-01` : undefined;
+  const to = year != null ? `${year}-12-31` : undefined;
+
+  type Agg = {
+    driversTotal: number;
+    driversFrozen: number;
+    closedAt: string | null;
+  };
+  const byWeek = new Map<string, Agg>();
+
+  const pageSize = 1000;
+  for (let offset = 0; ; offset += pageSize) {
+    let q = sb()
+      .from("driver_financial_periods")
+      .select("period_anchor, metadata, settlement_status")
+      .eq("organization_id", orgId)
+      .order("period_anchor", { ascending: false })
+      .range(offset, offset + pageSize - 1);
+    if (from) q = q.gte("period_anchor", from);
+    if (to) q = q.lte("period_anchor", to);
+    const { data, error } = await q;
+    if (error) throw new Error(error.message);
+    const batch = data ?? [];
+    for (const row of batch) {
+      const weekKey = String(row.period_anchor || "").slice(0, 10);
+      if (!WEEK_RE_INTERNAL.test(weekKey)) continue;
+      const cur = byWeek.get(weekKey) || {
+        driversTotal: 0,
+        driversFrozen: 0,
+        closedAt: null as string | null,
+      };
+      cur.driversTotal += 1;
+      const period = row as Record<string, unknown>;
+      if (periodIsFrozen(period)) {
+        cur.driversFrozen += 1;
+        const meta = (period.metadata as Record<string, unknown> | null) || null;
+        const fc = (meta?.financeCore as Record<string, unknown> | undefined) || {};
+        const signed = fc.signedAt ? String(fc.signedAt) : null;
+        if (signed && (!cur.closedAt || signed < cur.closedAt)) cur.closedAt = signed;
+      }
+      byWeek.set(weekKey, cur);
+    }
+    if (batch.length < pageSize) break;
+  }
+
+  const draftCounts = new Map<string, number>();
+  try {
+    const drafts = await listPendingRestatements(orgId, { limit: 500, offset: 0 });
+    for (const s of drafts) {
+      const wk = String(s.weekKey || "").slice(0, 10);
+      if (year != null && !wk.startsWith(String(year))) continue;
+      draftCounts.set(wk, (draftCounts.get(wk) || 0) + 1);
+    }
+  } catch (e) {
+    console.warn("[week_close] listClosedWeeks restatement counts failed (non-fatal)", e);
+  }
+
+  const out: ClosedWeekSummary[] = [];
+  for (const [weekKey, agg] of byWeek) {
+    if (agg.driversTotal <= 0 || agg.driversFrozen !== agg.driversTotal) continue;
+    out.push({
+      weekKey,
+      driversTotal: agg.driversTotal,
+      driversFrozen: agg.driversFrozen,
+      closedAt: agg.closedAt,
+      pendingRestatementCount: draftCounts.get(weekKey) || 0,
+    });
+  }
+  out.sort((a, b) => b.weekKey.localeCompare(a.weekKey));
+  return out;
+}
+
 /**
  * H-1: Explicit prepare — seals missing lanes and persists recon drifts.
  * Call before close when operators want lanes ready; preview stays pure.
@@ -578,7 +681,9 @@ export async function prepareWeekClose(
   actorId: string,
 ): Promise<WeekClosePreview> {
   const week = String(weekKey).slice(0, 10);
-  await ensureCloseLaneStatements(orgId, week, actorId);
+  // Prepare is an explicit operator action — force toll reseal so plaza/events
+  // can replace a stale FE-only or double-count seal before preview.
+  await ensureCloseLaneStatements(orgId, week, actorId, { forceTollReseal: true });
 
   const { data: periods, error } = await sb()
     .from("driver_financial_periods")

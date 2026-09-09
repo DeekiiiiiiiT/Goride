@@ -64,6 +64,14 @@ export type WeekReopenResult = {
   }>;
 };
 
+export type ClosedWeekSummary = {
+  weekKey: string;
+  driversTotal: number;
+  driversFrozen: number;
+  closedAt: string | null;
+  pendingRestatementCount: number;
+};
+
 /** True when the endpoint is genuinely absent (route not deployed yet). */
 export function isWeekCloseUnavailable(err: unknown): boolean {
   if (err instanceof WeekCloseApiError) return err.status === 404 || err.status === 501;
@@ -117,6 +125,22 @@ export const weekCloseApi = {
       throw new WeekCloseApiError(err.message, response.status, err.code, err.details);
     }
     return response.json() as Promise<WeekClosePreview>;
+  },
+
+  /** Fully frozen weeks for the year (directory — not the Restatements queue). */
+  async listClosed(year?: number): Promise<ClosedWeekSummary[]> {
+    const qs = new URLSearchParams();
+    if (year != null && Number.isFinite(year)) qs.set('year', String(year));
+    const response = await fetchWithRetry(
+      `${BASE}/closed-weeks${qs.toString() ? `?${qs.toString()}` : ''}`,
+      { headers: await requireAuthHeaders(null) },
+    );
+    if (!response.ok) {
+      const err = await parseErrorPayload(response, 'Failed to load closed weeks');
+      throw new WeekCloseApiError(err.message, response.status, err.code, err.details);
+    }
+    const j = (await response.json()) as { weeks?: ClosedWeekSummary[] };
+    return Array.isArray(j.weeks) ? j.weeks : [];
   },
 
   /** H-1: seal lanes + persist drifts before close (preview stays read-only). */

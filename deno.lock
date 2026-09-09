@@ -6516,6 +6516,7 @@
             "npm:leaflet@1.9.4",
             "npm:lucide-react@0.487",
             "npm:motion@*",
+            "npm:next-themes@~0.4.6",
             "npm:papaparse@*",
             "npm:pdfjs-dist@*",
             "npm:react-day-picker@^8.10.1",

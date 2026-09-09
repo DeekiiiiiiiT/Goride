@@ -68,6 +68,7 @@ export function computeTollWeekNetting(
 
   let tagSpend = 0;
   let refundsAndInflowOffsets = 0;
+  let platformReimbursedOffsets = 0;
   let reinstated = 0;
   const offsetSourceIds = new Set<string>();
   const tripCharges: Array<{ sourceId: string; amt: number }> = [];
@@ -87,8 +88,16 @@ export function computeTollWeekNetting(
       refundsAndInflowOffsets += amt;
     } else if (t === 'toll_charge_offset') {
       const dir = String(e.direction || '');
-      if (dir === 'inflow') refundsAndInflowOffsets += amt;
-      else if (dir === 'outflow') reinstated += amt;
+      if (dir === 'inflow') {
+        // Matched plaza dual-write: platform_reimbursed offset AND Uber
+        // toll_reimbursement both mark the same recovery. Prefer Uber card
+        // amounts; only keep leftover offsets when reimbursement is missing.
+        const reason = String(
+          (e.metadata as { reason?: string } | undefined)?.reason || '',
+        ).toLowerCase();
+        if (reason === 'platform_reimbursed') platformReimbursedOffsets += amt;
+        else refundsAndInflowOffsets += amt;
+      } else if (dir === 'outflow') reinstated += amt;
     }
   }
 
@@ -99,7 +108,12 @@ export function computeTollWeekNetting(
     else platformReimbursed += tc.amt;
   }
 
-  const disputeRecovered = refundsAndInflowOffsets - reinstated;
+  const unreimbursedPlatformOffsets = Math.max(
+    0,
+    platformReimbursedOffsets - platformReimbursed,
+  );
+  const disputeRecovered =
+    refundsAndInflowOffsets + unreimbursedPlatformOffsets - reinstated;
   const chargedToDrivers = sumTollChargedToDriversFromEvents(scoped);
 
   // C-3/C-4 (LOCKED): chargedToDrivers is a P&L recovery, so it reduces Net Toll

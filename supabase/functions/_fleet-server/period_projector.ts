@@ -45,12 +45,22 @@ export function derivePeriodStatus(input: PeriodStatusInput): DerivedPeriodStatu
   let settlementStatus = "pending";
   let payoutStatus = "pending";
   if (moneyUnlocked) {
+    // Driver-share-first: residual after share vs passenger cash drives directional status.
     if (Math.abs(settlementAmount) < STATUS_SETTLED_EPS) settlementStatus = "settled";
     else if (settlementAmount > 0) settlementStatus = "company_owes";
     else settlementStatus = "driver_owes";
-    payoutStatus = cashStillHeld > STATUS_CASH_HELD_EPS ? "awaiting_cash" : "finalized";
+    // Settled residual ⇒ share already applied from pocket cash — not fleet Collect.
+    // Never mark awaiting_cash when settled solely because adjCashBalance > 0.
+    if (settlementStatus === "settled") {
+      payoutStatus = "finalized";
+    } else {
+      payoutStatus = cashStillHeld > STATUS_CASH_HELD_EPS ? "awaiting_cash" : "finalized";
+    }
   } else if (input.fuelFinalized && !tollsClear) {
     payoutStatus = "awaiting_tolls";
+  } else if (cashStillHeld > STATUS_CASH_HELD_EPS) {
+    // Pre-unlock: passenger cash still with driver before share is applied at the desk.
+    payoutStatus = "awaiting_cash";
   }
 
   const periodStatus: "open" | "closed" | "reopened" =

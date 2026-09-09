@@ -15,12 +15,13 @@ import { Hono, type Context } from "npm:hono";
 import { requireAuth, requirePermission, type RbacUser } from "./rbac_middleware.ts";
 import { getOrgId } from "./org_scope.ts";
 import { safeErrorResponse } from "./safe_error.ts";
-import { closeWeek, previewWeekClose, prepareWeekClose, reopenWeek, retryFreezeWeek, WeekCloseError } from "./week_close.ts";
+import { closeWeek, previewWeekClose, prepareWeekClose, reopenWeek, retryFreezeWeek, listClosedWeeks, WeekCloseError } from "./week_close.ts";
 import { sealFuelWeek } from "./fuel_week_seal.ts";
 import {
   listPendingRestatements,
   requestRestatement,
 } from "./week_statements.ts";
+import * as kv from "./kv_store.tsx";
 
 const app = new Hono();
 app.use("*", requireAuth({ strict: true }));
@@ -36,6 +37,23 @@ function requireOrg(c: Context): string | Response {
 }
 
 const WEEK_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+// ── GET /week-close/closed-weeks?year=YYYY — directory of fully frozen weeks ─
+app.get(`${BASE}/closed-weeks`, requirePermission("transactions.view"), async (c) => {
+  try {
+    const org = requireOrg(c);
+    if (typeof org !== "string") return org;
+    const yearRaw = c.req.query("year");
+    const year = yearRaw ? Number(yearRaw) : undefined;
+    if (yearRaw && (!Number.isFinite(year) || year! < 2000 || year! > 2100)) {
+      return c.json({ error: "INVALID_YEAR", message: "year must be YYYY" }, 400);
+    }
+    const weeks = await listClosedWeeks(org, { year });
+    return c.json({ success: true, year: year ?? null, weeks });
+  } catch (e) {
+    return safeErrorResponse(c, e, "week-close-closed-weeks");
+  }
+});
 
 // ── GET /week-close/preview ─────────────────────────────────────────────────
 app.get(`${BASE}/preview`, requirePermission("transactions.view"), async (c) => {
@@ -197,11 +215,25 @@ app.get(`${BASE}/restatements`, requirePermission("transactions.view"), async (c
     const pageSize = Math.min(Math.max(Number(c.req.query("pageSize") || 50), 1), 200);
     const offset = (page - 1) * pageSize;
     const rows = await listPendingRestatements(org, { limit: pageSize, offset });
+    // Resolve display names for the page’s driver ids only (same pattern as cash desk).
+    const nameById = new Map<string, string>();
+    const ids = [...new Set(rows.map((s) => s.driverId).filter(Boolean))];
+    await Promise.all(
+      ids.map(async (id) => {
+        try {
+          const d = (await kv.get(`driver:${id}`)) as { name?: string } | null;
+          if (d?.name) nameById.set(id, String(d.name));
+        } catch {
+          /* ignore — fall back to id */
+        }
+      }),
+    );
     return c.json({
       success: true,
       rows: rows.map((s) => ({
         id: s.id,
         driverId: s.driverId,
+        driverName: nameById.get(s.driverId) || s.driverId,
         weekKey: s.weekKey,
         kind: s.kind,
         version: s.version,

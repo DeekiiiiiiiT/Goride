@@ -41,6 +41,9 @@ jobs:
       - name: Check ledger view invoker
         run: node scripts/assert-ledger-view-invoker.mjs
 
+      - name: Check no settlement saveTransaction fallback
+        run: node scripts/assert-no-settlement-saveTransaction-fallback.mjs
+
       - name: Check projection flags wired
         run: node scripts/check-projection-flags-wired.mjs
 

@@ -195,7 +195,9 @@ export async function sealTollWeek(opts: {
 
   const { data: periods, error } = await sb()
     .from("driver_financial_periods")
-    .select("driver_id, toll_spend, toll_charged_to_driver, toll_reimbursed, toll_cash_spend, toll_tag_spend")
+    .select(
+      "driver_id, toll_spend, toll_charged_to_driver, toll_reimbursed, toll_cash_spend, toll_tag_spend, metadata",
+    )
     .eq("organization_id", organizationId)
     .eq("period_anchor", weekKey);
   if (error) throw new Error(error.message);
@@ -211,6 +213,14 @@ export async function sealTollWeek(opts: {
     let tagSpend = round2(Number(p.toll_tag_spend) || 0);
     let chargedToDriver = round2(Number(p.toll_charged_to_driver) || 0);
     let source = "period_columns";
+
+    const meta = (p.metadata as Record<string, unknown> | null) || {};
+    const fc = (meta.financeCore as Record<string, unknown> | undefined) || {};
+    const periodFrozen =
+      meta.periodFrozen === true ||
+      meta.signedWeek === true ||
+      fc.periodFrozen === true ||
+      Boolean(fc.signedAt);
 
     try {
       // Prefer Toll Management plaza cards (Spend / Reimbursed) over events netting.
@@ -231,6 +241,23 @@ export async function sealTollWeek(opts: {
           tagSpend = round2(net.tagSpend);
           chargedToDriver = round2(net.chargedToDrivers);
           source = "events";
+        } else {
+          // Late tag posts may exist only as financial_events.toll_usage.
+          const { listActiveTollUsageEventsForWeek } = await import("./toll_financial_reset.ts");
+          const usage = await listActiveTollUsageEventsForWeek({
+            periodAnchor: weekKey,
+            driverId,
+          });
+          if (usage.length > 0) {
+            let tag = 0;
+            for (const e of usage) {
+              tag += Math.abs(Number(e.amount_minor) || 0) / 100;
+            }
+            tagSpend = round2(tag);
+            tollSpend = round2(tag);
+            cashWashSpend = 0;
+            source = "financial_events";
+          }
         }
       }
       // H-9: wallet financial_events win when present (same SoT as Toll cards).
@@ -266,17 +293,27 @@ export async function sealTollWeek(opts: {
       Math.abs(chargedToDriver) > 0.005 ||
       Math.abs(reimbursed) > 0.005;
 
+    const latest = await getLatestWeekStatement(organizationId, driverId, weekKey, "toll");
+    const staleZeroNa =
+      latest?.status === "closed" &&
+      String(latest.closeReason || "") === "zero_activity_na" &&
+      hasActivity;
+
     // Pass 4: zero-activity weeks still need an explicit closed toll statement
     // so Close Week / shadow do not treat the lane as missing (N/A = closed $0).
     // Pass 3 / H-7: period-column fallback is never a closed truth when the
     // driver-week has activity — publish draft so closeInvariants blocks.
+    // Frozen weeks: late activity after N/A → draft restatement (Sign restatements).
     const independent =
       source === "plaza" || source === "events" || source === "financial_events";
-    const status: "draft" | "closed" = !hasActivity
+    let status: "draft" | "closed" = !hasActivity
       ? "closed"
       : independent
         ? "closed"
         : "draft";
+    if (periodFrozen && hasActivity && (staleZeroNa || opts.force)) {
+      status = "draft";
+    }
 
     const amountsMinor = {
       totalSpend: cents(tollSpend),
@@ -287,14 +324,27 @@ export async function sealTollWeek(opts: {
       tagSpend: cents(tagSpend),
     };
 
-    if (!opts.force) {
-      const latest = await getLatestWeekStatement(organizationId, driverId, weekKey, "toll");
+    const forcePublish = Boolean(opts.force) || staleZeroNa;
+    if (!forcePublish) {
       const unchanged =
         latest &&
         latest.status === status &&
         JSON.stringify(latest.amountsMinor) === JSON.stringify(amountsMinor);
       if (unchanged) continue;
     }
+
+    const closeReason =
+      status === "closed"
+        ? !hasActivity
+          ? "zero_activity_na"
+          : source === "plaza"
+            ? "toll_week_seal_plaza"
+            : source === "events"
+              ? "toll_week_seal_events"
+              : "toll_week_seal_financial_events"
+        : staleZeroNa
+          ? "toll_stale_zero_na_restatement"
+          : "toll_week_seal_unverified_period_columns";
 
     await publishWeekStatement({
       kind: "toll",
@@ -304,16 +354,7 @@ export async function sealTollWeek(opts: {
       amountsMinor,
       status,
       closedBy: status === "closed" ? (opts.actorId ?? "toll_week_seal") : null,
-      closeReason:
-        status === "closed"
-          ? !hasActivity
-            ? "zero_activity_na"
-            : source === "plaza"
-              ? "toll_week_seal_plaza"
-              : source === "events"
-                ? "toll_week_seal_events"
-                : "toll_week_seal_financial_events"
-          : "toll_week_seal_unverified_period_columns",
+      closeReason,
     });
     published += 1;
   }

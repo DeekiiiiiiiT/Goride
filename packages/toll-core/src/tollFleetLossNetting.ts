@@ -140,6 +140,7 @@ export function computeTollFleetLossNetting(scoped: TollLedgerLikeEvent[]): Toll
   let plazaCharges = 0;
   let washedTripCharges = 0;
   let recovered = 0;
+  let platformReimbursedOffsets = 0;
   let reinstated = 0;
   const offsetSourceIds = new Set<string>();
   const tripCharges: Array<{ sourceId: string; amt: number }> = [];
@@ -165,7 +166,12 @@ export function computeTollFleetLossNetting(scoped: TollLedgerLikeEvent[]): Toll
     } else if (t === 'toll_charge_offset') {
       const dir = String(e.direction || '');
       if (dir === 'inflow') {
-        recovered += amt;
+        // Same dual-write as week netting: offset + Uber reimbursement = one recovery.
+        const reason = String(
+          (e.metadata as { reason?: string } | undefined)?.reason || '',
+        ).toLowerCase();
+        if (reason === 'platform_reimbursed') platformReimbursedOffsets += amt;
+        else recovered += amt;
       } else if (dir === 'outflow') {
         reinstated += amt;
       }
@@ -180,7 +186,9 @@ export function computeTollFleetLossNetting(scoped: TollLedgerLikeEvent[]): Toll
       platformCoverage += tc.amt;
     }
   }
+  // Prefer Uber reimbursement; keep leftover platform_reimbursed offsets only.
   recovered += platformCoverage;
+  recovered += Math.max(0, platformReimbursedOffsets - platformCoverage);
 
   const gross = plazaCharges + washedTripCharges;
   const rawNet = gross - recovered + reinstated;

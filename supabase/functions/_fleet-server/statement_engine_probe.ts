@@ -5,6 +5,7 @@ import {
   compareFuelStatementVsEngine,
   compareTollStatementVsEngine,
   compareEarningsStatementVsEngine,
+  shouldSkipZeroActivityTollCompare,
   type StatementEngineDrift,
   type FuelEngineAmounts,
   type TollEngineAmounts,
@@ -66,12 +67,37 @@ export async function probeTollEngineAmounts(
   let reimbursed = 0;
   let chargedToDriver = 0;
   try {
-    const events = await loadCanonicalTollEventsForDriverWeek(driverId, weekKey);
-    if (events.length > 0) {
-      const net = computeTollWeekNetting(events);
-      tollSpend = round2(net.tagSpend + net.cashWashSpend);
-      reimbursed = round2(net.platformReimbursed + net.disputeRecovered);
-      chargedToDriver = round2(net.chargedToDrivers);
+    // Same preference order as sealTollWeek — plaza cards first so Close Week
+    // never compares a FE-only seal against a divergent events double-count.
+    const { loadPlazaTollCardsForDriverWeek } = await import("./toll_week_seal.ts");
+    const plaza = await loadPlazaTollCardsForDriverWeek(driverId, weekKey);
+    if (plaza) {
+      tollSpend = plaza.tollSpend;
+      reimbursed = plaza.reimbursed;
+    } else {
+      const events = await loadCanonicalTollEventsForDriverWeek(driverId, weekKey);
+      if (events.length > 0) {
+        const net = computeTollWeekNetting(events);
+        tollSpend = round2(net.tagSpend + net.cashWashSpend);
+        reimbursed = round2(net.platformReimbursed + net.disputeRecovered);
+        chargedToDriver = round2(net.chargedToDrivers);
+      }
+      // Fold financial_events.toll_usage when events/plaza left spend empty
+      // (late tag posts) OR when events exist but netted to $0 spend.
+      if (tollSpend < 0.005) {
+        const { listActiveTollUsageEventsForWeek } = await import("./toll_financial_reset.ts");
+        const usage = await listActiveTollUsageEventsForWeek({
+          periodAnchor: weekKey,
+          driverId,
+        });
+        if (usage.length > 0) {
+          let tag = 0;
+          for (const e of usage) {
+            tag += Math.abs(Number(e.amount_minor) || 0) / 100;
+          }
+          tollSpend = round2(tag);
+        }
+      }
     }
     const wallet = await sumActiveTollChargedToDriverMajor({
       weekKey,
@@ -112,9 +138,9 @@ export async function compareDriverWeekStatementsToEngines(opts: {
       const engine = await probeFuelEngine(organizationId, weekKey, driverId);
       if (engine) drifts.push(...compareFuelStatementVsEngine(s, engine));
     } else if (s.kind === "toll") {
-      // Skip engine compare for explicit zero N/A seals (no activity by design).
-      if (s.closeReason === "zero_activity_na") continue;
       const engine = await probeTollEngine(organizationId, weekKey, driverId);
+      // Genuine empty-week N/A only — late tolls after $0 seal must drift.
+      if (shouldSkipZeroActivityTollCompare(s.closeReason, engine)) continue;
       drifts.push(...compareTollStatementVsEngine(s, engine));
     } else if (s.kind === "earnings") {
       const engine = await computeEarningsEngineAmountsForWeek(driverId, weekKey);

@@ -88,4 +88,75 @@ describe('computeTollWeekNetting — one netting, all four cards', () => {
     expect(r.residual).toBe(0);
     expect(r.clipped).toBe(false);
   });
+
+  it('does not double-count platform_reimbursed offset + Uber toll_reimbursement', () => {
+    // Matched tag: charge + P&L offset + Uber trip reimbursement (same $370 × 3).
+    const events = [
+      { eventType: 'toll_charge', sourceType: 'transaction', sourceId: 'tag1', netAmount: 370 },
+      {
+        eventType: 'toll_charge_offset',
+        direction: 'inflow',
+        sourceId: 'tag1',
+        netAmount: 370,
+        metadata: { reason: 'platform_reimbursed' },
+      },
+      {
+        eventType: 'toll_reimbursement',
+        sourceType: 'trip',
+        sourceId: 'trip1',
+        netAmount: 370,
+      },
+      { eventType: 'toll_charge', sourceType: 'transaction', sourceId: 'tag2', netAmount: 370 },
+      {
+        eventType: 'toll_charge_offset',
+        direction: 'inflow',
+        sourceId: 'tag2',
+        netAmount: 370,
+        metadata: { reason: 'platform_reimbursed' },
+      },
+      {
+        eventType: 'toll_reimbursement',
+        sourceType: 'trip',
+        sourceId: 'trip2',
+        netAmount: 370,
+      },
+      { eventType: 'toll_charge', sourceType: 'transaction', sourceId: 'tag3', netAmount: 370 },
+      {
+        eventType: 'toll_charge_offset',
+        direction: 'inflow',
+        sourceId: 'tag3',
+        netAmount: 370,
+        metadata: { reason: 'platform_reimbursed' },
+      },
+      {
+        eventType: 'toll_reimbursement',
+        sourceType: 'trip',
+        sourceId: 'trip3',
+        netAmount: 370,
+      },
+    ];
+    const r = computeTollWeekNetting(events);
+    expect(r.tagSpend).toBeCloseTo(1110, 2);
+    expect(r.platformReimbursed).toBeCloseTo(1110, 2);
+    expect(r.disputeRecovered).toBeCloseTo(0, 2);
+    expect(r.netLoss).toBeCloseTo(0, 2);
+    expect(tollWeekIdentityCloses(r)).toBe(true);
+  });
+
+  it('keeps platform_reimbursed offset when Uber reimbursement is absent', () => {
+    const r = computeTollWeekNetting([
+      { eventType: 'toll_charge', sourceType: 'transaction', sourceId: 'tag1', netAmount: 370 },
+      {
+        eventType: 'toll_charge_offset',
+        direction: 'inflow',
+        sourceId: 'tag1',
+        netAmount: 370,
+        metadata: { reason: 'platform_reimbursed' },
+      },
+    ]);
+    expect(r.tagSpend).toBeCloseTo(370, 2);
+    expect(r.platformReimbursed).toBeCloseTo(0, 2);
+    expect(r.disputeRecovered).toBeCloseTo(370, 2);
+    expect(r.netLoss).toBeCloseTo(0, 2);
+  });
 });

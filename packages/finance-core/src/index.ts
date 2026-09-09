@@ -154,6 +154,8 @@ export {
   compareTollStatementVsEngine,
   compareEarningsStatementVsEngine,
   engineDriftsToCloseBlockers,
+  isTollEngineActivity,
+  shouldSkipZeroActivityTollCompare,
 } from './statementEngineCompare.ts';
 export type {
   StatementEngineDrift,

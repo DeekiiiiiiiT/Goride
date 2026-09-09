@@ -4,6 +4,8 @@ import {
   compareTollStatementVsEngine,
   compareEarningsStatementVsEngine,
   engineDriftsToCloseBlockers,
+  shouldSkipZeroActivityTollCompare,
+  isTollEngineActivity,
 } from './statementEngineCompare.ts';
 import { checkCloseInvariants } from './closeInvariants.ts';
 
@@ -35,6 +37,37 @@ describe('statementEngineCompare', () => {
       { totalSpend: 5920, chargedToDriver: 1000, reimbursed: 2000 },
     );
     expect(drifts.some((d) => d.field === 'totalSpend')).toBe(true);
+  });
+
+  it('maps $0 seal vs engine spend to TOLL_STALE_ZERO_SEAL', () => {
+    const drifts = compareTollStatementVsEngine(
+      { kind: 'toll', amountsMinor: { totalSpend: 0, chargedToDriver: 0, reimbursed: 0 } },
+      { totalSpend: 1110, chargedToDriver: 0, reimbursed: 0 },
+    );
+    const blockers = engineDriftsToCloseBlockers(drifts, {
+      driverId: 'd1',
+      week: '2026-08-31',
+    });
+    expect(blockers.some((b) => b.code === 'TOLL_STALE_ZERO_SEAL')).toBe(true);
+    expect(blockers.find((b) => b.code === 'TOLL_STALE_ZERO_SEAL')?.message).toMatch(/Prepare lanes/i);
+  });
+
+  it('shouldSkipZeroActivityTollCompare only when engine is also empty', () => {
+    expect(isTollEngineActivity({ totalSpend: 1110, chargedToDriver: 0, reimbursed: 0 })).toBe(true);
+    expect(
+      shouldSkipZeroActivityTollCompare('zero_activity_na', {
+        totalSpend: 0,
+        chargedToDriver: 0,
+        reimbursed: 0,
+      }),
+    ).toBe(true);
+    expect(
+      shouldSkipZeroActivityTollCompare('zero_activity_na', {
+        totalSpend: 1110,
+        chargedToDriver: 0,
+        reimbursed: 0,
+      }),
+    ).toBe(false);
   });
 
   it('engine drifts become close blockers', () => {

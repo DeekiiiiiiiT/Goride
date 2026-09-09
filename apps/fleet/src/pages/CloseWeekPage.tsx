@@ -43,6 +43,7 @@ import {
   SelectValue,
 } from '../components/ui/select';
 import { cn } from '../components/ui/utils';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { useSettlementQueue } from '../hooks/useSettlementQueue';
 import {
   weekCloseApi,
@@ -259,6 +260,8 @@ export function CloseWeekPage({
     message: string;
     driversSealed?: number;
   } | null>(null);
+  /** Open = close this week; Closed = directory of frozen weeks. */
+  const [closeSubTab, setCloseSubTab] = useState<'open' | 'closed'>('open');
   const [reopening, setReopening] = useState(false);
   const [result, setResult] = useState<WeekCloseResult | null>(null);
   const [reopenOpen, setReopenOpen] = useState(false);
@@ -312,6 +315,16 @@ export function CloseWeekPage({
   });
   const preview = previewQuery.data;
   const previewUnavailable = previewQuery.isError && isWeekCloseUnavailable(previewQuery.error);
+
+  // Closed weeks directory for the selected year (not Restatements — all frozen weeks).
+  const closedWeeksQuery = useQuery({
+    queryKey: ['week-close-closed-weeks', year],
+    queryFn: () => weekCloseApi.listClosed(year),
+    retry: false,
+  });
+  const closedWeeks = closedWeeksQuery.data || [];
+  const closedWeeksUnavailable =
+    closedWeeksQuery.isError && isWeekCloseUnavailable(closedWeeksQuery.error);
 
   // ── Settlement lane (trusted settlement queue, single week) ────────────────
   const queueParams = { weekFrom: weekKey, weekTo: periodEnd, minAmount: 0, pageSize: 200, groupBy: 'week' as const };
@@ -445,6 +458,10 @@ export function CloseWeekPage({
   const unknownPmBlockers = (preview?.blockers || []).filter(
     (b) => b.code === 'TOLL_PAYMENT_METHOD_UNKNOWN',
   );
+  const staleZeroSealBlockers = (preview?.blockers || []).filter(
+    (b) => b.code === 'TOLL_STALE_ZERO_SEAL',
+  );
+  const hasStaleZeroSeal = staleZeroSealBlockers.length > 0;
   const hasMissingEventBlocker = missingEventBlockers.length > 0;
   const hasIneligibleBlocker = ineligibleBlockers.length > 0;
   const hasUnknownPmBlocker = unknownPmBlockers.length > 0;
@@ -607,6 +624,7 @@ export function CloseWeekPage({
         toast.error(`Could not close — ${res.driversBlocked} drivers still blocked`);
       }
       void previewQuery.refetch();
+      void closedWeeksQuery.refetch();
     } catch (e) {
       if (isWeekCloseUnavailable(e)) {
         toast.error('Close endpoint not deployed yet — deploy fleet-server to enable closing.');
@@ -640,6 +658,7 @@ export function CloseWeekPage({
         toast.error(`Freeze incomplete — ${res.driversBlocked} still open`);
       }
       void previewQuery.refetch();
+      void closedWeeksQuery.refetch();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Retry freeze failed');
     } finally {
@@ -665,6 +684,7 @@ export function CloseWeekPage({
       setSettlementRiskPrompt(false);
       setResult(null);
       void previewQuery.refetch();
+      void closedWeeksQuery.refetch();
     } catch (e) {
       if (e instanceof WeekCloseApiError && e.code === 'SETTLEMENT_RISK') {
         setSettlementRiskPrompt(true);
@@ -695,11 +715,13 @@ export function CloseWeekPage({
             </h1>
           ) : null}
           <p className={cn('text-sm text-slate-500', !embedded && 'mt-0.5')}>
-            {weekAlreadyClosed
-              ? hasPendingRestatements
-                ? `This week is signed. ${pendingRestatementCount} restatement draft${pendingRestatementCount === 1 ? '' : 's'} await sign-off below.`
-                : 'This week is signed and frozen. Use Restatement Queue for money corrections, or Re-open to unlock lane edits.'
-              : 'One week, three lanes. Closing is blocked until every identity ties.'}
+            {closeSubTab === 'closed'
+              ? `Fully frozen weeks in ${year}. Pick one to open it for inspect, reopen, or sign restatements.`
+              : weekAlreadyClosed
+                ? hasPendingRestatements
+                  ? `This week is signed. ${pendingRestatementCount} restatement draft${pendingRestatementCount === 1 ? '' : 's'} await sign-off below.`
+                  : 'This week is signed and frozen. Use Restatement Queue for money corrections, or Re-open to unlock lane edits.'
+                : 'One week, three lanes. Closing is blocked until every identity ties.'}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -718,55 +740,178 @@ export function CloseWeekPage({
               ))}
             </SelectContent>
           </Select>
-          <Select value={weekKey} onValueChange={onWeekChange}>
-            <SelectTrigger className="h-9 w-[240px]" aria-label="Close week">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {weekKeys.map((k) => (
-                <SelectItem key={k} value={k}>
-                  Week of {weekLabel(k)}
-                  {!isCloseWeekEnded(k) ? ' · in progress' : ''}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="h-9"
-            onClick={() => { void previewQuery.refetch(); void collectQuery.refetch(); void payQuery.refetch(); }}
-            disabled={previewLoading || settlementLoading}
-          >
-            {previewLoading || settlementLoading ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <RefreshCw className="h-4 w-4" />
-            )}
-            <span className="ml-2">Refresh</span>
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="h-9"
-            disabled={previewUnavailable || previewLoading}
-            onClick={async () => {
-              try {
-                await weekCloseApi.prepare(weekKey);
-                toast.success('Lanes prepared');
-                void previewQuery.refetch();
-              } catch (e) {
-                toast.error(e instanceof Error ? e.message : 'Prepare failed');
-              }
-            }}
-          >
-            Prepare lanes
-          </Button>
+          {closeSubTab === 'open' ? (
+            <>
+              <Select value={weekKey} onValueChange={onWeekChange}>
+                <SelectTrigger className="h-9 w-[240px]" aria-label="Close week">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {weekKeys.map((k) => (
+                    <SelectItem key={k} value={k}>
+                      Week of {weekLabel(k)}
+                      {!isCloseWeekEnded(k) ? ' · in progress' : ''}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-9"
+                onClick={() => {
+                  void previewQuery.refetch();
+                  void collectQuery.refetch();
+                  void payQuery.refetch();
+                }}
+                disabled={previewLoading || settlementLoading}
+              >
+                {previewLoading || settlementLoading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="h-4 w-4" />
+                )}
+                <span className="ml-2">Refresh</span>
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-9"
+                disabled={previewUnavailable || previewLoading}
+                onClick={async () => {
+                  try {
+                    await weekCloseApi.prepare(weekKey);
+                    toast.success('Lanes prepared');
+                    void previewQuery.refetch();
+                  } catch (e) {
+                    toast.error(e instanceof Error ? e.message : 'Prepare failed');
+                  }
+                }}
+              >
+                Prepare lanes
+              </Button>
+            </>
+          ) : (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-9"
+              onClick={() => void closedWeeksQuery.refetch()}
+              disabled={closedWeeksQuery.isFetching}
+            >
+              {closedWeeksQuery.isFetching ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <RefreshCw className="h-4 w-4" />
+              )}
+              <span className="ml-2">Refresh</span>
+            </Button>
+          )}
         </div>
       </div>
 
+      <Tabs
+        value={closeSubTab}
+        onValueChange={(v) => setCloseSubTab(v === 'closed' ? 'closed' : 'open')}
+        className="space-y-4"
+      >
+        <TabsList>
+          <TabsTrigger value="open">Open</TabsTrigger>
+          <TabsTrigger value="closed" className="gap-1.5">
+            Closed
+            {closedWeeks.length > 0 ? (
+              <span className="rounded-full bg-slate-200 px-1.5 py-0 text-[10px] font-semibold text-slate-700">
+                {closedWeeks.length}
+              </span>
+            ) : null}
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="closed" className="mt-0 space-y-3">
+          <div className="rounded-lg border border-slate-200 bg-white">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-4 py-3">
+              <div>
+                <p className="text-sm font-medium text-slate-900">Closed weeks · {year}</p>
+                <p className="text-xs text-slate-500">
+                  Fully frozen weeks for this year. Tap a week to open it on the Open tab. Not the
+                  Restatements queue — weeks with no drafts still show here.
+                </p>
+              </div>
+              {closedWeeksQuery.isFetching ? (
+                <Loader2 className="h-4 w-4 animate-spin text-slate-400" aria-label="Loading closed weeks" />
+              ) : null}
+            </div>
+            {closedWeeksUnavailable ? (
+              <p className="px-4 py-3 text-sm text-amber-900 bg-amber-50">
+                Closed-weeks list needs a fleet-server deploy (`/settlements/week-close/closed-weeks`).
+              </p>
+            ) : closedWeeksQuery.isError ? (
+              <p className="px-4 py-3 text-sm text-rose-700">
+                {(closedWeeksQuery.error as Error)?.message || 'Failed to load closed weeks'}
+              </p>
+            ) : closedWeeks.length === 0 ? (
+              <p className="px-4 py-6 text-sm text-slate-500 text-center">
+                No fully closed weeks in {year} yet.
+              </p>
+            ) : (
+              <ul className="max-h-[28rem] overflow-y-auto divide-y divide-slate-100">
+                {closedWeeks.map((w) => {
+                  const selected = w.weekKey === weekKey && closeSubTab === 'closed';
+                  return (
+                    <li key={w.weekKey}>
+                      <button
+                        type="button"
+                        className={cn(
+                          'flex w-full items-center justify-between gap-3 px-4 py-2.5 text-left text-sm transition-colors',
+                          selected ? 'bg-indigo-50' : 'hover:bg-slate-50',
+                        )}
+                        onClick={() => {
+                          onWeekChange(w.weekKey);
+                          setCloseSubTab('open');
+                        }}
+                      >
+                        <span className="min-w-0">
+                          <span className="font-medium text-slate-900">
+                            Week of {weekLabel(w.weekKey)}
+                          </span>
+                          <span className="mt-0.5 block text-xs text-slate-500">
+                            {w.driversFrozen} driver{w.driversFrozen === 1 ? '' : 's'} frozen
+                            {(() => {
+                              if (!w.closedAt) return '';
+                              try {
+                                return ` · signed ${format(parseISO(w.closedAt), 'MMM d, yyyy')}`;
+                              } catch {
+                                return '';
+                              }
+                            })()}
+                          </span>
+                        </span>
+                        <span className="flex shrink-0 items-center gap-2">
+                          {w.pendingRestatementCount > 0 ? (
+                            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-900">
+                              {w.pendingRestatementCount} restatement
+                              {w.pendingRestatementCount === 1 ? '' : 's'}
+                            </span>
+                          ) : (
+                            <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-medium text-emerald-800">
+                              Closed
+                            </span>
+                          )}
+                          <ArrowRight className="h-3.5 w-3.5 text-slate-400" />
+                        </span>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
+        </TabsContent>
+
+        <TabsContent value="open" className="mt-0 space-y-6">
       {previewUnavailable ? (
         <div role="status" className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
           Fuel / Toll preview is unavailable (route not deployed). The Settlement lane below is live; deploy
@@ -809,11 +954,11 @@ export function CloseWeekPage({
           lane="settlement"
           icon={<Banknote className="h-4 w-4" />}
           status={settlementStatus}
-          provenance="Earnings from commission + cash engines"
+          provenance="Share applied first; Collect/Pay is residual only"
           metrics={[
-            { label: 'Fleet owes', value: MONEY(settlement.fleetOwes) },
-            { label: 'Drivers owe', value: MONEY(settlement.driversOwe) },
-            { label: 'Cash held', value: MONEY(settlement.cashHeld) },
+            { label: 'Fleet owes (after share)', value: MONEY(settlement.fleetOwes) },
+            { label: 'Drivers owe (after share)', value: MONEY(settlement.driversOwe) },
+            { label: 'Cash held (before share)', value: MONEY(settlement.cashHeld) },
             { label: 'Total exposure', value: MONEY(settlement.totalExposure) },
             ...(settlement.blockedExposure > MONEY_EPS
               ? [{ label: 'Blocked / pending', value: MONEY(settlement.blockedExposure), tone: 'warn' as const }]
@@ -898,6 +1043,20 @@ export function CloseWeekPage({
           <p className="mt-1 text-amber-900/90">
             About {MONEY(unknownPmImpact)} sits in toll spend without cash or tag.
             Set each row’s payment method to Cash or Tag Balance, then rebuild the week before close.
+          </p>
+        </div>
+      ) : null}
+
+      {hasStaleZeroSeal ? (
+        <div
+          role="status"
+          className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950"
+        >
+          <p className="font-medium">Late tolls after a $0 seal</p>
+          <p className="mt-1 text-amber-900/90">
+            Tolls were sealed as no activity, then tag tolls posted later. That usually causes the
+            P&amp;L identity gap. Tap <strong>Prepare lanes</strong> to re-seal tolls, then Refresh —
+            do not chase Collect/Pay for this.
           </p>
         </div>
       ) : null}
@@ -1046,6 +1205,72 @@ export function CloseWeekPage({
         </div>
       </div>
 
+      {freezePending ? (
+        <div
+          role="alert"
+          className="rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950"
+        >
+          <p className="font-medium">Statements sealed — calendar freeze not applied</p>
+          <p className="mt-1 text-amber-900/90">
+            {freezePending.message}
+            {freezePending.driversSealed != null
+              ? ` (${freezePending.driversSealed} driver${freezePending.driversSealed === 1 ? '' : 's'} sealed).`
+              : ''}{' '}
+            Pay/Collect may still be open until freeze lands. Retry freeze only — do not re-run a full close.
+          </p>
+          <Button
+            type="button"
+            size="sm"
+            className="mt-2 h-8 bg-amber-800 hover:bg-amber-900"
+            disabled={closing}
+            onClick={() => void doRetryFreeze()}
+          >
+            {closing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Lock className="mr-2 h-4 w-4" />}
+            Retry freeze
+          </Button>
+        </div>
+      ) : null}
+
+      {result && !freezePending && (!weekAlreadyClosed || hasPendingRestatements) ? (
+        <div
+          role="status"
+          className={cn(
+            'rounded-md border px-4 py-3 text-sm',
+            result.closed
+              ? 'border-emerald-200 bg-emerald-50 text-emerald-900'
+              : 'border-rose-200 bg-rose-50 text-rose-900',
+          )}
+        >
+          {result.closed
+            ? `Week closed — ${result.driversClosed} driver-periods signed and frozen.`
+            : `Close blocked — ${result.driversClosed} signed, ${result.driversBlocked} still blocked.`}
+          {result.closed && onNavigate ? (
+            <div className="mt-2 flex flex-wrap gap-2">
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="h-8 border-emerald-300 bg-white"
+                onClick={() => onNavigate('driver-settlements', { weekKey })}
+              >
+                Open Cash desk
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="h-8 border-emerald-300 bg-white"
+                onClick={() => onNavigate('restatement-queue')}
+              >
+                Restatements
+              </Button>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+        </TabsContent>
+      </Tabs>
+
       <Dialog
         open={closeConfirmOpen}
         onOpenChange={(open) => {
@@ -1067,9 +1292,9 @@ export function CloseWeekPage({
               {preview?.driversReady === 1 ? '' : 's'} and lock Pay/Collect for the week.
             </p>
             <ul className="list-disc pl-5 text-slate-600 space-y-1">
-              <li>Fleet owes (pay lane): {MONEY(settlement.fleetOwes)}</li>
-              <li>Drivers owe: {MONEY(settlement.driversOwe)}</li>
-              <li>Cash held: {MONEY(settlement.cashHeld)}</li>
+              <li>Fleet owes (after share): {MONEY(settlement.fleetOwes)}</li>
+              <li>Drivers owe (after share): {MONEY(settlement.driversOwe)}</li>
+              <li>Cash held (before share): {MONEY(settlement.cashHeld)}</li>
             </ul>
             {closeConfirmDrivers.length > 0 ? (
               <div className="rounded-md border border-slate-200 bg-slate-50 max-h-40 overflow-y-auto">
@@ -1306,70 +1531,6 @@ export function CloseWeekPage({
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      {freezePending ? (
-        <div
-          role="alert"
-          className="rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950"
-        >
-          <p className="font-medium">Statements sealed — calendar freeze not applied</p>
-          <p className="mt-1 text-amber-900/90">
-            {freezePending.message}
-            {freezePending.driversSealed != null
-              ? ` (${freezePending.driversSealed} driver${freezePending.driversSealed === 1 ? '' : 's'} sealed).`
-              : ''}{' '}
-            Pay/Collect may still be open until freeze lands. Retry freeze only — do not re-run a full close.
-          </p>
-          <Button
-            type="button"
-            size="sm"
-            className="mt-2 h-8 bg-amber-800 hover:bg-amber-900"
-            disabled={closing}
-            onClick={() => void doRetryFreeze()}
-          >
-            {closing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Lock className="mr-2 h-4 w-4" />}
-            Retry freeze
-          </Button>
-        </div>
-      ) : null}
-
-      {result && !freezePending && (!weekAlreadyClosed || hasPendingRestatements) ? (
-        <div
-          role="status"
-          className={cn(
-            'rounded-md border px-4 py-3 text-sm',
-            result.closed
-              ? 'border-emerald-200 bg-emerald-50 text-emerald-900'
-              : 'border-rose-200 bg-rose-50 text-rose-900',
-          )}
-        >
-          {result.closed
-            ? `Week closed — ${result.driversClosed} driver-periods signed and frozen.`
-            : `Close blocked — ${result.driversClosed} signed, ${result.driversBlocked} still blocked.`}
-          {result.closed && onNavigate ? (
-            <div className="mt-2 flex flex-wrap gap-2">
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                className="h-8 border-emerald-300 bg-white"
-                onClick={() => onNavigate('driver-settlements', { weekKey })}
-              >
-                Open Cash desk
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                className="h-8 border-emerald-300 bg-white"
-                onClick={() => onNavigate('restatement-queue')}
-              >
-                Restatements
-              </Button>
-            </div>
-          ) : null}
-        </div>
-      ) : null}
     </div>
   );
 }

@@ -219,6 +219,37 @@ describe('checkCloseInvariants (§6.4)', () => {
     expect(blockers.some((b) => b.code.startsWith('SETTLEMENT_FLEET') || b.code.startsWith('SETTLEMENT_DRIVER') || b.code === 'SETTLEMENT_CASH_HELD')).toBe(false);
   });
 
+  it('settled with cash_still_held (applied share) does not emit SETTLEMENT_CASH_HELD', () => {
+    const blockers = checkCloseInvariants({
+      ...tyingWeek,
+      period: { ...tyingWeek.period, settlement_amount: 0, cash_still_held: 15785.22 },
+    });
+    expect(blockers.some((b) => b.code === 'SETTLEMENT_CASH_HELD')).toBe(false);
+    expect(blockers.some((b) => b.code === 'SETTLEMENT_FLEET_OWES')).toBe(false);
+    expect(blockers.some((b) => b.code === 'SETTLEMENT_DRIVER_OWES')).toBe(false);
+    expect(canCloseWeek(blockers)).toBe(true);
+  });
+
+  it('company_owes residual still blocks; cash_still_held alone does not add SETTLEMENT_CASH_HELD', () => {
+    const blockers = checkCloseInvariants({
+      ...tyingWeek,
+      period: { ...tyingWeek.period, settlement_amount: 8650.32, cash_still_held: 15785.22 },
+    });
+    expect(blockers.some((b) => b.code === 'SETTLEMENT_FLEET_OWES')).toBe(true);
+    expect(blockers.some((b) => b.code === 'SETTLEMENT_CASH_HELD')).toBe(false);
+    expect(canCloseWeek(blockers)).toBe(false);
+  });
+
+  it('driver_owes residual still blocks Collect path', () => {
+    const blockers = checkCloseInvariants({
+      ...tyingWeek,
+      period: { ...tyingWeek.period, settlement_amount: -200, cash_still_held: 500 },
+    });
+    expect(blockers.some((b) => b.code === 'SETTLEMENT_DRIVER_OWES')).toBe(true);
+    expect(blockers.some((b) => b.code === 'SETTLEMENT_CASH_HELD')).toBe(false);
+    expect(canCloseWeek(blockers)).toBe(false);
+  });
+
   it('sub-epsilon settlement residual does not block close', () => {
     const blockers = checkCloseInvariants({
       ...tyingWeek,

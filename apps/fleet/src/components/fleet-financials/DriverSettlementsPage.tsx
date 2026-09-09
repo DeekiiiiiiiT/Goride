@@ -226,6 +226,16 @@ function compareBySettlementWeekDesc(
   return String(a.driverId || '').localeCompare(String(b.driverId || ''));
 }
 
+/** R-3: fail closed when commands are down — never fall back to saveTransaction. */
+function failIfCommandsUnavailable(err: unknown, actionLabel: string): never {
+  if (!isSettlementCommandUnavailable(err)) {
+    toast.error(err instanceof Error ? err.message : `${actionLabel} failed`);
+    throw err;
+  }
+  toast.error('Settlement commands unavailable — redeploy fleet-server');
+  throw err;
+}
+
 /** Map queue API row → PeriodRow (amountOwed from major or minor). */
 function queueToPeriodRow(r: SettlementQueueRow): PeriodRow {
   const amountOwed =
@@ -1277,13 +1287,7 @@ export function DriverSettlementsPage({
         showMoneyLocked(weekAnchor, payoutModal.driverName);
         return;
       }
-      if (!isSettlementCommandUnavailable(err)) {
-        toast.error(err instanceof Error ? err.message : 'Pay failed');
-        throw err;
-      }
-      // R-3: no legacy saveTransaction fallback — commands endpoint is required.
-      toast.error('Settlement commands unavailable — redeploy fleet-server');
-      throw err;
+      failIfCommandsUnavailable(err, 'Pay');
     }
     refreshAll();
   };
@@ -1361,12 +1365,7 @@ export function DriverSettlementsPage({
           showMoneyLocked(weekStart, collectModal.driverName);
           return;
         }
-        if (!isSettlementCommandUnavailable(err)) {
-          toast.error(err instanceof Error ? err.message : 'Collect failed');
-          throw err;
-        }
-        toast.error('Settlement commands unavailable — redeploy fleet-server');
-        throw err;
+        failIfCommandsUnavailable(err, 'Collect');
       }
     }
     await Promise.all([
@@ -1421,12 +1420,7 @@ export function DriverSettlementsPage({
         showMoneyLocked(weekAnchor, writeOffModal.driverName);
         return;
       }
-      if (!isSettlementCommandUnavailable(err)) {
-        toast.error(err instanceof Error ? err.message : 'Write-off failed');
-        throw err;
-      }
-      toast.error('Settlement commands unavailable — redeploy fleet-server');
-      throw err;
+      failIfCommandsUnavailable(err, 'Write-off');
     }
     refreshAll();
   };
@@ -1813,7 +1807,7 @@ export function DriverSettlementsPage({
               : MONEY(fleetOwesTotal - settledOwesTotal)}
           </span>
           <span className="ml-1 text-[11px] font-normal text-slate-400">
-            (liability − receivable) · custody separate · {exposureScopeLabel}
+            Driver share applied first · Collect/Pay = leftover · {exposureScopeLabel}
           </span>
         </span>
         {blockedExposure > MONEY_EPS ? (

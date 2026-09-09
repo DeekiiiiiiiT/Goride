@@ -344,6 +344,49 @@ export async function ensureActiveTollUsagePostedForEntry(entry: {
   if (!result.ok && !result.skipped) {
     return { posted: false, skipped: false, error: result.error || "failed" };
   }
+  if (result.inserted === true) {
+    // Non-fatal: invalidate $0 N/A seals when late toll_usage lands for the week.
+    try {
+      const { periodKeyFor } = await import("../../../packages/finance-core/src/periodKey.ts");
+      const day = String(entry.date || "").slice(0, 10);
+      const weekKey =
+        periodKeyFor(/^\d{4}-\d{2}-\d{2}$/.test(day) ? day : new Date().toISOString().slice(0, 10)) ||
+        "";
+      if (/^\d{4}-\d{2}-\d{2}$/.test(weekKey)) {
+        const { getServiceClient } = await import("./service_client.ts");
+        const sb = getServiceClient();
+        const { data: per } = await sb
+          .from("driver_financial_periods")
+          .select("organization_id")
+          .eq("driver_id", String(entry.driverId))
+          .eq("period_anchor", weekKey)
+          .maybeSingle();
+        const orgId = String((per as { organization_id?: string } | null)?.organization_id || "").trim();
+        if (orgId) {
+          const { getLatestWeekStatement } = await import("./week_statements.ts");
+          const latest = await getLatestWeekStatement(orgId, String(entry.driverId), weekKey, "toll");
+          if (
+            latest?.status === "closed" &&
+            String(latest.closeReason || "") === "zero_activity_na"
+          ) {
+            const { sealTollWeek } = await import("./toll_week_seal.ts");
+            await sealTollWeek({
+              organizationId: orgId,
+              weekKey,
+              actorId: "toll_usage_post",
+              force: true,
+            });
+          }
+        }
+      }
+    } catch (e) {
+      console.warn(
+        "[ensureActiveTollUsagePostedForEntry] stale zero-seal reseal failed (non-fatal)",
+        entry.driverId,
+        e,
+      );
+    }
+  }
   return { posted: result.inserted === true, skipped: result.skipped === true };
 }
 
