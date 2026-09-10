@@ -3,6 +3,14 @@
 export const OVERPAID_BADGE_TOOLTIP =
   'Fleet paid more than this week’s gross entitlement. Full exposure is in the Driver owes amount.';
 
+/** Reconciled dual-stamp: cash settled vs Close Week signed. */
+export const SETTLED_NOT_SIGNED_TOOLTIP =
+  'Cash settled — click to open Close Week and sign books.';
+
+export function settledSignedLabel(periodFrozen: boolean): string {
+  return periodFrozen ? 'Settled · signed' : 'Settled · not signed';
+}
+
 export function overpaidBadgeLabel(amount: number | null | undefined): string {
   const n = Number(amount) || 0;
   if (n <= 0.005) return '';

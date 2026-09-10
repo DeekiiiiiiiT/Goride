@@ -21,6 +21,7 @@ import type { Vehicle } from '../../../types/vehicle';
 import { ymdToLocalDate } from '../../../utils/timezoneDisplay';
 import type { DateRange } from 'react-day-picker';
 import type { FuelAutoCloseDualApprovalMode } from '../../../utils/fuelDualApproval';
+import { isReconWeekSealed, reconWeekSealMessage } from '../../../utils/reconWeekSeal';
 
 export const FUEL_RECON_WIZARD_PRIMARY =
   import.meta.env.VITE_FUEL_RECON_WIZARD_PRIMARY !== '0';
@@ -34,6 +35,14 @@ function parseDeepLinkStep(raw: string | null): FuelStepId | undefined {
   if (!raw) return undefined;
   const step = raw.trim() as FuelStepId;
   return FUEL_STEP_ORDER.includes(step) ? step : undefined;
+}
+
+function periodAllowsReconWork(period: FuelReconciliationPeriod): boolean {
+  if (period.locked) return true;
+  return !isReconWeekSealed({
+    weekStart: period.startDate,
+    periodEnd: period.endDate,
+  });
 }
 
 export function FuelReconciliationDashboard({
@@ -111,6 +120,8 @@ export function FuelReconciliationDashboard({
   const [wizardSession, setWizardSession] = useState(0);
   const [deepLinkConsumed, setDeepLinkConsumed] = useState(false);
 
+  const [deepLinkSealedMessage, setDeepLinkSealedMessage] = useState<string | null>(null);
+
   useEffect(() => {
     if (initialWeekStart) setDeepLinkConsumed(false);
   }, [initialWeekStart]);
@@ -131,11 +142,18 @@ export function FuelReconciliationDashboard({
     if (!week) return;
     const period = allPeriods.find((p) => p.startDate === week);
     if (!period) return;
+    onSelectPeriodWeek?.(period);
+    if (!periodAllowsReconWork(period)) {
+      setDeepLinkSealedMessage(
+        reconWeekSealMessage({ weekStart: period.startDate, periodEnd: period.endDate }),
+      );
+      setDeepLinkConsumed(true);
+      return;
+    }
     const stepId =
       typeof window !== 'undefined'
         ? parseDeepLinkStep(new URLSearchParams(window.location.search).get('step'))
         : undefined;
-    onSelectPeriodWeek?.(period);
     setView({ kind: 'wizard', period, initialStepId: stepId });
     setDeepLinkConsumed(true);
   }, [allPeriods, deepLinkConsumed, loading, onSelectPeriodWeek, initialWeekStart]);
@@ -150,9 +168,21 @@ export function FuelReconciliationDashboard({
   }, [finalizedReports]);
 
   const openPeriod = (period: FuelReconciliationPeriod, stepId?: FuelStepId) => {
+    if (!periodAllowsReconWork(period)) {
+      setDeepLinkSealedMessage(
+        reconWeekSealMessage({ weekStart: period.startDate, periodEnd: period.endDate }),
+      );
+      return;
+    }
+    setDeepLinkSealedMessage(null);
     onSelectPeriodWeek?.(period);
     setView({ kind: 'wizard', period, initialStepId: stepId });
   };
+
+  const unlockedOpenPeriods = useMemo(
+    () => [...outstanding, ...inProgress].filter(periodAllowsReconWork),
+    [outstanding, inProgress],
+  );
 
   if (view.kind === 'archive') {
     return (
@@ -244,6 +274,14 @@ export function FuelReconciliationDashboard({
           Could not load locked weeks from the server. Completed tab may be incomplete — refresh and try again.
         </div>
       )}
+      {deepLinkSealedMessage && (
+        <div
+          className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950"
+          role="status"
+        >
+          {deepLinkSealedMessage}
+        </div>
+      )}
       <FuelPeriodLandingPage
         outstanding={outstanding}
         inProgress={inProgress}
@@ -262,7 +300,7 @@ export function FuelReconciliationDashboard({
       <FuelBulkFinalizeDialog
         open={bulkFinalizeOpen}
         onOpenChange={setBulkFinalizeOpen}
-        periods={[...outstanding, ...inProgress]}
+        periods={unlockedOpenPeriods}
         vehicles={vehicles}
         drivers={drivers}
         fuelEntries={fuelEntries}

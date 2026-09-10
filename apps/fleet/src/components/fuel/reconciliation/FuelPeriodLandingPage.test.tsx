@@ -2,7 +2,7 @@
  * @vitest-environment jsdom
  */
 import React from 'react';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { FuelPeriodLandingPage } from './FuelPeriodLandingPage';
 import { emptyFuelStepCounts } from '../../../utils/fuelPeriodGating';
@@ -112,5 +112,39 @@ describe('FuelPeriodLandingPage auto-close badges', () => {
     const completedTab = screen.queryByRole('tab', { name: /completed/i });
     if (completedTab) completedTab.click();
     expect(screen.getByText(/Jun 29/i)).toBeTruthy();
+  });
+});
+
+describe('FuelPeriodLandingPage calendar seal', () => {
+  it('disables open CTA for in-progress Sep 7–13 week before unlock day', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-09-09T15:00:00.000Z'));
+    try {
+      render(
+        <FuelPeriodLandingPage
+          outstanding={[
+            period({
+              id: 'sep7',
+              startDate: '2026-09-07',
+              endDate: '2026-09-13',
+              label: 'Sep 7 – Sep 13, 2026',
+              actionableTotal: 2,
+              netLeakage: 15_000,
+            }),
+          ]}
+          inProgress={[]}
+          completed={[]}
+          loading={false}
+          onSelectPeriod={() => undefined}
+          onBulkFinalize={() => undefined}
+        />,
+      );
+      expect(screen.getAllByText(/Week ending 2026-09-13 is still open/i).length).toBeGreaterThan(0);
+      expect(screen.getByText(/Opens after week ends/i)).toBeTruthy();
+      const finalize = screen.getByRole('button', { name: /Finalize weeks/i });
+      expect(finalize).toBeDisabled();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

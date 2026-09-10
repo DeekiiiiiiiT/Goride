@@ -14,6 +14,9 @@ import {
   type WeekStatement,
   type WeekStatementKind,
 } from "../../../packages/finance-core/src/weekStatement.ts";
+import { shouldBlockRestatementDraft } from "./week_statements_guard.ts";
+
+export { shouldBlockRestatementDraft } from "./week_statements_guard.ts";
 
 /** Statement engine identity — bump when statement math changes (invalidates hashes). */
 export const WEEK_STATEMENT_ENGINE_VERSION = "week-statement@1";
@@ -44,7 +47,20 @@ export type PublishWeekStatementInput = {
   status?: "draft" | "closed";
   closedBy?: string | null;
   closeReason?: string | null;
+  /**
+   * Required to publish draft that supersedes a standing CLOSED seal (Restatement Queue).
+   * Close Week sync / casual seals must never set this — prevents restatement spam.
+   */
+  allowRestatementDraft?: boolean;
 };
+
+export class RestatementDraftBlockedError extends Error {
+  readonly code = "RESTATEMENT_DRAFT_BLOCKED";
+  constructor(message: string) {
+    super(message);
+    this.name = "RestatementDraftBlockedError";
+  }
+}
 
 /**
  * Insert a new statement version for a driver-week lane. Version is
@@ -67,6 +83,13 @@ export async function publishWeekStatement(input: PublishWeekStatementInput): Pr
   const priorClosed = (existingRows ?? []).find((r) => r.status === "closed");
   const nextVersion = priorMaxVersion + 1;
   const status = input.status ?? "draft";
+
+  // Hard stop: draft-over-closed is a restatement — only Restatement Queue may create it.
+  if (shouldBlockRestatementDraft(Boolean(priorClosed), status, input.allowRestatementDraft)) {
+    throw new RestatementDraftBlockedError(
+      `Refusing draft ${input.kind} statement for ${input.driverId}@${weekKey}: standing closed seal exists (use requestRestatement)`,
+    );
+  }
 
   const statement: WeekStatement = {
     kind: input.kind,
@@ -291,6 +314,7 @@ export async function requestRestatement(input: RequestRestatementInput): Promis
     sourceRowIds: input.sourceRowIds ?? priorStmt.sourceRowIds,
     status: "draft",
     closeReason: input.reason,
+    allowRestatementDraft: true,
   });
 
   // Annotate the restatement request on the new draft for audit trace.
@@ -339,5 +363,33 @@ export async function listPendingRestatements(
     const prev = byKey.get(key);
     if (!prev || Number(s.version) > Number(prev.version)) byKey.set(key, s);
   }
-  return [...byKey.values()];
+  const candidates = [...byKey.values()];
+  if (candidates.length === 0) return [];
+
+  // Product: Restatements only for weeks that are already closed (frozen/signed).
+  const weekKeys = [...new Set(candidates.map((s) => s.weekKey))];
+  const driverIds = [...new Set(candidates.map((s) => s.driverId))];
+  const { data: periods, error: perr } = await sb()
+    .from("driver_financial_periods")
+    .select("driver_id, period_anchor, settlement_status, metadata")
+    .eq("organization_id", organizationId)
+    .in("period_anchor", weekKeys)
+    .in("driver_id", driverIds);
+  if (perr) throw new Error(perr.message);
+
+  const frozenKeys = new Set<string>();
+  for (const p of periods ?? []) {
+    const meta = (p.metadata as Record<string, unknown> | null) || null;
+    const fc = (meta?.financeCore as Record<string, unknown> | undefined) || {};
+    const frozen =
+      meta?.periodFrozen === true ||
+      fc.periodFrozen === true ||
+      Boolean(fc.signedAt) ||
+      String(p.settlement_status || "") === "signed";
+    if (frozen) {
+      frozenKeys.add(`${String(p.driver_id)}|${String(p.period_anchor).slice(0, 10)}`);
+    }
+  }
+
+  return candidates.filter((s) => frozenKeys.has(`${s.driverId}|${s.weekKey}`));
 }

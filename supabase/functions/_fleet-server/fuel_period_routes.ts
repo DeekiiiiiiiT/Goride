@@ -24,9 +24,19 @@ import {
 } from "./fuel_org_preferences.ts";
 import { sealFuelWeek } from "./fuel_week_seal.ts";
 import { buildFuelSealAmountsByDriver } from "./fuel_close_amounts.ts";
+import { assertPeriodEndedForReconciliation } from "./settlement_period_freeze.ts";
+import { SettlementCommandError } from "./settlement_commands.ts";
+import { isSettlementPeriodEnded } from "../../../packages/finance-core/src/settlementPeriodGate.ts";
 
 const BASE = "/make-server-37f42386";
 const CRON_SECRET = () => Deno.env.get("FLEET_CRON_SECRET") || Deno.env.get("CRON_SECRET") || "";
+
+function periodNotEndedResponse(e: unknown) {
+  if (e instanceof SettlementCommandError && e.code === "PERIOD_NOT_ENDED") {
+    return { error: e.code, message: e.message, details: e.details };
+  }
+  return null;
+}
 
 function actorId(c: Context): string | null {
   try {
@@ -850,6 +860,14 @@ export function registerFuelPeriodRoutes(app: Hono) {
       const periodId = c.req.param("id");
       const period = await loadPeriod(orgId, periodId);
       if (!period) return c.json({ error: "Not found" }, 404);
+      const weekKey = ymd(period.week_start);
+      try {
+        assertPeriodEndedForReconciliation(weekKey);
+      } catch (e) {
+        const body = periodNotEndedResponse(e);
+        if (body) return c.json(body, 409);
+        throw e;
+      }
       const ifMatch = c.req.header("If-Match");
       if (ifMatch != null && ifMatch !== "" && Number(ifMatch) !== Number(period.version)) {
         return c.json({ error: "version_conflict", currentVersion: period.version }, 409);
@@ -1275,6 +1293,11 @@ export function registerFuelPeriodRoutes(app: Hono) {
         }
 
         const weekStart = ymd(row.week_start);
+        // Calendar seal: never auto-lock an in-progress Mon–Sun week.
+        if (!isSettlementPeriodEnded({ weekAnchor: weekStart })) {
+          bumpSkip(orgId, periodId, "skip_period_not_ended");
+          continue;
+        }
         let snaps = ((await kv.getByPrefix(`finalized_report:${weekStart}:`)) || []).filter(
           (s: any) => !s.orgId || s.orgId === orgId || !s.org_id || s.org_id === orgId,
         ) as any[];

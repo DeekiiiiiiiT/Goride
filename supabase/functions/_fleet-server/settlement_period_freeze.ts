@@ -4,6 +4,7 @@
  */
 import {
   isSettlementPeriodEnded,
+  reconciliationPeriodOpenMessage,
   settlementPeriodOpenMessage,
 } from "../../../packages/finance-core/src/settlementPeriodGate.ts";
 import { SettlementCommandError } from "./settlement_commands.ts";
@@ -268,6 +269,21 @@ export function assertPeriodEndedForSettlement(
   throw new SettlementCommandError(
     "PERIOD_NOT_ENDED",
     settlementPeriodOpenMessage(gate),
+    409,
+    { weekAnchor },
+  );
+}
+
+/** Fuel finalize / toll seal / week close — same calendar rule, recon copy. */
+export function assertPeriodEndedForReconciliation(
+  weekAnchor: string,
+  now: Date | string = new Date(),
+): void {
+  const gate = { weekAnchor, now };
+  if (isSettlementPeriodEnded(gate)) return;
+  throw new SettlementCommandError(
+    "PERIOD_NOT_ENDED",
+    reconciliationPeriodOpenMessage(gate),
     409,
     { weekAnchor },
   );

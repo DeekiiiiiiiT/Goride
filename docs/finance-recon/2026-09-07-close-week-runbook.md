@@ -2,19 +2,41 @@
 
 ## How to close a week
 
-1. Open **Close the Week** and pick the Monday week.
-2. Clear Fuel / Tolls / Settlement blockers (Review deep-links).
-3. Unverified lanes mean the statement is still draft — finalize fuel or seal tolls from events.
-4. Press **Close week** only when blockers = 0 (warnings alone do not block).
+1. Finish **Fuel** and **Tolls** week recon (and Cash desk) where that work lives.
+2. Open **Close the Week** and pick the Monday week.
+3. Close Week **auto-syncs** ended open weeks on load and Refresh when seals/books need repair (publishes missing/draft seals, **force-reseals closed seals that drifted from engines**, rebuilds open driver books). Healthy Clear weeks stay preview-only. You do not need a Prepare button.
+4. Auto-sync **never** creates Restatement Queue drafts. Draft-over-closed seals are only from Restatement Queue / intentional frozen-week toll restatements.
+5. Clear remaining blockers via **Review** (Fuel / Tolls / Cash).
+6. Press **Close week** only when blockers = 0 (warnings alone do not block). Close force-reseals fuel + tolls + earnings (closed→closed) + rebuilds before signing.
+
+### After Refresh: Collect appears
+
+If Tolls / Fuel show **Clear** but Settlement still needs Collect or Pay, that residual is usually **real** — book refresh stamped charged/reimbursed onto periods and settlement reopened. Finish **Collect / Pay on Cash desk**, then **Refresh**. Do not hand-edit `driver_financial_periods` or run SQL heals for period↔seal drift.
+
+### Earnings unverified
+
+Retry **Refresh**. Do **not** use Restatement Queue for this. If it persists after deploy of write guards, engines could not produce a closed seal — investigate earnings engines, not Collect.
+
+### Restatement Queue spam cleanup
+
+If the queue filled with Earnings drafts after sync: run `.\scripts\cleanup-sync-restatement-drafts.ps1` (deletes open-week / `close_precondition_unverified` draft+supersedes only). Queue listing only shows drafts on **frozen** weeks.
+
+## Engineering contract (seal → rebuild)
+
+Any code path that publishes a **closed** `week_statement` for an open org-week must **rebuild open driver periods** for that week so Pass E can stamp seal → books (`PROJECTION_READS_WEEK_STATEMENTS=true`). Owned today by: Fuel finalize, Toll seal HTTP, Close Week sync (`POST …/prepare` or `…/sync`), and Close.
+
+`publishWeekStatement` refuses draft-over-closed unless `allowRestatementDraft: true` (Restatement Queue / intentional frozen toll restatement only).
 
 ## When Close is blocked
 
 | Code | Meaning | Fix |
 |------|---------|-----|
-| `FUEL_STATEMENT_MISSING` / `UNVERIFIED` | No closed fuel statement | Finalize Consumption Reconciliation |
-| `TOLL_STATEMENT_MISSING` / `UNVERIFIED` | No closed toll statement from events | Finish Toll Reconciliation / ensure events exist |
-| `EARNINGS_STATEMENT_MISSING` / `UNVERIFIED` | No closed earnings seal | Close Week auto-seals from engines; or wait for seal |
-| `FUEL_ENGINE_DRIFT` / `TOLL_ENGINE_DRIFT` / `EARNINGS_ENGINE_DRIFT` | Closed seal ≠ fresh engine | Reseal that lane before close |
+| `FUEL_STATEMENT_MISSING` / `UNVERIFIED` | No closed fuel statement | Finalize Consumption Reconciliation, then Refresh Close |
+| `TOLL_STATEMENT_MISSING` / `UNVERIFIED` | No closed toll statement from events | Finish Toll Reconciliation / ensure events exist, then Refresh |
+| `EARNINGS_STATEMENT_MISSING` / `UNVERIFIED` | No closed earnings seal | Refresh Close — not Restatement Queue |
+| `FUEL_ENGINE_DRIFT` / `TOLL_ENGINE_DRIFT` / `EARNINGS_ENGINE_DRIFT` | Closed seal ≠ fresh engine | **Refresh** Close Week (sync force-reseals closed→closed, then rebuilds). Not Restatement Queue. |
+| `TOLL_SPEND_MISMATCH` / `TOLL_CHARGED_MISMATCH` | Period toll_* ≠ seal | **Refresh** Close Week (sync reseals + rebuilds). Do not SQL-align periods. |
+| `PERIOD_REBUILD_FAILED` | Rebuild after seal failed for one+ drivers | Retry Refresh / Close; check worker limits |
 | `TOLL_EVENT_ORPHANED` | Toll money events don’t match live tolls | Re-open if closed → **Repair orphan toll events** → force-seal tolls (not Restatement) |
 | `TOLL_EVENT_MISSING` | Live tolls have no money event | Re-save / re-post those toll rows (or clear quarantine and save), then rebuild |
 | `TOLL_EVENT_INELIGIBLE` | Events still on quarantined/voided rows | Re-open if closed → **Review sample & repair** → force-seal (not Restatement) |
@@ -24,7 +46,14 @@
 | `*_MISMATCH` | Period ≠ independent statement | Investigate drift; do not force-close |
 | `CASH_SOURCE_MISMATCH` | Trip CSV vs ledger cash | Resolve cash source before close |
 | `SETTLEMENT_PNL_MISMATCH` | Desk fleet P&L ≠ sealed statement P&L | Align projection to statements / reseal |
-| `BUSINESS_WEEK_PNL_UNAVAILABLE` | Warn — no closed statements to build P&L | Seal lanes first |
+| `BUSINESS_WEEK_PNL_UNAVAILABLE` | Warn — no closed statements to build P&L | Finish lane recon / Refresh sync first |
+| `SETTLEMENT_DRIVER_OWES` / `SETTLEMENT_FLEET_OWES` / `SETTLEMENT_CASH_HELD` | Cash residual | Collect / Pay on Cash desk, then Refresh |
+
+## Ops scan — open weeks with toll period ≠ seal (read-only)
+
+Use [toll-period-seal-drift-scan.sql](./toll-period-seal-drift-scan.sql) and [unpublished-lane-statements-scan.sql](./unpublished-lane-statements-scan.sql). Heal via Close Week sync (`scripts/heal-week-close-sync.mjs` or open each week on Close) — the scans do **not** mutate data.
+
+Preview field `tollPeriodSealDriftCount` (set on sync) is the same class of metric for the selected week.
 
 ## Orphan toll events (tag spend inflation)
 

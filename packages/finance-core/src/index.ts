@@ -67,6 +67,8 @@ export {
   isSettlementPeriodEnded,
   isSettlementPeriodOpen,
   settlementPeriodOpenMessage,
+  reconciliationPeriodOpenMessage,
+  reconciliationUnlockDay,
 } from './settlementPeriodGate.ts';
 export type { SettlementPeriodGateInput } from './settlementPeriodGate.ts';
 export { clusterPayoutCashC1 } from './payoutCashC1.ts';
@@ -178,6 +180,10 @@ export type {
   CloseEarningsStatement,
 } from './closeInvariants.ts';
 export {
+  tollPeriodDisagreesWithSeal,
+  countTollPeriodSealDrift,
+} from './tollPeriodSealDrift.ts';
+export {
   filterActiveTollUsageEvents,
   reconcileTollUsageEventsVsLedger,
   tollEventLedgerHasDrift,
@@ -187,6 +193,7 @@ export type {
   TollLedgerSpendLike,
   TollEventLedgerRecon,
 } from './tollEventLedgerRecon.ts';
+export * from './weekCloseDirectory.ts';
 export * from './fixedExpenseOccurrences.ts';
 export * from './ledgerMoneyAggregate.ts';
 export * from './expenseHubJournal.ts';

@@ -5,7 +5,8 @@
  * button is enabled only when every cross-system identity ties — the system
  * will not let you close a week that does not balance. Fuel / Toll lanes and
  * the blocker list come from the read-only /week-close/preview endpoint;
- * the Settlement lane reuses the trusted settlement-queue hooks.
+ * the Settlement lane reuses the trusted settlement-queue hooks. Ended open
+ * weeks auto-sync (seal + rebuild) on load/Refresh via POST /week-close/sync.
  */
 import React, { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
@@ -50,6 +51,7 @@ import {
   isWeekCloseUnavailable,
   WeekCloseApiError,
   type WeekCloseResult,
+  type OpenWeekSummary,
 } from '../services/weekCloseApi';
 import {
   closeWeekYearOptions,
@@ -63,12 +65,18 @@ import {
   LANE_REVIEW_PAGE,
   blockingCount,
   humanBlockerLabel,
+  isCashResidualOnlyBlockers,
   laneStatusFromBlockers,
   summarizeBlockersByLane,
   type CloseLane,
   type CloseLaneStatus,
   type SettlementLaneMetrics,
 } from '../utils/weekCloseBlockers';
+import {
+  shouldAutoSyncCloseWeek,
+  shouldRunCloseWeekSync,
+  forceResealHintsFromPreview,
+} from '../utils/closeWeekAutoSync';
 import { computeSettlementLaneMetrics } from '../utils/settlementLaneMetrics';
 import { resolvePayQueueOwed } from '../utils/driverSettlementsPayAmount';
 
@@ -307,14 +315,27 @@ export function CloseWeekPage({
     setFreezePending(null);
   };
 
-  // ── Fuel / Toll lanes + cross-system blockers (read-only preview) ──────────
+  // ── Slim sync: preview first; POST sync only when seals/books need repair ──
   const previewQuery = useQuery({
     queryKey: ['week-close-preview', weekKey],
-    queryFn: () => weekCloseApi.preview(weekKey),
+    queryFn: async () => {
+      const base = await weekCloseApi.preview(weekKey);
+      if (!shouldRunCloseWeekSync(weekKey, base)) return base;
+      try {
+        return await weekCloseApi.sync(weekKey, forceResealHintsFromPreview(base));
+      } catch (e) {
+        console.warn('[CloseWeek] sync failed — keeping preview', e);
+        toast.message('Couldn’t refresh week books — showing last known state.');
+        return base;
+      }
+    },
     retry: false,
   });
   const preview = previewQuery.data;
   const previewUnavailable = previewQuery.isError && isWeekCloseUnavailable(previewQuery.error);
+  const weekBooksRefreshing =
+    previewQuery.isFetching &&
+    shouldAutoSyncCloseWeek(weekKey, { weekAlreadyClosed: !!preview?.weekClosed });
 
   // Closed weeks directory for the selected year (not Restatements — all frozen weeks).
   const closedWeeksQuery = useQuery({
@@ -325,6 +346,19 @@ export function CloseWeekPage({
   const closedWeeks = closedWeeksQuery.data || [];
   const closedWeeksUnavailable =
     closedWeeksQuery.isError && isWeekCloseUnavailable(closedWeeksQuery.error);
+
+  // Open weeks directory — cash settled × not signed (Awaiting sign-off).
+  const openWeeksQuery = useQuery({
+    queryKey: ['week-close-open-weeks', year],
+    queryFn: () => weekCloseApi.listOpen(year),
+    retry: false,
+  });
+  const awaitingSignOffWeeks = useMemo(
+    () => (openWeeksQuery.data || []).filter((w: OpenWeekSummary) => w.cashAllSettled),
+    [openWeeksQuery.data],
+  );
+  const openWeeksUnavailable =
+    openWeeksQuery.isError && isWeekCloseUnavailable(openWeeksQuery.error);
 
   // ── Settlement lane (trusted settlement queue, single week) ────────────────
   const queueParams = { weekFrom: weekKey, weekTo: periodEnd, minAmount: 0, pageSize: 200, groupBy: 'week' as const };
@@ -764,33 +798,16 @@ export function CloseWeekPage({
                   void previewQuery.refetch();
                   void collectQuery.refetch();
                   void payQuery.refetch();
+                  void openWeeksQuery.refetch();
                 }}
-                disabled={previewLoading || settlementLoading}
+                disabled={previewLoading || settlementLoading || weekBooksRefreshing}
               >
-                {previewLoading || settlementLoading ? (
+                {previewLoading || settlementLoading || weekBooksRefreshing ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
                   <RefreshCw className="h-4 w-4" />
                 )}
                 <span className="ml-2">Refresh</span>
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="h-9"
-                disabled={previewUnavailable || previewLoading}
-                onClick={async () => {
-                  try {
-                    await weekCloseApi.prepare(weekKey);
-                    toast.success('Lanes prepared');
-                    void previewQuery.refetch();
-                  } catch (e) {
-                    toast.error(e instanceof Error ? e.message : 'Prepare failed');
-                  }
-                }}
-              >
-                Prepare lanes
               </Button>
             </>
           ) : (
@@ -920,6 +937,89 @@ export function CloseWeekPage({
         </div>
       ) : null}
 
+      <div className="rounded-lg border border-slate-200 bg-white">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-4 py-3">
+          <div>
+            <p className="text-sm font-medium text-slate-900">Cash settled — not closed yet</p>
+            <p className="text-xs text-slate-500">
+              Cash desk is clear; Fuel / Tolls may still need work before Close. Tap a week to open it
+              below.
+            </p>
+          </div>
+          {openWeeksQuery.isFetching ? (
+            <Loader2 className="h-4 w-4 animate-spin text-slate-400" aria-label="Loading open weeks" />
+          ) : null}
+        </div>
+        {openWeeksUnavailable ? (
+          <p className="px-4 py-3 text-sm text-amber-900 bg-amber-50">
+            Open-weeks list needs a fleet-server deploy (`/settlements/week-close/open-weeks`).
+          </p>
+        ) : openWeeksQuery.isError ? (
+          <p className="px-4 py-3 text-sm text-rose-700">
+            {(openWeeksQuery.error as Error)?.message || 'Failed to load open weeks'}
+          </p>
+        ) : awaitingSignOffWeeks.length === 0 ? (
+          <p className="px-4 py-6 text-sm text-slate-500 text-center">
+            No cash-settled open weeks.
+          </p>
+        ) : (
+          <ul className="max-h-[14rem] overflow-y-auto divide-y divide-slate-100">
+            {awaitingSignOffWeeks.map((w) => {
+              const selected = w.weekKey === weekKey;
+              return (
+                <li key={w.weekKey}>
+                  <button
+                    type="button"
+                    className={cn(
+                      'flex w-full items-center justify-between gap-3 px-4 py-2.5 text-left text-sm transition-colors',
+                      selected ? 'bg-indigo-50' : 'hover:bg-slate-50',
+                    )}
+                    onClick={() => onWeekChange(w.weekKey)}
+                  >
+                    <span className="min-w-0">
+                      <span className="font-medium text-slate-900">
+                        Week of {weekLabel(w.weekKey)}
+                      </span>
+                      <span className="mt-0.5 block text-xs text-slate-500">
+                        {w.driversTotal} driver{w.driversTotal === 1 ? '' : 's'} · cash settled · not
+                        signed
+                      </span>
+                    </span>
+                    <span className="flex shrink-0 items-center gap-2">
+                      <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-900">
+                        Cash settled
+                      </span>
+                      <ArrowRight className="h-3.5 w-3.5 text-slate-400" />
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
+
+      {preview && !weekAlreadyClosed ? (
+        <div
+          role="status"
+          className={cn(
+            'rounded-md border px-4 py-2.5 text-sm',
+            preview.cashAllSettled
+              ? 'border-emerald-200 bg-emerald-50 text-emerald-950'
+              : 'border-amber-200 bg-amber-50 text-amber-950',
+          )}
+        >
+          {preview.cashAllSettled ? (
+            <span className="font-medium">Cash settled</span>
+          ) : (
+            <>
+              <span className="font-medium">Cash open</span>
+              <span className="text-amber-900/90"> — finish Collect/Pay on Cash desk</span>
+            </>
+          )}
+        </div>
+      ) : null}
+
       <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
         <LaneCard
           lane="fuel"
@@ -969,6 +1069,23 @@ export function CloseWeekPage({
           onReview={() => reviewLane('settlement')}
         />
       </div>
+
+      {isCashResidualOnlyBlockers(preview?.blockers, preview?.weekBlockers) ||
+      (settlementStatus === 'blocked' &&
+        fuelStatus === 'clear' &&
+        tollStatus === 'clear' &&
+        openSettlementExposure) ? (
+        <div
+          role="status"
+          className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950"
+        >
+          <p className="font-medium">Cash desk still open</p>
+          <p className="mt-1 text-amber-900/90">
+            Tolls and Fuel tie. Book refresh may have reopened Collect/Pay — finish on Cash desk, then
+            Refresh. This is not a Tolls lane failure.
+          </p>
+        </div>
+      ) : null}
 
       {hasOrphanBlocker ? (
         <div
@@ -1054,9 +1171,8 @@ export function CloseWeekPage({
         >
           <p className="font-medium">Late tolls after a $0 seal</p>
           <p className="mt-1 text-amber-900/90">
-            Tolls were sealed as no activity, then tag tolls posted later. That usually causes the
-            P&amp;L identity gap. Tap <strong>Prepare lanes</strong> to re-seal tolls, then Refresh —
-            do not chase Collect/Pay for this.
+            Tolls were sealed as no activity, then tag tolls posted later. Refresh this week to
+            re-seal — do not chase Collect/Pay for this.
           </p>
         </div>
       ) : null}
@@ -1090,6 +1206,13 @@ export function CloseWeekPage({
               ok={false}
             />
           ) : null}
+          {(preview?.tollPeriodSealDriftCount ?? 0) > 0 ? (
+            <IdentityRow
+              label="Toll period ↔ seal drift before last book refresh"
+              value={String(preview.tollPeriodSealDriftCount)}
+              ok={false}
+            />
+          ) : null}
         </div>
       </div>
 
@@ -1103,8 +1226,8 @@ export function CloseWeekPage({
         )}
       >
         <div className="text-sm text-slate-600">
-          {previewLoading ? (
-            'Checking cross-system invariants…'
+          {previewLoading || weekBooksRefreshing ? (
+            weekBooksRefreshing ? 'Refreshing week books…' : 'Checking cross-system invariants…'
           ) : previewQuery.isError && !previewUnavailable ? (
             <span className="text-rose-700">Could not load preview — try Refresh.</span>
           ) : weekAlreadyClosed ? (
@@ -1124,19 +1247,29 @@ export function CloseWeekPage({
             </span>
           ) : totalBlockers > 0 ? (
             <span className="text-rose-700">
-              {openSettlementBalanceBlocked || openSettlementExposure
-                ? 'Finish Pay / Collect on Cash desk, then Refresh.'
+              {isCashResidualOnlyBlockers(preview?.blockers, preview?.weekBlockers) ||
+              openSettlementBalanceBlocked ||
+              openSettlementExposure
+                ? (preview?.tollPeriodSealDriftCount ?? 0) > 0 ||
+                  (preview?.periodsRebuiltAfterSeal ?? 0) > 0
+                  ? 'Books refreshed — finish Collect/Pay on Cash desk, then Refresh.'
+                  : 'Finish Pay / Collect on Cash desk, then Refresh.'
                 : `${totalBlockers} blocker${totalBlockers === 1 ? '' : 's'} across ${preview?.driversBlocked ?? 0} driver${
                     (preview?.driversBlocked ?? 0) === 1 ? '' : 's'
                   } — resolve before closing.`}
             </span>
           ) : openSettlementExposure ? (
-            <span className="text-rose-700">Finish Pay / Collect on Cash desk, then Refresh.</span>
+            <span className="text-rose-700">
+              {(preview?.tollPeriodSealDriftCount ?? 0) > 0 ||
+              (preview?.periodsRebuiltAfterSeal ?? 0) > 0
+                ? 'Books refreshed — finish Collect/Pay on Cash desk, then Refresh.'
+                : 'Finish Pay / Collect on Cash desk, then Refresh.'}
+            </span>
           ) : (preview?.driversTotal ?? 0) === 0 ? (
             'No driver periods found for this week.'
           ) : (
             <span className="text-emerald-700">
-              Every driver ties. {preview?.driversReady ?? 0} ready to sign.
+              Every driver ties. {preview?.driversReady ?? 0} ready to close.
             </span>
           )}
         </div>

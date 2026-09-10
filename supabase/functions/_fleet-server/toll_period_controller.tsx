@@ -38,6 +38,8 @@ import { requireAuth, requirePermission, type RbacUser } from "./rbac_middleware
 import { getServiceClient } from "./service_client.ts";
 import { getOrgId } from "./org_scope.ts";
 import { sealTollWeek } from "./toll_week_seal.ts";
+import { assertPeriodEndedForReconciliation } from "./settlement_period_freeze.ts";
+import { SettlementCommandError } from "./settlement_commands.ts";
 import { sumActiveTollChargedToDriverMajor } from "./toll_charged_from_financial_events.ts";
 import {
   filterTollEventsInDateRange,
@@ -701,6 +703,7 @@ app.post(`/make-server-37f42386/toll/periods/:weekKey/seal`, requirePermission("
     if (!/^\d{4}-\d{2}-\d{2}$/.test(weekKey)) {
       return c.json({ error: "weekKey (YYYY-MM-DD Monday) is required" }, 400);
     }
+    assertPeriodEndedForReconciliation(weekKey);
     const body = (await c.req.json().catch(() => ({}))) as {
       chargedAmountsMajor?: Record<string, number>;
       nettingByDriver?: Record<string, { reimbursed?: number; netLoss?: number }>;
@@ -715,8 +718,59 @@ app.post(`/make-server-37f42386/toll/periods/:weekKey/seal`, requirePermission("
       nettingByDriver: body.nettingByDriver,
       force: body.force === true,
     });
-    return c.json({ success: true, weekKey, ...result });
+
+    // Contract: closed seal ⇒ rebuild open periods (Fuel finalize parity).
+    let periodsRebuilt = 0;
+    const rebuildErrors: string[] = [];
+    try {
+      const { rebuildPeriodsForAnchors } = await import("./driver_financial_periods.ts");
+      const { isPeriodFrozen } = await import("./settlement_period_freeze.ts");
+      const sbClient = getServiceClient();
+      const { data: periods } = await sbClient
+        .from("driver_financial_periods")
+        .select("driver_id, settlement_status, metadata")
+        .eq("period_anchor", weekKey)
+        .eq("organization_id", orgId);
+      const openDriverIds = [
+        ...new Set(
+          (periods || [])
+            .filter((p) => {
+              const meta = (p.metadata as Record<string, unknown> | null) || null;
+              const fc = (meta?.financeCore as Record<string, unknown> | undefined) || {};
+              return !isPeriodFrozen({
+                metadata: meta,
+                settlementStatus: p.settlement_status ? String(p.settlement_status) : null,
+                signedAt: fc.signedAt ? String(fc.signedAt) : null,
+              });
+            })
+            .map((p) => String(p.driver_id || ""))
+            .filter(Boolean),
+        ),
+      ];
+      for (const driverId of openDriverIds) {
+        try {
+          periodsRebuilt += await rebuildPeriodsForAnchors(driverId, [weekKey]);
+        } catch (re: unknown) {
+          const msg = re instanceof Error ? re.message : String(re);
+          rebuildErrors.push(`rebuild ${driverId}: ${msg}`);
+        }
+      }
+    } catch (rebuildErr: unknown) {
+      const msg = rebuildErr instanceof Error ? rebuildErr.message : String(rebuildErr);
+      rebuildErrors.push(`rebuild: ${msg}`);
+    }
+
+    return c.json({
+      success: true,
+      weekKey,
+      ...result,
+      periodsRebuilt,
+      rebuildErrors: rebuildErrors.length ? rebuildErrors : undefined,
+    });
   } catch (e: any) {
+    if (e instanceof SettlementCommandError) {
+      return c.json({ error: e.code, message: e.message, details: e.details }, e.status);
+    }
     return safeErrorResponse(c, e, "TollPeriodController.seal");
   }
 });

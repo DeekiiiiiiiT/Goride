@@ -1,8 +1,9 @@
 import React from 'react';
 import { format, parseISO } from 'date-fns';
-import { Loader2 } from 'lucide-react';
+import { Loader2, PenLine } from 'lucide-react';
 import { MONEY_EPS } from '@roam/finance-core';
 import { Badge } from '../../ui/badge';
+import { Button } from '../../ui/button';
 import {
   Table,
   TableBody,
@@ -11,8 +12,9 @@ import {
   TableHeader,
   TableRow,
 } from '../../ui/table';
-import { OVERPAID_BADGE_TOOLTIP, overpaidBadgeLabel } from '../../../utils/settlementDeskUx';
+import { OVERPAID_BADGE_TOOLTIP, overpaidBadgeLabel, SETTLED_NOT_SIGNED_TOOLTIP, settledSignedLabel } from '../../../utils/settlementDeskUx';
 import { useWindowedRows } from './useWindowedRows';
+import { cn } from '../../ui/utils';
 
 const MONEY = (n: number | null | undefined) => {
   if (n == null || !Number.isFinite(n)) return '—';
@@ -74,6 +76,8 @@ export type ReconciledTableRow = {
   tripCount: number;
   overpaidAmount?: number;
   cashSourceMismatch?: number;
+  /** Close Week freeze — Settled · signed vs Settled · not signed. */
+  periodFrozen?: boolean;
   metadata?: Record<string, unknown> | null;
 };
 
@@ -82,6 +86,8 @@ export type ReconciledTableProps = {
   loading: boolean;
   onOpenDriver?: (id: string) => void;
   onOpenPeriod: (r: ReconciledTableRow) => void;
+  /** Settled · not signed → Close Week for that period. */
+  onOpenCloseWeek?: (periodAnchor: string) => void;
 };
 
 const COL_SPAN = 13;
@@ -91,6 +97,7 @@ export function ReconciledTable({
   loading,
   onOpenDriver,
   onOpenPeriod,
+  onOpenCloseWeek,
 }: ReconciledTableProps) {
   const { visible, padTop, padBottom, windowed, onScroll, maxHeightClass } = useWindowedRows(rows);
 
@@ -189,12 +196,33 @@ export function ReconciledTable({
                     </TableCell>
                     <TableCell>
                       <div className="flex flex-col gap-1">
-                        <Badge
-                          variant="secondary"
-                          className="font-normal bg-emerald-50 text-emerald-800 border border-emerald-100"
-                        >
-                          Reconciled
-                        </Badge>
+                        {r.periodFrozen ? (
+                          <Badge
+                            variant="secondary"
+                            className="font-normal bg-emerald-50 text-emerald-800 border border-emerald-100"
+                          >
+                            {settledSignedLabel(true)}
+                          </Badge>
+                        ) : (
+                          <Button
+                            type="button"
+                            size="sm"
+                            title={SETTLED_NOT_SIGNED_TOOLTIP}
+                            className={cn(
+                              'h-8 gap-1.5 rounded-md border border-amber-400/80 bg-amber-100 px-2.5 text-xs font-semibold text-amber-950',
+                              'shadow-[0_2px_0_0_rgb(217,119,6)] hover:bg-amber-200 hover:shadow-[0_3px_0_0_rgb(180,83,9)]',
+                              'active:translate-y-[1px] active:shadow-[0_1px_0_0_rgb(180,83,9)]',
+                              'focus-visible:ring-2 focus-visible:ring-amber-500/40',
+                            )}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onOpenCloseWeek?.(r.periodAnchor);
+                            }}
+                          >
+                            <PenLine className="size-3.5 shrink-0" aria-hidden />
+                            {settledSignedLabel(false)}
+                          </Button>
+                        )}
                         <OverpaidBadge amount={overpaid} />
                         {Math.abs(Number(r.cashSourceMismatch) || 0) > 0.5 ? (
                           <span className="text-[10px] text-amber-700">

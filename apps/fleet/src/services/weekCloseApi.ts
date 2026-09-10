@@ -3,12 +3,14 @@
  *
  * Talks to fleet-server /settlements/week-close:
  *   GET  /settlements/week-close/preview?weekKey=YYYY-MM-DD  → dry-run lanes + blockers
+ *   POST /settlements/week-close/sync { weekKey }            → seal/rebuild only when needed
  *   POST /settlements/week-close  { weekKey, reason }        → sign the week
  *   POST /settlements/week-close/reopen { weekKey, reason, acknowledgeSettlementRisk? }
  *
  * The route is registered in supabase/functions/_fleet-server/index.tsx via
- * week_close_controller.tsx. Preview is read-only; POST runs the cross-system
- * invariants as a precondition and only closes when every driver ties.
+ * week_close_controller.tsx. Preview is read-only; sync is slim (no-op writes when
+ * healthy). POST close runs the cross-system invariants as a precondition and only
+ * closes when every driver ties.
  */
 import { requireAuthHeaders } from '../utils/authHeaders';
 import { fetchWithRetry } from './api';
@@ -35,10 +37,18 @@ export type WeekClosePreview = {
   weekBlockers?: CloseBlocker[];
   /** Pass 5: open statement↔engine drift rows for this org-week. */
   openEngineDriftCount?: number;
+  /** Unfrozen drivers whose period toll_* ≠ seal before prepare/close rebuild. */
+  tollPeriodSealDriftCount?: number;
+  /** Unfrozen drivers rebuilt after lane seal on prepare. */
+  periodsRebuiltAfterSeal?: number;
   /** Draft restatement rows awaiting sign for this week. */
   pendingRestatementCount?: number;
   /** Frozen drivers with settlement money already moved. */
   settlementRiskDriverCount?: number;
+  /** Drivers with settlement_status = settled. */
+  driversSettled?: number;
+  /** True when every driver-period for the week is cash-settled. */
+  cashAllSettled?: boolean;
 };
 
 export type WeekCloseResult = {
@@ -70,6 +80,15 @@ export type ClosedWeekSummary = {
   driversFrozen: number;
   closedAt: string | null;
   pendingRestatementCount: number;
+};
+
+export type OpenWeekSummary = {
+  weekKey: string;
+  driversTotal: number;
+  driversFrozen: number;
+  driversSettled: number;
+  closedAt: string | null;
+  cashAllSettled: boolean;
 };
 
 /** True when the endpoint is genuinely absent (route not deployed yet). */
@@ -143,15 +162,72 @@ export const weekCloseApi = {
     return Array.isArray(j.weeks) ? j.weeks : [];
   },
 
+  /** Not fully frozen weeks — dual-stamp cash settled counts for Open tab. */
+  async listOpen(year?: number): Promise<OpenWeekSummary[]> {
+    const qs = new URLSearchParams();
+    if (year != null && Number.isFinite(year)) qs.set('year', String(year));
+    const response = await fetchWithRetry(
+      `${BASE}/open-weeks${qs.toString() ? `?${qs.toString()}` : ''}`,
+      { headers: await requireAuthHeaders(null) },
+    );
+    if (!response.ok) {
+      const err = await parseErrorPayload(response, 'Failed to load open weeks');
+      throw new WeekCloseApiError(err.message, response.status, err.code, err.details);
+    }
+    const j = (await response.json()) as { weeks?: OpenWeekSummary[] };
+    return Array.isArray(j.weeks) ? j.weeks : [];
+  },
+
   /** H-1: seal lanes + persist drifts before close (preview stays read-only). */
-  async prepare(weekKey: string): Promise<WeekClosePreview> {
-    const response = await fetchWithRetry(`${BASE}/prepare`, {
+  async prepare(
+    weekKey: string,
+    hints?: {
+      forceFuelReseal?: boolean;
+      forceTollReseal?: boolean;
+      forceEarningsReseal?: boolean;
+      forceAllLaneReseals?: boolean;
+    },
+  ): Promise<WeekClosePreview> {
+    return this.sync(weekKey, hints);
+  },
+
+  /** Silent week sync (seal + rebuild when needed, else preview). Prefer over prepare in UI. */
+  async sync(
+    weekKey: string,
+    hints?: {
+      forceFuelReseal?: boolean;
+      forceTollReseal?: boolean;
+      forceEarningsReseal?: boolean;
+      forceAllLaneReseals?: boolean;
+    },
+  ): Promise<WeekClosePreview> {
+    const body = {
+      weekKey,
+      ...(hints?.forceFuelReseal ? { forceFuelReseal: true } : {}),
+      ...(hints?.forceTollReseal ? { forceTollReseal: true } : {}),
+      ...(hints?.forceEarningsReseal ? { forceEarningsReseal: true } : {}),
+      ...(hints?.forceAllLaneReseals ? { forceAllLaneReseals: true } : {}),
+    };
+    const response = await fetchWithRetry(`${BASE}/sync`, {
       method: 'POST',
       headers: await requireAuthHeaders(),
-      body: JSON.stringify({ weekKey }),
+      body: JSON.stringify(body),
     });
     if (!response.ok) {
-      const err = await parseErrorPayload(response, 'Prepare week close failed');
+      // Older deploys may only have /prepare — fall back once.
+      if (response.status === 404) {
+        const legacy = await fetchWithRetry(`${BASE}/prepare`, {
+          method: 'POST',
+          headers: await requireAuthHeaders(),
+          body: JSON.stringify(body),
+        });
+        if (!legacy.ok) {
+          const err = await parseErrorPayload(legacy, 'Week sync failed');
+          throw new WeekCloseApiError(err.message, legacy.status, err.code, err.details);
+        }
+        return legacy.json() as Promise<WeekClosePreview>;
+      }
+      const err = await parseErrorPayload(response, 'Week sync failed');
       throw new WeekCloseApiError(err.message, response.status, err.code, err.details);
     }
     return response.json() as Promise<WeekClosePreview>;

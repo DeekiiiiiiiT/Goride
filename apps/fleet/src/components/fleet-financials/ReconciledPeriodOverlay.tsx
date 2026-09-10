@@ -1,6 +1,6 @@
 /**
  * Driver Settlements → Reconciled — Fleet vs Driver period scoreboard.
- * Reads DFP projection fields; tagged payments come from desk txs.
+ * Reads DFP projection fields for the closed-week money split.
  */
 import React, { useMemo } from 'react';
 import { format, parseISO } from 'date-fns';
@@ -13,22 +13,10 @@ import {
 } from '../ui/sheet';
 import { Separator } from '../ui/separator';
 import { Badge } from '../ui/badge';
-import { Button } from '../ui/button';
-import { Loader2, CheckCircle2, Building2, User, Download } from 'lucide-react';
-import { toast } from 'sonner';
+import { Loader2, CheckCircle2, Building2, User } from 'lucide-react';
 import type { FinancialTransaction } from '../../types/data';
-import {
-  isCashReturnedForWeek,
-  isCashWriteOffForWeek,
-  isSettlementPaidForWeek,
-} from '../../utils/driverCashPayment';
 import { cn } from '../ui/utils';
 import { OVERPAID_BADGE_TOOLTIP, overpaidBadgeLabel } from '../../utils/settlementDeskUx';
-import {
-  buildRemittanceAdvice,
-  remittanceAdvicePlainText,
-} from '../../utils/settlementEnterprise';
-import { SettlementPeriodNotes } from './settlements';
 
 export type ReconciledPeriodDetail = {
   driverId: string;
@@ -68,6 +56,7 @@ type Props = {
   detail: ReconciledPeriodDetail | null;
   loading?: boolean;
   partialData?: boolean;
+  /** Kept for call-site compatibility; payments list no longer shown in overlay. */
   transactions?: FinancialTransaction[];
 };
 
@@ -77,15 +66,6 @@ const fmt = (n: number) =>
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
-
-const SOURCE_LABELS: Record<string, string> = {
-  events: 'Ledger events',
-  events_or_trips: 'Events + trip fallback',
-  ledger: 'Toll ledger',
-  snapshot: 'Fuel snapshot',
-  table: 'Settlement mirror',
-  kv: 'Transaction scan',
-};
 
 function ServiceLineBreakdownPanel({
   breakdown,
@@ -115,40 +95,6 @@ function ServiceLineBreakdownPanel({
                 {trips} trip{trips !== 1 ? 's' : ''} · gross {fmt(gross)} · driver {fmt(share)}
                 {row.tierName ? ` · ${String(row.tierName)}` : ''}
               </p>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-function ProjectionSourcesPanel({ sources }: { sources?: Record<string, string> }) {
-  if (!sources || Object.keys(sources).length === 0) return null;
-  const rows = [
-    { key: 'fares', label: 'Commission / fares' },
-    { key: 'fuel', label: 'Fuel' },
-    { key: 'tolls', label: 'Toll spend' },
-    { key: 'cash', label: 'Cash transactions' },
-  ];
-  return (
-    <div className="rounded-lg border border-slate-200 bg-slate-50/80 px-3 py-2">
-      <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 mb-1.5">
-        Data sources
-      </p>
-      <p className="text-[10px] text-slate-400 mb-2">
-        Where this week&apos;s numbers were loaded from — for ops troubleshooting only.
-      </p>
-      <div className="space-y-1">
-        {rows.map(({ key, label }) => {
-          const raw = sources[key];
-          if (!raw) return null;
-          return (
-            <div key={key} className="flex justify-between gap-2 text-[11px]">
-              <span className="text-slate-600">{label}</span>
-              <span className="text-slate-800 font-medium tabular-nums">
-                {SOURCE_LABELS[raw] || raw}
-              </span>
             </div>
           );
         })}
@@ -203,7 +149,6 @@ export function ReconciledPeriodOverlay({
   detail,
   loading,
   partialData,
-  transactions = [],
 }: Props) {
   const periodLabel = useMemo(() => {
     if (!detail) return '';
@@ -216,63 +161,6 @@ export function ReconciledPeriodOverlay({
       return `${detail.periodAnchor} – ${detail.periodEnd}`;
     }
   }, [detail]);
-
-  const tagged = useMemo(() => {
-    if (!detail) return { cash: [] as FinancialTransaction[], payouts: [] as FinancialTransaction[], writeOffs: [] as FinancialTransaction[] };
-    const monday = detail.periodAnchor;
-    const forDriver = (transactions || []).filter(
-      (t) => String(t.driverId || '') === String(detail.driverId),
-    );
-    return {
-      cash: forDriver
-        .filter((t) => isCashReturnedForWeek(t, monday))
-        .sort((a, b) => String(b.date || '').localeCompare(String(a.date || ''))),
-      payouts: forDriver
-        .filter((t) => isSettlementPaidForWeek(t, monday))
-        .sort((a, b) => String(b.date || '').localeCompare(String(a.date || ''))),
-      writeOffs: forDriver
-        .filter((t) => isCashWriteOffForWeek(t, monday))
-        .sort((a, b) => String(b.date || '').localeCompare(String(a.date || ''))),
-    };
-  }, [detail, transactions]);
-
-  const downloadRemittance = () => {
-    if (!detail) return;
-    const advice = buildRemittanceAdvice({
-      driverId: detail.driverId,
-      driverName: driverName || detail.driverId,
-      organizationName: 'Fleet',
-      lines: [
-        {
-          periodAnchor: detail.periodAnchor,
-          periodEnd: detail.periodEnd,
-          description: 'Net payout',
-          amountMinor: Math.round((Number(detail.payoutNet) || 0) * 100),
-        },
-        {
-          periodAnchor: detail.periodAnchor,
-          periodEnd: detail.periodEnd,
-          description: 'Settlement paid',
-          amountMinor: Math.round((Number(detail.settlementPaid) || 0) * 100),
-        },
-        {
-          periodAnchor: detail.periodAnchor,
-          periodEnd: detail.periodEnd,
-          description: 'Cash returned',
-          amountMinor: Math.round((Number(detail.cashReturned) || 0) * 100),
-        },
-      ].filter((l) => l.amountMinor !== 0),
-    });
-    const text = remittanceAdvicePlainText(advice);
-    const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `remittance-${detail.driverId}-${detail.periodAnchor}.txt`;
-    a.click();
-    URL.revokeObjectURL(url);
-    toast.success('Remittance advice downloaded');
-  };
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -298,13 +186,6 @@ export function ReconciledPeriodOverlay({
                 incomplete.
               </p>
             ) : null}
-            <div className="flex justify-end">
-              <Button type="button" variant="outline" size="sm" className="h-8" onClick={downloadRemittance}>
-                <Download className="h-3.5 w-3.5 mr-1.5" />
-                Remittance .txt
-              </Button>
-            </div>
-            <SettlementPeriodNotes driverId={detail.driverId} periodAnchor={detail.periodAnchor} />
             {Number(detail.overpaidAmount) > 0.005 ? (
               <p
                 className="text-[11px] text-violet-900 rounded-md bg-violet-50 px-3 py-2 border border-violet-100"
@@ -314,7 +195,6 @@ export function ReconciledPeriodOverlay({
                 entitlement this week. Recovery exposure is in Driver owes / settlement residual.
               </p>
             ) : null}
-            <ProjectionSourcesPanel sources={detail.projectionSources} />
             <ServiceLineBreakdownPanel breakdown={detail.serviceLineBreakdown} />
             <div className="rounded-lg bg-emerald-50 border border-emerald-100 px-4 py-3 flex items-center gap-3">
               <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0" />
@@ -402,16 +282,8 @@ export function ReconciledPeriodOverlay({
             <Separator />
 
             <div>
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-1">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-2">
                 How it closed
-              </p>
-              <p className="text-[11px] text-slate-400 mb-2">
-                Passenger cash → returns & credits → still held − net payout → residual
-              </p>
-              <p className="text-[11px] text-amber-700/80 mb-2 rounded-md bg-amber-50/80 px-2 py-1.5">
-                Platform toll reimbursement (tag credited) is display-only on Expenses — it does not
-                change this week’s money residual. Confirmed via live sample (see
-                docs/settlement-toll-reimbursement-trace.md).
               </p>
               {detail.cashSourceMismatch != null && Math.abs(detail.cashSourceMismatch) > 0.5 ? (
                 <p className="text-[11px] text-amber-800 mb-2 rounded-md bg-amber-50 px-2 py-1.5">
@@ -470,63 +342,9 @@ export function ReconciledPeriodOverlay({
               <Separator className="my-2" />
               <Line label="Residual (should be ~$0)" value={fmt(detail.settlementAmount)} tone="ok" bold />
             </div>
-
-            <Separator />
-
-            <div>
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-2">
-                Payments that counted
-              </p>
-              {tagged.cash.length === 0 &&
-              tagged.payouts.length === 0 &&
-              tagged.writeOffs.length === 0 ? (
-                <p className="text-xs text-slate-400 py-2">
-                  No tagged Log Cash / payout / write-off rows in this desk range for the week.
-                  Totals above still come from the period projection.
-                </p>
-              ) : (
-                <div className="space-y-3">
-                  {tagged.cash.length > 0 && (
-                    <PaymentGroup title="Cash returned" rows={tagged.cash} />
-                  )}
-                  {tagged.payouts.length > 0 && (
-                    <PaymentGroup title="Paid to driver" rows={tagged.payouts} />
-                  )}
-                  {tagged.writeOffs.length > 0 && (
-                    <PaymentGroup title="Write-offs" rows={tagged.writeOffs} />
-                  )}
-                </div>
-              )}
-            </div>
           </div>
         )}
       </SheetContent>
     </Sheet>
-  );
-}
-
-function PaymentGroup({ title, rows }: { title: string; rows: FinancialTransaction[] }) {
-  return (
-    <div>
-      <p className="text-xs font-medium text-slate-600 mb-1">{title}</p>
-          <ul className="rounded-lg border border-slate-100 divide-y divide-slate-100">
-        {rows.map((t) => (
-          <li key={t.id} className="flex items-center justify-between gap-2 px-3 py-2 text-xs">
-            <div className="min-w-0">
-              <p className="font-medium text-slate-800 truncate">
-                {String(t.date || '').slice(0, 10)}
-                {t.paymentMethod ? ` · ${t.paymentMethod}` : ''}
-              </p>
-              <p className="text-slate-400 truncate">
-                {t.referenceNumber || t.description || t.status || '—'}
-              </p>
-            </div>
-            <span className="tabular-nums font-semibold text-slate-900 shrink-0">
-              {fmt(Math.abs(Number(t.amount) || 0))}
-            </span>
-          </li>
-        ))}
-      </ul>
-    </div>
   );
 }

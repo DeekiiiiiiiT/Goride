@@ -3,7 +3,7 @@
  * Publishes earnings statements from commission + cash engines — not DFP columns.
  */
 import { getServiceClient } from "./service_client.ts";
-import { publishWeekStatement, getLatestWeekStatement } from "./week_statements.ts";
+import { publishWeekStatement, getLatestWeekStatement, RestatementDraftBlockedError } from "./week_statements.ts";
 import { periodEndForAnchor } from "../../../packages/finance-core/src/periodKey.ts";
 import {
   computeWeekCommissionShare,
@@ -141,8 +141,8 @@ export async function sealEarningsWeek(opts: {
       gross: cents(amounts.gross),
     };
 
+    const latest = await getLatestWeekStatement(organizationId, driverId, weekKey, "earnings");
     if (!opts.force) {
-      const latest = await getLatestWeekStatement(organizationId, driverId, weekKey, "earnings");
       const unchanged =
         latest &&
         latest.status === status &&
@@ -150,18 +150,46 @@ export async function sealEarningsWeek(opts: {
       if (unchanged) continue;
     }
 
-    await publishWeekStatement({
-      kind: "earnings",
-      organizationId,
-      driverId,
-      weekKey,
-      amountsMinor,
-      sourceRowIds,
-      status,
-      closedBy: status === "closed" ? (opts.actorId ?? "earnings_week_seal") : null,
-      closeReason: status === "closed" ? closeReason : closeReason,
-    });
-    published += 1;
+    // Never invent draft-over-closed restatement spam from Close sync / seal.
+    if (status === "draft") {
+      if (latest?.status === "closed") {
+        console.warn(
+          "[sealEarningsWeek] keeping standing closed — engines unverified",
+          driverId,
+          weekKey,
+        );
+        continue;
+      }
+      if (latest?.supersedes) {
+        console.warn(
+          "[sealEarningsWeek] skip additional restatement draft",
+          driverId,
+          weekKey,
+        );
+        continue;
+      }
+    }
+
+    try {
+      await publishWeekStatement({
+        kind: "earnings",
+        organizationId,
+        driverId,
+        weekKey,
+        amountsMinor,
+        sourceRowIds,
+        status,
+        closedBy: status === "closed" ? (opts.actorId ?? "earnings_week_seal") : null,
+        closeReason,
+      });
+      published += 1;
+    } catch (e) {
+      if (e instanceof RestatementDraftBlockedError) {
+        console.warn("[sealEarningsWeek]", e.message);
+        continue;
+      }
+      throw e;
+    }
   }
 
   return { published };

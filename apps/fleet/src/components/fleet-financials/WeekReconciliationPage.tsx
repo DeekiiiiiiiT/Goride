@@ -142,6 +142,7 @@ export function WeekReconciliationPage({
             >
               <TollReconciliationLazy
                 embedded
+                initialWeekStart={weekStart}
                 focusVehicleId={tollFocus?.vehicleId}
                 focusDriverId={tollFocus?.driverId}
                 focusVehicleLabel={tollFocus?.vehicleLabel}

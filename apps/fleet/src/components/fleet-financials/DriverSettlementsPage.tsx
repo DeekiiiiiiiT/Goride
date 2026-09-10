@@ -157,6 +157,8 @@ type PeriodRow = {
   /** Fleet overpay flag — badge only. */
   overpaidAmount?: number;
   cashSourceMismatch?: number;
+  /** Close Week freeze — dual-stamp on Reconciled. */
+  periodFrozen?: boolean;
   metadata?: Record<string, unknown> | null;
 };
 
@@ -259,6 +261,7 @@ function queueToPeriodRow(r: SettlementQueueRow): PeriodRow {
     collectKind: r.collectKind,
     overpaidAmount: Number(r.overpaidAmount) || 0,
     cashSourceMismatch: Number(r.cashSourceMismatch) || 0,
+    periodFrozen: r.periodFrozen === true,
     metadata: r.metadata ?? null,
   };
 }
@@ -2044,6 +2047,9 @@ export function DriverSettlementsPage({
             loading={reconciledQueueQuery.isLoading}
             onOpenDriver={onOpenDriver}
             onOpenPeriod={(r) => void openReconciledPeriod(r as ReconciledListRow)}
+            onOpenCloseWeek={(weekKey) => {
+              handleHubNavigate('close-week', { weekKey });
+            }}
           />
         </div>
       ) : (

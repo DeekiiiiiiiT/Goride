@@ -9,12 +9,11 @@
  * vs wizard $3,975 for Aug 24).
  */
 import { getServiceClient } from "./service_client.ts";
-import { publishWeekStatement, getLatestWeekStatement } from "./week_statements.ts";
-import { computeTollWeekNetting } from "../../../packages/toll-core/src/tollWeekNetting.ts";
+import { publishWeekStatement, getLatestWeekStatement, RestatementDraftBlockedError } from "./week_statements.ts";
 import { periodEndForAnchor } from "../../../packages/finance-core/src/periodKey.ts";
 import { isTollIncludedInSpend } from "../../../packages/finance-core/src/tollLedgerIntegrity.ts";
 import { loadTollLedgerWithTrips } from "./toll_controller.tsx";
-import { sumActiveTollChargedToDriverMajor } from "./toll_charged_from_financial_events.ts";
+import { resolveTollCloseAmounts } from "./toll_close_amounts.ts";
 
 function sb() {
   return getServiceClient();
@@ -223,55 +222,21 @@ export async function sealTollWeek(opts: {
       Boolean(fc.signedAt);
 
     try {
-      // Prefer Toll Management plaza cards (Spend / Reimbursed) over events netting.
-      const plaza = await loadPlazaTollCardsForDriverWeek(driverId, weekKey);
-      if (plaza) {
-        tollSpend = plaza.tollSpend;
-        reimbursed = plaza.reimbursed;
-        cashWashSpend = plaza.cashWashSpend;
-        tagSpend = plaza.tagSpend;
-        source = "plaza";
-      } else {
-        const events = await loadCanonicalTollEventsForDriverWeek(driverId, weekKey);
-        if (events.length > 0) {
-          const net = computeTollWeekNetting(events);
-          tollSpend = round2(net.tagSpend + net.cashWashSpend);
-          reimbursed = round2(net.platformReimbursed + net.disputeRecovered);
-          cashWashSpend = round2(net.cashWashSpend);
-          tagSpend = round2(net.tagSpend);
-          chargedToDriver = round2(net.chargedToDrivers);
-          source = "events";
-        } else {
-          // Late tag posts may exist only as financial_events.toll_usage.
-          const { listActiveTollUsageEventsForWeek } = await import("./toll_financial_reset.ts");
-          const usage = await listActiveTollUsageEventsForWeek({
-            periodAnchor: weekKey,
-            driverId,
-          });
-          if (usage.length > 0) {
-            let tag = 0;
-            for (const e of usage) {
-              tag += Math.abs(Number(e.amount_minor) || 0) / 100;
-            }
-            tagSpend = round2(tag);
-            tollSpend = round2(tag);
-            cashWashSpend = 0;
-            source = "financial_events";
-          }
-        }
-      }
-      // H-9: wallet financial_events win when present (same SoT as Toll cards).
-      const wallet = await sumActiveTollChargedToDriverMajor({
+      // Shared preference with probeTollEngineAmounts (toll_close_amounts).
+      const amounts = await resolveTollCloseAmounts({
+        organizationId,
         weekKey,
         driverId,
-        organizationId,
+        period: p,
       });
-      if (wallet.hasEvents) {
-        chargedToDriver = wallet.charged;
-        if (source === "period_columns") source = "financial_events";
-      }
+      tollSpend = amounts.totalSpend;
+      reimbursed = amounts.reimbursed;
+      cashWashSpend = amounts.cashWashSpend;
+      tagSpend = amounts.tagSpend;
+      chargedToDriver = amounts.chargedToDriver;
+      source = amounts.source;
     } catch (e) {
-      console.warn("[sealTollWeek] plaza/event netting failed — falling back to period columns", driverId, e);
+      console.warn("[sealTollWeek] resolveTollCloseAmounts failed — period columns", driverId, e);
     }
 
     if (opts.chargedAmountsMajor?.[driverId] != null) {
@@ -299,11 +264,7 @@ export async function sealTollWeek(opts: {
       String(latest.closeReason || "") === "zero_activity_na" &&
       hasActivity;
 
-    // Pass 4: zero-activity weeks still need an explicit closed toll statement
-    // so Close Week / shadow do not treat the lane as missing (N/A = closed $0).
-    // Pass 3 / H-7: period-column fallback is never a closed truth when the
-    // driver-week has activity — publish draft so closeInvariants blocks.
-    // Frozen weeks: late activity after N/A → draft restatement (Sign restatements).
+    // Frozen weeks: late activity after N/A → intentional restatement draft (Sign restatements).
     const independent =
       source === "plaza" || source === "events" || source === "financial_events";
     let status: "draft" | "closed" = !hasActivity
@@ -311,8 +272,10 @@ export async function sealTollWeek(opts: {
       : independent
         ? "closed"
         : "draft";
+    let allowRestatementDraft = false;
     if (periodFrozen && hasActivity && (staleZeroNa || opts.force)) {
       status = "draft";
+      allowRestatementDraft = true;
     }
 
     const amountsMinor = {
@@ -333,6 +296,18 @@ export async function sealTollWeek(opts: {
       if (unchanged) continue;
     }
 
+    // Open-week unverified: never draft over a standing closed seal.
+    if (status === "draft" && !allowRestatementDraft) {
+      if (latest?.status === "closed" || latest?.supersedes) {
+        console.warn(
+          "[sealTollWeek] keeping standing closed / skip restatement draft",
+          driverId,
+          weekKey,
+        );
+        continue;
+      }
+    }
+
     const closeReason =
       status === "closed"
         ? !hasActivity
@@ -346,17 +321,26 @@ export async function sealTollWeek(opts: {
           ? "toll_stale_zero_na_restatement"
           : "toll_week_seal_unverified_period_columns";
 
-    await publishWeekStatement({
-      kind: "toll",
-      organizationId,
-      driverId,
-      weekKey,
-      amountsMinor,
-      status,
-      closedBy: status === "closed" ? (opts.actorId ?? "toll_week_seal") : null,
-      closeReason,
-    });
-    published += 1;
+    try {
+      await publishWeekStatement({
+        kind: "toll",
+        organizationId,
+        driverId,
+        weekKey,
+        amountsMinor,
+        status,
+        closedBy: status === "closed" ? (opts.actorId ?? "toll_week_seal") : null,
+        closeReason,
+        allowRestatementDraft: allowRestatementDraft || undefined,
+      });
+      published += 1;
+    } catch (e) {
+      if (e instanceof RestatementDraftBlockedError) {
+        console.warn("[sealTollWeek]", e.message);
+        continue;
+      }
+      throw e;
+    }
   }
 
   return { published };

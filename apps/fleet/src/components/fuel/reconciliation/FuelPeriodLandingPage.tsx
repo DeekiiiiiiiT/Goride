@@ -15,16 +15,19 @@ import {
   normalizeSparkSeriesToMax,
   unexplainedWowDelta,
 } from '../../../utils/fuelUnexplainedSparkSeries';
+import { isReconWeekSealed, reconWeekSealMessage } from '../../../utils/reconWeekSeal';
 
 /** Labeled step cell — clear at a glance; click opens that step (M3/M5). */
 function StepStatusCell({
   stepId,
   counts,
   onOpenStep,
+  disabled,
 }: {
   stepId: FuelStepId;
   counts: FuelReconciliationPeriod['counts'];
   onOpenStep: (stepId: FuelStepId) => void;
+  disabled?: boolean;
 }) {
   const Icon = FUEL_STEP_ICONS[stepId];
   const label = FUEL_STEP_LABELS[stepId];
@@ -35,16 +38,26 @@ function StepStatusCell({
   return (
     <button
       type="button"
+      disabled={disabled}
       onClick={(e) => {
         e.stopPropagation();
+        if (disabled) return;
         onOpenStep(stepId);
       }}
-      className={`flex min-h-11 min-w-0 items-center gap-2 rounded-lg border px-2.5 py-2 text-left transition-colors hover:ring-2 hover:ring-indigo-200 ${
+      className={`flex min-h-11 min-w-0 items-center gap-2 rounded-lg border px-2.5 py-2 text-left transition-colors ${
+        disabled
+          ? 'cursor-not-allowed opacity-60'
+          : 'hover:ring-2 hover:ring-indigo-200'
+      } ${
         isClear
           ? 'border-emerald-100 bg-emerald-50/60'
           : 'border-amber-200 bg-amber-50'
       }`}
-      aria-label={`${label}: ${statusText}. Open step.`}
+      aria-label={
+        disabled
+          ? `${label}: ${statusText}. Week still open — reconciliation locked.`
+          : `${label}: ${statusText}. Open step.`
+      }
     >
       <span
         className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full ${
@@ -114,28 +127,62 @@ function PeriodCard({
       : undefined;
   const isOutstanding = period.status === 'outstanding';
   const isInProgress = period.status === 'in_progress';
+  // Calendar seal: no recon until day after Sunday (locked weeks stay viewable).
+  const weekSealed = !period.locked && isReconWeekSealed({
+    weekStart: period.startDate,
+    periodEnd: period.endDate,
+  });
+  const sealMessage = weekSealed
+    ? reconWeekSealMessage({ weekStart: period.startDate, periodEnd: period.endDate })
+    : null;
   const age = daysOpen(period.startDate);
   const aging = !period.locked && age >= 14;
-  const ctaClass = isOutstanding
-    ? 'bg-amber-500 text-white'
-    : isInProgress
-      ? 'bg-sky-600 text-white'
-      : 'border border-emerald-200 bg-emerald-50 text-emerald-700';
-  const ctaLabel = isOutstanding
-    ? period.actionableTotal > 0
-      ? `${period.actionableTotal} to review`
-      : 'Open week'
-    : isInProgress
+  const ctaClass = weekSealed
+    ? 'border border-amber-300 bg-amber-50 text-amber-900'
+    : isOutstanding
+      ? 'bg-amber-500 text-white'
+      : isInProgress
+        ? 'bg-sky-600 text-white'
+        : 'border border-emerald-200 bg-emerald-50 text-emerald-700';
+  const ctaLabel = weekSealed
+    ? 'Opens after week ends'
+    : isOutstanding
       ? period.actionableTotal > 0
-        ? `${period.actionableTotal} left`
-        : 'Continue'
-      : 'Completed';
+        ? `${period.actionableTotal} to review`
+        : 'Open week'
+      : isInProgress
+        ? period.actionableTotal > 0
+          ? `${period.actionableTotal} left`
+          : 'Continue'
+        : 'Completed';
 
   return (
-    <Card className={`transition-colors hover:border-indigo-300 hover:shadow-sm ${aging ? 'border-amber-300' : ''}`}>
+    <Card
+      className={`transition-colors ${
+        weekSealed
+          ? 'border-amber-200 bg-amber-50/30'
+          : `hover:border-indigo-300 hover:shadow-sm ${aging ? 'border-amber-300' : ''}`
+      }`}
+    >
       <CardContent className="flex flex-col gap-3 p-4">
+        {sealMessage && (
+          <div
+            className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950"
+            role="status"
+          >
+            {sealMessage}
+          </div>
+        )}
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <button type="button" onClick={onSelect} className="min-w-0 flex-1 text-left">
+          <button
+            type="button"
+            onClick={() => {
+              if (weekSealed) return;
+              onSelect();
+            }}
+            disabled={weekSealed}
+            className={`min-w-0 flex-1 text-left ${weekSealed ? 'cursor-not-allowed' : ''}`}
+          >
             <div className="flex flex-wrap items-center gap-2">
               <div className="font-semibold text-slate-900">{period.label}</div>
               {!period.locked && (
@@ -203,8 +250,14 @@ function PeriodCard({
             )}
             <button
               type="button"
-              onClick={onSelect}
-              className={`min-h-11 rounded-full px-2.5 py-1 text-xs font-bold sm:min-h-0 ${ctaClass}`}
+              disabled={weekSealed}
+              onClick={() => {
+                if (weekSealed) return;
+                onSelect();
+              }}
+              className={`min-h-11 rounded-full px-2.5 py-1 text-xs font-bold sm:min-h-0 ${ctaClass} ${
+                weekSealed ? 'cursor-not-allowed' : ''
+              }`}
             >
               {ctaLabel}
             </button>
@@ -221,6 +274,7 @@ function PeriodCard({
               key={stepId}
               stepId={stepId}
               counts={period.counts}
+              disabled={weekSealed}
               onOpenStep={(id) => (onSelectStep ? onSelectStep(period, id) : onSelect())}
             />
           ))}
@@ -348,11 +402,28 @@ export function FuelPeriodLandingPage({
     const oldest = open
       .slice()
       .sort((a, b) => a.startDate.localeCompare(b.startDate))[0];
+    const unlockedOpen = open.filter(
+      (p) =>
+        p.locked ||
+        !isReconWeekSealed({ weekStart: p.startDate, periodEnd: p.endDate }),
+    );
+    const sealedOpen = open.filter(
+      (p) =>
+        !p.locked && isReconWeekSealed({ weekStart: p.startDate, periodEnd: p.endDate }),
+    );
     return {
       openWeeks: open.length,
       totalUnexplained,
       oldestLabel: oldest?.label || null,
       oldestDays: oldest ? daysOpen(oldest.startDate) : 0,
+      unlockedOpenCount: unlockedOpen.length,
+      sealedBanner:
+        sealedOpen.length > 0
+          ? reconWeekSealMessage({
+              weekStart: sealedOpen[0].startDate,
+              periodEnd: sealedOpen[0].endDate,
+            })
+          : null,
     };
   }, [outstanding, inProgress]);
 
@@ -397,6 +468,15 @@ export function FuelPeriodLandingPage({
         </section>
       )}
 
+      {portfolio.sealedBanner && (
+        <div
+          className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950"
+          role="status"
+        >
+          {portfolio.sealedBanner}
+        </div>
+      )}
+
       <div className="flex flex-wrap items-center justify-end gap-2">
           {onBulkFinalize && (
             <Button
@@ -404,14 +484,19 @@ export function FuelPeriodLandingPage({
               variant="outline"
               size="sm"
               className="self-start min-h-10 gap-1.5"
-              disabled={openWorkCount === 0}
+              disabled={portfolio.unlockedOpenCount === 0}
+              title={
+                portfolio.unlockedOpenCount === 0 && openWorkCount > 0
+                  ? portfolio.sealedBanner || undefined
+                  : undefined
+              }
               onClick={onBulkFinalize}
             >
               <Flag className="h-4 w-4" />
               Finalize weeks
-              {openWorkCount > 0 && (
+              {portfolio.unlockedOpenCount > 0 && (
                 <Badge variant="secondary" className="ml-0.5 h-5 min-w-5 px-1.5 text-xs">
-                  {openWorkCount}
+                  {portfolio.unlockedOpenCount}
                 </Badge>
               )}
             </Button>

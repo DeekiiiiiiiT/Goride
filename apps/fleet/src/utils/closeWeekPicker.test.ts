@@ -33,6 +33,12 @@ describe('closeWeekPicker', () => {
     expect(isCloseWeekEnded('2026-01-19', now)).toBe(true);
   });
 
+  it('blocks through Sunday and unlocks the next Jamaica calendar day', () => {
+    // Sep 7–13 week: still sealed on Sunday the 13th
+    expect(isCloseWeekEnded('2026-09-07', '2026-09-13')).toBe(false);
+    expect(isCloseWeekEnded('2026-09-07', '2026-09-14')).toBe(true);
+  });
+
   it('yearFromWeekKey reads the year', () => {
     expect(yearFromWeekKey('2026-01-19')).toBe(2026);
   });

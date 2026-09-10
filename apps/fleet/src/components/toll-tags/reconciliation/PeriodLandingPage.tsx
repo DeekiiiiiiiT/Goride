@@ -22,6 +22,7 @@ import { StepId, STEP_ORDER } from '../../../utils/tollPeriodGating';
 import { TollFinancialOverviewCards } from './TollFinancialOverviewCards';
 import { BulkPeriodResetDialog } from './BulkPeriodResetDialog';
 import { TollReconBusyProvider } from './tollReconBusyLock';
+import { isReconWeekSealed, reconWeekSealMessage } from '../../../utils/reconWeekSeal';
 
 const STEP_ICONS: Record<StepId, LucideIcon> = {
   'needs-review': HelpCircle,
@@ -83,27 +84,51 @@ function StepChip({ stepId, counts }: { stepId: StepId; counts: ReconciliationPe
 function PeriodCard({ period, onSelect }: { period: ReconciliationPeriod; onSelect: () => void }) {
   const f = period.financials;
   const badge = periodDateBadge(period.startDate);
-  const statusCta =
-    period.status === 'reconciled' ? (
-      <span className="inline-flex min-h-[44px] items-center rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2 text-xs font-semibold text-emerald-700">
-        Completed
-      </span>
-    ) : period.status === 'in_progress' ? (
-      <span className="inline-flex min-h-[44px] items-center rounded-lg bg-sky-700 px-4 py-2 text-xs font-semibold text-white shadow-sm">
-        {period.actionableTotal} in progress
-      </span>
-    ) : (
-      <span className="inline-flex min-h-[44px] items-center rounded-lg bg-amber-800 px-4 py-2 text-xs font-semibold text-white shadow-sm">
-        {period.actionableTotal} to review
-      </span>
-    );
+  const weekSealed =
+    period.status !== 'reconciled' &&
+    isReconWeekSealed({ weekStart: period.startDate, periodEnd: period.endDate });
+  const sealMessage = weekSealed
+    ? reconWeekSealMessage({ weekStart: period.startDate, periodEnd: period.endDate })
+    : null;
+  const statusCta = weekSealed ? (
+    <span className="inline-flex min-h-[44px] items-center rounded-lg border border-amber-300 bg-amber-50 px-4 py-2 text-xs font-semibold text-amber-900">
+      Opens after week ends
+    </span>
+  ) : period.status === 'reconciled' ? (
+    <span className="inline-flex min-h-[44px] items-center rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2 text-xs font-semibold text-emerald-700">
+      Completed
+    </span>
+  ) : period.status === 'in_progress' ? (
+    <span className="inline-flex min-h-[44px] items-center rounded-lg bg-sky-700 px-4 py-2 text-xs font-semibold text-white shadow-sm">
+      {period.actionableTotal} in progress
+    </span>
+  ) : (
+    <span className="inline-flex min-h-[44px] items-center rounded-lg bg-amber-800 px-4 py-2 text-xs font-semibold text-white shadow-sm">
+      {period.actionableTotal} to review
+    </span>
+  );
 
   return (
     <button
       type="button"
-      onClick={onSelect}
-      className="group w-full min-h-[72px] rounded-2xl border border-indigo-100/60 bg-white/70 p-5 text-left shadow-sm backdrop-blur-sm transition-all duration-200 ease-in-out hover:border-indigo-300/60 hover:bg-white hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/40"
+      onClick={() => {
+        if (weekSealed) return;
+        onSelect();
+      }}
+      disabled={weekSealed}
+      aria-disabled={weekSealed}
+      title={sealMessage || undefined}
+      className={`group w-full min-h-[72px] rounded-2xl border p-5 text-left shadow-sm backdrop-blur-sm transition-all duration-200 ease-in-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/40 ${
+        weekSealed
+          ? 'cursor-not-allowed border-amber-200 bg-amber-50/60 opacity-90'
+          : 'border-indigo-100/60 bg-white/70 hover:border-indigo-300/60 hover:bg-white hover:shadow-md'
+      }`}
     >
+      {sealMessage && (
+        <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950">
+          {sealMessage}
+        </div>
+      )}
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex min-w-0 items-start gap-4 sm:items-center sm:gap-6">
           <div className="flex h-12 w-12 shrink-0 flex-col items-center justify-center rounded-xl bg-indigo-50">
@@ -194,6 +219,14 @@ export function PeriodLandingPage({
     () => [...outstanding, ...inProgress],
     [outstanding, inProgress],
   );
+
+  const sealedOpenBanner = useMemo(() => {
+    const sealed = openWork.find((p) =>
+      isReconWeekSealed({ weekStart: p.startDate, periodEnd: p.endDate }),
+    );
+    if (!sealed) return null;
+    return reconWeekSealMessage({ weekStart: sealed.startDate, periodEnd: sealed.endDate });
+  }, [openWork]);
 
   const openActionable = useMemo(() => {
     let tolls = 0;
@@ -287,6 +320,14 @@ export function PeriodLandingPage({
         </div>
       ) : (
       <>
+      {sealedOpenBanner && (
+        <div
+          className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950"
+          role="status"
+        >
+          {sealedOpenBanner}
+        </div>
+      )}
       {/* Action Required banner */}
       {showActionBanner && (
         <section

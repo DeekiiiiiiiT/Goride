@@ -18,7 +18,9 @@ import {
   clearPeriodFreeze,
   isPeriodFrozen,
   markPeriodFrozen,
+  assertPeriodEndedForReconciliation,
 } from "./settlement_period_freeze.ts";
+import { SettlementCommandError } from "./settlement_commands.ts";
 import {
   closeWeekStatements,
   getLatestWeekStatements,
@@ -50,7 +52,20 @@ import {
   type ClosePeriodRow,
   type CloseTollStatement,
 } from "../../../packages/finance-core/src/closeInvariants.ts";
+import { tollPeriodDisagreesWithSeal } from "../../../packages/finance-core/src/tollPeriodSealDrift.ts";
 import type { WeekStatement } from "../../../packages/finance-core/src/weekStatement.ts";
+import {
+  accumulateWeekDirectory,
+  cashAllSettled,
+  selectFullyFrozenWeeks,
+  selectOpenWeeks,
+  type OpenWeekSummary,
+} from "../../../packages/finance-core/src/weekCloseDirectory.ts";
+import { resolveCloseLaneForceOpts } from "./week_close_force_opts.ts";
+import type { CloseLaneForceOpts, PrepareWeekCloseOpts } from "./week_close_force_opts.ts";
+
+export type { CloseLaneForceOpts, PrepareWeekCloseOpts } from "./week_close_force_opts.ts";
+export { resolveCloseLaneForceOpts } from "./week_close_force_opts.ts";
 
 function sb() {
   return getServiceClient();
@@ -235,10 +250,21 @@ export type WeekClosePreview = {
   weekBlockers?: CloseBlocker[];
   /** Pass 5: open statement↔engine drift rows for this org (all weeks). */
   openEngineDriftCount?: number;
+  /**
+   * Drivers (unfrozen) whose period toll_* disagreed with the toll seal
+   * immediately before seal→rebuild sync on prepare/close.
+   */
+  tollPeriodSealDriftCount?: number;
+  /** Unfrozen drivers rebuilt after lane seal so Pass E stamps statement→period. */
+  periodsRebuiltAfterSeal?: number;
   /** Draft restatement rows (status=draft AND supersedes set) for this week. */
   pendingRestatementCount?: number;
   /** Frozen drivers with settlement_paid moved — reopen needs risk ack. */
   settlementRiskDriverCount?: number;
+  /** Drivers with settlement_status = settled. */
+  driversSettled?: number;
+  /** True when every driver-period for the week is cash-settled. */
+  cashAllSettled?: boolean;
 };
 
 /**
@@ -249,8 +275,8 @@ async function ensureCloseLaneStatements(
   orgId: string,
   week: string,
   actorId?: string,
-  opts?: { forceTollReseal?: boolean },
-): Promise<void> {
+  opts?: CloseLaneForceOpts,
+): Promise<{ didSeal: boolean }> {
   const { data: periods, error } = await sb()
     .from("driver_financial_periods")
     .select(
@@ -309,37 +335,251 @@ async function ensureCloseLaneStatements(
     }
   }
 
-  // Pass 5: never clobber a standing closed independent seal during close.
-  // Only seal missing/draft lanes (or when no closed statement exists).
-  // Exception: zero_activity_na may be stale after late toll posts — re-run seal.
-  if (fuelNeedsSeal || (anyOpenDriver && fuelLaneMissing)) {
+  let didSeal = false;
+  const forceFuel = Boolean(opts?.forceFuelReseal);
+  const forceToll = Boolean(opts?.forceTollReseal);
+  const forceEarnings = Boolean(opts?.forceEarningsReseal);
+
+  // Missing/draft → seal. Force flags → closed→closed reseal (engine drift).
+  // Never pass allowRestatementDraft from Close sync (draft-over-closed blocked).
+  if (fuelNeedsSeal || (anyOpenDriver && fuelLaneMissing) || forceFuel) {
     try {
-      await sealFuelWeek({ organizationId: orgId, weekKey: week, actorId });
+      await sealFuelWeek({
+        organizationId: orgId,
+        weekKey: week,
+        actorId,
+        force: forceFuel,
+      });
+      didSeal = true;
     } catch (e) {
       console.warn("[week_close] fuel auto-seal failed (non-fatal)", week, e);
     }
   }
 
-  if (tollNeedsSeal || tollStaleZeroNa || opts?.forceTollReseal || (anyOpenDriver && tollLaneMissing)) {
+  if (
+    tollNeedsSeal ||
+    tollStaleZeroNa ||
+    forceToll ||
+    (anyOpenDriver && tollLaneMissing)
+  ) {
     try {
       await sealTollWeek({
         organizationId: orgId,
         weekKey: week,
         actorId,
-        force: Boolean(tollStaleZeroNa || opts?.forceTollReseal),
+        force: Boolean(tollStaleZeroNa || forceToll),
       });
+      didSeal = true;
     } catch (e) {
       console.warn("[week_close] toll auto-seal failed (non-fatal)", week, e);
     }
   }
 
-  if (earningsNeedsSeal || (anyOpenDriver && earningsLaneMissing)) {
+  if (earningsNeedsSeal || (anyOpenDriver && earningsLaneMissing) || forceEarnings) {
     try {
-      await sealEarningsWeek({ organizationId: orgId, weekKey: week, actorId });
+      await sealEarningsWeek({
+        organizationId: orgId,
+        weekKey: week,
+        actorId,
+        force: forceEarnings,
+      });
+      didSeal = true;
     } catch (e) {
       console.warn("[week_close] earnings auto-seal failed (non-fatal)", week, e);
     }
   }
+
+  return { didSeal };
+}
+
+/**
+ * Cheap assess: do we need seal and/or period rebuild before preview?
+ * One org-week statement batch — avoids write path when week is already healthy.
+ */
+async function assessCloseWeekSyncNeed(
+  orgId: string,
+  week: string,
+): Promise<{
+  needsSeal: boolean;
+  needsForceTollReseal: boolean;
+  periodDriftCount: number;
+}> {
+  const { data: periods, error } = await sb()
+    .from("driver_financial_periods")
+    .select(
+      "driver_id, fuel_deduction, fuel_fleet_share, toll_spend, toll_charged_to_driver, settlement_status, metadata",
+    )
+    .eq("organization_id", orgId)
+    .eq("period_anchor", week);
+  if (error) throw new Error(error.message);
+
+  const statementsByDriver = await getLatestWeekStatementsForOrgWeek(orgId, week);
+  let needsSeal = false;
+  let needsForceTollReseal = false;
+  let periodDriftCount = 0;
+
+  for (const p of periods ?? []) {
+    const driverId = String(p.driver_id || "");
+    if (!driverId) continue;
+    if (periodIsFrozen(p as Record<string, unknown>)) continue;
+
+    const statements = statementsByDriver.get(driverId) ?? [];
+    const byKind = new Map(statements.map((s) => [s.kind, s]));
+    const fuel = byKind.get("fuel");
+    const toll = byKind.get("toll");
+    const earnings = byKind.get("earnings");
+
+    if (!fuel || fuel.status !== "closed") needsSeal = true;
+    if (!toll || toll.status !== "closed") needsSeal = true;
+    else if (String(toll.closeReason || "") === "zero_activity_na") {
+      needsSeal = true;
+      needsForceTollReseal = true;
+    }
+    if (!earnings || earnings.status !== "closed") needsSeal = true;
+
+    let drifted = false;
+    if (toll && (toll.status === "closed" || toll.status === "draft")) {
+      if (
+        tollPeriodDisagreesWithSeal(
+          {
+            tollSpend: Number(p.toll_spend) || 0,
+            tollChargedToDriver: Number(p.toll_charged_to_driver) || 0,
+          },
+          {
+            totalSpend: minorToMajor(toll.amountsMinor.totalSpend),
+            chargedToDriver: minorToMajor(toll.amountsMinor.chargedToDriver),
+          },
+        )
+      ) {
+        drifted = true;
+      }
+    }
+    if (fuel && fuel.status === "closed") {
+      const sealDriver = minorToMajor(fuel.amountsMinor.driverShare);
+      const sealFleet = minorToMajor(fuel.amountsMinor.companyShare);
+      if (
+        Math.abs((Number(p.fuel_deduction) || 0) - sealDriver) > CLOSE_INVARIANT_EPS ||
+        Math.abs((Number(p.fuel_fleet_share) || 0) - sealFleet) > CLOSE_INVARIANT_EPS
+      ) {
+        drifted = true;
+      }
+    }
+    if (drifted) periodDriftCount += 1;
+  }
+
+  return { needsSeal, needsForceTollReseal, periodDriftCount };
+}
+
+/**
+ * After lane seal: rebuild unfrozen driver periods so Pass E stamps statement→period
+ * before invariants. Counts pre-rebuild toll period↔seal drift for ops metrics.
+ *
+ * Contract: any path that publishes a closed week_statement for an open org-week
+ * must rebuild open periods for that week (Fuel finalize, Toll seal, Close sync).
+ */
+async function syncOpenPeriodsToStatementsAfterSeal(
+  orgId: string,
+  week: string,
+  opts?: { rebuildMode?: "all-open" | "drifted-only" | "skip" },
+): Promise<{
+  preRebuildTollDriftCount: number;
+  rebuilt: number;
+  failedDriverIds: string[];
+}> {
+  const { data: periods, error } = await sb()
+    .from("driver_financial_periods")
+    .select(
+      "driver_id, fuel_deduction, fuel_fleet_share, toll_spend, toll_charged_to_driver, toll_reimbursed, settlement_status, metadata",
+    )
+    .eq("organization_id", orgId)
+    .eq("period_anchor", week);
+  if (error) throw new Error(error.message);
+
+  const statementsByDriver = await getLatestWeekStatementsForOrgWeek(orgId, week);
+  const openDriverIds: string[] = [];
+  const driftedDriverIds: string[] = [];
+  let preRebuildTollDriftCount = 0;
+
+  for (const p of periods ?? []) {
+    const driverId = String(p.driver_id || "");
+    if (!driverId) continue;
+    if (periodIsFrozen(p as Record<string, unknown>)) continue;
+    openDriverIds.push(driverId);
+
+    const statements = statementsByDriver.get(driverId) ?? [];
+    let drifted = false;
+    const toll = statements.find(
+      (s) => s.kind === "toll" && (s.status === "closed" || s.status === "draft"),
+    );
+    if (toll) {
+      const sealSpend = minorToMajor(toll.amountsMinor.totalSpend);
+      const sealCharged = minorToMajor(toll.amountsMinor.chargedToDriver);
+      if (
+        tollPeriodDisagreesWithSeal(
+          {
+            tollSpend: Number(p.toll_spend) || 0,
+            tollChargedToDriver: Number(p.toll_charged_to_driver) || 0,
+          },
+          { totalSpend: sealSpend, chargedToDriver: sealCharged },
+        )
+      ) {
+        preRebuildTollDriftCount += 1;
+        drifted = true;
+      }
+    }
+    const fuel = statements.find((s) => s.kind === "fuel" && s.status === "closed");
+    if (fuel) {
+      const sealDriver = minorToMajor(fuel.amountsMinor.driverShare);
+      const sealFleet = minorToMajor(fuel.amountsMinor.companyShare);
+      if (
+        Math.abs((Number(p.fuel_deduction) || 0) - sealDriver) > CLOSE_INVARIANT_EPS ||
+        Math.abs((Number(p.fuel_fleet_share) || 0) - sealFleet) > CLOSE_INVARIANT_EPS
+      ) {
+        drifted = true;
+      }
+    }
+    if (drifted) driftedDriverIds.push(driverId);
+  }
+
+  const mode = opts?.rebuildMode ?? "all-open";
+  const toRebuild =
+    mode === "skip" ? [] : mode === "drifted-only" ? driftedDriverIds : openDriverIds;
+
+  const { rebuildPeriodsForAnchors } = await import("./driver_financial_periods.ts");
+  const failedDriverIds: string[] = [];
+  let rebuilt = 0;
+  await mapPool(toRebuild, 4, async (driverId) => {
+    try {
+      await rebuildPeriodsForAnchors(driverId, [week]);
+      rebuilt += 1;
+    } catch (e) {
+      failedDriverIds.push(driverId);
+      console.warn("[week_close] period rebuild after seal failed", driverId, week, e);
+    }
+  });
+
+  return { preRebuildTollDriftCount, rebuilt, failedDriverIds };
+}
+
+/** True when any open driver still has missing/draft/stale-zero toll seal. */
+async function orgWeekNeedsForceTollReseal(orgId: string, week: string): Promise<boolean> {
+  const { data: periods, error } = await sb()
+    .from("driver_financial_periods")
+    .select("driver_id, settlement_status, metadata")
+    .eq("organization_id", orgId)
+    .eq("period_anchor", week);
+  if (error) throw new Error(error.message);
+
+  for (const p of periods ?? []) {
+    const driverId = String(p.driver_id || "");
+    if (!driverId) continue;
+    if (periodIsFrozen(p as Record<string, unknown>)) continue;
+    const statements = await getLatestWeekStatements(orgId, driverId, week);
+    const toll = statements.find((s) => s.kind === "toll");
+    if (!toll || toll.status !== "closed") return true;
+    if (String(toll.closeReason || "") === "zero_activity_na") return true;
+  }
+  return false;
 }
 
 /**
@@ -361,6 +601,7 @@ export async function previewWeekClose(orgId: string, weekKey: string): Promise<
   const weekBlockers: CloseBlocker[] = [];
   let driversReady = 0;
   let driversFrozen = 0;
+  let driversSettled = 0;
   /** Frozen with no pending restatement drafts — done, excluded from blocked. */
   let driversFrozenIdle = 0;
   let closedAt: string | null = null;
@@ -437,6 +678,10 @@ export async function previewWeekClose(orgId: string, weekKey: string): Promise<
       }
       const signed = fc.signedAt ? String(fc.signedAt) : null;
       if (signed && (!closedAt || signed < closedAt)) closedAt = signed;
+    }
+
+    if (String(period.settlement_status || "") === "settled") {
+      driversSettled += 1;
     }
 
     const acceptRestatementDrafts = frozen && pendingDrafts;
@@ -577,6 +822,11 @@ export async function previewWeekClose(orgId: string, weekKey: string): Promise<
     openEngineDriftCount,
     pendingRestatementCount,
     settlementRiskDriverCount,
+    driversSettled,
+    cashAllSettled: cashAllSettled({
+      driversTotal: rows.length,
+      driversSettled,
+    }),
   };
 }
 
@@ -588,26 +838,24 @@ export type ClosedWeekSummary = {
   pendingRestatementCount: number;
 };
 
+export type { OpenWeekSummary };
+
 const WEEK_RE_INTERNAL = /^\d{4}-\d{2}-\d{2}$/;
 
-/**
- * Year-scoped directory of fully closed weeks (every driver-period frozen).
- * Not the Restatements queue — weeks with no drafts still appear here.
- */
-export async function listClosedWeeks(
+/** Page all org periods in a year window into week directory aggregates. */
+async function loadYearWeekDirectory(
   orgId: string,
   opts?: { year?: number },
-): Promise<ClosedWeekSummary[]> {
+): Promise<ReturnType<typeof accumulateWeekDirectory>> {
   const year = opts?.year && Number.isFinite(opts.year) ? Math.trunc(opts.year) : undefined;
   const from = year != null ? `${year}-01-01` : undefined;
   const to = year != null ? `${year}-12-31` : undefined;
-
-  type Agg = {
-    driversTotal: number;
-    driversFrozen: number;
-    closedAt: string | null;
-  };
-  const byWeek = new Map<string, Agg>();
+  const inputs: Array<{
+    weekKey: string;
+    frozen: boolean;
+    settled: boolean;
+    signedAt?: string | null;
+  }> = [];
 
   const pageSize = 1000;
   for (let offset = 0; ; offset += pageSize) {
@@ -625,24 +873,32 @@ export async function listClosedWeeks(
     for (const row of batch) {
       const weekKey = String(row.period_anchor || "").slice(0, 10);
       if (!WEEK_RE_INTERNAL.test(weekKey)) continue;
-      const cur = byWeek.get(weekKey) || {
-        driversTotal: 0,
-        driversFrozen: 0,
-        closedAt: null as string | null,
-      };
-      cur.driversTotal += 1;
       const period = row as Record<string, unknown>;
-      if (periodIsFrozen(period)) {
-        cur.driversFrozen += 1;
-        const meta = (period.metadata as Record<string, unknown> | null) || null;
-        const fc = (meta?.financeCore as Record<string, unknown> | undefined) || {};
-        const signed = fc.signedAt ? String(fc.signedAt) : null;
-        if (signed && (!cur.closedAt || signed < cur.closedAt)) cur.closedAt = signed;
-      }
-      byWeek.set(weekKey, cur);
+      const meta = (period.metadata as Record<string, unknown> | null) || null;
+      const fc = (meta?.financeCore as Record<string, unknown> | undefined) || {};
+      inputs.push({
+        weekKey,
+        frozen: periodIsFrozen(period),
+        settled: String(row.settlement_status || "") === "settled",
+        signedAt: fc.signedAt ? String(fc.signedAt) : null,
+      });
     }
     if (batch.length < pageSize) break;
   }
+  return accumulateWeekDirectory(inputs);
+}
+
+/**
+ * Year-scoped directory of fully closed weeks (every driver-period frozen).
+ * Not the Restatements queue — weeks with no drafts still appear here.
+ */
+export async function listClosedWeeks(
+  orgId: string,
+  opts?: { year?: number },
+): Promise<ClosedWeekSummary[]> {
+  const year = opts?.year && Number.isFinite(opts.year) ? Math.trunc(opts.year) : undefined;
+  const aggs = await loadYearWeekDirectory(orgId, opts);
+  const frozen = selectFullyFrozenWeeks(aggs);
 
   const draftCounts = new Map<string, number>();
   try {
@@ -656,88 +912,166 @@ export async function listClosedWeeks(
     console.warn("[week_close] listClosedWeeks restatement counts failed (non-fatal)", e);
   }
 
-  const out: ClosedWeekSummary[] = [];
-  for (const [weekKey, agg] of byWeek) {
-    if (agg.driversTotal <= 0 || agg.driversFrozen !== agg.driversTotal) continue;
-    out.push({
-      weekKey,
-      driversTotal: agg.driversTotal,
-      driversFrozen: agg.driversFrozen,
-      closedAt: agg.closedAt,
-      pendingRestatementCount: draftCounts.get(weekKey) || 0,
-    });
-  }
-  out.sort((a, b) => b.weekKey.localeCompare(a.weekKey));
-  return out;
+  return frozen.map((a) => ({
+    weekKey: a.weekKey,
+    driversTotal: a.driversTotal,
+    driversFrozen: a.driversFrozen,
+    closedAt: a.closedAt,
+    pendingRestatementCount: draftCounts.get(a.weekKey) || 0,
+  }));
 }
 
 /**
- * H-1: Explicit prepare — seals missing lanes and persists recon drifts.
- * Call before close when operators want lanes ready; preview stays pure.
+ * Year-scoped Open directory: weeks with activity that are not fully frozen.
+ * Includes cash settled counts for dual-stamp (Settled × Signed) UX.
+ */
+export async function listOpenWeeks(
+  orgId: string,
+  opts?: { year?: number },
+): Promise<OpenWeekSummary[]> {
+  const aggs = await loadYearWeekDirectory(orgId, opts);
+  return selectOpenWeeks(aggs);
+}
+
+/**
+ * Week sync (product: silent when Close Week needs repair) — seals missing/draft
+ * lanes, rebuilds drifted/open periods, persists recon drifts. Preview stays pure.
+ * Slim: if lanes already closed and periods tie to seals, return preview only
+ * (no rebuild / drift upsert — avoids Edge OOM on healthy Refresh).
+ * Force opts (client hints / mass heal): closed→closed reseal for engine drift;
+ * never draft-over-closed.
  */
 export async function prepareWeekClose(
   orgId: string,
   weekKey: string,
   actorId: string,
+  opts?: PrepareWeekCloseOpts,
 ): Promise<WeekClosePreview> {
   const week = String(weekKey).slice(0, 10);
-  // Prepare is an explicit operator action — force toll reseal so plaza/events
-  // can replace a stale FE-only or double-count seal before preview.
-  await ensureCloseLaneStatements(orgId, week, actorId, { forceTollReseal: true });
-
-  const { data: periods, error } = await sb()
-    .from("driver_financial_periods")
-    .select("driver_id")
-    .eq("organization_id", orgId)
-    .eq("period_anchor", week);
-  if (error) throw new Error(error.message);
-
-  const driverIds = (periods ?? []).map((p) => String(p.driver_id || "")).filter(Boolean);
-  const statementsByDriver = await getLatestWeekStatementsForOrgWeek(orgId, week);
-  const pendingDrifts: Array<{
-    driverId: string;
-    drifts: StatementEngineDrift[];
-    statementVersion: number | null;
-  }> = [];
-
-  await mapPool(driverIds, 8, async (driverId) => {
-    try {
-      const statements = statementsByDriver.get(driverId) ?? [];
-      const engineDrifts = await compareDriverWeekStatementsToEngines({
-        organizationId: orgId,
-        driverId,
-        weekKey: week,
-        statements,
-      });
-      if (engineDrifts.length) {
-        pendingDrifts.push({
-          driverId,
-          drifts: engineDrifts,
-          statementVersion: statements[0]?.version ?? null,
-        });
-      }
-    } catch (e) {
-      console.warn("[week_close] prepare drift upsert failed (non-fatal)", driverId, week, e);
+  try {
+    assertPeriodEndedForReconciliation(week);
+  } catch (e) {
+    if (e instanceof SettlementCommandError) {
+      throw new WeekCloseError(e.code, e.message, e.status, e.details);
     }
+    throw e;
+  }
+
+  const force = resolveCloseLaneForceOpts(opts);
+  const anyForce = force.forceFuelReseal || force.forceTollReseal || force.forceEarningsReseal;
+
+  const assess = await assessCloseWeekSyncNeed(orgId, week);
+  if (
+    !anyForce &&
+    !assess.needsSeal &&
+    !assess.needsForceTollReseal &&
+    assess.periodDriftCount === 0
+  ) {
+    const preview = await previewWeekClose(orgId, week);
+    preview.tollPeriodSealDriftCount = 0;
+    preview.periodsRebuiltAfterSeal = 0;
+    return preview;
+  }
+
+  let didSeal = false;
+  if (anyForce || assess.needsSeal || assess.needsForceTollReseal) {
+    const sealed = await ensureCloseLaneStatements(orgId, week, actorId, {
+      forceFuelReseal: force.forceFuelReseal,
+      forceTollReseal: force.forceTollReseal || assess.needsForceTollReseal,
+      forceEarningsReseal: force.forceEarningsReseal,
+    });
+    didSeal = sealed.didSeal;
+  }
+
+  let periodSync = await syncOpenPeriodsToStatementsAfterSeal(orgId, week, {
+    rebuildMode: didSeal || anyForce ? "all-open" : "drifted-only",
   });
 
-  // Single batch of drift upserts (one call per driver that drifted — still fewer round-trips than inline).
-  for (const row of pendingDrifts) {
-    try {
-      await upsertFinanceReconDrifts({
-        organizationId: orgId,
-        driverId: row.driverId,
-        weekKey: week,
-        source: "close_prepare",
-        drifts: row.drifts,
-        statementVersion: row.statementVersion,
-      });
-    } catch (e) {
-      console.warn("[week_close] prepare batch drift upsert failed", row.driverId, e);
+  // Second pass only when toll books still look wrong after light sync.
+  if (periodSync.preRebuildTollDriftCount > 0 || (await orgWeekNeedsForceTollReseal(orgId, week))) {
+    const sealed = await ensureCloseLaneStatements(orgId, week, actorId, {
+      forceTollReseal: true,
+      forceFuelReseal: force.forceFuelReseal,
+      forceEarningsReseal: force.forceEarningsReseal,
+    });
+    didSeal = didSeal || sealed.didSeal;
+    periodSync = await syncOpenPeriodsToStatementsAfterSeal(orgId, week, {
+      rebuildMode: "all-open",
+    });
+  }
+
+  // Persist engine drifts only when we wrote seals/books (preview already compares).
+  if (didSeal || periodSync.rebuilt > 0) {
+    const { data: periods, error } = await sb()
+      .from("driver_financial_periods")
+      .select("driver_id")
+      .eq("organization_id", orgId)
+      .eq("period_anchor", week);
+    if (error) throw new Error(error.message);
+
+    const driverIds = (periods ?? []).map((p) => String(p.driver_id || "")).filter(Boolean);
+    const statementsByDriver = await getLatestWeekStatementsForOrgWeek(orgId, week);
+    const pendingDrifts: Array<{
+      driverId: string;
+      drifts: StatementEngineDrift[];
+      statementVersion: number | null;
+    }> = [];
+
+    await mapPool(driverIds, 8, async (driverId) => {
+      try {
+        const statements = statementsByDriver.get(driverId) ?? [];
+        const engineDrifts = await compareDriverWeekStatementsToEngines({
+          organizationId: orgId,
+          driverId,
+          weekKey: week,
+          statements,
+        });
+        if (engineDrifts.length) {
+          pendingDrifts.push({
+            driverId,
+            drifts: engineDrifts,
+            statementVersion: statements[0]?.version ?? null,
+          });
+        }
+      } catch (e) {
+        console.warn("[week_close] prepare drift upsert failed (non-fatal)", driverId, week, e);
+      }
+    });
+
+    for (const row of pendingDrifts) {
+      try {
+        await upsertFinanceReconDrifts({
+          organizationId: orgId,
+          driverId: row.driverId,
+          weekKey: week,
+          source: "close_prepare",
+          drifts: row.drifts,
+          statementVersion: row.statementVersion,
+        });
+      } catch (e) {
+        console.warn("[week_close] prepare batch drift upsert failed", row.driverId, e);
+      }
     }
   }
 
-  return previewWeekClose(orgId, week);
+  const preview = await previewWeekClose(orgId, week);
+  preview.tollPeriodSealDriftCount = periodSync.preRebuildTollDriftCount;
+  preview.periodsRebuiltAfterSeal = periodSync.rebuilt;
+  if (periodSync.failedDriverIds.length > 0) {
+    preview.weekBlockers = [
+      ...(preview.weekBlockers || []),
+      {
+        code: "PERIOD_REBUILD_FAILED",
+        severity: "block",
+        week,
+        persisted: periodSync.failedDriverIds.length,
+        expected: 0,
+        delta: periodSync.failedDriverIds.length,
+        message: `Couldn’t refresh books for ${periodSync.failedDriverIds.length} driver(s) — retry`,
+      },
+    ];
+  }
+  return preview;
 }
 
 export type DriverCloseResult = {
@@ -769,8 +1103,32 @@ export async function closeWeek(
   reason: string,
 ): Promise<CloseWeekResult> {
   const week = String(weekKey).slice(0, 10);
+  try {
+    assertPeriodEndedForReconciliation(week);
+  } catch (e) {
+    if (e instanceof SettlementCommandError) {
+      throw new WeekCloseError(e.code, e.message, e.status, e.details);
+    }
+    throw e;
+  }
 
-  await ensureCloseLaneStatements(orgId, week, actorId);
+  // Close: force closed→closed reseal on all lanes (engine drift + stale seals).
+  await ensureCloseLaneStatements(orgId, week, actorId, {
+    forceFuelReseal: true,
+    forceTollReseal: true,
+    forceEarningsReseal: true,
+  });
+  const periodSync = await syncOpenPeriodsToStatementsAfterSeal(orgId, week, {
+    rebuildMode: "all-open",
+  });
+  if (periodSync.failedDriverIds.length > 0) {
+    throw new WeekCloseError(
+      "PERIOD_REBUILD_FAILED",
+      `Couldn’t refresh books for ${periodSync.failedDriverIds.length} driver(s) — retry Close`,
+      409,
+      { failedDriverIds: periodSync.failedDriverIds, weekKey: week },
+    );
+  }
 
   const { data: periods, error } = await sb()
     .from("driver_financial_periods")

@@ -8,7 +8,7 @@
  * engine probe (toll-style: probe and seal cannot diverge).
  */
 import { getServiceClient } from "./service_client.ts";
-import { publishWeekStatement, getLatestWeekStatement } from "./week_statements.ts";
+import { publishWeekStatement, getLatestWeekStatement, RestatementDraftBlockedError } from "./week_statements.ts";
 import { periodEndForAnchor } from "../../../packages/finance-core/src/periodKey.ts";
 import { buildFuelPeriodSnapshots } from "./fuel_period_build_snapshots.ts";
 import * as kv from "./kv_store.tsx";
@@ -248,20 +248,40 @@ export async function sealFuelWeek(opts: {
       if (unchanged) continue;
     }
 
-    await publishWeekStatement({
-      kind: "fuel",
-      organizationId,
-      driverId,
-      weekKey,
-      amountsMinor,
-      status,
-      closedBy: status === "closed" ? (opts.actorId ?? "fuel_week_seal") : null,
-      closeReason:
-        status === "closed"
-          ? `fuel_week_seal:${amounts.source}`
-          : "close_precondition_unverified",
-    });
-    published += 1;
+    if (status === "draft") {
+      const latest = await getLatestWeekStatement(organizationId, driverId, weekKey, "fuel");
+      if (latest?.status === "closed" || latest?.supersedes) {
+        console.warn(
+          "[sealFuelWeek] keeping standing closed / skip restatement draft",
+          driverId,
+          weekKey,
+        );
+        continue;
+      }
+    }
+
+    try {
+      await publishWeekStatement({
+        kind: "fuel",
+        organizationId,
+        driverId,
+        weekKey,
+        amountsMinor,
+        status,
+        closedBy: status === "closed" ? (opts.actorId ?? "fuel_week_seal") : null,
+        closeReason:
+          status === "closed"
+            ? `fuel_week_seal:${amounts.source}`
+            : "close_precondition_unverified",
+      });
+      published += 1;
+    } catch (e) {
+      if (e instanceof RestatementDraftBlockedError) {
+        console.warn("[sealFuelWeek]", e.message);
+        continue;
+      }
+      throw e;
+    }
   }
 
   return { published };

@@ -51,12 +51,12 @@ export function laneForBlockerCode(code: string): CloseLane {
 
 /** Plain-English label for each known blocker code (falls back to the raw message). */
 const BLOCKER_LABELS: Record<string, string> = {
-  FUEL_STATEMENT_MISSING: 'Fuel statement not published',
+  FUEL_STATEMENT_MISSING: 'Fuel statement not published — finish Fuel week recon',
   FUEL_STATEMENT_UNVERIFIED: 'Fuel statement unverified — finalize fuel before close',
   FUEL_DRIVER_SHARE_MISMATCH: 'Fuel driver share does not tie to statement',
   FUEL_FLEET_SHARE_MISMATCH: 'Fuel fleet share does not tie to statement',
-  TOLL_STATEMENT_MISSING: 'Toll statement not published',
-  TOLL_STATEMENT_UNVERIFIED: 'Toll statement unverified — seal from events before close',
+  TOLL_STATEMENT_MISSING: 'Toll statement not published — finish Tolls week recon',
+  TOLL_STATEMENT_UNVERIFIED: 'Toll statement unverified — finish Tolls week recon',
   TOLL_SPEND_MISMATCH: 'Toll spend does not tie to statement',
   TOLL_CHARGED_MISMATCH: 'Toll charged-to-driver does not tie to statement',
   TOLL_IDENTITY_UNBALANCED: 'Toll cards do not balance (Spend − Reimbursed − Charged − Net Loss ≠ 0)',
@@ -68,10 +68,10 @@ const BLOCKER_LABELS: Record<string, string> = {
   TOLL_PAYMENT_METHOD_UNKNOWN: 'Toll rows missing cash/tag payment method — set method and rebuild',
   FUEL_ENGINE_DRIFT: 'Fuel seal no longer matches Consumption — reseal before close',
   TOLL_ENGINE_DRIFT: 'Toll seal no longer matches event netting — reseal before close',
-  TOLL_STALE_ZERO_SEAL: 'Late tolls after $0 seal — tap Prepare lanes to re-seal',
+  TOLL_STALE_ZERO_SEAL: 'Late tolls after $0 seal — Refresh to re-seal',
   EARNINGS_ENGINE_DRIFT: 'Earnings seal no longer matches commission/cash engines — reseal before close',
-  EARNINGS_STATEMENT_MISSING: 'Earnings statement not published',
-  EARNINGS_STATEMENT_UNVERIFIED: 'Earnings statement unverified — seal from engines before close',
+  EARNINGS_STATEMENT_MISSING: 'Earnings statement not published — retry Refresh',
+  EARNINGS_STATEMENT_UNVERIFIED: 'Earnings not ready — retry Refresh (not Restatement Queue)',
   CASH_SOURCE_MISMATCH: 'Trip CSV cash disagrees with ledger cash',
   CASH_COLLECTED_MISMATCH: 'Cash collected does not tie to earnings statement',
   EARNINGS_GROSS_IDENTITY: 'Gross ≠ driver share + fleet share + tips',
@@ -81,7 +81,26 @@ const BLOCKER_LABELS: Record<string, string> = {
   SETTLEMENT_FLEET_OWES: 'Fleet still owes — Pay remaining on Cash desk before close',
   SETTLEMENT_DRIVER_OWES: 'Driver still owes — Collect remaining on Cash desk before close',
   SETTLEMENT_CASH_HELD: 'Cash still held — Collect or write off before close',
+  PERIOD_REBUILD_FAILED: 'Couldn’t refresh books — retry',
 };
+
+const CASH_RESIDUAL_CODES = new Set([
+  'SETTLEMENT_FLEET_OWES',
+  'SETTLEMENT_DRIVER_OWES',
+  'SETTLEMENT_CASH_HELD',
+]);
+
+/** True when every *blocking* residual is cash Collect/Pay (lanes already tie). */
+export function isCashResidualOnlyBlockers(
+  blockers: Array<Pick<CloseBlocker, 'code' | 'severity'>> | null | undefined,
+  weekBlockers?: Array<Pick<CloseBlocker, 'code' | 'severity'>> | null,
+): boolean {
+  const all = [...(blockers || []), ...(weekBlockers || [])].filter(
+    (b) => String(b.severity || 'block') !== 'warn',
+  );
+  if (all.length === 0) return false;
+  return all.every((b) => CASH_RESIDUAL_CODES.has(String(b.code || '').toUpperCase()));
+}
 
 export function humanBlockerLabel(blocker: Pick<CloseBlocker, 'code' | 'message'>): string {
   return BLOCKER_LABELS[String(blocker.code || '').toUpperCase()] || blocker.message || blocker.code;

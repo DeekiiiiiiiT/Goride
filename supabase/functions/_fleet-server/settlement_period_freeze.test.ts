@@ -1,6 +1,7 @@
 import { assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import {
   assertPeriodEndedForSettlement,
+  assertPeriodEndedForReconciliation,
   assertPeriodNotFrozen,
   clearPeriodFreeze,
   isPeriodFrozen,
@@ -73,6 +74,21 @@ Deno.test("assertPeriodEndedForSettlement blocks through periodEnd Sunday", () =
 
 Deno.test("assertPeriodEndedForSettlement allows from the next calendar day", () => {
   assertPeriodEndedForSettlement("2026-08-31", "2026-09-07");
+});
+
+Deno.test("assertPeriodEndedForReconciliation blocks Sep 7–13 through Sunday", () => {
+  try {
+    assertPeriodEndedForReconciliation("2026-09-07", "2026-09-13");
+    throw new Error("expected throw");
+  } catch (e) {
+    assertEquals(e instanceof SettlementCommandError, true);
+    assertEquals((e as SettlementCommandError).code, "PERIOD_NOT_ENDED");
+    assertEquals(String((e as SettlementCommandError).message).includes("Reconciliation"), true);
+  }
+});
+
+Deno.test("assertPeriodEndedForReconciliation allows from Sep 14", () => {
+  assertPeriodEndedForReconciliation("2026-09-07", "2026-09-14");
 });
 
 Deno.test("clearPeriodFreeze archives seal and unfreezes", () => {

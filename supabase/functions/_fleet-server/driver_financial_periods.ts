@@ -1489,7 +1489,10 @@ export async function rebuildDriverFinancialPeriod(
         latestEarnings &&
         latestEarnings.status === "draft" &&
         JSON.stringify(latestEarnings.amountsMinor) === JSON.stringify(earningsAmountsMinor);
-      if (!unchanged) {
+      // Never draft-over-closed from rebuild (restatement spam).
+      if (latestEarnings?.status === "closed" || latestEarnings?.supersedes) {
+        /* keep standing seal */
+      } else if (!unchanged) {
         await publishWeekStatement({
           kind: "earnings",
           organizationId: organizationIdResolved,
@@ -1545,6 +1548,9 @@ export async function rebuildDriverFinancialPeriod(
             engErr instanceof Error ? engErr.message : String(engErr),
           );
         }
+  // Pass E: stamp closed/draft statement amounts onto the period when the
+  // projection flag is on. Callers that publish a closed seal must rebuild
+  // open periods afterward (Fuel finalize, Toll seal, Close Week sync).
         if (PROJECTION_READS_WEEK_STATEMENTS) {
           const byKind = new Map(statements.map((s) => [s.kind, s]));
           const fuel = byKind.get("fuel");

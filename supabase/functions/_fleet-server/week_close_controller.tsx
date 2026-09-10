@@ -15,7 +15,7 @@ import { Hono, type Context } from "npm:hono";
 import { requireAuth, requirePermission, type RbacUser } from "./rbac_middleware.ts";
 import { getOrgId } from "./org_scope.ts";
 import { safeErrorResponse } from "./safe_error.ts";
-import { closeWeek, previewWeekClose, prepareWeekClose, reopenWeek, retryFreezeWeek, listClosedWeeks, WeekCloseError } from "./week_close.ts";
+import { closeWeek, previewWeekClose, prepareWeekClose, reopenWeek, retryFreezeWeek, listClosedWeeks, listOpenWeeks, WeekCloseError } from "./week_close.ts";
 import { sealFuelWeek } from "./fuel_week_seal.ts";
 import {
   listPendingRestatements,
@@ -55,6 +55,23 @@ app.get(`${BASE}/closed-weeks`, requirePermission("transactions.view"), async (c
   }
 });
 
+// ── GET /week-close/open-weeks?year=YYYY — not fully frozen; cash settled counts ─
+app.get(`${BASE}/open-weeks`, requirePermission("transactions.view"), async (c) => {
+  try {
+    const org = requireOrg(c);
+    if (typeof org !== "string") return org;
+    const yearRaw = c.req.query("year");
+    const year = yearRaw ? Number(yearRaw) : undefined;
+    if (yearRaw && (!Number.isFinite(year) || year! < 2000 || year! > 2100)) {
+      return c.json({ error: "INVALID_YEAR", message: "year must be YYYY" }, 400);
+    }
+    const weeks = await listOpenWeeks(org, { year });
+    return c.json({ success: true, year: year ?? null, weeks });
+  } catch (e) {
+    return safeErrorResponse(c, e, "week-close-open-weeks");
+  }
+});
+
 // ── GET /week-close/preview ─────────────────────────────────────────────────
 app.get(`${BASE}/preview`, requirePermission("transactions.view"), async (c) => {
   try {
@@ -71,23 +88,41 @@ app.get(`${BASE}/preview`, requirePermission("transactions.view"), async (c) => 
   }
 });
 
-// ── POST /week-close/prepare — seal lanes + persist drifts (H-1) ─────────────
-app.post(`${BASE}/prepare`, requirePermission("transactions.edit"), async (c) => {
+// ── POST /week-close/prepare — week sync: seal + rebuild + drifts (H-1 writes) ─
+// Alias: POST /week-close/sync (same handler; product language for auto-sync).
+async function handleWeekSync(c: Context) {
   try {
     const org = requireOrg(c);
     if (typeof org !== "string") return org;
     const user = c.get("rbacUser") as RbacUser;
-    const body = (await c.req.json().catch(() => ({}))) as { weekKey?: string };
+    const body = (await c.req.json().catch(() => ({}))) as {
+      weekKey?: string;
+      forceFuelReseal?: boolean;
+      forceTollReseal?: boolean;
+      forceEarningsReseal?: boolean;
+      forceAllLaneReseals?: boolean;
+    };
     const weekKey = String(body.weekKey || c.req.query("weekKey") || "").slice(0, 10);
     if (!WEEK_RE.test(weekKey)) {
       return c.json({ error: "weekKey (YYYY-MM-DD) is required" }, 400);
     }
-    const preview = await prepareWeekClose(org, weekKey, user.userId);
+    const preview = await prepareWeekClose(org, weekKey, user.userId, {
+      forceFuelReseal: Boolean(body.forceFuelReseal),
+      forceTollReseal: Boolean(body.forceTollReseal),
+      forceEarningsReseal: Boolean(body.forceEarningsReseal),
+      forceAllLaneReseals: Boolean(body.forceAllLaneReseals),
+    });
     return c.json(preview);
   } catch (e) {
+    if (e instanceof WeekCloseError) {
+      return c.json({ error: e.code, message: e.message, details: e.details }, e.status);
+    }
     return safeErrorResponse(c, e, "week-close-prepare");
   }
-});
+}
+
+app.post(`${BASE}/prepare`, requirePermission("transactions.edit"), handleWeekSync);
+app.post(`${BASE}/sync`, requirePermission("transactions.edit"), handleWeekSync);
 
 // ── POST /week-close ────────────────────────────────────────────────────────
 app.post(BASE, requirePermission("transactions.edit"), async (c) => {

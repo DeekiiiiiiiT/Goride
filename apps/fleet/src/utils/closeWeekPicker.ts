@@ -3,17 +3,16 @@
  * Weeks are Monday anchors (yyyy-MM-dd). Close is only for fully ended weeks.
  */
 import {
-  addDays,
   eachDayOfInterval,
   endOfYear,
   format,
   getYear,
   isMonday,
-  parseISO,
   startOfWeek,
   startOfYear,
   subWeeks,
 } from 'date-fns';
+import { isSettlementPeriodEnded } from './settlementPeriodGate';
 
 const EARLIEST_CLOSE_YEAR = 2024;
 
@@ -52,17 +51,12 @@ export function defaultCloseWeekKey(now = new Date()): string {
   return format(subWeeks(thisMonday, 1), 'yyyy-MM-dd');
 }
 
-/** True when the settlement week has ended (Sunday before today, or older). */
-export function isCloseWeekEnded(weekKey: string, now = new Date()): boolean {
-  try {
-    const start = parseISO(`${weekKey.slice(0, 10)}T12:00:00`);
-    const periodEnd = addDays(start, 6);
-    // End of period day must be before "today" start — current in-progress week is not closable.
-    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    return periodEnd < todayStart;
-  } catch {
-    return false;
-  }
+/**
+ * True when the Mon–Sun week has ended (first allowed day = Sunday + 1 in Jamaica).
+ * Aligns Close Week with Driver Settlements / Week Reconciliation seals.
+ */
+export function isCloseWeekEnded(weekKey: string, now: Date | string = new Date()): boolean {
+  return isSettlementPeriodEnded({ weekAnchor: weekKey, now });
 }
 
 export function yearFromWeekKey(weekKey: string): number {
