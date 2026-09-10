@@ -44,6 +44,10 @@ export type ReconciledPeriodDetail = {
   tipsPaidToDriver?: number;
   tipsWithheld?: number;
   cashSourceMismatch?: number;
+  /** Statement / ledger Uber cash (payments_driver). */
+  uberCash?: number;
+  /** Trip-rollup Uber cash (payments_transaction). */
+  uberTripCash?: number;
   overpaidAmount?: number;
   projectionSources?: Record<string, string>;
   serviceLineBreakdown?: Record<string, unknown>;
@@ -287,9 +291,12 @@ export function ReconciledPeriodOverlay({
               </p>
               {detail.cashSourceMismatch != null && Math.abs(detail.cashSourceMismatch) > 0.5 ? (
                 <p className="text-[11px] text-amber-800 mb-2 rounded-md bg-amber-50 px-2 py-1.5">
-                  Cash source mismatch {fmt(detail.cashSourceMismatch)} — trip CSV Uber cash disagrees
-                  with ledger payout_cash; ledger already wins for passenger cash. Informational only —
-                  does not block Pay or reconciliation.
+                  Cash source mismatch {fmt(detail.cashSourceMismatch)}
+                  {detail.uberCash != null && detail.uberTripCash != null
+                    ? ` — statement ${fmt(detail.uberCash)} vs trip sum ${fmt(detail.uberTripCash)}`
+                    : ' — trip Uber cash disagrees with statement (ledger) cash'}
+                  . Ledger already wins for passenger cash. Does not block Pay. Must accept on Close
+                  Week before freeze.
                 </p>
               ) : null}
               <Line label="Passenger cash" value={fmt(detail.cashCollected)} />

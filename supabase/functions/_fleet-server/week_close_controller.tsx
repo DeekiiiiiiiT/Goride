@@ -4,6 +4,7 @@
  * Routes under /make-server-37f42386/settlements/week-close:
  *   GET  /week-close/preview?weekKey=YYYY-MM-DD  → read-only lanes + blockers
  *   POST /week-close  { weekKey, reason }        → run invariants and sign week
+ *   POST /week-close/acknowledge-cash-source { weekKey, driverId, reason }
  *   POST /week-close/reopen { weekKey, reason, acknowledgeSettlementRisk? }
  *                                               → admin unfreeze (audit trail)
  *
@@ -15,7 +16,7 @@ import { Hono, type Context } from "npm:hono";
 import { requireAuth, requirePermission, type RbacUser } from "./rbac_middleware.ts";
 import { getOrgId } from "./org_scope.ts";
 import { safeErrorResponse } from "./safe_error.ts";
-import { closeWeek, previewWeekClose, prepareWeekClose, reopenWeek, retryFreezeWeek, listClosedWeeks, listOpenWeeks, WeekCloseError } from "./week_close.ts";
+import { closeWeek, previewWeekClose, prepareWeekClose, reopenWeek, retryFreezeWeek, listClosedWeeks, listOpenWeeks, acknowledgeCashSourceMismatch, WeekCloseError } from "./week_close.ts";
 import { sealFuelWeek } from "./fuel_week_seal.ts";
 import {
   listPendingRestatements,
@@ -123,6 +124,37 @@ async function handleWeekSync(c: Context) {
 
 app.post(`${BASE}/prepare`, requirePermission("transactions.edit"), handleWeekSync);
 app.post(`${BASE}/sync`, requirePermission("transactions.edit"), handleWeekSync);
+
+// ── POST /week-close/acknowledge-cash-source — accept statement Uber cash (M-1) ─
+app.post(`${BASE}/acknowledge-cash-source`, requirePermission("transactions.edit"), async (c) => {
+  try {
+    const org = requireOrg(c);
+    if (typeof org !== "string") return org;
+    const user = c.get("rbacUser") as RbacUser;
+    const body = (await c.req.json()) as {
+      weekKey?: string;
+      driverId?: string;
+      reason?: string;
+    };
+    const weekKey = String(body.weekKey || "").slice(0, 10);
+    if (!WEEK_RE.test(weekKey)) {
+      return c.json({ error: "weekKey (YYYY-MM-DD) is required" }, 400);
+    }
+    const result = await acknowledgeCashSourceMismatch(
+      org,
+      weekKey,
+      String(body.driverId || ""),
+      user.userId,
+      String(body.reason || ""),
+    );
+    return c.json({ success: true, ...result });
+  } catch (e) {
+    if (e instanceof WeekCloseError) {
+      return c.json({ error: e.code, message: e.message, details: e.details }, e.status);
+    }
+    return safeErrorResponse(c, e, "week-close-acknowledge-cash-source");
+  }
+});
 
 // ── POST /week-close ────────────────────────────────────────────────────────
 app.post(BASE, requirePermission("transactions.edit"), async (c) => {

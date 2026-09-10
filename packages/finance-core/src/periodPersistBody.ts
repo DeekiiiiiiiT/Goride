@@ -94,6 +94,8 @@ export function buildPeriodMetadata(input: BuildPeriodMetadataInput): Record<str
       uberTripCash: fc.uberTripCash,
       nonUberTripCash: fc.nonUberTripCash,
       cashSourceMismatch: fc.cashSourceMismatch,
+      // Preserve ops Accept statement cash across rebuild (do not wipe).
+      ...(priorFc.cashSourceAck ? { cashSourceAck: priorFc.cashSourceAck } : {}),
       cashHeldClamped: fc.cashHeldClamped,
       unclampedCashHeld: fc.unclampedCashHeld,
       overpaidAmount: round2(fc.overpaidAmount),

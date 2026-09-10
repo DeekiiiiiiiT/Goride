@@ -6,6 +6,7 @@
  *   POST /settlements/week-close/sync { weekKey }            → seal/rebuild only when needed
  *   POST /settlements/week-close  { weekKey, reason }        → sign the week
  *   POST /settlements/week-close/reopen { weekKey, reason, acknowledgeSettlementRisk? }
+ *   POST /settlements/week-close/acknowledge-cash-source { weekKey, driverId, reason }
  *
  * The route is registered in supabase/functions/_fleet-server/index.tsx via
  * week_close_controller.tsx. Preview is read-only; sync is slim (no-op writes when
@@ -49,6 +50,29 @@ export type WeekClosePreview = {
   driversSettled?: number;
   /** True when every driver-period for the week is cash-settled. */
   cashAllSettled?: boolean;
+  /** Drivers with statement Uber cash ≠ trip Uber cash (or a stored accept). */
+  cashSourceMismatches?: WeekCloseCashSourceMismatch[];
+  /** Drivers with a still-valid Accept statement cash ack this week. */
+  cashSourceAckCount?: number;
+};
+
+export type WeekCloseCashSourceAck = {
+  at: string;
+  by?: string | null;
+  reason: string;
+  uberCash: number;
+  uberTripCash: number;
+  mismatchAtAck: number;
+};
+
+export type WeekCloseCashSourceMismatch = {
+  driverId: string;
+  driverName?: string | null;
+  weekKey: string;
+  uberCash: number;
+  uberTripCash: number;
+  mismatch: number;
+  ack?: WeekCloseCashSourceAck | null;
 };
 
 export type WeekCloseResult = {
@@ -278,6 +302,39 @@ export const weekCloseApi = {
       throw new WeekCloseApiError(err.message, response.status, err.code, err.details);
     }
     return response.json() as Promise<WeekReopenResult>;
+  },
+
+  /**
+   * Accept statement (payments_driver) Uber cash for Close Week M-1.
+   * Does not change passenger cash — stamps financeCore.cashSourceAck only.
+   */
+  async acknowledgeCashSource(
+    weekKey: string,
+    driverId: string,
+    reason: string,
+  ): Promise<{
+    success: boolean;
+    weekKey: string;
+    driverId: string;
+    ack: WeekCloseCashSourceAck;
+    mismatch: WeekCloseCashSourceMismatch;
+  }> {
+    const response = await fetchWithRetry(`${BASE}/acknowledge-cash-source`, {
+      method: 'POST',
+      headers: await requireAuthHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ weekKey, driverId, reason }),
+    });
+    if (!response.ok) {
+      const err = await parseErrorPayload(response, 'Accept statement cash failed');
+      throw new WeekCloseApiError(err.message, response.status, err.code, err.details);
+    }
+    return response.json() as Promise<{
+      success: boolean;
+      weekKey: string;
+      driverId: string;
+      ack: WeekCloseCashSourceAck;
+      mismatch: WeekCloseCashSourceMismatch;
+    }>;
   },
 
   /** Heal fuel lane from Consumption money-strip amounts (force restates closed weeks). */

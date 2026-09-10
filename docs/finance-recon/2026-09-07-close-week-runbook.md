@@ -44,10 +44,20 @@ Any code path that publishes a **closed** `week_statement` for an open org-week 
 | `TOLL_PAYMENT_METHOD_UNKNOWN` | Toll rows missing cash/tag payment method | Set payment method on each row, then rebuild |
 | `TOLL_SPEND_SPLIT` | `toll_spend ≠ cash + tag` | Rebuild period after statement cutover; check tag/cash overwrite |
 | `*_MISMATCH` | Period ≠ independent statement | Investigate drift; do not force-close |
-| `CASH_SOURCE_MISMATCH` | Trip CSV vs ledger cash | Resolve cash source before close |
+| `CASH_SOURCE_MISMATCH` | Trip CSV vs ledger cash | **Accept statement cash** on Close Week (reason required), or re-import the Uber bundle. Settlement already uses statement cash. Not Restatement; not SQL. Supersedes one-off `pass5CashAck`. |
 | `SETTLEMENT_PNL_MISMATCH` | Desk fleet P&L ≠ sealed statement P&L | Align projection to statements / reseal |
 | `BUSINESS_WEEK_PNL_UNAVAILABLE` | Warn — no closed statements to build P&L | Finish lane recon / Refresh sync first |
 | `SETTLEMENT_DRIVER_OWES` / `SETTLEMENT_FLEET_OWES` / `SETTLEMENT_CASH_HELD` | Cash residual | Collect / Pay on Cash desk, then Refresh |
+
+## Uber statement cash ≠ trip cash (`CASH_SOURCE_MISMATCH`)
+
+Uber fleet imports are a **bundle**: statement cash comes from `payments_driver` (`financeCore.uberCash`); trip sum from payment lines (`financeCore.uberTripCash`). Settlement already trusts statement cash.
+
+1. On Close Week, open the rose banner — see driver, statement $, trip $, difference.
+2. Prefer **Accept statement cash** with a short reason (does not change collected money; clears the close block).
+3. Or **Re-import Uber bundle** if trips/payments look incomplete.
+4. Do **not** use Restatement Queue or SQL. After Accept, Refresh → Close week when blockers = 0.
+5. If rebuild later changes the mismatch beyond ε, Accept is invalidated and must be done again.
 
 ## Ops scan — open weeks with toll period ≠ seal (read-only)
 

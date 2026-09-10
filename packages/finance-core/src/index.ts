@@ -169,6 +169,7 @@ export {
   CLOSE_INVARIANT_EPS,
   checkCloseInvariants,
   canCloseWeek,
+  isCashSourceAckValid,
 } from './closeInvariants.ts';
 export type {
   CloseBlocker,
@@ -178,6 +179,7 @@ export type {
   CloseFuelStatement,
   CloseTollStatement,
   CloseEarningsStatement,
+  CashSourceAck,
 } from './closeInvariants.ts';
 export {
   tollPeriodDisagreesWithSeal,

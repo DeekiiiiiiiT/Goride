@@ -173,9 +173,11 @@ function AppContent() {
   });
   const [businessFinanceTab, setBusinessFinanceTab] = useState<'overview' | 'workbench' | 'expenses'>('overview');
   /** Period handoff when leaving BF hub for Bank / Wallet */
-  const [financePeriodHint, setFinancePeriodHint] = useState<{ startYmd: string; endYmd: string } | null>(
-    null,
-  );
+  const [financePeriodHint, setFinancePeriodHint] = useState<{
+    startYmd: string;
+    endYmd: string;
+    driverId?: string;
+  } | null>(null);
   /** Vehicle deep link into Expense Hub (register or recurring) */
   const [expenseHubVehicleId, setExpenseHubVehicleId] = useState<string | null>(null);
   const [expenseHubSubview, setExpenseHubSubview] = useState<ExpenseHubSubview | null>(null);
@@ -187,7 +189,7 @@ function AppContent() {
   } | null>(null);
 
   type NavigateOpts =
-    | { startYmd: string; endYmd?: string }
+    | { startYmd: string; endYmd?: string; driverId?: string }
     | { weekKey: string }
     | { vehicleId?: string; driverId?: string; vehicleLabel?: string };
 
@@ -219,7 +221,11 @@ function AppContent() {
   const handleNavigate = (page: string, opts?: NavigateOpts) => {
     const periodHint =
       opts && 'startYmd' in opts && typeof opts.startYmd === 'string'
-        ? { startYmd: opts.startYmd, endYmd: opts.endYmd || opts.startYmd }
+        ? {
+            startYmd: opts.startYmd,
+            endYmd: opts.endYmd || opts.startYmd,
+            driverId: 'driverId' in opts && opts.driverId ? String(opts.driverId) : undefined,
+          }
         : undefined;
     if (opts && 'weekKey' in opts && typeof opts.weekKey === 'string') {
       setCloseWeekKeyHint(opts.weekKey);
@@ -821,9 +827,13 @@ function AppContent() {
                 onNavigate={(page, opts) => handleNavigate(page, opts)}
                 initialHubTab={settlementsHubTabHint}
                 initialWeekKey={closeWeekKeyHint}
+                initialCashWeekFrom={financePeriodHint?.startYmd}
+                initialCashWeekTo={financePeriodHint?.endYmd}
+                initialCashDriverId={financePeriodHint?.driverId}
                 onSettlementsHintsConsumed={() => {
                   setSettlementsHubTabHint(null);
                   setCloseWeekKeyHint(null);
+                  setFinancePeriodHint(null);
                 }}
               />
             </Suspense>

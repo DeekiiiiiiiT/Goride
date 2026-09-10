@@ -226,7 +226,8 @@ export function ReconciledTable({
                         <OverpaidBadge amount={overpaid} />
                         {Math.abs(Number(r.cashSourceMismatch) || 0) > 0.5 ? (
                           <span className="text-[10px] text-amber-700">
-                            Cash source mismatch {MONEY(r.cashSourceMismatch)}
+                            Cash source mismatch {MONEY(r.cashSourceMismatch)} — does not block Pay;
+                            accept on Close Week before freeze
                           </span>
                         ) : null}
                       </div>

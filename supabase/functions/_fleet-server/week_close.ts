@@ -46,6 +46,8 @@ import {
   checkCloseInvariants,
   canCloseWeek,
   CLOSE_INVARIANT_EPS,
+  isCashSourceAckValid,
+  type CashSourceAck,
   type CloseBlocker,
   type CloseEarningsStatement,
   type CloseFuelStatement,
@@ -232,6 +234,16 @@ export type WeekCloseTollLane = {
   identityCloses: boolean;
 };
 
+export type WeekCloseCashSourceMismatch = {
+  driverId: string;
+  driverName?: string | null;
+  weekKey: string;
+  uberCash: number;
+  uberTripCash: number;
+  mismatch: number;
+  ack?: CashSourceAck | null;
+};
+
 export type WeekClosePreview = {
   weekKey: string;
   driversTotal: number;
@@ -265,7 +277,58 @@ export type WeekClosePreview = {
   driversSettled?: number;
   /** True when every driver-period for the week is cash-settled. */
   cashAllSettled?: boolean;
+  /**
+   * Drivers with |uberCash − uberTripCash| > ε (or a stored ack).
+   * Statement cash = uberCash; trip rollup = uberTripCash.
+   */
+  cashSourceMismatches?: WeekCloseCashSourceMismatch[];
+  /** Count of drivers with a still-valid cashSourceAck for this week. */
+  cashSourceAckCount?: number;
 };
+
+type FinanceCoreCashSlice = {
+  cashSourceMismatch: number;
+  uberCash: number;
+  uberTripCash: number;
+  cashSourceAck: CashSourceAck | null;
+};
+
+function parseCashSourceAck(raw: unknown): CashSourceAck | null {
+  if (!raw || typeof raw !== "object") return null;
+  const o = raw as Record<string, unknown>;
+  const reason = String(o.reason || "").trim();
+  if (!reason) return null;
+  const mismatchAtAck = Number(o.mismatchAtAck);
+  if (!Number.isFinite(mismatchAtAck)) return null;
+  return {
+    at: String(o.at || ""),
+    by: o.by != null ? String(o.by) : null,
+    reason,
+    uberCash: Number(o.uberCash) || 0,
+    uberTripCash: Number(o.uberTripCash) || 0,
+    mismatchAtAck,
+  };
+}
+
+function readFinanceCoreCash(meta: Record<string, unknown> | null | undefined): FinanceCoreCashSlice {
+  const fc = (meta?.financeCore as Record<string, unknown> | undefined) || {};
+  return {
+    cashSourceMismatch: Number(fc.cashSourceMismatch) || 0,
+    uberCash: Number(fc.uberCash) || 0,
+    uberTripCash: Number(fc.uberTripCash) || 0,
+    cashSourceAck: parseCashSourceAck(fc.cashSourceAck),
+  };
+}
+
+function cashInvariantFields(meta: Record<string, unknown> | null | undefined) {
+  const cash = readFinanceCoreCash(meta);
+  return {
+    cashSourceMismatch: cash.cashSourceMismatch,
+    uberCash: cash.uberCash,
+    uberTripCash: cash.uberTripCash,
+    cashSourceAck: cash.cashSourceAck,
+  };
+}
 
 /**
  * Close Program Pass 3/5 precondition: refresh fuel/toll/earnings from
@@ -649,12 +712,32 @@ export async function previewWeekClose(orgId: string, weekKey: string): Promise<
 
   // Dedup restatement drafts (U-6) — latest version per driver/week/kind.
   const draftKeys = new Set<string>();
+  const cashSourceMismatches: WeekCloseCashSourceMismatch[] = [];
+  let cashSourceAckCount = 0;
 
   for (const period of rows) {
     const driverId = String(period.driver_id);
     const meta = (period.metadata as Record<string, unknown> | null) || null;
     const fc = (meta?.financeCore as Record<string, unknown> | undefined) || {};
     const frozen = periodIsFrozen(period as Record<string, unknown>);
+    const cash = readFinanceCoreCash(meta);
+    if (Math.abs(cash.cashSourceMismatch) > CLOSE_INVARIANT_EPS || cash.cashSourceAck) {
+      cashSourceMismatches.push({
+        driverId,
+        driverName:
+          (period as { driver_name?: string | null }).driver_name != null
+            ? String((period as { driver_name?: string | null }).driver_name)
+            : null,
+        weekKey: week,
+        uberCash: cash.uberCash,
+        uberTripCash: cash.uberTripCash,
+        mismatch: cash.cashSourceMismatch,
+        ack: cash.cashSourceAck,
+      });
+      if (isCashSourceAckValid(cash.cashSourceAck, cash.cashSourceMismatch)) {
+        cashSourceAckCount += 1;
+      }
+    }
 
     const statements = statementsByDriver.get(driverId) ?? [];
     const pendingDrafts = hasPendingRestatementDrafts(statements);
@@ -753,10 +836,7 @@ export async function previewWeekClose(orgId: string, weekKey: string): Promise<
       fuelStatement,
       tollStatement,
       earningsStatement: earningsFromStatement(byKind.get("earnings"), acceptRestatementDrafts),
-      cashSourceMismatch: Number(
-        (meta as { financeCore?: { cashSourceMismatch?: number } } | null)
-          ?.financeCore?.cashSourceMismatch,
-      ) || 0,
+      ...cashInvariantFields(meta),
       skipSettlementDeskClear: acceptRestatementDrafts,
       engineDrifts: engineBlockers,
       tollEventLedger,
@@ -827,6 +907,8 @@ export async function previewWeekClose(orgId: string, weekKey: string): Promise<
       driversTotal: rows.length,
       driversSettled,
     }),
+    cashSourceMismatches,
+    cashSourceAckCount,
   };
 }
 
@@ -1300,10 +1382,7 @@ export async function closeWeek(
       fuelStatement: fuelFromStatement(byKind.get("fuel"), acceptRestatementDrafts),
       tollStatement: tollFromStatement(byKind.get("toll"), acceptRestatementDrafts),
       earningsStatement: earningsFromStatement(byKind.get("earnings"), acceptRestatementDrafts),
-      cashSourceMismatch: Number(
-        (meta as { financeCore?: { cashSourceMismatch?: number } } | null)
-          ?.financeCore?.cashSourceMismatch,
-      ) || 0,
+      ...cashInvariantFields(meta),
       skipSettlementDeskClear: acceptRestatementDrafts,
       engineDrifts: engineBlockers,
       tollEventLedger,
@@ -1602,6 +1681,107 @@ export type ReopenWeekResult = {
     settlementAmount: number;
   }>;
 };
+
+/**
+ * Ops accepts statement (ledger) Uber cash for Close Week M-1.
+ * Does not rewrite passenger cash — only stamps financeCore.cashSourceAck.
+ */
+export async function acknowledgeCashSourceMismatch(
+  orgId: string,
+  weekKey: string,
+  driverId: string,
+  actorId: string,
+  reason: string,
+): Promise<{
+  weekKey: string;
+  driverId: string;
+  ack: CashSourceAck;
+  mismatch: WeekCloseCashSourceMismatch;
+}> {
+  const week = String(weekKey).slice(0, 10);
+  const did = String(driverId || "").trim();
+  const trimmedReason = String(reason || "").trim();
+  if (!WEEK_RE_INTERNAL.test(week)) {
+    throw new WeekCloseError("INVALID_WEEK", "weekKey (YYYY-MM-DD) is required", 400);
+  }
+  if (!did) {
+    throw new WeekCloseError("DRIVER_REQUIRED", "driverId is required", 400);
+  }
+  if (trimmedReason.length < 8) {
+    throw new WeekCloseError(
+      "REASON_REQUIRED",
+      "Enter a reason (at least 8 characters) for accepting statement cash",
+      400,
+    );
+  }
+
+  const { data: period, error } = await sb()
+    .from("driver_financial_periods")
+    .select("*")
+    .eq("organization_id", orgId)
+    .eq("period_anchor", week)
+    .eq("driver_id", did)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!period) {
+    throw new WeekCloseError("PERIOD_NOT_FOUND", "No driver financial period for that week", 404);
+  }
+
+  const meta = (period.metadata as Record<string, unknown> | null) || {};
+  const cash = readFinanceCoreCash(meta);
+  if (Math.abs(cash.cashSourceMismatch) <= CLOSE_INVARIANT_EPS) {
+    throw new WeekCloseError(
+      "NO_MISMATCH",
+      "Statement cash already ties to trip cash for this driver-week",
+      409,
+    );
+  }
+
+  const now = new Date().toISOString();
+  const ack: CashSourceAck = {
+    at: now,
+    by: actorId || null,
+    reason: trimmedReason,
+    uberCash: cash.uberCash,
+    uberTripCash: cash.uberTripCash,
+    mismatchAtAck: cash.cashSourceMismatch,
+  };
+
+  const priorFc = (meta.financeCore as Record<string, unknown> | undefined) || {};
+  const nextMeta: Record<string, unknown> = {
+    ...meta,
+    financeCore: {
+      ...priorFc,
+      cashSourceAck: ack,
+    },
+  };
+
+  const { error: updErr } = await sb()
+    .from("driver_financial_periods")
+    .update({ metadata: nextMeta, updated_at: now })
+    .eq("organization_id", orgId)
+    .eq("period_anchor", week)
+    .eq("driver_id", did);
+  if (updErr) throw new Error(updErr.message);
+
+  return {
+    weekKey: week,
+    driverId: did,
+    ack,
+    mismatch: {
+      driverId: did,
+      driverName:
+        (period as { driver_name?: string | null }).driver_name != null
+          ? String((period as { driver_name?: string | null }).driver_name)
+          : null,
+      weekKey: week,
+      uberCash: cash.uberCash,
+      uberTripCash: cash.uberTripCash,
+      mismatch: cash.cashSourceMismatch,
+      ack,
+    },
+  };
+}
 
 /**
  * Admin calendar reopen: clear period freeze for every driver in the org-week.

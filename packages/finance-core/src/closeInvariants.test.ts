@@ -175,6 +175,61 @@ describe('checkCloseInvariants (§6.4)', () => {
     expect(canCloseWeek(blockers)).toBe(false);
   });
 
+  it('M-1: valid cashSourceAck skips mismatch block', () => {
+    const blockers = checkCloseInvariants({
+      ...tyingWeek,
+      cashSourceMismatch: 12.5,
+      uberCash: 100,
+      uberTripCash: 87.5,
+      cashSourceAck: {
+        at: '2026-09-10T12:00:00.000Z',
+        by: 'ops@roam',
+        reason: 'Statement cash matches payments_driver; trip rollup incomplete',
+        uberCash: 100,
+        uberTripCash: 87.5,
+        mismatchAtAck: 12.5,
+      },
+    });
+    expect(blockers.some((b) => b.code === 'CASH_SOURCE_MISMATCH')).toBe(false);
+    expect(canCloseWeek(blockers)).toBe(true);
+  });
+
+  it('M-1: ack invalidated when live mismatch drifts', () => {
+    const blockers = checkCloseInvariants({
+      ...tyingWeek,
+      cashSourceMismatch: 40,
+      uberCash: 140,
+      uberTripCash: 100,
+      cashSourceAck: {
+        at: '2026-09-10T12:00:00.000Z',
+        reason: 'Prior accept',
+        uberCash: 100,
+        uberTripCash: 87.5,
+        mismatchAtAck: 12.5,
+      },
+    });
+    const b = blockers.find((x) => x.code === 'CASH_SOURCE_MISMATCH');
+    expect(b).toBeTruthy();
+    expect(b?.persisted).toBe(140);
+    expect(b?.expected).toBe(100);
+    expect(canCloseWeek(blockers)).toBe(false);
+  });
+
+  it('M-1: ack without reason does not skip', () => {
+    const blockers = checkCloseInvariants({
+      ...tyingWeek,
+      cashSourceMismatch: 12.5,
+      cashSourceAck: {
+        at: '2026-09-10T12:00:00.000Z',
+        reason: '   ',
+        uberCash: 100,
+        uberTripCash: 87.5,
+        mismatchAtAck: 12.5,
+      },
+    });
+    expect(blockers.some((b) => b.code === 'CASH_SOURCE_MISMATCH')).toBe(true);
+  });
+
   it('blocks close when fleet still owes (Pay residual)', () => {
     const blockers = checkCloseInvariants({
       ...tyingWeek,

@@ -25,7 +25,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { computeTollCardIdentityResidual } from '@roam/toll-core';
-import { MONEY_EPS } from '@roam/finance-core';
+import { MONEY_EPS, CLOSE_INVARIANT_EPS, isCashSourceAckValid } from '@roam/finance-core';
 import { Button } from '../components/ui/button';
 import {
   Dialog,
@@ -52,6 +52,7 @@ import {
   WeekCloseApiError,
   type WeekCloseResult,
   type OpenWeekSummary,
+  type WeekCloseCashSourceMismatch,
 } from '../services/weekCloseApi';
 import {
   closeWeekYearOptions,
@@ -78,6 +79,7 @@ import {
   forceResealHintsFromPreview,
 } from '../utils/closeWeekAutoSync';
 import { computeSettlementLaneMetrics } from '../utils/settlementLaneMetrics';
+import { CloseWeekUberReimportDialog } from '../components/fleet-financials/CloseWeekUberReimportDialog';
 import { resolvePayQueueOwed } from '../utils/driverSettlementsPayAmount';
 
 const MONEY = (n: number | null | undefined) => {
@@ -241,7 +243,12 @@ export function CloseWeekPage({
   initialWeekKey,
   embedded = false,
 }: {
-  onNavigate?: (page: string, opts?: { startYmd: string; endYmd: string } | { weekKey: string }) => void;
+  onNavigate?: (
+    page: string,
+    opts?:
+      | { startYmd: string; endYmd: string; driverId?: string }
+      | { weekKey: string },
+  ) => void;
   initialWeekKey?: string;
   /** When true, omit page H1 / outer padding — Driver Settlements hub owns chrome. */
   embedded?: boolean;
@@ -295,6 +302,10 @@ export function CloseWeekPage({
       date: string | null;
     }>;
   } | null>(null);
+  const [cashAckTarget, setCashAckTarget] = useState<WeekCloseCashSourceMismatch | null>(null);
+  const [cashAckReason, setCashAckReason] = useState('');
+  const [cashAckBusy, setCashAckBusy] = useState(false);
+  const [uberReimportOpen, setUberReimportOpen] = useState(false);
 
   useEffect(() => {
     if (!initialWeekKey) return;
@@ -511,6 +522,14 @@ export function CloseWeekPage({
     (s, b) => s + Math.abs(Number(b.delta) || 0),
     0,
   );
+  const cashSourceRows = preview?.cashSourceMismatches || [];
+  const openCashMismatches = cashSourceRows.filter(
+    (m) =>
+      Math.abs(Number(m.mismatch) || 0) > CLOSE_INVARIANT_EPS &&
+      !isCashSourceAckValid(m.ack, Number(m.mismatch) || 0),
+  );
+  const hasOpenCashMismatch = openCashMismatches.length > 0;
+  const cashSourceAckCount = preview?.cashSourceAckCount ?? 0;
   const totalBlockers =
     blockingCount(preview?.blockers) + blockingCount(preview?.weekBlockers);
   const laneBlockLabels = (lane: CloseLane) =>
@@ -735,7 +754,36 @@ export function CloseWeekPage({
   };
 
   const reviewLane = (lane: CloseLane) => {
+    if (lane === 'settlement' && openCashMismatches.length === 1) {
+      onNavigate?.(LANE_REVIEW_PAGE[lane], {
+        startYmd: weekKey,
+        endYmd: periodEnd,
+        driverId: openCashMismatches[0].driverId,
+      });
+      return;
+    }
     onNavigate?.(LANE_REVIEW_PAGE[lane], { startYmd: weekKey, endYmd: periodEnd });
+  };
+
+  const doAcknowledgeCashSource = async () => {
+    if (!cashAckTarget) return;
+    const reason = cashAckReason.trim();
+    if (reason.length < 8) {
+      toast.error('Enter a reason (at least 8 characters)');
+      return;
+    }
+    setCashAckBusy(true);
+    try {
+      await weekCloseApi.acknowledgeCashSource(weekKey, cashAckTarget.driverId, reason);
+      toast.success('Statement cash accepted for close');
+      setCashAckTarget(null);
+      setCashAckReason('');
+      await previewQuery.refetch();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Accept statement cash failed');
+    } finally {
+      setCashAckBusy(false);
+    }
   };
 
   return (
@@ -1164,6 +1212,113 @@ export function CloseWeekPage({
         </div>
       ) : null}
 
+      {hasOpenCashMismatch ? (
+        <div
+          role="status"
+          className="space-y-3 rounded-md border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-950"
+        >
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <p className="font-medium">Uber statement cash ≠ trip cash</p>
+              <p className="mt-1 text-rose-900/90">
+                Statement total comes from the driver payments file; trip sum from payment lines.
+                Settlement already uses statement cash. Accept that to close, or re-import the Uber
+                bundle if trips/payments look incomplete. Do not use Restatement.
+              </p>
+            </div>
+            <div className="flex shrink-0 flex-wrap gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                className="h-10 border-rose-300 bg-white"
+                onClick={() =>
+                  onNavigate?.('driver-settlements', {
+                    startYmd: weekKey,
+                    endYmd: periodEnd,
+                    driverId:
+                      openCashMismatches.length === 1
+                        ? openCashMismatches[0].driverId
+                        : undefined,
+                  })
+                }
+              >
+                Review Settlement
+                <ArrowRight className="ml-1 h-4 w-4" />
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="h-10 border-rose-300 bg-white"
+                onClick={() => setUberReimportOpen((v) => !v)}
+              >
+                {uberReimportOpen ? 'Hide re-import' : 'Re-import Uber bundle'}
+              </Button>
+            </div>
+          </div>
+          <CloseWeekUberReimportDialog
+            open={uberReimportOpen}
+            onOpenChange={setUberReimportOpen}
+            weekLabel={weekLabel(weekKey)}
+            onImported={async () => {
+              toast.message('Refreshing week books after Uber import…');
+              try {
+                await weekCloseApi.sync(weekKey);
+              } catch (e) {
+                console.warn('[CloseWeek] sync after Uber re-import failed', e);
+              }
+              await previewQuery.refetch();
+            }}
+          />
+          <div className="overflow-x-auto rounded-md border border-rose-200 bg-white">
+            <table className="w-full min-w-[32rem] text-left text-xs">
+              <thead className="bg-rose-100/80 text-rose-900">
+                <tr>
+                  <th className="px-3 py-2 font-medium">Driver</th>
+                  <th className="px-3 py-2 font-medium tabular-nums">Statement</th>
+                  <th className="px-3 py-2 font-medium tabular-nums">Trip sum</th>
+                  <th className="px-3 py-2 font-medium tabular-nums">Difference</th>
+                  <th className="px-3 py-2 font-medium" />
+                </tr>
+              </thead>
+              <tbody>
+                {openCashMismatches.map((m) => (
+                  <tr key={m.driverId} className="border-t border-rose-100 text-slate-800">
+                    <td className="px-3 py-2">{m.driverName || m.driverId.slice(0, 8)}</td>
+                    <td className="px-3 py-2 tabular-nums">{MONEY(m.uberCash)}</td>
+                    <td className="px-3 py-2 tabular-nums">{MONEY(m.uberTripCash)}</td>
+                    <td className="px-3 py-2 tabular-nums">{MONEY(m.mismatch)}</td>
+                    <td className="px-3 py-2 text-right">
+                      <Button
+                        type="button"
+                        size="sm"
+                        className="h-8 bg-indigo-700 hover:bg-indigo-800"
+                        disabled={weekAlreadyClosed}
+                        onClick={() => {
+                          setCashAckReason('');
+                          setCashAckTarget(m);
+                        }}
+                      >
+                        Accept statement cash
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ) : null}
+
+      {cashSourceAckCount > 0 && !hasOpenCashMismatch ? (
+        <div
+          role="status"
+          className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700"
+        >
+          {cashSourceAckCount} driver{cashSourceAckCount === 1 ? '' : 's'} accepted statement cash
+          for this week (mismatch still stored for audit).
+        </div>
+      ) : null}
+
       {hasStaleZeroSeal ? (
         <div
           role="status"
@@ -1209,7 +1364,7 @@ export function CloseWeekPage({
           {(preview?.tollPeriodSealDriftCount ?? 0) > 0 ? (
             <IdentityRow
               label="Toll period ↔ seal drift before last book refresh"
-              value={String(preview.tollPeriodSealDriftCount)}
+              value={String(preview?.tollPeriodSealDriftCount ?? 0)}
               ok={false}
             />
           ) : null}
@@ -1664,6 +1819,60 @@ export function CloseWeekPage({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <Dialog
+        open={!!cashAckTarget}
+        onOpenChange={(open) => {
+          if (cashAckBusy) return;
+          if (!open) {
+            setCashAckTarget(null);
+            setCashAckReason('');
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Accept statement cash?</DialogTitle>
+            <DialogDescription>
+              Week of {weekLabel(weekKey)}
+              {cashAckTarget?.driverName ? ` · ${cashAckTarget.driverName}` : ''}. Settlement already
+              uses statement cash ({MONEY(cashAckTarget?.uberCash)}); trip sum is{' '}
+              {MONEY(cashAckTarget?.uberTripCash)} (difference {MONEY(cashAckTarget?.mismatch)}).
+              This does not change what was collected — it only clears the Close Week block.
+            </DialogDescription>
+          </DialogHeader>
+          <Textarea
+            value={cashAckReason}
+            onChange={(e) => setCashAckReason(e.target.value)}
+            placeholder="Why statement cash is correct (required)…"
+            rows={3}
+            className="text-sm"
+          />
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={cashAckBusy}
+              onClick={() => {
+                setCashAckTarget(null);
+                setCashAckReason('');
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              className="bg-indigo-700 hover:bg-indigo-800"
+              disabled={cashAckBusy || cashAckReason.trim().length < 8 || weekAlreadyClosed}
+              onClick={() => void doAcknowledgeCashSource()}
+            >
+              {cashAckBusy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              {weekAlreadyClosed ? 'Re-open week first' : cashAckBusy ? 'Saving…' : 'Accept statement cash'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
     </div>
   );
 }

@@ -135,7 +135,7 @@ type DeskTab = 'outstanding' | 'awaiting' | 'done';
 export type SettlementsHubTab = 'cash' | 'close-week' | 'restatements';
 
 type SettlementsNavigateOpts =
-  | { startYmd: string; endYmd?: string }
+  | { startYmd: string; endYmd?: string; driverId?: string }
   | { weekKey: string };
 
 type PeriodRow = {
@@ -375,6 +375,9 @@ export function DriverSettlementsPage({
   onNavigate,
   initialHubTab,
   initialWeekKey,
+  initialCashWeekFrom,
+  initialCashWeekTo,
+  initialCashDriverId,
   onSettlementsHintsConsumed,
 }: {
   onBackToBusinessFinance?: () => void;
@@ -382,6 +385,10 @@ export function DriverSettlementsPage({
   onNavigate?: (page: string, opts?: SettlementsNavigateOpts) => void;
   initialHubTab?: SettlementsHubTab | null;
   initialWeekKey?: string | null;
+  /** Close Week Review Settlement — cash desk week bounds. */
+  initialCashWeekFrom?: string | null;
+  initialCashWeekTo?: string | null;
+  initialCashDriverId?: string | null;
   onSettlementsHintsConsumed?: () => void;
 }) {
   const qc = useQueryClient();
@@ -407,13 +414,38 @@ export function DriverSettlementsPage({
   const [deskTab, setDeskTab] = useState<DeskTab>('outstanding');
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
-  // Deep-link / sidebar → hub tab + Close Week key
+  // Deep-link / sidebar → hub tab + Close Week key + cash desk week
   useEffect(() => {
-    if (!initialHubTab && !initialWeekKey) return;
+    if (
+      !initialHubTab &&
+      !initialWeekKey &&
+      !initialCashWeekFrom &&
+      !initialCashDriverId
+    ) {
+      return;
+    }
     if (initialHubTab) setHubTab(initialHubTab);
     if (initialWeekKey) setCloseWeekKey(initialWeekKey);
+    if (initialCashWeekFrom) {
+      setAllOpen(false);
+      setWeekFrom(initialCashWeekFrom);
+      setWeekTo(initialCashWeekTo || initialCashWeekFrom);
+      if (initialHubTab === 'cash' || !initialHubTab) setHubTab('cash');
+    }
+    if (initialCashDriverId) {
+      setSearch(String(initialCashDriverId));
+      setDeskMode('reconciled');
+      setDeskTab('done');
+    }
     onSettlementsHintsConsumed?.();
-  }, [initialHubTab, initialWeekKey, onSettlementsHintsConsumed]);
+  }, [
+    initialHubTab,
+    initialWeekKey,
+    initialCashWeekFrom,
+    initialCashWeekTo,
+    initialCashDriverId,
+    onSettlementsHintsConsumed,
+  ]);
 
   const restatementBadgeQuery = useQuery({
     queryKey: RESTATEMENT_QUEUE_QUERY_KEY,
@@ -440,6 +472,16 @@ export function DriverSettlementsPage({
       return;
     }
     if (page === 'driver-settlements' || page === 'driver-payouts') {
+      if (opts && 'startYmd' in opts && typeof opts.startYmd === 'string') {
+        setAllOpen(false);
+        setWeekFrom(opts.startYmd);
+        setWeekTo(opts.endYmd || opts.startYmd);
+      }
+      if (opts && 'driverId' in opts && opts.driverId) {
+        setSearch(String(opts.driverId));
+        setDeskMode('reconciled');
+        setDeskTab('done');
+      }
       setHubTab('cash');
       return;
     }
@@ -1063,6 +1105,22 @@ export function DriverSettlementsPage({
         cashSourceMismatch: Number.isFinite(Number((d as any).cashSourceMismatch))
           ? Number((d as any).cashSourceMismatch)
           : row.cashSourceMismatch || 0,
+        uberCash: (() => {
+          const fc = ((d.metadata as Record<string, unknown>)?.financeCore || {}) as Record<
+            string,
+            unknown
+          >;
+          const n = Number(fc.uberCash);
+          return Number.isFinite(n) ? n : undefined;
+        })(),
+        uberTripCash: (() => {
+          const fc = ((d.metadata as Record<string, unknown>)?.financeCore || {}) as Record<
+            string,
+            unknown
+          >;
+          const n = Number(fc.uberTripCash);
+          return Number.isFinite(n) ? n : undefined;
+        })(),
         overpaidAmount: rowOverpaidAmount({
           overpaidAmount: Number((d as any).overpaidAmount),
           metadata: (d.metadata as Record<string, unknown>) || row.metadata,
@@ -1105,6 +1163,18 @@ export function DriverSettlementsPage({
         settlementStatus: row.settlementStatus,
         tierName: null,
         cashSourceMismatch: row.cashSourceMismatch || 0,
+        uberCash: (() => {
+          const n = Number(
+            (row.metadata?.financeCore as Record<string, unknown> | undefined)?.uberCash,
+          );
+          return Number.isFinite(n) ? n : undefined;
+        })(),
+        uberTripCash: (() => {
+          const n = Number(
+            (row.metadata?.financeCore as Record<string, unknown> | undefined)?.uberTripCash,
+          );
+          return Number.isFinite(n) ? n : undefined;
+        })(),
         overpaidAmount: rowOverpaidAmount(row),
         projectionSources:
           (row.metadata?.financeCore as Record<string, unknown> | undefined)?.projectionSources as

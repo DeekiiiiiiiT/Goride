@@ -24,6 +24,35 @@ export const CLOSE_INVARIANT_EPS = 0.01;
 
 export type CloseInvariantSeverity = 'block' | 'warn';
 
+/**
+ * Ops accepted statement (ledger) Uber cash over trip rollup for Close Week.
+ * Rebuild must preserve this under metadata.financeCore.cashSourceAck.
+ */
+export type CashSourceAck = {
+  at: string;
+  by?: string | null;
+  reason: string;
+  uberCash: number;
+  uberTripCash: number;
+  mismatchAtAck: number;
+};
+
+function ackNum(v: unknown): number {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : 0;
+}
+
+/** True when ack exists and live mismatch has not drifted beyond ε from the snapshot. */
+export function isCashSourceAckValid(
+  ack: CashSourceAck | null | undefined,
+  liveMismatch: number,
+  eps: number = CLOSE_INVARIANT_EPS,
+): boolean {
+  if (!ack || !String(ack.reason || '').trim()) return false;
+  if (!Number.isFinite(Number(ack.mismatchAtAck))) return false;
+  return Math.abs(ackNum(liveMismatch) - ackNum(ack.mismatchAtAck)) <= eps;
+}
+
 export type CloseBlocker = {
   /** Stable machine code, e.g. FUEL_DRIVER_SHARE_MISMATCH. */
   code: string;
@@ -114,6 +143,15 @@ export type CloseInvariantInput = {
    * caller passing it was an excess-property type error.
    */
   cashSourceMismatch?: number | null;
+  /** Statement / ledger Uber cash (payments_driver) — for M-1 persisted when set. */
+  uberCash?: number | null;
+  /** Trip-rollup Uber cash (payments_transaction) — for M-1 expected when set. */
+  uberTripCash?: number | null;
+  /**
+   * Ops accepted statement cash for this period. Skip M-1 when the live mismatch
+   * still matches the ack snapshot (within ε); drift forces re-accept.
+   */
+  cashSourceAck?: CashSourceAck | null;
   /**
    * When re-signing restatements on an already-frozen week, skip desk open-balance
    * gates (fleet owes / driver owes / cash held) — those apply to first close only.
@@ -516,12 +554,23 @@ export function checkCloseInvariants(input: CloseInvariantInput): CloseBlocker[]
 
   // ── M-1: cash source mismatch blocks close ─────────────────────────────────────
   if (input.cashSourceMismatch != null && Math.abs(num(input.cashSourceMismatch)) > eps) {
-    pushIfDrift(
-      out, eps, ctx,
-      'CASH_SOURCE_MISMATCH',
-      'trip CSV Uber cash disagrees with ledger payout_cash beyond ε',
-      num(input.cashSourceMismatch), 0,
-    );
+    const liveMismatch = num(input.cashSourceMismatch);
+    if (!isCashSourceAckValid(input.cashSourceAck, liveMismatch, eps)) {
+      const hasSides =
+        input.uberCash != null &&
+        input.uberTripCash != null &&
+        Number.isFinite(Number(input.uberCash)) &&
+        Number.isFinite(Number(input.uberTripCash));
+      pushIfDrift(
+        out,
+        eps,
+        ctx,
+        'CASH_SOURCE_MISMATCH',
+        'trip CSV Uber cash disagrees with ledger payout_cash beyond ε',
+        hasSides ? num(input.uberCash) : liveMismatch,
+        hasSides ? num(input.uberTripCash) : 0,
+      );
+    }
   }
 
   // ── Settlement desk clear before freeze (PERIOD_FROZEN traps unpaid money) ──────

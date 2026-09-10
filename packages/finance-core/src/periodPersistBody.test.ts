@@ -114,4 +114,55 @@ describe('periodPersistBody', () => {
     expect(meta.rushTripCount).toBe(3);
     expect(meta.rideshareTripCount).toBe(0);
   });
+
+  it('buildPeriodMetadata preserves cashSourceAck across rebuild', () => {
+    const settled = computePeriodSettlement({
+      driverShare: 0,
+      fuelDeduction: 0,
+      baseCashOwed: 1000,
+      baseCashPaid: 0,
+      tollCashWash: 0,
+      tollPersonal: 0,
+    });
+    const ack = {
+      at: '2026-09-10T12:00:00.000Z',
+      by: 'ops',
+      reason: 'Statement cash trusted',
+      uberCash: 100,
+      uberTripCash: 80,
+      mismatchAtAck: 20,
+    };
+    const meta = buildPeriodMetadata({
+      priorMeta: {
+        financeCore: {
+          cashSourceMismatch: 20,
+          uberCash: 100,
+          uberTripCash: 80,
+          cashSourceAck: ack,
+        },
+      },
+      prevSettlementPaid: 0,
+      settled,
+      derived: {
+        settlementStatus: 'settled',
+        payoutStatus: 'finalized',
+        periodStatus: 'open',
+        cashStillHeld: 0,
+        tollsClear: true,
+        moneyUnlocked: true,
+      },
+      financeCore: {
+        uberCash: 100,
+        uberTripCash: 80,
+        cashSourceMismatch: 20,
+        overpaidAmount: 0,
+        tollCashWashEligible: 0,
+        tollsClear: true,
+        moneyUnlocked: true,
+        cashHeldClamped: false,
+        unclampedCashHeld: 0,
+      },
+    });
+    expect((meta.financeCore as { cashSourceAck?: unknown }).cashSourceAck).toEqual(ack);
+  });
 });
