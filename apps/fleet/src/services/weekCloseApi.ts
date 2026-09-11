@@ -10,8 +10,8 @@
  *
  * The route is registered in supabase/functions/_fleet-server/index.tsx via
  * week_close_controller.tsx. Preview is read-only; sync is slim (no-op writes when
- * healthy). POST close runs the cross-system invariants as a precondition and only
- * closes when every driver ties.
+ * healthy). POST close runs lean prepare (no forceAllLaneReseals), then invariants,
+ * and only closes when every driver ties.
  */
 import { requireAuthHeaders } from '../utils/authHeaders';
 import { fetchWithRetry } from './api';

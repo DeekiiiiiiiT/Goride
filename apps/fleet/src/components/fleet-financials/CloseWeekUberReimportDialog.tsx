@@ -1,13 +1,11 @@
 /**
- * In-place Uber CSV re-import on Close Week (no navigate to Imports).
- *
- * Not a Radix Dialog: modal Dialog sets body { pointer-events: none } and often
- * swallows / hides the Windows file picker while the drop zone looks "greyed out".
- * Playwright confirmed the input works; the modal layer was the product failure.
+ * In-place Uber cash refresh on Close Week (no navigate to Imports).
+ * Inline panel (not Radix Dialog) so Windows file picker is not swallowed.
+ * Preview → commit; no auto week sync. Optional Rebuild is separate.
  */
 import React, { useCallback, useId, useState } from 'react';
 import Papa from 'papaparse';
-import { Loader2, UploadCloud, FileText, X } from 'lucide-react';
+import { Loader2, UploadCloud, FileText, X, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '../ui/button';
 import { cn } from '../ui/utils';
@@ -18,8 +16,10 @@ import {
   type FileData,
 } from '../../utils/csvHelpers';
 import {
-  commitUberImportFromFiles,
+  commitUberCashRefresh,
   isUberImportFileType,
+  previewUberCashRefresh,
+  type UberCashRefreshPreview,
 } from '../../utils/commitUberImportFromFiles';
 
 function fileTypeLabel(type: FileData['type']): string {
@@ -37,32 +37,47 @@ function fileTypeLabel(type: FileData['type']): string {
   }
 }
 
+const MONEY = (n: number) =>
+  '$' +
+  Math.abs(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
 export function CloseWeekUberReimportDialog({
   open,
   onOpenChange,
   weekLabel,
+  weekKey,
   onImported,
+  onRebuildWeek,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   weekLabel: string;
+  weekKey: string;
   onImported: () => void | Promise<void>;
+  /** Explicit reseal + rebuild — warn user Collect/Pay may reopen. */
+  onRebuildWeek?: () => void | Promise<void>;
 }) {
   const inputId = useId();
   const [files, setFiles] = useState<FileData[]>([]);
   const [parsing, setParsing] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [previewBusy, setPreviewBusy] = useState(false);
+  const [rebuildBusy, setRebuildBusy] = useState(false);
   const [dragOver, setDragOver] = useState(false);
+  const [preview, setPreview] = useState<UberCashRefreshPreview | null>(null);
 
   const reset = () => {
     setFiles([]);
     setParsing(false);
     setBusy(false);
+    setPreviewBusy(false);
+    setRebuildBusy(false);
     setDragOver(false);
+    setPreview(null);
   };
 
   const close = () => {
-    if (busy) return;
+    if (busy || rebuildBusy) return;
     reset();
     onOpenChange(false);
   };
@@ -70,6 +85,7 @@ export function CloseWeekUberReimportDialog({
   const ingestFiles = useCallback((acceptedFiles: File[]) => {
     if (acceptedFiles.length === 0) return;
     setParsing(true);
+    setPreview(null);
     const next: FileData[] = [];
     let done = 0;
 
@@ -126,6 +142,23 @@ export function CloseWeekUberReimportDialog({
     }
   }, []);
 
+  const runPreview = async () => {
+    if (files.length === 0) {
+      toast.error('Choose Uber CSVs first');
+      return;
+    }
+    setPreviewBusy(true);
+    try {
+      const p = await previewUberCashRefresh(files, weekKey);
+      setPreview(p);
+    } catch (e) {
+      setPreview(null);
+      toast.error(e instanceof Error ? e.message : 'Preview failed');
+    } finally {
+      setPreviewBusy(false);
+    }
+  };
+
   const runImport = async () => {
     if (files.length === 0) {
       toast.error('Choose at least one Uber CSV first');
@@ -133,23 +166,44 @@ export function CloseWeekUberReimportDialog({
     }
     setBusy(true);
     try {
-      const result = await commitUberImportFromFiles(files);
+      if (!preview) {
+        const p = await previewUberCashRefresh(files, weekKey);
+        setPreview(p);
+      }
+      const result = await commitUberCashRefresh(files, weekKey, { closeWeekMode: true });
       toast.success(
-        `Imported ${result.tripCount} trip(s) · statement cash $${result.statementCashTotal.toFixed(2)}`,
+        `Cash refresh saved · ${result.tripCount} trip(s) · statement ${MONEY(result.statementCashTotal)}`,
       );
       reset();
       onOpenChange(false);
       await onImported();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Uber re-import failed');
+      toast.error(e instanceof Error ? e.message : 'Uber cash refresh failed');
     } finally {
       setBusy(false);
     }
   };
 
+  const runRebuild = async () => {
+    if (!onRebuildWeek) return;
+    const ok = window.confirm(
+      'Rebuild week books will reseal Tolls/Fuel/Earnings and recalculate Collect/Pay. Cash desk may reopen. Continue?',
+    );
+    if (!ok) return;
+    setRebuildBusy(true);
+    try {
+      await onRebuildWeek();
+      toast.success('Week books rebuilt');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Rebuild failed');
+    } finally {
+      setRebuildBusy(false);
+    }
+  };
+
   if (!open) return null;
 
-  const pickBlocked = parsing || busy;
+  const pickBlocked = parsing || busy || previewBusy;
 
   return (
     <div
@@ -158,18 +212,18 @@ export function CloseWeekUberReimportDialog({
     >
       <div className="mb-3 flex items-start justify-between gap-3">
         <div>
-          <p className="text-sm font-semibold text-slate-900">Re-import Uber bundle</p>
+          <p className="text-sm font-semibold text-slate-900">Uber cash refresh</p>
           <p className="mt-1 text-xs text-slate-600">
-            Week of {weekLabel}. Add Uber CSVs here — especially{' '}
-            <span className="font-medium text-slate-800">payments_driver</span> (statement cash) and{' '}
-            <span className="font-medium text-slate-800">payments_transaction</span> (trip cash).
-            Stays on this screen, then Close Week refreshes.
+            Week of {weekLabel}. Requires{' '}
+            <span className="font-medium text-slate-800">payments_driver</span> and{' '}
+            <span className="font-medium text-slate-800">payments_transaction</span> (or trip
+            activity). Toll Recon markings are kept. Does not auto-rebuild Collect/Pay.
           </p>
         </div>
         <button
           type="button"
           className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
-          disabled={busy}
+          disabled={busy || rebuildBusy}
           aria-label="Close re-import"
           onClick={close}
         >
@@ -258,7 +312,10 @@ export function CloseWeekUberReimportDialog({
                 className="relative z-20 rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
                 disabled={busy}
                 aria-label={`Remove ${f.name}`}
-                onClick={() => setFiles((prev) => prev.filter((x) => x.id !== f.id))}
+                onClick={() => {
+                  setPreview(null);
+                  setFiles((prev) => prev.filter((x) => x.id !== f.id));
+                }}
               >
                 <X className="h-3.5 w-3.5" />
               </button>
@@ -267,9 +324,42 @@ export function CloseWeekUberReimportDialog({
         </ul>
       ) : null}
 
+      {preview ? (
+        <div className="mt-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700">
+          <p className="font-medium text-slate-900">Impact preview</p>
+          <ul className="mt-1 space-y-0.5">
+            <li>
+              In-week trips: {preview.tripCountInWeek}
+              {preview.tripCountOutsideWeek > 0
+                ? ` · ${preview.tripCountOutsideWeek} outside week (excluded)`
+                : ''}
+            </li>
+            <li>Payment lines (in week): {preview.paymentLineCount}</li>
+            <li>
+              Statement cash {MONEY(preview.statementCashTotal)} vs trip cash{' '}
+              {MONEY(preview.tripCashTotal)} (Δ {MONEY(preview.cashDelta)})
+            </li>
+            <li>
+              {preview.existingCashWashCount > 0
+                ? `${preview.existingCashWashCount} trip(s) already cash-washed — markings will be kept`
+                : 'Toll Recon markings on matching trips will be kept'}
+            </li>
+          </ul>
+        </div>
+      ) : null}
+
       <div className="mt-3 flex flex-wrap justify-end gap-2">
-        <Button type="button" variant="outline" disabled={busy} onClick={close}>
+        <Button type="button" variant="outline" disabled={busy || rebuildBusy} onClick={close}>
           Cancel
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          disabled={busy || previewBusy || parsing || files.length === 0}
+          onClick={() => void runPreview()}
+        >
+          {previewBusy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+          Preview impact
         </Button>
         <Button
           type="button"
@@ -278,9 +368,33 @@ export function CloseWeekUberReimportDialog({
           onClick={() => void runImport()}
         >
           {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-          {busy ? 'Importing…' : 'Import and refresh week'}
+          {busy ? 'Saving…' : 'Save cash refresh'}
         </Button>
       </div>
+
+      {onRebuildWeek ? (
+        <div className="mt-3 flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950">
+          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          <div className="flex-1">
+            <p className="font-medium">Advanced: rebuild week books</p>
+            <p className="mt-0.5 text-amber-900/90">
+              Reseals lanes and recalculates Collect/Pay. Only after cash refresh if books still look
+              wrong.
+            </p>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="mt-2 h-8 border-amber-300 bg-white"
+              disabled={rebuildBusy || busy}
+              onClick={() => void runRebuild()}
+            >
+              {rebuildBusy ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null}
+              Rebuild week books
+            </Button>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

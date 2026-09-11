@@ -534,8 +534,22 @@ export function CloseWeekPage({
     blockingCount(preview?.blockers) + blockingCount(preview?.weekBlockers);
   const laneBlockLabels = (lane: CloseLane) =>
     byLane[lane].filter((b) => b.severity !== 'warn').map(humanBlockerLabel);
-  const laneWarnLabels = (lane: CloseLane) =>
-    byLane[lane].filter((b) => b.severity === 'warn').map(humanBlockerLabel);
+  const tollSpendUnhealthy =
+    !!preview &&
+    Math.abs(Number(preview.toll.spend) || 0) <= MONEY_EPS &&
+    Math.abs(Number(preview.toll.reimbursed) || 0) +
+      Math.abs(Number(preview.toll.chargedToDrivers) || 0) >
+      1;
+  const laneWarnLabels = (lane: CloseLane) => {
+    const fromPreview = byLane[lane].filter((b) => b.severity === 'warn').map(humanBlockerLabel);
+    if (lane === 'toll' && tollSpendUnhealthy) {
+      return [
+        ...fromPreview,
+        'Spend is $0 while reimbursed/charged are not — Toll Recon cash-wash may be missing (unhealthy Clear).',
+      ];
+    }
+    return fromPreview;
+  };
   const weekAlreadyClosed = Boolean(preview?.weekClosed);
   const pendingRestatementCount = preview?.pendingRestatementCount ?? 0;
   const hasPendingRestatements = pendingRestatementCount > 0;
@@ -1251,24 +1265,30 @@ export function CloseWeekPage({
                 className="h-10 border-rose-300 bg-white"
                 onClick={() => setUberReimportOpen((v) => !v)}
               >
-                {uberReimportOpen ? 'Hide re-import' : 'Re-import Uber bundle'}
+                {uberReimportOpen ? 'Hide cash refresh' : 'Uber cash refresh'}
               </Button>
             </div>
           </div>
-          <CloseWeekUberReimportDialog
-            open={uberReimportOpen}
-            onOpenChange={setUberReimportOpen}
-            weekLabel={weekLabel(weekKey)}
-            onImported={async () => {
-              toast.message('Refreshing week books after Uber import…');
-              try {
-                await weekCloseApi.sync(weekKey);
-              } catch (e) {
-                console.warn('[CloseWeek] sync after Uber re-import failed', e);
-              }
-              await previewQuery.refetch();
-            }}
-          />
+            <CloseWeekUberReimportDialog
+              open={uberReimportOpen}
+              onOpenChange={setUberReimportOpen}
+              weekLabel={weekLabel(weekKey)}
+              weekKey={weekKey}
+              onImported={async () => {
+                toast.message('Refreshing Close Week preview after Uber cash refresh…');
+                await previewQuery.refetch();
+              }}
+              onRebuildWeek={async () => {
+                toast.message('Rebuilding week books…');
+                try {
+                  await weekCloseApi.sync(weekKey);
+                } catch (e) {
+                  console.warn('[CloseWeek] rebuild after Uber cash refresh failed', e);
+                  throw e instanceof Error ? e : new Error('Rebuild failed');
+                }
+                await previewQuery.refetch();
+              }}
+            />
           <div className="overflow-x-auto rounded-md border border-rose-200 bg-white">
             <table className="w-full min-w-[32rem] text-left text-xs">
               <thead className="bg-rose-100/80 text-rose-900">

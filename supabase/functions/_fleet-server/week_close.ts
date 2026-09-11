@@ -63,11 +63,11 @@ import {
   selectOpenWeeks,
   type OpenWeekSummary,
 } from "../../../packages/finance-core/src/weekCloseDirectory.ts";
-import { resolveCloseLaneForceOpts } from "./week_close_force_opts.ts";
+import { closeWeekLaneForceOpts, resolveCloseLaneForceOpts } from "./week_close_force_opts.ts";
 import type { CloseLaneForceOpts, PrepareWeekCloseOpts } from "./week_close_force_opts.ts";
 
 export type { CloseLaneForceOpts, PrepareWeekCloseOpts } from "./week_close_force_opts.ts";
-export { resolveCloseLaneForceOpts } from "./week_close_force_opts.ts";
+export { closeWeekLaneForceOpts, resolveCloseLaneForceOpts } from "./week_close_force_opts.ts";
 
 function sb() {
   return getServiceClient();
@@ -1177,6 +1177,9 @@ export type CloseWeekResult = {
  * Close every driver-period for an org-week. Atomic per driver: a driver whose
  * invariants fail is left open with its blockers; drivers that tie are signed.
  * The week is `closed` only when every driver closed with zero blockers.
+ *
+ * Lean Close: Sync/Refresh owns force reseal. Close runs smart prepare (no
+ * forceAllLaneReseals) then verifies + freezes — avoids Edge CPU 546.
  */
 export async function closeWeek(
   orgId: string,
@@ -1194,21 +1197,18 @@ export async function closeWeek(
     throw e;
   }
 
-  // Close: force closed→closed reseal on all lanes (engine drift + stale seals).
-  await ensureCloseLaneStatements(orgId, week, actorId, {
-    forceFuelReseal: true,
-    forceTollReseal: true,
-    forceEarningsReseal: true,
-  });
-  const periodSync = await syncOpenPeriodsToStatementsAfterSeal(orgId, week, {
-    rebuildMode: "all-open",
-  });
-  if (periodSync.failedDriverIds.length > 0) {
+  // Smart sync only (same as prepare) — never blind force-reseal all lanes.
+  const prepared = await prepareWeekClose(orgId, week, actorId, closeWeekLaneForceOpts());
+  const rebuildBlocker = (prepared.weekBlockers || []).find(
+    (b) => b.code === "PERIOD_REBUILD_FAILED",
+  );
+  if (rebuildBlocker) {
     throw new WeekCloseError(
       "PERIOD_REBUILD_FAILED",
-      `Couldn’t refresh books for ${periodSync.failedDriverIds.length} driver(s) — retry Close`,
+      rebuildBlocker.message ||
+        `Couldn’t refresh books for ${rebuildBlocker.persisted} driver(s) — retry Close`,
       409,
-      { failedDriverIds: periodSync.failedDriverIds, weekKey: week },
+      { failedCount: rebuildBlocker.persisted, weekKey: week },
     );
   }
 

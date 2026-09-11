@@ -7,7 +7,7 @@
 3. Close Week **auto-syncs** ended open weeks on load and Refresh when seals/books need repair (publishes missing/draft seals, **force-reseals closed seals that drifted from engines**, rebuilds open driver books). Healthy Clear weeks stay preview-only. You do not need a Prepare button.
 4. Auto-sync **never** creates Restatement Queue drafts. Draft-over-closed seals are only from Restatement Queue / intentional frozen-week toll restatements.
 5. Clear remaining blockers via **Review** (Fuel / Tolls / Cash).
-6. Press **Close week** only when blockers = 0 (warnings alone do not block). Close force-reseals fuel + tolls + earnings (closed→closed) + rebuilds before signing.
+6. Press **Close week** only when blockers = 0 (warnings alone do not block). Close runs a **lean** smart sync (same as Refresh when books need repair — never blind force-reseal of all three lanes), then verifies invariants and freezes. Use **Refresh** first for engine drift / seal repair so Close stays under Edge CPU limits.
 
 ### After Refresh: Collect appears
 
@@ -23,7 +23,7 @@ If the queue filled with Earnings drafts after sync: run `.\scripts\cleanup-sync
 
 ## Engineering contract (seal → rebuild)
 
-Any code path that publishes a **closed** `week_statement` for an open org-week must **rebuild open driver periods** for that week so Pass E can stamp seal → books (`PROJECTION_READS_WEEK_STATEMENTS=true`). Owned today by: Fuel finalize, Toll seal HTTP, Close Week sync (`POST …/prepare` or `…/sync`), and Close.
+Any code path that publishes a **closed** `week_statement` for an open org-week must **rebuild open driver periods** for that week so Pass E can stamp seal → books (`PROJECTION_READS_WEEK_STATEMENTS=true`). Owned today by: Fuel finalize, Toll seal HTTP, Close Week sync (`POST …/prepare` or `…/sync`), and Close (lean prepare only — no `forceAllLaneReseals`).
 
 `publishWeekStatement` refuses draft-over-closed unless `allowRestatementDraft: true` (Restatement Queue / intentional frozen toll restatement only).
 
@@ -55,9 +55,14 @@ Uber fleet imports are a **bundle**: statement cash comes from `payments_driver`
 
 1. On Close Week, open the rose banner — see driver, statement $, trip $, difference.
 2. Prefer **Accept statement cash** with a short reason (does not change collected money; clears the close block).
-3. Or **Re-import Uber bundle** if trips/payments look incomplete.
-4. Do **not** use Restatement Queue or SQL. After Accept, Refresh → Close week when blockers = 0.
-5. If rebuild later changes the mismatch beyond ε, Accept is invalidated and must be done again.
+3. Or **Uber cash refresh** (Re-import) if trips/payments look incomplete — week-scoped preview first; does **not** auto-reseal Tolls or rebuild Collect/Pay.
+4. Use **Rebuild week books** only when you intentionally want seals + Cash desk residuals refreshed after a cash refresh.
+5. Do **not** use Restatement Queue or SQL. After Accept / refresh, Refresh → Close week when blockers = 0.
+6. If rebuild later changes the mismatch beyond ε, Accept is invalidated and must be done again.
+
+### Bad re-import recovery
+
+If an old full re-import wiped Toll Spend (cash-wash gone) or doubled statement cash: see [scripts/recover-bad-uber-reimport-2026-02-16.md](../../scripts/recover-bad-uber-reimport-2026-02-16.md). Do not import the same CSVs again until merge + week-scoped refresh is deployed.
 
 ## Ops scan — open weeks with toll period ≠ seal (read-only)
 

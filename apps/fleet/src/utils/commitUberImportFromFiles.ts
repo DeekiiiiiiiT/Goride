@@ -1,6 +1,7 @@
 /**
- * Commit a merged Uber CSV bundle (Close Week in-place re-import).
- * Same write path as ImportsPage confirm — trips, metrics, payment lines, canonical events.
+ * Close Week Uber cash refresh — week-scoped preview/commit.
+ * Same write building blocks as Imports, with bundle gates, week filter,
+ * duplicate hard-block, and no auto week sync (caller decides).
  */
 import { api, fetchFleetTimezone } from '../services/api';
 import { tripCalibrationService } from '../services/tripCalibrationService';
@@ -15,6 +16,19 @@ import { buildCanonicalImportEvents, tripDateBounds } from './buildCanonicalImpo
 import { buildPaymentLedgerCanonicalEvents } from './buildPaymentLedgerCanonicalEvents';
 import { validateMergedImportPreview } from './importValidation';
 import type { Trip } from '../types/data';
+import {
+  assertUberCashRefreshBundle,
+  isYmdInWeek,
+  tripYmd,
+  weekEndYmd,
+} from './uberCashRefreshScope';
+
+export {
+  assertUberCashRefreshBundle,
+  isYmdInWeek,
+  tripYmd,
+  weekEndYmd,
+} from './uberCashRefreshScope';
 
 const UBER_FILE_TYPES = new Set([
   'uber_trip',
@@ -32,11 +46,29 @@ export function isUberImportFileType(type: FileData['type']): boolean {
   return UBER_FILE_TYPES.has(type);
 }
 
+export type UberCashRefreshPreview = {
+  weekKey: string;
+  weekEnd: string;
+  tripCountInWeek: number;
+  tripCountOutsideWeek: number;
+  paymentLineCount: number;
+  statementCashTotal: number;
+  tripCashTotal: number;
+  cashDelta: number;
+  hasDriverPayments: boolean;
+  hasTripOrTx: boolean;
+  contentFingerprint: string;
+  /** Existing trips in payload that already have cash_wash (best-effort). */
+  existingCashWashCount: number;
+  overwriteTripCount: number;
+};
+
 export type CommitUberImportResult = {
   batchId: string;
   tripCount: number;
   statementCashTotal: number;
   tripCashTotal: number;
+  preview: UberCashRefreshPreview;
 };
 
 async function chunkedImport<T>(
@@ -55,22 +87,12 @@ async function chunkedImport<T>(
   return { imported, skipped };
 }
 
-export async function commitUberImportFromFiles(
-  uploadedFiles: FileData[],
-): Promise<CommitUberImportResult> {
+async function buildMergedUberBundle(uploadedFiles: FileData[]) {
   const uberFiles = uploadedFiles.filter((f) => isUberImportFileType(f.type));
   if (uberFiles.length === 0) {
     throw new Error('Drop Uber CSVs (payments_driver, payments_transaction, trips, …).');
   }
-  const hasDriver = uberFiles.some((f) => f.type === 'uber_payment_driver');
-  const hasTxOrTrip = uberFiles.some(
-    (f) => f.type === 'uber_payment' || f.type === 'uber_trip',
-  );
-  if (!hasDriver && !hasTxOrTrip) {
-    throw new Error(
-      'Need payments_driver.csv and/or payments_transaction / trip_activity for Uber cash.',
-    );
-  }
+  assertUberCashRefreshBundle(uberFiles);
 
   const fleetTimezone = await fetchFleetTimezone();
   const merged = mergeAndProcessData(uberFiles, DEFAULT_FIELDS, undefined, [], fleetTimezone);
@@ -91,16 +113,137 @@ export async function commitUberImportFromFiles(
   }
 
   const calibratedTrips = await tripCalibrationService.calibrateTrips(trips);
-  const batchId = crypto.randomUUID();
   const contentFingerprint = await computeImportBundleFingerprint(uberFiles);
+  return { uberFiles, merged, calibratedTrips, contentFingerprint };
+}
+
+function scopeTripsToWeek(trips: Trip[], weekKey: string) {
+  const inWeek: Trip[] = [];
+  let outside = 0;
+  for (const t of trips) {
+    const ymd = tripYmd(t);
+    if (!ymd || isYmdInWeek(ymd, weekKey)) inWeek.push(t);
+    else outside += 1;
+  }
+  return { inWeek, outside };
+}
+
+async function countExistingCashWash(weekKey: string): Promise<number> {
+  try {
+    const end = weekEndYmd(weekKey);
+    const res = await api.getTripsFiltered({
+      startDate: weekKey,
+      endDate: end,
+      limit: 500,
+    } as Parameters<typeof api.getTripsFiltered>[0]);
+    const trips =
+      (res as { data?: Trip[] }).data ||
+      (res as { trips?: Trip[] }).trips ||
+      (Array.isArray(res) ? (res as Trip[]) : []);
+    return trips.filter((t) => t?.tollRefundResolution?.status === 'cash_wash').length;
+  } catch {
+    return 0;
+  }
+}
+
+export async function previewUberCashRefresh(
+  uploadedFiles: FileData[],
+  weekKey: string,
+): Promise<UberCashRefreshPreview> {
+  const wk = weekKey.slice(0, 10);
+  const { merged, calibratedTrips, contentFingerprint } = await buildMergedUberBundle(uploadedFiles);
+  const { inWeek, outside } = scopeTripsToWeek(calibratedTrips, wk);
+  if (calibratedTrips.length > 0 && inWeek.length === 0) {
+    throw new Error(`No trips fall in week of ${wk}. Check the CSV dates.`);
+  }
+  if (outside > 0 && outside > inWeek.length * 2) {
+    throw new Error(
+      `Most trips (${outside}) are outside week ${wk}. Use Data Imports for multi-week bundles.`,
+    );
+  }
+
+  const paymentLines = (merged.paymentLedgerLines || []).filter((l) => {
+    const ymd = String((l as { date?: string; tripDate?: string }).date || (l as { tripDate?: string }).tripDate || '').slice(0, 10);
+    return !ymd || isYmdInWeek(ymd, wk);
+  });
+
+  const statementCashTotal = Object.values(merged.uberStatementsByDriverId || {}).reduce(
+    (s, t) => s + Math.abs(Number(t?.cashCollected) || 0),
+    0,
+  );
+  const tripCashTotal = inWeek
+    .filter((t) => String(t.platform || '').toLowerCase() === 'uber')
+    .reduce((s, t) => s + Math.abs(Number(t.cashCollected) || 0), 0);
+
+  const ids = inWeek.map((t) => String(t.id || '')).filter(Boolean);
+  let existingCashWashCount = 0;
+  try {
+    existingCashWashCount = await countExistingCashWash(wk);
+  } catch {
+    existingCashWashCount = 0;
+  }
+
+  return {
+    weekKey: wk,
+    weekEnd: weekEndYmd(wk),
+    tripCountInWeek: inWeek.length,
+    tripCountOutsideWeek: outside,
+    paymentLineCount: paymentLines.length,
+    statementCashTotal,
+    tripCashTotal,
+    cashDelta: statementCashTotal - tripCashTotal,
+    hasDriverPayments: true,
+    hasTripOrTx: true,
+    contentFingerprint,
+    existingCashWashCount,
+    overwriteTripCount: inWeek.length,
+  };
+}
+
+/**
+ * @deprecated Prefer previewUberCashRefresh + commitUberCashRefresh for Close Week.
+ * Kept for callers that pass files without week scope (still enforces full bundle).
+ */
+export async function commitUberImportFromFiles(
+  uploadedFiles: FileData[],
+  opts?: { weekKey?: string; closeWeekMode?: boolean },
+): Promise<CommitUberImportResult> {
+  return commitUberCashRefresh(uploadedFiles, opts?.weekKey || '', {
+    closeWeekMode: opts?.closeWeekMode !== false,
+  });
+}
+
+export async function commitUberCashRefresh(
+  uploadedFiles: FileData[],
+  weekKey: string,
+  opts?: { closeWeekMode?: boolean },
+): Promise<CommitUberImportResult> {
+  const closeWeekMode = opts?.closeWeekMode !== false;
+  const wk = weekKey.slice(0, 10);
+  if (!wk) throw new Error('weekKey is required for Uber cash refresh');
+
+  const preview = await previewUberCashRefresh(uploadedFiles, wk);
+  const { uberFiles, merged, calibratedTrips, contentFingerprint } = await buildMergedUberBundle(
+    uploadedFiles,
+  );
+  const { inWeek } = scopeTripsToWeek(calibratedTrips, wk);
+
+  const batchId = crypto.randomUUID();
   const orgForBatch = merged.organizationMetrics?.[0] ?? null;
-  const tripBounds = tripDateBounds(calibratedTrips);
-  const { data: { session } } = await supabase.auth.getSession();
+  const tripBounds = tripDateBounds(inWeek);
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
   const uploadedBy = session?.user?.email?.trim() || session?.user?.id || undefined;
 
-  const paymentLines = merged.paymentLedgerLines || [];
+  const paymentLines = (merged.paymentLedgerLines || []).filter((l) => {
+    const ymd = String(
+      (l as { date?: string }).date || (l as { tripDate?: string }).tripDate || '',
+    ).slice(0, 10);
+    return !ymd || isYmdInWeek(ymd, wk);
+  });
   const usesLineSsot = paymentLines.length > 0;
-  const tripsForSave = calibratedTrips.map((t) => ({
+  const tripsForSave = inWeek.map((t) => ({
     ...t,
     batchId,
     ...(usesLineSsot ? { usesPaymentLineSsot: true } : {}),
@@ -111,16 +254,14 @@ export async function commitUberImportFromFiles(
     fileName: uberFiles.map((f) => f.name).join(', '),
     uploadDate: new Date().toISOString(),
     status: 'processing',
-    recordCount: calibratedTrips.length,
+    recordCount: tripsForSave.length,
     type: 'merged_import',
     processedBy: uploadedBy || 'Close Week',
     contentFingerprint,
-    periodStart: orgForBatch?.periodStart
-      ? String(orgForBatch.periodStart).slice(0, 10)
-      : undefined,
-    periodEnd: orgForBatch?.periodEnd ? String(orgForBatch.periodEnd).slice(0, 10) : undefined,
-    dataPeriodStart: tripBounds.min,
-    dataPeriodEnd: tripBounds.max,
+    periodStart: wk,
+    periodEnd: weekEndYmd(wk),
+    dataPeriodStart: tripBounds.min || wk,
+    dataPeriodEnd: tripBounds.max || weekEndYmd(wk),
     uploadedBy,
     usesPaymentLineSsot: usesLineSsot,
     paymentLedgerLineCount: paymentLines.length,
@@ -137,7 +278,7 @@ export async function commitUberImportFromFiles(
     try {
       await api.saveVehicleMetrics(merged.vehicleMetrics);
     } catch (e) {
-      console.warn('[CloseWeek Uber re-import] vehicle metrics skipped', e);
+      console.warn('[CloseWeek Uber cash refresh] vehicle metrics skipped', e);
     }
   }
   if (orgForBatch) {
@@ -166,27 +307,22 @@ export async function commitUberImportFromFiles(
 
   if (canonicalEvents.length > 0) {
     let confirmSignedWeek = false;
-    let confirmDuplicateFile = false;
     const CANONICAL_APPEND_MAX = 200;
     for (let i = 0; i < canonicalEvents.length; i += CANONICAL_APPEND_MAX) {
       const chunk = canonicalEvents.slice(i, i + CANONICAL_APPEND_MAX);
       try {
         await api.appendCanonicalLedgerEvents(chunk, {
           confirmSignedWeek,
-          confirmDuplicateFile,
+          confirmDuplicateFile: false,
         });
       } catch (err: any) {
-        if (err?.code === 'DUPLICATE_FILE_HASH' && !confirmDuplicateFile) {
-          const ok = window.confirm(
-            'This CSV was already imported. Re-importing would post a second copy of the same money. Continue only if you intend a visible restatement?',
-          );
-          if (!ok) throw err;
-          confirmDuplicateFile = true;
-          await api.appendCanonicalLedgerEvents(chunk, {
-            confirmSignedWeek,
-            confirmDuplicateFile: true,
-          });
-          continue;
+        if (err?.code === 'DUPLICATE_FILE_HASH') {
+          if (closeWeekMode) {
+            throw new Error(
+              'These CSVs were already imported (same fingerprint). Close Week will not post a second copy of statement cash. Use Accept statement cash, or Data Imports only if you intend a visible restatement.',
+            );
+          }
+          throw err;
         }
         if (err?.code === 'SIGNED_WEEK' && !confirmSignedWeek) {
           const weeks = Array.isArray(err.signedWeeks)
@@ -223,18 +359,12 @@ export async function commitUberImportFromFiles(
 
   await api.patchImportBatch(batchId, { status: 'completed' });
 
-  const statementCashTotal = Object.values(merged.uberStatementsByDriverId || {}).reduce(
-    (s, t) => s + Math.abs(Number(t?.cashCollected) || 0),
-    0,
-  );
-  const tripCashTotal = tripsForSave
-    .filter((t) => String(t.platform || '').toLowerCase() === 'uber')
-    .reduce((s, t) => s + Math.abs(Number(t.cashCollected) || 0), 0);
-
   return {
     batchId,
     tripCount: tripsForSave.length,
-    statementCashTotal,
-    tripCashTotal,
+    statementCashTotal: preview.statementCashTotal,
+    tripCashTotal: preview.tripCashTotal,
+    preview,
   };
 }
+

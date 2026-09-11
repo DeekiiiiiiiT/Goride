@@ -2384,7 +2384,18 @@ async function handleTripsImport(c: any) {
     // Create keys for each trip
     // Assuming each trip has a unique 'id' field
     const keys = processedTrips.map((t: any) => `trip:${t.id}`);
-    
+
+    // Preserve Toll Recon ops fields across Uber/CSV re-import (cash_wash etc.).
+    // Wholesale overwrite previously wiped Spend to $0 while reimbursed stayed.
+    const { mergeTripForImport } = await import("./trip_import_merge.ts");
+    const existingTrips = await kv.mget(keys);
+    const mergedTrips = processedTrips.map((t: any, i: number) =>
+      mergeTripForImport(t as Record<string, unknown>, existingTrips[i] as Record<string, unknown> | null),
+    );
+    for (let i = 0; i < processedTrips.length; i++) {
+      processedTrips[i] = mergedTrips[i];
+    }
+
     // Store using mset
     await kv.mset(keys, processedTrips.map((t: any) => stampWriteOrg(t)));
 
