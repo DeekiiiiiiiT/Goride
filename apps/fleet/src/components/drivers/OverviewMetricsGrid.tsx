@@ -849,7 +849,7 @@ export function OverviewMetricsGrid({
                               </>
                             ) : (
                               <p className="mt-1 text-[11px] text-slate-500">
-                                Open InDrive Wallet for fee detail.
+                                See Business Finance → InDrive Wallet for fee detail.
                               </p>
                             )}
                           </div>
@@ -1036,7 +1036,7 @@ export function OverviewMetricsGrid({
               ) : (
                 'the selected date range'
               )}
-              . Does not include InDrive wallet loads, bank transfers, or payouts — use Financials and wallet tabs for those.
+              . Does not include InDrive wallet loads, bank transfers, or payouts — use Financials, Cash Wallet, and Business Finance → InDrive Wallet for those.
             </DialogDescription>
           </DialogHeader>
 

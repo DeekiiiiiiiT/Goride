@@ -81,7 +81,6 @@ export const DRIVER_DETAIL_TABS = [
   'financial',
   'quality',
   'wallet',
-  'indrive-wallet',
   'profile',
 ] as const;
 

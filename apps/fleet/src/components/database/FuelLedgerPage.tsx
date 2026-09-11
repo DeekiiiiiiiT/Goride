@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Fuel, RefreshCw } from 'lucide-react';
 import { FuelEntry } from '../../types/fuel';
-import { api } from '../../services/api';
+import { fuelService } from '../../services/fuelService';
+import { currentFuelListWindow } from '../../utils/fuelWeekPeriod';
+import { useLedgerPeriod } from '../../contexts/LedgerPeriodContext';
 import { FuelLedgerTable, ALL_COLUMNS, DEFAULT_VISIBLE_KEYS } from './fuel-ledger/FuelLedgerTable';
 import type { SortDir } from './fuel-ledger/FuelLedgerTable';
 import { FuelLedgerColumnToggle } from './fuel-ledger/FuelLedgerColumnToggle';
@@ -135,7 +137,10 @@ interface FuelLedgerPageProps {
 }
 
 export function FuelLedgerPage({ organizationId, columnConfig }: FuelLedgerPageProps = {}) {
+  const { period } = useLedgerPeriod();
   const [allEntries, setAllEntries] = useState<FuelEntry[]>([]);
+  const [serverTotal, setServerTotal] = useState<number | null>(null);
+  const [loadedWindow, setLoadedWindow] = useState<{ startDate: string; endDate: string } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(0);
@@ -147,14 +152,25 @@ export function FuelLedgerPage({ organizationId, columnConfig }: FuelLedgerPageP
 
   const fetchIdRef = useRef(0);
 
-  const fetchEntries = useCallback(async () => {
+  const fetchEntries = useCallback(async (f: FuelLedgerFilters = filters) => {
     const id = ++fetchIdRef.current;
     setLoading(true);
     setError(null);
     try {
-      const data = await api.getAllFuelEntries(organizationId);
+      const fallback = period.startDate ? period : currentFuelListWindow();
+      const startDate = f.dateFrom || fallback.startDate;
+      const endDate = f.dateTo || fallback.endDate;
+      const data = await fuelService.getFuelEntries({
+        startDate,
+        endDate,
+        limit: 1500,
+        offset: 0,
+      });
       if (id !== fetchIdRef.current) return;
+      const totalCount = (data as any)?.totalCount as number | undefined;
       setAllEntries(Array.isArray(data) ? data : []);
+      setServerTotal(totalCount != null && Number.isFinite(totalCount) ? totalCount : (Array.isArray(data) ? data.length : 0));
+      setLoadedWindow({ startDate, endDate });
     } catch (err: any) {
       if (id !== fetchIdRef.current) return;
       console.error('FuelLedgerPage fetch error:', err);
@@ -162,11 +178,15 @@ export function FuelLedgerPage({ organizationId, columnConfig }: FuelLedgerPageP
     } finally {
       if (id === fetchIdRef.current) setLoading(false);
     }
-  }, [organizationId]);
+  }, [filters, organizationId, period]);
 
   useEffect(() => {
-    fetchEntries();
-  }, [fetchEntries]);
+    fetchEntries(filters);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filters.dateFrom, filters.dateTo, organizationId, period.startDate, period.endDate]);
+
+  const truncated =
+    serverTotal != null && allEntries.length > 0 && serverTotal > allEntries.length;
 
   // Client-side filtering
   const filteredEntries = useMemo(
@@ -241,11 +261,13 @@ export function FuelLedgerPage({ organizationId, columnConfig }: FuelLedgerPageP
             <Fuel className="h-6 w-6 text-amber-600 dark:text-amber-400" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">
+            <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100">
               Fuel Management Ledger
-            </h1>
+            </h2>
             <p className="text-sm text-slate-500 dark:text-slate-400">
-              All fuel entries — fill-ups, costs, odometer readings, and audit status
+              {loadedWindow
+                ? `Fuel entries for ${loadedWindow.startDate} → ${loadedWindow.endDate}`
+                : 'Fuel fill-ups, costs, odometer readings, and audit status'}
             </p>
           </div>
         </div>
@@ -265,7 +287,7 @@ export function FuelLedgerPage({ organizationId, columnConfig }: FuelLedgerPageP
             onResetDefaults={handleResetColumns}
           />
           <button
-            onClick={fetchEntries}
+            onClick={() => fetchEntries(filters)}
             disabled={loading}
             className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-50 transition-colors"
           >
@@ -274,6 +296,23 @@ export function FuelLedgerPage({ organizationId, columnConfig }: FuelLedgerPageP
           </button>
         </div>
       </div>
+
+      {(loadedWindow || truncated) && (
+        <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 px-4 py-2.5 text-xs text-amber-800 dark:text-amber-200">
+          {loadedWindow && (
+            <span>
+              Showing window <span className="font-medium">{loadedWindow.startDate}</span> to{' '}
+              <span className="font-medium">{loadedWindow.endDate}</span>
+              {serverTotal != null ? ` · server total ${serverTotal.toLocaleString()}` : ''}.
+            </span>
+          )}
+          {truncated && (
+            <span className="ml-1 font-medium">
+              Loaded {allEntries.length.toLocaleString()} of {serverTotal!.toLocaleString()} — narrow the date range or raise the limit.
+            </span>
+          )}
+        </div>
+      )}
 
       {/* Filter Bar */}
       <FuelLedgerFilterBar

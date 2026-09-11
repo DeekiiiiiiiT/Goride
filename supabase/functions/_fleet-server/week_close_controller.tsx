@@ -3,7 +3,7 @@
  *
  * Routes under /make-server-37f42386/settlements/week-close:
  *   GET  /week-close/preview?weekKey=YYYY-MM-DD  → read-only lanes + blockers
- *   POST /week-close  { weekKey, reason }        → run invariants and sign week
+ *   POST /week-close  { weekKey, reason, idempotencyKey?, skipPrepare? }
  *   POST /week-close/acknowledge-cash-source { weekKey, driverId, reason }
  *   POST /week-close/reopen { weekKey, reason, acknowledgeSettlementRisk? }
  *                                               → admin unfreeze (audit trail)
@@ -11,6 +11,8 @@
  * The POST is the only place a week is truly closed: it runs the cross-system
  * invariants as a precondition and signs an immutable statement + freeze hash
  * per driver. A single blocking drift leaves that driver open with its blocker.
+ * C-3: optional idempotencyKey replays a completed result; org-week lock returns
+ * 409 CLOSE_IN_PROGRESS. H-1: skipPrepare skips seal/rebuild when client synced.
  */
 import { Hono, type Context } from "npm:hono";
 import { requireAuth, requirePermission, type RbacUser } from "./rbac_middleware.ts";
@@ -23,6 +25,12 @@ import {
   requestRestatement,
 } from "./week_statements.ts";
 import * as kv from "./kv_store.tsx";
+import {
+  beginWeekCloseRun,
+  completeWeekCloseRun,
+  failWeekCloseRun,
+  findWeekCloseRun,
+} from "./week_close_lock.ts";
 
 const app = new Hono();
 app.use("*", requireAuth({ strict: true }));
@@ -162,14 +170,79 @@ app.post(BASE, requirePermission("transactions.edit"), async (c) => {
     const org = requireOrg(c);
     if (typeof org !== "string") return org;
     const user = c.get("rbacUser") as RbacUser;
-    const body = (await c.req.json()) as { weekKey?: string; reason?: string };
+    const body = (await c.req.json()) as {
+      weekKey?: string;
+      reason?: string;
+      idempotencyKey?: string;
+      skipPrepare?: boolean;
+    };
     const weekKey = String(body.weekKey || "").slice(0, 10);
     if (!WEEK_RE.test(weekKey)) {
       return c.json({ error: "weekKey (YYYY-MM-DD) is required" }, 400);
     }
     const reason = String(body.reason || "").trim() || "Manual week close";
-    const result = await closeWeek(org, weekKey, user.userId, reason);
-    return c.json(result);
+    const idempotencyKey = String(body.idempotencyKey || "").trim();
+    const skipPrepare = body.skipPrepare === true;
+
+    // C-3: return stored outcome for a completed idempotency key.
+    if (idempotencyKey) {
+      const existing = await findWeekCloseRun(org, idempotencyKey);
+      if (existing?.status === "completed" && existing.result) {
+        return c.json({ ...existing.result, idempotent: true });
+      }
+      if (existing?.status === "in_progress") {
+        return c.json(
+          {
+            error: "CLOSE_IN_PROGRESS",
+            message: "Week close already in progress for this request — retry shortly",
+          },
+          409,
+        );
+      }
+
+      const { run, created } = await beginWeekCloseRun({
+        orgId: org,
+        weekKey,
+        idempotencyKey,
+        actorId: user.userId,
+      });
+      if (!created) {
+        if (run.status === "completed" && run.result) {
+          return c.json({ ...run.result, idempotent: true });
+        }
+        if (run.status === "in_progress") {
+          return c.json(
+            {
+              error: "CLOSE_IN_PROGRESS",
+              message: "Week close already in progress for this request — retry shortly",
+            },
+            409,
+          );
+        }
+      }
+    }
+
+    try {
+      const result = await closeWeek(org, weekKey, user.userId, reason, { skipPrepare });
+      if (idempotencyKey) {
+        await completeWeekCloseRun(org, idempotencyKey, result as unknown as Record<string, unknown>);
+      }
+      return c.json(result);
+    } catch (e) {
+      if (idempotencyKey) {
+        if (e instanceof WeekCloseError) {
+          await failWeekCloseRun(org, idempotencyKey, e.code, e.message);
+        } else {
+          await failWeekCloseRun(
+            org,
+            idempotencyKey,
+            "CLOSE_FAILED",
+            e instanceof Error ? e.message : "Close week failed",
+          );
+        }
+      }
+      throw e;
+    }
   } catch (e) {
     if (e instanceof WeekCloseError) {
       return c.json({ error: e.code, message: e.message, details: e.details }, e.status);

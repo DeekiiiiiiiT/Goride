@@ -3,6 +3,7 @@ export type { MoneyMinor } from './money.ts';
 export {
   periodKeyFor,
   periodEndForAnchor,
+  nextPeriodAnchor,
   dateWeekKey,
   fleetCalendarDay,
   asWeekKey,
@@ -98,8 +99,15 @@ export {
   resolveSignedSnapshot,
   preservePeriodMetaKeys,
   PRESERVED_PERIOD_META_KEYS,
+  buildCloseInvariantSnapshot,
+  stampCloseInvariantSnapshotOnMeta,
+  readCloseInvariantInputs,
 } from './periodSignedSnapshot.ts';
-export type { SignedSnapshot, ResolveSignedSnapshotInput } from './periodSignedSnapshot.ts';
+export type {
+  SignedSnapshot,
+  ResolveSignedSnapshotInput,
+  CloseInvariantSnapshot,
+} from './periodSignedSnapshot.ts';
 export {
   buildPeriodMetadata,
   buildCashSettlementPersistFields,
@@ -196,6 +204,7 @@ export type {
   TollEventLedgerRecon,
 } from './tollEventLedgerRecon.ts';
 export * from './weekCloseDirectory.ts';
+export * from './custodyCarry.ts';
 export * from './fixedExpenseOccurrences.ts';
 export * from './ledgerMoneyAggregate.ts';
 export * from './expenseHubJournal.ts';

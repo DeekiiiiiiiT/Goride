@@ -1197,33 +1197,56 @@ export function DriverSettlementsPage({
     }
     const header =
       direction === 'collect'
-        ? ['driver_id', 'driver_name', 'period_start', 'period_end', 'amount_owed', 'collect_kind', 'overpaid_amount', 'passenger_cash']
-        : ['driver_id', 'driver_name', 'period_start', 'period_end', 'amount_owed', 'overpaid_amount', 'passenger_cash', 'already_paid'];
+        ? [
+            'driver_id',
+            'driver_name',
+            'period_start',
+            'period_end',
+            'amount_driver_owes',
+            'amount_cash_held',
+            'collect_kind',
+            'overpaid_amount',
+            'passenger_cash',
+          ]
+        : [
+            'driver_id',
+            'driver_name',
+            'period_start',
+            'period_end',
+            'amount_owed',
+            'overpaid_amount',
+            'passenger_cash',
+            'already_paid',
+          ];
     const lines = [
       csvRow(header),
-      ...rows.map((r) =>
-        direction === 'collect'
-          ? csvRow([
-              r.driverId,
-              r.driverName || '',
-              r.periodAnchor,
-              r.periodEnd,
-              queueOwedMajor(r, 'collect').toFixed(2),
-              r.collectKind || '',
-              rowOverpaidAmount(r).toFixed(2),
-              Number(r.cashCollected || 0).toFixed(2),
-            ])
-          : csvRow([
-              r.driverId,
-              r.driverName || '',
-              r.periodAnchor,
-              r.periodEnd,
-              queueOwedMajor(r, 'pay').toFixed(2),
-              rowOverpaidAmount(r).toFixed(2),
-              Number(r.cashCollected || 0).toFixed(2),
-              Number(r.settlementPaid || 0).toFixed(2),
-            ]),
-      ),
+      ...rows.map((r) => {
+        if (direction === 'collect') {
+          const owed = queueOwedMajor(r, 'collect');
+          const isHeld = r.collectKind === 'cash_held';
+          return csvRow([
+            r.driverId,
+            r.driverName || '',
+            r.periodAnchor,
+            r.periodEnd,
+            (isHeld ? 0 : owed).toFixed(2),
+            (isHeld ? owed : 0).toFixed(2),
+            r.collectKind || '',
+            rowOverpaidAmount(r).toFixed(2),
+            Number(r.cashCollected || 0).toFixed(2),
+          ]);
+        }
+        return csvRow([
+          r.driverId,
+          r.driverName || '',
+          r.periodAnchor,
+          r.periodEnd,
+          queueOwedMajor(r, 'pay').toFixed(2),
+          rowOverpaidAmount(r).toFixed(2),
+          Number(r.cashCollected || 0).toFixed(2),
+          Number(r.settlementPaid || 0).toFixed(2),
+        ]);
+      }),
     ];
     const blob = new Blob([CSV_UTF8_BOM + lines.join('\n')], { type: 'text/csv;charset=utf-8' });
     const url = URL.createObjectURL(blob);

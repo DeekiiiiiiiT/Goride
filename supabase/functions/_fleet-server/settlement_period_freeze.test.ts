@@ -15,6 +15,10 @@ Deno.test("isPeriodFrozen detects signed / frozen metadata", () => {
   assertEquals(isPeriodFrozen({ signedAt: "2026-09-01" }), true);
   assertEquals(isPeriodFrozen({ metadata: { periodFrozen: true } }), true);
   assertEquals(isPeriodFrozen({ metadata: { financeCore: { signedAt: "x" } } }), true);
+  // Legacy / ops: status=closed or closed_at without freeze seals
+  assertEquals(isPeriodFrozen({ status: "closed" }), true);
+  assertEquals(isPeriodFrozen({ closedAt: "2026-09-06T15:15:16Z" }), true);
+  assertEquals(isPeriodFrozen({ status: "open" }), false);
 });
 
 Deno.test("assertPeriodNotFrozen throws PERIOD_FROZEN SettlementCommandError 409", () => {

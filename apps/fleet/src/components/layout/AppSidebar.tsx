@@ -288,7 +288,7 @@ export function AppSidebar({
     },
     canView('transaction-list') && {
       id: 'transaction-list',
-      label: 'Transaction List',
+      label: 'Ledgers',
     },
   ].filter(Boolean) as NavLeaf[];
 

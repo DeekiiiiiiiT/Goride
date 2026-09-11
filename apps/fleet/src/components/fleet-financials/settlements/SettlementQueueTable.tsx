@@ -50,35 +50,55 @@ function periodFrozenBlocked(r: Pick<SettlementQueueRow, 'periodFrozen'>): boole
 
 const GATE_TITLE = 'Not yet reconciled — fuel must be finalized and tolls clear before Collect.';
 const FROZEN_TITLE = 'Week closed — reopen on Close Week to change money';
+const SEAL_BROKEN_TITLE =
+  'Seal broken — close hash no longer matches; reopen on Close Week before Pay/Collect';
 
-/** Short action-oriented chip labels (U-1) — what to do, not only state. */
+/** Short action-oriented chip labels — what to do, not only state. */
 const CHIP_OPEN = 'Week still open — act after it ends';
 const CHIP_LOCKED = 'Reconcile fuel/tolls before Collect';
 const CHIP_CLOSED = 'Reopen on Close Week';
+const CHIP_SEAL_BROKEN = 'Seal broken — reopen';
 
-/** Row block reason shown as visible helper text (U-1), not only title tooltips. */
+function sealBroken(r: Pick<SettlementQueueRow, 'sealBroken'>): boolean {
+  return r.sealBroken === true;
+}
+
+/** Row block reason shown as visible helper text (U-5), not only title tooltips. */
 export function settlementRowBlockReason(
-  r: Pick<SettlementQueueRow, 'periodAnchor' | 'periodEnd' | 'moneyUnlocked' | 'periodFrozen'>,
+  r: Pick<
+    SettlementQueueRow,
+    'periodAnchor' | 'periodEnd' | 'moneyUnlocked' | 'periodFrozen' | 'sealBroken'
+  >,
   mode: 'collect' | 'pay',
 ): string | undefined {
   return actionTitle(r, mode);
 }
 
 function actionTitle(
-  r: Pick<SettlementQueueRow, 'periodAnchor' | 'periodEnd' | 'moneyUnlocked' | 'periodFrozen'>,
+  r: Pick<
+    SettlementQueueRow,
+    'periodAnchor' | 'periodEnd' | 'moneyUnlocked' | 'periodFrozen' | 'sealBroken'
+  >,
   mode: 'collect' | 'pay',
 ): string | undefined {
+  if (sealBroken(r)) return SEAL_BROKEN_TITLE;
   if (periodFrozenBlocked(r)) return FROZEN_TITLE;
   if (mode === 'collect' && collectGateBlocked(r)) return GATE_TITLE;
   return weekOpenTitle(r);
 }
 
 function blockReasonChip(
-  r: Pick<SettlementQueueRow, 'periodAnchor' | 'periodEnd' | 'moneyUnlocked' | 'periodFrozen'>,
+  r: Pick<
+    SettlementQueueRow,
+    'periodAnchor' | 'periodEnd' | 'moneyUnlocked' | 'periodFrozen' | 'sealBroken'
+  >,
   mode: 'collect' | 'pay',
 ): { label: string; className: string } | undefined {
   if (!weekActionable(r)) {
     return { label: CHIP_OPEN, className: 'text-amber-700' };
+  }
+  if (sealBroken(r)) {
+    return { label: CHIP_SEAL_BROKEN, className: 'text-rose-800' };
   }
   if (periodFrozenBlocked(r)) {
     return { label: CHIP_CLOSED, className: 'text-slate-600' };
@@ -89,19 +109,48 @@ function blockReasonChip(
   return undefined;
 }
 
+/** U-3: Closed / Seal broken badge before Pay fails. */
+function sealHealthBadge(
+  r: Pick<SettlementQueueRow, 'periodFrozen' | 'sealBroken'>,
+): { label: string; className: string } | undefined {
+  if (sealBroken(r)) {
+    return {
+      label: 'Seal broken',
+      className: 'bg-rose-100 text-rose-900 border border-rose-200',
+    };
+  }
+  if (periodFrozenBlocked(r)) {
+    return {
+      label: 'Closed',
+      className: 'bg-slate-100 text-slate-700 border border-slate-200',
+    };
+  }
+  return undefined;
+}
+
 function blockReasonDomId(scope: string, key: string): string {
   return `sq-block-${scope}-${key.replace(/[^a-zA-Z0-9_-]/g, '_')}`;
 }
 
 /** Collect is allowed only when the calendar week ended AND the money is unlocked AND not frozen. */
 function canCollect(
-  r: Pick<SettlementQueueRow, 'periodAnchor' | 'periodEnd' | 'moneyUnlocked' | 'periodFrozen'>,
+  r: Pick<
+    SettlementQueueRow,
+    'periodAnchor' | 'periodEnd' | 'moneyUnlocked' | 'periodFrozen' | 'sealBroken'
+  >,
 ): boolean {
-  return weekActionable(r) && !collectGateBlocked(r) && !periodFrozenBlocked(r);
+  return (
+    weekActionable(r) &&
+    !collectGateBlocked(r) &&
+    !periodFrozenBlocked(r) &&
+    !sealBroken(r)
+  );
 }
 
-function canPay(r: Pick<SettlementQueueRow, 'periodAnchor' | 'periodEnd' | 'periodFrozen'>): boolean {
-  return weekActionable(r) && !periodFrozenBlocked(r);
+function canPay(
+  r: Pick<SettlementQueueRow, 'periodAnchor' | 'periodEnd' | 'periodFrozen' | 'sealBroken'>,
+): boolean {
+  return weekActionable(r) && !periodFrozenBlocked(r) && !sealBroken(r);
 }
 
 /** Row label: before-share float vs residual after share (driver-share-first). */
@@ -148,13 +197,36 @@ const AGING_TONE: Record<AgingBucket, string> = {
 type DriverRollup = {
   driverId: string;
   driverName?: string;
+  /** Total exposure (driverOwes + cashHeld in collect; fleet owes in pay). */
   owed: number;
+  /** Collect: residual after share. */
+  driverOwes: number;
+  /** Collect: passenger cash still with driver (before share). */
+  cashHeld: number;
   oldestPeriodEnd: string;
   oldestPeriodAnchor: string;
   weekCount: number;
+  /** Collect week counts by kind (U-2). */
+  collectWeekCount: number;
+  cashHeldWeekCount: number;
   aging: AgingBucket;
   weeks: SettlementQueueRow[];
 };
+
+function isCashHeldRow(r: Pick<SettlementQueueRow, 'collectKind'>): boolean {
+  return r.collectKind === 'cash_held';
+}
+
+/** U-2: "6 collect · 2 cash held" when kinds mix. */
+function weeksCountLabel(g: DriverRollup, mode: 'collect' | 'pay'): string {
+  if (mode !== 'collect') return String(g.weekCount);
+  const a = g.collectWeekCount;
+  const b = g.cashHeldWeekCount;
+  if (a > 0 && b > 0) return `${a} collect · ${b} cash held`;
+  if (b > 0 && a === 0) return `${b} cash held`;
+  if (a > 0) return `${a} collect`;
+  return String(g.weekCount);
+}
 
 function buildDriverRollups(rows: SettlementQueueRow[], mode: 'collect' | 'pay'): DriverRollup[] {
   const map = new Map<string, DriverRollup>();
@@ -166,9 +238,13 @@ function buildDriverRollups(rows: SettlementQueueRow[], mode: 'collect' | 'pay')
         driverId: r.driverId,
         driverName: r.driverName,
         owed: 0,
+        driverOwes: 0,
+        cashHeld: 0,
         oldestPeriodEnd: r.periodEnd,
         oldestPeriodAnchor: r.periodAnchor,
         weekCount: 0,
+        collectWeekCount: 0,
+        cashHeldWeekCount: 0,
         aging: agingBucket(r.periodEnd),
         weeks: [],
       };
@@ -176,6 +252,17 @@ function buildDriverRollups(rows: SettlementQueueRow[], mode: 'collect' | 'pay')
     }
     g.owed += owed;
     g.weekCount += 1;
+    if (mode === 'collect') {
+      if (isCashHeldRow(r)) {
+        g.cashHeld += owed;
+        g.cashHeldWeekCount += 1;
+      } else {
+        g.driverOwes += owed;
+        g.collectWeekCount += 1;
+      }
+    } else {
+      g.driverOwes += owed;
+    }
     g.weeks.push(r);
     if (String(r.periodEnd) < String(g.oldestPeriodEnd)) {
       g.oldestPeriodEnd = r.periodEnd;
@@ -190,6 +277,8 @@ function buildDriverRollups(rows: SettlementQueueRow[], mode: 'collect' | 'pay')
   return [...map.values()].sort((a, b) => {
     const age = daysOverdue(b.oldestPeriodEnd) - daysOverdue(a.oldestPeriodEnd);
     if (age) return age;
+    const exposure = (b.driverOwes + b.cashHeld) - (a.driverOwes + a.cashHeld);
+    if (mode === 'collect' && exposure) return exposure;
     return (a.driverName || a.driverId).localeCompare(b.driverName || b.driverId, undefined, {
       sensitivity: 'base',
     });
@@ -255,6 +344,20 @@ export function SettlementQueueTable({
     () => rows.reduce((s, r) => s + owedMajor(r, mode), 0),
     [rows, mode],
   );
+  const footerDriverOwes = useMemo(
+    () =>
+      mode === 'collect'
+        ? rows.reduce((s, r) => s + (isCashHeldRow(r) ? 0 : owedMajor(r, mode)), 0)
+        : footerOwed,
+    [rows, mode, footerOwed],
+  );
+  const footerCashHeld = useMemo(
+    () =>
+      mode === 'collect'
+        ? rows.reduce((s, r) => s + (isCashHeldRow(r) ? owedMajor(r, mode) : 0), 0)
+        : 0,
+    [rows, mode],
+  );
 
   const flatWindow = useWindowedRows(groupByDriver ? [] : rows);
   // P-5: flatten expanded rollups into a single row list, then window (fixed 52px rows).
@@ -276,7 +379,9 @@ export function SettlementQueueTable({
 
   const rollupWindow = useWindowedRows(flatRollupItems);
   const windowed = groupByDriver ? rollupWindow : flatWindow;
-  const colSpan = groupByDriver ? 8 : 6;
+  // Collect adds Cash held column (C-4 / U-1).
+  const amountCols = mode === 'collect' ? 2 : 1;
+  const colSpan = (groupByDriver ? 7 : 5) + amountCols;
 
   const toggleExpand = (id: string) => {
     setExpanded((prev) => {
@@ -316,9 +421,14 @@ export function SettlementQueueTable({
               <TableHead>{groupByDriver ? 'Oldest week' : 'Settlement Week'}</TableHead>
               {groupByDriver ? <TableHead className="text-right">Weeks</TableHead> : null}
               <TableHead>Aging</TableHead>
-              <TableHead className="text-right">
-                {mode === 'collect' ? 'Driver owes' : 'Fleet owes'}
-              </TableHead>
+              {mode === 'collect' ? (
+                <>
+                  <TableHead className="text-right">Driver owes</TableHead>
+                  <TableHead className="text-right">Cash held</TableHead>
+                </>
+              ) : (
+                <TableHead className="text-right">Fleet owes</TableHead>
+              )}
               <TableHead className={mode === 'collect' ? 'w-[220px]' : 'w-[120px]'} />
             </TableRow>
           </TableHeader>
@@ -356,17 +466,26 @@ export function SettlementQueueTable({
                     const weekKeysForDriver = actionableWeeks.map(rowKey);
                     const firstActionable = actionableWeeks[0] || null;
                     const firstCollectable = actionableWeeks.find((w) => canCollect(w)) || null;
+                    const frozenSample =
+                      g.weeks.find((w) => sealBroken(w) || periodFrozenBlocked(w)) || null;
+                    const parentSeal = sealHealthBadge(
+                      frozenSample || { periodFrozen: false, sealBroken: false },
+                    );
                     const driverAllSelected =
                       weekKeysForDriver.length > 0 &&
                       weekKeysForDriver.every((k) => selected.has(k));
                     const parentOpenTitle = firstActionable
                       ? undefined
                       : actionTitle(
-                          g.weeks[0] || { periodAnchor: '', periodEnd: g.oldestPeriodEnd },
+                          frozenSample ||
+                            g.weeks[0] || { periodAnchor: '', periodEnd: g.oldestPeriodEnd },
                           mode,
                         );
                     const headerReasonId = blockReasonDomId('h', g.driverId);
                     const headerBlocked = Boolean(parentOpenTitle);
+                    const showWeekClosed =
+                      Boolean(frozenSample) &&
+                      (mode === 'collect' ? !firstCollectable : !firstActionable);
                     return (
                       <TableRow
                         key={`h:${g.driverId}`}
@@ -411,36 +530,72 @@ export function SettlementQueueTable({
                           )}
                         </TableCell>
                         <TableCell>
-                          <button
-                            type="button"
-                            className="text-left font-medium text-slate-900 hover:text-indigo-600"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onOpenDriver?.(g.driverId);
-                            }}
-                          >
-                            {g.driverName || g.driverId}
-                          </button>
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <button
+                              type="button"
+                              className="text-left font-medium text-slate-900 hover:text-indigo-600"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onOpenDriver?.(g.driverId);
+                              }}
+                            >
+                              {g.driverName || g.driverId}
+                            </button>
+                            {parentSeal ? (
+                              <Badge
+                                className={cn('font-normal text-[10px]', parentSeal.className)}
+                              >
+                                {parentSeal.label}
+                              </Badge>
+                            ) : null}
+                          </div>
                         </TableCell>
                         <TableCell className="text-sm text-slate-600">
                           {weekLabel(g.oldestPeriodAnchor, g.oldestPeriodEnd)}
                         </TableCell>
-                        <TableCell className="text-right tabular-nums text-slate-600">
-                          {g.weekCount}
+                        <TableCell className="text-right text-xs tabular-nums text-slate-600">
+                          {weeksCountLabel(g, mode)}
                         </TableCell>
                         <TableCell>
                           <Badge className={cn('font-normal', AGING_TONE[g.aging])}>{g.aging}</Badge>
                         </TableCell>
-                        <TableCell
-                          className={cn(
-                            'text-right tabular-nums font-semibold',
-                            mode === 'collect' ? 'text-rose-700' : 'text-emerald-800',
-                          )}
-                        >
-                          {MONEY(g.owed)}
-                        </TableCell>
+                        {mode === 'collect' ? (
+                          <>
+                            <TableCell className="text-right tabular-nums font-semibold text-rose-700">
+                              {MONEY(g.driverOwes)}
+                            </TableCell>
+                            <TableCell className="text-right tabular-nums font-semibold text-amber-800">
+                              {MONEY(g.cashHeld)}
+                            </TableCell>
+                          </>
+                        ) : (
+                          <TableCell className="text-right tabular-nums font-semibold text-emerald-800">
+                            {MONEY(g.owed)}
+                          </TableCell>
+                        )}
                         <TableCell onClick={(e) => e.stopPropagation()}>
-                          {mode === 'collect' ? (
+                          {showWeekClosed && frozenSample ? (
+                            <div className="flex flex-col items-end gap-1">
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                className="h-8"
+                                aria-describedby={headerBlocked ? headerReasonId : undefined}
+                                onClick={() => onWeekClosed?.(frozenSample)}
+                              >
+                                {sealBroken(frozenSample) ? 'Seal broken' : 'Week closed'}
+                              </Button>
+                              {parentOpenTitle ? (
+                                <p
+                                  id={headerReasonId}
+                                  className="max-w-[11rem] text-right text-[11px] leading-snug text-amber-800"
+                                >
+                                  {parentOpenTitle}
+                                </p>
+                              ) : null}
+                            </div>
+                          ) : mode === 'collect' ? (
                             <div className="flex flex-col items-end gap-1">
                               <div className="flex flex-wrap gap-1 justify-end">
                                 <Button
@@ -499,10 +654,13 @@ export function SettlementQueueTable({
                   const k = rowKey(r);
                   const bucket = agingBucket(r.periodEnd);
                   const amt = owedMajor(r, mode);
+                  const held = mode === 'collect' && isCashHeldRow(r);
                   const canAct = mode === 'collect' ? canCollect(r) : canPay(r);
                   const openTitle = actionTitle(r, mode);
                   const chip = blockReasonChip(r, mode);
+                  const seal = sealHealthBadge(r);
                   const reasonId = blockReasonDomId('w', k);
+                  const frozenOrBroken = periodFrozenBlocked(r) || sealBroken(r);
                   return (
                     <TableRow key={`w:${item.rollupId}:${k}`} className="bg-white">
                       <TableCell>
@@ -516,17 +674,24 @@ export function SettlementQueueTable({
                       </TableCell>
                       <TableCell />
                       <TableCell className="text-sm text-slate-500 pl-6">
-                        {mode === 'collect' ? collectKindLabel(r) : 'Week'}
-                        {chip ? (
-                          <span
-                            className={cn(
-                              'ml-2 text-[10px] font-medium uppercase tracking-wide',
-                              chip.className,
-                            )}
-                          >
-                            {chip.label}
-                          </span>
-                        ) : null}
+                        <span className="inline-flex flex-wrap items-center gap-1.5">
+                          {mode === 'collect' ? collectKindLabel(r) : 'Week'}
+                          {seal ? (
+                            <Badge className={cn('font-normal text-[10px]', seal.className)}>
+                              {seal.label}
+                            </Badge>
+                          ) : null}
+                          {chip && !seal ? (
+                            <span
+                              className={cn(
+                                'text-[10px] font-medium uppercase tracking-wide',
+                                chip.className,
+                              )}
+                            >
+                              {chip.label}
+                            </span>
+                          ) : null}
+                        </span>
                       </TableCell>
                       <TableCell className="text-sm text-slate-600">
                         {weekLabel(r.periodAnchor, r.periodEnd)}
@@ -535,18 +700,24 @@ export function SettlementQueueTable({
                       <TableCell>
                         <Badge className={cn('font-normal', AGING_TONE[bucket])}>{bucket}</Badge>
                       </TableCell>
-                      <TableCell
-                        className={cn(
-                          'text-right tabular-nums font-semibold',
-                          mode === 'collect' ? 'text-rose-700' : 'text-emerald-800',
-                        )}
-                      >
-                        {MONEY(amt)}
-                      </TableCell>
+                      {mode === 'collect' ? (
+                        <>
+                          <TableCell className="text-right tabular-nums font-semibold text-rose-700">
+                            {held ? '—' : MONEY(amt)}
+                          </TableCell>
+                          <TableCell className="text-right tabular-nums font-semibold text-amber-800">
+                            {held ? MONEY(amt) : '—'}
+                          </TableCell>
+                        </>
+                      ) : (
+                        <TableCell className="text-right tabular-nums font-semibold text-emerald-800">
+                          {MONEY(amt)}
+                        </TableCell>
+                      )}
                       <TableCell>
                         <div className="flex flex-col items-end gap-1">
                           <div className="flex flex-wrap gap-1 justify-end">
-                            {periodFrozenBlocked(r) ? (
+                            {frozenOrBroken ? (
                               <Button
                                 type="button"
                                 size="sm"
@@ -555,7 +726,7 @@ export function SettlementQueueTable({
                                 aria-describedby={reasonId}
                                 onClick={() => onWeekClosed?.(r)}
                               >
-                                Week closed
+                                {sealBroken(r) ? 'Seal broken' : 'Week closed'}
                               </Button>
                             ) : mode === 'collect' ? (
                               <>
@@ -633,10 +804,13 @@ export function SettlementQueueTable({
                 const k = rowKey(r);
                 const bucket = agingBucket(r.periodEnd);
                 const amt = owedMajor(r, mode);
+                const held = mode === 'collect' && isCashHeldRow(r);
                 const canAct = mode === 'collect' ? canCollect(r) : canPay(r);
                 const openTitle = actionTitle(r, mode);
                 const chip = blockReasonChip(r, mode);
+                const seal = sealHealthBadge(r);
                 const reasonId = blockReasonDomId('f', k);
+                const frozenOrBroken = periodFrozenBlocked(r) || sealBroken(r);
                 return (
                   <TableRow key={k}>
                     <TableCell>
@@ -649,17 +823,24 @@ export function SettlementQueueTable({
                       />
                     </TableCell>
                     <TableCell>
-                      <button
-                        type="button"
-                        className="text-left font-medium text-slate-900 hover:text-indigo-600"
-                        onClick={() => onOpenDriver?.(r.driverId)}
-                      >
-                        {r.driverName || r.driverId}
-                      </button>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <button
+                          type="button"
+                          className="text-left font-medium text-slate-900 hover:text-indigo-600"
+                          onClick={() => onOpenDriver?.(r.driverId)}
+                        >
+                          {r.driverName || r.driverId}
+                        </button>
+                        {seal ? (
+                          <Badge className={cn('font-normal text-[10px]', seal.className)}>
+                            {seal.label}
+                          </Badge>
+                        ) : null}
+                      </div>
                     </TableCell>
                     <TableCell className="text-sm text-slate-600">
                       {weekLabel(r.periodAnchor, r.periodEnd)}
-                      {chip ? (
+                      {chip && !seal ? (
                         <span
                           className={cn(
                             'ml-2 text-[10px] font-medium uppercase tracking-wide',
@@ -673,18 +854,24 @@ export function SettlementQueueTable({
                     <TableCell>
                       <Badge className={cn('font-normal', AGING_TONE[bucket])}>{bucket}</Badge>
                     </TableCell>
-                    <TableCell
-                      className={cn(
-                        'text-right tabular-nums font-semibold',
-                        mode === 'collect' ? 'text-rose-700' : 'text-emerald-800',
-                      )}
-                    >
-                      {MONEY(amt)}
-                    </TableCell>
+                    {mode === 'collect' ? (
+                      <>
+                        <TableCell className="text-right tabular-nums font-semibold text-rose-700">
+                          {held ? '—' : MONEY(amt)}
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums font-semibold text-amber-800">
+                          {held ? MONEY(amt) : '—'}
+                        </TableCell>
+                      </>
+                    ) : (
+                      <TableCell className="text-right tabular-nums font-semibold text-emerald-800">
+                        {MONEY(amt)}
+                      </TableCell>
+                    )}
                     <TableCell>
                       <div className="flex flex-col items-end gap-1">
                         <div className="flex flex-wrap gap-1 justify-end">
-                          {periodFrozenBlocked(r) ? (
+                          {frozenOrBroken ? (
                             <Button
                               type="button"
                               size="sm"
@@ -693,7 +880,7 @@ export function SettlementQueueTable({
                               aria-describedby={reasonId}
                               onClick={() => onWeekClosed?.(r)}
                             >
-                              Week closed
+                              {sealBroken(r) ? 'Seal broken' : 'Week closed'}
                             </Button>
                           ) : mode === 'collect' ? (
                             <>
@@ -762,17 +949,26 @@ export function SettlementQueueTable({
           {rows.length > 0 ? (
             <TableFooter>
               <TableRow className="bg-slate-50 font-medium">
-                <TableCell colSpan={groupByDriver ? 6 : 4} className="text-slate-600">
+                <TableCell
+                  colSpan={groupByDriver ? 6 : 4}
+                  className="text-slate-600"
+                >
                   Totals ({rows.length} week{rows.length !== 1 ? 's' : ''})
                 </TableCell>
-                <TableCell
-                  className={cn(
-                    'text-right tabular-nums',
-                    mode === 'collect' ? 'text-rose-700' : 'text-emerald-800',
-                  )}
-                >
-                  {MONEY(footerOwed)}
-                </TableCell>
+                {mode === 'collect' ? (
+                  <>
+                    <TableCell className="text-right tabular-nums text-rose-700">
+                      {MONEY(footerDriverOwes)}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums text-amber-800">
+                      {MONEY(footerCashHeld)}
+                    </TableCell>
+                  </>
+                ) : (
+                  <TableCell className="text-right tabular-nums text-emerald-800">
+                    {MONEY(footerOwed)}
+                  </TableCell>
+                )}
                 <TableCell />
               </TableRow>
             </TableFooter>

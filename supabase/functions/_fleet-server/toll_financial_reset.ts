@@ -505,23 +505,20 @@ async function loadTollLedgerRowsByIds(
   return out;
 }
 
-/** Summarize orphans / ineligible / amount gaps without reversing (close / nightly). */
-export async function summarizeTollUsageOrphansForWeek(opts: {
-  periodAnchor: string;
-  driverId?: string | null;
-}): Promise<TollUsageIntegritySummary> {
-  const active = await listActiveTollUsageEventsForWeek(opts);
+type MissingTollSpendRow = { id: string; amountMajor: number; driverId: string };
+
+/** Build integrity summary for one event set + optional missing-spend rows. */
+function buildTollUsageIntegritySummary(
+  active: any[],
+  ledgerById: Map<string, Record<string, unknown>>,
+  live: Set<string>,
+  missingRows: MissingTollSpendRow[],
+): TollUsageIntegritySummary {
   let eventSpendMajor = 0;
   for (const ev of active) {
     eventSpendMajor += Math.abs(minorToMajor(Number(ev.amount_minor) || 0));
   }
   eventSpendMajor = Math.round(eventSpendMajor * 100) / 100;
-
-  const sourceIds = [
-    ...new Set(active.map((ev) => String(ev.source_id || "")).filter(Boolean)),
-  ];
-  const ledgerById = await loadTollLedgerRowsByIds(sourceIds);
-  const live = await listLiveTollLedgerIds(sourceIds);
 
   const orphanSourceIds: string[] = [];
   let orphanAmountMajor = 0;
@@ -529,7 +526,6 @@ export async function summarizeTollUsageOrphansForWeek(opts: {
   let ineligibleEventAmountMajor = 0;
   const amountMismatchSourceIds: string[] = [];
   let amountMismatchAmountMajor = 0;
-  /** Spend-eligible ledger abs for events that resolve to live spend rows. */
   let eligibleLedgerSpendMajor = 0;
 
   for (const ev of active) {
@@ -564,10 +560,39 @@ export async function summarizeTollUsageOrphansForWeek(opts: {
   amountMismatchAmountMajor = Math.round(amountMismatchAmountMajor * 100) / 100;
   eligibleLedgerSpendMajor = Math.round(eligibleLedgerSpendMajor * 100) / 100;
 
-  // Missing events: spend-eligible usage rows in the week with no active event.
-  const eventSourceIds = new Set(sourceIds);
-  const missingEventTollIds: string[] = [];
-  let missingEventAmountMajor = 0;
+  const missingEventTollIds = missingRows.map((r) => r.id);
+  const missingEventAmountMajor = Math.round(
+    missingRows.reduce((s, r) => s + r.amountMajor, 0) * 100,
+  ) / 100;
+
+  const uniqueOrphans = [...new Set(orphanSourceIds)];
+  const uniqueIneligible = [...new Set(ineligibleSourceIds)];
+  const uniqueMismatch = [...new Set(amountMismatchSourceIds)];
+  return {
+    orphanCount: uniqueOrphans.length,
+    orphanAmountMajor,
+    eventSpendMajor,
+    ledgerSpendMajor: Math.round((eligibleLedgerSpendMajor + missingEventAmountMajor) * 100) / 100,
+    orphanSourceIds: uniqueOrphans,
+    missingEventCount: missingEventTollIds.length,
+    missingEventAmountMajor,
+    missingEventTollIds,
+    ineligibleEventCount: uniqueIneligible.length,
+    ineligibleEventAmountMajor,
+    ineligibleSourceIds: uniqueIneligible,
+    amountMismatchCount: uniqueMismatch.length,
+    amountMismatchAmountMajor,
+    amountMismatchSourceIds: uniqueMismatch,
+  };
+}
+
+/** Spend-eligible ledger usage rows in the week with no active toll_usage event. */
+async function loadMissingTollSpendRowsForWeek(opts: {
+  periodAnchor: string;
+  driverId?: string | null;
+  eventSourceIds: Set<string>;
+}): Promise<MissingTollSpendRow[]> {
+  const out: MissingTollSpendRow[] = [];
   try {
     const weekStart = String(opts.periodAnchor).slice(0, 10);
     const weekEnd = periodEndForAnchor(weekStart);
@@ -584,39 +609,94 @@ export async function summarizeTollUsageOrphansForWeek(opts: {
     for (const row of data || []) {
       const rec = row as Record<string, unknown>;
       const id = String(rec.id || "");
-      if (!id || eventSourceIds.has(id)) continue;
+      if (!id || opts.eventSourceIds.has(id)) continue;
       if (!isUsageType(rec.type)) continue;
       const integrity = tollLedgerRowToIntegrity(rec);
       // Quarantined / voided must NOT raise TOLL_EVENT_MISSING after reverse.
       if (!isTollIncludedInSpend(integrity)) continue;
-      missingEventTollIds.push(id);
-      missingEventAmountMajor += Math.abs(Number(integrity.amount) || 0);
+      out.push({
+        id,
+        amountMajor: Math.abs(Number(integrity.amount) || 0),
+        driverId: String(rec.driver_id || ""),
+      });
     }
   } catch (e) {
     console.warn("[tollUsageOrphans] missing-event scan skipped", opts.periodAnchor, e);
   }
-  missingEventAmountMajor = Math.round(missingEventAmountMajor * 100) / 100;
+  return out;
+}
 
-  const uniqueOrphans = [...new Set(orphanSourceIds)];
-  const uniqueIneligible = [...new Set(ineligibleSourceIds)];
-  const uniqueMismatch = [...new Set(amountMismatchSourceIds)];
-  return {
-    orphanCount: uniqueOrphans.length,
-    orphanAmountMajor,
-    eventSpendMajor,
-    // Eligible ledger + missing (understated) — excludes quarantined event spend.
-    ledgerSpendMajor: Math.round((eligibleLedgerSpendMajor + missingEventAmountMajor) * 100) / 100,
-    orphanSourceIds: uniqueOrphans,
-    missingEventCount: missingEventTollIds.length,
-    missingEventAmountMajor,
-    missingEventTollIds,
-    ineligibleEventCount: uniqueIneligible.length,
-    ineligibleEventAmountMajor,
-    ineligibleSourceIds: uniqueIneligible,
-    amountMismatchCount: uniqueMismatch.length,
-    amountMismatchAmountMajor,
-    amountMismatchSourceIds: uniqueMismatch,
-  };
+/** Summarize orphans / ineligible / amount gaps without reversing (close / nightly). */
+export async function summarizeTollUsageOrphansForWeek(opts: {
+  periodAnchor: string;
+  driverId?: string | null;
+}): Promise<TollUsageIntegritySummary> {
+  const active = await listActiveTollUsageEventsForWeek(opts);
+  const sourceIds = [
+    ...new Set(active.map((ev) => String(ev.source_id || "")).filter(Boolean)),
+  ];
+  const ledgerById = await loadTollLedgerRowsByIds(sourceIds);
+  const live = await listLiveTollLedgerIds(sourceIds);
+  const missingRows = await loadMissingTollSpendRowsForWeek({
+    periodAnchor: opts.periodAnchor,
+    driverId: opts.driverId,
+    eventSourceIds: new Set(sourceIds),
+  });
+  return buildTollUsageIntegritySummary(active, ledgerById, live, missingRows);
+}
+
+/**
+ * P-3: one week-scoped scan, indexed by driverId (close / preview driver loops).
+ * Drivers with no toll activity are omitted (caller treats missing as null ledger).
+ */
+export async function summarizeTollUsageOrphansByDriverForWeek(
+  periodAnchor: string,
+): Promise<Map<string, TollUsageIntegritySummary>> {
+  const week = String(periodAnchor).slice(0, 10);
+  const active = await listActiveTollUsageEventsForWeek({ periodAnchor: week });
+  const sourceIds = [
+    ...new Set(active.map((ev) => String(ev.source_id || "")).filter(Boolean)),
+  ];
+  const ledgerById = await loadTollLedgerRowsByIds(sourceIds);
+  const live = await listLiveTollLedgerIds(sourceIds);
+  const missingRows = await loadMissingTollSpendRowsForWeek({
+    periodAnchor: week,
+    eventSourceIds: new Set(sourceIds),
+  });
+
+  const eventsByDriver = new Map<string, any[]>();
+  for (const ev of active) {
+    const did = String(ev.driver_id || "");
+    if (!did) continue;
+    const list = eventsByDriver.get(did);
+    if (list) list.push(ev);
+    else eventsByDriver.set(did, [ev]);
+  }
+  const missingByDriver = new Map<string, MissingTollSpendRow[]>();
+  for (const row of missingRows) {
+    if (!row.driverId) continue;
+    const list = missingByDriver.get(row.driverId);
+    if (list) list.push(row);
+    else missingByDriver.set(row.driverId, [row]);
+  }
+
+  const driverIds = new Set<string>([
+    ...eventsByDriver.keys(),
+    ...missingByDriver.keys(),
+  ]);
+  const out = new Map<string, TollUsageIntegritySummary>();
+  for (const did of driverIds) {
+    out.set(
+      did,
+      buildTollUsageIntegritySummary(
+        eventsByDriver.get(did) || [],
+        ledgerById,
+        live,
+        missingByDriver.get(did) || [],
+      ),
+    );
+  }
+  return out;
 }
 
 export type IneligibleUsageRow = {

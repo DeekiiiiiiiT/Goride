@@ -21,6 +21,9 @@ const COLUMN_ALIASES: Record<string, string> = {
   "value->>tripId": "trip_id",
   date: "date",
   "value->>date": "date",
+  // Trip UUID lives on typed id; prefer it over payload_json->>id for search/order
+  id: "id",
+  "value->>id": "id",
   status: "status",
   "value->>status": "status",
   platform: "platform",

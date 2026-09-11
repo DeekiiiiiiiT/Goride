@@ -96,6 +96,7 @@ interface TollLedgerPageProps {
 
 export function TollLedgerPage({ organizationId, columnConfig }: TollLedgerPageProps = {}) {
   const [allEntries, setAllEntries] = useState<TollLedgerEntry[]>([]);
+  const [serverTotal, setServerTotal] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(0);
@@ -112,12 +113,21 @@ export function TollLedgerPage({ organizationId, columnConfig }: TollLedgerPageP
     setLoading(true);
     setError(null);
     try {
-      const raw = await api.getTollTransactionsExport(organizationId);
+      const startDate = filters.dateFrom || undefined;
+      const endDate = filters.dateTo || undefined;
+      const result = await api.getTollLedger({
+        organizationId,
+        startDate,
+        endDate,
+        limit: 1500,
+        offset: 0,
+      });
       if (id !== fetchIdRef.current) return;
-      const entries = Array.isArray(raw)
-        ? raw.map(normalizeTollLedgerEntry)
+      const entries = Array.isArray(result.data)
+        ? result.data.map(normalizeTollLedgerEntry)
         : [];
       setAllEntries(entries);
+      setServerTotal(result.total ?? entries.length);
     } catch (err: any) {
       if (id !== fetchIdRef.current) return;
       console.error('TollLedgerPage fetch error:', err);
@@ -125,7 +135,7 @@ export function TollLedgerPage({ organizationId, columnConfig }: TollLedgerPageP
     } finally {
       if (id === fetchIdRef.current) setLoading(false);
     }
-  }, [organizationId]);
+  }, [organizationId, filters.dateFrom, filters.dateTo]);
 
   useEffect(() => {
     fetchEntries();
@@ -253,11 +263,11 @@ export function TollLedgerPage({ organizationId, columnConfig }: TollLedgerPageP
             <Receipt className="h-6 w-6 text-rose-600 dark:text-rose-400" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">
+            <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100">
               Toll Ledger
-            </h1>
+            </h2>
             <p className="text-sm text-slate-500 dark:text-slate-400">
-              All toll transactions with reconciliation status, matched trips, and financial impact
+              Toll transactions (list view — no live match engine)
             </p>
           </div>
         </div>
@@ -284,6 +294,12 @@ export function TollLedgerPage({ organizationId, columnConfig }: TollLedgerPageP
           </button>
         </div>
       </div>
+
+      {serverTotal != null && serverTotal > allEntries.length && (
+        <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 px-4 py-2.5 text-xs text-amber-800 dark:text-amber-200">
+          Showing {allEntries.length.toLocaleString()} of {serverTotal.toLocaleString()} toll rows — narrow the date range to load more.
+        </div>
+      )}
 
       {/* Filter Bar */}
       <TollLedgerFilterBar

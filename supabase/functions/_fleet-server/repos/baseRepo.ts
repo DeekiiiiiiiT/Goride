@@ -67,10 +67,13 @@ export function rowToKvValue(row: Record<string, unknown>): Record<string, unkno
 export type FleetQueryFilter =
   | { op: "eq" | "neq" | "gte" | "gt" | "lte" | "lt"; col: string; value: unknown }
   | { op: "in"; col: string; value: unknown[] }
-  | { op: "like"; col: string; value: string }
+  | { op: "like" | "ilike"; col: string; value: string }
   | { op: "is"; col: string; value: null }
+  | { op: "not"; col: string; operator: string; value: unknown }
   | { op: "or"; value: string }
   | { op: "orOrg"; orgId: string }; // organization_id = org OR null OR roam-default-org
+
+export type FleetOrderSpec = { col: string; ascending?: boolean };
 
 export type FleetQueryOpts = {
   org?: string | null;
@@ -79,7 +82,10 @@ export type FleetQueryOpts = {
   filters?: FleetQueryFilter[];
   eq?: Record<string, unknown>;
   in?: Record<string, unknown[]>;
-  order?: { col: string; ascending?: boolean };
+  /** Primary sort (also used when `orders` is omitted). */
+  order?: FleetOrderSpec;
+  /** Multi-column sort; when set, takes precedence over `order`. */
+  orders?: FleetOrderSpec[];
   limit?: number;
   offset?: number;
   /** When true, return exact count (and optionally head-only). */
@@ -132,10 +138,16 @@ function applyFilter(q: any, f: FleetQueryFilter): any {
       return q.in(col, f.value);
     case "like":
       return q.like(col, f.value);
+    case "ilike":
+      return q.ilike(col, f.value);
     case "is":
       return q.is(col, f.value);
+    case "not": {
+      // PostgREST: .not(column, operator, value) — e.g. not('platform', 'eq', 'Roam Rush')
+      return q.not(col, f.operator, f.value);
+    }
     default:
-      return q;
+      throw new Error(`[queryFleet] unsupported filter op: ${(f as { op: string }).op}`);
   }
 }
 
@@ -184,11 +196,16 @@ export async function queryFleet(
       for (const f of opts.filters) q = applyFilter(q, f);
     }
 
-    const orderCol = opts.order
-      ? resolveFleetColumn(opts.order.col) ?? opts.order.col
-      : "updated_at";
-    const ascending = opts.order?.ascending === true;
-    q = q.order(orderCol, { ascending });
+    const orderList: FleetOrderSpec[] =
+      opts.orders && opts.orders.length > 0
+        ? opts.orders
+        : opts.order
+          ? [opts.order]
+          : [{ col: "updated_at", ascending: true }];
+    for (const o of orderList) {
+      const orderCol = resolveFleetColumn(o.col) ?? o.col;
+      q = q.order(orderCol, { ascending: o.ascending === true });
+    }
 
     if (opts.offset != null || opts.limit != null) {
       const from = opts.offset ?? 0;

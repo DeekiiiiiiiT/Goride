@@ -85,6 +85,11 @@ export function periodEndForAnchor(anchorYmd: string): string {
   return addDaysYmd(String(anchorYmd).slice(0, 10), 6);
 }
 
+/** Next Monday week anchor (custody carry-forward / close integrity Phase 2). */
+export function nextPeriodAnchor(anchorYmd: string): WeekKey {
+  return asWeekKey(addDaysYmd(String(anchorYmd).slice(0, 10), 7));
+}
+
 /** Alias used by existing fleet week helpers. */
 export function dateWeekKey(dateStr: string | undefined | null, fleetTz: string): WeekKey | null {
   if (!dateStr) return null;

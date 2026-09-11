@@ -1,11 +1,15 @@
-import React, { useState } from 'react';
-import { Car, Fuel, Receipt, FileText, Loader2 } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { Car, Fuel, Receipt, FileText, Layers } from 'lucide-react';
 import { TripLedgerPage } from '../database/TripLedgerPage';
 import { FuelLedgerPage } from '../database/FuelLedgerPage';
 import { TollLedgerPage } from '../database/TollLedgerPage';
 import { PlatformStatementSummary } from './PlatformStatementSummary';
+import { UnifiedLedgerAllTab } from './UnifiedLedgerAllTab';
+import { LedgerPeriodProvider, useLedgerPeriod } from '../../contexts/LedgerPeriodContext';
+import { useUnifiedLedgerFlag } from '../../hooks/useUnifiedLedgerFlag';
+import { PeriodWeekDropdown } from '../ui/PeriodWeekDropdown';
 
-type TransactionTab = 'trips' | 'fuel' | 'toll' | 'statement';
+type TransactionTab = 'trips' | 'fuel' | 'toll' | 'statement' | 'all';
 
 const TRANSACTION_TABS: { id: TransactionTab; label: string; icon: React.ElementType; description: string }[] = [
   { id: 'trips', label: 'Trip Ledger', icon: Car, description: 'Individual trip records with earnings breakdown' },
@@ -14,31 +18,80 @@ const TRANSACTION_TABS: { id: TransactionTab; label: string; icon: React.Element
   { id: 'statement', label: 'Statement Summary', icon: FileText, description: 'Period payouts, bank transfers, and statement totals' },
 ];
 
-export function TabbedTransactionList() {
-  const [activeTab, setActiveTab] = useState<TransactionTab>('trips');
-  const [loading] = useState(false);
+function readTabFromUrl(): TransactionTab {
+  try {
+    const sp = new URLSearchParams(window.location.search);
+    const t = sp.get('ledgerTab');
+    if (t === 'trips' || t === 'fuel' || t === 'toll' || t === 'statement' || t === 'all') return t;
+  } catch { /* ignore */ }
+  return 'trips';
+}
+
+function writeTabToUrl(tab: TransactionTab) {
+  try {
+    const url = new URL(window.location.href);
+    url.searchParams.set('ledgerTab', tab);
+    window.history.replaceState({}, '', url.toString());
+  } catch { /* ignore */ }
+}
+
+function LedgersInner() {
+  const [activeTab, setActiveTab] = useState<TransactionTab>(readTabFromUrl);
+  const { period, setPeriod } = useLedgerPeriod();
+  const unified = useUnifiedLedgerFlag();
+
+  useEffect(() => {
+    writeTabToUrl(activeTab);
+  }, [activeTab]);
+
+  const tabs = unified
+    ? [
+        ...TRANSACTION_TABS,
+        { id: 'all' as const, label: 'All', icon: Layers, description: 'Cross-type unified ledger entries' },
+      ]
+    : TRANSACTION_TABS;
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
-      {/* Header */}
-      <div>
-        <h2 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
-          Transaction List
-        </h2>
-        <p className="text-slate-500 dark:text-slate-400">
-          View and manage your complete transaction history across all ledgers.
-        </p>
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
+            Ledgers
+          </h1>
+          <p className="text-slate-500 dark:text-slate-400">
+            Trip, fuel, and toll records with full financial detail.
+          </p>
+        </div>
+        <div className="min-w-[220px]">
+          <PeriodWeekDropdown
+            selectedStart={period.startDate}
+            selectedEnd={period.endDate}
+            onSelect={(opt) => {
+              if (opt.startDate && opt.endDate) {
+                setPeriod({ startDate: opt.startDate, endDate: opt.endDate });
+              }
+            }}
+            placeholder="Shared ledger period"
+          />
+        </div>
       </div>
 
-      {/* Tab Bar */}
-      <div className="border-b border-slate-200 dark:border-slate-700">
+      {unified && (
+        <div className="rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-2 text-xs text-indigo-800 dark:border-indigo-800 dark:bg-indigo-950/40 dark:text-indigo-200">
+          Unified ledger read model (preview) — enable via localStorage <code>roam_ledger_read_model=1</code>.
+        </div>
+      )}
+
+      <div className="border-b border-slate-200 dark:border-slate-700" role="tablist" aria-label="Ledger tabs">
         <div className="flex items-center gap-1 -mb-px overflow-x-auto">
-          {TRANSACTION_TABS.map(tab => {
+          {tabs.map(tab => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
             return (
               <button
                 key={tab.id}
+                role="tab"
+                aria-selected={isActive}
                 onClick={() => setActiveTab(tab.id)}
                 className={`
                   flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 whitespace-nowrap transition-colors
@@ -57,30 +110,23 @@ export function TabbedTransactionList() {
         </div>
       </div>
 
-      {/* Tab Content */}
-      {loading ? (
-        <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 p-12 text-center">
-          <Loader2 className="w-8 h-8 text-slate-300 dark:text-slate-600 mx-auto mb-4 animate-spin" />
-          <p className="text-slate-500 dark:text-slate-400">Loading...</p>
+      <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+        <div className="p-4 md:p-6" role="tabpanel">
+          {activeTab === 'trips' && <TripLedgerPage />}
+          {activeTab === 'fuel' && <FuelLedgerPage />}
+          {activeTab === 'toll' && <TollLedgerPage />}
+          {activeTab === 'statement' && <PlatformStatementSummary />}
+          {activeTab === 'all' && unified && <UnifiedLedgerAllTab />}
         </div>
-      ) : (
-        <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
-          <div className="p-4 md:p-6">
-            {activeTab === 'trips' && (
-              <TripLedgerPage />
-            )}
-            {activeTab === 'fuel' && (
-              <FuelLedgerPage />
-            )}
-            {activeTab === 'toll' && (
-              <TollLedgerPage />
-            )}
-            {activeTab === 'statement' && (
-              <PlatformStatementSummary />
-            )}
-          </div>
-        </div>
-      )}
+      </div>
     </div>
+  );
+}
+
+export function TabbedTransactionList() {
+  return (
+    <LedgerPeriodProvider>
+      <LedgersInner />
+    </LedgerPeriodProvider>
   );
 }

@@ -18,6 +18,7 @@
  *     Σ driver settlements for week  = BusinessFinance week P&L
  */
 import { round2 } from './money.ts';
+import { readCloseInvariantInputs } from './periodSignedSnapshot.ts';
 
 /** JMD closing tolerance (1 cent). */
 export const CLOSE_INVARIANT_EPS = 0.01;
@@ -153,8 +154,9 @@ export type CloseInvariantInput = {
    */
   cashSourceAck?: CashSourceAck | null;
   /**
-   * When re-signing restatements on an already-frozen week, skip desk open-balance
-   * gates (fleet owes / driver owes / cash held) — those apply to first close only.
+   * Legacy flag (restatement re-sign). M-4: SETTLEMENT_FLEET_OWES /
+   * SETTLEMENT_DRIVER_OWES always apply — this flag no longer skips them.
+   * Retained for API compat; cash-held desk clear was already removed.
    */
   skipSettlementDeskClear?: boolean;
   /**
@@ -244,6 +246,9 @@ export function checkCloseInvariants(input: CloseInvariantInput): CloseBlocker[]
     week: p.period_anchor != null ? String(p.period_anchor).slice(0, 10) : undefined,
   };
   const out: CloseBlocker[] = [];
+
+  // H-5: prefer close-time stamped snapshot over live financeCore (rebuild-safe).
+  const stampedInv = readCloseInvariantInputs(p.metadata || null);
 
   // ── Fuel lane ──────────────────────────────────────────────────────────────
   if (!input.fuelStatement) {
@@ -345,7 +350,16 @@ export function checkCloseInvariants(input: CloseInvariantInput): CloseBlocker[]
     const tollSpend = num(p.toll_spend);
     const tollCash = num(p.toll_cash_spend);
     const tollTag = num(p.toll_tag_spend);
-    const unknownCount = Math.max(0, Math.trunc(num(input.tollUnknownPmCount)));
+    const unknownCount = Math.max(
+      0,
+      Math.trunc(
+        num(
+          input.tollUnknownPmCount != null
+            ? input.tollUnknownPmCount
+            : stampedInv.tollUnknownPmCount,
+        ),
+      ),
+    );
     const unknownAmount = round2(num(input.tollUnknownPmAmount));
 
     // A row with no payment method lands in toll_spend but in neither bucket, so
@@ -553,8 +567,12 @@ export function checkCloseInvariants(input: CloseInvariantInput): CloseBlocker[]
   }
 
   // ── M-1: cash source mismatch blocks close ─────────────────────────────────────
-  if (input.cashSourceMismatch != null && Math.abs(num(input.cashSourceMismatch)) > eps) {
-    const liveMismatch = num(input.cashSourceMismatch);
+  const cashSourceMismatch =
+    input.cashSourceMismatch != null
+      ? num(input.cashSourceMismatch)
+      : stampedInv.cashSourceMismatch;
+  if (cashSourceMismatch != null && Math.abs(num(cashSourceMismatch)) > eps) {
+    const liveMismatch = num(cashSourceMismatch);
     if (!isCashSourceAckValid(input.cashSourceAck, liveMismatch, eps)) {
       const hasSides =
         input.uberCash != null &&
@@ -574,7 +592,9 @@ export function checkCloseInvariants(input: CloseInvariantInput): CloseBlocker[]
   }
 
   // ── Settlement desk clear before freeze (PERIOD_FROZEN traps unpaid money) ──────
-  if (!input.skipSettlementDeskClear) {
+  // M-4: always re-check owes on restatement sign-off (skipSettlementDeskClear ignored).
+  void input.skipSettlementDeskClear;
+  {
     const settlementAmount = num(p.settlement_amount);
     if (settlementAmount > eps) {
       out.push({
@@ -604,10 +624,17 @@ export function checkCloseInvariants(input: CloseInvariantInput): CloseBlocker[]
     // SETTLEMENT_FLEET_OWES / SETTLEMENT_DRIVER_OWES (do not also SETTLEMENT_CASH_HELD).
     // (Intentionally no SETTLEMENT_CASH_HELD here.)
 
-    // H-5: clamped-negative cash held was recorded but never blocked close.
-    const fc = (p.metadata?.financeCore || {}) as Record<string, unknown>;
-    if (fc.cashHeldClamped === true) {
-      const unclamped = num(fc.unclampedCashHeld);
+    // H-5: clamped-negative cash held — prefer stamped closeInvariantSnapshot.
+    const cashHeldClamped =
+      stampedInv.cashHeldClamped != null
+        ? stampedInv.cashHeldClamped
+        : ((p.metadata?.financeCore || {}) as Record<string, unknown>).cashHeldClamped === true;
+    const unclampedCashHeld =
+      stampedInv.unclampedCashHeld != null
+        ? stampedInv.unclampedCashHeld
+        : num(((p.metadata?.financeCore || {}) as Record<string, unknown>).unclampedCashHeld);
+    if (cashHeldClamped === true) {
+      const unclamped = num(unclampedCashHeld);
       out.push({
         code: 'CASH_HELD_OVER_RETURNED',
         severity: 'block',

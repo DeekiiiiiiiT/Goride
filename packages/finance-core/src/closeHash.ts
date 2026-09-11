@@ -117,7 +117,7 @@ export type PeriodCloseHashVerifyResult = {
 
 /**
  * Recompute the close hash from a persisted period-shaped row and compare to
- * the stored source_event_hash / metadata.financeCore.closeHash (H-4).
+ * the stored close_hash / metadata.financeCore.closeHash / source_event_hash (H-4).
  * Callers should only invoke this for frozen weeks.
  */
 export async function verifyPeriodCloseHash(input: {
@@ -146,15 +146,21 @@ export async function verifyPeriodCloseHash(input: {
 
 /** Pull stored close hash from a DFP-like row (column or metadata). */
 export function storedCloseHashFromPeriod(period: {
+  /** Dedicated seal column (Phase 1) — wins over metadata / legacy column. */
+  close_hash?: string | null;
+  closeHash?: string | null;
   source_event_hash?: string | null;
   sourceEventHash?: string | null;
   metadata?: Record<string, unknown> | null;
 } | null | undefined): string | null {
   if (!period) return null;
-  const col = String(period.source_event_hash || period.sourceEventHash || '').trim();
-  if (col) return col;
+  // Precedence: close_hash → metadata.financeCore.closeHash → source_event_hash
+  const dedicated = String(period.close_hash || period.closeHash || '').trim();
+  if (dedicated) return dedicated;
   const meta = period.metadata || {};
   const fc = (meta.financeCore as Record<string, unknown> | undefined) || {};
   const fromMeta = String(fc.closeHash || '').trim();
-  return fromMeta || null;
+  if (fromMeta) return fromMeta;
+  const legacy = String(period.source_event_hash || period.sourceEventHash || '').trim();
+  return legacy || null;
 }

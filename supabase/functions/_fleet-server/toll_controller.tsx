@@ -9896,6 +9896,95 @@ app.post(`${BASE}/bridge-rides`, async (c) => {
   }
 });
 
+// ─── GET /ledger ───────────────────────────────────────────────────────
+// Suggestion-free paged toll list for the Ledgers desk (F-13). Does NOT run
+// findTollMatchesServer or load the full trip corpus.
+app.get(`${BASE}/ledger`, async (c) => {
+  try {
+    const orgId =
+      c.req.query("organizationId") ||
+      (await import("./org_scope.ts").then((m) => m.getOrgId(c))) ||
+      undefined;
+    const startDate = c.req.query("startDate") || undefined;
+    const endDate = c.req.query("endDate") || undefined;
+    const driverId = c.req.query("driverId") || undefined;
+    const vehicleId = c.req.query("vehicleId") || undefined;
+    const status = c.req.query("status") || undefined;
+    const limit = Math.min(Math.max(parseInt(c.req.query("limit") || "100", 10) || 100, 1), 1500);
+    const offset = Math.max(parseInt(c.req.query("offset") || "0", 10) || 0, 0);
+
+    const { queryFleet } = await import("./repos/baseRepo.ts");
+    const filters: import("./repos/baseRepo.ts").FleetQueryFilter[] = [];
+    if (orgId) filters.push({ op: "orOrg", orgId });
+    if (startDate) filters.push({ op: "gte", col: "date", value: String(startDate).slice(0, 10) });
+    if (endDate) filters.push({ op: "lte", col: "date", value: String(endDate).slice(0, 10) });
+    if (driverId) filters.push({ op: "eq", col: "driver_id", value: driverId });
+    if (vehicleId) filters.push({ op: "eq", col: "vehicle_id", value: vehicleId });
+    if (status) filters.push({ op: "eq", col: "status", value: status });
+
+    const res = await queryFleet("toll_ledger", {
+      filters,
+      orders: [
+        { col: "date", ascending: false },
+        { col: "id", ascending: false },
+      ],
+      limit,
+      offset,
+      count: true,
+      withKeys: false,
+    });
+    if (res.error) throw res.error;
+
+    const rows = (res.data as Record<string, unknown>[]).map((v) => {
+      const reconStatus =
+        v.isReconciled && v.tripId
+          ? "Matched"
+          : v.isReconciled
+            ? "Dismissed"
+            : v.status === "Approved"
+              ? "Approved"
+              : "Unmatched";
+      return {
+        id: v.id,
+        date: v.date,
+        time: (v as any).time || "",
+        vehicleId: v.vehicleId || v.vehicle_id || "",
+        vehiclePlate: (v as any).vehiclePlate || "",
+        driverId: v.driverId || v.driver_id || "",
+        driverName: (v as any).driverName || "",
+        plaza: v.plaza || "",
+        type: v.type || "",
+        paymentMethod: v.paymentMethod || v.payment_method || "",
+        amount: v.amount,
+        absAmount: Math.abs(Number(v.amount) || 0),
+        status: v.status || "",
+        description: (v as any).description || "",
+        referenceTagId: v.tollTagId || (v as any).toll_tag_id || "",
+        batchId: v.batchId || v.batch_id || "",
+        reconciliationStatus: reconStatus,
+        resolution: v.resolution || "",
+        matchedTripId: v.tripId || v.trip_id || "",
+        // Never invent zeros for missing trip toll data
+        tripTollCharges: null,
+        refundAmount: null,
+        lossAmount: null,
+        hasSuggestions: "No",
+      };
+    });
+
+    return c.json({
+      success: true,
+      data: rows,
+      total: res.count ?? rows.length,
+      limit,
+      offset,
+    });
+  } catch (e: any) {
+    console.error(`[TollReconciliation] GET /ledger error: ${e.message}`);
+    return c.json({ error: e.message || "Internal Server Error" }, 500);
+  }
+});
+
 // ─── GET /export ───────────────────────────────────────────────────────
 // Returns ALL toll transactions with flattened reconciliation data for CSV export.
 // No pagination — dumps everything in one response.
@@ -9940,8 +10029,12 @@ app.get(`${BASE}/export`, async (c) => {
             tripLookup[id] = tripValues[idx];
           }
         });
-      } catch {
-        console.log("[TollReconciliation] GET /export: mget for linked trips failed, proceeding without trip enrichment");
+      } catch (e) {
+        console.error("[TollReconciliation] GET /export: mget for linked trips failed", e);
+        // Mark all matched trips unresolved rather than inventing $0 tollCharges (F-06)
+        for (const id of matchedTripIds) {
+          if (!tripLookup[id]) tripLookup[id] = { __lookupFailed: true };
+        }
       }
     }
 
@@ -10017,12 +10110,24 @@ app.get(`${BASE}/export`, async (c) => {
         row.matchedTripDropoff = (linkedTrip?.dropoffLocation || "").substring(0, 40);
         row.reconciledAt = tx.metadata?.reconciledAt || tx.metadata?.matchedAt || "";
         row.reconciledBy = tx.metadata?.reconciledBy || tx.metadata?.matchedBy || "";
-        // Financial
-        const tripTollCharges = linkedTrip?.tollCharges || 0;
-        const variance = tripTollCharges - absAmount;
-        row.tripTollCharges = tripTollCharges;
-        row.refundAmount = variance >= 0 ? variance : 0;
-        row.lossAmount = variance < 0 ? Math.abs(variance) : 0;
+        // Financial — never treat missing trip toll data as $0 (phantom losses, F-06)
+        if (!linkedTrip || linkedTrip.__lookupFailed) {
+          row.tripTollCharges = null;
+          row.refundAmount = null;
+          row.lossAmount = null;
+          row.resolution = "unknown";
+        } else if (linkedTrip.tollCharges == null || linkedTrip.tollCharges === "") {
+          row.tripTollCharges = null;
+          row.refundAmount = null;
+          row.lossAmount = null;
+          row.resolution = "unknown";
+        } else {
+          const tripTollCharges = Number(linkedTrip.tollCharges);
+          const variance = tripTollCharges - absAmount;
+          row.tripTollCharges = tripTollCharges;
+          row.refundAmount = variance >= 0 ? variance : 0;
+          row.lossAmount = variance < 0 ? Math.abs(variance) : 0;
+        }
       } else {
         row.matchedTripId = "";
         row.matchedTripDate = "";

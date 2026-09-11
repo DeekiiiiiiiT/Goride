@@ -15,6 +15,16 @@ export type PersistPeriodResult = {
   projectionVersion: number;
 };
 
+/** Strip seal columns so cash-sync / allowFrozen writers cannot clobber a close. */
+function stripCloseSealFields(body: Record<string, unknown>): Record<string, unknown> {
+  const next = { ...body };
+  delete next.source_event_hash;
+  delete next.sourceEventHash;
+  delete next.close_hash;
+  delete next.closeHash;
+  return next;
+}
+
 /** Update with projection_version guard; insert when row missing. Retries on conflict. */
 export async function persistPeriodRowWithVersion(
   driverId: string,
@@ -23,6 +33,8 @@ export async function persistPeriodRowWithVersion(
   maxRetries = 3,
   opts: { allowFrozen?: boolean } = {},
 ): Promise<PersistPeriodResult> {
+  // Phase 1C: allowFrozen cash-sync must not overwrite seals.
+  const writeBody = opts.allowFrozen ? stripCloseSealFields(body) : body;
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     const { data: existing, error: loadErr } = await sb()
       .from("driver_financial_periods")
@@ -37,7 +49,8 @@ export async function persistPeriodRowWithVersion(
     if (!opts.allowFrozen && existing?.id) {
       assertPeriodNotFrozen({
         metadata: (existing.metadata as Record<string, unknown> | null) ?? null,
-        settlementStatus: (existing.status as string | null) ?? null,
+        status: (existing.status as string | null) ?? null,
+        closedAt: existing.closed_at != null ? String(existing.closed_at) : null,
       });
     }
 
@@ -46,14 +59,14 @@ export async function persistPeriodRowWithVersion(
       const nextVersion = expected + 1;
       const { data: updated, error: updErr } = await sb()
         .from("driver_financial_periods")
-        .update({ ...body, projection_version: nextVersion })
+        .update({ ...writeBody, projection_version: nextVersion })
         .eq("id", existing.id)
         .eq("projection_version", expected)
         .select("id")
         .maybeSingle();
       if (updErr) throw new Error(updErr.message);
       if (updated?.id) {
-        await appendPeriodRevisionIfNeeded(driverId, periodAnchor, nextVersion, body, existing);
+        await appendPeriodRevisionIfNeeded(driverId, periodAnchor, nextVersion, writeBody, existing);
         return { id: String(updated.id), projectionVersion: nextVersion };
       }
       continue;
@@ -61,7 +74,7 @@ export async function persistPeriodRowWithVersion(
 
     const { data: inserted, error: insErr } = await sb()
       .from("driver_financial_periods")
-      .insert({ ...body, driver_id: driverId, period_anchor: periodAnchor, projection_version: 1 })
+      .insert({ ...writeBody, driver_id: driverId, period_anchor: periodAnchor, projection_version: 1 })
       .select("id")
       .single();
     if (!insErr && inserted?.id) {
@@ -81,6 +94,8 @@ export async function updatePeriodCashWithVersion(
   maxRetries = 3,
   opts: { allowFrozen?: boolean } = {},
 ): Promise<PersistPeriodResult> {
+  // Phase 1C: allowFrozen cash-sync must not overwrite seals.
+  const writeBody = opts.allowFrozen ? stripCloseSealFields(body) : body;
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     const { data: existing, error: loadErr } = await sb()
       .from("driver_financial_periods")
@@ -93,7 +108,8 @@ export async function updatePeriodCashWithVersion(
     if (!opts.allowFrozen) {
       assertPeriodNotFrozen({
         metadata: (existing.metadata as Record<string, unknown> | null) ?? null,
-        settlementStatus: (existing.status as string | null) ?? null,
+        status: (existing.status as string | null) ?? null,
+        closedAt: existing.closed_at != null ? String(existing.closed_at) : null,
       });
     }
 
@@ -101,14 +117,14 @@ export async function updatePeriodCashWithVersion(
     const nextVersion = expected + 1;
     const { data: updated, error: updErr } = await sb()
       .from("driver_financial_periods")
-      .update({ ...body, projection_version: nextVersion })
+      .update({ ...writeBody, projection_version: nextVersion })
       .eq("id", existing.id)
       .eq("projection_version", expected)
       .select("id")
       .maybeSingle();
     if (updErr) throw new Error(updErr.message);
     if (updated?.id) {
-      await appendPeriodRevisionIfNeeded(driverId, periodAnchor, nextVersion, body, existing);
+      await appendPeriodRevisionIfNeeded(driverId, periodAnchor, nextVersion, writeBody, existing);
       return { id: String(updated.id), projectionVersion: nextVersion };
     }
   }

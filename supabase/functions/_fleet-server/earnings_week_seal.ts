@@ -86,6 +86,8 @@ export async function sealEarningsWeek(opts: {
   weekKey: string;
   actorId?: string;
   force?: boolean;
+  /** H-6: shared prepare as_of — stamped on close_reason / source rows for audit. */
+  asOf?: string;
 }): Promise<{ published: number }> {
   const organizationId = String(opts.organizationId || "").trim();
   const weekKey = WEEK_KEY(opts.weekKey);
@@ -120,6 +122,7 @@ export async function sealEarningsWeek(opts: {
       status = "closed";
       closeReason = hasActivity ? "earnings_week_seal_engines" : "zero_activity_na";
       sourceRowIds = [`earnings_seal:${driverId}:${weekKey}`];
+      if (opts.asOf) sourceRowIds.push(`as_of:${opts.asOf}`);
     } else {
       // Cannot run engines — draft from period so close blocks as unverified.
       amounts = {
@@ -171,6 +174,7 @@ export async function sealEarningsWeek(opts: {
     }
 
     try {
+      const asOfTag = opts.asOf ? `;as_of=${opts.asOf}` : "";
       await publishWeekStatement({
         kind: "earnings",
         organizationId,
@@ -180,7 +184,7 @@ export async function sealEarningsWeek(opts: {
         sourceRowIds,
         status,
         closedBy: status === "closed" ? (opts.actorId ?? "earnings_week_seal") : null,
-        closeReason,
+        closeReason: status === "closed" ? `${closeReason}${asOfTag}` : closeReason,
       });
       published += 1;
     } catch (e) {

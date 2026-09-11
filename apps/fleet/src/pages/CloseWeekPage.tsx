@@ -12,10 +12,8 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { addDays, format, parseISO } from 'date-fns';
 import {
-  AlertTriangle,
   ArrowRight,
   Banknote,
-  CheckCircle2,
   Fuel,
   Loader2,
   Lock,
@@ -27,15 +25,6 @@ import { toast } from 'sonner';
 import { computeTollCardIdentityResidual } from '@roam/toll-core';
 import { MONEY_EPS, CLOSE_INVARIANT_EPS, isCashSourceAckValid } from '@roam/finance-core';
 import { Button } from '../components/ui/button';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '../components/ui/dialog';
-import { Textarea } from '../components/ui/textarea';
 import {
   Select,
   SelectContent,
@@ -62,7 +51,6 @@ import {
   yearFromWeekKey,
 } from '../utils/closeWeekPicker';
 import {
-  LANE_LABEL,
   LANE_REVIEW_PAGE,
   blockingCount,
   humanBlockerLabel,
@@ -80,6 +68,8 @@ import {
 } from '../utils/closeWeekAutoSync';
 import { computeSettlementLaneMetrics } from '../utils/settlementLaneMetrics';
 import { CloseWeekUberReimportDialog } from '../components/fleet-financials/CloseWeekUberReimportDialog';
+import { CloseWeekLaneCard, CloseWeekIdentityRow } from '../components/fleet-financials/close-week/CloseWeekLaneCard';
+import { CloseWeekDialogs } from '../components/fleet-financials/close-week/CloseWeekDialogs';
 import { resolvePayQueueOwed } from '../utils/driverSettlementsPayAmount';
 
 const MONEY = (n: number | null | undefined) => {
@@ -91,7 +81,8 @@ const MONEY = (n: number | null | undefined) => {
   return `${n < 0 ? '-' : ''}$${body}`;
 };
 
-const CLOSE_CONFIRM_DRIVER_CAP = 20;
+/** H-1: after Sync/preview this fresh, Close may skip prepare (verify+freeze only). */
+const PREPARE_FRESH_MS = 2 * 60 * 1000;
 
 function collectOwedMajor(r: {
   amountOwed?: number | null;
@@ -122,120 +113,6 @@ function pickDefaultWeekForYear(year: number, preferred?: string): string {
   // Prefer newest fully ended week in that year; else newest available.
   const ended = keys.find((k) => isCloseWeekEnded(k));
   return ended ?? keys[0] ?? endedDefault;
-}
-
-const STATUS_CHROME: Record<CloseLaneStatus, { dot: string; text: string; label: string }> = {
-  clear: { dot: 'bg-emerald-500', text: 'text-emerald-700', label: 'Clear' },
-  blocked: { dot: 'bg-rose-500', text: 'text-rose-700', label: 'Blocked' },
-  unverified: { dot: 'bg-amber-500', text: 'text-amber-800', label: 'Unverified' },
-  pending: { dot: 'bg-amber-500', text: 'text-amber-700', label: 'Pending' },
-  loading: { dot: 'bg-slate-300', text: 'text-slate-500', label: 'Loading' },
-};
-
-function LaneCard({
-  lane,
-  icon,
-  status,
-  metrics,
-  blockerLabels,
-  warnLabels,
-  provenance,
-  onReview,
-}: {
-  lane: CloseLane;
-  icon: React.ReactNode;
-  status: CloseLaneStatus;
-  metrics: { label: string; value: string; tone?: 'default' | 'warn' }[];
-  blockerLabels: string[];
-  warnLabels?: string[];
-  provenance?: string;
-  onReview: () => void;
-}) {
-  const chrome = STATUS_CHROME[status];
-  return (
-    <div className="flex flex-col rounded-lg border border-slate-200 bg-white p-4">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
-          <span className="text-slate-500">{icon}</span>
-          {LANE_LABEL[lane]}
-        </div>
-        <span className={cn('flex items-center gap-1.5 text-xs font-medium', chrome.text)}>
-          <span className={cn('h-2 w-2 rounded-full', chrome.dot)} />
-          {status === 'loading' ? 'Loading…' : chrome.label}
-        </span>
-      </div>
-
-      {provenance ? (
-        <p className="mt-1 text-[11px] text-slate-500">{provenance}</p>
-      ) : null}
-
-      <dl className="mt-3 space-y-1.5">
-        {metrics.map((m) => (
-          <div key={m.label} className="flex items-baseline justify-between gap-2">
-            <dt className="text-xs text-slate-500">{m.label}</dt>
-            <dd
-              className={cn(
-                'text-sm font-medium tabular-nums',
-                m.tone === 'warn' ? 'text-rose-700' : 'text-slate-900',
-              )}
-            >
-              {m.value}
-            </dd>
-          </div>
-        ))}
-      </dl>
-
-      {blockerLabels.length > 0 ? (
-        <ul className="mt-3 space-y-1 border-t border-slate-100 pt-2">
-          {blockerLabels.map((b, i) => (
-            <li key={`b-${i}`} className="flex items-start gap-1.5 text-xs text-rose-700">
-              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-              <span>{b}</span>
-            </li>
-          ))}
-        </ul>
-      ) : null}
-
-      {(warnLabels || []).length > 0 ? (
-        <ul className={cn('mt-2 space-y-1', blockerLabels.length === 0 && 'border-t border-slate-100 pt-2')}>
-          {(warnLabels || []).map((w, i) => (
-            <li key={`w-${i}`} className="flex items-start gap-1.5 text-xs text-amber-800">
-              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-              <span>{w}</span>
-            </li>
-          ))}
-        </ul>
-      ) : null}
-
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        className="mt-3 h-8 w-full"
-        onClick={onReview}
-      >
-        Review {LANE_LABEL[lane]}
-        <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
-      </Button>
-    </div>
-  );
-}
-
-function IdentityRow({ label, value, ok }: { label: string; value: string; ok: boolean }) {
-  return (
-    <div className="flex items-center justify-between gap-3 py-1.5">
-      <span className="text-xs text-slate-600">{label}</span>
-      <span
-        className={cn(
-          'flex items-center gap-1.5 text-xs font-medium tabular-nums',
-          ok ? 'text-emerald-700' : 'text-rose-700',
-        )}
-      >
-        {value}
-        {ok ? <CheckCircle2 className="h-3.5 w-3.5" /> : <AlertTriangle className="h-3.5 w-3.5" />}
-      </span>
-    </div>
-  );
 }
 
 export function CloseWeekPage({
@@ -270,6 +147,12 @@ export function CloseWeekPage({
   const [closing, setClosing] = useState(false);
   const [closeConfirmOpen, setCloseConfirmOpen] = useState(false);
   const [closeConfirmReason, setCloseConfirmReason] = useState('');
+  /** C-3: stable per confirm-session; reused on retry / network replay. */
+  const [closeIdempotencyKey, setCloseIdempotencyKey] = useState<string | null>(null);
+  /** H-1: last successful preview/sync — Close skips prepare while fresh. */
+  const [lastPreparedAt, setLastPreparedAt] = useState<number | null>(null);
+  /** After a stale-confirm sync, operator must approve the refreshed numbers. */
+  const [confirmNeedsReconfirm, setConfirmNeedsReconfirm] = useState(false);
   /** N-11: statements sealed but calendar freeze failed — show Retry freeze. */
   const [freezePending, setFreezePending] = useState<{
     message: string;
@@ -324,6 +207,9 @@ export function CloseWeekPage({
     setWeekKey(next);
     setResult(null);
     setFreezePending(null);
+    setLastPreparedAt(null);
+    setCloseIdempotencyKey(null);
+    setConfirmNeedsReconfirm(false);
   };
 
   // ── Slim sync: preview first; POST sync only when seals/books need repair ──
@@ -347,6 +233,12 @@ export function CloseWeekPage({
   const weekBooksRefreshing =
     previewQuery.isFetching &&
     shouldAutoSyncCloseWeek(weekKey, { weekAlreadyClosed: !!preview?.weekClosed });
+
+  // H-1: mark books fresh whenever preview/sync lands for this week.
+  useEffect(() => {
+    if (!previewQuery.isSuccess || !previewQuery.dataUpdatedAt) return;
+    setLastPreparedAt(previewQuery.dataUpdatedAt);
+  }, [previewQuery.isSuccess, previewQuery.dataUpdatedAt, weekKey]);
 
   // Closed weeks directory for the selected year (not Restatements — all frozen weeks).
   const closedWeeksQuery = useQuery({
@@ -674,24 +566,36 @@ export function CloseWeekPage({
     }
   };
 
-  const doClose = async (reason: string) => {
+  const doClose = async (
+    reason: string,
+    opts?: { idempotencyKey?: string; skipPrepare?: boolean },
+  ) => {
     setClosing(true);
     setResult(null);
     setFreezePending(null);
     try {
-      const res = await weekCloseApi.close(weekKey, reason);
+      const res = await weekCloseApi.close(weekKey, reason, {
+        idempotencyKey: opts?.idempotencyKey,
+        skipPrepare: opts?.skipPrepare === true,
+      });
       setResult(res);
+      setCloseIdempotencyKey(null);
       if (res.closed) {
         toast.success(
           hasPendingRestatements
             ? `Restatements signed — ${res.driversClosed} drivers re-sealed`
-            : `Week of ${weekLabel(weekKey)} closed — ${res.driversClosed} drivers signed`,
+            : `Week of ${weekLabel(weekKey)} closed — ${res.driversClosed} drivers signed${
+                res.custodyCarried && res.custodyCarried > 0
+                  ? ` · cash custody carried forward`
+                  : ''
+              }`,
         );
       } else {
         toast.error(`Could not close — ${res.driversBlocked} drivers still blocked`);
       }
       void previewQuery.refetch();
       void closedWeeksQuery.refetch();
+      void openWeeksQuery.refetch();
     } catch (e) {
       if (isWeekCloseUnavailable(e)) {
         toast.error('Close endpoint not deployed yet — deploy fleet-server to enable closing.');
@@ -705,12 +609,49 @@ export function CloseWeekPage({
           driversSealed: Number.isFinite(sealed) ? sealed : undefined,
         });
         toast.error('Statements sealed — calendar freeze did not apply. Use Retry freeze.');
+      } else if (e instanceof WeekCloseApiError && e.code === 'CLOSE_IN_PROGRESS') {
+        toast.message('Close already in progress — wait a moment and try again.');
+      } else if (e instanceof WeekCloseApiError && e.code === 'CUSTODY_NO_OPEN_TARGET') {
+        toast.error(
+          e.message ||
+            'No open week to carry cash custody — reopen a later week or leave an open period first.',
+        );
       } else {
         toast.error(e instanceof Error ? e.message : 'Close week failed');
       }
     } finally {
       setClosing(false);
     }
+  };
+
+  /** H-1: stale books → sync + re-confirm; fresh → verify-and-freeze with skipPrepare. */
+  const confirmCloseWeek = async () => {
+    const reason = closeConfirmReason || 'Closed from Close Week screen';
+    const key = closeIdempotencyKey || crypto.randomUUID();
+    if (!closeIdempotencyKey) setCloseIdempotencyKey(key);
+
+    const prepareFresh =
+      lastPreparedAt != null && Date.now() - lastPreparedAt < PREPARE_FRESH_MS;
+
+    if (!prepareFresh) {
+      setClosing(true);
+      try {
+        await weekCloseApi.sync(weekKey, forceResealHintsFromPreview(preview || {}));
+        setLastPreparedAt(Date.now());
+        await previewQuery.refetch();
+        setConfirmNeedsReconfirm(true);
+        toast.message('Books refreshed — review the numbers and confirm Close again.');
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : 'Could not refresh week books before close');
+      } finally {
+        setClosing(false);
+      }
+      return;
+    }
+
+    setCloseConfirmOpen(false);
+    setConfirmNeedsReconfirm(false);
+    await doClose(reason, { idempotencyKey: key, skipPrepare: true });
   };
 
   const doRetryFreeze = async () => {
@@ -720,12 +661,20 @@ export function CloseWeekPage({
       setFreezePending(null);
       setResult(res);
       if (res.closed) {
-        toast.success(`Freeze applied — ${res.driversClosed} drivers locked`);
+        const custodyNote =
+          res.custodyCarried && res.custodyCarried > 0
+            ? ` · $${Number(res.custodyAmount || 0).toLocaleString(undefined, {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+              })} cash parked on a later week`
+            : '';
+        toast.success(`Freeze applied — ${res.driversClosed} drivers locked${custodyNote}`);
       } else {
         toast.error(`Freeze incomplete — ${res.driversBlocked} still open`);
       }
       void previewQuery.refetch();
       void closedWeeksQuery.refetch();
+      void openWeeksQuery.refetch();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Retry freeze failed');
     } finally {
@@ -752,11 +701,17 @@ export function CloseWeekPage({
       setResult(null);
       void previewQuery.refetch();
       void closedWeeksQuery.refetch();
+      void openWeeksQuery.refetch();
     } catch (e) {
       if (e instanceof WeekCloseApiError && e.code === 'SETTLEMENT_RISK') {
         setSettlementRiskPrompt(true);
         setAcknowledgeSettlementRisk(false);
         toast.message('Check the yellow box below, then click Re-open week again.');
+      } else if (e instanceof WeekCloseApiError && e.code === 'REOPEN_CUSTODY_SUCCESSOR_FROZEN') {
+        toast.error(
+          e.message ||
+            'Reopen the later week that holds carried cash first, then reopen this week.',
+        );
       } else if (isWeekCloseUnavailable(e)) {
         toast.error('Re-open endpoint not deployed yet — deploy fleet-server first.');
       } else {
@@ -1083,7 +1038,7 @@ export function CloseWeekPage({
       ) : null}
 
       <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-        <LaneCard
+        <CloseWeekLaneCard
           lane="fuel"
           icon={<Fuel className="h-4 w-4" />}
           status={fuelStatus}
@@ -1097,7 +1052,7 @@ export function CloseWeekPage({
           warnLabels={laneWarnLabels('fuel')}
           onReview={() => reviewLane('fuel')}
         />
-        <LaneCard
+        <CloseWeekLaneCard
           lane="toll"
           icon={<Receipt className="h-4 w-4" />}
           status={tollStatus}
@@ -1112,7 +1067,7 @@ export function CloseWeekPage({
           warnLabels={laneWarnLabels('toll')}
           onReview={() => reviewLane('toll')}
         />
-        <LaneCard
+        <CloseWeekLaneCard
           lane="settlement"
           icon={<Banknote className="h-4 w-4" />}
           status={settlementStatus}
@@ -1308,18 +1263,31 @@ export function CloseWeekPage({
                     <td className="px-3 py-2 tabular-nums">{MONEY(m.uberTripCash)}</td>
                     <td className="px-3 py-2 tabular-nums">{MONEY(m.mismatch)}</td>
                     <td className="px-3 py-2 text-right">
-                      <Button
-                        type="button"
-                        size="sm"
-                        className="h-8 bg-indigo-700 hover:bg-indigo-800"
-                        disabled={weekAlreadyClosed}
-                        onClick={() => {
-                          setCashAckReason('');
-                          setCashAckTarget(m);
-                        }}
-                      >
-                        Accept statement cash
-                      </Button>
+                      <div className="flex flex-col items-end gap-1">
+                        <Button
+                          type="button"
+                          size="sm"
+                          className="h-8 bg-indigo-700 hover:bg-indigo-800"
+                          disabled={weekAlreadyClosed}
+                          aria-describedby={
+                            weekAlreadyClosed ? `cash-ack-closed-${m.driverId}` : undefined
+                          }
+                          onClick={() => {
+                            setCashAckReason('');
+                            setCashAckTarget(m);
+                          }}
+                        >
+                          Accept statement cash
+                        </Button>
+                        {weekAlreadyClosed ? (
+                          <p
+                            id={`cash-ack-closed-${m.driverId}`}
+                            className="text-[11px] text-slate-500 leading-snug"
+                          >
+                            Week closed — reopen to accept cash
+                          </p>
+                        ) : null}
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -1356,12 +1324,12 @@ export function CloseWeekPage({
       <div className="rounded-lg border border-slate-200 bg-white p-4">
         <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Identity check</p>
         <div className="mt-2 divide-y divide-slate-100">
-          <IdentityRow
+          <CloseWeekIdentityRow
             label="Spend − Reimbursed − Charged to drivers − Net loss"
             value={tollIdentity.residual == null ? '—' : MONEY(tollIdentity.residual)}
             ok={!!preview && tollIdentity.closes}
           />
-          <IdentityRow
+          <CloseWeekIdentityRow
             label="Σ driver settlements ↔ Business Finance P&L"
             value={
               pnlBlocker
@@ -1375,14 +1343,14 @@ export function CloseWeekPage({
             ok={!!preview && !pnlBlocker && !pnlUnavailable}
           />
           {(preview?.openEngineDriftCount ?? 0) > 0 ? (
-            <IdentityRow
+            <CloseWeekIdentityRow
               label="Open statement ↔ engine drifts (nightly / close)"
               value={String(preview?.openEngineDriftCount)}
               ok={false}
             />
           ) : null}
           {(preview?.tollPeriodSealDriftCount ?? 0) > 0 ? (
-            <IdentityRow
+            <CloseWeekIdentityRow
               label="Toll period ↔ seal drift before last book refresh"
               value={String(preview?.tollPeriodSealDriftCount ?? 0)}
               ok={false}
@@ -1400,7 +1368,7 @@ export function CloseWeekPage({
             : 'border-slate-200 bg-slate-50',
         )}
       >
-        <div className="text-sm text-slate-600">
+        <div id="close-week-action-reason" className="text-sm text-slate-600">
           {previewLoading || weekBooksRefreshing ? (
             weekBooksRefreshing ? 'Refreshing week books…' : 'Checking cross-system invariants…'
           ) : previewQuery.isError && !previewUnavailable ? (
@@ -1455,6 +1423,7 @@ export function CloseWeekPage({
               variant="outline"
               className="h-10 border-slate-300 bg-white"
               disabled={reopening || previewUnavailable}
+              aria-describedby="close-week-action-reason"
               onClick={() => {
                 const riskUpFront = (preview?.settlementRiskDriverCount ?? 0) > 0;
                 setSettlementRiskPrompt(riskUpFront);
@@ -1471,8 +1440,11 @@ export function CloseWeekPage({
               type="button"
               className="h-10 bg-indigo-700 hover:bg-indigo-800"
               disabled={closing || previewUnavailable}
+              aria-describedby="close-week-action-reason"
               onClick={() => {
                 setCloseConfirmReason('Signed restatements from Close Week');
+                setCloseIdempotencyKey(crypto.randomUUID());
+                setConfirmNeedsReconfirm(false);
                 setCloseConfirmOpen(true);
               }}
             >
@@ -1493,8 +1465,15 @@ export function CloseWeekPage({
                   : 'bg-indigo-700 hover:bg-indigo-800',
               )}
               disabled={!canClose || closing || previewUnavailable || weekAlreadyClosed}
+              aria-describedby={
+                !canClose || weekAlreadyClosed || previewUnavailable
+                  ? 'close-week-action-reason'
+                  : undefined
+              }
               onClick={() => {
                 setCloseConfirmReason('Closed from Close Week screen');
+                setCloseIdempotencyKey(crypto.randomUUID());
+                setConfirmNeedsReconfirm(false);
                 setCloseConfirmOpen(true);
               }}
             >
@@ -1579,320 +1558,48 @@ export function CloseWeekPage({
         </TabsContent>
       </Tabs>
 
-      <Dialog
-        open={closeConfirmOpen}
-        onOpenChange={(open) => {
-          if (closing) return;
-          setCloseConfirmOpen(open);
-        }}
-      >
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>
-              {hasPendingRestatements
-                ? `Sign restatements for ${weekLabel(weekKey)}?`
-                : `Close week of ${weekLabel(weekKey)}?`}
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-2 text-sm text-slate-700">
-            <p>
-              This will freeze <strong>{preview?.driversReady ?? 0}</strong> driver-period
-              {preview?.driversReady === 1 ? '' : 's'} and lock Pay/Collect for the week.
-            </p>
-            <ul className="list-disc pl-5 text-slate-600 space-y-1">
-              <li>Fleet owes (after share): {MONEY(settlement.fleetOwes)}</li>
-              <li>Drivers owe (after share): {MONEY(settlement.driversOwe)}</li>
-              <li>Cash held (before share): {MONEY(settlement.cashHeld)}</li>
-            </ul>
-            {closeConfirmDrivers.length > 0 ? (
-              <div className="rounded-md border border-slate-200 bg-slate-50 max-h-40 overflow-y-auto">
-                <ul className="divide-y divide-slate-200 text-xs">
-                  {closeConfirmDrivers.slice(0, CLOSE_CONFIRM_DRIVER_CAP).map((d) => (
-                    <li
-                      key={d.driverId}
-                      className="flex items-start justify-between gap-2 px-2.5 py-1.5"
-                    >
-                      <span className="font-medium text-slate-800 truncate">{d.name}</span>
-                      <span className="shrink-0 tabular-nums text-slate-600 text-right">
-                        {d.owed > MONEY_EPS ? `owed ${MONEY(d.owed)}` : null}
-                        {d.owed > MONEY_EPS && d.fleet > MONEY_EPS ? ' · ' : null}
-                        {d.fleet > MONEY_EPS ? `fleet ${MONEY(d.fleet)}` : null}
-                        {d.owed <= MONEY_EPS && d.fleet <= MONEY_EPS ? '—' : null}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-                {closeConfirmDrivers.length > CLOSE_CONFIRM_DRIVER_CAP ? (
-                  <p className="px-2.5 py-1.5 text-[11px] text-slate-500 border-t border-slate-200">
-                    and {closeConfirmDrivers.length - CLOSE_CONFIRM_DRIVER_CAP} more
-                  </p>
-                ) : null}
-              </div>
-            ) : null}
-            <p className="text-xs text-slate-500">
-              After close, open Restatements if a sealed fact needs a new version — do not re-open
-              casually when money has already moved.
-            </p>
-          </div>
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              disabled={closing}
-              onClick={() => setCloseConfirmOpen(false)}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              className="bg-indigo-700 hover:bg-indigo-800"
-              disabled={closing}
-              onClick={() => {
-                setCloseConfirmOpen(false);
-                void doClose(closeConfirmReason || 'Closed from Close Week screen');
-              }}
-            >
-              {closing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Lock className="mr-2 h-4 w-4" />}
-              {hasPendingRestatements ? 'Sign restatements' : 'Close week'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog
-        open={reopenOpen}
-        onOpenChange={(open) => {
-          if (reopening) return;
-          setReopenOpen(open);
-          if (!open) {
-            setSettlementRiskPrompt(false);
-            setAcknowledgeSettlementRisk(false);
-          }
-        }}
-      >
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Re-open week of {weekLabel(weekKey)}?</DialogTitle>
-            <DialogDescription>
-              Unlocks this week so Fuel, Tolls, and Settlement can be edited again. Does not reopen
-              fuel Consumption recon — use that screen separately if needed. You must re-close when
-              done. Prefer Restatement Queue for money-only corrections.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-3">
-            <label className="block text-sm font-medium text-slate-700" htmlFor="reopen-reason">
-              Reason (required)
-            </label>
-            <Textarea
-              id="reopen-reason"
-              value={reopenReason}
-              onChange={(e) => setReopenReason(e.target.value)}
-              placeholder="Why is this week being re-opened?"
-              rows={3}
-              className="resize-none"
-            />
-            {settlementRiskPrompt ? (
-              <label className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
-                <input
-                  type="checkbox"
-                  className="mt-1"
-                  checked={acknowledgeSettlementRisk}
-                  onChange={(e) => setAcknowledgeSettlementRisk(e.target.checked)}
-                />
-                <span>
-                  <span className="font-medium">Required to continue:</span> Settlement money was
-                  already moved for one or more drivers. I understand re-opening can allow duplicate
-                  collect/pay and I will re-close carefully.
-                </span>
-              </label>
-            ) : null}
-          </div>
-          <DialogFooter className="gap-2 sm:gap-0">
-            <Button
-              type="button"
-              variant="outline"
-              disabled={reopening}
-              onClick={() => setReopenOpen(false)}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              className="bg-indigo-700 hover:bg-indigo-800"
-              disabled={
-                reopening ||
-                !reopenReason.trim() ||
-                (settlementRiskPrompt && !acknowledgeSettlementRisk)
-              }
-              onClick={() => void doReopen(settlementRiskPrompt && acknowledgeSettlementRisk)}
-            >
-              {reopening ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : (
-                <Unlock className="mr-2 h-4 w-4" />
-              )}
-              {reopening ? 'Re-opening…' : 'Re-open week'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={orphanRepairOpen} onOpenChange={(open) => !orphanRepairing && setOrphanRepairOpen(open)}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Repair orphan toll events?</DialogTitle>
-            <DialogDescription>
-              Week of {weekLabel(weekKey)}. About {MONEY(orphanImpact)} of toll spend has no live
-              toll row. This reverses those money events and force-reseals the toll lane. Driver
-              settlement should not change for tag-only orphans — stop if it does.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter className="gap-2 sm:gap-0">
-            <Button
-              type="button"
-              variant="outline"
-              disabled={orphanRepairing}
-              onClick={() => setOrphanRepairOpen(false)}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              className="bg-indigo-700 hover:bg-indigo-800"
-              disabled={orphanRepairing || weekAlreadyClosed}
-              onClick={() => void doRepairOrphans()}
-            >
-              {orphanRepairing ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : null}
-              {weekAlreadyClosed
-                ? 'Re-open week first'
-                : orphanRepairing
-                  ? 'Repairing…'
-                  : 'Repair and re-seal'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog
-        open={ineligibleRepairOpen}
-        onOpenChange={(open) => {
-          if (ineligibleRepairing) return;
-          setIneligibleRepairOpen(open);
-          if (!open) setIneligibleSample(null);
-        }}
-      >
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Review ineligible toll events</DialogTitle>
-            <DialogDescription>
-              Week of {weekLabel(weekKey)}. Spot-check the sample below, then reverse so Expenses
-              matches Toll Recon. Tag {MONEY(ineligibleSample?.tagAmountMajor)} · Cash{' '}
-              {MONEY(ineligibleSample?.cashAmountMajor)} · Total{' '}
-              {MONEY(ineligibleSample?.amountMajor)} ({ineligibleSample?.count ?? 0} events).
-            </DialogDescription>
-          </DialogHeader>
-          {ineligibleSample?.rows?.length ? (
-            <ul className="max-h-48 space-y-2 overflow-y-auto rounded-md border border-slate-200 bg-slate-50 p-3 text-xs text-slate-700">
-              {ineligibleSample.rows.map((r, idx) => (
-                <li key={`${r.sourceId}-${idx}`} className="leading-snug">
-                  <span className="font-medium">{r.reason}</span>
-                  {r.quarantineReason ? ` · ${r.quarantineReason}` : ''}
-                  {' · '}
-                  {MONEY(r.eventAmountMajor)} {r.paymentBucket}
-                  {r.date ? ` · ${r.date}` : ''}
-                  {r.plaza ? ` · ${r.plaza}` : ''}
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="text-sm text-slate-600">No sample rows returned for this week.</p>
-          )}
-          <DialogFooter className="gap-2 sm:gap-0">
-            <Button
-              type="button"
-              variant="outline"
-              disabled={ineligibleRepairing}
-              onClick={() => {
-                setIneligibleRepairOpen(false);
-                setIneligibleSample(null);
-              }}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              className="bg-indigo-700 hover:bg-indigo-800"
-              disabled={ineligibleRepairing || weekAlreadyClosed || !(ineligibleSample?.count)}
-              onClick={() => void doRepairIneligible()}
-            >
-              {ineligibleRepairing ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : null}
-              {weekAlreadyClosed
-                ? 'Re-open week first'
-                : ineligibleRepairing
-                  ? 'Repairing…'
-                  : 'Reverse and re-seal'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog
-        open={!!cashAckTarget}
-        onOpenChange={(open) => {
-          if (cashAckBusy) return;
-          if (!open) {
-            setCashAckTarget(null);
-            setCashAckReason('');
-          }
-        }}
-      >
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Accept statement cash?</DialogTitle>
-            <DialogDescription>
-              Week of {weekLabel(weekKey)}
-              {cashAckTarget?.driverName ? ` · ${cashAckTarget.driverName}` : ''}. Settlement already
-              uses statement cash ({MONEY(cashAckTarget?.uberCash)}); trip sum is{' '}
-              {MONEY(cashAckTarget?.uberTripCash)} (difference {MONEY(cashAckTarget?.mismatch)}).
-              This does not change what was collected — it only clears the Close Week block.
-            </DialogDescription>
-          </DialogHeader>
-          <Textarea
-            value={cashAckReason}
-            onChange={(e) => setCashAckReason(e.target.value)}
-            placeholder="Why statement cash is correct (required)…"
-            rows={3}
-            className="text-sm"
-          />
-          <DialogFooter className="gap-2 sm:gap-0">
-            <Button
-              type="button"
-              variant="outline"
-              disabled={cashAckBusy}
-              onClick={() => {
-                setCashAckTarget(null);
-                setCashAckReason('');
-              }}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              className="bg-indigo-700 hover:bg-indigo-800"
-              disabled={cashAckBusy || cashAckReason.trim().length < 8 || weekAlreadyClosed}
-              onClick={() => void doAcknowledgeCashSource()}
-            >
-              {cashAckBusy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-              {weekAlreadyClosed ? 'Re-open week first' : cashAckBusy ? 'Saving…' : 'Accept statement cash'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
+      <CloseWeekDialogs
+        weekKey={weekKey}
+        weekAlreadyClosed={weekAlreadyClosed}
+        hasPendingRestatements={hasPendingRestatements}
+        closeConfirmOpen={closeConfirmOpen}
+        setCloseConfirmOpen={setCloseConfirmOpen}
+        closing={closing}
+        confirmNeedsReconfirm={confirmNeedsReconfirm}
+        setConfirmNeedsReconfirm={setConfirmNeedsReconfirm}
+        previewDriversReady={preview?.driversReady ?? 0}
+        settlement={settlement}
+        closeConfirmDrivers={closeConfirmDrivers}
+        pnlUnavailable={!!pnlUnavailable}
+        onConfirmClose={confirmCloseWeek}
+        reopenOpen={reopenOpen}
+        setReopenOpen={setReopenOpen}
+        reopening={reopening}
+        reopenReason={reopenReason}
+        setReopenReason={setReopenReason}
+        settlementRiskPrompt={settlementRiskPrompt}
+        setSettlementRiskPrompt={setSettlementRiskPrompt}
+        acknowledgeSettlementRisk={acknowledgeSettlementRisk}
+        setAcknowledgeSettlementRisk={setAcknowledgeSettlementRisk}
+        onReopen={doReopen}
+        orphanRepairOpen={orphanRepairOpen}
+        setOrphanRepairOpen={setOrphanRepairOpen}
+        orphanRepairing={orphanRepairing}
+        orphanImpact={orphanImpact}
+        onRepairOrphans={doRepairOrphans}
+        ineligibleRepairOpen={ineligibleRepairOpen}
+        setIneligibleRepairOpen={setIneligibleRepairOpen}
+        ineligibleRepairing={ineligibleRepairing}
+        ineligibleSample={ineligibleSample}
+        setIneligibleSample={setIneligibleSample}
+        onRepairIneligible={doRepairIneligible}
+        cashAckTarget={cashAckTarget}
+        setCashAckTarget={setCashAckTarget}
+        cashAckReason={cashAckReason}
+        setCashAckReason={setCashAckReason}
+        cashAckBusy={cashAckBusy}
+        onAcknowledgeCashSource={doAcknowledgeCashSource}
+      />
     </div>
   );
 }

@@ -250,8 +250,6 @@ export function DriverDetail({
         handleEditTransaction={mutations.handleEditTransaction}
         periodCompletedFromOps={data.periodCompletedFromOps}
         operationalTotals={data.operationalTotals}
-        ledgerRefreshKey={data.ledgerRefreshKey}
-        setLedgerRefreshKey={data.setLedgerRefreshKey}
       />
 
       <DriverDetailModals

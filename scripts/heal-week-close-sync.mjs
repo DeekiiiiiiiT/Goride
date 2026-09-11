@@ -1,67 +1,61 @@
 #!/usr/bin/env node
 /**
- * One-time Close Week sync heal — calls prepareWeekClose via fleet-server.
+ * Close Week sync heal — calls prepareWeekClose via fleet-server HTTP.
  * No SQL amount edits. Collect/Pay residuals stay on Cash desk.
  *
  * Usage:
- *   SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... ORGANIZATION_ID=... \
- *     node scripts/heal-week-close-sync.mjs [--weeks=2025-12-29,2026-02-16] [--dry]
+ *   SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... ORG_ID=... ACTOR_ID=... \
+ *     node scripts/heal-week-close-sync.mjs --weeks=2025-12-29,2026-02-16 [--dry]
  *
- * Default week list = Phase 0 heal backlog (unpublished seals + toll drift).
+ * No hardcoded org / weeks / actor — all required via env or flags.
  */
 const url = (process.env.SUPABASE_URL || "").replace(/\/$/, "");
 const key = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
-const orgId = process.env.ORGANIZATION_ID || "8cfa606a-f6ea-4ccb-a2b2-1d2cc323a823";
+const orgId = (process.env.ORG_ID || process.env.ORGANIZATION_ID || "").trim();
+const actorId = (process.env.ACTOR_ID || process.env.HEAL_ACTOR_ID || "").trim();
 if (!url || !key) {
   console.error("Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY");
+  process.exit(1);
+}
+if (!orgId) {
+  console.error("Set ORG_ID (or ORGANIZATION_ID)");
+  process.exit(1);
+}
+if (!actorId) {
+  console.error("Set ACTOR_ID (or HEAL_ACTOR_ID) — must be a valid UUID");
+  process.exit(1);
+}
+
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+if (!UUID_RE.test(orgId)) {
+  console.error("ORG_ID must be a valid UUID");
+  process.exit(1);
+}
+if (!UUID_RE.test(actorId)) {
+  console.error("ACTOR_ID must be a valid UUID");
   process.exit(1);
 }
 
 const args = process.argv.slice(2);
 const dryRun = args.includes("--dry");
 const weeksArg = args.find((a) => a.startsWith("--weeks="));
-const DEFAULT_WEEKS = [
-  "2025-12-08",
-  "2025-12-15",
-  "2025-12-22",
-  "2025-12-29",
-  "2026-01-05",
-  "2026-01-12",
-  "2026-02-02",
-  "2026-02-09",
-  "2026-02-16",
-  "2026-02-23",
-  "2026-03-02",
-  "2026-03-09",
-  "2026-03-16",
-  "2026-03-23",
-  "2026-03-30",
-  "2026-04-06",
-  "2026-05-04",
-  "2026-05-11",
-  "2026-05-18",
-  "2026-05-25",
-  "2026-06-01",
-  "2026-06-08",
-  "2026-06-15",
-  "2026-06-22",
-  "2026-06-29",
-  "2026-07-06",
-  "2026-07-13",
-  "2026-07-20",
-  "2026-07-27",
-  "2026-08-03",
-  "2026-08-10",
-  "2026-08-17",
-  "2026-08-24",
-];
-const weeks = weeksArg
-  ? weeksArg
-      .slice("--weeks=".length)
-      .split(",")
-      .map((w) => w.trim())
-      .filter(Boolean)
-  : DEFAULT_WEEKS;
+const weeksEnv = (process.env.WEEKS || "").trim();
+const weeksRaw = weeksArg
+  ? weeksArg.slice("--weeks=".length)
+  : weeksEnv;
+if (!weeksRaw) {
+  console.error("Pass --weeks=YYYY-MM-DD,... or set WEEKS");
+  process.exit(1);
+}
+const weeks = weeksRaw
+  .split(",")
+  .map((w) => w.trim())
+  .filter(Boolean);
+if (weeks.length === 0) {
+  console.error("WEEKS / --weeks parsed empty");
+  process.exit(1);
+}
 
 const base = `${url}/functions/v1/make-server-37f42386/settlements/week-close`;
 
@@ -76,6 +70,7 @@ async function syncWeek(weekKey) {
         apikey: key,
         "Content-Type": "application/json",
         "x-organization-id": orgId,
+        "x-actor-id": actorId,
       },
       body: JSON.stringify({ weekKey }),
     });

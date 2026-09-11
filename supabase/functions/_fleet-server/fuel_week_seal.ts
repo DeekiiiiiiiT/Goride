@@ -179,6 +179,8 @@ export async function sealFuelWeek(opts: {
   weekKey: string;
   actorId?: string;
   force?: boolean;
+  /** H-6: shared prepare as_of — stamped on close_reason / source rows for audit. */
+  asOf?: string;
   /** Optional per-driver overrides (major units) — e.g. Finalize snapshots / Consumption strip. */
   amountsByDriver?: Record<string, FuelCloseAmountOverride>;
 }): Promise<{ published: number }> {
@@ -261,17 +263,19 @@ export async function sealFuelWeek(opts: {
     }
 
     try {
+      const asOfTag = opts.asOf ? `;as_of=${opts.asOf}` : "";
       await publishWeekStatement({
         kind: "fuel",
         organizationId,
         driverId,
         weekKey,
         amountsMinor,
+        sourceRowIds: opts.asOf ? [`as_of:${opts.asOf}`] : undefined,
         status,
         closedBy: status === "closed" ? (opts.actorId ?? "fuel_week_seal") : null,
         closeReason:
           status === "closed"
-            ? `fuel_week_seal:${amounts.source}`
+            ? `fuel_week_seal:${amounts.source}${asOfTag}`
             : "close_precondition_unverified",
       });
       published += 1;

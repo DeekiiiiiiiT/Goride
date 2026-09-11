@@ -187,6 +187,8 @@ export type DriverFinancialPeriodRow = {
   payoutStatus: string;
   tollStatus: string;
   sourceEventHash: string;
+  /** Dedicated close seal (Phase 1) — never written by rebuild. */
+  closeHash?: string | null;
   projectionVersion: number;
   /** Settlement command optimistic lock (ledger.driver_financial_periods.row_version). */
   rowVersion?: number;
@@ -1230,6 +1232,12 @@ export async function rebuildDriverFinancialPeriod(
   const cashWrittenOff = cashBase.cashWrittenOff;
   const settlementPaidRaw = cashBase.settlementPaid;
 
+  const priorMeta =
+    context.periodMetaByAnchor?.get(periodAnchor) ||
+    ({} as Record<string, unknown>);
+  const priorFcForCustody = (priorMeta.financeCore || {}) as Record<string, unknown>;
+  const openingCashCustody = round2(Math.max(0, Number(priorFcForCustody.openingCashCustody) || 0));
+
   const fuelNetPay = round2(fuelDriverSpend - fuelDeduction);
   let settled = computePeriodSettlement({
     driverShare,
@@ -1244,6 +1252,7 @@ export async function rebuildDriverFinancialPeriod(
     cashWrittenOff,
     settlementPaid: settlementPaidRaw,
     tipsPaidToDriver: share.tipsPaidToDriver || 0,
+    openingCashCustody,
   });
   // Pocket cash cannot go negative (DB cash_nonneg). Over-return vs collected
   // is fleet-owes on settlement_amount, not a negative held balance.
@@ -1252,9 +1261,6 @@ export async function rebuildDriverFinancialPeriod(
   const overpaidAmount = settled.overpaidAmount;
   const settlementAmount = settled.settlement;
 
-  const priorMeta =
-    context.periodMetaByAnchor?.get(periodAnchor) ||
-    ({} as Record<string, unknown>);
   const forceMeta = (priorMeta.forceRelease || {}) as Record<string, unknown>;
   const forceRelease =
     !!(context as any).forceRelease ||
@@ -1589,6 +1595,7 @@ export async function rebuildDriverFinancialPeriod(
             cashWrittenOff: row.cashWrittenOff,
             settlementPaid: settlementPaidRaw,
             tipsPaidToDriver: row.tipsPaidToDriver || 0,
+            openingCashCustody,
           });
           row.settlementAmount = round2(settled.settlement);
           row.payoutNet = round2(settled.netPayout);
@@ -1685,6 +1692,7 @@ export async function rebuildDriverFinancialPeriod(
     settlement_status: cashPersist.settlement_status,
     payout_status: cashPersist.payout_status,
     toll_status: row.tollStatus,
+    // Projection hash only — never write close_hash (Phase 1: freeze RPC owns seals).
     source_event_hash: sourceEventHash,
     projected_at: row.projectedAt,
     updated_at: cashPersist.updated_at,
@@ -1745,12 +1753,32 @@ export async function rebuildDriverFinancialPeriod(
  * Convenience wrapper for a single ad-hoc week rebuild. Loads shared context once
  * (with week buckets + persisted lines) when no ctx is supplied. Prefer passing a
  * shared ctx directly when rebuilding many weeks for the same driver.
+ * Phase 1D: frozen weeks are returned as-is (graceful skip) — never rewrite seals.
  */
 export async function rebuildOneDriverPeriod(
   driverId: string,
   periodAnchor: string,
   ctx?: RebuildContext,
 ): Promise<DriverFinancialPeriodRow> {
+  const anchor = String(periodAnchor || "").slice(0, 10);
+  const { data: existing, error: loadErr } = await sb()
+    .from("driver_financial_periods")
+    .select("*")
+    .eq("driver_id", driverId)
+    .eq("period_anchor", anchor)
+    .maybeSingle();
+  if (loadErr) throw new Error(loadErr.message);
+  if (
+    existing &&
+    isPeriodFrozen({
+      metadata: (existing.metadata as Record<string, unknown> | null) ?? null,
+      status: (existing.status as string | null) ?? null,
+      closedAt: existing.closed_at != null ? String(existing.closed_at) : null,
+    })
+  ) {
+    return mapDbPeriod(existing);
+  }
+
   const context = ctx || { ...(await loadRebuildContext(driverId)), persistLines: true };
   return rebuildDriverFinancialPeriod(driverId, periodAnchor, context);
 }
@@ -1927,6 +1955,7 @@ function mapDbPeriod(r: any): DriverFinancialPeriodRow {
     payoutStatus: r.payout_status,
     tollStatus: r.toll_status,
     sourceEventHash: r.source_event_hash,
+    closeHash: r.close_hash ?? null,
     projectionVersion: r.projection_version,
     rowVersion: Number(r.row_version) || 1,
     projectedAt: r.projected_at,
@@ -1961,6 +1990,7 @@ export async function getDriverFinancialPeriodDetail(
         storedCloseHashFromPeriod,
       } = await import("../../../packages/finance-core/src/closeHash.ts");
       const stored = storedCloseHashFromPeriod({
+        close_hash: row.closeHash,
         source_event_hash: row.sourceEventHash,
         metadata: row.metadata as Record<string, unknown> | null,
       });
@@ -2153,16 +2183,43 @@ export async function rebuildAllPeriodsForDriver(
   return { rebuilt: n, skippedSigned };
 }
 
-/** Rebuild a small set of anchors with one shared context load (parity / repair). */
+/** Rebuild a small set of anchors with one shared context load (parity / repair).
+ * Phase 1D: skips frozen anchors; count only actually rebuilt. */
 export async function rebuildPeriodsForAnchors(
   driverId: string,
   anchors: string[],
   persistLines = false,
 ): Promise<number> {
+  const valid = anchors
+    .map((a) => String(a || "").slice(0, 10))
+    .filter((a) => /^\d{4}-\d{2}-\d{2}$/.test(a));
+  if (valid.length === 0) return 0;
+
+  const { data: existingRows, error: loadErr } = await sb()
+    .from("driver_financial_periods")
+    .select("period_anchor, status, metadata")
+    .eq("driver_id", driverId)
+    .in("period_anchor", valid);
+  if (loadErr) throw new Error(loadErr.message);
+
+  const frozenAnchors = new Set<string>();
+  for (const r of existingRows || []) {
+    if (
+      isPeriodFrozen({
+        metadata: (r.metadata as Record<string, unknown> | null) ?? null,
+        settlementStatus: (r.status as string | null) ?? null,
+      })
+    ) {
+      frozenAnchors.add(String(r.period_anchor || "").slice(0, 10));
+    }
+  }
+
+  const toRebuild = valid.filter((a) => !frozenAnchors.has(a));
+  if (toRebuild.length === 0) return 0;
+
   const ctx = { ...(await loadRebuildContext(driverId)), persistLines };
   let n = 0;
-  for (const anchor of anchors) {
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(anchor)) continue;
+  for (const anchor of toRebuild) {
     await rebuildDriverFinancialPeriod(driverId, anchor, ctx);
     n++;
   }
@@ -2248,6 +2305,7 @@ export async function syncPeriodCashFromTransactions(
     cashWrittenOff,
     settlementPaid: settlementPaidRaw,
     tipsPaidToDriver,
+    openingCashCustody: round2(Math.max(0, Number(fc.openingCashCustody) || 0)),
   });
 
   const fuelFinalized = !!existing.fuel_finalized;
@@ -2746,7 +2804,13 @@ export async function listCashHeldPeriods(opts?: PeriodListQueryOpts): Promise<D
     console.error("[DriverFinancialPeriods] cash_held list:", error.message);
     throw new Error(error.message);
   }
-  return (data || []).map((r: any) => {
+  // Phase 2: exclude closed weeks whose custody already carried to next week.
+  return (data || [])
+    .filter((r: any) => {
+      const transferred = String(r.metadata?.financeCore?.custodyTransferredTo || "").trim();
+      return !transferred;
+    })
+    .map((r: any) => {
     const row = mapPeriodListRow(r);
     const oa = Number(r.metadata?.financeCore?.overpaidAmount);
     return {

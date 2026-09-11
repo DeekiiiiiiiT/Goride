@@ -347,7 +347,7 @@ const ALL_CUSTOMER_PERMISSIONS: Permission[] = [
   'nav.trips',
   'nav.reports',
   'nav.financial_analytics',
-  'nav.transaction_list',
+  'nav.transaction_list', // gates Ledgers desk (display label; id unchanged)
   'nav.performance',
   'nav.tier_config',
   'nav.user_management',

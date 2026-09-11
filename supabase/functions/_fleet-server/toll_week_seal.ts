@@ -185,6 +185,8 @@ export async function sealTollWeek(opts: {
   >;
   /** Re-seal drivers that already have a standing toll statement (default: skip unchanged). */
   force?: boolean;
+  /** H-6: shared prepare as_of — stamped on close_reason / source rows for audit. */
+  asOf?: string;
 }): Promise<{ published: number }> {
   const organizationId = String(opts.organizationId || "").trim();
   const weekKey = WEEK_KEY(opts.weekKey);
@@ -320,6 +322,7 @@ export async function sealTollWeek(opts: {
         : staleZeroNa
           ? "toll_stale_zero_na_restatement"
           : "toll_week_seal_unverified_period_columns";
+    const asOfTag = opts.asOf ? `;as_of=${opts.asOf}` : "";
 
     try {
       await publishWeekStatement({
@@ -328,9 +331,10 @@ export async function sealTollWeek(opts: {
         driverId,
         weekKey,
         amountsMinor,
+        sourceRowIds: opts.asOf ? [`as_of:${opts.asOf}`] : undefined,
         status,
         closedBy: status === "closed" ? (opts.actorId ?? "toll_week_seal") : null,
-        closeReason,
+        closeReason: status === "closed" || staleZeroNa ? `${closeReason}${asOfTag}` : closeReason,
         allowRestatementDraft: allowRestatementDraft || undefined,
       });
       published += 1;

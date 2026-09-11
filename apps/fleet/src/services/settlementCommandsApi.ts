@@ -193,6 +193,32 @@ function numField(r: Record<string, unknown>, ...keys: string[]): number {
   return 0;
 }
 
+function legacyPeriodFrozen(r: Record<string, unknown>): boolean {
+  if (r.periodFrozen === true || r.period_frozen === true) return true;
+  const meta = (r.metadata || {}) as Record<string, unknown>;
+  if (meta.periodFrozen === true || meta.signedWeek === true) return true;
+  const fc = (meta.financeCore || {}) as Record<string, unknown>;
+  return fc.periodFrozen === true || Boolean(fc.signedAt);
+}
+
+function legacyMoneyUnlocked(r: Record<string, unknown>): boolean {
+  if (r.moneyUnlocked === true || r.money_unlocked === true) return true;
+  const meta = (r.metadata || {}) as Record<string, unknown>;
+  const fc = (meta.financeCore || {}) as Record<string, unknown>;
+  return fc.moneyUnlocked === true;
+}
+
+function legacySealBroken(r: Record<string, unknown>): boolean | undefined {
+  if (r.sealBroken === true || r.seal_broken === true) return true;
+  if (r.sealBroken === false || r.seal_broken === false) return false;
+  const meta = (r.metadata || {}) as Record<string, unknown>;
+  const fc = (meta.financeCore || {}) as Record<string, unknown>;
+  if (fc.sealBroken === true || fc.hashMismatch === true || fc.closeHashMismatch === true) {
+    return true;
+  }
+  return undefined;
+}
+
 function mapLegacyPeriodRow(r: Record<string, unknown>, collectKind?: 'driver_owes' | 'cash_held'): SettlementQueueRow {
   const periodAnchor = String(r.periodAnchor || r.period_anchor || '').slice(0, 10);
   const periodEnd = String(r.periodEnd || r.period_end || periodAnchor).slice(0, 10);
@@ -201,6 +227,7 @@ function mapLegacyPeriodRow(r: Record<string, unknown>, collectKind?: 'driver_ow
     Math.abs(Number(r.settlementAmount) || 0) ||
     Math.abs(Number(r.cashStillHeld) || 0) ||
     0;
+  const sealBroken = legacySealBroken(r);
   return {
     driverId: String(r.driverId || r.driver_id || ''),
     driverName: r.driverName != null ? String(r.driverName) : undefined,
@@ -216,6 +243,9 @@ function mapLegacyPeriodRow(r: Record<string, unknown>, collectKind?: 'driver_ow
     tripCount: Number(r.tripCount) || 0,
     settlementStatus: r.settlementStatus != null ? String(r.settlementStatus) : undefined,
     fuelFinalized: r.fuelFinalized === true,
+    periodFrozen: legacyPeriodFrozen(r),
+    moneyUnlocked: legacyMoneyUnlocked(r),
+    ...(sealBroken === true ? { sealBroken: true } : {}),
     collectKind,
     overpaidAmount: Number(r.overpaidAmount) || undefined,
     cashSourceMismatch: Number(r.cashSourceMismatch) || undefined,

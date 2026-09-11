@@ -4,14 +4,14 @@
  * Talks to fleet-server /settlements/week-close:
  *   GET  /settlements/week-close/preview?weekKey=YYYY-MM-DD  → dry-run lanes + blockers
  *   POST /settlements/week-close/sync { weekKey }            → seal/rebuild only when needed
- *   POST /settlements/week-close  { weekKey, reason }        → sign the week
+ *   POST /settlements/week-close  { weekKey, reason, idempotencyKey?, skipPrepare? }
  *   POST /settlements/week-close/reopen { weekKey, reason, acknowledgeSettlementRisk? }
  *   POST /settlements/week-close/acknowledge-cash-source { weekKey, driverId, reason }
  *
  * The route is registered in supabase/functions/_fleet-server/index.tsx via
  * week_close_controller.tsx. Preview is read-only; sync is slim (no-op writes when
- * healthy). POST close runs lean prepare (no forceAllLaneReseals), then invariants,
- * and only closes when every driver ties.
+ * healthy). POST close verifies + freezes; pass skipPrepare after a fresh Sync so
+ * numbers in the confirm match what gets frozen (H-1).
  */
 import { requireAuthHeaders } from '../utils/authHeaders';
 import { fetchWithRetry } from './api';
@@ -83,6 +83,11 @@ export type WeekCloseResult = {
   driversBlocked: number;
   blockers: CloseBlocker[];
   perDriver: Array<{ driverId: string; closed: boolean; closeHash?: string; blockers: CloseBlocker[] }>;
+  /** C-3: true when this response was replayed from a prior completed close. */
+  idempotent?: boolean;
+  /** Pass 6: drivers whose residual custody was carried this run. */
+  custodyCarried?: number;
+  custodyAmount?: number;
 };
 
 export type WeekReopenResult = {
@@ -257,11 +262,20 @@ export const weekCloseApi = {
     return response.json() as Promise<WeekClosePreview>;
   },
 
-  async close(weekKey: string, reason: string): Promise<WeekCloseResult> {
+  async close(
+    weekKey: string,
+    reason: string,
+    opts?: { idempotencyKey?: string; skipPrepare?: boolean },
+  ): Promise<WeekCloseResult> {
     const response = await fetchWithRetry(BASE, {
       method: 'POST',
       headers: await requireAuthHeaders(),
-      body: JSON.stringify({ weekKey, reason }),
+      body: JSON.stringify({
+        weekKey,
+        reason,
+        ...(opts?.idempotencyKey ? { idempotencyKey: opts.idempotencyKey } : {}),
+        ...(opts?.skipPrepare ? { skipPrepare: true } : {}),
+      }),
     });
     if (!response.ok) {
       const err = await parseErrorPayload(response, 'Close week failed');

@@ -11,6 +11,16 @@ export type PrepareWeekCloseOpts = CloseLaneForceOpts & {
    * Never pass this from Close — Sync owns repairs; Close verifies + freezes.
    */
   forceAllLaneReseals?: boolean;
+  /**
+   * C-3: when true, caller already holds the org-week close lock
+   * (e.g. closeWeek invoking prepare) — do not claim/release here.
+   */
+  skipCloseLock?: boolean;
+};
+
+/** H-1: close can skip prepare when client already synced fresh books. */
+export type CloseWeekOpts = {
+  skipPrepare?: boolean;
 };
 
 export function resolveCloseLaneForceOpts(opts?: PrepareWeekCloseOpts): CloseLaneForceOpts {

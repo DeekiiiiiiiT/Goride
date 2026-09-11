@@ -1,10 +1,14 @@
-# One-time Close Week heal (PowerShell). Run from repo root:
-#   .\scripts\heal-week-close-sync.ps1
-# Optional: .\scripts\heal-week-close-sync.ps1 -Weeks "2025-12-29,2026-02-16"
+# Close Week heal (PowerShell). Run from repo root:
+#   .\scripts\heal-week-close-sync.ps1 -OrgId <uuid> -ActorId <uuid> -Weeks "2026-02-16,2026-02-23"
 # Optional: set $env:SUPABASE_SERVICE_ROLE_KEY first, or pass -ServiceRoleKey
 
 param(
-  [string]$Weeks = "",
+  [Parameter(Mandatory = $true)]
+  [string]$OrgId,
+  [Parameter(Mandatory = $true)]
+  [string]$ActorId,
+  [Parameter(Mandatory = $true)]
+  [string]$Weeks,
   [string]$ServiceRoleKey = ""
 )
 
@@ -19,7 +23,6 @@ function Get-ServiceRoleJwtFromCli {
     throw "Could not read api-keys. Run: npx supabase login"
   }
   $text = ($raw | Out-String).Trim()
-  # Strip any leading junk before the JSON object.
   $jsonStart = $text.IndexOf('{')
   if ($jsonStart -lt 0) {
     throw "api-keys output was not JSON. Run: npx supabase login"
@@ -30,7 +33,6 @@ function Get-ServiceRoleJwtFromCli {
     throw "api-keys JSON had no keys[]"
   }
 
-  # Prefer legacy JWT (eyJ…) with id/name service_role.
   $legacy = $keys | Where-Object {
     ($_.id -eq 'service_role' -or $_.name -eq 'service_role') -and
     ($_.api_key -is [string]) -and
@@ -38,7 +40,6 @@ function Get-ServiceRoleJwtFromCli {
   } | Select-Object -First 1
   if ($legacy) { return [string]$legacy.api_key }
 
-  # Fallback: any key whose JWT payload role is service_role.
   foreach ($k in $keys) {
     $ak = [string]$k.api_key
     if (-not $ak.StartsWith('eyJ')) { continue }
@@ -59,10 +60,18 @@ if ($key.Length -lt 40 -or -not $key.StartsWith('eyJ')) {
   throw "service_role key looks invalid (len=$($key.Length); expect eyJ… JWT from Dashboard → API → service_role)"
 }
 
+$uuidRe = '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$'
+if ($OrgId -notmatch $uuidRe) { throw "OrgId must be a valid UUID" }
+if ($ActorId -notmatch $uuidRe) { throw "ActorId must be a valid UUID" }
+if (-not $Weeks.Trim()) { throw "Weeks is required (comma-separated Monday YYYY-MM-DD)" }
+
 $env:SUPABASE_URL = "https://csfllzzastacofsvcdsc.supabase.co"
 $env:SUPABASE_SERVICE_ROLE_KEY = $key
-$env:ORGANIZATION_ID = "8cfa606a-f6ea-4ccb-a2b2-1d2cc323a823"
-if ($Weeks) { $env:WEEKS = $Weeks } else { Remove-Item Env:WEEKS -ErrorAction SilentlyContinue }
+$env:ORG_ID = $OrgId.Trim()
+$env:ORGANIZATION_ID = $OrgId.Trim()
+$env:ACTOR_ID = $ActorId.Trim()
+$env:HEAL_ACTOR_ID = $ActorId.Trim()
+$env:WEEKS = $Weeks.Trim()
 
-Write-Host "Key loaded (len=$($key.Length)). Starting heal…"
-deno run -A --config deno.json supabase/functions/_fleet-server/heal_week_close_sync.ts
+Write-Host "Key loaded (len=$($key.Length)). Starting heal for $($Weeks.Split(',').Count) week(s)…"
+deno run -A --config deno.json scripts/heal-week-close-sync.ts

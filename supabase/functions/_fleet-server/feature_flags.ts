@@ -57,6 +57,8 @@ export const FEATURE_FLAGS = {
   RUSH_UI: "rush_ui",
   /** Deprecated org-UUID join path on POST /driver/join-fleet */
   LEGACY_DRIVER_JOIN: "legacy_driver_join",
+  /** Unified fleet.ledger_entries read model for Ledgers desk */
+  LEDGER_READ_MODEL: "ledger_read_model",
 } as const;
 
 export type FeatureFlagName = typeof FEATURE_FLAGS[keyof typeof FEATURE_FLAGS];
@@ -399,6 +401,11 @@ export async function initializeDefaultFlags(): Promise<void> {
       name: FEATURE_FLAGS.LEGACY_DRIVER_JOIN,
       enabled: false,
       description: "Deprecated POST /driver/join-fleet by org UUID (use invite codes)",
+    },
+    {
+      name: FEATURE_FLAGS.LEDGER_READ_MODEL,
+      enabled: false,
+      description: "Unified fleet.ledger_entries read model for Ledgers desk (/ledger/search|stats)",
     },
   ];
 

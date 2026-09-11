@@ -42,6 +42,22 @@ describe('computePeriodSettlementMinor (A-3)', () => {
     expect(m.settlementMinor).toBe(toMoneyMinor(-7000));
     expect(m.overpaidAmountMinor).toBe(toMoneyMinor(5000));
   });
+
+  it('openingCashCustody increases adjCashBalance (Phase 2 carry-forward)', () => {
+    const base = {
+      driverShare: 0,
+      fuelDeduction: 0,
+      baseCashOwed: 100,
+      baseCashPaid: 0,
+      tollCashWash: 0,
+      tollPersonal: 0,
+    };
+    const without = computePeriodSettlementMinor(base);
+    const withCustody = computePeriodSettlementMinor({ ...base, openingCashCustody: 50 });
+    expect(fromMoneyMinor(withCustody.adjCashBalanceMinor)).toBe(
+      fromMoneyMinor(without.adjCashBalanceMinor) + 50,
+    );
+  });
 });
 
 describe('signed pass-through (C-7)', () => {

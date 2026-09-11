@@ -251,6 +251,7 @@ import {
   registerLedgerQuerySummaryRoutes,
   expandStatementSummaryDriverIds,
 } from "./ledger_query_summary_routes.ts";
+import { registerLedgerEntriesRoutes } from "./ledger_entries_routes.ts";
 import {
   provisionFleetOwner,
   enableDriverForFleetOwner,
@@ -503,6 +504,7 @@ registerLedgerDriverEarningsHistoryRoutes(app);
 registerLedgerIndriveWalletRoutes(app);
 registerLedgerDriversFleetSummaryRoutes(app);
 registerLedgerQuerySummaryRoutes(app);
+registerLedgerEntriesRoutes(app);
 
 // ─── Toll Ledger Primary Write Helper (Phase 6) ──────────────────────────
 // Tolls are now written ONLY to toll_ledger:* (single source of truth).
@@ -1877,10 +1879,14 @@ app.get("/make-server-37f42386/dashboard/stats", requireAuth(), async (c) => {
 // Trips Search Endpoint (GIN Index)
 // Phase 2: Add auth and strict org filtering
 app.post("/make-server-37f42386/trips/search", requireAuth({ requireOrg: true }), async (c) => {
+  const requestId = crypto.randomUUID();
+  c.header("X-Request-Id", requestId);
+  const t0 = Date.now();
   try {
     let { 
         driverId, driverName, driverIds, startDate, endDate, status, limit, offset,
-        platform, tripType, vehicleId, anchorPeriodId, organizationId, serviceLine
+        platform, tripType, vehicleId, anchorPeriodId, organizationId, serviceLine,
+        sortKey, sortDir,
     } = await c.req.json();
     
     // Query JSONB value directly
@@ -1905,7 +1911,7 @@ app.post("/make-server-37f42386/trips/search", requireAuth({ requireOrg: true })
         }
     } else if (useStrict) {
         // STRICT MODE with no org context: return empty (platform roles bypass via getOrgId returning null)
-        return c.json({ data: [], page: 1, limit: limit || 50, total: 0 });
+        return c.json({ data: [], page: 1, limit: limit || 50, total: 0, request_id: requestId });
     }
 
     // driverIds: broad OR search across multiple IDs + optional name
@@ -1914,24 +1920,35 @@ app.post("/make-server-37f42386/trips/search", requireAuth({ requireOrg: true })
         const orParts: string[] = [];
         for (const id of driverIds) {
             orParts.push(`value->>driverId.eq.${id}`);
-            orParts.push(`value->>driverName.ilike.${id}`);
+            const idTerm = String(id).includes("%") ? String(id) : `%${id}%`;
+            orParts.push(`value->>driverName.ilike.${idTerm.replace(/,/g, "")}`);
         }
         if (driverName) {
-            orParts.push(`value->>driverName.ilike.${driverName}`);
+            const nameTerm = String(driverName).includes("%") ? String(driverName) : `%${driverName}%`;
+            const safe = nameTerm.replace(/,/g, "");
+            orParts.push(`value->>driverName.ilike.${safe}`);
             // Also check if driverId field contains the name (legacy CSV imports stored names as driverId)
-            orParts.push(`value->>driverId.ilike.${driverName}`);
+            orParts.push(`value->>driverId.ilike.${safe}`);
         }
         const orClause = orParts.join(',');
 
         query = query.or(orClause);
     } else if (driverId) {
         if (driverName) {
-            query = query.or(`value->>driverId.eq.${driverId},value->>driverName.ilike.${driverName}`);
+            const nameTerm = String(driverName).includes("%") ? String(driverName) : `%${driverName}%`;
+            const safe = nameTerm.replace(/,/g, "");
+            query = query.or(`value->>driverId.eq.${driverId},value->>driverName.ilike.${safe}`);
         } else {
             query = query.eq("value->>driverId", driverId);
         }
     } else if (driverName) {
-        query = query.ilike("value->>driverName", driverName);
+        // Fuzzy search: driver name + trip id + legacy_kv_id (wildcarded ilike)
+        const raw = String(driverName).trim();
+        const term = raw.includes("%") ? raw : `%${raw}%`;
+        const safe = term.replace(/,/g, "");
+        query = query.or(
+            `value->>driverName.ilike.${safe},value->>id.ilike.${safe},legacy_kv_id.ilike.${safe}`,
+        );
     }
 
     if (anchorPeriodId) {
@@ -1980,8 +1997,18 @@ app.post("/make-server-37f42386/trips/search", requireAuth({ requireOrg: true })
         query = query.lte("value->>date", String(endDate).slice(0, 10));
     }
 
-    // Order by date desc (Note: textual comparison works for ISO dates)
-    query = query.order("value->>date", { ascending: false });
+    // Server sort whitelist (F-03) + id DESC tiebreaker (F-04)
+    const SORT_MAP: Record<string, string> = {
+      date: "value->>date",
+      amount: "amount",
+      status: "value->>status",
+      platform: "value->>platform",
+      id: "id",
+      driverName: "value->>driverName",
+    };
+    const primarySort = SORT_MAP[String(sortKey || "")] || "value->>date";
+    const ascending = String(sortDir || "").toLowerCase() === "asc";
+    query = query.order(primarySort, { ascending }).order("id", { ascending: false });
 
     const from = offset || 0;
     // Cap at 1000 per request (PostgREST max row limit)
@@ -2018,16 +2045,26 @@ app.post("/make-server-37f42386/trips/search", requireAuth({ requireOrg: true })
     }
     trips = trips.slice(0, effectiveLimit);
 
+    console.log(JSON.stringify({
+      request_id: requestId,
+      endpoint: "trips/search",
+      org_id: effectiveOrgId,
+      row_count: trips.length,
+      total_count: count || 0,
+      db_ms: Date.now() - t0,
+    }));
+
     return c.json({
         data: trips,
         page: Math.floor(from / effectiveLimit) + 1,
         limit: effectiveLimit,
-        total: count || 0
+        total: count || 0,
+        request_id: requestId,
     });
 
   } catch (e: any) {
     console.error("Error searching trips:", e);
-    return c.json({ error: e.message || "Internal Server Error" }, 500);
+    return c.json({ error: e.message || "Internal Server Error", request_id: requestId }, 500);
   }
 });
 
@@ -2038,7 +2075,8 @@ app.post("/make-server-37f42386/trips/stats", requireAuth({ requireOrg: true }),
     const filters = await c.req.json();
     let { 
         driverId, startDate, endDate, status,
-        platform, tripType, vehicleId, anchorPeriodId, organizationId
+        platform, tripType, vehicleId, anchorPeriodId, organizationId, serviceLine,
+        driverName,
     } = filters;
     
     // Organization scoping: use feature-flag controlled strict filtering
@@ -2050,7 +2088,8 @@ app.post("/make-server-37f42386/trips/stats", requireAuth({ requireOrg: true }),
     if (useStrict && !effectiveOrgId) {
         return c.json({
             totalTrips: 0, completed: 0, cancelled: 0,
-            totalEarnings: 0, totalCashCollected: 0, avgEarnings: 0, avgDuration: 0
+            totalEarnings: 0, totalCashCollected: 0, avgEarnings: 0, avgDuration: 0,
+            sumAmount: 0, sumNet: 0,
         });
     }
 
@@ -2083,6 +2122,15 @@ app.post("/make-server-37f42386/trips/stats", requireAuth({ requireOrg: true }),
           query = query.eq("value->>driverId", driverId);
       }
 
+      if (driverName) {
+          const raw = String(driverName).trim();
+          const term = raw.includes("%") ? raw : `%${raw}%`;
+          const safe = term.replace(/,/g, "");
+          query = query.or(
+            `value->>driverName.ilike.${safe},value->>id.ilike.${safe},legacy_kv_id.ilike.${safe}`,
+          );
+      }
+
       if (anchorPeriodId) {
           query = query.eq("value->>anchorPeriodId", anchorPeriodId);
       }
@@ -2109,6 +2157,12 @@ app.post("/make-server-37f42386/trips/stats", requireAuth({ requireOrg: true }),
           query = query.eq("value->>vehicleId", vehicleId);
       }
 
+      if (serviceLine === 'rush_delivery') {
+          query = query.or('value->>serviceLine.eq.rush_delivery,value->>service_line.eq.rush_delivery,value->>platform.eq.Roam Rush');
+      } else if (serviceLine === 'rideshare') {
+          query = query.not('value->>platform', 'eq', 'Roam Rush');
+      }
+
       // isManual lives in payload_json only — apply after fetch when needed
       if (pageStart) {
           query = query.gte("value->>date", String(pageStart).slice(0, 10));
@@ -2131,11 +2185,34 @@ app.post("/make-server-37f42386/trips/stats", requireAuth({ requireOrg: true }),
     let totalCashCollected = 0;
     let durationSum = 0;
     let durationCount = 0;
+    let sumAmount = 0;
+    let sumNet = 0;
 
     const matchesTripType = (t: any) => {
       if (tripType === 'manual') return t?.isManual === true || t?.isManual === 'true';
       if (tripType === 'platform') return !(t?.isManual === true || t?.isManual === 'true');
       return true;
+    };
+
+    const resolveNet = (t: any): number | null => {
+      if (t?.netToDriver != null && Number.isFinite(Number(t.netToDriver))) return Number(t.netToDriver);
+      if (t?.indriveNetIncome != null && Number.isFinite(Number(t.indriveNetIncome))) {
+        return Number(t.indriveNetIncome);
+      }
+      const platformName = String(t?.platform || "").toLowerCase();
+      if (platformName === "indrive" || platformName === "in drive") {
+        const fee = t?.indriveServiceFee != null ? Number(t.indriveServiceFee) : null;
+        const gross =
+          t?.grossEarnings != null
+            ? Number(t.grossEarnings)
+            : t?.amount != null
+              ? Number(t.amount)
+              : null;
+        if (fee != null && Number.isFinite(fee) && gross != null && Number.isFinite(gross)) {
+          return gross - fee;
+        }
+      }
+      return null;
     };
 
     for (;;) {
@@ -2153,9 +2230,12 @@ app.post("/make-server-37f42386/trips/stats", requireAuth({ requireOrg: true }),
         if (t.status === 'Completed') completed += 1;
         else if (t.status === 'Cancelled') cancelled += 1;
 
-        const effectiveEarnings = (t.platform === 'InDrive' && t.indriveNetIncome != null)
-          ? Number(t.indriveNetIncome)
-          : (Number(t.amount) || 0);
+        const amount = Number(t.amount) || 0;
+        sumAmount += amount;
+        const net = resolveNet(t);
+        if (net != null) sumNet += net;
+
+        const effectiveEarnings = net != null ? net : amount;
         totalEarnings += effectiveEarnings;
         totalCashCollected += Number(t.cashCollected) || 0;
 
@@ -2183,7 +2263,9 @@ app.post("/make-server-37f42386/trips/stats", requireAuth({ requireOrg: true }),
         totalEarnings,
         totalCashCollected,
         avgEarnings,
-        avgDuration
+        avgDuration,
+        sumAmount,
+        sumNet,
     };
 
     // 2. Set Cache (TTL 300 seconds = 5 minutes)

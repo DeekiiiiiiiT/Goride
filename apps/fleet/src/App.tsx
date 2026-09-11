@@ -14,7 +14,6 @@ import { SettingsPage } from './components/settings/SettingsPage';
 import { FleetMaintenanceHub } from './components/vehicles/FleetMaintenanceHub';
 import { FleetPage } from './components/fleet/FleetPage';
 import { ReportsPage } from './components/reports/ReportsPage';
-import { TransactionsPage } from './components/transactions/TransactionsPage';
 import { UserManagementPage } from './components/users/UserManagementPage';
 import { EarningsPolicyConfiguration } from './components/earnings-policy';
 import { VehicleAnalytics } from './components/vehicles/VehicleAnalytics';
@@ -88,6 +87,9 @@ const ExpenseHubPage = lazy(() =>
 );
 const TripLogsPage = lazy(() =>
   import('./components/trips/TripLogsPage').then((m) => ({ default: m.TripLogsPage })),
+);
+const TransactionsPage = lazy(() =>
+  import('./components/transactions/TransactionsPage').then((m) => ({ default: m.TransactionsPage })),
 );
 const TollLogsPage = lazy(() =>
   import('./pages/TollLogs').then((m) => ({ default: m.TollLogsPage })),
@@ -743,7 +745,9 @@ function AppContent() {
         )}
         {currentPage === 'transaction-list' && (
           <PermissionGate permission="nav.transaction_list" onNavigate={setCurrentPage}>
-            <TransactionsPage mode="list" onBackToBusinessFinance={() => handleNavigate('business-finance')} />
+            <Suspense fallback={<div className="p-6 text-sm text-slate-500">Loading ledgers…</div>}>
+              <TransactionsPage mode="list" onBackToBusinessFinance={() => handleNavigate('business-finance')} />
+            </Suspense>
           </PermissionGate>
         )}
         {currentPage === 'week-reconciliation' && canUseWeekReconHub && (

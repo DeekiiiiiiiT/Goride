@@ -12,6 +12,11 @@ export interface PeriodSettlementInput {
   settlementPaid?: number;
   /** Tips paid to the driver this week (quota met or quota off). Adds to net payout. */
   tipsPaidToDriver?: number;
+  /**
+   * Cash custody brought forward from a prior closed week (Phase 2).
+   * Increases adjCashBalance / cash_still_held so Collect can discharge it on an open week.
+   */
+  openingCashCustody?: number;
 }
 
 export interface PeriodSettlementResult {
@@ -83,7 +88,10 @@ export function computePeriodSettlementMinor(i: PeriodSettlementInput): PeriodSe
   const cashOwedMinor = (toMoneyMinor(i.baseCashOwed || 0) + tollPersonalMinor) as MoneyMinor;
   const cashPaidMinor = (toMoneyMinor(i.baseCashPaid || 0) + tollCashWashMinor) as MoneyMinor;
   const cashBalanceMinor = (cashOwedMinor - cashPaidMinor) as MoneyMinor;
-  const adjCashBalanceMinor = (cashBalanceMinor - fuelCreditsMinor - cashWrittenOffMinor) as MoneyMinor;
+  const openingCustodyMinor = toMoneyMinor(i.openingCashCustody || 0);
+  const adjCashBalanceMinor = (
+    cashBalanceMinor - fuelCreditsMinor - cashWrittenOffMinor + openingCustodyMinor
+  ) as MoneyMinor;
   const grossSettlementMinor = (netPayoutMinor - adjCashBalanceMinor) as MoneyMinor;
 
   const grossPosMinor = Math.max(0, grossSettlementMinor) as MoneyMinor;

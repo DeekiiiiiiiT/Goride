@@ -3,7 +3,7 @@ import { TabbedTransactionList } from '../finance/TabbedTransactionList';
 import { BusinessFinanceDeskChrome } from '../business-finance/BusinessFinanceDeskChrome';
 
 /**
- * Transaction List desk only.
+ * Ledgers desk (page id transaction-list).
  * Legacy Financial Analytics (mode=analytics) removed — redirects live in App.tsx → Business Finance Workbench.
  */
 export function TransactionsPage({
@@ -24,7 +24,7 @@ export function TransactionsPage({
   return (
     <div className="space-y-4">
       {onBackToBusinessFinance && (
-        <BusinessFinanceDeskChrome deskLabel="Transaction List" onBack={onBackToBusinessFinance} />
+        <BusinessFinanceDeskChrome deskLabel="Ledgers" onBack={onBackToBusinessFinance} />
       )}
       <TabbedTransactionList />
     </div>

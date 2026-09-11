@@ -3,15 +3,8 @@ import { Download } from 'lucide-react';
 import { Trip } from '../../../types/data';
 import { toast } from 'sonner';
 import { mergeTripLedgerActiveColumns, type RenderColumnDef } from './TripLedgerTable';
-
-// ── CSV value helpers ───────────────────────────────────────────────────────
-
-function getNetIncome(t: Trip): number | null {
-  if (t.netToDriver != null) return t.netToDriver;
-  if (t.grossEarnings != null) return t.grossEarnings;
-  if (t.amount != null) return t.amount;
-  return null;
-}
+import { getTripNetIncome } from '../../../utils/tripNetIncome';
+import { csvEscape, csvDocument } from '../../../utils/ledgerCsvEscape';
 
 /** Map a column key to a raw (non-JSX) string value for CSV */
 function getRawValue(trip: Trip, key: string): string {
@@ -36,7 +29,7 @@ function getRawValue(trip: Trip, key: string): string {
     case 'duration': return trip.duration != null ? String(trip.duration) : '';
     case 'amount': return trip.amount != null ? String(trip.amount) : '';
     case 'netIncome': {
-      const n = getNetIncome(trip);
+      const n = getTripNetIncome(trip);
       return n != null ? String(n) : '';
     }
     case 'paymentMethod': return trip.paymentMethod || '';
@@ -77,22 +70,12 @@ function getRawValue(trip: Trip, key: string): string {
   }
 }
 
-/** Escape a value for CSV (wrap in quotes if it contains comma, quote, or newline) */
-function csvEscape(val: string): string {
-  if (val.includes(',') || val.includes('"') || val.includes('\n') || val.includes('\r')) {
-    return `"${val.replace(/"/g, '""')}"`;
-  }
-  return val;
-}
-
-// ── Export logic ────────────────────────────────────────────────────────────
-
 function buildCsv(trips: Trip[], columns: RenderColumnDef[]): string {
   const header = columns.map(c => csvEscape(c.label)).join(',');
   const rows = trips.map(trip =>
     columns.map(c => csvEscape(getRawValue(trip, c.key))).join(',')
   );
-  return [header, ...rows].join('\n');
+  return csvDocument([header, ...rows]);
 }
 
 function downloadCsv(csv: string, filename: string) {
@@ -110,15 +93,12 @@ function downloadCsv(csv: string, filename: string) {
 function generateFilename(): string {
   const now = new Date();
   const ts = now.toISOString().slice(0, 10);
-  return `trip_ledger_export_${ts}.csv`;
+  return `trip_ledger_page_export_${ts}.csv`;
 }
-
-// ── Component ───────────────────────────────────────────────────────────────
 
 interface TripLedgerExportProps {
   trips: Trip[];
   visibleColumns: string[];
-  /** When set (Super Admin), CSV headers use saved labels and column order from config. */
   columnConfig?: { key: string; label: string; visible: boolean }[];
   total: number;
 }
@@ -137,7 +117,11 @@ export function TripLedgerExport({ trips, visibleColumns, columnConfig, total }:
       const activeCols = mergeTripLedgerActiveColumns(visibleColumns, columnConfig);
       const csv = buildCsv(trips, activeCols);
       downloadCsv(csv, generateFilename());
-      toast.success(`Exported ${trips.length} trips (${activeCols.length} columns)`);
+      const pageNote =
+        total > trips.length
+          ? ` — page only (${trips.length} of ${total.toLocaleString()} matching)`
+          : '';
+      toast.success(`Exported this page: ${trips.length} trips${pageNote}`);
     } catch (err: any) {
       console.error('CSV export error:', err);
       toast.error('Export failed: ' + (err?.message || 'Unknown error'));
@@ -151,10 +135,16 @@ export function TripLedgerExport({ trips, visibleColumns, columnConfig, total }:
       onClick={handleExport}
       disabled={exporting || trips.length === 0}
       className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-      title={trips.length > 0 ? `Export ${trips.length} trips on this page as CSV` : 'No trips to export'}
+      title={
+        trips.length > 0
+          ? total > trips.length
+            ? `Export this page only (${trips.length} of ${total.toLocaleString()} matching)`
+            : `Export ${trips.length} trips as CSV`
+          : 'No trips to export'
+      }
     >
       <Download className={`h-4 w-4 ${exporting ? 'animate-bounce' : ''}`} />
-      Export
+      Export this page
       {trips.length > 0 && (
         <span className="text-xs text-slate-400 dark:text-slate-500">({trips.length})</span>
       )}

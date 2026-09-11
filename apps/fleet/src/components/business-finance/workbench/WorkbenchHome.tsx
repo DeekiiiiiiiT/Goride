@@ -95,7 +95,7 @@ export function WorkbenchHome({
         {[
           { page: 'fleet-financials', label: 'Bank Deposits' },
           { page: 'indrive-wallet', label: 'InDrive Wallet' },
-          { page: 'transaction-list', label: 'Transaction List' },
+          { page: 'transaction-list', label: 'Ledgers' },
         ].map((d, i) => (
           <React.Fragment key={d.page}>
             {i > 0 && <span className="text-slate-300">·</span>}

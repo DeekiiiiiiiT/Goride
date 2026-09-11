@@ -224,6 +224,8 @@ export async function getLatestWeekStatementsForOrgWeek(
 /**
  * Mark statements closed for a driver-week (called by the close path). Only
  * `draft` rows advance to `closed`; already-closed rows are left untouched.
+ * M-3: single batch update for all draft ids — mid-loop throw must not leave
+ * mixed draft/closed for one driver-week.
  */
 export async function closeWeekStatements(
   organizationId: string,
@@ -233,9 +235,9 @@ export async function closeWeekStatements(
   closeReason: string,
 ): Promise<number> {
   const latest = await getLatestWeekStatements(organizationId, driverId, weekKey);
-  let closed = 0;
-  for (const s of latest) {
-    if (s.status !== "draft" || !s.id) continue;
+  const drafts = latest.filter((s) => s.status === "draft" && s.id);
+  const ids = drafts.map((s) => String(s.id));
+  if (ids.length > 0) {
     const { error } = await sb()
       .from("week_statements")
       .update({
@@ -244,19 +246,22 @@ export async function closeWeekStatements(
         closed_by: closedBy,
         close_reason: closeReason,
       })
-      .eq("id", s.id)
+      .in("id", ids)
       .eq("status", "draft");
     if (error) throw new Error(error.message);
-    // Restatement drafts supersede a prior closed row — retire it on sign.
-    if (s.supersedes) {
+
+    // Restatement drafts supersede a prior closed row — retire them on sign.
+    const supersedeIds = drafts
+      .map((s) => (s.supersedes ? String(s.supersedes) : ""))
+      .filter(Boolean);
+    if (supersedeIds.length > 0) {
       const { error: retireErr } = await sb()
         .from("week_statements")
         .update({ status: "restated" })
-        .eq("id", s.supersedes)
+        .in("id", supersedeIds)
         .eq("status", "closed");
       if (retireErr) throw new Error(retireErr.message);
     }
-    closed++;
   }
   // Older draft restatements for this week are history — retire so the queue stays clean.
   const { error: dropErr } = await sb()
@@ -268,7 +273,7 @@ export async function closeWeekStatements(
     .eq("status", "draft")
     .not("supersedes", "is", null);
   if (dropErr) throw new Error(dropErr.message);
-  return closed;
+  return ids.length;
 }
 
 export { hasPendingRestatementDrafts } from "../../../packages/finance-core/src/weekStatement.ts";

@@ -58,6 +58,8 @@ export interface TripFilterParams {
     hasSurge?: string;
     organizationId?: string; // Super Admin: scope to specific customer org
     serviceLine?: 'rideshare' | 'rush_delivery' | 'all';
+    sortKey?: string;
+    sortDir?: 'asc' | 'desc';
 }
 
 export interface PaginatedTripResponse {
@@ -3918,6 +3920,38 @@ export const api = {
     }
     const result = await response.json();
     return result.data || [];
+  },
+
+  /** Suggestion-free paged toll ledger list (Ledgers desk — F-13). */
+  async getTollLedger(params?: {
+    organizationId?: string;
+    startDate?: string;
+    endDate?: string;
+    driverId?: string;
+    vehicleId?: string;
+    status?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<{ data: any[]; total: number }> {
+    const qs = new URLSearchParams();
+    if (params?.organizationId) qs.set('organizationId', params.organizationId);
+    if (params?.startDate) qs.set('startDate', params.startDate);
+    if (params?.endDate) qs.set('endDate', params.endDate);
+    if (params?.driverId) qs.set('driverId', params.driverId);
+    if (params?.vehicleId) qs.set('vehicleId', params.vehicleId);
+    if (params?.status) qs.set('status', params.status);
+    qs.set('limit', String(params?.limit ?? 500));
+    qs.set('offset', String(params?.offset ?? 0));
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.financial}/toll-reconciliation/ledger?${qs.toString()}`,
+      { headers: await requireAuthHeaders(null) },
+    );
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || 'Failed to fetch toll ledger');
+    }
+    const result = await response.json();
+    return { data: result.data || [], total: result.total ?? 0 };
   },
 
   /** IDEA 2: unified toll financial events (multi-source read model). */

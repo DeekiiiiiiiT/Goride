@@ -7,15 +7,29 @@ import { TripLedgerColumnToggle } from './trip-ledger/TripLedgerColumnToggle';
 import { TripLedgerFilterBar, TripLedgerFilters, EMPTY_FILTERS } from './trip-ledger/TripLedgerFilterBar';
 import { TripLedgerStats } from './trip-ledger/TripLedgerStats';
 import { TripLedgerExport } from './trip-ledger/TripLedgerExport';
+import { useServiceLineScope } from '../../contexts/ServiceLineScopeContext';
+import { useQuery } from '@tanstack/react-query';
 
 const STORAGE_KEY = 'roam_trip_ledger_columns';
+const STORAGE_VERSION_KEY = 'roam_trip_ledger_columns_v';
+/** Bump when DEFAULT_VISIBLE_KEYS gains new defaultVisible columns (F-15). */
+const COLUMN_PREF_VERSION = 2;
 
 function loadVisibleColumns(): string[] {
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
+    const ver = Number(localStorage.getItem(STORAGE_VERSION_KEY) || '0');
     if (stored) {
       const parsed = JSON.parse(stored);
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        if (ver < COLUMN_PREF_VERSION) {
+          const merged = Array.from(new Set([...parsed, ...DEFAULT_VISIBLE_KEYS]));
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
+          localStorage.setItem(STORAGE_VERSION_KEY, String(COLUMN_PREF_VERSION));
+          return merged;
+        }
+        return parsed;
+      }
     }
   } catch { /* ignore */ }
   return [...DEFAULT_VISIBLE_KEYS];
@@ -24,17 +38,21 @@ function loadVisibleColumns(): string[] {
 function saveVisibleColumns(keys: string[]) {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(keys));
+    localStorage.setItem(STORAGE_VERSION_KEY, String(COLUMN_PREF_VERSION));
   } catch { /* ignore */ }
 }
 
-/** Convert UI filters into the API's TripFilterParams shape */
-function filtersToApiParams(f: TripLedgerFilters): Partial<TripFilterParams> {
+function filtersToApiParams(
+  f: TripLedgerFilters,
+  serviceLine?: 'rideshare' | 'rush_delivery' | 'all',
+): Partial<TripFilterParams> {
   const params: Partial<TripFilterParams> = {};
-  if (f.search) params.driverName = f.search;  // server does fuzzy match on driver name + trip ID
+  if (f.search) params.driverName = f.search;
   if (f.platform) params.platform = f.platform;
   if (f.status) params.status = f.status;
   if (f.dateFrom) params.startDate = f.dateFrom;
   if (f.dateTo) params.endDate = f.dateTo;
+  if (serviceLine && serviceLine !== 'all') params.serviceLine = serviceLine;
   return params;
 }
 
@@ -51,6 +69,7 @@ interface TripLedgerPageProps {
 }
 
 export function TripLedgerPage({ organizationId, columnConfig }: TripLedgerPageProps = {}) {
+  const { scope } = useServiceLineScope();
   const [trips, setTrips] = useState<Trip[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(0);
@@ -58,18 +77,36 @@ export function TripLedgerPage({ organizationId, columnConfig }: TripLedgerPageP
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filters, setFilters] = useState<TripLedgerFilters>({ ...EMPTY_FILTERS });
+  const [sortKey, setSortKey] = useState<string | null>(null);
+  const [sortDir, setSortDir] = useState<'asc' | 'desc' | null>(null);
 
-  // Use server config if provided (Super Admin view), otherwise use localStorage (fleet view)
   const [localVisibleColumns, setLocalVisibleColumns] = useState<string[]>(loadVisibleColumns);
-  
+
   const visibleColumns = columnConfig
     ? columnConfig.filter(c => c.visible).map(c => c.key)
     : localVisibleColumns;
 
-  // Track the latest fetch request to avoid stale responses
   const fetchIdRef = useRef(0);
 
-  const fetchTrips = useCallback(async (p: number, ps: number, f: TripLedgerFilters) => {
+  const apiFilterBase = filtersToApiParams(filters, scope);
+
+  const statsQuery = useQuery({
+    queryKey: ['tripLedgerStats', apiFilterBase, organizationId],
+    queryFn: () =>
+      api.getTripStats({
+        ...apiFilterBase,
+        ...(organizationId ? { organizationId } : {}),
+      }),
+    staleTime: 30_000,
+  });
+
+  const fetchTrips = useCallback(async (
+    p: number,
+    ps: number,
+    f: TripLedgerFilters,
+    sk: string | null,
+    sd: 'asc' | 'desc' | null,
+  ) => {
     const id = ++fetchIdRef.current;
     setLoading(true);
     setError(null);
@@ -77,11 +114,11 @@ export function TripLedgerPage({ organizationId, columnConfig }: TripLedgerPageP
       const apiParams: TripFilterParams = {
         limit: ps,
         offset: p * ps,
-        ...filtersToApiParams(f),
+        ...filtersToApiParams(f, scope),
         ...(organizationId ? { organizationId } : {}),
+        ...(sk && sd ? { sortKey: sk, sortDir: sd } : {}),
       };
       const result = await api.getTripsFiltered(apiParams);
-      // Discard if a newer request has been fired
       if (id !== fetchIdRef.current) return;
       setTrips(result.data || []);
       setTotal(result.total || 0);
@@ -92,38 +129,27 @@ export function TripLedgerPage({ organizationId, columnConfig }: TripLedgerPageP
     } finally {
       if (id === fetchIdRef.current) setLoading(false);
     }
-  }, [organizationId]);
+  }, [organizationId, scope]);
 
   useEffect(() => {
-    fetchTrips(page, pageSize, filters);
-  }, [page, pageSize, filters, fetchTrips, organizationId]);
+    fetchTrips(page, pageSize, filters, sortKey, sortDir);
+  }, [page, pageSize, filters, fetchTrips, organizationId, sortKey, sortDir, scope]);
 
-  const handlePageChange = (newPage: number) => {
-    setPage(newPage);
-  };
-
+  const handlePageChange = (newPage: number) => setPage(newPage);
   const handlePageSizeChange = (newSize: number) => {
     setPage(0);
     setPageSize(newSize);
   };
-
-  const handleRetry = () => {
-    fetchTrips(page, pageSize, filters);
-  };
-
-  // ── Filter handler — resets to page 0 on any filter change ──────────────
+  const handleRetry = () => fetchTrips(page, pageSize, filters, sortKey, sortDir);
   const handleFiltersChange = (next: TripLedgerFilters) => {
     setFilters(next);
     setPage(0);
   };
 
-  // ── Column toggle handlers (only for local/fleet view, not Super Admin) ──
   const handleColumnToggle = (key: string) => {
-    if (columnConfig) return; // Server config takes precedence
+    if (columnConfig) return;
     setLocalVisibleColumns(prev => {
-      const next = prev.includes(key)
-        ? prev.filter(k => k !== key)
-        : [...prev, key];
+      const next = prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key];
       if (next.length === 0) return prev;
       saveVisibleColumns(next);
       return next;
@@ -131,31 +157,29 @@ export function TripLedgerPage({ organizationId, columnConfig }: TripLedgerPageP
   };
 
   const handleResetColumns = () => {
-    if (columnConfig) return; // Server config takes precedence
+    if (columnConfig) return;
     setLocalVisibleColumns([...DEFAULT_VISIBLE_KEYS]);
     saveVisibleColumns([...DEFAULT_VISIBLE_KEYS]);
   };
-  
-  // When in Super Admin view, hide the column toggle button
+
   const showColumnToggle = !columnConfig;
+  const serverStats = statsQuery.data;
 
   return (
     <div className="space-y-5">
-      {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="p-2.5 rounded-lg bg-emerald-100 dark:bg-emerald-900/50">
             <FileText className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Trip Ledger</h1>
+            <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Trip Ledger</h2>
             <p className="text-sm text-slate-500 dark:text-slate-400">
               All trip records with full financial breakdown
             </p>
           </div>
         </div>
 
-        {/* Toolbar: Column Toggle + Refresh */}
         <div className="flex items-center gap-2">
           <TripLedgerExport
             trips={trips}
@@ -182,7 +206,6 @@ export function TripLedgerPage({ organizationId, columnConfig }: TripLedgerPageP
         </div>
       </div>
 
-      {/* Filter Bar */}
       <TripLedgerFilterBar
         filters={filters}
         onChange={handleFiltersChange}
@@ -190,14 +213,14 @@ export function TripLedgerPage({ organizationId, columnConfig }: TripLedgerPageP
         totalResults={total}
       />
 
-      {/* Summary Stats */}
       <TripLedgerStats
         trips={trips}
-        total={total}
-        loading={loading}
+        total={serverStats?.totalTrips ?? total}
+        loading={loading || statsQuery.isFetching}
+        filterSumAmount={serverStats?.sumAmount}
+        filterSumNet={serverStats?.sumNet}
       />
 
-      {/* Error state */}
       {error && (
         <div className="rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/30 p-4">
           <div className="flex items-center justify-between">
@@ -215,7 +238,6 @@ export function TripLedgerPage({ organizationId, columnConfig }: TripLedgerPageP
         </div>
       )}
 
-      {/* Table */}
       <TripLedgerTable
         trips={trips}
         total={total}
@@ -226,6 +248,14 @@ export function TripLedgerPage({ organizationId, columnConfig }: TripLedgerPageP
         columnConfig={columnConfig}
         onPageChange={handlePageChange}
         onPageSizeChange={handlePageSizeChange}
+        hasActiveFilters={Object.values(filters).some((v) => !!v)}
+        serverSortKey={sortKey}
+        serverSortDir={sortDir}
+        onServerSort={(key, dir) => {
+          setSortKey(key);
+          setSortDir(dir);
+          setPage(0);
+        }}
       />
     </div>
   );

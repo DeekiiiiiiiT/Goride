@@ -85,8 +85,7 @@ export function useDriverDetailShellData({
     };
   }, [financialDateRange]);
 
-  const showOverviewDateControls =
-    activeTab === 'overview' || activeTab === 'indrive-wallet';
+  const showOverviewDateControls = activeTab === 'overview';
 
   const didInitDateRangeFromCsv = useRef(false);
   useEffect(() => {

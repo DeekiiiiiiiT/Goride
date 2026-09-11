@@ -35,12 +35,16 @@ import { sealEarningsWeek } from "./earnings_week_seal.ts";
 import { compareDriverWeekStatementsToEngines } from "./statement_engine_probe.ts";
 import { upsertFinanceReconDrifts, countOpenFinanceReconDrifts } from "./finance_recon_drift.ts";
 import { weekPnlTieSides } from "./business_week_pnl.ts";
-import { summarizeTollUsageOrphansForWeek } from "./toll_financial_reset.ts";
+import {
+  summarizeTollUsageOrphansByDriverForWeek,
+  type TollUsageIntegritySummary,
+} from "./toll_financial_reset.ts";
 import { engineDriftsToCloseBlockers } from "../../../packages/finance-core/src/statementEngineCompare.ts";
 import type { StatementEngineDrift } from "../../../packages/finance-core/src/statementEngineCompare.ts";
 import {
   buildCloseHash,
   buildPeriodCloseHashPayload,
+  storedCloseHashFromPeriod,
 } from "../../../packages/finance-core/src/closeHash.ts";
 import {
   checkCloseInvariants,
@@ -55,6 +59,7 @@ import {
   type CloseTollStatement,
 } from "../../../packages/finance-core/src/closeInvariants.ts";
 import { tollPeriodDisagreesWithSeal } from "../../../packages/finance-core/src/tollPeriodSealDrift.ts";
+import { stampCloseInvariantSnapshotOnMeta } from "../../../packages/finance-core/src/periodSignedSnapshot.ts";
 import type { WeekStatement } from "../../../packages/finance-core/src/weekStatement.ts";
 import {
   accumulateWeekDirectory,
@@ -64,10 +69,409 @@ import {
   type OpenWeekSummary,
 } from "../../../packages/finance-core/src/weekCloseDirectory.ts";
 import { closeWeekLaneForceOpts, resolveCloseLaneForceOpts } from "./week_close_force_opts.ts";
-import type { CloseLaneForceOpts, PrepareWeekCloseOpts } from "./week_close_force_opts.ts";
+import type { CloseLaneForceOpts, CloseWeekOpts, PrepareWeekCloseOpts } from "./week_close_force_opts.ts";
+import { periodEndForAnchor } from "../../../packages/finance-core/src/periodKey.ts";
+import { round2 } from "../../../packages/finance-core/src/money.ts";
+import {
+  CUSTODY_ERROR_CODES,
+  CUSTODY_TARGET_HORIZON_WEEKS,
+  PRIOR_CLOSE_HASH_CHANGED,
+  clearCustodyTransferMarks,
+  custodyCarryAlreadyLanded,
+  custodyTargetWeekCandidates,
+  mergeOpeningCashCustody,
+  openingCustodyAfterReverse,
+  pickFirstOpenCustodyTargetFromMap,
+  priorCloseHashChanged,
+  readCustodyTransferMarks,
+  residualCustodyHeld,
+} from "../../../packages/finance-core/src/custodyCarry.ts";
+import {
+  releaseWeekCloseLock,
+  tryClaimWeekCloseLock,
+} from "./week_close_lock.ts";
+import { persistPeriodRowWithVersion } from "./period_persist.ts";
 
-export type { CloseLaneForceOpts, PrepareWeekCloseOpts } from "./week_close_force_opts.ts";
+export type { CloseLaneForceOpts, CloseWeekOpts, PrepareWeekCloseOpts } from "./week_close_force_opts.ts";
 export { closeWeekLaneForceOpts, resolveCloseLaneForceOpts } from "./week_close_force_opts.ts";
+
+type CustodyTargetRow = {
+  id: string;
+  metadata: Record<string, unknown> | null;
+  organization_id?: string | null;
+  driver_id?: string;
+  period_anchor?: string;
+  status?: string | null;
+  settlement_status?: string | null;
+};
+
+/**
+ * N-2 / P-6: first non-frozen week after `afterWeekKey` (missing row = open stub).
+ * One ranged query + in-memory Monday walk (not 52 sequential maybeSingle).
+ */
+async function findFirstOpenCustodyTarget(
+  driverId: string,
+  afterWeekKey: string,
+  preferredTargetWeek?: string | null,
+): Promise<{ targetWeek: string; existingRow: CustodyTargetRow | null } | null> {
+  const preferred = String(preferredTargetWeek || "").slice(0, 10);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(preferred)) {
+    const { data: prefRow, error: prefErr } = await sb()
+      .from("driver_financial_periods")
+      .select("id, metadata, organization_id, driver_id, period_anchor, status, settlement_status, closed_at")
+      .eq("driver_id", driverId)
+      .eq("period_anchor", preferred)
+      .maybeSingle();
+    if (prefErr) throw new Error(prefErr.message);
+    if (!prefRow?.id) {
+      return { targetWeek: preferred, existingRow: null };
+    }
+    if (
+      !periodIsFrozen({
+        metadata: prefRow.metadata,
+        settlement_status: prefRow.settlement_status,
+        status: prefRow.status,
+        closed_at: prefRow.closed_at,
+      } as Record<string, unknown>)
+    ) {
+      return { targetWeek: preferred, existingRow: prefRow as CustodyTargetRow };
+    }
+    // Preferred became frozen — fall through to ranged walk.
+  }
+
+  const candidates = custodyTargetWeekCandidates(afterWeekKey);
+  const horizonEnd = candidates[candidates.length - 1];
+  const { data: rows, error } = await sb()
+    .from("driver_financial_periods")
+    .select("id, metadata, organization_id, driver_id, period_anchor, status, settlement_status, closed_at")
+    .eq("driver_id", driverId)
+    .gt("period_anchor", afterWeekKey)
+    .lte("period_anchor", horizonEnd)
+    .order("period_anchor", { ascending: true })
+    .limit(CUSTODY_TARGET_HORIZON_WEEKS);
+  if (error) throw new Error(error.message);
+
+  const byAnchor = new Map<string, CustodyTargetRow>();
+  const frozenByAnchor = new Map<string, boolean>();
+  for (const row of rows || []) {
+    const anchor = String(row.period_anchor || "").slice(0, 10);
+    if (!anchor) continue;
+    byAnchor.set(anchor, row as CustodyTargetRow);
+    frozenByAnchor.set(
+      anchor,
+      periodIsFrozen({
+        metadata: row.metadata,
+        settlement_status: row.settlement_status,
+        status: row.status,
+        closed_at: row.closed_at,
+      } as Record<string, unknown>),
+    );
+  }
+
+  const picked = pickFirstOpenCustodyTargetFromMap({
+    afterWeekKey,
+    frozenByAnchor,
+  });
+  if (!picked) return null;
+  if (!picked.exists) {
+    return { targetWeek: picked.targetWeek, existingRow: null };
+  }
+  return {
+    targetWeek: picked.targetWeek,
+    existingRow: byAnchor.get(picked.targetWeek) || null,
+  };
+}
+
+/**
+ * Phase 2 / Pass 4–6: after calendar freeze (or recovery), transfer residual
+ * cash_still_held onto the first non-frozen later week as openingCashCustody.
+ */
+async function carryForwardCashCustodyAfterFreeze(opts: {
+  orgId: string;
+  weekKey: string;
+  freezeBatch: Array<{
+    id: string;
+    driverId: string;
+    metadata: Record<string, unknown>;
+  }>;
+  periodByDriver: Map<string, Record<string, unknown>>;
+  /** P-6: reuse targets already resolved in close preflight. */
+  resolvedTargets?: Map<string, string>;
+}): Promise<{ carried: number; totalAmount: number }> {
+  let carried = 0;
+  let totalAmount = 0;
+
+  for (const f of opts.freezeBatch) {
+    const period = opts.periodByDriver.get(f.driverId);
+    if (!period) continue;
+    const held = residualCustodyHeld(Number(period.cash_still_held) || 0, CLOSE_INVARIANT_EPS);
+    if (held <= CLOSE_INVARIANT_EPS) continue;
+
+    const srcFc = ((f.metadata.financeCore || {}) as Record<string, unknown>);
+    // Idempotent skip only when marks exist AND successor still shows opening custody.
+    if (srcFc.custodyTransferredTo) {
+      const marks = readCustodyTransferMarks(srcFc);
+      const opening = await loadSuccessorOpeningCustody(f.driverId, marks.transferredTo!);
+      if (custodyCarryAlreadyLanded(srcFc, opening, CLOSE_INVARIANT_EPS)) continue;
+      // Fall through to heal onto first open target (may differ from stale mark).
+    }
+
+    const preferred = opts.resolvedTargets?.get(f.driverId) || null;
+    const target = await findFirstOpenCustodyTarget(f.driverId, opts.weekKey, preferred);
+    if (!target) {
+      throw new WeekCloseError(
+        CUSTODY_ERROR_CODES.NO_OPEN_TARGET,
+        `No open week to carry $${held.toFixed(2)} custody for driver after ${opts.weekKey} — reopen a later week or leave an open period`,
+        409,
+        {
+          driverId: f.driverId,
+          weekKey: opts.weekKey,
+          cashStillHeld: held,
+        },
+      );
+    }
+
+    const { targetWeek, existingRow } = target;
+    const orgId =
+      String(period.organization_id || existingRow?.organization_id || opts.orgId || "").trim() ||
+      opts.orgId;
+
+    if (existingRow?.id) {
+      const nextMeta = { ...((existingRow.metadata as Record<string, unknown>) || {}) };
+      const nextFc = { ...((nextMeta.financeCore as Record<string, unknown>) || {}) };
+      nextMeta.financeCore = mergeOpeningCashCustody(nextFc, held, opts.weekKey);
+      await persistPeriodRowWithVersion(f.driverId, targetWeek, {
+        metadata: nextMeta,
+        updated_at: new Date().toISOString(),
+      });
+    } else {
+      await persistPeriodRowWithVersion(f.driverId, targetWeek, {
+        organization_id: orgId,
+        period_end: periodEndForAnchor(targetWeek),
+        status: "open",
+        settlement_status: "pending",
+        cash_still_held: held,
+        cash_still_held_minor: Math.round(held * 100),
+        metadata: {
+          financeCore: mergeOpeningCashCustody({}, held, opts.weekKey),
+        },
+        source_event_hash: "",
+      });
+    }
+
+    const srcMeta = {
+      ...f.metadata,
+      financeCore: {
+        ...srcFc,
+        custodyTransferredTo: targetWeek,
+        custodyTransferredAmount: held,
+      },
+    };
+    await persistPeriodRowWithVersion(
+      f.driverId,
+      opts.weekKey,
+      {
+        metadata: srcMeta,
+        updated_at: new Date().toISOString(),
+      },
+      3,
+      { allowFrozen: true },
+    );
+
+    try {
+      const { rebuildOneDriverPeriod } = await import("./driver_financial_periods.ts");
+      await rebuildOneDriverPeriod(f.driverId, targetWeek);
+    } catch (e) {
+      console.warn("[week_close] next week rebuild after custody carry failed", f.driverId, e);
+    }
+
+    carried += 1;
+    totalAmount = round2(totalAmount + held);
+  }
+
+  return { carried, totalAmount };
+}
+
+async function loadSuccessorOpeningCustody(
+  driverId: string,
+  successorWeek: string,
+): Promise<number> {
+  const { data: succ } = await sb()
+    .from("driver_financial_periods")
+    .select("metadata")
+    .eq("driver_id", driverId)
+    .eq("period_anchor", successorWeek)
+    .maybeSingle();
+  const succFc = ((succ?.metadata as Record<string, unknown> | null)?.financeCore ||
+    {}) as Record<string, unknown>;
+  return round2(Math.max(0, Number(succFc.openingCashCustody) || 0));
+}
+
+/**
+ * N-3 preflight (read-only): custody carry readiness before freeze.
+ * - ok + targetWeek: residual needs carry and an open week was found (reuse in carry)
+ * - ok + no targetWeek: no residual / already landed
+ * - blocked: residual with no open target in horizon
+ */
+async function custodyCarryPreflight(
+  driverId: string,
+  weekKey: string,
+  period: Record<string, unknown>,
+  metadata: Record<string, unknown> | null,
+): Promise<
+  | { ok: true; targetWeek?: string }
+  | { ok: false; held: number }
+> {
+  const held = residualCustodyHeld(Number(period.cash_still_held) || 0, CLOSE_INVARIANT_EPS);
+  if (held <= CLOSE_INVARIANT_EPS) return { ok: true };
+  const fc = ((metadata?.financeCore || {}) as Record<string, unknown>);
+  if (fc.custodyTransferredTo) {
+    const marks = readCustodyTransferMarks(fc);
+    const opening = await loadSuccessorOpeningCustody(driverId, marks.transferredTo!);
+    if (custodyCarryAlreadyLanded(fc, opening, CLOSE_INVARIANT_EPS)) return { ok: true };
+  }
+  const target = await findFirstOpenCustodyTarget(driverId, weekKey);
+  if (!target) return { ok: false, held };
+  return { ok: true, targetWeek: target.targetWeek };
+}
+
+function custodyNoOpenTargetBlocker(
+  driverId: string,
+  week: string,
+  held: number,
+): CloseBlocker {
+  return {
+    code: CUSTODY_ERROR_CODES.NO_OPEN_TARGET,
+    severity: "block",
+    driverId,
+    week,
+    persisted: held,
+    expected: 0,
+    delta: held,
+    message: `No open week to park $${held.toFixed(2)} passenger cash after ${week} — reopen a later week or leave one open`,
+  };
+}
+
+/**
+ * Pass 6: run custody carry for every driver on the week that still needs it
+ * (just-frozen batch and/or already-frozen stranded rows).
+ */
+async function runCustodyCarryForWeek(opts: {
+  orgId: string;
+  weekKey: string;
+  periodRows: Array<Record<string, unknown>>;
+  resolvedTargets?: Map<string, string>;
+}): Promise<{ carried: number; totalAmount: number }> {
+  const periodByDriver = new Map<string, Record<string, unknown>>();
+  const freezeBatch: Array<{
+    id: string;
+    driverId: string;
+    metadata: Record<string, unknown>;
+  }> = [];
+
+  for (const p of opts.periodRows) {
+    const driverId = String(p.driver_id || "");
+    if (!driverId || !p.id) continue;
+    // Only carry from calendar-frozen sources — never from an open week that failed close.
+    if (!periodIsFrozen(p)) continue;
+    periodByDriver.set(driverId, p);
+    const held = residualCustodyHeld(Number(p.cash_still_held) || 0, CLOSE_INVARIANT_EPS);
+    if (held <= CLOSE_INVARIANT_EPS) continue;
+    const meta = { ...((p.metadata as Record<string, unknown>) || {}) };
+    freezeBatch.push({
+      id: String(p.id),
+      driverId,
+      metadata: meta,
+    });
+  }
+
+  if (freezeBatch.length === 0) return { carried: 0, totalAmount: 0 };
+  return carryForwardCashCustodyAfterFreeze({
+    orgId: opts.orgId,
+    weekKey: opts.weekKey,
+    freezeBatch,
+    periodByDriver,
+    resolvedTargets: opts.resolvedTargets,
+  });
+}
+
+/**
+ * N-1: pull carried custody back from the successor before unfreezing source week N.
+ * Returns metadata with transfer marks cleared (caller merges into clearPeriodFreeze result).
+ */
+async function reverseCustodyCarryOnReopen(opts: {
+  driverId: string;
+  weekKey: string;
+  metadata: Record<string, unknown>;
+}): Promise<Record<string, unknown>> {
+  const fc = { ...((opts.metadata.financeCore as Record<string, unknown>) || {}) };
+  const marks = readCustodyTransferMarks(fc);
+  if (!marks.transferredTo || marks.transferredAmount <= CLOSE_INVARIANT_EPS) {
+    return opts.metadata;
+  }
+
+  const successorWeek = marks.transferredTo;
+  const { data: succ, error } = await sb()
+    .from("driver_financial_periods")
+    .select("id, metadata, status, settlement_status, closed_at")
+    .eq("driver_id", opts.driverId)
+    .eq("period_anchor", successorWeek)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+
+  if (succ?.id) {
+    if (
+      periodIsFrozen({
+        metadata: succ.metadata,
+        settlement_status: succ.settlement_status,
+        status: succ.status,
+        closed_at: succ.closed_at,
+      } as Record<string, unknown>)
+    ) {
+      throw new WeekCloseError(
+        CUSTODY_ERROR_CODES.SUCCESSOR_FROZEN,
+        `Reopen ${opts.weekKey} would double-count custody still parked on closed week ${successorWeek} — reopen ${successorWeek} first`,
+        409,
+        {
+          driverId: opts.driverId,
+          weekKey: opts.weekKey,
+          successorWeek,
+          amount: marks.transferredAmount,
+        },
+      );
+    }
+
+    const succMeta = { ...((succ.metadata as Record<string, unknown>) || {}) };
+    const succFc = { ...((succMeta.financeCore as Record<string, unknown>) || {}) };
+    const nextOpening = openingCustodyAfterReverse(
+      Number(succFc.openingCashCustody) || 0,
+      marks.transferredAmount,
+    );
+    if (nextOpening > CLOSE_INVARIANT_EPS) {
+      succFc.openingCashCustody = nextOpening;
+    } else {
+      delete succFc.openingCashCustody;
+      delete succFc.custodyReceivedFrom;
+    }
+    succMeta.financeCore = succFc;
+    await persistPeriodRowWithVersion(opts.driverId, successorWeek, {
+      metadata: succMeta,
+      updated_at: new Date().toISOString(),
+    });
+
+    try {
+      const { rebuildOneDriverPeriod } = await import("./driver_financial_periods.ts");
+      await rebuildOneDriverPeriod(opts.driverId, successorWeek);
+    } catch (e) {
+      console.warn("[week_close] successor rebuild after custody reverse failed", opts.driverId, e);
+    }
+  }
+
+  return {
+    ...opts.metadata,
+    financeCore: clearCustodyTransferMarks(fc),
+  };
+}
 
 function sb() {
   return getServiceClient();
@@ -92,6 +496,76 @@ async function mapPool<T, R>(
   });
   await Promise.all(workers);
   return out;
+}
+
+/**
+ * P-4: columns for close invariants, freeze, hash, reopen — not select("*").
+ * metadata is required (financeCore freeze + cash ack).
+ */
+const PERIOD_CLOSE_SELECT = [
+  "id",
+  "driver_id",
+  "organization_id",
+  "period_anchor",
+  "period_end",
+  "status",
+  "metadata",
+  "source_event_hash",
+  "close_hash",
+  "cash_collected",
+  "cash_returned",
+  "cash_still_held",
+  "cash_written_off",
+  "settlement_paid",
+  "settlement_amount",
+  "settlement_status",
+  "payout_net",
+  "toll_spend",
+  "toll_cash_spend",
+  "toll_tag_spend",
+  "toll_reimbursed",
+  "toll_charged_to_driver",
+  "toll_unmatched_count",
+  "dispute_refund_matched",
+  "dispute_refund_unmatched",
+  "fuel_deduction",
+  "fuel_fleet_share",
+  "fuel_finalized",
+  "driver_share",
+  "fleet_share",
+  "earnings_gross",
+  "tips_paid_to_driver",
+  "trip_count",
+  "closed_at",
+].join(", ");
+
+function tollEventLedgerFromSummary(
+  sum: TollUsageIntegritySummary | undefined | null,
+): {
+  orphanCount: number;
+  orphanAmountMajor: number;
+  eventSpendMajor: number;
+  ledgerSpendMajor: number;
+  missingEventCount: number;
+  missingEventAmountMajor: number;
+  ineligibleEventCount: number;
+  ineligibleEventAmountMajor: number;
+  amountMismatchCount: number;
+  amountMismatchAmountMajor: number;
+} | null {
+  if (!sum) return null;
+  return {
+    orphanCount: sum.orphanCount,
+    orphanAmountMajor: sum.orphanAmountMajor,
+    eventSpendMajor: sum.eventSpendMajor,
+    ledgerSpendMajor: sum.ledgerSpendMajor,
+    missingEventCount: sum.missingEventCount,
+    missingEventAmountMajor: sum.missingEventAmountMajor,
+    ineligibleEventCount: sum.ineligibleEventCount,
+    ineligibleEventAmountMajor: sum.ineligibleEventAmountMajor,
+    amountMismatchCount: sum.amountMismatchCount,
+    amountMismatchAmountMajor: sum.amountMismatchAmountMajor,
+  };
 }
 
 /** Draft restatements (supersedes set) are amount-ready; treat as closed for invariants. */
@@ -162,11 +636,13 @@ export class WeekCloseError extends Error {
 function periodIsFrozen(period: Record<string, unknown>): boolean {
   const meta = (period.metadata as Record<string, unknown> | null) || null;
   const fc = (meta?.financeCore as Record<string, unknown> | undefined) || {};
-  // R-2: do not read period.signed_at — column is never written; freeze is metadata-only.
+  // R-2: do not read period.signed_at — column is never written; freeze is metadata + status/closed_at.
   return isPeriodFrozen({
     metadata: meta,
     settlementStatus: period.settlement_status ? String(period.settlement_status) : null,
     signedAt: fc.signedAt ? String(fc.signedAt) : null,
+    status: period.status != null ? String(period.status) : null,
+    closedAt: period.closed_at != null ? String(period.closed_at) : null,
   });
 }
 
@@ -177,7 +653,8 @@ function settlementRiskForPeriod(period: Record<string, unknown>): {
   cashCollected: number;
   cashWrittenOff: number;
 } {
-  // H-10: reopen risk includes payouts, collections, and write-offs — not payouts alone.
+  // M-1: reopen risk includes payouts, returns, write-offs, and collections
+  // (collected-without-returned is risk — do not AND with returned).
   const settlementPaid = Number(period.settlement_paid) || 0;
   const settlementAmount = Number(period.settlement_amount) || 0;
   const cashCollected = Number(period.cash_collected) || 0;
@@ -187,7 +664,7 @@ function settlementRiskForPeriod(period: Record<string, unknown>): {
     Math.abs(settlementPaid) > CLOSE_INVARIANT_EPS ||
     Math.abs(cashReturned) > CLOSE_INVARIANT_EPS ||
     Math.abs(cashWrittenOff) > CLOSE_INVARIANT_EPS ||
-    (Math.abs(cashCollected) > CLOSE_INVARIANT_EPS && Math.abs(cashReturned) > CLOSE_INVARIANT_EPS);
+    Math.abs(cashCollected) > CLOSE_INVARIANT_EPS;
   return { risk, settlementPaid, settlementAmount, cashCollected, cashWrittenOff };
 }
 
@@ -284,6 +761,8 @@ export type WeekClosePreview = {
   cashSourceMismatches?: WeekCloseCashSourceMismatch[];
   /** Count of drivers with a still-valid cashSourceAck for this week. */
   cashSourceAckCount?: number;
+  /** P-2: statement engine version used when this preview was built. */
+  statementEngineVersion?: string;
 };
 
 type FinanceCoreCashSlice = {
@@ -340,6 +819,9 @@ async function ensureCloseLaneStatements(
   actorId?: string,
   opts?: CloseLaneForceOpts,
 ): Promise<{ didSeal: boolean }> {
+  // H-6: one as_of for all three seals so statements describe one instant.
+  const asOf = new Date().toISOString();
+
   const { data: periods, error } = await sb()
     .from("driver_financial_periods")
     .select(
@@ -412,6 +894,7 @@ async function ensureCloseLaneStatements(
         weekKey: week,
         actorId,
         force: forceFuel,
+        asOf,
       });
       didSeal = true;
     } catch (e) {
@@ -431,6 +914,7 @@ async function ensureCloseLaneStatements(
         weekKey: week,
         actorId,
         force: Boolean(tollStaleZeroNa || forceToll),
+        asOf,
       });
       didSeal = true;
     } catch (e) {
@@ -445,6 +929,7 @@ async function ensureCloseLaneStatements(
         weekKey: week,
         actorId,
         force: forceEarnings,
+        asOf,
       });
       didSeal = true;
     } catch (e) {
@@ -654,7 +1139,7 @@ export async function previewWeekClose(orgId: string, weekKey: string): Promise<
 
   const { data: periods, error } = await sb()
     .from("driver_financial_periods")
-    .select("*")
+    .select(PERIOD_CLOSE_SELECT)
     .eq("organization_id", orgId)
     .eq("period_anchor", week);
   if (error) throw new Error(error.message);
@@ -686,6 +1171,14 @@ export async function previewWeekClose(orgId: string, weekKey: string): Promise<
     week,
     driverIds,
   );
+
+  // P-3: one week-scoped toll orphan scan, indexed by driver.
+  let orphansByDriver = new Map<string, TollUsageIntegritySummary>();
+  try {
+    orphansByDriver = await summarizeTollUsageOrphansByDriverForWeek(week);
+  } catch (e) {
+    console.warn("[week_close] toll orphan week summarize failed (non-fatal)", week, e);
+  }
 
   // H-3 / N-3: week-level P&L — block on mismatch (non-tautological statements↔engines).
   if (businessWeekPnl != null && Math.abs(settlementSumForWeek - businessWeekPnl) > CLOSE_INVARIANT_EPS) {
@@ -794,42 +1287,10 @@ export async function previewWeekClose(orgId: string, weekKey: string): Promise<
       }
     }
 
-    let tollEventLedger: {
-      orphanCount: number;
-      orphanAmountMajor: number;
-      eventSpendMajor: number;
-      ledgerSpendMajor: number;
-    } | null = null;
-    if (!frozen || acceptRestatementDrafts) {
-      try {
-        const sum = await summarizeTollUsageOrphansForWeek({
-          periodAnchor: week,
-          driverId,
-        });
-        tollEventLedger = {
-          orphanCount: sum.orphanCount,
-          orphanAmountMajor: sum.orphanAmountMajor,
-          eventSpendMajor: sum.eventSpendMajor,
-          ledgerSpendMajor: sum.ledgerSpendMajor,
-          missingEventCount: sum.missingEventCount,
-          missingEventAmountMajor: sum.missingEventAmountMajor,
-          ineligibleEventCount: sum.ineligibleEventCount,
-          ineligibleEventAmountMajor: sum.ineligibleEventAmountMajor,
-          amountMismatchCount: sum.amountMismatchCount,
-          amountMismatchAmountMajor: sum.amountMismatchAmountMajor,
-        };
-        if (
-          sum.orphanCount > 0 ||
-          sum.ineligibleEventCount > 0 ||
-          sum.amountMismatchCount > 0 ||
-          Math.abs(sum.eventSpendMajor - sum.ledgerSpendMajor) > CLOSE_INVARIANT_EPS
-        ) {
-          // H-1: preview does not write drifts — surface via engineBlockers only on prepare/close.
-        }
-      } catch (e) {
-        console.warn("[week_close] toll orphan summarize failed (non-fatal)", driverId, week, e);
-      }
-    }
+    const tollEventLedger =
+      !frozen || acceptRestatementDrafts
+        ? tollEventLedgerFromSummary(orphansByDriver.get(driverId))
+        : null;
 
     const driverBlockers = checkCloseInvariants({
       period: period as ClosePeriodRow,
@@ -850,6 +1311,22 @@ export async function previewWeekClose(orgId: string, weekKey: string): Promise<
       ) || 0,
       // H-3: P&L is in weekBlockers — do not attribute to a driver here.
     });
+    // N-3: custody target must exist before freeze — surface on preview.
+    if (!frozen || acceptRestatementDrafts) {
+      try {
+        const preflight = await custodyCarryPreflight(
+          driverId,
+          week,
+          period as Record<string, unknown>,
+          meta,
+        );
+        if (!preflight.ok) {
+          driverBlockers.push(custodyNoOpenTargetBlocker(driverId, week, preflight.held));
+        }
+      } catch (e) {
+        console.warn("[week_close] custody preflight failed (non-fatal preview)", driverId, e);
+      }
+    }
     // Already-frozen without restatement drafts are done — not blockers.
     // Frozen WITH drafts surface blockers for Sign restatements.
     if (!frozen || acceptRestatementDrafts) {
@@ -909,6 +1386,7 @@ export async function previewWeekClose(orgId: string, weekKey: string): Promise<
     }),
     cashSourceMismatches,
     cashSourceAckCount,
+    statementEngineVersion: WEEK_STATEMENT_ENGINE_VERSION,
   };
 }
 
@@ -943,7 +1421,7 @@ async function loadYearWeekDirectory(
   for (let offset = 0; ; offset += pageSize) {
     let q = sb()
       .from("driver_financial_periods")
-      .select("period_anchor, metadata, settlement_status")
+      .select("period_anchor, metadata, settlement_status, status, closed_at")
       .eq("organization_id", orgId)
       .order("period_anchor", { ascending: false })
       .range(offset, offset + pageSize - 1);
@@ -958,11 +1436,16 @@ async function loadYearWeekDirectory(
       const period = row as Record<string, unknown>;
       const meta = (period.metadata as Record<string, unknown> | null) || null;
       const fc = (meta?.financeCore as Record<string, unknown> | undefined) || {};
+      const signedAt = fc.signedAt
+        ? String(fc.signedAt)
+        : row.closed_at
+          ? String(row.closed_at)
+          : null;
       inputs.push({
         weekKey,
         frozen: periodIsFrozen(period),
         settled: String(row.settlement_status || "") === "settled",
-        signedAt: fc.signedAt ? String(fc.signedAt) : null,
+        signedAt,
       });
     }
     if (batch.length < pageSize) break;
@@ -1039,6 +1522,36 @@ export async function prepareWeekClose(
     throw e;
   }
 
+  // C-3: mutual exclusion — skip when caller (closeWeek) already holds the lock.
+  const manageLock = !opts?.skipCloseLock;
+  if (manageLock) {
+    const claimed = await tryClaimWeekCloseLock(orgId, week, actorId);
+    if (!claimed) {
+      throw new WeekCloseError(
+        "CLOSE_IN_PROGRESS",
+        "Week close or sync already in progress for this week — retry shortly",
+        409,
+        { weekKey: week },
+      );
+    }
+  }
+
+  try {
+    return await prepareWeekCloseBody(orgId, week, actorId, opts);
+  } finally {
+    if (manageLock) {
+      await releaseWeekCloseLock(orgId, week, actorId);
+    }
+  }
+}
+
+/** Inner prepare body (lock managed by prepareWeekClose / closeWeek). */
+async function prepareWeekCloseBody(
+  orgId: string,
+  week: string,
+  actorId: string,
+  opts?: PrepareWeekCloseOpts,
+): Promise<WeekClosePreview> {
   const force = resolveCloseLaneForceOpts(opts);
   const anyForce = force.forceFuelReseal || force.forceTollReseal || force.forceEarningsReseal;
 
@@ -1171,6 +1684,9 @@ export type CloseWeekResult = {
   driversBlocked: number;
   blockers: CloseBlocker[];
   perDriver: DriverCloseResult[];
+  /** Pass 6: drivers whose residual custody was carried (or healed) this run. */
+  custodyCarried?: number;
+  custodyAmount?: number;
 };
 
 /**
@@ -1180,12 +1696,14 @@ export type CloseWeekResult = {
  *
  * Lean Close: Sync/Refresh owns force reseal. Close runs smart prepare (no
  * forceAllLaneReseals) then verifies + freezes — avoids Edge CPU 546.
+ * H-1: pass `skipPrepare: true` when the client already ran a fresh Sync.
  */
 export async function closeWeek(
   orgId: string,
   weekKey: string,
   actorId: string,
   reason: string,
+  opts?: CloseWeekOpts,
 ): Promise<CloseWeekResult> {
   const week = String(weekKey).slice(0, 10);
   try {
@@ -1197,24 +1715,56 @@ export async function closeWeek(
     throw e;
   }
 
-  // Smart sync only (same as prepare) — never blind force-reseal all lanes.
-  const prepared = await prepareWeekClose(orgId, week, actorId, closeWeekLaneForceOpts());
-  const rebuildBlocker = (prepared.weekBlockers || []).find(
-    (b) => b.code === "PERIOD_REBUILD_FAILED",
-  );
-  if (rebuildBlocker) {
+  // C-3: one close/sync at a time per org-week.
+  const claimed = await tryClaimWeekCloseLock(orgId, week, actorId);
+  if (!claimed) {
     throw new WeekCloseError(
-      "PERIOD_REBUILD_FAILED",
-      rebuildBlocker.message ||
-        `Couldn’t refresh books for ${rebuildBlocker.persisted} driver(s) — retry Close`,
+      "CLOSE_IN_PROGRESS",
+      "Week close already in progress for this week — retry shortly",
       409,
-      { failedCount: rebuildBlocker.persisted, weekKey: week },
+      { weekKey: week },
     );
+  }
+
+  try {
+    return await closeWeekBody(orgId, week, actorId, reason, opts);
+  } finally {
+    await releaseWeekCloseLock(orgId, week, actorId);
+  }
+}
+
+async function closeWeekBody(
+  orgId: string,
+  week: string,
+  actorId: string,
+  reason: string,
+  opts?: CloseWeekOpts,
+): Promise<CloseWeekResult> {
+  // H-1: default still prepares for safety; Close Week UI skips when sync is fresh.
+  // P-2: keep prepare preview to reuse weekBlockers / skip redundant P&L when just prepared.
+  let prepared: WeekClosePreview | null = null;
+  if (!opts?.skipPrepare) {
+    prepared = await prepareWeekClose(orgId, week, actorId, {
+      ...closeWeekLaneForceOpts(),
+      skipCloseLock: true,
+    });
+    const rebuildBlocker = (prepared.weekBlockers || []).find(
+      (b) => b.code === "PERIOD_REBUILD_FAILED",
+    );
+    if (rebuildBlocker) {
+      throw new WeekCloseError(
+        "PERIOD_REBUILD_FAILED",
+        rebuildBlocker.message ||
+          `Couldn’t refresh books for ${rebuildBlocker.persisted} driver(s) — retry Close`,
+        409,
+        { failedCount: rebuildBlocker.persisted, weekKey: week },
+      );
+    }
   }
 
   const { data: periods, error } = await sb()
     .from("driver_financial_periods")
-    .select("*")
+    .select(PERIOD_CLOSE_SELECT)
     .eq("organization_id", orgId)
     .eq("period_anchor", week);
   if (error) throw new Error(error.message);
@@ -1223,46 +1773,85 @@ export async function closeWeek(
   const allBlockers: CloseBlocker[] = [];
   const periodRows = periods ?? [];
   const driverIds = periodRows.map((p) => String(p.driver_id)).filter(Boolean);
-  const { statementsByDriver, settlementSumForWeek, businessWeekPnl } = await weekPnlTieSides(
-    orgId,
-    week,
-    driverIds,
-  );
 
-  // H-3 / N-3: week-level P&L — block before any freeze (never partial-close past a P&L fail).
-  if (businessWeekPnl != null && Math.abs(settlementSumForWeek - businessWeekPnl) > CLOSE_INVARIANT_EPS) {
-    allBlockers.push({
-      code: "SETTLEMENT_PNL_MISMATCH",
-      severity: "block",
-      week,
-      persisted: settlementSumForWeek,
-      expected: businessWeekPnl,
-      delta: settlementSumForWeek - businessWeekPnl,
-      message: "Week settlement composition (statements) does not tie to engine week P&L",
-    });
-    return {
-      organizationId: orgId,
-      weekKey: week,
-      closed: false,
-      driversClosed: 0,
-      driversBlocked: periodRows.length,
-      blockers: allBlockers,
-      perDriver: periodRows.map((p) => ({
-        driverId: String(p.driver_id),
+  // P-2: after prepare, reuse P&L weekBlockers and only reload statements (skip engine P&L).
+  let statementsByDriver: Map<string, WeekStatement[]>;
+  if (prepared) {
+    statementsByDriver = await getLatestWeekStatementsForOrgWeek(orgId, week);
+    for (const id of driverIds) {
+      if (!statementsByDriver.has(id)) statementsByDriver.set(id, []);
+    }
+    const pnlMismatch = (prepared.weekBlockers || []).find(
+      (b) => b.code === "SETTLEMENT_PNL_MISMATCH",
+    );
+    if (pnlMismatch) {
+      allBlockers.push(pnlMismatch);
+      return {
+        organizationId: orgId,
+        weekKey: week,
         closed: false,
+        driversClosed: 0,
+        driversBlocked: periodRows.length,
         blockers: allBlockers,
-      })),
-    };
-  } else if (businessWeekPnl == null) {
-    allBlockers.push({
-      code: "BUSINESS_WEEK_PNL_UNAVAILABLE",
-      severity: "warn",
-      week,
-      persisted: settlementSumForWeek,
-      expected: 0,
-      delta: settlementSumForWeek,
-      message: "Engine week P&L unavailable for settlement tie-out",
-    });
+        perDriver: periodRows.map((p) => ({
+          driverId: String(p.driver_id),
+          closed: false,
+          blockers: allBlockers,
+        })),
+      };
+    }
+    const pnlWarn = (prepared.weekBlockers || []).find(
+      (b) => b.code === "BUSINESS_WEEK_PNL_UNAVAILABLE",
+    );
+    if (pnlWarn) allBlockers.push(pnlWarn);
+  } else {
+    const sides = await weekPnlTieSides(orgId, week, driverIds);
+    statementsByDriver = sides.statementsByDriver;
+    const { settlementSumForWeek, businessWeekPnl } = sides;
+
+    // H-3 / N-3: week-level P&L — block before any freeze (never partial-close past a P&L fail).
+    if (businessWeekPnl != null && Math.abs(settlementSumForWeek - businessWeekPnl) > CLOSE_INVARIANT_EPS) {
+      allBlockers.push({
+        code: "SETTLEMENT_PNL_MISMATCH",
+        severity: "block",
+        week,
+        persisted: settlementSumForWeek,
+        expected: businessWeekPnl,
+        delta: settlementSumForWeek - businessWeekPnl,
+        message: "Week settlement composition (statements) does not tie to engine week P&L",
+      });
+      return {
+        organizationId: orgId,
+        weekKey: week,
+        closed: false,
+        driversClosed: 0,
+        driversBlocked: periodRows.length,
+        blockers: allBlockers,
+        perDriver: periodRows.map((p) => ({
+          driverId: String(p.driver_id),
+          closed: false,
+          blockers: allBlockers,
+        })),
+      };
+    } else if (businessWeekPnl == null) {
+      allBlockers.push({
+        code: "BUSINESS_WEEK_PNL_UNAVAILABLE",
+        severity: "warn",
+        week,
+        persisted: settlementSumForWeek,
+        expected: 0,
+        delta: settlementSumForWeek,
+        message: "Engine week P&L unavailable for settlement tie-out",
+      });
+    }
+  }
+
+  // P-3: hoist toll orphan summary once per week.
+  let orphansByDriver = new Map<string, TollUsageIntegritySummary>();
+  try {
+    orphansByDriver = await summarizeTollUsageOrphansByDriverForWeek(week);
+  } catch (e) {
+    console.warn("[week_close] toll orphan week summarize failed (non-fatal)", week, e);
   }
 
   const closeDriftBatch: Array<{
@@ -1279,7 +1868,25 @@ export async function closeWeek(
     closedAt: string;
   }> = [];
 
-  for (const period of periodRows) {
+  type CloseVerifyRow = {
+    driverId: string;
+    period: Record<string, unknown>;
+    alreadyClosed: boolean;
+    storedHash?: string;
+    canClose: boolean;
+    blockers: CloseBlocker[];
+    statements: WeekStatement[];
+    closeReason: string;
+    closeHash?: string;
+    sourceRowIds?: string[];
+    nextMeta?: Record<string, unknown>;
+    /** P-6: open custody week resolved during preflight (reuse in carry). */
+    resolvedCustodyTarget?: string;
+  };
+
+  const closePhaseStarted = Date.now();
+  // P-1: read-only verification pooled; freeze writes stay sequential after.
+  const verified = await mapPool(periodRows, 6, async (period): Promise<CloseVerifyRow> => {
     const driverId = String(period.driver_id);
     const meta = (period.metadata as Record<string, unknown> | null) || null;
     const fc = (meta?.financeCore as Record<string, unknown> | undefined) || {};
@@ -1289,14 +1896,16 @@ export async function closeWeek(
     const pendingDrafts = hasPendingRestatementDrafts(statements);
 
     if (frozen && !pendingDrafts) {
-      // Idempotent: already frozen with no restatement drafts — skip.
-      perDriver.push({
+      return {
         driverId,
-        closed: true,
-        closeHash: String(period.source_event_hash || fc.closeHash || "") || undefined,
+        period: period as Record<string, unknown>,
+        alreadyClosed: true,
+        storedHash: storedCloseHashFromPeriod(period as Record<string, unknown>) || undefined,
+        canClose: false,
         blockers: [],
-      });
-      continue;
+        statements,
+        closeReason: reason,
+      };
     }
 
     const acceptRestatementDrafts = frozen && pendingDrafts;
@@ -1328,53 +1937,30 @@ export async function closeWeek(
       console.warn("[week_close] engine compare failed (non-fatal)", driverId, week, e);
     }
 
-    let tollEventLedger: {
-      orphanCount: number;
-      orphanAmountMajor: number;
-      eventSpendMajor: number;
-      ledgerSpendMajor: number;
-    } | null = null;
-    try {
-      const sum = await summarizeTollUsageOrphansForWeek({
-        periodAnchor: week,
-        driverId,
-      });
-      tollEventLedger = {
-        orphanCount: sum.orphanCount,
-        orphanAmountMajor: sum.orphanAmountMajor,
-        eventSpendMajor: sum.eventSpendMajor,
-        ledgerSpendMajor: sum.ledgerSpendMajor,
-        missingEventCount: sum.missingEventCount,
-        missingEventAmountMajor: sum.missingEventAmountMajor,
-        ineligibleEventCount: sum.ineligibleEventCount,
-        ineligibleEventAmountMajor: sum.ineligibleEventAmountMajor,
-        amountMismatchCount: sum.amountMismatchCount,
-        amountMismatchAmountMajor: sum.amountMismatchAmountMajor,
-      };
-      if (
-        sum.orphanCount > 0 ||
+    const sum = orphansByDriver.get(driverId);
+    const tollEventLedger = tollEventLedgerFromSummary(sum);
+    if (
+      sum &&
+      (sum.orphanCount > 0 ||
         sum.ineligibleEventCount > 0 ||
         sum.amountMismatchCount > 0 ||
-        Math.abs(sum.eventSpendMajor - sum.ledgerSpendMajor) > CLOSE_INVARIANT_EPS
-      ) {
-        closeDriftBatch.push({
-          driverId,
-          drifts: [
-            {
-              kind: "toll",
-              field: "orphan_event_spend",
-              statementMinor: Math.round(sum.eventSpendMajor * 100),
-              engineMinor: Math.round(sum.ledgerSpendMajor * 100),
-              deltaMinor: Math.round(
-                (sum.orphanAmountMajor || sum.eventSpendMajor - sum.ledgerSpendMajor) * 100,
-              ),
-            },
-          ],
-          statementVersion: statements[0]?.version ?? null,
-        });
-      }
-    } catch (e) {
-      console.warn("[week_close] toll orphan summarize failed (non-fatal)", driverId, week, e);
+        Math.abs(sum.eventSpendMajor - sum.ledgerSpendMajor) > CLOSE_INVARIANT_EPS)
+    ) {
+      closeDriftBatch.push({
+        driverId,
+        drifts: [
+          {
+            kind: "toll",
+            field: "orphan_event_spend",
+            statementMinor: Math.round(sum.eventSpendMajor * 100),
+            engineMinor: Math.round(sum.ledgerSpendMajor * 100),
+            deltaMinor: Math.round(
+              (sum.orphanAmountMajor || sum.eventSpendMajor - sum.ledgerSpendMajor) * 100,
+            ),
+          },
+        ],
+        statementVersion: statements[0]?.version ?? null,
+      });
     }
 
     const blockers = checkCloseInvariants({
@@ -1431,13 +2017,46 @@ export async function closeWeek(
       /* non-fatal — finance-recon still catches */
     }
 
-    if (!canCloseWeek(blockers)) {
-      allBlockers.push(...blockers);
-      perDriver.push({ driverId, closed: false, blockers });
-      continue;
+    // N-3: refuse close before freeze when no open week can receive custody.
+    let resolvedCustodyTarget: string | undefined;
+    try {
+      const preflight = await custodyCarryPreflight(
+        driverId,
+        week,
+        period as Record<string, unknown>,
+        meta,
+      );
+      if (!preflight.ok) {
+        blockers.push(custodyNoOpenTargetBlocker(driverId, week, preflight.held));
+      } else if (preflight.targetWeek) {
+        resolvedCustodyTarget = preflight.targetWeek;
+      }
+    } catch (e) {
+      console.warn("[week_close] custody preflight failed", driverId, week, e);
+      blockers.push({
+        code: CUSTODY_ERROR_CODES.NO_OPEN_TARGET,
+        severity: "block",
+        driverId,
+        week,
+        persisted: Number(period.cash_still_held) || 0,
+        expected: 0,
+        delta: Number(period.cash_still_held) || 0,
+        message: "Could not verify custody carry target — retry Close",
+      });
     }
 
-    // Ties — sign it. Build H-4 close hash over the complete row + source ids.
+    if (!canCloseWeek(blockers)) {
+      return {
+        driverId,
+        period: period as Record<string, unknown>,
+        alreadyClosed: false,
+        canClose: false,
+        blockers,
+        statements,
+        closeReason,
+      };
+    }
+
     const sourceRowIds = statements.flatMap((s) => s.sourceRowIds);
     const closeHash = await buildCloseHash(
       buildPeriodCloseHashPayload({
@@ -1447,26 +2066,133 @@ export async function closeWeek(
       }),
     );
 
-    await closeWeekStatements(orgId, driverId, week, actorId, closeReason);
+    const priorCloseHash = String(fc.priorCloseHash || "").trim();
+    if (priorCloseHashChanged(priorCloseHash, closeHash)) {
+      blockers.push({
+        code: PRIOR_CLOSE_HASH_CHANGED,
+        severity: "warn",
+        driverId,
+        week,
+        persisted: 0,
+        expected: 0,
+        delta: 0,
+        message:
+          "Re-close hash differs from the prior seal — money may have changed while reopened (reported, not blocked)",
+      });
+      console.warn("[week_close] re-close hash differs from priorCloseHash", {
+        driverId,
+        week,
+        priorCloseHash,
+        closeHash,
+      });
+    }
 
-    const nextMeta = markPeriodFrozen(period as { metadata?: Record<string, unknown> }, {
+    let nextMeta = markPeriodFrozen(period as { metadata?: Record<string, unknown> }, {
       actorId,
       reason: closeReason,
       closeHash,
       sourceRowIds,
       engineVersion: WEEK_STATEMENT_ENGINE_VERSION,
     });
+    // H-5: stamp close-time invariant inputs for audit (rebuild-safe).
+    nextMeta = stampCloseInvariantSnapshotOnMeta(nextMeta);
 
-    freezeBatch.push({
-      id: String(period.id),
+    return {
       driverId,
+      period: period as Record<string, unknown>,
+      alreadyClosed: false,
+      canClose: true,
+      blockers,
+      statements,
+      closeReason,
       closeHash,
-      metadata: nextMeta,
-      closedAt: new Date().toISOString(),
-    });
-    perDriver.push({ driverId, closed: true, closeHash, blockers: [] });
+      sourceRowIds,
+      nextMeta,
+      resolvedCustodyTarget,
+    };
+  });
+  const verifyMs = Date.now() - closePhaseStarted;
+
+  // N-3: any custody target miss blocks the whole week before seals/freeze (like P&L).
+  const custodyBlockers = verified.flatMap((v) =>
+    v.blockers.filter((b) => b.code === CUSTODY_ERROR_CODES.NO_OPEN_TARGET),
+  );
+  if (custodyBlockers.length > 0) {
+    allBlockers.push(...custodyBlockers);
+    for (const v of verified) {
+      if (v.alreadyClosed) {
+        perDriver.push({
+          driverId: v.driverId,
+          closed: true,
+          closeHash: v.storedHash,
+          blockers: [],
+        });
+      } else {
+        perDriver.push({
+          driverId: v.driverId,
+          closed: false,
+          blockers: v.blockers,
+        });
+        for (const b of v.blockers) {
+          if (b.code !== CUSTODY_ERROR_CODES.NO_OPEN_TARGET) allBlockers.push(b);
+        }
+      }
+    }
+    return {
+      organizationId: orgId,
+      weekKey: week,
+      closed: false,
+      driversClosed: perDriver.filter((d) => d.closed).length,
+      driversBlocked: perDriver.filter((d) => !d.closed).length,
+      blockers: allBlockers,
+      perDriver,
+      custodyCarried: 0,
+      custodyAmount: 0,
+    };
   }
 
+  // Stable order: statement seals + freezeBatch after pooled verification.
+  const resolvedCustodyTargets = new Map<string, string>();
+  for (const v of verified) {
+    if (v.alreadyClosed) {
+      perDriver.push({
+        driverId: v.driverId,
+        closed: true,
+        closeHash: v.storedHash,
+        blockers: [],
+      });
+      continue;
+    }
+    if (!v.canClose) {
+      allBlockers.push(...v.blockers);
+      perDriver.push({ driverId: v.driverId, closed: false, blockers: v.blockers });
+      continue;
+    }
+
+    // Warn-only (e.g. PRIOR_CLOSE_HASH_CHANGED) — still freeze, surface to operator.
+    if (v.blockers.length) allBlockers.push(...v.blockers);
+    if (v.resolvedCustodyTarget) {
+      resolvedCustodyTargets.set(v.driverId, v.resolvedCustodyTarget);
+    }
+
+    await closeWeekStatements(orgId, v.driverId, week, actorId, v.closeReason);
+
+    freezeBatch.push({
+      id: String(v.period.id),
+      driverId: v.driverId,
+      closeHash: v.closeHash!,
+      metadata: v.nextMeta!,
+      closedAt: new Date().toISOString(),
+    });
+    perDriver.push({
+      driverId: v.driverId,
+      closed: true,
+      closeHash: v.closeHash,
+      blockers: v.blockers,
+    });
+  }
+
+  const freezePhaseStarted = Date.now();
   if (freezeBatch.length > 0) {
     const { data: frozenCount, error: freezeErr } = await sb().rpc("freeze_settlement_periods_batch", {
       p_rows: freezeBatch.map((f) => ({
@@ -1497,6 +2223,50 @@ export async function closeWeek(
       );
     }
   }
+  const freezeMs = Date.now() - freezePhaseStarted;
+
+  // Pass 6: carry for just-frozen and already-frozen stranded drivers (N-3 recovery).
+  let custodyCarried = 0;
+  let custodyAmount = 0;
+  const carryPhaseStarted = Date.now();
+  try {
+    const { data: freshPeriods, error: freshErr } = await sb()
+      .from("driver_financial_periods")
+      .select(PERIOD_CLOSE_SELECT)
+      .eq("organization_id", orgId)
+      .eq("period_anchor", week);
+    if (freshErr) throw new Error(freshErr.message);
+    const custody = await runCustodyCarryForWeek({
+      orgId,
+      weekKey: week,
+      periodRows: (freshPeriods ?? []) as Array<Record<string, unknown>>,
+      resolvedTargets: resolvedCustodyTargets,
+    });
+    custodyCarried = custody.carried;
+    custodyAmount = custody.totalAmount;
+    if (custody.carried > 0) {
+      console.log("[week_close] custody carried forward", custody);
+    }
+  } catch (e) {
+    // N-2/N-3: never swallow CUSTODY_NO_OPEN_TARGET — close must fail loudly.
+    // Preflight should make this unreachable; still refuse rather than strand cash.
+    if (e instanceof WeekCloseError) throw e;
+    console.warn("[week_close] custody carry-forward failed", e);
+    throw e;
+  }
+  const carryMs = Date.now() - carryPhaseStarted;
+  // P-6 / Pass 8: phase timings for future 50-driver evidence (no fake scale data).
+  console.info("[week_close] close_phase_timing", {
+    weekKey: week,
+    drivers: periodRows.length,
+    freezeBatch: freezeBatch.length,
+    verifyMs,
+    freezeMs,
+    carryMs,
+    totalMs: Date.now() - closePhaseStarted,
+    custodyCarried,
+    custodyAmount,
+  });
 
   // Flush recon drifts after the driver loop (P-2).
   for (const row of closeDriftBatch) {
@@ -1525,6 +2295,8 @@ export async function closeWeek(
     driversBlocked,
     blockers: allBlockers,
     perDriver,
+    custodyCarried,
+    custodyAmount,
   };
 }
 
@@ -1541,9 +2313,32 @@ export async function retryFreezeWeek(
   const week = String(weekKey).slice(0, 10);
   const closeReason = String(reason || "").trim() || "Retry freeze after ATOMIC_FREEZE_FAILED";
 
+  const claimed = await tryClaimWeekCloseLock(orgId, week, actorId);
+  if (!claimed) {
+    throw new WeekCloseError(
+      "CLOSE_IN_PROGRESS",
+      "Week close already in progress for this week — retry shortly",
+      409,
+      { weekKey: week },
+    );
+  }
+
+  try {
+    return await retryFreezeWeekBody(orgId, week, actorId, closeReason);
+  } finally {
+    await releaseWeekCloseLock(orgId, week, actorId);
+  }
+}
+
+async function retryFreezeWeekBody(
+  orgId: string,
+  week: string,
+  actorId: string,
+  closeReason: string,
+): Promise<CloseWeekResult> {
   const { data: periods, error } = await sb()
     .from("driver_financial_periods")
-    .select("*")
+    .select(PERIOD_CLOSE_SELECT)
     .eq("organization_id", orgId)
     .eq("period_anchor", week);
   if (error) throw new Error(error.message);
@@ -1561,8 +2356,6 @@ export async function retryFreezeWeek(
 
   for (const period of periodRows) {
     const driverId = String(period.driver_id);
-    const meta = (period.metadata as Record<string, unknown> | null) || null;
-    const fc = (meta?.financeCore as Record<string, unknown> | undefined) || {};
     const frozen = periodIsFrozen(period as Record<string, unknown>);
     const statements = statementsByDriver.get(driverId) ?? [];
 
@@ -1570,7 +2363,7 @@ export async function retryFreezeWeek(
       perDriver.push({
         driverId,
         closed: true,
-        closeHash: String(period.source_event_hash || fc.closeHash || "") || undefined,
+        closeHash: storedCloseHashFromPeriod(period as Record<string, unknown>) || undefined,
         blockers: [],
       });
       continue;
@@ -1596,7 +2389,7 @@ export async function retryFreezeWeek(
     }
 
     const sourceRowIds = statements.flatMap((s) => s.sourceRowIds);
-    const existingHash = String(period.source_event_hash || fc.closeHash || "").trim();
+    const existingHash = storedCloseHashFromPeriod(period as Record<string, unknown>) || "";
     const closeHash = existingHash || await buildCloseHash(
       buildPeriodCloseHashPayload({
         row: closeHashRowFrom(period as Record<string, unknown>),
@@ -1605,13 +2398,15 @@ export async function retryFreezeWeek(
       }),
     );
 
-    const nextMeta = markPeriodFrozen(period as { metadata?: Record<string, unknown> }, {
+    let nextMeta = markPeriodFrozen(period as { metadata?: Record<string, unknown> }, {
       actorId,
       reason: closeReason,
       closeHash,
       sourceRowIds,
       engineVersion: WEEK_STATEMENT_ENGINE_VERSION,
     });
+    // H-5: stamp close-time invariant inputs when recovering freeze after seal.
+    nextMeta = stampCloseInvariantSnapshotOnMeta(nextMeta);
 
     freezeBatch.push({
       id: String(period.id),
@@ -1624,6 +2419,24 @@ export async function retryFreezeWeek(
   }
 
   if (freezeBatch.length === 0) {
+    let custodyCarried = 0;
+    let custodyAmount = 0;
+    try {
+      const custody = await runCustodyCarryForWeek({
+        orgId,
+        weekKey: week,
+        periodRows: periodRows as Array<Record<string, unknown>>,
+      });
+      custodyCarried = custody.carried;
+      custodyAmount = custody.totalAmount;
+      if (custody.carried > 0) {
+        console.log("[week_close] retryFreeze custody carried (no freeze batch)", custody);
+      }
+    } catch (e) {
+      if (e instanceof WeekCloseError) throw e;
+      console.warn("[week_close] retryFreeze custody carry failed", e);
+      throw e;
+    }
     const blocked = perDriver.filter((d) => !d.closed).length;
     return {
       organizationId: orgId,
@@ -1633,6 +2446,8 @@ export async function retryFreezeWeek(
       driversBlocked: blocked,
       blockers: perDriver.flatMap((d) => d.blockers),
       perDriver,
+      custodyCarried,
+      custodyAmount,
     };
   }
 
@@ -1656,6 +2471,32 @@ export async function retryFreezeWeek(
     console.warn("[week_close] retry freeze count mismatch", frozenCount, freezeBatch.length);
   }
 
+  // Pass 6 / N-3: complete custody even when freezeBatch was empty (stranded recovery).
+  let custodyCarried = 0;
+  let custodyAmount = 0;
+  try {
+    const { data: freshPeriods, error: freshErr } = await sb()
+      .from("driver_financial_periods")
+      .select(PERIOD_CLOSE_SELECT)
+      .eq("organization_id", orgId)
+      .eq("period_anchor", week);
+    if (freshErr) throw new Error(freshErr.message);
+    const custody = await runCustodyCarryForWeek({
+      orgId,
+      weekKey: week,
+      periodRows: (freshPeriods ?? []) as Array<Record<string, unknown>>,
+    });
+    custodyCarried = custody.carried;
+    custodyAmount = custody.totalAmount;
+    if (custody.carried > 0) {
+      console.log("[week_close] retryFreeze custody carried", custody);
+    }
+  } catch (e) {
+    if (e instanceof WeekCloseError) throw e;
+    console.warn("[week_close] retryFreeze custody carry failed", e);
+    throw e;
+  }
+
   const driversClosed = perDriver.filter((d) => d.closed).length;
   const driversBlocked = perDriver.length - driversClosed;
   return {
@@ -1666,6 +2507,8 @@ export async function retryFreezeWeek(
     driversBlocked,
     blockers: perDriver.flatMap((d) => d.blockers),
     perDriver,
+    custodyCarried,
+    custodyAmount,
   };
 }
 
@@ -1717,7 +2560,7 @@ export async function acknowledgeCashSourceMismatch(
 
   const { data: period, error } = await sb()
     .from("driver_financial_periods")
-    .select("*")
+    .select(PERIOD_CLOSE_SELECT)
     .eq("organization_id", orgId)
     .eq("period_anchor", week)
     .eq("driver_id", did)
@@ -1803,7 +2646,7 @@ export async function reopenWeek(
 
   const { data: periods, error } = await sb()
     .from("driver_financial_periods")
-    .select("*")
+    .select(PERIOD_CLOSE_SELECT)
     .eq("organization_id", orgId)
     .eq("period_anchor", week);
   if (error) throw new Error(error.message);
@@ -1845,15 +2688,68 @@ export async function reopenWeek(
     );
   }
 
+  // N-1 preflight: refuse reopen if any transferred custody sits on a still-frozen successor.
+  for (const period of frozenRows) {
+    const fc = ((period.metadata as Record<string, unknown>)?.financeCore || {}) as Record<
+      string,
+      unknown
+    >;
+    const marks = readCustodyTransferMarks(fc);
+    if (!marks.transferredTo || marks.transferredAmount <= CLOSE_INVARIANT_EPS) continue;
+    const { data: succ, error: succErr } = await sb()
+      .from("driver_financial_periods")
+      .select("id, metadata, status, settlement_status, closed_at")
+      .eq("driver_id", String(period.driver_id))
+      .eq("period_anchor", marks.transferredTo)
+      .maybeSingle();
+    if (succErr) throw new Error(succErr.message);
+    if (
+      succ?.id &&
+      periodIsFrozen({
+        metadata: succ.metadata,
+        settlement_status: succ.settlement_status,
+        status: succ.status,
+        closed_at: succ.closed_at,
+      } as Record<string, unknown>)
+    ) {
+      throw new WeekCloseError(
+        CUSTODY_ERROR_CODES.SUCCESSOR_FROZEN,
+        `Reopen ${week} would double-count custody still parked on closed week ${marks.transferredTo} — reopen ${marks.transferredTo} first`,
+        409,
+        {
+          driverId: String(period.driver_id),
+          weekKey: week,
+          successorWeek: marks.transferredTo,
+          amount: marks.transferredAmount,
+        },
+      );
+    }
+  }
+
   const now = new Date().toISOString();
   let driversReopened = 0;
 
   for (const period of frozenRows) {
-    const nextMeta = clearPeriodFreeze(period as { metadata?: Record<string, unknown> }, {
-      actorId,
-      reason: trimmedReason,
-      reopenedAt: now,
+    const driverId = String(period.driver_id);
+    const priorMeta = (period.metadata as Record<string, unknown>) || {};
+    // N-1: reverse carry before clearPeriodFreeze so Collect never double-counts.
+    const metaAfterReverse = await reverseCustodyCarryOnReopen({
+      driverId,
+      weekKey: week,
+      metadata: priorMeta,
     });
+
+    const nextMeta = clearPeriodFreeze(
+      { metadata: metaAfterReverse },
+      {
+        actorId,
+        reason: trimmedReason,
+        reopenedAt: now,
+      },
+    );
+    // Ensure transfer marks stay cleared after clearPeriodFreeze (preserves other fc keys).
+    const fc = { ...((nextMeta.financeCore as Record<string, unknown>) || {}) };
+    nextMeta.financeCore = clearCustodyTransferMarks(fc);
 
     const { error: updErr } = await sb()
       .from("driver_financial_periods")
@@ -1861,8 +2757,10 @@ export async function reopenWeek(
         status: "reopened",
         closed_at: null,
         reopened_at: now,
-        // Column is NOT NULL DEFAULT '' — never write null.
-        source_event_hash: "",
+        // H-3: null (not "") so reopen does not look like "never sealed".
+        // clearPeriodFreeze already archived the seal into reopenHistory + priorCloseHash.
+        source_event_hash: null,
+        close_hash: null,
         metadata: nextMeta,
       })
       .eq("id", period.id);

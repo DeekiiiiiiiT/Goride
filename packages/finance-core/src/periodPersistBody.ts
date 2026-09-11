@@ -96,6 +96,19 @@ export function buildPeriodMetadata(input: BuildPeriodMetadataInput): Record<str
       cashSourceMismatch: fc.cashSourceMismatch,
       // Preserve ops Accept statement cash across rebuild (do not wipe).
       ...(priorFc.cashSourceAck ? { cashSourceAck: priorFc.cashSourceAck } : {}),
+      // Phase 2: custody carry-forward survives rebuild.
+      ...(Number(priorFc.openingCashCustody) > 0
+        ? { openingCashCustody: round2(Number(priorFc.openingCashCustody) || 0) }
+        : {}),
+      ...(priorFc.custodyReceivedFrom
+        ? { custodyReceivedFrom: priorFc.custodyReceivedFrom }
+        : {}),
+      ...(priorFc.custodyTransferredTo
+        ? { custodyTransferredTo: priorFc.custodyTransferredTo }
+        : {}),
+      ...(priorFc.custodyTransferredAmount != null
+        ? { custodyTransferredAmount: round2(Number(priorFc.custodyTransferredAmount) || 0) }
+        : {}),
       cashHeldClamped: fc.cashHeldClamped,
       unclampedCashHeld: fc.unclampedCashHeld,
       overpaidAmount: round2(fc.overpaidAmount),

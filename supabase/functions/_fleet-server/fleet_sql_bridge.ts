@@ -16,6 +16,7 @@ import {
   type FleetQueryFilter,
 } from "./repos/baseRepo.ts";
 import type { FleetDomain as FD } from "./fleet_table_flags.ts";
+import { buildOrFilterSegment } from "./fleet_sql_bridge_filters.ts";
 
 type Call = { method: string; args: unknown[] };
 
@@ -149,7 +150,71 @@ async function executeMapped(calls: Call[]): Promise<{ data: unknown; error: unk
         filters.push({ op: "in", col: "platform", value: platformEqs });
         continue;
       }
-      console.warn("[fleetSqlBridge] unmapped or() filter (skipped):", expr.slice(0, 200));
+      // serviceLine rush_delivery OR (platform + service_line aliases)
+      const rushBits = [...expr.matchAll(/value->>(?:serviceLine|service_line|platform)\.eq\.([^,]+)/g)];
+      if (rushBits.length >= 2 && /rush_delivery|Roam Rush/.test(expr)) {
+        const orParts = rushBits.map((m) => {
+          const full = m[0];
+          const left = full.replace(/\.eq\.[^,]+$/, "");
+          const sqlCol = payloadPathToCol(left) ?? left;
+          return buildOrFilterSegment(sqlCol, "eq", m[1]);
+        });
+        filters.push({ op: "or", value: orParts.join(",") });
+        continue;
+      }
+      // Search ORs: driverName / id / legacy_kv_id ilike
+      const orSegments = expr.split(",").map((s) => s.trim()).filter(Boolean);
+      const allIlike = orSegments.length > 0 && orSegments.every((p) => /\.ilike\./i.test(p));
+      if (allIlike) {
+        const resolved = orSegments.map((p) => {
+          const [left, pattern] = p.split(/\.ilike\./i);
+          const sqlCol =
+            payloadPathToCol(left) ??
+            payloadPathToCol(`value->>${left}`) ??
+            (left === "legacy_kv_id" || left === "key" ? "legacy_kv_id" : left === "id" ? "id" : null);
+          if (!sqlCol) {
+            throw new Error(`[fleetSqlBridge] unmapped or() ilike column: ${left}`);
+          }
+          return buildOrFilterSegment(sqlCol, "ilike", pattern);
+        });
+        filters.push({ op: "or", value: resolved.join(",") });
+        continue;
+      }
+      // Mixed eq + ilike (driverId.eq + driverName.ilike)
+      const mixedEqIlike =
+        orSegments.length > 0 &&
+        orSegments.every((p) => /\.(eq|ilike)\./i.test(p));
+      if (mixedEqIlike) {
+        const resolved = orSegments.map((p) => {
+          const m = p.match(/^(.*?)\.(eq|ilike)\.(.*)$/i);
+          if (!m) throw new Error(`[fleetSqlBridge] unmapped or() segment: ${p}`);
+          const left = m[1];
+          const op = m[2].toLowerCase() as "eq" | "ilike";
+          const val = m[3];
+          const sqlCol =
+            payloadPathToCol(left) ??
+            payloadPathToCol(`value->>${left}`) ??
+            (left === "legacy_kv_id" || left === "key" ? "legacy_kv_id" : left === "id" ? "id" : null);
+          if (!sqlCol) {
+            throw new Error(`[fleetSqlBridge] unmapped or() column: ${left}`);
+          }
+          return buildOrFilterSegment(sqlCol, op, val);
+        });
+        filters.push({ op: "or", value: resolved.join(",") });
+        continue;
+      }
+      throw new Error(`[fleetSqlBridge] unmapped or() filter: ${expr.slice(0, 200)}`);
+    }
+    if (c.method === "not") {
+      // supabase-js: .not(column, operator, value)
+      const col = String(c.args[0] ?? "");
+      const operator = String(c.args[1] ?? "eq");
+      const value = c.args[2];
+      const sqlCol = payloadPathToCol(col);
+      if (!sqlCol) {
+        throw new Error(`[fleetSqlBridge] unmapped not() column: ${col}`);
+      }
+      filters.push({ op: "not", col: sqlCol, operator, value });
       continue;
     }
     const col = String(c.args[0] ?? "");
@@ -165,7 +230,11 @@ async function executeMapped(calls: Call[]): Promise<{ data: unknown; error: unk
     else if (c.method === "lt") filters.push({ op: "lt", col: sqlCol, value: c.args[1] });
     else if (c.method === "in") filters.push({ op: "in", col: sqlCol, value: (c.args[1] as unknown[]) || [] });
     else if (c.method === "like") filters.push({ op: "like", col: sqlCol, value: String(c.args[1] ?? "") });
+    else if (c.method === "ilike") filters.push({ op: "ilike", col: sqlCol, value: String(c.args[1] ?? "") });
     else if (c.method === "is") filters.push({ op: "is", col: sqlCol, value: null });
+    else {
+      throw new Error(`[fleetSqlBridge] unmapped filter method: ${c.method}`);
+    }
   }
 
   const selectCall = calls.find((c) => c.method === "select");
@@ -173,13 +242,12 @@ async function executeMapped(calls: Call[]): Promise<{ data: unknown; error: unk
   const head = !!selectOpts.head;
   const wantCount = !!selectOpts.count || head;
 
-  const orderCall = calls.find((c) => c.method === "order");
-  let order: { col: string; ascending?: boolean } | undefined;
-  if (orderCall) {
+  const orderCalls = calls.filter((c) => c.method === "order");
+  const orders = orderCalls.map((orderCall) => {
     const col = payloadPathToCol(String(orderCall.args[0] ?? "")) ?? "legacy_kv_id";
     const opts = (orderCall.args[1] || {}) as { ascending?: boolean };
-    order = { col, ascending: opts.ascending === true };
-  }
+    return { col, ascending: opts.ascending === true };
+  });
 
   const rangeCall = calls.find((c) => c.method === "range");
   const limitCall = calls.find((c) => c.method === "limit");
@@ -194,7 +262,7 @@ async function executeMapped(calls: Call[]): Promise<{ data: unknown; error: unk
   }
 
   if (head) {
-    const n = await countBy(domain!, { filters, legacyPrefix, order });
+    const n = await countBy(domain!, { filters, legacyPrefix, order: orders[0] });
     return { data: null, error: null, count: n };
   }
 
@@ -204,7 +272,7 @@ async function executeMapped(calls: Call[]): Promise<{ data: unknown; error: unk
   const res = await queryFleet(domain!, {
     filters,
     legacyPrefix,
-    order: order ?? { col: "legacy_kv_id", ascending: true },
+    orders: orders.length > 0 ? orders : [{ col: "legacy_kv_id", ascending: true }],
     limit,
     offset,
     count: wantCount,
@@ -305,7 +373,7 @@ function createBuilder(raw: SupabaseClient): KvStoreQueryBuilder {
 
   const api: Record<string, unknown> = {};
   const methods = [
-    "select", "like", "eq", "neq", "gte", "gt", "lte", "lt", "in", "or", "order", "range", "limit",
+    "select", "like", "ilike", "eq", "neq", "gte", "gt", "lte", "lt", "in", "or", "order", "range", "limit",
     "maybeSingle", "single", "insert", "upsert", "update", "delete", "match", "filter", "not", "is",
     "contains", "containedBy", "textSearch", "csv", "throwOnError",
   ];

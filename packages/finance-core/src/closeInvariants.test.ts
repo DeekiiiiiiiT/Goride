@@ -318,14 +318,23 @@ describe('checkCloseInvariants (§6.4)', () => {
     expect(blockers.some((b) => b.code === 'SETTLEMENT_CASH_HELD')).toBe(false);
   });
 
-  it('skipSettlementDeskClear ignores open balances (restatement re-sign)', () => {
+  it('skipSettlementDeskClear still blocks SETTLEMENT_FLEET_OWES (M-4)', () => {
     const blockers = checkCloseInvariants({
       ...tyingWeek,
       period: { ...tyingWeek.period, settlement_amount: 500, cash_still_held: 100 },
       skipSettlementDeskClear: true,
     });
-    expect(blockers.some((b) => b.code === 'SETTLEMENT_FLEET_OWES')).toBe(false);
+    expect(blockers.some((b) => b.code === 'SETTLEMENT_FLEET_OWES')).toBe(true);
     expect(blockers.some((b) => b.code === 'SETTLEMENT_CASH_HELD')).toBe(false);
+  });
+
+  it('skipSettlementDeskClear still blocks SETTLEMENT_DRIVER_OWES (M-4)', () => {
+    const blockers = checkCloseInvariants({
+      ...tyingWeek,
+      period: { ...tyingWeek.period, settlement_amount: -250, cash_still_held: 0 },
+      skipSettlementDeskClear: true,
+    });
+    expect(blockers.some((b) => b.code === 'SETTLEMENT_DRIVER_OWES')).toBe(true);
   });
 
   // Pass 3 / H-7: draft statements must block close (cannot greenwash).

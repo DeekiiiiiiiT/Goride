@@ -1,14 +1,12 @@
 import React from 'react';
 import { Trip } from '../../../types/data';
 import { DollarSign, MapPin, Clock, CheckCircle2, TrendingUp } from 'lucide-react';
+import { getTripNetIncome } from '../../../utils/tripNetIncome';
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
 function getNetIncome(t: Trip): number | null {
-  if (t.netToDriver != null) return t.netToDriver;
-  if (t.grossEarnings != null) return t.grossEarnings;
-  if (t.amount != null) return t.amount;
-  return null;
+  return getTripNetIncome(t);
 }
 
 function fmt$(v: number): string {
@@ -58,18 +56,33 @@ interface TripLedgerStatsProps {
   trips: Trip[];       // current page of trips
   total: number;       // total filtered count
   loading: boolean;
+  /** Filtered-set money totals from /trips/stats (F-12). */
+  filterSumAmount?: number;
+  filterSumNet?: number;
 }
 
-export function TripLedgerStats({ trips, total, loading }: TripLedgerStatsProps) {
+export function TripLedgerStats({
+  trips,
+  total,
+  loading,
+  filterSumAmount,
+  filterSumNet,
+}: TripLedgerStatsProps) {
   // Compute stats from loaded page
   const completed = trips.filter(t => t.status === 'Completed');
   const completionRate = trips.length > 0
     ? (completed.length / trips.length) * 100
     : 0;
 
-  const totalRevenue = trips.reduce((sum, t) => sum + (t.amount || 0), 0);
-  const totalNet = trips.reduce((sum, t) => sum + (getNetIncome(t) || 0), 0);
-  const avgAmount = trips.length > 0 ? totalRevenue / trips.length : 0;
+  const pageRevenue = trips.reduce((sum, t) => sum + (t.amount || 0), 0);
+  const pageNet = trips.reduce((sum, t) => sum + (getNetIncome(t) || 0), 0);
+  const totalRevenue = filterSumAmount != null ? filterSumAmount : pageRevenue;
+  const totalNet = filterSumNet != null ? filterSumNet : pageNet;
+  // Exclude cancelled / non-completed from monetary averages (F-27)
+  const avgBasis = completed.length > 0 ? completed : trips.filter(t => (t.amount || 0) > 0);
+  const avgAmount = avgBasis.length > 0
+    ? avgBasis.reduce((sum, t) => sum + (t.amount || 0), 0) / avgBasis.length
+    : 0;
 
   const tripsWithDist = trips.filter(t => t.distance != null && t.distance > 0);
   const avgDistance = tripsWithDist.length > 0
@@ -104,16 +117,20 @@ export function TripLedgerStats({ trips, total, loading }: TripLedgerStatsProps)
         iconClasses="bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400"
       />
       <StatCard
-        label="Page Revenue"
+        label={filterSumAmount != null ? "Filter Revenue" : "Page Revenue"}
         value={fmt$(totalRevenue)}
-        sub={`Net: ${fmt$(totalNet)}`}
+        sub={
+          filterSumAmount != null
+            ? `Net: ${fmt$(totalNet)} (filter)`
+            : `Net: ${fmt$(totalNet)}`
+        }
         icon={<DollarSign className="h-4 w-4" />}
         iconClasses="bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400"
       />
       <StatCard
         label="Avg Trip Amount"
-        value={trips.length > 0 ? fmt$(avgAmount) : '—'}
-        sub="per trip on page"
+        value={avgBasis.length > 0 ? fmt$(avgAmount) : '—'}
+        sub={completed.length > 0 ? `completed on page (excl. cancelled)` : 'per trip on page'}
         icon={<TrendingUp className="h-4 w-4" />}
         iconClasses="bg-violet-100 dark:bg-violet-900/40 text-violet-600 dark:text-violet-400"
       />

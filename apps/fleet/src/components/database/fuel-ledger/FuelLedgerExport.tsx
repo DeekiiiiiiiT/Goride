@@ -3,6 +3,7 @@ import { Download } from 'lucide-react';
 import { FuelEntry } from '../../../types/fuel';
 import { toast } from 'sonner';
 import type { RenderColumnDef } from './FuelLedgerTable';
+import { csvEscape, csvDocument } from '../../../utils/ledgerCsvEscape';
 
 // ── CSV value helpers ───────────────────────────────────────────────────────
 
@@ -43,22 +44,12 @@ function getRawValue(entry: FuelEntry, key: string): string {
   }
 }
 
-/** Escape a value for CSV (wrap in quotes if it contains comma, quote, or newline) */
-function csvEscape(val: string): string {
-  if (val.includes(',') || val.includes('"') || val.includes('\n') || val.includes('\r')) {
-    return `"${val.replace(/"/g, '""')}"`;
-  }
-  return val;
-}
-
-// ── Export logic ────────────────────────────────────────────────────────────
-
 function buildCsv(entries: FuelEntry[], columns: RenderColumnDef[]): string {
   const header = columns.map(c => csvEscape(c.label)).join(',');
   const rows = entries.map(entry =>
     columns.map(c => csvEscape(getRawValue(entry, c.key))).join(',')
   );
-  return [header, ...rows].join('\n');
+  return csvDocument([header, ...rows]);
 }
 
 function downloadCsv(csv: string, filename: string) {

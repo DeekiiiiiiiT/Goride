@@ -3,6 +3,7 @@ import { Download } from 'lucide-react';
 import { TollLedgerEntry } from '../../../types/toll-ledger';
 import { toast } from 'sonner';
 import type { RenderColumnDef } from './TollLedgerTable';
+import { csvEscape, csvDocument } from '../../../utils/ledgerCsvEscape';
 
 // ── CSV value helpers ───────────────────────────────────────────────────────
 
@@ -51,22 +52,12 @@ function getRawValue(entry: TollLedgerEntry, key: string): string {
   return String(val);
 }
 
-/** Escape a value for CSV (wrap in quotes if it contains comma, quote, or newline) */
-function csvEscape(val: string): string {
-  if (val.includes(',') || val.includes('"') || val.includes('\n') || val.includes('\r')) {
-    return `"${val.replace(/"/g, '""')}"`;
-  }
-  return val;
-}
-
-// ── Export logic ────────────────────────────────────────────────────────────
-
 function buildCsv(entries: TollLedgerEntry[]): string {
   const header = EXPORT_COLUMNS.map(c => csvEscape(c.label)).join(',');
   const rows = entries.map(entry =>
     EXPORT_COLUMNS.map(c => csvEscape(getRawValue(entry, c.key))).join(',')
   );
-  return [header, ...rows].join('\n');
+  return csvDocument([header, ...rows]);
 }
 
 function downloadCsv(csv: string, filename: string) {

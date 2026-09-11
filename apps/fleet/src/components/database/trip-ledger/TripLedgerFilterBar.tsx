@@ -29,7 +29,9 @@ interface TripLedgerFilterBarProps {
 
 // ── Constants ───────────────────────────────────────────────────────────────
 
-const PLATFORMS = ['Uber', 'InDrive', 'Roam', 'Lyft', 'Bolt', 'GoRide', 'Private', 'Cash'] as const;
+import { LEDGER_PLATFORM_OPTIONS } from '../../../utils/ledgerPlatforms';
+
+const PLATFORMS = LEDGER_PLATFORM_OPTIONS;
 const STATUSES = ['Completed', 'Cancelled', 'Processing'] as const;
 
 const PLATFORM_COLORS: Record<string, string> = {
@@ -147,11 +149,15 @@ export function TripLedgerFilterBar({ filters, onChange, loading, totalResults }
     setLocalSearch(filters.search);
   }, [filters.search]);
 
+  // Keep search debounce from reverting concurrent chip changes (F-16)
+  const filtersRef = useRef(filters);
+  filtersRef.current = filters;
+
   const handleSearchChange = (val: string) => {
     setLocalSearch(val);
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
-      onChange({ ...filters, search: val });
+      onChange({ ...filtersRef.current, search: val });
     }, 350);
   };
 

@@ -4,6 +4,7 @@ import { Copy, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, ChevronsUpDown
 import { PaymentLinesPanel } from './PaymentLinesPanel';
 import { toast } from 'sonner';
 import type { ColumnDef } from './TripLedgerColumnToggle';
+import { getTripNetIncome } from '../../../utils/tripNetIncome';
 
 // ── Formatters ──────────────────────────────────────────────────────────────
 
@@ -78,10 +79,7 @@ function formatPercent(v: number | null | undefined): string {
 // ── Net income helper ───────────────────────────────────────────────────────
 
 function getNetIncome(t: Trip): number | null {
-  if (t.netToDriver != null) return t.netToDriver;
-  if (t.grossEarnings != null) return t.grossEarnings;
-  if (t.amount != null) return t.amount;
-  return null;
+  return getTripNetIncome(t);
 }
 
 // ── Batch source label ──────────────────────────────────────────────────────
@@ -885,6 +883,12 @@ interface TripLedgerTableProps {
   columnConfig?: ColumnConfig[];
   onPageChange: (page: number) => void;
   onPageSizeChange: (size: number) => void;
+  /** When true, empty copy assumes active filters (F-22). */
+  hasActiveFilters?: boolean;
+  /** Server-driven sort (F-03). When provided, table sort pushes to parent. */
+  serverSortKey?: string | null;
+  serverSortDir?: SortDir;
+  onServerSort?: (key: string | null, dir: SortDir) => void;
 }
 
 export function TripLedgerTable({
@@ -897,10 +901,17 @@ export function TripLedgerTable({
   columnConfig,
   onPageChange,
   onPageSizeChange,
+  hasActiveFilters = false,
+  serverSortKey,
+  serverSortDir,
+  onServerSort,
 }: TripLedgerTableProps) {
-  const [sortKey, setSortKey] = useState<string | null>(null);
-  const [sortDir, setSortDir] = useState<SortDir>(null);
+  const [localSortKey, setLocalSortKey] = useState<string | null>(null);
+  const [localSortDir, setLocalSortDir] = useState<SortDir>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  const sortKey = onServerSort ? (serverSortKey ?? null) : localSortKey;
+  const sortDir = onServerSort ? (serverSortDir ?? null) : localSortDir;
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const rangeStart = total === 0 ? 0 : page * pageSize + 1;
@@ -911,26 +922,36 @@ export function TripLedgerTable({
     [visibleColumns, columnConfig]
   );
 
-  // Sort trips client-side
+  // Sort trips client-side only when server sort is not wired
   const sortedTrips = useMemo(() => {
+    if (onServerSort) return trips;
     if (!sortKey || !sortDir) return trips;
     return [...trips].sort((a, b) =>
       compareValues(getSortValue(a, sortKey), getSortValue(b, sortKey), sortDir)
     );
-  }, [trips, sortKey, sortDir]);
+  }, [trips, sortKey, sortDir, onServerSort]);
 
   // Cycle sort: none → asc → desc → none
   const handleSort = useCallback((key: string) => {
+    let nextKey: string | null = key;
+    let nextDir: SortDir = 'asc';
     if (sortKey !== key) {
-      setSortKey(key);
-      setSortDir('asc');
+      nextKey = key;
+      nextDir = 'asc';
     } else if (sortDir === 'asc') {
-      setSortDir('desc');
+      nextKey = key;
+      nextDir = 'desc';
     } else {
-      setSortKey(null);
-      setSortDir(null);
+      nextKey = null;
+      nextDir = null;
     }
-  }, [sortKey, sortDir]);
+    if (onServerSort) {
+      onServerSort(nextKey, nextDir);
+    } else {
+      setLocalSortKey(nextKey);
+      setLocalSortDir(nextDir);
+    }
+  }, [sortKey, sortDir, onServerSort]);
 
   const handleCopyId = useCallback((id: string) => {
     navigator.clipboard.writeText(id).then(() => {
@@ -956,8 +977,19 @@ export function TripLedgerTable({
         </div>
       )}
 
+      {sortKey && !onServerSort && (
+        <div className="mb-2 text-xs text-amber-700 dark:text-amber-300">
+          Sorting this page only ({trips.length} of {total.toLocaleString()}). Server-wide sort ships in a later release.
+        </div>
+      )}
+      {sortKey && onServerSort && (
+        <div className="mb-2 text-xs text-slate-500 dark:text-slate-400">
+          Sorted by {sortKey} ({sortDir}) across the full filtered set.
+        </div>
+      )}
+
       {/* Table container with horizontal scroll */}
-      <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-700">
+      <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-700 max-h-[70vh]">
         <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-700">
           {/* Sticky header */}
           <thead className="bg-slate-50 dark:bg-slate-800/60 sticky top-0 z-10">
@@ -969,10 +1001,20 @@ export function TripLedgerTable({
                 return (
                   <th
                     key={col.key}
+                    scope="col"
                     className={`px-3 py-3 text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wider whitespace-nowrap group/th ${col.align === 'right' ? 'text-right' : 'text-left'} ${canSort ? 'cursor-pointer select-none hover:bg-slate-100 dark:hover:bg-slate-700/50 transition-colors' : ''}`}
                     style={col.minWidth ? { minWidth: col.minWidth } : undefined}
                     onClick={canSort ? () => handleSort(col.key) : undefined}
-                    title={canSort ? `Sort by ${col.label}` : undefined}
+                    title={canSort ? `Sort this page by ${col.label}` : undefined}
+                    aria-sort={
+                      isSorted
+                        ? sortDir === 'asc'
+                          ? 'ascending'
+                          : sortDir === 'desc'
+                            ? 'descending'
+                            : 'none'
+                        : undefined
+                    }
                   >
                     <span className={`inline-flex items-center gap-1 ${col.align === 'right' ? 'flex-row-reverse' : ''}`}>
                       {col.label}
@@ -996,7 +1038,11 @@ export function TripLedgerTable({
                 <td colSpan={activeCols.length} className="px-6 py-16 text-center">
                   <div className="flex flex-col items-center gap-2">
                     <div className="text-slate-400 dark:text-slate-500 text-lg font-medium">No trips found</div>
-                    <p className="text-sm text-slate-400 dark:text-slate-500">There are no trip records to display. Import trip data to get started.</p>
+                    <p className="text-sm text-slate-400 dark:text-slate-500">
+                      {hasActiveFilters
+                        ? 'No trips match these filters. Clear filters or widen the date range.'
+                        : 'There are no trip records to display. Import trip data to get started.'}
+                    </p>
                   </div>
                 </td>
               </tr>

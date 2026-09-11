@@ -81,6 +81,10 @@ const BLOCKER_LABELS: Record<string, string> = {
   SETTLEMENT_FLEET_OWES: 'Fleet still owes — Pay remaining on Cash desk before close',
   SETTLEMENT_DRIVER_OWES: 'Driver still owes — Collect remaining on Cash desk before close',
   SETTLEMENT_CASH_HELD: 'Cash still held — Collect or write off before close',
+  CUSTODY_NO_OPEN_TARGET:
+    'No open later week to park passenger cash — reopen a later week or leave one open',
+  PRIOR_CLOSE_HASH_CHANGED:
+    'Re-close hash differs from the prior seal — money may have changed while reopened',
   PERIOD_REBUILD_FAILED: 'Couldn’t refresh books — retry',
 };
 

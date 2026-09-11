@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { preservePeriodMetaKeys, resolveSignedSnapshot } from './periodSignedSnapshot.ts';
+import {
+  buildCloseInvariantSnapshot,
+  preservePeriodMetaKeys,
+  resolveSignedSnapshot,
+  stampCloseInvariantSnapshotOnMeta,
+} from './periodSignedSnapshot.ts';
 import { computePeriodSettlement } from './driverPeriodSettlement.ts';
 
 describe('periodSignedSnapshot', () => {
@@ -75,5 +80,35 @@ describe('periodSignedSnapshot', () => {
     expect(kept.rideshareTripCount).toBe(12);
     expect(kept.signedSnapshot).toEqual(prior.signedSnapshot);
     expect(kept.financeCore).toBeUndefined();
+  });
+
+  it('H-5: stampCloseInvariantSnapshotOnMeta folds invariant inputs', () => {
+    const meta = stampCloseInvariantSnapshotOnMeta(
+      {
+        signedSnapshot: {
+          at: '2026-08-01',
+          settlement_amount: 0,
+          payout_net: 100,
+          settlement_paid: 100,
+          cash_still_held: 0,
+        },
+        financeCore: {
+          signedAt: '2026-09-11T12:00:00.000Z',
+          cashSourceMismatch: 12.5,
+          tollUnknownPmCount: 2,
+          cashHeldClamped: true,
+          unclampedCashHeld: -40,
+        },
+      },
+      '2026-09-11T12:00:00.000Z',
+    );
+    const cis = (
+      meta.financeCore as { closeInvariantSnapshot: ReturnType<typeof buildCloseInvariantSnapshot> }
+    ).closeInvariantSnapshot;
+    expect(cis.cashSourceMismatch).toBe(12.5);
+    expect(cis.tollUnknownPmCount).toBe(2);
+    expect(cis.cashHeldClamped).toBe(true);
+    expect(cis.unclampedCashHeld).toBe(-40);
+    expect((meta.signedSnapshot as { cashSourceMismatch?: number }).cashSourceMismatch).toBe(12.5);
   });
 });

@@ -13,9 +13,16 @@ export function isPeriodFrozen(period: {
   metadata?: Record<string, unknown> | null;
   settlementStatus?: string | null;
   signedAt?: string | null;
+  /** ledger.driver_financial_periods.status — legacy closes may set closed without freeze seals */
+  status?: string | null;
+  closedAt?: string | null;
 } | null | undefined): boolean {
   if (!period) return false;
   if (period.signedAt) return true;
+  // Ops / backfill may set status=closed + closed_at without metadata.periodFrozen.
+  // Treat calendar-closed rows as frozen so Close Week / money paths stay honest.
+  if (period.closedAt) return true;
+  if (String(period.status || "").toLowerCase() === "closed") return true;
   const meta = period.metadata || {};
   if (meta.periodFrozen === true || meta.signedWeek === true) return true;
   if (meta.financeCore && typeof meta.financeCore === "object") {
@@ -76,6 +83,8 @@ export function assertMovementAllowed(opts: {
  */
 export async function assertFrozenPeriodHashIntact(period: {
   metadata?: Record<string, unknown> | null;
+  close_hash?: string | null;
+  closeHash?: string | null;
   source_event_hash?: string | null;
   sourceEventHash?: string | null;
   toll_spend?: number | null;
@@ -145,13 +154,52 @@ export async function assertFrozenPeriodHashIntact(period: {
   });
 
   if (!result.ok) {
+    // H-4 diagnosis: which money fields drifted vs signedSnapshot (when present).
+    const driftedFields = driftedMoneyFieldsVsSignedSnapshot(period);
     throw new SettlementCommandError(
       "HASH_MISMATCH",
       "Closed week hash no longer matches stored close hash — refuse money movement",
       409,
-      { stored: result.stored, expected: result.expected },
+      {
+        stored: result.stored,
+        expected: result.expected,
+        ...(driftedFields.length > 0 ? { driftedFields } : {}),
+      },
     );
   }
+}
+
+const SIGNED_SNAPSHOT_MONEY_KEYS = [
+  "settlement_amount",
+  "payout_net",
+  "settlement_paid",
+  "cash_still_held",
+] as const;
+
+/** Compare current period money columns to metadata.signedSnapshot when present. */
+function driftedMoneyFieldsVsSignedSnapshot(period: {
+  metadata?: Record<string, unknown> | null;
+  settlement_amount?: number | null;
+  payout_net?: number | null;
+  settlement_paid?: number | null;
+  cash_still_held?: number | null;
+}): string[] {
+  const snap = period.metadata?.signedSnapshot;
+  if (!snap || typeof snap !== "object") return [];
+  const s = snap as Record<string, unknown>;
+  const current: Record<(typeof SIGNED_SNAPSHOT_MONEY_KEYS)[number], number> = {
+    settlement_amount: Number(period.settlement_amount) || 0,
+    payout_net: Number(period.payout_net) || 0,
+    settlement_paid: Number(period.settlement_paid) || 0,
+    cash_still_held: Number(period.cash_still_held) || 0,
+  };
+  const drifted: string[] = [];
+  for (const key of SIGNED_SNAPSHOT_MONEY_KEYS) {
+    if (!(key in s)) continue;
+    const signed = Number(s[key]) || 0;
+    if (Math.abs(signed - current[key]) > 0.005) drifted.push(key);
+  }
+  return drifted;
 }
 
 export type FreezeMetaInput = {

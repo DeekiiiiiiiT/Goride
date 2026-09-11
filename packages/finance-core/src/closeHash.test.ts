@@ -54,7 +54,27 @@ describe('verifyPeriodCloseHash (H-4)', () => {
     expect(result.missingStored).toBe(true);
   });
 
-  it('storedCloseHashFromPeriod prefers column then metadata', () => {
+  it('storedCloseHashFromPeriod prefers close_hash → metadata → source_event_hash', () => {
+    expect(
+      storedCloseHashFromPeriod({
+        close_hash: 'dedicated',
+        source_event_hash: 'legacy',
+        metadata: { financeCore: { closeHash: 'meta' } },
+      }),
+    ).toBe('dedicated');
+    expect(
+      storedCloseHashFromPeriod({
+        closeHash: 'camelDedicated',
+        source_event_hash: 'legacy',
+        metadata: { financeCore: { closeHash: 'meta' } },
+      }),
+    ).toBe('camelDedicated');
+    expect(
+      storedCloseHashFromPeriod({
+        source_event_hash: 'legacy',
+        metadata: { financeCore: { closeHash: 'meta' } },
+      }),
+    ).toBe('meta');
     expect(
       storedCloseHashFromPeriod({ source_event_hash: 'abc' }),
     ).toBe('abc');

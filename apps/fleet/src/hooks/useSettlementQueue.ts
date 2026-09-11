@@ -30,6 +30,11 @@ export type SettlementQueueRow = {
   moneyUnlocked?: boolean;
   /** Close Week freeze — Pay/Collect disabled until reopen. */
   periodFrozen?: boolean;
+  /**
+   * Close seal failed verify-on-read (hash mismatch). When absent, UI still shows
+   * Closed from periodFrozen so operators know Collect/Pay is blocked (U-3).
+   */
+  sealBroken?: boolean;
   collectKind?: 'driver_owes' | 'cash_held';
   overpaidAmount?: number;
   cashSourceMismatch?: number;

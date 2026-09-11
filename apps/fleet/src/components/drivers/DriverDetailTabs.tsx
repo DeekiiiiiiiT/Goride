@@ -15,8 +15,6 @@ import type {
   QuotaConfig,
   Trip,
 } from '../../types/data';
-import { DriverIndriveWalletTab } from './DriverIndriveWalletTab';
-
 const DriverProfileTab = React.lazy(() =>
   import('./tabs/DriverProfileTab').then((m) => ({ default: m.DriverProfileTab })),
 );
@@ -94,8 +92,6 @@ export type DriverDetailTabsProps = {
   handleEditTransaction: (tx: FinancialTransaction) => void;
   periodCompletedFromOps: number | null;
   operationalTotals: { cancelledCount: number; tripCount: number };
-  ledgerRefreshKey: number;
-  setLedgerRefreshKey: React.Dispatch<React.SetStateAction<number>>;
 };
 
 export function DriverDetailTabs(p: DriverDetailTabsProps) {
@@ -106,7 +102,6 @@ export function DriverDetailTabs(p: DriverDetailTabsProps) {
         <TabsTrigger value="financial" aria-label="Financials tab">Financials</TabsTrigger>
         <TabsTrigger value="quality" aria-label="Service Quality tab">Service Quality</TabsTrigger>
         <TabsTrigger value="wallet" aria-label="Cash Wallet tab">Cash Wallet</TabsTrigger>
-        <TabsTrigger value="indrive-wallet" aria-label="InDrive Wallet tab">InDrive Wallet</TabsTrigger>
         <TabsTrigger value="profile" aria-label="Profile tab">Profile</TabsTrigger>
       </TabsList>
 
@@ -264,15 +259,6 @@ export function DriverDetailTabs(p: DriverDetailTabsProps) {
             />
           </Suspense>
         )}
-      </TabsContent>
-
-      <TabsContent value="indrive-wallet" className="space-y-6">
-        <DriverIndriveWalletTab
-          driverId={p.driverId}
-          range={p.ledgerDateRangeStrings}
-          ledgerRefreshKey={p.ledgerRefreshKey}
-          onWalletLedgerMutated={() => p.setLedgerRefreshKey((k) => k + 1)}
-        />
       </TabsContent>
 
       <TabsContent value="profile" className="space-y-6">
