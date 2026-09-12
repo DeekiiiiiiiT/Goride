@@ -202,6 +202,7 @@ import { registerFleetAdminMaintenanceLedgerRoutes } from "./fleet_admin_mainten
 import { registerEnterpriseAdminRoutes } from "./enterprise_admin_routes.ts";
 import { registerEnterpriseIntakeAdminRoutes } from "./enterprise_intake_admin_routes.ts";
 import { registerWorkforceInviteRoutes } from "./workforce_invite_routes.ts";
+import { registerFleetTagRoutes } from "./fleet_tag_routes.ts";
 import { registerFleetModuleCheckoutRoutes } from "./fleet_module_checkout.ts";
 import {
   linkDriverToFleet,
@@ -247,6 +248,7 @@ import { registerLedgerDiagnosticRoutes } from "./ledger_diagnostic_routes.ts";
 import { registerLedgerDriverEarningsHistoryRoutes } from "./ledger_driver_earnings_history_routes.ts";
 import { registerLedgerIndriveWalletRoutes } from "./ledger_indrive_wallet_routes.ts";
 import { registerLedgerWalletRoutes } from "./ledger_wallet_routes.ts";
+import { registerOrgBillingRoutes } from "./org_billing_routes.ts";
 import { registerLedgerDriversFleetSummaryRoutes } from "./ledger_drivers_fleet_summary_routes.ts";
 import {
   registerLedgerQuerySummaryRoutes,
@@ -506,6 +508,7 @@ registerLedgerIndriveWalletRoutes(app);
 registerLedgerDriversFleetSummaryRoutes(app);
 registerLedgerQuerySummaryRoutes(app);
 registerLedgerWalletRoutes(app);
+registerOrgBillingRoutes(app);
 registerLedgerEntriesRoutes(app);
 
 // ─── Toll Ledger Primary Write Helper (Phase 6) ──────────────────────────
@@ -13695,6 +13698,23 @@ registerEnterpriseAdminRoutes(app, {
 registerEnterpriseIntakeAdminRoutes(app);
 
 registerWorkforceInviteRoutes(app, {
+  supabase,
+  requireAuth,
+  getOrgId,
+  linkDriverToFleet: (userId, fleetId) =>
+    linkDriverToFleet(
+      {
+        supabase,
+        kv,
+        upsertDriverProfile: upsertDriverProfileFromServer,
+        invalidateDriverCache,
+      },
+      userId,
+      fleetId,
+    ),
+});
+
+registerFleetTagRoutes(app, {
   supabase,
   requireAuth,
   getOrgId,

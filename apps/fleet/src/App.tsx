@@ -819,7 +819,10 @@ function AppContent() {
         )}
         {currentPage === 'wallet' && (
           <PermissionGate permission="nav.tier_config" onNavigate={setCurrentPage}>
-            <WalletPage onNavigate={handleNavigate} />
+            <WalletPage
+              onNavigate={handleNavigate}
+              onOpenDriver={(id) => openDriverDetail(id, 'wallet')}
+            />
           </PermissionGate>
         )}
         {currentPage === 'earnings-policy' && (

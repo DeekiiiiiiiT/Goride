@@ -1,21 +1,26 @@
 /**
  * Fleet Wallet snapshot — Money → Wallet desk.
- * Composes Layer B cash-held, Layer A driver debt rollup, and statement bankTransfer (Balance).
+ * Composes Layer B cash-held, Layer A driver debt rollup, and Bank Deposits SSOT for Balance.
  * Roam Cash stays coming_soon until fleet org payout is productized.
  */
 import type { Context, Hono } from "npm:hono";
 import * as kv from "./kv_store.tsx";
 import { requireAuth } from "./rbac_middleware.ts";
-import { filterByOrgSafe, getOrgId } from "./org_scope.ts";
+import { filterByOrg, filterByOrgSafe, getOrgId } from "./org_scope.ts";
 import { fromKvStore } from "./fleet_sql_bridge.ts";
 import { listCashHeldPeriods } from "./driver_financial_periods.ts";
-import { buildOrgStatementSummaries } from "./ledger_query_summary_routes.ts";
 import { getRidesPaymentDb } from "../_shared/ridesPaymentDb.ts";
 import { driverDebtAccountKeyForUser } from "../rides/cashSettlement/buildJournalEntries.ts";
+import {
+  DEFAULT_FLEET_TZ,
+  periodKeyFor,
+} from "../../../packages/finance-core/src/periodKey.ts";
 
 const PREFIX = "/make-server-37f42386";
 const DRIVER_LIST_CAP = 5000;
 const TOP_N = 5;
+
+type BankPlatform = "uber" | "roam" | "indrive";
 
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
@@ -46,6 +51,159 @@ function payoutScheduledLabel(periodEndYmd: string): string {
     "Dec",
   ];
   return `${day} ${months[end.getUTCMonth()]}`;
+}
+
+function eventMeta(raw: Record<string, unknown>): Record<string, unknown> {
+  const m = raw.metadata;
+  return m && typeof m === "object" ? (m as Record<string, unknown>) : {};
+}
+
+function isOrgBankEvent(raw: Record<string, unknown>): boolean {
+  if (String(raw.eventType || "") !== "payout_bank") return false;
+  const meta = eventMeta(raw);
+  if (meta.recipient === "org") return true;
+  if (String(meta.source || "") === "payments_organization") return true;
+  if (String(meta.bankRole || "") === "org_deposit") return true;
+  return false;
+}
+
+function inferFleetBankPlatform(raw: Record<string, unknown>): BankPlatform {
+  const meta = eventMeta(raw);
+  const platform = String(meta.platform || meta.sourcePlatform || "").toLowerCase();
+  if (platform.includes("indrive") || platform.includes("in_drive")) return "indrive";
+  if (platform.includes("roam")) return "roam";
+  return "uber";
+}
+
+function normalizeBankPlatform(raw: unknown): BankPlatform {
+  const p = String(raw || "uber").toLowerCase();
+  if (p === "indrive" || p === "roam" || p === "uber") return p;
+  return "uber";
+}
+
+/**
+ * Wallet Balance = Bank Deposits desk for the selected weeks (NOT Earnings statement bankTransfer).
+ * Expected = org payout_bank weeks; Received = confirmed deposits; Outstanding = unconfirmed expected.
+ * Avoids fake InDrive/Roam plugs and false "over-received" when confirms match real wires.
+ */
+async function buildBankDepositsBalanceForPeriod(
+  c: Context,
+  startDate: string,
+  endDate: string,
+): Promise<{
+  expected: number;
+  bankReceived: number;
+  outstanding: number;
+  byPlatform: { roam: number; uber: number; indrive: number };
+  confirmedWeekCount: number;
+  unconfirmedWeekCount: number;
+}> {
+  const {
+    listAllUnifiedCanonicalEvents,
+    dedupeOrgBankCanonicalEvents,
+  } = await import("../_shared/unifiedLedger/queries.ts");
+
+  const all = dedupeOrgBankCanonicalEvents(
+    await listAllUnifiedCanonicalEvents({
+      products: ["roam_driver", "roam_fleet"],
+      entryTypes: ["payout_bank"],
+      maxRows: 100_000,
+    }),
+  );
+  const scoped = filterByOrg(all, c) as Record<string, unknown>[];
+
+  const orgByWeek = new Map<string, number>();
+  const allByWeek = new Map<string, number>();
+  const platformByWeek = new Map<string, BankPlatform>();
+
+  for (const raw of scoped) {
+    if (String(raw.eventType || "") !== "payout_bank") continue;
+    const date =
+      String(raw.date || "").slice(0, 10) || String(raw.periodStart || "").slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
+    const weekStartYmd = periodKeyFor(date, DEFAULT_FLEET_TZ);
+    if (!weekStartYmd) continue;
+    const add = Math.abs(Number(raw.netAmount) || 0);
+    if (add < 1e-9) continue;
+    allByWeek.set(weekStartYmd, round2((allByWeek.get(weekStartYmd) || 0) + add));
+    if (!platformByWeek.has(weekStartYmd) || isOrgBankEvent(raw)) {
+      platformByWeek.set(weekStartYmd, inferFleetBankPlatform(raw));
+    }
+    if (isOrgBankEvent(raw)) {
+      orgByWeek.set(weekStartYmd, round2((orgByWeek.get(weekStartYmd) || 0) + add));
+    }
+  }
+
+  type ExpectedRow = { weekStartYmd: string; expected: number; platform: BankPlatform };
+  const expectedRows: ExpectedRow[] = [];
+  const weeks = new Set<string>([...allByWeek.keys(), ...orgByWeek.keys()]);
+  for (const weekStartYmd of weeks) {
+    if (weekStartYmd < startDate || weekStartYmd > endDate) continue;
+    const orgAmt = orgByWeek.get(weekStartYmd);
+    const expected =
+      orgAmt != null && orgAmt > 0.005 ? orgAmt : allByWeek.get(weekStartYmd) || 0;
+    if (expected <= 0.005) continue;
+    expectedRows.push({
+      weekStartYmd,
+      expected: round2(expected),
+      platform: platformByWeek.get(weekStartYmd) || "uber",
+    });
+  }
+
+  const confirmItems = ((await kv.getByPrefix("fleet_bank_confirm:")) || []) as Record<
+    string,
+    unknown
+  >[];
+  const confirms = filterByOrg(confirmItems, c) as Record<string, unknown>[];
+
+  // Dedupe dual-write confirms → week|platform → amountReceived
+  const confirmByKey = new Map<string, number>();
+  for (const row of confirms) {
+    if (String(row.status || "") !== "confirmed") continue;
+    const week = String(row.weekStartYmd || "").slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(week)) continue;
+    const platform = normalizeBankPlatform(row.platform);
+    const key = `${week}|${platform}`;
+    if (!confirmByKey.has(key)) {
+      confirmByKey.set(key, round2(Number(row.amountReceived) || 0));
+    }
+  }
+
+  const byPlatform = { roam: 0, uber: 0, indrive: 0 };
+  let expected = 0;
+  let bankReceived = 0;
+  let outstanding = 0;
+  let confirmedWeekCount = 0;
+  let unconfirmedWeekCount = 0;
+
+  for (const row of expectedRows) {
+    byPlatform[row.platform] = round2(byPlatform[row.platform] + row.expected);
+    expected = round2(expected + row.expected);
+    const key = `${row.weekStartYmd}|${row.platform}`;
+    // Uber legacy week-only confirm (no platform split) — dual-read like Bank Deposits
+    const received =
+      confirmByKey.get(key) ??
+      (row.platform === "uber" ? confirmByKey.get(`${row.weekStartYmd}|uber`) : undefined);
+    // Also try resolves when confirm was stored without platform field defaulting uber
+    const got = received != null ? received : undefined;
+    if (got != null) {
+      bankReceived = round2(bankReceived + got);
+      confirmedWeekCount += 1;
+    } else {
+      // Awaiting confirmation — same meaning as Bank Deposits outstanding
+      outstanding = round2(outstanding + row.expected);
+      unconfirmedWeekCount += 1;
+    }
+  }
+
+  return {
+    expected,
+    bankReceived,
+    outstanding,
+    byPlatform,
+    confirmedWeekCount,
+    unconfirmedWeekCount,
+  };
 }
 
 async function loadOrgDrivers(c: Context): Promise<Record<string, unknown>[]> {
@@ -186,19 +344,25 @@ export function registerLedgerWalletRoutes(app: Hono) {
         );
       }
 
-      const [cashRows, summaries, drivers] = await Promise.all([
+      const [cashRows, drivers, bankBalance] = await Promise.all([
         listCashHeldPeriods({
           organizationId,
           periodStart: startDate,
           periodEnd: endDate,
           limit: 500,
         }),
-        buildOrgStatementSummaries(c, {
-          startDate,
-          endDate,
-          platforms: ["Uber", "Roam", "InDrive"],
-        }),
         loadOrgDrivers(c),
+        buildBankDepositsBalanceForPeriod(c, startDate, endDate).catch((e: any) => {
+          console.error("[WalletSnapshot] bank deposits balance failed:", e?.message || e);
+          return {
+            expected: 0,
+            bankReceived: 0,
+            outstanding: 0,
+            byPlatform: { roam: 0, uber: 0, indrive: 0 },
+            confirmedWeekCount: 0,
+            unconfirmedWeekCount: 0,
+          };
+        }),
       ]);
 
       // Cash in Hand — Layer B custody (same queue as Settlements Collect)
@@ -228,23 +392,22 @@ export function registerLedgerWalletRoutes(app: Hono) {
         .sort((a, b) => b.amount - a.amount)
         .slice(0, TOP_N);
 
-      // Balance — platform bankTransfer (Roam+Uber+InDrive)
-      const byPlatform = { roam: 0, uber: 0, indrive: 0 };
-      let payoutObservedAny = false;
-      let payoutGapAbs = 0;
-      for (const s of summaries) {
-        const bank = Number(s.bankTransfer) || 0;
-        const plat = String(s.platform || "");
-        if (plat === "Roam") byPlatform.roam = bank;
-        else if (plat === "Uber") byPlatform.uber = bank;
-        else if (plat === "InDrive") byPlatform.indrive = bank;
-        if (s.payoutObserved) payoutObservedAny = true;
-        payoutGapAbs = Math.max(payoutGapAbs, Math.abs(Number(s.payoutReconciliationGap) || 0));
-      }
-      const balanceAmount = round2(byPlatform.roam + byPlatform.uber + byPlatform.indrive);
+      // Balance — Bank Deposits SSOT (payout_bank + confirms), not Earnings bankTransfer plug
+      const { expected, bankReceived, outstanding, byPlatform } = bankBalance;
 
-      // Debt — Layer A driver:debt arrears rollup
-      const debt = await rollupFleetDriverDebt(drivers);
+      // Debt — Layer A driver:debt arrears rollup (soft-fail: do not blank Balance/Cash)
+      let debt: Awaited<ReturnType<typeof rollupFleetDriverDebt>> = {
+        amountMinor: 0,
+        driverCount: 0,
+        topDebtors: [],
+      };
+      let debtError: string | undefined;
+      try {
+        debt = await rollupFleetDriverDebt(drivers);
+      } catch (e: any) {
+        debtError = String(e?.message || e);
+        console.error("[WalletSnapshot] debt rollup failed:", debtError);
+      }
 
       const snapshot = {
         asOf: new Date().toISOString(),
@@ -271,20 +434,23 @@ export function registerLedgerWalletRoutes(app: Hono) {
             amount: majorFromMinor(d.amountMinor),
             amountMinor: d.amountMinor,
           })),
+          ...(debtError ? { error: debtError } : {}),
         },
         balance: {
-          amount: balanceAmount,
-          amountMinor: Math.round(balanceAmount * 100),
+          amount: outstanding,
+          amountMinor: Math.round(outstanding * 100),
+          expected,
+          bankReceived,
+          outstanding,
           byPlatform,
-          payoutScheduledLabel: payoutScheduledLabel(endDate),
-          payoutObserved: payoutObservedAny,
-          payoutReconciliationGap: payoutGapAbs > 0.005 ? round2(payoutGapAbs) : 0,
+          payoutScheduledLabel:
+            outstanding > 0.005 ? payoutScheduledLabel(endDate) : undefined,
         },
         roamCash: { status: "coming_soon" as const },
       };
 
       console.log(
-        `[WalletSnapshot] org=${organizationId} range=${startDate}..${endDate} cash=${snapshot.cashInHand.amount} debt=${snapshot.debt.amount} balance=${snapshot.balance.amount} ${Date.now() - t0}ms`,
+        `[WalletSnapshot] org=${organizationId} range=${startDate}..${endDate} cash=${snapshot.cashInHand.amount} debt=${snapshot.debt.amount} expected=${expected} received=${bankReceived} outstanding=${outstanding} confirmed=${bankBalance.confirmedWeekCount} awaiting=${bankBalance.unconfirmedWeekCount} ${Date.now() - t0}ms`,
       );
 
       return c.json({ success: true, snapshot, meta: { durationMs: Date.now() - t0 } });

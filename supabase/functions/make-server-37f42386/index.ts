@@ -24,6 +24,8 @@ import "../_fleet-server/api_command_center.tsx";
 import "../_fleet-server/fleet_toll_statement_snapshot.ts";
 // Money → Wallet snapshot (cash held + debt + platform Balance).
 import "../_fleet-server/ledger_wallet_routes.ts";
+// Org billing — payment methods + payout accounts.
+import "../_fleet-server/org_billing_routes.ts";
 // Deno cannot resolve bare @roam/* — pin finance-core via packages path (not apps/fleet re-export).
 import "../../../packages/finance-core/src/businessTransactionAccounting.ts";
 import "../../../packages/finance-core/src/fixedExpenseOccurrences.ts";

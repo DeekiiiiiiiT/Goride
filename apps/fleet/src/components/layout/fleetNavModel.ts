@@ -133,7 +133,12 @@ export function buildFleetNavModel(input: BuildFleetNavModelInput): FleetNavMode
   const canSeeWeekReconciliation =
     canView('fuel-reconciliation') || canView('toll-tags');
   const canSeeFleetOps = hasSharedOps && (canSeeFuelDesk || canSeeTollDesk);
-  const canSeeDriverOps = rideshareVisible && canView('drivers');
+  const canSeeCouriersInDriverOps =
+    hasRushDeliveryLine &&
+    isModuleEnabled('rush_couriers') &&
+    canView('couriers');
+  const canSeeDriverOps =
+    (rideshareVisible && canView('drivers')) || canSeeCouriersInDriverOps;
   const canSeeEarningsPolicyNav = computeCanSeeEarningsPolicy({
     hasSharedOps,
     sidebarVisible: isSidebarItemVisible('earnings-policy', businessType),
@@ -146,7 +151,6 @@ export function buildFleetNavModel(input: BuildFleetNavModelInput): FleetNavMode
     hasRushDeliveryLine,
     rushModuleEnabled: rushModuleNavEnabled(isModuleEnabled),
     canViewAnyCourierPage:
-      canView('couriers') ||
       canView('deliveries') ||
       canView('courier-settlements') ||
       canView('supply-health'),
@@ -189,7 +193,14 @@ export function buildFleetNavModel(input: BuildFleetNavModelInput): FleetNavMode
   ]);
 
   const driverItems = compactLeaves([
-    leaf(canView('drivers'), { id: 'drivers', label: labels.drivers }),
+    leaf(rideshareVisible && canView('drivers'), {
+      id: 'drivers',
+      label: labels.drivers,
+    }),
+    leaf(canSeeCouriersInDriverOps, {
+      id: 'couriers',
+      label: 'Couriers',
+    }),
   ]);
 
   const vehicleItems = compactLeaves([
@@ -252,10 +263,6 @@ export function buildFleetNavModel(input: BuildFleetNavModelInput): FleetNavMode
   ]);
 
   const courierItems = compactLeaves([
-    leaf(isModuleEnabled('rush_couriers') && canView('couriers'), {
-      id: 'couriers',
-      label: 'Couriers',
-    }),
     leaf(isModuleEnabled('rush_deliveries') && canView('deliveries'), {
       id: 'deliveries',
       label: 'Deliveries',

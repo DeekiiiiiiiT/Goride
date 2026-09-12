@@ -1552,6 +1552,110 @@ export const api = {
     return response.json();
   },
 
+  // ── Fleet Tag + join requests ──────────────────────────────────────────
+  async getFleetTag() {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/fleet-tag/me`, {
+      headers: await requireAuthHeaders(null),
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err?.error || 'Failed to load Fleet Tag');
+    }
+    return response.json() as Promise<{
+      fleet_tag: string | null;
+      has_fleet_tag: boolean;
+      organization_id: string;
+      organization_name: string | null;
+    }>;
+  },
+
+  async ensureFleetTag() {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/fleet-tag/me`, {
+      method: 'POST',
+      headers: await requireAuthHeaders(),
+      body: JSON.stringify({}),
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err?.error || 'Failed to ensure Fleet Tag');
+    }
+    return response.json() as Promise<{
+      fleet_tag: string | null;
+      has_fleet_tag: boolean;
+      organization_id: string;
+      organization_name: string | null;
+    }>;
+  },
+
+  async updateFleetTag(fleetTag: string) {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/fleet-tag/me`, {
+      method: 'PATCH',
+      headers: await requireAuthHeaders(),
+      body: JSON.stringify({ fleetTag }),
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err?.error || 'Failed to update Fleet Tag');
+    }
+    return response.json() as Promise<{
+      fleet_tag: string | null;
+      has_fleet_tag: boolean;
+      organization_id: string;
+      organization_name: string | null;
+    }>;
+  },
+
+  async getJoinRequests(status?: 'pending' | 'approved' | 'denied') {
+    const qs = status ? `?status=${status}` : '';
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/workforce/join-requests${qs}`, {
+      headers: await requireAuthHeaders(null),
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err?.error || 'Failed to load join requests');
+    }
+    return response.json() as Promise<{
+      requests: Array<{
+        id: string;
+        organization_id: string;
+        requester_user_id: string;
+        service_line: 'rideshare' | 'rush_delivery';
+        status: string;
+        created_at: string;
+        resolved_at: string | null;
+        resolved_by: string | null;
+        requester_name?: string | null;
+        requester_email?: string | null;
+      }>;
+    }>;
+  },
+
+  async approveJoinRequest(id: string) {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/workforce/join-requests/${id}/approve`, {
+      method: 'POST',
+      headers: await requireAuthHeaders(),
+      body: JSON.stringify({}),
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err?.error || 'Failed to approve join request');
+    }
+    return response.json();
+  },
+
+  async denyJoinRequest(id: string) {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/workforce/join-requests/${id}/deny`, {
+      method: 'POST',
+      headers: await requireAuthHeaders(),
+      body: JSON.stringify({}),
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err?.error || 'Failed to deny join request');
+    }
+    return response.json();
+  },
+
   // ── Toll Info ──────────────────────────────────────────────────────────
   async getTollInfo() {
     const response = await fetchWithRetry(`${API_ENDPOINTS.admin}/toll-info`, {
@@ -5224,6 +5328,124 @@ export const api = {
       const errText = await response.text();
       throw new Error(`Wallet snapshot failed: ${errText}`);
     }
+    return response.json();
+  },
+
+  async getOrgPaymentMethods(): Promise<{
+    success: boolean;
+    data: import('../types/orgBilling').OrgPaymentMethod[];
+  }> {
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.financial}/org-billing/payment-methods`,
+      { headers: await requireAuthHeaders(null) },
+    );
+    if (!response.ok) throw new Error(await response.text());
+    return response.json();
+  },
+
+  async createOrgPaymentMethod(body: {
+    brand: string;
+    last4: string;
+    expMonth: number;
+    expYear: number;
+    nickname?: string;
+    isDefault?: boolean;
+  }) {
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.financial}/org-billing/payment-methods`,
+      {
+        method: 'POST',
+        headers: await requireAuthHeaders(),
+        body: JSON.stringify(body),
+      },
+    );
+    if (!response.ok) throw new Error(await response.text());
+    return response.json();
+  },
+
+  async patchOrgPaymentMethod(
+    id: string,
+    body: { nickname?: string; isDefault?: boolean },
+  ) {
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.financial}/org-billing/payment-methods/${encodeURIComponent(id)}`,
+      {
+        method: 'PATCH',
+        headers: await requireAuthHeaders(),
+        body: JSON.stringify(body),
+      },
+    );
+    if (!response.ok) throw new Error(await response.text());
+    return response.json();
+  },
+
+  async deleteOrgPaymentMethod(id: string) {
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.financial}/org-billing/payment-methods/${encodeURIComponent(id)}`,
+      { method: 'DELETE', headers: await requireAuthHeaders() },
+    );
+    if (!response.ok) throw new Error(await response.text());
+    return response.json();
+  },
+
+  async getOrgPayoutAccounts(): Promise<{
+    success: boolean;
+    data: import('../types/orgBilling').OrgPayoutAccount[];
+  }> {
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.financial}/org-billing/payout-accounts`,
+      { headers: await requireAuthHeaders(null) },
+    );
+    if (!response.ok) throw new Error(await response.text());
+    return response.json();
+  },
+
+  async createOrgPayoutAccount(body: {
+    bankName: string;
+    accountHolderName: string;
+    accountType: 'checking' | 'savings';
+    accountNumber: string;
+    isDefault?: boolean;
+  }) {
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.financial}/org-billing/payout-accounts`,
+      {
+        method: 'POST',
+        headers: await requireAuthHeaders(),
+        body: JSON.stringify(body),
+      },
+    );
+    if (!response.ok) throw new Error(await response.text());
+    return response.json();
+  },
+
+  async patchOrgPayoutAccount(
+    id: string,
+    body: {
+      bankName?: string;
+      accountHolderName?: string;
+      accountType?: 'checking' | 'savings';
+      isDefault?: boolean;
+    },
+  ) {
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.financial}/org-billing/payout-accounts/${encodeURIComponent(id)}`,
+      {
+        method: 'PATCH',
+        headers: await requireAuthHeaders(),
+        body: JSON.stringify(body),
+      },
+    );
+    if (!response.ok) throw new Error(await response.text());
+    return response.json();
+  },
+
+  async deleteOrgPayoutAccount(id: string) {
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.financial}/org-billing/payout-accounts/${encodeURIComponent(id)}`,
+      { method: 'DELETE', headers: await requireAuthHeaders() },
+    );
+    if (!response.ok) throw new Error(await response.text());
     return response.json();
   },
 

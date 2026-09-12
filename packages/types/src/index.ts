@@ -47,6 +47,7 @@ export * from './pickupLocationRequest';
 export * from './riderContacts';
 export * from './passengerSavedPlaces';
 export * from './roamPassengerTag';
+export * from './fleetTag';
 export * from './passengerProfile';
 export * from './tripShare';
 export * from './roamConnections';

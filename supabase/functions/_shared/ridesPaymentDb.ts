@@ -60,6 +60,21 @@ function isMissingTableError(error: PostgrestError | null): boolean {
   );
 }
 
+/** Table exists in schema cache but role cannot use it — must try public views. */
+function isUnusableTableError(error: PostgrestError | null): boolean {
+  if (!error) return false;
+  if (isMissingTableError(error)) return true;
+  const msg = (error.message ?? "").toLowerCase();
+  const code = String(error.code ?? "");
+  // Postgres 42501 + PostgREST wrappers — native rides.* often lacks GRANTs;
+  // public.rides_payment_* views are the granted path (see 20260620120002).
+  return (
+    code === "42501" ||
+    msg.includes("permission denied") ||
+    msg.includes("insufficient_privilege")
+  );
+}
+
 async function probe(schema: string, table: string): Promise<PostgrestError | null> {
   const db = serviceClient(schema);
   const { error } = await db.from(table).select("id").limit(1);
@@ -72,19 +87,32 @@ export async function getRidesPaymentDb(): Promise<Resolved> {
   if (resolved) return resolved;
 
   const ridesErr = await probe("rides", NATIVE.accounts);
-  if (!isMissingTableError(ridesErr)) {
+  // Only bind rides.* when the probe fully succeeds — permission denied used to
+  // look "not missing" and permanently poison the isolate onto an unreadable table.
+  if (!ridesErr) {
     resolved = { db: serviceClient("rides"), tables: NATIVE };
     return resolved;
   }
+  if (!isUnusableTableError(ridesErr)) {
+    // Unexpected error (network, auth, etc.) — still try public before giving up.
+    console.warn(
+      `[ridesPaymentDb] rides.${NATIVE.accounts} probe failed (${ridesErr.code}: ${ridesErr.message}); trying public views`,
+    );
+  }
 
   const publicErr = await probe("public", PUBLIC_VIEWS.accounts);
-  if (!isMissingTableError(publicErr)) {
+  if (!publicErr) {
     resolved = { db: serviceClient("public"), tables: PUBLIC_VIEWS };
     return resolved;
   }
+  if (!isUnusableTableError(publicErr)) {
+    throw new Error(
+      `Payment wallet tables probe failed on public.${PUBLIC_VIEWS.accounts}: ${publicErr.message}`,
+    );
+  }
 
   throw new Error(
-    "Payment wallet tables are not available. Run migration 20260620120000_payment_accounts_public_views.sql " +
-      "or expose the rides schema in Supabase API settings.",
+    "Payment wallet tables are not available. Run migration 20260620120002_payment_accounts_public_views.sql " +
+      "or expose the rides schema in Supabase API settings and GRANT service_role on rides.payment_accounts.",
   );
 }

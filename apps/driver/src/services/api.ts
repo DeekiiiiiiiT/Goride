@@ -690,6 +690,53 @@ export const api = {
     return response.json();
   },
 
+  /** Request to join a fleet via permanent Fleet Tag (pending owner approval). */
+  async requestFleetJoin(fleetTag: string, serviceLine: 'rideshare' | 'rush_delivery' = 'rideshare') {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/workforce/join-requests`, {
+      method: 'POST',
+      headers: await getHeaders(),
+      body: JSON.stringify({ fleetTag, serviceLine }),
+    });
+    if (!response.ok) {
+      let msg = 'Failed to submit join request';
+      try {
+        const j = await response.json();
+        if (j && typeof j.error === 'string') msg = j.error;
+      } catch {
+        /* ignore */
+      }
+      throw new Error(msg);
+    }
+    return response.json() as Promise<{
+      request: unknown;
+      organization_name?: string;
+      fleet_tag?: string;
+      message?: string;
+    }>;
+  },
+
+  async lookupFleetTag(name: string) {
+    const tag = name.trim().replace(/^@+/, '').toLowerCase();
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/fleet-tag/lookup/${encodeURIComponent(tag)}`, {
+      headers: await getHeaders(null),
+    });
+    if (!response.ok) {
+      let msg = 'Fleet not found';
+      try {
+        const j = await response.json();
+        if (j && typeof j.error === 'string') msg = j.error;
+      } catch {
+        /* ignore */
+      }
+      throw new Error(msg);
+    }
+    return response.json() as Promise<{
+      fleet_tag: string;
+      organization_id: string;
+      organization_name: string;
+    }>;
+  },
+
   // joinFleetByFleetId removed — use acceptWorkforceInvite
 
   async fetchPendingTollClaims(): Promise<FinancialTransaction[]> {

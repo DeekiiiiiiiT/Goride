@@ -52,6 +52,7 @@ import {
   resolveEnterpriseSeatRole,
   enterpriseSeatHasPermission,
 } from '@roam/auth-client';
+import { FleetTagSection } from './FleetTagSection';
 
 // Role display configuration
 const FLEET_ROLE_CONFIG: Record<string, { label: string; description: string; color: string }> = {
@@ -270,6 +271,8 @@ export function UserManagementPage({ productLine = 'fleet' }: UserManagementPage
           Invite and manage team members for your organization.
         </p>
       </div>
+
+      {productLine === 'fleet' && <FleetTagSection />}
 
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
