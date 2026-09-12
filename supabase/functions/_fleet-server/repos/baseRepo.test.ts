@@ -31,12 +31,21 @@ Deno.test("rowToKvValue mirrors trip_id column into tripId", () => {
   assertEquals(payload.id, "toll-1");
 });
 
-Deno.test("rowToKvValue prefers payload_json tripId over column", () => {
+// Typed trip_id is SSOT (F-26 / Gate 2) — stale payload_json must not win.
+Deno.test("rowToKvValue prefers typed trip_id column over payload_json", () => {
   const payload = rowToKvValue({
     trip_id: "column-trip",
     payload_json: { tripId: "json-trip" },
   });
-  assertEquals(payload.tripId, "json-trip");
+  assertEquals(payload.tripId, "column-trip");
+});
+
+Deno.test("rowToKvValue typed null trip_id clears stale payload tripId", () => {
+  const payload = rowToKvValue({
+    trip_id: null,
+    payload_json: { tripId: "json-trip" },
+  });
+  assertEquals(payload.tripId, null);
 });
 
 Deno.test("queryFleet default order is updated_at DESC (N-04)", () => {
