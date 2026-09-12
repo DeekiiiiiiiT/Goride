@@ -66,4 +66,13 @@ export function findPeriodWeekOptionByRange(
 }
 
 export const ENTIRE_PERIOD_OPTION_ID = 'all';
+/** Shared ledger period: clear date bounds (all-time). */
+export const ALL_TIME_OPTION_ID = 'all-time';
 export const CUSTOM_RANGE_OPTION_ID = 'custom';
+
+export const ALL_TIME_PERIOD_OPTION: PeriodWeekOption = {
+  id: ALL_TIME_OPTION_ID,
+  label: 'All time',
+  startDate: '',
+  endDate: '',
+};

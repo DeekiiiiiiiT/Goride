@@ -1,6 +1,6 @@
 import { assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import { resolveFleetColumn } from "./fleet_column_map.ts";
-import { rowToKvValue } from "./baseRepo.ts";
+import { QUERY_FLEET_DEFAULT_ORDER, rowToKvValue } from "./baseRepo.ts";
 
 Deno.test("typed aliases win over JSON paths", () => {
   assertEquals(resolveFleetColumn("value->>transactionId"), "transaction_id");
@@ -37,4 +37,9 @@ Deno.test("rowToKvValue prefers payload_json tripId over column", () => {
     payload_json: { tripId: "json-trip" },
   });
   assertEquals(payload.tripId, "json-trip");
+});
+
+Deno.test("queryFleet default order is updated_at DESC (N-04)", () => {
+  assertEquals(QUERY_FLEET_DEFAULT_ORDER.col, "updated_at");
+  assertEquals(QUERY_FLEET_DEFAULT_ORDER.ascending, false);
 });

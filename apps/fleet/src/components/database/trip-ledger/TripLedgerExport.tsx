@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import { mergeTripLedgerActiveColumns, type RenderColumnDef } from './TripLedgerTable';
 import { getTripNetIncome } from '../../../utils/tripNetIncome';
 import { csvEscape, csvDocument } from '../../../utils/ledgerCsvEscape';
+import { api, TripFilterParams } from '../../../services/api';
 
 /** Map a column key to a raw (non-JSX) string value for CSV */
 function getRawValue(trip: Trip, key: string): string {
@@ -78,8 +79,7 @@ function buildCsv(trips: Trip[], columns: RenderColumnDef[]): string {
   return csvDocument([header, ...rows]);
 }
 
-function downloadCsv(csv: string, filename: string) {
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+function downloadBlob(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
@@ -90,10 +90,15 @@ function downloadCsv(csv: string, filename: string) {
   URL.revokeObjectURL(url);
 }
 
-function generateFilename(): string {
-  const now = new Date();
-  const ts = now.toISOString().slice(0, 10);
-  return `trip_ledger_page_export_${ts}.csv`;
+function downloadCsv(csv: string, filename: string) {
+  downloadBlob(new Blob([csv], { type: 'text/csv;charset=utf-8;' }), filename);
+}
+
+function generateFilename(kind: 'page' | 'filtered'): string {
+  const ts = new Date().toISOString().slice(0, 10);
+  return kind === 'filtered'
+    ? `trip_ledger_filtered_export_${ts}.csv`
+    : `trip_ledger_page_export_${ts}.csv`;
 }
 
 interface TripLedgerExportProps {
@@ -101,12 +106,21 @@ interface TripLedgerExportProps {
   visibleColumns: string[];
   columnConfig?: { key: string; label: string; visible: boolean }[];
   total: number;
+  /** Current filters for server filtered export (F-08). */
+  exportFilters?: Partial<TripFilterParams>;
 }
 
-export function TripLedgerExport({ trips, visibleColumns, columnConfig, total }: TripLedgerExportProps) {
+export function TripLedgerExport({
+  trips,
+  visibleColumns,
+  columnConfig,
+  total,
+  exportFilters,
+}: TripLedgerExportProps) {
   const [exporting, setExporting] = useState(false);
+  const [exportingFiltered, setExportingFiltered] = useState(false);
 
-  const handleExport = () => {
+  const handleExportPage = () => {
     if (trips.length === 0) {
       toast.error('No trips to export');
       return;
@@ -116,7 +130,7 @@ export function TripLedgerExport({ trips, visibleColumns, columnConfig, total }:
     try {
       const activeCols = mergeTripLedgerActiveColumns(visibleColumns, columnConfig);
       const csv = buildCsv(trips, activeCols);
-      downloadCsv(csv, generateFilename());
+      downloadCsv(csv, generateFilename('page'));
       const pageNote =
         total > trips.length
           ? ` — page only (${trips.length} of ${total.toLocaleString()} matching)`
@@ -130,24 +144,84 @@ export function TripLedgerExport({ trips, visibleColumns, columnConfig, total }:
     }
   };
 
+  const handleExportFiltered = async () => {
+    if (!exportFilters) {
+      toast.error('Filtered export unavailable');
+      return;
+    }
+    if (total === 0) {
+      toast.error('No trips match filters');
+      return;
+    }
+    if (total > 10_000) {
+      const ok = window.confirm(
+        `Export first 10,000 of ${total.toLocaleString()} matching trips?`,
+      );
+      if (!ok) return;
+    }
+    setExportingFiltered(true);
+    const toastId = toast.loading(
+      total > 10_000
+        ? `Exporting filtered set (capped at 10,000 of ${total.toLocaleString()})…`
+        : `Exporting ${total.toLocaleString()} filtered trips…`,
+    );
+    try {
+      const blob = await api.exportTripsFiltered(exportFilters as TripFilterParams);
+      downloadBlob(blob, generateFilename('filtered'));
+      toast.success(
+        total > 10_000
+          ? `Exported filtered set (cap 10,000 of ${total.toLocaleString()})`
+          : `Exported filtered set (${total.toLocaleString()} trips)`,
+        { id: toastId },
+      );
+    } catch (err: any) {
+      console.error('Filtered CSV export error:', err);
+      toast.error('Filtered export failed: ' + (err?.message || 'Unknown error'), { id: toastId });
+    } finally {
+      setExportingFiltered(false);
+    }
+  };
+
   return (
-    <button
-      onClick={handleExport}
-      disabled={exporting || trips.length === 0}
-      className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-      title={
-        trips.length > 0
-          ? total > trips.length
-            ? `Export this page only (${trips.length} of ${total.toLocaleString()} matching)`
-            : `Export ${trips.length} trips as CSV`
-          : 'No trips to export'
-      }
-    >
-      <Download className={`h-4 w-4 ${exporting ? 'animate-bounce' : ''}`} />
-      Export this page
-      {trips.length > 0 && (
-        <span className="text-xs text-slate-400 dark:text-slate-500">({trips.length})</span>
+    <div className="inline-flex items-center gap-2">
+      <button
+        onClick={handleExportPage}
+        disabled={exporting || trips.length === 0}
+        className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+        title={
+          trips.length > 0
+            ? total > trips.length
+              ? `Export this page only (${trips.length} of ${total.toLocaleString()} matching)`
+              : `Export ${trips.length} trips as CSV`
+            : 'No trips to export'
+        }
+      >
+        <Download className={`h-4 w-4 ${exporting ? 'animate-bounce' : ''}`} />
+        Export this page
+        {trips.length > 0 && (
+          <span className="text-xs text-slate-400 dark:text-slate-500">({trips.length})</span>
+        )}
+      </button>
+      {exportFilters && (
+        <button
+          onClick={() => void handleExportFiltered()}
+          disabled={exportingFiltered || total === 0}
+          className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          title={
+            total > 10_000
+              ? `Export filtered set (server cap 10,000 of ${total.toLocaleString()})`
+              : `Export all ${total.toLocaleString()} matching trips`
+          }
+        >
+          <Download className={`h-4 w-4 ${exportingFiltered ? 'animate-bounce' : ''}`} />
+          Export filtered set
+          {total > 0 && (
+            <span className="text-xs opacity-70">
+              ({total > 10_000 ? '10k cap' : total.toLocaleString()})
+            </span>
+          )}
+        </button>
       )}
-    </button>
+    </div>
   );
 }

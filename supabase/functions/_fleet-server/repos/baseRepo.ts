@@ -55,8 +55,15 @@ export function rowToKvValue(row: Record<string, unknown>): Record<string, unkno
   if (payload.isAnomaly == null && row.is_anomaly != null) payload.isAnomaly = row.is_anomaly;
   if (payload.isHard == null && row.is_hard != null) payload.isHard = row.is_hard;
   if (!payload.transactionId && row.transaction_id) payload.transactionId = row.transaction_id;
-  if (!payload.tripId && row.trip_id) payload.tripId = row.trip_id;
-  if (payload.isReconciled == null && row.is_reconciled != null) {
+  // Prefer typed SSOT over stale payload (toll filter/label parity — F-26 / Gate 2)
+  if (Object.prototype.hasOwnProperty.call(row, "trip_id")) {
+    payload.tripId = row.trip_id;
+  } else if (!payload.tripId && row.trip_id) {
+    payload.tripId = row.trip_id;
+  }
+  if (Object.prototype.hasOwnProperty.call(row, "is_reconciled")) {
+    payload.isReconciled = row.is_reconciled;
+  } else if (payload.isReconciled == null && row.is_reconciled != null) {
     payload.isReconciled = row.is_reconciled;
   }
   if (!payload.resolution && row.resolution) payload.resolution = row.resolution;
@@ -74,6 +81,9 @@ export type FleetQueryFilter =
   | { op: "orOrg"; orgId: string }; // organization_id = org OR null OR roam-default-org
 
 export type FleetOrderSpec = { col: string; ascending?: boolean };
+
+/** Default when callers omit order — newest first (N-04). */
+export const QUERY_FLEET_DEFAULT_ORDER: FleetOrderSpec = { col: "updated_at", ascending: false };
 
 export type FleetQueryOpts = {
   org?: string | null;
@@ -201,9 +211,10 @@ export async function queryFleet(
         ? opts.orders
         : opts.order
           ? [opts.order]
-          : [{ col: "updated_at", ascending: true }];
+          : [QUERY_FLEET_DEFAULT_ORDER];
     for (const o of orderList) {
       const orderCol = resolveFleetColumn(o.col) ?? o.col;
+      // Explicit false stays DESC; only ascending === true sorts ASC (N-04)
       q = q.order(orderCol, { ascending: o.ascending === true });
     }
 

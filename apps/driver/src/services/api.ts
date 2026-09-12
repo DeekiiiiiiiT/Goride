@@ -8,6 +8,7 @@ import { API_ENDPOINTS } from './apiConfig';
 import type { CompatiblePartsResponse } from '../types/partSourcing';
 import { compressImage, OCR_COMPRESS_OPTS } from '../utils/compressImage';
 import { isTollCategory } from '../utils/tollCategoryHelper';
+import { unwrapFuelEntriesPayload } from '@roam/fuel-core';
 import { appendUploadEvidenceMeta, type UploadEvidenceMeta } from '@roam/types/evidence';
 
 // Helper to get authorization headers (JWT if logged in, else anon key)
@@ -2304,9 +2305,13 @@ export const api = {
       })
     ]);
 
-    const dataUnderscore = resUnderscore.ok ? await resUnderscore.json() : [];
-    const dataHyphen = resHyphen.ok ? await resHyphen.json() : [];
-    
+    const dataUnderscore = resUnderscore.ok
+      ? unwrapFuelEntriesPayload(await resUnderscore.json(), resUnderscore.headers.get('X-Total-Count'))
+      : [];
+    const dataHyphen = resHyphen.ok
+      ? unwrapFuelEntriesPayload(await resHyphen.json(), resHyphen.headers.get('X-Total-Count'))
+      : [];
+
     const combined = [...dataUnderscore, ...dataHyphen];
     // Deduplicate by ID
     return Array.from(new Map(combined.map(item => [item.id, item])).values());
@@ -2412,7 +2417,7 @@ export const api = {
         headers: { 'Authorization': `Bearer ${publicAnonKey}` }
     });
     if (!response.ok) throw new Error("Failed to fetch fuel entries");
-    return response.json();
+    return unwrapFuelEntriesPayload(await response.json(), response.headers.get('X-Total-Count'));
   },
 
   async getForensicErrorLogs() {

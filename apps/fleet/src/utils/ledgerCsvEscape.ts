@@ -4,8 +4,9 @@
  */
 export function csvEscape(val: string): string {
   let s = String(val ?? '');
-  // Formula injection: leading = + - @ tab CR
-  if (/^[=+\-@\t\r]/.test(s)) {
+  // Formula injection: leading = + - @ tab CR — but keep finite numbers numeric (N-07)
+  const isPlainNumber = /^-?\d+(\.\d+)?([eE][+-]?\d+)?$/.test(s);
+  if (!isPlainNumber && /^[=+\-@\t\r]/.test(s)) {
     s = `'${s}`;
   }
   if (s.includes(',') || s.includes('"') || s.includes('\n') || s.includes('\r')) {

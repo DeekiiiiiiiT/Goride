@@ -7,7 +7,7 @@ ALTER TABLE fleet.trips
 UPDATE fleet.trips
 SET net_to_driver = (payload_json->>'netToDriver')::numeric
 WHERE net_to_driver IS NULL
-  AND payload_json->>'netToDriver' ~ '^-?[0-9]+(\\.[0-9]+)?$';
+  AND payload_json->>'netToDriver' ~ '^-?[0-9]+(\.[0-9]+)?$';
 
 CREATE INDEX IF NOT EXISTS fleet_trips_org_date_id_idx
   ON fleet.trips (organization_id, date DESC, id DESC);
@@ -24,7 +24,7 @@ SELECT
   t.id AS source_id,
   (t.date::timestamp AT TIME ZONE 'UTC') AS occurred_at,
   t.created_at AS posted_at,
-  NULL::text AS period_key,
+  to_char(date_trunc('week', t.date::timestamp), 'IYYY-"W"IW') AS period_key,
   t.driver_id,
   t.vehicle_id,
   t.batch_id,
@@ -34,7 +34,7 @@ SELECT
     t.net_to_driver,
     NULLIF(t.payload_json->>'indriveNetIncome', '')::numeric
   ) AS amount_net,
-  'USD'::char(3) AS currency,
+  coalesce(NULLIF(t.payload_json->>'currency', ''), 'USD')::char(3) AS currency,
   t.status,
   jsonb_build_object(
     'lines_match', t.payload_json->'paymentLineRollupMatch',
@@ -53,14 +53,14 @@ SELECT
   f.id AS source_id,
   (f.date::timestamp AT TIME ZONE 'UTC') AS occurred_at,
   f.created_at AS posted_at,
-  NULL::text AS period_key,
+  to_char(date_trunc('week', f.date::timestamp), 'IYYY-"W"IW') AS period_key,
   f.driver_id,
   f.vehicle_id,
   NULL::text AS batch_id,
   'outflow'::text AS direction,
   f.amount AS amount_gross,
   f.amount AS amount_net,
-  'USD'::char(3) AS currency,
+  coalesce(NULLIF(f.payload_json->>'currency', ''), 'USD')::char(3) AS currency,
   f.type AS status,
   '{}'::jsonb AS integrity_flags,
   f.payload_json
@@ -76,14 +76,14 @@ SELECT
   l.id AS source_id,
   (l.date::timestamp AT TIME ZONE 'UTC') AS occurred_at,
   l.created_at AS posted_at,
-  NULL::text AS period_key,
+  to_char(date_trunc('week', l.date::timestamp), 'IYYY-"W"IW') AS period_key,
   l.driver_id,
   l.vehicle_id,
   l.batch_id,
   'outflow'::text AS direction,
   abs(coalesce(l.amount, 0)) AS amount_gross,
   abs(coalesce(l.amount, 0)) AS amount_net,
-  'USD'::char(3) AS currency,
+  coalesce(NULLIF(l.payload_json->>'currency', ''), 'USD')::char(3) AS currency,
   l.status,
   jsonb_build_object(
     'is_reconciled', l.is_reconciled,
@@ -93,7 +93,13 @@ SELECT
   l.payload_json
 FROM fleet.toll_ledger l;
 
-CREATE OR REPLACE VIEW public.fleet_ledger_entries AS
+CREATE OR REPLACE VIEW public.fleet_ledger_entries
+WITH (security_invoker = true) AS
 SELECT * FROM fleet.ledger_entries;
 
-CREATE OR REPLACE VIEW public.fleet_trips AS SELECT * FROM fleet.trips;
+CREATE OR REPLACE VIEW public.fleet_trips
+WITH (security_invoker = true) AS
+SELECT * FROM fleet.trips;
+
+REVOKE ALL ON TABLE public.fleet_ledger_entries FROM PUBLIC, anon;
+REVOKE ALL ON TABLE public.fleet_trips FROM PUBLIC, anon;

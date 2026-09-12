@@ -130,7 +130,10 @@ function ChipDropdown({
   return (
     <div className="relative" ref={ref}>
       <button
+        type="button"
         onClick={() => setOpen(!open)}
+        aria-haspopup="listbox"
+        aria-expanded={open}
         className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg border transition-colors ${isActive ? activeColor : INACTIVE_CHIP}`}
       >
         {displayValue || label}
@@ -145,7 +148,7 @@ function ChipDropdown({
       </button>
 
       {open && (
-        <div className="absolute left-0 top-full mt-1.5 w-44 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-lg z-50 py-1">
+        <div role="listbox" className="absolute left-0 top-full mt-1.5 w-44 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-lg z-50 py-1">
           {/* "All" option */}
           <button
             onClick={() => { onChange(''); setOpen(false); }}

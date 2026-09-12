@@ -1,11 +1,14 @@
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Receipt, RefreshCw } from 'lucide-react';
 import { TollLedgerEntry, normalizeTollLedgerEntry } from '../../types/toll-ledger';
 import { api } from '../../services/api';
+import { useLedgerPeriod } from '../../contexts/LedgerPeriodContext';
+import { useLedgerQuery } from '../../hooks/useLedgerQuery';
+import { isTollServerSortKey } from '../../utils/tollSortKeys';
 import { TollLedgerTable, ALL_COLUMNS, DEFAULT_VISIBLE_KEYS } from './toll-ledger/TollLedgerTable';
 import type { SortDir } from './toll-ledger/TollLedgerTable';
 import { TollLedgerColumnToggle } from './toll-ledger/TollLedgerColumnToggle';
-import { TollLedgerFilterBar, TollLedgerFilters, EMPTY_FILTERS, hasActiveFilters } from './toll-ledger/TollLedgerFilterBar';
+import { TollLedgerFilterBar, TollLedgerFilters, EMPTY_FILTERS } from './toll-ledger/TollLedgerFilterBar';
 import { TollLedgerStats } from './toll-ledger/TollLedgerStats';
 import { TollLedgerExport } from './toll-ledger/TollLedgerExport';
 
@@ -28,60 +31,6 @@ function saveVisibleColumns(keys: string[]) {
   } catch { /* ignore */ }
 }
 
-// ── Sort helpers ────────────────────────────────────────────────────────────
-
-/** Extract a raw sortable value for a given column key */
-function getSortValue(entry: TollLedgerEntry, key: string): string | number | null {
-  switch (key) {
-    case 'id': return entry.id || '';
-    case 'date': return entry.date || '';
-    case 'vehiclePlate': return (entry.vehiclePlate || '').toLowerCase();
-    case 'driverName': return (entry.driverName || '').toLowerCase();
-    case 'plaza': return (entry.plaza || '').toLowerCase();
-    case 'amount': return typeof entry.amount === 'number' ? entry.amount : null;
-    case 'absAmount': return typeof entry.absAmount === 'number' ? entry.absAmount : null;
-    case 'type': return entry.type || '';
-    case 'reconciliationStatus': return entry.reconciliationStatus || '';
-    case 'status': return entry.status || '';
-    case 'paymentMethod': return entry.paymentMethod || '';
-    case 'matchedTripId': return entry.matchedTripId || '';
-    case 'matchedTripPlatform': return (entry.matchedTripPlatform || '').toLowerCase();
-    case 'matchedTripPickup': return (entry.matchedTripPickup || '').toLowerCase();
-    case 'matchedTripDropoff': return (entry.matchedTripDropoff || '').toLowerCase();
-    case 'resolution': return (entry.resolution || '').toLowerCase();
-    case 'tripTollCharges': return typeof entry.tripTollCharges === 'number' ? entry.tripTollCharges : null;
-    case 'refundAmount': return typeof entry.refundAmount === 'number' ? entry.refundAmount : null;
-    case 'lossAmount': return typeof entry.lossAmount === 'number' ? entry.lossAmount : null;
-    case 'referenceTagId': return entry.referenceTagId || '';
-    case 'batchId': return entry.batchId || '';
-    default: return null;
-  }
-}
-
-/** Compare two values for sorting. Nulls/empty always sort last regardless of direction. */
-function compareValues(
-  a: string | number | null,
-  b: string | number | null,
-  dir: 'asc' | 'desc',
-): number {
-  const aNull = a == null || a === '';
-  const bNull = b == null || b === '';
-  if (aNull && bNull) return 0;
-  if (aNull) return 1;   // nulls last
-  if (bNull) return -1;  // nulls last
-
-  let cmp: number;
-  if (typeof a === 'number' && typeof b === 'number') {
-    cmp = a - b;
-  } else {
-    cmp = String(a).localeCompare(String(b));
-  }
-
-  return dir === 'desc' ? -cmp : cmp;
-}
-
-// ── Component ───────────────────────────────────────────────────────────────
-
 export interface ColumnConfig {
   key: string;
   label: string;
@@ -95,124 +44,83 @@ interface TollLedgerPageProps {
 }
 
 export function TollLedgerPage({ organizationId, columnConfig }: TollLedgerPageProps = {}) {
-  const [allEntries, setAllEntries] = useState<TollLedgerEntry[]>([]);
-  const [serverTotal, setServerTotal] = useState<number | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { period, setPeriod } = useLedgerPeriod();
   const [page, setPage] = useState(0);
   const [pageSize, setPageSize] = useState(50);
-  const [visibleColumns, setVisibleColumns] = useState<string[]>(loadVisibleColumns);
+  const [localVisibleColumns, setLocalVisibleColumns] = useState<string[]>(loadVisibleColumns);
+  const visibleColumns = columnConfig
+    ? columnConfig.filter((c) => c.visible).map((c) => c.key)
+    : localVisibleColumns;
   const [sortKey, setSortKey] = useState<string | null>(null);
   const [sortDir, setSortDir] = useState<SortDir>(null);
-  const [filters, setFilters] = useState<TollLedgerFilters>({ ...EMPTY_FILTERS });
-
-  const fetchIdRef = useRef(0);
-
-  const fetchEntries = useCallback(async () => {
-    const id = ++fetchIdRef.current;
-    setLoading(true);
-    setError(null);
-    try {
-      const startDate = filters.dateFrom || undefined;
-      const endDate = filters.dateTo || undefined;
-      const result = await api.getTollLedger({
-        organizationId,
-        startDate,
-        endDate,
-        limit: 1500,
-        offset: 0,
-      });
-      if (id !== fetchIdRef.current) return;
-      const entries = Array.isArray(result.data)
-        ? result.data.map(normalizeTollLedgerEntry)
-        : [];
-      setAllEntries(entries);
-      setServerTotal(result.total ?? entries.length);
-    } catch (err: any) {
-      if (id !== fetchIdRef.current) return;
-      console.error('TollLedgerPage fetch error:', err);
-      setError(err?.message || 'Failed to load toll transactions');
-    } finally {
-      if (id === fetchIdRef.current) setLoading(false);
-    }
-  }, [organizationId, filters.dateFrom, filters.dateTo]);
+  const [filters, setFilters] = useState<TollLedgerFilters>(() => ({
+    ...EMPTY_FILTERS,
+    dateFrom: period.startDate,
+    dateTo: period.endDate,
+  }));
 
   useEffect(() => {
-    fetchEntries();
-  }, [fetchEntries]);
-
-  // ── Client-side filtering ──
-  const filteredEntries = useMemo(() => {
-    if (!hasActiveFilters(filters)) return allEntries;
-
-    const searchLower = filters.search.toLowerCase();
-
-    return allEntries.filter((e) => {
-      if (searchLower) {
-        const haystack = [
-          e.id, e.plaza, e.driverName, e.vehiclePlate, e.description, e.matchedTripId,
-        ]
-          .filter(Boolean)
-          .join(' ')
-          .toLowerCase();
-        if (!haystack.includes(searchLower)) return false;
-      }
-
-      if (filters.reconciliationStatus && e.reconciliationStatus !== filters.reconciliationStatus) {
-        return false;
-      }
-
-      if (filters.type && e.type !== filters.type) {
-        return false;
-      }
-
-      if (filters.vehiclePlate) {
-        if (!e.vehiclePlate?.toLowerCase().includes(filters.vehiclePlate.toLowerCase())) {
-          return false;
-        }
-      }
-
-      if (filters.driverName) {
-        if (!e.driverName?.toLowerCase().includes(filters.driverName.toLowerCase())) {
-          return false;
-        }
-      }
-
-      if (filters.dateFrom && e.date < filters.dateFrom) return false;
-      if (filters.dateTo && e.date > filters.dateTo) return false;
-
-      return true;
+    setFilters((prev) => {
+      if (prev.dateFrom === period.startDate && prev.dateTo === period.endDate) return prev;
+      return { ...prev, dateFrom: period.startDate, dateTo: period.endDate };
     });
-  }, [allEntries, filters]);
+    setPage(0);
+  }, [period.startDate, period.endDate]);
 
-  // ── Client-side sorting ──
-  const sortedEntries = useMemo(() => {
-    if (!sortKey || !sortDir) return filteredEntries;
+  const rowFilters = useMemo(() => ({
+    ...(organizationId ? { organizationId } : {}),
+    startDate: filters.dateFrom || undefined,
+    endDate: filters.dateTo || undefined,
+    search: filters.search || undefined,
+    reconciliationStatus: filters.reconciliationStatus || undefined,
+    type: filters.type || undefined,
+    vehiclePlate: filters.vehiclePlate || undefined,
+    driverName: filters.driverName || undefined,
+    limit: pageSize,
+    offset: page * pageSize,
+    ...(sortKey && sortDir && isTollServerSortKey(sortKey) ? { sortKey, sortDir } : {}),
+  }), [organizationId, filters, page, pageSize, sortKey, sortDir]);
 
-    return [...filteredEntries].sort((a, b) => {
-      const va = getSortValue(a, sortKey);
-      const vb = getSortValue(b, sortKey);
-      return compareValues(va, vb, sortDir);
-    });
-  }, [filteredEntries, sortKey, sortDir]);
+  const rowsQuery = useLedgerQuery<{ data: TollLedgerEntry[]; total: number }>({
+    domain: 'toll',
+    filters: rowFilters,
+    queryFn: async (f) => {
+      const result = await api.getTollLedger(f as any);
+      return {
+        data: (result.data || []).map(normalizeTollLedgerEntry),
+        total: result.total ?? 0,
+      };
+    },
+  });
 
-  // ── Client-side pagination (slices from sorted array) ──
-  const paginatedEntries = useMemo(() => {
-    const start = page * pageSize;
-    return sortedEntries.slice(start, start + pageSize);
-  }, [sortedEntries, page, pageSize]);
+  const entries = rowsQuery.data?.data || [];
+  const total = rowsQuery.data?.total ?? 0;
+  const loading = rowsQuery.isFetching;
+  const error = rowsQuery.error ? ((rowsQuery.error as Error).message || 'Failed to load toll transactions') : null;
 
-  const handlePageChange = (newPage: number) => {
-    setPage(newPage);
-  };
-
+  const handlePageChange = (newPage: number) => setPage(newPage);
   const handlePageSizeChange = (newSize: number) => {
     setPage(0);
     setPageSize(newSize);
   };
 
-  // ── Sort handler: none → asc → desc → none ──
+  const handleFiltersChange = (next: TollLedgerFilters) => {
+    setFilters(next);
+    setPage(0);
+    if (next.dateFrom && next.dateTo) {
+      setPeriod({ startDate: next.dateFrom, endDate: next.dateTo });
+    } else if (!next.dateFrom && !next.dateTo) {
+      setPeriod({ startDate: '', endDate: '' });
+    }
+  };
+
+  const handleFilterByStatus = (status: string) => {
+    setFilters((prev) => ({ ...prev, reconciliationStatus: status }));
+    setPage(0);
+  };
+
   const handleSort = useCallback((key: string) => {
+    if (!isTollServerSortKey(key)) return;
     if (sortKey !== key) {
       setSortKey(key);
       setSortDir('asc');
@@ -226,41 +134,29 @@ export function TollLedgerPage({ organizationId, columnConfig }: TollLedgerPageP
   }, [sortKey, sortDir]);
 
   const handleColumnToggle = (key: string) => {
-    const next = visibleColumns.includes(key)
-      ? visibleColumns.filter(k => k !== key)
-      : [...visibleColumns, key];
-    if (next.length === 0) return;
-    setVisibleColumns(next);
-    saveVisibleColumns(next);
+    if (columnConfig) return;
+    setLocalVisibleColumns((prev) => {
+      const next = prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key];
+      if (next.length === 0) return prev;
+      saveVisibleColumns(next);
+      return next;
+    });
   };
 
   const handleResetColumns = () => {
-    const defaults = [...DEFAULT_VISIBLE_KEYS];
-    setVisibleColumns(defaults);
-    saveVisibleColumns(defaults);
+    if (columnConfig) return;
+    setLocalVisibleColumns([...DEFAULT_VISIBLE_KEYS]);
+    saveVisibleColumns([...DEFAULT_VISIBLE_KEYS]);
   };
 
-  const handleFiltersChange = (newFilters: TollLedgerFilters) => {
-    setFilters(newFilters);
-    setPage(0);
-  };
-
-  // ── Click-to-filter from reconciliation breakdown bar (toggle behavior) ──
-  const handleFilterByStatus = useCallback((status: string) => {
-    setFilters((prev) => ({
-      ...prev,
-      reconciliationStatus: prev.reconciliationStatus === status ? '' : status,
-    }));
-    setPage(0);
-  }, []);
+  const showColumnToggle = !columnConfig;
 
   return (
     <div className="space-y-5">
-      {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="p-2.5 rounded-lg bg-rose-100 dark:bg-rose-900/50">
-            <Receipt className="h-6 w-6 text-rose-600 dark:text-rose-400" />
+          <div className="p-2.5 rounded-lg bg-violet-100 dark:bg-violet-900/50">
+            <Receipt className="h-6 w-6 text-violet-600 dark:text-violet-400" />
           </div>
           <div>
             <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100">
@@ -268,24 +164,23 @@ export function TollLedgerPage({ organizationId, columnConfig }: TollLedgerPageP
             </h2>
             <p className="text-sm text-slate-500 dark:text-slate-400">
               Toll transactions (list view — no live match engine)
+              {total ? ` · ${total.toLocaleString()} matching` : ''}
             </p>
           </div>
         </div>
 
-        {/* Toolbar */}
         <div className="flex items-center gap-2">
-          <TollLedgerExport
-            entries={filteredEntries}
-            totalFiltered={filteredEntries.length}
-          />
-          <TollLedgerColumnToggle
-            columns={ALL_COLUMNS}
-            visibleColumns={visibleColumns}
-            onToggle={handleColumnToggle}
-            onResetDefaults={handleResetColumns}
-          />
+          <TollLedgerExport entries={entries} totalFiltered={total} />
+          {showColumnToggle && (
+            <TollLedgerColumnToggle
+              columns={ALL_COLUMNS}
+              visibleColumns={visibleColumns}
+              onToggle={handleColumnToggle}
+              onResetDefaults={handleResetColumns}
+            />
+          )}
           <button
-            onClick={fetchEntries}
+            onClick={() => void rowsQuery.refetch()}
             disabled={loading}
             className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-50 transition-colors"
           >
@@ -295,30 +190,27 @@ export function TollLedgerPage({ organizationId, columnConfig }: TollLedgerPageP
         </div>
       </div>
 
-      {serverTotal != null && serverTotal > allEntries.length && (
-        <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 px-4 py-2.5 text-xs text-amber-800 dark:text-amber-200">
-          Showing {allEntries.length.toLocaleString()} of {serverTotal.toLocaleString()} toll rows — narrow the date range to load more.
+      {sortKey && sortDir && (
+        <div className="text-xs text-slate-500 dark:text-slate-400">
+          Sorted by {sortKey} ({sortDir}) across the full filtered set.
         </div>
       )}
 
-      {/* Filter Bar */}
       <TollLedgerFilterBar
         filters={filters}
         onChange={handleFiltersChange}
         loading={loading}
-        totalResults={filteredEntries.length}
-        totalUnfiltered={allEntries.length}
+        totalResults={total}
+        totalUnfiltered={total}
       />
 
-      {/* Stats Strip */}
       <TollLedgerStats
-        entries={filteredEntries}
+        entries={entries}
         loading={loading}
         activeReconStatus={filters.reconciliationStatus || undefined}
         onFilterByStatus={handleFilterByStatus}
       />
 
-      {/* Error state */}
       {error && (
         <div className="rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/30 p-4">
           <div className="flex items-center justify-between">
@@ -329,7 +221,7 @@ export function TollLedgerPage({ organizationId, columnConfig }: TollLedgerPageP
               <p className="text-sm text-red-600 dark:text-red-400 mt-1">{error}</p>
             </div>
             <button
-              onClick={fetchEntries}
+              onClick={() => void rowsQuery.refetch()}
               className="px-3 py-1.5 text-sm font-medium rounded-md bg-red-100 dark:bg-red-900/50 text-red-700 dark:text-red-300 hover:bg-red-200 dark:hover:bg-red-900 transition-colors"
             >
               Retry
@@ -338,19 +230,19 @@ export function TollLedgerPage({ organizationId, columnConfig }: TollLedgerPageP
         </div>
       )}
 
-      {/* Table */}
       <TollLedgerTable
-        entries={paginatedEntries}
+        entries={entries}
         loading={loading}
         visibleColumns={visibleColumns}
         page={page}
         pageSize={pageSize}
-        totalFiltered={filteredEntries.length}
+        totalFiltered={total}
         onPageChange={handlePageChange}
         onPageSizeChange={handlePageSizeChange}
         sortKey={sortKey}
         sortDir={sortDir}
         onSort={handleSort}
+        columnConfig={columnConfig}
       />
     </div>
   );

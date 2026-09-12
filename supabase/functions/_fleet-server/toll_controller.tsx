@@ -18,8 +18,8 @@
 
 import { Hono, type Context } from "npm:hono";
 import * as kv from "./kv_store.tsx";
-import { requireAuth, requirePermission, type RbacUser } from "./rbac_middleware.ts";
-import { stampOrg, filterByOrg, belongsToOrg } from "./org_scope.ts";
+import { requireAuth, requirePermission, type RbacUser, PLATFORM_RESOLVED_ROLES } from "./rbac_middleware.ts";
+import { stampOrg, filterByOrg, belongsToOrg, getOrgId } from "./org_scope.ts";
 import {
   runWithTollContext,
   getTollContext,
@@ -9897,23 +9897,32 @@ app.post(`${BASE}/bridge-rides`, async (c) => {
 });
 
 // ─── GET /ledger ───────────────────────────────────────────────────────
-// Suggestion-free paged toll list for the Ledgers desk (F-13). Does NOT run
-// findTollMatchesServer or load the full trip corpus.
+// Suggestion-free paged toll list for the Ledgers desk (F-13 / R-01).
 app.get(`${BASE}/ledger`, async (c) => {
+  const requestId = crypto.randomUUID();
+  c.header("X-Request-Id", requestId);
   try {
+    const user = c.get("rbacUser") as RbacUser | undefined;
+    const isPlatform = !!(user && PLATFORM_RESOLVED_ROLES.has(user.resolvedRole));
     const orgId =
-      c.req.query("organizationId") ||
-      (await import("./org_scope.ts").then((m) => m.getOrgId(c))) ||
+      getOrgId(c) ||
+      (isPlatform ? (c.req.query("organizationId") || "").trim() : "") ||
       undefined;
     const startDate = c.req.query("startDate") || undefined;
     const endDate = c.req.query("endDate") || undefined;
     const driverId = c.req.query("driverId") || undefined;
     const vehicleId = c.req.query("vehicleId") || undefined;
     const status = c.req.query("status") || undefined;
+    const search = (c.req.query("search") || "").trim();
+    const reconciliationStatus = c.req.query("reconciliationStatus") || "";
+    const type = c.req.query("type") || "";
+    const vehiclePlate = (c.req.query("vehiclePlate") || "").trim();
+    const driverName = (c.req.query("driverName") || "").trim();
     const limit = Math.min(Math.max(parseInt(c.req.query("limit") || "100", 10) || 100, 1), 1500);
     const offset = Math.max(parseInt(c.req.query("offset") || "0", 10) || 0, 0);
 
     const { queryFleet } = await import("./repos/baseRepo.ts");
+    const { resolveTollSort, reconciliationStatusFilters } = await import("./toll_sort.ts");
     const filters: import("./repos/baseRepo.ts").FleetQueryFilter[] = [];
     if (orgId) filters.push({ op: "orOrg", orgId });
     if (startDate) filters.push({ op: "gte", col: "date", value: String(startDate).slice(0, 10) });
@@ -9921,11 +9930,36 @@ app.get(`${BASE}/ledger`, async (c) => {
     if (driverId) filters.push({ op: "eq", col: "driver_id", value: driverId });
     if (vehicleId) filters.push({ op: "eq", col: "vehicle_id", value: vehicleId });
     if (status) filters.push({ op: "eq", col: "status", value: status });
+    if (type) filters.push({ op: "eq", col: "type", value: type });
+    if (vehiclePlate) {
+      const safe = vehiclePlate.replace(/,/g, "").replace(/%/g, "");
+      filters.push({ op: "ilike", col: "payload_json->>vehiclePlate", value: `%${safe}%` });
+    }
+    if (driverName) {
+      const safe = driverName.replace(/,/g, "").replace(/%/g, "");
+      filters.push({ op: "ilike", col: "payload_json->>driverName", value: `%${safe}%` });
+    }
+    if (search) {
+      const safe = search.replace(/,/g, "").replace(/%/g, "");
+      const term = `%${safe}%`;
+      filters.push({
+        op: "or",
+        value: `id.ilike.${term},plaza.ilike.${term},payload_json->>driverName.ilike.${term},payload_json->>vehiclePlate.ilike.${term},payload_json->>description.ilike.${term},trip_id.ilike.${term}`,
+      });
+    }
+    if (reconciliationStatus) {
+      filters.push(...reconciliationStatusFilters(reconciliationStatus));
+    }
+
+    const { appliedKey, sqlCol, ascending } = resolveTollSort(
+      c.req.query("sortKey"),
+      c.req.query("sortDir"),
+    );
 
     const res = await queryFleet("toll_ledger", {
       filters,
       orders: [
-        { col: "date", ascending: false },
+        { col: sqlCol, ascending },
         { col: "id", ascending: false },
       ],
       limit,
@@ -9936,10 +9970,16 @@ app.get(`${BASE}/ledger`, async (c) => {
     if (res.error) throw res.error;
 
     const rows = (res.data as Record<string, unknown>[]).map((v) => {
+      // Same semantics as reconciliationStatusFilters: typed is_reconciled / trip_id;
+      // empty-string trip_id = no match (Dismissed if reconciled), not Matched.
+      const isReconciled = v.isReconciled === true || v.is_reconciled === true;
+      const tripRaw = v.tripId ?? v.trip_id;
+      const hasTrip = tripRaw != null && String(tripRaw).trim() !== "";
+      const matchedTripId = hasTrip ? String(tripRaw).trim() : "";
       const reconStatus =
-        v.isReconciled && v.tripId
+        isReconciled && hasTrip
           ? "Matched"
-          : v.isReconciled
+          : isReconciled
             ? "Dismissed"
             : v.status === "Approved"
               ? "Approved"
@@ -9963,8 +10003,7 @@ app.get(`${BASE}/ledger`, async (c) => {
         batchId: v.batchId || v.batch_id || "",
         reconciliationStatus: reconStatus,
         resolution: v.resolution || "",
-        matchedTripId: v.tripId || v.trip_id || "",
-        // Never invent zeros for missing trip toll data
+        matchedTripId,
         tripTollCharges: null,
         refundAmount: null,
         lossAmount: null,
@@ -9978,12 +10017,16 @@ app.get(`${BASE}/ledger`, async (c) => {
       total: res.count ?? rows.length,
       limit,
       offset,
+      sortKey: appliedKey,
+      sortDir: ascending ? "asc" : "desc",
+      request_id: requestId,
     });
   } catch (e: any) {
     console.error(`[TollReconciliation] GET /ledger error: ${e.message}`);
-    return c.json({ error: e.message || "Internal Server Error" }, 500);
+    return c.json({ error: e.message || "Internal Server Error", request_id: requestId }, 500);
   }
 });
+
 
 // ─── GET /export ───────────────────────────────────────────────────────
 // Returns ALL toll transactions with flattened reconciliation data for CSV export.
@@ -10115,12 +10158,12 @@ app.get(`${BASE}/export`, async (c) => {
           row.tripTollCharges = null;
           row.refundAmount = null;
           row.lossAmount = null;
-          row.resolution = "unknown";
+          row.tollVarianceStatus = "unknown";
         } else if (linkedTrip.tollCharges == null || linkedTrip.tollCharges === "") {
           row.tripTollCharges = null;
           row.refundAmount = null;
           row.lossAmount = null;
-          row.resolution = "unknown";
+          row.tollVarianceStatus = "unknown";
         } else {
           const tripTollCharges = Number(linkedTrip.tollCharges);
           const variance = tripTollCharges - absAmount;

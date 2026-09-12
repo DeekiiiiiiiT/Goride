@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { FileText, RefreshCw } from 'lucide-react';
 import { Trip } from '../../types/data';
 import { api, TripFilterParams } from '../../services/api';
@@ -8,7 +8,10 @@ import { TripLedgerFilterBar, TripLedgerFilters, EMPTY_FILTERS } from './trip-le
 import { TripLedgerStats } from './trip-ledger/TripLedgerStats';
 import { TripLedgerExport } from './trip-ledger/TripLedgerExport';
 import { useServiceLineScope } from '../../contexts/ServiceLineScopeContext';
+import { useLedgerPeriod } from '../../contexts/LedgerPeriodContext';
 import { useQuery } from '@tanstack/react-query';
+import { useLedgerQuery } from '../../hooks/useLedgerQuery';
+import { toTripApiSortKey, isTripServerSortKey } from '../../utils/tripSortKeys';
 
 const STORAGE_KEY = 'roam_trip_ledger_columns';
 const STORAGE_VERSION_KEY = 'roam_trip_ledger_columns_v';
@@ -56,6 +59,14 @@ function filtersToApiParams(
   return params;
 }
 
+function isDateDescSort(sortKey: string | null, sortDir: 'asc' | 'desc' | null): boolean {
+  // Server defaults to date DESC when sort omitted
+  if (!sortKey && !sortDir) return true;
+  const key = sortKey === 'tripDate' ? 'date' : sortKey;
+  if (key !== 'date') return false;
+  return !sortDir || sortDir === 'desc';
+}
+
 export interface ColumnConfig {
   key: string;
   label: string;
@@ -70,15 +81,50 @@ interface TripLedgerPageProps {
 
 export function TripLedgerPage({ organizationId, columnConfig }: TripLedgerPageProps = {}) {
   const { scope } = useServiceLineScope();
-  const [trips, setTrips] = useState<Trip[]>([]);
-  const [total, setTotal] = useState(0);
+  const { period, setPeriod } = useLedgerPeriod();
   const [page, setPage] = useState(0);
   const [pageSize, setPageSize] = useState(50);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [filters, setFilters] = useState<TripLedgerFilters>({ ...EMPTY_FILTERS });
-  const [sortKey, setSortKey] = useState<string | null>(null);
-  const [sortDir, setSortDir] = useState<'asc' | 'desc' | null>(null);
+  const [filters, setFilters] = useState<TripLedgerFilters>(() => {
+    const base = {
+      ...EMPTY_FILTERS,
+      dateFrom: period.startDate,
+      dateTo: period.endDate,
+    };
+    try {
+      const sp = new URLSearchParams(window.location.search);
+      if (sp.get('q')) base.search = sp.get('q') || '';
+      if (sp.get('platform')) base.platform = sp.get('platform') || '';
+      if (sp.get('status')) base.status = sp.get('status') || '';
+    } catch { /* ignore */ }
+    return base;
+  });
+  const [sortKey, setSortKey] = useState<string | null>(() => {
+    try {
+      const s = new URLSearchParams(window.location.search).get('sort');
+      return s && isTripServerSortKey(s) ? s : null;
+    } catch {
+      return null;
+    }
+  });
+  const [sortDir, setSortDir] = useState<'asc' | 'desc' | null>(() => {
+    try {
+      const d = new URLSearchParams(window.location.search).get('dir');
+      return d === 'asc' || d === 'desc' ? d : null;
+    } catch {
+      return null;
+    }
+  });
+  /** F-04: last row of previous page for keyset (forward next only) */
+  const [keysetCursor, setKeysetCursor] = useState<{ date: string; id: string } | null>(null);
+  const lastPageTripsRef = useRef<Trip[]>([]);
+
+  useEffect(() => {
+    try {
+      const sp = new URLSearchParams(window.location.search);
+      const p = Number(sp.get('page'));
+      if (Number.isFinite(p) && p >= 0) setPage(p);
+    } catch { /* ignore */ }
+  }, []);
 
   const [localVisibleColumns, setLocalVisibleColumns] = useState<string[]>(loadVisibleColumns);
 
@@ -86,9 +132,36 @@ export function TripLedgerPage({ organizationId, columnConfig }: TripLedgerPageP
     ? columnConfig.filter(c => c.visible).map(c => c.key)
     : localVisibleColumns;
 
-  const fetchIdRef = useRef(0);
-
   const apiFilterBase = filtersToApiParams(filters, scope);
+
+  const rowFilters = useMemo(() => {
+    const offset = page * pageSize;
+    const dateDesc = isDateDescSort(sortKey, sortDir);
+    // F-04: keyset instead of deep OFFSET when date DESC (always page>0) or offset >= 500
+    const useKeyset =
+      page > 0 &&
+      !!keysetCursor?.date &&
+      !!keysetCursor?.id &&
+      (dateDesc || offset >= 500) &&
+      // Server keyset branch is date DESC only
+      dateDesc;
+
+    return {
+      ...apiFilterBase,
+      ...(organizationId ? { organizationId } : {}),
+      limit: pageSize,
+      ...(useKeyset
+        ? { cursorDate: keysetCursor!.date, cursorId: keysetCursor!.id, offset: 0 }
+        : { offset }),
+      ...(sortKey && sortDir ? { sortKey: toTripApiSortKey(sortKey), sortDir } : {}),
+    };
+  }, [apiFilterBase, organizationId, page, pageSize, sortKey, sortDir, keysetCursor]);
+
+  const rowsQuery = useLedgerQuery<{ data: Trip[]; total: number }>({
+    domain: 'trips',
+    filters: rowFilters,
+    queryFn: (f) => api.getTripsFiltered(f as TripFilterParams),
+  });
 
   const statsQuery = useQuery({
     queryKey: ['tripLedgerStats', apiFilterBase, organizationId],
@@ -100,50 +173,75 @@ export function TripLedgerPage({ organizationId, columnConfig }: TripLedgerPageP
     staleTime: 30_000,
   });
 
-  const fetchTrips = useCallback(async (
-    p: number,
-    ps: number,
-    f: TripLedgerFilters,
-    sk: string | null,
-    sd: 'asc' | 'desc' | null,
-  ) => {
-    const id = ++fetchIdRef.current;
-    setLoading(true);
-    setError(null);
-    try {
-      const apiParams: TripFilterParams = {
-        limit: ps,
-        offset: p * ps,
-        ...filtersToApiParams(f, scope),
-        ...(organizationId ? { organizationId } : {}),
-        ...(sk && sd ? { sortKey: sk, sortDir: sd } : {}),
-      };
-      const result = await api.getTripsFiltered(apiParams);
-      if (id !== fetchIdRef.current) return;
-      setTrips(result.data || []);
-      setTotal(result.total || 0);
-    } catch (err: any) {
-      if (id !== fetchIdRef.current) return;
-      console.error('TripLedgerPage fetch error:', err);
-      setError(err?.message || 'Failed to load trip data');
-    } finally {
-      if (id === fetchIdRef.current) setLoading(false);
-    }
-  }, [organizationId, scope]);
+  const trips = rowsQuery.data?.data || [];
+  const total = rowsQuery.data?.total || 0;
+  const loading = rowsQuery.isFetching;
+  const error = rowsQuery.error ? ((rowsQuery.error as Error).message || 'Failed to load trip data') : null;
 
   useEffect(() => {
-    fetchTrips(page, pageSize, filters, sortKey, sortDir);
-  }, [page, pageSize, filters, fetchTrips, organizationId, sortKey, sortDir, scope]);
+    lastPageTripsRef.current = trips;
+  }, [trips]);
 
-  const handlePageChange = (newPage: number) => setPage(newPage);
+  // Shared ledger period → trip filters (N-08)
+  useEffect(() => {
+    setFilters((prev) => {
+      if (prev.dateFrom === period.startDate && prev.dateTo === period.endDate) return prev;
+      return { ...prev, dateFrom: period.startDate, dateTo: period.endDate };
+    });
+    setPage(0);
+    setKeysetCursor(null);
+  }, [period.startDate, period.endDate]);
+
+  // URL sync for trip filters/page/sort (F-14)
+  useEffect(() => {
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.set('ledgerTab', 'trips');
+      if (filters.search) url.searchParams.set('q', filters.search);
+      else url.searchParams.delete('q');
+      if (filters.platform) url.searchParams.set('platform', filters.platform);
+      else url.searchParams.delete('platform');
+      if (filters.status) url.searchParams.set('status', filters.status);
+      else url.searchParams.delete('status');
+      url.searchParams.set('page', String(page));
+      if (sortKey && sortDir) {
+        url.searchParams.set('sort', sortKey);
+        url.searchParams.set('dir', sortDir);
+      } else {
+        url.searchParams.delete('sort');
+        url.searchParams.delete('dir');
+      }
+      window.history.replaceState({}, '', url.toString());
+    } catch { /* ignore */ }
+  }, [filters, page, sortKey, sortDir]);
+
+  const handlePageChange = (newPage: number) => {
+    if (newPage > page) {
+      const last = lastPageTripsRef.current[lastPageTripsRef.current.length - 1];
+      const d = last?.date ? String(last.date).slice(0, 10) : '';
+      const id = last?.id ? String(last.id) : '';
+      setKeysetCursor(d && id ? { date: d, id } : null);
+    } else {
+      // Prev / jump back: keyset is forward-only — use OFFSET
+      setKeysetCursor(null);
+    }
+    setPage(newPage);
+  };
   const handlePageSizeChange = (newSize: number) => {
     setPage(0);
+    setKeysetCursor(null);
     setPageSize(newSize);
   };
-  const handleRetry = () => fetchTrips(page, pageSize, filters, sortKey, sortDir);
+  const handleRetry = () => { void rowsQuery.refetch(); };
   const handleFiltersChange = (next: TripLedgerFilters) => {
     setFilters(next);
     setPage(0);
+    setKeysetCursor(null);
+    if (next.dateFrom && next.dateTo) {
+      setPeriod({ startDate: next.dateFrom, endDate: next.dateTo });
+    } else if (!next.dateFrom && !next.dateTo) {
+      setPeriod({ startDate: '', endDate: '' });
+    }
   };
 
   const handleColumnToggle = (key: string) => {
@@ -186,6 +284,10 @@ export function TripLedgerPage({ organizationId, columnConfig }: TripLedgerPageP
             visibleColumns={visibleColumns}
             columnConfig={columnConfig}
             total={total}
+            exportFilters={{
+              ...apiFilterBase,
+              ...(organizationId ? { organizationId } : {}),
+            }}
           />
           {showColumnToggle && (
             <TripLedgerColumnToggle
@@ -213,12 +315,23 @@ export function TripLedgerPage({ organizationId, columnConfig }: TripLedgerPageP
         totalResults={total}
       />
 
+      <div className="sr-only" aria-live="polite">
+        {loading ? 'Loading trips' : `${total.toLocaleString()} trips match filters`}
+      </div>
+
       <TripLedgerStats
         trips={trips}
         total={serverStats?.totalTrips ?? total}
         loading={loading || statsQuery.isFetching}
         filterSumAmount={serverStats?.sumAmount}
         filterSumNet={serverStats?.sumNet}
+        filterNetKnownCount={serverStats?.netKnownCount}
+        filterNetUnknownCount={serverStats?.netUnknownCount}
+        filterAvgAmount={serverStats?.avgAmount}
+        filterAvgDistance={serverStats?.avgDistance}
+        filterCompletionRate={serverStats?.completionRate}
+        filterCompleted={serverStats?.completed}
+        filterDistanceCount={serverStats?.distanceCount}
       />
 
       {error && (
@@ -255,6 +368,7 @@ export function TripLedgerPage({ organizationId, columnConfig }: TripLedgerPageP
           setSortKey(key);
           setSortDir(dir);
           setPage(0);
+          setKeysetCursor(null);
         }}
       />
     </div>

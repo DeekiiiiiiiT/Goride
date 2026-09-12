@@ -4,6 +4,7 @@ import { FinancialTransaction } from '../types/data';
 import { API_ENDPOINTS } from './apiConfig';
 import { settlementService } from './settlementService';
 import { throwIfCatalogGateBlocked } from './api';
+import { unwrapFuelEntriesPayload } from '@roam/fuel-core';
 
 /**
  * Fuel controller is requireAuth({ strict: true }) — anon key always 401s.
@@ -82,7 +83,10 @@ export const fuelService = {
       headers: await authHeaders(null),
     });
     if (!response.ok) throw new Error("Failed to fetch fuel entries");
-    return response.json();
+    return unwrapFuelEntriesPayload<FuelEntry>(
+      await response.json(),
+      response.headers.get('X-Total-Count'),
+    );
   },
 
   async saveFuelEntry(entry: FuelEntry): Promise<FuelEntry> {

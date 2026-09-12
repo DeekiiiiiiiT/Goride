@@ -2,6 +2,8 @@ import React, { useState, useMemo, useCallback } from 'react';
 import { FuelEntry } from '../../../types/fuel';
 import { Copy, ChevronLeft, ChevronRight, Flag, ChevronUp, ChevronDown, ChevronsUpDown, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
+import { isFuelServerSortKey } from '../../../utils/fuelSortKeys';
+import { usePlatformConfig } from '../../auth/PlatformConfigContext';
 
 // ── Column definition type ──────────────────────────────────────────────────
 
@@ -31,14 +33,29 @@ function SortIcon({ dir }: { dir: SortDir }) {
 
 // ── Formatters ──────────────────────────────────────────────────────────────
 
-function formatCurrency(value: number | null | undefined): string {
+let activeFuelCurrency = 'JMD';
+
+function setFuelTableCurrency(code: string) {
+  if (code && typeof code === 'string') activeFuelCurrency = code;
+}
+
+function formatCurrency(value: number | null | undefined, currency = activeFuelCurrency): string {
   if (value == null) return '—';
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(value);
+  try {
+    return new Intl.NumberFormat(undefined, {
+      style: 'currency',
+      currency,
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(value);
+  } catch {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(value);
+  }
 }
 
 function formatDate(iso: string | null | undefined, time?: string | null): string {
@@ -186,7 +203,7 @@ export const ALL_COLUMNS: RenderColumnDef[] = [
   },
   {
     key: 'amount',
-    label: 'Cost ($)',
+    label: 'Cost',
     defaultVisible: true,
     group: 'core',
     render: (e) => formatCurrency(e.amount),
@@ -204,10 +221,10 @@ export const ALL_COLUMNS: RenderColumnDef[] = [
   },
   {
     key: 'pricePerLiter',
-    label: '$/Liter',
+    label: 'Price / L',
     defaultVisible: true,
     group: 'core',
-    render: (e) => e.pricePerLiter != null ? `$${formatNumber(e.pricePerLiter, 2)}` : '—',
+    render: (e) => e.pricePerLiter != null ? formatCurrency(e.pricePerLiter) : '—',
     align: 'right',
     sortable: true,
   },
@@ -362,6 +379,25 @@ export const ALL_COLUMNS: RenderColumnDef[] = [
 ];
 
 export const DEFAULT_VISIBLE_KEYS = ALL_COLUMNS.filter((c) => c.defaultVisible).map((c) => c.key);
+
+/** Super Admin ledger config: merge saved labels + column order with ALL_COLUMNS render/sort logic. */
+export function mergeFuelLedgerActiveColumns(
+  visibleColumns: string[],
+  columnConfig?: { key: string; label: string; visible: boolean }[],
+): RenderColumnDef[] {
+  if (columnConfig != null && columnConfig.length > 0) {
+    const out: RenderColumnDef[] = [];
+    for (const c of columnConfig) {
+      if (!c.visible) continue;
+      const base = ALL_COLUMNS.find((ac) => ac.key === c.key);
+      if (!base) continue;
+      const label = c.label?.trim() ? c.label.trim() : base.label;
+      out.push({ ...base, label });
+    }
+    return out;
+  }
+  return ALL_COLUMNS.filter((col) => visibleColumns.includes(col.key));
+}
 
 // ── Skeleton ────────────────────────────────────────────────────────────────
 
@@ -564,17 +600,26 @@ const FuelDataRow = React.memo(function FuelDataRow({
   onToggleExpand,
   onCopyId,
 }: FuelDataRowProps) {
+  const toggle = () => onToggleExpand(entry.id);
+  const onRowKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    e.preventDefault();
+    toggle();
+  };
   return (
     <>
       <tr
-        onClick={() => onToggleExpand(entry.id)}
+        tabIndex={0}
+        aria-expanded={isExpanded}
+        onClick={toggle}
+        onKeyDown={onRowKeyDown}
         className={`group transition-colors cursor-pointer ${
           isExpanded
             ? 'bg-amber-50/50 dark:bg-amber-950/20'
             : idx % 2 === 1
               ? 'bg-slate-50/50 dark:bg-slate-800/20'
               : ''
-        } hover:bg-slate-50 dark:hover:bg-slate-800/40 ${loading ? 'opacity-50' : ''}`}
+        } hover:bg-slate-50 dark:hover:bg-slate-800/40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-amber-500 ${loading ? 'opacity-50' : ''}`}
       >
         {activeCols.map((col) => {
           // Special handling for ID column (copy-to-clipboard)
@@ -630,6 +675,7 @@ interface FuelLedgerTableProps {
   sortKey: string | null;
   sortDir: SortDir;
   onSort: (key: string) => void;
+  columnConfig?: { key: string; label: string; visible: boolean }[];
 }
 
 export function FuelLedgerTable({
@@ -644,17 +690,20 @@ export function FuelLedgerTable({
   sortKey,
   sortDir,
   onSort,
+  columnConfig,
 }: FuelLedgerTableProps) {
+  const { defaultCurrency } = usePlatformConfig();
+  setFuelTableCurrency(defaultCurrency || 'JMD');
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const totalPages = Math.max(1, Math.ceil(totalFiltered / pageSize));
   const rangeStart = totalFiltered === 0 ? 0 : page * pageSize + 1;
   const rangeEnd = Math.min((page + 1) * pageSize, totalFiltered);
 
-  // Filter columns to only visible ones, preserving order from ALL_COLUMNS
+  // Honor Super Admin saved order/labels when present (F-32)
   const activeCols = useMemo(
-    () => ALL_COLUMNS.filter((c) => visibleColumns.includes(c.key)),
-    [visibleColumns]
+    () => mergeFuelLedgerActiveColumns(visibleColumns, columnConfig),
+    [visibleColumns, columnConfig]
   );
 
   const handleCopyId = useCallback((id: string) => {
@@ -690,7 +739,7 @@ export function FuelLedgerTable({
               {activeCols.map((col) => {
                 const isSorted = sortKey === col.key;
                 const currentDir: SortDir = isSorted ? sortDir : null;
-                const canSort = col.sortable !== false;
+                const canSort = col.sortable !== false && isFuelServerSortKey(col.key);
                 return (
                   <th
                     key={col.key}

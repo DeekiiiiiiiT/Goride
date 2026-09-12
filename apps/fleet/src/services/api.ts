@@ -26,6 +26,7 @@ import {
   fetchPreferencesCached,
   seedPreferencesCache,
 } from './preferencesClient';
+import { unwrapFuelEntriesPayload } from '@roam/fuel-core';
 
 // Auth headers are centralized in utils/authHeaders (single source of truth for
 // session-JWT scoping + product-line headers; throws AuthRequiredError logged out).
@@ -47,6 +48,10 @@ export interface TripFilterParams {
     status?: string;
     limit?: number;
     offset?: number;
+    /** F-04 keyset: last row date (YYYY-MM-DD) when paging past deep OFFSET */
+    cursorDate?: string;
+    /** F-04 keyset: last row id tiebreaker */
+    cursorId?: string;
     platform?: string;
     tripType?: string;
     vehicleId?: string;
@@ -400,6 +405,20 @@ export const api = {
     }
     
     return response.json();
+  },
+
+  /** F-08: server CSV for current filters (capped). */
+  async exportTripsFiltered(params: TripFilterParams): Promise<Blob> {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/trips/export`, {
+      method: 'POST',
+      headers: await getHeaders(),
+      body: JSON.stringify(params),
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || `Export failed (${response.status})`);
+    }
+    return response.blob();
   },
 
   async getTripStats(params: TripFilterParams): Promise<any> {
@@ -3930,9 +3949,16 @@ export const api = {
     driverId?: string;
     vehicleId?: string;
     status?: string;
+    search?: string;
+    reconciliationStatus?: string;
+    type?: string;
+    vehiclePlate?: string;
+    driverName?: string;
+    sortKey?: string;
+    sortDir?: 'asc' | 'desc';
     limit?: number;
     offset?: number;
-  }): Promise<{ data: any[]; total: number }> {
+  }): Promise<{ data: any[]; total: number; sortKey?: string; sortDir?: string }> {
     const qs = new URLSearchParams();
     if (params?.organizationId) qs.set('organizationId', params.organizationId);
     if (params?.startDate) qs.set('startDate', params.startDate);
@@ -3940,6 +3966,13 @@ export const api = {
     if (params?.driverId) qs.set('driverId', params.driverId);
     if (params?.vehicleId) qs.set('vehicleId', params.vehicleId);
     if (params?.status) qs.set('status', params.status);
+    if (params?.search) qs.set('search', params.search);
+    if (params?.reconciliationStatus) qs.set('reconciliationStatus', params.reconciliationStatus);
+    if (params?.type) qs.set('type', params.type);
+    if (params?.vehiclePlate) qs.set('vehiclePlate', params.vehiclePlate);
+    if (params?.driverName) qs.set('driverName', params.driverName);
+    if (params?.sortKey) qs.set('sortKey', params.sortKey);
+    if (params?.sortDir) qs.set('sortDir', params.sortDir);
     qs.set('limit', String(params?.limit ?? 500));
     qs.set('offset', String(params?.offset ?? 0));
     const response = await fetchWithRetry(
@@ -3951,7 +3984,12 @@ export const api = {
       throw new Error(err.error || 'Failed to fetch toll ledger');
     }
     const result = await response.json();
-    return { data: result.data || [], total: result.total ?? 0 };
+    return {
+      data: result.data || [],
+      total: result.total ?? 0,
+      sortKey: result.sortKey,
+      sortDir: result.sortDir,
+    };
   },
 
   /** IDEA 2: unified toll financial events (multi-source read model). */
@@ -4281,9 +4319,13 @@ export const api = {
       })
     ]);
 
-    const dataUnderscore = resUnderscore.ok ? await resUnderscore.json() : [];
-    const dataHyphen = resHyphen.ok ? await resHyphen.json() : [];
-    
+    const dataUnderscore = resUnderscore.ok
+      ? unwrapFuelEntriesPayload(await resUnderscore.json(), resUnderscore.headers.get('X-Total-Count'))
+      : [];
+    const dataHyphen = resHyphen.ok
+      ? unwrapFuelEntriesPayload(await resHyphen.json(), resHyphen.headers.get('X-Total-Count'))
+      : [];
+
     const combined = [...dataUnderscore, ...dataHyphen];
     // Deduplicate by ID
     return Array.from(new Map(combined.map(item => [item.id, item])).values());
@@ -4389,7 +4431,7 @@ export const api = {
         headers: await requireAuthHeaders(null)
     });
     if (!response.ok) throw new Error("Failed to fetch fuel entries");
-    return response.json();
+    return unwrapFuelEntriesPayload(await response.json(), response.headers.get('X-Total-Count'));
   },
 
   async getForensicErrorLogs() {
@@ -5115,15 +5157,37 @@ export const api = {
       promotions: number;
       tips: number;
       totalEarnings: number;
+      tollStory?: 'uber_csv_credits' | 'no_platform_tolls' | 'trip_toll_expense';
+      uberTollCredits?: number;
+      platformTollCredits?: number;
+      statementTollExpense?: number;
       tolls: number;
+      tollCharges?: number;
+      tollRefunds?: number;
+      tollReimbursements?: number;
       tollAdjustments: number;
       totalRefundsExpenses: number;
       periodAdjustments: number;
       cashCollected: number;
       bankTransfer: number;
       totalPayout: number;
+      payoutObserved?: boolean;
+      payoutReconciliationGap?: number;
       tripCount?: number;
     }>;
+    fleetTollSnapshot?: {
+      tagSpend: number;
+      tagSpendByPlatform: {
+        Uber: number;
+        Roam: number;
+        InDrive: number;
+        Unlinked: number;
+      };
+      platformCredits: number;
+      chargedToDrivers: number;
+      netTollLoss: number;
+      periodMatched: boolean;
+    };
     periodStart: string;
     periodEnd: string;
   }> {

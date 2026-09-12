@@ -5,6 +5,7 @@ import { FinancialTransaction } from '../types/data';
 import { API_ENDPOINTS } from './apiConfig';
 import { settlementService } from './settlementService';
 import { throwIfCatalogGateBlocked } from './api';
+import { unwrapFuelEntriesPayload } from '@roam/fuel-core';
 
 async function authHeaders(contentType: string | null = 'application/json'): Promise<Record<string, string>> {
   const { data: { session } } = await supabase.auth.getSession();
@@ -217,12 +218,10 @@ export const fuelService = {
       headers: await authHeaders(null),
     });
     if (!response.ok) throw new Error("Failed to fetch fuel entries");
-    const data = await response.json();
-    const totalHeader = response.headers.get('X-Total-Count');
-    if (Array.isArray(data) && totalHeader != null) {
-      (data as any).totalCount = parseInt(totalHeader, 10) || data.length;
-    }
-    return data;
+    return unwrapFuelEntriesPayload<FuelEntry>(
+      await response.json(),
+      response.headers.get('X-Total-Count'),
+    );
   },
 
   async getAllFuelEntriesInRange(options: {

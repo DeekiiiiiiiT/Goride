@@ -9,9 +9,13 @@ describe('csvEscape', () => {
     expect(csvEscape('@sum')).toBe("'@sum");
   });
 
-  it('quotes commas and embedded quotes', () => {
-    expect(csvEscape('a,b')).toBe('"a,b"');
-    expect(csvEscape('say "hi"')).toBe('"say ""hi"""');
+  it('keeps plain negative numbers numeric for Excel sums', () => {
+    expect(csvEscape('-1500.00')).toBe('-1500.00');
+    expect(csvEscape('1234.56')).toBe('1234.56');
+  });
+
+  it('still neutralizes formula-like leading minus', () => {
+    expect(csvEscape('-1+1')).toBe("'-1+1");
   });
 
   it('csvDocument adds BOM and CRLF', () => {

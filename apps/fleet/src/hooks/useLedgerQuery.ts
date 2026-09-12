@@ -9,10 +9,27 @@ export type LedgerFilterBody = {
   sortKey?: string;
   sortDir?: 'asc' | 'desc';
   cursor?: string;
+  /** F-04 trip keyset (date DESC pages) */
+  cursorDate?: string;
+  cursorId?: string;
   limit?: number;
   offset?: number;
   serviceLine?: 'rideshare' | 'rush_delivery' | 'all';
   organizationId?: string;
+  // Fuel / Toll desk filters (R-01)
+  paymentSource?: string;
+  entryMode?: string;
+  type?: string;
+  auditStatus?: string;
+  driverId?: string;
+  vehicleId?: string;
+  reconciliationStatus?: string;
+  vehiclePlate?: string;
+  driverName?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  /** Unified /ledger/* filter (trip | fuel | toll); omit for all types. */
+  entryType?: string;
 };
 
 export function useLedgerQuery<TData>(opts: {

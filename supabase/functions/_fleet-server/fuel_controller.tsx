@@ -2795,12 +2795,21 @@ app.put(`${BASE_PATH}/fuel/exception-assignments/:cycleId`, requirePermission("f
 
 // --- SCALABILITY & PERFORMANCE (Phase 8) ? native fleet_fuel_entries ---
 app.get(`${BASE_PATH}/fuel-entries`, async (c) => {
+  const requestId = crypto.randomUUID();
+  c.header("X-Request-Id", requestId);
   try {
     const { queryFleet } = await import("./repos/baseRepo.ts");
+    const { resolveFuelSort } = await import("./fuel_sort.ts");
     const rawLimit = parseInt(c.req.query("limit") || String(FUEL_LIST_DEFAULT_LIMIT), 10);
     const limit = Math.min(Math.max(Number.isFinite(rawLimit) ? rawLimit : FUEL_LIST_DEFAULT_LIMIT, 1), FUEL_LIST_MAX_LIMIT);
-    const offset = parseInt(c.req.query("offset") || "0");
+    const offset = Math.max(parseInt(c.req.query("offset") || "0", 10) || 0, 0);
     const vehicleId = c.req.query("vehicleId");
+    const driverId = c.req.query("driverId");
+    const search = (c.req.query("search") || "").trim();
+    const paymentSource = c.req.query("paymentSource") || "";
+    const entryMode = c.req.query("entryMode") || "";
+    const type = c.req.query("type") || "";
+    const auditStatus = c.req.query("auditStatus") || "";
     const orgFilter = getOrgId(c) || (isPlatformCaller(c) ? (c.req.query("organizationId") || "").trim() : "");
 
     let startDate = (c.req.query("startDate") || "").slice(0, 10);
@@ -2814,18 +2823,36 @@ app.get(`${BASE_PATH}/fuel-entries`, async (c) => {
     const customPrefix = c.req.query("prefix") || "fuel_entry";
     const filters: import("./repos/baseRepo.ts").FleetQueryFilter[] = [];
     if (vehicleId) filters.push({ op: "eq", col: "vehicle_id", value: vehicleId });
+    if (driverId) filters.push({ op: "eq", col: "driver_id", value: driverId });
+    if (paymentSource) filters.push({ op: "eq", col: "payment_source", value: paymentSource });
+    if (entryMode) filters.push({ op: "eq", col: "entry_mode", value: entryMode });
+    if (type) filters.push({ op: "eq", col: "type", value: type });
+    if (auditStatus) filters.push({ op: "eq", col: "audit_status", value: auditStatus });
+    if (search) {
+      const safe = search.replace(/,/g, "").replace(/%/g, "");
+      const term = `%${safe}%`;
+      filters.push({
+        op: "or",
+        value: `vehicle_id.ilike.${term},driver_id.ilike.${term},id.ilike.${term},payload_json->>location.ilike.${term},payload_json->>stationAddress.ilike.${term}`,
+      });
+    }
     if (orgFilter && !isPlatformCaller(c)) {
       filters.push({ op: "orOrg", orgId: orgFilter });
     } else if (orgFilter && isPlatformCaller(c)) {
       filters.push({ op: "eq", col: "organization_id", value: orgFilter });
     }
 
+    const { appliedKey, sqlCol, ascending } = resolveFuelSort(c.req.query("sortKey"), c.req.query("sortDir"));
+
     const res = await queryFleet("fuel_entries", {
       legacyPrefix: customPrefix.endsWith(":") ? customPrefix : `${customPrefix}:`,
       dateFrom: startDate,
       dateTo: /^\d{4}-\d{2}-\d{2}$/.test(endDate) ? endDate : undefined,
       filters,
-      order: { col: "date", ascending: false },
+      orders: [
+        { col: sqlCol, ascending },
+        { col: "id", ascending: false },
+      ],
       limit,
       offset,
       count: true,
@@ -2835,13 +2862,28 @@ app.get(`${BASE_PATH}/fuel-entries`, async (c) => {
     const entries = res.data as Record<string, unknown>[];
     const scoped = filterByOrg(entries, c, { endpoint: "/fuel-entries" });
     const narrowed = narrowPlatformOrg(scoped, c);
+    const total = res.count ?? narrowed.length;
 
-    c.header("X-Total-Count", String(res.count ?? narrowed.length));
+    c.header("X-Total-Count", String(total));
+    // V-01: default bare array for legacy consumers; opt-in envelope via ?shape=envelope
+    const wantEnvelope = (c.req.query("shape") || "").trim().toLowerCase() === "envelope";
+    if (wantEnvelope) {
+      return c.json({
+        data: narrowed,
+        total,
+        limit,
+        offset,
+        sortKey: appliedKey,
+        sortDir: ascending ? "asc" : "desc",
+        request_id: requestId,
+      });
+    }
     return c.json(narrowed);
   } catch (e: any) {
-    return c.json({ error: e.message }, 500);
+    return c.json({ error: e.message, request_id: requestId }, 500);
   }
 });
+
 
 // Phase 8 Step 3: Chaos Seeder Endpoint
 app.post(`${BASE_PATH}/admin/chaos-seeder`, requirePlatformStaff(), async (c) => {

@@ -3,6 +3,7 @@ import { Download } from 'lucide-react';
 import { FuelEntry } from '../../../types/fuel';
 import { toast } from 'sonner';
 import type { RenderColumnDef } from './FuelLedgerTable';
+import { mergeFuelLedgerActiveColumns } from './FuelLedgerTable';
 import { csvEscape, csvDocument } from '../../../utils/ledgerCsvEscape';
 
 // ── CSV value helpers ───────────────────────────────────────────────────────
@@ -76,9 +77,16 @@ interface FuelLedgerExportProps {
   allColumns: RenderColumnDef[];
   visibleColumns: string[];
   totalFiltered: number;
+  columnConfig?: { key: string; label: string; visible: boolean }[];
 }
 
-export function FuelLedgerExport({ entries, allColumns, visibleColumns, totalFiltered }: FuelLedgerExportProps) {
+export function FuelLedgerExport({
+  entries,
+  allColumns,
+  visibleColumns,
+  totalFiltered,
+  columnConfig,
+}: FuelLedgerExportProps) {
   const [exporting, setExporting] = useState(false);
 
   const handleExport = () => {
@@ -89,7 +97,10 @@ export function FuelLedgerExport({ entries, allColumns, visibleColumns, totalFil
 
     setExporting(true);
     try {
-      const activeCols = allColumns.filter(c => visibleColumns.includes(c.key));
+      const activeCols =
+        columnConfig != null && columnConfig.length > 0
+          ? mergeFuelLedgerActiveColumns(visibleColumns, columnConfig)
+          : allColumns.filter((c) => visibleColumns.includes(c.key));
       const csv = buildCsv(entries, activeCols);
       downloadCsv(csv, generateFilename());
       toast.success(`Exported ${entries.length.toLocaleString()} fuel entries (${activeCols.length} columns)`);

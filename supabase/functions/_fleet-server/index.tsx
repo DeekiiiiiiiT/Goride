@@ -389,7 +389,7 @@ app.use(
     origin: corsOriginFn,
     allowHeaders: ["Content-Type", "Authorization", "apikey", "X-Roam-Product-Line", "X-Roam-Settings-Segment"],
     allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
-    exposeHeaders: ["Content-Length", "X-Cache"],
+    exposeHeaders: ["Content-Length", "X-Cache", "X-Total-Count", "X-Request-Id"],
     maxAge: 600,
   }),
 );
@@ -1886,131 +1886,48 @@ app.post("/make-server-37f42386/trips/search", requireAuth({ requireOrg: true })
     let { 
         driverId, driverName, driverIds, startDate, endDate, status, limit, offset,
         platform, tripType, vehicleId, anchorPeriodId, organizationId, serviceLine,
-        sortKey, sortDir,
+        sortKey, sortDir, cursorDate, cursorId,
     } = await c.req.json();
     
-    // Query JSONB value directly
+    // Query JSONB value directly — F-20: estimated count on deep OFFSET pages
+    const deepOffset = Number(offset || 0) >= 5000;
     let query = fromKvStore()
-        .select("value", { count: 'exact' })
+        .select("value", { count: deepOffset ? "estimated" : "exact" })
         .like("key", "trip:%");
 
-    // Organization scoping: use feature-flag controlled strict filtering
+    // Organization + domain filters (R-02 shared builder)
     const rbacOrgId = getOrgId(c);
     const effectiveOrgId = organizationId || rbacOrgId;
-    
-    // Check if strict org filter is enabled
     const useStrict = await isFeatureEnabled(FEATURE_FLAGS.STRICT_ORG_FILTER, effectiveOrgId);
-    
-    if (effectiveOrgId) {
-        if (useStrict) {
-            // STRICT MODE: Only return trips with matching organizationId (exclude null)
-            query = query.eq("value->>organizationId", effectiveOrgId);
-        } else {
-            // LEGACY MODE: Include trips without organizationId (pre-backfill data)
-            query = query.or(`value->>organizationId.eq.${effectiveOrgId},value->>organizationId.is.null`);
-        }
-    } else if (useStrict) {
-        // STRICT MODE with no org context: return empty (platform roles bypass via getOrgId returning null)
+    const { applyTripFilters } = await import("./trip_search_filters.ts");
+    const applied = applyTripFilters(query, {
+        driverId, driverName, driverIds, startDate, endDate, status,
+        platform, vehicleId, anchorPeriodId, serviceLine,
+    }, { effectiveOrgId, useStrict });
+    if (applied.empty) {
         return c.json({ data: [], page: 1, limit: limit || 50, total: 0, request_id: requestId });
     }
-
-    // driverIds: broad OR search across multiple IDs + optional name
-    // This ensures we find trips regardless of which ID format was stored
-    if (driverIds && Array.isArray(driverIds) && driverIds.length > 0) {
-        const orParts: string[] = [];
-        for (const id of driverIds) {
-            orParts.push(`value->>driverId.eq.${id}`);
-            const idTerm = String(id).includes("%") ? String(id) : `%${id}%`;
-            orParts.push(`value->>driverName.ilike.${idTerm.replace(/,/g, "")}`);
-        }
-        if (driverName) {
-            const nameTerm = String(driverName).includes("%") ? String(driverName) : `%${driverName}%`;
-            const safe = nameTerm.replace(/,/g, "");
-            orParts.push(`value->>driverName.ilike.${safe}`);
-            // Also check if driverId field contains the name (legacy CSV imports stored names as driverId)
-            orParts.push(`value->>driverId.ilike.${safe}`);
-        }
-        const orClause = orParts.join(',');
-
-        query = query.or(orClause);
-    } else if (driverId) {
-        if (driverName) {
-            const nameTerm = String(driverName).includes("%") ? String(driverName) : `%${driverName}%`;
-            const safe = nameTerm.replace(/,/g, "");
-            query = query.or(`value->>driverId.eq.${driverId},value->>driverName.ilike.${safe}`);
-        } else {
-            query = query.eq("value->>driverId", driverId);
-        }
-    } else if (driverName) {
-        // Fuzzy search: driver name + trip id + legacy_kv_id (wildcarded ilike)
-        const raw = String(driverName).trim();
-        const term = raw.includes("%") ? raw : `%${raw}%`;
-        const safe = term.replace(/,/g, "");
-        query = query.or(
-            `value->>driverName.ilike.${safe},value->>id.ilike.${safe},legacy_kv_id.ilike.${safe}`,
-        );
-    }
-
-    if (anchorPeriodId) {
-        query = query.eq("value->>anchorPeriodId", anchorPeriodId);
-    }
-    
-    if (status === 'Processing') {
-        // Handle variations of "In Progress" status and relax date constraints for active trips
-        query = query.or(`value->>status.eq.Processing,value->>status.eq.In Progress,value->>status.eq.In_Progress,value->>status.eq.started`);
-        
-        // Clear date filters for active trips to ensure they appear regardless of start time
-        startDate = undefined;
-        endDate = undefined;
-    } else if (status) {
-        query = query.eq("value->>status", status);
-    }
-
-    if (platform) {
-        // Alias: "Roam" was formerly "GoRide" — query both to include pre-rebrand trips
-        if (platform === 'Roam') {
-            query = query.or('value->>platform.eq.Roam,value->>platform.eq.GoRide');
-        } else {
-            query = query.eq("value->>platform", platform);
-        }
-    }
-
-    if (vehicleId) {
-        query = query.eq("value->>vehicleId", vehicleId);
-    }
-
-    if (serviceLine === 'rush_delivery') {
-        query = query.or('value->>serviceLine.eq.rush_delivery,value->>service_line.eq.rush_delivery,value->>platform.eq.Roam Rush');
-    } else if (serviceLine === 'rideshare') {
-        query = query.not('value->>platform', 'eq', 'Roam Rush');
-    }
+    query = applied.query;
+    startDate = applied.startDate;
+    endDate = applied.endDate;
 
     if (tripType === 'manual' || tripType === 'platform') {
-        // isManual is payload-only (no fleet.trips column) — filter after unwrap below
+        // isManual is payload-only — filter after unwrap below
     }
 
-    // Calendar-day filters on fleet.trips.date (indexed). Prefer YYYY-MM-DD from clients.
-    if (startDate) {
-        query = query.gte("value->>date", String(startDate).slice(0, 10));
-    }
-    if (endDate) {
-        query = query.lte("value->>date", String(endDate).slice(0, 10));
-    }
-
-    // Server sort whitelist (F-03) + id DESC tiebreaker (F-04)
-    const SORT_MAP: Record<string, string> = {
-      date: "value->>date",
-      amount: "amount",
-      status: "value->>status",
-      platform: "value->>platform",
-      id: "id",
-      driverName: "value->>driverName",
-    };
-    const primarySort = SORT_MAP[String(sortKey || "")] || "value->>date";
-    const ascending = String(sortDir || "").toLowerCase() === "asc";
+    // Server sort whitelist (F-03 / N-03) + id DESC tiebreaker (F-04)
+    const { resolveTripSort } = await import("./trip_sort.ts");
+    const { appliedKey, sqlCol: primarySort, ascending } = resolveTripSort(sortKey, sortDir);
     query = query.order(primarySort, { ascending }).order("id", { ascending: false });
 
-    const from = offset || 0;
+    // Optional keyset (F-04): when cursor provided, skip OFFSET deep scan
+    if (cursorDate && cursorId && !ascending) {
+      query = query.or(
+        `value->>date.lt.${String(cursorDate).slice(0, 10)},and(value->>date.eq.${String(cursorDate).slice(0, 10)},id.lt.${cursorId})`,
+      );
+    }
+
+    const from = (cursorDate && cursorId) ? 0 : (offset || 0);
     // Cap at 1000 per request (PostgREST max row limit)
     const effectiveLimit = Math.min(limit || 50, 1000);
     // Over-fetch when tripType needs payload filter so page stays full after in-memory filter
@@ -2028,15 +1945,9 @@ app.post("/make-server-37f42386/trips/search", requireAuth({ requireOrg: true })
         throw error;
     }
 
-    // Phase 8.4: Large Data Stripping
-    // Remove heavy fields (route, stops) from search results to prevent "Connection Closed" errors
-    let trips = (data || []).map((d: any) => {
-        const v = d.value || {};
-        const { route, stops, ...lightweight } = v;
-        // Normalize legacy "GoRide" → "Roam" for display
-        if (lightweight.platform === 'GoRide') lightweight.platform = 'Roam';
-        return lightweight;
-    });
+    // Phase 8.4 / F-20: whitelist projection (keep UI scalars only — not blacklist strip)
+    const { projectTripListValue } = await import("./trip_list_projection.ts");
+    let trips = (data || []).map((d: any) => projectTripListValue(d.value || {}));
 
     if (tripType === 'manual') {
       trips = trips.filter((t: any) => t?.isManual === true || t?.isManual === 'true');
@@ -2052,6 +1963,8 @@ app.post("/make-server-37f42386/trips/search", requireAuth({ requireOrg: true })
       row_count: trips.length,
       total_count: count || 0,
       db_ms: Date.now() - t0,
+      sort_key: appliedKey,
+      sort_dir: ascending ? "asc" : "desc",
     }));
 
     return c.json({
@@ -2060,10 +1973,93 @@ app.post("/make-server-37f42386/trips/search", requireAuth({ requireOrg: true })
         limit: effectiveLimit,
         total: count || 0,
         request_id: requestId,
+        sortKey: appliedKey,
+        sortDir: ascending ? "asc" : "desc",
+        countExact: !deepOffset,
     });
 
   } catch (e: any) {
     console.error("Error searching trips:", e);
+    return c.json({ error: e.message || "Internal Server Error", request_id: requestId }, 500);
+  }
+});
+
+// Full filtered-set CSV export (F-08) — cap 10k; same filters as /trips/search
+app.post("/make-server-37f42386/trips/export", requireAuth({ requireOrg: true }), async (c) => {
+  const requestId = crypto.randomUUID();
+  c.header("X-Request-Id", requestId);
+  try {
+    const body = await c.req.json();
+    const EXPORT_CAP = 10_000;
+    const searchRes = await (async () => {
+      // Reuse search handler logic via internal fetch-shaped call: build same query
+      const {
+        driverId, driverName, startDate, endDate, status,
+        platform, tripType, vehicleId, anchorPeriodId, organizationId, serviceLine,
+        sortKey, sortDir,
+      } = body;
+      let query = fromKvStore().select("value", { count: "exact" }).like("key", "trip:%");
+      const rbacOrgId = getOrgId(c);
+      const effectiveOrgId = organizationId || rbacOrgId;
+      const useStrict = await isFeatureEnabled(FEATURE_FLAGS.STRICT_ORG_FILTER, effectiveOrgId);
+      const { applyTripFilters } = await import("./trip_search_filters.ts");
+      const applied = applyTripFilters(query, {
+        driverId, driverName, startDate, endDate, status,
+        platform, vehicleId, anchorPeriodId, serviceLine,
+      }, { effectiveOrgId, useStrict });
+      if (applied.empty) {
+        return { data: [], error: null, count: 0 };
+      }
+      query = applied.query;
+      const { resolveTripSort } = await import("./trip_sort.ts");
+      const { sqlCol, ascending } = resolveTripSort(sortKey, sortDir);
+      query = query.order(sqlCol, { ascending }).order("id", { ascending: false });
+      query = query.range(0, EXPORT_CAP - 1);
+      return await query;
+    })();
+    if (searchRes.error) throw searchRes.error;
+    // F-20: same heavy-blob strip as /trips/search (route/polyline/gps/evidence)
+    let trips = (searchRes.data || []).map((d: any) => {
+      const v = d.value || {};
+      const {
+        route, stops, intermediateStops, rawPayload, evidence,
+        polyline, gpsTrace, gpsPoints, trackPoints, path, coordinates,
+        ...lightweight
+      } = v;
+      if (lightweight.platform === "GoRide") lightweight.platform = "Roam";
+      return lightweight;
+    });
+    if (body.tripType === "manual") {
+      trips = trips.filter((t: any) => t?.isManual === true || t?.isManual === "true");
+    } else if (body.tripType === "platform") {
+      trips = trips.filter((t: any) => !(t?.isManual === true || t?.isManual === "true"));
+    }
+    const esc = (val: unknown) => {
+      let s = String(val ?? "");
+      const isPlainNumber = /^-?\d+(\.\d+)?([eE][+-]?\d+)?$/.test(s);
+      if (!isPlainNumber && /^[=+\-@\t\r]/.test(s)) s = `'${s}`;
+      if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+      return s;
+    };
+    const header = ["id", "date", "driverName", "platform", "status", "amount", "netToDriver", "distance"].join(",");
+    const lines = trips.map((t: any) =>
+      [
+        t.id,
+        t.date,
+        t.driverName || t.driverId || "",
+        t.platform,
+        t.status,
+        t.amount ?? "",
+        t.netToDriver ?? t.indriveNetIncome ?? "",
+        t.distance ?? "",
+      ].map(esc).join(",")
+    );
+    const csv = `\uFEFF${[header, ...lines].join("\r\n")}`;
+    c.header("Content-Type", "text/csv; charset=utf-8");
+    c.header("Content-Disposition", `attachment; filename="trip_ledger_filtered_export.csv"`);
+    return c.body(csv);
+  } catch (e: any) {
+    console.error("Error exporting trips:", e);
     return c.json({ error: e.message || "Internal Server Error", request_id: requestId }, 500);
   }
 });
@@ -2096,7 +2092,7 @@ app.post("/make-server-37f42386/trips/stats", requireAuth({ requireOrg: true }),
     // 1. Check Cache (include orgId in cache key for isolation)
     // v2: post-cutover stats that page past PostgREST 1000-row cap + correct value unwrap
     const version = await cache.getCacheVersion("stats");
-    const cacheKey = await cache.generateKey(`stats:v2:${version}:org:${effectiveOrgId || 'none'}:strict:${useStrict}`, filters);
+    const cacheKey = await cache.generateKey(`stats:v3:${version}:org:${effectiveOrgId || 'none'}:strict:${useStrict}`, filters);
     const cachedStats = await cache.getCache(cacheKey);
 
     if (cachedStats) {
@@ -2104,72 +2100,24 @@ app.post("/make-server-37f42386/trips/stats", requireAuth({ requireOrg: true }),
         return c.json(cachedStats);
     }
 
+    const { applyTripFilters } = await import("./trip_search_filters.ts");
+    let statsStart = startDate;
+    let statsEnd = endDate;
+    if (status === 'Processing') {
+      statsStart = undefined;
+      statsEnd = undefined;
+    }
+
     const buildStatsQuery = (pageOffset: number, pageLimit: number) => {
-      // Select full value — arrow projections are not reshaped by the SQL bridge
       let query = fromKvStore()
           .select("value")
           .like("key", "trip:%");
 
-      if (effectiveOrgId) {
-          if (useStrict) {
-              query = query.eq("value->>organizationId", effectiveOrgId);
-          } else {
-              query = query.or(`value->>organizationId.eq.${effectiveOrgId},value->>organizationId.is.null`);
-          }
-      }
-
-      if (driverId) {
-          query = query.eq("value->>driverId", driverId);
-      }
-
-      if (driverName) {
-          const raw = String(driverName).trim();
-          const term = raw.includes("%") ? raw : `%${raw}%`;
-          const safe = term.replace(/,/g, "");
-          query = query.or(
-            `value->>driverName.ilike.${safe},value->>id.ilike.${safe},legacy_kv_id.ilike.${safe}`,
-          );
-      }
-
-      if (anchorPeriodId) {
-          query = query.eq("value->>anchorPeriodId", anchorPeriodId);
-      }
-
-      let pageStart = startDate;
-      let pageEnd = endDate;
-      if (status === 'Processing') {
-          query = query.or(`value->>status.eq.Processing,value->>status.eq.In Progress,value->>status.eq.In_Progress,value->>status.eq.started`);
-          pageStart = undefined;
-          pageEnd = undefined;
-      } else if (status) {
-          query = query.eq("value->>status", status);
-      }
-
-      if (platform) {
-          if (platform === 'Roam') {
-              query = query.or('value->>platform.eq.Roam,value->>platform.eq.GoRide');
-          } else {
-              query = query.eq("value->>platform", platform);
-          }
-      }
-
-      if (vehicleId) {
-          query = query.eq("value->>vehicleId", vehicleId);
-      }
-
-      if (serviceLine === 'rush_delivery') {
-          query = query.or('value->>serviceLine.eq.rush_delivery,value->>service_line.eq.rush_delivery,value->>platform.eq.Roam Rush');
-      } else if (serviceLine === 'rideshare') {
-          query = query.not('value->>platform', 'eq', 'Roam Rush');
-      }
-
-      // isManual lives in payload_json only — apply after fetch when needed
-      if (pageStart) {
-          query = query.gte("value->>date", String(pageStart).slice(0, 10));
-      }
-      if (pageEnd) {
-          query = query.lte("value->>date", String(pageEnd).slice(0, 10));
-      }
+      const applied = applyTripFilters(query, {
+        driverId, driverName, startDate: statsStart, endDate: statsEnd, status,
+        platform, vehicleId, anchorPeriodId, serviceLine,
+      }, { effectiveOrgId, useStrict });
+      query = applied.query;
 
       return query.range(pageOffset, pageOffset + pageLimit - 1);
     };
@@ -2187,6 +2135,11 @@ app.post("/make-server-37f42386/trips/stats", requireAuth({ requireOrg: true }),
     let durationCount = 0;
     let sumAmount = 0;
     let sumNet = 0;
+    let netKnownCount = 0;
+    let netUnknownCount = 0;
+    let distanceSum = 0;
+    let distanceCount = 0;
+    let completedAmountSum = 0;
 
     const matchesTripType = (t: any) => {
       if (tripType === 'manual') return t?.isManual === true || t?.isManual === 'true';
@@ -2232,8 +2185,14 @@ app.post("/make-server-37f42386/trips/stats", requireAuth({ requireOrg: true }),
 
         const amount = Number(t.amount) || 0;
         sumAmount += amount;
+        if (t.status === 'Completed') completedAmountSum += amount;
         const net = resolveNet(t);
-        if (net != null) sumNet += net;
+        if (net != null) {
+          sumNet += net;
+          netKnownCount += 1;
+        } else {
+          netUnknownCount += 1;
+        }
 
         const effectiveEarnings = net != null ? net : amount;
         totalEarnings += effectiveEarnings;
@@ -2242,6 +2201,10 @@ app.post("/make-server-37f42386/trips/stats", requireAuth({ requireOrg: true }),
         if (t.duration && Number(t.duration) > 0) {
           durationSum += Number(t.duration);
           durationCount += 1;
+        }
+        if (t.distance != null && Number(t.distance) > 0) {
+          distanceSum += Number(t.distance);
+          distanceCount += 1;
         }
       }
 
@@ -2255,6 +2218,10 @@ app.post("/make-server-37f42386/trips/stats", requireAuth({ requireOrg: true }),
 
     const avgEarnings = completed > 0 ? totalEarnings / completed : 0;
     const avgDuration = durationCount > 0 ? durationSum / durationCount : 0;
+    const avgAmount = completed > 0 ? completedAmountSum / completed : 0;
+    // Prefer completed-only amount average
+    const avgDistance = distanceCount > 0 ? distanceSum / distanceCount : 0;
+    const completionRate = totalTrips > 0 ? (completed / totalTrips) * 100 : 0;
 
     const result = {
         totalTrips,
@@ -2264,8 +2231,14 @@ app.post("/make-server-37f42386/trips/stats", requireAuth({ requireOrg: true }),
         totalCashCollected,
         avgEarnings,
         avgDuration,
+        avgAmount,
+        avgDistance,
+        completionRate,
         sumAmount,
         sumNet,
+        netKnownCount,
+        netUnknownCount,
+        distanceCount,
     };
 
     // 2. Set Cache (TTL 300 seconds = 5 minutes)

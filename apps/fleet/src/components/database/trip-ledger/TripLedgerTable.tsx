@@ -1,16 +1,40 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useRef } from 'react';
 import { Trip } from '../../../types/data';
 import { Copy, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, ChevronsUpDown, AlertTriangle } from 'lucide-react';
 import { PaymentLinesPanel } from './PaymentLinesPanel';
 import { toast } from 'sonner';
 import type { ColumnDef } from './TripLedgerColumnToggle';
 import { getTripNetIncome } from '../../../utils/tripNetIncome';
+import { isTripServerSortKey } from '../../../utils/tripSortKeys';
+import { usePlatformConfig } from '../../auth/PlatformConfigContext';
+import { useVirtualizer } from '@tanstack/react-virtual';
 
 // ── Formatters ──────────────────────────────────────────────────────────────
 
-function formatCurrency(value: number | null | undefined): string {
+/** F-34: set from usePlatformConfig in table roots; defaults to org currency JMD */
+let activeLedgerCurrency = 'JMD';
+
+export function setLedgerTableCurrency(code: string) {
+  if (code && typeof code === 'string') activeLedgerCurrency = code;
+}
+
+function formatCurrency(value: number | null | undefined, currency = activeLedgerCurrency): string {
   if (value == null) return '—';
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
+  try {
+    return new Intl.NumberFormat(undefined, {
+      style: 'currency',
+      currency,
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(value);
+  } catch {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(value);
+  }
 }
 
 function formatDate(iso: string | null | undefined): string {
@@ -799,14 +823,24 @@ interface DataRowProps {
 }
 
 const DataRow = React.memo(function DataRow({ trip, idx, activeCols, loading, isExpanded, columnConfig, onToggleExpand, onCopyId }: DataRowProps) {
+  const toggle = () => onToggleExpand(trip.id);
+  const onRowKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    e.preventDefault();
+    toggle();
+  };
   return (
     <>
       <tr
-        onClick={() => onToggleExpand(trip.id)}
+        tabIndex={0}
+        aria-expanded={isExpanded}
+        onClick={toggle}
+        onKeyDown={onRowKeyDown}
         className={`
           group transition-colors cursor-pointer
           ${isExpanded ? 'bg-emerald-50/50 dark:bg-emerald-950/20' : idx % 2 === 1 ? 'bg-slate-50/50 dark:bg-slate-800/20' : ''}
           hover:bg-slate-50 dark:hover:bg-slate-800/40
+          focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-emerald-500
           ${loading ? 'opacity-50' : ''}
         `}
       >
@@ -871,6 +905,173 @@ export interface ColumnConfig {
   custom?: boolean;
 }
 
+const VIRTUALIZE_MIN_ROWS = 50;
+const EST_ROW_PX = 44;
+
+function TripLedgerVirtualTable({
+  activeCols,
+  sortedTrips,
+  loading,
+  hasActiveFilters,
+  sortKey,
+  sortDir,
+  onServerSort,
+  handleSort,
+  expandedId,
+  columnConfig,
+  handleToggleExpand,
+  handleCopyId,
+}: {
+  activeCols: RenderColumnDef[];
+  sortedTrips: Trip[];
+  loading: boolean;
+  hasActiveFilters: boolean;
+  sortKey: string | null;
+  sortDir: SortDir;
+  onServerSort?: (key: string | null, dir: SortDir) => void;
+  handleSort: (key: string) => void;
+  expandedId: string | null;
+  columnConfig?: ColumnConfig[];
+  handleToggleExpand: (id: string) => void;
+  handleCopyId: (id: string) => void;
+}) {
+  const parentRef = useRef<HTMLDivElement>(null);
+  const shouldVirtualize = sortedTrips.length >= VIRTUALIZE_MIN_ROWS && !expandedId;
+  const virtualizer = useVirtualizer({
+    count: shouldVirtualize ? sortedTrips.length : 0,
+    getScrollElement: () => parentRef.current,
+    estimateSize: () => EST_ROW_PX,
+    overscan: 10,
+    getItemKey: (index) => sortedTrips[index]?.id ?? index,
+    initialRect: { width: 1200, height: 560 },
+  });
+  const virtualItems = shouldVirtualize ? virtualizer.getVirtualItems() : [];
+  const paddingTop = virtualItems.length > 0 ? virtualItems[0]!.start : 0;
+  const paddingBottom =
+    virtualItems.length > 0
+      ? virtualizer.getTotalSize() - virtualItems[virtualItems.length - 1]!.end
+      : 0;
+
+  const header = (
+    <thead className="bg-slate-50 dark:bg-slate-800/60 sticky top-0 z-10">
+      <tr>
+        {activeCols.map((col) => {
+          const isSorted = sortKey === col.key;
+          const currentDir: SortDir = isSorted ? sortDir : null;
+          const canSort = onServerSort ? isTripServerSortKey(col.key) : col.sortable !== false;
+          return (
+            <th
+              key={col.key}
+              scope="col"
+              className={`px-3 py-3 text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wider whitespace-nowrap group/th ${col.align === 'right' ? 'text-right' : 'text-left'}`}
+              style={col.minWidth ? { minWidth: col.minWidth } : undefined}
+              aria-sort={
+                isSorted
+                  ? sortDir === 'asc'
+                    ? 'ascending'
+                    : sortDir === 'desc'
+                      ? 'descending'
+                      : 'none'
+                  : undefined
+              }
+            >
+              {canSort ? (
+                <button
+                  type="button"
+                  className={`inline-flex items-center gap-1 w-full ${col.align === 'right' ? 'flex-row-reverse justify-end' : 'justify-start'} cursor-pointer select-none hover:text-slate-900 dark:hover:text-slate-100`}
+                  onClick={() => handleSort(col.key)}
+                  title={`Sort by ${col.label}`}
+                >
+                  {col.label}
+                  <SortIcon dir={currentDir} />
+                </button>
+              ) : (
+                <span>{col.label}</span>
+              )}
+            </th>
+          );
+        })}
+      </tr>
+    </thead>
+  );
+
+  const bodyRows = shouldVirtualize ? (
+    <>
+      {paddingTop > 0 && (
+        <tr aria-hidden>
+          <td colSpan={activeCols.length} style={{ height: paddingTop, padding: 0, border: 0 }} />
+        </tr>
+      )}
+      {virtualItems.map((vr) => {
+        const trip = sortedTrips[vr.index];
+        return (
+          <DataRow
+            key={trip.id || `row-${vr.index}`}
+            trip={trip}
+            idx={vr.index}
+            activeCols={activeCols}
+            loading={false}
+            isExpanded={expandedId === trip.id}
+            columnConfig={columnConfig}
+            onToggleExpand={handleToggleExpand}
+            onCopyId={handleCopyId}
+          />
+        );
+      })}
+      {paddingBottom > 0 && (
+        <tr aria-hidden>
+          <td colSpan={activeCols.length} style={{ height: paddingBottom, padding: 0, border: 0 }} />
+        </tr>
+      )}
+    </>
+  ) : (
+    sortedTrips.map((trip, idx) => (
+      <DataRow
+        key={trip.id || `row-${idx}`}
+        trip={trip}
+        idx={idx}
+        activeCols={activeCols}
+        loading={false}
+        isExpanded={expandedId === trip.id}
+        columnConfig={columnConfig}
+        onToggleExpand={handleToggleExpand}
+        onCopyId={handleCopyId}
+      />
+    ))
+  );
+
+  return (
+    <div
+      ref={parentRef}
+      className="max-h-[70vh] overflow-auto rounded-lg border border-slate-200 dark:border-slate-700"
+      data-virtualized={shouldVirtualize ? '1' : '0'}
+    >
+      <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-700">
+        {header}
+        <tbody className="divide-y divide-slate-100 dark:divide-slate-800 bg-white dark:bg-slate-900">
+          {loading && sortedTrips.length === 0 &&
+            Array.from({ length: 8 }).map((_, i) => <SkeletonRow key={`skel-${i}`} colCount={activeCols.length} />)}
+          {!loading && sortedTrips.length === 0 && (
+            <tr>
+              <td colSpan={activeCols.length} className="px-6 py-16 text-center">
+                <div className="flex flex-col items-center gap-2">
+                  <div className="text-slate-400 dark:text-slate-500 text-lg font-medium">No trips found</div>
+                  <p className="text-sm text-slate-400 dark:text-slate-500">
+                    {hasActiveFilters
+                      ? 'No trips match these filters. Clear filters or widen the date range.'
+                      : 'There are no trip records to display. Import trip data to get started.'}
+                  </p>
+                </div>
+              </td>
+            </tr>
+          )}
+          {bodyRows}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 // ── Main Component ──────────────────────────────────────────────────────────
 
 interface TripLedgerTableProps {
@@ -906,6 +1107,8 @@ export function TripLedgerTable({
   serverSortDir,
   onServerSort,
 }: TripLedgerTableProps) {
+  const { defaultCurrency } = usePlatformConfig();
+  setLedgerTableCurrency(defaultCurrency || 'JMD');
   const [localSortKey, setLocalSortKey] = useState<string | null>(null);
   const [localSortDir, setLocalSortDir] = useState<SortDir>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -931,8 +1134,9 @@ export function TripLedgerTable({
     );
   }, [trips, sortKey, sortDir, onServerSort]);
 
-  // Cycle sort: none → asc → desc → none
+  // Cycle sort: none → asc → desc → none (server path only whitelisted keys — N-03)
   const handleSort = useCallback((key: string) => {
+    if (onServerSort && !isTripServerSortKey(key)) return;
     let nextKey: string | null = key;
     let nextDir: SortDir = 'asc';
     if (sortKey !== key) {
@@ -988,82 +1192,22 @@ export function TripLedgerTable({
         </div>
       )}
 
-      {/* Table container with horizontal scroll */}
-      <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-700 max-h-[70vh]">
-        <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-700">
-          {/* Sticky header */}
-          <thead className="bg-slate-50 dark:bg-slate-800/60 sticky top-0 z-10">
-            <tr>
-              {activeCols.map(col => {
-                const isSorted = sortKey === col.key;
-                const currentDir: SortDir = isSorted ? sortDir : null;
-                const canSort = col.sortable !== false;
-                return (
-                  <th
-                    key={col.key}
-                    scope="col"
-                    className={`px-3 py-3 text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wider whitespace-nowrap group/th ${col.align === 'right' ? 'text-right' : 'text-left'} ${canSort ? 'cursor-pointer select-none hover:bg-slate-100 dark:hover:bg-slate-700/50 transition-colors' : ''}`}
-                    style={col.minWidth ? { minWidth: col.minWidth } : undefined}
-                    onClick={canSort ? () => handleSort(col.key) : undefined}
-                    title={canSort ? `Sort this page by ${col.label}` : undefined}
-                    aria-sort={
-                      isSorted
-                        ? sortDir === 'asc'
-                          ? 'ascending'
-                          : sortDir === 'desc'
-                            ? 'descending'
-                            : 'none'
-                        : undefined
-                    }
-                  >
-                    <span className={`inline-flex items-center gap-1 ${col.align === 'right' ? 'flex-row-reverse' : ''}`}>
-                      {col.label}
-                      {canSort && <SortIcon dir={currentDir} />}
-                    </span>
-                  </th>
-                );
-              })}
-            </tr>
-          </thead>
-
-          <tbody className="divide-y divide-slate-100 dark:divide-slate-800 bg-white dark:bg-slate-900">
-            {/* Loading state */}
-            {loading && trips.length === 0 && (
-              Array.from({ length: 8 }).map((_, i) => <SkeletonRow key={`skel-${i}`} colCount={activeCols.length} />)
-            )}
-
-            {/* Empty state */}
-            {!loading && trips.length === 0 && (
-              <tr>
-                <td colSpan={activeCols.length} className="px-6 py-16 text-center">
-                  <div className="flex flex-col items-center gap-2">
-                    <div className="text-slate-400 dark:text-slate-500 text-lg font-medium">No trips found</div>
-                    <p className="text-sm text-slate-400 dark:text-slate-500">
-                      {hasActiveFilters
-                        ? 'No trips match these filters. Clear filters or widen the date range.'
-                        : 'There are no trip records to display. Import trip data to get started.'}
-                    </p>
-                  </div>
-                </td>
-              </tr>
-            )}
-
-            {/* Data rows */}
-            {sortedTrips.map((trip, idx) => (
-              <DataRow
-                key={trip.id || `row-${idx}`}
-                trip={trip}
-                idx={idx}
-                activeCols={activeCols}
-                loading={loading}
-                isExpanded={expandedId === trip.id}
-                columnConfig={columnConfig}
-                onToggleExpand={handleToggleExpand}
-                onCopyId={handleCopyId}
-              />
-            ))}
-          </tbody>
-        </table>
+      {/* F-23: virtualize tbody when page has ≥50 rows (padding-row window) */}
+      <div className={`${loading && trips.length > 0 ? 'opacity-60 pointer-events-none' : ''}`}>
+        <TripLedgerVirtualTable
+          activeCols={activeCols}
+          sortedTrips={sortedTrips}
+          loading={loading}
+          hasActiveFilters={hasActiveFilters}
+          sortKey={sortKey}
+          sortDir={sortDir}
+          onServerSort={onServerSort}
+          handleSort={handleSort}
+          expandedId={expandedId}
+          columnConfig={columnConfig}
+          handleToggleExpand={handleToggleExpand}
+          handleCopyId={handleCopyId}
+        />
       </div>
 
       {/* Pagination */}
@@ -1088,6 +1232,7 @@ export function TripLedgerTable({
               <option value={25}>25</option>
               <option value={50}>50</option>
               <option value={100}>100</option>
+              <option value={200}>200</option>
             </select>
           </div>
 

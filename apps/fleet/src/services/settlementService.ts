@@ -24,6 +24,7 @@ import { mapPool as mapPoolIndexed } from '../utils/fuelMapPool';
 import {
   enterpriseFuelSyncIdempotencyKey,
   fuelSettlementEntryYmd,
+  unwrapFuelEntriesPayload,
 } from '@roam/fuel-core';
 
 export { enterpriseFuelSyncIdempotencyKey } from '@roam/fuel-core';
@@ -93,7 +94,10 @@ export const settlementService = {
         { headers: await requireAuthHeaders(null) },
       );
       if (res.ok) {
-        const entries: FuelEntry[] = await res.json();
+        const entries = unwrapFuelEntriesPayload<FuelEntry>(
+          await res.json(),
+          res.headers.get('X-Total-Count'),
+        );
         for (const entry of entries || []) {
           const fbr = entry.metadata?.finalizedByReport
             ? String(entry.metadata.finalizedByReport)

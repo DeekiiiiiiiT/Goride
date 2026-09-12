@@ -9,6 +9,7 @@ import { VehicleMetrics } from '../types/data';
 import { equipmentService } from './equipmentService';
 import { inventoryService } from './inventoryService';
 import JSZip from 'jszip';
+import { unwrapFuelEntriesPayload } from '@roam/fuel-core';
 import {
     FUEL_CSV_COLUMNS, SERVICE_CSV_COLUMNS, ODOMETER_CSV_COLUMNS, CHECKIN_CSV_COLUMNS,
     TRIP_CSV_COLUMNS, DRIVER_CSV_COLUMNS, DRIVER_METRICS_CSV_COLUMNS,
@@ -56,8 +57,11 @@ async function fetchAllFuelLogs(): Promise<FuelEntry[]> {
             headers: { 'Authorization': `Bearer ${publicAnonKey}` }
         });
         if (!response.ok) throw new Error("Failed to fetch fuel entries");
-        const data: FuelEntry[] = await response.json();
-        
+        const data = unwrapFuelEntriesPayload<FuelEntry>(
+            await response.json(),
+            response.headers.get('X-Total-Count'),
+        );
+
         // Sort by date ascending
         return data.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
     } catch (error) {

@@ -28,6 +28,11 @@ const COLUMN_ALIASES: Record<string, string> = {
   "value->>status": "status",
   platform: "platform",
   "value->>platform": "platform",
+  // F-26 typed trip metrics (prefer columns over payload_json text)
+  distance: "distance",
+  "value->>distance": "distance",
+  duration: "duration",
+  "value->>duration": "duration",
   type: "type",
   "value->>type": "type",
   category: "category",

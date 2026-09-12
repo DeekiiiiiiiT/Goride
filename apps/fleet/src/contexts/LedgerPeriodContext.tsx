@@ -2,7 +2,9 @@ import React, { createContext, useContext, useMemo, useState } from 'react';
 import { currentFuelListWindow } from '../utils/fuelWeekPeriod';
 
 export type LedgerPeriod = {
+  /** yyyy-MM-dd, or '' for all-time (R-08) */
   startDate: string;
+  /** yyyy-MM-dd, or '' for all-time (R-08) */
   endDate: string;
 };
 

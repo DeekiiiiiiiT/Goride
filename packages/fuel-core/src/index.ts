@@ -79,3 +79,8 @@ export {
   floorMiscForSplit,
   type FlooredMiscSplit,
 } from './fuelFinalizeGate.ts';
+
+export {
+  unwrapFuelEntriesPayload,
+  type FuelEntriesListMeta,
+} from './unwrapFuelEntriesPayload.ts';

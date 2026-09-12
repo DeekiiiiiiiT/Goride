@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowLeft,
@@ -40,6 +40,38 @@ interface ColumnConfig {
   label: string;
   visible: boolean;
   custom?: boolean;
+}
+
+/** Move item in-array; no-op if indices invalid or identical. */
+function moveItem<T>(list: T[], fromIndex: number, toIndex: number): T[] | null {
+  if (fromIndex === toIndex || fromIndex < 0 || toIndex < 0) return null;
+  if (fromIndex >= list.length || toIndex >= list.length) return null;
+  const next = [...list];
+  const [moved] = next.splice(fromIndex, 1);
+  next.splice(toIndex, 0, moved);
+  return next;
+}
+
+/**
+ * Reorder sectionCols, then write back into full trip array using the original
+ * section key slots so non-section columns keep their absolute positions (F-32).
+ */
+function writeSectionOrderIntoFull(
+  full: ColumnConfig[],
+  sectionColsBefore: ColumnConfig[],
+  reorderedSection: ColumnConfig[],
+): ColumnConfig[] {
+  const sectionKeys = new Set(sectionColsBefore.map(c => c.key));
+  const slots: number[] = [];
+  for (let i = 0; i < full.length; i++) {
+    if (sectionKeys.has(full[i].key)) slots.push(i);
+  }
+  if (slots.length !== reorderedSection.length) return full;
+  const next = [...full];
+  for (let i = 0; i < slots.length; i++) {
+    next[slots[i]] = reorderedSection[i];
+  }
+  return next;
 }
 
 interface LedgerConfig {
@@ -185,6 +217,13 @@ export function LedgerColumnSettings({ onBack }: LedgerColumnSettingsProps) {
   const [hasChanges, setHasChanges] = useState(false);
   /** Trip ledger column groups: which sections are expanded (default none — all collapsed). */
   const [tripSectionsOpen, setTripSectionsOpen] = useState<Set<TripLedgerSettingsSectionId>>(() => new Set());
+  /** HTML5 DnD source; sectionId set only for trip sectioned lists. */
+  const dragRef = useRef<{
+    ledger: LedgerType;
+    index: number;
+    sectionId?: TripLedgerSettingsSectionId;
+  } | null>(null);
+  const [dragOverKey, setDragOverKey] = useState<string | null>(null);
 
   const toggleTripSection = (sectionId: TripLedgerSettingsSectionId) => {
     setTripSectionsOpen(prev => {
@@ -302,6 +341,75 @@ export function LedgerColumnSettings({ onBack }: LedgerColumnSettingsProps) {
       ),
     }));
     setHasChanges(true);
+  };
+
+  /** Flat list reorder (main / fuel / toll). */
+  const reorderColumn = (ledger: LedgerType, fromIndex: number, toIndex: number) => {
+    setColumns(prev => {
+      const moved = moveItem(prev[ledger], fromIndex, toIndex);
+      if (!moved) return prev;
+      return { ...prev, [ledger]: moved };
+    });
+    setHasChanges(true);
+  };
+
+  /**
+   * Trip section DnD: reorder within visible sectionCols, then write back into
+   * the full trip columns array preserving non-section absolute positions.
+   */
+  const reorderTripSectionColumn = (
+    sectionCols: ColumnConfig[],
+    fromIndex: number,
+    toIndex: number,
+  ) => {
+    const reordered = moveItem(sectionCols, fromIndex, toIndex);
+    if (!reordered) return;
+    setColumns(prev => ({
+      ...prev,
+      trip: writeSectionOrderIntoFull(prev.trip, sectionCols, reordered),
+    }));
+    setHasChanges(true);
+  };
+
+  const onColumnDragStart = (
+    e: React.DragEvent,
+    ledger: LedgerType,
+    index: number,
+    sectionId?: TripLedgerSettingsSectionId,
+  ) => {
+    dragRef.current = { ledger, index, sectionId };
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', String(index));
+  };
+
+  const onColumnDragOver = (e: React.DragEvent, dropKey: string) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (dragOverKey !== dropKey) setDragOverKey(dropKey);
+  };
+
+  const onColumnDrop = (
+    e: React.DragEvent,
+    ledger: LedgerType,
+    toIndex: number,
+    opts?: { sectionId?: TripLedgerSettingsSectionId; sectionCols?: ColumnConfig[] },
+  ) => {
+    e.preventDefault();
+    setDragOverKey(null);
+    const from = dragRef.current;
+    dragRef.current = null;
+    if (!from || from.ledger !== ledger) return;
+    if ((from.sectionId ?? null) !== (opts?.sectionId ?? null)) return;
+    if (opts?.sectionId != null && opts.sectionCols) {
+      reorderTripSectionColumn(opts.sectionCols, from.index, toIndex);
+    } else {
+      reorderColumn(ledger, from.index, toIndex);
+    }
+  };
+
+  const onColumnDragEnd = () => {
+    dragRef.current = null;
+    setDragOverKey(null);
   };
 
   const Icon = BIZ_ICON[selectedBusinessType] ?? Car;
@@ -474,12 +582,30 @@ export function LedgerColumnSettings({ onBack }: LedgerColumnSettingsProps) {
                                       </button>
                                       {isOpen && (
                                         <div className="space-y-2 border-t border-slate-100 px-2 pb-2 pt-2 bg-slate-50/80">
-                                          {sectionCols.map(col => (
+                                          {sectionCols.map((col, colIdx) => (
                                             <div
                                               key={col.key}
-                                              className="flex items-center gap-3 p-2 bg-white rounded-lg border border-slate-200"
+                                              draggable
+                                              onDragStart={e => onColumnDragStart(e, ledger.id, colIdx, sectionId)}
+                                              onDragOver={e => onColumnDragOver(e, col.key)}
+                                              onDrop={e =>
+                                                onColumnDrop(e, ledger.id, colIdx, {
+                                                  sectionId,
+                                                  sectionCols,
+                                                })
+                                              }
+                                              onDragEnd={onColumnDragEnd}
+                                              className={`flex items-center gap-3 p-2 bg-white rounded-lg border border-slate-200 ${
+                                                dragOverKey === col.key ? 'ring-2 ring-amber-300 border-amber-300' : ''
+                                              }`}
                                             >
-                                              <GripVertical className="w-4 h-4 text-slate-300 shrink-0" />
+                                              <span
+                                                className="cursor-grab active:cursor-grabbing touch-none"
+                                                aria-label={`Drag to reorder ${col.label}`}
+                                                title="Drag to reorder"
+                                              >
+                                                <GripVertical className="w-4 h-4 text-slate-400 shrink-0" />
+                                              </span>
                                               <div className="flex-1 min-w-0 space-y-1">
                                                 <input
                                                   type="text"
@@ -487,6 +613,7 @@ export function LedgerColumnSettings({ onBack }: LedgerColumnSettingsProps) {
                                                   onChange={e => updateColumnLabel(ledger.id, col.key, e.target.value)}
                                                   className="w-full text-sm text-slate-800 border border-slate-200 rounded-md px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-amber-400/40 focus:border-amber-300"
                                                   aria-label={`Label for column ${col.key}`}
+                                                  onMouseDown={e => e.stopPropagation()}
                                                 />
                                                 <span
                                                   className="block text-[11px] font-mono text-slate-400 truncate"
@@ -567,12 +694,25 @@ export function LedgerColumnSettings({ onBack }: LedgerColumnSettingsProps) {
                           </>
                         ) : (
                           <div className="space-y-2">
-                            {ledgerColumns.map(col => (
+                            {ledgerColumns.map((col, colIdx) => (
                               <div
                                 key={col.key}
-                                className="flex items-center gap-3 p-2 bg-white rounded-lg border border-slate-200"
+                                draggable
+                                onDragStart={e => onColumnDragStart(e, ledger.id, colIdx)}
+                                onDragOver={e => onColumnDragOver(e, col.key)}
+                                onDrop={e => onColumnDrop(e, ledger.id, colIdx)}
+                                onDragEnd={onColumnDragEnd}
+                                className={`flex items-center gap-3 p-2 bg-white rounded-lg border border-slate-200 ${
+                                  dragOverKey === col.key ? 'ring-2 ring-amber-300 border-amber-300' : ''
+                                }`}
                               >
-                                <GripVertical className="w-4 h-4 text-slate-300 shrink-0" />
+                                <span
+                                  className="cursor-grab active:cursor-grabbing touch-none"
+                                  aria-label={`Drag to reorder ${col.label}`}
+                                  title="Drag to reorder"
+                                >
+                                  <GripVertical className="w-4 h-4 text-slate-400 shrink-0" />
+                                </span>
                                 <div className="flex-1 min-w-0 space-y-1">
                                   <input
                                     type="text"
@@ -580,6 +720,7 @@ export function LedgerColumnSettings({ onBack }: LedgerColumnSettingsProps) {
                                     onChange={e => updateColumnLabel(ledger.id, col.key, e.target.value)}
                                     className="w-full text-sm text-slate-800 border border-slate-200 rounded-md px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-amber-400/40 focus:border-amber-300"
                                     aria-label={`Label for column ${col.key}`}
+                                    onMouseDown={e => e.stopPropagation()}
                                   />
                                   <span className="block text-[11px] font-mono text-slate-400 truncate" title="Internal key used by the app for this column">
                                     key: {col.key}

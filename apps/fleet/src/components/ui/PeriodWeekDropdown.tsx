@@ -10,6 +10,7 @@ import {
   findPeriodWeekOptionByRange,
   type PeriodWeekOption,
   ENTIRE_PERIOD_OPTION_ID,
+  ALL_TIME_PERIOD_OPTION,
   CUSTOM_RANGE_OPTION_ID,
 } from '../../utils/periodWeekOptions';
 
@@ -40,6 +41,8 @@ export interface PeriodWeekDropdownProps {
   headerLabel?: string;
   /** Prepends “Entire selected period” to clear a week drill-down. */
   prependEntireOption?: boolean;
+  /** Prepends “All time” (empty start/end) for shared ledger period clearing (R-08). */
+  prependAllTimeOption?: boolean;
   /** Appends “Custom range…” with a calendar for any start/end (beyond rolling week presets). */
   allowCustomRange?: boolean;
   className?: string;
@@ -60,6 +63,7 @@ export function PeriodWeekDropdown({
   timezone,
   headerLabel,
   prependEntireOption = false,
+  prependAllTimeOption = false,
   allowCustomRange = false,
   className,
   buttonClassName,
@@ -72,7 +76,7 @@ export function PeriodWeekDropdown({
   const [draftRange, setDraftRange] = useState<DateRange | undefined>();
 
   const options = useMemo(() => {
-    const base = optionsOverride ?? generatePeriodWeekOptions(weekCount, timezone);
+    let base = optionsOverride ?? generatePeriodWeekOptions(weekCount, timezone);
     if (prependEntireOption) {
       const entire: PeriodWeekOption = {
         id: ENTIRE_PERIOD_OPTION_ID,
@@ -80,17 +84,20 @@ export function PeriodWeekDropdown({
         startDate: '',
         endDate: '',
       };
-      return [entire, ...base];
+      base = [entire, ...base];
+    }
+    if (prependAllTimeOption) {
+      base = [ALL_TIME_PERIOD_OPTION, ...base];
     }
     return base;
-  }, [optionsOverride, weekCount, prependEntireOption, timezone]);
+  }, [optionsOverride, weekCount, prependEntireOption, prependAllTimeOption, timezone]);
 
   const matched = useMemo(() => {
-    if (prependEntireOption && !selectedStart && !selectedEnd) {
+    if ((prependEntireOption || prependAllTimeOption) && !selectedStart && !selectedEnd) {
       return options[0];
     }
     return findPeriodWeekOptionByRange(options, selectedStart, selectedEnd);
-  }, [prependEntireOption, options, selectedStart, selectedEnd]);
+  }, [prependEntireOption, prependAllTimeOption, options, selectedStart, selectedEnd]);
 
   const isCustomSelected = allowCustomRange && !matched && Boolean(selectedStart && selectedEnd);
 

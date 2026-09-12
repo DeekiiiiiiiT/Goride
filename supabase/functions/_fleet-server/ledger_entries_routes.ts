@@ -107,4 +107,41 @@ export function registerLedgerEntriesRoutes(app: Hono) {
       by_platform: Object.entries(by_platform).map(([k, v]) => ({ platform: k, count: v })),
     });
   });
+
+  app.post("/make-server-37f42386/ledger/export", requireAuth({ requireOrg: true }), async (c) => {
+    const orgId = getOrgId(c);
+    if (!(await readModelEnabled(orgId))) {
+      return c.json({ error: "ledger_read_model_disabled" }, 404);
+    }
+    const body = await c.req.json().catch(() => ({}));
+    const { entryType, startDate, endDate } = body as {
+      entryType?: string;
+      startDate?: string;
+      endDate?: string;
+    };
+    const db = getServiceClient();
+    let q = db.from("fleet_ledger_entries").select("*").eq("organization_id", orgId!);
+    if (entryType) q = q.eq("entry_type", entryType);
+    if (startDate) q = q.gte("occurred_at", `${String(startDate).slice(0, 10)}T00:00:00Z`);
+    if (endDate) q = q.lte("occurred_at", `${String(endDate).slice(0, 10)}T23:59:59Z`);
+    const { data, error } = await q.order("occurred_at", { ascending: false }).limit(10000);
+    if (error) return c.json({ error: error.message }, 500);
+    const esc = (val: unknown) => {
+      let s = String(val ?? "");
+      const isPlainNumber = /^-?\d+(\.\d+)?([eE][+-]?\d+)?$/.test(s);
+      if (!isPlainNumber && /^[=+\-@\t\r]/.test(s)) s = `'${s}`;
+      if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+      return s;
+    };
+    const header = ["entry_id", "entry_type", "occurred_at", "period_key", "amount_gross", "amount_net", "currency", "status"].join(",");
+    const lines = (data || []).map((r: any) =>
+      [r.entry_id, r.entry_type, r.occurred_at, r.period_key, r.amount_gross, r.amount_net, r.currency, r.status]
+        .map(esc)
+        .join(",")
+    );
+    const csv = `\uFEFF${[header, ...lines].join("\r\n")}`;
+    c.header("Content-Type", "text/csv; charset=utf-8");
+    c.header("Content-Disposition", 'attachment; filename="ledger_entries_export.csv"');
+    return c.body(csv);
+  });
 }

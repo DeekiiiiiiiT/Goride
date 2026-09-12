@@ -47,6 +47,19 @@ const parseLocalDate = (dateStr: string) => {
 };
 
 export function TripLogsPage() {
+  // F-17 soft decommission: financial trip history lives in Ledgers
+  return (
+    <div className="space-y-4">
+      <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100">
+        Financial trip history and money columns live in <strong>Business Finance → Ledgers</strong>.
+        This Trip Logs view remains for ops (manual trips, maps, integrity tools).
+      </div>
+      <TripLogsPageInner />
+    </div>
+  );
+}
+
+function TripLogsPageInner() {
   const queryClient = useQueryClient();
   const { v } = useVocab();
   const { scope } = useServiceLineScope();

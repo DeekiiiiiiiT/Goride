@@ -642,7 +642,9 @@ function AppContent() {
           setDriverDetailTab(undefined);
         }}
       >
-        {currentPage === 'dashboard' && <Dashboard />}
+        {currentPage === 'dashboard' && (
+          <Dashboard onSelectDriver={(driverId) => openDriverDetail(driverId)} />
+        )}
         {currentPage === 'imports' && (
           <PermissionGate permission="nav.imports" onNavigate={setCurrentPage}>
             <Suspense fallback={<div className="p-6 text-sm text-slate-500">Loading imports…</div>}>
@@ -746,7 +748,12 @@ function AppContent() {
         {currentPage === 'transaction-list' && (
           <PermissionGate permission="nav.transaction_list" onNavigate={setCurrentPage}>
             <Suspense fallback={<div className="p-6 text-sm text-slate-500">Loading ledgers…</div>}>
-              <TransactionsPage mode="list" onBackToBusinessFinance={() => handleNavigate('business-finance')} />
+              <TransactionsPage
+                onBackToBusinessFinance={() => handleNavigate('business-finance')}
+                onOpenTollRecon={({ startYmd, endYmd }) =>
+                  handleNavigate('toll-tags', { startYmd, endYmd })
+                }
+              />
             </Suspense>
           </PermissionGate>
         )}

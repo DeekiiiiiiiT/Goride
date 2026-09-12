@@ -230,8 +230,8 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
       // If we have a vehicle ID, fetch fuel entries for that vehicle specifically
       const [allTx, allFuel, vehicleFuel] = await Promise.all([
         api.getTransactions(driverIds).catch(() => []),
-        api.getAllFuelEntries().catch(() => []),
-        vehicleId ? api.getFuelEntriesByVehicle(vehicleId).catch(() => []) : Promise.resolve([])
+        api.getAllFuelEntries(),
+        vehicleId ? api.getFuelEntriesByVehicle(vehicleId) : Promise.resolve([])
       ]);
       
       console.log('[DriverExpenses] Fetched all fuel entries:', allFuel?.length || 0);

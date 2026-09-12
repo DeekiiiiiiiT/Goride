@@ -85,29 +85,46 @@ export const fuelService = {
     offset?: number;
     startDate?: string;
     endDate?: string;
+    search?: string;
+    paymentSource?: string;
+    entryMode?: string;
+    type?: string;
+    auditStatus?: string;
+    driverId?: string;
+    vehicleId?: string;
+    organizationId?: string;
+    sortKey?: string;
+    sortDir?: 'asc' | 'desc';
   }): Promise<FuelEntry[]> {
     const fallback = currentFuelListWindow();
     const startDate = options?.startDate || fallback.startDate;
     const endDate = options?.endDate || fallback.endDate;
     const query = new URLSearchParams();
     query.append("limit", String(options?.limit || 500));
-    if (typeof options?.offset === 'number' && options.offset > 0) {
-      query.append("offset", String(options.offset));
-    }
+    query.append("offset", String(options?.offset ?? 0));
     query.append("startDate", startDate);
     query.append("endDate", endDate);
+    if (options?.search) query.append("search", options.search);
+    if (options?.paymentSource) query.append("paymentSource", options.paymentSource);
+    if (options?.entryMode) query.append("entryMode", options.entryMode);
+    if (options?.type) query.append("type", options.type);
+    if (options?.auditStatus) query.append("auditStatus", options.auditStatus);
+    if (options?.driverId) query.append("driverId", options.driverId);
+    if (options?.vehicleId) query.append("vehicleId", options.vehicleId);
+    if (options?.organizationId) query.append("organizationId", options.organizationId);
+    if (options?.sortKey) query.append("sortKey", options.sortKey);
+    if (options?.sortDir) query.append("sortDir", options.sortDir);
+    // V-01: ledger needs filtered total in body
+    query.append("shape", "envelope");
 
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/fuel-entries?${query.toString()}`, {
       headers: await requireAuthHeaders(null)
     });
     if (!response.ok) throw new Error("Failed to fetch fuel entries");
+    const { unwrapFuelEntriesPayload } = await import('@roam/fuel-core');
     const totalHeader = response.headers.get('X-Total-Count');
-    const totalCount = totalHeader ? Number(totalHeader) : undefined;
-    const data = await response.json();
-    if (Array.isArray(data) && totalCount != null && Number.isFinite(totalCount)) {
-      (data as any).totalCount = totalCount;
-    }
-    return data;
+    const payload = await response.json();
+    return unwrapFuelEntriesPayload<FuelEntry>(payload, totalHeader);
   },
 
   /**

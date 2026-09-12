@@ -1,15 +1,37 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Car, Fuel, Receipt, FileText, Layers } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
 import { TripLedgerPage } from '../database/TripLedgerPage';
 import { FuelLedgerPage } from '../database/FuelLedgerPage';
 import { TollLedgerPage } from '../database/TollLedgerPage';
+import { mergeTripLedgerColumnConfig } from '../database/LedgerColumnSettings';
 import { PlatformStatementSummary } from './PlatformStatementSummary';
 import { UnifiedLedgerAllTab } from './UnifiedLedgerAllTab';
 import { LedgerPeriodProvider, useLedgerPeriod } from '../../contexts/LedgerPeriodContext';
 import { useUnifiedLedgerFlag } from '../../hooks/useUnifiedLedgerFlag';
 import { PeriodWeekDropdown } from '../ui/PeriodWeekDropdown';
+import { ALL_TIME_OPTION_ID } from '../../utils/periodWeekOptions';
+import { useAuth } from '../auth/AuthContext';
+import { useBusinessConfig } from '../auth/BusinessConfigContext';
+import { API_ENDPOINTS } from '../../services/apiConfig';
+import { BusinessType } from '../../types/data';
 
 type TransactionTab = 'trips' | 'fuel' | 'toll' | 'statement' | 'all';
+
+type LedgerTab = 'main' | 'trip' | 'fuel' | 'toll';
+
+interface ColumnConfig {
+  key: string;
+  label: string;
+  visible: boolean;
+  custom?: boolean;
+}
+
+interface LedgerConfig {
+  businessType: BusinessType;
+  enabledLedgers: LedgerTab[];
+  columns?: Record<LedgerTab, ColumnConfig[]>;
+}
 
 const TRANSACTION_TABS: { id: TransactionTab; label: string; icon: React.ElementType; description: string }[] = [
   { id: 'trips', label: 'Trip Ledger', icon: Car, description: 'Individual trip records with earnings breakdown' },
@@ -35,10 +57,42 @@ function writeTabToUrl(tab: TransactionTab) {
   } catch { /* ignore */ }
 }
 
-function LedgersInner() {
+function LedgersInner({
+  onOpenTollRecon,
+}: {
+  onOpenTollRecon?: (opts: { startYmd: string; endYmd: string }) => void;
+}) {
   const [activeTab, setActiveTab] = useState<TransactionTab>(readTabFromUrl);
+  // R-03: mount panel content on first visit, then keep mounted behind hidden
+  const [visited, setVisited] = useState<Set<TransactionTab>>(() => new Set([readTabFromUrl()]));
   const { period, setPeriod } = useLedgerPeriod();
   const unified = useUnifiedLedgerFlag();
+  const { session } = useAuth();
+  const { businessType } = useBusinessConfig();
+  const accessToken = session?.access_token;
+
+  // F-33: same Super-Admin ledger-config source as CustomerLedgerView / LedgerColumnSettings (API, not localStorage)
+  const { data: ledgerConfig } = useQuery<LedgerConfig>({
+    queryKey: ['ledgerConfig', businessType],
+    queryFn: async () => {
+      const res = await fetch(`${API_ENDPOINTS.admin}/admin/ledger-config/${businessType}`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      if (!res.ok) {
+        return { businessType, enabledLedgers: ['trip', 'fuel', 'toll'] };
+      }
+      return res.json();
+    },
+    enabled: !!accessToken,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const tripColumnConfig = useMemo(
+    () => (ledgerConfig?.columns?.trip ? mergeTripLedgerColumnConfig(ledgerConfig.columns.trip) : undefined),
+    [ledgerConfig?.columns?.trip],
+  );
+  const fuelColumnConfig = ledgerConfig?.columns?.fuel;
+  const tollColumnConfig = ledgerConfig?.columns?.toll;
 
   useEffect(() => {
     writeTabToUrl(activeTab);
@@ -50,6 +104,29 @@ function LedgersInner() {
         { id: 'all' as const, label: 'All', icon: Layers, description: 'Cross-type unified ledger entries' },
       ]
     : TRANSACTION_TABS;
+
+  const selectTab = (id: TransactionTab) => {
+    setActiveTab(id);
+    setVisited((prev) => {
+      if (prev.has(id)) return prev;
+      const next = new Set(prev);
+      next.add(id);
+      return next;
+    });
+  };
+
+  const onTabKeyDown = (e: React.KeyboardEvent, index: number) => {
+    if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft' && e.key !== 'Home' && e.key !== 'End') return;
+    e.preventDefault();
+    let next = index;
+    if (e.key === 'ArrowRight') next = (index + 1) % tabs.length;
+    if (e.key === 'ArrowLeft') next = (index - 1 + tabs.length) % tabs.length;
+    if (e.key === 'Home') next = 0;
+    if (e.key === 'End') next = tabs.length - 1;
+    selectTab(tabs[next].id);
+    const btn = document.getElementById(`ledger-tab-${tabs[next].id}`);
+    btn?.focus();
+  };
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
@@ -64,9 +141,14 @@ function LedgersInner() {
         </div>
         <div className="min-w-[220px]">
           <PeriodWeekDropdown
-            selectedStart={period.startDate}
-            selectedEnd={period.endDate}
+            selectedStart={period.startDate || undefined}
+            selectedEnd={period.endDate || undefined}
+            prependAllTimeOption
             onSelect={(opt) => {
+              if (opt.id === ALL_TIME_OPTION_ID || (!opt.startDate && !opt.endDate)) {
+                setPeriod({ startDate: '', endDate: '' });
+                return;
+              }
               if (opt.startDate && opt.endDate) {
                 setPeriod({ startDate: opt.startDate, endDate: opt.endDate });
               }
@@ -84,15 +166,20 @@ function LedgersInner() {
 
       <div className="border-b border-slate-200 dark:border-slate-700" role="tablist" aria-label="Ledger tabs">
         <div className="flex items-center gap-1 -mb-px overflow-x-auto">
-          {tabs.map(tab => {
+          {tabs.map((tab, index) => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
+            const panelId = `ledger-panel-${tab.id}`;
             return (
               <button
                 key={tab.id}
+                id={`ledger-tab-${tab.id}`}
                 role="tab"
                 aria-selected={isActive}
-                onClick={() => setActiveTab(tab.id)}
+                aria-controls={panelId}
+                tabIndex={isActive ? 0 : -1}
+                onClick={() => selectTab(tab.id)}
+                onKeyDown={(e) => onTabKeyDown(e, index)}
                 className={`
                   flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 whitespace-nowrap transition-colors
                   ${isActive
@@ -111,22 +198,46 @@ function LedgersInner() {
       </div>
 
       <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
-        <div className="p-4 md:p-6" role="tabpanel">
-          {activeTab === 'trips' && <TripLedgerPage />}
-          {activeTab === 'fuel' && <FuelLedgerPage />}
-          {activeTab === 'toll' && <TollLedgerPage />}
-          {activeTab === 'statement' && <PlatformStatementSummary />}
-          {activeTab === 'all' && unified && <UnifiedLedgerAllTab />}
-        </div>
+        {/* Mount on first visit (R-03); keep mounted behind hidden after that (F-14) */}
+        {tabs.map((tab) => {
+          const isActive = activeTab === tab.id;
+          const panelId = `ledger-panel-${tab.id}`;
+          return (
+            <div
+              key={tab.id}
+              id={panelId}
+              role="tabpanel"
+              aria-labelledby={`ledger-tab-${tab.id}`}
+              hidden={!isActive}
+              className={isActive ? 'p-4 md:p-6' : undefined}
+            >
+              {visited.has(tab.id) && (
+                <>
+                  {tab.id === 'trips' && <TripLedgerPage columnConfig={tripColumnConfig} />}
+                  {tab.id === 'fuel' && <FuelLedgerPage columnConfig={fuelColumnConfig} />}
+                  {tab.id === 'toll' && <TollLedgerPage columnConfig={tollColumnConfig} />}
+                  {tab.id === 'statement' && (
+                    <PlatformStatementSummary onOpenTollRecon={onOpenTollRecon} />
+                  )}
+                  {tab.id === 'all' && unified && <UnifiedLedgerAllTab />}
+                </>
+              )}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
 }
 
-export function TabbedTransactionList() {
+export function TabbedTransactionList({
+  onOpenTollRecon,
+}: {
+  onOpenTollRecon?: (opts: { startYmd: string; endYmd: string }) => void;
+} = {}) {
   return (
     <LedgerPeriodProvider>
-      <LedgersInner />
+      <LedgersInner onOpenTollRecon={onOpenTollRecon} />
     </LedgerPeriodProvider>
   );
 }

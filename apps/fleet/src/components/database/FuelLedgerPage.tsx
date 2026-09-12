@@ -1,13 +1,15 @@
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Fuel, RefreshCw } from 'lucide-react';
 import { FuelEntry } from '../../types/fuel';
 import { fuelService } from '../../services/fuelService';
 import { currentFuelListWindow } from '../../utils/fuelWeekPeriod';
 import { useLedgerPeriod } from '../../contexts/LedgerPeriodContext';
+import { useLedgerQuery } from '../../hooks/useLedgerQuery';
+import { isFuelServerSortKey } from '../../utils/fuelSortKeys';
 import { FuelLedgerTable, ALL_COLUMNS, DEFAULT_VISIBLE_KEYS } from './fuel-ledger/FuelLedgerTable';
 import type { SortDir } from './fuel-ledger/FuelLedgerTable';
 import { FuelLedgerColumnToggle } from './fuel-ledger/FuelLedgerColumnToggle';
-import { FuelLedgerFilterBar, FuelLedgerFilters, EMPTY_FILTERS, hasActiveFilters } from './fuel-ledger/FuelLedgerFilterBar';
+import { FuelLedgerFilterBar, FuelLedgerFilters, EMPTY_FILTERS } from './fuel-ledger/FuelLedgerFilterBar';
 import { FuelLedgerStats } from './fuel-ledger/FuelLedgerStats';
 import { FuelLedgerExport } from './fuel-ledger/FuelLedgerExport';
 
@@ -30,100 +32,6 @@ function saveVisibleColumns(keys: string[]) {
   } catch { /* ignore */ }
 }
 
-// ── Client-side filter logic ────────────────────────────────────────────────
-
-function applyFilters(entries: FuelEntry[], f: FuelLedgerFilters): FuelEntry[] {
-  if (!hasActiveFilters(f)) return entries;
-
-  return entries.filter(e => {
-    // Free-text search: vehicle ID, driver ID, station/location
-    if (f.search) {
-      const q = f.search.toLowerCase();
-      const haystack = [
-        e.vehicleId,
-        e.driverId,
-        e.location,
-        e.stationAddress,
-        e.id,
-      ]
-        .filter(Boolean)
-        .join(' ')
-        .toLowerCase();
-      if (!haystack.includes(q)) return false;
-    }
-
-    // Payment source
-    if (f.paymentSource && e.paymentSource !== f.paymentSource) return false;
-
-    // Entry mode
-    if (f.entryMode && e.entryMode !== f.entryMode) return false;
-
-    // Type
-    if (f.type && e.type !== f.type) return false;
-
-    // Audit status
-    if (f.auditStatus && (e.auditStatus || '') !== f.auditStatus) return false;
-
-    // Date range
-    if (f.dateFrom && e.date < f.dateFrom) return false;
-    if (f.dateTo && e.date > f.dateTo) return false;
-
-    return true;
-  });
-}
-
-// ── Sort helpers ────────────────────────────────────────────────────────────
-
-function getSortValue(entry: FuelEntry, key: string): string | number | boolean | null {
-  switch (key) {
-    case 'id': return entry.id || '';
-    case 'date': return entry.date || '';
-    case 'vehicleId': return (entry.vehicleId || '').toLowerCase();
-    case 'driverId': return (entry.driverId || '').toLowerCase();
-    case 'amount': return entry.amount ?? null;
-    case 'liters': return entry.liters ?? null;
-    case 'pricePerLiter': return entry.pricePerLiter ?? null;
-    case 'odometer': return entry.odometer ?? null;
-    case 'location': return (entry.location || entry.stationAddress || '').toLowerCase();
-    case 'paymentSource': return entry.paymentSource || '';
-    case 'entryMode': return entry.entryMode || '';
-    case 'type': return entry.type || '';
-    case 'auditStatus': return entry.auditStatus || '';
-    case 'entrySource': return entry.entrySource || '';
-    case 'isFullTank': return (entry as any).isFullTank ?? null;
-    case 'isFlagged': return entry.isFlagged ?? null;
-    case 'transactionId': return entry.transactionId || '';
-    case 'matchedStationId': return entry.matchedStationId || '';
-    case 'reconciliationStatus': return entry.reconciliationStatus || '';
-    case 'anchorPeriodId': return entry.anchorPeriodId || '';
-    case 'volumeContributed': return entry.volumeContributed ?? null;
-    default: return null;
-  }
-}
-
-function compareValues(
-  a: string | number | boolean | null,
-  b: string | number | boolean | null,
-  dir: 'asc' | 'desc'
-): number {
-  // nulls always last regardless of direction
-  if (a == null && b == null) return 0;
-  if (a == null) return 1;
-  if (b == null) return -1;
-
-  let cmp = 0;
-  if (typeof a === 'boolean' && typeof b === 'boolean') {
-    cmp = a === b ? 0 : a ? -1 : 1; // true first
-  } else if (typeof a === 'number' && typeof b === 'number') {
-    cmp = a - b;
-  } else {
-    cmp = String(a).localeCompare(String(b));
-  }
-  return dir === 'desc' ? -cmp : cmp;
-}
-
-// ── Component ───────────────────────────────────────────────────────────────
-
 export interface ColumnConfig {
   key: string;
   label: string;
@@ -137,94 +45,80 @@ interface FuelLedgerPageProps {
 }
 
 export function FuelLedgerPage({ organizationId, columnConfig }: FuelLedgerPageProps = {}) {
-  const { period } = useLedgerPeriod();
-  const [allEntries, setAllEntries] = useState<FuelEntry[]>([]);
-  const [serverTotal, setServerTotal] = useState<number | null>(null);
-  const [loadedWindow, setLoadedWindow] = useState<{ startDate: string; endDate: string } | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { period, setPeriod } = useLedgerPeriod();
   const [page, setPage] = useState(0);
   const [pageSize, setPageSize] = useState(50);
-  const [visibleColumns, setVisibleColumns] = useState<string[]>(loadVisibleColumns);
-  const [filters, setFilters] = useState<FuelLedgerFilters>({ ...EMPTY_FILTERS });
+  const [localVisibleColumns, setLocalVisibleColumns] = useState<string[]>(loadVisibleColumns);
+  const visibleColumns = columnConfig
+    ? columnConfig.filter((c) => c.visible).map((c) => c.key)
+    : localVisibleColumns;
+  const [filters, setFilters] = useState<FuelLedgerFilters>(() => ({
+    ...EMPTY_FILTERS,
+    dateFrom: period.startDate,
+    dateTo: period.endDate,
+  }));
   const [sortKey, setSortKey] = useState<string | null>(null);
   const [sortDir, setSortDir] = useState<SortDir>(null);
 
-  const fetchIdRef = useRef(0);
-
-  const fetchEntries = useCallback(async (f: FuelLedgerFilters = filters) => {
-    const id = ++fetchIdRef.current;
-    setLoading(true);
-    setError(null);
-    try {
-      const fallback = period.startDate ? period : currentFuelListWindow();
-      const startDate = f.dateFrom || fallback.startDate;
-      const endDate = f.dateTo || fallback.endDate;
-      const data = await fuelService.getFuelEntries({
-        startDate,
-        endDate,
-        limit: 1500,
-        offset: 0,
-      });
-      if (id !== fetchIdRef.current) return;
-      const totalCount = (data as any)?.totalCount as number | undefined;
-      setAllEntries(Array.isArray(data) ? data : []);
-      setServerTotal(totalCount != null && Number.isFinite(totalCount) ? totalCount : (Array.isArray(data) ? data.length : 0));
-      setLoadedWindow({ startDate, endDate });
-    } catch (err: any) {
-      if (id !== fetchIdRef.current) return;
-      console.error('FuelLedgerPage fetch error:', err);
-      setError(err?.message || 'Failed to load fuel entries');
-    } finally {
-      if (id === fetchIdRef.current) setLoading(false);
-    }
-  }, [filters, organizationId, period]);
-
   useEffect(() => {
-    fetchEntries(filters);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filters.dateFrom, filters.dateTo, organizationId, period.startDate, period.endDate]);
+    setFilters((prev) => {
+      if (prev.dateFrom === period.startDate && prev.dateTo === period.endDate) return prev;
+      return { ...prev, dateFrom: period.startDate, dateTo: period.endDate };
+    });
+    setPage(0);
+  }, [period.startDate, period.endDate]);
 
-  const truncated =
-    serverTotal != null && allEntries.length > 0 && serverTotal > allEntries.length;
+  const fallback = period.startDate ? period : currentFuelListWindow();
+  const startDate = filters.dateFrom || fallback.startDate;
+  const endDate = filters.dateTo || fallback.endDate;
 
-  // Client-side filtering
-  const filteredEntries = useMemo(
-    () => applyFilters(allEntries, filters),
-    [allEntries, filters]
-  );
+  const rowFilters = useMemo(() => ({
+    startDate,
+    endDate,
+    search: filters.search || undefined,
+    paymentSource: filters.paymentSource || undefined,
+    entryMode: filters.entryMode || undefined,
+    type: filters.type || undefined,
+    auditStatus: filters.auditStatus || undefined,
+    ...(organizationId ? { organizationId } : {}),
+    limit: pageSize,
+    offset: page * pageSize,
+    ...(sortKey && sortDir && isFuelServerSortKey(sortKey) ? { sortKey, sortDir } : {}),
+  }), [startDate, endDate, filters, organizationId, page, pageSize, sortKey, sortDir]);
 
-  // Client-side sorting (applies to entire filtered set before pagination)
-  const sortedEntries = useMemo(() => {
-    if (!sortKey || !sortDir) return filteredEntries;
-    return [...filteredEntries].sort((a, b) =>
-      compareValues(getSortValue(a, sortKey), getSortValue(b, sortKey), sortDir)
-    );
-  }, [filteredEntries, sortKey, sortDir]);
+  const rowsQuery = useLedgerQuery<{ data: FuelEntry[]; total: number }>({
+    domain: 'fuel',
+    filters: rowFilters,
+    queryFn: async (f) => {
+      const data = await fuelService.getFuelEntries(f as any);
+      const total = (data as any)?.totalCount ?? (Array.isArray(data) ? data.length : 0);
+      return { data: Array.isArray(data) ? data : [], total };
+    },
+  });
 
-  // Client-side pagination (on sorted + filtered set)
-  const paginatedEntries = useMemo(() => {
-    const start = page * pageSize;
-    return sortedEntries.slice(start, start + pageSize);
-  }, [sortedEntries, page, pageSize]);
+  const entries = rowsQuery.data?.data || [];
+  const total = rowsQuery.data?.total ?? 0;
+  const loading = rowsQuery.isFetching;
+  const error = rowsQuery.error ? ((rowsQuery.error as Error).message || 'Failed to load fuel entries') : null;
 
-  const handlePageChange = (newPage: number) => {
-    setPage(newPage);
-  };
-
+  const handlePageChange = (newPage: number) => setPage(newPage);
   const handlePageSizeChange = (newSize: number) => {
     setPage(0);
     setPageSize(newSize);
   };
 
-  // Filter handler — resets to page 0 on any filter change
   const handleFiltersChange = (next: FuelLedgerFilters) => {
     setFilters(next);
     setPage(0);
+    if (next.dateFrom && next.dateTo) {
+      setPeriod({ startDate: next.dateFrom, endDate: next.dateTo });
+    } else if (!next.dateFrom && !next.dateTo) {
+      setPeriod({ startDate: '', endDate: '' });
+    }
   };
 
-  // Sort handler — cycles: none → asc → desc → none
   const handleSort = useCallback((key: string) => {
+    if (!isFuelServerSortKey(key)) return;
     if (sortKey !== key) {
       setSortKey(key);
       setSortDir('asc');
@@ -238,23 +132,26 @@ export function FuelLedgerPage({ organizationId, columnConfig }: FuelLedgerPageP
   }, [sortKey, sortDir]);
 
   const handleColumnToggle = (key: string) => {
-    const newVisibleColumns = visibleColumns.includes(key)
-      ? visibleColumns.filter(k => k !== key)
-      : [...visibleColumns, key];
-    if (newVisibleColumns.length === 0) return;
-    setVisibleColumns(newVisibleColumns);
-    saveVisibleColumns(newVisibleColumns);
+    if (columnConfig) return;
+    setLocalVisibleColumns((prev) => {
+      const next = prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key];
+      if (next.length === 0) return prev;
+      saveVisibleColumns(next);
+      return next;
+    });
   };
 
   const handleResetColumns = () => {
+    if (columnConfig) return;
     const defaultColumns = [...DEFAULT_VISIBLE_KEYS];
-    setVisibleColumns(defaultColumns);
+    setLocalVisibleColumns(defaultColumns);
     saveVisibleColumns(defaultColumns);
   };
 
+  const showColumnToggle = !columnConfig;
+
   return (
     <div className="space-y-5">
-      {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="p-2.5 rounded-lg bg-amber-100 dark:bg-amber-900/50">
@@ -265,29 +162,30 @@ export function FuelLedgerPage({ organizationId, columnConfig }: FuelLedgerPageP
               Fuel Management Ledger
             </h2>
             <p className="text-sm text-slate-500 dark:text-slate-400">
-              {loadedWindow
-                ? `Fuel entries for ${loadedWindow.startDate} → ${loadedWindow.endDate}`
-                : 'Fuel fill-ups, costs, odometer readings, and audit status'}
+              Fuel entries for {startDate} → {endDate}
+              {total ? ` · ${total.toLocaleString()} matching` : ''}
             </p>
           </div>
         </div>
 
-        {/* Toolbar */}
         <div className="flex items-center gap-2">
           <FuelLedgerExport
-            entries={filteredEntries}
+            entries={entries}
             allColumns={ALL_COLUMNS}
             visibleColumns={visibleColumns}
-            totalFiltered={filteredEntries.length}
+            totalFiltered={total}
+            columnConfig={columnConfig}
           />
-          <FuelLedgerColumnToggle
-            columns={ALL_COLUMNS}
-            visibleColumns={visibleColumns}
-            onToggle={handleColumnToggle}
-            onResetDefaults={handleResetColumns}
-          />
+          {showColumnToggle && (
+            <FuelLedgerColumnToggle
+              columns={ALL_COLUMNS}
+              visibleColumns={visibleColumns}
+              onToggle={handleColumnToggle}
+              onResetDefaults={handleResetColumns}
+            />
+          )}
           <button
-            onClick={() => fetchEntries(filters)}
+            onClick={() => void rowsQuery.refetch()}
             disabled={loading}
             className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-50 transition-colors"
           >
@@ -297,39 +195,22 @@ export function FuelLedgerPage({ organizationId, columnConfig }: FuelLedgerPageP
         </div>
       </div>
 
-      {(loadedWindow || truncated) && (
-        <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 px-4 py-2.5 text-xs text-amber-800 dark:text-amber-200">
-          {loadedWindow && (
-            <span>
-              Showing window <span className="font-medium">{loadedWindow.startDate}</span> to{' '}
-              <span className="font-medium">{loadedWindow.endDate}</span>
-              {serverTotal != null ? ` · server total ${serverTotal.toLocaleString()}` : ''}.
-            </span>
-          )}
-          {truncated && (
-            <span className="ml-1 font-medium">
-              Loaded {allEntries.length.toLocaleString()} of {serverTotal!.toLocaleString()} — narrow the date range or raise the limit.
-            </span>
-          )}
+      {sortKey && sortDir && (
+        <div className="text-xs text-slate-500 dark:text-slate-400">
+          Sorted by {sortKey} ({sortDir}) across the full filtered set.
         </div>
       )}
 
-      {/* Filter Bar */}
       <FuelLedgerFilterBar
         filters={filters}
         onChange={handleFiltersChange}
         loading={loading}
-        totalResults={filteredEntries.length}
-        totalUnfiltered={allEntries.length}
+        totalResults={total}
+        totalUnfiltered={total}
       />
 
-      {/* Summary Stats */}
-      <FuelLedgerStats
-        entries={filteredEntries}
-        loading={loading}
-      />
+      <FuelLedgerStats entries={entries} loading={loading} />
 
-      {/* Error state */}
       {error && (
         <div className="rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/30 p-4">
           <div className="flex items-center justify-between">
@@ -340,7 +221,7 @@ export function FuelLedgerPage({ organizationId, columnConfig }: FuelLedgerPageP
               <p className="text-sm text-red-600 dark:text-red-400 mt-1">{error}</p>
             </div>
             <button
-              onClick={fetchEntries}
+              onClick={() => void rowsQuery.refetch()}
               className="px-3 py-1.5 text-sm font-medium rounded-md bg-red-100 dark:bg-red-900/50 text-red-700 dark:text-red-300 hover:bg-red-200 dark:hover:bg-red-900 transition-colors"
             >
               Retry
@@ -349,19 +230,19 @@ export function FuelLedgerPage({ organizationId, columnConfig }: FuelLedgerPageP
         </div>
       )}
 
-      {/* Table */}
       <FuelLedgerTable
-        entries={paginatedEntries}
+        entries={entries}
         loading={loading}
         visibleColumns={visibleColumns}
         page={page}
         pageSize={pageSize}
-        totalFiltered={sortedEntries.length}
+        totalFiltered={total}
         onPageChange={handlePageChange}
         onPageSizeChange={handlePageSizeChange}
         sortKey={sortKey}
         sortDir={sortDir}
         onSort={handleSort}
+        columnConfig={columnConfig}
       />
     </div>
   );

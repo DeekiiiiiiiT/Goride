@@ -20,6 +20,19 @@ import { buildOrFilterSegment } from "./fleet_sql_bridge_filters.ts";
 
 type Call = { method: string; args: unknown[] };
 
+/** Injectable deps so N-13 tests can stub queryFleet and still run real executeMapped. */
+export type ExecuteMappedDeps = {
+  queryFleet: typeof queryFleet;
+  countBy: typeof countBy;
+  getByLegacyKvId: typeof getByLegacyKvId;
+};
+
+const defaultMappedDeps: ExecuteMappedDeps = {
+  queryFleet,
+  countBy,
+  getByLegacyKvId,
+};
+
 export type KvStoreQueryResult = {
   data: unknown;
   error: unknown;
@@ -59,7 +72,15 @@ function payloadPathToCol(col: string): string | null {
   return resolveFleetColumn(col);
 }
 
-async function executeMapped(calls: Call[]): Promise<{ data: unknown; error: unknown; count: number | null }> {
+/** Exported for N-13: tests stub queryFleet and assert emitted filters. */
+export async function executeMapped(
+  calls: Call[],
+  deps: Partial<ExecuteMappedDeps> = {},
+): Promise<{ data: unknown; error: unknown; count: number | null }> {
+  const { queryFleet: qf, countBy: countFn, getByLegacyKvId: getById } = {
+    ...defaultMappedDeps,
+    ...deps,
+  };
   const likeKey = calls.find((c) => c.method === "like" && c.args[0] === "key");
   const eqKey = calls.find((c) => c.method === "eq" && c.args[0] === "key");
   const inKey = calls.find((c) => c.method === "in" && c.args[0] === "key");
@@ -73,7 +94,7 @@ async function executeMapped(calls: Call[]): Promise<{ data: unknown; error: unk
     if (!def || !isFleetReadTableEnabled(def.domain)) {
       return { data: null, error: null, count: 0 };
     }
-    const val = await getByLegacyKvId(def.domain, key);
+    const val = await getById(def.domain, key);
     const selectCall = calls.find((c) => c.method === "select");
     const selectArg = String(selectCall?.args[0] ?? "value");
     const single = calls.some((c) => c.method === "maybeSingle" || c.method === "single");
@@ -98,7 +119,7 @@ async function executeMapped(calls: Call[]): Promise<{ data: unknown; error: unk
     for (const key of keys) {
       const def = resolveDomain(key);
       if (!def || !isFleetReadTableEnabled(def.domain)) continue;
-      const val = await getByLegacyKvId(def.domain, key);
+      const val = await getById(def.domain, key);
       if (val) rows.push({ key, value: val });
     }
     return shapeResult(calls, rows, rows.length);
@@ -138,6 +159,14 @@ async function executeMapped(calls: Call[]): Promise<{ data: unknown; error: unk
       if (dateLte && /requestTime\.lte\./.test(expr)) {
         filters.push({ op: "lte", col: "date", value: String(dateLte[1]).slice(0, 10) });
         continue;
+      }
+      // Null-inclusive platform exclusion (rideshare scope — F-09)
+      if (/value->>platform\.is\.null/.test(expr) && /value->>platform\.neq\./.test(expr)) {
+        const neq = expr.match(/value->>platform\.neq\.([^,]+)/);
+        if (neq) {
+          filters.push({ op: "or", value: `platform.is.null,platform.neq.${neq[1]}` });
+          continue;
+        }
       }
       // Multi-eq ORs → IN (status Processing variants, Roam/GoRide platform alias, etc.)
       const statusEqs = [...expr.matchAll(/value->>status\.eq\.([^,]+)/g)].map((m) => m[1]);
@@ -262,14 +291,14 @@ async function executeMapped(calls: Call[]): Promise<{ data: unknown; error: unk
   }
 
   if (head) {
-    const n = await countBy(domain!, { filters, legacyPrefix, order: orders[0] });
+    const n = await countFn(domain!, { filters, legacyPrefix, order: orders[0] });
     return { data: null, error: null, count: n };
   }
 
   const selectArg = String(selectCall?.args[0] ?? "value");
   const withKeys = selectArg.includes("key");
 
-  const res = await queryFleet(domain!, {
+  const res = await qf(domain!, {
     filters,
     legacyPrefix,
     orders: orders.length > 0 ? orders : [{ col: "legacy_kv_id", ascending: true }],

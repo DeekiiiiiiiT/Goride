@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import { TollLedgerEntry } from '../../../types/toll-ledger';
 import {
   Copy,
@@ -10,6 +10,7 @@ import {
   AlertTriangle,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { isTollServerSortKey } from '../../../utils/tollSortKeys';
 
 // ── Column definition type ──────────────────────────────────────────────────
 
@@ -424,6 +425,25 @@ export const DEFAULT_VISIBLE_KEYS = ALL_COLUMNS.filter((c) => c.defaultVisible).
   (c) => c.key,
 );
 
+/** Super Admin ledger config: merge saved labels + column order with ALL_COLUMNS render/sort logic. */
+export function mergeTollLedgerActiveColumns(
+  visibleColumns: string[],
+  columnConfig?: { key: string; label: string; visible: boolean }[],
+): RenderColumnDef[] {
+  if (columnConfig != null && columnConfig.length > 0) {
+    const out: RenderColumnDef[] = [];
+    for (const c of columnConfig) {
+      if (!c.visible) continue;
+      const base = ALL_COLUMNS.find((ac) => ac.key === c.key);
+      if (!base) continue;
+      const label = c.label?.trim() ? c.label.trim() : base.label;
+      out.push({ ...base, label });
+    }
+    return out;
+  }
+  return ALL_COLUMNS.filter((col) => visibleColumns.includes(col.key));
+}
+
 // ── Detail panel helper components ──────────────────────────────────────────
 
 function copyToClipboard(text: string, e?: React.MouseEvent) {
@@ -673,21 +693,29 @@ const TollDataRow = React.memo(function TollDataRow({
   onToggleExpand,
   onCopyId,
 }: TollDataRowProps) {
-  const handleClick = () => {
+  const toggle = () => {
     if (entry.id) onToggleExpand(entry.id);
+  };
+  const onRowKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    e.preventDefault();
+    toggle();
   };
 
   return (
     <>
       <tr
-        onClick={handleClick}
+        tabIndex={0}
+        aria-expanded={isExpanded}
+        onClick={toggle}
+        onKeyDown={onRowKeyDown}
         className={`cursor-pointer transition-colors ${
           isExpanded
             ? 'bg-rose-50/50 dark:bg-rose-950/20'
             : idx % 2 === 0
             ? 'bg-white dark:bg-slate-900'
             : 'bg-slate-50/50 dark:bg-slate-800/20'
-        } hover:bg-rose-50/40 dark:hover:bg-rose-950/20 ${
+        } hover:bg-rose-50/40 dark:hover:bg-rose-950/20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-rose-500 ${
           loading ? 'opacity-60' : ''
         } ${
           !isExpanded && entry.reconciliationStatus && ROW_BORDER_COLORS[entry.reconciliationStatus]
@@ -748,6 +776,7 @@ interface TollLedgerTableProps {
   sortKey: string | null;
   sortDir: SortDir;
   onSort: (key: string) => void;
+  columnConfig?: { key: string; label: string; visible: boolean }[];
 }
 
 export function TollLedgerTable({
@@ -762,10 +791,14 @@ export function TollLedgerTable({
   sortKey,
   sortDir,
   onSort,
+  columnConfig,
 }: TollLedgerTableProps) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
-  const activeCols = ALL_COLUMNS.filter((c) => visibleColumns.includes(c.key));
+  const activeCols = useMemo(
+    () => mergeTollLedgerActiveColumns(visibleColumns, columnConfig),
+    [visibleColumns, columnConfig],
+  );
 
   const totalPages = Math.max(1, Math.ceil(totalFiltered / pageSize));
   const showFrom = totalFiltered === 0 ? 0 : page * pageSize + 1;
@@ -803,7 +836,7 @@ export function TollLedgerTable({
             <thead>
               <tr className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">
                 {activeCols.map((col) => {
-                  const isSortable = col.sortable !== false;
+                  const isSortable = col.sortable !== false && isTollServerSortKey(col.key);
                   const isActive = sortKey === col.key;
                   const dir: SortDir = isActive ? sortDir : null;
                   return (

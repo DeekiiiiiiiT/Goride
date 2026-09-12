@@ -24,7 +24,7 @@ export function useDriverFuelEntries(driverId: string, vehicleIds: string[]) {
       const ids = Array.from(new Set(vehicleIds.filter(Boolean)));
       if (!ids.length) return [];
       const lists = await Promise.all(
-        ids.map((vid) => api.getFuelEntriesByVehicle(vid).catch(() => [] as FuelEntry[]))
+        ids.map((vid) => api.getFuelEntriesByVehicle(vid))
       );
       const byId = new Map<string, FuelEntry>();
       for (const list of lists) {

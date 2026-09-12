@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { 
   Calendar, 
@@ -20,12 +20,20 @@ import {
 import { format, subDays, startOfMonth, endOfMonth, startOfWeek, endOfWeek, subMonths } from 'date-fns';
 import { api } from '../../services/api';
 import { StatementSummaryCard, StatementTooltipIcon, STATEMENT_HELP } from './StatementSummaryCard';
-import { StatementSummary, StatementPlatform } from '../../types/statementSummary';
+import {
+  StatementSummary,
+  StatementPlatform,
+  createEmptyFleetTollSnapshot,
+  type FleetTollSnapshot,
+} from '../../types/statementSummary';
 import { cn } from '../ui/utils';
 import { PeriodWeekDropdown } from '../ui/PeriodWeekDropdown';
 import { generatePeriodWeekOptions, type PeriodWeekOption } from '../../utils/periodWeekOptions';
+import { useLedgerPeriod } from '../../contexts/LedgerPeriodContext';
 
 type DatePreset = 'thisWeek' | 'lastWeek' | 'thisMonth' | 'lastMonth' | 'last30Days' | 'custom';
+
+type OpenTollReconOpts = { startYmd: string; endYmd: string };
 
 const DATE_PRESETS: { id: DatePreset; label: string }[] = [
   { id: 'thisWeek', label: 'This Week' },
@@ -91,31 +99,69 @@ const PLATFORM_TABS: { id: StatementPlatform | 'all'; label: string; icon: React
 
 type SummaryScope = 'fleet' | 'driver';
 
-export function PlatformStatementSummary() {
+export function PlatformStatementSummary({
+  onOpenTollRecon,
+}: {
+  /** Navigate to Week Reconciliation → Tolls for the statement week. */
+  onOpenTollRecon?: (opts: OpenTollReconOpts) => void;
+} = {}) {
+  const { period, setPeriod } = useLedgerPeriod();
   const [activeTab, setActiveTab] = useState<StatementPlatform | 'all'>('all');
   const [summaryScope, setSummaryScope] = useState<SummaryScope>('fleet');
   const [selectedDriverId, setSelectedDriverId] = useState<string>('');
-  const [datePreset, setDatePreset] = useState<DatePreset>('thisMonth');
-  const [customStartDate, setCustomStartDate] = useState('');
-  const [customEndDate, setCustomEndDate] = useState('');
+  const [datePreset, setDatePreset] = useState<DatePreset>('custom');
+  const [customStartDate, setCustomStartDate] = useState(period.startDate);
+  const [customEndDate, setCustomEndDate] = useState(period.endDate);
   const [selectedPeriodId, setSelectedPeriodId] = useState<string | null>(null);
+  // R-06: period key we just wrote locally — effect must not force datePreset='custom'
+  const localPeriodKeyRef = useRef<string | null>(null);
   const weekPeriodOptions = useMemo(() => generatePeriodWeekOptions(12), []);
 
   const { startDate, endDate } = useMemo(() => {
     if (selectedPeriodId) {
-      const period = weekPeriodOptions.find((p) => p.id === selectedPeriodId);
-      if (period) return { startDate: period.startDate, endDate: period.endDate };
+      const p = weekPeriodOptions.find((x) => x.id === selectedPeriodId);
+      if (p) return { startDate: p.startDate, endDate: p.endDate };
+    }
+    if (datePreset === 'custom') {
+      return {
+        startDate: customStartDate || period.startDate,
+        endDate: customEndDate || period.endDate,
+      };
     }
     return getDateRange(datePreset, customStartDate, customEndDate);
-  }, [datePreset, customStartDate, customEndDate, selectedPeriodId, weekPeriodOptions]);
+  }, [datePreset, customStartDate, customEndDate, selectedPeriodId, weekPeriodOptions, period.startDate, period.endDate]);
 
-  const handlePeriodSelect = (period: PeriodWeekOption) => {
-    setSelectedPeriodId(period.id);
+  // Shared ledger period → statement range (N-08); skip when we originated the change (R-06)
+  React.useEffect(() => {
+    const key = `${period.startDate}|${period.endDate}`;
+    if (localPeriodKeyRef.current === key) {
+      setCustomStartDate(period.startDate);
+      setCustomEndDate(period.endDate);
+      return;
+    }
+    // All-time shared period (empty bounds): statement keeps its own date chips
+    if (!period.startDate || !period.endDate) return;
+    setDatePreset('custom');
+    setSelectedPeriodId(null);
+    setCustomStartDate(period.startDate);
+    setCustomEndDate(period.endDate);
+  }, [period.startDate, period.endDate]);
+
+  const handlePeriodSelect = (p: PeriodWeekOption) => {
+    localPeriodKeyRef.current = `${p.startDate}|${p.endDate}`;
+    setSelectedPeriodId(p.id);
+    setDatePreset('custom');
+    setPeriod({ startDate: p.startDate, endDate: p.endDate });
   };
 
   const handlePresetClick = (presetId: DatePreset) => {
     setDatePreset(presetId);
-    setSelectedPeriodId(null); // Clear period selection when preset is clicked
+    setSelectedPeriodId(null);
+    if (presetId !== 'custom') {
+      const range = getDateRange(presetId);
+      localPeriodKeyRef.current = `${range.startDate}|${range.endDate}`;
+      setPeriod(range);
+    }
   };
 
   const { data: driversList } = useQuery({
@@ -157,6 +203,8 @@ export function PlatformStatementSummary() {
   });
 
   const summaries = statementQuery.data?.summaries ?? [];
+  const fleetTollSnapshot: FleetTollSnapshot =
+    statementQuery.data?.fleetTollSnapshot ?? createEmptyFleetTollSnapshot();
 
   const isLoading = statementQuery.isLoading;
   const isFetching = statementQuery.isFetching;
@@ -166,16 +214,26 @@ export function PlatformStatementSummary() {
     void statementQuery.refetch();
   };
 
+  const openReconForStatementWeek = () => {
+    onOpenTollRecon?.({ startYmd: startDate, endYmd: endDate });
+  };
+
   const filteredSummaries = activeTab === 'all' 
     ? summaries 
     : summaries.filter(s => s.platform === activeTab);
 
   const hasSummaryData = (summary: StatementSummary) => {
-    return summary.totalEarnings > 0 || 
-           summary.totalPayout > 0 || 
-           summary.tolls > 0 ||
-           (summary.tripCount && summary.tripCount > 0);
+    return (
+      summary.totalEarnings > 0 ||
+      summary.totalPayout > 0 ||
+      (summary.platformTollCredits ?? 0) > 0 ||
+      (summary.statementTollExpense ?? summary.tolls) > 0 ||
+      (summary.tripCount && summary.tripCount > 0)
+    );
   };
+
+  const linkedSpendFor = (platform: StatementPlatform) =>
+    fleetTollSnapshot.tagSpendByPlatform?.[platform] ?? 0;
 
   return (
     <div className="space-y-4">
@@ -367,6 +425,8 @@ export function PlatformStatementSummary() {
               summary={summary}
               defaultExpanded={false}
               showUberDriverScopePayoutNote={summaryScope === 'driver'}
+              linkedTagSpend={linkedSpendFor(summary.platform)}
+              onOpenTollRecon={onOpenTollRecon ? openReconForStatementWeek : undefined}
             />
           ))}
         </div>
@@ -378,53 +438,103 @@ export function PlatformStatementSummary() {
               summary={summary}
               defaultExpanded={true}
               showUberDriverScopePayoutNote={summaryScope === 'driver'}
+              linkedTagSpend={linkedSpendFor(summary.platform)}
+              onOpenTollRecon={onOpenTollRecon ? openReconForStatementWeek : undefined}
             />
           ))}
         </div>
       )}
 
-      {/* Summary Totals (fleet only — driver view is not a fleet rollup) */}
+      {/* Combined: platform earnings rollup + fleet toll snapshot (not sum of platform “expenses”) */}
       {summaryScope === 'fleet' && activeTab === 'all' && filteredSummaries.length > 0 && (
-        <div className="bg-gradient-to-r from-indigo-50 to-purple-50 dark:from-indigo-900/20 dark:to-purple-900/20 rounded-xl p-4 border border-indigo-100 dark:border-indigo-800">
-          <h4 className="font-semibold text-slate-900 dark:text-slate-100 mb-3">
-            Combined Totals
-          </h4>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div>
-              <div className="mb-0.5 flex items-center gap-1">
-                <p className="text-xs text-slate-500 uppercase tracking-wide">Total Earnings</p>
-                <StatementTooltipIcon content={STATEMENT_HELP.combinedTotalEarnings} />
+        <div className="space-y-3">
+          <div className="bg-gradient-to-r from-indigo-50 to-purple-50 dark:from-indigo-900/20 dark:to-purple-900/20 rounded-xl p-4 border border-indigo-100 dark:border-indigo-800">
+            <h4 className="font-semibold text-slate-900 dark:text-slate-100 mb-3">
+              Platform earnings rollup
+            </h4>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+              <div>
+                <div className="mb-0.5 flex items-center gap-1">
+                  <p className="text-xs text-slate-500 uppercase tracking-wide">Total Earnings</p>
+                  <StatementTooltipIcon content={STATEMENT_HELP.combinedTotalEarnings} />
+                </div>
+                <p className="text-lg font-bold text-emerald-600">
+                  ${filteredSummaries.reduce((sum, s) => sum + s.totalEarnings, 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                </p>
               </div>
-              <p className="text-lg font-bold text-emerald-600">
-                ${filteredSummaries.reduce((sum, s) => sum + s.totalEarnings, 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
-              </p>
+              <div>
+                <div className="mb-0.5 flex items-center gap-1">
+                  <p className="text-xs text-slate-500 uppercase tracking-wide">Cash Collected</p>
+                  <StatementTooltipIcon content={STATEMENT_HELP.combinedCashCollected} />
+                </div>
+                <p className="text-lg font-bold text-slate-700 dark:text-slate-300">
+                  ${filteredSummaries.reduce((sum, s) => sum + s.cashCollected, 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                </p>
+              </div>
+              <div>
+                <div className="mb-0.5 flex items-center gap-1">
+                  <p className="text-xs text-slate-500 uppercase tracking-wide">Bank Transfer</p>
+                  <StatementTooltipIcon content={STATEMENT_HELP.combinedBankTransfer} />
+                </div>
+                <p className="text-lg font-bold text-slate-700 dark:text-slate-300">
+                  ${filteredSummaries.reduce((sum, s) => sum + s.bankTransfer, 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                </p>
+              </div>
             </div>
-            <div>
-              <div className="mb-0.5 flex items-center gap-1">
-                <p className="text-xs text-slate-500 uppercase tracking-wide">Total Expenses</p>
-                <StatementTooltipIcon content={STATEMENT_HELP.combinedTotalExpenses} />
-              </div>
-              <p className="text-lg font-bold text-red-600">
-                ${filteredSummaries.reduce((sum, s) => sum + s.totalRefundsExpenses, 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
-              </p>
+          </div>
+
+          <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-800/40 p-4">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <h4 className="font-semibold text-slate-900 dark:text-slate-100">
+                Fleet toll snapshot
+              </h4>
+              {onOpenTollRecon && (
+                <button
+                  type="button"
+                  onClick={openReconForStatementWeek}
+                  className="text-xs font-medium text-indigo-600 hover:text-indigo-700 dark:text-indigo-400"
+                >
+                  Open Toll Recon
+                </button>
+              )}
             </div>
-            <div>
-              <div className="mb-0.5 flex items-center gap-1">
-                <p className="text-xs text-slate-500 uppercase tracking-wide">Cash Collected</p>
-                <StatementTooltipIcon content={STATEMENT_HELP.combinedCashCollected} />
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div>
+                <div className="mb-0.5 flex items-center gap-1">
+                  <p className="text-xs text-slate-500 uppercase tracking-wide">Spend</p>
+                  <StatementTooltipIcon content={STATEMENT_HELP.fleetTollSpend} />
+                </div>
+                <p className="text-lg font-bold text-red-600">
+                  ${fleetTollSnapshot.tagSpend.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                </p>
               </div>
-              <p className="text-lg font-bold text-slate-700 dark:text-slate-300">
-                ${filteredSummaries.reduce((sum, s) => sum + s.cashCollected, 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
-              </p>
-            </div>
-            <div>
-              <div className="mb-0.5 flex items-center gap-1">
-                <p className="text-xs text-slate-500 uppercase tracking-wide">Bank Transfer</p>
-                <StatementTooltipIcon content={STATEMENT_HELP.combinedBankTransfer} />
+              <div>
+                <div className="mb-0.5 flex items-center gap-1">
+                  <p className="text-xs text-slate-500 uppercase tracking-wide">Credits</p>
+                  <StatementTooltipIcon content={STATEMENT_HELP.fleetTollCredits} />
+                </div>
+                <p className="text-lg font-bold text-emerald-600">
+                  ${fleetTollSnapshot.platformCredits.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                </p>
               </div>
-              <p className="text-lg font-bold text-slate-700 dark:text-slate-300">
-                ${filteredSummaries.reduce((sum, s) => sum + s.bankTransfer, 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
-              </p>
+              <div>
+                <div className="mb-0.5 flex items-center gap-1">
+                  <p className="text-xs text-slate-500 uppercase tracking-wide">Charged</p>
+                  <StatementTooltipIcon content={STATEMENT_HELP.fleetTollCharged} />
+                </div>
+                <p className="text-lg font-bold text-slate-700 dark:text-slate-300">
+                  ${fleetTollSnapshot.chargedToDrivers.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                </p>
+              </div>
+              <div>
+                <div className="mb-0.5 flex items-center gap-1">
+                  <p className="text-xs text-slate-500 uppercase tracking-wide">Net Loss</p>
+                  <StatementTooltipIcon content={STATEMENT_HELP.fleetTollNetLoss} />
+                </div>
+                <p className="text-lg font-bold text-slate-900 dark:text-slate-100">
+                  ${fleetTollSnapshot.netTollLoss.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                </p>
+              </div>
             </div>
           </div>
         </div>

@@ -318,6 +318,17 @@ export function registerLedgerQuerySummaryRoutes(app: Hono) {
         filterCanonicalEventsByPlatform,
         dedupeOrgBankCanonicalEvents,
       } = await import("../_shared/unifiedLedger/queries.ts");
+      const {
+        applyStatementTollEvent,
+        emptyStatementTollBuckets,
+        presentStatementToll,
+        deriveStatementBankPlug,
+        statementPayoutReconciliationGap,
+        STATEMENT_TOLL_RECON_EPS,
+      } = await import("../../../packages/finance-core/src/statementTollNetting.ts");
+      const { buildFleetTollSnapshotForRange } = await import(
+        "./fleet_toll_statement_snapshot.ts"
+      );
 
       const statementTypes = [
         "fare_earning",
@@ -327,6 +338,7 @@ export function registerLedgerQuerySummaryRoutes(app: Hono) {
         "toll_reimbursement",
         "toll_refund",
         "toll_support_adjustment",
+        "toll_charge_offset",
         "prior_period_adjustment",
         "payout_cash",
         "payout_bank",
@@ -365,19 +377,33 @@ export function registerLedgerQuerySummaryRoutes(app: Hono) {
         let netFare = 0,
           promotions = 0,
           tips = 0;
-        let tolls = 0,
-          tollAdjustments = 0;
+        let tollBuckets = emptyStatementTollBuckets();
         let periodAdjustments = 0;
         let cashCollected = 0,
           bankTransfer = 0;
         let tripCount = 0;
         let hasPayoutEvents = false;
 
+        // Pass 1: record toll_reimbursement first so support_adjustment dedupe works
+        for (const e of entries) {
+          if (String(e.eventType || "") !== "toll_reimbursement") continue;
+          const next = applyStatementTollEvent(tollBuckets, e, plat);
+          if (next) tollBuckets = next;
+        }
+
         for (const e of entries) {
           const net = Number(e.netAmount) || 0;
           const mag = Math.abs(net);
+          const et = String(e.eventType || "");
+          if (et === "toll_reimbursement") continue; // already folded
 
-          switch (e.eventType) {
+          const tollNext = applyStatementTollEvent(tollBuckets, e, plat);
+          if (tollNext) {
+            tollBuckets = tollNext;
+            continue;
+          }
+
+          switch (et) {
             case "fare_earning":
               netFare += net;
               tripCount++;
@@ -393,15 +419,6 @@ export function registerLedgerQuerySummaryRoutes(app: Hono) {
             case "promotion":
               promotions += net;
               break;
-            case "toll_charge":
-              tolls += mag;
-              break;
-            case "toll_refund":
-              tollAdjustments += mag;
-              break;
-            case "toll_support_adjustment":
-              tollAdjustments += mag;
-              break;
             case "prior_period_adjustment":
               periodAdjustments += net;
               break;
@@ -413,19 +430,28 @@ export function registerLedgerQuerySummaryRoutes(app: Hono) {
               bankTransfer = mag;
               hasPayoutEvents = true;
               break;
-            case "statement_line":
-              if (e.metadata?.lineCode === "REFUNDS_TOLL" && plat !== "Uber") {
-                tollAdjustments += mag;
-              }
-              break;
           }
         }
 
+        const tollPres = presentStatementToll(tollBuckets, plat);
         const computedNetFare = plat === "Uber" ? netFare - promotions : netFare;
         const totalEarnings = computedNetFare + promotions + tips;
+        // Credits are memo lines — bank plug only subtracts real statementTollExpense
         if (!hasPayoutEvents) {
-          bankTransfer = Math.max(0, totalEarnings - tolls - cashCollected);
+          bankTransfer = deriveStatementBankPlug(
+            totalEarnings,
+            tollPres.statementTollExpense,
+            cashCollected,
+          );
         }
+
+        const totalPayout = cashCollected + bankTransfer;
+        const payoutGap = statementPayoutReconciliationGap({
+          totalEarnings,
+          statementTollExpense: tollPres.statementTollExpense,
+          periodAdjustments,
+          totalPayout,
+        });
 
         summaries.push({
           platform: plat,
@@ -436,20 +462,41 @@ export function registerLedgerQuerySummaryRoutes(app: Hono) {
           promotions: Number(promotions.toFixed(2)),
           tips: Number(tips.toFixed(2)),
           totalEarnings: Number(totalEarnings.toFixed(2)),
-          tolls: Number(tolls.toFixed(2)),
-          tollAdjustments: Number(tollAdjustments.toFixed(2)),
-          totalRefundsExpenses: Number((tolls + tollAdjustments).toFixed(2)),
+          // Honest toll story (Uber CSV credits ≠ charges)
+          tollStory: tollPres.tollStory,
+          uberTollCredits: tollPres.uberTollCredits,
+          platformTollCredits: tollPres.platformTollCredits,
+          statementTollExpense: tollPres.statementTollExpense,
+          // Legacy aliases (expense = statementTollExpense; credits not framed as charges)
+          tolls: tollPres.statementTollExpense,
+          tollCharges: tollPres.tollCharges,
+          tollRefunds: tollPres.tollRefunds,
+          tollReimbursements: tollPres.tollReimbursements,
+          tollAdjustments: tollPres.tollAdjustments,
+          totalRefundsExpenses: tollPres.statementTollExpense,
           periodAdjustments: Number(periodAdjustments.toFixed(2)),
           cashCollected: Number(cashCollected.toFixed(2)),
           bankTransfer: Number(bankTransfer.toFixed(2)),
-          totalPayout: Number((cashCollected + bankTransfer).toFixed(2)),
+          totalPayout: Number(totalPayout.toFixed(2)),
+          payoutObserved: hasPayoutEvents,
+          payoutReconciliationGap:
+            Math.abs(payoutGap) >= STATEMENT_TOLL_RECON_EPS ? payoutGap : 0,
           tripCount,
         });
       }
 
+      const fleetTollSnapshot = await buildFleetTollSnapshotForRange(c, {
+        startDate,
+        endDate,
+        driverId: driverIdParam && String(driverIdParam).trim()
+          ? String(driverIdParam).trim()
+          : undefined,
+      });
+
       return c.json({
         success: true,
         summaries,
+        fleetTollSnapshot,
         periodStart: startDate,
         periodEnd: endDate,
         meta: { source: "ledger.entries" as const },

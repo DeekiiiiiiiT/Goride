@@ -3,94 +3,87 @@ import {
   ChevronDown,
   ChevronUp,
   TrendingUp,
-  TrendingDown,
   Receipt,
   Wallet,
   FileSpreadsheet,
   Calculator,
   Car,
   Info,
+  ExternalLink,
 } from 'lucide-react';
 import { cn } from '../ui/utils';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip';
-import { StatementSummary, StatementPlatform } from '../../types/statementSummary';
+import {
+  StatementSummary,
+  StatementPlatform,
+  FleetTollSnapshot,
+} from '../../types/statementSummary';
 
-/** Explanations match GET /ledger/statement-summary aggregation logic. */
+/** Explanations match GET /ledger/statement-summary + Uber CSV vocabulary. */
 export const STATEMENT_HELP = {
   periodNetEarnings:
-    'Gross in-period earnings before tolls and payout split. Sum of all canonical ledger inflows in your date range for this platform: trip fares (fare_earning), promotions, and tips.',
+    'Gross in-period earnings before payout split. Sum of fare earnings, promotions, and tips for this platform.',
   netFare:
-    'Uber: sum of fare_earning minus sum of promotion (fare rows use CSV fare components; promotions are the exact payments_driver total). Other platforms: sum of fare_earning.',
+    'Uber: sum of fare_earning minus promotions (CSV fare components). Other platforms: sum of fare_earning.',
   promotions:
-    'Uber: promotion ledger rows from import (exact Total Earnings : Promotions from payments_driver per driver/period). Other platforms: any promotion events in range.',
-  tips:
-    'Sum of tip ledger events in the period (e.g. Uber tips from imported trip data).',
-  totalEarnings:
-    'Net Fare + Promotions + Tips. This is the earnings subtotal before Refunds & Expenses.',
-  refundsExpenses:
-    'Toll charges paid during trips plus any additional toll adjustments recovered from the platform. This represents the total toll-related amount that was refunded or should be reimbursed.',
-  tolls:
-    'Total toll charges attributed to trips in this period. These are tolls the driver paid during trips that the platform refunds as part of the trip fare.',
-  tollAdjustments:
-    'Uber: sum of toll_support_adjustment and toll_refund only (org REFUNDS_TOLL is excluded here — trip tolls are in Tolls; support cases are toll_support_adjustment). Other platforms: same plus org REFUNDS_TOLL statement lines. ADDED to Tolls for Total Refunds & Expenses.',
-  totalRefundsExpenses:
-    'Tolls + Toll Adjustments. The full toll amount that was or should be reimbursed. For example: $1,385 tolls + $10 support adjustment = $1,395 total.',
+    'Uber: payments_driver Promotions total. Other platforms: promotion events in range.',
+  tips: 'Sum of tip ledger events in the period.',
+  totalEarnings: 'Net Fare + Promotions + Tips — earnings subtotal before any trip toll expense.',
+  uberTollCredits:
+    'Uber CSV Refunds:Toll credits posted as toll_reimbursement. This is a credit memo from the statement — not plaza tag spend, and not “reimbursed for nothing.”',
+  platformTollCredits:
+    'Platform fare toll credits in earnings (CSV Refunds:Toll for Uber). Fleet tag spend is tracked in Toll Recon.',
+  fleetTagSpendLinked:
+    'Fleet plaza/tag spend on crossings linked to this platform’s trips this week (from Toll Recon engines). Informational — not subtracted from Net Period Earnings on this card.',
+  noPlatformTolls:
+    'This platform has no toll credits in the earnings statement. Fleet toll P&L (tag spend, credits, charged to drivers, net loss) lives in Toll Recon.',
+  tripTollExpense:
+    'Trip-level platform toll expense when the platform bills tolls as a cost line. Uber fare does not include toll — Uber uses CSV credits instead.',
+  statementTollExpense:
+    'Only real trip-level toll expense on this statement. Plaza tag spend is never included here.',
   adjustments:
-    'Corrections from previous statement periods that apply to this period (e.g. Uber "Adjustments from previous periods").',
-  periodAdjustments:
-    'Sum of prior_period_adjustment ledger events. These are credits or debits from previous periods that Uber applies to the current statement (e.g. fare corrections, disputed amounts resolved).',
+    'Corrections from previous statement periods that apply to this period.',
+  periodAdjustments: 'Sum of prior_period_adjustment ledger events.',
   payout:
-    'How earnings are allocated between cash collected from passengers and amounts treated as bank/digital payout for this platform in the period.',
+    'Cash collected vs bank/digital payout for this platform in the period.',
   cashCollected:
-    'Uber: from payout_cash on the organization import when available. Roam/InDrive: sum of physical cash on cash fare trips (fare_earning with paymentMethod Cash, using metadata.cashCollected or the fare amount).',
+    'Uber: payout_cash from organization import when available. Roam/InDrive: cash on cash fare trips.',
   bankTransfer:
-    'Uber: payout_bank from import when available. Other platforms: remainder so that Cash + Bank matches earnings after toll charges in the formula (Total Earnings − toll charges − Cash Collected, not below zero).',
-  totalPayout:
-    'Cash Collected + Transferred to Bank. Should align with how the platform paid out or how cash was handled for the period.',
+    'Observed: payout_bank from import. Derived (no payout events): Total Earnings − statement toll expense − Cash Collected.',
+  totalPayout: 'Cash Collected + Transferred to Bank.',
+  payoutObserved:
+    'Observed means payout_cash / payout_bank events were present. Derived means the bank line was computed from earnings.',
+  payoutReconciliation:
+    'Difference between Total Payout and (Total Earnings − statement toll expense + Period Adjustments).',
   netPeriodEarnings:
-    'Bottom line for the card: Total Earnings − Total Refunds & Expenses + Period Adjustments. This is what you keep after toll net expense, before interpreting cash vs bank in the Payout section.',
-  combinedTotalEarnings:
-    'Sum of each platform’s Total Earnings (Net Fare + Promotions + Tips) for the selected date range.',
-  combinedTotalExpenses:
-    'Sum of each platform’s Total Refunds & Expenses (net toll impact) for the selected date range.',
-  combinedCashCollected:
-    'Sum of each platform’s Cash Collected for the selected date range.',
-  combinedBankTransfer:
-    'Sum of each platform’s Transferred to Bank for the selected date range.',
+    'Total Earnings − statement toll expense + Period Adjustments. Uber toll credits are memo lines and are not subtracted as expenses.',
+  combinedTotalEarnings: 'Sum of each platform’s Total Earnings for the selected date range.',
+  combinedCashCollected: 'Sum of each platform’s Cash Collected.',
+  combinedBankTransfer: 'Sum of each platform’s Transferred to Bank.',
+  fleetTollSpend: 'Fleet plaza/tag spend this week (same as Toll Recon Spend card).',
+  fleetTollCredits: 'Trip toll credits reimbursed by platforms (same as Toll Recon Reimbursed card).',
+  fleetTollCharged: 'Amount charged back to drivers (same as Toll Recon Charged card).',
+  fleetTollNetLoss: 'Spend − Credits − Charged (same as Toll Recon Net Loss).',
+  openTollRecon: 'Opens Week Reconciliation → Tolls for this Monday–Sunday window.',
 } as const;
 
 interface StatementSummaryCardProps {
   summary: StatementSummary;
   className?: string;
   defaultExpanded?: boolean;
-  /** When true (driver-scoped summary), show a note under Payout for Uber org-level cash/bank rows. */
   showUberDriverScopePayoutNote?: boolean;
+  /** Linked Uber (or platform) tag spend from fleetTollSnapshot — informational. */
+  linkedTagSpend?: number;
+  onOpenTollRecon?: () => void;
 }
 
-const PLATFORM_CONFIG: Record<StatementPlatform, { 
-  label: string; 
-  color: string; 
-  bgColor: string;
-  icon: React.ElementType;
-}> = {
-  Uber: { 
-    label: 'Uber', 
-    color: 'text-slate-900', 
-    bgColor: 'bg-slate-100',
-    icon: Car
-  },
-  Roam: { 
-    label: 'Roam', 
-    color: 'text-amber-700', 
-    bgColor: 'bg-amber-50',
-    icon: Car
-  },
-  InDrive: { 
-    label: 'InDrive', 
-    color: 'text-emerald-700', 
-    bgColor: 'bg-emerald-50',
-    icon: Car
-  },
+const PLATFORM_CONFIG: Record<
+  StatementPlatform,
+  { label: string; color: string; bgColor: string; icon: React.ElementType }
+> = {
+  Uber: { label: 'Uber', color: 'text-slate-900', bgColor: 'bg-slate-100', icon: Car },
+  Roam: { label: 'Roam', color: 'text-amber-700', bgColor: 'bg-amber-50', icon: Car },
+  InDrive: { label: 'InDrive', color: 'text-emerald-700', bgColor: 'bg-emerald-50', icon: Car },
 };
 
 function formatCurrency(amount: number | undefined | null): string {
@@ -100,7 +93,9 @@ function formatCurrency(amount: number | undefined | null): string {
     currency: 'JMD',
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
-  }).format(amount).replace('JMD', '$');
+  })
+    .format(amount)
+    .replace('JMD', '$');
 }
 
 export function StatementTooltipIcon({ content }: { content: string }) {
@@ -127,27 +122,27 @@ export function StatementTooltipIcon({ content }: { content: string }) {
   );
 }
 
-function AmountDisplay({ 
-  amount, 
+function AmountDisplay({
+  amount,
   isExpense = false,
-  showSign = false 
-}: { 
-  amount: number | undefined | null; 
+  showSign = false,
+}: {
+  amount: number | undefined | null;
   isExpense?: boolean;
   showSign?: boolean;
 }) {
   if (amount === undefined || amount === null) {
     return <span className="text-slate-400">—</span>;
   }
-  
   const isZero = Math.abs(amount) < 0.01;
   const isNegative = amount < 0 || isExpense;
-  
   return (
-    <span className={cn(
-      'font-medium tabular-nums',
-      isZero ? 'text-slate-400' : isNegative ? 'text-red-600' : 'text-emerald-600'
-    )}>
+    <span
+      className={cn(
+        'font-medium tabular-nums',
+        isZero ? 'text-slate-400' : isNegative ? 'text-red-600' : 'text-emerald-600',
+      )}
+    >
       {showSign && !isZero && (isNegative ? '−' : '+')}
       {formatCurrency(Math.abs(amount))}
     </span>
@@ -183,9 +178,7 @@ function SectionHeader({
           <span className="font-medium text-slate-700 dark:text-slate-300">{title}</span>
         </div>
         <div className="flex shrink-0 items-center gap-3">
-          {total !== undefined && (
-            <AmountDisplay amount={total} isExpense={isExpense} />
-          )}
+          {total !== undefined && <AmountDisplay amount={total} isExpense={isExpense} />}
           {expanded ? (
             <ChevronUp className="h-4 w-4 text-slate-400" />
           ) : (
@@ -216,12 +209,7 @@ function LineItem({
   tooltipContent?: string;
 }) {
   return (
-    <div
-      className={cn(
-        'flex items-center justify-between gap-2 py-1.5 text-sm',
-        indent && 'pl-6',
-      )}
-    >
+    <div className={cn('flex items-center justify-between gap-2 py-1.5 text-sm', indent && 'pl-6')}>
       <div className="flex min-w-0 items-center gap-1">
         <span className="text-slate-600 dark:text-slate-400">{label}</span>
         {tooltipContent ? <StatementTooltipIcon content={tooltipContent} /> : null}
@@ -253,26 +241,164 @@ function TotalLineRow({
   );
 }
 
-export function StatementSummaryCard({ 
-  summary, 
+function TollStorySection({
+  summary,
+  linkedTagSpend,
+  onOpenTollRecon,
+  expanded,
+  onToggle,
+}: {
+  summary: StatementSummary;
+  linkedTagSpend?: number;
+  onOpenTollRecon?: () => void;
+  expanded: boolean;
+  onToggle: () => void;
+}) {
+  const story =
+    summary.tollStory ||
+    (summary.platform === 'Uber' && (summary.uberTollCredits ?? summary.platformTollCredits ?? 0) > 0.005
+      ? 'uber_csv_credits'
+      : (summary.statementTollExpense ?? summary.totalRefundsExpenses) > 0.005
+        ? 'trip_toll_expense'
+        : 'no_platform_tolls');
+
+  const credits =
+    summary.platform === 'Uber'
+      ? (summary.uberTollCredits ?? summary.platformTollCredits ?? summary.tollReimbursements ?? 0)
+      : (summary.platformTollCredits ?? summary.tollReimbursements ?? 0);
+  const expense = summary.statementTollExpense ?? summary.totalRefundsExpenses ?? 0;
+
+  if (story === 'no_platform_tolls') {
+    return (
+      <div className="px-4 py-3 space-y-2">
+        <div className="flex items-start gap-1">
+          <p className="text-sm text-slate-500 dark:text-slate-400 leading-snug">
+            No platform toll credits in earnings. Fleet toll P&amp;L is in Toll Recon.
+          </p>
+          <StatementTooltipIcon content={STATEMENT_HELP.noPlatformTolls} />
+        </div>
+        {onOpenTollRecon && (
+          <button
+            type="button"
+            onClick={onOpenTollRecon}
+            className="inline-flex items-center gap-1.5 text-xs font-medium text-indigo-600 hover:text-indigo-700 dark:text-indigo-400"
+          >
+            Open Toll Recon
+            <ExternalLink className="h-3 w-3" />
+          </button>
+        )}
+      </div>
+    );
+  }
+
+  if (story === 'uber_csv_credits' || (summary.platform === 'Uber' && credits > 0.005)) {
+    return (
+      <div>
+        <SectionHeader
+          title="Uber toll credits (from statement CSV)"
+          icon={Receipt}
+          expanded={expanded}
+          onToggle={onToggle}
+          total={credits}
+          tooltipContent={STATEMENT_HELP.uberTollCredits}
+        />
+        {expanded && (
+          <div className="px-4 pb-3 space-y-2">
+            <LineItem
+              label="Refunds:Toll credits"
+              amount={credits}
+              indent
+              tooltipContent={STATEMENT_HELP.uberTollCredits}
+            />
+            {linkedTagSpend != null && (
+              <p className="pl-6 text-xs text-slate-500 dark:text-slate-400 leading-snug">
+                Fleet tag spend on Uber-linked crossings this week:{' '}
+                <span className="font-medium tabular-nums text-slate-700 dark:text-slate-300">
+                  {formatCurrency(linkedTagSpend)}
+                </span>
+                <span className="ml-1 inline-flex align-middle">
+                  <StatementTooltipIcon content={STATEMENT_HELP.fleetTagSpendLinked} />
+                </span>
+              </p>
+            )}
+            {onOpenTollRecon && (
+              <button
+                type="button"
+                onClick={onOpenTollRecon}
+                className="ml-6 inline-flex items-center gap-1.5 text-xs font-medium text-indigo-600 hover:text-indigo-700 dark:text-indigo-400"
+              >
+                Open Toll Recon
+                <ExternalLink className="h-3 w-3" />
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // trip_toll_expense
+  return (
+    <div>
+      <SectionHeader
+        title="Statement toll expense"
+        icon={Receipt}
+        expanded={expanded}
+        onToggle={onToggle}
+        total={expense}
+        isExpense
+        tooltipContent={STATEMENT_HELP.tripTollExpense}
+      />
+      {expanded && (
+        <div className="px-4 pb-3">
+          <LineItem
+            label="Trip toll expense"
+            amount={expense}
+            isExpense
+            indent
+            tooltipContent={STATEMENT_HELP.statementTollExpense}
+          />
+          {onOpenTollRecon && (
+            <button
+              type="button"
+              onClick={onOpenTollRecon}
+              className="mt-2 ml-6 inline-flex items-center gap-1.5 text-xs font-medium text-indigo-600 hover:text-indigo-700 dark:text-indigo-400"
+            >
+              Open Toll Recon
+              <ExternalLink className="h-3 w-3" />
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function StatementSummaryCard({
+  summary,
   className,
   defaultExpanded = true,
   showUberDriverScopePayoutNote = false,
+  linkedTagSpend,
+  onOpenTollRecon,
 }: StatementSummaryCardProps) {
   const [earningsExpanded, setEarningsExpanded] = useState(defaultExpanded);
-  const [expensesExpanded, setExpensesExpanded] = useState(defaultExpanded);
+  const [tollExpanded, setTollExpanded] = useState(defaultExpanded);
   const [adjustmentsExpanded, setAdjustmentsExpanded] = useState(defaultExpanded);
   const [payoutExpanded, setPayoutExpanded] = useState(defaultExpanded);
 
   const config = PLATFORM_CONFIG[summary.platform];
   const Icon = config.icon;
+  const statementExpense = summary.statementTollExpense ?? summary.totalRefundsExpenses ?? 0;
+  const netPeriod = summary.totalEarnings - statementExpense + summary.periodAdjustments;
 
   return (
-    <div className={cn(
-      'bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden',
-      className
-    )}>
-      {/* Header */}
+    <div
+      className={cn(
+        'bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden',
+        className,
+      )}
+    >
       <div className={cn('px-4 py-3 border-b border-slate-200 dark:border-slate-700', config.bgColor)}>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -285,12 +411,14 @@ export function StatementSummaryCard({
             )}
           </div>
           <div className="flex items-center gap-2">
-            <span className={cn(
-              'text-xs px-2 py-0.5 rounded-full',
-              summary.sourceType === 'csv_import' 
-                ? 'bg-blue-100 text-blue-700' 
-                : 'bg-purple-100 text-purple-700'
-            )}>
+            <span
+              className={cn(
+                'text-xs px-2 py-0.5 rounded-full',
+                summary.sourceType === 'csv_import'
+                  ? 'bg-blue-100 text-blue-700'
+                  : 'bg-purple-100 text-purple-700',
+              )}
+            >
               {summary.sourceType === 'csv_import' ? (
                 <span className="flex items-center gap-1">
                   <FileSpreadsheet className="h-3 w-3" />
@@ -310,9 +438,7 @@ export function StatementSummaryCard({
         </p>
       </div>
 
-      {/* Content */}
       <div className="divide-y divide-slate-100 dark:divide-slate-800">
-        {/* Period Net Earnings */}
         <div>
           <SectionHeader
             title="Period Net Earnings"
@@ -324,24 +450,14 @@ export function StatementSummaryCard({
           />
           {earningsExpanded && (
             <div className="px-4 pb-3">
-              <LineItem
-                label="Net Fare"
-                amount={summary.netFare}
-                indent
-                tooltipContent={STATEMENT_HELP.netFare}
-              />
+              <LineItem label="Net Fare" amount={summary.netFare} indent tooltipContent={STATEMENT_HELP.netFare} />
               <LineItem
                 label="Promotions"
                 amount={summary.promotions}
                 indent
                 tooltipContent={STATEMENT_HELP.promotions}
               />
-              <LineItem
-                label="Tips"
-                amount={summary.tips}
-                indent
-                tooltipContent={STATEMENT_HELP.tips}
-              />
+              <LineItem label="Tips" amount={summary.tips} indent tooltipContent={STATEMENT_HELP.tips} />
               <div className="border-t border-slate-100 dark:border-slate-800 mt-2 pt-2">
                 <TotalLineRow
                   label="Total Earnings"
@@ -353,45 +469,14 @@ export function StatementSummaryCard({
           )}
         </div>
 
-        {/* Refunds & Expenses */}
-        <div>
-          <SectionHeader
-            title="Refunds & Expenses"
-            icon={TrendingDown}
-            expanded={expensesExpanded}
-            onToggle={() => setExpensesExpanded(!expensesExpanded)}
-            total={summary.totalRefundsExpenses}
-            isExpense
-            tooltipContent={STATEMENT_HELP.refundsExpenses}
-          />
-          {expensesExpanded && (
-            <div className="px-4 pb-3">
-              <LineItem
-                label="Tolls"
-                amount={summary.tolls}
-                isExpense
-                indent
-                tooltipContent={STATEMENT_HELP.tolls}
-              />
-              <LineItem
-                label="Toll Adjustments"
-                amount={summary.tollAdjustments}
-                indent
-                tooltipContent={STATEMENT_HELP.tollAdjustments}
-              />
-              <div className="border-t border-slate-100 dark:border-slate-800 mt-2 pt-2">
-                <TotalLineRow
-                  label="Total Refunds & Expenses"
-                  amount={summary.totalRefundsExpenses}
-                  isExpense
-                  tooltipContent={STATEMENT_HELP.totalRefundsExpenses}
-                />
-              </div>
-            </div>
-          )}
-        </div>
+        <TollStorySection
+          summary={summary}
+          linkedTagSpend={linkedTagSpend}
+          onOpenTollRecon={onOpenTollRecon}
+          expanded={tollExpanded}
+          onToggle={() => setTollExpanded(!tollExpanded)}
+        />
 
-        {/* Adjustments */}
         <div>
           <SectionHeader
             title="Adjustments"
@@ -413,7 +498,6 @@ export function StatementSummaryCard({
           )}
         </div>
 
-        {/* Payout */}
         <div>
           <SectionHeader
             title="Payout"
@@ -431,6 +515,25 @@ export function StatementSummaryCard({
                   the ledger does not split org payout by driver.
                 </p>
               )}
+              <div className="mb-2 flex items-center gap-2">
+                <span
+                  className={cn(
+                    'text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full font-medium',
+                    summary.payoutObserved
+                      ? 'bg-emerald-100 text-emerald-800'
+                      : 'bg-amber-100 text-amber-800',
+                  )}
+                >
+                  {summary.payoutObserved ? 'Observed payout' : 'Derived payout'}
+                </span>
+                <StatementTooltipIcon
+                  content={
+                    summary.platform === 'Uber'
+                      ? `${STATEMENT_HELP.payoutObserved} Uber payouts come from payments_driver / organization import.`
+                      : `${STATEMENT_HELP.payoutObserved} Roam derived plug is not a bank feed.`
+                  }
+                />
+              </div>
               <LineItem
                 label="Cash Collected"
                 amount={summary.cashCollected}
@@ -450,34 +553,38 @@ export function StatementSummaryCard({
                   tooltipContent={STATEMENT_HELP.totalPayout}
                 />
               </div>
+              {Math.abs(summary.payoutReconciliationGap ?? 0) >= 0.01 && (
+                <div className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-2 py-1.5 dark:border-amber-800 dark:bg-amber-950/40">
+                  <LineItem
+                    label="Payout vs earnings gap"
+                    amount={summary.payoutReconciliationGap}
+                    tooltipContent={STATEMENT_HELP.payoutReconciliation}
+                  />
+                </div>
+              )}
             </div>
           )}
         </div>
       </div>
 
-      {/* Footer - Grand Total */}
       <div className="px-4 py-3 bg-slate-50 dark:bg-slate-800/50 border-t border-slate-200 dark:border-slate-700">
         <div className="flex items-center justify-between gap-2">
           <div className="flex min-w-0 items-center gap-1">
-            <span className="font-semibold text-slate-700 dark:text-slate-300">
-              Net Period Earnings
-            </span>
+            <span className="font-semibold text-slate-700 dark:text-slate-300">Net Period Earnings</span>
             <StatementTooltipIcon content={STATEMENT_HELP.netPeriodEarnings} />
           </div>
           <span
             className={cn(
               'text-lg font-bold tabular-nums shrink-0',
-              summary.totalEarnings - summary.totalRefundsExpenses >= 0
-                ? 'text-emerald-600'
-                : 'text-red-600',
+              netPeriod >= 0 ? 'text-emerald-600' : 'text-red-600',
             )}
           >
-            {formatCurrency(
-              summary.totalEarnings - summary.totalRefundsExpenses + summary.periodAdjustments,
-            )}
+            {formatCurrency(netPeriod)}
           </span>
         </div>
       </div>
     </div>
   );
 }
+
+export type { FleetTollSnapshot };
