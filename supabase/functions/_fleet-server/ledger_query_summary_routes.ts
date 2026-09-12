@@ -6,6 +6,16 @@ import * as kv from "./kv_store.tsx";
 import { requireAuth } from "./rbac_middleware.ts";
 import { filterByOrg, getOrgId } from "./org_scope.ts";
 import { fromKvStore } from "./fleet_sql_bridge.ts";
+// Static: CLI packager drops dynamic ./fleet_toll_statement_snapshot imports.
+import { buildFleetTollSnapshotForRange } from "./fleet_toll_statement_snapshot.ts";
+import {
+  applyStatementTollEvent,
+  emptyStatementTollBuckets,
+  presentStatementToll,
+  deriveStatementBankPlug,
+  statementPayoutReconciliationGap,
+  STATEMENT_TOLL_RECON_EPS,
+} from "../../../packages/finance-core/src/statementTollNetting.ts";
 
 const PREFIX = "/make-server-37f42386";
 
@@ -305,185 +315,17 @@ export function registerLedgerQuerySummaryRoutes(app: Hono) {
         return c.json({ error: "startDate and endDate are required" }, 400);
       }
 
-      const driverIdVariants =
-        driverIdParam && String(driverIdParam).trim()
-          ? await expandStatementSummaryDriverIds(driverIdParam)
-          : [];
-
       const platforms =
-        platform === "all" || !platform ? ["Uber", "Roam", "InDrive"] : [platform];
+        platform === "all" || !platform
+          ? (["Uber", "Roam", "InDrive"] as const)
+          : ([platform] as ("Uber" | "Roam" | "InDrive")[]);
 
-      const {
-        listAllUnifiedCanonicalEvents,
-        filterCanonicalEventsByPlatform,
-        dedupeOrgBankCanonicalEvents,
-      } = await import("../_shared/unifiedLedger/queries.ts");
-      const {
-        applyStatementTollEvent,
-        emptyStatementTollBuckets,
-        presentStatementToll,
-        deriveStatementBankPlug,
-        statementPayoutReconciliationGap,
-        STATEMENT_TOLL_RECON_EPS,
-      } = await import("../../../packages/finance-core/src/statementTollNetting.ts");
-      const { buildFleetTollSnapshotForRange } = await import(
-        "./fleet_toll_statement_snapshot.ts"
-      );
-
-      const statementTypes = [
-        "fare_earning",
-        "tip",
-        "promotion",
-        "toll_charge",
-        "toll_reimbursement",
-        "toll_refund",
-        "toll_support_adjustment",
-        "toll_charge_offset",
-        "prior_period_adjustment",
-        "payout_cash",
-        "payout_bank",
-        "statement_line",
-      ];
-      const all = dedupeOrgBankCanonicalEvents(
-        await listAllUnifiedCanonicalEvents({
-          products: ["roam_driver", "roam_fleet"],
-          entryTypes: statementTypes,
-          maxRows: 100_000,
-        }),
-      );
-      const scoped = filterByOrg(all, c).filter((e) => {
-        if (driverIdVariants.length === 0) return true;
-        const did = String(e.driverId || "");
-        return driverIdVariants.some((v) => v === did || v.toLowerCase() === did.toLowerCase());
+      const summaries = await buildOrgStatementSummaries(c, {
+        startDate,
+        endDate,
+        platforms: [...platforms],
+        driverId: driverIdParam,
       });
-
-      const summaries: any[] = [];
-      for (const plat of platforms) {
-        const raw = filterCanonicalEventsByPlatform(scoped, plat);
-        const uberImportTypes = new Set(["promotion", "payout_cash", "payout_bank", "statement_line"]);
-        const entries = raw.filter((e: any) => {
-          const t = String(e.eventType || "");
-          const d = String(e.date || "").slice(0, 10);
-          const ps = String(e.periodStart || "").slice(0, 10);
-          const pe = String(e.periodEnd || "").slice(0, 10);
-          const inDate = !!(d && d >= startDate && d <= endDate);
-          if (plat === "Uber" && uberImportTypes.has(t)) {
-            const periodOverlap = !!(ps && pe && ps <= endDate && pe >= startDate);
-            return inDate || periodOverlap;
-          }
-          return inDate;
-        });
-
-        let netFare = 0,
-          promotions = 0,
-          tips = 0;
-        let tollBuckets = emptyStatementTollBuckets();
-        let periodAdjustments = 0;
-        let cashCollected = 0,
-          bankTransfer = 0;
-        let tripCount = 0;
-        let hasPayoutEvents = false;
-
-        // Pass 1: record toll_reimbursement first so support_adjustment dedupe works
-        for (const e of entries) {
-          if (String(e.eventType || "") !== "toll_reimbursement") continue;
-          const next = applyStatementTollEvent(tollBuckets, e, plat);
-          if (next) tollBuckets = next;
-        }
-
-        for (const e of entries) {
-          const net = Number(e.netAmount) || 0;
-          const mag = Math.abs(net);
-          const et = String(e.eventType || "");
-          if (et === "toll_reimbursement") continue; // already folded
-
-          const tollNext = applyStatementTollEvent(tollBuckets, e, plat);
-          if (tollNext) {
-            tollBuckets = tollNext;
-            continue;
-          }
-
-          switch (et) {
-            case "fare_earning":
-              netFare += net;
-              tripCount++;
-              if (e.paymentMethod === "Cash") {
-                const cashAmt =
-                  e.metadata?.cashCollected != null ? Number(e.metadata.cashCollected) : mag;
-                cashCollected += cashAmt;
-              }
-              break;
-            case "tip":
-              tips += net;
-              break;
-            case "promotion":
-              promotions += net;
-              break;
-            case "prior_period_adjustment":
-              periodAdjustments += net;
-              break;
-            case "payout_cash":
-              cashCollected = mag;
-              hasPayoutEvents = true;
-              break;
-            case "payout_bank":
-              bankTransfer = mag;
-              hasPayoutEvents = true;
-              break;
-          }
-        }
-
-        const tollPres = presentStatementToll(tollBuckets, plat);
-        const computedNetFare = plat === "Uber" ? netFare - promotions : netFare;
-        const totalEarnings = computedNetFare + promotions + tips;
-        // Credits are memo lines — bank plug only subtracts real statementTollExpense
-        if (!hasPayoutEvents) {
-          bankTransfer = deriveStatementBankPlug(
-            totalEarnings,
-            tollPres.statementTollExpense,
-            cashCollected,
-          );
-        }
-
-        const totalPayout = cashCollected + bankTransfer;
-        const payoutGap = statementPayoutReconciliationGap({
-          totalEarnings,
-          statementTollExpense: tollPres.statementTollExpense,
-          periodAdjustments,
-          totalPayout,
-        });
-
-        summaries.push({
-          platform: plat,
-          periodStart: startDate,
-          periodEnd: endDate,
-          sourceType: "computed",
-          netFare: Number(computedNetFare.toFixed(2)),
-          promotions: Number(promotions.toFixed(2)),
-          tips: Number(tips.toFixed(2)),
-          totalEarnings: Number(totalEarnings.toFixed(2)),
-          // Honest toll story (Uber CSV credits ≠ charges)
-          tollStory: tollPres.tollStory,
-          uberTollCredits: tollPres.uberTollCredits,
-          platformTollCredits: tollPres.platformTollCredits,
-          statementTollExpense: tollPres.statementTollExpense,
-          // Legacy aliases (expense = statementTollExpense; credits not framed as charges)
-          tolls: tollPres.statementTollExpense,
-          tollCharges: tollPres.tollCharges,
-          tollRefunds: tollPres.tollRefunds,
-          tollReimbursements: tollPres.tollReimbursements,
-          tollAdjustments: tollPres.tollAdjustments,
-          totalRefundsExpenses: tollPres.statementTollExpense,
-          periodAdjustments: Number(periodAdjustments.toFixed(2)),
-          cashCollected: Number(cashCollected.toFixed(2)),
-          bankTransfer: Number(bankTransfer.toFixed(2)),
-          totalPayout: Number(totalPayout.toFixed(2)),
-          payoutObserved: hasPayoutEvents,
-          payoutReconciliationGap:
-            Math.abs(payoutGap) >= STATEMENT_TOLL_RECON_EPS ? payoutGap : 0,
-          tripCount,
-        });
-      }
 
       const fleetTollSnapshot = await buildFleetTollSnapshotForRange(c, {
         startDate,
@@ -506,4 +348,188 @@ export function registerLedgerQuerySummaryRoutes(app: Hono) {
       return c.json({ error: "Statement summary failed: " + (e.message || e) }, 500);
     }
   });
+}
+
+/** Shared statement builder — Earnings + Wallet Balance SSOT. */
+export async function buildOrgStatementSummaries(
+  c: { get?: (k: string) => unknown },
+  opts: {
+    startDate: string;
+    endDate: string;
+    platforms?: string[];
+    driverId?: string | null;
+  },
+): Promise<any[]> {
+  const startDate = opts.startDate;
+  const endDate = opts.endDate;
+  const driverIdParam = opts.driverId;
+
+  const driverIdVariants =
+    driverIdParam && String(driverIdParam).trim()
+      ? await expandStatementSummaryDriverIds(driverIdParam)
+      : [];
+
+  const platforms =
+    opts.platforms && opts.platforms.length > 0
+      ? opts.platforms
+      : ["Uber", "Roam", "InDrive"];
+
+  const {
+    listAllUnifiedCanonicalEvents,
+    filterCanonicalEventsByPlatform,
+    dedupeOrgBankCanonicalEvents,
+  } = await import("../_shared/unifiedLedger/queries.ts");
+
+  const statementTypes = [
+    "fare_earning",
+    "tip",
+    "promotion",
+    "toll_charge",
+    "toll_reimbursement",
+    "toll_refund",
+    "toll_support_adjustment",
+    "toll_charge_offset",
+    "prior_period_adjustment",
+    "payout_cash",
+    "payout_bank",
+    "statement_line",
+  ];
+  const all = dedupeOrgBankCanonicalEvents(
+    await listAllUnifiedCanonicalEvents({
+      products: ["roam_driver", "roam_fleet"],
+      entryTypes: statementTypes,
+      maxRows: 100_000,
+    }),
+  );
+  const scoped = filterByOrg(all, c as any).filter((e) => {
+    if (driverIdVariants.length === 0) return true;
+    const did = String(e.driverId || "");
+    return driverIdVariants.some((v) => v === did || v.toLowerCase() === did.toLowerCase());
+  });
+
+  const summaries: any[] = [];
+  for (const plat of platforms) {
+    const raw = filterCanonicalEventsByPlatform(scoped, plat);
+    const uberImportTypes = new Set(["promotion", "payout_cash", "payout_bank", "statement_line"]);
+    const entries = raw.filter((e: any) => {
+      const t = String(e.eventType || "");
+      const d = String(e.date || "").slice(0, 10);
+      const ps = String(e.periodStart || "").slice(0, 10);
+      const pe = String(e.periodEnd || "").slice(0, 10);
+      const inDate = !!(d && d >= startDate && d <= endDate);
+      if (plat === "Uber" && uberImportTypes.has(t)) {
+        const periodOverlap = !!(ps && pe && ps <= endDate && pe >= startDate);
+        return inDate || periodOverlap;
+      }
+      return inDate;
+    });
+
+    let netFare = 0,
+      promotions = 0,
+      tips = 0;
+    let tollBuckets = emptyStatementTollBuckets();
+    let periodAdjustments = 0;
+    let cashCollected = 0,
+      bankTransfer = 0;
+    let tripCount = 0;
+    let hasPayoutEvents = false;
+
+    for (const e of entries) {
+      if (String(e.eventType || "") !== "toll_reimbursement") continue;
+      const next = applyStatementTollEvent(tollBuckets, e, plat);
+      if (next) tollBuckets = next;
+    }
+
+    for (const e of entries) {
+      const net = Number(e.netAmount) || 0;
+      const mag = Math.abs(net);
+      const et = String(e.eventType || "");
+      if (et === "toll_reimbursement") continue;
+
+      const tollNext = applyStatementTollEvent(tollBuckets, e, plat);
+      if (tollNext) {
+        tollBuckets = tollNext;
+        continue;
+      }
+
+      switch (et) {
+        case "fare_earning":
+          netFare += net;
+          tripCount++;
+          if (e.paymentMethod === "Cash") {
+            const cashAmt =
+              e.metadata?.cashCollected != null ? Number(e.metadata.cashCollected) : mag;
+            cashCollected += cashAmt;
+          }
+          break;
+        case "tip":
+          tips += net;
+          break;
+        case "promotion":
+          promotions += net;
+          break;
+        case "prior_period_adjustment":
+          periodAdjustments += net;
+          break;
+        case "payout_cash":
+          cashCollected = mag;
+          hasPayoutEvents = true;
+          break;
+        case "payout_bank":
+          bankTransfer = mag;
+          hasPayoutEvents = true;
+          break;
+      }
+    }
+
+    const tollPres = presentStatementToll(tollBuckets, plat);
+    const computedNetFare = plat === "Uber" ? netFare - promotions : netFare;
+    const totalEarnings = computedNetFare + promotions + tips;
+    if (!hasPayoutEvents) {
+      bankTransfer = deriveStatementBankPlug(
+        totalEarnings,
+        tollPres.statementTollExpense,
+        cashCollected,
+      );
+    }
+
+    const totalPayout = cashCollected + bankTransfer;
+    const payoutGap = statementPayoutReconciliationGap({
+      totalEarnings,
+      statementTollExpense: tollPres.statementTollExpense,
+      periodAdjustments,
+      totalPayout,
+    });
+
+    summaries.push({
+      platform: plat,
+      periodStart: startDate,
+      periodEnd: endDate,
+      sourceType: "computed",
+      netFare: Number(computedNetFare.toFixed(2)),
+      promotions: Number(promotions.toFixed(2)),
+      tips: Number(tips.toFixed(2)),
+      totalEarnings: Number(totalEarnings.toFixed(2)),
+      tollStory: tollPres.tollStory,
+      uberTollCredits: tollPres.uberTollCredits,
+      platformTollCredits: tollPres.platformTollCredits,
+      statementTollExpense: tollPres.statementTollExpense,
+      tolls: tollPres.statementTollExpense,
+      tollCharges: tollPres.tollCharges,
+      tollRefunds: tollPres.tollRefunds,
+      tollReimbursements: tollPres.tollReimbursements,
+      tollAdjustments: tollPres.tollAdjustments,
+      totalRefundsExpenses: tollPres.statementTollExpense,
+      periodAdjustments: Number(periodAdjustments.toFixed(2)),
+      cashCollected: Number(cashCollected.toFixed(2)),
+      bankTransfer: Number(bankTransfer.toFixed(2)),
+      totalPayout: Number(totalPayout.toFixed(2)),
+      payoutObserved: hasPayoutEvents,
+      payoutReconciliationGap:
+        Math.abs(payoutGap) >= STATEMENT_TOLL_RECON_EPS ? payoutGap : 0,
+      tripCount,
+    });
+  }
+
+  return summaries;
 }

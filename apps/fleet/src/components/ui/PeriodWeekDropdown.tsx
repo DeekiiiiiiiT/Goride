@@ -1,4 +1,5 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { format } from 'date-fns';
 import { Calendar as CalendarIcon, ChevronDown, ChevronLeft } from 'lucide-react';
 import type { DateRange } from 'react-day-picker';
@@ -45,6 +46,8 @@ export interface PeriodWeekDropdownProps {
   prependAllTimeOption?: boolean;
   /** Appends “Custom range…” with a calendar for any start/end (beyond rolling week presets). */
   allowCustomRange?: boolean;
+  /** Align the floating menu to the trigger’s start (left) or end (right). */
+  menuAlign?: 'start' | 'end';
   className?: string;
   buttonClassName?: string;
   placeholder?: string;
@@ -65,15 +68,49 @@ export function PeriodWeekDropdown({
   prependEntireOption = false,
   prependAllTimeOption = false,
   allowCustomRange = false,
+  menuAlign = 'start',
   className,
   buttonClassName,
   placeholder = 'Select week period',
   disabled = false,
   title,
 }: PeriodWeekDropdownProps) {
+  const triggerRef = useRef<HTMLButtonElement>(null);
   const [open, setOpen] = useState(false);
   const [panel, setPanel] = useState<'weeks' | 'custom'>('weeks');
   const [draftRange, setDraftRange] = useState<DateRange | undefined>();
+  const [menuStyle, setMenuStyle] = useState<React.CSSProperties>({});
+
+  // Portal + fixed coords so the menu isn’t clipped by AppLayout overflow-auto / right edge.
+  useLayoutEffect(() => {
+    if (!open) return;
+    const place = () => {
+      const el = triggerRef.current;
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      const gap = 4;
+      const next: React.CSSProperties = {
+        position: 'fixed',
+        top: r.bottom + gap,
+        zIndex: 200,
+      };
+      if (menuAlign === 'end') {
+        next.right = Math.max(8, window.innerWidth - r.right);
+        next.left = 'auto';
+      } else {
+        next.left = Math.min(r.left, window.innerWidth - 296);
+        next.right = 'auto';
+      }
+      setMenuStyle(next);
+    };
+    place();
+    window.addEventListener('resize', place);
+    window.addEventListener('scroll', place, true);
+    return () => {
+      window.removeEventListener('resize', place);
+      window.removeEventListener('scroll', place, true);
+    };
+  }, [open, menuAlign, panel]);
 
   const options = useMemo(() => {
     let base = optionsOverride ?? generatePeriodWeekOptions(weekCount, timezone);
@@ -149,6 +186,7 @@ export function PeriodWeekDropdown({
   return (
     <div className={cn('relative', className)}>
       <button
+        ref={triggerRef}
         type="button"
         title={title}
         disabled={disabled}
@@ -176,117 +214,121 @@ export function PeriodWeekDropdown({
         <ChevronDown className={cn('h-3.5 w-3.5 shrink-0 opacity-60 transition-transform', open && 'rotate-180')} />
       </button>
 
-      {open && !disabled && (
-        <>
-          <div className="fixed inset-0 z-40" aria-hidden onClick={close} />
-          <div
-            className={cn(
-              'absolute left-0 top-full z-50 mt-1 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg dark:border-slate-700 dark:bg-slate-800',
-              panel === 'custom' ? 'w-auto' : 'w-72 max-h-80',
-            )}
-            role="listbox"
-          >
-            {panel === 'weeks' ? (
-              <>
-                <div className="border-b border-slate-100 px-3 py-2 dark:border-slate-700">
-                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                    Week periods
-                  </p>
-                </div>
-                <div className="max-h-60 overflow-y-auto py-1">
-                  {options.map((period) => {
-                    const isSel = matched?.id === period.id;
-                    return (
+      {open &&
+        !disabled &&
+        createPortal(
+          <>
+            <div className="fixed inset-0 z-[199]" aria-hidden onClick={close} />
+            <div
+              className={cn(
+                'overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg dark:border-slate-700 dark:bg-slate-800',
+                panel === 'custom' ? 'w-auto' : 'w-72 max-h-80',
+              )}
+              style={menuStyle}
+              role="listbox"
+            >
+              {panel === 'weeks' ? (
+                <>
+                  <div className="border-b border-slate-100 px-3 py-2 dark:border-slate-700">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                      Week periods
+                    </p>
+                  </div>
+                  <div className="max-h-60 overflow-y-auto py-1">
+                    {options.map((period) => {
+                      const isSel = matched?.id === period.id;
+                      return (
+                        <button
+                          key={period.id}
+                          type="button"
+                          role="option"
+                          aria-selected={isSel}
+                          onClick={() => {
+                            onSelect(period);
+                            close();
+                          }}
+                          className={cn(
+                            'flex w-full items-center gap-2.5 px-3 py-2 text-left text-xs transition-colors',
+                            isSel
+                              ? 'bg-indigo-50 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-200'
+                              : 'text-slate-700 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-700/50',
+                          )}
+                        >
+                          <span
+                            className={cn(
+                              'h-2 w-2 shrink-0 rounded-full',
+                              isSel ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-600',
+                            )}
+                          />
+                          <span className="font-medium">{period.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {allowCustomRange && (
+                    <div className="border-t border-slate-100 dark:border-slate-700">
                       <button
-                        key={period.id}
                         type="button"
                         role="option"
-                        aria-selected={isSel}
-                        onClick={() => {
-                          onSelect(period);
-                          close();
-                        }}
+                        aria-selected={isCustomSelected}
+                        onClick={openCustomPanel}
                         className={cn(
-                          'flex w-full items-center gap-2.5 px-3 py-2 text-left text-xs transition-colors',
-                          isSel
+                          'flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-xs font-semibold transition-colors',
+                          isCustomSelected
                             ? 'bg-indigo-50 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-200'
-                            : 'text-slate-700 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-700/50',
+                            : 'text-indigo-700 hover:bg-indigo-50 dark:text-indigo-300 dark:hover:bg-indigo-900/20',
                         )}
                       >
-                        <span
-                          className={cn(
-                            'h-2 w-2 shrink-0 rounded-full',
-                            isSel ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-600',
-                          )}
-                        />
-                        <span className="font-medium">{period.label}</span>
+                        <CalendarIcon className="h-3.5 w-3.5 shrink-0" />
+                        <span className="min-w-0 flex-1 truncate">
+                          {isCustomSelected && selectedStart && selectedEnd
+                            ? `Custom: ${fmtYmd(selectedStart, 'MMM d')} – ${fmtYmd(selectedEnd, 'MMM d, yyyy')}`
+                            : 'Custom range…'}
+                        </span>
                       </button>
-                    );
-                  })}
-                </div>
-                {allowCustomRange && (
-                  <div className="border-t border-slate-100 dark:border-slate-700">
-                    <button
-                      type="button"
-                      role="option"
-                      aria-selected={isCustomSelected}
-                      onClick={openCustomPanel}
-                      className={cn(
-                        'flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-xs font-semibold transition-colors',
-                        isCustomSelected
-                          ? 'bg-indigo-50 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-200'
-                          : 'text-indigo-700 hover:bg-indigo-50 dark:text-indigo-300 dark:hover:bg-indigo-900/20',
-                      )}
-                    >
-                      <CalendarIcon className="h-3.5 w-3.5 shrink-0" />
-                      <span className="min-w-0 flex-1 truncate">
-                        {isCustomSelected && selectedStart && selectedEnd
-                          ? `Custom: ${fmtYmd(selectedStart, 'MMM d')} – ${fmtYmd(selectedEnd, 'MMM d, yyyy')}`
-                          : 'Custom range…'}
-                      </span>
-                    </button>
-                  </div>
-                )}
-              </>
-            ) : (
-              <div className="p-3 space-y-3 min-w-[280px]">
-                <button
-                  type="button"
-                  onClick={goToWeeks}
-                  className="flex w-full items-center gap-1.5 rounded-md border border-slate-200 bg-slate-50 px-2.5 py-2 text-left text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-100 dark:border-slate-600 dark:bg-slate-700/40 dark:text-slate-200 dark:hover:bg-slate-700"
-                >
-                  <ChevronLeft className="h-3.5 w-3.5 shrink-0" />
-                  Back to week periods
-                </button>
-                <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                  Pick a custom date range
-                </p>
-                <Calendar
-                  mode="range"
-                  numberOfMonths={1}
-                  defaultMonth={draftRange?.from ?? ymdToDate(selectedStart) ?? new Date()}
-                  selected={draftRange}
-                  onSelect={setDraftRange}
-                  initialFocus
-                />
-                <div className="flex items-center gap-2 pt-1">
-                  <Button
-                    size="sm"
-                    className="flex-1 h-8 text-xs bg-indigo-600 hover:bg-indigo-700 text-white"
-                    disabled={!draftRange?.from}
-                    onClick={applyCustomRange}
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="p-3 space-y-3 min-w-[280px]">
+                  <button
+                    type="button"
+                    onClick={goToWeeks}
+                    className="flex w-full items-center gap-1.5 rounded-md border border-slate-200 bg-slate-50 px-2.5 py-2 text-left text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-100 dark:border-slate-600 dark:bg-slate-700/40 dark:text-slate-200 dark:hover:bg-slate-700"
                   >
-                    Apply range
-                  </Button>
-                  <Button size="sm" variant="outline" className="h-8 text-xs" onClick={close}>
-                    Close
-                  </Button>
+                    <ChevronLeft className="h-3.5 w-3.5 shrink-0" />
+                    Back to week periods
+                  </button>
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                    Pick a custom date range
+                  </p>
+                  <Calendar
+                    mode="range"
+                    numberOfMonths={1}
+                    defaultMonth={draftRange?.from ?? ymdToDate(selectedStart) ?? new Date()}
+                    selected={draftRange}
+                    onSelect={setDraftRange}
+                    initialFocus
+                  />
+                  <div className="flex items-center gap-2 pt-1">
+                    <Button
+                      size="sm"
+                      className="flex-1 h-8 text-xs bg-indigo-600 hover:bg-indigo-700 text-white"
+                      disabled={!draftRange?.from}
+                      onClick={applyCustomRange}
+                    >
+                      Apply range
+                    </Button>
+                    <Button size="sm" variant="outline" className="h-8 text-xs" onClick={close}>
+                      Close
+                    </Button>
+                  </div>
                 </div>
-              </div>
-            )}
-          </div>
-        </>
-      )}
+              )}
+            </div>
+          </>,
+          document.body,
+        )}
     </div>
   );
 }

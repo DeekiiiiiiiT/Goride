@@ -15,6 +15,13 @@ export const FLEET_PAGE_REGISTRY: Record<string, FleetPageDef> = {
   vehicles: { id: 'vehicles', path: '/vehicles', permission: 'nav.vehicles' },
   trips: { id: 'trips', path: '/trips', permission: 'nav.trips' },
   reports: { id: 'reports', path: '/reports', permission: 'nav.reports' },
+  earnings: { id: 'earnings', path: '/earnings', permission: 'nav.tier_config' },
+  'earnings-policy': {
+    id: 'earnings-policy',
+    path: '/earnings-policy',
+    permission: 'nav.tier_config',
+  },
+  wallet: { id: 'wallet', path: '/wallet', permission: 'nav.tier_config' },
   settings: { id: 'settings', path: '/settings', permission: 'nav.settings' },
   couriers: { id: 'couriers', path: '/couriers', permission: 'nav.couriers' },
   'courier-analytics': { id: 'courier-analytics', path: '/courier-analytics', permission: 'nav.courier_analytics' },

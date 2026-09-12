@@ -550,6 +550,8 @@ export const PAGE_PERMISSION_MAP: Record<string, Permission> = {
   'drivers':            'nav.drivers',
   'driver-analytics':   'nav.drivers',
   'earnings-policy':    'nav.tier_config',
+  'earnings':           'nav.tier_config',
+  'wallet':             'nav.tier_config',
   'performance':        'nav.performance',
   'tier-config':        'nav.tier_config',
   'tier-config-legacy': 'nav.tier_config',

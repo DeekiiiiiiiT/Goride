@@ -20,7 +20,12 @@ import "../_fleet-server/fleet_sql_bridge.ts";
 import "../_fleet-server/fleet_select.ts";
 import "../_fleet-server/supabase_platform_usage.ts";
 import "../_fleet-server/api_command_center.tsx";
+// Statement Summary toll P&L snapshot — dynamic import alone is dropped by CLI packager.
+import "../_fleet-server/fleet_toll_statement_snapshot.ts";
+// Money → Wallet snapshot (cash held + debt + platform Balance).
+import "../_fleet-server/ledger_wallet_routes.ts";
 // Deno cannot resolve bare @roam/* — pin finance-core via packages path (not apps/fleet re-export).
 import "../../../packages/finance-core/src/businessTransactionAccounting.ts";
 import "../../../packages/finance-core/src/fixedExpenseOccurrences.ts";
+import "../../../packages/finance-core/src/statementTollNetting.ts";
 import "../_fleet-server/index.tsx";

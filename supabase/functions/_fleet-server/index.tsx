@@ -246,6 +246,7 @@ import { registerLedgerDriverOverviewRoutes } from "./ledger_driver_overview_rou
 import { registerLedgerDiagnosticRoutes } from "./ledger_diagnostic_routes.ts";
 import { registerLedgerDriverEarningsHistoryRoutes } from "./ledger_driver_earnings_history_routes.ts";
 import { registerLedgerIndriveWalletRoutes } from "./ledger_indrive_wallet_routes.ts";
+import { registerLedgerWalletRoutes } from "./ledger_wallet_routes.ts";
 import { registerLedgerDriversFleetSummaryRoutes } from "./ledger_drivers_fleet_summary_routes.ts";
 import {
   registerLedgerQuerySummaryRoutes,
@@ -504,6 +505,7 @@ registerLedgerDriverEarningsHistoryRoutes(app);
 registerLedgerIndriveWalletRoutes(app);
 registerLedgerDriversFleetSummaryRoutes(app);
 registerLedgerQuerySummaryRoutes(app);
+registerLedgerWalletRoutes(app);
 registerLedgerEntriesRoutes(app);
 
 // ─── Toll Ledger Primary Write Helper (Phase 6) ──────────────────────────
@@ -4395,6 +4397,7 @@ app.post(
 
 
 // GET /ledger/driver-indrive-wallet + /ledger/indrive-wallet/fleet registered via registerLedgerIndriveWalletRoutes(app)
+// GET /ledger/wallet-snapshot registered via registerLedgerWalletRoutes(app)
 
 // ─── POST /ledger — RETIRED: Use POST /ledger/canonical-events/append instead ───────────────────
 app.post("/make-server-37f42386/ledger", requireAuth(), async (c) => {

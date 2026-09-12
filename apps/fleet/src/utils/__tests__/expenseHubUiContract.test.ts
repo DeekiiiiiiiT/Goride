@@ -38,14 +38,15 @@ describe('Expense Hub accessibility & UI contract', () => {
   });
 
   it('exposes Expense Hub (with Recurring expenses) in Business Finance nav', () => {
-    const sidebar = readFileSync(resolve(ROOT, 'components/layout/AppSidebar.tsx'), 'utf8');
+    const navModel = readFileSync(resolve(ROOT, 'components/layout/fleetNavModel.ts'), 'utf8');
     const app = readFileSync(resolve(ROOT, 'App.tsx'), 'utf8');
     const shell = readFileSync(
       resolve(ROOT, 'components/business-finance/expense-hub/ExpenseHubShell.tsx'),
       'utf8',
     );
-    expect(sidebar).toContain("{ id: 'expense-hub', label: 'Expense Hub' }");
-    expect(sidebar).not.toContain("id: 'expense-accounting'");
+    expect(navModel).toContain("id: 'expense-hub'");
+    expect(navModel).toContain("label: 'Expense Hub'");
+    expect(navModel).not.toContain("id: 'expense-accounting'");
     expect(app).toContain("currentPage === 'expense-hub'");
     expect(app).toContain('<ExpenseHubPage');
     expect(shell).toContain("id: 'recurring'");

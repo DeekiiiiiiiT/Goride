@@ -1,11 +1,5 @@
 import { useEffect, useState } from 'react';
 import {
-  canSeeCourierOps as computeCanSeeCourierOps,
-  canSeeEarningsPolicy as computeCanSeeEarningsPolicy,
-  hasSharedOps as computeHasSharedOps,
-  rushModuleNavEnabled,
-} from './sidebarGating';
-import {
   Sidebar,
   SidebarContent,
   SidebarFooter,
@@ -15,7 +9,6 @@ import {
   useSidebar,
 } from '../ui/sidebar';
 import { Button } from '../ui/button';
-import { Badge } from '../ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
 import { Separator } from '../ui/separator';
 import {
@@ -34,43 +27,24 @@ import {
   CarFront,
   FolderKanban,
   Package,
+  Wallet,
 } from 'lucide-react';
-import { useVocab } from '../../utils/vocabulary';
-import { isSidebarItemVisible } from '../../utils/businessTypes';
-import { usePermissions } from '../../hooks/usePermissions';
-import { useFeatureFlags } from '../auth/FeatureFlagContext';
-import { useServiceLineScope } from '../../contexts/ServiceLineScopeContext';
 import { NavItem } from './nav/NavItem';
 import { NavSection } from './nav/NavSection';
 import { NavFlyout } from './nav/NavFlyout';
-import type { NavLeaf } from './nav/types';
+import { fleetOpsActive } from './fleetNavModel';
+import { useFleetNavModel, withNavBadge } from './useFleetNavModel';
 
 type SectionId = 'fleet-ops';
-type FlyoutId = 'fuel' | 'toll' | 'driver-ops' | 'vehicle-ops' | 'business-finance' | 'courier-ops';
-
-const FUEL_PAGE_IDS = [
-  'fuel-management',
-  'fuel-overview', // legacy → redirects to fuel-analytics
-  'fuel-analytics',
-  'fuel-reconciliation',
-  'fuel-cards',
-  'fuel-logs',
-  'fuel-configuration',
-  'fuel-reimbursements',
-];
-const TOLL_PAGE_IDS = [
-  'toll-logs',
-  'toll-tags',
-  'tag-inventory',
-  'toll-analytics',
-  'toll-rate-drift',
-  'toll-low-balance',
-];
-
-
-function fleetOpsActive(page: string) {
-  return [...FUEL_PAGE_IDS, ...TOLL_PAGE_IDS].includes(page);
-}
+type FlyoutId =
+  | 'fuel'
+  | 'toll'
+  | 'driver-ops'
+  | 'vehicle-ops'
+  | 'business-finance'
+  | 'courier-ops'
+  | 'analytics'
+  | 'money';
 
 type AppSidebarProps = {
   currentPage?: string;
@@ -83,79 +57,12 @@ export function AppSidebar({
   onNavigate,
   onLogout,
 }: AppSidebarProps) {
-  const { v, businessType } = useVocab();
-  const { canView, can } = usePermissions();
-  const { isModuleEnabled } = useFeatureFlags();
-  const { serviceLines, rushVisible, rideshareVisible } = useServiceLineScope();
+  const nav = useFleetNavModel();
   const { isMobile, setOpenMobile } = useSidebar();
 
-  const hasRushDeliveryLine = serviceLines.includes('rush_delivery');
-
-  const canSeeFuelDesk =
-    isModuleEnabled('fuelManagement') &&
-    (canView('fuel-analytics') ||
-      canView('fuel-overview') ||
-      canView('fuel-reimbursements') ||
-      canView('fuel-reconciliation') ||
-      canView('fuel-cards') ||
-      canView('fuel-logs') ||
-      canView('fuel-configuration'));
-  const canSeeTollDesk =
-    isModuleEnabled('tollManagement') &&
-    isSidebarItemVisible('toll-management', businessType) &&
-    (canView('toll-logs') ||
-      canView('toll-tags') ||
-      canView('tag-inventory') ||
-      canView('toll-analytics') ||
-      canView('toll-rate-drift') ||
-      canView('toll-low-balance'));
-  const canSeeBusinessFinanceHome =
-    isModuleEnabled('businessFinance') && canView('business-finance');
-  const canSeeBusinessFinanceNav =
-    canSeeBusinessFinanceHome ||
-    canView('fleet-financials') ||
-    canView('driver-settlements') ||
-    canView('driver-payouts') ||
-    canView('indrive-wallet') ||
-    canView('transaction-list') ||
-    canView('fuel-reconciliation') ||
-    canView('toll-tags');
-  const canSeeWeekReconciliation =
-    canView('fuel-reconciliation') || canView('toll-tags');
-  const hasSharedOps = computeHasSharedOps({ rushVisible, rideshareVisible });
-  const canSeeFleetOps = hasSharedOps && (canSeeFuelDesk || canSeeTollDesk);
-  const canSeeDriverOps =
-    rideshareVisible &&
-    (canView('drivers') || canView('driver-analytics'));
-  const canSeeEarningsPolicyNav = computeCanSeeEarningsPolicy({
-    hasSharedOps,
-    sidebarVisible: isSidebarItemVisible('earnings-policy', businessType),
-    canView: canView('earnings-policy'),
-  });
-  const canSeeVehicleOps =
-    hasSharedOps &&
-    (canView('vehicles') ||
-      canView('vehicle-analytics') ||
-      canView('maintenance-hub') ||
-      canView('fleet'));
-  const canSeeCourierOps = computeCanSeeCourierOps({
-    hasRushDeliveryLine,
-    rushModuleEnabled: rushModuleNavEnabled(isModuleEnabled),
-    canViewAnyCourierPage:
-      canView('couriers') ||
-      canView('courier-analytics') ||
-      canView('deliveries') ||
-      canView('delivery-analytics') ||
-      canView('courier-settlements') ||
-      canView('supply-health'),
-  });
-  const canSeeSystem = canView('user-management') || canView('settings');
-
-  // Accordion only for Fleet Ops (has mid-level Fuel/Toll desks)
   const [openSection, setOpenSection] = useState<SectionId | null>(() =>
     fleetOpsActive(currentPage) ? 'fleet-ops' : null,
   );
-  // Single-open horizontal fly-out across the whole nav
   const [openFlyout, setOpenFlyout] = useState<FlyoutId | null>(null);
 
   useEffect(() => {
@@ -173,8 +80,15 @@ export function AppSidebar({
 
   const handleFlyoutChange = (id: FlyoutId, nextOpen: boolean) => {
     setOpenFlyout(nextOpen ? id : null);
-    // Opening a top-level fly-out collapses Fleet Ops accordion
-    if (nextOpen && (id === 'driver-ops' || id === 'vehicle-ops' || id === 'business-finance' || id === 'courier-ops')) {
+    if (
+      nextOpen &&
+      (id === 'driver-ops' ||
+        id === 'vehicle-ops' ||
+        id === 'business-finance' ||
+        id === 'courier-ops' ||
+        id === 'analytics' ||
+        id === 'money')
+    ) {
       setOpenSection(null);
     }
   };
@@ -185,134 +99,15 @@ export function AppSidebar({
     if (isMobile) setOpenMobile(false);
   };
 
-  const fuelItems: NavLeaf[] = [
-    (canView('fuel-analytics') || canView('fuel-overview')) && {
-      id: 'fuel-analytics',
-      label: 'Fuel Analytics',
-      activeIds: ['fuel-management', 'fuel-overview'],
-      badge: (
-        <Badge className="h-4 border-none bg-indigo-500 px-1 text-[8px] text-white">
-          New
-        </Badge>
-      ),
-    },
-    canView('fuel-reimbursements') && {
-      id: 'fuel-reimbursements',
-      label: 'Review Queue',
-    },
-    canView('fuel-cards') && { id: 'fuel-cards', label: 'Fuel Cards' },
-    canView('fuel-logs') && { id: 'fuel-logs', label: 'Transaction Logs' },
-    canView('fuel-configuration') && {
-      id: 'fuel-configuration',
-      label: 'Configuration',
-    },
-  ].filter(Boolean) as NavLeaf[];
-
-  const tollItems: NavLeaf[] = [
-    canView('toll-logs') && { id: 'toll-logs', label: 'Toll Logs' },
-    canView('tag-inventory') && { id: 'tag-inventory', label: 'Tag Inventory' },
-    canView('toll-low-balance') && { id: 'toll-low-balance', label: 'Low Balance Queue' },
-    canView('toll-rate-drift') && { id: 'toll-rate-drift', label: 'Rate Drift' },
-    canView('toll-analytics') && {
-      id: 'toll-analytics',
-      label: 'Toll Analytics',
-      badge: (
-        <Badge className="h-4 border-none bg-indigo-500 px-1 text-[8px] text-white">
-          New
-        </Badge>
-      ),
-    },
-  ].filter(Boolean) as NavLeaf[];
-
-  const driverItems: NavLeaf[] = [
-    canView('drivers') && { id: 'drivers', label: v('drivers') },
-    (canView('driver-analytics') || canView('drivers')) && {
-      id: 'driver-analytics',
-      label: 'Driver Analytics',
-      badge: (
-        <Badge className="h-4 border-none bg-indigo-500 px-1 text-[8px] text-white">
-          New
-        </Badge>
-      ),
-    },
-  ].filter(Boolean) as NavLeaf[];
-
-  const vehicleItems: NavLeaf[] = [
-    canView('vehicles') && { id: 'vehicles', label: v('vehiclesPageTitle') },
-    canView('vehicle-analytics') && {
-      id: 'vehicle-analytics',
-      label: 'Vehicle Analytics',
-    },
-    canView('maintenance-hub') && {
-      id: 'maintenance-hub',
-      label: 'Maintenance',
-    },
-    canView('fleet') && { id: 'fleet', label: 'Inventory & Asset Management' },
-  ].filter(Boolean) as NavLeaf[];
-
-  const financeItems: NavLeaf[] = [
-    canSeeBusinessFinanceHome && { id: 'business-finance', label: 'Overview' },
-    canSeeBusinessFinanceHome && { id: 'expense-hub', label: 'Expense Hub' },
-    canView('fleet-financials') && {
-      id: 'fleet-financials',
-      label: 'Bank Deposits',
-    },
-    canSeeWeekReconciliation && {
-      id: 'week-reconciliation',
-      label: 'Week Reconciliation',
-    },
-    canView('driver-settlements') && rideshareVisible && {
-      id: 'driver-settlements',
-      label: 'Driver Settlements',
-    },
-    // Close Week / Restatement live on Driver Settlements hub when that desk is shown
-    !(canView('driver-settlements') && rideshareVisible) &&
-      (canView('driver-settlements') || canView('fuel-reconciliation')) && {
-        id: 'close-week',
-        label: 'Close Week',
-      },
-    !(canView('driver-settlements') && rideshareVisible) &&
-      (canView('driver-settlements') || canView('fuel-reconciliation')) && {
-        id: 'restatement-queue',
-        label: 'Restatement Queue',
-      },
-    canView('courier-settlements') &&
-      hasRushDeliveryLine &&
-      isModuleEnabled('rush_courier_settlements') && {
-        id: 'courier-settlements',
-        label: 'Courier Settlements',
-      },
-    canView('indrive-wallet') && {
-      id: 'indrive-wallet',
-      label: 'InDrive Wallet',
-    },
-    canView('transaction-list') && {
-      id: 'transaction-list',
-      label: 'Ledgers',
-    },
-  ].filter(Boolean) as NavLeaf[];
-
-  const courierItems: NavLeaf[] = [
-    isModuleEnabled('rush_couriers') && canView('couriers') && { id: 'couriers', label: 'Couriers' },
-    isModuleEnabled('rush_couriers') &&
-      canView('courier-analytics') && {
-        id: 'courier-analytics',
-        label: 'Courier Analytics',
-        badge: (
-          <Badge className="h-4 border-none bg-indigo-500 px-1 text-[8px] text-white">
-            New
-          </Badge>
-        ),
-      },
-    isModuleEnabled('rush_deliveries') && canView('deliveries') && { id: 'deliveries', label: 'Deliveries' },
-    isModuleEnabled('rush_deliveries') &&
-      canView('delivery-analytics') && {
-        id: 'delivery-analytics',
-        label: 'Delivery Analytics',
-      },
-    isModuleEnabled('rush_supply_health') &&
-      canView('supply-health') && { id: 'supply-health', label: 'Supply Health' },
-  ].filter(Boolean) as NavLeaf[];
+  const fuelItems = (nav.fleetOps.fuel?.items ?? []).map(withNavBadge);
+  const tollItems = (nav.fleetOps.toll?.items ?? []).map(withNavBadge);
+  const driverItems = nav.driverOps.items.map(withNavBadge);
+  const vehicleItems = nav.vehicleOps.items.map(withNavBadge);
+  const courierItems = nav.courierOps.items.map(withNavBadge);
+  const analyticsItems = nav.analytics.items.map(withNavBadge);
+  const financeItems = nav.businessFinance.items.map(withNavBadge);
+  const moneyItems = nav.money.items.map(withNavBadge);
+  const systemItems = nav.system.items.map(withNavBadge);
 
   return (
     <Sidebar className="border-r border-slate-200/80 dark:border-slate-800">
@@ -335,24 +130,16 @@ export function AppSidebar({
       <SidebarContent className="px-2 py-3">
         <nav aria-label="Main navigation">
           <SidebarMenu className="gap-0.5">
-            {canView('dashboard') && (
+            {nav.dashboard && (
               <NavItem
                 icon={<LayoutDashboard className="h-4 w-4" />}
-                label={v('dashboardTitle')}
+                label={String(nav.dashboard.label)}
                 active={currentPage === 'dashboard'}
                 onClick={() => navigate('dashboard')}
               />
             )}
-            {canView('imports') && (
-              <NavItem
-                icon={<UploadCloud className="h-4 w-4" />}
-                label="Data Center"
-                active={currentPage === 'imports'}
-                onClick={() => navigate('imports')}
-              />
-            )}
 
-            {canSeeFleetOps && (
+            {nav.fleetOps.visible && (nav.fleetOps.fuel || nav.fleetOps.toll) && (
               <NavSection
                 id="fleet-ops"
                 label="Fleet Operations"
@@ -364,10 +151,10 @@ export function AppSidebar({
                 forceActive={fleetOpsActive(currentPage)}
               >
                 <div className="mt-0.5 ml-3 space-y-0.5 border-l border-slate-200/70 pl-1 dark:border-slate-700">
-                  {canSeeFuelDesk && fuelItems.length > 0 && (
+                  {nav.fleetOps.fuel && (
                     <NavFlyout
                       id="fuel"
-                      label="Fuel Management"
+                      label={nav.fleetOps.fuel.label}
                       icon={<Fuel className="h-4 w-4" />}
                       items={fuelItems}
                       currentPage={currentPage}
@@ -377,10 +164,10 @@ export function AppSidebar({
                       nested
                     />
                   )}
-                  {canSeeTollDesk && tollItems.length > 0 && (
+                  {nav.fleetOps.toll && (
                     <NavFlyout
                       id="toll"
-                      label="Toll Management"
+                      label={nav.fleetOps.toll.label}
                       icon={<Receipt className="h-4 w-4" />}
                       items={tollItems}
                       currentPage={currentPage}
@@ -394,7 +181,7 @@ export function AppSidebar({
               </NavSection>
             )}
 
-            {canSeeDriverOps && driverItems.length > 0 && (
+            {nav.driverOps.visible && (
               <NavFlyout
                 id="driver-ops"
                 label="Driver Operations"
@@ -407,16 +194,20 @@ export function AppSidebar({
               />
             )}
 
-            {canSeeEarningsPolicyNav && (
-              <NavItem
-                icon={<Receipt className="h-4 w-4" />}
-                label="Earnings Policy"
-                active={currentPage === 'earnings-policy'}
-                onClick={() => navigate('earnings-policy')}
+            {nav.money.visible && (
+              <NavFlyout
+                id="money"
+                label="Money"
+                icon={<Wallet className="h-4 w-4" />}
+                items={moneyItems}
+                currentPage={currentPage}
+                open={openFlyout === 'money'}
+                onOpenChange={(next) => handleFlyoutChange('money', next)}
+                onNavigate={navigate}
               />
             )}
 
-            {canSeeVehicleOps && vehicleItems.length > 0 && (
+            {nav.vehicleOps.visible && (
               <NavFlyout
                 id="vehicle-ops"
                 label="Vehicle Operations"
@@ -429,7 +220,7 @@ export function AppSidebar({
               />
             )}
 
-            {canSeeCourierOps && courierItems.length > 0 && (
+            {nav.courierOps.visible && (
               <NavFlyout
                 id="courier-ops"
                 label="Delivery Operations"
@@ -442,24 +233,29 @@ export function AppSidebar({
               />
             )}
 
-            {rideshareVisible && canView('trips') && (
-              <NavItem
-                icon={<FileText className="h-4 w-4" />}
-                label={v('sidebarTrips')}
-                active={currentPage === 'trips'}
-                onClick={() => navigate('trips')}
+            {nav.analytics.visible && (
+              <NavFlyout
+                id="analytics"
+                label="Analytics"
+                icon={<BarChart3 className="h-4 w-4" />}
+                items={analyticsItems}
+                currentPage={currentPage}
+                open={openFlyout === 'analytics'}
+                onOpenChange={(next) => handleFlyoutChange('analytics', next)}
+                onNavigate={navigate}
               />
             )}
-            {canView('reports') && (
+
+            {nav.reports && (
               <NavItem
-                icon={<BarChart3 className="h-4 w-4" />}
-                label="Reports"
+                icon={<FileText className="h-4 w-4" />}
+                label={String(nav.reports.label)}
                 active={currentPage === 'reports'}
                 onClick={() => navigate('reports')}
               />
             )}
 
-            {canSeeBusinessFinanceNav && financeItems.length > 0 && (
+            {nav.businessFinance.visible && (
               <NavFlyout
                 id="business-finance"
                 label="Business Finance"
@@ -476,7 +272,7 @@ export function AppSidebar({
           </SidebarMenu>
         </nav>
 
-        {canSeeSystem && (
+        {nav.system.visible && (
           <>
             <Separator className="my-4 opacity-60" />
             <div className="mb-2 px-2 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
@@ -484,22 +280,25 @@ export function AppSidebar({
             </div>
             <nav aria-label="System">
               <SidebarMenu className="gap-0.5">
-                {canView('user-management') && (
-                  <NavItem
-                    icon={<UserCog className="h-4 w-4" />}
-                    label="User Management"
-                    active={currentPage === 'user-management'}
-                    onClick={() => navigate('user-management')}
-                  />
-                )}
-                {canView('settings') && (
-                  <NavItem
-                    icon={<Settings className="h-4 w-4" />}
-                    label="Settings"
-                    active={currentPage === 'settings'}
-                    onClick={() => navigate('settings')}
-                  />
-                )}
+                {systemItems.map((item) => {
+                  const icon =
+                    item.id === 'user-management' ? (
+                      <UserCog className="h-4 w-4" />
+                    ) : item.id === 'settings' ? (
+                      <Settings className="h-4 w-4" />
+                    ) : (
+                      <UploadCloud className="h-4 w-4" />
+                    );
+                  return (
+                    <NavItem
+                      key={item.id}
+                      icon={icon}
+                      label={String(item.label)}
+                      active={currentPage === item.id}
+                      onClick={() => navigate(item.id)}
+                    />
+                  );
+                })}
               </SidebarMenu>
             </nav>
           </>

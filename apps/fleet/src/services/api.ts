@@ -5208,6 +5208,25 @@ export const api = {
     return response.json();
   },
 
+  /** Money → Wallet: cash in hand + debt + platform bank Balance + Roam Cash placeholder. */
+  async getFleetWalletSnapshot(params: {
+    startDate: string;
+    endDate: string;
+  }): Promise<{ success: boolean; snapshot: import('../types/fleetWallet').FleetWalletSnapshot }> {
+    const qp = new URLSearchParams();
+    qp.set('startDate', params.startDate);
+    qp.set('endDate', params.endDate);
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.financial}/ledger/wallet-snapshot?${qp.toString()}`,
+      { headers: await requireAuthHeaders(null) },
+    );
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error(`Wallet snapshot failed: ${errText}`);
+    }
+    return response.json();
+  },
+
   async getLedgerDriverOverview(params: {
     driverId: string;
     startDate: string;

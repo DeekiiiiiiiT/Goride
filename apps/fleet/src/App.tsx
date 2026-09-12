@@ -16,6 +16,8 @@ import { FleetPage } from './components/fleet/FleetPage';
 import { ReportsPage } from './components/reports/ReportsPage';
 import { UserManagementPage } from './components/users/UserManagementPage';
 import { EarningsPolicyConfiguration } from './components/earnings-policy';
+import { EarningsPage } from './components/earnings/EarningsPage';
+import { WalletPage } from './components/wallet/WalletPage';
 import { VehicleAnalytics } from './components/vehicles/VehicleAnalytics';
 import { IndriveWalletCenterPage } from './components/fleet-financials/IndriveWalletCenterPage';
 import type { ExpenseHubSubview } from './components/business-finance/expense-hub/ExpenseHubShell';
@@ -808,6 +810,16 @@ function AppContent() {
             <Suspense fallback={<div className="p-6 text-sm text-slate-500">Loading toll low balance…</div>}>
               <TollLowBalancePage onNavigate={handleNavigate} />
             </Suspense>
+          </PermissionGate>
+        )}
+        {currentPage === 'earnings' && (
+          <PermissionGate permission="nav.tier_config" onNavigate={setCurrentPage}>
+            <EarningsPage />
+          </PermissionGate>
+        )}
+        {currentPage === 'wallet' && (
+          <PermissionGate permission="nav.tier_config" onNavigate={setCurrentPage}>
+            <WalletPage onNavigate={handleNavigate} />
           </PermissionGate>
         )}
         {currentPage === 'earnings-policy' && (
