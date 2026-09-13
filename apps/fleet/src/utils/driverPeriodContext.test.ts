@@ -20,11 +20,12 @@ describe('DriverPeriod helpers', () => {
     expect(readPeriodFromLocationSearch('')).toBeNull();
   });
 
-  it('defaultDriverPeriod spans the last 12 pay weeks', () => {
+  it('defaultDriverPeriod is the current Monday–Sunday pay week', () => {
     const range = defaultDriverPeriod();
     expect(range.from.getTime()).toBeLessThanOrEqual(range.to.getTime());
-    // At least ~11 weeks between oldest Monday and newest Sunday
+    // Current week is Mon–Sun inclusive (~6 days between noon anchors)
     const days = (range.to.getTime() - range.from.getTime()) / (24 * 60 * 60 * 1000);
-    expect(days).toBeGreaterThanOrEqual(70);
+    expect(days).toBeGreaterThanOrEqual(6);
+    expect(days).toBeLessThanOrEqual(7);
   });
 });

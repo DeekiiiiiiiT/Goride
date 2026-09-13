@@ -7,6 +7,8 @@ import {
   SheetDescription,
   SheetFooter,
 } from '../ui/sheet';
+import { useIsMobile } from '../ui/use-mobile';
+import { cn } from '../ui/utils';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Separator } from '../ui/separator';
@@ -179,6 +181,7 @@ export function TollLogDetailPanel({
   onFlagDisputed,
   onOpenReconciliation,
 }: TollLogDetailPanelProps) {
+  const isMobile = useIsMobile();
   const [linkedTrip, setLinkedTrip] = useState<Trip | null>(null);
   const [tripLoading, setTripLoading] = useState(false);
 
@@ -217,11 +220,16 @@ export function TollLogDetailPanel({
   return (
     <Sheet open={isOpen} onOpenChange={(open) => { if (!open) onClose(); }}>
       <SheetContent
-        side="right"
-        className="w-full sm:max-w-md overflow-y-auto p-0 flex flex-col"
+        side={isMobile ? 'bottom' : 'right'}
+        className={cn(
+          'flex flex-col gap-0 overflow-hidden p-0',
+          isMobile
+            ? 'inset-x-0 h-[55vh] max-h-[55vh] w-full rounded-t-2xl border-t safe-b'
+            : 'w-full sm:max-w-md',
+        )}
       >
         {/* ── Header ──────────────────────────────────────────────────── */}
-        <SheetHeader className="p-5 pb-3 border-b border-slate-100 dark:border-slate-800">
+        <SheetHeader className="shrink-0 p-5 pb-3 border-b border-slate-100 dark:border-slate-800">
           <div className="flex items-start justify-between gap-3">
             <div className="flex-1 min-w-0">
               <SheetTitle className="text-lg font-bold text-slate-900 dark:text-slate-100 truncate pr-6">
@@ -262,7 +270,7 @@ export function TollLogDetailPanel({
         </SheetHeader>
 
         {/* ── Scrollable body ─────────────────────────────────────────── */}
-        <div className="flex-1 overflow-y-auto p-5 space-y-5">
+        <div className="min-h-0 flex-1 overflow-y-auto p-5 space-y-5">
 
           {/* Section 1: Transaction Details */}
           <Section title="Transaction Details" icon={<Receipt className="h-3.5 w-3.5 text-indigo-500" />}>
@@ -441,7 +449,7 @@ export function TollLogDetailPanel({
         </div>
 
         {/* ── Footer actions ──────────────────────────────────────────── */}
-        <SheetFooter className="border-t border-slate-100 dark:border-slate-800 p-4 flex-row gap-2 justify-start">
+        <SheetFooter className="shrink-0 border-t border-slate-100 dark:border-slate-800 p-4 flex-row gap-2 justify-start">
           {onFlagDisputed && (
             <Button
               variant="outline"

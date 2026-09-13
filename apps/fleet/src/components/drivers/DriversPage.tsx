@@ -1004,9 +1004,6 @@ export function DriversPage({
                         </TableHead>
                         <TableHead className="w-[250px] font-semibold text-slate-700 dark:text-slate-300">Driver</TableHead>
                         <TableHead className="w-[100px] font-semibold text-slate-700 dark:text-slate-300">Status</TableHead>
-                        <TableHead className="font-semibold text-slate-700 dark:text-slate-300">Earnings (Today)</TableHead>
-                        <TableHead className="font-semibold text-slate-700 dark:text-slate-300">Trips (Today)</TableHead>
-                        <TableHead className="font-semibold text-slate-700 dark:text-slate-300">Acceptance</TableHead>
                         <TableHead className="font-semibold text-slate-700 dark:text-slate-300">Tier</TableHead>
                         <TableHead className="w-[100px]"></TableHead>
                     </TableRow>
@@ -1097,20 +1094,6 @@ export function DriversPage({
                                           {driver.overdueFollowUpCount}
                                         </Badge>
                                       )}
-                                    </div>
-                                </TableCell>
-                                <TableCell>
-                                    <div className="font-medium text-slate-900 dark:text-slate-100">{formatJMD(driver.todaysEarnings, 2)}</div>
-                                </TableCell>
-                                <TableCell>
-                                    <div className="text-slate-600 dark:text-slate-300">{driver.todaysTrips}</div>
-                                </TableCell>
-                                <TableCell>
-                                    <div className="flex items-center gap-2">
-                                       <span className={`font-medium ${driver.acceptanceRate < 70 ? 'text-rose-600' : 'text-emerald-600'}`}>
-                                          {driver.acceptanceRate}%
-                                       </span>
-                                       {driver.acceptanceRate < 70 && <AlertCircle className="h-3 w-3 text-rose-500" />}
                                     </div>
                                 </TableCell>
                                 <TableCell>
@@ -1221,25 +1204,9 @@ export function DriversPage({
                   </div>
                   <StatusBadge status={driver.status} />
                 </div>
-                <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
-                  <div>
-                    <p className="text-xs text-slate-500">Earnings (Today)</p>
-                    <p className="font-medium text-slate-900 dark:text-slate-100">{formatJMD(driver.todaysEarnings, 2)}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-slate-500">Trips</p>
-                    <p className="text-slate-700 dark:text-slate-300">{driver.todaysTrips}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-slate-500">Acceptance</p>
-                    <p className={driver.acceptanceRate < 70 ? 'font-medium text-rose-600' : 'font-medium text-emerald-600'}>
-                      {driver.acceptanceRate}%
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-slate-500">Tier</p>
-                    <TierBadge tier={driver.tier} />
-                  </div>
+                <div className="mt-3 flex items-center gap-2 text-sm">
+                  <p className="text-xs text-slate-500">Tier</p>
+                  <TierBadge tier={driver.tier} />
                 </div>
               </button>
               <div className="mt-3 flex items-center justify-between border-t border-slate-100 pt-2 dark:border-slate-800">

@@ -1,7 +1,12 @@
 import React from 'react';
 import { ChevronRight } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '../../ui/popover';
-import { SidebarMenuButton, SidebarMenuItem } from '../../ui/sidebar';
+import {
+  SidebarMenuButton,
+  SidebarMenuItem,
+  useSidebar,
+} from '../../ui/sidebar';
+import { useIsMobile } from '../../ui/use-mobile';
 import { cn } from '../../ui/utils';
 import type { NavLeaf } from './types';
 
@@ -23,7 +28,11 @@ function isLeafActive(item: NavLeaf, currentPage: string) {
   return item.activeIds?.includes(currentPage) ?? false;
 }
 
-/** Mid-level row that opens its children in a horizontal fly-out. */
+/**
+ * Mid-level nav with children.
+ * Desktop: horizontal fly-out beside the sidebar.
+ * Phone: opens AppSidebar push + floating panel; rail mode shows icon + chevron only.
+ */
 export function NavFlyout({
   id,
   label,
@@ -35,6 +44,8 @@ export function NavFlyout({
   onNavigate,
   nested = false,
 }: NavFlyoutProps) {
+  const isMobile = useIsMobile();
+  const { mobileNavPush } = useSidebar();
   const openTimer = React.useRef<number | null>(null);
   const closeTimer = React.useRef<number | null>(null);
   const hasActiveChild = items.some((item) => isLeafActive(item, currentPage));
@@ -49,11 +60,13 @@ export function NavFlyout({
   React.useEffect(() => () => clearTimers(), []);
 
   const scheduleOpen = () => {
+    if (isMobile) return;
     clearTimers();
     openTimer.current = window.setTimeout(() => onOpenChange(true), 80);
   };
 
   const scheduleClose = () => {
+    if (isMobile) return;
     clearTimers();
     closeTimer.current = window.setTimeout(() => onOpenChange(false), 180);
   };
@@ -62,6 +75,55 @@ export function NavFlyout({
     onNavigate?.(pageId);
     onOpenChange(false);
   };
+
+  const triggerCn = cn(
+    'relative',
+    nested && !mobileNavPush && 'pl-3',
+    mobileNavPush && 'justify-center gap-0.5 px-1',
+    (hasActiveChild || open) &&
+      'bg-indigo-50 font-medium text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300',
+  );
+
+  const chevronClassName = cn(
+    'h-3.5 w-3.5 shrink-0 text-slate-400 transition-transform duration-200',
+    mobileNavPush ? 'ml-0' : 'ml-auto h-4 w-4',
+    open && 'translate-x-0.5 text-indigo-500',
+    (hasActiveChild || open) && 'text-indigo-500',
+  );
+
+  const triggerInner = (
+    <>
+      {hasActiveChild && !nested && (
+        <span
+          className="absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-full bg-indigo-500"
+          aria-hidden
+        />
+      )}
+      {icon}
+      <span className={cn('truncate', mobileNavPush && 'sr-only')}>{label}</span>
+      <ChevronRight className={chevronClassName} aria-hidden />
+    </>
+  );
+
+  // Phone: open the push panel owned by AppSidebar (no side popover / accordion).
+  if (isMobile) {
+    return (
+      <SidebarMenuItem>
+        <SidebarMenuButton
+          id={`nav-flyout-trigger-${id}`}
+          tooltip={label}
+          isActive={hasActiveChild || open}
+          aria-haspopup="menu"
+          aria-expanded={open}
+          aria-controls="mobile-nav-flyout-panel"
+          className={triggerCn}
+          onClick={() => onOpenChange(!open)}
+        >
+          {triggerInner}
+        </SidebarMenuButton>
+      </SidebarMenuItem>
+    );
+  }
 
   return (
     <SidebarMenuItem>
@@ -74,30 +136,11 @@ export function NavFlyout({
             aria-haspopup="menu"
             aria-expanded={open}
             aria-controls={`nav-flyout-panel-${id}`}
-            className={cn(
-              'relative',
-              nested && 'pl-3',
-              hasActiveChild &&
-                'bg-indigo-50 font-medium text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300',
-            )}
+            className={triggerCn}
             onMouseEnter={scheduleOpen}
             onMouseLeave={scheduleClose}
           >
-            {hasActiveChild && !nested && (
-              <span
-                className="absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-full bg-indigo-500"
-                aria-hidden
-              />
-            )}
-            {icon}
-            <span className="truncate">{label}</span>
-            <ChevronRight
-              className={cn(
-                'ml-auto h-4 w-4 shrink-0 text-slate-400 transition-transform duration-200',
-                open && 'translate-x-0.5 text-indigo-500',
-              )}
-              aria-hidden
-            />
+            {triggerInner}
           </SidebarMenuButton>
         </PopoverTrigger>
         <PopoverContent
@@ -106,7 +149,7 @@ export function NavFlyout({
           aria-labelledby={`nav-flyout-trigger-${id}`}
           side="right"
           align="start"
-          sideOffset={10}
+          sideOffset={1}
           collisionPadding={12}
           className={cn(
             'z-[120] w-60 border-slate-200/80 p-1.5 shadow-lg shadow-slate-900/8',

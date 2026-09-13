@@ -1,5 +1,5 @@
 import React from 'react';
-import { SidebarMenuButton, SidebarMenuItem } from '../../ui/sidebar';
+import { SidebarMenuButton, SidebarMenuItem, useSidebar } from '../../ui/sidebar';
 import { cn } from '../../ui/utils';
 
 type NavItemProps = {
@@ -10,6 +10,8 @@ type NavItemProps = {
 };
 
 export function NavItem({ icon, label, active = false, onClick }: NavItemProps) {
+  const { mobileNavPush } = useSidebar();
+
   return (
     <SidebarMenuItem>
       <SidebarMenuButton
@@ -18,6 +20,7 @@ export function NavItem({ icon, label, active = false, onClick }: NavItemProps) 
         aria-current={active ? 'page' : undefined}
         className={cn(
           'relative',
+          mobileNavPush && 'justify-center gap-0 px-0',
           active
             ? 'bg-indigo-50 font-medium text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300'
             : 'text-slate-600 dark:text-slate-400',
@@ -31,7 +34,7 @@ export function NavItem({ icon, label, active = false, onClick }: NavItemProps) 
           />
         )}
         {icon}
-        <span className="truncate">{label}</span>
+        <span className={cn('truncate', mobileNavPush && 'sr-only')}>{label}</span>
       </SidebarMenuButton>
     </SidebarMenuItem>
   );

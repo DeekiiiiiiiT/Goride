@@ -7,6 +7,7 @@ import {
   SidebarMenuSub,
   SidebarMenuSubButton,
   SidebarMenuSubItem,
+  useSidebar,
 } from '../../ui/sidebar';
 import { cn } from '../../ui/utils';
 import type { NavLeaf } from './types';
@@ -45,21 +46,30 @@ export function NavSection({
   forceActive = false,
   children,
 }: NavSectionProps) {
+  const { mobileNavPush } = useSidebar();
   const hasActiveChild =
     forceActive || (items?.some((item) => isLeafActive(item, currentPage)) ?? false);
 
   return (
-    <Collapsible open={open} onOpenChange={onOpenChange} className="group/nav-section">
+    <Collapsible
+      open={mobileNavPush ? false : open}
+      onOpenChange={onOpenChange}
+      className="group/nav-section"
+    >
       <SidebarMenuItem>
         <CollapsibleTrigger asChild>
           <SidebarMenuButton
             id={`nav-section-trigger-${id}`}
             tooltip={label}
             isActive={hasActiveChild && !open}
-            aria-controls={`nav-section-panel-${id}`}
+            aria-controls={mobileNavPush ? undefined : `nav-section-panel-${id}`}
             className={cn(
               'relative',
+              mobileNavPush && 'justify-center gap-0.5 px-1',
               (open || hasActiveChild) && 'text-slate-900 dark:text-slate-100',
+              hasActiveChild &&
+                mobileNavPush &&
+                'bg-indigo-50 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300',
             )}
           >
             <span
@@ -70,55 +80,60 @@ export function NavSection({
               aria-hidden
             />
             {icon}
-            <span className="truncate">{label}</span>
+            <span className={cn('truncate', mobileNavPush && 'sr-only')}>{label}</span>
             <ChevronRight
               className={cn(
-                'ml-auto h-4 w-4 shrink-0 text-slate-400 transition-transform duration-200',
-                'group-data-[state=open]/nav-section:rotate-90 group-data-[state=open]/nav-section:text-indigo-500',
+                'h-3.5 w-3.5 shrink-0 text-slate-400 transition-transform duration-200',
+                mobileNavPush ? 'ml-0' : 'ml-auto h-4 w-4',
+                !mobileNavPush &&
+                  'group-data-[state=open]/nav-section:rotate-90 group-data-[state=open]/nav-section:text-indigo-500',
+                mobileNavPush && hasActiveChild && 'text-indigo-500',
               )}
               aria-hidden
             />
           </SidebarMenuButton>
         </CollapsibleTrigger>
-        <CollapsibleContent
-          id={`nav-section-panel-${id}`}
-          role="region"
-          aria-labelledby={`nav-section-trigger-${id}`}
-          className="overflow-hidden"
-        >
-          {children}
-          {items && items.length > 0 && (
-            <SidebarMenuSub className="mt-0.5 mr-0 border-slate-200/70 dark:border-slate-700">
-              {items.map((item) => {
-                const active = isLeafActive(item, currentPage);
-                return (
-                  <SidebarMenuSubItem key={item.id}>
-                    <SidebarMenuSubButton
-                      asChild
-                      isActive={active}
-                      className={cn(
-                        active &&
-                          'bg-indigo-50 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300',
-                      )}
-                    >
-                      <button
-                        type="button"
-                        className="w-full cursor-pointer text-left"
-                        aria-current={active ? 'page' : undefined}
-                        onClick={() => onNavigate?.(item.id)}
+        {!mobileNavPush && (
+          <CollapsibleContent
+            id={`nav-section-panel-${id}`}
+            role="region"
+            aria-labelledby={`nav-section-trigger-${id}`}
+            className="overflow-hidden"
+          >
+            {children}
+            {items && items.length > 0 && (
+              <SidebarMenuSub className="mt-0.5 mr-0 border-slate-200/70 dark:border-slate-700">
+                {items.map((item) => {
+                  const active = isLeafActive(item, currentPage);
+                  return (
+                    <SidebarMenuSubItem key={item.id}>
+                      <SidebarMenuSubButton
+                        asChild
+                        isActive={active}
+                        className={cn(
+                          active &&
+                            'bg-indigo-50 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300',
+                        )}
                       >
-                        <span className="flex min-w-0 items-center gap-2">
-                          <span className="truncate">{item.label}</span>
-                          {item.badge}
-                        </span>
-                      </button>
-                    </SidebarMenuSubButton>
-                  </SidebarMenuSubItem>
-                );
-              })}
-            </SidebarMenuSub>
-          )}
-        </CollapsibleContent>
+                        <button
+                          type="button"
+                          className="w-full cursor-pointer text-left"
+                          aria-current={active ? 'page' : undefined}
+                          onClick={() => onNavigate?.(item.id)}
+                        >
+                          <span className="flex min-w-0 items-center gap-2">
+                            <span className="truncate">{item.label}</span>
+                            {item.badge}
+                          </span>
+                        </button>
+                      </SidebarMenuSubButton>
+                    </SidebarMenuSubItem>
+                  );
+                })}
+              </SidebarMenuSub>
+            )}
+          </CollapsibleContent>
+        )}
       </SidebarMenuItem>
     </Collapsible>
   );

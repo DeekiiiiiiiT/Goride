@@ -4,14 +4,13 @@ import { generatePeriodWeekOptions } from '../../../utils/periodWeekOptions';
 
 export type DriverPeriodRange = { from: Date; to: Date };
 
-/** Match Financials default: span of the last 12 Monday-start pay weeks. */
+/** Match pay-week UI: current Monday–Sunday period (newest week). */
 export function defaultDriverPeriod(): DriverPeriodRange {
-  const weeks = generatePeriodWeekOptions(12);
-  const newest = weeks[0];
-  const oldest = weeks[weeks.length - 1] || newest;
+  const weeks = generatePeriodWeekOptions(1);
+  const current = weeks[0];
   return {
-    from: new Date(`${oldest.startDate}T12:00:00`),
-    to: new Date(`${newest.endDate}T12:00:00`),
+    from: new Date(`${current.startDate}T12:00:00`),
+    to: new Date(`${current.endDate}T12:00:00`),
   };
 }
 

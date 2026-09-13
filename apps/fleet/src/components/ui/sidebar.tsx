@@ -52,6 +52,9 @@ type SidebarContextProps = {
   setOpenMobile: (open: boolean) => void;
   isMobile: boolean;
   toggleSidebar: () => void;
+  /** Phone: main drawer slid aside for a floating fly-out — sheet shell goes transparent. */
+  mobileNavPush: boolean;
+  setMobileNavPush: (open: boolean) => void;
 };
 
 /** Survive Vite HMR — duplicate module instances otherwise break provider/consumer pairing. */
@@ -88,6 +91,7 @@ function SidebarProvider({
 }) {
   const isMobile = useIsMobile();
   const [openMobile, setOpenMobile] = React.useState(false);
+  const [mobileNavPush, setMobileNavPush] = React.useState(false);
 
   // This is the internal state of the sidebar.
   // We use openProp and setOpenProp for control from outside the component.
@@ -142,8 +146,20 @@ function SidebarProvider({
       openMobile,
       setOpenMobile,
       toggleSidebar,
+      mobileNavPush,
+      setMobileNavPush,
     }),
-    [state, open, setOpen, isMobile, openMobile, setOpenMobile, toggleSidebar],
+    [
+      state,
+      open,
+      setOpen,
+      isMobile,
+      openMobile,
+      setOpenMobile,
+      toggleSidebar,
+      mobileNavPush,
+      setMobileNavPush,
+    ],
   );
 
   return (
@@ -183,7 +199,7 @@ function Sidebar({
   variant?: "sidebar" | "floating" | "inset";
   collapsible?: "offcanvas" | "icon" | "none";
 }) {
-  const { isMobile, state, openMobile, setOpenMobile } = useSidebar();
+  const { isMobile, state, openMobile, setOpenMobile, mobileNavPush } = useSidebar();
 
   if (collapsible === "none") {
     return (
@@ -207,13 +223,39 @@ function Sidebar({
           data-sidebar="sidebar"
           data-slot="sidebar"
           data-mobile="true"
-          className="bg-sidebar text-sidebar-foreground w-(--sidebar-width) p-0 [&>button]:hidden"
+          data-nav-push={mobileNavPush ? "true" : "false"}
+          className={cn(
+            "text-sidebar-foreground p-0 [&>button]:hidden transition-[width] duration-300 ease-out",
+            // Push mode: sheet shrinks to the icon rail — no empty column beside it.
+            mobileNavPush
+              ? "w-16 border-transparent bg-transparent shadow-none pointer-events-none overflow-visible"
+              : "bg-sidebar w-(--sidebar-width)",
+          )}
           style={
             {
               "--sidebar-width": SIDEBAR_WIDTH_MOBILE,
             } as React.CSSProperties
           }
           side={side}
+          onPointerDownOutside={(event) => {
+            // Fly-out is portaled to body — don't treat it as "outside" the drawer.
+            const target = event.target as HTMLElement | null;
+            if (target?.closest("#mobile-nav-flyout-panel")) {
+              event.preventDefault();
+            }
+          }}
+          onFocusOutside={(event) => {
+            const target = event.target as HTMLElement | null;
+            if (target?.closest("#mobile-nav-flyout-panel")) {
+              event.preventDefault();
+            }
+          }}
+          onInteractOutside={(event) => {
+            const target = event.target as HTMLElement | null;
+            if (target?.closest("#mobile-nav-flyout-panel")) {
+              event.preventDefault();
+            }
+          }}
         >
           <SheetHeader className="sr-only">
             <SheetTitle>Sidebar</SheetTitle>
