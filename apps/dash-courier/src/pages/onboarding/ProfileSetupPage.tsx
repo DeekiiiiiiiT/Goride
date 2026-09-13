@@ -3,22 +3,31 @@ import { OnboardingHeader } from '@/components/layout/OnboardingHeader';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import { loadSignupDraft, saveSignupDraft } from '@/lib/signupDraft';
 import { syncCourierProfileFromDraft } from '@/lib/ensureCourierProfile';
+import { claimCourierRoamTag } from '@/lib/courierRoamTagService';
 import { uploadAndGetProofUrl } from '@/lib/courierFileUpload';
 import { toast } from '@/lib/toast';
 import { useVisualViewport } from '@/hooks/useVisualViewport';
+import { normalizeCourierRoamTagName, validateCourierRoamTagName } from '@roam/types';
 
 type ProfileSetupPageProps = {
   onBack: () => void;
   onContinue: () => void;
+  /** When joining a fleet — optional Roam Tag so employers can invite by @tag. */
+  showRoamTagClaim?: boolean;
 };
 
-export function ProfileSetupPage({ onBack, onContinue }: ProfileSetupPageProps) {
+export function ProfileSetupPage({
+  onBack,
+  onContinue,
+  showRoamTagClaim = false,
+}: ProfileSetupPageProps) {
   const draft = loadSignupDraft();
   const [fullName, setFullName] = useState(draft.fullName);
   const [displayName, setDisplayName] = useState(draft.displayName);
   const [phone, setPhone] = useState(
     draft.phone ? `${draft.countryCode} ${draft.phone}` : '+1 ',
   );
+  const [roamTag, setRoamTag] = useState('');
   const [photoPreview, setPhotoPreview] = useState<string | null>(draft.profilePhotoUrl || null);
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -62,6 +71,27 @@ export function ProfileSetupPage({ onBack, onContinue }: ProfileSetupPageProps) 
 
     saveSignupDraft({ fullName, displayName, phone, profilePhotoUrl });
     await syncCourierProfileFromDraft();
+
+    if (showRoamTagClaim && roamTag.trim()) {
+      const check = validateCourierRoamTagName(roamTag);
+      if (check) {
+        setUploading(false);
+        const tips: Record<string, string> = {
+          tag_length: 'Roam Tag must be 3–24 characters.',
+          tag_format: 'Use letters, numbers, and underscores only.',
+          tag_reserved: 'That Roam Tag isn’t available.',
+        };
+        toast.info('About your Roam Tag', tips[check] || 'Try a different Roam Tag.');
+        return;
+      }
+      const tagResult = await claimCourierRoamTag(normalizeCourierRoamTagName(roamTag));
+      if (!tagResult.ok) {
+        setUploading(false);
+        toast.info('About your Roam Tag', tagResult.error);
+        return;
+      }
+    }
+
     setUploading(false);
     onContinue();
   };
@@ -140,6 +170,38 @@ export function ProfileSetupPage({ onBack, onContinue }: ProfileSetupPageProps) 
                   className="w-full bg-surface border border-outline-variant rounded-lg px-4 h-14 text-base text-on-surface placeholder:text-muted focus:ring-2 focus:ring-primary focus:border-primary transition-all outline-none shadow-sm"
                 />
               </div>
+
+              {showRoamTagClaim ? (
+                <div className="flex flex-col gap-1">
+                  <label htmlFor="roamTag" className="text-[11px] font-medium text-on-surface-variant uppercase tracking-wider ml-1">
+                    Roam Tag <span className="normal-case font-normal text-muted">(optional)</span>
+                  </label>
+                  <div className="relative flex items-center">
+                    <span className="absolute left-4 text-muted select-none">@</span>
+                    <input
+                      id="roamTag"
+                      type="text"
+                      value={roamTag}
+                      onChange={(e) =>
+                        setRoamTag(
+                          e.target.value
+                            .replace(/^@+/, '')
+                            .toLowerCase()
+                            .replace(/[^a-z0-9_]/g, ''),
+                        )
+                      }
+                      placeholder="your_tag"
+                      autoCapitalize="none"
+                      autoCorrect="off"
+                      spellCheck={false}
+                      className="w-full bg-surface border border-outline-variant rounded-lg pl-8 pr-4 h-14 text-base text-on-surface placeholder:text-muted focus:ring-2 focus:ring-primary focus:border-primary transition-all outline-none shadow-sm"
+                    />
+                  </div>
+                  <p className="text-[11px] text-muted ml-1">
+                    Recommended if a delivery company will invite you. You can&apos;t change it later.
+                  </p>
+                </div>
+              ) : null}
 
               <div className="flex flex-col gap-1">
                 <label htmlFor="phone" className="text-[11px] font-medium text-on-surface-variant uppercase tracking-wider ml-1">

@@ -31,7 +31,11 @@ interface AddDriverModalProps {
   onDriverAdded: (driver: unknown) => void;
 }
 
-export function AddDriverModal({ isOpen, onClose, onDriverAdded }: AddDriverModalProps) {
+export function AddDriverModal({
+  isOpen,
+  onClose,
+  onDriverAdded,
+}: AddDriverModalProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
   const [step, setStep] = useState(1);
@@ -251,6 +255,8 @@ export function AddDriverModal({ isOpen, onClose, onDriverAdded }: AddDriverModa
         acceptanceRate: 100,
         tier: 'Bronze',
         avatarUrl: '',
+        serviceLines: ['rideshare'],
+        service_lines: ['rideshare'],
       });
       if (res.error) throw new Error(res.error);
       onDriverAdded(res.data);
@@ -278,7 +284,9 @@ export function AddDriverModal({ isOpen, onClose, onDriverAdded }: AddDriverModa
     <ResponsiveDialog open={isOpen} onOpenChange={() => handleClose(false)}>
       <ResponsiveDialogContent className="sm:max-w-[600px] overflow-hidden max-h-[90vh] overflow-y-auto">
         <ResponsiveDialogHeader>
-          <ResponsiveDialogTitle>New Driver Profile</ResponsiveDialogTitle>
+          <ResponsiveDialogTitle>
+            New Driver Profile
+          </ResponsiveDialogTitle>
           <ResponsiveDialogDescription>
             {step === 1
               ? "Start by scanning the driver's license."

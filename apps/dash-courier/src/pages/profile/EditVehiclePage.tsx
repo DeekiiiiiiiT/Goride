@@ -3,6 +3,7 @@ import { SubPageHeader } from '@/components/layout/SubPageHeader';
 import { loadSignupDraft, saveSignupDraft } from '@/lib/signupDraft';
 import { updateCourierProfile } from '@/lib/courierProfileService';
 import { loadPrimaryVehicle, upsertCourierVehicle } from '@/lib/courierVehicleService';
+import { loadWorkforceMe } from '@/lib/courierWorkforceService';
 import { validateJamaicanPlate } from '@/lib/validateJamaicanPlate';
 import { toast } from '@/lib/toast';
 
@@ -20,22 +21,29 @@ export function EditVehiclePage({ onBack, onSave }: EditVehiclePageProps) {
   const [color, setColor] = useState('Black');
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState(false);
+  const [blockedFleet, setBlockedFleet] = useState(false);
 
   useEffect(() => {
-    void loadPrimaryVehicle()
-      .then((vehicle) => {
-        if (!vehicle) {
-          setLoadError(true);
-          return;
-        }
+    void (async () => {
+      const me = await loadWorkforceMe();
+      if (me?.mode === 'fleet') {
+        setBlockedFleet(true);
+        setLoading(false);
+        toast.error('Your fleet assigns vehicles — you can’t add your own while linked.');
+        onBack();
+        return;
+      }
+      const vehicle = await loadPrimaryVehicle();
+      if (vehicle) {
         setMakeModel(`${vehicle.make} ${vehicle.model}`.trim());
         setLicensePlate(vehicle.license_plate);
         setColor(vehicle.color || 'Black');
-      })
-      .finally(() => setLoading(false));
-  }, []);
+      }
+      setLoading(false);
+    })();
+  }, [onBack]);
 
+  if (blockedFleet) return null;
   const handleSave = async () => {
     if (!makeModel.trim() || !licensePlate.trim()) {
       toast.error('Missing details', 'Make/model and license plate are required.');
@@ -74,7 +82,7 @@ export function EditVehiclePage({ onBack, onSave }: EditVehiclePageProps) {
 
   return (
     <div className="fixed inset-0 z-[70] bg-background flex flex-col overflow-hidden">
-      <SubPageHeader title="Edit Vehicle" onBack={onBack} />
+      <SubPageHeader title="Vehicle" onBack={onBack} />
 
       <main className="flex-1 overflow-y-auto px-[var(--spacing-edge)] py-6 pb-32 space-y-4">
         {loading && (
@@ -83,9 +91,6 @@ export function EditVehiclePage({ onBack, onSave }: EditVehiclePageProps) {
             <div className="h-12 bg-surface-container rounded-lg" />
             <div className="h-12 bg-surface-container rounded-lg" />
           </div>
-        )}
-        {!loading && loadError && (
-          <p className="text-sm text-error">Could not load saved vehicle. Enter details to save.</p>
         )}
         {!loading && (
           <>

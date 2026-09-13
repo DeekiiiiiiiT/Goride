@@ -5,7 +5,6 @@ import { useIsMobile } from '../ui/use-mobile';
 import { AnnouncementBanner } from './AnnouncementBanner';
 import { AppSidebar } from './AppSidebar';
 import { AppTopNav } from './AppTopNav';
-import { ServiceLineScopeSwitcher } from './ServiceLineScopeSwitcher';
 import { resolveNavPageTitle } from './fleetNavModel';
 import { useFleetNavModel } from './useFleetNavModel';
 
@@ -54,15 +53,12 @@ export function AppLayout({ children, currentPage, onNavigate, onLogout }: AppLa
             />
           </div>
 
-          {/* Mobile header: hamburger + page title + scope */}
+          {/* Mobile header: hamburger + page title */}
           <header className="sticky top-0 z-40 flex h-14 items-center gap-2 border-b border-slate-200 bg-white safe-t safe-x md:hidden dark:border-slate-800 dark:bg-slate-950">
             <SidebarTrigger className="min-h-11 min-w-11 shrink-0" />
-            <h1 className="min-w-0 flex-1 truncate text-center text-base font-semibold text-slate-900 dark:text-slate-100">
+            <h1 className="min-w-0 flex-1 truncate pr-11 text-center text-base font-semibold text-slate-900 dark:text-slate-100">
               {pageTitle}
             </h1>
-            <div className="shrink-0">
-              <ServiceLineScopeSwitcher />
-            </div>
           </header>
 
           <div className="flex-1 overflow-auto py-4 pl-[max(1rem,env(safe-area-inset-left,0px))] pr-[max(1rem,env(safe-area-inset-right,0px))] pb-[max(1.5rem,env(safe-area-inset-bottom,0px))] md:p-8">

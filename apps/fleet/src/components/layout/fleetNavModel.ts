@@ -193,14 +193,13 @@ export function buildFleetNavModel(input: BuildFleetNavModelInput): FleetNavMode
   ]);
 
   const driverItems = compactLeaves([
-    leaf(rideshareVisible && canView('drivers'), {
-      id: 'drivers',
-      label: labels.drivers,
-    }),
-    leaf(canSeeCouriersInDriverOps, {
-      id: 'couriers',
-      label: 'Couriers',
-    }),
+    leaf(
+      (rideshareVisible && canView('drivers')) || canSeeCouriersInDriverOps,
+      {
+        id: 'drivers',
+        label: labels.drivers,
+      },
+    ),
   ]);
 
   const vehicleItems = compactLeaves([

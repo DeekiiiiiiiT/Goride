@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Copy, Plus } from 'lucide-react';
+import { Check, Copy, Plus } from 'lucide-react';
 import { api } from '../../services/api';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -15,6 +15,7 @@ import {
 import { Label } from '../ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { toast } from 'sonner';
+import { formatCourierRoamTagDisplay, normalizeCourierRoamTagName } from '@roam/types';
 
 export type WorkforceInviteServiceLine = 'rideshare' | 'rush_delivery';
 
@@ -25,19 +26,38 @@ type Props = {
   dialogDescription: string;
   /** button: header action only; full: pending card + button */
   variant?: 'full' | 'button';
+  buttonClassName?: string;
+};
+
+type InviteRow = {
+  id: string;
+  invite_code?: string;
+  invite_kind?: string;
+  invited_roam_tag?: string | null;
+  status?: string;
+  service_line?: string;
 };
 
 export function WorkforcePendingInvites({ serviceLine }: { serviceLine: WorkforceInviteServiceLine }) {
+  const queryClient = useQueryClient();
   const { data: invitesData } = useQuery({
     queryKey: ['workforce-invites'],
     queryFn: () => api.getWorkforceInvites(),
   });
 
+  const cancelInvite = useMutation({
+    mutationFn: (inviteId: string) => api.cancelWorkforceInvite(inviteId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['workforce-invites'] });
+      toast.success('Invite cancelled');
+    },
+    onError: (e: Error) => toast.error(e.message || 'Could not cancel invite'),
+  });
+
   const pendingInvites = useMemo(() => {
-    const invites = invitesData?.invites ?? [];
+    const invites = (invitesData?.invites ?? []) as InviteRow[];
     return invites.filter(
-      (i: { status?: string; service_line?: string }) =>
-        i.status === 'pending' && i.service_line === serviceLine,
+      (i) => i.status === 'pending' && i.service_line === serviceLine,
     );
   }, [invitesData, serviceLine]);
 
@@ -54,17 +74,44 @@ export function WorkforcePendingInvites({ serviceLine }: { serviceLine: Workforc
         <CardTitle className="text-base">Pending invites</CardTitle>
       </CardHeader>
       <CardContent className="space-y-2">
-        {pendingInvites.slice(0, 5).map((inv: { id: string; invite_code?: string }) => (
-          <div
-            key={inv.id}
-            className="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-700"
-          >
-            <span className="font-mono text-sm font-semibold tracking-wider">{inv.invite_code}</span>
-            <Button variant="ghost" size="sm" onClick={() => copyCode(String(inv.invite_code))}>
-              <Copy className="h-4 w-4" />
-            </Button>
-          </div>
-        ))}
+        {pendingInvites.slice(0, 8).map((inv) => {
+          const isTag = inv.invite_kind === 'roam_tag';
+          const label = isTag
+            ? formatCourierRoamTagDisplay(inv.invited_roam_tag) || 'Roam Tag invite'
+            : String(inv.invite_code ?? '');
+          const cancelling = cancelInvite.isPending && cancelInvite.variables === inv.id;
+          return (
+            <div
+              key={inv.id}
+              className="flex items-center justify-between gap-2 rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-700"
+            >
+              <div className="min-w-0">
+                <span className={`font-semibold tracking-wider ${isTag ? 'text-sm' : 'font-mono text-sm'}`}>
+                  {label}
+                </span>
+                {isTag ? (
+                  <p className="text-[11px] text-slate-500">Waiting for courier to accept</p>
+                ) : null}
+              </div>
+              <div className="flex shrink-0 items-center gap-1">
+                {!isTag && inv.invite_code ? (
+                  <Button variant="ghost" size="sm" onClick={() => copyCode(String(inv.invite_code))}>
+                    <Copy className="h-4 w-4" />
+                  </Button>
+                ) : null}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-slate-600 hover:text-red-600 dark:text-slate-400 dark:hover:text-red-400"
+                  disabled={cancelInvite.isPending}
+                  onClick={() => cancelInvite.mutate(inv.id)}
+                >
+                  {cancelling ? 'Cancelling…' : 'Cancel'}
+                </Button>
+              </div>
+            </div>
+          );
+        })}
       </CardContent>
     </Card>
   );
@@ -76,11 +123,16 @@ export function WorkforceInvitePanel({
   dialogTitle,
   dialogDescription,
   variant = 'full',
+  buttonClassName,
 }: Props) {
+  const isCourier = serviceLine === 'rush_delivery';
   const [inviteOpen, setInviteOpen] = useState(false);
+  const [inviteMode, setInviteMode] = useState<'code' | 'roam_tag'>(isCourier ? 'roam_tag' : 'code');
   const [invitedEmail, setInvitedEmail] = useState('');
   const [invitedPhone, setInvitedPhone] = useState('');
+  const [roamTag, setRoamTag] = useState('');
   const [lastCode, setLastCode] = useState<string | null>(null);
+  const [tagInviteSent, setTagInviteSent] = useState<{ tag: string; name?: string | null } | null>(null);
   const queryClient = useQueryClient();
 
   const createInvite = useMutation({
@@ -99,6 +151,24 @@ export function WorkforceInvitePanel({
     onError: (e: Error) => toast.error(e.message || 'Could not create invite'),
   });
 
+  const createByTag = useMutation({
+    mutationFn: () =>
+      api.createWorkforceInviteByRoamTag({
+        roamTag: normalizeCourierRoamTagName(roamTag),
+        serviceLine: 'rush_delivery',
+      }),
+    onSuccess: (data) => {
+      const tag = data?.courier?.custom_tag_name || normalizeCourierRoamTagName(roamTag);
+      setTagInviteSent({
+        tag,
+        name: data?.courier?.display_name ?? null,
+      });
+      void queryClient.invalidateQueries({ queryKey: ['workforce-invites'] });
+      toast.success('Invite sent');
+    },
+    onError: (e: Error) => toast.error(e.message || 'Could not send invite'),
+  });
+
   const copyCode = (code: string) => {
     void navigator.clipboard.writeText(code);
     toast.success('Code copied');
@@ -107,8 +177,11 @@ export function WorkforceInvitePanel({
   const openInvite = () => {
     setInviteOpen(true);
     setLastCode(null);
+    setTagInviteSent(null);
     setInvitedEmail('');
     setInvitedPhone('');
+    setRoamTag('');
+    setInviteMode(isCourier ? 'roam_tag' : 'code');
   };
 
   return (
@@ -116,8 +189,11 @@ export function WorkforceInvitePanel({
       {variant === 'full' && <WorkforcePendingInvites serviceLine={serviceLine} />}
 
       <Button
-        variant={variant === 'button' ? 'outline' : 'default'}
-        className={variant === 'button' ? '' : 'bg-indigo-600 hover:bg-indigo-700'}
+        variant={variant === 'button' && !buttonClassName ? 'outline' : 'default'}
+        className={
+          buttonClassName ||
+          (variant === 'button' ? '' : 'bg-indigo-600 hover:bg-indigo-700')
+        }
         onClick={openInvite}
       >
         <Plus className="mr-2 h-4 w-4" />
@@ -126,6 +202,18 @@ export function WorkforceInvitePanel({
 
       <Dialog open={inviteOpen} onOpenChange={setInviteOpen}>
         <DialogContent>
+          {tagInviteSent ? (
+            <div className="flex flex-col items-center justify-center gap-3 py-8">
+              <div className="flex h-14 w-14 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-900/40">
+                <Check className="h-8 w-8 text-emerald-600 dark:text-emerald-400" strokeWidth={2.5} />
+              </div>
+              <p className="text-base font-semibold text-slate-900 dark:text-slate-50">Invite sent</p>
+              <Button className="mt-2" onClick={() => setInviteOpen(false)}>
+                Done
+              </Button>
+            </div>
+          ) : (
+            <>
           <DialogHeader>
             <DialogTitle>{dialogTitle}</DialogTitle>
             <DialogDescription>{dialogDescription}</DialogDescription>
@@ -142,25 +230,69 @@ export function WorkforceInvitePanel({
             </div>
           ) : (
             <div className="space-y-4 py-2">
-              <div className="space-y-2">
-                <Label htmlFor="invite-email">Email (optional)</Label>
-                <Input
-                  id="invite-email"
-                  type="email"
-                  value={invitedEmail}
-                  onChange={(e) => setInvitedEmail(e.target.value)}
-                  placeholder="driver@example.com"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="invite-phone">Phone (optional)</Label>
-                <Input
-                  id="invite-phone"
-                  value={invitedPhone}
-                  onChange={(e) => setInvitedPhone(e.target.value)}
-                  placeholder="8765551234"
-                />
-              </div>
+              {isCourier ? (
+                <div className="flex gap-2 rounded-lg bg-slate-100 p-1 dark:bg-slate-800">
+                  <button
+                    type="button"
+                    className={`flex-1 rounded-md px-3 py-1.5 text-sm font-medium ${
+                      inviteMode === 'roam_tag' ? 'bg-white shadow-sm dark:bg-slate-700' : 'text-slate-600'
+                    }`}
+                    onClick={() => setInviteMode('roam_tag')}
+                  >
+                    By Roam Tag
+                  </button>
+                  <button
+                    type="button"
+                    className={`flex-1 rounded-md px-3 py-1.5 text-sm font-medium ${
+                      inviteMode === 'code' ? 'bg-white shadow-sm dark:bg-slate-700' : 'text-slate-600'
+                    }`}
+                    onClick={() => setInviteMode('code')}
+                  >
+                    Invite code
+                  </button>
+                </div>
+              ) : null}
+
+              {isCourier && inviteMode === 'roam_tag' ? (
+                <div className="space-y-2">
+                  <Label htmlFor="invite-roam-tag">Courier Roam Tag</Label>
+                  <div className="flex items-center gap-1">
+                    <span className="text-slate-500">@</span>
+                    <Input
+                      id="invite-roam-tag"
+                      value={roamTag.replace(/^@+/, '')}
+                      onChange={(e) => setRoamTag(e.target.value.replace(/^@+/, '').toLowerCase())}
+                      placeholder="courier_handle"
+                      autoCapitalize="none"
+                    />
+                  </div>
+                  <p className="text-xs text-slate-500">
+                    They’ll get an in-app invite to Accept or Decline.
+                  </p>
+                </div>
+              ) : (
+                <>
+                  <div className="space-y-2">
+                    <Label htmlFor="invite-email">Email (optional)</Label>
+                    <Input
+                      id="invite-email"
+                      type="email"
+                      value={invitedEmail}
+                      onChange={(e) => setInvitedEmail(e.target.value)}
+                      placeholder={isCourier ? 'courier@example.com' : 'driver@example.com'}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="invite-phone">Phone (optional)</Label>
+                    <Input
+                      id="invite-phone"
+                      value={invitedPhone}
+                      onChange={(e) => setInvitedPhone(e.target.value)}
+                      placeholder="8765551234"
+                    />
+                  </div>
+                </>
+              )}
             </div>
           )}
           <DialogFooter>
@@ -169,16 +301,28 @@ export function WorkforceInvitePanel({
             ) : (
               <>
                 <Button variant="outline" onClick={() => setInviteOpen(false)}>Cancel</Button>
-                <Button
-                  className="bg-indigo-600 hover:bg-indigo-700"
-                  disabled={createInvite.isPending}
-                  onClick={() => createInvite.mutate()}
-                >
-                  {createInvite.isPending ? 'Creating…' : 'Generate code'}
-                </Button>
+                {isCourier && inviteMode === 'roam_tag' ? (
+                  <Button
+                    className="bg-indigo-600 hover:bg-indigo-700"
+                    disabled={createByTag.isPending || !normalizeCourierRoamTagName(roamTag)}
+                    onClick={() => createByTag.mutate()}
+                  >
+                    {createByTag.isPending ? 'Sending…' : 'Send invite'}
+                  </Button>
+                ) : (
+                  <Button
+                    className="bg-indigo-600 hover:bg-indigo-700"
+                    disabled={createInvite.isPending}
+                    onClick={() => createInvite.mutate()}
+                  >
+                    {createInvite.isPending ? 'Creating…' : 'Generate code'}
+                  </Button>
+                )}
               </>
             )}
           </DialogFooter>
+            </>
+          )}
         </DialogContent>
       </Dialog>
     </>

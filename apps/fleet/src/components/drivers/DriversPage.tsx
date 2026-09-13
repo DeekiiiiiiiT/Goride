@@ -89,9 +89,12 @@ import {
   type EarningsPolicyRuntimeContext,
 } from '../../utils/loadResolvedEarningsBundle';
 import { useServiceLineScopeParam } from '../../hooks/useServiceLineScopeParam';
+import { useServiceLineScope } from '../../contexts/ServiceLineScopeContext';
 import { TierCalculations } from '../../utils/tierCalculations';
 import { usePermissions } from '../../hooks/usePermissions';
 import { useAuth } from '../auth/AuthContext';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
+import { CouriersPage } from '../couriers/CouriersPage';
 
 function asArray<T>(value: unknown): T[] {
   return Array.isArray(value) ? value : [];
@@ -217,10 +220,56 @@ export function DriversPage({
   const { v } = useVocab();
   const queryClient = useQueryClient();
   const { can } = usePermissions();
+  const { rideshareVisible, rushVisible } = useServiceLineScope();
   // Phase 5: Get user for organization validation
   const { user } = useAuth();
   const currentOrgId = user?.user_metadata?.organizationId || user?.id;
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+
+  const showCourierTab = rushVisible;
+  const showDriversTab = rideshareVisible;
+  const showWorkforceTabs = showCourierTab && showDriversTab;
+
+  type WorkforceTab = 'drivers' | 'couriers';
+  const readWorkforceTab = (): WorkforceTab => {
+    try {
+      const raw = new URLSearchParams(window.location.search).get('workforce');
+      if (raw === 'couriers' && showCourierTab) return 'couriers';
+      if (raw === 'drivers' && showDriversTab) return 'drivers';
+    } catch {
+      /* ignore */
+    }
+    if (!showDriversTab && showCourierTab) return 'couriers';
+    return 'drivers';
+  };
+  const [workforceTab, setWorkforceTab] = useState<WorkforceTab>(() => readWorkforceTab());
+
+  useEffect(() => {
+    if (workforceTab === 'couriers' && !showCourierTab) {
+      setWorkforceTab(showDriversTab ? 'drivers' : 'couriers');
+    } else if (workforceTab === 'drivers' && !showDriversTab && showCourierTab) {
+      setWorkforceTab('couriers');
+    }
+  }, [showCourierTab, showDriversTab, workforceTab]);
+
+  const setWorkforceTabAndUrl = (next: WorkforceTab) => {
+    setWorkforceTab(next);
+    try {
+      const url = new URL(window.location.href);
+      if (showWorkforceTabs) {
+        url.searchParams.set('workforce', next);
+      } else {
+        url.searchParams.delete('workforce');
+      }
+      window.history.replaceState(
+        { page: 'drivers' },
+        '',
+        `${url.pathname}${url.search}${url.hash}`,
+      );
+    } catch {
+      /* ignore */
+    }
+  };
   
   // Phase 10: Claim Driver state
   const [isClaimOpen, setIsClaimOpen] = useState(false);
@@ -457,65 +506,74 @@ export function DriversPage({
       if (m?.driverId) metricsMap.set(m.driverId, m);
     }
 
-    return safeRoster.map((row) => {
-      const profile = profileById.get(row.id);
-      let acceptanceRate = asNumber(row.acceptanceRate, 100);
-      let metric = metricsMap.get(row.id);
-      if (!metric && row.uberDriverId) metric = metricsMap.get(row.uberDriverId);
-      if (!metric && row.inDriveDriverId) metric = metricsMap.get(row.inDriveDriverId);
-      if (metric?.acceptanceRate != null) {
-        acceptanceRate = Math.round(Number(metric.acceptanceRate) <= 1
-          ? Number(metric.acceptanceRate) * 100
-          : Number(metric.acceptanceRate));
-      }
+    return safeRoster
+      .filter((row) => {
+        // Courier-only (rush_delivery, no rideshare) belongs on Couriers tab, not Drivers.
+        if (!rushVisible) return true;
+        const profile = profileById.get(row.id) as { serviceLines?: string[] } | undefined;
+        const lines = profile?.serviceLines;
+        if (!Array.isArray(lines) || lines.length === 0) return true;
+        return lines.includes('rideshare');
+      })
+      .map((row) => {
+        const profile = profileById.get(row.id);
+        let acceptanceRate = asNumber(row.acceptanceRate, 100);
+        let metric = metricsMap.get(row.id);
+        if (!metric && row.uberDriverId) metric = metricsMap.get(row.uberDriverId);
+        if (!metric && row.inDriveDriverId) metric = metricsMap.get(row.inDriveDriverId);
+        if (metric?.acceptanceRate != null) {
+          acceptanceRate = Math.round(Number(metric.acceptanceRate) <= 1
+            ? Number(metric.acceptanceRate) * 100
+            : Number(metric.acceptanceRate));
+        }
 
-      const monthlyEarnings = asNumber(row.monthlyEarnings);
-      let tier = row.tier || profile?.tier || 'Bronze';
-      if (earningsPolicyCtx) {
-        const serviceLineForBundle =
-          earningsServiceLine === 'rideshare' || earningsServiceLine === 'rush_delivery'
-            ? earningsServiceLine
-            : undefined;
-        const bundle = resolveBundleFromContext(
-          earningsPolicyCtx as EarningsPolicyRuntimeContext,
-          row.id,
-          undefined,
-          serviceLineForBundle,
-        );
-        const t = TierCalculations.getTierForEarnings(monthlyEarnings, bundle.tiers);
-        tier = t?.name ?? 'Bronze';
-      } else if (metric?.tier) {
-        tier = metric.tier;
-      }
+        const monthlyEarnings = asNumber(row.monthlyEarnings);
+        let tier = row.tier || profile?.tier || 'Bronze';
+        if (earningsPolicyCtx) {
+          const serviceLineForBundle =
+            earningsServiceLine === 'rideshare' || earningsServiceLine === 'rush_delivery'
+              ? earningsServiceLine
+              : undefined;
+          const bundle = resolveBundleFromContext(
+            earningsPolicyCtx as EarningsPolicyRuntimeContext,
+            row.id,
+            undefined,
+            serviceLineForBundle,
+          );
+          const t = TierCalculations.getTierForEarnings(monthlyEarnings, bundle.tiers);
+          tier = t?.name ?? 'Bronze';
+        } else if (metric?.tier) {
+          tier = metric.tier;
+        }
 
-      let status = (row.status as DriverProfile['status']) || 'Active';
-      if (status === 'Active' && acceptanceRate < 70) status = 'Needs Attention';
+        let status = (row.status as DriverProfile['status']) || 'Active';
+        if (status === 'Active' && acceptanceRate < 70) status = 'Needs Attention';
 
-      return normalizeDriverProfile({
-        ...profile,
-        ...row,
-        name: driverDisplayName(row.name || profile?.name),
-        status,
-        vehicle: row.vehicle || profile?.vehicle || 'Unassigned',
-        phone: row.phone || profile?.phone || '—',
-        email: row.email || profile?.email || '',
-        totalTrips: asNumber(row.totalTrips),
-        totalEarnings: asNumber(row.totalEarnings),
-        todaysEarnings: asNumber(row.todaysEarnings),
-        todaysTrips: asNumber(row.todaysTrips),
-        monthlyEarnings,
-        acceptanceRate,
-        tier,
-        bankInfo: (row as any).bankInfo ?? (profile as any)?.bankInfo,
-        createdAt: (row as any).createdAt ?? (profile as any)?.createdAt,
-        licenseExpiry: (row as any).licenseExpiry ?? (profile as any)?.licenseExpiry,
-        licenseNumber: (row as any).licenseNumber ?? (profile as any)?.licenseNumber,
-        dispatchBlocked: Boolean((row as any).dispatchBlocked),
-        dispatchBlockReason: (row as any).dispatchBlockReason,
-        overdueFollowUpCount: asNumber((row as any).overdueFollowUpCount),
+        return normalizeDriverProfile({
+          ...profile,
+          ...row,
+          name: driverDisplayName(row.name || profile?.name),
+          status,
+          vehicle: row.vehicle || profile?.vehicle || 'Unassigned',
+          phone: row.phone || profile?.phone || '—',
+          email: row.email || profile?.email || '',
+          totalTrips: asNumber(row.totalTrips),
+          totalEarnings: asNumber(row.totalEarnings),
+          todaysEarnings: asNumber(row.todaysEarnings),
+          todaysTrips: asNumber(row.todaysTrips),
+          monthlyEarnings,
+          acceptanceRate,
+          tier,
+          bankInfo: (row as any).bankInfo ?? (profile as any)?.bankInfo,
+          createdAt: (row as any).createdAt ?? (profile as any)?.createdAt,
+          licenseExpiry: (row as any).licenseExpiry ?? (profile as any)?.licenseExpiry,
+          licenseNumber: (row as any).licenseNumber ?? (profile as any)?.licenseNumber,
+          dispatchBlocked: Boolean((row as any).dispatchBlocked),
+          dispatchBlockReason: (row as any).dispatchBlockReason,
+          overdueFollowUpCount: asNumber((row as any).overdueFollowUpCount),
+        });
       });
-    });
-  }, [safeRoster, safeManualDrivers, safeImportedMetrics, earningsPolicyCtx, earningsServiceLine]);
+  }, [safeRoster, safeManualDrivers, safeImportedMetrics, earningsPolicyCtx, earningsServiceLine, rushVisible]);
 
   // Phase 5: Apply org validation first, then other filters
   const orgValidatedDrivers = useMemo(() => {
@@ -716,6 +774,7 @@ export function DriversPage({
   const handleDriverAdded = (driver: any) => {
     queryClient.invalidateQueries({ queryKey: ['drivers'] });
     queryClient.invalidateQueries({ queryKey: ['driversRoster'] });
+    queryClient.invalidateQueries({ queryKey: ['couriers'] });
   };
 
   if (loading) {
@@ -780,10 +839,24 @@ export function DriversPage({
       <div className="flex flex-col gap-4">
         <div className="flex justify-between items-center">
            <div>
-               <h2 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-100">{v('driversPageTitle')}</h2>
-               <p className="text-slate-500 dark:text-slate-400">{v('driversPageSubtitle')}</p>
+               <h2 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
+                 {v('driversPageTitle')}
+               </h2>
+               <p className="text-slate-500 dark:text-slate-400">
+                 {workforceTab === 'couriers'
+                   ? 'Manage fleet couriers for Roam Rush delivery.'
+                   : v('driversPageSubtitle')}
+               </p>
            </div>
-           {can('drivers.create') && (
+           {workforceTab === 'couriers' ? (
+             <WorkforceInvitePanel
+               variant="button"
+               serviceLine="rush_delivery"
+               inviteButtonLabel="Invite courier"
+               dialogTitle="Invite a courier"
+               dialogDescription="Invite by the courier’s Roam Tag (in-app Accept/Decline), or generate a shareable code. Roam reviews and approves all couriers before they can go online."
+             />
+           ) : can('drivers.create') ? (
            <div className="flex items-center gap-2">
              <WorkforceInvitePanel
                variant="button"
@@ -801,9 +874,31 @@ export function DriversPage({
                Add Driver
              </Button>
            </div>
-           )}
+           ) : null}
         </div>
 
+        {showWorkforceTabs ? (
+          <Tabs
+            value={workforceTab}
+            onValueChange={(v) => setWorkforceTabAndUrl(v === 'couriers' ? 'couriers' : 'drivers')}
+            className="gap-4"
+          >
+            <TabsList className="h-10 rounded-lg bg-slate-100 p-1 dark:bg-slate-800">
+              <TabsTrigger value="drivers" className="rounded-md px-4">
+                Drivers
+              </TabsTrigger>
+              <TabsTrigger value="couriers" className="rounded-md px-4">
+                Couriers
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
+        ) : null}
+      </div>
+
+      {workforceTab === 'couriers' ? (
+        <CouriersPage embedded />
+      ) : (
+      <>
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
             
             {/* Filters (Left) */}
@@ -942,7 +1037,6 @@ export function DriversPage({
                 />
             </div>
         </div>
-      </div>
 
       {/* --- BULK ACTIONS --- */}
       {selectedIds.size > 0 && (
@@ -1293,6 +1387,8 @@ export function DriversPage({
               </Button>
           </div>
       </div>
+      </>
+      )}
 
       <AddDriverModal
         isOpen={isAddModalOpen}

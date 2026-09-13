@@ -203,12 +203,18 @@ import { registerFleetAdminMaintenanceLedgerRoutes } from "./fleet_admin_mainten
 import { registerEnterpriseAdminRoutes } from "./enterprise_admin_routes.ts";
 import { registerEnterpriseIntakeAdminRoutes } from "./enterprise_intake_admin_routes.ts";
 import { registerWorkforceInviteRoutes } from "./workforce_invite_routes.ts";
+import { registerCourierRoamTagRoutes } from "./courier_roam_tag_routes.ts";
 import { registerFleetTagRoutes } from "./fleet_tag_routes.ts";
 import { registerFleetModuleCheckoutRoutes } from "./fleet_module_checkout.ts";
 import {
+  clearCourierFleetMembership,
+  healOrgCourierRoster,
+  linkCourierToFleet,
   linkDriverToFleet,
+  unlinkCourierFromFleet,
   upsertDriverProfileFromServer as upsertDriverProfileOnServer,
 } from "./workforce_link.ts";
+import { registerCourierWorkforceRoutes } from "./courier_workforce_routes.ts";
 import { reconcileRushTripProjection } from "./rush_trip_recon.ts";
 import {
   backfillRushOrdersToFleet,
@@ -473,6 +479,9 @@ async function detachDriverFromOrg(driverId: string): Promise<void> {
     .update({ mode: "independent", fleet_id: null, fleet_joined_at: null, updated_at: new Date().toISOString() })
     .eq("user_id", driverId);
   if (profErr) console.warn("[DetachDriver] driver_profiles update failed:", profErr.message);
+
+  // 5) courier_profiles: same detach for rush couriers on this account
+  await clearCourierFleetMembership(supabase, driverId);
 
   invalidateDriverCache();
 }
@@ -2857,6 +2866,17 @@ app.post("/make-server-37f42386/vehicles", requireAuth(), requirePermission('veh
       return c.json({ error: "Forbidden" }, 403);
     }
     vehicle = stampOrg(vehicle, c);
+    // Normalize platform tags (legacy / missing → rideshare)
+    {
+      const raw = (vehicle as { serviceLines?: unknown; service_lines?: unknown }).serviceLines
+        ?? (vehicle as { service_lines?: unknown }).service_lines;
+      const lines = Array.isArray(raw)
+        ? raw.filter((l: unknown) => l === "rideshare" || l === "rush_delivery")
+        : [];
+      (vehicle as { serviceLines: string[] }).serviceLines = lines.length
+        ? [...new Set(lines as string[])]
+        : ["rideshare"];
+    }
     const orgId = (vehicle as { organizationId?: string }).organizationId ?? null;
     const rbacUser = c.get('rbacUser') as RbacUser | undefined;
     const canBypass = rbacUserCanBypassCatalogGate(rbacUser);
@@ -3033,7 +3053,22 @@ app.get("/make-server-37f42386/drivers", requireAuth({ requireOrg: true }), asyn
     }
 
     // Phase 3: Use filterByOrgSafe for feature-flag controlled filtering
-    const drivers = await filterByOrgSafe(driversRaw, c, { endpoint: '/drivers' });
+    let drivers = await filterByOrgSafe(driversRaw, c, { endpoint: '/drivers' });
+
+    // Heal: fleet-linked couriers missing from roster / rush_delivery serviceLines
+    const healOrgId = getOrgId(c);
+    if (healOrgId) {
+      try {
+        drivers = await healOrgCourierRoster(
+          { supabase, kv, invalidateDriverCache },
+          healOrgId,
+          drivers as Array<Record<string, unknown>>,
+        );
+      } catch (healErr: unknown) {
+        const msg = healErr instanceof Error ? healErr.message : String(healErr);
+        console.warn(`[drivers] courier roster heal skipped: ${msg}`);
+      }
+    }
 
     // ACTION 2: The "Exorcism" (Auto-Cleanup)
     const BANNED_UUID = "73dfc14d-3798-4a00-8d86-b2a3eb632f54";
@@ -10978,11 +11013,17 @@ app.post("/make-server-37f42386/team/drivers/:id/remove", requireAuth(), require
     const { data: { user }, error: getUserErr } = await supabase.auth.admin.getUserById(driverId);
     if (getUserErr || !user) return c.json({ error: "Driver not found" }, 404);
 
-    // Scope check across both membership stores — owner can only remove their own drivers
+    // Scope check across membership stores — owner can only remove their own people
     const metaOrg = typeof user.user_metadata?.organizationId === 'string' ? user.user_metadata.organizationId : '';
     const { data: prof } = await supabase.from("driver_profiles").select("fleet_id").eq("user_id", driverId).maybeSingle();
     const profOrg = prof?.fleet_id ? String(prof.fleet_id) : '';
-    if (metaOrg !== orgId && profOrg !== orgId) {
+    const { data: courierProf } = await supabase.schema("delivery")
+      .from("courier_profiles")
+      .select("fleet_id")
+      .eq("user_id", driverId)
+      .maybeSingle();
+    const courierOrg = courierProf?.fleet_id ? String(courierProf.fleet_id) : '';
+    if (metaOrg !== orgId && profOrg !== orgId && courierOrg !== orgId) {
       return c.json({ error: "This driver is not part of your fleet" }, 403);
     }
 
@@ -13710,15 +13751,25 @@ async function fetchCustomersWithCache(productLineFilter?: ProductLine): Promise
     });
   }
 
-  customers = customers.map((u: any) => ({
+  customers = customers.map((u: any) => {
+    const meta = { ...(u.app_metadata || {}), ...(u.user_metadata || {}) };
+    const organizationId =
+      (typeof meta.organizationId === "string" && meta.organizationId) ||
+      (typeof meta.organization_id === "string" && meta.organization_id) ||
+      u.id;
+    const metaLines = Array.isArray(meta.serviceLines)
+      ? meta.serviceLines.filter((l: unknown) => l === "rideshare" || l === "rush_delivery")
+      : Array.isArray(meta.service_lines)
+      ? meta.service_lines.filter((l: unknown) => l === "rideshare" || l === "rush_delivery")
+      : [];
+    return {
       id: u.id,
       email: u.email || "",
       name: u.user_metadata?.name || u.user_metadata?.full_name || "",
       businessType: u.user_metadata?.businessType || "rideshare",
-      productLine: inferProductLineFromUser({
-        ...(u.app_metadata || {}),
-        ...(u.user_metadata || {}),
-      }),
+      productLine: inferProductLineFromUser(meta),
+      organizationId,
+      serviceLines: metaLines.length ? metaLines : ["rideshare"],
       accountStatus: u.user_metadata?.accountStatus || null,
       createdAt: u.created_at || null,
       lastSignIn: u.last_sign_in_at || null,
@@ -13728,7 +13779,32 @@ async function fetchCustomersWithCache(productLineFilter?: ProductLine): Promise
           : "inactive")
         : "inactive",
       isSuspended: !!u.banned_until && new Date(u.banned_until) > new Date(),
-    }));
+    };
+  });
+
+  // Prefer organizations.service_lines as source of truth when rows exist
+  try {
+    const orgIds = [...new Set(customers.map((c: any) => c.organizationId).filter(Boolean))];
+    if (orgIds.length > 0) {
+      const { data: orgs } = await supabase
+        .from("organizations")
+        .select("id, service_lines")
+        .in("id", orgIds);
+      const byId = new Map(
+        (orgs || []).map((o: { id: string; service_lines?: string[] | null }) => [o.id, o]),
+      );
+      customers = customers.map((c: any) => {
+        const org = byId.get(c.organizationId);
+        const lines = Array.isArray(org?.service_lines)
+          ? org!.service_lines!.filter((l) => l === "rideshare" || l === "rush_delivery")
+          : [];
+        return lines.length ? { ...c, serviceLines: lines } : c;
+      });
+    }
+  } catch (enrichErr: unknown) {
+    const msg = enrichErr instanceof Error ? enrichErr.message : String(enrichErr);
+    console.warn(`[AdminCustomers] service_lines enrich skipped: ${msg}`);
+  }
   
   // Store in both caches (skip caching empty — avoids sticky blank UI after transient auth blips)
   if (customers.length > 0) {
@@ -13775,6 +13851,21 @@ registerWorkforceInviteRoutes(app, {
       userId,
       fleetId,
     ),
+  linkCourierToFleet: (userId, fleetId) =>
+    linkCourierToFleet(
+      {
+        supabase,
+        kv,
+        invalidateDriverCache,
+      },
+      userId,
+      fleetId,
+    ),
+});
+
+registerCourierRoamTagRoutes(app, {
+  supabase,
+  requireAuth,
 });
 
 registerFleetTagRoutes(app, {
@@ -13791,6 +13882,26 @@ registerFleetTagRoutes(app, {
       },
       userId,
       fleetId,
+    ),
+  linkCourierToFleet: (userId, fleetId) =>
+    linkCourierToFleet(
+      {
+        supabase,
+        kv,
+        invalidateDriverCache,
+      },
+      userId,
+      fleetId,
+    ),
+});
+
+registerCourierWorkforceRoutes(app, {
+  supabase,
+  requireAuth,
+  unlinkCourierFromFleet: (userId) =>
+    unlinkCourierFromFleet(
+      { supabase, kv, invalidateDriverCache },
+      userId,
     ),
 });
 
@@ -13848,24 +13959,15 @@ app.post("/make-server-37f42386/rush/trip-recon/cron", async (c) => {
 
 registerRushSettlementRoutes(app, { supabase, requireAuth, getOrgId });
 
+// Fleet owners cannot self-serve service lines — Roam staff use fleet-admin / Dominion.
 app.patch("/make-server-37f42386/org/service-lines", requireAuth(), async (c) => {
-  try {
-    const orgId = getOrgId(c);
-    if (!orgId) return c.json({ error: "Organization required" }, 403);
-    const body = await c.req.json();
-    const { parseServiceLinesInput, applyOrgServiceLines } = await import("./rush_rollout_admin.ts");
-    const lines = parseServiceLinesInput(body?.serviceLines);
-    if (!lines) return c.json({ error: "serviceLines required" }, 400);
-    const result = await applyOrgServiceLines(supabase, orgId, lines);
-    return c.json({
-      serviceLines: result.serviceLines,
-      businessType: result.businessType,
-      enabledModules: result.enabledModules,
-    });
-  } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : String(e);
-    return c.json({ error: msg }, 500);
-  }
+  return c.json(
+    {
+      error: "Service lines are managed by Roam. Contact support or use the admin portal.",
+      code: "SERVICE_LINES_ADMIN_ONLY",
+    },
+    403,
+  );
 });
 
 import {
@@ -14626,6 +14728,50 @@ app.get("/make-server-37f42386/fleet-admin/customers", async (c) => {
   } catch (e: any) {
     console.log(`fleet-admin/customers error: ${e.message}`);
     return c.json({ error: e.message }, 500);
+  }
+});
+
+/** Product admin (roamfleet.co/admin) sets org service lines — same write path as Dominion. */
+app.patch("/make-server-37f42386/fleet-admin/organizations/:orgId/service-lines", async (c) => {
+  try {
+    const auth = await requireProductAdmin(c, "fleet");
+    if (auth instanceof Response) return auth;
+
+    const orgId = c.req.param("orgId");
+    if (!orgId) return c.json({ error: "orgId required" }, 400);
+
+    const body = await c.req.json();
+    const { parseServiceLinesInput, applyOrgServiceLines } = await import("./rush_rollout_admin.ts");
+    const lines = parseServiceLinesInput(body?.serviceLines);
+    if (!lines) return c.json({ error: "serviceLines required" }, 400);
+
+    const { data: before } = await supabase
+      .from("organizations")
+      .select("service_lines")
+      .eq("id", orgId)
+      .maybeSingle();
+
+    const result = await applyOrgServiceLines(supabase, orgId, lines);
+    await invalidateCustomerCache();
+
+    await logAdminAction({
+      actorId: auth.id,
+      actorName: auth.email,
+      action: "fleet_admin_update_org_service_lines",
+      targetId: orgId,
+      targetEmail: "",
+      details: `Before: ${JSON.stringify(before?.service_lines ?? [])}; After: ${lines.join(", ")}`,
+    });
+
+    return c.json({
+      serviceLines: result.serviceLines,
+      businessType: result.businessType,
+      enabledModules: result.enabledModules,
+    });
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error("[FleetAdmin Org Service Lines] PATCH error:", msg);
+    return c.json({ error: msg }, 500);
   }
 });
 

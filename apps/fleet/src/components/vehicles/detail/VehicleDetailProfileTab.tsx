@@ -1,5 +1,5 @@
-import React from 'react';
-import { FileText, Upload } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { FileText, Upload, Loader2 } from 'lucide-react';
 import { Button } from '../../ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../ui/card';
 import { Badge } from '../../ui/badge';
@@ -10,6 +10,11 @@ import type { CatalogMaintenanceTaskOption } from '../../../types/maintenance';
 import { EquipmentManager } from '../EquipmentManager';
 import { ExteriorManager } from '../ExteriorManager';
 import { MaintenanceManager, MaintenanceLog } from '../MaintenanceManager';
+import {
+  vehicleServiceLines,
+  type VehicleServiceLine,
+} from '../../../utils/vehicleServiceLines';
+import { cn } from '../../ui/utils';
 
 export type VehicleDetailGeneralInfoFields = {
   make: string;
@@ -36,7 +41,15 @@ export interface VehicleDetailProfileTabProps {
   };
   catalogMaintenanceOptions: CatalogMaintenanceTaskOption[];
   handleRefreshMaintenance: () => void;
+  /** Org-enabled platforms; when both, platforms can be edited. */
+  orgServiceLines?: VehicleServiceLine[];
+  onSaveServiceLines?: (lines: VehicleServiceLine[]) => Promise<void>;
 }
+
+const PLATFORM_OPTIONS: { id: VehicleServiceLine; label: string }[] = [
+  { id: 'rideshare', label: 'Rideshare' },
+  { id: 'rush_delivery', label: 'Delivery (Roam Rush)' },
+];
 
 export function VehicleDetailProfileTab({
   generalInfoFields,
@@ -47,7 +60,33 @@ export function VehicleDetailProfileTab({
   maintenanceStatus,
   catalogMaintenanceOptions,
   handleRefreshMaintenance,
+  orgServiceLines = ['rideshare'],
+  onSaveServiceLines,
 }: VehicleDetailProfileTabProps) {
+  const showPlatformEditor = orgServiceLines.length > 1 && Boolean(onSaveServiceLines);
+  const [draftLines, setDraftLines] = useState<VehicleServiceLine[]>(() => vehicleServiceLines(vehicle));
+  const [savingLines, setSavingLines] = useState(false);
+
+  useEffect(() => {
+    setDraftLines(vehicleServiceLines(vehicle));
+  }, [vehicle.id, vehicle.serviceLines]);
+
+  const currentLines = vehicleServiceLines(vehicle);
+  const linesDirty =
+    showPlatformEditor &&
+    (draftLines.length !== currentLines.length ||
+      draftLines.some((l) => !currentLines.includes(l)));
+
+  const handleSavePlatforms = async () => {
+    if (!onSaveServiceLines || !draftLines.length) return;
+    setSavingLines(true);
+    try {
+      await onSaveServiceLines(draftLines);
+    } finally {
+      setSavingLines(false);
+    }
+  };
+
   return (
           <TabsContent value="profile" className="space-y-6 mt-6">
               <Tabs defaultValue="general" className="w-full">
@@ -120,6 +159,73 @@ export function VehicleDetailProfileTab({
                                       <p className="font-medium text-slate-900 mt-0.5 font-mono text-sm tracking-wide">{generalInfoFields.vin}</p>
                                   </div>
                               </div>
+
+                              {showPlatformEditor ? (
+                                <div className="rounded-lg border border-slate-200 bg-slate-50/80 p-4 space-y-3">
+                                  <div>
+                                    <Label className="text-xs text-slate-500">
+                                      Platforms <span className="text-red-500">*</span>
+                                    </Label>
+                                    <p className="text-[11px] text-slate-400 mt-0.5">
+                                      Where this vehicle is used. Appears on matching Vehicles tabs.
+                                    </p>
+                                  </div>
+                                  <div className="flex flex-wrap gap-2">
+                                    {PLATFORM_OPTIONS.filter((o) => orgServiceLines.includes(o.id)).map((opt) => {
+                                      const on = draftLines.includes(opt.id);
+                                      return (
+                                        <button
+                                          key={opt.id}
+                                          type="button"
+                                          onClick={() => {
+                                            setDraftLines((prev) => {
+                                              if (on) {
+                                                const next = prev.filter((l) => l !== opt.id);
+                                                return next.length ? next : prev;
+                                              }
+                                              return [...prev, opt.id];
+                                            });
+                                          }}
+                                          className={cn(
+                                            'rounded-full border px-3 py-1.5 text-xs font-medium transition-colors',
+                                            on
+                                              ? 'border-indigo-500 bg-indigo-50 text-indigo-800'
+                                              : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300',
+                                          )}
+                                        >
+                                          {opt.label}
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                  {linesDirty ? (
+                                    <div className="flex justify-end">
+                                      <Button
+                                        size="sm"
+                                        className="bg-indigo-600 hover:bg-indigo-700"
+                                        disabled={savingLines || !draftLines.length}
+                                        onClick={() => void handleSavePlatforms()}
+                                      >
+                                        {savingLines ? (
+                                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                        ) : null}
+                                        Save platforms
+                                      </Button>
+                                    </div>
+                                  ) : null}
+                                </div>
+                              ) : (
+                                <div>
+                                  <Label className="text-xs text-slate-500">Platforms</Label>
+                                  <div className="flex flex-wrap gap-1.5 mt-1.5">
+                                    {vehicleServiceLines(vehicle).map((line) => (
+                                      <Badge key={line} variant="secondary" className="font-normal">
+                                        {line === 'rush_delivery' ? 'Delivery (Roam Rush)' : 'Rideshare'}
+                                      </Badge>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
                           </CardContent>
                       </Card>
                   </TabsContent>

@@ -68,12 +68,15 @@ import {
 import { isSameDay, subDays } from "date-fns";
 import { useVocab } from '../../utils/vocabulary';
 import { usePermissions } from '../../hooks/usePermissions';
+import { useServiceLineScope } from '../../contexts/ServiceLineScopeContext';
+import { vehicleMatchesLine, type VehicleServiceLine } from '../../utils/vehicleServiceLines';
 import type { VehicleCatalogPendingRequest } from '../../types/vehicleCatalogPending';
 import { isVehicleParked } from '../../utils/vehicleCatalogGate';
 import { showCatalogGateToastIfApplicable } from '../../utils/catalogGateErrors';
 import { useMyPendingCatalogRequests } from '../../hooks/useMyPendingCatalogRequests';
 import { PendingCatalogRequestsDrawer } from './PendingCatalogRequestsDrawer';
 import { ListChecks } from 'lucide-react';
+import { Tabs, TabsList, TabsTrigger } from '../ui/tabs';
 
 export function VehiclesPage({
   onNavigateToExpenseHub,
@@ -84,7 +87,50 @@ export function VehiclesPage({
   const { v } = useVocab();
   const { can } = usePermissions();
   const queryClient = useQueryClient();
+  const { rideshareVisible, rushVisible, serviceLines: orgServiceLines } = useServiceLineScope();
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+
+  type VehicleLineTab = 'rideshare' | 'delivery';
+  const availableLines = useMemo((): VehicleLineTab[] => {
+    const lines: VehicleLineTab[] = [];
+    if (rideshareVisible) lines.push('rideshare');
+    if (rushVisible) lines.push('delivery');
+    return lines.length ? lines : ['rideshare'];
+  }, [rideshareVisible, rushVisible]);
+  const showLineTabs = availableLines.length > 1;
+
+  const readLineFromUrl = (): VehicleLineTab => {
+    try {
+      const raw = new URLSearchParams(window.location.search).get('line');
+      if (raw === 'delivery' && availableLines.includes('delivery')) return 'delivery';
+      if (raw === 'rideshare' && availableLines.includes('rideshare')) return 'rideshare';
+    } catch {
+      /* ignore */
+    }
+    return availableLines[0] ?? 'rideshare';
+  };
+  const [activeLineTab, setActiveLineTab] = useState<VehicleLineTab>(() => readLineFromUrl());
+
+  useEffect(() => {
+    if (!availableLines.includes(activeLineTab)) {
+      setActiveLineTab(availableLines[0] ?? 'rideshare');
+    }
+  }, [availableLines, activeLineTab]);
+
+  const activeServiceLine: VehicleServiceLine =
+    activeLineTab === 'delivery' ? 'rush_delivery' : 'rideshare';
+
+  const setLineTab = (next: VehicleLineTab) => {
+    setActiveLineTab(next);
+    try {
+      const url = new URL(window.location.href);
+      if (showLineTabs) url.searchParams.set('line', next);
+      else url.searchParams.delete('line');
+      window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`);
+    } catch {
+      /* ignore */
+    }
+  };
   
   // Navigation State
   const [selectedVehicleId, setSelectedVehicleId] = useState<string | null>(null);
@@ -275,9 +321,14 @@ export function VehiclesPage({
   // Apply Filters
   const filteredVehicles = useMemo(() => {
       return vehicles.filter(vehicle => {
+          if (showLineTabs || rushVisible || rideshareVisible) {
+            if (!vehicleMatchesLine(vehicle, activeServiceLine)) return false;
+          }
+
           const matchesSearch = 
             vehicle.model.toLowerCase().includes(searchQuery.toLowerCase()) || 
             vehicle.licensePlate.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            (vehicle.vin || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
             (vehicle.currentDriverName || '').toLowerCase().includes(searchQuery.toLowerCase());
 
           const matchesStatus =
@@ -292,7 +343,16 @@ export function VehiclesPage({
 
           return matchesSearch && matchesStatus && matchesService;
       });
-  }, [vehicles, searchQuery, statusFilter, serviceFilter]);
+  }, [
+    vehicles,
+    searchQuery,
+    statusFilter,
+    serviceFilter,
+    activeServiceLine,
+    showLineTabs,
+    rushVisible,
+    rideshareVisible,
+  ]);
 
   const parkedVehicleCount = useMemo(
     () => vehicles.filter(isVehicleParked).length,
@@ -439,7 +499,16 @@ export function VehiclesPage({
   };
 
   const handleVehicleUpdate = (updatedVehicle: Vehicle) => {
-    // Phase 8: Invalidate cache after vehicle update
+    queryClient.setQueryData(['vehicles', 'withMeta'], (prev: unknown) => {
+      if (!prev || typeof prev !== 'object' || !('vehicles' in prev)) return prev;
+      const meta = prev as { vehicles: Vehicle[]; truncated?: boolean };
+      return {
+        ...meta,
+        vehicles: meta.vehicles.map((v) =>
+          v.id === updatedVehicle.id ? { ...v, ...updatedVehicle } : v,
+        ),
+      };
+    });
     queryClient.invalidateQueries({ queryKey: ['vehicles'] });
   };
 
@@ -479,6 +548,29 @@ export function VehiclesPage({
                   </Button>
                   )}
               </div>
+
+              {showLineTabs ? (
+                <Tabs
+                  value={activeLineTab}
+                  onValueChange={(val) => {
+                    if (val === 'rideshare' || val === 'delivery') setLineTab(val);
+                  }}
+                  className="w-full"
+                >
+                  <TabsList className="h-10 rounded-lg bg-slate-100 p-1 dark:bg-slate-800">
+                    {availableLines.includes('rideshare') ? (
+                      <TabsTrigger value="rideshare" className="rounded-md px-4">
+                        Rideshare
+                      </TabsTrigger>
+                    ) : null}
+                    {availableLines.includes('delivery') ? (
+                      <TabsTrigger value="delivery" className="rounded-md px-4">
+                        Delivery (Roam Rush)
+                      </TabsTrigger>
+                    ) : null}
+                  </TabsList>
+                </Tabs>
+              ) : null}
 
               {vehiclesLoadError && (
                 <div className="rounded-lg border border-red-200 bg-red-50 dark:bg-red-950/30 dark:border-red-800 px-4 py-3 text-sm text-red-900 dark:text-red-100 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -558,7 +650,11 @@ export function VehiclesPage({
                       <div className="relative w-full md:w-[300px]">
                           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                           <Input 
-                            placeholder="Search Plate, VIN, or Driver..." 
+                            placeholder={
+                              activeLineTab === 'delivery'
+                                ? 'Search Plate, VIN, or Courier...'
+                                : 'Search Plate, VIN, or Driver...'
+                            } 
                             className="pl-9"
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
@@ -729,7 +825,7 @@ export function VehiclesPage({
                                 onClick={() => handleOpenAssignModal(vehicle.id)}
                                 disabled={parked}
                               >
-                                <UserPlus className="mr-2 h-4 w-4" /> Assign Driver
+                                <UserPlus className="mr-2 h-4 w-4" /> {activeLineTab === 'delivery' ? 'Assign Courier' : 'Assign Driver'}
                               </DropdownMenuItem>
                               <DropdownMenuSeparator />
                               <DropdownMenuItem onClick={() => handleLogService(vehicle.id)} disabled={parked}>
@@ -874,7 +970,7 @@ export function VehiclesPage({
                                                   disabled={parked}
                                                   title={parked ? 'Pending catalog approval' : undefined}
                                                 >
-                                                    <UserPlus className="mr-2 h-4 w-4" /> Assign Driver
+                                                    <UserPlus className="mr-2 h-4 w-4" /> {activeLineTab === 'delivery' ? 'Assign Courier' : 'Assign Driver'}
                                                 </DropdownMenuItem>
                                                 <DropdownMenuSeparator />
                                                 <DropdownMenuItem
@@ -935,6 +1031,7 @@ export function VehiclesPage({
         vehicle={vehicleToAssign}
         trips={trips}
         allDrivers={allDrivers}
+        serviceLine={activeServiceLine}
         onAssign={handleAssignDriver}
       />
 
@@ -963,6 +1060,10 @@ export function VehiclesPage({
         onClose={() => setIsAddModalOpen(false)}
         onVehicleAdded={handleVehicleAdded}
         existingVehicles={manualVehicles}
+        defaultServiceLines={[activeServiceLine]}
+        orgServiceLines={orgServiceLines.filter(
+          (l): l is VehicleServiceLine => l === 'rideshare' || l === 'rush_delivery',
+        )}
       />
 
       <PendingCatalogRequestsDrawer

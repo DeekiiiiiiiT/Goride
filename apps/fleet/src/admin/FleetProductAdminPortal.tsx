@@ -35,9 +35,17 @@ import {
   suspendFleetCustomer,
   type FleetAdminCustomer,
 } from './fleetAdminService';
+import { FleetAdminServiceLinesModal } from './FleetAdminServiceLinesModal';
 import { StorageCenterPage } from './storage/StorageCenterPage';
 import { MaintenanceScheduleLedgerPage } from './ledger/MaintenanceScheduleLedgerPage';
 import { Button } from '../components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '../components/ui/dropdown-menu';
 import { toast } from 'sonner';
 import { useAdminConfirm } from './contexts/AdminConfirmContext';
 
@@ -143,7 +151,7 @@ function FleetAdminLogin({ onSession }: { onSession: (s: Session) => void }) {
   );
 }
 
-type ModalType = 'suspend' | null;
+type ModalType = 'suspend' | 'service-lines' | null;
 
 export function FleetProductAdminPortal() {
   const { confirm, prompt } = useAdminConfirm();
@@ -155,7 +163,6 @@ export function FleetProductAdminPortal() {
   const [ledgerNavOpen, setLedgerNavOpen] = useState(true);
   
   // Action state
-  const [actionMenuId, setActionMenuId] = useState<string | null>(null);
   const [modal, setModal] = useState<ModalType>(null);
   const [selectedCustomer, setSelectedCustomer] = useState<FleetAdminCustomer | null>(null);
   const [reason, setReason] = useState('');
@@ -394,7 +401,7 @@ export function FleetProductAdminPortal() {
           <div className="space-y-6 max-w-2xl">
             <h2 className="text-xl font-semibold">Dashboard</h2>
             <p className="text-sm text-slate-400">
-              Rideshare stack operations — fleet managers, drivers, and riders.
+              Fleet operations for rideshare and Delivery (Roam Rush) — managers, platforms, and account lifecycle.
             </p>
             <div className="grid gap-4 sm:grid-cols-2">
               <button
@@ -432,12 +439,13 @@ export function FleetProductAdminPortal() {
             {customersLoading ? (
               <Loader2 className="h-6 w-6 animate-spin text-slate-500" />
             ) : (
-              <div className="rounded-xl border border-slate-800 overflow-hidden">
+              <div className="rounded-xl border border-slate-800">
                 <table className="w-full text-sm">
                   <thead className="bg-slate-900 text-slate-400">
                     <tr>
                       <th className="text-left p-3">Name</th>
                       <th className="text-left p-3">Email</th>
+                      <th className="text-left p-3">Platforms</th>
                       <th className="text-left p-3">Status</th>
                       <th className="text-right p-3">Actions</th>
                     </tr>
@@ -447,6 +455,18 @@ export function FleetProductAdminPortal() {
                       <tr key={c.id} className="border-t border-slate-800">
                         <td className="p-3">{c.name}</td>
                         <td className="p-3 text-slate-400">{c.email}</td>
+                        <td className="p-3">
+                          <div className="flex flex-wrap gap-1">
+                            {(c.serviceLines?.length ? c.serviceLines : ['rideshare']).map((line) => (
+                              <span
+                                key={line}
+                                className="rounded-full bg-slate-800 px-2 py-0.5 text-[10px] font-medium uppercase text-slate-300"
+                              >
+                                {line === 'rush_delivery' ? 'Delivery' : 'Rideshare'}
+                              </span>
+                            ))}
+                          </div>
+                        </td>
                         <td className="p-3">
                           {c.accountStatus === 'pending_approval' ? (
                             <span className="text-amber-400">Pending</span>
@@ -467,74 +487,57 @@ export function FleetProductAdminPortal() {
                                   await loadCustomers();
                                 }}
                               >
-                                <CheckCircle2 className="h-3.5 w-3.5 mr-1" />
+                                <CheckCircle2 className="mr-1 h-3.5 w-3.5" />
                                 Approve
                               </Button>
                             )}
-                            <div className="relative">
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                onClick={() => setActionMenuId(actionMenuId === c.id ? null : c.id)}
-                              >
-                                <MoreHorizontal className="h-4 w-4" />
-                              </Button>
-                              {actionMenuId === c.id && (
-                                <div className="absolute right-0 mt-1 w-48 rounded-lg border border-slate-700 bg-slate-900 shadow-xl z-20 py-1 text-sm">
-                                  {c.isSuspended || c.accountStatus === 'suspended' ? (
-                                    <button
-                                      type="button"
-                                      className="w-full text-left px-3 py-2 hover:bg-slate-800"
-                                      onClick={() => {
-                                        setActionMenuId(null);
-                                        void doReactivate(c);
-                                      }}
-                                    >
-                                      Reactivate account
-                                    </button>
-                                  ) : c.accountStatus !== 'pending_approval' && (
-                                    <button
-                                      type="button"
-                                      className="w-full text-left px-3 py-2 hover:bg-slate-800"
-                                      onClick={() => {
-                                        setActionMenuId(null);
-                                        setSelectedCustomer(c);
-                                        setModal('suspend');
-                                      }}
-                                    >
-                                      Suspend account
-                                    </button>
-                                  )}
-                                  <button
-                                    type="button"
-                                    className="w-full text-left px-3 py-2 hover:bg-slate-800 flex items-center gap-2"
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button size="sm" variant="ghost" aria-label={`Actions for ${c.email}`}>
+                                  <MoreHorizontal className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end" className="w-52 border-slate-700 bg-slate-900 text-slate-100">
+                                <DropdownMenuItem
+                                  onClick={() => {
+                                    setSelectedCustomer(c);
+                                    setModal('service-lines');
+                                  }}
+                                >
+                                  Edit platforms
+                                </DropdownMenuItem>
+                                {c.isSuspended || c.accountStatus === 'suspended' ? (
+                                  <DropdownMenuItem onClick={() => void doReactivate(c)}>
+                                    Reactivate account
+                                  </DropdownMenuItem>
+                                ) : c.accountStatus !== 'pending_approval' ? (
+                                  <DropdownMenuItem
                                     onClick={() => {
-                                      setActionMenuId(null);
-                                      void doSignOut(c);
+                                      setSelectedCustomer(c);
+                                      setModal('suspend');
                                     }}
                                   >
-                                    <LogOut className="h-3.5 w-3.5" />
-                                    Sign out all devices
-                                  </button>
-                                  {canDelete && (
-                                    <>
-                                      <hr className="my-1 border-slate-800" />
-                                      <button
-                                        type="button"
-                                        className="w-full text-left px-3 py-2 hover:bg-slate-800 text-red-400 flex items-center gap-2"
-                                        onClick={() => {
-                                          setActionMenuId(null);
-                                          void doDelete(c);
-                                        }}
-                                      >
-                                        <Trash2 className="h-3.5 w-3.5" />
-                                        Remove from Fleet
-                                      </button>
-                                    </>
-                                  )}
-                                </div>
-                              )}
-                            </div>
+                                    Suspend account
+                                  </DropdownMenuItem>
+                                ) : null}
+                                <DropdownMenuItem onClick={() => void doSignOut(c)}>
+                                  <LogOut className="mr-2 h-3.5 w-3.5" />
+                                  Sign out all devices
+                                </DropdownMenuItem>
+                                {canDelete ? (
+                                  <>
+                                    <DropdownMenuSeparator className="bg-slate-800" />
+                                    <DropdownMenuItem
+                                      className="text-red-400 focus:text-red-300"
+                                      onClick={() => void doDelete(c)}
+                                    >
+                                      <Trash2 className="mr-2 h-3.5 w-3.5" />
+                                      Remove from Fleet
+                                    </DropdownMenuItem>
+                                  </>
+                                ) : null}
+                              </DropdownMenuContent>
+                            </DropdownMenu>
                           </div>
                         </td>
                       </tr>
@@ -588,6 +591,20 @@ export function FleetProductAdminPortal() {
           </div>
         </div>
       )}
+
+      {modal === 'service-lines' && selectedCustomer && token ? (
+        <FleetAdminServiceLinesModal
+          accessToken={token}
+          orgId={selectedCustomer.organizationId || selectedCustomer.id}
+          customerEmail={selectedCustomer.email}
+          serviceLines={selectedCustomer.serviceLines?.length ? selectedCustomer.serviceLines : ['rideshare']}
+          onSaved={() => void loadCustomers()}
+          onClose={() => {
+            setModal(null);
+            setSelectedCustomer(null);
+          }}
+        />
+      ) : null}
     </div>
   );
 }

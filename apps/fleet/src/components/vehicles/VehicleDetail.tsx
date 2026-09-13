@@ -34,6 +34,8 @@ import { format, subDays, isSameDay, getHours, differenceInDays, addDays, startO
 import { DateRange } from "react-day-picker";
 import { DatePickerWithRange } from "../ui/date-range-picker";
 import { useAuth } from '../auth/AuthContext';
+import { useServiceLineScope } from '../../contexts/ServiceLineScopeContext';
+import { type VehicleServiceLine } from '../../utils/vehicleServiceLines';
 import { getFleetVehicleCatalog } from '../../services/pendingVehicleCatalogService';
 import { useMyPendingCatalogRequests } from '../../hooks/useMyPendingCatalogRequests';
 import type { VehicleCatalogRecord } from '../../types/vehicleCatalog';
@@ -75,6 +77,7 @@ export function VehicleDetail({ vehicle, trips, onBack, onAssignDriver, onUpdate
   const { session } = useAuth();
   const token = session?.access_token;
   const queryClient = useQueryClient();
+  const { serviceLines: orgServiceLines } = useServiceLineScope();
   // Centralised hook handles window-focus refetch + conditional polling.
   const { data: myPendingCatalog } = useMyPendingCatalogRequests();
 
@@ -821,6 +824,19 @@ export function VehicleDetail({ vehicle, trips, onBack, onAssignDriver, onUpdate
     }
   };
 
+  const handleSaveServiceLines = async (lines: VehicleServiceLine[]) => {
+    const updatedVehicle = { ...vehicle, serviceLines: lines };
+    try {
+      await api.saveVehicle(updatedVehicle);
+      await queryClient.invalidateQueries({ queryKey: ['vehicles'] });
+      onUpdate?.(updatedVehicle);
+      toast.success('Platforms updated');
+    } catch {
+      toast.error('Could not update platforms');
+      throw new Error('save_service_lines_failed');
+    }
+  };
+
   const handleUpdateOdometer = async () => {
       if (!newOdometerValue || !newOdometerDate) {
           toast.error("Please enter a valid reading and date");
@@ -1085,6 +1101,8 @@ export function VehicleDetail({ vehicle, trips, onBack, onAssignDriver, onUpdate
             maintenanceStatus={maintenanceStatus}
             catalogMaintenanceOptions={catalogMaintenanceOptions}
             handleRefreshMaintenance={handleRefreshMaintenance}
+            orgServiceLines={orgServiceLines}
+            onSaveServiceLines={handleSaveServiceLines}
           />
       </Tabs>
 

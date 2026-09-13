@@ -53,7 +53,8 @@ function normalizeCourier(row: Record<string, unknown>): CourierProfile {
   };
 }
 
-export function CouriersPage() {
+/** Standalone page or embedded tab under Drivers (`embedded`). */
+export function CouriersPage({ embedded = false }: { embedded?: boolean }) {
   const [search, setSearch] = useState('');
   const [selectedCourier, setSelectedCourier] = useState<CourierProfile | null>(null);
 
@@ -64,7 +65,7 @@ export function CouriersPage() {
       return (Array.isArray(drivers) ? drivers : [])
         .filter((d) => {
           const lines = (d as { serviceLines?: string[] }).serviceLines;
-          return !lines?.length || lines.includes('rush_delivery');
+          return lines?.includes('rush_delivery');
         })
         .map((d) => normalizeCourier(d as Record<string, unknown>))
         .filter((c) => c.id);
@@ -84,39 +85,37 @@ export function CouriersPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-50">
-            Couriers
-          </h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400">
-            Delivery workforce — invite couriers to join your fleet on Roam Rush Courier.
-          </p>
+      {!embedded ? (
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-50">
+              Couriers
+            </h1>
+            <p className="text-sm text-slate-500 dark:text-slate-400">
+              Delivery workforce — invite couriers to join your fleet on Roam Rush Courier.
+            </p>
+          </div>
+          <WorkforceInvitePanel
+            variant="button"
+            serviceLine="rush_delivery"
+            inviteButtonLabel="Invite courier"
+            dialogTitle="Invite a courier"
+            dialogDescription="Invite by the courier’s Roam Tag (in-app Accept/Decline), or generate a shareable code. Roam reviews and approves all couriers before they can go online."
+          />
         </div>
-        <WorkforceInvitePanel
-          variant="button"
-          serviceLine="rush_delivery"
-          inviteButtonLabel="Invite courier"
-          dialogTitle="Invite a courier"
-          dialogDescription="Generate a code for your courier to enter in the Roam Rush Courier app. Roam reviews and approves all couriers before they can go online."
-        />
-      </div>
+      ) : null}
 
       <WorkforcePendingInvites serviceLine="rush_delivery" />
 
-      <Card>
-        <CardContent className="p-4">
-          <div className="relative max-w-md">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <Input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search couriers…"
-              className="pl-9"
-            />
-          </div>
-        </CardContent>
-      </Card>
+      <div className="relative max-w-md">
+        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+        <Input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search couriers…"
+          className="pl-9"
+        />
+      </div>
 
       {isLoading ? (
         <div className="flex min-h-[280px] items-center justify-center">
@@ -129,7 +128,7 @@ export function CouriersPage() {
       ) : filtered.length === 0 ? (
         <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-slate-200 py-16 dark:border-slate-700">
           <Package className="h-10 w-10 text-slate-300" />
-          <p className="text-sm text-slate-500">No couriers yet. Invite your first courier.</p>
+          <p className="text-sm text-slate-500">No couriers yet. Invite your first courier with their Roam Tag or an invite code.</p>
         </div>
       ) : (
         <Card>

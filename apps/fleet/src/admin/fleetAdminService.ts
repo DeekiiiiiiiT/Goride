@@ -18,6 +18,8 @@ export type FleetAdminCustomer = {
   name: string;
   businessType: string;
   productLine: string;
+  organizationId?: string;
+  serviceLines?: Array<'rideshare' | 'rush_delivery'>;
   accountStatus: string | null;
   createdAt: string | null;
   lastSignIn: string | null;
@@ -36,6 +38,24 @@ export async function fetchFleetAdminCustomers(
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.message || data.error || `HTTP ${res.status}`);
   return data.customers || [];
+}
+
+export async function patchFleetOrgServiceLines(
+  accessToken: string,
+  orgId: string,
+  serviceLines: Array<'rideshare' | 'rush_delivery'>,
+): Promise<{ serviceLines: string[]; businessType: string }> {
+  const res = await fetch(
+    `${API_ENDPOINTS.admin}/fleet-admin/organizations/${encodeURIComponent(orgId)}/service-lines`,
+    {
+      method: 'PATCH',
+      headers: authHeaders(accessToken, { 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ serviceLines }),
+    },
+  );
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || data.message || `HTTP ${res.status}`);
+  return data;
 }
 
 export async function approveFleetCustomer(

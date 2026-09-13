@@ -1,5 +1,9 @@
 import type { CourierComplianceBlocker } from '@roam/types/courier';
-import { AlertTriangle, Package, X } from 'lucide-react';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { AlertTriangle, Package, UserMinus, X } from 'lucide-react';
+import { toast } from 'sonner';
+import { API_ENDPOINTS } from '@roam/api-client';
+import { requireAuthHeaders } from '../../utils/authHeaders';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import {
@@ -16,7 +20,7 @@ const BLOCKER_LABELS: Record<CourierComplianceBlocker, string> = {
   onboarding_incomplete: 'Onboarding incomplete',
   background_check_not_approved: 'Background check not approved',
   license_missing: 'Driver license missing',
-  vehicle_missing: 'Vehicle not registered',
+  vehicle_missing: 'Vehicle not assigned',
   insurance_missing: 'Insurance missing',
   account_suspended: 'Account suspended',
   account_deactivated: 'Account deactivated',
@@ -26,7 +30,7 @@ const BLOCKER_WHY: Partial<Record<CourierComplianceBlocker, string>> = {
   onboarding_incomplete: 'Courier must finish onboarding in the Roam Rush Courier app.',
   background_check_not_approved: 'Roam must approve the background check before deliveries.',
   license_missing: 'A valid license document is required.',
-  vehicle_missing: 'Courier must add a vehicle in the app.',
+  vehicle_missing: 'Assign a delivery vehicle to this courier under Vehicles → Delivery.',
   insurance_missing: 'Proof of insurance is required.',
   account_suspended: 'This account is suspended — contact Roam support.',
   account_deactivated: 'This account is deactivated.',
@@ -41,6 +45,28 @@ export function CourierDetailSheet({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
+  const queryClient = useQueryClient();
+
+  const removeMutation = useMutation({
+    mutationFn: async (courierId: string) => {
+      const response = await fetch(`${API_ENDPOINTS.fleet}/team/drivers/${courierId}/remove`, {
+        method: 'POST',
+        headers: await requireAuthHeaders(null),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || 'Failed to remove courier');
+      return data;
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['couriers'] });
+      void queryClient.invalidateQueries({ queryKey: ['drivers'] });
+      void queryClient.invalidateQueries({ queryKey: ['driversRoster'] });
+      toast.success('Courier removed from your fleet');
+      onOpenChange(false);
+    },
+    onError: (e: Error) => toast.error(e.message || 'Could not remove courier'),
+  });
+
   if (!courier) return null;
 
   const blockers = courier.complianceBlockers ?? [];
@@ -116,6 +142,25 @@ export function CourierDetailSheet({
               Fleet owners cannot approve couriers here — Roam reviews documents and compliance centrally.
             </p>
           </div>
+
+          <Button
+            type="button"
+            variant="outline"
+            className="w-full border-red-200 text-red-700 hover:bg-red-50 dark:border-red-900/50 dark:text-red-300 dark:hover:bg-red-950/40"
+            disabled={removeMutation.isPending}
+            onClick={() => {
+              if (
+                window.confirm(
+                  `Remove ${courier.name} from your fleet? They will become an independent courier again.`,
+                )
+              ) {
+                removeMutation.mutate(courier.id);
+              }
+            }}
+          >
+            <UserMinus className="mr-2 h-4 w-4" />
+            {removeMutation.isPending ? 'Removing…' : 'Remove from fleet'}
+          </Button>
 
           <Button type="button" variant="outline" className="w-full" onClick={() => onOpenChange(false)}>
             <X className="mr-2 h-4 w-4" />

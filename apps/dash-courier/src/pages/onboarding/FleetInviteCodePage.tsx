@@ -98,7 +98,9 @@ export function FleetInviteCodePage({ onBack, onContinue, accessToken }: Props) 
       <OnboardingHeader title="Join a fleet" onBack={onBack} variant="centered" />
       <div className="mx-auto mt-8 w-full max-w-md space-y-4">
         <p className="text-sm text-muted-foreground">
-          Use an invite code for instant join, or a Fleet Tag to request approval. Skip if you work independently.
+          Join with an invite code (instant), a Fleet Tag (owner must approve), or skip if you work
+          independently. If your company invites you by Roam Tag, you&apos;ll see that later under
+          Fleet Invites.
         </p>
 
         <div className="grid grid-cols-2 gap-2">

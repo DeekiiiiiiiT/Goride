@@ -1,21 +1,8 @@
-import React, { useState } from 'react';
-import { Car, Package, Loader2 } from 'lucide-react';
+import React from 'react';
+import { Car, Package } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
-import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
-import { Switch } from '../ui/switch';
-import { Label } from '../ui/label';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '../ui/dialog';
-import { toast } from 'sonner';
 import { useBusinessConfig } from '../auth/BusinessConfigContext';
-import { api } from '../../services/api';
 
 type ServiceLine = 'rideshare' | 'rush_delivery';
 
@@ -32,79 +19,24 @@ const LINE_META: Record<ServiceLine, { label: string; description: string; icon:
   },
 };
 
+/** Read-only — Roam staff add/remove platforms via roamfleet.co/admin. */
 export function ServiceLinesSettingsCard() {
-  const { serviceLines, refreshConfig } = useBusinessConfig();
-  const [draft, setDraft] = useState<ServiceLine[]>(serviceLines);
-  const [saving, setSaving] = useState(false);
-  const [confirmRemoveDelivery, setConfirmRemoveDelivery] = useState(false);
-
-  React.useEffect(() => {
-    setDraft(serviceLines);
-  }, [serviceLines]);
-
-  const toggleLine = (line: ServiceLine, on: boolean) => {
-    if (line === 'rush_delivery' && !on && draft.includes('rush_delivery')) {
-      setConfirmRemoveDelivery(true);
-      return;
-    }
-    setDraft((prev) => {
-      if (on) {
-        const next = prev.includes(line) ? prev : [...prev, line];
-        if (line === 'rush_delivery' && !prev.includes('rush_delivery')) {
-          toast.message('Delivery line added — see Setup checklist below.');
-        }
-        return next;
-      }
-      const next = prev.filter((l) => l !== line);
-      return next.length ? next : prev;
-    });
-  };
-
-  const confirmRemoveRushDelivery = () => {
-    setDraft((prev) => {
-      const next = prev.filter((l) => l !== 'rush_delivery');
-      return next.length ? next : prev;
-    });
-    setConfirmRemoveDelivery(false);
-  };
-
-  const deliveryIncluded = draft.includes('rush_delivery');
-
-  const handleSave = async () => {
-    if (draft.length === 0) {
-      toast.error('Keep at least one service line enabled.');
-      return;
-    }
-    setSaving(true);
-    try {
-      await api.updateOrgServiceLines(draft);
-      await refreshConfig?.();
-      toast.success('Service lines updated.');
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Could not save service lines.');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const dirty =
-    draft.length !== serviceLines.length ||
-    draft.some((l) => !serviceLines.includes(l));
+  const { serviceLines } = useBusinessConfig();
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Service lines</CardTitle>
+        <CardTitle>Your platforms</CardTitle>
         <CardDescription>
-          Run rideshare, deliveries, or both from one portal. Removing a line hides nav only — your data stays.
+          Platforms enabled for this fleet. Contact Roam to add or remove Rideshare or Delivery
+          (Roam Rush).
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         {(Object.keys(LINE_META) as ServiceLine[]).map((line) => {
           const meta = LINE_META[line];
           const Icon = meta.icon;
-          const enabled = draft.includes(line);
-          const isRush = line === 'rush_delivery';
+          const enabled = serviceLines.includes(line);
           return (
             <div
               key={line}
@@ -117,54 +49,17 @@ export function ServiceLinesSettingsCard() {
                 <div>
                   <div className="flex items-center gap-2">
                     <p className="font-medium text-slate-900 dark:text-slate-100">{meta.label}</p>
-                    {isRush && deliveryIncluded && (
-                      <Badge variant="secondary" className="text-xs">
-                        Delivery included
-                      </Badge>
-                    )}
+                    <Badge variant={enabled ? 'secondary' : 'outline'} className="text-xs">
+                      {enabled ? 'Enabled' : 'Not enabled'}
+                    </Badge>
                   </div>
                   <p className="mt-1 text-sm text-slate-500">{meta.description}</p>
-                  {isRush && (
-                    <p className="mt-2 text-xs text-slate-400">
-                      Roam approves couriers; you nominate and upload docs. Features roll out gradually during pilot.
-                    </p>
-                  )}
                 </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <Switch
-                  id={`line-${line}`}
-                  checked={enabled}
-                  onCheckedChange={(v) => toggleLine(line, v)}
-                  disabled={enabled && draft.length === 1}
-                />
-                <Label htmlFor={`line-${line}`} className="sr-only">
-                  {meta.label}
-                </Label>
               </div>
             </div>
           );
         })}
-        <Button onClick={handleSave} disabled={!dirty || saving} className="w-full sm:w-auto">
-          {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-          Save service lines
-        </Button>
       </CardContent>
-      <Dialog open={confirmRemoveDelivery} onOpenChange={setConfirmRemoveDelivery}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Remove delivery line?</DialogTitle>
-            <DialogDescription>
-              Active couriers may still be linked to your fleet. Settlement and dispatch for delivery will stop after you save.
-              Confirm only if you intend to turn off Roam delivery for this organization.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setConfirmRemoveDelivery(false)}>Cancel</Button>
-            <Button variant="destructive" onClick={confirmRemoveRushDelivery}>Remove delivery</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </Card>
   );
 }

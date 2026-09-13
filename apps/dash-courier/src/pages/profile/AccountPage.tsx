@@ -7,6 +7,7 @@ import { formatMemberSince } from '@/lib/formatElapsed';
 
 export type ProfileDestination =
   | 'edit-profile'
+  | 'fleet-invites'
   | 'vehicle'
   | 'documents'
   | 'earnings'
@@ -45,6 +46,7 @@ const EMPTY_PROFILE: CourierProfile = {
 const MENU_GROUPS: MenuItem[][] = [
   [
     { id: 'edit-profile', label: 'Edit Profile', icon: 'person_edit' },
+    { id: 'fleet-invites', label: 'Fleet Info', icon: 'apartment' },
     { id: 'vehicle', label: 'Vehicle Details', icon: 'directions_car' },
     { id: 'documents', label: 'Documents', icon: 'description' },
   ],

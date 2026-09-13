@@ -5,15 +5,22 @@ import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import { CourierGoogleAuthButton } from '@/components/auth/CourierGoogleAuthButton';
 import { PhoneInput, toE164JamaicaPhone } from '@/components/forms/PhoneInput';
 import { getCourierAuthRedirectUrl } from '@/lib/courierAuth';
+import {
+  DUPLICATE_ACCOUNT_MESSAGE,
+  DUPLICATE_PHONE_MESSAGE,
+  isDuplicateAuthError,
+  isSoftDuplicateSignUp,
+} from '@/lib/signupDuplicate';
 import { saveSignupDraft } from '@/lib/signupDraft';
 import { supabase } from '@/lib/supabase';
 
 type SignUpPageProps = {
   onBack: () => void;
   onContinue: () => void;
+  onSignIn: () => void;
 };
 
-export function SignUpPage({ onBack, onContinue }: SignUpPageProps) {
+export function SignUpPage({ onBack, onContinue, onSignIn }: SignUpPageProps) {
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -21,6 +28,7 @@ export function SignUpPage({ onBack, onContinue }: SignUpPageProps) {
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [googleError, setGoogleError] = useState<string | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
+  const [duplicateAccount, setDuplicateAccount] = useState(false);
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -34,20 +42,24 @@ export function SignUpPage({ onBack, onContinue }: SignUpPageProps) {
 
     if (!hasEmail && !hasPhone) {
       setAuthError('Enter an email address or phone number.');
+      setDuplicateAccount(false);
       return;
     }
     if (password.length < 8) {
       setAuthError('Password must be at least 8 characters.');
+      setDuplicateAccount(false);
       return;
     }
 
     setAuthError(null);
+    setDuplicateAccount(false);
+    setGoogleError(null);
     setLoading(true);
 
     try {
       if (hasEmail) {
         saveSignupDraft({ countryCode: '+1', phone: trimmedPhone, email: trimmedEmail });
-        const { error } = await supabase.auth.signUp({
+        const { data, error } = await supabase.auth.signUp({
           email: trimmedEmail,
           password,
           options: {
@@ -58,15 +70,32 @@ export function SignUpPage({ onBack, onContinue }: SignUpPageProps) {
             },
           },
         });
-        if (error) throw error;
+        if (error) {
+          if (isDuplicateAuthError(error.message)) {
+            setAuthError(DUPLICATE_ACCOUNT_MESSAGE);
+            setDuplicateAccount(true);
+            return;
+          }
+          throw error;
+        }
+        if (isSoftDuplicateSignUp(data)) {
+          setAuthError(DUPLICATE_ACCOUNT_MESSAGE);
+          setDuplicateAccount(true);
+          return;
+        }
         onContinue();
         return;
       }
 
       const e164 = toE164JamaicaPhone(trimmedPhone);
       saveSignupDraft({ countryCode: '+1', phone: trimmedPhone, email: '' });
-      const { error } = await supabase.auth.signUp({ phone: e164, password });
+      const { data, error } = await supabase.auth.signUp({ phone: e164, password });
       if (error) {
+        if (isDuplicateAuthError(error.message)) {
+          setAuthError(DUPLICATE_PHONE_MESSAGE);
+          setDuplicateAccount(true);
+          return;
+        }
         setAuthError(
           error.message.includes('SMS')
             ? 'Phone signup requires SMS verification. Please use email signup instead.'
@@ -74,9 +103,20 @@ export function SignUpPage({ onBack, onContinue }: SignUpPageProps) {
         );
         return;
       }
+      if (isSoftDuplicateSignUp(data)) {
+        setAuthError(DUPLICATE_PHONE_MESSAGE);
+        setDuplicateAccount(true);
+        return;
+      }
       onContinue();
     } catch (err) {
-      setAuthError(err instanceof Error ? err.message : 'Sign up failed');
+      const msg = err instanceof Error ? err.message : 'Sign up failed';
+      if (isDuplicateAuthError(msg)) {
+        setAuthError(hasEmail ? DUPLICATE_ACCOUNT_MESSAGE : DUPLICATE_PHONE_MESSAGE);
+        setDuplicateAccount(true);
+      } else {
+        setAuthError(msg);
+      }
     } finally {
       setLoading(false);
     }
@@ -109,9 +149,18 @@ export function SignUpPage({ onBack, onContinue }: SignUpPageProps) {
               .
             </p>
             {(googleError || authError) && (
-              <p className="text-sm text-error text-center" role="alert">
-                {authError || googleError}
-              </p>
+              <div className="rounded-lg border border-error/30 bg-error/5 px-3 py-3 text-center" role="alert">
+                <p className="text-sm text-error">{authError || googleError}</p>
+                {duplicateAccount && (
+                  <button
+                    type="button"
+                    onClick={onSignIn}
+                    className="mt-3 min-h-11 w-full rounded-lg bg-primary px-4 text-sm font-semibold text-on-primary"
+                  >
+                    Sign in instead
+                  </button>
+                )}
+              </div>
             )}
           </div>
 
@@ -142,7 +191,11 @@ export function SignUpPage({ onBack, onContinue }: SignUpPageProps) {
               id="email"
               type="email"
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              onChange={(e) => {
+                setEmail(e.target.value);
+                setDuplicateAccount(false);
+                setAuthError(null);
+              }}
               placeholder="name@example.com"
               className="h-14 bg-surface border border-outline-variant rounded-lg px-4 text-base text-on-surface focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-colors placeholder:text-muted/50"
             />

@@ -54,20 +54,33 @@ export async function ensureCourierProfile(opts?: { markComplete?: boolean }): P
     status: 'pending' as const,
     updated_at: new Date().toISOString(),
   };
+  // Independent / fleet-owner-continue: stamp mode. Join stays independent until invite accept.
+  if (draft.workforceChoice !== 'join_fleet') {
+    payload.mode = 'independent';
+  }
   if (draft.profilePhotoUrl) {
     payload.profile_photo_url = draft.profilePhotoUrl;
   }
 
   if (existing) {
     // Do not overwrite status on existing profiles; do not flip complete mid-wizard.
+    // Do not overwrite mode=fleet if already linked.
     const { status: _status, ...safePayload } = payload;
     if (opts?.markComplete) {
       safePayload.onboarding_complete = true;
     }
+    const { data: current } = await delivery
+      .from('courier_profiles')
+      .select('mode, fleet_id')
+      .eq('user_id', user.id)
+      .maybeSingle();
+    if (current?.mode === 'fleet' && current?.fleet_id) {
+      delete safePayload.mode;
+    }
     await delivery.from('courier_profiles').update(safePayload).eq('user_id', user.id);
   } else {
     await delivery.from('courier_profiles').upsert(
-      { ...payload, onboarding_complete: false },
+      { ...payload, onboarding_complete: false, mode: payload.mode ?? 'independent' },
       { onConflict: 'user_id' },
     );
   }
@@ -94,6 +107,16 @@ export async function syncCourierProfileFromDraft(): Promise<void> {
   };
   if (draft.profilePhotoUrl) {
     patch.profile_photo_url = draft.profilePhotoUrl;
+  }
+  if (draft.workforceChoice !== 'join_fleet') {
+    const { data: current } = await delivery
+      .from('courier_profiles')
+      .select('mode, fleet_id')
+      .eq('user_id', session.user.id)
+      .maybeSingle();
+    if (!(current?.mode === 'fleet' && current?.fleet_id)) {
+      patch.mode = 'independent';
+    }
   }
 
   await delivery.from('courier_profiles').update(patch).eq('user_id', session.user.id);

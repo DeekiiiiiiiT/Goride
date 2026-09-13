@@ -1544,11 +1544,45 @@ export const api = {
     return response.json();
   },
 
+  async createWorkforceInviteByRoamTag(payload: {
+    roamTag: string;
+    serviceLine?: 'rush_delivery';
+  }) {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/workforce/invites/by-roam-tag`, {
+      method: 'POST',
+      headers: await requireAuthHeaders(),
+      body: JSON.stringify({
+        roamTag: payload.roamTag,
+        serviceLine: payload.serviceLine ?? 'rush_delivery',
+      }),
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err?.error || 'Failed to invite by Roam Tag');
+    }
+    return response.json();
+  },
+
   async getWorkforceInvites() {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/workforce/invites`, {
       headers: await requireAuthHeaders(null),
     });
     if (!response.ok) throw new Error('Failed to fetch workforce invites');
+    return response.json();
+  },
+
+  async cancelWorkforceInvite(inviteId: string) {
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.fleet}/workforce/invites/${encodeURIComponent(inviteId)}/cancel`,
+      {
+        method: 'POST',
+        headers: await requireAuthHeaders(),
+      },
+    );
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err?.error || 'Failed to cancel invite');
+    }
     return response.json();
   },
 

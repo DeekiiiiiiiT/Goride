@@ -16,6 +16,7 @@ import { Vehicle } from '../../types/vehicle';
 import { Trip, DriverMetrics } from '../../types/data';
 import { cn } from "../ui/utils";
 import { toast } from "sonner";
+import { personMatchesServiceLine, type VehicleServiceLine } from '../../utils/vehicleServiceLines';
 
 interface DriverAssignmentModalProps {
   isOpen: boolean;
@@ -23,6 +24,8 @@ interface DriverAssignmentModalProps {
   vehicle: Vehicle | null;
   trips: Trip[];
   allDrivers?: any[];
+  /** Active Vehicles tab line — filters who can be assigned. */
+  serviceLine?: VehicleServiceLine;
   onAssign: (vehicleId: string, driverId: string) => void;
 }
 
@@ -38,17 +41,28 @@ interface DriverSummary {
   isCompatible: boolean;
 }
 
-export function DriverAssignmentModal({ isOpen, onClose, vehicle, trips, allDrivers = [], onAssign }: DriverAssignmentModalProps) {
+export function DriverAssignmentModal({
+  isOpen,
+  onClose,
+  vehicle,
+  trips,
+  allDrivers = [],
+  serviceLine = 'rideshare',
+  onAssign,
+}: DriverAssignmentModalProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedDriverId, setSelectedDriverId] = useState<string | null>(null);
+  const isDelivery = serviceLine === 'rush_delivery';
+  const personLabelTitle = isDelivery ? 'Courier' : 'Driver';
 
   // Derived drivers list from trips and allDrivers source of truth
   const drivers: DriverSummary[] = useMemo(() => {
     const driverMap = new Map<string, DriverSummary>();
+    const lineEligible = allDrivers.filter((d) => personMatchesServiceLine(d, serviceLine));
     
-    // 1. Populate from Source of Truth (allDrivers)
+    // 1. Populate from Source of Truth (allDrivers) for this service line only
     // Handle both DriverProfile (id, name) and DriverMetrics (driverId, driverName) shapes
-    allDrivers.forEach(d => {
+    lineEligible.forEach(d => {
        const id = d.id || d.driverId;
        const name = d.name || d.driverName;
        
@@ -56,7 +70,7 @@ export function DriverAssignmentModal({ isOpen, onClose, vehicle, trips, allDriv
        
        driverMap.set(id, {
            id: id,
-           name: name || 'Unknown Driver',
+           name: name || `Unknown ${personLabelTitle}`,
            rating: d.ratingLast4Weeks || ((d.tripsCompleted || d.totalTrips || 0) > 0 ? 4.8 : 0),
            totalTrips: d.tripsCompleted || d.totalTrips || 0,
            totalEarnings: d.totalEarnings || 0,
@@ -66,7 +80,14 @@ export function DriverAssignmentModal({ isOpen, onClose, vehicle, trips, allDriv
        });
     });
 
-    // 2. Augment with Trip Data (and handle legacy/unmapped drivers)
+    // 2. Augment with Trip Data for rideshare only (delivery uses courier roster)
+    if (isDelivery) {
+      return Array.from(driverMap.values()).filter(d =>
+        d.id !== 'unknown' &&
+        !d.name.toLowerCase().includes('unknown')
+      );
+    }
+
     trips.forEach(trip => {
       if (!trip.driverId || trip.driverId === 'unknown') return;
       
@@ -158,7 +179,7 @@ export function DriverAssignmentModal({ isOpen, onClose, vehicle, trips, allDriv
         d.name !== 'Unknown Driver' &&
         !d.name.toLowerCase().includes('unknown driver')
     );
-  }, [trips, allDrivers]);
+  }, [trips, allDrivers, serviceLine, isDelivery, personLabelTitle]);
 
   const filteredDrivers = drivers.filter(d => 
     d.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -187,9 +208,9 @@ export function DriverAssignmentModal({ isOpen, onClose, vehicle, trips, allDriv
                   <User className="h-6 w-6" />
                </div>
                <div>
-                  <DialogTitle className="text-xl">Assign Driver</DialogTitle>
+                  <DialogTitle className="text-xl">Assign {personLabelTitle}</DialogTitle>
                   <DialogDescription>
-                    Select a driver for {vehicle.year} {vehicle.model} ({vehicle.licensePlate})
+                    Select a {personLabelTitle.toLowerCase()} for {vehicle.year} {vehicle.model} ({vehicle.licensePlate})
                   </DialogDescription>
                </div>
             </div>
@@ -202,7 +223,7 @@ export function DriverAssignmentModal({ isOpen, onClose, vehicle, trips, allDriv
                   <div className="relative">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                     <Input 
-                      placeholder="Search drivers..." 
+                      placeholder={isDelivery ? 'Search couriers...' : 'Search drivers...'} 
                       className="pl-9 h-9 text-sm"
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
@@ -300,18 +321,18 @@ export function DriverAssignmentModal({ isOpen, onClose, vehicle, trips, allDriv
                        <div className="space-y-2">
                           <div className="flex items-start gap-2 text-xs p-2 bg-emerald-50 text-emerald-800 rounded-lg border border-emerald-100">
                              <Check className="h-3.5 w-3.5 mt-0.5" />
-                             <p>Driver has 92% performance match with this vehicle type.</p>
+                             <p>{personLabelTitle} has 92% performance match with this vehicle type.</p>
                           </div>
                           <div className="flex items-start gap-2 text-xs p-2 bg-amber-50 text-amber-800 rounded-lg border border-amber-100">
                              <AlertCircle className="h-3.5 w-3.5 mt-0.5" />
-                             <p>Vehicle service is due in 3 days. Notify driver upon assignment.</p>
+                             <p>Vehicle service is due in 3 days. Notify {personLabelTitle.toLowerCase()} upon assignment.</p>
                           </div>
                        </div>
                     </div>
 
                     <div className="mt-auto pt-4 border-t border-slate-200">
                        <p className="text-[11px] text-slate-500 italic text-center">
-                         By assigning this driver, they will be notified immediately and the vehicle status will be updated fleet-wide.
+                         By assigning this {personLabelTitle.toLowerCase()}, they will be notified immediately and the vehicle status will be updated fleet-wide.
                        </p>
                     </div>
                  </div>
@@ -320,7 +341,7 @@ export function DriverAssignmentModal({ isOpen, onClose, vehicle, trips, allDriv
                     <div className="h-16 w-16 rounded-full bg-slate-100 flex items-center justify-center mb-4">
                        <User className="h-8 w-8 text-slate-300" />
                     </div>
-                    <p className="text-sm font-medium">Select a driver to view <br/>details and compatibility</p>
+                    <p className="text-sm font-medium">Select a {personLabelTitle.toLowerCase()} to view <br/>details and compatibility</p>
                  </div>
                )}
             </div>

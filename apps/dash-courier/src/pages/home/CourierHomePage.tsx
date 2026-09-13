@@ -40,6 +40,8 @@ import { DashSummaryPage } from '@/pages/home/DashSummaryPage';
 import { ActivityPage } from '@/pages/activity/ActivityPage';
 import { AccountPage, type ProfileDestination } from '@/pages/profile/AccountPage';
 import { EditProfilePage } from '@/pages/profile/EditProfilePage';
+import { FleetInvitesPage } from '@/pages/profile/FleetInvitesPage';
+import { loadMyFleetInvites } from '@/lib/courierRoamTagService';
 import { VehicleDetailsPage } from '@/pages/profile/VehicleDetailsPage';
 import { EditVehiclePage } from '@/pages/profile/EditVehiclePage';
 import { CourierDocumentsPage } from '@/pages/profile/CourierDocumentsPage';
@@ -80,9 +82,11 @@ import {
 import { nextClientSeq } from '@/lib/locationSeq';
 import { realDispatchProvider } from '@/services/courierDispatch/RealDispatchProvider';
 import { toast } from '@/lib/toast';
+import { MaterialIcon } from '@/components/icons/MaterialIcon';
 
 type ProfileScreen =
   | 'edit-profile'
+  | 'fleet-invites'
   | 'vehicle'
   | 'edit-vehicle'
   | 'documents'
@@ -127,6 +131,7 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
   const [stackedRoute, setStackedRoute] = useState<StackedRouteStop[]>([]);
   const [promotionsOpen, setPromotionsOpen] = useState(false);
   const [mutationSubmitting, setMutationSubmitting] = useState(false);
+  const [pendingFleetInviteCount, setPendingFleetInviteCount] = useState(0);
   const [sessionRestoredApprox, setSessionRestoredApprox] = useState(false);
   const delivery = activeDelivery ?? emptyActiveDelivery();
   const hasActiveDeliveryData = Boolean(activeDelivery?.orderId);
@@ -137,6 +142,10 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
   const networkOffline = !networkOnline;
   const isOnline = mode === 'online' || mode === 'on-delivery';
   const { coords } = useBackgroundLocation(isOnline);
+
+  useEffect(() => {
+    void loadMyFleetInvites().then((rows) => setPendingFleetInviteCount(rows.length));
+  }, [profileScreen]);
 
   const getProviderPendingOrder = useCallback((): AvailableOrder | null => {
     if (
@@ -610,6 +619,7 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
   const handleProfileNavigate = useCallback((destination: ProfileDestination) => {
     const screenMap: Partial<Record<ProfileDestination, ProfileScreen>> = {
       'edit-profile': 'edit-profile',
+      'fleet-invites': 'fleet-invites',
       vehicle: 'vehicle',
       documents: 'documents',
       notifications: 'notifications',
@@ -725,6 +735,25 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
           onMenuClick={() => setActiveTab('account')}
           avatarUrl={avatarUrl}
         />
+
+        {pendingFleetInviteCount > 0 && profileScreen === null && activeTab === 'home' && (
+          <button
+            type="button"
+            onClick={() => setProfileScreen('fleet-invites')}
+            className="mx-[var(--spacing-edge)] mt-2 mb-1 flex items-center gap-3 rounded-xl bg-primary/10 border border-primary/20 px-4 py-3 text-left active:scale-[0.99]"
+          >
+            <MaterialIcon name="mail" className="text-primary" />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-on-surface">
+                {pendingFleetInviteCount === 1
+                  ? '1 fleet invite waiting'
+                  : `${pendingFleetInviteCount} fleet invites waiting`}
+              </p>
+              <p className="text-xs text-muted">Tap to Accept or Decline</p>
+            </div>
+            <MaterialIcon name="chevron_right" className="text-muted" />
+          </button>
+        )}
 
         {renderTabContent()}
       </div>
@@ -925,6 +954,13 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
         <EditProfilePage
           onBack={() => setProfileScreen(null)}
           onSave={() => setProfileScreen(null)}
+        />
+      )}
+
+      {profileScreen === 'fleet-invites' && (
+        <FleetInvitesPage
+          onBack={() => setProfileScreen(null)}
+          onJoinFleet={() => setProfileScreen('settings')}
         />
       )}
 

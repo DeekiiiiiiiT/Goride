@@ -126,7 +126,6 @@ import {
   resolvePageFromPathname,
   type DriverDetailTab,
 } from './navigation/pageRegistry';
-import { CouriersPage } from './components/couriers/CouriersPage';
 import { CourierAnalyticsPage } from './components/couriers/CourierAnalyticsPage';
 import { CourierSettlementsPage } from './components/couriers/CourierSettlementsPage';
 import { SupplyHealthPage } from './components/couriers/SupplyHealthPage';
@@ -388,6 +387,17 @@ function AppContent() {
     window.addEventListener('popstate', onPopState);
     return () => window.removeEventListener('popstate', onPopState);
   }, []);
+
+  // Couriers moved under Drivers — rewrite legacy /couriers bookmarks
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const path = window.location.pathname.replace(/\/+$/, '') || '/';
+    if (path === '/couriers' || path.startsWith('/couriers/')) {
+      const next = '/drivers?workforce=couriers';
+      window.history.replaceState({ page: 'drivers' }, '', next);
+      setCurrentPage('drivers');
+    }
+  }, [currentPage]);
 
   // Old Tier Config / legacy bookmarks → Earnings Policy Configuration
   useEffect(() => {
@@ -941,11 +951,6 @@ function AppContent() {
         {currentPage === 'settings' && (
           <PermissionGate permission="nav.settings" onNavigate={setCurrentPage}>
             <SettingsPage />
-          </PermissionGate>
-        )}
-        {currentPage === 'couriers' && (
-          <PermissionGate permission="nav.couriers" onNavigate={setCurrentPage}>
-            <CouriersPage />
           </PermissionGate>
         )}
         {currentPage === 'courier-analytics' && (

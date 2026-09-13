@@ -25,6 +25,10 @@ interface AddVehicleModalProps {
   onClose: () => void;
   onVehicleAdded: (vehicle: Vehicle) => void;
   existingVehicles?: Vehicle[];
+  /** Default platforms when creating (e.g. active Vehicles tab). */
+  defaultServiceLines?: Array<'rideshare' | 'rush_delivery'>;
+  /** Org capability — when both, show platform picker. */
+  orgServiceLines?: Array<'rideshare' | 'rush_delivery'>;
 }
 
 const ACCEPT_IMAGE_ONLY = 'image/*';
@@ -164,7 +168,30 @@ const FileUploadZone = ({
   );
 };
 
-export function AddVehicleModal({ isOpen, onClose, onVehicleAdded, existingVehicles = [] }: AddVehicleModalProps) {
+export function AddVehicleModal({
+  isOpen,
+  onClose,
+  onVehicleAdded,
+  existingVehicles = [],
+  defaultServiceLines,
+  orgServiceLines,
+}: AddVehicleModalProps) {
+  const orgLines = (orgServiceLines?.length
+    ? orgServiceLines
+    : (['rideshare'] as Array<'rideshare' | 'rush_delivery'>));
+  const showPlatformPicker = orgLines.includes('rideshare') && orgLines.includes('rush_delivery');
+  const [serviceLines, setServiceLines] = useState<Array<'rideshare' | 'rush_delivery'>>(() => {
+    if (defaultServiceLines?.length) return defaultServiceLines.filter((l) => orgLines.includes(l));
+    return [...orgLines];
+  });
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const next = defaultServiceLines?.length
+      ? defaultServiceLines.filter((l) => orgLines.includes(l))
+      : [...orgLines];
+    setServiceLines(next.length ? next : [...orgLines]);
+  }, [isOpen, defaultServiceLines, orgLines.join(',')]);
   const [step, setStep] = useState(1); // 1 = Upload docs, 2 = Verify Details
   /** Step 1: fitness upload → parse review → registration upload → combined verify. */
   const [uploadSubStep, setUploadSubStep] = useState<"fitness" | "fitness_review" | "registration">("fitness");
@@ -514,6 +541,11 @@ export function AddVehicleModal({ isOpen, onClose, onVehicleAdded, existingVehic
       return;
     }
 
+    if (!serviceLines.length) {
+      toast.error('Select at least one platform (Rideshare or Delivery).');
+      return;
+    }
+
     // Hybrid catalog matching: when the picker has 2+ candidates we must not
     // silently guess. Force the operator onto the catalog tab to pick.
     if (catalogSaveBlocked) {
@@ -670,6 +702,7 @@ export function AddVehicleModal({ isOpen, onClose, onVehicleAdded, existingVehic
                 formData.usageCategory === 'Commercial'
                   ? formData.fitnessFirstRegistration
                   : existingVehicle.fitnessFirstRegistration,
+              serviceLines: serviceLines.length ? serviceLines : ['rideshare'],
           };
           toast.info(`Updated existing vehicle: ${plateToUse}`);
       } else {
@@ -719,6 +752,7 @@ export function AddVehicleModal({ isOpen, onClose, onVehicleAdded, existingVehic
             plateClass: (formData.plateClass || undefined) as Vehicle['plateClass'],
             fitnessFirstRegistration:
               formData.usageCategory === 'Commercial' ? formData.fitnessFirstRegistration : undefined,
+            serviceLines: serviceLines.length ? serviceLines : ['rideshare'],
 
             // Hybrid catalog matching: catalog id + hints from the picker.
             ...catalogHints,
@@ -1040,6 +1074,49 @@ export function AddVehicleModal({ isOpen, onClose, onVehicleAdded, existingVehic
                     Edit the fields parsed from your registration document. Switch to the Fitness tab to review or edit certificate details.
                   </p>
                   <div className="space-y-3 pt-1">
+                            {showPlatformPicker ? (
+                              <div className="space-y-2 rounded-lg border border-slate-200 bg-white p-3">
+                                <Label className="text-xs text-slate-500">
+                                  Platforms <span className="text-red-500">*</span>
+                                </Label>
+                                <p className="text-[11px] text-slate-400">
+                                  Where this vehicle will be used. You can select both.
+                                </p>
+                                <div className="flex flex-wrap gap-2">
+                                  {(
+                                    [
+                                      { id: 'rideshare' as const, label: 'Rideshare' },
+                                      { id: 'rush_delivery' as const, label: 'Delivery (Roam Rush)' },
+                                    ] as const
+                                  ).map((opt) => {
+                                    const on = serviceLines.includes(opt.id);
+                                    return (
+                                      <button
+                                        key={opt.id}
+                                        type="button"
+                                        onClick={() => {
+                                          setServiceLines((prev) => {
+                                            if (on) {
+                                              const next = prev.filter((l) => l !== opt.id);
+                                              return next.length ? next : prev;
+                                            }
+                                            return [...prev, opt.id];
+                                          });
+                                        }}
+                                        className={cn(
+                                          'rounded-full border px-3 py-1.5 text-xs font-medium transition-colors',
+                                          on
+                                            ? 'border-indigo-500 bg-indigo-50 text-indigo-800'
+                                            : 'border-slate-200 bg-slate-50 text-slate-600 hover:border-slate-300',
+                                        )}
+                                      >
+                                        {opt.label}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            ) : null}
                             <div>
                                 <Label className="text-xs text-slate-500">LA Number</Label>
                                 <Input value={formData.laNumber} onChange={(e) => setFormData({...formData, laNumber: e.target.value})} />

@@ -11,7 +11,6 @@ import {
   DropdownMenuTrigger,
 } from '../ui/dropdown-menu';
 import { cn } from '../ui/utils';
-import { ServiceLineScopeSwitcher } from './ServiceLineScopeSwitcher';
 import {
   fleetOpsActive,
   isNavLeafActive,
@@ -303,8 +302,6 @@ export function AppTopNav({
         </nav>
 
         <div className="flex shrink-0 items-center gap-2">
-          <ServiceLineScopeSwitcher />
-
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button

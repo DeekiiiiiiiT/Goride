@@ -7,7 +7,7 @@ import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import type { RbacUser } from "./rbac_middleware.ts";
 import { hasPermission, type Permission } from "./rbac_middleware.ts";
 import { checkAcceptRateLimit } from "./workforce_invite_rate_limit.ts";
-import type { LinkDriverResult } from "./workforce_link.ts";
+import type { LinkCourierResult, LinkDriverResult } from "./workforce_link.ts";
 
 const RESERVED_FLEET_TAGS = new Set([
   "admin",
@@ -172,6 +172,7 @@ export function registerFleetTagRoutes(
     requireAuth: () => unknown;
     getOrgId: (c: { get: (k: string) => unknown }) => string | null;
     linkDriverToFleet: (userId: string, fleetId: string) => Promise<LinkDriverResult>;
+    linkCourierToFleet: (userId: string, fleetId: string) => Promise<LinkCourierResult>;
   },
 ): void {
   // ── Ensure / get own org Fleet Tag ─────────────────────────────────────
@@ -491,26 +492,8 @@ export function registerFleetTagRoutes(
         const fleetId = orgId;
 
         if (serviceLine === "rush_delivery") {
-          const { data: existingCourier } = await deps.supabase.schema("delivery")
-            .from("courier_profiles")
-            .select("user_id, mode, fleet_id")
-            .eq("user_id", userId)
-            .maybeSingle();
-          if (!existingCourier) {
-            return c.json({ error: "Requester has no courier profile" }, 404);
-          }
-          if (existingCourier.mode === "fleet" && existingCourier.fleet_id && existingCourier.fleet_id !== fleetId) {
-            return c.json({ error: "Requester already linked to another fleet" }, 409);
-          }
-          const { error: courierErr } = await deps.supabase.schema("delivery").from("courier_profiles")
-            .update({
-              mode: "fleet",
-              fleet_id: fleetId,
-              fleet_joined_at: new Date().toISOString(),
-              fleet_role: "courier",
-            })
-            .eq("user_id", userId);
-          if (courierErr) throw courierErr;
+          const linked = await deps.linkCourierToFleet(userId, fleetId);
+          if (!linked.success) return c.json({ error: linked.error }, linked.status);
         } else {
           try {
             await deps.linkDriverToFleet(userId, fleetId);

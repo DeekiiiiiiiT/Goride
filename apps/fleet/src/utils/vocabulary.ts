@@ -230,12 +230,9 @@ export function getVocab(businessType: BusinessType, key: VocabKey): string {
 }
 
 /**
- * React hook — reads the active business type from context and returns
- * a bound `v()` function for convenient use in components.
- *
- * Usage:
- *   const { v } = useVocab();
- *   <h1>{v('tripsPageTitle')}</h1>   // "Trip Logs" | "Delivery Logs" | etc.
+ * React hook — vocabulary for the active business type.
+ * Dual-line orgs use rideshare labels on shared pages (scope is capability-derived 'all').
+ * Delivery-only orgs use delivery vocabulary via businessType.
  */
 export function useVocab() {
   const { businessType, serviceLines } = useBusinessConfig();
@@ -243,6 +240,7 @@ export function useVocab() {
 
   const effectiveType: BusinessType = (() => {
     if (serviceLines.includes('rideshare') && serviceLines.includes('rush_delivery')) {
+      // Shared surfaces stay rideshare-labeled; delivery-specific pages have their own copy.
       if (scope === 'rush_delivery') return 'delivery';
       return 'rideshare';
     }

@@ -135,6 +135,8 @@ export function pathForDriverDetail(driverId: string, tab?: string | null): stri
 export function resolvePageFromPathname(pathname: string): string {
   const normalized = pathname.replace(/\/+$/, '') || '/';
   if (normalized === '/') return 'dashboard';
+  // Couriers live under Drivers as a workforce tab — keep deep links working.
+  if (normalized === '/couriers' || normalized.startsWith('/couriers/')) return 'drivers';
   const match = PATH_TO_PAGE.find(
     (def) => normalized === def.path || normalized.startsWith(`${def.path}/`),
   );
@@ -142,5 +144,6 @@ export function resolvePageFromPathname(pathname: string): string {
 }
 
 export function pathForPageId(pageId: string): string {
+  if (pageId === 'couriers') return '/drivers?workforce=couriers';
   return FLEET_PAGE_REGISTRY[pageId]?.path ?? '/';
 }

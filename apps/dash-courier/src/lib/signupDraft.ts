@@ -1,4 +1,4 @@
-export type WorkforceChoice = 'independent' | 'join_fleet';
+export type WorkforceChoice = 'independent' | 'join_fleet' | 'fleet_owner';
 
 export type SignupDraft = {
   countryCode: string;

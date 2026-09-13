@@ -2,8 +2,10 @@ import React, { useEffect, useRef, useState } from 'react';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import { SubPageHeader } from '@/components/layout/SubPageHeader';
 import { loadCourierProfile, updateCourierProfile } from '@/lib/courierProfileService';
+import { claimCourierRoamTag, loadCourierRoamTag } from '@/lib/courierRoamTagService';
 import { uploadAndGetProofUrl, resolveCourierFileUrl } from '@/lib/courierFileUpload';
 import { toast } from '@/lib/toast';
+import { formatCourierRoamTagDisplay, normalizeCourierRoamTagName, validateCourierRoamTagName } from '@roam/types';
 
 type EditProfilePageProps = {
   onBack: () => void;
@@ -32,12 +34,44 @@ type FieldConfig = {
   placeholder: string;
 };
 
-const FIELDS: FieldConfig[] = [
+const FIELDS_BEFORE_TAG: FieldConfig[] = [
   { id: 'fullName', label: 'Full Name', icon: 'person', type: 'text', placeholder: 'Enter your full name' },
   { id: 'displayName', label: 'Display Name', icon: 'badge', type: 'text', placeholder: 'How customers see you' },
+];
+
+const FIELDS_AFTER_TAG: FieldConfig[] = [
   { id: 'phone', label: 'Phone Number', icon: 'call', type: 'tel', placeholder: 'Phone number' },
   { id: 'email', label: 'Email Address', icon: 'mail', type: 'email', placeholder: 'Email address' },
 ];
+
+function FieldRow({
+  field,
+  value,
+  onChange,
+}: {
+  field: FieldConfig;
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-1">
+      <label htmlFor={field.id} className="text-xs font-semibold uppercase tracking-wide text-on-surface-variant ml-1">
+        {field.label}
+      </label>
+      <div className="rounded-xl bg-surface border border-outline-variant shadow-soft flex items-center px-4 h-14 focus-within:ring-1 focus-within:ring-primary focus-within:border-primary transition-shadow">
+        <MaterialIcon name={field.icon} className="text-muted mr-2" />
+        <input
+          id={field.id}
+          type={field.type}
+          value={value}
+          placeholder={field.placeholder}
+          onChange={(e) => onChange(e.target.value)}
+          className="w-full bg-transparent border-none p-0 text-base text-on-surface focus:ring-0 placeholder:text-muted"
+        />
+      </div>
+    </div>
+  );
+}
 
 export function EditProfilePage({ onBack, onSave }: EditProfilePageProps) {
   const [form, setForm] = useState<ProfileForm>(EMPTY_FORM);
@@ -46,11 +80,15 @@ export function EditProfilePage({ onBack, onSave }: EditProfilePageProps) {
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [existingPhotoUrl, setExistingPhotoUrl] = useState<string | undefined>();
+  const [roamTagDraft, setRoamTagDraft] = useState('');
+  const [roamTagLocked, setRoamTagLocked] = useState(false);
+  const [tagTip, setTagTip] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     let cancelled = false;
-    void loadCourierProfile().then(async (row) => {
+    void (async () => {
+      const [row, tag] = await Promise.all([loadCourierProfile(), loadCourierRoamTag()]);
       if (cancelled) return;
       if (!row) {
         setLoadState('error');
@@ -62,6 +100,10 @@ export function EditProfilePage({ onBack, onSave }: EditProfilePageProps) {
         phone: row.phone || '',
         email: row.email || '',
       });
+      if (tag?.custom_tag_name) {
+        setRoamTagDraft(tag.custom_tag_name);
+        setRoamTagLocked(true);
+      }
       const raw = row.profile_photo_url || '';
       if (raw) {
         const resolved = (await resolveCourierFileUrl(raw)) || raw;
@@ -70,7 +112,7 @@ export function EditProfilePage({ onBack, onSave }: EditProfilePageProps) {
         setPhotoPreview(resolved);
       }
       setLoadState('ready');
-    });
+    })();
     return () => {
       cancelled = true;
     };
@@ -96,6 +138,29 @@ export function EditProfilePage({ onBack, onSave }: EditProfilePageProps) {
       }
       profilePhotoUrl = url;
     }
+
+    if (!roamTagLocked && roamTagDraft.trim()) {
+      const localCheck = validateCourierRoamTagName(roamTagDraft);
+      if (localCheck) {
+        setSaving(false);
+        const tips: Record<string, string> = {
+          tag_length: 'Pick something between 3 and 24 characters.',
+          tag_format: 'Use letters, numbers, and underscores only — no spaces.',
+          tag_reserved: 'That name isn’t available. Try a different @tag.',
+        };
+        setTagTip(tips[localCheck] || 'Try a different Roam Tag and save again.');
+        return;
+      }
+      const tagResult = await claimCourierRoamTag(normalizeCourierRoamTagName(roamTagDraft));
+      if (!tagResult.ok) {
+        setSaving(false);
+        setTagTip(tagResult.error);
+        return;
+      }
+      setRoamTagDraft(tagResult.tag.custom_tag_name || roamTagDraft);
+      setRoamTagLocked(Boolean(tagResult.tag.has_custom_tag));
+    }
+
     const patch: Parameters<typeof updateCourierProfile>[0] = {
       display_name: form.displayName || form.fullName,
       phone: form.phone,
@@ -168,23 +233,62 @@ export function EditProfilePage({ onBack, onSave }: EditProfilePageProps) {
         </section>
 
         <form className="flex flex-col gap-6" onSubmit={(e) => e.preventDefault()}>
-          {FIELDS.map((field) => (
-            <div key={field.id} className="flex flex-col gap-1">
-              <label htmlFor={field.id} className="text-xs font-semibold uppercase tracking-wide text-on-surface-variant ml-1">
-                {field.label}
-              </label>
-              <div className="rounded-xl bg-surface border border-outline-variant shadow-soft flex items-center px-4 h-14 focus-within:ring-1 focus-within:ring-primary focus-within:border-primary transition-shadow">
-                <MaterialIcon name={field.icon} className="text-muted mr-2" />
-                <input
-                  id={field.id}
-                  type={field.type}
-                  value={form[field.id]}
-                  placeholder={field.placeholder}
-                  onChange={(e) => setForm((prev) => ({ ...prev, [field.id]: e.target.value }))}
-                  className="w-full bg-transparent border-none p-0 text-base text-on-surface focus:ring-0 placeholder:text-muted"
-                />
-              </div>
+          {FIELDS_BEFORE_TAG.map((field) => (
+            <FieldRow
+              key={field.id}
+              field={field}
+              value={form[field.id]}
+              onChange={(v) => setForm((prev) => ({ ...prev, [field.id]: v }))}
+            />
+          ))}
+
+          <div className="flex flex-col gap-1">
+            <label htmlFor="roamTag" className="text-xs font-semibold uppercase tracking-wide text-on-surface-variant ml-1">
+              Roam Tag
+            </label>
+            <div
+              className={`rounded-xl bg-surface border border-outline-variant shadow-soft flex items-center px-4 h-14 transition-shadow ${
+                roamTagLocked
+                  ? 'opacity-90'
+                  : 'focus-within:ring-1 focus-within:ring-primary focus-within:border-primary'
+              }`}
+            >
+              <MaterialIcon name="alternate_email" className="text-muted mr-2" />
+              <span className="text-muted mr-0.5 select-none">@</span>
+              <input
+                id="roamTag"
+                type="text"
+                value={roamTagDraft.replace(/^@+/, '')}
+                placeholder="your_tag"
+                readOnly={roamTagLocked}
+                onChange={(e) =>
+                  setRoamTagDraft(
+                    e.target.value
+                      .replace(/^@+/, '')
+                      .toLowerCase()
+                      .replace(/[^a-z0-9_]/g, ''),
+                  )
+                }
+                className="w-full bg-transparent border-none p-0 text-base text-on-surface focus:ring-0 placeholder:text-muted read-only:cursor-default"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
+              />
             </div>
+            <p className="text-[11px] text-muted ml-1 mt-1">
+              {roamTagLocked
+                ? `Your permanent Roam Tag is ${formatCourierRoamTagDisplay(roamTagDraft)}. Fleets use this to invite you.`
+                : 'Choose a unique @tag so delivery companies can invite you. You can’t change it later.'}
+            </p>
+          </div>
+
+          {FIELDS_AFTER_TAG.map((field) => (
+            <FieldRow
+              key={field.id}
+              field={field}
+              value={form[field.id]}
+              onChange={(v) => setForm((prev) => ({ ...prev, [field.id]: v }))}
+            />
           ))}
         </form>
       </main>
@@ -199,6 +303,42 @@ export function EditProfilePage({ onBack, onSave }: EditProfilePageProps) {
           {saving ? 'Saving…' : 'Save Changes'}
         </button>
       </div>
+
+      {tagTip ? (
+        <div className="fixed inset-0 z-[90] flex items-center justify-center p-[var(--spacing-edge)]">
+          <button
+            type="button"
+            className="absolute inset-0 bg-inverse-surface/30 backdrop-blur-sm"
+            onClick={() => setTagTip(null)}
+            aria-label="Dismiss"
+          />
+          <div
+            role="dialog"
+            aria-labelledby="roam-tag-tip-title"
+            className="relative z-10 w-full max-w-sm bg-surface rounded-2xl shadow-lg overflow-hidden"
+          >
+            <div className="h-1 w-full bg-primary" />
+            <div className="p-6 flex flex-col items-center text-center gap-5">
+              <div className="w-14 h-14 rounded-full bg-primary/10 flex items-center justify-center">
+                <MaterialIcon name="alternate_email" className="text-[28px] text-primary" filled />
+              </div>
+              <div className="space-y-2">
+                <h2 id="roam-tag-tip-title" className="text-lg font-semibold text-on-surface">
+                  About your Roam Tag
+                </h2>
+                <p className="text-sm text-muted leading-relaxed">{tagTip}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setTagTip(null)}
+                className="w-full min-h-12 rounded-xl bg-primary text-on-primary text-sm font-semibold uppercase tracking-wide active:scale-[0.98] transition-transform"
+              >
+                Got it
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

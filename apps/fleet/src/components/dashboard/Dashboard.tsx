@@ -1,8 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import type { CourierComplianceBlocker } from '@roam/types/courier';
 import { Car, ChevronFirst, ChevronLeft, ChevronRight, Loader2, UserPlus } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { api } from '../../services/api';
+import { useServiceLineScope } from '../../contexts/ServiceLineScopeContext';
 import { applyDriverAssignmentChange } from '../../utils/vehicleDriverAssignmentHistory';
 import { isVehicleParked } from '../../utils/vehicleCatalogGate';
 import { showCatalogGateToastIfApplicable } from '../../utils/catalogGateErrors';
@@ -14,12 +16,20 @@ import {
   SelectTrigger,
   SelectValue,
 } from '../ui/select';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { AddDriverModal } from '../drivers/AddDriverModal';
 import { AddVehicleModal } from '../vehicles/AddVehicleModal';
+import { WorkforceInvitePanel } from '../workforce/WorkforceInvitePanel';
+import { CourierDetailSheet } from '../couriers/CourierDetailSheet';
+import type { CourierProfile } from '../couriers/CouriersPage';
 import {
   DashboardDriverTable,
   type DashboardDriverRow,
 } from './DashboardDriverTable';
+import {
+  DashboardCourierTable,
+  type DashboardCourierRow,
+} from './DashboardCourierTable';
 import {
   DashboardAssignVehicleDialog,
   type AssignableVehicleOption,
@@ -28,11 +38,14 @@ import { DashboardFilterBar } from './DashboardFilterBar';
 import {
   DOCUMENT_OPTIONS,
   STATUS_OPTIONS,
+  courierRowMatchesSearch,
+  deriveCourierDocumentStatus,
   deriveDocumentStatus,
   deriveStatusBucket,
   isAssignedRow,
   rowMatchesSearch,
   type AssignmentFilter,
+  type CourierSearchFieldOption,
   type DocumentFilterOption,
   type SearchFieldOption,
   type StatusFilterOption,
@@ -41,6 +54,8 @@ import {
 type Props = {
   onSelectDriver?: (driverId: string) => void;
 };
+
+type DashboardLine = 'rideshare' | 'delivery';
 
 const PAGE_SIZE_OPTIONS = [10, 20, 50] as const;
 
@@ -52,30 +67,160 @@ function vehicleLabel(v: {
   return [v.year, v.make, v.model].filter(Boolean).join(' ').trim();
 }
 
+function readLineFromUrl(available: DashboardLine[]): DashboardLine {
+  try {
+    const raw = new URLSearchParams(window.location.search).get('line');
+    if (raw === 'delivery' && available.includes('delivery')) return 'delivery';
+    if (raw === 'rideshare' && available.includes('rideshare')) return 'rideshare';
+  } catch {
+    /* ignore */
+  }
+  return available[0] ?? 'rideshare';
+}
+
+function writeLineToUrl(line: DashboardLine) {
+  try {
+    const url = new URL(window.location.href);
+    url.searchParams.set('line', line);
+    window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`);
+  } catch {
+    /* ignore */
+  }
+}
+
+function driverServiceLines(d: { serviceLines?: string[]; service_lines?: string[] }): string[] {
+  const lines = d.serviceLines ?? d.service_lines;
+  return Array.isArray(lines) ? lines.filter((l): l is string => typeof l === 'string') : [];
+}
+
+function isRideshareCapable(d: { serviceLines?: string[]; service_lines?: string[] }): boolean {
+  const lines = driverServiceLines(d);
+  if (!lines.length) return true;
+  return lines.includes('rideshare');
+}
+
+function isRushCapable(d: { serviceLines?: string[]; service_lines?: string[] }): boolean {
+  return driverServiceLines(d).includes('rush_delivery');
+}
+
+function normalizeCourierRow(
+  row: Record<string, unknown>,
+  assignedVehicle?: {
+    id?: string;
+    year?: string | number;
+    make?: string;
+    model?: string;
+    licensePlate?: string;
+    image?: string;
+  } | null,
+): DashboardCourierRow | null {
+  const id = String(row.id ?? '');
+  if (!id) return null;
+  const status = (typeof row.status === 'string' && row.status) || 'Active';
+  const blockers = Array.isArray(row.complianceBlockers)
+    ? (row.complianceBlockers as CourierComplianceBlocker[])
+    : undefined;
+  const vehicleMissing = blockers?.includes('vehicle_missing');
+  const fromVehicle = assignedVehicle ? vehicleLabel(assignedVehicle) : '';
+  return {
+    id,
+    name:
+      (typeof row.name === 'string' && row.name.trim()) ||
+      (typeof row.driverName === 'string' && row.driverName.trim()) ||
+      'Unknown Courier',
+    avatarUrl: typeof row.avatarUrl === 'string' ? row.avatarUrl : undefined,
+    phone: typeof row.phone === 'string' ? row.phone : '—',
+    email: typeof row.email === 'string' ? row.email : '',
+    status,
+    statusBucket: deriveStatusBucket(status),
+    documentStatus: deriveCourierDocumentStatus(blockers),
+    totalDeliveries: typeof row.totalTrips === 'number' ? row.totalTrips : undefined,
+    complianceBlockers: blockers,
+    vehicleId: assignedVehicle?.id,
+    vehicleLabel: vehicleMissing ? 'Unassigned' : fromVehicle || 'Unassigned',
+    licensePlate: assignedVehicle?.licensePlate || '',
+  };
+}
+
 export function Dashboard({ onSelectDriver }: Props) {
   const queryClient = useQueryClient();
+  const { rideshareVisible, rushVisible } = useServiceLineScope();
+
+  const availableLines = useMemo((): DashboardLine[] => {
+    const lines: DashboardLine[] = [];
+    if (rideshareVisible) lines.push('rideshare');
+    if (rushVisible) lines.push('delivery');
+    return lines.length ? lines : ['rideshare'];
+  }, [rideshareVisible, rushVisible]);
+
+  const showTabs = availableLines.length > 1;
+  const [activeLine, setActiveLine] = useState<DashboardLine>(() =>
+    readLineFromUrl(availableLines),
+  );
+
+  useEffect(() => {
+    if (!availableLines.includes(activeLine)) {
+      const next = availableLines[0] ?? 'rideshare';
+      setActiveLine(next);
+      if (showTabs) writeLineToUrl(next);
+    }
+  }, [availableLines, activeLine, showTabs]);
+
+  const handleLineChange = (value: string) => {
+    const next = value === 'delivery' ? 'delivery' : 'rideshare';
+    if (!availableLines.includes(next)) return;
+    setActiveLine(next);
+    writeLineToUrl(next);
+    setPage(1);
+  };
+
   const [assignDriverId, setAssignDriverId] = useState<string | null>(null);
   const [busyDriverId, setBusyDriverId] = useState<string | null>(null);
   const [isAddVehicleOpen, setIsAddVehicleOpen] = useState(false);
   const [isAddDriverOpen, setIsAddDriverOpen] = useState(false);
+  const [selectedCourier, setSelectedCourier] = useState<CourierProfile | null>(null);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState<(typeof PAGE_SIZE_OPTIONS)[number]>(10);
 
   const [assignmentFilter, setAssignmentFilter] = useState<AssignmentFilter>(null);
-  const [statusFilters, setStatusFilters] = useState<StatusFilterOption[]>([
-    ...STATUS_OPTIONS,
-  ]);
+  const [statusFilters, setStatusFilters] = useState<StatusFilterOption[]>([...STATUS_OPTIONS]);
   const [documentFilters, setDocumentFilters] = useState<DocumentFilterOption[]>([
     ...DOCUMENT_OPTIONS,
   ]);
   const [searchField, setSearchField] = useState<SearchFieldOption>('Number plate');
   const [searchQuery, setSearchQuery] = useState('');
 
+  const [courierAssignmentFilter, setCourierAssignmentFilter] = useState<AssignmentFilter>(null);
+  const [courierStatusFilters, setCourierStatusFilters] = useState<StatusFilterOption[]>([
+    ...STATUS_OPTIONS,
+  ]);
+  const [courierDocumentFilters, setCourierDocumentFilters] = useState<DocumentFilterOption[]>([
+    ...DOCUMENT_OPTIONS,
+  ]);
+  const [courierSearchField, setCourierSearchField] =
+    useState<CourierSearchFieldOption>('Name');
+  const [courierSearchQuery, setCourierSearchQuery] = useState('');
+
+  const showRideshare = activeLine === 'rideshare' && rideshareVisible;
+  const showDelivery = activeLine === 'delivery' && rushVisible;
+
   const { data: rosterPayload, isLoading: rosterLoading } = useQuery({
     queryKey: ['driversRoster'],
     queryFn: () => api.getDriversRoster(),
     staleTime: 2 * 60 * 1000,
     refetchOnWindowFocus: false,
+    enabled: rideshareVisible,
+  });
+
+  const { data: driversList = [], isLoading: driversLoading } = useQuery({
+    queryKey: ['drivers', 'service-line-filter'],
+    queryFn: async () => {
+      const drivers = await api.getDrivers();
+      return Array.isArray(drivers) ? drivers : [];
+    },
+    staleTime: 2 * 60 * 1000,
+    refetchOnWindowFocus: false,
+    enabled: rideshareVisible || rushVisible,
   });
 
   const { data: vehicles = [], isLoading: vehiclesLoading } = useQuery({
@@ -83,6 +228,7 @@ export function Dashboard({ onSelectDriver }: Props) {
     queryFn: () => api.getVehicles(),
     staleTime: 5 * 60 * 1000,
     refetchOnWindowFocus: false,
+    enabled: rideshareVisible || rushVisible,
   });
 
   const vehicleList = useMemo(
@@ -101,37 +247,63 @@ export function Dashboard({ onSelectDriver }: Props) {
     return map;
   }, [vehicleList]);
 
+  const rideshareIdSet = useMemo(() => {
+    const ids = new Set<string>();
+    for (const d of driversList as Array<{ id?: string; serviceLines?: string[]; service_lines?: string[] }>) {
+      if (d?.id && isRideshareCapable(d)) ids.add(String(d.id));
+    }
+    return ids;
+  }, [driversList]);
+
   const rows: DashboardDriverRow[] = useMemo(() => {
     const roster = rosterPayload?.data ?? [];
+    const dual = rideshareVisible && rushVisible;
 
-    return roster.map((driver) => {
-      const assigned = byDriverId.get(driver.id);
-      const fromVehicle = assigned ? vehicleLabel(assigned) : '';
-      const fromRoster =
-        typeof driver.vehicle === 'string' &&
-        driver.vehicle.trim() &&
-        driver.vehicle.toLowerCase() !== 'unassigned'
-          ? driver.vehicle.trim()
-          : '';
-      const status = driver.status || 'Active';
+    return roster
+      .filter((driver) => {
+        if (!dual) return true;
+        // Prefer explicit capability when both lines exist; legacy (no id in list) stays rideshare.
+        if (rideshareIdSet.size === 0) return true;
+        return rideshareIdSet.has(driver.id);
+      })
+      .map((driver) => {
+        const assigned = byDriverId.get(driver.id);
+        const fromVehicle = assigned ? vehicleLabel(assigned) : '';
+        const fromRoster =
+          typeof driver.vehicle === 'string' &&
+          driver.vehicle.trim() &&
+          driver.vehicle.toLowerCase() !== 'unassigned'
+            ? driver.vehicle.trim()
+            : '';
+        const status = driver.status || 'Active';
 
-      return {
-        id: driver.id,
-        name: driver.name || 'Unknown Driver',
-        avatarUrl: driver.avatarUrl,
-        phone: driver.phone || '—',
-        email: driver.email || '',
-        status,
-        statusBucket: deriveStatusBucket(status),
-        documentStatus: deriveDocumentStatus(driver),
-        vehicleId: assigned?.id,
-        vehicleLabel: fromVehicle || fromRoster || 'Unassigned',
-        licensePlate: assigned?.licensePlate || '',
-        vehicleImage: assigned?.image || undefined,
-        vin: assigned?.vin || '',
-      };
-    });
-  }, [rosterPayload, byDriverId]);
+        return {
+          id: driver.id,
+          name: driver.name || 'Unknown Driver',
+          avatarUrl: driver.avatarUrl,
+          phone: driver.phone || '—',
+          email: driver.email || '',
+          status,
+          statusBucket: deriveStatusBucket(status),
+          documentStatus: deriveDocumentStatus(driver),
+          vehicleId: assigned?.id,
+          vehicleLabel: fromVehicle || fromRoster || 'Unassigned',
+          licensePlate: assigned?.licensePlate || '',
+          vehicleImage: assigned?.image || undefined,
+          vin: assigned?.vin || '',
+        };
+      });
+  }, [rosterPayload, byDriverId, rideshareVisible, rushVisible, rideshareIdSet]);
+
+  const courierRows: DashboardCourierRow[] = useMemo(() => {
+    return (driversList as Array<Record<string, unknown>>)
+      .filter((d) => isRushCapable(d as { serviceLines?: string[]; service_lines?: string[] }))
+      .map((d) => {
+        const id = String(d.id ?? '');
+        return normalizeCourierRow(d, id ? byDriverId.get(id) : null);
+      })
+      .filter((c): c is DashboardCourierRow => Boolean(c));
+  }, [driversList, byDriverId]);
 
   const filteredRows = useMemo(() => {
     const allStatuses = statusFilters.length === STATUS_OPTIONS.length;
@@ -155,16 +327,65 @@ export function Dashboard({ onSelectDriver }: Props) {
     });
   }, [rows, assignmentFilter, statusFilters, documentFilters, searchField, searchQuery]);
 
+  const filteredCouriers = useMemo(() => {
+    const allStatuses = courierStatusFilters.length === STATUS_OPTIONS.length;
+    const allDocuments = courierDocumentFilters.length === DOCUMENT_OPTIONS.length;
+
+    return courierRows.filter((row) => {
+      if (courierAssignmentFilter === 'Assigned' && !isAssignedRow(row)) return false;
+      if (courierAssignmentFilter === 'Unassigned' && isAssignedRow(row)) return false;
+
+      if (!allStatuses) {
+        if (!row.statusBucket || !courierStatusFilters.includes(row.statusBucket)) return false;
+      }
+
+      if (!allDocuments && !courierDocumentFilters.includes(row.documentStatus)) {
+        return false;
+      }
+
+      if (!courierRowMatchesSearch(row, courierSearchField, courierSearchQuery)) return false;
+
+      return true;
+    });
+  }, [
+    courierRows,
+    courierAssignmentFilter,
+    courierStatusFilters,
+    courierDocumentFilters,
+    courierSearchField,
+    courierSearchQuery,
+  ]);
+
   useEffect(() => {
     setPage(1);
-  }, [assignmentFilter, statusFilters, documentFilters, searchField, searchQuery, pageSize]);
+  }, [
+    assignmentFilter,
+    statusFilters,
+    documentFilters,
+    searchField,
+    searchQuery,
+    courierAssignmentFilter,
+    courierStatusFilters,
+    courierDocumentFilters,
+    courierSearchField,
+    courierSearchQuery,
+    pageSize,
+    activeLine,
+  ]);
 
-  const totalPages = Math.max(1, Math.ceil(filteredRows.length / pageSize));
+  const activeListLength = showDelivery ? filteredCouriers.length : filteredRows.length;
+  const totalPages = Math.max(1, Math.ceil(activeListLength / pageSize));
   const safePage = Math.min(page, totalPages);
+
   const paginatedRows = useMemo(() => {
     const start = (safePage - 1) * pageSize;
     return filteredRows.slice(start, start + pageSize);
   }, [filteredRows, safePage, pageSize]);
+
+  const paginatedCouriers = useMemo(() => {
+    const start = (safePage - 1) * pageSize;
+    return filteredCouriers.slice(start, start + pageSize);
+  }, [filteredCouriers, safePage, pageSize]);
 
   const assignDriver = useMemo(
     () => rows.find((r) => r.id === assignDriverId) ?? null,
@@ -193,7 +414,6 @@ export function Dashboard({ onSelectDriver }: Props) {
   };
 
   const clearVehicleDriver = async (vehicle: any) => {
-    // Empty strings so JSON.stringify keeps the clear (undefined fields get dropped).
     const updated = {
       ...vehicle,
       currentDriverId: '',
@@ -284,45 +504,62 @@ export function Dashboard({ onSelectDriver }: Props) {
     setSearchQuery('');
   };
 
+  const resetCourierFilters = () => {
+    setCourierAssignmentFilter(null);
+    setCourierStatusFilters([...STATUS_OPTIONS]);
+    setCourierDocumentFilters([...DOCUMENT_OPTIONS]);
+    setCourierSearchField('Name');
+    setCourierSearchQuery('');
+  };
+
   const pagerBtnClass =
     'h-9 rounded-md border-none bg-slate-100 px-3 text-slate-600 shadow-none hover:bg-slate-200 hover:text-slate-900 disabled:opacity-40 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700';
 
-  const loading = rosterLoading || vehiclesLoading;
+  const loading =
+    ((showRideshare || showDelivery) && vehiclesLoading) ||
+    (showRideshare && rosterLoading) ||
+    ((showRideshare || showDelivery) && driversLoading);
 
-  if (loading && rows.length === 0) {
+  if (loading && rows.length === 0 && courierRows.length === 0) {
     return (
-      <div className="flex items-center justify-center h-[50vh]">
+      <div className="flex h-[50vh] items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-indigo-600" />
       </div>
     );
   }
 
-  return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <h2 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
-          Dashboard
-        </h2>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button
-            type="button"
-            className="h-10 rounded-lg bg-slate-900 px-4 text-white hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white"
-            onClick={() => setIsAddDriverOpen(true)}
-          >
-            <UserPlus className="mr-2 h-4 w-4" />
-            Add driver
-          </Button>
-          <Button
-            type="button"
-            className="h-10 rounded-lg bg-slate-900 px-4 text-white hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white"
-            onClick={() => setIsAddVehicleOpen(true)}
-          >
-            <Car className="mr-2 h-4 w-4" />
-            Add vehicle
-          </Button>
-        </div>
-      </div>
+  const headerActions = showDelivery ? (
+    <WorkforceInvitePanel
+      variant="button"
+      serviceLine="rush_delivery"
+      inviteButtonLabel="Invite courier"
+      dialogTitle="Invite a courier"
+      dialogDescription="Invite by the courier’s Roam Tag (in-app Accept/Decline), or generate a shareable code. Roam reviews and approves all couriers before they can go online."
+      buttonClassName="h-10 rounded-lg bg-slate-900 px-4 text-white hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white"
+    />
+  ) : (
+    <div className="flex flex-wrap items-center gap-2">
+      <Button
+        type="button"
+        className="h-10 rounded-lg bg-slate-900 px-4 text-white hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white"
+        onClick={() => setIsAddDriverOpen(true)}
+      >
+        <UserPlus className="mr-2 h-4 w-4" />
+        Add driver
+      </Button>
+      <Button
+        type="button"
+        className="h-10 rounded-lg bg-slate-900 px-4 text-white hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white"
+        onClick={() => setIsAddVehicleOpen(true)}
+      >
+        <Car className="mr-2 h-4 w-4" />
+        Add vehicle
+      </Button>
+    </div>
+  );
 
+  const rideshareBody = (
+    <>
       <DashboardFilterBar
         assignment={assignmentFilter}
         statuses={statusFilters}
@@ -344,6 +581,79 @@ export function Dashboard({ onSelectDriver }: Props) {
         onUnassignVehicle={handleUnassignVehicle}
         assignmentBusyDriverId={busyDriverId}
       />
+    </>
+  );
+
+  const deliveryBody = (
+    <>
+      <DashboardFilterBar
+        variant="delivery"
+        assignment={courierAssignmentFilter}
+        statuses={courierStatusFilters}
+        documents={courierDocumentFilters}
+        searchField={courierSearchField}
+        searchQuery={courierSearchQuery}
+        onAssignmentChange={setCourierAssignmentFilter}
+        onStatusesChange={setCourierStatusFilters}
+        onDocumentsChange={setCourierDocumentFilters}
+        onSearchFieldChange={setCourierSearchField}
+        onSearchQueryChange={setCourierSearchQuery}
+        onReset={resetCourierFilters}
+      />
+
+      <DashboardCourierTable
+        rows={paginatedCouriers}
+        emptyMessage="No couriers yet. Invite your first courier."
+        onOpenCourier={(row) =>
+          setSelectedCourier({
+            id: row.id,
+            name: row.name,
+            status: row.status,
+            phone: row.phone,
+            email: row.email,
+            totalDeliveries: row.totalDeliveries,
+            complianceBlockers: row.complianceBlockers,
+          })
+        }
+      />
+    </>
+  );
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <h2 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
+          Dashboard
+        </h2>
+        {headerActions}
+      </div>
+
+      {showTabs ? (
+        <Tabs value={activeLine} onValueChange={handleLineChange} className="gap-4">
+          <TabsList className="h-10 rounded-lg bg-slate-100 p-1 dark:bg-slate-800">
+            {availableLines.includes('rideshare') ? (
+              <TabsTrigger value="rideshare" className="rounded-md px-4">
+                Rideshare
+              </TabsTrigger>
+            ) : null}
+            {availableLines.includes('delivery') ? (
+              <TabsTrigger value="delivery" className="rounded-md px-4">
+                Delivery (Roam Rush)
+              </TabsTrigger>
+            ) : null}
+          </TabsList>
+          <TabsContent value="rideshare" className="space-y-4">
+            {rideshareBody}
+          </TabsContent>
+          <TabsContent value="delivery" className="space-y-4">
+            {deliveryBody}
+          </TabsContent>
+        </Tabs>
+      ) : showDelivery ? (
+        <div className="space-y-4">{deliveryBody}</div>
+      ) : (
+        <div className="space-y-4">{rideshareBody}</div>
+      )}
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <Select
@@ -353,7 +663,7 @@ export function Dashboard({ onSelectDriver }: Props) {
             if (PAGE_SIZE_OPTIONS.includes(next)) setPageSize(next);
           }}
         >
-          <SelectTrigger className="h-9 w-[110px] rounded-md border-none bg-transparent shadow-none text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800">
+          <SelectTrigger className="h-9 w-[110px] rounded-md border-none bg-transparent text-slate-600 shadow-none hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800">
             <SelectValue placeholder="10 rows" />
           </SelectTrigger>
           <SelectContent>
@@ -433,6 +743,14 @@ export function Dashboard({ onSelectDriver }: Props) {
           setIsAddVehicleOpen(false);
           void queryClient.invalidateQueries({ queryKey: ['vehicles'] });
           toast.success('Vehicle added');
+        }}
+      />
+
+      <CourierDetailSheet
+        courier={selectedCourier}
+        open={selectedCourier !== null}
+        onOpenChange={(open) => {
+          if (!open) setSelectedCourier(null);
         }}
       />
     </div>

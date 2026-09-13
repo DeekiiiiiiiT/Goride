@@ -25,6 +25,9 @@ export const SEARCH_FIELD_OPTIONS = [
 ] as const;
 export type SearchFieldOption = (typeof SEARCH_FIELD_OPTIONS)[number];
 
+export const COURIER_SEARCH_FIELD_OPTIONS = ['Name', 'Phone', 'Email'] as const;
+export type CourierSearchFieldOption = (typeof COURIER_SEARCH_FIELD_OPTIONS)[number];
+
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const EXPIRING_SOON_DAYS = 30;
 
@@ -56,6 +59,25 @@ export function deriveDocumentStatus(driver: {
   return 'Passed';
 }
 
+/** Map courier compliance blockers onto the Documents filter buckets. */
+export function deriveCourierDocumentStatus(blockers?: string[] | null): DocumentFilterOption {
+  if (!blockers?.length) return 'Passed';
+  if (blockers.some((b) => b.includes('suspended') || b.includes('deactivated'))) return 'Rejected';
+  if (
+    blockers.every(
+      (b) =>
+        b.includes('missing') ||
+        b === 'no_profile' ||
+        b === 'license_missing' ||
+        b === 'vehicle_missing' ||
+        b === 'insurance_missing',
+    )
+  ) {
+    return 'Missing';
+  }
+  return 'Pending';
+}
+
 /** Map roster status strings onto the dashboard Status filter buckets. */
 export function deriveStatusBucket(status: string): StatusFilterOption | null {
   const s = (status || '').trim().toLowerCase();
@@ -64,7 +86,6 @@ export function deriveStatusBucket(status: string): StatusFilterOption | null {
   if (s.includes('onboard')) return 'Onboarding';
   if (s.includes('wait')) return 'Waitlisted';
   if (s.includes('reject')) return 'Rejected';
-  // Existing fleet statuses → closest buckets in the filter set
   if (s.includes('attention')) return 'Onboarding';
   if (s === 'inactive') return 'Waitlisted';
   return null;
@@ -103,5 +124,17 @@ export function rowMatchesSearch(
         ? row.vehicleId || ''
         : row.vin || '';
 
+  return hay.toLowerCase().includes(q);
+}
+
+export function courierRowMatchesSearch(
+  row: { name?: string; phone?: string; email?: string },
+  field: CourierSearchFieldOption,
+  query: string,
+): boolean {
+  const q = query.trim().toLowerCase();
+  if (!q) return true;
+  const hay =
+    field === 'Name' ? row.name || '' : field === 'Phone' ? row.phone || '' : row.email || '';
   return hay.toLowerCase().includes(q);
 }

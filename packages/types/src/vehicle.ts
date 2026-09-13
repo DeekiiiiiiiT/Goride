@@ -128,6 +128,12 @@ export interface Vehicle {
   currentDriverId?: string;
   currentDriverName?: string;
 
+  /**
+   * Platforms this vehicle is used on. Empty/missing → treat as rideshare-only (legacy).
+   * Dual-tagged vehicles appear on both Fleet Vehicles tabs.
+   */
+  serviceLines?: Array<'rideshare' | 'rush_delivery'>;
+
   /** Uber Vehicles API id — set by Settings → Uber Fleet sync. */
   uberVehicleId?: string;
   uberOwnerId?: string;

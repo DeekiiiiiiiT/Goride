@@ -12,16 +12,19 @@ import {
 import { cn } from '../ui/utils';
 import {
   ASSIGNMENT_OPTIONS,
+  COURIER_SEARCH_FIELD_OPTIONS,
   DOCUMENT_OPTIONS,
   SEARCH_FIELD_OPTIONS,
   STATUS_OPTIONS,
   type AssignmentFilter,
+  type CourierSearchFieldOption,
   type DocumentFilterOption,
   type SearchFieldOption,
   type StatusFilterOption,
 } from './dashboardFilters';
 
-type Props = {
+type RideshareProps = {
+  variant?: 'rideshare';
   assignment: AssignmentFilter;
   statuses: StatusFilterOption[];
   documents: DocumentFilterOption[];
@@ -34,6 +37,23 @@ type Props = {
   onSearchQueryChange: (value: string) => void;
   onReset: () => void;
 };
+
+type DeliveryProps = {
+  variant: 'delivery';
+  assignment: AssignmentFilter;
+  statuses: StatusFilterOption[];
+  documents: DocumentFilterOption[];
+  searchField: CourierSearchFieldOption;
+  searchQuery: string;
+  onAssignmentChange: (value: AssignmentFilter) => void;
+  onStatusesChange: (value: StatusFilterOption[]) => void;
+  onDocumentsChange: (value: DocumentFilterOption[]) => void;
+  onSearchFieldChange: (value: CourierSearchFieldOption) => void;
+  onSearchQueryChange: (value: string) => void;
+  onReset: () => void;
+};
+
+type Props = RideshareProps | DeliveryProps;
 
 function pillClass(active: boolean) {
   return cn(
@@ -53,19 +73,21 @@ function toggleInList<T extends string>(list: T[], value: T, all: readonly T[]):
   return [...list, value];
 }
 
-export function DashboardFilterBar({
-  assignment,
-  statuses,
-  documents,
-  searchField,
-  searchQuery,
-  onAssignmentChange,
-  onStatusesChange,
-  onDocumentsChange,
-  onSearchFieldChange,
-  onSearchQueryChange,
-  onReset,
-}: Props) {
+export function DashboardFilterBar(props: Props) {
+  const {
+    assignment,
+    statuses,
+    documents,
+    searchField,
+    searchQuery,
+    onAssignmentChange,
+    onStatusesChange,
+    onDocumentsChange,
+    onSearchQueryChange,
+    onReset,
+  } = props;
+  const isDelivery = props.variant === 'delivery';
+
   const allStatusesSelected = statuses.length === STATUS_OPTIONS.length;
   const allDocumentsSelected = documents.length === DOCUMENT_OPTIONS.length;
   const filtersIdle =
@@ -73,6 +95,9 @@ export function DashboardFilterBar({
     allStatusesSelected &&
     allDocumentsSelected &&
     !searchQuery.trim();
+
+  const searchOptions = isDelivery ? COURIER_SEARCH_FIELD_OPTIONS : SEARCH_FIELD_OPTIONS;
+  const searchPlaceholder = isDelivery ? 'Search couriers' : 'Search vehicles';
 
   return (
     <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
@@ -197,13 +222,13 @@ export function DashboardFilterBar({
         </DropdownMenu>
       </div>
 
-      <div className="flex items-center gap-2 w-full lg:w-auto lg:ml-auto">
+      <div className="flex w-full items-center gap-2 lg:ml-auto lg:w-auto">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button
               type="button"
               variant="outline"
-              className="rounded-full h-9 px-3 gap-1.5 font-medium shadow-none bg-white border-slate-200 text-slate-800 shrink-0"
+              className="h-9 shrink-0 gap-1.5 rounded-full border-slate-200 bg-white px-3 font-medium text-slate-800 shadow-none"
             >
               {searchField}
               <ChevronDown className="h-3.5 w-3.5 opacity-70" />
@@ -213,16 +238,16 @@ export function DashboardFilterBar({
             <DropdownMenuRadioGroup
               value={searchField}
               onValueChange={(v) => {
-                if (
-                  v === 'Number plate' ||
-                  v === 'Vehicle ID' ||
-                  v === 'VIN'
-                ) {
-                  onSearchFieldChange(v);
+                if (isDelivery) {
+                  if (v === 'Name' || v === 'Phone' || v === 'Email') {
+                    props.onSearchFieldChange(v);
+                  }
+                } else if (v === 'Number plate' || v === 'Vehicle ID' || v === 'VIN') {
+                  props.onSearchFieldChange(v);
                 }
               }}
             >
-              {SEARCH_FIELD_OPTIONS.map((opt) => (
+              {searchOptions.map((opt) => (
                 <DropdownMenuRadioItem key={opt} value={opt} className="pr-8">
                   {opt}
                 </DropdownMenuRadioItem>
@@ -232,12 +257,12 @@ export function DashboardFilterBar({
         </DropdownMenu>
 
         <div className="relative flex-1 lg:w-64">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
           <Input
             value={searchQuery}
             onChange={(e) => onSearchQueryChange(e.target.value)}
-            placeholder="Search vehicles"
-            className="h-9 pl-9 rounded-full bg-slate-100 border-transparent shadow-none focus-visible:bg-white focus-visible:border-slate-200"
+            placeholder={searchPlaceholder}
+            className="h-9 rounded-full border-transparent bg-slate-100 pl-9 shadow-none focus-visible:border-slate-200 focus-visible:bg-white"
             aria-label={`Search by ${searchField}`}
           />
         </div>

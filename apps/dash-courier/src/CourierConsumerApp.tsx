@@ -7,6 +7,7 @@ import { VerifyAccountPage } from '@/pages/onboarding/VerifyAccountPage';
 import { ProfileSetupPage } from '@/pages/onboarding/ProfileSetupPage';
 import { FleetInviteCodePage } from '@/pages/onboarding/FleetInviteCodePage';
 import { CourierWorkforceArchetypePage } from '@/pages/onboarding/CourierWorkforceArchetypePage';
+import { CourierFleetOwnerCtaPage } from '@/pages/onboarding/CourierFleetOwnerCtaPage';
 import { VehicleSetupPage } from '@/pages/onboarding/VehicleSetupPage';
 import { DocumentsPage } from '@/pages/onboarding/DocumentsPage';
 import { PermissionsPage } from '@/pages/onboarding/PermissionsPage';
@@ -62,6 +63,7 @@ type AppPhase =
   | 'welcome'
   | 'how-it-works'
   | 'workforce-archetype'
+  | 'fleet-owner-cta'
   | 'sign-up'
   | 'verify'
   | 'profile-setup'
@@ -233,13 +235,35 @@ export function CourierConsumerApp() {
           saveSignupDraft({ workforceChoice: 'join_fleet' });
           setPhase('sign-up');
         }}
+        onFleetOwner={() => {
+          setWorkforceChoice('fleet_owner');
+          saveSignupDraft({ workforceChoice: 'fleet_owner' });
+          setPhase('fleet-owner-cta');
+        }}
+      />
+    );
+  }
+
+  if (phase === 'fleet-owner-cta') {
+    return (
+      <CourierFleetOwnerCtaPage
+        onBack={() => setPhase('workforce-archetype')}
+        onContinueAsCourier={() => {
+          setWorkforceChoice('independent');
+          saveSignupDraft({ workforceChoice: 'independent' });
+          setPhase('sign-up');
+        }}
       />
     );
   }
 
   if (phase === 'sign-up') {
     return (
-      <SignUpPage onBack={() => setPhase('workforce-archetype')} onContinue={() => setPhase('verify')} />
+      <SignUpPage
+        onBack={() => setPhase('workforce-archetype')}
+        onContinue={() => setPhase('verify')}
+        onSignIn={() => setPhase('login')}
+      />
     );
   }
 
@@ -253,10 +277,16 @@ export function CourierConsumerApp() {
   }
 
   if (phase === 'profile-setup') {
+    const choice = loadSignupDraft().workforceChoice ?? workforceChoice;
     return (
       <ProfileSetupPage
         onBack={() => setPhase('verify')}
-        onContinue={() => setPhase(workforceChoice === 'join_fleet' ? 'fleet-invite' : 'vehicle-setup')}
+        onContinue={() => {
+          const next = loadSignupDraft().workforceChoice ?? workforceChoice;
+          setWorkforceChoice(next);
+          setPhase(next === 'join_fleet' ? 'fleet-invite' : 'vehicle-setup');
+        }}
+        showRoamTagClaim={choice === 'join_fleet'}
       />
     );
   }
@@ -273,7 +303,13 @@ export function CourierConsumerApp() {
   if (phase === 'vehicle-setup') {
     return (
       <VehicleSetupPage
-        onBack={() => setPhase(workforceChoice === 'join_fleet' ? 'fleet-invite' : 'profile-setup')}
+        onBack={() =>
+          setPhase(
+            (loadSignupDraft().workforceChoice ?? workforceChoice) === 'join_fleet'
+              ? 'fleet-invite'
+              : 'profile-setup',
+          )
+        }
         onContinue={() => setPhase('documents')}
       />
     );
@@ -312,7 +348,7 @@ export function CourierConsumerApp() {
       <LoginPage
         onBack={() => setPhase('welcome')}
         onSignIn={() => void finishLogin()}
-        onSignUp={() => setPhase('sign-up')}
+        onSignUp={() => setPhase('workforce-archetype')}
       />
     );
   }

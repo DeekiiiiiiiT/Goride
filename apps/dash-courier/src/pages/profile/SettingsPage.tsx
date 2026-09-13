@@ -5,6 +5,8 @@ import { ROAM_LEGAL, accountDeletionMailto } from '@roam/business-config/legalUr
 import { loadAppSettings, type CourierAppSettings } from '@/lib/courierStorage';
 import { saveAppSettingsSynced } from '@/lib/courierSettingsSync';
 import { JoinFleetFromSettings } from './JoinFleetFromSettings';
+import { FleetInvitesPage } from './FleetInvitesPage';
+import { loadMyFleetInvites } from '@/lib/courierRoamTagService';
 
 type SettingsPageProps = {
   onBack: () => void;
@@ -69,10 +71,16 @@ function applyTheme(appearance: CourierAppSettings['appearance']) {
 export function SettingsPage({ onBack }: SettingsPageProps) {
   const [settings, setSettings] = useState<CourierAppSettings>(() => loadAppSettings());
   const [showJoinFleet, setShowJoinFleet] = useState(false);
+  const [showFleetInvites, setShowFleetInvites] = useState(false);
+  const [pendingInviteCount, setPendingInviteCount] = useState(0);
 
   useEffect(() => {
     applyTheme(settings.appearance);
   }, [settings.appearance]);
+
+  useEffect(() => {
+    void loadMyFleetInvites().then((rows) => setPendingInviteCount(rows.length));
+  }, [showFleetInvites]);
 
   const update = (patch: Partial<CourierAppSettings>) => {
     const next = { ...settings, ...patch };
@@ -85,12 +93,44 @@ export function SettingsPage({ onBack }: SettingsPageProps) {
       {showJoinFleet && (
         <JoinFleetFromSettings onBack={() => setShowJoinFleet(false)} />
       )}
+      {showFleetInvites && (
+        <FleetInvitesPage
+          onBack={() => {
+            setShowFleetInvites(false);
+            void loadMyFleetInvites().then((rows) => setPendingInviteCount(rows.length));
+          }}
+          onJoinFleet={() => {
+            setShowFleetInvites(false);
+            setShowJoinFleet(true);
+          }}
+        />
+      )}
       <SubPageHeader title="Settings" onBack={onBack} />
 
       <main className="flex-1 overflow-y-auto px-[var(--spacing-edge)] py-6 pb-8 space-y-8">
         <section className="space-y-4">
           <h2 className="text-xs font-semibold uppercase tracking-wider text-primary">Workforce</h2>
           <div className="bg-surface rounded-xl shadow-soft overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setShowFleetInvites(true)}
+              className="flex w-full items-center justify-between p-4 hover:bg-surface-container-lowest transition-colors group border-b border-surface-variant"
+            >
+              <div className="flex items-center gap-4">
+                <div className="bg-surface-container p-2 rounded-full text-on-surface-variant group-hover:text-primary transition-colors">
+                  <MaterialIcon name="apartment" />
+                </div>
+                <div className="text-left">
+                  <p className="text-base text-on-surface">Fleet Info</p>
+                  <p className="text-sm text-muted">
+                    {pendingInviteCount > 0
+                      ? `${pendingInviteCount} pending invite${pendingInviteCount === 1 ? '' : 's'}`
+                      : 'Invites and your fleet membership'}
+                  </p>
+                </div>
+              </div>
+              <MaterialIcon name="chevron_right" className="text-muted group-hover:text-primary transition-colors" />
+            </button>
             <button
               type="button"
               onClick={() => setShowJoinFleet(true)}
@@ -102,7 +142,9 @@ export function SettingsPage({ onBack }: SettingsPageProps) {
                 </div>
                 <div>
                   <p className="text-base text-on-surface">Join a delivery company</p>
-                  <p className="text-sm text-muted">Enter a fleet invite code from your employer</p>
+                  <p className="text-sm text-muted">
+                    Invite code, Fleet Tag, or wait for a Roam Tag invite
+                  </p>
                 </div>
               </div>
               <MaterialIcon name="chevron_right" className="text-muted group-hover:text-primary transition-colors" />
