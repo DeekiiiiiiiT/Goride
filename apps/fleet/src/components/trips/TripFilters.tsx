@@ -58,25 +58,27 @@ function ToggleButtonGroup({
   label?: string;
 }) {
   return (
-    <div className="flex items-center gap-0.5 bg-slate-100 rounded-lg p-0.5">
-      {options.map((opt) => (
-        <button
-          key={opt.value}
-          type="button"
-          onClick={() => {
-            if (opt.value !== value) {
-              onChange(opt.value);
-            }
-          }}
-          className={`px-2.5 py-1.5 text-xs font-medium rounded-md transition-all whitespace-nowrap
-            ${opt.value === value
-              ? 'bg-white text-slate-900 shadow-sm'
-              : 'text-slate-500 hover:text-slate-700 hover:bg-white/50'
-            }`}
-        >
-          {opt.label}
-        </button>
-      ))}
+    <div className="max-w-full overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <div className="inline-flex items-center gap-0.5 rounded-lg bg-slate-100 p-0.5">
+        {options.map((opt) => (
+          <button
+            key={opt.value}
+            type="button"
+            onClick={() => {
+              if (opt.value !== value) {
+                onChange(opt.value);
+              }
+            }}
+            className={`shrink-0 whitespace-nowrap rounded-md px-2.5 py-1.5 text-xs font-medium transition-all
+              ${opt.value === value
+                ? 'bg-white text-slate-900 shadow-sm'
+                : 'text-slate-500 hover:bg-white/50 hover:text-slate-700'
+              }`}
+          >
+            {opt.label}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }
@@ -160,7 +162,7 @@ export function TripFilters({ filters, onFilterChange, drivers, vehicles }: Trip
       <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center justify-between">
         
         {/* Primary Filters Row */}
-        <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto">
+        <div className="flex w-full max-w-full flex-col gap-3 lg:w-auto lg:flex-row lg:flex-wrap lg:items-center">
           
           {/* Time Range - Toggle Buttons */}
           <ToggleButtonGroup

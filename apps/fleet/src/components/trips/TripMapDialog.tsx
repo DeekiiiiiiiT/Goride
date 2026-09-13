@@ -1,5 +1,5 @@
 import React from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../ui/dialog";
+import { ResponsiveDialog, ResponsiveDialogContent, ResponsiveDialogHeader, ResponsiveDialogTitle } from '../ui/responsive-dialog';
 import { Trip } from "../../types/data";
 import { LeafletMap } from "../maps/LeafletMap";
 import { AlertCircle } from "lucide-react";
@@ -16,18 +16,18 @@ export function TripMapDialog({ trip, open, onOpenChange }: TripMapDialogProps) 
   const hasRoute = trip.route && trip.route.length > 0;
   
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl w-full">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-lg">
+    <ResponsiveDialog open={open} onOpenChange={onOpenChange}>
+      <ResponsiveDialogContent className="max-w-3xl w-full">
+        <ResponsiveDialogHeader>
+          <ResponsiveDialogTitle className="flex items-center gap-2 text-lg">
             Route Visualization
             {trip.pickupLocation && trip.dropoffLocation && (
                 <span className="text-sm font-normal text-slate-500 hidden sm:inline-block ml-2 truncate max-w-md">
                    • {trip.pickupLocation} ➔ {trip.dropoffLocation}
                 </span>
             )}
-          </DialogTitle>
-        </DialogHeader>
+          </ResponsiveDialogTitle>
+        </ResponsiveDialogHeader>
         
         <div className="h-[400px] w-full bg-slate-50 dark:bg-slate-900 rounded-md overflow-hidden relative border border-slate-100 dark:border-slate-800">
            {hasRoute ? (
@@ -47,7 +47,7 @@ export function TripMapDialog({ trip, open, onOpenChange }: TripMapDialogProps) 
              </div>
            )}
         </div>
-      </DialogContent>
-    </Dialog>
+      </ResponsiveDialogContent>
+    </ResponsiveDialog>
   );
 }

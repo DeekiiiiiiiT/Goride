@@ -652,7 +652,109 @@ export function VehiclesPage({
                     ))}
                 </div>
               ) : (
-                <div className="bg-white rounded-md border shadow-sm overflow-hidden">
+                <>
+                {/* Mobile list cards */}
+                <div className="space-y-3 md:hidden">
+                  {filteredVehicles.map((vehicle) => {
+                    const parked = isVehicleParked(vehicle);
+                    const cp = catalogPendingByFleetId.get(vehicle.id);
+                    return (
+                      <div
+                        key={vehicle.id}
+                        className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900"
+                      >
+                        <button
+                          type="button"
+                          className="w-full text-left"
+                          onClick={() => setSelectedVehicleId(vehicle.id)}
+                          aria-label={`Open ${vehicle.year} ${vehicle.make} ${vehicle.model}`}
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="flex min-w-0 items-center gap-3">
+                              <div className="relative h-12 w-16 shrink-0 overflow-hidden rounded-md border border-slate-200 bg-slate-100">
+                                <img src={vehicle.image} alt="" className="h-full w-full object-cover" />
+                              </div>
+                              <div className="min-w-0">
+                                <p className="truncate font-medium text-slate-900 dark:text-slate-100">
+                                  {vehicle.year} {vehicle.make} {vehicle.model}
+                                </p>
+                                <p className="font-mono text-xs text-slate-500">{vehicle.licensePlate}</p>
+                              </div>
+                            </div>
+                            <div className="flex shrink-0 items-center gap-1.5">
+                              <div className={`h-2.5 w-2.5 rounded-full ${vehicle.status === 'Active' ? 'bg-emerald-500' : 'bg-slate-300'}`} />
+                              <span className="text-sm text-slate-700 dark:text-slate-300">{vehicle.status}</span>
+                            </div>
+                          </div>
+                          <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
+                            <div>
+                              <p className="text-xs text-slate-500">Assignment</p>
+                              <p className="truncate font-medium text-slate-800 dark:text-slate-200">
+                                {vehicle.currentDriverName || 'Unassigned'}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-slate-500">Utilization</p>
+                              <p className="font-medium text-slate-800 dark:text-slate-200">
+                                {(vehicle.metrics?.utilizationRate ?? 0).toFixed(0)}%
+                              </p>
+                            </div>
+                          </div>
+                          {parked && (
+                            <Badge
+                              variant="secondary"
+                              className={`mt-2 ${
+                                cp?.status === 'needs_info'
+                                  ? 'border-amber-200 bg-amber-50 text-amber-900'
+                                  : 'border-slate-300 bg-slate-100 text-slate-700'
+                              }`}
+                            >
+                              {cp?.status === 'needs_info' ? 'Pending catalog (action needed)' : 'Pending catalog'}
+                            </Badge>
+                          )}
+                        </button>
+                        <div className="mt-3 flex justify-end border-t border-slate-100 pt-2 dark:border-slate-800">
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="icon" className="min-h-11 min-w-11">
+                                <MoreVertical className="h-4 w-4 text-slate-400" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                              <DropdownMenuItem onClick={() => setSelectedVehicleId(vehicle.id)}>
+                                <FileText className="mr-2 h-4 w-4" /> View Details
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                onClick={() => handleOpenAssignModal(vehicle.id)}
+                                disabled={parked}
+                              >
+                                <UserPlus className="mr-2 h-4 w-4" /> Assign Driver
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem onClick={() => handleLogService(vehicle.id)} disabled={parked}>
+                                <Wrench className="mr-2 h-4 w-4" /> Log Service
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => handleAddFuel(vehicle.id)} disabled={parked}>
+                                <Fuel className="mr-2 h-4 w-4" /> Log Fuel
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                onClick={() => setVehicleToDelete(vehicle.id)}
+                                className="text-red-600 focus:bg-red-50 focus:text-red-600"
+                                disabled={!can('vehicles.delete')}
+                              >
+                                <Trash2 className="mr-2 h-4 w-4" /> Delete Vehicle
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <div className="hidden overflow-hidden rounded-md border bg-white shadow-sm md:block">
                     <Table>
                         <TableHeader className="bg-slate-50">
                             <TableRow>
@@ -813,6 +915,7 @@ export function VehiclesPage({
                         </TableBody>
                     </Table>
                 </div>
+                </>
               )
           ) : (
               <div className="flex flex-col items-center justify-center h-64 text-slate-500 bg-slate-50 rounded-xl border border-dashed">

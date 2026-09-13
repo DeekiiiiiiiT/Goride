@@ -219,7 +219,7 @@ function Sidebar({
             <SheetTitle>Sidebar</SheetTitle>
             <SheetDescription>Displays the mobile sidebar.</SheetDescription>
           </SheetHeader>
-          <div className="flex h-full w-full flex-col">{children}</div>
+          <div className="flex h-full w-full flex-col safe-t safe-b">{children}</div>
         </SheetContent>
       </Sheet>
     );
@@ -503,8 +503,8 @@ const sidebarMenuButtonVariants = cva(
           "bg-background shadow-[0_0_0_1px_hsl(var(--sidebar-border))] hover:bg-sidebar-accent hover:text-sidebar-accent-foreground hover:shadow-[0_0_0_1px_hsl(var(--sidebar-accent))]",
       },
       size: {
-        default: "h-8 text-sm",
-        sm: "h-7 text-xs",
+        default: "h-8 min-h-11 text-sm md:min-h-0 md:h-8",
+        sm: "h-7 min-h-11 text-xs md:min-h-0 md:h-7",
         lg: "h-12 text-sm group-data-[collapsible=icon]:p-0!",
       },
     },

@@ -7,6 +7,7 @@ import { addDays, format, parseISO } from 'date-fns';
 import { ArrowRight, Loader2, RefreshCw } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { cn } from '../components/ui/utils';
+import { DesktopRecommendedBanner } from '../components/layout/DesktopRecommendedBanner';
 import { requireAuthHeaders } from '../utils/authHeaders';
 import { fetchWithRetry } from '../services/api';
 import { API_ENDPOINTS } from '../services/apiConfig';
@@ -79,6 +80,7 @@ export function RestatementQueuePage({
 
   return (
     <div className={cn(embedded ? 'space-y-4' : 'mx-auto max-w-5xl space-y-4 p-4 sm:p-6')}>
+      <DesktopRecommendedBanner message="Best on a larger screen — open Roam Fleet on desktop to review restatements." />
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           {!embedded ? (

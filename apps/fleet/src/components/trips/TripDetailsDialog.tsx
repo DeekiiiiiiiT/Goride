@@ -1,5 +1,5 @@
 import React from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "../ui/dialog";
+import { ResponsiveDialog, ResponsiveDialogContent, ResponsiveDialogHeader, ResponsiveDialogTitle, ResponsiveDialogDescription } from '../ui/responsive-dialog';
 import { Trip } from "../../types/data";
 import { normalizePlatform } from '../../utils/normalizePlatform';
 import { TripStop } from "../../types/tripSession";
@@ -34,15 +34,15 @@ export function TripDetailsDialog({ trip, open, onOpenChange }: TripDetailsDialo
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col gap-0 p-0 overflow-hidden">
-        <DialogHeader className="p-6 pb-4 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950">
+    <ResponsiveDialog open={open} onOpenChange={onOpenChange}>
+      <ResponsiveDialogContent className="max-w-2xl max-h-[90vh] flex flex-col gap-0 p-0 overflow-hidden">
+        <ResponsiveDialogHeader className="p-6 pb-4 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950">
           <div className="flex items-center justify-between mr-8">
             <div className="space-y-1">
-              <DialogTitle className="text-xl">Trip Details</DialogTitle>
-              <DialogDescription>
+              <ResponsiveDialogTitle className="text-xl">Trip Details</ResponsiveDialogTitle>
+              <ResponsiveDialogDescription>
                 ID: {trip.id.slice(0, 8)}...
-              </DialogDescription>
+              </ResponsiveDialogDescription>
             </div>
             <Badge className={getStatusColor(trip.status)}>
               {trip.status}
@@ -62,7 +62,7 @@ export function TripDetailsDialog({ trip, open, onOpenChange }: TripDetailsDialo
               </Badge>
             );
           })()}
-        </DialogHeader>
+        </ResponsiveDialogHeader>
 
         <ScrollArea className="flex-1">
           <div className="space-y-8 p-6 pt-4 pb-6">
@@ -454,7 +454,7 @@ export function TripDetailsDialog({ trip, open, onOpenChange }: TripDetailsDialo
 
           </div>
         </ScrollArea>
-      </DialogContent>
-    </Dialog>
+      </ResponsiveDialogContent>
+    </ResponsiveDialog>
   );
 }

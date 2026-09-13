@@ -1257,7 +1257,7 @@ export function OverviewMetricsGrid({
               <div className="text-[10px] text-slate-500 font-medium uppercase tracking-wide">Hours Online</div>
             </div>
           </div>
-          <div className="mt-4 grid grid-cols-4 gap-1 text-center px-2">
+          <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-1 text-center px-2">
             <TooltipProvider>
               <UiTooltip>
                 <TooltipTrigger asChild>

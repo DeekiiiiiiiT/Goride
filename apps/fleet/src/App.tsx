@@ -368,7 +368,11 @@ function AppContent() {
 
   // Sync browser back/forward with in-app page state (+ driver detail deep links)
   useEffect(() => {
-    const onPopState = () => {
+    const onPopState = (event: PopStateEvent) => {
+      // Map fullscreen sentinel — FleetMap owns close; do not thrash page state
+      const overlay = (event.state as { overlay?: string } | null)?.overlay;
+      if (overlay === 'map-fullscreen') return;
+
       const pathname = window.location.pathname;
       const page = resolvePageFromPathname(pathname);
       setCurrentPage(page);

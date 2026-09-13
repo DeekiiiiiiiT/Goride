@@ -989,7 +989,7 @@ export function DriversPage({
       )}
 
       {/* --- TABLE --- */}
-      <Card className="border-none shadow-sm ring-1 ring-slate-200 dark:ring-slate-700">
+      <Card className="hidden border-none shadow-sm ring-1 ring-slate-200 md:block dark:ring-slate-700">
           <CardContent className="p-0">
             <Table>
                 <TableHeader className="bg-slate-50 dark:bg-slate-800/50">
@@ -1191,6 +1191,101 @@ export function DriversPage({
             </Table>
           </CardContent>
       </Card>
+
+      {/* Mobile card list */}
+      <div className="space-y-3 md:hidden">
+        {paginatedDrivers.length > 0 ? (
+          paginatedDrivers.map((driver) => (
+            <div
+              key={driver.id}
+              className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900"
+            >
+              <button
+                type="button"
+                className="w-full text-left"
+                onClick={() => openDriver(driver.id)}
+                aria-label={`Open driver ${driver.name}`}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex min-w-0 items-center gap-3">
+                    <Avatar className="h-10 w-10 shrink-0 border border-slate-200 dark:border-slate-700">
+                      <AvatarImage src={driver.avatarUrl} />
+                      <AvatarFallback className="bg-indigo-50 font-medium text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300">
+                        {driverInitials(driver.name)}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="min-w-0">
+                      <p className="truncate font-medium text-slate-900 dark:text-slate-100">{driver.name}</p>
+                      <p className="truncate font-mono text-xs text-slate-500">{driver.phone}</p>
+                    </div>
+                  </div>
+                  <StatusBadge status={driver.status} />
+                </div>
+                <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
+                  <div>
+                    <p className="text-xs text-slate-500">Earnings (Today)</p>
+                    <p className="font-medium text-slate-900 dark:text-slate-100">{formatJMD(driver.todaysEarnings, 2)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-500">Trips</p>
+                    <p className="text-slate-700 dark:text-slate-300">{driver.todaysTrips}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-500">Acceptance</p>
+                    <p className={driver.acceptanceRate < 70 ? 'font-medium text-rose-600' : 'font-medium text-emerald-600'}>
+                      {driver.acceptanceRate}%
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-500">Tier</p>
+                    <TierBadge tier={driver.tier} />
+                  </div>
+                </div>
+              </button>
+              <div className="mt-3 flex items-center justify-between border-t border-slate-100 pt-2 dark:border-slate-800">
+                <Checkbox
+                  checked={selectedIds.has(driver.id)}
+                  onCheckedChange={(v) => toggleSelectOne(driver.id, v === true)}
+                  aria-label={`Select ${driver.name}`}
+                  className="min-h-11 min-w-11"
+                />
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="icon" className="min-h-11 min-w-11 text-slate-400">
+                      <MoreVertical className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={() => openDriver(driver.id)}>View Analysis</DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => openDriver(driver.id, 'profile')}>Add note</DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    {can('drivers.delete') && (
+                      <>
+                        <DropdownMenuItem
+                          className="cursor-pointer"
+                          onClick={() => setDriverToRemove(driver.id)}
+                        >
+                          Remove from Fleet
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          className="cursor-pointer text-rose-600 focus:bg-rose-50 focus:text-rose-600 dark:focus:bg-rose-900/20"
+                          onClick={() => setDriverToDelete(driver.id)}
+                        >
+                          Delete Driver
+                        </DropdownMenuItem>
+                      </>
+                    )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            </div>
+          ))
+        ) : (
+          <div className="rounded-lg border border-slate-200 bg-white p-8 text-center text-slate-500 dark:border-slate-700 dark:bg-slate-900">
+            No drivers found matching your criteria.
+          </div>
+        )}
+      </div>
 
       {/* --- FOOTER --- */}
       <div className="flex items-center justify-between">

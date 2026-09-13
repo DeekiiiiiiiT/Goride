@@ -163,7 +163,7 @@ export function PredictiveAnalyticsPanel({ trips = [] }: PredictiveAnalyticsPane
                 </LineChart>
              </SafeResponsiveContainer>
           </div>
-          <div className="grid grid-cols-3 gap-4 mt-4 text-center">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 mt-4 text-center">
               <div>
                   <p className="text-sm text-slate-500">Expected Earnings</p>
                   <p className="text-xl font-bold text-slate-900">{stats?.expectedEarnings || '-'}</p>

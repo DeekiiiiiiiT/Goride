@@ -78,7 +78,7 @@ export function SettingsPage() {
       </div>
 
       <Tabs defaultValue="general" className="space-y-4">
-        <div className="w-full overflow-x-auto pb-2">
+        <div className="w-full overflow-x-auto pb-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           <TabsList>
             <TabsTrigger value="general">General</TabsTrigger>
             <TabsTrigger value="integrations">Integrations</TabsTrigger>

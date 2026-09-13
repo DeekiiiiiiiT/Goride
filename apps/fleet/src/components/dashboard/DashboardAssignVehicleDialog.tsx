@@ -1,13 +1,13 @@
 import { useMemo, useState } from 'react';
 import { Check, Search } from 'lucide-react';
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '../ui/dialog';
+  ResponsiveDialog,
+  ResponsiveDialogContent,
+  ResponsiveDialogDescription,
+  ResponsiveDialogFooter,
+  ResponsiveDialogHeader,
+  ResponsiveDialogTitle,
+} from '../ui/responsive-dialog';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { cn } from '../ui/utils';
@@ -61,14 +61,14 @@ export function DashboardAssignVehicleDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="sm:max-w-lg">
-        <DialogHeader>
-          <DialogTitle>Assign vehicle</DialogTitle>
-          <DialogDescription>
+    <ResponsiveDialog open={open} onOpenChange={handleOpenChange}>
+      <ResponsiveDialogContent className="sm:max-w-lg">
+        <ResponsiveDialogHeader>
+          <ResponsiveDialogTitle>Assign vehicle</ResponsiveDialogTitle>
+          <ResponsiveDialogDescription>
             Choose a vehicle for {driverName.trim() || 'this driver'}.
-          </DialogDescription>
-        </DialogHeader>
+          </ResponsiveDialogDescription>
+        </ResponsiveDialogHeader>
 
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
@@ -130,7 +130,7 @@ export function DashboardAssignVehicleDialog({
           )}
         </div>
 
-        <DialogFooter>
+        <ResponsiveDialogFooter>
           <Button variant="outline" onClick={() => handleOpenChange(false)} disabled={busy}>
             Cancel
           </Button>
@@ -140,8 +140,8 @@ export function DashboardAssignVehicleDialog({
           >
             {busy ? 'Saving…' : 'Assign'}
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </ResponsiveDialogFooter>
+      </ResponsiveDialogContent>
+    </ResponsiveDialog>
   );
 }

@@ -76,11 +76,11 @@ export function DashboardFilterBar({
 
   return (
     <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex items-center gap-2 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         <Button
           type="button"
           variant={filtersIdle ? 'default' : 'secondary'}
-          className={pillClass(filtersIdle)}
+          className={cn(pillClass(filtersIdle), 'shrink-0')}
           onClick={onReset}
         >
           All
@@ -91,7 +91,7 @@ export function DashboardFilterBar({
             <Button
               type="button"
               variant={assignment !== null ? 'default' : 'secondary'}
-              className={pillClass(assignment !== null)}
+              className={cn(pillClass(assignment !== null), 'shrink-0')}
             >
               Assignment
               <ChevronDown className="h-3.5 w-3.5 opacity-70" />
@@ -113,7 +113,7 @@ export function DashboardFilterBar({
             {assignment !== null ? (
               <button
                 type="button"
-                className="w-full text-left px-2 py-1.5 text-xs text-slate-500 hover:text-slate-800"
+                className="w-full px-2 py-1.5 text-left text-xs text-slate-500 hover:text-slate-800"
                 onClick={() => onAssignmentChange(null)}
               >
                 Clear assignment filter
@@ -127,7 +127,7 @@ export function DashboardFilterBar({
             <Button
               type="button"
               variant={!allStatusesSelected ? 'default' : 'secondary'}
-              className={pillClass(!allStatusesSelected)}
+              className={cn(pillClass(!allStatusesSelected), 'shrink-0')}
             >
               Status
               <ChevronDown className="h-3.5 w-3.5 opacity-70" />
@@ -164,7 +164,7 @@ export function DashboardFilterBar({
             <Button
               type="button"
               variant={!allDocumentsSelected ? 'default' : 'secondary'}
-              className={pillClass(!allDocumentsSelected)}
+              className={cn(pillClass(!allDocumentsSelected), 'shrink-0')}
             >
               Documents
               <ChevronDown className="h-3.5 w-3.5 opacity-70" />

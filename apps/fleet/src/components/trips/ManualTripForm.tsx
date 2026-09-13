@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
-  Dialog, 
-  DialogContent, 
-  DialogHeader, 
-  DialogTitle, 
-  DialogDescription,
-  DialogFooter 
-} from "../ui/dialog";
+  ResponsiveDialog, 
+  ResponsiveDialogContent, 
+  ResponsiveDialogHeader, 
+  ResponsiveDialogTitle, 
+  ResponsiveDialogDescription,
+  ResponsiveDialogFooter 
+} from '../ui/responsive-dialog';
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
@@ -328,19 +328,19 @@ export function ManualTripForm({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex max-h-[90dvh] flex-col gap-0 overflow-hidden p-0 sm:max-w-[500px]">
+    <ResponsiveDialog open={open} onOpenChange={onOpenChange}>
+      <ResponsiveDialogContent className="flex max-h-[90dvh] flex-col gap-0 overflow-hidden p-0 sm:max-w-[500px]">
         <div className="shrink-0 border-b border-slate-200 px-6 pb-4 pt-6 dark:border-slate-700">
-          <DialogHeader>
-            <DialogTitle>{editingTrip ? 'Edit Trip' : initialData ? 'Confirm Trip Details' : 'Log Manual Trip'}</DialogTitle>
-            <DialogDescription>
+          <ResponsiveDialogHeader>
+            <ResponsiveDialogTitle>{editingTrip ? 'Edit Trip' : initialData ? 'Confirm Trip Details' : 'Log Manual Trip'}</ResponsiveDialogTitle>
+            <ResponsiveDialogDescription>
               {editingTrip
                 ? `Editing trip ${editingTrip.id?.slice(0, 12)}… — update any fields and save.`
                 : initialData
                   ? 'Review and confirm the details of your recorded trip.'
                   : 'Record a completed trip or log a cancelled trip for tracking.'}
-            </DialogDescription>
-          </DialogHeader>
+            </ResponsiveDialogDescription>
+          </ResponsiveDialogHeader>
         </div>
 
         <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
@@ -992,7 +992,7 @@ export function ManualTripForm({
 
           </div>
           <div className="relative z-10 shrink-0 border-t border-slate-200 bg-background px-6 py-4 dark:border-slate-700">
-            <DialogFooter className="gap-2 p-0 sm:justify-end">
+            <ResponsiveDialogFooter className="gap-2 p-0 sm:justify-end">
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
                 Cancel
               </Button>
@@ -1014,10 +1014,10 @@ export function ManualTripForm({
                 {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 {editingTrip ? 'Save Changes' : formData.tripStatus === 'Cancelled' ? 'Log Cancelled Trip' : 'Save Trip'}
               </Button>
-            </DialogFooter>
+            </ResponsiveDialogFooter>
           </div>
         </form>
-      </DialogContent>
-    </Dialog>
+      </ResponsiveDialogContent>
+    </ResponsiveDialog>
   );
 }

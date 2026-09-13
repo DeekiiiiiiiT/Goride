@@ -406,3 +406,34 @@ export function navDeskHasActivePage(
 export function navItemsHaveActivePage(items: NavLeaf[], currentPage: string) {
   return items.some((item) => isNavLeafActive(item, currentPage));
 }
+
+/** Flat label lookup for mobile chrome — prefers exact id, then activeIds. */
+export function resolveNavPageTitle(
+  model: FleetNavModel,
+  currentPage: string | undefined,
+): string | null {
+  if (!currentPage) return null;
+
+  const leaves: NavLeaf[] = [];
+  if (model.dashboard) leaves.push(model.dashboard);
+  if (model.reports) leaves.push(model.reports);
+  for (const desk of [model.fleetOps.fuel, model.fleetOps.toll]) {
+    if (desk) leaves.push(...desk.items);
+  }
+  leaves.push(
+    ...model.driverOps.items,
+    ...model.money.items,
+    ...model.vehicleOps.items,
+    ...model.courierOps.items,
+    ...model.analytics.items,
+    ...model.businessFinance.items,
+    ...model.system.items,
+  );
+
+  const match =
+    leaves.find((item) => item.id === currentPage) ??
+    leaves.find((item) => item.activeIds?.includes(currentPage));
+  if (!match) return null;
+  return typeof match.label === 'string' ? match.label : null;
+}
+

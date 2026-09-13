@@ -153,7 +153,7 @@ export function FleetTagSection() {
           </CardTitle>
           <CardDescription>
             Share this tag with drivers and couriers so they can request to join your fleet.
-            Instant invite codes on Drivers / Couriers still work the same.
+            Once set, it cannot be changed (same as Rider Roam Tags). Instant invite codes still work.
             {orgName ? ` (${orgName})` : ''}
           </CardDescription>
         </CardHeader>
@@ -216,15 +216,17 @@ export function FleetTagSection() {
                   </Button>
                 </>
               ) : (
-                <p className="text-sm text-slate-600 dark:text-slate-300">
-                  No Fleet Tag yet. Set one so drivers and couriers can find your fleet.
-                </p>
-              )}
-              {canEditTag && (
-                <Button type="button" variant="secondary" size="sm" onClick={() => setEditing(true)}>
-                  <Pencil className="mr-1.5 h-4 w-4" />
-                  {tag ? 'Edit' : 'Set Fleet Tag'}
-                </Button>
+                <>
+                  <p className="text-sm text-slate-600 dark:text-slate-300">
+                    No Fleet Tag yet. Choose carefully — you can only set it once.
+                  </p>
+                  {canEditTag && (
+                    <Button type="button" variant="secondary" size="sm" onClick={() => setEditing(true)}>
+                      <Pencil className="mr-1.5 h-4 w-4" />
+                      Set Fleet Tag
+                    </Button>
+                  )}
+                </>
               )}
             </div>
           )}

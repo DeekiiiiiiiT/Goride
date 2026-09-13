@@ -155,7 +155,7 @@ export function FinancialSubTabs({
   return (
     <Tabs defaultValue="earnings" className="space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <TabsList className="grid w-full grid-cols-5 max-w-[750px]">
+        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 md:grid-cols-5 max-w-[750px]">
           <TabsTrigger value="earnings">Earnings</TabsTrigger>
           <TabsTrigger value="expenses">Expenses</TabsTrigger>
           <TabsTrigger value="settlement">Settlement</TabsTrigger>

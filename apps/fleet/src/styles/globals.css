@@ -184,6 +184,44 @@
 
 html {
   font-size: var(--font-size);
+  -webkit-text-size-adjust: 100%;
+}
+
+body,
+#root {
+  min-height: 100dvh;
+}
+
+@utility safe-x {
+  padding-left: max(1rem, env(safe-area-inset-left, 0px));
+  padding-right: max(1rem, env(safe-area-inset-right, 0px));
+}
+
+@utility safe-t {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+
+@utility safe-b {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+@utility app-fullscreen-screen {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  max-height: 100dvh;
+  overflow: hidden;
+}
+
+@layer base {
+  button,
+  [role="button"],
+  a,
+  summary {
+    touch-action: manipulation;
+  }
 }
 
 /**

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "../ui/dialog";
+import { ResponsiveDialog, ResponsiveDialogContent, ResponsiveDialogHeader, ResponsiveDialogTitle, ResponsiveDialogFooter, ResponsiveDialogDescription } from '../ui/responsive-dialog';
 import { Button } from "../ui/button";
 import { Textarea } from "../ui/textarea";
 import { WeeklyCheckIn } from '../../types/check-in';
@@ -34,14 +34,14 @@ export function CheckInReviewModal({ isOpen, onClose, checkIn, driverName, onRev
     const isSignificantDiff = difference > 100;
 
     return (
-        <Dialog open={isOpen} onOpenChange={onClose}>
-            <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-                <DialogHeader>
-                    <DialogTitle>Review Manual Check-In</DialogTitle>
-                    <DialogDescription>
+        <ResponsiveDialog open={isOpen} onOpenChange={onClose}>
+            <ResponsiveDialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+                <ResponsiveDialogHeader>
+                    <ResponsiveDialogTitle>Review Manual Check-In</ResponsiveDialogTitle>
+                    <ResponsiveDialogDescription>
                         Review the driver's manual entry against the provided photo evidence.
-                    </DialogDescription>
-                </DialogHeader>
+                    </ResponsiveDialogDescription>
+                </ResponsiveDialogHeader>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mt-4">
                     {/* Left: Photo Evidence */}
@@ -145,7 +145,7 @@ export function CheckInReviewModal({ isOpen, onClose, checkIn, driverName, onRev
                     </div>
                 </div>
 
-                <DialogFooter className="mt-8 gap-3 sm:gap-0">
+                <ResponsiveDialogFooter className="mt-8 gap-3 sm:gap-0">
                     <Button variant="outline" onClick={onClose} disabled={isLoading}>
                         Cancel
                     </Button>
@@ -166,8 +166,8 @@ export function CheckInReviewModal({ isOpen, onClose, checkIn, driverName, onRev
                             <Check className="h-4 w-4 mr-2" /> Approve
                         </Button>
                     </div>
-                </DialogFooter>
-            </DialogContent>
-        </Dialog>
+                </ResponsiveDialogFooter>
+            </ResponsiveDialogContent>
+        </ResponsiveDialog>
     );
 }

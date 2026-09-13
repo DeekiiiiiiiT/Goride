@@ -91,7 +91,7 @@ export function AddDriverDetailsStep({
             </Button>
           )}
         </div>
-        <div className="grid grid-cols-4 items-start gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 items-start gap-4">
           <Label className="text-right pt-2.5">
             Address <span className="text-red-500">*</span>
           </Label>
@@ -129,7 +129,7 @@ export function AddDriverDetailsStep({
       <div>
         <h4 className="text-sm font-semibold text-slate-900 mb-3 border-b pb-1">Personal Information</h4>
         <div className="space-y-4">
-          <div className="grid grid-cols-4 items-start gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 items-start gap-4">
             <Label className="text-right pt-2.5">
               Name <span className="text-red-500">*</span>
             </Label>
@@ -143,7 +143,7 @@ export function AddDriverDetailsStep({
             </div>
           </div>
 
-          <div className="grid grid-cols-4 items-center gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 items-center gap-4">
             <Label className="text-right">
               DOB <span className="text-red-500">*</span>
             </Label>
@@ -170,7 +170,7 @@ export function AddDriverDetailsStep({
             </div>
           </div>
 
-          <div className="grid grid-cols-4 items-center gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 items-center gap-4">
             <Label className="text-right">Phone</Label>
             <div className="col-span-3 flex gap-3">
               <Controller
@@ -195,7 +195,7 @@ export function AddDriverDetailsStep({
             </div>
           </div>
 
-          <div className="grid grid-cols-4 items-center gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 items-center gap-4">
             <Label htmlFor="email" className="text-right">
               Email <span className="text-red-500">*</span>
             </Label>
@@ -208,7 +208,7 @@ export function AddDriverDetailsStep({
             />
           </div>
 
-          <div className="grid grid-cols-4 items-start gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 items-start gap-4">
             <Label className="text-right pt-2 text-slate-500">Login</Label>
             <p className="col-span-3 text-xs text-slate-500 leading-relaxed">
               Driver app access is issued via{' '}
@@ -217,7 +217,7 @@ export function AddDriverDetailsStep({
             </p>
           </div>
 
-          <div className="grid grid-cols-4 items-center gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 items-center gap-4">
             <Label className="text-right">
               Nationality <span className="text-red-500">*</span>
             </Label>
@@ -232,7 +232,7 @@ export function AddDriverDetailsStep({
       <div>
         <h4 className="text-sm font-semibold text-slate-900 mb-3 border-b pb-1 mt-2">License Details</h4>
         <div className="space-y-4">
-          <div className="grid grid-cols-4 items-center gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 items-center gap-4">
             <Label className="text-right">
               TRN / Lic # <span className="text-red-500">*</span>
             </Label>
@@ -241,13 +241,13 @@ export function AddDriverDetailsStep({
               <Input {...register('licenseNumber')} className="pl-9" placeholder="123456789" />
             </div>
           </div>
-          <div className="grid grid-cols-4 items-center gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 items-center gap-4">
             <Label className="text-right">Collectorate</Label>
             <div className="col-span-3">
               <Input {...register('collectorate')} placeholder="e.g. Spanish Town" />
             </div>
           </div>
-          <div className="grid grid-cols-4 items-center gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 items-center gap-4">
             <Label className="text-right">
               Expires <span className="text-red-500">*</span>
             </Label>
@@ -255,13 +255,13 @@ export function AddDriverDetailsStep({
               <Input type="date" {...register('licenseExpiry')} />
             </div>
           </div>
-          <div className="grid grid-cols-4 items-center gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 items-center gap-4">
             <Label className="text-right">Issued</Label>
             <div className="col-span-3">
               <Input type="date" {...register('originalIssueDate')} />
             </div>
           </div>
-          <div className="grid grid-cols-4 items-center gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 items-center gap-4">
             <Label className="text-right">
               Class <span className="text-red-500">*</span>
             </Label>
@@ -269,7 +269,7 @@ export function AddDriverDetailsStep({
               <Input {...register('licenseClass')} placeholder="e.g. Class C" />
             </div>
           </div>
-          <div className="grid grid-cols-4 items-center gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 items-center gap-4">
             <Label className="text-right">
               Licence to Drive <span className="text-red-500">*</span>
             </Label>
@@ -282,7 +282,7 @@ export function AddDriverDetailsStep({
               />
             </div>
           </div>
-          <div className="grid grid-cols-4 items-center gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 items-center gap-4">
             <Label className="text-right">
               Control No. <span className="text-red-500">*</span>
             </Label>

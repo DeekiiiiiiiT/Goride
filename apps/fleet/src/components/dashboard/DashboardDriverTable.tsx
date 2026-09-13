@@ -12,12 +12,12 @@ import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Card, CardContent } from '../ui/card';
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from '../ui/dialog';
+  ResponsiveDialog,
+  ResponsiveDialogContent,
+  ResponsiveDialogDescription,
+  ResponsiveDialogHeader,
+  ResponsiveDialogTitle,
+} from '../ui/responsive-dialog';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -111,9 +111,133 @@ export function DashboardDriverTable({
 }: Props) {
   const [contactRow, setContactRow] = useState<DashboardDriverRow | null>(null);
 
+  const rowMeta = (row: DashboardDriverRow) => {
+    const displayName = row.name.trim() || 'Unknown Driver';
+    const plate = row.licensePlate.trim();
+    const assignment = row.vehicleLabel.trim();
+    const unassigned =
+      !row.vehicleId ||
+      !assignment ||
+      assignment.toLowerCase() === 'unassigned' ||
+      assignment === '—';
+    const busy = assignmentBusyDriverId === row.id;
+    return { displayName, plate, assignment, unassigned, busy };
+  };
+
   return (
     <>
-      <Card className="border border-slate-200 shadow-none bg-white dark:bg-slate-900 dark:border-slate-700">
+      {/* Mobile card list */}
+      <div className="space-y-3 md:hidden">
+        {rows.length === 0 ? (
+          <div className="rounded-lg border border-slate-200 bg-white p-8 text-center text-slate-500 dark:border-slate-700 dark:bg-slate-900">
+            No drivers in this fleet yet.
+          </div>
+        ) : (
+          rows.map((row) => {
+            const { displayName, plate, assignment, unassigned, busy } = rowMeta(row);
+            return (
+              <div
+                key={row.id}
+                className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900"
+              >
+                <button
+                  type="button"
+                  className="w-full text-left"
+                  onClick={() => onOpenDriver?.(row.id)}
+                  aria-label={`Open driver ${displayName}`}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex min-w-0 items-center gap-3">
+                      <Avatar className="h-10 w-10 shrink-0 border border-slate-200 dark:border-slate-700">
+                        <AvatarImage src={row.avatarUrl} alt="" />
+                        <AvatarFallback className="bg-slate-100 text-xs font-semibold text-slate-700">
+                          {initials(displayName)}
+                        </AvatarFallback>
+                      </Avatar>
+                      <span className="truncate font-semibold uppercase tracking-wide text-slate-900 dark:text-slate-100">
+                        {displayName}
+                      </span>
+                    </div>
+                    <RidesStatusBadge status={row.status} />
+                  </div>
+                  <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
+                    <div>
+                      <p className="text-xs text-slate-500">Assignment</p>
+                      <p className="truncate font-medium text-slate-800 dark:text-slate-200">
+                        {unassigned ? 'Unassigned' : assignment}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-slate-500">Plate</p>
+                      <p className="font-mono text-slate-700 dark:text-slate-300">{plate || '—'}</p>
+                    </div>
+                  </div>
+                </button>
+                <div className="mt-3 flex items-center justify-end gap-1 border-t border-slate-100 pt-2 dark:border-slate-800">
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="min-h-11 min-w-11"
+                        disabled={busy}
+                        aria-label={`Change vehicle for ${displayName}`}
+                      >
+                        <ChevronDown className="h-4 w-4 text-slate-500" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-52">
+                      <DropdownMenuLabel>Vehicle</DropdownMenuLabel>
+                      <DropdownMenuItem
+                        disabled={busy}
+                        onClick={() => onAssignVehicle?.(row.id)}
+                      >
+                        {unassigned ? 'Assign vehicle' : 'Assign another vehicle'}
+                      </DropdownMenuItem>
+                      {!unassigned ? (
+                        <>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            disabled={busy}
+                            className="text-rose-600 focus:text-rose-700"
+                            onClick={() => onUnassignVehicle?.(row.id)}
+                          >
+                            Unassign vehicle
+                          </DropdownMenuItem>
+                        </>
+                      ) : null}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="min-h-11 min-w-11"
+                        aria-label={`Actions for ${displayName}`}
+                      >
+                        <MoreVertical className="h-4 w-4 text-slate-400" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                      <DropdownMenuItem onClick={() => onOpenDriver?.(row.id)}>
+                        View driver
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => setContactRow(row)}>
+                        Contact
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      <Card className="hidden border border-slate-200 bg-white shadow-none md:block dark:border-slate-700 dark:bg-slate-900">
         <CardContent className="p-0">
           <Table>
             <TableHeader>
@@ -145,20 +269,12 @@ export function DashboardDriverTable({
                 </TableRow>
               ) : (
                 rows.map((row) => {
-                  const displayName = row.name.trim() || 'Unknown Driver';
-                  const plate = row.licensePlate.trim();
-                  const assignment = row.vehicleLabel.trim();
-                  const unassigned =
-                    !row.vehicleId ||
-                    !assignment ||
-                    assignment.toLowerCase() === 'unassigned' ||
-                    assignment === '—';
-                  const busy = assignmentBusyDriverId === row.id;
+                  const { displayName, plate, assignment, unassigned, busy } = rowMeta(row);
 
                   return (
                     <TableRow
                       key={row.id}
-                      className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 cursor-pointer"
+                      className="cursor-pointer hover:bg-slate-50/70 dark:hover:bg-slate-800/40"
                       role="button"
                       tabIndex={0}
                       aria-label={`Open driver ${displayName}`}
@@ -170,15 +286,15 @@ export function DashboardDriverTable({
                         }
                       }}
                     >
-                      <TableCell className="pl-6 py-4">
-                        <div className="flex items-center gap-3 min-w-[200px]">
+                      <TableCell className="py-4 pl-6">
+                        <div className="flex w-full items-center gap-3 md:min-w-[200px]">
                           <Avatar className="h-10 w-10 border border-slate-200 dark:border-slate-700">
                             <AvatarImage src={row.avatarUrl} alt="" />
-                            <AvatarFallback className="bg-slate-100 text-slate-700 text-xs font-semibold">
+                            <AvatarFallback className="bg-slate-100 text-xs font-semibold text-slate-700">
                               {initials(displayName)}
                             </AvatarFallback>
                           </Avatar>
-                          <span className="font-semibold text-slate-900 dark:text-slate-100 uppercase tracking-wide">
+                          <span className="font-semibold uppercase tracking-wide text-slate-900 dark:text-slate-100">
                             {displayName}
                           </span>
                         </div>
@@ -190,7 +306,7 @@ export function DashboardDriverTable({
                             <button
                               type="button"
                               disabled={busy}
-                              className="group flex items-center gap-3 min-w-[180px] rounded-md px-1.5 py-1 -mx-1.5 text-left hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors disabled:opacity-60"
+                              className="group -mx-1.5 flex w-full items-center gap-3 rounded-md px-1.5 py-1 text-left transition-colors hover:bg-slate-100 disabled:opacity-60 md:min-w-[180px] dark:hover:bg-slate-800"
                               aria-label={`Change vehicle for ${displayName}`}
                             >
                               {unassigned ? (
@@ -200,7 +316,7 @@ export function DashboardDriverTable({
                               ) : (
                                 <>
                                   {row.vehicleImage ? (
-                                    <div className="h-10 w-16 rounded-md overflow-hidden bg-slate-100 border border-slate-200 flex-shrink-0">
+                                    <div className="flex h-10 w-16 flex-shrink-0 overflow-hidden rounded-md border border-slate-200 bg-slate-100">
                                       <img
                                         src={row.vehicleImage}
                                         alt=""
@@ -213,7 +329,7 @@ export function DashboardDriverTable({
                                   </span>
                                 </>
                               )}
-                              <ChevronDown className="h-3.5 w-3.5 text-slate-400 opacity-0 group-hover:opacity-100 group-data-[state=open]:opacity-100 flex-shrink-0" />
+                              <ChevronDown className="h-3.5 w-3.5 flex-shrink-0 text-slate-400 opacity-0 group-hover:opacity-100 group-data-[state=open]:opacity-100" />
                             </button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="start" className="w-52">
@@ -241,7 +357,7 @@ export function DashboardDriverTable({
                       </TableCell>
 
                       <TableCell className="py-4">
-                        <span className="text-slate-600 dark:text-slate-300 font-mono text-sm">
+                        <span className="font-mono text-sm text-slate-600 dark:text-slate-300">
                           {plate || '—'}
                         </span>
                       </TableCell>
@@ -285,19 +401,19 @@ export function DashboardDriverTable({
         </CardContent>
       </Card>
 
-      <Dialog
+      <ResponsiveDialog
         open={Boolean(contactRow)}
         onOpenChange={(open) => {
           if (!open) setContactRow(null);
         }}
       >
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Contact</DialogTitle>
-            <DialogDescription>
+        <ResponsiveDialogContent className="sm:max-w-md">
+          <ResponsiveDialogHeader>
+            <ResponsiveDialogTitle>Contact</ResponsiveDialogTitle>
+            <ResponsiveDialogDescription>
               {(contactRow?.name || 'Driver').trim()}
-            </DialogDescription>
-          </DialogHeader>
+            </ResponsiveDialogDescription>
+          </ResponsiveDialogHeader>
           <div className="space-y-4 pt-1">
             <div className="flex items-start gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-800/50">
               <Phone className="mt-0.5 h-4 w-4 shrink-0 text-slate-500" />
@@ -336,8 +452,8 @@ export function DashboardDriverTable({
               </div>
             </div>
           </div>
-        </DialogContent>
-      </Dialog>
+        </ResponsiveDialogContent>
+      </ResponsiveDialog>
     </>
   );
 }

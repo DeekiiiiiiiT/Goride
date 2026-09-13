@@ -33,6 +33,7 @@ import {
   SelectValue,
 } from '../components/ui/select';
 import { cn } from '../components/ui/utils';
+import { DesktopRecommendedBanner } from '../components/layout/DesktopRecommendedBanner';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { useSettlementQueue } from '../hooks/useSettlementQueue';
 import {
@@ -757,6 +758,7 @@ export function CloseWeekPage({
 
   return (
     <div className={cn(embedded ? 'space-y-6' : 'mx-auto max-w-[1200px] space-y-6 p-4 sm:p-6')}>
+      <DesktopRecommendedBanner message="Best on a larger screen — open Roam Fleet on desktop to close the week." />
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           {!embedded ? (

@@ -216,7 +216,24 @@ export function registerFleetTagRoutes(
       if (invalid) return c.json({ error: tagValidationMessage(invalid), code: invalid }, 400);
       const normalized = normalizeFleetTagName(raw);
 
-      await ensureOrgFleetTagInternalId(deps.supabase, orgId);
+      const org = await ensureOrgFleetTagInternalId(deps.supabase, orgId);
+      if (!org) return c.json({ error: "Organization not found" }, 404);
+
+      // Permanent after first claim (matches Rider Roam Tag UI lock; enforced server-side for fleets).
+      if (org.fleet_tag) {
+        if (org.fleet_tag === normalized) {
+          return c.json({
+            fleet_tag: org.fleet_tag,
+            has_fleet_tag: true,
+            organization_id: org.id,
+            organization_name: org.name,
+          });
+        }
+        return c.json({
+          error: "Fleet Tag is permanent and cannot be changed once set",
+          code: "tag_locked",
+        }, 409);
+      }
 
       const { data: clash } = await deps.supabase
         .from("organizations")
@@ -236,17 +253,25 @@ export function registerFleetTagRoutes(
         return c.json({ error: "That Fleet Tag is reserved", code: "tag_reserved" }, 400);
       }
 
+      // Only claim when still null — race-safe lock.
       const { data: updated, error } = await deps.supabase
         .from("organizations")
         .update({ fleet_tag: normalized, updated_at: new Date().toISOString() })
         .eq("id", orgId)
+        .is("fleet_tag", null)
         .select("id, name, fleet_tag")
-        .single();
+        .maybeSingle();
       if (error) {
         if (error.code === "23505") {
           return c.json({ error: "That Fleet Tag is already taken", code: "tag_taken" }, 409);
         }
         throw error;
+      }
+      if (!updated) {
+        return c.json({
+          error: "Fleet Tag is permanent and cannot be changed once set",
+          code: "tag_locked",
+        }, 409);
       }
 
       return c.json({

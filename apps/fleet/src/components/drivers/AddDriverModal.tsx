@@ -2,13 +2,13 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useForm, FormProvider } from 'react-hook-form';
 import { useQuery } from '@tanstack/react-query';
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-  DialogDescription,
-} from '../ui/dialog';
+  ResponsiveDialog,
+  ResponsiveDialogContent,
+  ResponsiveDialogHeader,
+  ResponsiveDialogTitle,
+  ResponsiveDialogFooter,
+  ResponsiveDialogDescription,
+} from '../ui/responsive-dialog';
 import { api } from '../../services/api';
 import { toast } from 'sonner';
 import { cn } from '../ui/utils';
@@ -275,16 +275,16 @@ export function AddDriverModal({ isOpen, onClose, onDriverAdded }: AddDriverModa
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={() => handleClose(false)}>
-      <DialogContent className="sm:max-w-[600px] overflow-hidden max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>New Driver Profile</DialogTitle>
-          <DialogDescription>
+    <ResponsiveDialog open={isOpen} onOpenChange={() => handleClose(false)}>
+      <ResponsiveDialogContent className="sm:max-w-[600px] overflow-hidden max-h-[90vh] overflow-y-auto">
+        <ResponsiveDialogHeader>
+          <ResponsiveDialogTitle>New Driver Profile</ResponsiveDialogTitle>
+          <ResponsiveDialogDescription>
             {step === 1
               ? "Start by scanning the driver's license."
               : 'Verify details and complete onboarding.'}
-          </DialogDescription>
-        </DialogHeader>
+          </ResponsiveDialogDescription>
+        </ResponsiveDialogHeader>
 
         <div className="flex items-center gap-2 mb-4 mt-2">
           <div className={cn('h-2 rounded-full flex-1 transition-all', step >= 1 ? 'bg-slate-900' : 'bg-slate-100')} />
@@ -320,7 +320,7 @@ export function AddDriverModal({ isOpen, onClose, onDriverAdded }: AddDriverModa
               />
             )}
 
-            <DialogFooter className="mt-8 flex justify-between sm:justify-between items-center w-full">
+            <ResponsiveDialogFooter className="mt-8 flex justify-between sm:justify-between items-center w-full">
               <AddDriverModalFooter
                 step={step}
                 licenseStep={licenseStep}
@@ -342,10 +342,10 @@ export function AddDriverModal({ isOpen, onClose, onDriverAdded }: AddDriverModa
                   setStep(3);
                 }}
               />
-            </DialogFooter>
+            </ResponsiveDialogFooter>
           </form>
         </FormProvider>
-      </DialogContent>
-    </Dialog>
+      </ResponsiveDialogContent>
+    </ResponsiveDialog>
   );
 }

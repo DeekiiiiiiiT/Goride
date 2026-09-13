@@ -129,6 +129,7 @@ import { SystemBackupRestore } from './SystemBackupRestore';
 import { ImportReconciliationSummary } from './ImportReconciliationSummary';
 import { CategoryGroupCard, CategoryGroup } from './CategoryGroupCard';
 import { FleetBusyProvider, useFleetBusy } from '../shared/FleetBusyLock';
+import { DesktopRecommendedBanner } from '../layout/DesktopRecommendedBanner';
 import { runBackgroundJobToast } from '../shared/runBackgroundJobToast';
 
 type Step = 'select_platform' | 'upload' | 'review_files' | 'preview_merged' | 'success';
@@ -218,6 +219,7 @@ type ImportsPageProps = {
 export function ImportsPage(props: ImportsPageProps) {
   return (
     <FleetBusyProvider>
+      <DesktopRecommendedBanner message="Best on a larger screen — open Roam Fleet on desktop to run imports." />
       <ImportsPageInner {...props} />
     </FleetBusyProvider>
   );

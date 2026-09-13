@@ -11,13 +11,13 @@ import { Input } from "../ui/input";
 import { Label } from "../ui/label";
 import { Textarea } from "../ui/textarea";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-} from "../ui/dialog";
+  ResponsiveDialog,
+  ResponsiveDialogContent,
+  ResponsiveDialogHeader,
+  ResponsiveDialogTitle,
+  ResponsiveDialogDescription,
+  ResponsiveDialogFooter,
+} from '../ui/responsive-dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import { Checkbox } from "../ui/checkbox";
 import { toast } from "sonner";
@@ -994,14 +994,14 @@ export function LogMaintenanceServiceDialog({
     lines.some((l) => categoryMatchLine(cat, l));
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[720px] max-h-[90vh] flex flex-col p-0 overflow-hidden">
-        <DialogHeader className="px-6 py-4 border-b">
-          <DialogTitle>{stepTitle(step)}</DialogTitle>
-          <DialogDescription>
+    <ResponsiveDialog open={open} onOpenChange={onOpenChange}>
+      <ResponsiveDialogContent className="sm:max-w-[720px] max-h-[90vh] flex flex-col p-0 overflow-hidden">
+        <ResponsiveDialogHeader className="px-6 py-4 border-b">
+          <ResponsiveDialogTitle>{stepTitle(step)}</ResponsiveDialogTitle>
+          <ResponsiveDialogDescription>
             {stepDescription(step, selectedPackage?.shortLabel, selectedSystem?.name)}
-          </DialogDescription>
-        </DialogHeader>
+          </ResponsiveDialogDescription>
+        </ResponsiveDialogHeader>
 
         <div className="flex-1 overflow-y-auto px-6 py-6">
           {step === "pick" && (
@@ -1593,7 +1593,7 @@ export function LogMaintenanceServiceDialog({
           )}
         </div>
 
-        <DialogFooter className="px-6 py-4 border-t bg-slate-50/50">
+        <ResponsiveDialogFooter className="px-6 py-4 border-t bg-slate-50/50">
           <Button variant="ghost" onClick={handleBack} className="mr-auto">
             {step === "pick" ? (
               "Cancel"
@@ -1641,8 +1641,8 @@ export function LogMaintenanceServiceDialog({
               Save Log
             </Button>
           )}
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </ResponsiveDialogFooter>
+      </ResponsiveDialogContent>
+    </ResponsiveDialog>
   );
 }

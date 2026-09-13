@@ -81,6 +81,14 @@ export function LeafletMap({ height = "300px", route, currentLocation, startMark
     return () => ro.disconnect();
   }, [isMounted]);
 
+  // Re-invalidate after height / sheet open transitions
+  useEffect(() => {
+    if (!isMounted || !mapInstanceRef.current) return;
+    const map = mapInstanceRef.current;
+    const t = window.setTimeout(() => map.invalidateSize(), 50);
+    return () => window.clearTimeout(t);
+  }, [isMounted, height]);
+
   // Update Map Content
   useEffect(() => {
     const map = mapInstanceRef.current;
