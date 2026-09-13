@@ -34,7 +34,8 @@ const defaultMappedDeps: ExecuteMappedDeps = {
 };
 
 export type KvStoreQueryResult = {
-  data: unknown;
+  /** Row list or single row; `any` matches supabase-js and avoids `unknown || []` CI failures. */
+  data: any;
   error: unknown;
   count?: number | null;
 };
@@ -45,6 +46,8 @@ export interface KvStoreQueryBuilder extends PromiseLike<KvStoreQueryResult> {
   like(column: string, pattern: string): KvStoreQueryBuilder;
   eq(column: string, value: unknown): KvStoreQueryBuilder;
   in(column: string, values: unknown[]): KvStoreQueryBuilder;
+  /** PostgREST-style OR filter string (handled by executeMapped / raw replay). */
+  or(filter: string): KvStoreQueryBuilder;
   order(column: string, options?: unknown): KvStoreQueryBuilder;
   range(from: number, to: number): KvStoreQueryBuilder;
   limit(count: number): KvStoreQueryBuilder;

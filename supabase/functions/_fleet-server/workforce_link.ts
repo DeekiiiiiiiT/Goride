@@ -463,20 +463,22 @@ export async function unlinkCourierFromFleet(
   try {
     const { fromKvStore } = await import("./fleet_sql_bridge.ts");
     const { applyDriverAssignmentChangeOnVehicle } = await import("./driver_vehicle_assignment.ts");
-    const { data: vehicleRows } = await fromKvStore()
+    const { data: vehicleRowsRaw } = await fromKvStore()
       .select("key, value")
       .like("key", "vehicle:%")
       .eq("value->>currentDriverId", userId);
-    if (vehicleRows?.length) {
-      for (const row of vehicleRows) {
-        const vehicle = row.value as Record<string, unknown>;
-        const updated = applyDriverAssignmentChangeOnVehicle(vehicle, {
-          ...vehicle,
-          currentDriverId: null,
-          currentDriverName: null,
-        });
-        await deps.kv.set(String(row.key), updated);
-      }
+    const vehicleRows = (Array.isArray(vehicleRowsRaw) ? vehicleRowsRaw : []) as Array<{
+      key: string;
+      value: unknown;
+    }>;
+    for (const row of vehicleRows) {
+      const vehicle = row.value as Record<string, unknown>;
+      const updated = applyDriverAssignmentChangeOnVehicle(vehicle, {
+        ...vehicle,
+        currentDriverId: null,
+        currentDriverName: null,
+      });
+      await deps.kv.set(String(row.key), updated);
     }
   } catch (e) {
     console.warn(`[unlinkCourierFromFleet] vehicle release failed for ${userId}:`, e);

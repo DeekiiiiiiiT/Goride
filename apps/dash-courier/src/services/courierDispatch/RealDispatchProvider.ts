@@ -382,10 +382,14 @@ export class RealDispatchProvider implements CourierDispatchService {
       return;
     }
 
-    const row = await fetchCourierOrderStatus(orderId);
-    if (!row) return;
-    if (row.status === 'cancelled') {
-      this.handleRemoteCancel();
+    try {
+      const row = await fetchCourierOrderStatus(orderId);
+      if (!row) return;
+      if (row.status === 'cancelled') {
+        this.handleRemoteCancel();
+      }
+    } catch {
+      // Transient network — next interval retries
     }
   }
 
@@ -408,28 +412,32 @@ export class RealDispatchProvider implements CourierDispatchService {
   private async pollOffers(): Promise<void> {
     if (this.state.mode !== 'online' || this.state.offerPhase !== null) return;
 
-    const offers = await fetchCourierOffers();
-    if (isCourierStackedEnabled() && offers.length >= 2) {
-      this.pendingOffers = offers.slice(0, 2);
-      this.pendingOrders = [];
-      this.currentOfferId = offers[0].id;
-      this.setState({ offerPhase: 'stacked' });
-      return;
-    }
-    if (offers.length > 0) {
-      this.pendingOffers = offers;
-      this.pendingOrders = [];
-      this.currentOfferId = offers[0].id;
-      this.setState({ offerPhase: 'single' });
-      return;
-    }
+    try {
+      const offers = await fetchCourierOffers();
+      if (isCourierStackedEnabled() && offers.length >= 2) {
+        this.pendingOffers = offers.slice(0, 2);
+        this.pendingOrders = [];
+        this.currentOfferId = offers[0].id;
+        this.setState({ offerPhase: 'stacked' });
+        return;
+      }
+      if (offers.length > 0) {
+        this.pendingOffers = offers;
+        this.pendingOrders = [];
+        this.currentOfferId = offers[0].id;
+        this.setState({ offerPhase: 'single' });
+        return;
+      }
 
-    const orders = await fetchAvailableOrders();
-    if (orders.length > 0) {
-      this.pendingOrders = orders;
-      this.pendingOffers = [];
-      this.currentOfferId = orders[0].id;
-      this.setState({ offerPhase: 'single' });
+      const orders = await fetchAvailableOrders();
+      if (orders.length > 0) {
+        this.pendingOrders = orders;
+        this.pendingOffers = [];
+        this.currentOfferId = orders[0].id;
+        this.setState({ offerPhase: 'single' });
+      }
+    } catch {
+      // Transient network — next poll retries (ROAM-DASH-COURIER-D)
     }
   }
 

@@ -164,10 +164,10 @@ export async function resolveDriverVehicleAssignment(
       .like("key", "vehicle:%")
       .or(orFilter);
 
-    if (!error && data?.length) {
-      const matches = data
-        .map((row: { value: unknown }) => row.value as Record<string, unknown>)
-        .filter((v) => orgMatches(v, options?.organizationId));
+    if (!error && Array.isArray(data) && data.length) {
+      const matches = (data as Array<{ value: unknown }>)
+        .map((row) => row.value as Record<string, unknown>)
+        .filter((v: Record<string, unknown>) => orgMatches(v, options?.organizationId));
 
       const chosen = pickBestVehicle(matches);
       if (chosen?.id) {

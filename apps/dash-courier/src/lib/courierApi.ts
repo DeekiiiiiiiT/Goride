@@ -26,6 +26,16 @@ async function parseError(res: Response): Promise<string> {
   }
 }
 
+/** fetch() TypeErrors (offline / DNS / CORS) — soft-fail for background polls (ROAM-DASH-COURIER-C/D). */
+function networkFailureMessage(err: unknown): string | null {
+  if (!(err instanceof TypeError)) return null;
+  const msg = String(err.message || '');
+  if (/failed to fetch|networkerror|load failed|network request failed/i.test(msg)) {
+    return 'Network unavailable';
+  }
+  return null;
+}
+
 export type AvailableOrder = {
   id: string;
   order_number?: string;
@@ -76,33 +86,49 @@ export async function putCourierAvailability(input: {
 }): Promise<{ ok: boolean; error?: string }> {
   const headers = await authHeaders();
   if (!headers) return { ok: false, error: 'Not signed in' };
-  const res = await fetch(`${BASE}/courier/availability`, {
-    method: 'PUT',
-    headers,
-    body: JSON.stringify(input),
-  });
-  if (!res.ok) {
-    return { ok: false, error: await parseError(res) };
+  try {
+    const res = await fetch(`${BASE}/courier/availability`, {
+      method: 'PUT',
+      headers,
+      body: JSON.stringify(input),
+    });
+    if (!res.ok) {
+      return { ok: false, error: await parseError(res) };
+    }
+    return { ok: true };
+  } catch (err) {
+    const network = networkFailureMessage(err);
+    if (network) return { ok: false, error: network };
+    throw err;
   }
-  return { ok: true };
 }
 
 export async function fetchAvailableOrders(): Promise<AvailableOrder[]> {
   const headers = await authHeaders(false);
   if (!headers) return [];
-  const res = await fetch(`${BASE}/courier/available-orders`, { headers });
-  if (!res.ok) return [];
-  const body = (await res.json()) as { orders?: AvailableOrder[] };
-  return body.orders || [];
+  try {
+    const res = await fetch(`${BASE}/courier/available-orders`, { headers });
+    if (!res.ok) return [];
+    const body = (await res.json()) as { orders?: AvailableOrder[] };
+    return body.orders || [];
+  } catch (err) {
+    if (networkFailureMessage(err)) return [];
+    throw err;
+  }
 }
 
 export async function fetchCourierOffers(): Promise<CourierOfferRow[]> {
   const headers = await authHeaders(false);
   if (!headers) return [];
-  const res = await fetch(`${BASE}/courier/offers`, { headers });
-  if (!res.ok) return [];
-  const body = (await res.json()) as { offers?: CourierOfferRow[] };
-  return body.offers || [];
+  try {
+    const res = await fetch(`${BASE}/courier/offers`, { headers });
+    if (!res.ok) return [];
+    const body = (await res.json()) as { offers?: CourierOfferRow[] };
+    return body.offers || [];
+  } catch (err) {
+    if (networkFailureMessage(err)) return [];
+    throw err;
+  }
 }
 
 export async function acceptDeliveryOrder(orderId: string): Promise<{ ok: true; order: AvailableOrder } | { ok: false; error: string }> {
@@ -162,11 +188,16 @@ export async function fetchCourierOrderStatus(
 ): Promise<{ status: string } | null> {
   const headers = await authHeaders();
   if (!headers) return null;
-  const res = await fetch(`${BASE}/orders/${orderId}`, { headers });
-  if (!res.ok) return null;
-  const json = (await res.json()) as { order?: { status?: string } };
-  const status = json.order?.status;
-  return status ? { status } : null;
+  try {
+    const res = await fetch(`${BASE}/orders/${orderId}`, { headers });
+    if (!res.ok) return null;
+    const json = (await res.json()) as { order?: { status?: string } };
+    const status = json.order?.status;
+    return status ? { status } : null;
+  } catch (err) {
+    if (networkFailureMessage(err)) return null;
+    throw err;
+  }
 }
 
 export type CourierOrderDetailResponse = {
