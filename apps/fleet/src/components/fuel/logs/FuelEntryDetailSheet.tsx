@@ -7,11 +7,10 @@ import {
 } from '../../ui/dialog';
 import { Badge } from '../../ui/badge';
 import { Button } from '../../ui/button';
-import { Skeleton } from '../../ui/skeleton';
 import { cn } from '../../ui/utils';
 import { formatFuelMoney } from '../../../utils/formatFuelMoney';
 import { resolveFuelEntrySource } from '../../../utils/fuelEntrySource';
-import type { FuelEntry, FuelEntryCorrection } from '../../../types/fuel';
+import type { FuelEntry } from '../../../types/fuel';
 import {
   AlertTriangle,
   Banknote,
@@ -37,8 +36,8 @@ import {
 } from './fuelLogDisplay';
 
 /**
- * Read-only detail view for a single fuel entry (classic Fuel Log Details overlay),
- * including correction history. Presentational only — parent supplies labels + data.
+ * Read-only detail view for a single fuel entry (classic Fuel Log Details overlay).
+ * Presentational only — parent supplies labels + data.
  */
 
 export type FuelEntryDetailSheetProps = {
@@ -51,9 +50,6 @@ export type FuelEntryDetailSheetProps = {
   paymentLabel?: string;
   prevOdometer?: number | null;
   tankCapacity?: number;
-  corrections?: FuelEntryCorrection[];
-  correctionsLoading?: boolean;
-  correctionsError?: string | null;
   canEdit?: boolean;
   onEdit?: (entry: FuelEntry) => void;
 };
@@ -103,9 +99,6 @@ export function FuelEntryDetailSheet({
   paymentLabel,
   prevOdometer = null,
   tankCapacity = 40,
-  corrections = [],
-  correctionsLoading = false,
-  correctionsError = null,
   canEdit = false,
   onEdit,
 }: FuelEntryDetailSheetProps) {
@@ -116,7 +109,6 @@ export function FuelEntryDetailSheet({
   const pricePerLiter =
     entry.pricePerLiter || (liters > 0 && amount ? amount / liters : 0);
   const fillPct = Math.min(100, (liters / (tankCapacity || 40)) * 100);
-  const confidenceScore = entry.metadata?.auditConfidenceScore;
   const locationStatus = entry.metadata?.locationStatus || entry.locationStatus;
   const src = resolveFuelEntrySource(entry);
   const srcLabel = entrySourceLabel(src);
@@ -324,92 +316,7 @@ export function FuelEntryDetailSheet({
                 }
               />
             ) : null}
-            {entry.metadata?.cycleId ? (
-              <DetailRow
-                icon={<Link2 className="h-3.5 w-3.5 text-slate-400" />}
-                label="Full Tank"
-                value={
-                  <span className="font-mono text-[10px] text-slate-600">
-                    {String(entry.metadata.cycleId)}
-                  </span>
-                }
-              />
-            ) : null}
           </div>
-
-          {/* Audit confidence */}
-          {confidenceScore !== undefined && (
-            <div className="rounded-lg border border-slate-100 bg-slate-50 p-3">
-              <div className="mb-2 flex items-center justify-between">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                  Audit Confidence
-                </span>
-                <Badge
-                  className={cn(
-                    'border-none text-[9px]',
-                    confidenceScore >= 90
-                      ? 'bg-emerald-500 text-white'
-                      : confidenceScore >= 70
-                        ? 'bg-blue-500 text-white'
-                        : 'bg-amber-500 text-white',
-                  )}
-                >
-                  {confidenceScore}%
-                </Badge>
-              </div>
-              <div className="h-2 w-full overflow-hidden rounded-full bg-slate-200">
-                <div
-                  className={cn(
-                    'h-full rounded-full transition-all',
-                    confidenceScore >= 90
-                      ? 'bg-emerald-500'
-                      : confidenceScore >= 70
-                        ? 'bg-blue-500'
-                        : 'bg-amber-500',
-                  )}
-                  style={{ width: `${confidenceScore}%` }}
-                />
-              </div>
-              {entry.metadata?.auditConfidenceBreakdown && (
-                <div className="mt-2 grid grid-cols-5 gap-2 text-center">
-                  {[
-                    {
-                      label: 'GPS',
-                      val: entry.metadata.auditConfidenceBreakdown.gps,
-                      max: 30,
-                    },
-                    {
-                      label: 'Prox',
-                      val: entry.metadata.auditConfidenceBreakdown.gps_bonus,
-                      max: 5,
-                    },
-                    {
-                      label: 'Crypto',
-                      val: entry.metadata.auditConfidenceBreakdown.crypto,
-                      max: 25,
-                    },
-                    {
-                      label: 'Phys',
-                      val: entry.metadata.auditConfidenceBreakdown.physical,
-                      max: 25,
-                    },
-                    {
-                      label: 'Behav',
-                      val: entry.metadata.auditConfidenceBreakdown.behavioral,
-                      max: 20,
-                    },
-                  ].map((b) => (
-                    <div key={b.label} className="text-[9px]">
-                      <span className="text-slate-400">{b.label}</span>
-                      <p className="font-bold text-slate-700">
-                        {b.val ?? 0}/{b.max}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
 
           {/* Notes */}
           {entry.notes ? (
@@ -423,67 +330,6 @@ export function FuelEntryDetailSheet({
               <p className="text-xs text-slate-700">{entry.notes}</p>
             </div>
           ) : null}
-
-          {/* Correction history (kept from newer sheet) */}
-          <div>
-            <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
-              Correction history
-              {!correctionsLoading && corrections.length > 0
-                ? ` (${corrections.length})`
-                : ''}
-            </div>
-            {correctionsLoading ? (
-              <div className="mt-2 space-y-2">
-                <Skeleton className="h-12 w-full" />
-                <Skeleton className="h-12 w-full" />
-              </div>
-            ) : correctionsError ? (
-              <p className="mt-2 text-sm text-rose-600">{correctionsError}</p>
-            ) : corrections.length === 0 ? (
-              <p className="mt-2 text-sm text-slate-500">
-                No corrections recorded for this entry.
-              </p>
-            ) : (
-              <ul className="mt-2 space-y-2">
-                {corrections.map((corr) => (
-                  <li
-                    key={corr.id}
-                    className="rounded-md border border-slate-200 p-2 text-sm"
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="font-medium text-slate-800">{corr.reason}</span>
-                      <span className="shrink-0 text-[11px] text-slate-400">
-                        {new Date(corr.created_at).toLocaleString()}
-                      </span>
-                    </div>
-                    {corr.field_diffs && Object.keys(corr.field_diffs).length > 0 ? (
-                      <ul className="mt-1 space-y-0.5 text-xs text-slate-600">
-                        {Object.entries(corr.field_diffs).map(([field, diff]) => (
-                          <li key={field}>
-                            <span className="font-medium">{field}:</span>{' '}
-                            {String(diff.from ?? '—')} → {String(diff.to ?? '—')}
-                          </li>
-                        ))}
-                      </ul>
-                    ) : null}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-
-          {/* ID footer */}
-          <div className="flex items-center justify-between border-t border-slate-100 pt-2">
-            <span className="max-w-[240px] truncate font-mono text-[9px] text-slate-400">
-              ID: {entry.id}
-            </span>
-            {entry.isLocked ? (
-              <div className="flex items-center gap-1 text-emerald-600">
-                <ShieldCheck className="h-3 w-3" />
-                <span className="text-[9px] font-bold">LOCKED</span>
-              </div>
-            ) : null}
-          </div>
         </div>
 
         {/* Footer actions */}

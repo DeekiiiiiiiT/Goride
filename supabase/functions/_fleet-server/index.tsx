@@ -175,6 +175,7 @@ import tollApp, {
   reconsiderTollsForNewTrips,
   invalidateStaleTollMatchesForTrip,
   voidTollLedgerEntryHandler,
+  applyTagIdentityBackfill,
 } from "./toll_controller.tsx";
 import { replayFleetTripsWithRoutes } from "./fleet_trip_toll_replay.ts";
 import { resolveDriverFromFleetRecords, collectDriverAliasIds } from "./driver_identity.ts";
@@ -6663,6 +6664,55 @@ app.post(
       const previousVehicle = { ...vehicle };
       const now = new Date().toISOString();
       const plate = String(vehicle.licensePlate || vehicle.id || "");
+      const previousTagVehicleId =
+        typeof tag.assignedVehicleId === "string" && tag.assignedVehicleId !== vehicleId
+          ? tag.assignedVehicleId
+          : null;
+
+      // If this vehicle already has a different tag, close that tag's open assignment.
+      const occupyingTagUuid =
+        typeof vehicle.tollTagUuid === "string" && vehicle.tollTagUuid !== tagId
+          ? vehicle.tollTagUuid
+          : null;
+      if (occupyingTagUuid) {
+        const occupying = await kv.get(`toll_tag:${occupyingTagUuid}`) as Record<string, unknown> | null;
+        if (occupying && belongsToOrg(occupying, c)) {
+          const occHistory = Array.isArray(occupying.assignmentHistory)
+            ? (occupying.assignmentHistory as any[]).map((entry: any) =>
+                entry.vehicleId === vehicleId && !entry.unassignedAt
+                  ? { ...entry, unassignedAt: now }
+                  : entry
+              )
+            : [];
+          const clearedOcc = stampOrg({
+            ...occupying,
+            assignedVehicleId: undefined,
+            assignedVehicleName: undefined,
+            assignmentHistory: occHistory,
+            updatedAt: now,
+          }, c);
+          delete (clearedOcc as any).assignedVehicleId;
+          delete (clearedOcc as any).assignedVehicleName;
+          await kv.set(`toll_tag:${occupyingTagUuid}`, clearedOcc);
+        }
+      }
+
+      // Tag moving off another vehicle — clear that vehicle and close history window.
+      if (previousTagVehicleId) {
+        const prevVeh = await kv.get(`vehicle:${previousTagVehicleId}`) as Record<string, unknown> | null;
+        if (prevVeh && belongsToOrg(prevVeh, c)) {
+          const clearedPrev = stampOrg({
+            ...prevVeh,
+            tollTagId: null,
+            tollTagUuid: null,
+            tollTagProvider: null,
+          }, c);
+          delete (clearedPrev as any).tollTagId;
+          delete (clearedPrev as any).tollTagUuid;
+          delete (clearedPrev as any).tollTagProvider;
+          await kv.set(`vehicle:${previousTagVehicleId}`, clearedPrev);
+        }
+      }
 
       const updatedVehicle = stampOrg({
         ...vehicle,
@@ -6673,7 +6723,11 @@ app.post(
 
       await kv.set(`vehicle:${vehicleId}`, updatedVehicle);
 
-      const history = Array.isArray(tag.assignmentHistory) ? [...(tag.assignmentHistory as any[])] : [];
+      let history = Array.isArray(tag.assignmentHistory) ? [...(tag.assignmentHistory as any[])] : [];
+      // Close any open windows for this tag before opening the new assignment.
+      history = history.map((entry: any) =>
+        !entry.unassignedAt ? { ...entry, unassignedAt: now } : entry
+      );
       history.push({
         vehicleId,
         vehicleName: plate,
@@ -6695,6 +6749,11 @@ app.post(
         await kv.set(`vehicle:${vehicleId}`, stampOrg(previousVehicle, c));
         throw tagErr;
       }
+
+      // Link past tolls to this tag from assignment windows — no manual Sync button.
+      void applyTagIdentityBackfill().catch((err) => {
+        console.log(`[TagBackfill] auto after assign failed: ${err?.message || err}`);
+      });
 
       return c.json({ success: true, data: updatedTag });
     } catch (e: any) {
@@ -6768,6 +6827,10 @@ app.post(
         }
         throw tagErr;
       }
+
+      void applyTagIdentityBackfill().catch((err) => {
+        console.log(`[TagBackfill] auto after unassign failed: ${err?.message || err}`);
+      });
 
       return c.json({ success: true, data: updatedTag });
     } catch (e: any) {

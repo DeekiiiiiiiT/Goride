@@ -2,11 +2,10 @@ import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Button } from '../ui/button';
 import { AlertCircle, AlertTriangle, RotateCcw } from 'lucide-react';
 import { toast } from 'sonner';
-import { FuelEntry, FuelEntryCorrection } from '../../types/fuel';
+import { FuelEntry } from '../../types/fuel';
 import { FinancialTransaction } from '../../types/data';
 import { Vehicle } from '../../types/vehicle';
 import { api } from '../../services/api';
-import { fuelService } from '../../services/fuelService';
 import { useFuelCycles } from '../../hooks/useFuelCycles';
 import { useFuelAnchors } from '../../hooks/useFuelAnchors';
 import { useFuelLogQuery } from '../../hooks/useFuelLogQuery';
@@ -98,9 +97,6 @@ export function FuelLogTable({
   const [isRecalculating, setIsRecalculating] = useState(false);
   const [confirmFleetRecalc, setConfirmFleetRecalc] = useState(false);
   const [viewingEntry, setViewingEntry] = useState<FuelEntry | null>(null);
-  const [corrections, setCorrections] = useState<FuelEntryCorrection[]>([]);
-  const [correctionsLoading, setCorrectionsLoading] = useState(false);
-  const [correctionsError, setCorrectionsError] = useState<string | null>(null);
   const [focusEntryId, setFocusEntryId] = useState<string | null>(null);
   const [focusExceptions, setFocusExceptions] = useState(false);
   const exceptionQueueRef = useRef<HTMLDivElement | null>(null);
@@ -139,35 +135,6 @@ export function FuelLogTable({
       if (timer) window.clearTimeout(timer);
     };
   }, [entries]);
-
-  useEffect(() => {
-    if (!viewingEntry?.id) {
-      setCorrections([]);
-      setCorrectionsError(null);
-      setCorrectionsLoading(false);
-      return;
-    }
-    let cancelled = false;
-    setCorrectionsLoading(true);
-    setCorrectionsError(null);
-    fuelService
-      .getFuelEntryCorrections(viewingEntry.id)
-      .then((rows) => {
-        if (!cancelled) setCorrections(rows);
-      })
-      .catch((err) => {
-        if (!cancelled) {
-          setCorrections([]);
-          setCorrectionsError(String(err?.message || err));
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setCorrectionsLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [viewingEntry?.id]);
 
   const uniqueVehicles = useMemo(() => {
     const ids = Array.from(new Set(entries.map((e) => e.vehicleId).filter(Boolean))) as string[];
@@ -999,9 +966,6 @@ export function FuelLogTable({
           );
           return fromSpecs || fromSettings || 40;
         })()}
-        corrections={corrections}
-        correctionsLoading={correctionsLoading}
-        correctionsError={correctionsError}
         canEdit={can('fuel.edit_entry')}
         onEdit={(entry) => {
           setViewingEntry(null);

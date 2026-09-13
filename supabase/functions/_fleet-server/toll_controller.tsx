@@ -5193,6 +5193,36 @@ async function computeTagBackfillPlan(force: boolean) {
   return plan;
 }
 
+/**
+ * Stamp tollTagId onto ledger rows from assignment windows.
+ * Called after assign/unassign so tag history stays current without a manual Sync button.
+ */
+export async function applyTagIdentityBackfill(opts: { force?: boolean } = {}) {
+  const force = opts.force === true;
+  const plan = await computeTagBackfillPlan(force);
+  let linked = 0;
+  const errors: string[] = [];
+  for (const item of plan.toStamp) {
+    try {
+      await updateTollLedgerEntry(
+        item.id,
+        { tollTagId: item.tollTagId, tagNumber: item.tagNumber ?? null },
+        "updated",
+        "system",
+        "Tag Backfill (auto on assign)",
+      );
+      linked++;
+    } catch (err: any) {
+      errors.push(`${item.id}: ${err?.message || err}`);
+      if (errors.length > 50) break;
+    }
+  }
+  console.log(
+    `[TagBackfill] auto apply force=${force} willLink=${plan.toStamp.length} linked=${linked} errors=${errors.length}`,
+  );
+  return { linked, willLink: plan.toStamp.length, errors };
+}
+
 // ═══════════════════════════════════════════════════════════════════════
 // Plaza attribution backfill
 // ═══════════════════════════════════════════════════════════════════════
@@ -5357,21 +5387,9 @@ app.post(`${BASE}/toll-ledger/tag-backfill`, async (c) => {
     let linked = 0;
     const errors: string[] = [];
     if (!dryRun) {
-      for (const item of plan.toStamp) {
-        try {
-          await updateTollLedgerEntry(
-            item.id,
-            { tollTagId: item.tollTagId, tagNumber: item.tagNumber ?? null },
-            "updated",
-            "system",
-            "Tag Backfill",
-          );
-          linked++;
-        } catch (err: any) {
-          errors.push(`${item.id}: ${err.message}`);
-          if (errors.length > 50) break;
-        }
-      }
+      const applied = await applyTagIdentityBackfill({ force });
+      linked = applied.linked;
+      errors.push(...applied.errors);
     }
 
     console.log(`[TagBackfill] dryRun=${dryRun} force=${force} willLink=${plan.toStamp.length} linked=${linked} errors=${errors.length}`);

@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "../components/ui/card";
 import { Button } from "../components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "../components/ui/dialog";
-import { Plus, Tag, RefreshCw, Loader2 } from "lucide-react";
+import { Plus } from "lucide-react";
 import { TollTagList } from "../components/toll-tags/TollTagList";
 import { TollTagDetail } from "../components/toll-tags/TollTagDetail";
 import { AddTollTagModal } from "../components/toll-tags/AddTollTagModal";
@@ -11,8 +10,7 @@ import { BulkImportTagsModal } from "../components/toll-tags/BulkImportTagsModal
 import { api } from "../services/api";
 import { TollTag, TollProvider, TollTagStatus, Vehicle } from "../types/vehicle";
 import { toast } from "sonner";
-import { FleetBusyProvider, useFleetBusy } from "../components/shared/FleetBusyLock";
-import { useLockedDialog } from "../components/shared/useLockedDialog";
+import { FleetBusyProvider } from "../components/shared/FleetBusyLock";
 
 export function TagInventory({
   onNavigate,
@@ -31,7 +29,6 @@ function TagInventoryInner({
 }: {
   onNavigate?: (page: string, opts?: { vehicleId?: string; driverId?: string; vehicleLabel?: string }) => void;
 }) {
-  const { runExclusive } = useFleetBusy();
   const [tags, setTags] = useState<TollTag[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -42,54 +39,6 @@ function TagInventoryInner({
     isOpen: false,
     tag: null
   });
-  // "Sync Tag History" — links existing tolls to their tag so each tag shows its
-  // full lifetime activity across vehicle reassignments.
-  const [syncOpen, setSyncOpen] = useState(false);
-  const [syncPreviewing, setSyncPreviewing] = useState(false);
-  const [syncing, setSyncing] = useState(false);
-  const [syncStatus, setSyncStatus] = useState<any | null>(null);
-  const {
-    onOpenChange: lockedSyncOpenChange,
-    contentProps: lockedSyncContentProps,
-  } = useLockedDialog(syncOpen, setSyncOpen, syncing);
-
-  const openSync = async () => {
-    setSyncOpen(true);
-    setSyncStatus(null);
-    setSyncPreviewing(true);
-    try {
-      const res = await api.getTollTagBackfillStatus();
-      setSyncStatus(res?.summary || null);
-    } catch (error) {
-      console.error("Failed to preview tag history sync:", error);
-      toast.error("Couldn't check tag history. Please try again.");
-      setSyncOpen(false);
-    } finally {
-      setSyncPreviewing(false);
-    }
-  };
-
-  const confirmSync = async () => {
-    setSyncing(true);
-    const locked = await runExclusive('Syncing tag history…', async () => {
-      try {
-        const res = await api.runTollTagBackfill(false);
-        const linked = res?.summary?.linked ?? 0;
-        toast.success(linked > 0 ? `Linked ${linked} toll${linked === 1 ? '' : 's'} to their tags.` : "Tag history is already up to date.");
-        lockedSyncOpenChange(false);
-        fetchTags();
-        return true;
-      } catch (error) {
-        console.error("Failed to sync tag history:", error);
-        toast.error("Failed to sync tag history. Please try again.");
-        return false;
-      }
-    });
-    setSyncing(false);
-    if (locked === undefined) {
-      toast.message('Another action is still running — try again when it finishes.');
-    }
-  };
 
   const fetchTags = async () => {
     setIsLoading(true);
@@ -213,21 +162,17 @@ function TagInventoryInner({
 
   return (
     <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3">
         <div>
             <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
             Tag Inventory
             </h1>
-            <p className="text-slate-500 text-sm mt-1">
+            <p className="mt-1 hidden text-sm text-slate-500 md:block">
                 Manage your toll transponders and vehicle assignments.
             </p>
         </div>
         
-        <div className="flex gap-2">
-            <Button variant="outline" onClick={openSync}>
-                <RefreshCw className="mr-2 h-4 w-4" />
-                Sync Tag History
-            </Button>
+        <div className="flex gap-2 shrink-0">
             <Button onClick={() => { setEditingTag(null); setIsAddModalOpen(true); }}>
                 <Plus className="mr-2 h-4 w-4" />
                 Add New Tag
@@ -278,57 +223,6 @@ function TagInventoryInner({
             onAssign={handleAssignComplete}
         />
       )}
-
-      {/* Sync Tag History — preview then apply the tag-link backfill */}
-      <Dialog open={syncOpen} onOpenChange={lockedSyncOpenChange}>
-        <DialogContent hideCloseButton={syncing} {...lockedSyncContentProps}>
-          <DialogHeader>
-            <DialogTitle>Sync Tag History</DialogTitle>
-            <DialogDescription>
-              This links your existing tolls to the tag that paid them, so each tag shows its full history — including tolls from when the tag was on a different vehicle. It only adds links; nothing is deleted or changed.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="py-2 text-sm">
-            {syncPreviewing ? (
-              <div className="flex items-center gap-2 text-slate-500">
-                <Loader2 className="h-4 w-4 animate-spin" /> Checking your tolls…
-              </div>
-            ) : syncStatus ? (
-              (syncStatus.willLink ?? 0) > 0 ? (
-                <div className="space-y-2">
-                  <p className="text-slate-700">
-                    <span className="font-semibold text-indigo-600">{syncStatus.willLink}</span> toll{syncStatus.willLink === 1 ? '' : 's'} can be linked to their tag.
-                  </p>
-                  {(() => {
-                    const unresolved = (syncStatus.unresolvedNoWindow ?? 0) + (syncStatus.unresolvedNoVehicle ?? 0) + (syncStatus.ambiguous ?? 0);
-                    return unresolved > 0 ? (
-                      <p className="text-xs text-slate-500">
-                        {unresolved} toll{unresolved === 1 ? '' : 's'} couldn’t be matched to a tag automatically (missing vehicle or assignment info) and will be left as-is.
-                      </p>
-                    ) : null;
-                  })()}
-                </div>
-              ) : (
-                <p className="text-slate-600">Everything is already linked — nothing to sync.</p>
-              )
-            ) : (
-              <p className="text-slate-500">No data available.</p>
-            )}
-          </div>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setSyncOpen(false)} disabled={syncing}>
-              {syncStatus && (syncStatus.willLink ?? 0) === 0 ? 'Close' : 'Cancel'}
-            </Button>
-            {syncStatus && (syncStatus.willLink ?? 0) > 0 && (
-              <Button onClick={confirmSync} disabled={syncing || syncPreviewing}>
-                {syncing ? (<><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Syncing…</>) : 'Sync now'}
-              </Button>
-            )}
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

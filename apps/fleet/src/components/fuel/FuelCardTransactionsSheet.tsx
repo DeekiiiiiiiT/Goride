@@ -1,7 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Eye, Loader2 } from 'lucide-react';
-import { format } from 'date-fns';
-import type { DateRange } from 'react-day-picker';
 import {
   Sheet,
   SheetContent,
@@ -19,13 +17,26 @@ import {
 } from '../ui/table';
 import { Badge } from '../ui/badge';
 import { Tabs, TabsList, TabsTrigger } from '../ui/tabs';
-import { PeriodWeekDropdown } from '../ui/PeriodWeekDropdown';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '../ui/select';
+import { useIsMobile } from '../ui/use-mobile';
+import { cn } from '../ui/utils';
 import { FuelCard, FuelEntry } from '../../types/fuel';
 import type { StationProfile } from '../../types/station';
 import { fuelService } from '../../services/fuelService';
 import { getCustomerFacingFuelProvider } from '../../utils/fuelCardDisplay';
 import { normalizeFuelCardCode } from '../../utils/fuelCardMatch';
-import { currentFuelWeekRange, fuelListWindow, toEntryYmd } from '../../utils/fuelWeekPeriod';
+import {
+  currentFuelWeekRange,
+  fuelListWindow,
+  generateFuelWeekOptions,
+  toEntryYmd,
+} from '../../utils/fuelWeekPeriod';
 import { isJaaStatementLedgerRow } from '../../utils/jaaFuelStatementMatcher';
 import { resolveCardTransactionStation } from '../../utils/jaaStationDisplay';
 import { FuelCardAssignmentHistoryList } from './FuelCardAssignmentHistoryList';
@@ -105,6 +116,11 @@ function rowKindBadge(entry: FuelEntry) {
   );
 }
 
+function defaultWeekBounds(): { start: string; end: string } {
+  const range = currentFuelWeekRange();
+  return { start: toEntryYmd(range.from), end: toEntryYmd(range.to) };
+}
+
 export function FuelCardTransactionsSheet({
   card,
   open,
@@ -113,30 +129,33 @@ export function FuelCardTransactionsSheet({
   getVehicleName,
   isRoamManaged = false,
 }: FuelCardTransactionsSheetProps) {
+  const isMobile = useIsMobile();
   const [loading, setLoading] = useState(false);
   const [entries, setEntries] = useState<FuelEntry[]>([]);
   const [entryById, setEntryById] = useState<Map<string, FuelEntry>>(new Map());
   const [verifiedStations, setVerifiedStations] = useState<StationProfile[]>([]);
-  const [dateRange, setDateRange] = useState<DateRange | undefined>(() => {
-    const range = currentFuelWeekRange();
-    return { from: range.from, to: range.to };
-  });
+  // YMD strings — avoid Date identity churn / custom portal picker inside Sheet (freezes UI)
+  const [periodStart, setPeriodStart] = useState(() => defaultWeekBounds().start);
+  const [periodEnd, setPeriodEnd] = useState(() => defaultWeekBounds().end);
   const [sheetTab, setSheetTab] = useState<'transactions' | 'assignments'>('transactions');
+
+  const weekOptions = useMemo(() => generateFuelWeekOptions(12), []);
 
   useEffect(() => {
     if (!open) return;
-    const range = currentFuelWeekRange();
-    setDateRange({ from: range.from, to: range.to });
+    const bounds = defaultWeekBounds();
+    setPeriodStart(bounds.start);
+    setPeriodEnd(bounds.end);
     setSheetTab('transactions');
   }, [open, card?.id]);
 
   useEffect(() => {
-    if (!open || !card) return;
+    if (!open || !card || !periodStart || !periodEnd) return;
     let cancelled = false;
     setLoading(true);
     const win = fuelListWindow({
-      startYmd: dateRange?.from ? toEntryYmd(dateRange.from) : toEntryYmd(currentFuelWeekRange().from),
-      endYmd: dateRange?.to ? toEntryYmd(dateRange.to) : toEntryYmd(currentFuelWeekRange().to),
+      startYmd: periodStart,
+      endYmd: periodEnd,
     });
     Promise.all([
       fuelService.getFuelEntries({ ...win, limit: 500 }),
@@ -180,12 +199,7 @@ export function FuelCardTransactionsSheet({
     return () => {
       cancelled = true;
     };
-  }, [open, card?.id, dateRange?.from, dateRange?.to]);
-
-  const periodStart = dateRange?.from ? format(dateRange.from, 'yyyy-MM-dd') : undefined;
-  const periodEnd = dateRange?.to
-    ? format(dateRange.to, 'yyyy-MM-dd')
-    : periodStart;
+  }, [open, card?.id, card?.cardNumber, periodStart, periodEnd]);
 
   const filteredEntries = useMemo(() => {
     if (!periodStart) return entries;
@@ -212,14 +226,38 @@ export function FuelCardTransactionsSheet({
     };
   }, [filteredEntries]);
 
+  const selectedWeekValue =
+    weekOptions.find((w) => w.startDate === periodStart && w.endDate === periodEnd)?.id ??
+    periodStart;
+
+  const allowSheetOutside = (event: Event) => {
+    const target = event.target as HTMLElement | null;
+    if (!target) return;
+    if (
+      target.closest('[data-period-week-menu]') ||
+      target.closest('[data-period-week-backdrop]') ||
+      target.closest('[data-slot="select-content"]')
+    ) {
+      event.preventDefault();
+    }
+  };
+
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
-        side="right"
-        className="flex w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-[min(1100px,96vw)]"
+        side={isMobile ? 'bottom' : 'right'}
+        className={cn(
+          'flex flex-col gap-0 overflow-hidden p-0',
+          isMobile
+            ? 'inset-x-0 h-[58vh] max-h-[58vh] w-full rounded-t-2xl border-t safe-b'
+            : 'w-full sm:max-w-[min(1100px,96vw)]',
+        )}
+        onPointerDownOutside={allowSheetOutside}
+        onInteractOutside={allowSheetOutside}
+        onFocusOutside={allowSheetOutside}
       >
-        <div className="shrink-0 border-b border-slate-100 px-6 pt-6 pb-0">
-          <SheetHeader className="space-y-1 text-left pb-3">
+        <div className={cn('shrink-0 border-b border-slate-100 pb-0', isMobile ? 'px-4 pt-3' : 'px-6 pt-6')}>
+          <SheetHeader className="space-y-1 pb-3 text-left">
             <SheetTitle className="flex items-center gap-2">
               <Eye className="h-4 w-4" />
               Card details
@@ -256,46 +294,51 @@ export function FuelCardTransactionsSheet({
 
         {sheetTab === 'transactions' ? (
           <>
-            <div className="shrink-0 border-b border-slate-100 px-6 py-4">
+            <div className={cn('shrink-0 border-b border-slate-100 py-3', isMobile ? 'px-4' : 'px-6 py-4')}>
               <div className="flex flex-wrap items-center gap-3">
-                <div className="min-w-[220px] max-w-sm flex-1">
-                  <PeriodWeekDropdown
-                    selectedStart={periodStart}
-                    selectedEnd={periodEnd}
-                    placeholder="Select week period"
-                    buttonClassName="h-9 w-full text-xs justify-between"
-                    allowCustomRange
-                    onSelect={(period) => {
-                      const [sy, sm, sd] = period.startDate.split('-').map(Number);
-                      const [ey, em, ed] = period.endDate.split('-').map(Number);
-                      setDateRange({
-                        from: new Date(sy, sm - 1, sd),
-                        to: new Date(ey, em - 1, ed),
-                      });
+                <div className="min-w-0 max-w-sm flex-1 basis-full sm:basis-auto sm:min-w-[220px]">
+                  <Select
+                    value={selectedWeekValue}
+                    onValueChange={(id) => {
+                      const week = weekOptions.find((w) => w.id === id);
+                      if (!week) return;
+                      setPeriodStart(week.startDate);
+                      setPeriodEnd(week.endDate);
                     }}
-                  />
+                  >
+                    <SelectTrigger className="h-9 w-full text-xs">
+                      <SelectValue placeholder="Select week period" />
+                    </SelectTrigger>
+                    <SelectContent position="popper" className="z-[300]">
+                      {weekOptions.map((week) => (
+                        <SelectItem key={week.id} value={week.id} className="text-xs">
+                          {week.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
-                <div className="grid flex-1 grid-cols-3 gap-2 text-center min-w-[240px]">
+                <div className="grid min-w-0 flex-1 grid-cols-3 gap-2 text-center">
                   <div className="rounded-lg border bg-slate-50 px-2 py-1.5">
-                    <p className="text-[10px] uppercase text-slate-400 font-bold">Rows</p>
+                    <p className="text-[10px] font-bold uppercase text-slate-400">Rows</p>
                     <p className="text-base font-bold text-slate-800">{totals.count}</p>
                   </div>
                   <div className="rounded-lg border bg-slate-50 px-2 py-1.5">
-                    <p className="text-[10px] uppercase text-slate-400 font-bold">Fuel spend</p>
+                    <p className="text-[10px] font-bold uppercase text-slate-400">Fuel spend</p>
                     <p className="text-base font-bold text-slate-800">${totals.spend.toFixed(0)}</p>
                   </div>
                   <div className="rounded-lg border bg-slate-50 px-2 py-1.5">
-                    <p className="text-[10px] uppercase text-slate-400 font-bold">Liters</p>
+                    <p className="text-[10px] font-bold uppercase text-slate-400">Liters</p>
                     <p className="text-base font-bold text-slate-800">{totals.liters.toFixed(1)}</p>
                   </div>
                 </div>
               </div>
             </div>
 
-            <div className="min-h-0 flex-1 overflow-auto px-6 py-4">
+            <div className={cn('min-h-0 flex-1 overflow-auto py-3', isMobile ? 'px-4' : 'px-6 py-4')}>
               {loading ? (
                 <div className="flex items-center justify-center py-16 text-slate-500">
-                  <Loader2 className="h-5 w-5 animate-spin mr-2" /> Loading…
+                  <Loader2 className="mr-2 h-5 w-5 animate-spin" /> Loading…
                 </div>
               ) : filteredEntries.length === 0 ? (
                 <div className="rounded-md border py-16 text-center text-sm text-slate-500">
@@ -304,41 +347,41 @@ export function FuelCardTransactionsSheet({
                     : 'No transactions in this period.'}
                 </div>
               ) : (
-                <div className="rounded-md border overflow-x-auto">
+                <div className="overflow-x-auto rounded-md border">
                   <Table className="w-max min-w-full">
                     <TableHeader>
                       <TableRow className="bg-slate-50/80">
-                        <TableHead className="text-[11px] uppercase tracking-wide whitespace-nowrap" title="When it happened">
+                        <TableHead className="whitespace-nowrap text-[11px] uppercase tracking-wide" title="When it happened">
                           Date
                         </TableHead>
-                        <TableHead className="text-[11px] uppercase tracking-wide whitespace-nowrap">
+                        <TableHead className="whitespace-nowrap text-[11px] uppercase tracking-wide">
                           Kind
                         </TableHead>
-                        <TableHead className="text-[11px] uppercase tracking-wide whitespace-nowrap text-right" title="Money on the statement">
+                        <TableHead className="whitespace-nowrap text-right text-[11px] uppercase tracking-wide" title="Money on the statement">
                           Amount
                         </TableHead>
-                        <TableHead className="text-[11px] uppercase tracking-wide whitespace-nowrap" title="Approved vs declined / limit hit">
+                        <TableHead className="whitespace-nowrap text-[11px] uppercase tracking-wide" title="Approved vs declined / limit hit">
                           Response
                         </TableHead>
-                        <TableHead className="text-[11px] uppercase tracking-wide whitespace-nowrap" title="Gas station (real merchant)">
+                        <TableHead className="whitespace-nowrap text-[11px] uppercase tracking-wide" title="Gas station (real merchant)">
                           Station
                         </TableHead>
-                        <TableHead className="text-[11px] uppercase tracking-wide whitespace-nowrap" title="Fee / issuer description">
+                        <TableHead className="whitespace-nowrap text-[11px] uppercase tracking-wide" title="Fee / issuer description">
                           Description
                         </TableHead>
-                        <TableHead className="text-[11px] uppercase tracking-wide whitespace-nowrap" title="Fuel grade">
+                        <TableHead className="whitespace-nowrap text-[11px] uppercase tracking-wide" title="Fuel grade">
                           Fuel type
                         </TableHead>
-                        <TableHead className="text-[11px] uppercase tracking-wide whitespace-nowrap text-right" title="Fuel $ (vs fees)">
+                        <TableHead className="whitespace-nowrap text-right text-[11px] uppercase tracking-wide" title="Fuel $ (vs fees)">
                           Fuel $
                         </TableHead>
-                        <TableHead className="text-[11px] uppercase tracking-wide whitespace-nowrap text-right" title="Liters">
+                        <TableHead className="whitespace-nowrap text-right text-[11px] uppercase tracking-wide" title="Liters">
                           Liters
                         </TableHead>
-                        <TableHead className="text-[11px] uppercase tracking-wide whitespace-nowrap" title="Unique JAA transaction id">
+                        <TableHead className="whitespace-nowrap text-[11px] uppercase tracking-wide" title="Unique JAA transaction id">
                           Receipt
                         </TableHead>
-                        <TableHead className="text-[11px] uppercase tracking-wide whitespace-nowrap">
+                        <TableHead className="whitespace-nowrap text-[11px] uppercase tracking-wide">
                           Assigned
                         </TableHead>
                       </TableRow>
@@ -363,24 +406,24 @@ export function FuelCardTransactionsSheet({
                         );
                         return (
                           <TableRow key={entry.id}>
-                            <TableCell className="text-xs whitespace-nowrap align-top">
+                            <TableCell className="align-top whitespace-nowrap text-xs">
                               <div>{entryYmd(entry)}</div>
                               {entry.time ? (
                                 <div className="text-[10px] text-slate-400">{entry.time}</div>
                               ) : null}
                             </TableCell>
                             <TableCell className="align-top">{rowKindBadge(entry)}</TableCell>
-                            <TableCell className="text-right text-xs font-medium tabular-nums whitespace-nowrap align-top">
+                            <TableCell className="align-top whitespace-nowrap text-right text-xs font-medium tabular-nums">
                               {m.awaitingCardStatement ? '—' : money(entry.amount)}
                             </TableCell>
                             <TableCell
-                              className="text-xs max-w-[160px] truncate align-top"
+                              className="align-top max-w-[160px] truncate text-xs"
                               title={String(m.jaaResponse || '')}
                             >
                               {String(m.jaaResponse || '—')}
                             </TableCell>
                             <TableCell
-                              className={`text-xs max-w-[160px] truncate align-top ${
+                              className={`align-top max-w-[160px] truncate text-xs ${
                                 station.fromVerified ? 'text-slate-800' : 'text-slate-600'
                               }`}
                               title={
@@ -392,28 +435,28 @@ export function FuelCardTransactionsSheet({
                               {station.label}
                             </TableCell>
                             <TableCell
-                              className="text-xs max-w-[160px] truncate align-top"
+                              className="align-top max-w-[160px] truncate text-xs"
                               title={String(m.jaaDescription || '')}
                             >
                               {String(m.jaaDescription || '—')}
                             </TableCell>
-                            <TableCell className="text-xs whitespace-nowrap align-top">
+                            <TableCell className="align-top whitespace-nowrap text-xs">
                               {String(m.jaaFuelType || '—')}
                             </TableCell>
-                            <TableCell className="text-right text-xs tabular-nums whitespace-nowrap align-top">
+                            <TableCell className="align-top whitespace-nowrap text-right text-xs tabular-nums">
                               {fuelAmt != null && fuelAmt > 0 ? money(fuelAmt) : '—'}
                             </TableCell>
-                            <TableCell className="text-right text-xs tabular-nums whitespace-nowrap align-top">
+                            <TableCell className="align-top whitespace-nowrap text-right text-xs tabular-nums">
                               {liters(entry.liters)}
                             </TableCell>
                             <TableCell
-                              className="font-mono text-[11px] whitespace-nowrap align-top"
+                              className="align-top whitespace-nowrap font-mono text-[11px]"
                               title={String(m.jaaReceiptNumber || '')}
                             >
                               {String(m.jaaReceiptNumber || '—')}
                             </TableCell>
                             <TableCell
-                              className="text-xs max-w-[140px] truncate text-slate-500 align-top"
+                              className="align-top max-w-[140px] truncate text-xs text-slate-500"
                               title={assigned}
                             >
                               {assigned}
@@ -428,7 +471,7 @@ export function FuelCardTransactionsSheet({
             </div>
           </>
         ) : (
-          <div className="min-h-0 flex-1 overflow-auto px-6 py-4">
+          <div className={cn('min-h-0 flex-1 overflow-auto py-3', isMobile ? 'px-4' : 'px-6 py-4')}>
             <p className="mb-3 text-xs text-slate-500">
               Who held this card over time. Vehicle is a snapshot at handoff — the driver may change cars while keeping the card.
             </p>

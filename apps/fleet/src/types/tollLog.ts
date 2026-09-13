@@ -8,6 +8,7 @@
 import { FinancialTransaction } from './data';
 import { CsvColumn } from '../utils/csv-helper';
 import type { PlazaMatchSource } from '../utils/tollPlazaResolution';
+import { generatePeriodWeekOptions } from '../utils/periodWeekOptions';
 
 export interface TollLogEntry {
   // --- Identity ---
@@ -113,6 +114,23 @@ export const DEFAULT_TOLL_LOG_FILTERS: TollLogFiltersState = {
   status: 'all',
   type: 'all',
 };
+
+/** Default filters with the current Mon–Sun week selected (fleet timezone aware). */
+export function createDefaultTollLogFilters(timezone?: string): TollLogFiltersState {
+  const [week] = generatePeriodWeekOptions(1, timezone);
+  if (!week?.startDate || !week?.endDate) {
+    return { ...DEFAULT_TOLL_LOG_FILTERS };
+  }
+  const [sy, sm, sd] = week.startDate.split('-').map(Number);
+  const [ey, em, ed] = week.endDate.split('-').map(Number);
+  return {
+    ...DEFAULT_TOLL_LOG_FILTERS,
+    dateRange: {
+      from: new Date(sy, sm - 1, sd),
+      to: new Date(ey, em - 1, ed),
+    },
+  };
+}
 
 // --- CSV export column schema ---
 export const TOLL_LOG_CSV_COLUMNS: CsvColumn<TollLogEntry>[] = [

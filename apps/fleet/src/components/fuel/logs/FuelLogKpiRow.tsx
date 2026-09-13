@@ -37,7 +37,7 @@ export function FuelLogKpiRow({
 }) {
   if (!tiles.length) return null;
   return (
-    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+    <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-3 sm:gap-2 lg:grid-cols-5">
       {tiles.map((t) => {
         const clickable = !!onTileClick && (t.filterable || t.id === 'imbalanced' || t.id === 'exceptions');
         return (
@@ -58,19 +58,28 @@ export function FuelLogKpiRow({
                 : undefined
             }
             className={cn(
-              'px-2.5 py-1.5 shadow-none transition-colors',
+              // Card defaults to gap-6 — kill it so KPI chips stay compact on phones
+              'gap-0 px-2 py-1 shadow-none transition-colors sm:px-2.5 sm:py-1.5',
               clickable && 'cursor-pointer hover:border-slate-300 hover:bg-slate-50/80',
-              t.active && 'ring-2 ring-amber-400 border-amber-300',
+              t.active && 'border-amber-300 ring-2 ring-amber-400',
             )}
           >
-            <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 leading-tight">
+            <div className="truncate text-[9px] font-semibold uppercase leading-none tracking-wide text-slate-400 sm:text-[10px] sm:leading-tight">
               {t.label}
             </div>
-            <div className={`text-base font-bold leading-tight ${toneClass[t.tone || 'default']}`}>
+            <div
+              className={cn(
+                'truncate text-sm font-bold leading-tight sm:text-base',
+                toneClass[t.tone || 'default'],
+              )}
+            >
               {t.value}
             </div>
             {t.hint ? (
-              <div className="text-[10px] text-slate-400 leading-tight truncate" title={t.hint}>
+              <div
+                className="mt-0.5 hidden truncate text-[10px] leading-tight text-slate-400 sm:block"
+                title={t.hint}
+              >
                 {t.hint}
               </div>
             ) : null}

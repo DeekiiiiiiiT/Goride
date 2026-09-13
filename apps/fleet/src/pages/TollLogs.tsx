@@ -18,12 +18,13 @@ import { TollLogTable } from '../components/toll/TollLogTable';
 import { TollLogFilters } from '../components/toll/TollLogFilters';
 import { TollLogDetailPanel } from '../components/toll/TollLogDetailPanel';
 import { EditTollModal } from '../components/toll-tags/reconciliation/EditTollModal';
-import { TollLogEntry, TollLogFiltersState, DEFAULT_TOLL_LOG_FILTERS, TOLL_LOG_CSV_COLUMNS, tollLogNeedsReconciliationReset } from '../types/tollLog';
+import { TollLogEntry, TollLogFiltersState, TOLL_LOG_CSV_COLUMNS, tollLogNeedsReconciliationReset, createDefaultTollLogFilters } from '../types/tollLog';
 import { isWithinInterval, parseISO, startOfDay, endOfDay, format } from 'date-fns';
 import { api } from '../services/api';
 import { toast } from 'sonner';
 import { jsonToCsv, downloadBlob } from '../utils/csv-helper';
 import { FleetBusyProvider, useFleetBusy } from '../components/shared/FleetBusyLock';
+import { useFleetTimezone } from '../utils/timezoneDisplay';
 
 // ---------------------------------------------------------------------------
 // Bulk action types
@@ -100,10 +101,13 @@ export function TollLogsPage() {
 
 function TollLogsPageInner() {
   const { runExclusive, setMessage } = useFleetBusy();
+  const fleetTz = useFleetTimezone();
   const { logs, loading, refresh, vehicles, drivers, plazas } = useTollLogs();
   const [selectedLog, setSelectedLog] = useState<TollLogEntry | null>(null);
   const [logToEdit, setLogToEdit] = useState<TollLogEntry | null>(null);
-  const [filters, setFilters] = useState<TollLogFiltersState>(DEFAULT_TOLL_LOG_FILTERS);
+  const [filters, setFilters] = useState<TollLogFiltersState>(() =>
+    createDefaultTollLogFilters(fleetTz),
+  );
 
   // --- Bulk selection state ---
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -347,7 +351,7 @@ function TollLogsPageInner() {
   }, [refresh, resetConfirmLog, selectedLog?.id]);
 
   const handleClearFilters = () => {
-    setFilters(DEFAULT_TOLL_LOG_FILTERS);
+    setFilters(createDefaultTollLogFilters(fleetTz));
   };
 
   const actionConfig = bulkAction ? BULK_ACTION_CONFIG[bulkAction] : null;

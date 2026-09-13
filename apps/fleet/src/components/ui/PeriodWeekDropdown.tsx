@@ -76,12 +76,16 @@ export function PeriodWeekDropdown({
   title,
 }: PeriodWeekDropdownProps) {
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const menuStyleRef = useRef<React.CSSProperties>({});
   const [open, setOpen] = useState(false);
   const [panel, setPanel] = useState<'weeks' | 'custom'>('weeks');
   const [draftRange, setDraftRange] = useState<DateRange | undefined>();
   const [menuStyle, setMenuStyle] = useState<React.CSSProperties>({});
 
   // Portal + fixed coords so the menu isn’t clipped by AppLayout overflow-auto / right edge.
+  // Do NOT listen to capture-phase scroll: scrolling the menu list (or Sheet body) used to
+  // call setMenuStyle in a tight loop and freeze the tab.
   useLayoutEffect(() => {
     if (!open) return;
     const place = () => {
@@ -101,14 +105,22 @@ export function PeriodWeekDropdown({
         next.left = Math.min(r.left, window.innerWidth - 296);
         next.right = 'auto';
       }
+      const prev = menuStyleRef.current;
+      if (
+        prev.top === next.top &&
+        prev.left === next.left &&
+        prev.right === next.right &&
+        prev.zIndex === next.zIndex
+      ) {
+        return;
+      }
+      menuStyleRef.current = next;
       setMenuStyle(next);
     };
     place();
     window.addEventListener('resize', place);
-    window.addEventListener('scroll', place, true);
     return () => {
       window.removeEventListener('resize', place);
-      window.removeEventListener('scroll', place, true);
     };
   }, [open, menuAlign, panel]);
 
@@ -218,8 +230,10 @@ export function PeriodWeekDropdown({
         !disabled &&
         createPortal(
           <>
-            <div className="fixed inset-0 z-[199]" aria-hidden onClick={close} />
+            <div className="fixed inset-0 z-[199]" aria-hidden data-period-week-backdrop onClick={close} />
             <div
+              ref={menuRef}
+              data-period-week-menu
               className={cn(
                 'overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg dark:border-slate-700 dark:bg-slate-800',
                 panel === 'custom' ? 'w-auto' : 'w-72 max-h-80',
@@ -244,8 +258,9 @@ export function PeriodWeekDropdown({
                           role="option"
                           aria-selected={isSel}
                           onClick={() => {
-                            onSelect(period);
+                            // Close first so scroll listeners unmount before parent re-fetch/reflow
                             close();
+                            onSelect(period);
                           }}
                           className={cn(
                             'flex w-full items-center gap-2.5 px-3 py-2 text-left text-xs transition-colors',

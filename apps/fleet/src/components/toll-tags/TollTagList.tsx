@@ -9,10 +9,19 @@ import {
 } from "../ui/table";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
-import { Trash2, Link as LinkIcon, AlertCircle, History, Pencil, AlertTriangle } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "../ui/dropdown-menu";
+import { Trash2, Link as LinkIcon, History, Pencil, MoreHorizontal, UserPlus, UserMinus } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 import { TollTag } from "../../types/vehicle";
 import { formatJMD } from "../../utils/formatJMD";
+import { useIsMobile } from "../ui/use-mobile";
 
 interface TollTagListProps {
   tags: TollTag[];
@@ -24,7 +33,88 @@ interface TollTagListProps {
   onEdit: (tag: TollTag) => void;
 }
 
+function getStatusColor(status: string) {
+  switch (status) {
+    case 'Active': return 'bg-green-100 text-green-700 hover:bg-green-100';
+    case 'Inactive': return 'bg-slate-100 text-slate-700 hover:bg-slate-100';
+    case 'Lost': return 'bg-red-100 text-red-700 hover:bg-red-100';
+    case 'Damaged': return 'bg-amber-100 text-amber-700 hover:bg-amber-100';
+    default: return 'bg-slate-100 text-slate-700 hover:bg-slate-100';
+  }
+}
+
+function TagRowActions({
+  tag,
+  compact,
+  onDelete,
+  onAssign,
+  onUnassign,
+  onViewHistory,
+  onEdit,
+}: {
+  tag: TollTag;
+  compact?: boolean;
+  onDelete: (id: string) => void;
+  onAssign: (tag: TollTag) => void;
+  onUnassign: (tag: TollTag) => void;
+  onViewHistory: (tag: TollTag) => void;
+  onEdit: (tag: TollTag) => void;
+}) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="ghost"
+          size="sm"
+          className={compact ? 'min-h-11 min-w-11 p-0' : 'h-8 w-8 p-0'}
+          aria-label="Tag actions"
+        >
+          <MoreHorizontal className="h-4 w-4" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-48">
+        <DropdownMenuLabel>Actions</DropdownMenuLabel>
+        {tag.assignedVehicleId && (
+          <DropdownMenuItem onClick={() => onViewHistory(tag)}>
+            <History className="mr-2 h-4 w-4" />
+            View History
+          </DropdownMenuItem>
+        )}
+        {tag.assignedVehicleId ? (
+          <DropdownMenuItem onClick={() => onUnassign(tag)}>
+            <UserMinus className="mr-2 h-4 w-4" />
+            Unassign
+          </DropdownMenuItem>
+        ) : (
+          <DropdownMenuItem onClick={() => onAssign(tag)}>
+            <UserPlus className="mr-2 h-4 w-4" />
+            Assign
+          </DropdownMenuItem>
+        )}
+        <DropdownMenuItem onClick={() => onEdit(tag)}>
+          <Pencil className="mr-2 h-4 w-4" />
+          Edit
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem
+          className="text-rose-600 focus:text-rose-600"
+          onClick={() => {
+            if (window.confirm('Are you sure you want to delete this tag?')) {
+              onDelete(tag.id);
+            }
+          }}
+        >
+          <Trash2 className="mr-2 h-4 w-4" />
+          Delete
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 export function TollTagList({ tags, isLoading, onDelete, onAssign, onUnassign, onViewHistory, onEdit }: TollTagListProps) {
+  const isMobile = useIsMobile();
+
   if (isLoading) {
     return <div className="p-8 text-center text-slate-500">Loading inventory...</div>;
   }
@@ -41,15 +131,47 @@ export function TollTagList({ tags, isLoading, onDelete, onAssign, onUnassign, o
     );
   }
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'Active': return 'bg-green-100 text-green-700 hover:bg-green-100';
-      case 'Inactive': return 'bg-slate-100 text-slate-700 hover:bg-slate-100';
-      case 'Lost': return 'bg-red-100 text-red-700 hover:bg-red-100';
-      case 'Damaged': return 'bg-amber-100 text-amber-700 hover:bg-amber-100';
-      default: return 'bg-slate-100 text-slate-700 hover:bg-slate-100';
-    }
-  };
+  if (isMobile) {
+    return (
+      <div className="overflow-hidden rounded-md border">
+        <div className="grid grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_2.75rem] items-center gap-x-2 border-b border-slate-200 bg-slate-50/80 px-3 py-2 text-xs font-medium text-slate-500">
+          <span>Tag Number</span>
+          <span>Assigned</span>
+          <span className="sr-only">Actions</span>
+        </div>
+        {tags.map((tag) => (
+          <div
+            key={tag.id}
+            className="grid grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_2.75rem] items-center gap-x-2 border-b border-slate-100 px-3 py-3 last:border-b-0"
+          >
+            <div className="min-w-0 font-mono text-xs text-slate-800">
+              <span className="block truncate">{tag.tagNumber}</span>
+            </div>
+            <div className="min-w-0 truncate text-sm">
+              {tag.assignedVehicleId ? (
+                <span className="font-medium text-indigo-600">
+                  {tag.assignedVehicleName || 'Linked'}
+                </span>
+              ) : (
+                <span className="italic text-slate-400">Unassigned</span>
+              )}
+            </div>
+            <div className="flex justify-center">
+              <TagRowActions
+                tag={tag}
+                compact
+                onDelete={onDelete}
+                onAssign={onAssign}
+                onUnassign={onUnassign}
+                onViewHistory={onViewHistory}
+                onEdit={onEdit}
+              />
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  }
 
   return (
     <div className="border rounded-md">

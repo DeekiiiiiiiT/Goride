@@ -181,7 +181,7 @@ export function FuelTransactionsTable({
       <Table>
         <TableHeader className="sticky top-0 bg-white z-10">
           <TableRow>
-            <TableHead className="w-10">
+            <TableHead className="hidden w-10 md:table-cell">
               <Checkbox
                 checked={pageAllSelected ? true : pageSomeSelected ? 'indeterminate' : false}
                 onCheckedChange={(v) => onToggleSelectPage(v === true)}
@@ -194,20 +194,23 @@ export function FuelTransactionsTable({
               </button>
             </TableHead>
             <TableHead>Paid By</TableHead>
-            <TableHead>Station</TableHead>
-            <TableHead>Vehicle</TableHead>
-            <TableHead>Driver</TableHead>
-            <TableHead>
+            <TableHead className="hidden md:table-cell">Station</TableHead>
+            <TableHead className="hidden md:table-cell">Vehicle</TableHead>
+            <TableHead className="hidden md:table-cell">Driver</TableHead>
+            <TableHead className="hidden md:table-cell">
               <button type="button" className="font-medium hover:text-slate-900" onClick={() => onToggleSort('liters')}>
                 Vol (L){sortIndicator('liters')}
               </button>
             </TableHead>
-            <TableHead>
+            <TableHead className="hidden md:table-cell">
               <button type="button" className="font-medium hover:text-slate-900" onClick={() => onToggleSort('odometer')}>
                 Odo{sortIndicator('odometer')}
               </button>
             </TableHead>
-            <TableHead title="Pump-to-pump odometer change only — not Odometer History / Live Status">
+            <TableHead
+              className="hidden md:table-cell"
+              title="Pump-to-pump odometer change only — not Odometer History / Live Status"
+            >
               Δ Odo
             </TableHead>
             <TableHead>
@@ -215,7 +218,7 @@ export function FuelTransactionsTable({
                 Cost{sortIndicator('amount')}
               </button>
             </TableHead>
-            <TableHead className="text-center">
+            <TableHead className="hidden text-center md:table-cell">
               <Tooltip>
                 <TooltipTrigger asChild>
                   <span className="cursor-help font-medium">
@@ -227,13 +230,15 @@ export function FuelTransactionsTable({
                 </TooltipTrigger>
                 <TooltipContent className="max-w-[220px]">
                   <p className="text-xs font-semibold">Audit dots</p>
-                  <p className="text-[11px] text-slate-300 mt-1">
+                  <p className="mt-1 text-[11px] text-slate-300">
                     Three dots under the score: GPS station match · cryptographic signature · odometer present.
                   </p>
                 </TooltipContent>
               </Tooltip>
             </TableHead>
-            <TableHead className="text-right">Actions</TableHead>
+            <TableHead className="w-12 text-right md:w-auto">
+              <span className="sr-only md:not-sr-only">Actions</span>
+            </TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -262,7 +267,7 @@ export function FuelTransactionsTable({
                     selectedIds.has(entry.id) && 'bg-indigo-50/40',
                   )}
                 >
-                  <TableCell>
+                  <TableCell className="hidden md:table-cell">
                     <Checkbox
                       checked={selectedIds.has(entry.id)}
                       onCheckedChange={() => onToggleSelect(entry.id)}
@@ -273,7 +278,7 @@ export function FuelTransactionsTable({
                     <div className="flex flex-col gap-0.5">
                       <span>{formatFuelLogDate(entry.date)}</span>
                       {entryTimeLabel && (
-                        <span className="text-[11px] text-slate-500 font-medium tabular-nums">
+                        <span className="text-[11px] font-medium tabular-nums text-slate-500">
                           {entryTimeLabel}
                         </span>
                       )}
@@ -283,7 +288,7 @@ export function FuelTransactionsTable({
                           return (
                             <Badge
                               variant="outline"
-                              className={cn('text-[11px] font-bold px-1 py-0 h-4 w-fit', src.color)}
+                              className={cn('h-4 w-fit px-1 py-0 text-[11px] font-bold', src.color)}
                             >
                               {src.label}
                             </Badge>
@@ -297,10 +302,10 @@ export function FuelTransactionsTable({
                       <span className="text-xs">{resolvePaymentLabel(entry)}</span>
                     </div>
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="hidden md:table-cell">
                     <div className="flex flex-col gap-0.5">
                       <div className="flex items-center gap-1.5">
-                        <span className="text-xs font-semibold text-slate-700 truncate max-w-[140px]">
+                        <span className="max-w-[140px] truncate text-xs font-semibold text-slate-700">
                           {entry.location ||
                             entry.vendor ||
                             entry.metadata?.stationName ||
@@ -309,7 +314,7 @@ export function FuelTransactionsTable({
                         {locationStatus === 'verified' && (
                           <Tooltip>
                             <TooltipTrigger asChild>
-                              <div className="bg-blue-50 text-blue-600 p-0.5 rounded-full border border-blue-100 flex-shrink-0 animate-in zoom-in-95 duration-300">
+                              <div className="flex flex-shrink-0 animate-in zoom-in-95 rounded-full border border-blue-100 bg-blue-50 p-0.5 text-blue-600 duration-300">
                                 <ShieldCheck className="h-2.5 w-2.5" />
                               </div>
                             </TooltipTrigger>
@@ -321,7 +326,7 @@ export function FuelTransactionsTable({
                                   {(entry.metadata?.verificationMethod || 'gps').replace(/_/g, ' ')}.
                                 </p>
                                 {entry.metadata?.matchDistance !== undefined && (
-                                  <p className="text-[11px] text-blue-500 font-medium">
+                                  <p className="text-[11px] font-medium text-blue-500">
                                     GPS offset from station anchor: {entry.metadata.matchDistance}m
                                   </p>
                                 )}
@@ -332,7 +337,7 @@ export function FuelTransactionsTable({
                         {locationStatus === 'review_required' && (
                           <Tooltip>
                             <TooltipTrigger asChild>
-                              <div className="bg-amber-50 text-amber-600 p-0.5 rounded-full border border-amber-100 flex-shrink-0">
+                              <div className="flex flex-shrink-0 rounded-full border border-amber-100 bg-amber-50 p-0.5 text-amber-600">
                                 <AlertTriangle className="h-2.5 w-2.5" />
                               </div>
                             </TooltipTrigger>
@@ -348,7 +353,7 @@ export function FuelTransactionsTable({
                         {(locationStatus === 'unknown' || !locationStatus) && (
                           <Tooltip>
                             <TooltipTrigger asChild>
-                              <div className="flex items-center gap-1.5 bg-amber-50 text-amber-600 px-1.5 py-0.5 rounded border border-amber-100 animate-pulse">
+                              <div className="flex animate-pulse items-center gap-1.5 rounded border border-amber-100 bg-amber-50 px-1.5 py-0.5 text-amber-600">
                                 <AlertCircle className="h-2.5 w-2.5" />
                                 <span className="text-[11px] font-bold uppercase tracking-tighter">
                                   Review Required
@@ -367,15 +372,15 @@ export function FuelTransactionsTable({
                       </div>
                       <span
                         title={entry.location}
-                        className="text-[11px] text-slate-400 truncate max-w-[140px]"
+                        className="max-w-[140px] truncate text-[11px] text-slate-400"
                       >
                         {entry.location || 'No GPS metadata'}
                       </span>
                     </div>
                   </TableCell>
-                  <TableCell className="font-medium text-xs">{getVehicleName(entry.vehicleId)}</TableCell>
-                  <TableCell className="text-xs">{getDriverName(entry.driverId)}</TableCell>
-                  <TableCell>
+                  <TableCell className="hidden text-xs font-medium md:table-cell">{getVehicleName(entry.vehicleId)}</TableCell>
+                  <TableCell className="hidden text-xs md:table-cell">{getDriverName(entry.driverId)}</TableCell>
+                  <TableCell className="hidden md:table-cell">
                     {(() => {
                       const vehicle = vehicles.find((v) => v.id === entry.vehicleId);
                       const tankCap =
@@ -385,11 +390,11 @@ export function FuelTransactionsTable({
                       const fillPct =
                         tankCap > 0 ? Math.min(100, ((entry.liters || 0) / tankCap) * 100) : 0;
                       return (
-                        <div className="flex flex-col gap-1 min-w-[50px]">
+                        <div className="flex min-w-[50px] flex-col gap-1">
                           <span className="text-xs font-medium">{entry.liters?.toFixed(1)} L</span>
                           <Tooltip>
                             <TooltipTrigger asChild>
-                              <div className="h-1.5 w-12 bg-slate-100 rounded-full overflow-hidden border border-slate-200/50 cursor-help">
+                              <div className="h-1.5 w-12 cursor-help overflow-hidden rounded-full border border-slate-200/50 bg-slate-100">
                                 <div
                                   className={cn(
                                     'h-full rounded-full transition-all duration-300',
@@ -417,14 +422,14 @@ export function FuelTransactionsTable({
                       );
                     })()}
                   </TableCell>
-                  <TableCell>
-                    <span className="text-xs font-semibold font-mono text-slate-800">
+                  <TableCell className="hidden md:table-cell">
+                    <span className="font-mono text-xs font-semibold text-slate-800">
                       {entry.odometer != null && Number(entry.odometer) > 0
                         ? Number(entry.odometer).toLocaleString()
                         : '—'}
                     </span>
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="hidden md:table-cell">
                     {(() => {
                       const prev = prevOdometerMap.get(entry.id);
                       if (!prev || prev.prevOdo == null)
@@ -457,31 +462,31 @@ export function FuelTransactionsTable({
                       );
                     })()}
                   </TableCell>
-                  <TableCell className="font-bold text-xs">
+                  <TableCell className="text-xs font-bold">
                     {(entry.metadata as { awaitingCardStatement?: boolean })?.awaitingCardStatement ? (
-                      <span className="text-amber-600 font-medium">Awaiting</span>
+                      <span className="font-medium text-amber-600">Awaiting</span>
                     ) : (entry.metadata as { jaaRowKind?: string })?.jaaRowKind === 'declined' ? (
-                      <span className="text-rose-600 font-medium">Declined</span>
+                      <span className="font-medium text-rose-600">Declined</span>
                     ) : (entry.metadata as { jaaRowKind?: string })?.jaaRowKind === 'fee' ? (
                       <span className="text-slate-500">{formatFuelMoney(entry.amount ?? 0)} fee</span>
                     ) : (
                       formatFuelMoney(entry.amount ?? 0)
                     )}
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="hidden md:table-cell">
                     <div className="flex justify-center">
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <div
                             className={cn(
-                              'flex flex-col items-center justify-center w-10 h-10 rounded-lg border transition-all cursor-help',
+                              'flex h-10 w-10 cursor-help flex-col items-center justify-center rounded-lg border transition-all',
                               confidenceScore === undefined
-                                ? 'bg-slate-50 border-slate-100 text-slate-300'
+                                ? 'border-slate-100 bg-slate-50 text-slate-300'
                                 : confidenceScore >= 90
-                                  ? 'bg-emerald-50 border-emerald-100 text-emerald-600'
+                                  ? 'border-emerald-100 bg-emerald-50 text-emerald-600'
                                   : confidenceScore >= 70
-                                    ? 'bg-blue-50 border-blue-100 text-blue-600'
-                                    : 'bg-amber-50 border-amber-100 text-amber-600',
+                                    ? 'border-blue-100 bg-blue-50 text-blue-600'
+                                    : 'border-amber-100 bg-amber-50 text-amber-600',
                             )}
                           >
                             {isLocked ? (
@@ -573,12 +578,24 @@ export function FuelTransactionsTable({
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end">
+                      {/* Phone: one-tap view details */}
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="min-h-11 min-w-11 text-slate-500 hover:text-slate-800 md:hidden"
+                        title="View Details"
+                        aria-label="View Details"
+                        onClick={() => onView(entry)}
+                      >
+                        <Eye className="h-4 w-4" />
+                      </Button>
+                      {/* Desktop: full actions menu */}
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button
                             variant="ghost"
                             size="icon"
-                            className="h-8 w-8 text-slate-400 hover:text-slate-600"
+                            className="hidden h-8 w-8 text-slate-400 hover:text-slate-600 md:inline-flex"
                             title="Actions"
                             aria-label="Row actions"
                           >
@@ -586,13 +603,13 @@ export function FuelTransactionsTable({
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" className="w-40">
-                          <DropdownMenuLabel className="text-[11px] text-slate-400 uppercase tracking-wider">
+                          <DropdownMenuLabel className="text-[11px] uppercase tracking-wider text-slate-400">
                             Log Actions
                           </DropdownMenuLabel>
                           <DropdownMenuSeparator />
                           <DropdownMenuItem
                             onClick={() => onView(entry)}
-                            className="gap-2 text-xs cursor-pointer"
+                            className="cursor-pointer gap-2 text-xs"
                           >
                             <Eye className="h-3.5 w-3.5 text-slate-500" />
                             View Details
@@ -600,7 +617,7 @@ export function FuelTransactionsTable({
                           <DropdownMenuItem
                             onClick={() => onEdit(entry)}
                             disabled={isLocked || !canEdit}
-                            className="gap-2 text-xs cursor-pointer"
+                            className="cursor-pointer gap-2 text-xs"
                           >
                             <Pencil className="h-3.5 w-3.5 text-slate-500" />
                             Edit Log
@@ -609,7 +626,7 @@ export function FuelTransactionsTable({
                           <DropdownMenuItem
                             onClick={() => onDelete(entry.id)}
                             disabled={isLocked || !canDelete}
-                            className="gap-2 text-xs cursor-pointer text-red-600 focus:text-red-600"
+                            className="cursor-pointer gap-2 text-xs text-red-600 focus:text-red-600"
                           >
                             <Trash2 className="h-3.5 w-3.5" />
                             Delete Log
