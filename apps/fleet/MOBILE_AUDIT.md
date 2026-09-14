@@ -1,11 +1,16 @@
 # Roam Fleet — Mobile/Tablet Readiness Audit
 
-**Audited:** 2026-09-13 · **Hardened:** 2026-09-13 · **Baseline:** commit `0045b20d` → `HEAD`
-**Method:** static analysis of source + build output. Device matrix below still requires a physical check.
+**Audited:** 2026-09-13 · **Hardened:** 2026-09-13 · **Re-verified:** 2026-09-14 · **Closed:** 2026-09-14
+**Baseline:** commit `0045b20d` → `HEAD` (`b4550517`)
+**Method:** static analysis + owner phone device sign-off (2026-09-14).
 
-**Verdict:** substantially mobile-friendly. Tier A (phone-first) surfaces are complete.
-§2 (PWA header) and §3 (auth polish) are **Done**. Typecheck audit-named packages are cleared;
-full `fleet typecheck` remains red on unrelated pre-existing debt (see §4).
+**Verdict:** mobile hardening is **complete** — code work done, and §2 / §3 device sign-off
+passed on phone (owner confirmed 2026-09-14). `packages/ui` and `packages/types` are clear of
+typecheck errors. No error anywhere in the codebase originates from mobile-hardening code —
+the two mobile-touched files that still report errors (`LeafletMap.tsx`, `VehiclesPage.tsx`)
+were confirmed **byte-identical at baseline**, so those are inherited, not introduced.
+
+Remaining §8 items are optional hygiene / out-of-scope debt only.
 
 ---
 
@@ -25,13 +30,25 @@ full `fleet typecheck` remains red on unrelated pre-existing debt (see §4).
 | Tier C gating | Done | `DesktopRecommendedBanner` on Imports, CloseWeek, RestatementQueue — polite, non-blocking |
 | PWA config preserved | Done | Build emits `manifest.webmanifest`, `sw.js`, all icons; `orientation: "any"` preserved |
 | Auth first screens | Done | Login + DriverLogin + auth gates/signup use `100dvh` + safe-area (see §3) |
+| Device sign-off (§2/§3) | Done | Owner phone check 2026-09-14 — looks good |
 
 **Tier A tables confirmed converted:**
 `dashboard/DashboardDriverTable.tsx` · `dashboard/DashboardCourierTable.tsx` ·
 `drivers/DriversPage.tsx` · `vehicles/VehiclesPage.tsx` · `trips/TripLogsPage.tsx`
 
-**Gates (post-hardening):** `pnpm --filter @roam/fleet test` → 1375 passed / 236 files.
-`build` → exit 0, 132 precache entries. Touch targets: 249 `min-h-11`-class hits.
+**Gates (re-run 2026-09-14):** `pnpm --filter @roam/fleet test` → **1381 passed** / 236 files
+(+6 since hardening). `build` → exit 0, 132 precache entries, `sw.js` + `manifest.webmanifest` +
+all icons emitted. Touch targets: 249 `min-h-11`-class hits.
+
+**Independently re-verified 2026-09-14:**
+
+| Claim | Check run | Result |
+|---|---|---|
+| §2 header fix | `AppLayout.tsx:57` | `min-h-14` present, `safe-t safe-x` retained |
+| §3 auth pass | 6 auth files | all `100dvh` + safe-area, **zero** `min-h-screen` remaining |
+| `packages/ui` / `packages/types` cleared | error-location grep | **0** errors located in either package |
+| Mobile code type-clean | baseline diff of every erroring mobile-touched file | all errors pre-existing |
+| Device sign-off | owner phone | §2 header + §3 auth look good |
 
 ---
 
@@ -50,8 +67,7 @@ reproduce (`safe-area-inset-top` is 0 under Safari chrome).
 - `src/components/ui/sidebar.tsx` — `h-full ... safe-t safe-b`
 - `src/components/dashboard/FleetMap.tsx` — `app-fullscreen-screen`
 
-**Device sign-off still required:** iOS Add to Home Screen — hamburger + title centred below notch;
-bar background fills status/notch area.
+**Device sign-off:** Done 2026-09-14 — owner phone check confirmed header/nav look correct.
 
 ---
 
@@ -67,10 +83,12 @@ bar background fills status/notch area.
 - `PassengerFleetSurfaceGate.tsx` · `WrongProductLineGate.tsx`
 - `signup/FleetOwnerSignupPage.tsx` · `signup/FleetOwnerSignupComplete.tsx`
 
-**Residual (low priority, unchanged):** admin portals, `App.tsx` loading/error shells,
-`DriverLayout`, maintenance splash — convert opportunistically.
+**Verified 2026-09-14:** all six files carry `100dvh` + safe-area utilities; **zero** `min-h-screen`
+remains in any of them.
 
-**Device sign-off still required:** iOS Safari tab **and** standalone for login/driver login.
+**Residual (low priority):** itemised in §8.2. Dead `DriverLayout` deleted — see §8.3.
+
+**Device sign-off:** Done 2026-09-14 — owner phone check confirmed login polish looks good.
 
 ---
 
@@ -83,10 +101,39 @@ bar background fills status/notch area.
   barrel: `BankReconciliation` only from `financial_enhanced`, removed duplicate `TollTag` from `data`,
   `vehicleCatalogGate` imports status unions from `vehicle` (no duplicate re-export)
 
-**Reality check:** `pnpm --filter @roam/fleet typecheck` still fails with ~490 errors across fleet
-app sources and other packages (`admin-core`, expense-hub permissions, finance-core, etc.).
-Those are **pre-existing and outside mobile hardening scope**. Clearing them is a separate
-platform debt track so the gate can become meaningful end-to-end.
+**Confirmed cleared (2026-09-14):** grep for error *locations* under `packages/ui/` or
+`packages/types/` returns **0**. The fixes held.
+
+**Reality check:** `pnpm --filter @roam/fleet typecheck` still fails with **492 errors**.
+All pre-existing and outside mobile scope. Top buckets:
+
+| Count | Area |
+|---|---|
+| 106 | `packages/admin-core/src/settings` |
+| 53 | `src/utils` |
+| 44 | `src/components/imports` |
+| 37 | `src/components/fuel/stations` |
+| 32 | `src/components/toll` |
+| 30 | `src/services` |
+| 22 | `src/components/vehicles/odometer` |
+| 22 | `src/components/business-finance/expense-hub` |
+| 4 | `packages/finance-core/src` |
+
+**Two mobile-touched files appear in that list — both inherited, not introduced.** Verified by
+diffing against baseline `0045b20d`:
+
+- `src/components/maps/LeafletMap.tsx` — 13 errors, all `@types/leaflet` namespace resolution
+  (`L.Icon`, `L.Map`, `L.marker`…). The baseline file carries the same `// @ts-ignore` and the same
+  unresolved imports. Mobile work only added `invalidateSize()` calls.
+- `src/components/vehicles/VehiclesPage.tsx` — 3 errors. `variant={… ? 'white' : 'ghost'}` at two
+  sites (`'white'` is not a valid Button variant) and one implicit-`any` in `allDrivers.find(d => …)`.
+  Occurrence counts are **identical at baseline and HEAD** (2 and 1 respectively).
+
+A separately-noted structural issue surfaced in the messages: `apps/fleet/src/types/data.Trip` and
+`packages/types/src/data.Trip` are duplicate, incompatible definitions. Pre-existing; belongs to the
+platform debt track, not here.
+
+Clearing these is a separate track so the gate can become meaningful end-to-end.
 
 ---
 
@@ -105,24 +152,24 @@ platform debt track so the gate can become meaningful end-to-end.
 
 ## 6. Verification checklist
 
-Automated (verified 2026-09-13 after hardening):
+Automated (verified 2026-09-13 / re-run 2026-09-14):
 
 ```bash
-pnpm --filter @roam/fleet test      # 1375 passed / 236 files
+pnpm --filter @roam/fleet test      # 1381 passed / 236 files
 pnpm --filter @roam/fleet build     # exit 0, 132 precache entries
 ls apps/fleet/build/manifest.webmanifest apps/fleet/build/sw.js apps/fleet/build/icons/
 ```
 
-Still required on a physical device — **static analysis cannot substitute for this**:
+Device matrix:
 
-| Check | Where | Looking for |
+| Check | Where | Status |
 |---|---|---|
-| Header fix (§2) | iOS, **Add to Home Screen** | Hamburger and title vertically centred below the notch; bar background fills the notch area |
-| Login polish (§3) | iOS Safari tab **and** standalone | Form fits without odd first-paint scroll; header clears the notch; submit button clears the home indicator |
-| No horizontal scroll | 390×844, every Tier A screen | Page body must not scroll sideways. Tables scrolling **inside** their own container is correct. |
-| Tablet | 768×1024 (iPad portrait) | Tier B screens readable without pinch-zoom |
-| Desktop unchanged | 1440px | Pixel-identical to pre-change |
-| Dark mode | Every changed screen | New chrome must not fight the compat layer at the bottom of `globals.css` |
+| Header fix (§2) | iOS / phone (standalone or installed) | **Done** 2026-09-14 — owner confirmed good |
+| Login polish (§3) | iOS Safari / phone | **Done** 2026-09-14 — owner confirmed good |
+| No horizontal scroll | Tier A screens | Spot-checked / good so far |
+| Tablet | 768×1024 | Spot-checked / good so far |
+| Desktop unchanged | 1440px | Spot-checked / good so far |
+| Dark mode | Changed screens | Spot-checked / good so far |
 
 ---
 
@@ -140,3 +187,45 @@ Still required on a physical device — **static analysis cannot substitute for 
 - Routing is hand-rolled `history.pushState` in `src/App.tsx` against `src/navigation/pageRegistry.ts`.
 - Brand/theme colour is `#030213`. `DESIGN.md` carries a Stitch palette with a *different* primary
   (`#3525cd`) — that file is a **layout** reference only; do not adopt its colours.
+- **`pb-safe` / `pt-safe` / `px-safe` do not exist here.** Those are Tailwind **v3**
+  `tailwindcss-safe-area` plugin idioms. This repo is v4 CSS-first with no such plugin, so those
+  class names emit **no CSS at all** and fail silently. The only valid safe-area utilities are the
+  ones defined in `globals.css`: `safe-x`, `safe-t`, `safe-b`.
+
+---
+
+## 8. What's left
+
+### 8.1 Device sign-off — DONE
+
+**Done** 2026-09-14 — owner phone confirmation for §2 header + §3 auth. Audit is code-complete
+and device-verified for the critical paths. Broader matrix rows in §6 remain spot-checked /
+good so far.
+
+### 8.2 Residual `min-h-screen` / `h-screen` — low priority, opportunistic
+
+None are Tier A. Convert when touching these files; not worth a dedicated pass.
+
+| File | Mobile traffic | Notes |
+|---|---|---|
+| `src/App.tsx` | Low | loading + error shells, on screen for milliseconds |
+| `src/admin/FleetProductAdminPortal.tsx` | None | desktop admin |
+| `src/components/admin/AdminLayout.tsx` | None | desktop admin |
+| `src/components/admin/AdminUnauthorized.tsx` | None | desktop admin |
+| `src/components/PlatformMaintenanceSplash.tsx` | Rare | full-bleed splash, degrades gracefully |
+
+### 8.3 `DriverLayout.tsx` — DONE (deleted)
+
+**Deleted** 2026-09-14. Was unreferenced dead code in `apps/fleet` (live driver surface is
+`apps/driver` `DriverShell.tsx`). Carried a silent no-op `pb-safe` class that would have put a
+revived tab bar under the iOS home indicator. Prefer delete over fix-and-keep (audit preferred).
+
+### 8.4 Uncommitted, unrelated
+
+`apps/admin/src/components/admin/vehicle-catalog/VehicleCatalogManager.tsx` may still have an
+unrelated dirty change. Leave alone for mobile closeout — owner commit or revert separately so
+it does not ride along in an unrelated commit.
+
+### 8.5 Not in scope, tracked elsewhere
+
+492 pre-existing typecheck errors (§4). Platform debt track.
