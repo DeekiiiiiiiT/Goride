@@ -5,7 +5,6 @@ import { toast } from 'sonner';
 import { FuelEntry } from '../../types/fuel';
 import { FinancialTransaction } from '../../types/data';
 import { Vehicle } from '../../types/vehicle';
-import { api } from '../../services/api';
 import { useFuelCycles } from '../../hooks/useFuelCycles';
 import { useFuelAnchors } from '../../hooks/useFuelAnchors';
 import { useFuelLogQuery } from '../../hooks/useFuelLogQuery';
@@ -26,16 +25,6 @@ import { buildTrustedPeriodTotals } from '../../utils/fuelPeriodTotals';
 import { partitionCyclesForPeriod } from '../../utils/fuelCycleTrust';
 import { useFleetTimezone, fleetTzDateKey } from '../../utils/timezoneDisplay';
 import { Skeleton } from '../ui/skeleton';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '../ui/alert-dialog';
 import { usePlatformConfig } from '../auth/PlatformConfigContext';
 import { FuelEntryDetailSheet } from './logs/FuelEntryDetailSheet';
 import { FuelLogKpiRow, transactionKpisToTiles, cycleKpisToTiles } from './logs/FuelLogKpiRow';
@@ -62,6 +51,7 @@ interface FuelLogTableProps {
   isLoading?: boolean;
   loadError?: string | null;
   onRefresh?: () => void | Promise<void>;
+  onAddFuel?: () => void;
 }
 
 export function FuelLogTable({
@@ -79,6 +69,7 @@ export function FuelLogTable({
   isLoading = false,
   loadError = null,
   onRefresh,
+  onAddFuel,
 }: FuelLogTableProps) {
   const { can } = usePermissions();
   const fleetTz = useFleetTimezone();
@@ -94,8 +85,6 @@ export function FuelLogTable({
   const [filterIntegrity, setFilterIntegrity] = useState<string>(query.integrity || 'all');
   const [filterCycleId, setFilterCycleId] = useState<string | null>(query.cycleId || null);
   const [activeView, setActiveView] = useState<'transactions' | 'cycles'>(query.view);
-  const [isRecalculating, setIsRecalculating] = useState(false);
-  const [confirmFleetRecalc, setConfirmFleetRecalc] = useState(false);
   const [viewingEntry, setViewingEntry] = useState<FuelEntry | null>(null);
   const [focusEntryId, setFocusEntryId] = useState<string | null>(null);
   const [focusExceptions, setFocusExceptions] = useState(false);
@@ -558,34 +547,6 @@ export function FuelLogTable({
     [trustedCycles, exceptionCycles, trustedPeriodTotals],
   );
 
-  const runRecalculate = async () => {
-    setIsRecalculating(true);
-    try {
-      const scopeId = filterVehicle !== 'all' ? filterVehicle : undefined;
-      const result = await api.recalculateAllIntegrity(
-        scopeId ? { vehicleId: scopeId } : undefined,
-      );
-      toast.success(scopeId ? 'Vehicle recalculation complete' : 'Fleet recalculation complete', {
-        description: `Re-scored ${result?.entriesModified ?? 0} entries / ${result?.modified ?? 0} transactions.`,
-      });
-      await onRefresh?.();
-    } catch (err) {
-      console.error('[Recalculate] failed:', err);
-      toast.error('Failed to recalculate cycles', { description: String(err) });
-    } finally {
-      setIsRecalculating(false);
-      setConfirmFleetRecalc(false);
-    }
-  };
-
-  const handleRecalculateClick = () => {
-    if (filterVehicle === 'all') {
-      setConfirmFleetRecalc(true);
-      return;
-    }
-    void runRecalculate();
-  };
-
   const exportRows = (rows: FuelEntry[]) => {
     const mapped = rows.map((e) => ({
       date: e.date,
@@ -822,9 +783,7 @@ export function FuelLogTable({
         periodStart={periodStart}
         periodEnd={periodEnd}
         onDateRangeChange={onDateRangeChange}
-        showRecalculate={activeView === 'cycles' && can('data.backfill')}
-        isRecalculating={isRecalculating}
-        onRecalculate={handleRecalculateClick}
+        onAddFuel={onAddFuel}
         afterTabs={
           <div>
             {activeView === 'transactions' && summaryLoading && !hasExtraTxnFilters && !serverSummary ? (
@@ -958,30 +917,6 @@ export function FuelLogTable({
           onEdit(entry);
         }}
       />
-
-      <AlertDialog
-        open={confirmFleetRecalc}
-        onOpenChange={(open) => {
-          if (!open) setConfirmFleetRecalc(false);
-        }}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Recalculate the entire fleet?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This re-scores capacity cycles and ledger integrity for every vehicle. It can take a
-              while and will refresh the logs when done. Filter to a single vehicle first to scope
-              the run.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={isRecalculating}>Cancel</AlertDialogCancel>
-            <AlertDialogAction disabled={isRecalculating} onClick={() => void runRecalculate()}>
-              {isRecalculating ? 'Recalculating…' : 'Recalculate fleet'}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </div>
   );
 }

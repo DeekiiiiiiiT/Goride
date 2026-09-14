@@ -1,0 +1,10 @@
+﻿node.exe : $ tsc --noEmit -p tsconfig.json
+At C:\Users\deeki\AppData\Roaming\npm\pnpm.ps1:24 char:5
++     & "node$exe"  "$basedir/node_modules/pnpm/bin/pnpm.mjs" $args
++     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: ($ tsc --noEmit -p tsconfig.json:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+../toll-core/src/tollPeriodCounts.ts(44,45): error TS2345: Argument of type 'FinancialTransaction | null' is not assignable to parameter of type 'Pick<TollLike, "unlinkedSourceTripId"> | null | undefined'.
+  Type 'FinancialTransaction' has no properties in common with type 'Pick<TollLike, "unlinkedSourceTripId">'.
+[ELIFECYCLE] Command failed with exit code 2.

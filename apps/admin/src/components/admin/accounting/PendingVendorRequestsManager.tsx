@@ -1,1 +1,1 @@
-export { PendingVendorRequestsManager } from '@fleet/components/admin/accounting/PendingVendorRequestsManager';
+export { PendingVendorRequestsManager } from '@roam/platform-ops-ui';

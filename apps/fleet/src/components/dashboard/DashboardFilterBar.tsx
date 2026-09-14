@@ -100,7 +100,7 @@ export function DashboardFilterBar(props: Props) {
   const searchPlaceholder = isDelivery ? 'Search couriers' : 'Search vehicles';
 
   return (
-    <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+    <div className="hidden flex-col gap-3 md:flex lg:flex-row lg:items-center lg:justify-between">
       <div className="flex items-center gap-2 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         <Button
           type="button"

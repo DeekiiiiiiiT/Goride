@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Fails when fuel shims regain forked implementations instead of re-exporting
- * @roam/fuel-core / fleet-canonical. See packages/fuel-core/README.md.
+ * @roam/fuel-core. See packages/fuel-core/README.md.
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -16,13 +16,28 @@ const SHIMS = [
     forbidden: /export const FLEET_USE_FUEL_BRAIN =\s*\n?\s*import\.meta\.env/,
   },
   {
-    rel: 'apps/admin/src/services/fuelCalculationService.ts',
-    mustMatch: /from\s+['"]@fleet\/services\/fuelCalculationService['"]/,
+    rel: 'apps/fleet/src/utils/fuelCycleEngine.ts',
+    mustMatch: /from\s+['"]@roam\/fuel-core['"]/,
+    forbidden: /export function calculateFuelCycles\s*\(/,
+  },
+  {
+    rel: 'apps/fleet/src/services/fuelCalculationService.ts',
+    mustMatch: /from\s+['"]@roam\/fuel-core['"]/,
     forbidden: /FALLBACK_PRICE_PER_LITER\s*=\s*1\.50/,
   },
   {
+    rel: 'apps/admin/src/services/fuelCalculationService.ts',
+    mustMatch: /from\s+['"]@roam\/fuel-core['"]/,
+    forbidden: /FALLBACK_PRICE_PER_LITER\s*=\s*1\.50/,
+  },
+  {
+    rel: 'apps/admin/src/utils/fuelCycleEngine.ts',
+    mustMatch: /from\s+['"]@roam\/fuel-core['"]/,
+    forbidden: /export function calculateFuelCycles\s*\(/,
+  },
+  {
     rel: 'apps/driver/src/services/fuelCalculationService.ts',
-    mustMatch: /from\s+['"]@fleet\/services\/fuelCalculationService['"]/,
+    mustMatch: /from\s+['"]@roam\/fuel-core['"]/,
     forbidden: /FALLBACK_PRICE_PER_LITER\s*=\s*1\.50/,
   },
   {
@@ -70,7 +85,7 @@ for (const shim of SHIMS) {
   }
   if (!shim.mustMatch.test(text)) {
     failed = true;
-    console.error(`${shim.rel}: must re-export from @roam/fuel-core / @fleet canonical`);
+    console.error(`${shim.rel}: must re-export from @roam/fuel-core`);
   }
   if (shim.forbidden.test(text)) {
     failed = true;

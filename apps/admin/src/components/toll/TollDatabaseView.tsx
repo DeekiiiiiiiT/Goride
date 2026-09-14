@@ -1,1 +1,1 @@
-export { TollDatabaseView } from '@fleet/components/toll/TollDatabaseView';
+export { TollDatabaseView } from '@roam/platform-ops-ui';

@@ -1,0 +1,1267 @@
+import React, { useState, useMemo, useCallback, useRef } from 'react';
+import { Trip } from '@roam/types';
+import { Copy, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, ChevronsUpDown, AlertTriangle } from 'lucide-react';
+import { PaymentLinesPanel } from './PaymentLinesPanel';
+import { toast } from 'sonner';
+import type { ColumnDef } from './TripLedgerColumnToggle';
+import { getTripNetIncome } from '../../utils/tripNetIncome';
+import { isTripServerSortKey } from '../../utils/tripSortKeys';
+import { usePlatformConfig } from '../../contexts/PlatformConfigContext';
+import { useVirtualizer } from '@tanstack/react-virtual';
+
+// ── Formatters ──────────────────────────────────────────────────────────────
+
+/** F-34: set from usePlatformConfig in table roots; defaults to org currency JMD */
+let activeLedgerCurrency = 'JMD';
+
+export function setLedgerTableCurrency(code: string) {
+  if (code && typeof code === 'string') activeLedgerCurrency = code;
+}
+
+function formatCurrency(value: number | null | undefined, currency = activeLedgerCurrency): string {
+  if (value == null) return '—';
+  try {
+    return new Intl.NumberFormat(undefined, {
+      style: 'currency',
+      currency,
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(value);
+  } catch {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(value);
+  }
+}
+
+function formatDate(iso: string | null | undefined): string {
+  if (!iso) return '—';
+  try {
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return '—';
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) +
+      ' ' +
+      d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+  } catch {
+    return '—';
+  }
+}
+
+/** Date only — same source as `date` column, split for display */
+function formatDateOnly(iso: string | null | undefined): string {
+  if (!iso) return '—';
+  try {
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return '—';
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  } catch {
+    return '—';
+  }
+}
+
+/** Time only — same source as `date` column */
+function formatTimeOnly(iso: string | null | undefined): string {
+  if (!iso) return '—';
+  try {
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return '—';
+    return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+  } catch {
+    return '—';
+  }
+}
+
+function formatDistance(km: number | null | undefined): string {
+  if (km == null) return '—';
+  return `${km.toFixed(1)} km`;
+}
+
+function formatDuration(min: number | null | undefined): string {
+  if (min == null) return '—';
+  if (min < 1) return '<1 min';
+  if (min >= 60) {
+    const h = Math.floor(min / 60);
+    const m = Math.round(min % 60);
+    return m > 0 ? `${h}h ${m}m` : `${h}h`;
+  }
+  return `${Math.round(min)} min`;
+}
+
+function truncateId(id: string): string {
+  if (!id) return '—';
+  return id.length > 8 ? '…' + id.slice(-8) : id;
+}
+
+function formatPercent(v: number | null | undefined): string {
+  if (v == null) return '—';
+  return `${v.toFixed(1)}%`;
+}
+
+// ── Net income helper ───────────────────────────────────────────────────────
+
+function getNetIncome(t: Trip): number | null {
+  return getTripNetIncome(t);
+}
+
+// ── Batch source label ──────────────────────────────────────────────────────
+
+function getBatchLabel(trip: Trip): string {
+  if ((trip as any).isManual) return 'Manual Entry';
+  if ((trip as any).isLiveRecorded) return 'Live Recording';
+  if (trip.batchId) return truncateId(trip.batchId);
+  return '—';
+}
+
+// ── Platform & Status badges ────────────────────────────────────────────────
+
+const PLATFORM_BADGE_CLASSES: Record<string, string> = {
+  Uber: 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300',
+  Lyft: 'bg-pink-100 text-pink-800 dark:bg-pink-900/40 dark:text-pink-300',
+  Bolt: 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300',
+  InDrive: 'bg-orange-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-300',
+  Roam: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/40 dark:text-indigo-300',
+  GoRide: 'bg-cyan-100 text-cyan-800 dark:bg-cyan-900/40 dark:text-cyan-300',
+  Private: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300',
+  Cash: 'bg-lime-100 text-lime-800 dark:bg-lime-900/40 dark:text-lime-300',
+  Other: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300',
+};
+
+const STATUS_BADGE_CLASSES: Record<string, string> = {
+  Completed: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300',
+  Cancelled: 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300',
+  Processing: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300',
+};
+
+// ── Sorting ─────────────────────────────────────────────────────────────────
+
+type SortDir = 'asc' | 'desc' | null;
+
+/** Get a raw sortable value from a trip for a given column key */
+function getSortValue(trip: Trip, key: string): string | number | null {
+  switch (key) {
+    case 'id': return trip.id || '';
+    case 'date': return trip.date || '';
+    case 'tripDate': return trip.date || '';
+    case 'tripTime': return trip.date || '';
+    case 'driver': return (trip.driverName || trip.driverId || '').toUpperCase();
+    case 'vehicle': return trip.vehicleId || '';
+    case 'platform': return trip.platform || '';
+    case 'status': return trip.status || '';
+    case 'distance': return trip.distance ?? null;
+    case 'duration': return trip.duration ?? null;
+    case 'amount': return trip.amount ?? null;
+    case 'netIncome': return getNetIncome(trip);
+    case 'paymentMethod': return trip.paymentMethod || '';
+    case 'cashCollected': return trip.cashCollected ?? null;
+    case 'tips': return trip.fareBreakdown?.tips ?? null;
+    case 'surge': return trip.fareBreakdown?.surge ?? null;
+    case 'tolls': return trip.tollCharges ?? null;
+    case 'serviceFee': return trip.indriveServiceFee ?? null;
+    case 'pickup': return trip.pickupLocation || '';
+    case 'dropoff': return trip.dropoffLocation || '';
+    case 'serviceCategory': return trip.serviceCategory || '';
+    case 'batchSource': return trip.batchId || '';
+    case 'efficiencyScore': return trip.efficiencyScore ?? null;
+    case 'requestTime': return trip.requestTime || '';
+    case 'dropoffTime': return trip.dropoffTime || '';
+    case 'serviceType': return (trip.serviceType || trip.productType || '').toUpperCase();
+    case 'grossEarnings': return trip.grossEarnings ?? null;
+    case 'netPayout': return trip.netPayout ?? null;
+    case 'pickupArea': return trip.pickupArea || '';
+    case 'dropoffArea': return trip.dropoffArea || '';
+    case 'baseFare': return trip.fareBreakdown?.baseFare ?? null;
+    case 'waitTime': return trip.fareBreakdown?.waitTime ?? null;
+    case 'airportFees': return trip.fareBreakdown?.airportFees ?? null;
+    case 'timeAtStop': return trip.fareBreakdown?.timeAtStop ?? null;
+    case 'taxes': return trip.fareBreakdown?.taxes ?? null;
+    case 'indriveServiceFeePercent': return trip.indriveServiceFeePercent ?? null;
+    case 'indriveNetIncome': return trip.indriveNetIncome ?? null;
+    case 'indriveBalanceDeduction': return trip.indriveBalanceDeduction ?? null;
+    case 'speed': return trip.speed ?? null;
+    case 'earningsPerKm': return trip.earningsPerKm ?? null;
+    case 'earningsPerMin': return trip.earningsPerMin ?? null;
+    case 'tripRating': return trip.tripRating ?? null;
+    case 'dayOfWeek': return trip.dayOfWeek || '';
+    case 'anchorPeriod': return trip.anchorPeriodId || '';
+    case 'routeId': return trip.routeId || '';
+    case 'notes': return trip.notes || '';
+    case 'uberFareComponents': return trip.uberFareComponents ?? null;
+    case 'uberTips': return trip.uberTips ?? null;
+    case 'uberPriorPeriodAdjustment': return trip.uberPriorPeriodAdjustment ?? null;
+    case 'paidToYouNet': return trip.paidToYouNet ?? null;
+    case 'bankTransferred': return trip.bankTransferred ?? null;
+    case 'cancellationFare': return trip.cancellationFare ?? null;
+    case 'transactionType': return trip.transactionType || '';
+    case 'paymentRowCount': return trip.paymentRowCount ?? null;
+    case 'uberSsotMatch': return trip.uberSsotFarePlusTipsMatch === true ? 1 : trip.uberSsotFarePlusTipsMatch === false ? 0 : null;
+    case 'missingTripActivity': return trip.missingTripActivityInExport ? 1 : 0;
+    default: return null;
+  }
+}
+
+function compareValues(a: string | number | null, b: string | number | null, dir: 'asc' | 'desc'): number {
+  // nulls always last
+  if (a == null && b == null) return 0;
+  if (a == null) return 1;
+  if (b == null) return -1;
+  let cmp = 0;
+  if (typeof a === 'number' && typeof b === 'number') {
+    cmp = a - b;
+  } else {
+    cmp = String(a).localeCompare(String(b));
+  }
+  return dir === 'desc' ? -cmp : cmp;
+}
+
+// ── Column definitions (exported for use by ColumnToggle & Page) ────────────
+
+export interface RenderColumnDef extends ColumnDef {
+  render: (trip: Trip) => React.ReactNode;
+  align?: 'left' | 'right';
+  minWidth?: string;
+  sortable?: boolean;
+}
+
+export const ALL_COLUMNS: RenderColumnDef[] = [
+  // ── Core Fields (12 default-visible) ──
+  {
+    key: 'id', label: 'ID', defaultVisible: true, group: 'core',
+    render: (t) => truncateId(t.id),
+    minWidth: '100px', sortable: true,
+  },
+  {
+    key: 'date', label: 'Date/Time', defaultVisible: true, group: 'core',
+    render: (t) => formatDate(t.date),
+    minWidth: '160px', sortable: true,
+  },
+  {
+    key: 'tripDate', label: 'Date', defaultVisible: false, group: 'core',
+    render: (t) => formatDateOnly(t.date),
+    minWidth: '120px', sortable: true,
+  },
+  {
+    key: 'tripTime', label: 'Time', defaultVisible: false, group: 'core',
+    render: (t) => formatTimeOnly(t.date),
+    minWidth: '100px', sortable: true,
+  },
+  {
+    key: 'driver', label: 'Driver', defaultVisible: true, group: 'core',
+    render: (t) => {
+      if (t.driverName?.trim()) return t.driverName.trim().toUpperCase();
+      return t.driverId ? truncateId(t.driverId) : '—';
+    },
+    minWidth: '120px', sortable: true,
+  },
+  {
+    key: 'vehicle', label: 'Vehicle', defaultVisible: true, group: 'core',
+    render: (t) => t.vehicleId ? truncateId(t.vehicleId) : '—',
+    minWidth: '100px', sortable: true,
+  },
+  {
+    key: 'platform', label: 'Platform', defaultVisible: true, group: 'core',
+    render: (t) => {
+      const cls = PLATFORM_BADGE_CLASSES[t.platform] || PLATFORM_BADGE_CLASSES.Other;
+      return <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${cls}`}>{t.platform}</span>;
+    },
+    sortable: true,
+  },
+  {
+    key: 'status', label: 'Status', defaultVisible: true, group: 'core',
+    render: (t) => {
+      const cls = STATUS_BADGE_CLASSES[t.status] || STATUS_BADGE_CLASSES.Processing;
+      return <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${cls}`}>{t.status}</span>;
+    },
+    sortable: true,
+  },
+  {
+    key: 'distance', label: 'Distance', defaultVisible: true, group: 'core',
+    render: (t) => formatDistance(t.distance),
+    align: 'right', sortable: true,
+  },
+  {
+    key: 'duration', label: 'Duration', defaultVisible: true, group: 'core',
+    render: (t) => formatDuration(t.duration),
+    align: 'right', sortable: true,
+  },
+
+  // ── Financial Fields ──
+  {
+    key: 'amount', label: 'Amount', defaultVisible: true, group: 'financial',
+    render: (t) => formatCurrency(t.amount),
+    align: 'right', sortable: true,
+  },
+  {
+    key: 'netIncome', label: 'Net Income', defaultVisible: true, group: 'financial',
+    render: (t) => formatCurrency(getNetIncome(t)),
+    align: 'right', sortable: true,
+  },
+  {
+    key: 'paymentMethod', label: 'Payment', defaultVisible: true, group: 'financial',
+    render: (t) => t.paymentMethod || '—',
+    sortable: true,
+  },
+  {
+    key: 'cashCollected', label: 'Cash Collected', defaultVisible: true, group: 'financial',
+    render: (t) => t.cashCollected ? formatCurrency(t.cashCollected) : '—',
+    align: 'right', sortable: true,
+  },
+  {
+    key: 'tips', label: 'Tips', defaultVisible: false, group: 'financial',
+    render: (t) => t.fareBreakdown?.tips ? formatCurrency(t.fareBreakdown.tips) : '—',
+    align: 'right', sortable: true,
+  },
+  {
+    key: 'surge', label: 'Surge', defaultVisible: false, group: 'financial',
+    render: (t) => t.fareBreakdown?.surge ? formatCurrency(t.fareBreakdown.surge) : '—',
+    align: 'right', sortable: true,
+  },
+  {
+    key: 'tolls', label: 'Tolls', defaultVisible: false, group: 'financial',
+    render: (t) => t.tollCharges ? formatCurrency(t.tollCharges) : '—',
+    align: 'right', sortable: true,
+  },
+  {
+    key: 'serviceFee', label: 'Service Fee', defaultVisible: false, group: 'indrive',
+    render: (t) => t.indriveServiceFee ? formatCurrency(t.indriveServiceFee) : '—',
+    align: 'right', sortable: true,
+  },
+
+  // ── Metadata Fields ──
+  {
+    key: 'pickup', label: 'Pickup', defaultVisible: false, group: 'meta',
+    render: (t) => t.pickupLocation || '—',
+    minWidth: '180px', sortable: true,
+  },
+  {
+    key: 'dropoff', label: 'Dropoff', defaultVisible: false, group: 'meta',
+    render: (t) => t.dropoffLocation || '—',
+    minWidth: '180px', sortable: true,
+  },
+  {
+    key: 'serviceCategory', label: 'Service Category', defaultVisible: false, group: 'meta',
+    render: (t) => {
+      if (!t.serviceCategory) return '—';
+      if (t.serviceCategory === 'courier') return <span className="inline-flex items-center gap-1 text-xs"><span>📦</span> Courier</span>;
+      return <span className="text-xs">Ride</span>;
+    },
+    sortable: true,
+  },
+  {
+    key: 'batchSource', label: 'Batch Source', defaultVisible: false, group: 'meta',
+    render: (t) => getBatchLabel(t),
+    sortable: true,
+  },
+  {
+    key: 'efficiencyScore', label: 'Efficiency', defaultVisible: false, group: 'meta',
+    render: (t) => t.efficiencyScore != null ? `${Math.round(t.efficiencyScore)}/100` : '—',
+    align: 'right', sortable: true,
+  },
+
+  // ── Extended timing & service ──
+  {
+    key: 'requestTime', label: 'Request Time', defaultVisible: false, group: 'meta',
+    render: (t) => formatDate(t.requestTime),
+    minWidth: '160px', sortable: true,
+  },
+  {
+    key: 'dropoffTime', label: 'Dropoff Time', defaultVisible: false, group: 'meta',
+    render: (t) => formatDate(t.dropoffTime),
+    minWidth: '160px', sortable: true,
+  },
+  {
+    key: 'serviceType', label: 'Service Type', defaultVisible: false, group: 'meta',
+    render: (t) => t.serviceType || t.productType || '—',
+    minWidth: '120px', sortable: true,
+  },
+
+  // ── Extra financials ──
+  {
+    key: 'grossEarnings', label: 'Gross Earnings', defaultVisible: false, group: 'financial',
+    render: (t) => formatCurrency(t.grossEarnings),
+    align: 'right', sortable: true,
+  },
+  {
+    key: 'netPayout', label: 'Net Payout', defaultVisible: false, group: 'financial',
+    render: (t) => formatCurrency(t.netPayout),
+    align: 'right', sortable: true,
+  },
+  {
+    key: 'baseFare', label: 'Base Fare', defaultVisible: false, group: 'financial',
+    render: (t) => formatCurrency(t.fareBreakdown?.baseFare),
+    align: 'right', sortable: true,
+  },
+  {
+    key: 'waitTime', label: 'Wait Time Fee', defaultVisible: false, group: 'financial',
+    render: (t) => formatCurrency(t.fareBreakdown?.waitTime),
+    align: 'right', sortable: true,
+  },
+  {
+    key: 'airportFees', label: 'Airport Fees', defaultVisible: false, group: 'financial',
+    render: (t) => formatCurrency(t.fareBreakdown?.airportFees),
+    align: 'right', sortable: true,
+  },
+  {
+    key: 'timeAtStop', label: 'Time at Stop', defaultVisible: false, group: 'financial',
+    render: (t) => formatCurrency(t.fareBreakdown?.timeAtStop),
+    align: 'right', sortable: true,
+  },
+  {
+    key: 'taxes', label: 'Taxes', defaultVisible: false, group: 'financial',
+    render: (t) => formatCurrency(t.fareBreakdown?.taxes),
+    align: 'right', sortable: true,
+  },
+  {
+    key: 'indriveServiceFeePercent', label: 'InDrive Fee %', defaultVisible: false, group: 'indrive',
+    render: (t) => formatPercent(t.indriveServiceFeePercent),
+    align: 'right', sortable: true,
+  },
+  {
+    key: 'indriveNetIncome', label: 'InDrive Net Income', defaultVisible: false, group: 'indrive',
+    render: (t) => formatCurrency(t.indriveNetIncome),
+    align: 'right', sortable: true,
+  },
+  {
+    key: 'indriveBalanceDeduction', label: 'Balance Deduction', defaultVisible: false, group: 'indrive',
+    render: (t) => formatCurrency(t.indriveBalanceDeduction),
+    align: 'right', sortable: true,
+  },
+
+  // ── Geography & analytics ──
+  {
+    key: 'pickupArea', label: 'Pickup Area', defaultVisible: false, group: 'meta',
+    render: (t) => t.pickupArea || '—',
+    minWidth: '140px', sortable: true,
+  },
+  {
+    key: 'dropoffArea', label: 'Dropoff Area', defaultVisible: false, group: 'meta',
+    render: (t) => t.dropoffArea || '—',
+    minWidth: '140px', sortable: true,
+  },
+  {
+    key: 'speed', label: 'Speed', defaultVisible: false, group: 'meta',
+    render: (t) => t.speed != null ? `${t.speed.toFixed(1)} km/h` : '—',
+    align: 'right', sortable: true,
+  },
+  {
+    key: 'earningsPerKm', label: 'Earnings/km', defaultVisible: false, group: 'meta',
+    render: (t) => formatCurrency(t.earningsPerKm),
+    align: 'right', sortable: true,
+  },
+  {
+    key: 'earningsPerMin', label: 'Earnings/min', defaultVisible: false, group: 'meta',
+    render: (t) => formatCurrency(t.earningsPerMin),
+    align: 'right', sortable: true,
+  },
+  {
+    key: 'tripRating', label: 'Trip Rating', defaultVisible: false, group: 'meta',
+    render: (t) => t.tripRating != null ? `${t.tripRating}/5` : '—',
+    align: 'right', sortable: true,
+  },
+  {
+    key: 'dayOfWeek', label: 'Day of Week', defaultVisible: false, group: 'meta',
+    render: (t) => t.dayOfWeek || '—',
+    sortable: true,
+  },
+  {
+    key: 'anchorPeriod', label: 'Anchor Period', defaultVisible: false, group: 'meta',
+    render: (t) => (t.anchorPeriodId ? truncateId(t.anchorPeriodId) : '—'),
+    minWidth: '100px', sortable: true,
+  },
+  {
+    key: 'routeId', label: 'Route ID', defaultVisible: false, group: 'meta',
+    render: (t) => t.routeId || '—',
+    minWidth: '140px', sortable: true,
+  },
+  {
+    key: 'notes', label: 'Notes', defaultVisible: false, group: 'meta',
+    render: (t) => t.notes || '—',
+    minWidth: '180px', sortable: true,
+  },
+
+  // ── Uber SSOT fields ──
+  {
+    key: 'uberFareComponents', label: 'Uber Fare', defaultVisible: false, group: 'uber',
+    render: (t) => formatCurrency(t.uberFareComponents),
+    align: 'right', sortable: true,
+  },
+  {
+    key: 'uberTips', label: 'Uber Tips', defaultVisible: false, group: 'uber',
+    render: (t) => formatCurrency(t.uberTips),
+    align: 'right', sortable: true,
+  },
+  {
+    key: 'uberPriorPeriodAdjustment', label: 'Prior Period Adj.', defaultVisible: false, group: 'uber',
+    render: (t) => formatCurrency(t.uberPriorPeriodAdjustment),
+    align: 'right', sortable: true,
+  },
+  {
+    key: 'paidToYouNet', label: 'Paid To You (Net)', defaultVisible: false, group: 'uber',
+    render: (t) => formatCurrency(t.paidToYouNet),
+    align: 'right', sortable: true,
+  },
+  {
+    key: 'bankTransferred', label: 'Bank Transfer', defaultVisible: false, group: 'uber',
+    render: (t) => formatCurrency(t.bankTransferred),
+    align: 'right', sortable: true,
+  },
+  {
+    key: 'cancellationFare', label: 'Cancellation Fare', defaultVisible: false, group: 'uber',
+    render: (t) => formatCurrency(t.cancellationFare),
+    align: 'right', sortable: true,
+  },
+  {
+    key: 'transactionType', label: 'Transaction Type', defaultVisible: false, group: 'uber',
+    render: (t) => t.transactionType || '—',
+    minWidth: '160px', sortable: true,
+  },
+  {
+    key: 'paymentRowCount', label: 'Payment Rows', defaultVisible: false, group: 'uber',
+    render: (t) => t.paymentRowCount != null ? String(t.paymentRowCount) : '—',
+    align: 'right', sortable: true,
+  },
+  {
+    key: 'uberTripStatus', label: 'Uber Status', defaultVisible: false, group: 'uber',
+    render: (t) => t.uberTripStatus || (t.status === 'Cancelled' ? 'cancelled' : t.status) || '—',
+    minWidth: '120px', sortable: true,
+  },
+  {
+    key: 'paymentLineRollupMatch', label: 'Lines Match', defaultVisible: true, group: 'uber',
+    render: (t) => {
+      if (t.paymentLineRollupMatch === undefined) return '—';
+      return t.paymentLineRollupMatch ? (
+        <span className="text-emerald-600 dark:text-emerald-400">Yes</span>
+      ) : (
+        <span className="text-amber-600 dark:text-amber-400">No</span>
+      );
+    },
+    sortable: true,
+  },
+  {
+    key: 'uberSsotMatch', label: 'SSOT Match', defaultVisible: false, group: 'uber',
+    render: (t) => {
+      if (t.uberSsotFarePlusTipsMatch === undefined) return '—';
+      return t.uberSsotFarePlusTipsMatch ? (
+        <span className="text-emerald-600 dark:text-emerald-400">Yes</span>
+      ) : (
+        <span className="text-amber-600 dark:text-amber-400">No</span>
+      );
+    },
+    sortable: true,
+  },
+  {
+    key: 'missingTripActivity', label: 'Missing Activity', defaultVisible: false, group: 'uber',
+    render: (t) =>
+      t.missingTripActivityInExport ? (
+        <span className="inline-flex items-center gap-1 text-amber-600 dark:text-amber-400">
+          <AlertTriangle className="h-3 w-3" /> Yes
+        </span>
+      ) : (
+        '—'
+      ),
+    sortable: true,
+  },
+];
+
+/** Super Admin Ledger Settings: UI sections (grouped headers). Technical groups core|financial|meta map to Common. */
+export type TripLedgerSettingsSectionId = 'common' | 'indrive' | 'uber' | 'roam' | 'custom';
+
+export const TRIP_SETTINGS_SECTION_ORDER: TripLedgerSettingsSectionId[] = [
+  'common',
+  'indrive',
+  'uber',
+  'roam',
+  'custom',
+];
+
+export const TRIP_SETTINGS_SECTION_LABELS: Record<TripLedgerSettingsSectionId, string> = {
+  common: 'Common',
+  indrive: 'InDrive',
+  uber: 'Uber',
+  roam: 'Roam',
+  custom: 'Custom',
+};
+
+export function getTripLedgerSettingsSection(col: { key: string; custom?: boolean }): TripLedgerSettingsSectionId {
+  if (col.custom) return 'custom';
+  const g = ALL_COLUMNS.find(c => c.key === col.key)?.group;
+  if (!g) return 'custom';
+  if (g === 'core' || g === 'financial' || g === 'meta') return 'common';
+  if (g === 'indrive') return 'indrive';
+  if (g === 'uber') return 'uber';
+  if (g === 'roam') return 'roam';
+  return 'common';
+}
+
+export function bucketTripLedgerSettingsColumns<T extends { key: string; custom?: boolean }>(
+  columns: T[],
+): Map<TripLedgerSettingsSectionId, T[]> {
+  const buckets = new Map<TripLedgerSettingsSectionId, T[]>();
+  for (const id of TRIP_SETTINGS_SECTION_ORDER) buckets.set(id, []);
+  for (const col of columns) {
+    buckets.get(getTripLedgerSettingsSection(col))!.push(col);
+  }
+  return buckets;
+}
+
+export const DEFAULT_VISIBLE_KEYS = ALL_COLUMNS.filter(c => c.defaultVisible).map(c => c.key);
+
+/** Super Admin ledger config: merge saved labels + column order with ALL_COLUMNS render/sort logic. */
+export function mergeTripLedgerActiveColumns(
+  visibleColumns: string[],
+  columnConfig?: { key: string; label: string; visible: boolean }[],
+): RenderColumnDef[] {
+  if (columnConfig != null && columnConfig.length > 0) {
+    const out: RenderColumnDef[] = [];
+    for (const c of columnConfig) {
+      if (!c.visible) continue;
+      const base = ALL_COLUMNS.find(ac => ac.key === c.key);
+      if (!base) continue;
+      const label = c.label?.trim() ? c.label.trim() : base.label;
+      out.push({ ...base, label });
+    }
+    return out;
+  }
+  return ALL_COLUMNS.filter(col => visibleColumns.includes(col.key));
+}
+
+// ── Skeleton ────────────────────────────────────────────────────────────────
+
+function SkeletonRow({ colCount }: { colCount: number }) {
+  return (
+    <tr className="animate-pulse">
+      {Array.from({ length: colCount }).map((_, i) => (
+        <td key={i} className="px-3 py-3">
+          <div className="h-4 bg-slate-200 dark:bg-slate-700 rounded w-full" />
+        </td>
+      ))}
+    </tr>
+  );
+}
+
+// ── Expanded Detail Panel ───────────────────────────────────────────────────
+
+function DetailField({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div className="flex flex-col gap-0.5">
+      <span className="text-[10px] uppercase tracking-wider text-slate-400 dark:text-slate-500 font-medium">{label}</span>
+      <span className="text-sm text-slate-700 dark:text-slate-300">{value || '—'}</span>
+    </div>
+  );
+}
+
+/**
+ * Maps column keys to their value extractors for the detail panel.
+ * This allows the detail panel to be data-driven by the column config.
+ */
+const DETAIL_FIELD_EXTRACTORS: Record<string, { label: string; getValue: (t: Trip) => React.ReactNode }> = {
+  // Core fields
+  id: { label: 'ID', getValue: (t) => <span className="font-mono text-xs">{t.id}</span> },
+  date: { label: 'Date & Time', getValue: (t) => formatDate(t.date) },
+  tripDate: { label: 'Date', getValue: (t) => formatDateOnly(t.date) },
+  tripTime: { label: 'Time', getValue: (t) => formatTimeOnly(t.date) },
+  requestTime: { label: 'Request Time', getValue: (t) => formatDate(t.requestTime) },
+  dropoffTime: { label: 'Dropoff Time', getValue: (t) => formatDate(t.dropoffTime) },
+  platform: { label: 'Platform', getValue: (t) => t.platform },
+  status: { label: 'Status', getValue: (t) => t.status },
+  serviceType: { label: 'Service Type', getValue: (t) => t.serviceType || t.productType },
+  serviceCategory: { label: 'Service Category', getValue: (t) => t.serviceCategory === 'courier' ? 'Courier' : t.serviceCategory === 'ride' ? 'Ride' : t.serviceCategory },
+  driver: { label: 'Driver', getValue: (t) => t.driverName?.trim() ? t.driverName.trim().toUpperCase() : t.driverName || t.driverId },
+  vehicle: { label: 'Vehicle', getValue: (t) => t.vehicleId },
+  
+  // Geography
+  pickup: { label: 'Pickup', getValue: (t) => t.pickupLocation },
+  dropoff: { label: 'Dropoff', getValue: (t) => t.dropoffLocation },
+  pickupArea: { label: 'Pickup Area', getValue: (t) => t.pickupArea },
+  dropoffArea: { label: 'Dropoff Area', getValue: (t) => t.dropoffArea },
+  distance: { label: 'Distance', getValue: (t) => formatDistance(t.distance) },
+  duration: { label: 'Duration', getValue: (t) => formatDuration(t.duration) },
+  
+  // Financial
+  amount: { label: 'Amount', getValue: (t) => formatCurrency(t.amount) },
+  grossEarnings: { label: 'Gross Earnings', getValue: (t) => formatCurrency(t.grossEarnings) },
+  netIncome: { label: 'Net to Driver', getValue: (t) => formatCurrency(getNetIncome(t)) },
+  paymentMethod: { label: 'Payment Method', getValue: (t) => t.paymentMethod },
+  cashCollected: { label: 'Cash Collected', getValue: (t) => formatCurrency(t.cashCollected) },
+  netPayout: { label: 'Net Payout', getValue: (t) => formatCurrency(t.netPayout) },
+  tolls: { label: 'Toll Charges', getValue: (t) => formatCurrency(t.tollCharges) },
+  
+  // Fare breakdown
+  baseFare: { label: 'Base Fare', getValue: (t) => formatCurrency(t.fareBreakdown?.baseFare) },
+  tips: { label: 'Tips', getValue: (t) => formatCurrency(t.fareBreakdown?.tips) },
+  waitTime: { label: 'Wait Time Fee', getValue: (t) => formatCurrency(t.fareBreakdown?.waitTime) },
+  surge: { label: 'Surge', getValue: (t) => formatCurrency(t.fareBreakdown?.surge) },
+  airportFees: { label: 'Airport Fees', getValue: (t) => formatCurrency(t.fareBreakdown?.airportFees) },
+  timeAtStop: { label: 'Time at Stop', getValue: (t) => formatCurrency(t.fareBreakdown?.timeAtStop) },
+  taxes: { label: 'Taxes', getValue: (t) => formatCurrency(t.fareBreakdown?.taxes) },
+  
+  // InDrive-specific
+  serviceFee: { label: 'InDrive Service Fee', getValue: (t) => formatCurrency(t.indriveServiceFee) },
+  indriveServiceFeePercent: { label: 'InDrive Fee %', getValue: (t) => formatPercent(t.indriveServiceFeePercent) },
+  indriveNetIncome: { label: 'InDrive Net Income', getValue: (t) => formatCurrency(t.indriveNetIncome) },
+  indriveBalanceDeduction: { label: 'Balance Deduction', getValue: (t) => formatCurrency(t.indriveBalanceDeduction) },
+  
+  // Analytics
+  speed: { label: 'Speed', getValue: (t) => t.speed != null ? `${t.speed.toFixed(1)} km/h` : undefined },
+  earningsPerKm: { label: 'Earnings/km', getValue: (t) => t.earningsPerKm != null ? formatCurrency(t.earningsPerKm) : undefined },
+  earningsPerMin: { label: 'Earnings/min', getValue: (t) => t.earningsPerMin != null ? formatCurrency(t.earningsPerMin) : undefined },
+  efficiencyScore: { label: 'Efficiency Score', getValue: (t) => t.efficiencyScore != null ? `${Math.round(t.efficiencyScore)}/100` : undefined },
+  tripRating: { label: 'Trip Rating', getValue: (t) => t.tripRating != null ? `${t.tripRating}/5` : undefined },
+  dayOfWeek: { label: 'Day of Week', getValue: (t) => t.dayOfWeek },
+  
+  // Metadata
+  batchSource: { label: 'Batch ID', getValue: (t) => t.batchId ? <span className="font-mono text-xs">{t.batchId}</span> : undefined },
+  anchorPeriod: { label: 'Anchor Period', getValue: (t) => t.anchorPeriodId ? <span className="font-mono text-xs">{t.anchorPeriodId}</span> : undefined },
+  routeId: { label: 'Route ID', getValue: (t) => t.routeId },
+  notes: { label: 'Notes', getValue: (t) => t.notes },
+};
+
+/** Default detail fields shown when no column config is provided (and base set when Super Admin config exists — table visibility does not strip these). */
+const DEFAULT_DETAIL_KEYS = [
+  'date', 'requestTime', 'dropoffTime', 'platform', 'status', 'serviceType', 'serviceCategory', 'driver', 'vehicle',
+  'pickup', 'dropoff', 'pickupArea', 'dropoffArea', 'distance', 'duration',
+  'amount', 'grossEarnings', 'netIncome', 'paymentMethod', 'cashCollected', 'netPayout', 'tolls',
+  'baseFare', 'tips', 'waitTime', 'surge', 'airportFees', 'timeAtStop', 'taxes',
+  'serviceFee', 'indriveServiceFeePercent', 'indriveNetIncome', 'indriveBalanceDeduction',
+  'speed', 'earningsPerKm', 'earningsPerMin', 'efficiencyScore', 'tripRating', 'dayOfWeek',
+  'batchSource', 'anchorPeriod', 'routeId', 'notes',
+];
+
+interface TripDetailPanelProps {
+  trip: Trip;
+  colSpan: number;
+  columnConfig?: ColumnConfig[];
+}
+
+function TripDetailPanel({ trip, colSpan, columnConfig }: TripDetailPanelProps) {
+  /** Expanded row always lists the full extractor set; column config only overrides labels (and appends custom keys). Table column visibility stays independent. */
+  const fieldsToShow = useMemo(() => {
+    if (!columnConfig?.length) return DEFAULT_DETAIL_KEYS;
+    const customKeys = columnConfig.filter(c => c.custom).map(c => c.key);
+    const seen = new Set<string>(DEFAULT_DETAIL_KEYS);
+    const out = [...DEFAULT_DETAIL_KEYS];
+    for (const k of customKeys) {
+      if (!seen.has(k)) {
+        seen.add(k);
+        out.push(k);
+      }
+    }
+    return out;
+  }, [columnConfig]);
+
+  // Include cancellation fields if trip is cancelled
+  const isCancelled = trip.status === 'Cancelled';
+  
+  return (
+    <tr>
+      <td colSpan={colSpan} className="p-0">
+        <div className="bg-slate-50 dark:bg-slate-800/50 border-t border-b border-slate-200 dark:border-slate-700 px-6 py-4">
+          {/* Title */}
+          <div className="flex items-center gap-2 mb-4">
+            <h4 className="text-sm font-semibold text-slate-800 dark:text-slate-200">Trip Details</h4>
+            <span className="text-xs text-slate-400 dark:text-slate-500 font-mono">{trip.id}</span>
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-x-6 gap-y-3">
+            {fieldsToShow.map(key => {
+              const extractor = DETAIL_FIELD_EXTRACTORS[key];
+              if (!extractor) {
+                // Handle custom columns - show raw value from trip
+                const customValue = (trip as any)[key];
+                if (customValue === undefined || customValue === null) return null;
+                const configCol = columnConfig?.find(c => c.key === key);
+                return (
+                  <DetailField 
+                    key={key} 
+                    label={configCol?.label || key} 
+                    value={String(customValue)} 
+                  />
+                );
+              }
+              const value = extractor.getValue(trip);
+              if (value === undefined || value === null || value === '') return null;
+              const cfgLabel = columnConfig?.find(cc => cc.key === key)?.label?.trim();
+              const displayLabel = cfgLabel || extractor.label;
+              return <DetailField key={key} label={displayLabel} value={value} />;
+            })}
+
+            {/* Always show cancellation fields if cancelled */}
+            {isCancelled && (
+              <>
+                <DetailField label="Cancelled By" value={trip.cancelledBy} />
+                <DetailField label="Cancellation Reason" value={trip.cancellationReason} />
+                <DetailField label="Estimated Loss" value={formatCurrency(trip.estimatedLoss)} />
+              </>
+            )}
+            
+            {/* Uber prior period adjustment */}
+            {trip.uberPriorPeriodAdjustment != null && Math.abs(trip.uberPriorPeriodAdjustment) > 0.0001 && (
+              <DetailField label="Adj. previous periods" value={formatCurrency(trip.uberPriorPeriodAdjustment)} />
+            )}
+          </div>
+
+          <PaymentLinesPanel tripId={trip.id} batchId={trip.batchId} platform={trip.platform} />
+        </div>
+      </td>
+    </tr>
+  );
+}
+
+// ── Memoized Data Row ───────────────────────────────────────────────────────
+
+interface DataRowProps {
+  trip: Trip;
+  idx: number;
+  activeCols: RenderColumnDef[];
+  loading: boolean;
+  isExpanded: boolean;
+  columnConfig?: ColumnConfig[];
+  onToggleExpand: (id: string) => void;
+  onCopyId: (id: string) => void;
+}
+
+const DataRow = React.memo(function DataRow({ trip, idx, activeCols, loading, isExpanded, columnConfig, onToggleExpand, onCopyId }: DataRowProps) {
+  const toggle = () => onToggleExpand(trip.id);
+  const onRowKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    e.preventDefault();
+    toggle();
+  };
+  return (
+    <>
+      <tr
+        tabIndex={0}
+        aria-expanded={isExpanded}
+        onClick={toggle}
+        onKeyDown={onRowKeyDown}
+        className={`
+          group transition-colors cursor-pointer
+          ${isExpanded ? 'bg-emerald-50/50 dark:bg-emerald-950/20' : idx % 2 === 1 ? 'bg-slate-50/50 dark:bg-slate-800/20' : ''}
+          hover:bg-slate-50 dark:hover:bg-slate-800/40
+          focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-emerald-500
+          ${loading ? 'opacity-50' : ''}
+        `}
+      >
+        {activeCols.map(col => {
+          // Special handling for ID column (copy-to-clipboard button)
+          if (col.key === 'id') {
+            return (
+              <td key={col.key} className="px-3 py-2.5 whitespace-nowrap">
+                <button
+                  onClick={(e) => { e.stopPropagation(); onCopyId(trip.id); }}
+                  className="inline-flex items-center gap-1 text-xs font-mono text-slate-500 dark:text-slate-400 hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors"
+                  title={`Click to copy: ${trip.id}`}
+                >
+                  {col.render(trip)}
+                  <Copy className="h-3 w-3 opacity-0 group-hover:opacity-100" />
+                </button>
+              </td>
+            );
+          }
+
+          // Special styling for certain columns
+          const isNetIncome = col.key === 'netIncome';
+          const isAmount = col.key === 'amount';
+          const isDriver = col.key === 'driver';
+
+          return (
+            <td
+              key={col.key}
+              className={`px-3 py-2.5 whitespace-nowrap text-sm tabular-nums
+                ${col.align === 'right' ? 'text-right' : 'text-left'}
+                ${isNetIncome ? 'font-medium text-emerald-700 dark:text-emerald-400' : ''}
+                ${isAmount ? 'font-medium text-slate-800 dark:text-slate-200' : ''}
+                ${isDriver ? 'max-w-[150px] truncate text-slate-700 dark:text-slate-300' : ''}
+                ${!isNetIncome && !isAmount && !isDriver ? 'text-slate-600 dark:text-slate-400' : ''}
+              `}
+              style={col.minWidth ? { minWidth: col.minWidth } : undefined}
+            >
+              {col.render(trip)}
+            </td>
+          );
+        })}
+      </tr>
+      {isExpanded && <TripDetailPanel trip={trip} colSpan={activeCols.length} columnConfig={columnConfig} />}
+    </>
+  );
+});
+
+// ── Sort indicator icon ─────────────────────────────────────────────────────
+
+function SortIcon({ dir }: { dir: SortDir }) {
+  if (dir === 'asc') return <ChevronUp className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />;
+  if (dir === 'desc') return <ChevronDown className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />;
+  return <ChevronsUpDown className="h-3 w-3 opacity-0 group-hover/th:opacity-40 transition-opacity" />;
+}
+
+// ── Column Config type (matches LedgerColumnSettings) ───────────────────────
+
+export interface ColumnConfig {
+  key: string;
+  label: string;
+  visible: boolean;
+  custom?: boolean;
+}
+
+const VIRTUALIZE_MIN_ROWS = 50;
+const EST_ROW_PX = 44;
+
+function TripLedgerVirtualTable({
+  activeCols,
+  sortedTrips,
+  loading,
+  hasActiveFilters,
+  sortKey,
+  sortDir,
+  onServerSort,
+  handleSort,
+  expandedId,
+  columnConfig,
+  handleToggleExpand,
+  handleCopyId,
+}: {
+  activeCols: RenderColumnDef[];
+  sortedTrips: Trip[];
+  loading: boolean;
+  hasActiveFilters: boolean;
+  sortKey: string | null;
+  sortDir: SortDir;
+  onServerSort?: (key: string | null, dir: SortDir) => void;
+  handleSort: (key: string) => void;
+  expandedId: string | null;
+  columnConfig?: ColumnConfig[];
+  handleToggleExpand: (id: string) => void;
+  handleCopyId: (id: string) => void;
+}) {
+  const parentRef = useRef<HTMLDivElement>(null);
+  const shouldVirtualize = sortedTrips.length >= VIRTUALIZE_MIN_ROWS && !expandedId;
+  const virtualizer = useVirtualizer({
+    count: shouldVirtualize ? sortedTrips.length : 0,
+    getScrollElement: () => parentRef.current,
+    estimateSize: () => EST_ROW_PX,
+    overscan: 10,
+    getItemKey: (index) => sortedTrips[index]?.id ?? index,
+    initialRect: { width: 1200, height: 560 },
+  });
+  const virtualItems = shouldVirtualize ? virtualizer.getVirtualItems() : [];
+  const paddingTop = virtualItems.length > 0 ? virtualItems[0]!.start : 0;
+  const paddingBottom =
+    virtualItems.length > 0
+      ? virtualizer.getTotalSize() - virtualItems[virtualItems.length - 1]!.end
+      : 0;
+
+  const header = (
+    <thead className="bg-slate-50 dark:bg-slate-800/60 sticky top-0 z-10">
+      <tr>
+        {activeCols.map((col) => {
+          const isSorted = sortKey === col.key;
+          const currentDir: SortDir = isSorted ? sortDir : null;
+          const canSort = onServerSort ? isTripServerSortKey(col.key) : col.sortable !== false;
+          return (
+            <th
+              key={col.key}
+              scope="col"
+              className={`px-3 py-3 text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wider whitespace-nowrap group/th ${col.align === 'right' ? 'text-right' : 'text-left'}`}
+              style={col.minWidth ? { minWidth: col.minWidth } : undefined}
+              aria-sort={
+                isSorted
+                  ? sortDir === 'asc'
+                    ? 'ascending'
+                    : sortDir === 'desc'
+                      ? 'descending'
+                      : 'none'
+                  : undefined
+              }
+            >
+              {canSort ? (
+                <button
+                  type="button"
+                  className={`inline-flex items-center gap-1 w-full ${col.align === 'right' ? 'flex-row-reverse justify-end' : 'justify-start'} cursor-pointer select-none hover:text-slate-900 dark:hover:text-slate-100`}
+                  onClick={() => handleSort(col.key)}
+                  title={`Sort by ${col.label}`}
+                >
+                  {col.label}
+                  <SortIcon dir={currentDir} />
+                </button>
+              ) : (
+                <span>{col.label}</span>
+              )}
+            </th>
+          );
+        })}
+      </tr>
+    </thead>
+  );
+
+  const bodyRows = shouldVirtualize ? (
+    <>
+      {paddingTop > 0 && (
+        <tr aria-hidden>
+          <td colSpan={activeCols.length} style={{ height: paddingTop, padding: 0, border: 0 }} />
+        </tr>
+      )}
+      {virtualItems.map((vr) => {
+        const trip = sortedTrips[vr.index];
+        return (
+          <DataRow
+            key={trip.id || `row-${vr.index}`}
+            trip={trip}
+            idx={vr.index}
+            activeCols={activeCols}
+            loading={false}
+            isExpanded={expandedId === trip.id}
+            columnConfig={columnConfig}
+            onToggleExpand={handleToggleExpand}
+            onCopyId={handleCopyId}
+          />
+        );
+      })}
+      {paddingBottom > 0 && (
+        <tr aria-hidden>
+          <td colSpan={activeCols.length} style={{ height: paddingBottom, padding: 0, border: 0 }} />
+        </tr>
+      )}
+    </>
+  ) : (
+    sortedTrips.map((trip, idx) => (
+      <DataRow
+        key={trip.id || `row-${idx}`}
+        trip={trip}
+        idx={idx}
+        activeCols={activeCols}
+        loading={false}
+        isExpanded={expandedId === trip.id}
+        columnConfig={columnConfig}
+        onToggleExpand={handleToggleExpand}
+        onCopyId={handleCopyId}
+      />
+    ))
+  );
+
+  return (
+    <div
+      ref={parentRef}
+      className="max-h-[70vh] overflow-auto rounded-lg border border-slate-200 dark:border-slate-700"
+      data-virtualized={shouldVirtualize ? '1' : '0'}
+    >
+      <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-700">
+        {header}
+        <tbody className="divide-y divide-slate-100 dark:divide-slate-800 bg-white dark:bg-slate-900">
+          {loading && sortedTrips.length === 0 &&
+            Array.from({ length: 8 }).map((_, i) => <SkeletonRow key={`skel-${i}`} colCount={activeCols.length} />)}
+          {!loading && sortedTrips.length === 0 && (
+            <tr>
+              <td colSpan={activeCols.length} className="px-6 py-16 text-center">
+                <div className="flex flex-col items-center gap-2">
+                  <div className="text-slate-400 dark:text-slate-500 text-lg font-medium">No trips found</div>
+                  <p className="text-sm text-slate-400 dark:text-slate-500">
+                    {hasActiveFilters
+                      ? 'No trips match these filters. Clear filters or widen the date range.'
+                      : 'There are no trip records to display. Import trip data to get started.'}
+                  </p>
+                </div>
+              </td>
+            </tr>
+          )}
+          {bodyRows}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// ── Main Component ──────────────────────────────────────────────────────────
+
+interface TripLedgerTableProps {
+  trips: Trip[];
+  total: number;
+  page: number;
+  pageSize: number;
+  loading: boolean;
+  visibleColumns: string[];
+  columnConfig?: ColumnConfig[];
+  onPageChange: (page: number) => void;
+  onPageSizeChange: (size: number) => void;
+  /** When true, empty copy assumes active filters (F-22). */
+  hasActiveFilters?: boolean;
+  /** Server-driven sort (F-03). When provided, table sort pushes to parent. */
+  serverSortKey?: string | null;
+  serverSortDir?: SortDir;
+  onServerSort?: (key: string | null, dir: SortDir) => void;
+}
+
+export function TripLedgerTable({
+  trips,
+  total,
+  page,
+  pageSize,
+  loading,
+  visibleColumns,
+  columnConfig,
+  onPageChange,
+  onPageSizeChange,
+  hasActiveFilters = false,
+  serverSortKey,
+  serverSortDir,
+  onServerSort,
+}: TripLedgerTableProps) {
+  const { defaultCurrency } = usePlatformConfig();
+  setLedgerTableCurrency(defaultCurrency || 'JMD');
+  const [localSortKey, setLocalSortKey] = useState<string | null>(null);
+  const [localSortDir, setLocalSortDir] = useState<SortDir>(null);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  const sortKey = onServerSort ? (serverSortKey ?? null) : localSortKey;
+  const sortDir = onServerSort ? (serverSortDir ?? null) : localSortDir;
+
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const rangeStart = total === 0 ? 0 : page * pageSize + 1;
+  const rangeEnd = Math.min((page + 1) * pageSize, total);
+
+  const activeCols = useMemo(
+    () => mergeTripLedgerActiveColumns(visibleColumns, columnConfig),
+    [visibleColumns, columnConfig]
+  );
+
+  // Sort trips client-side only when server sort is not wired
+  const sortedTrips = useMemo(() => {
+    if (onServerSort) return trips;
+    if (!sortKey || !sortDir) return trips;
+    return [...trips].sort((a, b) =>
+      compareValues(getSortValue(a, sortKey), getSortValue(b, sortKey), sortDir)
+    );
+  }, [trips, sortKey, sortDir, onServerSort]);
+
+  // Cycle sort: none → asc → desc → none (server path only whitelisted keys — N-03)
+  const handleSort = useCallback((key: string) => {
+    if (onServerSort && !isTripServerSortKey(key)) return;
+    let nextKey: string | null = key;
+    let nextDir: SortDir = 'asc';
+    if (sortKey !== key) {
+      nextKey = key;
+      nextDir = 'asc';
+    } else if (sortDir === 'asc') {
+      nextKey = key;
+      nextDir = 'desc';
+    } else {
+      nextKey = null;
+      nextDir = null;
+    }
+    if (onServerSort) {
+      onServerSort(nextKey, nextDir);
+    } else {
+      setLocalSortKey(nextKey);
+      setLocalSortDir(nextDir);
+    }
+  }, [sortKey, sortDir, onServerSort]);
+
+  const handleCopyId = useCallback((id: string) => {
+    navigator.clipboard.writeText(id).then(() => {
+      toast.success('Trip ID copied');
+    }).catch(() => {
+      toast.error('Failed to copy ID');
+    });
+  }, []);
+
+  const handleToggleExpand = useCallback((id: string) => {
+    setExpandedId(prev => prev === id ? null : id);
+  }, []);
+
+  return (
+    <div className="flex flex-col">
+      {/* Large dataset warning */}
+      {total > 5000 && (
+        <div className="flex items-center gap-2 rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 px-4 py-2.5 mb-3">
+          <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0" />
+          <p className="text-xs text-amber-700 dark:text-amber-300">
+            <span className="font-medium">{total.toLocaleString()} trips</span> match your filters. Consider narrowing by date range, platform, or driver name for faster performance.
+          </p>
+        </div>
+      )}
+
+      {sortKey && !onServerSort && (
+        <div className="mb-2 text-xs text-amber-700 dark:text-amber-300">
+          Sorting this page only ({trips.length} of {total.toLocaleString()}). Server-wide sort ships in a later release.
+        </div>
+      )}
+      {sortKey && onServerSort && (
+        <div className="mb-2 text-xs text-slate-500 dark:text-slate-400">
+          Sorted by {sortKey} ({sortDir}) across the full filtered set.
+        </div>
+      )}
+
+      {/* F-23: virtualize tbody when page has ≥50 rows (padding-row window) */}
+      <div className={`${loading && trips.length > 0 ? 'opacity-60 pointer-events-none' : ''}`}>
+        <TripLedgerVirtualTable
+          activeCols={activeCols}
+          sortedTrips={sortedTrips}
+          loading={loading}
+          hasActiveFilters={hasActiveFilters}
+          sortKey={sortKey}
+          sortDir={sortDir}
+          onServerSort={onServerSort}
+          handleSort={handleSort}
+          expandedId={expandedId}
+          columnConfig={columnConfig}
+          handleToggleExpand={handleToggleExpand}
+          handleCopyId={handleCopyId}
+        />
+      </div>
+
+      {/* Pagination */}
+      <div className="flex items-center justify-between px-1 py-3 mt-2">
+        {/* Left: range info */}
+        <div className="text-sm text-slate-500 dark:text-slate-400">
+          {total === 0
+            ? 'No records'
+            : `Showing ${rangeStart}–${rangeEnd} of ${total.toLocaleString()} trips`}
+        </div>
+
+        {/* Right: controls */}
+        <div className="flex items-center gap-3">
+          {/* Page size selector */}
+          <div className="flex items-center gap-1.5">
+            <label className="text-xs text-slate-500 dark:text-slate-400">Rows:</label>
+            <select
+              value={pageSize}
+              onChange={e => onPageSizeChange(Number(e.target.value))}
+              className="text-xs border border-slate-200 dark:border-slate-700 rounded-md px-2 py-1 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+            >
+              <option value={25}>25</option>
+              <option value={50}>50</option>
+              <option value={100}>100</option>
+              <option value={200}>200</option>
+            </select>
+          </div>
+
+          {/* Page info */}
+          <span className="text-xs text-slate-500 dark:text-slate-400">
+            Page {total === 0 ? 0 : page + 1} of {totalPages}
+          </span>
+
+          {/* Prev / Next */}
+          <div className="flex gap-1">
+            <button
+              onClick={() => onPageChange(page - 1)}
+              disabled={page === 0 || loading}
+              className="p-1.5 rounded-md border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              aria-label="Previous page"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+            <button
+              onClick={() => onPageChange(page + 1)}
+              disabled={page >= totalPages - 1 || loading}
+              className="p-1.5 rounded-md border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              aria-label="Next page"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

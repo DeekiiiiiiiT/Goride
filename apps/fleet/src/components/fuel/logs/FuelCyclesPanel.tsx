@@ -147,52 +147,55 @@ export function FuelCyclesPanel({
               <AccordionItem
                 key={cycle.id}
                 value={cycle.id}
-                className="border rounded-xl px-4 py-1 hover:bg-slate-50/50 transition-colors"
+                className="overflow-hidden border rounded-xl px-3 sm:px-4 py-1 hover:bg-slate-50/50 transition-colors"
               >
                 <AccordionTrigger
-                  className="hover:no-underline py-3"
+                  className="hover:no-underline py-3 gap-2"
                   title={explainCycleAnomaly(cycle)}
                 >
-                  <div className="flex items-center gap-6 w-full text-left">
-                    <div className="flex flex-col">
+                  {/* Mobile: 2×2 grid so Efficiency stays inside the card; desktop keeps a row. */}
+                  <div className="grid w-full min-w-0 flex-1 grid-cols-2 gap-x-3 gap-y-2 text-left sm:grid-cols-4 lg:flex lg:items-center lg:gap-6">
+                    <div className="flex min-w-0 flex-col">
                       <span className="text-[11px] text-slate-400 font-bold uppercase">
                         {cycle.status === 'Active' ? 'Started' : 'Cycle End'}
                       </span>
-                      <span className="text-sm font-bold">
+                      <span className="truncate text-sm font-bold">
                         {formatFuelLogDate(
                           cycle.status === 'Active' ? cycle.startDate : cycle.endDate,
                         )}
                       </span>
                     </div>
-                    <div className="flex flex-col min-w-[110px]">
+                    <div className="flex min-w-0 flex-col lg:min-w-[110px]">
                       <span className="text-[11px] text-slate-400 font-bold uppercase">Vehicle</span>
-                      <span className="text-sm font-medium">{getVehicleName(cycle.vehicleId)}</span>
+                      <span className="truncate text-sm font-medium">
+                        {getVehicleName(cycle.vehicleId)}
+                      </span>
                     </div>
-                    <div className="flex flex-col">
+                    <div className="flex min-w-0 flex-col">
                       <span className="text-[11px] text-slate-400 font-bold uppercase">Distance</span>
-                      <span className="text-sm font-bold text-indigo-600">
+                      <span className="truncate text-sm font-bold text-indigo-600">
                         {cycle.distance.toLocaleString()} km
                       </span>
                     </div>
-                    <div className="flex flex-col">
+                    <div className="flex min-w-0 flex-col">
                       <span className="text-[11px] text-slate-400 font-bold uppercase">
                         Efficiency
                       </span>
-                      <span className="text-sm font-bold text-emerald-600">
+                      <span className="truncate text-sm font-bold text-emerald-600">
                         {cycle.efficiency.toFixed(2)}{' '}
                         <span className="text-[11px] font-normal text-slate-400">km/L</span>
                       </span>
                     </div>
-                    <div className="flex flex-col min-w-[120px]">
+                    <div className="col-span-2 flex min-w-0 flex-col sm:col-span-4 lg:col-span-1 lg:min-w-[120px]">
                       <span className="text-[11px] text-slate-400 font-bold uppercase">
                         Tank Range
                       </span>
                       {tankConfigured ? (
-                        <div className="flex items-center gap-2 mt-0.5">
-                          <span className="text-[11px] font-bold text-slate-500">
+                        <div className="mt-0.5 flex min-w-0 items-center gap-2">
+                          <span className="shrink-0 text-[11px] font-bold text-slate-500">
                             {(cycle.startingPercentage || 0).toFixed(0)}%
                           </span>
-                          <div className="h-1.5 w-14 bg-slate-100 rounded-full overflow-hidden flex border border-slate-200/50">
+                          <div className="flex h-1.5 w-14 shrink-0 overflow-hidden rounded-full border border-slate-200/50 bg-slate-100">
                             <div
                               className="h-full bg-slate-200"
                               style={{ width: `${cycle.startingPercentage || 0}%` }}
@@ -207,21 +210,21 @@ export function FuelCyclesPanel({
                               }}
                             />
                           </div>
-                          <span className="text-[11px] font-bold text-emerald-600">
+                          <span className="shrink-0 text-[11px] font-bold text-emerald-600">
                             {cycle.isCapped ? '100%' : `${calculatedEndPct.toFixed(0)}%`}
                           </span>
                         </div>
                       ) : (
-                        <span className="text-[11px] font-medium text-amber-600 mt-0.5">
+                        <span className="mt-0.5 text-[11px] font-medium text-amber-600">
                           Tank capacity not configured
                         </span>
                       )}
                     </div>
-                    <div className="flex-1" />
+                    <div className="hidden flex-1 lg:block" />
                     {cycle.signalTier === 'exception' || cycle.status === 'Anomaly' ? (
                       <Tooltip>
                         <TooltipTrigger asChild>
-                          <Badge className="bg-rose-50 text-rose-700 border-rose-200 gap-1.5 cursor-help">
+                          <Badge className="w-fit shrink-0 bg-rose-50 text-rose-700 border-rose-200 gap-1.5 cursor-help">
                             <AlertCircle className="h-3 w-3" />
                             EXCEPTION
                           </Badge>
@@ -232,8 +235,8 @@ export function FuelCyclesPanel({
                         </TooltipContent>
                       </Tooltip>
                     ) : cycle.status === 'Active' ? (
-                      <div className="flex flex-col items-end gap-1">
-                        <Badge className="bg-blue-50 text-blue-700 border-blue-200 animate-pulse">
+                      <div className="flex flex-col items-start gap-1 lg:items-end">
+                        <Badge className="w-fit shrink-0 bg-blue-50 text-blue-700 border-blue-200 animate-pulse">
                           ACTIVE CYCLE
                         </Badge>
                         <span className="text-[11px] text-blue-500 font-bold uppercase">
@@ -243,7 +246,7 @@ export function FuelCyclesPanel({
                     ) : cycle.trustTier === 'Soft' || cycle.resetType === 'Auto_Soft' ? (
                       <Tooltip>
                         <TooltipTrigger asChild>
-                          <Badge className="bg-teal-50 text-teal-800 border-teal-200 gap-1 cursor-help">
+                          <Badge className="w-fit shrink-0 bg-teal-50 text-teal-800 border-teal-200 gap-1 cursor-help">
                             Full Tank
                           </Badge>
                         </TooltipTrigger>
@@ -257,7 +260,7 @@ export function FuelCyclesPanel({
                     ) : (
                       <Tooltip>
                         <TooltipTrigger asChild>
-                          <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 gap-1 cursor-help">
+                          <Badge className="w-fit shrink-0 bg-emerald-50 text-emerald-700 border-emerald-200 gap-1 cursor-help">
                             COMPLETE
                           </Badge>
                         </TooltipTrigger>

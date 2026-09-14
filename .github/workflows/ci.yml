@@ -29,6 +29,9 @@ jobs:
       - name: Check no edge→fleet imports
         run: node scripts/check-no-edge-fleet-imports.mjs
 
+      - name: Check no admin→fleet imports
+        run: node scripts/check-no-admin-fleet-imports.mjs
+
       - name: Check toll-core parity
         run: node scripts/check-toll-core-parity.mjs
 

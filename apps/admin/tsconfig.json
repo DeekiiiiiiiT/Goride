@@ -4,7 +4,6 @@
     "baseUrl": ".",
     "allowImportingTsExtensions": true,
     "paths": {
-      "@fleet/*": ["../fleet/src/*"],
       "@/*": ["./src/*"],
       "@roam/types": ["../../packages/types/src"],
       "@roam/types/*": ["../../packages/types/src/*"],

@@ -15,6 +15,10 @@ export {
 
 export {
   resolveFuelBrainFlags,
+  FLEET_USE_FUEL_BRAIN,
+  FLEET_CYCLE_HEALTH,
+  FUEL_BRAIN_SHADOW_COMPARE,
+  FUEL_BRAIN_FLAGS,
   type FuelBrainRuntimeFlags,
 } from './fuelBrainFlags.ts';
 
@@ -105,3 +109,79 @@ export {
   type FuelUnapprovedTxBlocker,
   type FuelReviewQueueCounts,
 } from './fuelReviewQueue.ts';
+
+export { calculateFuelCycles } from './fuelCycleEngine.ts';
+
+export {
+  FuelCalculationService,
+  type PersonalAllowanceReconContext,
+  type VehicleDeadheadInput,
+  type FuelBrainClassificationInput,
+} from './fuelCalculationService.ts';
+
+export {
+  classifyAnchor,
+  resolveTankCapacity,
+  isStableCycleId,
+  mintCycleId,
+  SOFT_ANCHOR_THRESHOLD,
+  CAPACITY_CLOSE_THRESHOLD,
+  type AnchorClassifyInput,
+  type AnchorClassifyResult,
+} from './fuelAnchorLogic.ts';
+
+export {
+  evaluateCycleClose,
+  resolveCycleCloseMode,
+  closeOpenCycleAtWeekBoundary,
+  SINGLE_FILL_FULL_THRESHOLD,
+  type CycleCloseMode,
+  type CloseDecision,
+} from './fuelCycleClosePolicy.ts';
+
+export {
+  toEntryYmd,
+  isEntryInInclusiveYmdRange,
+  entriesInFuelWeek,
+} from './fuelWeekRange.ts';
+
+export { getTotalTripRideshareKm, sumTripRideshareKm } from './tripRideshareKm.ts';
+export { getTripGrossRevenue } from './tripGrossRevenue.ts';
+
+export {
+  computePersonalAllowanceSplit,
+  buildPersonalAllowanceMetadata,
+  mergePersonalAllowanceDefaults,
+  DEFAULT_PERSONAL_ALLOWANCE,
+  type PersonalAllowanceSplitResult,
+} from './personalAllowance.ts';
+
+export {
+  pickScenarioForDriverMembership,
+  pickScenarioForDriverWeek,
+  resolveDriverVersionForWeek,
+} from './fuelPolicyVersion.ts';
+
+export { resolveFuelFillDriver, stampAttributedDriverIds } from './resolveFuelFillDriver.ts';
+
+export {
+  filterFuelOpsLogEntries,
+  fuelOpsLiters,
+  fuelOpsSpendAmount,
+  isFuelOpsLogEntry,
+  isGasCardFuelEntry,
+  countsInGasCardSpend,
+} from './fuelOpsEligibility.ts';
+
+export {
+  UNASSIGNED_FUEL_DRIVER_ID,
+  type FuelEntry,
+  type FuelCycle,
+  type FuelScenario,
+  type FuelRule,
+  type WeeklyFuelReport,
+  type FuelCalcTrip,
+  type FuelCalcVehicle,
+  type PersonalAllowanceTierConfig,
+  type QuotaConfig,
+} from './fuelTypes.ts';

@@ -1,1 +1,1 @@
-export { ExpenseCategoriesManager } from '@fleet/components/admin/accounting/ExpenseCategoriesManager';
+export { ExpenseCategoriesManager } from '@roam/platform-ops-ui';

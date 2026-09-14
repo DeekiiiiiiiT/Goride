@@ -25,7 +25,8 @@ export type { StepCounts, StepId };
 export function incrementUnderpaidClaimCount(
   counts: Record<StepId, StepCounts>,
   claim: Claim,
-  toll: FinancialTransaction | undefined,
+  /** Only `unlinkedSourceTripId` is read — keep structural so FinancialTransaction callers typecheck. */
+  toll: { unlinkedSourceTripId?: string | null } | undefined,
   disputeRefunds: DisputeRefund[],
 ): void {
   if (claim.status === 'Sent_to_Driver' || claim.status === 'Submitted_to_Uber') {

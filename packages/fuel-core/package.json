@@ -9,12 +9,27 @@
     ".": "./src/index.ts",
     "./resolvePricePerLiter": "./src/resolvePricePerLiter.ts",
     "./fuelCycleEngine": "./src/fuelCycleEngine.ts",
+    "./fuelCalculationService": "./src/fuelCalculationService.ts",
     "./fuelBrainFlags": "./src/fuelBrainFlags.ts",
-    "./constants": "./src/constants.ts"
+    "./constants": "./src/constants.ts",
+    "./fuelAnchorLogic": "./src/fuelAnchorLogic.ts",
+    "./fuelCycleClosePolicy": "./src/fuelCycleClosePolicy.ts",
+    "./fuelPolicyVersion": "./src/fuelPolicyVersion.ts",
+    "./personalAllowance": "./src/personalAllowance.ts",
+    "./resolveFuelFillDriver": "./src/resolveFuelFillDriver.ts",
+    "./fuelOpsEligibility": "./src/fuelOpsEligibility.ts",
+    "./fuelWeekRange": "./src/fuelWeekRange.ts",
+    "./tripRideshareKm": "./src/tripRideshareKm.ts",
+    "./tripGrossRevenue": "./src/tripGrossRevenue.ts",
+    "./vehicleDriverAssignmentHistory": "./src/vehicleDriverAssignmentHistory.ts"
   },
   "scripts": {
     "test": "vitest run",
     "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@roam/roam-shared": "workspace:*",
+    "date-fns": "*"
   },
   "devDependencies": {
     "vitest": "^3.2.4"

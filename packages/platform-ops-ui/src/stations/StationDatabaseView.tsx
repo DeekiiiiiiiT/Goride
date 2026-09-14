@@ -1,0 +1,853 @@
+// cache-bust: v1.0.3 - Explicitly standardizing Badge import
+import React, { useMemo, useState, useEffect, useCallback } from 'react';
+import { FuelEntry } from '../types/fuel';
+import { StationProfile, StationOverride } from '../types/station';
+import { aggregateStations, calculateRegionalStats, generateStationId, normalizeStationName } from '../utils/stationUtils';
+import { getDefaultGeofenceRadius } from '../utils/plusCode';
+import { StationList } from './StationList';
+import { StationDetailView } from './StationDetailView';
+import { StationImportWizard } from './StationImportWizard';
+import { StationExport } from './StationExport';
+import { BulkDeleteStationsModal } from './BulkDeleteStationsModal';
+import { ParentCompanyManager } from './ParentCompanyManager';
+import { VerifiedStationsTab } from './VerifiedStationsTab';
+import { ResolutionQueueTab } from './ResolutionQueueTab';
+import type { ResolutionQueueSubTab } from './ResolutionQueueTab';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@roam/ui';
+import { Switch } from '@roam/ui';
+import { Label } from '@roam/ui';
+import { Button } from '@roam/ui';
+import { Badge } from '@roam/ui';
+import { Star, Loader2, Upload, Trash2, Plus, ShieldCheck, ShieldOff, Map as MapIcon, Inbox } from 'lucide-react';
+import { SpatialIntegrityMap } from './SpatialIntegrityMap';
+import { fuelService } from '../services/stationFuelService';
+import { api } from '../services/stationOpsApi';
+import { toast } from 'sonner';
+import { AddStationModal } from './AddStationModal';
+
+interface StationDatabaseViewProps {
+  /** Optional — when omitted (standalone Stations nav), this view loads fuel entries itself. */
+  logs?: FuelEntry[];
+  loading?: boolean;
+  /** Top-level Station Database tab to open on load (e.g. resolution-queue for deep links). */
+  defaultTab?: string;
+  defaultResolutionSubTab?: ResolutionQueueSubTab;
+  /** Dominion-only: Silent Attach sub-tab inside Resolution Queue. */
+  enableSilentAttach?: boolean;
+  silentAttachPanel?: React.ReactNode;
+}
+
+export function StationDatabaseView({
+  logs: logsFromParent,
+  loading = false,
+  defaultTab = 'spatial-audit',
+  defaultResolutionSubTab = 'unresolved-stops',
+  enableSilentAttach = false,
+  silentAttachPanel,
+}: StationDatabaseViewProps) {
+  const [selectedStation, setSelectedStation] = useState<StationProfile | null>(null);
+  const [preferredStationIds, setPreferredStationIds] = useState<Set<string>>(new Set());
+  const [stationOverrides, setStationOverrides] = useState<Record<string, StationOverride>>({});
+  const [internalLogs, setInternalLogs] = useState<FuelEntry[]>([]);
+  const [isBackendLoading, setIsBackendLoading] = useState(false);
+  // Parent-supplied logs win; otherwise use self-fetched entries for the standalone page.
+  const logs = logsFromParent ?? internalLogs;
+  const [showPreferredOnly, setShowPreferredOnly] = useState(false);
+  const [isImportOpen, setIsImportOpen] = useState(false);
+  const [isNonFuelImportOpen, setIsNonFuelImportOpen] = useState(false);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [isAddStationOpen, setIsAddStationOpen] = useState(false);
+  const [editingStation, setEditingStation] = useState<StationProfile | null>(null);
+  const [verifyingLearntId, setVerifyingLearntId] = useState<string | null>(null);
+  const [verifyingNearbyStation, setVerifyingNearbyStation] = useState<any>(null);
+  const [resolutionQueueCount, setResolutionQueueCount] = useState(0);
+
+  const handleVerifyLearntLocation = useCallback((learntLoc: any) => {
+    const pseudoStation: StationProfile = {
+      id: generateStationId(
+        normalizeStationName(learntLoc.name || 'Unknown Station'),
+        learntLoc.address || `${learntLoc.location?.lat ?? 0},${learntLoc.location?.lng ?? 0}`,
+      ),
+      name: learntLoc.name || 'Unknown Station',
+      brand: learntLoc.brand || 'Independent',
+      address: learntLoc.address || '',
+      city: learntLoc.city || '',
+      parish: learntLoc.parish || '',
+      country: learntLoc.country || 'Jamaica',
+      plusCode: learntLoc.plusCode || '',
+      location: {
+        lat: learntLoc.location?.lat ?? 0,
+        lng: learntLoc.location?.lng ?? 0,
+      },
+      isPreferred: false,
+      stats: {
+        avgPrice: 0,
+        lastPrice: 0,
+        priceTrend: 'Stable',
+        totalVisits: 1,
+        rating: 0,
+        lastUpdated: learntLoc.timestamp || new Date().toISOString(),
+      },
+      amenities: [],
+      dataSource: 'manual',
+      contactInfo: {},
+      status: 'unverified',
+      operationalStatus: 'active',
+      category: 'fuel',
+    } as StationProfile;
+
+    setEditingStation(pseudoStation);
+    setVerifyingLearntId(learntLoc.id);
+    const nearby = learntLoc.nearbyStation || null;
+    if (nearby?.id) {
+      const fromStore = stationOverrides[nearby.id];
+      setVerifyingNearbyStation({
+        ...nearby,
+        status: fromStore?.status || nearby.status || 'unverified',
+        brand: fromStore?.brand || nearby.brand || '',
+        address: fromStore?.address || nearby.address || '',
+        plusCode: fromStore?.plusCode || nearby.plusCode || '',
+        geofenceRadius: fromStore?.geofenceRadius || nearby.geofenceRadius,
+        matchType: nearby.matchType || 'geofence',
+      });
+    } else {
+      setVerifyingNearbyStation(null);
+    }
+    setIsAddStationOpen(true);
+  }, [stationOverrides]);
+
+  const fetchData = useCallback(async () => {
+    setIsBackendLoading(true);
+    try {
+      // 1. Stations + (when standalone) fuel entries for visit/stats aggregation
+      const [backendStations, fuelEntries] = await Promise.all([
+        fuelService.getAllStations({ fields: 'list' }),
+        logsFromParent === undefined
+          ? fuelService.getFuelEntries({ limit: 1500 })
+          : Promise.resolve(null),
+      ]);
+      if (fuelEntries) {
+        setInternalLogs(Array.isArray(fuelEntries) ? fuelEntries : []);
+      }
+
+      const overrides: Record<string, StationOverride> = {};
+      backendStations.forEach(s => {
+        overrides[s.id] = s;
+      });
+
+      // Preferred from server field (source of truth)
+      setPreferredStationIds(
+        new Set(backendStations.filter((s) => s.isPreferred).map((s) => s.id)),
+      );
+
+      // One-time status migration — completion is server-flagged, not localStorage
+      try {
+        const migFlag = await fuelService.getMigrationFlag('station_status_v1');
+        if (!migFlag.done) {
+          const result = await fuelService.migrateStationStatuses();
+          if (result.patchedCount > 0) {
+            console.log(`[Migration] Patched ${result.patchedCount}/${result.totalStations} stations to 'unverified' status.`);
+            toast.success(`Station Migration: ${result.patchedCount} stations patched to 'unverified'.`);
+          }
+          await fuelService.setMigrationFlag('station_status_v1');
+        }
+      } catch (migErr) {
+        console.error('[Migration] Station status migration failed:', migErr);
+      }
+
+      // Legacy localStorage overrides — migrate once then clear
+      const storedOverrides = localStorage.getItem('station_overrides');
+      if (storedOverrides) {
+        try {
+          const legacyData = JSON.parse(storedOverrides);
+          const legacyKeys = Object.keys(legacyData);
+          
+          if (legacyKeys.length > 0) {
+            console.log(`[Migration] Found ${legacyKeys.length} legacy stations. Migrating to Cloud...`);
+            
+            for (const key of legacyKeys) {
+              if (!overrides[key]) {
+                const station = legacyData[key];
+                if (!station.id) station.id = key;
+                await fuelService.saveStation(station);
+                overrides[key] = station;
+              }
+            }
+            localStorage.removeItem('station_overrides');
+            toast.success(`Migrated ${legacyKeys.length} stations to cloud.`);
+          } else {
+            localStorage.removeItem('station_overrides');
+          }
+        } catch (e) {
+          console.error('Failed to migrate legacy station overrides', e);
+        }
+      }
+
+      setStationOverrides(overrides);
+    } catch (e) {
+      console.error('Failed to load station data from cloud', e);
+      toast.error("Could not sync with cloud station database.");
+    } finally {
+      setIsBackendLoading(false);
+    }
+  }, [logsFromParent]);
+
+  // Phase 9: Persistent Storage Migration
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  // Preferred is server-backed via StationProfile.isPreferred
+  const togglePreferred = async (id: string) => {
+    const currentlyPreferred = preferredStationIds.has(id);
+    const nextPreferred = !currentlyPreferred;
+    setPreferredStationIds(prev => {
+      const next = new Set(prev);
+      if (nextPreferred) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+    try {
+      await updateStationDetails(id, { isPreferred: nextPreferred });
+    } catch (e) {
+      console.error('Failed to persist preferred station', e);
+      toast.error('Could not save preferred station');
+      setPreferredStationIds(prev => {
+        const next = new Set(prev);
+        if (currentlyPreferred) next.add(id);
+        else next.delete(id);
+        return next;
+      });
+    }
+  };
+
+  // Save Station Overrides (Cloud Persisted)
+  const updateStationDetails = async (id: string, details: Partial<StationProfile>) => {
+    const current = stationOverrides[id] || {};
+    // Empty string clears; undefined keeps previous (??). Falsy || blocked clearing addresses/brands.
+    const pickStr = (next: string | undefined, prev: string | undefined) =>
+      next !== undefined ? next : prev;
+    const updated: StationOverride = {
+      ...current,
+      id,
+      name: pickStr(details.name, current.name),
+      address: pickStr(details.address, current.address),
+      brand: pickStr(details.brand, current.brand),
+      city: pickStr(details.city, current.city),
+      parish: pickStr(details.parish, current.parish),
+      country: pickStr(details.country, current.country),
+      plusCode: pickStr(details.plusCode, current.plusCode),
+      geofenceRadius: details.geofenceRadius ?? current.geofenceRadius,
+      location: details.location ?? current.location,
+      amenities: details.amenities ?? current.amenities,
+      contactInfo: details.contactInfo ?? current.contactInfo,
+      status: details.status || current.status,
+      operationalStatus: details.operationalStatus || current.operationalStatus,
+      dataSource: details.dataSource || current.dataSource || 'manual',
+      isPreferred: details.isPreferred ?? (current as StationProfile).isPreferred,
+    };
+    
+    // Clean up undefined values
+    Object.keys(updated).forEach(key => 
+      (updated as any)[key] === undefined && delete (updated as any)[key]
+    );
+
+    try {
+      const result = await fuelService.saveStation(updated);
+      setStationOverrides(prev => ({ ...prev, [id]: updated }));
+      
+      if (details.status === 'verified' && current.status !== 'verified') {
+        toast.success(`${updated.name} promoted to Master Verified Ledger`, {
+          description: "Location successfully moved to Source of Truth.",
+          icon: <ShieldCheck className="h-4 w-4 text-emerald-500" />
+        });
+      } else if (details.status === 'unverified' && current.status === 'verified') {
+        toast.success(`${updated.name} demoted to Unverified`, {
+          description: "Station moved back to Unverified MGMT tab. Admin approval required to re-verify.",
+          icon: <ShieldOff className="h-4 w-4 text-amber-500" />
+        });
+        // Close the detail sheet so the station disappears from the verified list immediately
+        setSelectedStation(null);
+      } else {
+        toast.success("Station updated in cloud.");
+      }
+
+      // Phase 11: Show feedback when stale learnt locations were auto-cleaned
+      if (result?.autoCleanedLearnt > 0) {
+        const cleanedNames = (result.cleanupDetails || [])
+          .map((d: any) => `"${d.learntName}" → ${d.stationName}`)
+          .join(', ');
+        toast.info(`Auto-resolved ${result.autoCleanedLearnt} learnt location(s)`, {
+          description: cleanedNames || 'Stale entries removed from Evidence Bridge.',
+          duration: 8000,
+        });
+      }
+    } catch (e: any) {
+      if (e?.duplicate) {
+        // 409 Duplicate — show override confirmation with station details
+        const existing = e.existingStation;
+        console.warn(`[UpdateStation] Duplicate detected: conflicts with "${existing?.name}" (${e.message})`);
+        toast.error(e.message || 'Duplicate station detected', {
+          description: existing ? `Conflicts with "${existing.name}" (${existing.matchType}, ${existing.distance}m). Click below to save anyway.` : undefined,
+          duration: 15000,
+          action: {
+            label: 'Save Anyway',
+            onClick: async () => {
+              try {
+                await fuelService.saveStation({ ...updated, _overrideDuplicate: true });
+                setStationOverrides(prev => ({ ...prev, [id]: updated }));
+                toast.success("Station updated (duplicate override applied).");
+              } catch (retryErr) {
+                console.error("Override save failed", retryErr);
+                toast.error("Save failed even with override.");
+              }
+            }
+          }
+        });
+      } else {
+        console.error("Failed to save station to cloud", e);
+        toast.error("Cloud sync failed. Changes may not persist.");
+      }
+    }
+  };
+
+  const handleManualAdd = async (station: StationOverride) => {
+    setIsBackendLoading(true);
+    try {
+      const result = await fuelService.saveStation(station);
+      setStationOverrides(prev => ({ ...prev, [station.id!]: station }));
+
+      // Phase 11: Show feedback when stale learnt locations were auto-cleaned on station add
+      if (result?.autoCleanedLearnt > 0) {
+        const cleanedNames = (result.cleanupDetails || [])
+          .map((d: any) => `"${d.learntName}" → ${d.stationName}`)
+          .join(', ');
+        toast.info(`Auto-resolved ${result.autoCleanedLearnt} learnt location(s)`, {
+          description: cleanedNames || 'Stale entries removed from Evidence Bridge.',
+          duration: 8000,
+        });
+      }
+    } catch (e) {
+      console.error("Manual add failed", e);
+      throw e; // Let the modal handle the error toast
+    } finally {
+      setIsBackendLoading(false);
+    }
+  };
+
+  const handleImportStations = async (imported: StationOverride[]) => {
+    setIsBackendLoading(true);
+    let count = 0;
+    let dupeSkipped = 0;
+    const newOverrides = { ...stationOverrides };
+    
+    try {
+      for (const item of imported) {
+        if (item.name && item.address) {
+          // Fix 2: Normalize name before generating ID to match the wizard's duplicate-check logic
+          const id = generateStationId(normalizeStationName(item.name), item.address);
+          const updatedItem = {
+            ...item,
+            id,
+            status: 'unverified', // CSV imports are always unverified
+            dataSource: 'import',
+            category: item.category || 'fuel',
+            // Smart default geofence radius based on Plus Code precision (if available)
+            geofenceRadius: item.geofenceRadius ?? (item.plusCode ? getDefaultGeofenceRadius(item.plusCode) : undefined),
+          };
+          
+          try {
+            await fuelService.saveStation(updatedItem);
+            newOverrides[id] = updatedItem;
+            count++;
+          } catch (saveErr: any) {
+            // Phase 8.3: Handle 409 duplicate gracefully — skip and continue
+            if (saveErr?.duplicate) {
+              dupeSkipped++;
+              console.warn(`[Import] Skipped duplicate: "${item.name}" conflicts with "${saveErr.existingStation?.name || 'unknown'}"`);
+            } else {
+              throw saveErr; // Re-throw non-duplicate errors
+            }
+          }
+        }
+      }
+
+      setStationOverrides(newOverrides);
+      if (dupeSkipped > 0) {
+        toast.success(`Cloud Sync: Imported ${count} locations. ${dupeSkipped} duplicate${dupeSkipped > 1 ? 's' : ''} skipped.`, {
+          description: `${dupeSkipped} station${dupeSkipped > 1 ? 's' : ''} matched existing entries and ${dupeSkipped > 1 ? 'were' : 'was'} not re-created.`,
+        });
+      } else {
+        toast.success(`Cloud Sync: Successfully imported ${count} locations.`);
+      }
+    } catch (e) {
+      console.error("Import failed", e);
+      toast.error("Import interrupted. Some stations might not have been saved.");
+    } finally {
+      setIsBackendLoading(false);
+    }
+  };
+
+  const handleConfirmDelete = async (idsToDelete: string[]) => {
+    setIsBackendLoading(true);
+    try {
+      // Delete from backend first
+      for (const id of idsToDelete) {
+        await fuelService.deleteStation(id);
+      }
+      
+      // Immediately update local state to remove deleted stations
+      setStationOverrides(prev => {
+        const next = { ...prev };
+        idsToDelete.forEach(id => {
+          delete next[id];
+        });
+        return next;
+      });
+      
+      toast.success(`Deleted ${idsToDelete.length} stations from cloud.`);
+      
+      // Re-fetch from backend to ensure local state is in sync with KV
+      try {
+        const freshStations = await fuelService.getAllStations({ fields: 'list' });
+        const freshOverrides: Record<string, StationOverride> = {};
+        freshStations.forEach(s => {
+          freshOverrides[s.id] = s;
+        });
+        setStationOverrides(freshOverrides);
+      } catch (syncErr) {
+        console.error('[Delete] Post-delete sync failed, using local state:', syncErr);
+      }
+    } catch (e) {
+      console.error("Delete failed", e);
+      toast.error("Cloud deletion failed.");
+    } finally {
+      setIsBackendLoading(false);
+    }
+  };
+
+  // Helper to generate context
+  const buildContext = useCallback((inputLogs: FuelEntry[]) => {
+    // 1. Start with stations derived from Logs
+    const rawStations = aggregateStations(inputLogs);
+    const stationMap = new Map(rawStations.map(s => [s.id, s]));
+
+    // 2. Apply Overrides
+    Object.entries(stationOverrides).forEach(([id, override]) => {
+      if (stationMap.has(id)) {
+        const existing = stationMap.get(id)!;
+        stationMap.set(id, {
+           ...existing,
+           ...override,
+           amenities: override.amenities || existing.amenities || [],
+        });
+      } else {
+        if (override.name && override.address) {
+           stationMap.set(id, {
+             id,
+             name: override.name,
+             address: override.address,
+             brand: override.brand || 'Unknown',
+             city: override.city || 'Unknown City',
+             parish: override.parish || 'Unknown Parish',
+             country: override.country || 'Jamaica',
+             plusCode: override.plusCode,
+             geofenceRadius: override.geofenceRadius,
+             location: override.location || { lat: 18.0179, lng: -76.8099 },
+             isPreferred: false,
+             stats: {
+               avgPrice: override.initialStats?.avgPrice || 0,
+               lastPrice: override.initialStats?.lastPrice || 0,
+               priceTrend: 'Stable',
+               totalVisits: override.initialStats?.totalVisits || 0,
+               rating: 0,
+               lastUpdated: override.initialStats?.lastUpdated || new Date().toISOString()
+             },
+             amenities: override.amenities || [],
+             dataSource: override.dataSource || 'manual',
+             contactInfo: override.contactInfo || {},
+             status: override.status || 'unverified',
+             operationalStatus: override.operationalStatus || 'active',
+             category: override.category || 'fuel'
+           });
+        }
+      }
+    });
+
+    const stations = Array.from(stationMap.values()).map(s => ({
+       ...s,
+       isPreferred: preferredStationIds.has(s.id)
+    }));
+
+    const visibleStations = showPreferredOnly 
+      ? stations.filter(s => s.isPreferred) 
+      : stations;
+
+    const regionalStats = calculateRegionalStats(stations); 
+    
+    return {
+      stations: visibleStations,
+      regionalStats,
+      loading,
+      togglePreferred,
+      updateStationDetails
+    };
+  }, [loading, preferredStationIds, showPreferredOnly, stationOverrides]);
+
+  const context = useMemo(() => buildContext(logs), [buildContext, logs]);
+
+  const handleStationSelect = (stationId: string) => {
+    const station = context.stations.find(s => s.id === stationId);
+    if (station) {
+      setSelectedStation(station);
+    }
+  };
+
+  const activeStation = selectedStation 
+    ? context.stations.find(s => s.id === selectedStation.id) || selectedStation 
+    : null;
+
+  if (loading) {
+    return (
+      <div className="flex h-[400px] items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-slate-400" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6 animate-in fade-in duration-500">
+      <div className="overflow-x-auto overflow-y-visible rounded-xl border border-slate-200 bg-white shadow-sm dark:border-border dark:bg-card">
+        <Tabs defaultValue={defaultTab} className="w-full">
+          <div className="border-b border-slate-200 px-4 py-3 bg-slate-50 flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <h3 className="font-semibold text-slate-900">Station Database</h3>
+            </div>
+            
+            <TabsList className="bg-slate-200/50 p-1">
+              <TabsTrigger value="spatial-audit" className="flex items-center gap-1.5 text-indigo-700 font-bold data-[state=active]:bg-white data-[state=active]:shadow-sm">
+                <MapIcon className="h-3.5 w-3.5" />
+                Spatial Audit
+              </TabsTrigger>
+              <TabsTrigger value="verified-stations">Verified Gas Station</TabsTrigger>
+              <TabsTrigger value="parent-company">Parent Company</TabsTrigger>
+              <TabsTrigger value="unverified-stations" className="flex items-center gap-1.5">
+                Unverified
+                <Badge variant="outline" className="h-4 px-1 text-[8px] border-slate-300 text-slate-400">CSV</Badge>
+              </TabsTrigger>
+              <TabsTrigger value="non-fuel">Non-Fuel Locations</TabsTrigger>
+              <TabsTrigger value="resolution-queue" className="flex items-center gap-1.5">
+                <Inbox className="h-3.5 w-3.5 opacity-70" />
+                Resolution Queue
+                {resolutionQueueCount > 0 && (
+                  <Badge variant="outline" className="h-4 px-1 text-[8px] border-indigo-200 text-indigo-600">
+                    {resolutionQueueCount}
+                  </Badge>
+                )}
+              </TabsTrigger>
+            </TabsList>
+          </div>
+
+          {/* --- Spatial Audit Tab --- */}
+          <TabsContent value="spatial-audit" className="m-0 border-0 p-0">
+            <div className="w-full bg-slate-50 pt-2 dark:bg-transparent">
+              <SpatialIntegrityMap />
+            </div>
+          </TabsContent>
+
+          {/* --- Verified Gas Station Tab --- */}
+          <TabsContent value="verified-stations" className="m-0 p-0 border-0">
+             <VerifiedStationsTab 
+               stations={context.stations.filter(s => s.status === 'verified')} 
+               onRefresh={fetchData}
+               onSelectStation={(station) => setSelectedStation(station)}
+               onSaveGeofenceRadius={async (stationId, radius) => {
+                 const current = stationOverrides[stationId] || {};
+                 const updated = {
+                   ...current,
+                   id: stationId,
+                   geofenceRadius: radius,
+                 };
+                 await fuelService.saveStation(updated);
+                 setStationOverrides(prev => ({ ...prev, [stationId]: updated as any }));
+                 // Refresh to reflect the change in the table
+                 await fetchData();
+               }}
+             />
+          </TabsContent>
+
+          {/* --- Parent Company Tab --- */}
+          <TabsContent value="parent-company" className="m-0 p-0 border-0">
+             <ParentCompanyManager />
+          </TabsContent>
+
+          {/* --- Unverified Gas Stations Tab (CSV reference shelf only) --- */}
+          <TabsContent value="unverified-stations" className="m-0 p-0 border-0">
+             <div className="mx-3 mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+               <span className="font-semibold">CSV reference shelf only.</span> Nothing here is merged or copied into your Verified GOD list.
+               Usual workflow: delete a nearby CSV row, then Verify Location from the Resolution Queue with your own pin.
+             </div>
+             <div className="border-b border-slate-100 bg-white p-3 flex justify-end gap-3 items-center">
+               {/* Preferred Toggle */}
+                <div className="flex items-center space-x-2 mr-2">
+                  <Switch 
+                    id="preferred-mode" 
+                    checked={showPreferredOnly}
+                    onCheckedChange={setShowPreferredOnly}
+                  />
+                  <Label htmlFor="preferred-mode" className="text-sm text-slate-600 flex items-center cursor-pointer">
+                    <Star className="h-3 w-3 mr-1 fill-yellow-400 text-yellow-400" />
+                    Preferred Only
+                  </Label>
+                </div>
+                
+                {/* Actions */}
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="bg-white text-blue-600 border-blue-200 hover:bg-blue-50 hover:text-blue-700"
+                  onClick={() => setIsAddStationOpen(true)}
+                >
+                  <Plus className="h-3.5 w-3.5 mr-2" />
+                  Add Station
+                </Button>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="bg-white text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700"
+                  onClick={() => setIsDeleteModalOpen(true)}
+                >
+                  <Trash2 className="h-3.5 w-3.5 mr-2" />
+                  Bulk Delete
+                </Button>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
+                  onClick={() => setIsImportOpen(true)}
+                >
+                  <Upload className="h-3.5 w-3.5 mr-2" />
+                  Import CSV
+                </Button>
+                <StationExport stations={context.stations.filter(s => (s.dataSource === 'manual' || s.dataSource === 'import') && s.category !== 'non_fuel')} />
+             </div>
+
+             <div className="p-4">
+               <StationList 
+                  context={{
+                      ...context,
+                      stations: context.stations.filter(s => s.status === 'unverified' && s.category !== 'non_fuel')
+                  }} 
+                  onSelectStation={handleStationSelect} 
+                  variant="manager"
+                  selectable
+                  onDeleteSelected={async (ids) => {
+                    await handleConfirmDelete(ids);
+                  }}
+               />
+             </div>
+          </TabsContent>
+
+          {/* --- Non-Fuel Locations Tab --- */}
+          <TabsContent value="non-fuel" className="m-0 p-0 border-0">
+             <div className="border-b border-slate-100 bg-white p-3 flex justify-end gap-3 items-center">
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
+                  onClick={() => setIsNonFuelImportOpen(true)}
+                >
+                  <Upload className="h-3.5 w-3.5 mr-2" />
+                  Import CSV
+                </Button>
+                <StationExport 
+                  stations={context.stations.filter(s => s.category === 'non_fuel' && s.status === 'unverified')} 
+                  filename="non-fuel-locations"
+                />
+             </div>
+
+             <div className="p-4">
+               <StationList 
+                  context={{
+                      ...context,
+                      stations: context.stations.filter(s => s.category === 'non_fuel' && s.status === 'unverified')
+                  }} 
+                  onSelectStation={handleStationSelect} 
+                  variant="manager"
+               />
+             </div>
+          </TabsContent>
+
+          {/* --- Resolution Queue: merged unresolved stops + spatial review --- */}
+          <TabsContent value="resolution-queue" className="m-0 p-0 border-0">
+            <ResolutionQueueTab
+              defaultSubTab={defaultResolutionSubTab}
+              onPromoted={() => fetchData()}
+              onVerifyLocation={handleVerifyLearntLocation}
+              onResolved={() => fetchData()}
+              onCountChange={setResolutionQueueCount}
+              enableSilentAttach={enableSilentAttach}
+              silentAttachPanel={silentAttachPanel}
+            />
+          </TabsContent>
+        </Tabs>
+      </div>
+
+      <StationDetailView 
+        station={activeStation} 
+        onClose={() => setSelectedStation(null)} 
+        logs={logs}
+        onTogglePreferred={togglePreferred}
+        onUpdateStation={updateStationDetails}
+        onEditInModal={(station) => {
+          setEditingStation(station);
+          setIsAddStationOpen(true);
+        }}
+        onDemoteStation={async (stationId) => {
+          try {
+            const result = await fuelService.demoteStation(stationId);
+            toast.success(result.message, {
+              description: result.learntLocationId
+                ? 'A learnt location has been created — open Resolution Queue → Unresolved stops to re-match.'
+                : 'No fuel entries were linked to this station.',
+              icon: <ShieldOff className="h-4 w-4 text-amber-500" />,
+              duration: 8000,
+            });
+            setSelectedStation(null);
+            await fetchData();
+          } catch (e: any) {
+            console.error('[Demote] Failed:', e);
+            toast.error(`Demotion failed: ${e.message}`);
+          }
+        }}
+      />
+
+      <StationImportWizard 
+        isOpen={isImportOpen}
+        onClose={() => setIsImportOpen(false)}
+        onImport={handleImportStations}
+        existingStations={context.stations}
+        mode="fuel"
+      />
+
+      <StationImportWizard 
+        isOpen={isNonFuelImportOpen}
+        onClose={() => setIsNonFuelImportOpen(false)}
+        onImport={handleImportStations}
+        existingStations={context.stations}
+        mode="non_fuel"
+      />
+
+      <BulkDeleteStationsModal 
+        isOpen={isDeleteModalOpen}
+        onClose={() => setIsDeleteModalOpen(false)}
+        stations={stationOverrides}
+        onDelete={handleConfirmDelete}
+      />
+
+      <AddStationModal 
+        isOpen={isAddStationOpen || !!editingStation}
+        onClose={() => {
+          setIsAddStationOpen(false);
+          setEditingStation(null);
+          setVerifyingLearntId(null);
+          setVerifyingNearbyStation(null);
+        }}
+        onAdd={handleManualAdd}
+        editStation={editingStation}
+        verifyAsGodList={!!verifyingLearntId}
+        initialNearbyStation={verifyingNearbyStation}
+        onDeleteCsvReference={async (stationId: string) => {
+          await fuelService.deleteStation(stationId);
+          setStationOverrides((prev) => {
+            const next = { ...prev };
+            delete next[stationId];
+            return next;
+          });
+          await fetchData();
+        }}
+        onMergeIntoExisting={async (existingStationId: string) => {
+          // Merge only into Verified GOD — backend rejects Unverified CSV
+          if (verifyingLearntId) {
+            const promoteResult = await api.promoteLearntLocationToMaster({
+              learntId: verifyingLearntId,
+              action: 'merge',
+              targetStationId: existingStationId,
+            });
+            const linked = promoteResult?.linkedEntries || 0;
+            toast.success('Merged into Verified GOD station.', {
+              description: linked > 0
+                ? `${linked} fuel transaction${linked > 1 ? 's' : ''} linked.`
+                : 'Learnt staging cleared.',
+              icon: <ShieldCheck className="h-4 w-4 text-emerald-500" />,
+            });
+            setVerifyingLearntId(null);
+            await fetchData();
+          } else {
+            toast.info('Station already exists on the GOD list. No new station was created.');
+          }
+        }}
+        onUpdate={async (id, stationData) => {
+          // Verify Location from Resolution Queue: create fresh GOD from form only — never seed from CSV
+          if (verifyingLearntId) {
+            try {
+              const promoteResult = await api.promoteLearntLocationToMaster({
+                learntId: verifyingLearntId,
+                action: 'create',
+                stationData: {
+                  ...stationData,
+                  status: 'verified',
+                  dataSource: 'manual',
+                },
+              });
+
+              if (promoteResult?.autoMerged) {
+                const linked = promoteResult?.linkedEntries || 0;
+                const mergedName = promoteResult?.data?.name || 'existing GOD station';
+                toast.success(`Matched existing GOD station "${mergedName}".`, {
+                  description: `${promoteResult.message || ''}${linked > 0 ? ` ${linked} transaction${linked > 1 ? 's' : ''} linked.` : ''}`,
+                  icon: <ShieldCheck className="h-4 w-4 text-emerald-500" />,
+                });
+              } else {
+                const linked = promoteResult?.linkedEntries || 0;
+                toast.success('Saved to Verified GOD list from your location.', {
+                  description: linked > 0
+                    ? `${linked} fuel transaction${linked > 1 ? 's' : ''} linked.`
+                    : 'Payment holds for this stop will clear when matching picks up your pin.',
+                  icon: <ShieldCheck className="h-4 w-4 text-emerald-500" />,
+                });
+              }
+              setVerifyingLearntId(null);
+              await fetchData();
+            } catch (promoteErr: any) {
+              console.error('[Verify Learnt] Failed to promote:', promoteErr);
+              toast.error(promoteErr?.message || 'Failed to save Verified GOD station.');
+              throw promoteErr;
+            }
+            return;
+          }
+
+          // Regular edit of an existing station record
+          const current = stationOverrides[id] || {};
+          const updated: StationOverride = {
+            ...current,
+            ...stationData,
+            id,
+            status: current.status || stationData.status,
+            dataSource: current.dataSource || stationData.dataSource,
+            geofenceRadius: stationData.geofenceRadius ?? current.geofenceRadius,
+          };
+          
+          try {
+            await fuelService.saveStation(updated);
+            setStationOverrides(prev => ({ ...prev, [id]: updated }));
+            setSelectedStation(null);
+          } catch (e) {
+            console.error("Failed to update station via modal", e);
+            throw e;
+          }
+        }}
+      />
+    </div>
+  );
+}

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import {
+  Car,
   CheckCircle2,
   ChevronDown,
   Mail,
@@ -34,6 +35,7 @@ import {
   TableHeader,
   TableRow,
 } from '../ui/table';
+import { cn } from '../ui/utils';
 import type { DocumentFilterOption, StatusFilterOption } from './dashboardFilters';
 
 export type DashboardDriverRow = {
@@ -126,114 +128,133 @@ export function DashboardDriverTable({
 
   return (
     <>
-      {/* Mobile card list */}
-      <div className="space-y-3 md:hidden">
+      {/* Mobile: vehicle-centric flat list */}
+      <div className="md:hidden">
         {rows.length === 0 ? (
           <div className="rounded-lg border border-slate-200 bg-white p-8 text-center text-slate-500 dark:border-slate-700 dark:bg-slate-900">
             No drivers in this fleet yet.
           </div>
         ) : (
-          rows.map((row) => {
-            const { displayName, plate, assignment, unassigned, busy } = rowMeta(row);
-            return (
-              <div
-                key={row.id}
-                className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900"
-              >
-                <button
-                  type="button"
-                  className="w-full text-left"
-                  onClick={() => onOpenDriver?.(row.id)}
-                  aria-label={`Open driver ${displayName}`}
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex min-w-0 items-center gap-3">
-                      <Avatar className="h-10 w-10 shrink-0 border border-slate-200 dark:border-slate-700">
-                        <AvatarImage src={row.avatarUrl} alt="" />
-                        <AvatarFallback className="bg-slate-100 text-xs font-semibold text-slate-700">
-                          {initials(displayName)}
-                        </AvatarFallback>
-                      </Avatar>
-                      <span className="truncate font-semibold uppercase tracking-wide text-slate-900 dark:text-slate-100">
-                        {displayName}
-                      </span>
-                    </div>
-                    <RidesStatusBadge status={row.status} />
-                  </div>
-                  <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
-                    <div>
-                      <p className="text-xs text-slate-500">Assignment</p>
-                      <p className="truncate font-medium text-slate-800 dark:text-slate-200">
-                        {unassigned ? 'Unassigned' : assignment}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-slate-500">Plate</p>
-                      <p className="font-mono text-slate-700 dark:text-slate-300">{plate || '—'}</p>
-                    </div>
-                  </div>
-                </button>
-                <div className="mt-3 flex items-center justify-end gap-1 border-t border-slate-100 pt-2 dark:border-slate-800">
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="min-h-11 min-w-11"
-                        disabled={busy}
-                        aria-label={`Change vehicle for ${displayName}`}
-                      >
-                        <ChevronDown className="h-4 w-4 text-slate-500" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-52">
-                      <DropdownMenuLabel>Vehicle</DropdownMenuLabel>
-                      <DropdownMenuItem
-                        disabled={busy}
-                        onClick={() => onAssignVehicle?.(row.id)}
-                      >
-                        {unassigned ? 'Assign vehicle' : 'Assign another vehicle'}
-                      </DropdownMenuItem>
-                      {!unassigned ? (
-                        <>
-                          <DropdownMenuSeparator />
+          <ul className="divide-y divide-slate-200 overflow-hidden rounded-xl border border-slate-200 bg-white dark:divide-slate-800 dark:border-slate-700 dark:bg-slate-900">
+            {rows.map((row) => {
+              const { displayName, plate, assignment, unassigned, busy } = rowMeta(row);
+              const vehicleTitle = unassigned ? 'Unassigned' : assignment;
+              const metaBits = [
+                plate || null,
+                unassigned ? 'Unassigned' : 'Assigned',
+              ].filter(Boolean);
+
+              return (
+                <li key={row.id} className="px-3 py-3.5">
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      className={cn(
+                        'flex h-14 w-20 shrink-0 items-center justify-center overflow-hidden rounded-md border border-slate-200 bg-slate-100 dark:border-slate-700 dark:bg-slate-800',
+                        busy && 'opacity-60',
+                      )}
+                      onClick={() => onOpenDriver?.(row.id)}
+                      aria-label={`Open driver ${displayName}`}
+                    >
+                      {!unassigned && row.vehicleImage ? (
+                        <img
+                          src={row.vehicleImage}
+                          alt=""
+                          className="h-full w-full object-cover object-center"
+                        />
+                      ) : (
+                        <Car className="h-6 w-6 text-slate-400" aria-hidden />
+                      )}
+                    </button>
+
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-start justify-between gap-2">
+                        <button
+                          type="button"
+                          className="min-w-0 truncate text-left text-[15px] font-semibold uppercase tracking-wide text-slate-900 dark:text-slate-100"
+                          onClick={() => onOpenDriver?.(row.id)}
+                        >
+                          {displayName}
+                        </button>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="-mr-1.5 -mt-0.5 h-8 w-8 shrink-0"
+                              aria-label={`Actions for ${displayName}`}
+                            >
+                              <MoreVertical className="h-4 w-4 text-slate-400" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => onOpenDriver?.(row.id)}>
+                              View driver
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => setContactRow(row)}>
+                              Contact
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <button
+                            type="button"
+                            disabled={busy}
+                            className="mt-0.5 flex min-w-0 max-w-full items-center gap-1 text-left disabled:opacity-60"
+                            aria-label={`Change vehicle for ${displayName}`}
+                          >
+                            <span
+                              className={cn(
+                                'truncate text-sm font-medium leading-tight',
+                                unassigned
+                                  ? 'text-slate-400'
+                                  : 'text-slate-800 dark:text-slate-200',
+                              )}
+                            >
+                              {vehicleTitle}
+                            </span>
+                            <ChevronDown className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+                          </button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="start" className="w-52">
                           <DropdownMenuItem
                             disabled={busy}
-                            className="text-rose-600 focus:text-rose-700"
-                            onClick={() => onUnassignVehicle?.(row.id)}
+                            onClick={() => onAssignVehicle?.(row.id)}
                           >
-                            Unassign vehicle
+                            {unassigned ? 'Assign vehicle' : 'Assign another vehicle'}
                           </DropdownMenuItem>
-                        </>
-                      ) : null}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="min-h-11 min-w-11"
-                        aria-label={`Actions for ${displayName}`}
-                      >
-                        <MoreVertical className="h-4 w-4 text-slate-400" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                      <DropdownMenuItem onClick={() => onOpenDriver?.(row.id)}>
-                        View driver
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => setContactRow(row)}>
-                        Contact
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </div>
-              </div>
-            );
-          })
+                          {!unassigned ? (
+                            <>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                disabled={busy}
+                                className="text-rose-600 focus:text-rose-700"
+                                onClick={() => onUnassignVehicle?.(row.id)}
+                              >
+                                Unassign vehicle
+                              </DropdownMenuItem>
+                            </>
+                          ) : null}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+
+                      <p className="mt-0.5 truncate text-sm text-slate-500">
+                        {metaBits.join(' • ')}
+                      </p>
+
+                      <p className="mt-2 text-[11px] font-medium text-slate-500">Rides Status</p>
+                      <div className="mt-1">
+                        <RidesStatusBadge status={row.status} />
+                      </div>
+                    </div>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
         )}
       </div>
 

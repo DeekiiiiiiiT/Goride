@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import type { CourierComplianceBlocker } from '@roam/types/courier';
-import { Car, ChevronFirst, ChevronLeft, ChevronRight, Loader2, UserPlus } from 'lucide-react';
+import { Car, ChevronFirst, ChevronLeft, ChevronRight, Loader2, Plus, Search, SlidersHorizontal, UserPlus } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { api } from '../../services/api';
@@ -9,6 +9,15 @@ import { applyDriverAssignmentChange } from '../../utils/vehicleDriverAssignment
 import { isVehicleParked } from '../../utils/vehicleCatalogGate';
 import { showCatalogGateToastIfApplicable } from '../../utils/catalogGateErrors';
 import { Button } from '../ui/button';
+import { Input } from '../ui/input';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '../ui/dropdown-menu';
 import {
   Select,
   SelectContent,
@@ -17,6 +26,7 @@ import {
   SelectValue,
 } from '../ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
+import { cn } from '../ui/utils';
 import { AddDriverModal } from '../drivers/AddDriverModal';
 import { AddVehicleModal } from '../vehicles/AddVehicleModal';
 import { WorkforceInvitePanel } from '../workforce/WorkforceInvitePanel';
@@ -35,6 +45,7 @@ import {
   type AssignableVehicleOption,
 } from './DashboardAssignVehicleDialog';
 import { DashboardFilterBar } from './DashboardFilterBar';
+import { DashboardMobileFiltersDrawer } from './DashboardMobileFiltersDrawer';
 import {
   DOCUMENT_OPTIONS,
   STATUS_OPTIONS,
@@ -178,6 +189,7 @@ export function Dashboard({ onSelectDriver }: Props) {
   const [busyDriverId, setBusyDriverId] = useState<string | null>(null);
   const [isAddVehicleOpen, setIsAddVehicleOpen] = useState(false);
   const [isAddDriverOpen, setIsAddDriverOpen] = useState(false);
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
   const [selectedCourier, setSelectedCourier] = useState<CourierProfile | null>(null);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState<(typeof PAGE_SIZE_OPTIONS)[number]>(10);
@@ -538,25 +550,87 @@ export function Dashboard({ onSelectDriver }: Props) {
       buttonClassName="h-10 rounded-lg bg-slate-900 px-4 text-white hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white"
     />
   ) : (
-    <div className="flex flex-wrap items-center gap-2">
-      <Button
-        type="button"
-        className="h-10 rounded-lg bg-slate-900 px-4 text-white hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white"
-        onClick={() => setIsAddDriverOpen(true)}
-      >
-        <UserPlus className="mr-2 h-4 w-4" />
-        Add driver
-      </Button>
-      <Button
-        type="button"
-        className="h-10 rounded-lg bg-slate-900 px-4 text-white hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white"
-        onClick={() => setIsAddVehicleOpen(true)}
-      >
-        <Car className="mr-2 h-4 w-4" />
-        Add vehicle
-      </Button>
-    </div>
+    <>
+      {/* Desktop: original side-by-side actions */}
+      <div className="hidden flex-wrap items-center gap-2 md:flex">
+        <Button
+          type="button"
+          className="h-10 rounded-lg bg-slate-900 px-4 text-white hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white"
+          onClick={() => setIsAddDriverOpen(true)}
+        >
+          <UserPlus className="mr-2 h-4 w-4" />
+          Add driver
+        </Button>
+        <Button
+          type="button"
+          className="h-10 rounded-lg bg-slate-900 px-4 text-white hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white"
+          onClick={() => setIsAddVehicleOpen(true)}
+        >
+          <Car className="mr-2 h-4 w-4" />
+          Add vehicle
+        </Button>
+      </div>
+
+      {/* Mobile: self-serve + menu */}
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            type="button"
+            size="icon"
+            aria-label="Add to your fleet"
+            className="h-10 w-10 shrink-0 rounded-lg bg-slate-900 text-white hover:bg-slate-800 md:hidden dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white"
+          >
+            <Plus className="h-5 w-5" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-64 p-1.5">
+          <DropdownMenuLabel className="px-2 py-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500">
+            What do you want to add?
+          </DropdownMenuLabel>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            className="cursor-pointer gap-3 rounded-md px-2 py-2.5"
+            onSelect={() => setIsAddDriverOpen(true)}
+          >
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200">
+              <UserPlus className="h-4 w-4" />
+            </span>
+            <span className="flex min-w-0 flex-col gap-0.5">
+              <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">Driver</span>
+              <span className="text-xs text-slate-500">Add someone to your rideshare roster</span>
+            </span>
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            className="cursor-pointer gap-3 rounded-md px-2 py-2.5"
+            onSelect={() => setIsAddVehicleOpen(true)}
+          >
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200">
+              <Car className="h-4 w-4" />
+            </span>
+            <span className="flex min-w-0 flex-col gap-0.5">
+              <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">Vehicle</span>
+              <span className="text-xs text-slate-500">Register a car for your fleet</span>
+            </span>
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </>
   );
+
+  const mobileSearchPlaceholder =
+    activeLine === 'delivery' ? 'Search couriers' : 'Search vehicles';
+  const mobileSearchValue = activeLine === 'delivery' ? courierSearchQuery : searchQuery;
+  const mobileSearchField = activeLine === 'delivery' ? courierSearchField : searchField;
+  const onMobileSearchChange =
+    activeLine === 'delivery' ? setCourierSearchQuery : setSearchQuery;
+  const mobileFiltersActive =
+    activeLine === 'delivery'
+      ? courierAssignmentFilter !== null ||
+        courierStatusFilters.length !== STATUS_OPTIONS.length ||
+        courierDocumentFilters.length !== DOCUMENT_OPTIONS.length
+      : assignmentFilter !== null ||
+        statusFilters.length !== STATUS_OPTIONS.length ||
+        documentFilters.length !== DOCUMENT_OPTIONS.length;
 
   const rideshareBody = (
     <>
@@ -621,23 +695,87 @@ export function Dashboard({ onSelectDriver }: Props) {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      {/* Desktop: title + add actions */}
+      <div className="hidden items-center justify-between gap-3 md:flex">
         <h2 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
           Dashboard
         </h2>
         {headerActions}
       </div>
 
+      {/* Mobile: search + filters icon beside + / invite */}
+      <div className="flex items-center gap-2 md:hidden">
+        <div className="relative min-w-0 flex-1">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          <Input
+            value={mobileSearchValue}
+            onChange={(e) => onMobileSearchChange(e.target.value)}
+            placeholder={mobileSearchPlaceholder}
+            className="h-10 rounded-full border-transparent bg-slate-100 pl-9 pr-11 shadow-none focus-visible:border-slate-200 focus-visible:bg-white"
+            aria-label={`Search by ${mobileSearchField}`}
+          />
+          <button
+            type="button"
+            aria-label="Open filters"
+            className="absolute right-1.5 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full text-slate-700 hover:bg-slate-200/80"
+            onClick={() => setMobileFiltersOpen(true)}
+          >
+            <SlidersHorizontal className="h-4 w-4" />
+            {mobileFiltersActive ? (
+              <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-slate-900" />
+            ) : null}
+          </button>
+        </div>
+        {headerActions}
+      </div>
+
+      {activeLine === 'delivery' ? (
+        <DashboardMobileFiltersDrawer
+          variant="delivery"
+          open={mobileFiltersOpen}
+          onOpenChange={setMobileFiltersOpen}
+          assignment={courierAssignmentFilter}
+          statuses={courierStatusFilters}
+          documents={courierDocumentFilters}
+          searchField={courierSearchField}
+          onAssignmentChange={setCourierAssignmentFilter}
+          onStatusesChange={setCourierStatusFilters}
+          onDocumentsChange={setCourierDocumentFilters}
+          onSearchFieldChange={setCourierSearchField}
+          onReset={resetCourierFilters}
+        />
+      ) : (
+        <DashboardMobileFiltersDrawer
+          open={mobileFiltersOpen}
+          onOpenChange={setMobileFiltersOpen}
+          assignment={assignmentFilter}
+          statuses={statusFilters}
+          documents={documentFilters}
+          searchField={searchField}
+          onAssignmentChange={setAssignmentFilter}
+          onStatusesChange={setStatusFilters}
+          onDocumentsChange={setDocumentFilters}
+          onSearchFieldChange={setSearchField}
+          onReset={resetFilters}
+        />
+      )}
+
       {showTabs ? (
         <Tabs value={activeLine} onValueChange={handleLineChange} className="gap-4">
-          <TabsList className="h-10 rounded-lg bg-slate-100 p-1 dark:bg-slate-800">
+          <TabsList
+            className={cn(
+              'h-10 rounded-lg bg-slate-100 p-1 dark:bg-slate-800',
+              'max-md:grid max-md:w-full',
+              availableLines.length >= 2 ? 'max-md:grid-cols-2' : 'max-md:grid-cols-1',
+            )}
+          >
             {availableLines.includes('rideshare') ? (
-              <TabsTrigger value="rideshare" className="rounded-md px-4">
+              <TabsTrigger value="rideshare" className="rounded-md px-4 max-md:w-full">
                 Rideshare
               </TabsTrigger>
             ) : null}
             {availableLines.includes('delivery') ? (
-              <TabsTrigger value="delivery" className="rounded-md px-4">
+              <TabsTrigger value="delivery" className="rounded-md px-4 max-md:w-full">
                 Delivery (Roam Rush)
               </TabsTrigger>
             ) : null}

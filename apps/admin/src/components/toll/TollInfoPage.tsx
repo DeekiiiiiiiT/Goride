@@ -1,1 +1,1 @@
-export { TollInfoPage } from '@fleet/components/toll/TollInfoPage';
+export { TollInfoPage } from '@roam/platform-ops-ui';

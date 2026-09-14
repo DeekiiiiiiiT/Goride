@@ -1,1 +1,1 @@
-export { GasStationAnalytics } from '@fleet/components/fuel/stations/GasStationAnalytics';
+export { GasStationAnalytics } from '@roam/platform-ops-ui';

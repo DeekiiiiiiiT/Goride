@@ -1,16 +1,18 @@
 import React from 'react';
-import { StationDatabaseView as FleetStationDatabaseView } from '@fleet/components/fuel/stations/StationDatabaseView';
-import type { ResolutionQueueSubTab } from '@fleet/components/fuel/stations/ResolutionQueueTab';
+import {
+  StationDatabaseView as PlatformStationDatabaseView,
+  type ResolutionQueueSubTab,
+} from '@roam/platform-ops-ui';
 import { SilentStationAttachPanel } from '../../admin/fuel/SilentStationAttachPanel';
 
 export type { ResolutionQueueSubTab };
 
-type FleetProps = React.ComponentProps<typeof FleetStationDatabaseView>;
+type PlatformProps = React.ComponentProps<typeof PlatformStationDatabaseView>;
 
 /** Dominion Station Database — Resolution Queue includes Silent Attach. */
-export function StationDatabaseView(props: FleetProps) {
+export function StationDatabaseView(props: PlatformProps) {
   return (
-    <FleetStationDatabaseView
+    <PlatformStationDatabaseView
       {...props}
       enableSilentAttach
       silentAttachPanel={<SilentStationAttachPanel embedded />}

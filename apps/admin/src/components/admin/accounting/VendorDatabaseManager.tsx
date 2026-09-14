@@ -1,1 +1,1 @@
-export { VendorDatabaseManager } from '@fleet/components/admin/accounting/VendorDatabaseManager';
+export { VendorDatabaseManager } from '@roam/platform-ops-ui';

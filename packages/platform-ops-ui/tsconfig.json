@@ -1,0 +1,28 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "noEmit": true,
+    "skipLibCheck": true,
+    "jsx": "react-jsx",
+    "allowImportingTsExtensions": true,
+    "paths": {
+      "@roam/admin-core": ["../admin-core/src"],
+      "@roam/admin-core/*": ["../admin-core/src/*"],
+      "@roam/types": ["../types/src"],
+      "@roam/types/*": ["../types/src/*"],
+      "@roam/ui": ["../ui/src"],
+      "@roam/ui/*": ["../ui/src/*"],
+      "@roam/api-client": ["../api-client/src"],
+      "@roam/api-client/*": ["../api-client/src/*"],
+      "@roam/business-config": ["../business-config/src"],
+      "@roam/business-config/*": ["../business-config/src/*"],
+      "@roam/toll-core/*": ["../toll-core/src/*"],
+      "@roam/fuel-core": ["../fuel-core/src"],
+      "@roam/fuel-core/*": ["../fuel-core/src/*"],
+      "@roam/roam-shared": ["../roam-shared/src"],
+      "@roam/roam-shared/*": ["../roam-shared/src/*"]
+    }
+  },
+  "include": ["src/**/*.ts", "src/**/*.tsx", "src/**/*.d.ts"]
+}

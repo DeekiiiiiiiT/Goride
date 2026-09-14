@@ -24,6 +24,7 @@ import type { ExpenseHubSubview } from './components/business-finance/expense-hu
 
 import { OfflineProvider } from './components/providers/OfflineProvider';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { PlatformConfigProvider as OpsPlatformConfigProvider, PlatformSessionProvider } from '@roam/platform-ops-ui';
 import { ErrorBoundary } from './components/ui/ErrorBoundary';
 import { API_ENDPOINTS } from './services/apiConfig';
 import { withProductLineHeaders } from './config/productLine';
@@ -149,6 +150,16 @@ function inferClientProductLine(meta: Record<string, unknown> | undefined): 'fle
   if (meta?.businessType === 'rideshare' || meta?.businessType === 'delivery') return 'fleet';
   if (Array.isArray(meta?.serviceLines) && meta.serviceLines.length > 0) return 'fleet';
   return 'enterprise';
+}
+
+/** Bridges Fleet AuthProvider session into shared platform-ops UI. */
+function PlatformSessionFromAuth({ children }: { children: React.ReactNode }) {
+  const { session } = useAuth();
+  return (
+    <PlatformSessionProvider accessToken={session?.access_token ?? null}>
+      <OpsPlatformConfigProvider>{children}</OpsPlatformConfigProvider>
+    </PlatformSessionProvider>
+  );
 }
 
 function AppContent() {
@@ -1003,17 +1014,19 @@ export default function App() {
         ) : (
           <QueryClientProvider client={queryClient}>
             <AuthProvider>
-              <OfflineProvider>
-                <BusinessConfigProvider>
-                  <PlatformConfigProvider>
-                    <FeatureFlagProvider>
-                      <ServiceLineScopeProvider>
-                        <AppContent />
-                      </ServiceLineScopeProvider>
-                    </FeatureFlagProvider>
-                  </PlatformConfigProvider>
-                </BusinessConfigProvider>
-              </OfflineProvider>
+              <PlatformSessionFromAuth>
+                <OfflineProvider>
+                  <BusinessConfigProvider>
+                    <PlatformConfigProvider>
+                      <FeatureFlagProvider>
+                        <ServiceLineScopeProvider>
+                          <AppContent />
+                        </ServiceLineScopeProvider>
+                      </FeatureFlagProvider>
+                    </PlatformConfigProvider>
+                  </BusinessConfigProvider>
+                </OfflineProvider>
+              </PlatformSessionFromAuth>
             </AuthProvider>
           </QueryClientProvider>
         )}

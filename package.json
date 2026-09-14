@@ -62,6 +62,7 @@
     "build:courier": "pnpm --filter @roam/dash-courier build",
     "test": "pnpm -r test",
     "check:edge-imports": "node scripts/check-no-edge-fleet-imports.mjs",
+    "check:admin-fleet-imports": "node scripts/check-no-admin-fleet-imports.mjs",
     "check:toll-core-parity": "node scripts/check-toll-core-parity.mjs",
     "lint": "pnpm -r lint",
     "check:ledger-view-invoker": "node scripts/assert-ledger-view-invoker.mjs && node scripts/assert-fleet-view-invoker.mjs",

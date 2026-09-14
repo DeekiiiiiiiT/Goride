@@ -3,7 +3,6 @@ import { Button } from '../../ui/button';
 import { Input } from '../../ui/input';
 import { Badge } from '../../ui/badge';
 import { Label } from '../../ui/label';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../../ui/tooltip';
 import {
   Select,
   SelectContent,
@@ -13,8 +12,7 @@ import {
 } from '../../ui/select';
 import { Popover, PopoverContent, PopoverTrigger } from '../../ui/popover';
 import { Tabs, TabsList, TabsTrigger } from '../../ui/tabs';
-import { cn } from '../../ui/utils';
-import { Search, Filter as FilterIcon, Download, RotateCcw, History, X } from 'lucide-react';
+import { Search, Filter as FilterIcon, Download, RotateCcw, History, X, Plus } from 'lucide-react';
 import { PeriodWeekDropdown } from '../../ui/PeriodWeekDropdown';
 import type { DateRange } from 'react-day-picker';
 
@@ -49,15 +47,14 @@ export type FuelLogToolbarProps = {
   periodStart?: string;
   periodEnd?: string;
   onDateRangeChange?: (range: DateRange | undefined) => void;
-  showRecalculate: boolean;
-  isRecalculating: boolean;
-  onRecalculate: () => void;
   /** Rendered between tabs and filters (e.g. KPI cards). */
   afterTabs?: React.ReactNode;
+  /** Mobile: Add fuel sits beside the calendar; desktop keeps header CTA. */
+  onAddFuel?: () => void;
 };
 
 /**
- * Search / export / filters / period / recalculate + tab triggers.
+ * Search / export / filters / period + tab triggers.
  * Presentational — parent owns query state.
  */
 export function FuelLogToolbar({
@@ -91,10 +88,8 @@ export function FuelLogToolbar({
   periodStart,
   periodEnd,
   onDateRangeChange,
-  showRecalculate,
-  isRecalculating,
-  onRecalculate,
   afterTabs,
+  onAddFuel,
 }: FuelLogToolbarProps) {
   return (
     <div className="space-y-3">
@@ -285,51 +280,38 @@ export function FuelLogToolbar({
               </Badge>
             )}
           </div>
-          {onDateRangeChange && (
-            <PeriodWeekDropdown
-              selectedStart={periodStart}
-              selectedEnd={periodEnd}
-              placeholder="Select week period"
-              buttonClassName="h-9 text-xs"
-              allowCustomRange
-              onSelect={(period) => {
-                const [sy, sm, sd] = period.startDate.split('-').map(Number);
-                const [ey, em, ed] = period.endDate.split('-').map(Number);
-                onDateRangeChange({
-                  from: new Date(sy, sm - 1, sd),
-                  to: new Date(ey, em - 1, ed),
-                });
-              }}
-            />
+          {(onDateRangeChange || onAddFuel) && (
+            <div className="flex items-center gap-2 min-w-0">
+              {onDateRangeChange && (
+                <PeriodWeekDropdown
+                  selectedStart={periodStart}
+                  selectedEnd={periodEnd}
+                  placeholder="Select week period"
+                  buttonClassName="h-9 text-xs"
+                  allowCustomRange
+                  onSelect={(period) => {
+                    const [sy, sm, sd] = period.startDate.split('-').map(Number);
+                    const [ey, em, ed] = period.endDate.split('-').map(Number);
+                    onDateRangeChange({
+                      from: new Date(sy, sm - 1, sd),
+                      to: new Date(ey, em - 1, ed),
+                    });
+                  }}
+                />
+              )}
+              {onAddFuel ? (
+                <Button
+                  size="sm"
+                  onClick={onAddFuel}
+                  className="h-9 shrink-0 bg-slate-900 text-white hover:bg-slate-800 md:hidden"
+                >
+                  <Plus className="h-4 w-4 mr-1.5" />
+                  Add fuel
+                </Button>
+              ) : null}
+            </div>
           )}
         </div>
-        {showRecalculate && (
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="gap-2 h-9 text-slate-600 border-slate-200 hover:text-indigo-600 hover:border-indigo-300 transition-colors shrink-0"
-                  disabled={isRecalculating}
-                  onClick={onRecalculate}
-                >
-                  <RotateCcw className={cn('h-3.5 w-3.5', isRecalculating && 'animate-spin')} />
-                  <span className="text-xs font-semibold">
-                    {isRecalculating ? 'Recalculating...' : 'Recalculate'}
-                  </span>
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="bottom" className="max-w-[240px]">
-                <p className="text-xs font-semibold">Recalculate Capacity Cycles</p>
-                <p className="text-[11px] text-slate-400 mt-0.5">
-                  Runs Fuel Audit recalculate-all (optional vehicle filter). Cycles close at 98% capacity with
-                  spillover; driver Full Tank removed.
-                </p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-        )}
       </div>
     </div>
   );

@@ -21,7 +21,6 @@ import {
   Weight,
 } from "lucide-react";
 import { useAuth } from "../../auth/AuthContext";
-import { CatalogGateObservabilityPanel } from "./CatalogGateObservabilityPanel";
 import { CatalogOrphansPanel } from "./CatalogOrphansPanel";
 import {
   bulkUpsertVehicleCatalog,
@@ -570,7 +569,6 @@ export function VehicleCatalogManager() {
 
   return (
     <div className="flex flex-col gap-4 p-4 sm:p-6 text-slate-900 dark:text-slate-200">
-      <CatalogGateObservabilityPanel />
       <CatalogOrphansPanel />
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>

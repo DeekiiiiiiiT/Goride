@@ -1,2 +1,2 @@
-export type { ResolutionQueueSubTab } from '@fleet/components/fuel/stations/ResolutionQueueTab';
-export { ResolutionQueueTab } from '@fleet/components/fuel/stations/ResolutionQueueTab';
+export type { ResolutionQueueSubTab } from '@roam/platform-ops-ui';
+export { ResolutionQueueTab } from '@roam/platform-ops-ui';

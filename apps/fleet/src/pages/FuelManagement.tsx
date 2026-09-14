@@ -1434,7 +1434,7 @@ function FuelManagementInner({
             <Button
               size="sm"
               onClick={() => setIsAddFuelChoiceOpen(true)}
-              className="bg-slate-900 text-white hover:bg-slate-800"
+              className="hidden md:inline-flex bg-slate-900 text-white hover:bg-slate-800"
             >
               <Plus className="h-4 w-4 mr-2" />
               Add fuel
@@ -1446,13 +1446,15 @@ function FuelManagementInner({
         <div
           className={`flex justify-end items-center gap-3 mb-4 flex-wrap${
             activeTab === 'logs' && !embedded ? ' md:justify-end' : ''
+          }${
+            activeTab === 'logs' && !isSyncing ? ' hidden md:flex' : ''
           }`}
         >
             {activeTab === 'logs' && embedded ? (
               <Button
                 size="sm"
                 onClick={() => setIsAddFuelChoiceOpen(true)}
-                className="bg-slate-900 text-white hover:bg-slate-800"
+                className="hidden md:inline-flex bg-slate-900 text-white hover:bg-slate-800"
               >
                 <Plus className="h-4 w-4 mr-2" />
                 Add fuel
@@ -1472,7 +1474,9 @@ function FuelManagementInner({
                     void loadLogsAndTransactions();
                 }} 
                 disabled={isRefreshing}
-                className="text-slate-600 border-slate-200"
+                className={`text-slate-600 border-slate-200${
+                  activeTab === 'logs' ? ' hidden md:inline-flex' : ''
+                }`}
             >
                 <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
                 {isRefreshing ? 'Refreshing...' : 'Refresh Data'}
@@ -1669,7 +1673,7 @@ function FuelManagementInner({
 
       {activeTab === 'logs' && (
         <div className="space-y-4">
-            <FuelLogTable 
+            <FuelLogTable
                 entries={logs}
                 transactions={transactions}
                 vehicles={vehicles}
@@ -1684,6 +1688,7 @@ function FuelManagementInner({
                 isLoading={!fuelLogsHydrated}
                 loadError={fuelLogsLoadError}
                 onRefresh={refreshLogs}
+                onAddFuel={() => setIsAddFuelChoiceOpen(true)}
             />
         </div>
       )}

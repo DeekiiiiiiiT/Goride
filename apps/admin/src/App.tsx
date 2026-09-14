@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthRecoveryGate, flashAdminLoginError } from '@roam/auth-client';
+import { PlatformConfigProvider, PlatformSessionProvider } from '@roam/platform-ops-ui';
 import { AuthProvider, useAuth } from './components/auth/AuthContext';
 import { AdminConfirmProvider } from '@roam/admin-core';
 import { AdminLoginPage } from './components/admin/AdminLoginPage';
@@ -19,6 +20,16 @@ const queryClient = new QueryClient({
     },
   },
 });
+
+/** Bridges Dominion AuthProvider session into shared platform-ops UI. */
+function PlatformSessionFromAuth({ children }: { children: React.ReactNode }) {
+  const { session } = useAuth();
+  return (
+    <PlatformSessionProvider accessToken={session?.access_token ?? null}>
+      <PlatformConfigProvider>{children}</PlatformConfigProvider>
+    </PlatformSessionProvider>
+  );
+}
 
 function AppContent() {
   const { user, isPlatformUser, loading, signOut } = useAuth();
@@ -65,7 +76,9 @@ export default function App() {
     >
       <QueryClientProvider client={queryClient}>
         <AuthProvider>
-          <AppContent />
+          <PlatformSessionFromAuth>
+            <AppContent />
+          </PlatformSessionFromAuth>
         </AuthProvider>
       </QueryClientProvider>
     </AuthRecoveryGate>

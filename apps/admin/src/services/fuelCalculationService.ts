@@ -1,5 +1,5 @@
 /**
- * Dominion re-exports Fleet's canonical fuel money engine (Phase 1 de-fork).
+ * Dominion re-exports @roam/fuel-core fuel money engine (Phase 1 Dominion/Fleet decoupling).
  * Do not reintroduce a local fork — see @roam/fuel-core README.
  */
 export {
@@ -9,9 +9,9 @@ export {
   SEVERE_GAP_PCT,
   TANK_OVERFLOW_MULT,
   UNACCOUNTED_DISTANCE_DEDUCTION_KM,
-} from '@fleet/services/fuelCalculationService';
+} from '@roam/fuel-core';
 export type {
   PersonalAllowanceReconContext,
   VehicleDeadheadInput,
   FuelCoverageCategory,
-} from '@fleet/services/fuelCalculationService';
+} from '@roam/fuel-core';
