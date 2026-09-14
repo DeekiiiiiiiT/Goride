@@ -1,7 +1,7 @@
 # Motorcycle Catalog Audit — Adding Two-Wheelers to the Dominion Vehicle Database
 
 **Date:** 2026-09-13 · **Rev 3 closure:** 2026-09-14
-**Status:** **§M1–§M12, §M14, and §M15 closed.** §M13 remains a deliberate forward product note (Rides car-only).
+**Status:** **§M1–§M12, §M14–§M16 closed and independently verified.** §7b fleet fuel gate import fixed. §M13 remains a deliberate forward product note (Rides car-only).
 **Scope:** `public.vehicle_catalog` and every read/write path touching it — Dominion → Motor Vehicles, Pending motor vehicles, Maintenance templates. RoamFleet → Add Vehicle, catalog anchor facets, catalog gate. Edge → `_fleet-server` catalog routes, `rides/admin/commandoBodyTypes`. Plus the CSV import/export pipeline in all four app copies.
 **Method (Rev 1):** Static read of the catalog schema chain (11 migrations), both import allowlists, the edge write path with its fallback ladder, the gate, the resolver, and all downstream consumers. No code was changed.
 **Method (Rev 2):** Re-read every remediated path against commit `b4550517`; ran the catalog test suite (40/40 pass) and a repo typecheck; traced the pending-request approve path end to end.
@@ -31,6 +31,7 @@
 | §M13 | Rides hard-filtered to `car` blocks future Rush couriers | Note | 🔵 Forward dependency (intentional) |
 | §M14 | No test binds the three column lists together | Note | ✅ **Closed** — CSV ⊆ aliases ⊆ writable (+ CSV ⊆ writable) |
 | §M15 | Rev 3 work is uncommitted (incl. the new migration) | Note | ✅ **Closed** — `8465cf13` catalog-scoped |
+| §M16 | Parity test itself fails `tsc` (narrow `Set` vs `string`) | Low | ✅ **Closed** — `new Set<string>(...)` |
 
 **Verification result:** the remediation is thorough and in several places went beyond the recommendation. The **mirroring tax was genuinely paid down** rather than paid repeatedly — app-level copies are now thin re-exports and the edge resolver imports `packages/types` directly, which makes resolver drift structurally impossible rather than merely tested for.
 
@@ -117,6 +118,16 @@ Approve-existing still inherits the linked catalog row's class (no insert).
 
 Pending approve `KEYS` and fleet-server catalog writes both import package `VEHICLE_CATALOG_WRITABLE_KEYS` (SSOT).
 
+**Beyond the recommendation — §M2's "two allowlists" are now literally one.** `supabase/functions/_fleet-server/index.tsx:128` and `pending_vehicle_catalog_routes.ts:23` both import the list from `packages/types`; the hand-maintained server copy is gone. Rev 1 asked for the two lists to be kept in agreement — they were instead collapsed into a single source, which is the stronger fix.
+
+Verified empirically alongside the test: all **66** CSV data columns are present in `VEHICLE_CATALOG_WRITABLE_KEYS`. Suite is **10 tests, passing**; catalog total **53/53**.
+
+---
+
+## 5c. §M16 — Low — CLOSED — Parity test typechecks
+
+**Closed 2026-09-14.** Widened construction to `new Set<string>(VEHICLE_CATALOG_WRITABLE_KEYS)` so `writable.has(k)` accepts CSV `string` keys. Runtime assertions unchanged; vitest **10/10** still pass. Catalog-scope `TS2345` from this file is gone.
+
 ---
 
 ## 5a. §M15 — Note — CLOSED — Rev 3 committed
@@ -152,11 +163,20 @@ When Rush courier onboarding ships:
 
 ## 7. What is left to do
 
-**Nothing blocks motorcycle loading.** CSV, Edit dialog, and pending-request approve preserve class. GoRide schema verified; edge deployed; Ace SQL smoke passed.
+**Nothing blocks motorcycle loading.** CSV, Edit dialog, and pending-request approve all preserve class. GoRide schema verified; edge deployed; Ace SQL smoke passed. §M16 and §7b hygiene closed.
 
-**Forward only:** Rush courier body types (§M13 / §5b).
+1. **§M13 — forward only.** Rush courier body types (§5b), when that product PR lands.
+2. **Optional human UI click-through:** Fleet unmatched Ace 150 → Pending shows Motorcycle → Approve → confirm facets. Already proven at the DB layer.
 
-**Optional human UI click-through:** Fleet unmatched Ace 150 → Pending shows Motorcycle → Approve → confirm facets (already proven at DB layer).
+### Provenance note on live-environment checks
+
+The GoRide schema re-verification, edge redeploy, and Ace SQL smoke test in §7a are **recorded from the implementer**, not independently confirmed by this audit — verifying them requires production database access, which was deliberately not exercised here. The static chain they attest to (migration → seed → approve → UI) *was* independently traced and holds. If the smoke results are ever in doubt, §M11 is the finding to re-run, because it is closed in code but only asserted in production.
+
+---
+
+## 7b. Pre-existing fuel gate import — CLOSED
+
+**Closed 2026-09-14.** [`apps/fleet/src/services/fuelService.ts`](apps/fleet/src/services/fuelService.ts) now imports `throwIfCatalogGateBlocked` from `./api` (same pattern as admin). Failed fuel-entry saves surface catalog-gate / server errors instead of `ReferenceError`.
 
 ---
 
@@ -176,6 +196,11 @@ When Rush courier onboarding ships:
 | Fleet edge deploy | ✅ `make-server-37f42386` 2026-09-14 |
 | Ace SQL smoke | ✅ motorcycle pending→approve = motorcycle; car stays car; excluded from car filter |
 | Deno import hygiene | ✅ `vehicleCatalogCsvImport` uses `.ts` suffixes |
+| Server allowlist single-sourced | ✅ both edge sites import `packages/types` — §M2's two lists are now one |
+| Catalog test suite | ✅ **53/53** across 5 files (parity 10/10) |
+| Typecheck, catalog scope | ✅ parity test `TS2345` closed (§M16 `Set<string>`) |
+| Fleet fuel gate import (§7b) | ✅ `throwIfCatalogGateBlocked` imported in fleet `fuelService.ts` |
+| Commit scope | ✅ `8465cf13` is catalog-only; unrelated `DriverLayout`/`MOBILE_AUDIT` split into `4f9be8a2` |
 
 ---
 ## 8. Loading the Honda Ace 150 / CG150 — Rev 3

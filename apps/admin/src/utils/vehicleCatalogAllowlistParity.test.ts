@@ -28,7 +28,7 @@ const PENDING_APPROVE_REQUIRED_KEYS = [
 
 describe("vehicle catalog column allowlists (§M14)", () => {
   const aliasTargets = new Set(Object.values(ALIAS_TO_CANONICAL));
-  const writable = new Set(VEHICLE_CATALOG_WRITABLE_KEYS);
+  const writable = new Set<string>(VEHICLE_CATALOG_WRITABLE_KEYS);
 
   it("every export data column is reachable via ALIAS_TO_CANONICAL", () => {
     const missing: string[] = [];

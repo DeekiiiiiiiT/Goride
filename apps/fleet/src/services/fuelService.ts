@@ -4,6 +4,7 @@ import { FuelCard, FuelEntry, FuelEntryCorrection, MileageAdjustment, FuelScenar
 import { FinancialTransaction } from '../types/data';
 import { API_ENDPOINTS } from './apiConfig';
 import { settlementService } from './settlementService';
+import { throwIfCatalogGateBlocked } from './api';
 import { currentFuelListWindow } from '../utils/fuelWeekPeriod';
 
 async function fetchWithRetry(url: string, options: RequestInit = {}, retries = 3, backoff = 500): Promise<Response> {
