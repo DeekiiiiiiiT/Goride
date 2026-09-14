@@ -30,7 +30,7 @@
 | §M12 | `VEHICLE_CATALOG_CSV_COLUMNS` still duplicated in fleet + driver | Low | ✅ **Closed** — re-export from packages/types |
 | §M13 | Rides hard-filtered to `car` blocks future Rush couriers | Note | 🔵 Forward dependency (intentional) |
 | §M14 | No test binds the three column lists together | Note | ✅ **Closed** — CSV ⊆ aliases ⊆ writable (+ CSV ⊆ writable) |
-| §M15 | Rev 3 work is uncommitted (incl. the new migration) | Note | ✅ **Closed** — catalog-scoped commit (see §7) |
+| §M15 | Rev 3 work is uncommitted (incl. the new migration) | Note | ✅ **Closed** — `8465cf13` catalog-scoped |
 
 **Verification result:** the remediation is thorough and in several places went beyond the recommendation. The **mirroring tax was genuinely paid down** rather than paid repeatedly — app-level copies are now thin re-exports and the edge resolver imports `packages/types` directly, which makes resolver drift structurally impossible rather than merely tested for.
 
@@ -121,7 +121,7 @@ Pending approve `KEYS` and fleet-server catalog writes both import package `VEHI
 
 ## 5a. §M15 — Note — CLOSED — Rev 3 committed
 
-Catalog-scoped commit lands migration `20260914120000_pending_proposed_vehicle_class.sql`, pending class path, CSV re-exports, parity tests, and Deno `.ts` import hygiene. Unrelated `DriverLayout.tsx` deletion is **not** included.
+Catalog-scoped commit `8465cf13` lands migration `20260914120000_pending_proposed_vehicle_class.sql`, pending class path, CSV re-exports, parity tests, and Deno `.ts` import hygiene. Unrelated `DriverLayout.tsx` deletion is **not** included.
 
 ---
 
