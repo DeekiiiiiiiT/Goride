@@ -1,10 +1,11 @@
 # Vehicle Catalog Enterprise Readiness Audit — Dominion → Vehicle Database
 
-**Date:** 2026-09-14 · **Rev 2 verification:** 2026-09-14 · **Rev 3 verification:** 2026-09-14
-**Status:** **All 13 original findings closed. §E1, §E3, §E4 closed in Rev 3.** One new Medium opened (§E5, server does not enforce the undo confirm phrase). §E2 remains documented-by-design. **The import is not blocked.**
+**Date:** 2026-09-14 · **Rev 2 verification:** 2026-09-14 · **Rev 3 verification:** 2026-09-14 · **Rev 4 close-out:** 2026-09-14
+**Status:** **All 13 original findings closed. §E1–§E6 closed (Rev 3–4).** §E2 remains documented-by-design (no code change). **Catalog enterprise programme complete for this audit scope.**
 **Scope:** Dominion → Vehicle Database → **Vehicle Catalog** and **Pending catalog**. Covers the admin UI (`VehicleCatalogManager`, `VehicleCatalogTable`, `VehicleCatalogEditDialog`, `VehicleCatalogImportDialog`, `PendingVehicleCatalogManager`, `CatalogGateObservabilityPanel`), the service layer, the `_fleet-server` catalog + pending routes, and the schema's referential behaviour.
 **Method (Rev 1):** Static read of all 8 catalog components, both services, the edge CRUD/purge/pending routes, and every FK referencing `public.vehicle_catalog`. No code was changed.
 **Method (Rev 2):** Re-read every remediated path — provenance migration, the new `vehicle_catalog_enterprise.ts` edge module, all 6 catalog write routes, the bulk/undo-batch/orphans/dependencies routes, and the manager UI. Traced provenance stamping order, undo-batch dependency guard, and checkpoint persistence. Catalog suites **54/54 pass**; typecheck shows no new catalog errors.
+**Method (Rev 4):** Closed §E5 (server `confirm` on force undo-batch) and §E6 (`npm:` type import). Edge redeployed. Parity **12/12** green.
 **Trigger:** Pre-flight before a 190-row bulk CSV import (`catalog_expansion_2026-09-14.csv`). The question asked was "what must be enterprise-grade before I load data."
 **Companions:** [MOTORCYCLE_CATALOG_AUDIT.md](MOTORCYCLE_CATALOG_AUDIT.md) · [VEHICLE_SYSTEM_AUDIT.md](VEHICLE_SYSTEM_AUDIT.md)
 
@@ -31,8 +32,8 @@
 | §E2 | `/bulk` is not transactional | Low | 🔵 Documented, mitigated by design |
 | §E3 | Gate backfill route has no rate limit | Low | ✅ **Closed** — `assertCatalogWriteRateLimit` added |
 | §E4 | Chunk size duplicated client/server | Low | ✅ **Closed** — `VEHICLE_CATALOG_BULK_MAX_ROWS` shared |
-| **§E5** | **Undo confirm phrase is client-side only** | **Medium** | 🔴 **OPEN — new** |
-| §E6 | `supabase-js` import style differs from sibling module | Low | 🔵 Nit, no runtime impact |
+| §E5 | Undo confirm phrase is client-side only | Medium | ✅ **Closed** — edge requires `confirm: "UNDO BATCH"` when `force:true` |
+| §E6 | `supabase-js` import style differs from sibling module | Low | ✅ **Closed** — `npm:@supabase/supabase-js@2` |
 
 **Verification result:** this is a thorough implementation that went past the recommendation in two places worth calling out.
 
@@ -388,17 +389,35 @@ It is a **type-only** import, erased at runtime, and the repo already carries th
 
 ---
 
+## 5d. Rev 4 — §E5 / §E6 closed
+
+### §E5 — CLOSED — force undo-batch confirm enforced on the edge
+
+`VEHICLE_CATALOG_UNDO_BATCH_CONFIRM = "UNDO BATCH"` lives next to the purge constant in `_fleet-server/index.tsx`. When `force: true`, the route rejects with **400** unless `confirm` matches exactly. Soft undo (no `force`) stays phrase-free. The admin client sends `confirm: VEHICLE_CATALOG_UNDO_BATCH_CONFIRM_PHRASE` whenever `force` is set; the dialog still gates the click. Purge and force-undo are now symmetric.
+
+### §E6 — CLOSED — type import aligned
+
+`vehicle_catalog_enterprise.ts` now imports `SupabaseClient` from `npm:@supabase/supabase-js@2`, matching `vehicle_catalog_schema_fallback.ts`.
+
+**Deploy:** `make-server-37f42386` redeployed to GoRide after Rev 4. Live production batch `84311f52-…` was **not** undone during verification.
+
+---
+
 ## 6. What to do before importing the 190 rows
 
 > **Rev 2: nothing here blocks the import any more.** §C1 is closed, so the batch is reversible via `/undo-batch`, and §H1 is closed, so a 190-row run is 5 chunked requests with retry and resume rather than 190 bare round trips. The original Rev 1 guidance is kept below for the record.
 
-**Rev 3 follow-ups, none blocking the import:**
+**Rev 4 follow-ups:** none for this audit scope. §E2 stays documented-by-design. Commit the Rev 4 edge/client/audit delta when ready.
 
-1. **§E5 — enforce the undo confirm phrase server-side.** The UI ceremony is real but the API accepts bare `force: true`. Mirror the purge pattern (client sends `confirm`, edge rejects 400 on mismatch). This is the only substantive item left.
-2. **§E6** — align the `supabase-js` type import with the sibling module to clear one `TS2307`.
-3. **Commit the work — still outstanding.** The tree carries **73 modified files** and `HEAD` is still `f7979973`; none of the Rev 2 or Rev 3 catalog work is committed. It remains bundled with unrelated fuel, nav, and fleet changes. Splitting the catalog work into its own commit (as was done for `8465cf13`) is what makes it revertible if the import surfaces a problem — which is precisely the scenario §C1's undo-batch exists for.
+**Verification state at Rev 4:** allowlist parity **12/12**. Edge redeployed with force-undo `confirm` gate. Unauthenticated probe of `/undo-batch` → 401 (auth still required before confirm check).
 
-**Verification state at Rev 3:** catalog suites **55/55** (parity 12 tests). Typecheck shows no new catalog errors — only the pre-existing `vehicleCatalogWriteDrift.ts` `TS2352` (both mirrors, file untouched) and the §E6 remote-specifier note.
+### Rev 3 follow-ups (historical — closed in Rev 4)
+
+1. **§E5 — enforce the undo confirm phrase server-side.** Closed: client sends `confirm`, edge rejects 400 on mismatch when `force:true`.
+2. **§E6** — align the `supabase-js` type import with the sibling module. Closed.
+3. **Commit** — catalog enterprise work was committed by PO prior to Rev 4; Rev 4 delta still needs its own commit.
+
+**Verification state at Rev 3:** catalog suites **55/55** (parity 12 tests). Typecheck shows no new catalog errors — only the pre-existing `vehicleCatalogWriteDrift.ts` `TS2352` (both mirrors, file untouched) and the §E6 remote-specifier note (resolved in Rev 4).
 
 ### Rev 1 guidance (historical)
 

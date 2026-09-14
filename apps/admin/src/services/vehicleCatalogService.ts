@@ -7,7 +7,7 @@ const url = () => `${API_ENDPOINTS.admin}/admin/vehicle-catalog`;
 /** Must match edge `VEHICLE_CATALOG_PURGE_CONFIRM` in `index.tsx` (purge route). */
 export const VEHICLE_CATALOG_PURGE_CONFIRM_PHRASE = "DELETE ALL";
 
-/** Typed phrase for force-undo of an import batch that has dependents. */
+/** Must match edge `VEHICLE_CATALOG_UNDO_BATCH_CONFIRM` in `index.tsx` (undo-batch route). */
 export const VEHICLE_CATALOG_UNDO_BATCH_CONFIRM_PHRASE = "UNDO BATCH";
 
 export type CatalogDependencyCounts = {
@@ -225,10 +225,15 @@ export async function undoVehicleCatalogImportBatch(
   importBatchId: string,
   opts?: { force?: boolean },
 ): Promise<{ deleted: number; dependencies: CatalogDependencyCounts | null }> {
+  const force = opts?.force === true;
   const res = await fetchWithRetry(`${url()}/undo-batch`, {
     method: "POST",
     headers: edgeHeaders(accessToken, "application/json"),
-    body: JSON.stringify({ import_batch_id: importBatchId, force: opts?.force === true }),
+    body: JSON.stringify({
+      import_batch_id: importBatchId,
+      force,
+      ...(force ? { confirm: VEHICLE_CATALOG_UNDO_BATCH_CONFIRM_PHRASE } : {}),
+    }),
   });
   if (res.status === 409) {
     const body = (await res.json().catch(() => ({}))) as {

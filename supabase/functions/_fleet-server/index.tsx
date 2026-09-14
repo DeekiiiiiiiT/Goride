@@ -13424,6 +13424,8 @@ app.get("/make-server-37f42386/admin/vehicle-catalog", requireAuth(), async (c) 
 
 /** Bulk-delete every row in motor vehicle catalog (maintenance templates CASCADE). */
 const VEHICLE_CATALOG_PURGE_CONFIRM = "DELETE ALL";
+/** Must match client `VEHICLE_CATALOG_UNDO_BATCH_CONFIRM_PHRASE` — required when force-undoing a batch. */
+const VEHICLE_CATALOG_UNDO_BATCH_CONFIRM = "UNDO BATCH";
 
 // POST /admin/vehicle-catalog/purge — must be registered before POST /admin/vehicle-catalog (create)
 app.post("/make-server-37f42386/admin/vehicle-catalog/purge", requireAuth(), async (c) => {
@@ -13662,10 +13664,19 @@ app.post("/make-server-37f42386/admin/vehicle-catalog/undo-batch", requireAuth()
     const body = (await c.req.json().catch(() => ({}))) as {
       import_batch_id?: string;
       force?: boolean;
+      confirm?: string;
     };
     const importBatchId = String(body.import_batch_id ?? "").trim();
     if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(importBatchId)) {
       return c.json({ error: "import_batch_id must be a UUID" }, 400);
+    }
+    if (body.force === true) {
+      if (String(body.confirm ?? "").trim() !== VEHICLE_CATALOG_UNDO_BATCH_CONFIRM) {
+        return c.json(
+          { error: `Confirmation required: send JSON { "confirm": "${VEHICLE_CATALOG_UNDO_BATCH_CONFIRM}" }` },
+          400,
+        );
+      }
     }
     const { data: batchRows, error: qErr } = await supabase
       .from("vehicle_catalog")

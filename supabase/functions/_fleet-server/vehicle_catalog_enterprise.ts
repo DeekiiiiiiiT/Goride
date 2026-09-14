@@ -2,7 +2,7 @@
  * Vehicle catalog enterprise helpers — dependency counts, fleet KV refs,
  * existential catalog existence cache (gate + delete guards).
  */
-import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import * as kv from "./kv_store.tsx";
 
 const UUID_RE =
