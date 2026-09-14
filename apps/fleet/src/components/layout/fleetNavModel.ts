@@ -53,6 +53,8 @@ export type BuildFleetNavModelInput = {
   rushVisible: boolean;
   rideshareVisible: boolean;
   labels: FleetNavLabels;
+  /** Live Review Queue work count (log review + pending ready). */
+  reviewQueueCount?: number;
 };
 
 export type FleetNavDesk = {
@@ -99,6 +101,7 @@ export function buildFleetNavModel(input: BuildFleetNavModelInput): FleetNavMode
     rushVisible,
     rideshareVisible,
     labels,
+    reviewQueueCount = 0,
   } = input;
 
   const hasRushDeliveryLine = serviceLines.includes('rush_delivery');
@@ -173,6 +176,7 @@ export function buildFleetNavModel(input: BuildFleetNavModelInput): FleetNavMode
     leaf(canView('fuel-reimbursements'), {
       id: 'fuel-reimbursements',
       label: 'Review Queue',
+      ...(reviewQueueCount > 0 ? { badgeCount: reviewQueueCount } : {}),
     }),
     leaf(canView('fuel-cards'), { id: 'fuel-cards', label: 'Fuel Cards' }),
     leaf(canView('fuel-logs'), { id: 'fuel-logs', label: 'Transaction Logs' }),

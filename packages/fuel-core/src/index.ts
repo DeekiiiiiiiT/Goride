@@ -84,3 +84,24 @@ export {
   unwrapFuelEntriesPayload,
   type FuelEntriesListMeta,
 } from './unwrapFuelEntriesPayload.ts';
+
+export {
+  metaFlagOn,
+  isStationGateHeld,
+  isLedgerFuelExpenseRow,
+  isFuelCategory,
+  isFuelReimbursement,
+  isPendingFuelQueueRow,
+  isAdminManualFuelWithProvidedOdometer,
+  isLogReviewEligible,
+  isPendingReadyForReview,
+  fuelTxDateYmd,
+  holdReasonForUnapprovedTx,
+  listUnapprovedFuelTxInWindow,
+  countFuelReviewQueueWork,
+  type FuelReviewQueueTx,
+  type FuelClassifyFields,
+  type FuelUnapprovedHoldReason,
+  type FuelUnapprovedTxBlocker,
+  type FuelReviewQueueCounts,
+} from './fuelReviewQueue.ts';

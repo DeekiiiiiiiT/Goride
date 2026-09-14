@@ -24,7 +24,7 @@ import type {
   FuelScenario,
   WeeklyFuelReport,
 } from '../../../types/fuel';
-import type { Trip } from '../../../types/data';
+import type { FinancialTransaction, Trip } from '../../../types/data';
 import type { Vehicle } from '../../../types/vehicle';
 import {
   buildBreakdownRows,
@@ -54,6 +54,7 @@ export function useFuelWizardDerived(input: {
   weekTrips: Trip[];
   weekLoading: boolean;
   weekError: boolean;
+  transactions?: FinancialTransaction[];
 }) {
   const {
     periodStart,
@@ -72,6 +73,7 @@ export function useFuelWizardDerived(input: {
     weekTrips,
     weekLoading,
     weekError,
+    transactions = [],
   } = input;
 
   const { vehicleSnaps, openDisputes } = useMemo(() => {
@@ -201,10 +203,11 @@ export function useFuelWizardDerived(input: {
         disputes,
         fuelEntries,
         finalizedReports,
+        transactions,
         weekStartYmd: periodStart,
         weekEndYmd: periodEnd,
       }),
-    [liveReports, disputes, fuelEntries, finalizedReports, periodStart, periodEnd],
+    [liveReports, disputes, fuelEntries, finalizedReports, transactions, periodStart, periodEnd],
   );
 
   const plateByVehicleId = useMemo(() => {
@@ -238,6 +241,7 @@ export function useFuelWizardDerived(input: {
     priorMedian,
     gateResult,
     exceptionBlockers: gateResult.exceptionBlockers || [],
+    unapprovedFuelTxBlockers: gateResult.unapprovedFuelTxBlockers || [],
     plateByVehicleId,
     canContinue,
     stepIndex,

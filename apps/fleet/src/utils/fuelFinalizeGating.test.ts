@@ -159,9 +159,11 @@ describe('evaluateFuelFinalizeGating', () => {
   it('is clean when no issues', () => {
     const gate = evaluateFuelFinalizeGating({ reports: [report()] });
     expect(gate.hasExceptionBlockers).toBe(false);
+    expect(gate.hasUnapprovedFuelTxBlockers).toBe(false);
     expect(gate.hasOverExplainedBlockers).toBe(false);
     expect(gate.hasBlockingWarnings).toBe(false);
     expect(gate.exceptionBlockers).toEqual([]);
+    expect(gate.unapprovedFuelTxBlockers).toEqual([]);
   });
 
   it('C-2: hard-blocks an over-explained week (|misc| > 25% of spend)', () => {
@@ -186,5 +188,37 @@ describe('evaluateFuelFinalizeGating', () => {
     });
     expect(gate.hasOverExplainedBlockers).toBe(true);
     expect(gate.overExplainedBlockers[0].pctOfSpend).toBe(40);
+  });
+
+  it('F3: hard-blocks Pending fuel reimbursements in the statement window', () => {
+    const gate = evaluateFuelFinalizeGating({
+      reports: [report()],
+      weekStartYmd: '2026-08-10',
+      weekEndYmd: '2026-08-16',
+      transactions: [
+        {
+          id: 'tx1',
+          date: '2026-08-12',
+          status: 'Pending',
+          type: 'Expense',
+          category: 'Fuel',
+          paymentMethod: 'Cash',
+          amount: -2500,
+          driverName: 'Alex',
+        },
+        {
+          id: 'tx-out',
+          date: '2026-08-01',
+          status: 'Pending',
+          type: 'Expense',
+          category: 'Fuel',
+          paymentMethod: 'Cash',
+          amount: -100,
+        },
+      ],
+    });
+    expect(gate.hasUnapprovedFuelTxBlockers).toBe(true);
+    expect(gate.unapprovedFuelTxBlockers).toHaveLength(1);
+    expect(gate.unapprovedFuelTxBlockers[0].id).toBe('tx1');
   });
 });

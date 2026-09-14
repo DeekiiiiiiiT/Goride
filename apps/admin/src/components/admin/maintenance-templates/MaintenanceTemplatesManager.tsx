@@ -331,7 +331,7 @@ export function MaintenanceTemplatesManager() {
     setLoading(true);
     setError(null);
     try {
-      const items = await listVehicleCatalog(token);
+      const { items } = await listVehicleCatalog(token);
       setCatalog(items);
       setSelectedCatalogId((prev) => prev || items[0]?.id || "");
     } catch (e: unknown) {

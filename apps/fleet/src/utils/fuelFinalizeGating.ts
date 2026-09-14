@@ -8,13 +8,20 @@ import type {
   FinalizedFuelReport,
   WeeklyFuelReport,
 } from '../types/fuel';
+import type { FinancialTransaction } from '../types/data';
 import { isSameFuelStatement, reportWeekYmdBounds, toEntryYmd } from './fuelWeekPeriod';
 import { FUEL_MONEY_EPS } from './fuelMoneyEpsilon';
-import { isOverExplainedFuelWeek } from '@roam/fuel-core';
+import {
+  isOverExplainedFuelWeek,
+  listUnapprovedFuelTxInWindow,
+  type FuelUnapprovedTxBlocker,
+} from '@roam/fuel-core';
 import {
   fuelPaymentSourceDisplayLabel,
   resolveFuelPaymentSource,
 } from './fuelPaymentSource';
+
+export type { FuelUnapprovedTxBlocker };
 
 export type FuelReFinalizeWarning = {
   vehicleId: string;
@@ -60,6 +67,9 @@ export type FuelFinalizeGateResult = {
   /** Concrete fills — UI must list these; never only a vague banner. */
   exceptionBlockers: FuelExceptionBlocker[];
   hasExceptionBlockers: boolean;
+  /** Pending fuel reimbursements in the statement window — HARD block (F3). */
+  unapprovedFuelTxBlockers: FuelUnapprovedTxBlocker[];
+  hasUnapprovedFuelTxBlockers: boolean;
   /** Weeks whose residual is a modelling artefact — finalize is refused (C-2). */
   overExplainedBlockers: FuelOverExplainedBlocker[];
   hasOverExplainedBlockers: boolean;
@@ -183,6 +193,8 @@ export function evaluateFuelFinalizeGating(opts: {
   disputes?: FuelDispute[];
   fuelEntries?: FuelEntry[];
   finalizedReports?: FinalizedFuelReport[];
+  /** Pending fuel Expense txs — hard-block when in statement window. */
+  transactions?: Array<FinancialTransaction | Record<string, unknown>>;
   weekStartYmd?: string;
   weekEndYmd?: string;
 }): FuelFinalizeGateResult {
@@ -213,6 +225,12 @@ export function evaluateFuelFinalizeGating(opts: {
 
   const exceptionBlockers = listExceptionTierFillBlockers(fuelEntries, startYmd, endYmd);
 
+  const unapprovedFuelTxBlockers = listUnapprovedFuelTxInWindow(
+    (opts.transactions || []) as Parameters<typeof listUnapprovedFuelTxInWindow>[0],
+    startYmd,
+    endYmd,
+  );
+
   const dataQualityWarnings = opts.reports.reduce((acc, r) => {
     const openDispute = findDisputeForReport(disputes, r)?.status === 'Open';
     const isUnhealthy = r.healthStatus && r.healthStatus !== 'Emerald';
@@ -234,6 +252,7 @@ export function evaluateFuelFinalizeGating(opts: {
   const overExplainedBlockers = listOverExplainedBlockers(opts.reports);
 
   const hasExceptionBlockers = exceptionBlockers.length > 0;
+  const hasUnapprovedFuelTxBlockers = unapprovedFuelTxBlockers.length > 0;
   const hasOverExplainedBlockers = overExplainedBlockers.length > 0;
   // C-2: an over-explained week is a HARD blocker — the residual is a modelling
   // artefact, not real cash, and must never be split/finalized.
@@ -247,6 +266,8 @@ export function evaluateFuelFinalizeGating(opts: {
     dataQualityWarnings,
     exceptionBlockers,
     hasExceptionBlockers,
+    unapprovedFuelTxBlockers,
+    hasUnapprovedFuelTxBlockers,
     overExplainedBlockers,
     hasOverExplainedBlockers,
     hasBlockingWarnings,

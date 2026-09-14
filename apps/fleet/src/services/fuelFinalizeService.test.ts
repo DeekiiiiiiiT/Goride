@@ -157,4 +157,24 @@ describe('finalizeFuelWeekReports', () => {
     expect(result.ok).toBe(true);
     expect(result.snapshotCount).toBe(1);
   });
+
+  it('refuses when transactions include Pending fuel in the week (R3)', async () => {
+    const result = await finalizeFuelWeekReports([report()], {
+      ...deps,
+      transactions: [
+        {
+          id: 'tx1',
+          type: 'Reimbursement',
+          category: 'Fuel',
+          status: 'Pending',
+          date: '2026-08-12',
+          amount: 40,
+          metadata: { source: 'Manual' },
+        } as any,
+      ],
+    });
+    expect(result.ok).toBe(false);
+    expect(result.message).toMatch(/UNAPPROVED_FUEL_TX/);
+    expect(mocks.commitWeeklyStatement).not.toHaveBeenCalled();
+  });
 });

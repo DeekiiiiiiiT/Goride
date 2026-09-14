@@ -13,6 +13,7 @@
  */
 
 import type { Context, Next } from "npm:hono";
+import { createClient } from "npm:@supabase/supabase-js@2";
 import * as kv from "./kv_store.tsx";
 import {
   hasPermission,
@@ -25,6 +26,12 @@ import {
   VEHICLE_PENDING_CATALOG_ERROR_CODE,
   type CatalogGateVehicleShape,
 } from "../../../packages/types/src/vehicleCatalogGate.ts";
+import { catalogIdExists } from "./vehicle_catalog_enterprise.ts";
+
+const gateSupabase = createClient(
+  Deno.env.get("SUPABASE_URL") ?? "",
+  Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+);
 
 /** Permission that lets platform operators temporarily bypass the gate (rare). */
 export const CATALOG_GATE_BYPASS_PERMISSION: Permission =
@@ -212,6 +219,31 @@ export function requireCatalogMatched(options: CatalogGateOptions) {
             code: VEHICLE_PENDING_CATALOG_ERROR_CODE,
             vehicleId,
             catalogStatus: shape.catalogStatus ?? "pending_catalog",
+          },
+          403,
+        );
+      }
+
+      // Existential check: UUID-shaped match is not enough if the catalog row was deleted.
+      const catalogId =
+        typeof shape.vehicle_catalog_id === "string" ? shape.vehicle_catalog_id.trim() : "";
+      const exists = catalogId ? await catalogIdExists(gateSupabase, catalogId) : false;
+      if (!exists) {
+        await recordGateEvent({
+          route,
+          vehicleId,
+          userId: user?.userId ?? "_anon",
+          organizationId: user?.organizationId ?? null,
+          reason: bypass ? "bypassed" : enforcement ? "orphan_catalog_id" : "warn_only",
+        });
+        if (bypass || !enforcement) continue;
+        return c.json(
+          {
+            error:
+              "Vehicle catalog link is broken (catalog row missing). Rematch the vehicle before this action is allowed.",
+            code: VEHICLE_PENDING_CATALOG_ERROR_CODE,
+            vehicleId,
+            catalogStatus: "pending_catalog",
           },
           403,
         );

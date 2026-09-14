@@ -56,6 +56,7 @@ export type FuelBulkFinalizeDialogProps = {
   fuelCards: FuelCard[];
   disputes?: import('../../../types/fuel').FuelDispute[];
   finalizedReports?: FinalizedFuelReport[];
+  transactions?: import('../../../types/data').FinancialTransaction[];
   onComplete: () => void;
 };
 
@@ -126,6 +127,7 @@ export function FuelBulkFinalizeDialog({
   fuelCards,
   disputes = [],
   finalizedReports = [],
+  transactions = [],
   onComplete,
 }: FuelBulkFinalizeDialogProps) {
   const queryClient = useQueryClient();
@@ -224,6 +226,7 @@ export function FuelBulkFinalizeDialog({
               fuelCards,
               disputes,
               finalizedReports: priorReports.length ? priorReports : finalizedReports,
+              transactions,
             });
 
             if (!reports.length) {
@@ -276,6 +279,27 @@ export function FuelBulkFinalizeDialog({
                 label,
                 status: 'failed',
                 message: `Blocked — resolve exception fill(s): ${detail}`,
+              });
+              continue;
+            }
+
+            if (gateResult.hasUnapprovedFuelTxBlockers) {
+              const n = gateResult.unapprovedFuelTxBlockers.length;
+              const holds = gateResult.unapprovedFuelTxBlockers.filter(
+                (b) => b.holdReason === 'station_hold',
+              ).length;
+              const actionable = n - holds;
+              const detail =
+                actionable > 0 && holds > 0
+                  ? `${actionable} need Review Queue; ${holds} await Station Database`
+                  : holds > 0
+                    ? `${holds} await Station Database (not Review Queue)`
+                    : `${actionable} need Review Queue action`;
+              weekResults.push({
+                id: period.id,
+                label,
+                status: 'failed',
+                message: `Blocked — UNAPPROVED_FUEL_TX: ${detail}`,
               });
               continue;
             }
@@ -344,7 +368,16 @@ export function FuelBulkFinalizeDialog({
           try {
             const result = await finalizeFuelWeekReports(
               reports,
-              { vehicles, drivers, fuelCards, fuelEntries: weekEntries, scenarios, trips },
+              {
+                vehicles,
+                drivers,
+                fuelCards,
+                fuelEntries: weekEntries,
+                scenarios,
+                trips,
+                // R3: defence-in-depth — same Pending-fuel refuse as single-week finalize
+                transactions,
+              },
               {
                 priorReports,
                 skipCacheInvalidation: true,

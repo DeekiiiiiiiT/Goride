@@ -1288,12 +1288,14 @@ export const api = {
     return result.data || result;
   },
 
-  async deleteTransaction(id: string) {
+  async deleteTransaction(id: string, opts?: { cascade?: boolean }) {
     const trimmed = typeof id === 'string' ? id.trim() : '';
     if (!trimmed) throw new Error('Missing transaction id');
+    const cascade = opts?.cascade !== false;
+    const qs = cascade ? '' : '?cascade=false';
     // Phase 1: Use JWT for proper org scoping
     const response = await fetchWithRetry(
-      `${API_ENDPOINTS.financial}/transactions/${encodeURIComponent(trimmed)}`,
+      `${API_ENDPOINTS.financial}/transactions/${encodeURIComponent(trimmed)}${qs}`,
       {
         method: 'DELETE',
         headers: await getHeaders(null)

@@ -473,11 +473,19 @@ export function FuelLogModal({
         <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
             <DialogContent className="sm:max-w-[1000px]">
                 <DialogHeader>
-                    <DialogTitle>{initialData ? 'Edit Fuel Entry' : 'Log Fuel Transaction'}</DialogTitle>
+                    <DialogTitle>{initialData ? 'Edit known fill' : 'Known fill'}</DialogTitle>
                     <DialogDescription>
-                        Record a fuel purchase or mileage event.
+                        {initialData
+                          ? 'Update this posted fill-up.'
+                          : 'Post a fill you already know is real into Transaction Logs.'}
                     </DialogDescription>
                 </DialogHeader>
+
+                {!initialData && (
+                  <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600 -mt-2 mb-2">
+                    Known fill — use this when you already know the fill is real.
+                  </div>
+                )}
 
                 <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
                     <TabsList className="grid w-full grid-cols-2 mb-4">

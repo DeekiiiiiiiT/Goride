@@ -5,6 +5,8 @@ import Papa from "papaparse";
 export {
   ALIAS_TO_CANONICAL,
   VEHICLE_CATALOG_WRITABLE_KEYS,
+  VEHICLE_CATALOG_PROVENANCE_KEYS,
+  VEHICLE_CATALOG_BULK_MAX_ROWS,
   MAX_ENGINE_TYPE_LEN,
   normalizeCatalogCsvHeader,
   collectUnknownCatalogCsvHeaders,

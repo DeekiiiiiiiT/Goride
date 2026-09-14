@@ -11,6 +11,7 @@ import { FuelLogTable } from '../components/fuel/FuelLogTable';
 import { FuelConfiguration } from '../components/fuel/FuelConfiguration';
 import { BucketReconciliationView } from '../components/fuel/BucketReconciliationView';
 import { MileageAdjustmentModal } from '../components/fuel/MileageAdjustmentModal';
+import { AddFuelChoiceDialog } from '../components/fuel/AddFuelChoiceDialog';
 import {
   Sheet,
   SheetContent,
@@ -32,9 +33,13 @@ import { format } from 'date-fns';
 import { DisputeResolutionModal } from '../components/fuel/DisputeResolutionModal';
 import { FuelReimbursementTable } from '../components/fuel/FuelReimbursementTable';
 import { SubmitExpenseModal } from '../components/fuel/SubmitExpenseModal';
+import { usePermissions } from '../hooks/usePermissions';
+import { useInvalidateFuelReviewQueueCounts } from '../hooks/useFuelReviewQueueCounts';
+import { fuelReviewQueueLookbackRange, FUEL_REVIEW_QUEUE_TX_PAGE_SIZE, FUEL_REVIEW_QUEUE_TX_MAX_PAGES } from '../utils/fuelReviewQueueLookback';
 import { fuelService } from '../services/fuelService';
 import { settlementService } from '../services/settlementService';
 import { finalizeFuelWeekReports } from '../services/fuelFinalizeService';
+import { purgeFuelExpense, saveFuelExpense } from '../services/fuelExpenseMutationService';
 import { FuelDisputeService } from '../services/fuelDisputeService';
 import { api } from '../services/api';
 import { FuelReconciliationDashboard } from '../components/fuel/reconciliation/FuelReconciliationDashboard';
@@ -110,6 +115,8 @@ function FuelManagementInner({
   initialWeekStart?: string;
 }) {
   const queryClient = useQueryClient();
+  const { can } = usePermissions();
+  const invalidateReviewQueueCounts = useInvalidateFuelReviewQueueCounts();
   const { runExclusive, setMessage } = useFuelReconBusy();
   const { confirmIfNeeded: confirmSettlementReopen, dialog: settlementReopenDialog } =
     useFuelSettlementReopenGate();
@@ -164,7 +171,7 @@ function FuelManagementInner({
   }, [fleetTz, logCustomOverride]);
 
   const reconciliationDateRange = activeFuelWeek;
-  const reimbursementDateRange = activeFuelWeek;
+
   const logDateRange = logCustomOverride ? logDateRangeOverride : activeFuelWeek;
 
   const [activityMinDate, setActivityMinDate] = useState<string | null>(null);
@@ -268,6 +275,7 @@ function FuelManagementInner({
   const [transactionsTruncated, setTransactionsTruncated] = useState(false);
   const [isLogModalOpen, setIsLogModalOpen] = useState(false);
   const [editingLog, setEditingLog] = useState<FuelEntry | null>(null);
+  const [isAddFuelChoiceOpen, setIsAddFuelChoiceOpen] = useState(false);
 
   // Reimbursement State
   const [transactions, setTransactions] = useState<FinancialTransaction[]>([]);
@@ -490,6 +498,9 @@ function FuelManagementInner({
 
   const loadLogsAndTransactions = useCallback(async () => {
     const { startDate, endDate } = fuelFetchWindow;
+    // R6: Review Queue backlog is not week-bounded — same lookback as the nav badge.
+    const txRange =
+      activeTab === 'reimbursements' ? fuelReviewQueueLookbackRange() : { startDate, endDate };
     try {
       const [logsData, txData] = await Promise.all([
         // Paged fetch loads the whole date window (not a single 1500-row page) under
@@ -505,7 +516,16 @@ function FuelManagementInner({
           }
           return [] as FuelEntry[];
         }),
-        api.getAllTransactionsInRange({ startDate, endDate }).catch((err) => {
+        api.getAllTransactionsInRange({
+          startDate: txRange.startDate,
+          endDate: txRange.endDate,
+          ...(activeTab === 'reimbursements'
+            ? {
+                pageSize: FUEL_REVIEW_QUEUE_TX_PAGE_SIZE,
+                maxPages: FUEL_REVIEW_QUEUE_TX_MAX_PAGES,
+              }
+            : {}),
+        }).catch((err) => {
           console.error('[FuelManagement] getAllTransactionsInRange failed', err);
           return [] as FinancialTransaction[];
         }),
@@ -525,7 +545,7 @@ function FuelManagementInner({
       setFuelLogsLoadError(e instanceof Error ? e.message : 'Failed to load fuel logs.');
       setFuelLogsHydrated(true);
     }
-  }, [fuelFetchWindow]);
+  }, [fuelFetchWindow, activeTab]);
 
   useEffect(() => {
     void loadLogsAndTransactions();
@@ -928,12 +948,13 @@ function FuelManagementInner({
           setTransactions(prev => prev.map(t => t.id === id ? updated : t));
           // Refresh logs to pick up the new fuel_entry created by server
           await loadLogsAndTransactions();
+          invalidateReviewQueueCounts();
           toast.success("Posted to Transaction Logs");
       } catch (e) {
           console.error(e);
           toast.error("Failed to approve log review");
       }
-  }, [loadLogsAndTransactions]);
+  }, [loadLogsAndTransactions, invalidateReviewQueueCounts]);
 
   // Reimbursement Handlers
   const handleApproveReimbursement = useCallback(async (
@@ -952,6 +973,7 @@ function FuelManagementInner({
               } catch {
                   /* non-fatal */
               }
+              invalidateReviewQueueCounts();
               toast.success("Posted to Transaction Logs");
           } else {
               toast.success("Expense approved");
@@ -960,18 +982,19 @@ function FuelManagementInner({
           console.error(e);
           toast.error("Failed to approve reimbursement");
       }
-  }, [loadLogsAndTransactions]);
+  }, [loadLogsAndTransactions, invalidateReviewQueueCounts]);
 
   const handleRejectReimbursement = useCallback(async (id: string, reason?: string) => {
       try {
           const updated = await api.rejectExpense(id, reason);
           setTransactions(prev => prev.map(t => t.id === id ? updated : t));
+          invalidateReviewQueueCounts();
           toast.success("Reimbursement Rejected");
       } catch (e) {
           console.error(e);
           toast.error("Failed to reject reimbursement");
       }
-  }, []);
+  }, [invalidateReviewQueueCounts]);
 
     const handleSaveExpense = async (transactionData: any, shouldRefresh = true) => {
         setIsSyncing(true);
@@ -984,7 +1007,55 @@ function FuelManagementInner({
                 return;
             }
 
+            // Edit path — shared mutation service (credit orphan + linked fill sync)
+            if (editingExpense) {
+                const { saved, syncedFuelEntryId } = await saveFuelExpense(transactionData, {
+                    previous: editingExpense,
+                    fuelEntries: logs,
+                });
+                if (syncedFuelEntryId) {
+                    const refreshed = await fuelService.getFuelEntry(syncedFuelEntryId).catch(() => null);
+                    if (refreshed) {
+                        setLogs((prev) => prev.map((l) => (l.id === refreshed.id ? refreshed : l)));
+                    }
+                }
+                setTransactions((prev) => prev.map((t) => (t.id === saved.id ? saved : t)));
+                toast.success(
+                    syncedFuelEntryId
+                        ? 'Expense updated and linked fuel records synced'
+                        : 'Expense updated',
+                );
+                if (shouldRefresh) await loadData(true);
+                return;
+            }
+
             const savedTx = await api.saveTransaction(transactionData);
+
+            // Admin create: one-step Save & Approve so cash receipts do not self-queue
+            if (
+                transactionData?._saveAndApprove &&
+                savedTx.status === 'Pending' &&
+                (savedTx.category === 'Fuel' || savedTx.category === 'Fuel Reimbursement')
+            ) {
+                const odo = Number(savedTx.odometer);
+                const approved = await api.approveExpense(
+                    savedTx.id,
+                    'Admin Save & Approve',
+                    Number.isFinite(odo) && odo > 0 ? odo : undefined,
+                    savedTx.matchedStationId || savedTx.metadata?.matchedStationId
+                        ? {
+                            matchedStationId: savedTx.matchedStationId || savedTx.metadata?.matchedStationId,
+                            stationLocation:
+                                typeof savedTx.metadata?.stationLocation === 'string'
+                                    ? savedTx.metadata.stationLocation
+                                    : undefined,
+                          }
+                        : undefined,
+                );
+                setTransactions((prev) => [approved, ...prev.filter((t) => t.id !== approved.id)]);
+                if (shouldRefresh) await loadData(true);
+                return;
+            }
             
             // If admin saves as 'Approved' immediately, process settlement
             if (savedTx.status === 'Approved' && (savedTx.category === 'Fuel' || savedTx.category === 'Fuel Reimbursement')) {
@@ -994,70 +1065,8 @@ function FuelManagementInner({
                  */
             }
 
-            if (editingExpense) {
-                // Safeguard: if payment source changed away from driver_cash on an approved transaction,
-                // delete the orphaned wallet credit that was created during original approval
-                const oldPaymentSource = editingExpense.metadata?.paymentSource;
-                const newPaymentSource = savedTx.metadata?.paymentSource || savedTx.metadata?.previousPaymentSource;
-                const actualNewSource = savedTx.metadata?.paymentSource;
-                if (
-                    editingExpense.status === 'Approved' &&
-                    oldPaymentSource === 'driver_cash' &&
-                    actualNewSource && actualNewSource !== 'driver_cash'
-                ) {
-                    try {
-                        const creditId = `fuel-credit-${savedTx.id}`;
-                        await api.deleteTransaction(creditId);
-                        console.log(`[handleSaveExpense] Deleted orphaned wallet credit ${creditId} — payment source changed from driver_cash to ${actualNewSource}`);
-                    } catch (creditErr: any) {
-                        // Credit may not exist — that's OK, log and continue
-                        console.warn(`[handleSaveExpense] Could not delete wallet credit fuel-credit-${savedTx.id}:`, creditErr?.message || creditErr);
-                    }
-                }
-
-                // ... logic to sync with logs ...
-                if (savedTx.category === 'Fuel' || savedTx.category === 'Fuel Reimbursement') {
-                    const linkedLog = logs.find(l => l.transactionId === savedTx.id || l.id === savedTx.metadata?.sourceId);
-                    if (linkedLog) {
-                        try {
-                            const updatedLog = {
-                                ...linkedLog,
-                                amount: Math.abs(savedTx.amount),
-                                date: savedTx.date.includes('T') ? savedTx.date : `${savedTx.date}T${savedTx.time || '12:00:00'}`,
-                                location: savedTx.vendor || savedTx.merchant || linkedLog.location,
-                                vendor: savedTx.vendor || savedTx.merchant || linkedLog.vendor,
-                                matchedStationId: savedTx.matchedStationId || savedTx.metadata?.matchedStationId || linkedLog.matchedStationId,
-                                driverId: savedTx.driverId || linkedLog.driverId,
-                                vehicleId: savedTx.vehicleId || linkedLog.vehicleId,
-                                odometer: savedTx.odometer || linkedLog.odometer,
-                                liters: savedTx.quantity || linkedLog.liters,
-                                metadata: {
-                                    ...linkedLog.metadata,
-                                    isEdited: true,
-                                    lastEditedAt: new Date().toISOString(),
-                                    syncSource: 'financial_transaction',
-                                    editReason: 'Financial record reconciliation sync'
-                                }
-                            };
-                            
-                            if (updatedLog.liters && updatedLog.liters > 0) {
-                                updatedLog.pricePerLiter = Number((updatedLog.amount / updatedLog.liters).toFixed(3));
-                                if (updatedLog.metadata) updatedLog.metadata.pricePerLiter = updatedLog.pricePerLiter;
-                            }
-
-                            await fuelService.saveFuelEntry(updatedLog);
-                            setLogs(prev => prev.map(l => l.id === updatedLog.id ? updatedLog : l));
-                        } catch (e) {
-                            console.error("Failed to sync changes back to fuel log", e);
-                        }
-                    }
-                }
-                setTransactions(prev => prev.map(t => t.id === savedTx.id ? savedTx : t));
-                toast.success("Expense updated and linked fuel records synced");
-            } else {
-                setTransactions(prev => [savedTx, ...prev]);
-                // We don't toast here if it's bulk, the modal will toast at the end
-            }
+            setTransactions(prev => [savedTx, ...prev]);
+            // We don't toast here if it's bulk, the modal will toast at the end
             
             if (shouldRefresh) {
                 await loadData(true);
@@ -1144,48 +1153,22 @@ function FuelManagementInner({
 
       setIsSyncing(true);
       try {
-          // 1. Bi-Directional Discovery (Step 3.1)
-          // Find the parent fuel entry that likely spawned this transaction
-          const parentEntry = await settlementService.getParentFuelEntry(txToDelete);
-          
-          let recordsToPurge: { entryId?: string, transactionIds: string[] } = {
-              transactionIds: [deleteConfirmationId]
-          };
-
-          if (parentEntry && cascadeDelete) {
-              // If we found a parent, we do a "Total Recall" of all its children
-              const relatedTxs = await settlementService.getRelatedTransactions(parentEntry);
-              recordsToPurge = {
-                  entryId: parentEntry.id,
-                  transactionIds: Array.from(new Set([...relatedTxs.map(t => t.id).filter(Boolean), deleteConfirmationId]))
-              };
+          const result = await purgeFuelExpense(txToDelete, { cascade: cascadeDelete });
+          const txIds = result.deletedTransactionIds;
+          if (result.deletedFuelEntryId) {
+              setLogs((prev) => prev.filter((l) => l.id !== result.deletedFuelEntryId));
           }
+          setTransactions((prev) => prev.filter((t) => !txIds.includes(t.id)));
 
-          const txIds = recordsToPurge.transactionIds.filter((x): x is string => typeof x === 'string' && x.trim().length > 0);
-
-          // Delete ledger rows first; if this fails we do not remove the fuel log (avoids dangling links).
-          await Promise.all(txIds.map((tid) => api.deleteTransaction(tid)));
-
-          if (recordsToPurge.entryId) {
-              await fuelService.deleteFuelEntry(recordsToPurge.entryId);
-          }
-
-          // 3. Sync State
-          if (recordsToPurge.entryId) {
-              setLogs(prev => prev.filter(l => l.id !== recordsToPurge.entryId));
-          }
-          setTransactions(prev => prev.filter(t => !txIds.includes(t.id)));
-
-          // 4. Recovery Context Feedback
           const detailsText = ` ($${Math.abs(txToDelete.amount).toFixed(2)})`;
           const count = txIds.length;
           
           toast.success(
-            recordsToPurge.entryId && cascadeDelete 
+            result.deletedFuelEntryId && cascadeDelete 
               ? `Ledger records and linked fuel log purged${detailsText}` 
               : `Expense removed${detailsText}`,
             {
-              description: recordsToPurge.entryId && cascadeDelete
+              description: result.deletedFuelEntryId && cascadeDelete
                 ? `Total of ${count} ledger records removed to prevent duplicate re-entry flags.`
                 : "The individual record has been removed.",
               duration: 5000
@@ -1331,6 +1314,8 @@ function FuelManagementInner({
               fuelEntries: logs,
               scenarios,
               trips,
+              // R3: defence-in-depth — refuse client-side if Pending fuel still in window
+              transactions,
             },
             {
               onProgress: (msg) => setMessage(msg),
@@ -1426,13 +1411,13 @@ function FuelManagementInner({
       pageDescription = "Close each Monday–Sunday week, step by step.";
   } else if (activeTab === 'reimbursements') {
       pageTitle = "Review Queue";
-      pageDescription = "Open work only — posted fill-ups are in Transaction Logs.";
+      pageDescription = "Approve or reject driver fuel receipts. Create fill-ups from Transaction Logs.";
   } else if (activeTab === 'cards') {
       pageTitle = "Card Inventory";
       pageDescription = "Manage gas cards and their assignments.";
   } else if (activeTab === 'logs') {
       pageTitle = "Transaction Logs";
-      pageDescription = "Posted fuel fill-ups. Odometer column shows current km; Δ Prev shows change from last fill.";
+      pageDescription = "Posted fuel fill-ups. Use Add fuel to create. Odometer shows current km; Δ Prev shows change from last fill.";
   } else if (activeTab === 'configuration') {
       pageTitle = "Fleet Policy Configuration";
       pageDescription = "Manage company and driver expense splits for fuel.";
@@ -1444,17 +1429,35 @@ function FuelManagementInner({
         description={pageDescription}
         hideDescriptionOnMobile={activeTab === 'logs'}
         embedded={embedded}
-        onAddTransaction={(activeTab === 'configuration' || activeTab === 'cards' || activeTab === 'reconciliation') ? undefined : () => {
-            setEditingLog(null);
-            setIsLogModalOpen(true);
-        }}
+        headerActions={
+          activeTab === 'logs' && !embedded ? (
+            <Button
+              size="sm"
+              onClick={() => setIsAddFuelChoiceOpen(true)}
+              className="bg-slate-900 text-white hover:bg-slate-800"
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              Add fuel
+            </Button>
+          ) : undefined
+        }
     >
       {(activeTab !== 'configuration' && activeTab !== 'cards') && (
         <div
-          className={`flex justify-end items-center gap-3 mb-4${
-            activeTab === 'logs' ? ' hidden md:flex' : ''
+          className={`flex justify-end items-center gap-3 mb-4 flex-wrap${
+            activeTab === 'logs' && !embedded ? ' md:justify-end' : ''
           }`}
         >
+            {activeTab === 'logs' && embedded ? (
+              <Button
+                size="sm"
+                onClick={() => setIsAddFuelChoiceOpen(true)}
+                className="bg-slate-900 text-white hover:bg-slate-800"
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Add fuel
+              </Button>
+            ) : null}
             {isSyncing && (
                 <div className="flex items-center gap-2 text-xs font-bold text-amber-600 bg-amber-50 px-3 py-1.5 rounded-full border border-amber-100 animate-pulse">
                     <Loader2 className="h-3 w-3 animate-spin" />
@@ -1478,18 +1481,26 @@ function FuelManagementInner({
       )}
 
       {activeTab === 'reimbursements' && (
+        <>
+          {transactionsTruncated && (
+            <div
+              className="mb-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900"
+              role="status"
+            >
+              Review Queue loaded the maximum window of transactions. Older Pending items may be
+              missing from this list and the nav badge — narrow activity or raise the lookback only
+              with care.
+            </div>
+          )}
           <FuelReimbursementTable 
               transactions={transactions}
               logs={logs}
               onApprove={handleApproveReimbursement}
               onReject={handleRejectReimbursement}
-              onRequestSubmit={() => { setEditingExpense(null); setIsSubmitExpenseModalOpen(true); }}
-              onEdit={handleEditExpense}
-              onDelete={handleDeleteExpense}
+              onEdit={can('fuel.edit_entry') ? handleEditExpense : undefined}
+              onDelete={can('fuel.delete_entry') ? handleDeleteExpense : undefined}
               onViewDriverLedger={onViewDriverLedger}
               onApproveLogReview={handleApproveLogReview}
-              dateRange={reimbursementDateRange}
-              onDateRangeChange={setReimbursementDateRange}
               isRefreshing={isRefreshing}
               onViewInTransactionLogs={({ fuelEntryId, date, vehicleId }) => {
                   setActiveTab('logs');
@@ -1507,6 +1518,7 @@ function FuelManagementInner({
                   toast.info('Opening Transaction Logs…');
               }}
           />
+        </>
       )}
 
       {activeTab === 'reconciliation' && (
@@ -1525,6 +1537,7 @@ function FuelManagementInner({
           drivers={drivers}
           fuelCards={cards}
           finalizedReports={finalizedReports}
+          transactions={transactions}
           isRefreshing={isRefreshing}
           dataTruncated={fuelDataTruncated}
           secondApproverThreshold={secondApproverThreshold}
@@ -1548,6 +1561,11 @@ function FuelManagementInner({
             }
             void loadData(true);
             toast.info('Opening Transaction Logs…');
+          }}
+          onOpenReviewQueue={() => {
+            setActiveTab('reimbursements');
+            onTabChange?.('reimbursements');
+            toast.info('Opening Review Queue…');
           }}
           onAcceptFuelException={async (entryId, note) => {
             const entry = logs.find((l) => l.id === entryId);
@@ -1705,6 +1723,19 @@ function FuelManagementInner({
         />
       )}
 
+      <AddFuelChoiceDialog
+        open={isAddFuelChoiceOpen}
+        onOpenChange={setIsAddFuelChoiceOpen}
+        onChooseDriverClaim={() => {
+          setEditingExpense(null);
+          setIsSubmitExpenseModalOpen(true);
+        }}
+        onChooseKnownFill={() => {
+          setEditingLog(null);
+          setIsLogModalOpen(true);
+        }}
+      />
+
       {isLogModalOpen && (
       <FuelLogModal 
             isOpen={isLogModalOpen}
@@ -1748,6 +1779,7 @@ function FuelManagementInner({
             drivers={drivers}
             vehicles={vehicles}
             initialData={editingExpense}
+            canApproveFuel={can('fuel.approve')}
       />
       )}
 

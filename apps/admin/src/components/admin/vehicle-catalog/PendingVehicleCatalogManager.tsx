@@ -75,6 +75,8 @@ export function PendingVehicleCatalogManager() {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<string>("open");
+  const [page, setPage] = useState(0);
+  const PAGE_SIZE = 50;
   const [selected, setSelected] = useState<VehicleCatalogPendingRequest | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
   const [fleetSnap, setFleetSnap] = useState<Record<string, unknown> | null>(null);
@@ -94,7 +96,11 @@ export function PendingVehicleCatalogManager() {
     if (!token) return;
     setLoading(true);
     try {
-      const res = await listPendingVehicleCatalogRequests(token, { status: statusFilter, limit: 100 });
+      const res = await listPendingVehicleCatalogRequests(token, {
+        status: statusFilter,
+        limit: PAGE_SIZE,
+        offset: page * PAGE_SIZE,
+      });
       setItems(res.items);
       setTotal(res.total);
     } catch (e: unknown) {
@@ -102,7 +108,11 @@ export function PendingVehicleCatalogManager() {
     } finally {
       setLoading(false);
     }
-  }, [token, statusFilter]);
+  }, [token, statusFilter, page]);
+
+  useEffect(() => {
+    setPage(0);
+  }, [statusFilter]);
 
   useEffect(() => {
     void load();
@@ -322,7 +332,31 @@ export function PendingVehicleCatalogManager() {
         </div>
       )}
 
-      <p className="text-xs text-slate-500">Total matching filter (reported): {total}</p>
+      <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
+        <p>
+          Showing {total === 0 ? 0 : page * PAGE_SIZE + 1}–{Math.min(total, (page + 1) * PAGE_SIZE)} of {total}
+        </p>
+        <div className="flex gap-2">
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            disabled={loading || page === 0}
+            onClick={() => setPage((p) => Math.max(0, p - 1))}
+          >
+            Previous
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            disabled={loading || (page + 1) * PAGE_SIZE >= total}
+            onClick={() => setPage((p) => p + 1)}
+          >
+            Next
+          </Button>
+        </div>
+      </div>
 
       <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
         <DialogContent className="flex max-h-[min(90vh,880px)] flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl">

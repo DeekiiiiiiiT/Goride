@@ -6,6 +6,8 @@ import { describe, it, expect } from "vitest";
 import { VEHICLE_CATALOG_CSV_COLUMNS } from "../types/csv-schemas";
 import {
   ALIAS_TO_CANONICAL,
+  VEHICLE_CATALOG_PROVENANCE_KEYS,
+  VEHICLE_CATALOG_BULK_MAX_ROWS,
   VEHICLE_CATALOG_WRITABLE_KEYS,
 } from "./vehicleCatalogCsvImport";
 import {
@@ -47,13 +49,27 @@ describe("vehicle catalog column allowlists (§M14)", () => {
     }
   });
 
-  it("writable keys (except generation_code legacy) appear as alias targets or are meta", () => {
+  it("writable keys (except generation_code legacy / provenance) appear as alias targets or are meta", () => {
+    const provenance = new Set<string>(VEHICLE_CATALOG_PROVENANCE_KEYS);
     const missing: string[] = [];
     for (const key of VEHICLE_CATALOG_WRITABLE_KEYS) {
       if (key === "generation_code") continue; // aliased into chassis_code
+      if (provenance.has(key)) continue; // edge-stamped, not CSV columns
       if (!aliasTargets.has(key)) missing.push(key);
     }
     expect(missing, `writable keys without aliases: ${missing.join(", ")}`).toEqual([]);
+  });
+
+  it("provenance keys are writable so edge stamps are not silently dropped", () => {
+    for (const key of VEHICLE_CATALOG_PROVENANCE_KEYS) {
+      expect(writable.has(key), `writable missing provenance ${key}`).toBe(true);
+    }
+  });
+
+  it("bulk max rows is a positive integer at or below PostgREST comfort (50)", () => {
+    expect(Number.isInteger(VEHICLE_CATALOG_BULK_MAX_ROWS)).toBe(true);
+    expect(VEHICLE_CATALOG_BULK_MAX_ROWS).toBeGreaterThan(0);
+    expect(VEHICLE_CATALOG_BULK_MAX_ROWS).toBeLessThanOrEqual(50);
   });
 
   it("every export data column is writable server-side", () => {

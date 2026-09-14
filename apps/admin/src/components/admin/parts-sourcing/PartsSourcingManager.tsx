@@ -153,7 +153,7 @@ export function PartsSourcingManager() {
 
   const reloadCatalog = useCallback(async () => {
     if (!token) return;
-    const rows = await listVehicleCatalog(token);
+    const { items: rows } = await listVehicleCatalog(token);
     setCatalog(rows.slice(0, 500));
   }, [token]);
 
@@ -350,7 +350,7 @@ export function PartsSourcingManager() {
     try {
       if (pList.length === 0) pList = await listPartMasters(token);
       if (cList.length === 0) {
-        cList = (await listVehicleCatalog(token)).slice(0, 500);
+        cList = (await listVehicleCatalog(token)).items.slice(0, 500);
         setCatalog(cList);
       }
       setParts(pList);

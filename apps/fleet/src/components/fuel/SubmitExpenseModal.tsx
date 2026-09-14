@@ -26,13 +26,15 @@ import { findActiveFuelCardForSession } from '../../utils/fuelCardMatch';
 interface SubmitExpenseModalProps {
     isOpen: boolean;
     onClose: () => void;
-    onSave: (data: any) => Promise<void>;
+    onSave: (data: any, shouldRefresh?: boolean) => Promise<void>;
     drivers: any[];
     vehicles: any[];
     initialData?: any;
+    /** When true on create cash path, submit becomes Save & Approve (one-step). */
+    canApproveFuel?: boolean;
 }
 
-export function SubmitExpenseModal({ isOpen, onClose, onSave, drivers, vehicles, initialData }: SubmitExpenseModalProps) {
+export function SubmitExpenseModal({ isOpen, onClose, onSave, drivers, vehicles, initialData, canApproveFuel = false }: SubmitExpenseModalProps) {
     // Phase 5: Use React Query for parent companies caching
     const { data: parentCompaniesData = [] } = useQuery({
         queryKey: ['parentCompanies'],
@@ -695,11 +697,13 @@ export function SubmitExpenseModal({ isOpen, onClose, onSave, drivers, vehicles,
                         // Preserve previous payment source so the parent can detect changes
                         previousPaymentSource: initialData?.metadata?.paymentSource || undefined,
                     },
-                    isReconciled: initialData ? (initialData.isReconciled ?? false) : false
+                    isReconciled: initialData ? (initialData.isReconciled ?? false) : false,
+                    // One-step approve for admin create when actor has fuel.approve
+                    _saveAndApprove: Boolean(canApproveFuel && !initialData),
                 };
                 await (onSave as any)(transactionData, isLast);
             }
-            toast.success("Submitted successfully");
+            toast.success(canApproveFuel && !initialData ? "Saved and posted to Transaction Logs" : "Submitted successfully");
             onClose();
         } catch (error) {
             toast.error("Submission failed");
@@ -714,9 +718,19 @@ export function SubmitExpenseModal({ isOpen, onClose, onSave, drivers, vehicles,
                 <DialogHeader>
                     <div className="flex items-center justify-between mr-8">
                         <div>
-                            <DialogTitle>{aiReviewData ? "Confirm AI Extraction" : (initialData ? "Edit Manual Entry" : "Log Receipt / Manual Entry")}</DialogTitle>
+                            <DialogTitle>
+                              {aiReviewData
+                                ? 'Confirm AI Extraction'
+                                : initialData
+                                  ? 'Edit driver claim'
+                                  : 'Driver claim'}
+                            </DialogTitle>
                             <DialogDescription>
-                                {aiReviewData ? "Verify extracted values from Gemini Vision." : (initialData ? "Update entry details." : "Log fuel historical data.")}
+                              {aiReviewData
+                                ? 'Verify extracted values from Gemini Vision.'
+                                : initialData
+                                  ? 'Update this driver claim.'
+                                  : 'Record a refuel the driver says they did. Cash claims may need approval before they appear as posted fills.'}
                             </DialogDescription>
                         </div>
                         {!initialData && !aiReviewData && (
@@ -729,6 +743,11 @@ export function SubmitExpenseModal({ isOpen, onClose, onSave, drivers, vehicles,
                         )}
                     </div>
                 </DialogHeader>
+                {!initialData && !aiReviewData && (
+                  <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                    Driver claim — use this when the driver says they fueled (cash / out-of-pocket).
+                  </div>
+                )}
                 {!initialData && !aiReviewData && !isGasCard && <EvidenceRetentionNotice className="mt-2" />}
 
                 {aiReviewData ? (
@@ -894,7 +913,13 @@ export function SubmitExpenseModal({ isOpen, onClose, onSave, drivers, vehicles,
                         <Button variant="ghost" onClick={onClose}>Cancel</Button>
                         <Button className="bg-indigo-600 hover:bg-indigo-700" onClick={handleSubmit} disabled={isSubmitting || (isGasCard && (!gasCardLookupDone || !assignedGasCard))}>
                             {isSubmitting ? <Loader2 className="animate-spin h-4 w-4 mr-2" /> : null}
-                            {initialData ? 'Update' : (isGasCard ? 'Submit Odometer Log' : 'Submit')}
+                            {initialData
+                                ? 'Update'
+                                : isGasCard
+                                  ? 'Submit Odometer Log'
+                                  : canApproveFuel
+                                    ? 'Save & Approve'
+                                    : 'Submit'}
                         </Button>
                     </DialogFooter>
                 )}

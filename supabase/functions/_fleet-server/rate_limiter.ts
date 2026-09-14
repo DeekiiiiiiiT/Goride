@@ -60,6 +60,12 @@ const PORTAL_CONFIGS: Record<string, RateLimitConfig> = {
     maxAttempts: 5,
     lockoutMs: 30 * 60 * 1000,
   },
+  /** Catalog CRUD / bulk / purge — generous enough for ops, still bounds runaway loops. */
+  catalog_write: {
+    windowMs: 60 * 1000,
+    maxAttempts: 120,
+    lockoutMs: 60 * 1000,
+  },
   signup: {
     windowMs: 60 * 60 * 1000,
     maxAttempts: 5,

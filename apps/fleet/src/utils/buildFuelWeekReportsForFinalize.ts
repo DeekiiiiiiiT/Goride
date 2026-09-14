@@ -31,7 +31,7 @@ import type {
   WeeklyFuelReport,
   FinalizedFuelReport,
 } from '../types/fuel';
-import type { Trip } from '../types/data';
+import type { FinancialTransaction, Trip } from '../types/data';
 import type { Vehicle } from '../types/vehicle';
 
 export type BuildFuelWeekReportsInput = {
@@ -47,6 +47,8 @@ export type BuildFuelWeekReportsInput = {
   trips?: Trip[];
   disputes?: FuelDispute[];
   finalizedReports?: FinalizedFuelReport[];
+  /** Pending fuel reimbursements — Finalize hard-block (F3). */
+  transactions?: FinancialTransaction[];
   personalAllowance?: PersonalAllowanceReconContext;
   seedPersonalAllowance?: boolean;
 };
@@ -265,6 +267,7 @@ export async function buildFuelWeekReportsWithGating(
     disputes: input.disputes,
     fuelEntries: input.fuelEntries,
     finalizedReports: input.finalizedReports,
+    transactions: input.transactions,
     weekStartYmd: input.weekStartYmd,
     weekEndYmd: input.weekEndYmd,
   });

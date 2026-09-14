@@ -10,7 +10,7 @@ import {
 import { Button } from "../ui/button";
 import { Badge } from "../ui/badge";
 import { FinancialTransaction } from '../../types/data';
-import { Check, X, Eye, FileText, Calendar, User, Truck, DollarSign, Plus, Pencil, Trash2, Loader2, Camera, AlertTriangle, MapPin } from "lucide-react";
+import { Check, X, Eye, FileText, Calendar, User, Truck, DollarSign, Pencil, Trash2, Loader2, Camera, AlertTriangle, MapPin } from "lucide-react";
 import { ImageWithFallback } from '../figma/ImageWithFallback';
 import { EvidenceFromRecord } from '../evidence/EvidenceFromRecord';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "../ui/dialog";
@@ -24,45 +24,15 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 import { cn } from "../ui/utils";
 import { FuelEntry } from '../../types/fuel';
 
-import { DateRange } from "react-day-picker";
-import { DatePickerWithRange } from "../ui/date-range-picker";
 import { usePermissions } from '../../hooks/usePermissions';
 import { fuelService } from '../../services/fuelService';
-import { api } from '../../services/api';
 import { StationProfile } from '../../types/station';
-import type { StationGateEvidenceRow } from './stations/EvidenceInboxTab';
-
-function gateEvidenceToTransaction(row: StationGateEvidenceRow): FinancialTransaction {
-    return {
-        id: row.id,
-        date: row.date || '',
-        time: row.time,
-        driverName: row.driverName,
-        driverId: row.driverId,
-        amount: row.amount,
-        vendor: row.vendor,
-        description: row.description,
-        status: 'Pending',
-        category: 'Fuel',
-        type: 'Expense',
-        metadata: {
-            stationGateHold: true,
-            gateReason: row.gateReason,
-            holdReason: row.holdReason,
-            locationStatus: row.locationStatus,
-            learntLocationId: row.learntLocationId,
-            ...(row.hasGps && row.lat != null && row.lng != null
-                ? {
-                      locationMetadata: {
-                          lat: row.lat,
-                          lng: row.lng,
-                          accuracy: row.accuracy,
-                      },
-                  }
-                : {}),
-        },
-    } as FinancialTransaction;
-}
+import {
+    isLogReviewEligible,
+    isPendingFuelQueueRow,
+    isStationGateHeld,
+    metaFlagOn,
+} from '@roam/fuel-core';
 
 /** Liters from stored quantity/fuelVolume, or amount ÷ price/L (same as manual log). */
 function computeResolvedFuelLiters(tx: FinancialTransaction): number | null {
@@ -102,17 +72,6 @@ function pickTransactionCoords(tx: FinancialTransaction): { lat: number; lng: nu
         lng,
         ...(accuracy != null ? { accuracy } : {}),
     };
-}
-
-/** Expense rows that belong in fuel/driver-merge context (strict enough to avoid random expenses). */
-function isLedgerFuelExpenseRow(t: FinancialTransaction): boolean {
-    const typ = String(t.type || "").toLowerCase();
-    if (typ !== "expense") return false;
-    const cat = String(t.category || "").toLowerCase();
-    if (cat.includes("fuel")) return true;
-    const desc = String(t.description || "").toLowerCase();
-    if (desc.includes("fuel expense") || desc.startsWith("fuel:") || desc.includes("fuel —")) return true;
-    return false;
 }
 
 function isGenericFuelVendor(vendor?: string): boolean {
@@ -195,13 +154,10 @@ interface FuelReimbursementTableProps {
     logs?: FuelEntry[];
     onApprove: (id: string, notes?: string, stationOpts?: { matchedStationId?: string; stationLocation?: string }) => void;
     onReject: (id: string, reason?: string) => void;
-    onRequestSubmit?: () => void;
     onEdit?: (transaction: FinancialTransaction) => void;
     onDelete?: (id: string) => void;
     onViewDriverLedger?: (driverId: string) => void;
     onApproveLogReview?: (id: string, odometer: number, notes?: string) => void;
-    dateRange?: DateRange;
-    onDateRangeChange?: (range: DateRange | undefined) => void;
     isRefreshing?: boolean;
     /** Jump to Transaction Logs for a posted fuel entry */
     onViewInTransactionLogs?: (opts: { fuelEntryId?: string; date?: string; vehicleId?: string }) => void;
@@ -212,13 +168,10 @@ export function FuelReimbursementTable({
     logs = [],
     onApprove, 
     onReject, 
-    onRequestSubmit, 
     onEdit, 
     onDelete,
     onViewDriverLedger,
     onApproveLogReview,
-    dateRange,
-    onDateRangeChange,
     isRefreshing = false,
     onViewInTransactionLogs,
 }: FuelReimbursementTableProps) {
@@ -235,32 +188,12 @@ export function FuelReimbursementTable({
     const [adminNotes, setAdminNotes] = useState('');
     const [isLogReviewSubmitting, setIsLogReviewSubmitting] = useState(false);
     const [odometerError, setOdometerError] = useState('');
-    const [gateHeldEvidence, setGateHeldEvidence] = useState<StationGateEvidenceRow[]>([]);
-    const [gateHeldLoading, setGateHeldLoading] = useState(false);
-
-    const fetchGateHeldEvidence = useCallback(async () => {
-        try {
-            setGateHeldLoading(true);
-            const data = await api.getStationGateEvidence({ limit: 5000 });
-            setGateHeldEvidence(Array.isArray(data) ? data : []);
-        } catch (e) {
-            console.error('[ReviewQueue] gate-held evidence', e);
-            setGateHeldEvidence([]);
-        } finally {
-            setGateHeldLoading(false);
-        }
-    }, []);
-
-    useEffect(() => {
-        void fetchGateHeldEvidence();
-    }, [fetchGateHeldEvidence, isRefreshing]);
 
     const [verifiedStations, setVerifiedStations] = useState<StationProfile[]>([]);
     const [stationsLoading, setStationsLoading] = useState(false);
     const [approvalBrand, setApprovalBrand] = useState('');
     const [approvalMatchedStationId, setApprovalMatchedStationId] = useState('');
     const [approvalStationLocation, setApprovalStationLocation] = useState('');
-    const [pendingSubTab, setPendingSubTab] = useState<'ready' | 'station-hold'>('ready');
 
     useEffect(() => {
         if (!isDetailsOpen) return;
@@ -364,112 +297,11 @@ export function FuelReimbursementTable({
         return walletCredit || null;
     };
 
-    // Filter mainly for Reimbursements. 
-    // We exclude automated transactions to avoid "duplication" in the UI, 
-    // as settlements are linked to and visible within the primary log entry.
-    const isFuelReimbursement = (t: FinancialTransaction) => {
-        const isStandardSource = !t.metadata?.automated || t.metadata?.source === 'Manual' || t.metadata?.source === 'Bulk Manual';
-        const isFuelCategory = (t.category === 'Fuel' || t.category === 'Fuel Reimbursement');
-        const isReimbursementType = (t.type === 'Reimbursement' || t.type === 'Fuel_Manual_Entry' || t.type === 'Manual_Entry' || (t.type === 'Expense' && (t.paymentMethod === 'Cash' || t.paymentMethod === 'RideShare Cash' || isFuelCategory)));
-        return isStandardSource && isReimbursementType && isFuelCategory;
-    };
+    const pendingAll = transactions.filter((t) => isPendingFuelQueueRow(t));
+    const pendingStationHoldCount = pendingAll.filter((t) => isStationGateHeld(t)).length;
+    const pendingReadyForReview = pendingAll.filter((t) => !isStationGateHeld(t));
 
-    /** All Pending fuel rows for Review Queue (includes station-gate-held and automated — not filtered out of Pending). */
-    const isPendingFuelQueueRow = (t: FinancialTransaction) => {
-        if (t.status !== 'Pending') return false;
-        const isFuelCategory = t.category === 'Fuel' || t.category === 'Fuel Reimbursement';
-        if (!isFuelCategory) return false;
-        return (
-            t.type === 'Reimbursement' ||
-            t.type === 'Fuel_Manual_Entry' ||
-            t.type === 'Manual_Entry' ||
-            (t.type === 'Expense' && (t.paymentMethod === 'Cash' || t.paymentMethod === 'RideShare Cash' || isFuelCategory))
-        );
-    };
-
-    /** Matches server: admin manual fuel with odometer > 0 skips Log Review (Pending tab). */
-    const isAdminManualFuelWithProvidedOdometer = (t: FinancialTransaction) => {
-        const odo = Number(t.odometer);
-        if (!Number.isFinite(odo) || odo <= 0) return false;
-        const m = t.metadata || {};
-        const entrySrc = m.entrySource ?? (t as FinancialTransaction & { entrySource?: string }).entrySource;
-        if (entrySrc === 'admin-manual' || entrySrc === 'bulk-import') return true;
-        const src = m.source;
-        if (src === 'Manual' || src === 'Bulk Manual' || src === 'Fuel Log' || src === 'Bulk Log') return true;
-        if (t.type === 'Fuel_Manual_Entry' && (m.portal_type === 'Manual_Entry' || m.isManual === true)) return true;
-        return false;
-    };
-
-    const metaFlagOn = (v: unknown) => v === true || v === 'true';
-
-    /** Same rules as Log Review tab — for badges + Review action on Pending table. */
-    const isLogReviewEligible = (t: FinancialTransaction) => {
-        if (!isPendingFuelQueueRow(t)) return false;
-        if (metaFlagOn(t.metadata?.stationGateHold)) return false;
-        if (isAdminManualFuelWithProvidedOdometer(t)) return false;
-        if (t.metadata?.needsLogReview) return true;
-        const method = t.metadata?.odometerMethod;
-        if ((t.category === 'Fuel' || t.category === 'Fuel Reimbursement') && (!method || method !== 'ai_verified')) return true;
-        return false;
-    };
-
-    const isWithinRange = (t: FinancialTransaction) => {
-        if (!dateRange?.from && !dateRange?.to) return true;
-        
-        // Parse transaction date as a local date object
-        let txDate: Date;
-        if (t.date.includes('T')) {
-            // ISO string - parse and convert to local date at midnight
-            const dateOnly = t.date.split('T')[0];
-            const [y, m, d] = dateOnly.split('-').map(Number);
-            txDate = new Date(y, m - 1, d);
-        } else if (t.date.includes('-') && t.date.length === 10) {
-            const [y, m, d] = t.date.split('-').map(Number);
-            txDate = new Date(y, m - 1, d);
-        } else {
-            txDate = new Date(t.date);
-            txDate.setHours(0, 0, 0, 0);
-        }
-        
-        if (dateRange?.from) {
-            const fromDate = new Date(dateRange.from);
-            fromDate.setHours(0, 0, 0, 0);
-            if (txDate < fromDate) return false;
-        }
-        if (dateRange?.to) {
-            const toDate = new Date(dateRange.to);
-            toDate.setHours(0, 0, 0, 0);
-            if (txDate > toDate) return false;
-        }
-        return true;
-    };
-
-    const pendingAll = transactions.filter(t => isPendingFuelQueueRow(t));
-    const pendingStationHold = useMemo(() => {
-        return gateHeldEvidence.map((row) => {
-            const full = transactions.find((t) => t.id === row.id);
-            if (full && metaFlagOn(full.metadata?.stationGateHold)) return full;
-            return gateEvidenceToTransaction(row);
-        });
-    }, [gateHeldEvidence, transactions]);
-    const pendingReadyForReview = pendingAll.filter((t) => !metaFlagOn(t.metadata?.stationGateHold));
-
-    const logReview = transactions.filter(isLogReviewEligible);
-
-    const history = transactions.filter(t => (t.status === 'Approved' || t.status === 'Rejected') && isFuelReimbursement(t) && isWithinRange(t));
-
-    /** Financial `Expense` rows for fuel (KV `transaction:*`) — same class of records drivers merge with `fuel_entry`. */
-    const approvedFuelExpenseLedger = transactions
-        .filter((t) => {
-            if (!isLedgerFuelExpenseRow(t)) return false;
-            if (t.status !== "Approved" && t.status !== "Rejected") return false;
-            return isWithinRange(t);
-        })
-        .sort((a, b) => {
-            const da = (a.date || '').split('T')[0];
-            const db = (b.date || '').split('T')[0];
-            return db.localeCompare(da);
-        });
+    const logReview = transactions.filter((t) => isLogReviewEligible(t));
 
     const handleAction = (type: 'approve' | 'reject') => {
         setAction(type);
@@ -478,7 +310,7 @@ export function FuelReimbursementTable({
 
     const confirmAction = () => {
         if (!selectedTx || !action) return;
-        if (metaFlagOn(selectedTx.metadata?.stationGateHold)) return;
+        if (isStationGateHeld(selectedTx)) return;
         if (action === 'approve') {
             onApprove(selectedTx.id, notes, {
                 matchedStationId: approvalMatchedStationId || undefined,
@@ -577,7 +409,7 @@ export function FuelReimbursementTable({
     const renderPendingQueueBadges = (tx: FinancialTransaction) => {
         const badges = (
             <>
-                {metaFlagOn(tx.metadata?.stationGateHold) && (
+                {isStationGateHeld(tx) && (
                     <Badge variant="outline" className="text-[9px] h-5 px-1.5 font-normal bg-sky-50 text-sky-800 border-sky-200">
                         Station hold
                     </Badge>
@@ -595,7 +427,7 @@ export function FuelReimbursementTable({
             </>
         );
         const hasAny =
-            metaFlagOn(tx.metadata?.stationGateHold) ||
+            isStationGateHeld(tx) ||
             metaFlagOn(tx.metadata?.automated) ||
             isLogReviewEligible(tx);
         return (
@@ -999,7 +831,7 @@ export function FuelReimbursementTable({
     return (
         <div className="space-y-6">
             <Tabs defaultValue="pending" className="w-full">
-                <div className="flex items-center justify-between mb-4">
+                <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
                     <TabsList>
                         <TabsTrigger value="log-review">
                             Log Review
@@ -1011,38 +843,20 @@ export function FuelReimbursementTable({
                         </TabsTrigger>
                         <TabsTrigger value="pending">
                             Pending
-                            {pendingAll.length > 0 && (
+                            {pendingReadyForReview.length > 0 && (
                                 <Badge variant="secondary" className="ml-2 bg-orange-100 text-orange-700 hover:bg-orange-200">
-                                    {pendingAll.length}
+                                    {pendingReadyForReview.length}
                                 </Badge>
                             )}
                         </TabsTrigger>
-                        <TabsTrigger value="fuel-expense-ledger">
-                            Expense ledger (accounting)
-                            {approvedFuelExpenseLedger.length > 0 && (
-                                <Badge variant="secondary" className="ml-2 bg-slate-100 text-slate-700 hover:bg-slate-200 font-normal">
-                                    {approvedFuelExpenseLedger.length}
-                                </Badge>
-                            )}
-                        </TabsTrigger>
-                        <TabsTrigger value="history">Closed</TabsTrigger>
                     </TabsList>
-
-                    <div className="flex items-center gap-2">
-                        {onDateRangeChange && (
-                            <DatePickerWithRange 
-                                date={dateRange} 
-                                setDate={onDateRangeChange} 
-                            />
-                        )}
-                        
-                        {onRequestSubmit && (
-                            <Button onClick={onRequestSubmit} size="sm" className="bg-slate-900 text-white hover:bg-slate-800">
-                                <Plus className="h-4 w-4 mr-2" />
-                                Log Receipt / Manual Entry
-                            </Button>
-                        )}
-                    </div>
+                    {pendingStationHoldCount > 0 && (
+                        <div className="flex items-center gap-2 rounded-md border border-sky-200 bg-sky-50 px-3 py-1.5 text-xs text-sky-900">
+                            <MapPin className="h-3.5 w-3.5 shrink-0" />
+                            {pendingStationHoldCount} station hold
+                            {pendingStationHoldCount === 1 ? '' : 's'} — resolve in Station Database
+                        </div>
+                    )}
                 </div>
 
                 <TabsContent value="log-review" className="space-y-4">
@@ -1050,7 +864,6 @@ export function FuelReimbursementTable({
                         <div className="rounded-md border bg-white p-8 text-center text-slate-500">
                             <p className="text-sm">No fuel submissions awaiting odometer review.</p>
                             <p className="text-xs text-slate-400 mt-1">Items appear here when the AI scanner fails and the driver submits an odometer photo for admin review.</p>
-                            <p className="text-xs text-slate-400 mt-2">All pending fuel rows are listed on the <span className="font-medium text-slate-600">Pending</span> tab with labels; use this tab for a filtered odometer-review list.</p>
                         </div>
                     ) : (
                         renderLogReviewTable(logReview)
@@ -1064,104 +877,21 @@ export function FuelReimbursementTable({
                             Synchronizing ledger and verifying manual entries...
                         </div>
                     )}
-                    <Tabs value={pendingSubTab} onValueChange={(v) => setPendingSubTab(v as 'ready' | 'station-hold')} className="w-full">
-                        <TabsList className="mb-1 h-9 w-full justify-start rounded-lg bg-slate-100/80 p-1 sm:w-auto">
-                            <TabsTrigger value="ready" className="text-xs sm:text-sm px-3">
-                                Ready for review
-                                {pendingReadyForReview.length > 0 && (
-                                    <Badge variant="secondary" className="ml-2 bg-emerald-100 text-emerald-800 hover:bg-emerald-100 border-0 font-normal">
-                                        {pendingReadyForReview.length}
-                                    </Badge>
-                                )}
-                            </TabsTrigger>
-                            <TabsTrigger value="station-hold" className="text-xs sm:text-sm px-3 gap-1">
-                                <MapPin className="h-3.5 w-3.5 opacity-70" />
-                                Awaiting station
-                                {pendingStationHold.length > 0 && (
-                                    <Badge variant="secondary" className="ml-2 bg-sky-100 text-sky-800 hover:bg-sky-100 border-0 font-normal">
-                                        {pendingStationHold.length}
-                                    </Badge>
-                                )}
-                            </TabsTrigger>
-                        </TabsList>
-                        <TabsContent value="ready" className="mt-4 space-y-3 focus-visible:outline-none">
-                            {pendingReadyForReview.length === 0 ? (
-                                <div className="rounded-md border border-slate-200 bg-white p-8 text-center space-y-2">
-                                    <p className="text-sm text-slate-600">No fuel items need your action.</p>
-                                    <p className="text-xs text-slate-400 max-w-md mx-auto">
-                                        Posted fill-ups are in <span className="font-medium text-slate-600">Transaction Logs</span>.
-                                        Rows held for an unverified station appear under <span className="font-medium text-slate-600">Awaiting station</span>.
-                                    </p>
-                                </div>
-                            ) : (
-                                renderTable(pendingReadyForReview, true, true, true)
-                            )}
-                        </TabsContent>
-                        <TabsContent value="station-hold" className="mt-4 space-y-3 focus-visible:outline-none">
-                            <div className="rounded-lg border border-sky-100 bg-sky-50/60 px-4 py-3 text-sm text-sky-900">
-                                <div className="flex gap-2 items-start">
-                                    <MapPin className="h-4 w-4 shrink-0 mt-0.5 text-sky-700" />
-                                    <p className="leading-snug">
-                                        These submissions are paused until Roam matches them to a verified station.
-                                        Approve and reject stay disabled here — no action needed on your side.
-                                    </p>
-                                </div>
-                            </div>
-                            {gateHeldLoading && pendingStationHold.length === 0 ? (
-                                <div className="rounded-md border border-slate-200 bg-white p-8 text-center text-slate-500 flex items-center justify-center gap-2">
-                                    <Loader2 className="h-4 w-4 animate-spin" />
-                                    Loading station holds…
-                                </div>
-                            ) : pendingStationHold.length === 0 ? (
-                                <div className="rounded-md border border-slate-200 bg-white p-8 text-center space-y-2">
-                                    <p className="text-sm text-slate-600">No transactions awaiting station verification.</p>
-                                    <p className="text-xs text-slate-400 max-w-md mx-auto">
-                                        When GPS does not match a verified station, entries appear here until Roam ops resolves them.
-                                    </p>
-                                </div>
-                            ) : (
-                                renderTable(pendingStationHold, true, true, false)
-                            )}
-                        </TabsContent>
-                    </Tabs>
-                </TabsContent>
-
-                <TabsContent value="fuel-expense-ledger" className="space-y-4">
-                    <div className="rounded-lg border border-slate-200 bg-slate-50/80 px-4 py-3 text-sm text-slate-700">
-                        <p className="font-medium text-slate-800">Financial fuel expenses (ledger)</p>
-                        <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                            These are <span className="font-medium text-slate-600">Expense</span> transactions tied to fuel (by category or fuel-style description) that are already approved or rejected.
-                            They live in the same KV store as other reimbursements and can show on the driver app next to fuel log rows. Use the date range above; open a row for details, edit, or delete where allowed.
-                        </p>
-                    </div>
-                    {approvedFuelExpenseLedger.length === 0 ? (
+                    {pendingReadyForReview.length === 0 ? (
                         <div className="rounded-md border border-slate-200 bg-white p-8 text-center space-y-2">
-                            <p className="text-sm text-slate-600">No approved or rejected fuel expense lines in this date range.</p>
+                            <p className="text-sm text-slate-600">No fuel items need your action.</p>
                             <p className="text-xs text-slate-400 max-w-md mx-auto">
-                                Widen the date range if you expect rows here. Pending items stay on the <span className="font-medium text-slate-600">Pending</span> tab.
+                                Posted fill-ups are in <span className="font-medium text-slate-600">Transaction Logs</span>.
+                                Accounting history is under <span className="font-medium text-slate-600">Ledgers › Fuel Expenses</span>.
                             </p>
                         </div>
                     ) : (
-                        renderTable(approvedFuelExpenseLedger, false)
-                    )}
-                </TabsContent>
-
-                <TabsContent value="history" className="space-y-4">
-                    {history.length === 0 ? (
-                        <div className="rounded-md border border-slate-200 bg-white p-8 text-center space-y-2">
-                            <p className="text-sm text-slate-600">No closed items in this date range.</p>
-                            <p className="text-xs text-slate-400 max-w-md mx-auto">
-                                Posted fill-ups live in <span className="font-medium text-slate-600">Transaction Logs</span>.
-                                This archive only keeps rejected or otherwise closed review items.
-                            </p>
-                        </div>
-                    ) : (
-                        renderTable(history, false)
+                        renderTable(pendingReadyForReview, true, true, true)
                     )}
                 </TabsContent>
             </Tabs>
 
-            {/* Details Modal (existing Pending/History detail view) */}
+            {/* Details Modal (existing Pending detail view) */}
             <Dialog open={isDetailsOpen} onOpenChange={(open) => { if(!open) { setIsDetailsOpen(false); setAction(null); } }}>
                 <DialogContent className="sm:max-w-[720px] max-h-[90vh] overflow-y-auto">
                     <DialogHeader>
@@ -1171,7 +901,7 @@ export function FuelReimbursementTable({
                         </DialogDescription>
                     </DialogHeader>
 
-                    {selectedTx && metaFlagOn(selectedTx.metadata?.stationGateHold) && (
+                    {selectedTx && isStationGateHeld(selectedTx) && (
                         <div className="space-y-3">
                             <div className="rounded-md border border-sky-200 bg-sky-50 px-3 py-2.5 text-sm text-sky-900 flex gap-2 items-start">
                                 <MapPin className="h-4 w-4 shrink-0 mt-0.5 text-sky-700" />
@@ -1201,7 +931,7 @@ export function FuelReimbursementTable({
                         const showFuelStationPicker =
                             selectedTx.status === 'Pending' &&
                             (selectedTx.category === 'Fuel' || selectedTx.category === 'Fuel Reimbursement') &&
-                            !metaFlagOn(selectedTx.metadata?.stationGateHold);
+                            !isStationGateHeld(selectedTx);
                         return (
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 py-4">
                             <div className="space-y-4">
@@ -1500,7 +1230,7 @@ export function FuelReimbursementTable({
                     {!action && selectedTx?.status === 'Pending' && (
                         <DialogFooter className="gap-2 sm:gap-0">
                             <div className="flex gap-2 w-full sm:w-auto mr-auto">
-                                {onEdit && !metaFlagOn(selectedTx.metadata?.stationGateHold) && (
+                                {onEdit && !isStationGateHeld(selectedTx) && (
                                     selectedTx.metadata?.source === 'Manual' || 
                                     selectedTx.metadata?.source === 'Bulk Manual' || 
                                     selectedTx.metadata?.source === 'Manual Request' ||
@@ -1513,7 +1243,7 @@ export function FuelReimbursementTable({
                                 )}
                                 <Button variant="outline" className="flex-1 sm:flex-none" onClick={() => setIsDetailsOpen(false)}>Close</Button>
                             </div>
-                            {!metaFlagOn(selectedTx.metadata?.stationGateHold) && (
+                            {!isStationGateHeld(selectedTx) && (
                                 <div className="flex gap-2 w-full sm:w-auto">
                                     {can('fuel.reject') && <Button variant="destructive" className="flex-1 sm:flex-none" onClick={() => setAction('reject')}>Reject</Button>}
                                     {can('fuel.approve') && <Button className="bg-emerald-600 hover:bg-emerald-700 flex-1 sm:flex-none" onClick={() => setAction('approve')}>Approve</Button>}

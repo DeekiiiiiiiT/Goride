@@ -125,7 +125,7 @@ import {
   mayMutateTransactionOrg,
 } from "./settlement_desk_security.ts";
 import { parseCatalogMonthFromUnknown } from "../../../packages/types/src/catalogMonthParse.ts";
-import { VEHICLE_CATALOG_WRITABLE_KEYS } from "../../../packages/types/src/vehicleCatalogCsvImport.ts";
+import { VEHICLE_CATALOG_WRITABLE_KEYS, VEHICLE_CATALOG_BULK_MAX_ROWS } from "../../../packages/types/src/vehicleCatalogCsvImport.ts";
 import fuelApp from "./fuel_controller.tsx";
 import {
   fleetAutocompletePlaces,
@@ -141,6 +141,7 @@ import {
   enrichRecordWithDriverVehicle,
   syncDriverRecordFromVehicleAssignment,
   applyDriverAssignmentChangeOnVehicle,
+  enforceExclusiveCurrentDriverAssignment,
 } from "./driver_vehicle_assignment.ts";
 import {
   projectOdometerReading,
@@ -157,6 +158,11 @@ import {
 import { syncLinkedExpenseTransaction } from "./fuel_transaction_sync.ts";
 import { resolveFuelPaymentSource } from "./fuel_payment_source.ts";
 import { ensureFuelEntryForApprovedTx } from "./fuel_posted_guarantee.ts";
+import {
+  buildFuelTxCascadePlan,
+  collectRelatedTxIdsForEntry,
+  resolveParentFuelEntry,
+} from "./fuel_tx_cascade.ts";
 import { normalizeAdminCashFuelTransaction } from "./fuel_transaction_normalize.ts";
 import auditApp from "./audit_controller.tsx";
 import safetyApp from "./safety_controller.tsx";
@@ -295,6 +301,14 @@ import {
   stripVehicleCatalogOptionalMigrationColumns,
   VEHICLE_CATALOG_SUPABASE_SELECT,
 } from "./vehicle_catalog_schema_fallback.ts";
+import {
+  countCatalogDependencies,
+  countCatalogDependenciesForIds,
+  dependenciesBlockDelete,
+  invalidateCatalogExistenceCache,
+  listCatalogOrphanVehicles,
+  stampCatalogProvenance,
+} from "./vehicle_catalog_enterprise.ts";
 
 // Wave 5: Fail-fast env validation at startup (after all imports — never between import lines)
 assertRequiredEnv();
@@ -2915,6 +2929,11 @@ app.post("/make-server-37f42386/vehicles", requireAuth(), requirePermission('veh
     await kv.set(`vehicle:${vehicle.id}`, vehicle);
 
     try {
+      // One driver ↔ one vehicle — release duplicates before mirroring driver cache
+      await enforceExclusiveCurrentDriverAssignment(
+        vehicle as Record<string, unknown>,
+        previous as Record<string, unknown> | null | undefined,
+      );
       await syncDriverRecordFromVehicleAssignment(vehicle as Record<string, unknown>);
     } catch (assignSyncErr: unknown) {
       console.warn(
@@ -4225,6 +4244,8 @@ app.delete("/make-server-37f42386/transactions/:id", requireAuth({ requireOrg: t
   const id = c.req.param("id");
   try {
     const callerOrgId = getOrgId(c);
+    const cascadeParam = (c.req.query("cascade") || "").toLowerCase();
+    const cascade = cascadeParam !== "false" && cascadeParam !== "0";
 
     // Phase 6: Check toll_ledger first (tolls are now stored there, not in transaction:*)
     const tollEntry = await getTollLedgerEntry(id);
@@ -4235,37 +4256,132 @@ app.delete("/make-server-37f42386/transactions/:id", requireAuth({ requireOrg: t
       }
       await deleteTollLedgerEntry(id);
       console.log(`[TollLedger] Deleted toll_ledger:${id}`);
-      return c.json({ success: true });
+      return c.json({ success: true, deletedTransactionIds: [id] });
     }
-    
+
     const tx = await kv.get(`transaction:${id}`);
-    if (!tx) {
+    if (!tx || typeof tx !== "object") {
       return c.json({ error: "Not found" }, 404);
     }
+    const primaryTx = tx as Record<string, unknown>;
     // S1-2b: cross-tenant IDOR guard — never delete another org's transaction by id.
-    const txOrg =
-      tx && typeof tx === "object"
-        ? (tx as Record<string, unknown>).organizationId
-        : undefined;
-    if (!mayMutateTransactionOrg(txOrg, callerOrgId)) {
+    if (!mayMutateTransactionOrg(primaryTx.organizationId, callerOrgId)) {
       return c.json({ error: "Not found" }, 404);
     }
 
-    if (isEvidenceTtlEnabled()) {
-      const urls = extractEvidenceUrlsFromRecord(tx);
-      await cleanupEphemeralPathsOnDelete(supabase, urls);
+    const deletedTransactionIds: string[] = [];
+    let deletedFuelEntryId: string | undefined;
+
+    const deleteOneTxRow = async (rowId: string, row: unknown) => {
+      if (isEvidenceTtlEnabled() && row) {
+        const urls = extractEvidenceUrlsFromRecord(row);
+        await cleanupEphemeralPathsOnDelete(supabase, urls);
+      }
+      await kv.del(`transaction:${rowId}`);
+      try {
+        await deleteCanonicalLedgerBySource("transaction", [rowId]);
+      } catch (ledgerErr: any) {
+        console.warn(
+          `[DELETE /transactions/:id] Ledger cleanup failed (non-fatal) tx=${rowId}:`,
+          ledgerErr?.message,
+        );
+      }
+      if (row) {
+        await rebuildFinancialPeriodsForCashTx(row, null);
+      }
+      deletedTransactionIds.push(rowId);
+    };
+
+    // R8: fuel-class deletes cascade to linked fill + wallet credit by default.
+    if (cascade && transactionDeletableWithFuelDeletePermission(primaryTx)) {
+      const parentEntry = await resolveParentFuelEntry(kv, primaryTx);
+      let relatedTxIds: string[] = [];
+      if (parentEntry) {
+        const driverId =
+          typeof parentEntry.driverId === "string" ? parentEntry.driverId.trim() : "";
+        const dayRaw = String(parentEntry.date || primaryTx.date || "");
+        const day = dayRaw.includes("T") ? dayRaw.split("T")[0] : dayRaw.slice(0, 10);
+        try {
+          let q = fromKvStore()
+            .select("value")
+            .like("key", "transaction:%")
+            .limit(500);
+          if (callerOrgId) {
+            q = q.eq("value->>organizationId", callerOrgId);
+          }
+          if (driverId) {
+            q = q.eq("value->>driverId", driverId);
+          }
+          if (day && /^\d{4}-\d{2}-\d{2}$/.test(day)) {
+            q = q.gte("value->>date", day).lte("value->>date", `${day}\uffff`);
+          }
+          const { data } = await q;
+          const candidates = (data || [])
+            .map((d: { value?: unknown }) => d?.value)
+            .filter((v: unknown): v is Record<string, unknown> => !!v && typeof v === "object");
+          relatedTxIds = collectRelatedTxIdsForEntry(parentEntry, candidates);
+        } catch (scanErr: any) {
+          console.warn(
+            `[DELETE /transactions/:id] Related-tx scan failed (non-fatal) tx=${id}:`,
+            scanErr?.message,
+          );
+          relatedTxIds = [];
+        }
+      }
+
+      const plan = buildFuelTxCascadePlan({
+        primaryId: id,
+        parentEntry,
+        relatedTxIds,
+      });
+
+      // Delete related ledger rows first (primary included); then fuel_entry.
+      for (const tid of plan.transactionIds) {
+        if (tid === id) {
+          await deleteOneTxRow(id, primaryTx);
+          continue;
+        }
+        const other = await kv.get(`transaction:${tid}`);
+        if (!other || typeof other !== "object") continue;
+        const otherRec = other as Record<string, unknown>;
+        if (!mayMutateTransactionOrg(otherRec.organizationId, callerOrgId)) continue;
+        await deleteOneTxRow(tid, otherRec);
+      }
+
+      if (plan.fuelEntryId) {
+        const entryKey = `fuel_entry:${plan.fuelEntryId}`;
+        const entryRow = await kv.get(entryKey);
+        if (entryRow && typeof entryRow === "object") {
+          if (mayMutateTransactionOrg((entryRow as Record<string, unknown>).organizationId, callerOrgId)) {
+            await kv.del(entryKey);
+            try {
+              await deleteCanonicalLedgerBySource("transaction", [plan.fuelEntryId]);
+            } catch (le: any) {
+              console.warn(
+                `[DELETE /transactions/:id] Fuel entry ledger cleanup failed (non-fatal) entry=${plan.fuelEntryId}:`,
+                le?.message,
+              );
+            }
+            deletedFuelEntryId = plan.fuelEntryId;
+          }
+        }
+      }
+
+      return c.json({
+        success: true,
+        deletedTransactionIds,
+        deletedFuelEntryId: deletedFuelEntryId ?? null,
+        cascaded: true,
+      });
     }
 
-    // Not a toll, delete from transaction:*
-    await kv.del(`transaction:${id}`);
-    try {
-      await deleteCanonicalLedgerBySource("transaction", [id]);
-    } catch (ledgerErr: any) {
-      console.warn(`[DELETE /transactions/:id] Ledger cleanup failed (non-fatal) tx=${id}:`, ledgerErr?.message);
-    }
-    // Deleted cash payments must leave the projected Cash Returned for their Settlement Week.
-    await rebuildFinancialPeriodsForCashTx(tx, null);
-    return c.json({ success: true });
+    await deleteOneTxRow(id, primaryTx);
+    return c.json({
+      success: true,
+      deletedTransactionIds,
+      deletedFuelEntryId: null,
+      cascaded: false,
+    });
   } catch (e: any) {
     return c.json({ error: e.message }, 500);
   }
@@ -13247,6 +13363,30 @@ function assertVehicleCatalogAccess(c: any) {
   return null;
 }
 
+function vehicleCatalogActorId(c: any): string | null {
+  const rbacUser = c.get("rbacUser") as { userId?: string; id?: string } | undefined;
+  const id = String(rbacUser?.userId ?? rbacUser?.id ?? "").trim();
+  return id || null;
+}
+
+async function assertCatalogWriteRateLimit(c: any) {
+  const clientIp = getClientIp(c);
+  const userId = vehicleCatalogActorId(c) || "unknown";
+  const rateLimitKey = `catalog:${clientIp}:${userId}`;
+  const rateCheck = await checkRateLimit(rateLimitKey, "catalog_write");
+  if (!rateCheck.allowed) {
+    return c.json(
+      {
+        error: "rate_limit_exceeded",
+        message: `Too many catalog writes. Please wait ${rateCheck.retryAfterSec} seconds.`,
+        retryAfter: rateCheck.retryAfterSec,
+      },
+      429,
+    );
+  }
+  return null;
+}
+
 function pickVehicleCatalogRow(raw: Record<string, unknown>, partial: boolean): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   for (const k of VEHICLE_CATALOG_WRITABLE_KEYS) {
@@ -13263,6 +13403,9 @@ function pickVehicleCatalogRow(raw: Record<string, unknown>, partial: boolean): 
       out[k] = v;
     }
   }
+  // Never trust client-supplied actor stamps; edge overwrites after pick.
+  delete out.created_by;
+  delete out.updated_by;
   return out;
 }
 
@@ -13271,8 +13414,8 @@ app.get("/make-server-37f42386/admin/vehicle-catalog", requireAuth(), async (c) 
   const denied = assertVehicleCatalogAccess(c);
   if (denied) return denied;
   try {
-    const { items } = await listVehicleCatalogWithFallback(supabase);
-    return c.json({ items });
+    const { items, total } = await listVehicleCatalogWithFallback(supabase);
+    return c.json({ items, total });
   } catch (e: any) {
     console.error("[vehicle-catalog] list:", e);
     return c.json({ error: e.message || "Failed to list vehicle catalog" }, 500);
@@ -13286,6 +13429,8 @@ const VEHICLE_CATALOG_PURGE_CONFIRM = "DELETE ALL";
 app.post("/make-server-37f42386/admin/vehicle-catalog/purge", requireAuth(), async (c) => {
   const denied = assertVehicleCatalogAccess(c);
   if (denied) return denied;
+  const limited = await assertCatalogWriteRateLimit(c);
+  if (limited) return limited;
   try {
     const body = (await c.req.json().catch(() => ({}))) as { confirm?: string };
     if (String(body.confirm ?? "").trim() !== VEHICLE_CATALOG_PURGE_CONFIRM) {
@@ -13306,6 +13451,7 @@ app.post("/make-server-37f42386/admin/vehicle-catalog/purge", requireAuth(), asy
       deleted += ids.length;
       if (batch.length < CHUNK) break;
     }
+    invalidateCatalogExistenceCache();
     return c.json({ deleted });
   } catch (e: any) {
     console.error("[vehicle-catalog] purge:", e);
@@ -13313,10 +13459,265 @@ app.post("/make-server-37f42386/admin/vehicle-catalog/purge", requireAuth(), asy
   }
 });
 
+// GET /admin/vehicle-catalog/orphans — before :id routes
+app.get("/make-server-37f42386/admin/vehicle-catalog/orphans", requireAuth(), async (c) => {
+  const denied = assertVehicleCatalogAccess(c);
+  if (denied) return denied;
+  try {
+    const items = await listCatalogOrphanVehicles(supabase);
+    return c.json({ items, total: items.length });
+  } catch (e: any) {
+    console.error("[vehicle-catalog] orphans:", e);
+    return c.json({ error: e.message || "Failed to list catalog orphans" }, 500);
+  }
+});
+
+// POST /admin/vehicle-catalog/bulk
+app.post("/make-server-37f42386/admin/vehicle-catalog/bulk", requireAuth(), async (c) => {
+  const denied = assertVehicleCatalogAccess(c);
+  if (denied) return denied;
+  const limited = await assertCatalogWriteRateLimit(c);
+  if (limited) return limited;
+  try {
+    const body = (await c.req.json()) as {
+      import_batch_id?: string;
+      rows?: Array<{ rowIndex?: number; id?: string; payload?: Record<string, unknown> }>;
+    };
+    const importBatchId = String(body.import_batch_id ?? "").trim();
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(importBatchId)) {
+      return c.json({ error: "import_batch_id must be a UUID" }, 400);
+    }
+    const rows = Array.isArray(body.rows) ? body.rows : [];
+    if (rows.length === 0) return c.json({ error: "rows required" }, 400);
+    if (rows.length > VEHICLE_CATALOG_BULK_MAX_ROWS) {
+      return c.json({ error: `Max ${VEHICLE_CATALOG_BULK_MAX_ROWS} rows per bulk request` }, 400);
+    }
+
+    const actorId = vehicleCatalogActorId(c);
+    const results: Array<{
+      rowIndex: number;
+      ok: boolean;
+      id?: string;
+      action?: "created" | "updated";
+      error?: string;
+      item?: Record<string, unknown>;
+    }> = [];
+
+    for (const entry of rows) {
+      const rowIndex = Number(entry.rowIndex ?? 0);
+      const payload = (entry.payload && typeof entry.payload === "object" ? entry.payload : {}) as Record<
+        string,
+        unknown
+      >;
+      const existingId = typeof entry.id === "string" ? entry.id.trim() : "";
+      try {
+        if (existingId) {
+          const make = payload.make !== undefined ? String(payload.make ?? "").trim() : undefined;
+          const model = payload.model !== undefined ? String(payload.model ?? "").trim() : undefined;
+          const row = pickVehicleCatalogRow(
+            {
+              ...payload,
+              ...(make !== undefined ? { make } : {}),
+              ...(model !== undefined ? { model } : {}),
+            },
+            true,
+          );
+          stampCatalogProvenance(row, {
+            userId: actorId,
+            source: "csv_import",
+            importBatchId,
+            isCreate: false,
+          });
+          row.updated_at = new Date().toISOString();
+          let upd = await supabase
+            .from("vehicle_catalog")
+            .update(row)
+            .eq("id", existingId)
+            .select(VEHICLE_CATALOG_SUPABASE_SELECT)
+            .single();
+          if (upd.error && shouldStripVehicleCatalogInsertPayloadOnRetry(upd.error)) {
+            const trimmed = stripVehicleCatalogOptionalMigrationColumns(row);
+            trimmed.updated_at = row.updated_at;
+            stampCatalogProvenance(trimmed, {
+              userId: actorId,
+              source: "csv_import",
+              importBatchId,
+              isCreate: false,
+            });
+            upd = await supabase
+              .from("vehicle_catalog")
+              .update(trimmed)
+              .eq("id", existingId)
+              .select(VEHICLE_CATALOG_SUPABASE_SELECT)
+              .single();
+          }
+          if (upd.error) throw upd.error;
+          if (!upd.data) throw new Error("Not found");
+          invalidateCatalogExistenceCache(existingId);
+          results.push({
+            rowIndex,
+            ok: true,
+            id: existingId,
+            action: "updated",
+            item: catalogRowForApi(upd.data as Record<string, unknown>),
+          });
+        } else {
+          const make = String(payload.make ?? "").trim();
+          const model = String(payload.model ?? "").trim();
+          const startNum = Number(payload.production_start_year);
+          let endNum: number | null = null;
+          if (
+            payload.production_end_year !== undefined &&
+            payload.production_end_year !== null &&
+            payload.production_end_year !== ""
+          ) {
+            const e = Number(payload.production_end_year);
+            if (!Number.isFinite(e) || e < 1900 || e > 2100) {
+              throw new Error("production_end_year must be between 1900 and 2100, or omitted for ongoing");
+            }
+            endNum = e;
+          }
+          if (!make || !model || !Number.isFinite(startNum) || startNum < 1900 || startNum > 2100) {
+            throw new Error("make, model, and production_start_year are required");
+          }
+          const spanErr = assertCatalogProductionSpan(startNum, endNum);
+          if (spanErr) throw new Error(spanErr);
+          const row = pickVehicleCatalogRow(
+            {
+              ...payload,
+              make,
+              model,
+              production_start_year: startNum,
+              production_end_year: endNum,
+            },
+            false,
+          );
+          stampCatalogProvenance(row, {
+            userId: actorId,
+            source: "csv_import",
+            importBatchId,
+            isCreate: true,
+          });
+          row.updated_at = new Date().toISOString();
+          let ins = await supabase
+            .from("vehicle_catalog")
+            .insert(row)
+            .select(VEHICLE_CATALOG_SUPABASE_SELECT)
+            .single();
+          if (ins.error && shouldStripVehicleCatalogInsertPayloadOnRetry(ins.error)) {
+            const trimmed = stripVehicleCatalogOptionalMigrationColumns(row);
+            trimmed.updated_at = row.updated_at;
+            stampCatalogProvenance(trimmed, {
+              userId: actorId,
+              source: "csv_import",
+              importBatchId,
+              isCreate: true,
+            });
+            ins = await supabase
+              .from("vehicle_catalog")
+              .insert(trimmed)
+              .select(VEHICLE_CATALOG_SUPABASE_SELECT)
+              .single();
+          }
+          if (ins.error) throw ins.error;
+          const id = String((ins.data as { id: string }).id);
+          invalidateCatalogExistenceCache(id);
+          results.push({
+            rowIndex,
+            ok: true,
+            id,
+            action: "created",
+            item: catalogRowForApi((ins.data ?? {}) as Record<string, unknown>),
+          });
+        }
+      } catch (err: unknown) {
+        results.push({
+          rowIndex,
+          ok: false,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+
+    return c.json({
+      import_batch_id: importBatchId,
+      results,
+      created: results.filter((r) => r.ok && r.action === "created").length,
+      updated: results.filter((r) => r.ok && r.action === "updated").length,
+      failed: results.filter((r) => !r.ok).length,
+    });
+  } catch (e: any) {
+    console.error("[vehicle-catalog] bulk:", e);
+    return c.json({ error: e.message || "Failed to bulk upsert vehicle catalog" }, 500);
+  }
+});
+
+// POST /admin/vehicle-catalog/undo-batch
+app.post("/make-server-37f42386/admin/vehicle-catalog/undo-batch", requireAuth(), async (c) => {
+  const denied = assertVehicleCatalogAccess(c);
+  if (denied) return denied;
+  const limited = await assertCatalogWriteRateLimit(c);
+  if (limited) return limited;
+  try {
+    const body = (await c.req.json().catch(() => ({}))) as {
+      import_batch_id?: string;
+      force?: boolean;
+    };
+    const importBatchId = String(body.import_batch_id ?? "").trim();
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(importBatchId)) {
+      return c.json({ error: "import_batch_id must be a UUID" }, 400);
+    }
+    const { data: batchRows, error: qErr } = await supabase
+      .from("vehicle_catalog")
+      .select("id")
+      .eq("import_batch_id", importBatchId);
+    if (qErr) throw qErr;
+    const ids = (batchRows || []).map((r: { id: string }) => r.id);
+    if (ids.length === 0) {
+      return c.json({ deleted: 0, import_batch_id: importBatchId, dependencies: null });
+    }
+    const deps = await countCatalogDependenciesForIds(supabase, ids);
+    if (dependenciesBlockDelete(deps) && body.force !== true) {
+      return c.json(
+        {
+          error: "Batch has dependents; pass force:true to delete anyway",
+          code: "CATALOG_HAS_DEPENDENTS",
+          dependencies: deps,
+          rowCount: ids.length,
+        },
+        409,
+      );
+    }
+    const { error: dErr } = await supabase.from("vehicle_catalog").delete().eq("import_batch_id", importBatchId);
+    if (dErr) throw dErr;
+    invalidateCatalogExistenceCache();
+    return c.json({ deleted: ids.length, import_batch_id: importBatchId, dependencies: deps });
+  } catch (e: any) {
+    console.error("[vehicle-catalog] undo-batch:", e);
+    return c.json({ error: e.message || "Failed to undo import batch" }, 500);
+  }
+});
+
+// GET /admin/vehicle-catalog/:id/dependencies
+app.get("/make-server-37f42386/admin/vehicle-catalog/:id/dependencies", requireAuth(), async (c) => {
+  const denied = assertVehicleCatalogAccess(c);
+  if (denied) return denied;
+  try {
+    const id = c.req.param("id");
+    const dependencies = await countCatalogDependencies(supabase, id);
+    return c.json({ id, dependencies });
+  } catch (e: any) {
+    console.error("[vehicle-catalog] dependencies:", e);
+    return c.json({ error: e.message || "Failed to load dependencies" }, 500);
+  }
+});
+
 // POST /admin/vehicle-catalog
 app.post("/make-server-37f42386/admin/vehicle-catalog", requireAuth(), async (c) => {
   const denied = assertVehicleCatalogAccess(c);
   if (denied) return denied;
+  const limited = await assertCatalogWriteRateLimit(c);
+  if (limited) return limited;
   try {
     const body = (await c.req.json()) as Record<string, unknown>;
     const make = String(body.make ?? "").trim();
@@ -13375,6 +13776,11 @@ app.post("/make-server-37f42386/admin/vehicle-catalog", requireAuth(), async (c)
     ) {
       row.generation_code = row.chassis_code;
     }
+    stampCatalogProvenance(row, {
+      userId: vehicleCatalogActorId(c),
+      source: "manual",
+      isCreate: true,
+    });
     row.updated_at = new Date().toISOString();
     /**
      * Prefer PostgREST insert first so **new columns** (fuel economy, etc.) are applied whenever the
@@ -13431,6 +13837,8 @@ app.post("/make-server-37f42386/admin/vehicle-catalog", requireAuth(), async (c)
 
     if (ins.error) throw ins.error;
     const item = catalogRowForApi((ins.data ?? {}) as Record<string, unknown>);
+    const newId = String((ins.data as { id?: string })?.id ?? "");
+    if (newId) invalidateCatalogExistenceCache(newId);
     return c.json({ item });
   } catch (e: any) {
     console.error("[vehicle-catalog] create:", e);
@@ -13442,9 +13850,31 @@ app.post("/make-server-37f42386/admin/vehicle-catalog", requireAuth(), async (c)
 app.patch("/make-server-37f42386/admin/vehicle-catalog/:id", requireAuth(), async (c) => {
   const denied = assertVehicleCatalogAccess(c);
   if (denied) return denied;
+  const limited = await assertCatalogWriteRateLimit(c);
+  if (limited) return limited;
   try {
     const id = c.req.param("id");
     const body = (await c.req.json()) as Record<string, unknown>;
+    const expectedUpdatedAt =
+      body.expected_updated_at ?? body.expectedUpdatedAt ?? body.updated_at ?? null;
+    if (expectedUpdatedAt != null && expectedUpdatedAt !== "") {
+      const { data: existing, error: exErr } = await supabase
+        .from("vehicle_catalog")
+        .select("updated_at")
+        .eq("id", id)
+        .maybeSingle();
+      if (exErr) throw exErr;
+      if (!existing) return c.json({ error: "Not found" }, 404);
+      if (String(existing.updated_at) !== String(expectedUpdatedAt)) {
+        return c.json(
+          {
+            error: "Record was updated elsewhere — refresh and try again",
+            code: "STALE_WRITE",
+          },
+          409,
+        );
+      }
+    }
     if (body.production_end_year === "") body.production_end_year = null;
     if (body.engine_type === "") body.engine_type = null;
     if (body.production_end_year === null || body.production_end_year === undefined) {
@@ -13510,8 +13940,12 @@ app.patch("/make-server-37f42386/admin/vehicle-catalog/:id", requireAuth(), asyn
     }
     if (row.make !== undefined) row.make = String(row.make).trim();
     if (row.model !== undefined) row.model = String(row.model).trim();
+    stampCatalogProvenance(row, {
+      userId: vehicleCatalogActorId(c),
+      isCreate: false,
+    });
     row.updated_at = new Date().toISOString();
-    const keys = Object.keys(row).filter((k) => k !== "updated_at");
+    const keys = Object.keys(row).filter((k) => k !== "updated_at" && k !== "updated_by");
     if (keys.length === 0) {
       return c.json({ error: "No fields to update" }, 400);
     }
@@ -13537,6 +13971,7 @@ app.patch("/make-server-37f42386/admin/vehicle-catalog/:id", requireAuth(), asyn
     }
     if (upd.error) throw upd.error;
     if (!upd.data) return c.json({ error: "Not found" }, 404);
+    invalidateCatalogExistenceCache(id);
     return c.json({ item: catalogRowForApi(upd.data as Record<string, unknown>) });
   } catch (e: any) {
     console.error("[vehicle-catalog] patch:", e);
@@ -13548,12 +13983,27 @@ app.patch("/make-server-37f42386/admin/vehicle-catalog/:id", requireAuth(), asyn
 app.delete("/make-server-37f42386/admin/vehicle-catalog/:id", requireAuth(), async (c) => {
   const denied = assertVehicleCatalogAccess(c);
   if (denied) return denied;
+  const limited = await assertCatalogWriteRateLimit(c);
+  if (limited) return limited;
   try {
     const id = c.req.param("id");
+    const force = c.req.query("force") === "true";
+    const dependencies = await countCatalogDependencies(supabase, id);
+    if (dependenciesBlockDelete(dependencies) && !force) {
+      return c.json(
+        {
+          error: "Catalog row has dependents; pass force=true to delete anyway",
+          code: "CATALOG_HAS_DEPENDENTS",
+          dependencies,
+        },
+        409,
+      );
+    }
     const { data, error } = await supabase.from("vehicle_catalog").delete().eq("id", id).select("id");
     if (error) throw error;
     if (!data?.length) return c.json({ error: "Not found" }, 404);
-    return c.json({ success: true });
+    invalidateCatalogExistenceCache(id);
+    return c.json({ success: true, dependencies });
   } catch (e: any) {
     console.error("[vehicle-catalog] delete:", e);
     return c.json({ error: e.message || "Failed to delete vehicle catalog entry" }, 500);
@@ -13591,6 +14041,8 @@ app.get("/make-server-37f42386/admin/vehicle-catalog-gate/audit", requireAuth(),
 app.post("/make-server-37f42386/admin/vehicle-catalog-gate/backfill", requireAuth(), async (c) => {
   const denied = assertVehicleCatalogAccess(c);
   if (denied) return denied;
+  const limited = await assertCatalogWriteRateLimit(c);
+  if (limited) return limited;
   try {
     const body = await c.req.json().catch(() => ({})) as { dryRun?: boolean };
     const dryRun = body.dryRun === true;

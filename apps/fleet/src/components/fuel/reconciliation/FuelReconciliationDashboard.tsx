@@ -16,7 +16,7 @@ import type {
   MileageAdjustment,
   WeeklyFuelReport,
 } from '../../../types/fuel';
-import type { Trip } from '../../../types/data';
+import type { FinancialTransaction, Trip } from '../../../types/data';
 import type { Vehicle } from '../../../types/vehicle';
 import { ymdToLocalDate } from '../../../utils/timezoneDisplay';
 import type { DateRange } from 'react-day-picker';
@@ -60,6 +60,7 @@ export function FuelReconciliationDashboard({
   drivers,
   fuelCards,
   finalizedReports,
+  transactions,
   isRefreshing,
   onRefresh,
   onFinalize,
@@ -68,6 +69,7 @@ export function FuelReconciliationDashboard({
   onOpenConfiguration,
   onSelectPeriodWeek,
   onOpenTransactionLogs,
+  onOpenReviewQueue,
   onAcceptFuelException,
   onEditFuelEntry,
   dataTruncated,
@@ -90,6 +92,7 @@ export function FuelReconciliationDashboard({
   drivers: any[];
   fuelCards: FuelCard[];
   finalizedReports: FinalizedFuelReport[];
+  transactions?: FinancialTransaction[];
   isRefreshing?: boolean;
   onRefresh: () => void;
   onFinalize: (reports: WeeklyFuelReport[]) => Promise<boolean | void> | boolean | void;
@@ -102,6 +105,7 @@ export function FuelReconciliationDashboard({
     date?: string;
     vehicleId?: string;
   }) => void;
+  onOpenReviewQueue?: () => void;
   onAcceptFuelException?: (
     entryId: string,
     note: string,
@@ -219,6 +223,7 @@ export function FuelReconciliationDashboard({
           drivers={drivers}
           fuelCards={fuelCards}
           finalizedReports={finalizedReports}
+          transactions={transactions}
           dateRange={dateRange}
           isRefreshing={isRefreshing}
           sessionKey={wizardSession}
@@ -233,6 +238,7 @@ export function FuelReconciliationDashboard({
           onResolveDispute={onResolveDispute}
           onOpenConfiguration={onOpenConfiguration}
           onOpenTransactionLogs={onOpenTransactionLogs}
+          onOpenReviewQueue={onOpenReviewQueue}
           onAcceptFuelException={onAcceptFuelException}
           onEditFuelEntry={onEditFuelEntry}
           onResetPeriod={period.locked ? () => setResetPeriod(period) : undefined}
@@ -309,6 +315,7 @@ export function FuelReconciliationDashboard({
         fuelCards={fuelCards}
         disputes={disputes}
         finalizedReports={finalizedReports}
+        transactions={transactions}
         onComplete={onRefresh}
       />
       <FuelBulkResetDialog

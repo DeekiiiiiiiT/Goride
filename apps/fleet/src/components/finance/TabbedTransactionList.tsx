@@ -3,6 +3,7 @@ import { Car, Fuel, Receipt, FileText, Layers } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { TripLedgerPage } from '../database/TripLedgerPage';
 import { FuelLedgerPage } from '../database/FuelLedgerPage';
+import { FuelExpenseLedgerPage } from '../database/FuelExpenseLedgerPage';
 import { TollLedgerPage } from '../database/TollLedgerPage';
 import { mergeTripLedgerColumnConfig } from '../database/LedgerColumnSettings';
 import { PlatformStatementSummary } from './PlatformStatementSummary';
@@ -16,7 +17,7 @@ import { useBusinessConfig } from '../auth/BusinessConfigContext';
 import { API_ENDPOINTS } from '../../services/apiConfig';
 import { BusinessType } from '../../types/data';
 
-type TransactionTab = 'trips' | 'fuel' | 'toll' | 'statement' | 'all';
+type TransactionTab = 'trips' | 'fuel' | 'fuel-expenses' | 'toll' | 'statement' | 'all';
 
 type LedgerTab = 'main' | 'trip' | 'fuel' | 'toll';
 
@@ -36,6 +37,12 @@ interface LedgerConfig {
 const TRANSACTION_TABS: { id: TransactionTab; label: string; icon: React.ElementType; description: string }[] = [
   { id: 'trips', label: 'Trip Ledger', icon: Car, description: 'Individual trip records with earnings breakdown' },
   { id: 'fuel', label: 'Fuel Ledger', icon: Fuel, description: 'Fuel fill-ups, costs, and odometer readings' },
+  {
+    id: 'fuel-expenses',
+    label: 'Fuel Expenses',
+    icon: Receipt,
+    description: 'Approved/rejected fuel Expense transactions (accounting)',
+  },
   { id: 'toll', label: 'Toll Ledger', icon: Receipt, description: 'Toll transactions and reconciliation status' },
   { id: 'statement', label: 'Statement Summary', icon: FileText, description: 'Period payouts, bank transfers, and statement totals' },
 ];
@@ -44,7 +51,18 @@ function readTabFromUrl(): TransactionTab {
   try {
     const sp = new URLSearchParams(window.location.search);
     const t = sp.get('ledgerTab');
-    if (t === 'trips' || t === 'fuel' || t === 'toll' || t === 'statement' || t === 'all') return t;
+    // Legacy Review Queue Closed / expense-ledger deep links
+    if (t === 'history' || t === 'fuel-expense-ledger') return 'fuel-expenses';
+    if (
+      t === 'trips' ||
+      t === 'fuel' ||
+      t === 'fuel-expenses' ||
+      t === 'toll' ||
+      t === 'statement' ||
+      t === 'all'
+    ) {
+      return t;
+    }
   } catch { /* ignore */ }
   return 'trips';
 }
@@ -215,6 +233,7 @@ function LedgersInner({
                 <>
                   {tab.id === 'trips' && <TripLedgerPage columnConfig={tripColumnConfig} />}
                   {tab.id === 'fuel' && <FuelLedgerPage columnConfig={fuelColumnConfig} />}
+                  {tab.id === 'fuel-expenses' && <FuelExpenseLedgerPage />}
                   {tab.id === 'toll' && <TollLedgerPage columnConfig={tollColumnConfig} />}
                   {tab.id === 'statement' && (
                     <PlatformStatementSummary onOpenTollRecon={onOpenTollRecon} />

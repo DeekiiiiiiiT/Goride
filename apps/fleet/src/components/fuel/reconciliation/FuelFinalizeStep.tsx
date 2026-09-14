@@ -5,19 +5,26 @@ import React from 'react';
 import { Button } from '../../ui/button';
 import { Checkbox } from '../../ui/checkbox';
 import { FuelExceptionBlockersPanel } from './FuelExceptionBlockersPanel';
+import { FuelUnapprovedTxBlockersPanel } from './FuelUnapprovedTxBlockersPanel';
 import { FuelSettlementTable, type FuelSettlementRow } from './FuelSettlementTable';
-import type { FuelExceptionBlocker } from '../../../utils/fuelFinalizeGating';
+import type {
+  FuelExceptionBlocker,
+  FuelUnapprovedTxBlocker,
+} from '../../../utils/fuelFinalizeGating';
 import { formatFuelMoney } from '../../../utils/formatFuelMoney';
 
 export type FuelFinalizeStepProps = {
   periodLocked: boolean;
   exceptionBlockers: FuelExceptionBlocker[];
+  unapprovedFuelTxBlockers?: FuelUnapprovedTxBlocker[];
+  onOpenReviewQueue?: () => void;
   plateByVehicleId: Record<string, string>;
   exceptionBusyId: string | null;
   onAcceptException: (blocker: FuelExceptionBlocker, note: string) => Promise<void>;
   onEditFill?: (blocker: FuelExceptionBlocker) => void;
   hasBlockingWarnings: boolean;
   hasExceptionBlockers: boolean;
+  hasUnapprovedFuelTxBlockers?: boolean;
   financeWarningAcknowledged: boolean;
   onFinanceWarningChange: (v: boolean) => void;
   needsSecondApprover: boolean;
@@ -36,12 +43,15 @@ export function FuelFinalizeStep(props: FuelFinalizeStepProps) {
   const {
     periodLocked,
     exceptionBlockers,
+    unapprovedFuelTxBlockers = [],
+    onOpenReviewQueue,
     plateByVehicleId,
     exceptionBusyId,
     onAcceptException,
     onEditFill,
     hasBlockingWarnings,
     hasExceptionBlockers,
+    hasUnapprovedFuelTxBlockers = false,
     financeWarningAcknowledged,
     onFinanceWarningChange,
     needsSecondApprover,
@@ -66,6 +76,10 @@ export function FuelFinalizeStep(props: FuelFinalizeStepProps) {
           Download evidence pack
         </Button>
       </div>
+      <FuelUnapprovedTxBlockersPanel
+        blockers={unapprovedFuelTxBlockers}
+        onOpenReviewQueue={onOpenReviewQueue}
+      />
       <FuelExceptionBlockersPanel
         blockers={exceptionBlockers}
         plateByVehicleId={plateByVehicleId}
@@ -73,7 +87,7 @@ export function FuelFinalizeStep(props: FuelFinalizeStepProps) {
         onAcceptException={onAcceptException}
         onEditFill={onEditFill}
       />
-      {hasBlockingWarnings && !hasExceptionBlockers && (
+      {hasBlockingWarnings && !hasExceptionBlockers && !hasUnapprovedFuelTxBlockers && (
         <label className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
           <Checkbox
             checked={financeWarningAcknowledged}

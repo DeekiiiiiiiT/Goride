@@ -22,6 +22,7 @@ export type VehicleCatalogImportOutcome = {
   errors: string[];
   /** Present when API accepted rows but omitted columns the CSV had (remote DB / Edge out of date). */
   schemaWarnings: string[];
+  importBatchId?: string;
 };
 
 export type VehicleCatalogImportDialogProps = {
@@ -32,9 +33,12 @@ export type VehicleCatalogImportDialogProps = {
   unknownHeaders: string[];
   importProgress: { current: number; total: number } | null;
   importOutcome: VehicleCatalogImportOutcome | null;
+  importBatchId?: string | null;
+  undoingBatch?: boolean;
   onOpenChange: (open: boolean) => void;
   onClose: () => void;
   onRunImport: () => void;
+  onUndoBatch?: () => void;
 };
 
 export function VehicleCatalogImportDialog({
@@ -44,9 +48,12 @@ export function VehicleCatalogImportDialog({
   unknownHeaders,
   importProgress,
   importOutcome,
+  importBatchId,
+  undoingBatch,
   onOpenChange,
   onClose,
   onRunImport,
+  onUndoBatch,
 }: VehicleCatalogImportDialogProps) {
   const hasUnknown = unknownHeaders.length > 0;
   const readyCount = importPreview?.filter((r) => r.payload).length ?? 0;
@@ -87,7 +94,14 @@ export function VehicleCatalogImportDialog({
           )}
           {importStep === "importing" && (
             <DialogDescription className="text-slate-600 text-sm">
-              Uploading rows to the catalog. Please keep this window open.
+              Uploading rows to the catalog
+              {importBatchId ? (
+                <>
+                  {" "}
+                  (batch <span className="font-mono text-xs">{importBatchId.slice(0, 8)}…</span>)
+                </>
+              ) : null}
+              . Please keep this window open — progress is checkpointed for resume.
             </DialogDescription>
           )}
           {importStep === "result" && importOutcome && (
@@ -259,6 +273,11 @@ export function VehicleCatalogImportDialog({
                 </ScrollArea>
               </div>
             )}
+            {(importOutcome.importBatchId || importBatchId) && (
+              <p className="text-xs text-slate-500 font-mono">
+                Batch id: {importOutcome.importBatchId || importBatchId}
+              </p>
+            )}
           </div>
         )}
 
@@ -279,9 +298,22 @@ export function VehicleCatalogImportDialog({
             </>
           )}
           {importStep === "result" && (
-            <Button type="button" onClick={onClose} className="w-full sm:w-auto">
-              Done
-            </Button>
+            <>
+              {onUndoBatch && (importOutcome?.imported ?? 0) + (importOutcome?.updated ?? 0) > 0 && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="text-rose-700 border-rose-300"
+                  disabled={undoingBatch}
+                  onClick={() => onUndoBatch()}
+                >
+                  {undoingBatch ? "Undoing…" : "Undo this import"}
+                </Button>
+              )}
+              <Button type="button" onClick={onClose} className="w-full sm:w-auto" disabled={undoingBatch}>
+                Done
+              </Button>
+            </>
           )}
         </DialogFooter>
       </DialogContent>

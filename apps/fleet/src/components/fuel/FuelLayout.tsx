@@ -3,24 +3,23 @@ import { cn } from '../ui/utils';
 
 interface FuelLayoutProps {
   children: React.ReactNode;
-  activeTab?: string;
-  onTabChange?: (tab: string) => void;
-  onAddTransaction?: () => void;
   title?: string;
   description?: string;
   /** Hide subtitle under md — used to declutter Transaction Logs on phones. */
   hideDescriptionOnMobile?: boolean;
   /** When true, omit page H1 — Week Reconciliation hub owns chrome. */
   embedded?: boolean;
+  /** Optional header actions (e.g. Log Receipt / Add fill-up on Transaction Logs). */
+  headerActions?: React.ReactNode;
 }
 
 export function FuelLayout({
   children,
-  onAddTransaction,
   title = 'Fuel Management',
   description = 'Track consumption, reconcile expenses, and manage gas cards.',
   hideDescriptionOnMobile = false,
   embedded = false,
+  headerActions,
 }: FuelLayoutProps) {
   return (
     <div className={cn(embedded ? 'space-y-4' : 'space-y-6')}>
@@ -37,6 +36,9 @@ export function FuelLayout({
               {description}
             </p>
           </div>
+          {headerActions ? (
+            <div className="flex flex-wrap items-center gap-2 shrink-0">{headerActions}</div>
+          ) : null}
         </div>
       ) : null}
 

@@ -14,6 +14,7 @@ import {
   Loader2,
   Plus,
   Ruler,
+  Search,
   Settings2,
   Tag,
   Trash2,
@@ -21,13 +22,19 @@ import {
 } from "lucide-react";
 import { useAuth } from "../../auth/AuthContext";
 import { CatalogGateObservabilityPanel } from "./CatalogGateObservabilityPanel";
+import { CatalogOrphansPanel } from "./CatalogOrphansPanel";
 import {
+  bulkUpsertVehicleCatalog,
   createVehicleCatalog,
   deleteVehicleCatalog,
+  getVehicleCatalogDependencies,
   listVehicleCatalog,
   purgeAllVehicleCatalog,
+  type CatalogDependencyCounts,
+  undoVehicleCatalogImportBatch,
   updateVehicleCatalog,
   VEHICLE_CATALOG_PURGE_CONFIRM_PHRASE,
+  VEHICLE_CATALOG_UNDO_BATCH_CONFIRM_PHRASE,
 } from "../../../services/vehicleCatalogService";
 import {
   formatCatalogProductionWindow,
@@ -35,8 +42,17 @@ import {
 } from "../../../types/vehicleCatalog";
 import { VEHICLE_CATALOG_CSV_COLUMNS } from "../../../types/csv-schemas";
 import { downloadBlob, jsonToCsv } from "../../../utils/csv-helper";
-import { parseVehicleCatalogCsvWithPapa, type ParsedCatalogImportRow } from "../../../utils/vehicleCatalogCsvImport";
+import {
+  parseVehicleCatalogCsvWithPapa,
+  VEHICLE_CATALOG_BULK_MAX_ROWS,
+  type ParsedCatalogImportRow,
+} from "../../../utils/vehicleCatalogCsvImport";
 import { catalogCreateDriftFieldNames } from "../../../utils/vehicleCatalogWriteDrift";
+import {
+  clearCatalogImportCheckpoint,
+  loadCatalogImportCheckpoint,
+  saveCatalogImportCheckpoint,
+} from "../../../utils/catalogImportCheckpoint";
 import { toast } from "sonner";
 import { Button } from "../../ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "../../ui/collapsible";
@@ -48,6 +64,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from "../../ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "../../ui/alert-dialog";
 import { Input } from "../../ui/input";
 import { Label } from "../../ui/label";
 import {
@@ -67,11 +93,29 @@ import {
 } from "./VehicleCatalogImportDialog";
 import { VehicleCatalogTable } from "./VehicleCatalogTable";
 
+function rowMatchesSearch(row: VehicleCatalogRecord, q: string): boolean {
+  if (!q) return true;
+  const hay = [
+    row.make,
+    row.model,
+    row.chassis_code,
+    row.engine_code,
+    row.trim_series,
+    row.full_model_code,
+    row.catalog_trim,
+    row.generation,
+  ]
+    .map((x) => String(x ?? "").toLowerCase())
+    .join(" ");
+  return hay.includes(q);
+}
+
 export function VehicleCatalogManager() {
   const { session } = useAuth();
   const token = session?.access_token;
 
   const [items, setItems] = useState<VehicleCatalogRecord[]>([]);
+  const [listTotal, setListTotal] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -79,18 +123,26 @@ export function VehicleCatalogManager() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [viewRecord, setViewRecord] = useState<VehicleCatalogRecord | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingUpdatedAt, setEditingUpdatedAt] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>(() => emptyForm());
 
   /** Grouped table: make → model → variants */
   const [expandedMakes, setExpandedMakes] = useState<Set<string>>(() => new Set());
   const [expandedModels, setExpandedModels] = useState<Set<string>>(() => new Set());
   const [classFilter, setClassFilter] = useState<"all" | "car" | "motorcycle">("all");
+  const [searchQuery, setSearchQuery] = useState("");
+
+  const [deleteTarget, setDeleteTarget] = useState<VehicleCatalogRecord | null>(null);
+  const [deleteDeps, setDeleteDeps] = useState<CatalogDependencyCounts | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const groupedCatalog = useMemo(() => {
-    const filtered =
-      classFilter === "all"
-        ? items
-        : items.filter((r) => (r.vehicle_class ?? "car") === classFilter);
+    const q = searchQuery.trim().toLowerCase();
+    const filtered = items.filter((r) => {
+      if (classFilter !== "all" && (r.vehicle_class ?? "car") !== classFilter) return false;
+      return rowMatchesSearch(r, q);
+    });
     const byMake = new Map<string, Map<string, VehicleCatalogRecord[]>>();
     for (const row of filtered) {
       const make = (row.make ?? "").trim() || "—";
@@ -119,18 +171,35 @@ export function VehicleCatalogManager() {
       const variantCount = modelGroups.reduce((n, g) => n + g.rows.length, 0);
       return { make, modelGroups, variantCount };
     });
-  }, [items, classFilter]);
+  }, [items, classFilter, searchQuery]);
+
+  // Auto-expand matches when searching
+  useEffect(() => {
+    const q = searchQuery.trim();
+    if (!q) return;
+    const makes = new Set<string>();
+    const models = new Set<string>();
+    for (const g of groupedCatalog) {
+      makes.add(g.make);
+      for (const mg of g.modelGroups) models.add(`${g.make}\u001f${mg.model}`);
+    }
+    setExpandedMakes(makes);
+    setExpandedModels(models);
+  }, [searchQuery, groupedCatalog]);
 
   const modelGroupKey = (make: string, model: string) => `${make}\u001f${model}`;
-
 
   const load = useCallback(async () => {
     if (!token) return;
     setLoading(true);
     setError(null);
     try {
-      const list = await listVehicleCatalog(token);
+      const { items: list, total } = await listVehicleCatalog(token);
       setItems(list);
+      setListTotal(total);
+      if (list.length !== total) {
+        setError(`Catalog list mismatch: loaded ${list.length} of reported ${total}. Refresh or contact support.`);
+      }
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to load vehicle catalog");
     } finally {
@@ -144,6 +213,7 @@ export function VehicleCatalogManager() {
 
   const openCreate = () => {
     setEditingId(null);
+    setEditingUpdatedAt(null);
     setForm(emptyForm());
     setError(null);
     setDialogOpen(true);
@@ -151,6 +221,7 @@ export function VehicleCatalogManager() {
 
   const openEdit = (row: VehicleCatalogRecord) => {
     setEditingId(row.id);
+    setEditingUpdatedAt(row.updated_at ?? null);
     setForm(recordToForm(row));
     setError(null);
     setDialogOpen(true);
@@ -187,28 +258,69 @@ export function VehicleCatalogManager() {
     setError(null);
     try {
       if (editingId) {
-        await updateVehicleCatalog(token, editingId, toPatchPayload(form));
+        const patched = await updateVehicleCatalog(token, editingId, {
+          ...toPatchPayload(form),
+          ...(editingUpdatedAt ? { expected_updated_at: editingUpdatedAt } : {}),
+        });
+        setItems((prev) => prev.map((r) => (r.id === editingId ? patched : r)));
       } else {
-        await createVehicleCatalog(token, toCreatePayload(form));
+        const created = await createVehicleCatalog(token, toCreatePayload(form));
+        setItems((prev) => [...prev, created]);
+        setListTotal((t) => (t == null ? null : t + 1));
       }
       setDialogOpen(false);
-      await load();
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Save failed");
+      const err = e as Error & { code?: string };
+      if (err.code === "STALE_WRITE") {
+        setError("Someone else saved this variant first — refresh and try again.");
+        toast.error("Conflict: record was updated elsewhere");
+        await load();
+      } else {
+        setError(e instanceof Error ? e.message : "Save failed");
+      }
     } finally {
       setSaving(false);
     }
   };
 
-  const handleDelete = async (row: VehicleCatalogRecord) => {
+  const openDelete = async (row: VehicleCatalogRecord) => {
     if (!token) return;
-    if (!window.confirm(`Delete ${row.make} ${row.model} (${formatCatalogProductionWindow(row)})?`)) return;
+    setDeleteTarget(row);
+    setDeleteDeps(null);
+    setDeleteLoading(true);
+    try {
+      const deps = await getVehicleCatalogDependencies(token, row.id);
+      setDeleteDeps(deps);
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : "Could not load dependencies");
+      setDeleteTarget(null);
+    } finally {
+      setDeleteLoading(false);
+    }
+  };
+
+  const confirmDelete = async (force: boolean) => {
+    if (!token || !deleteTarget) return;
+    setDeleting(true);
     setError(null);
     try {
-      await deleteVehicleCatalog(token, row.id);
-      await load();
+      await deleteVehicleCatalog(token, deleteTarget.id, { force });
+      setItems((prev) => prev.filter((r) => r.id !== deleteTarget.id));
+      setListTotal((t) => (t == null ? null : Math.max(0, t - 1)));
+      setDeleteTarget(null);
+      setDeleteDeps(null);
+      toast.success("Catalog variant deleted");
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Delete failed");
+      const err = e as Error & { code?: string; dependencies?: CatalogDependencyCounts };
+      if (err.code === "CATALOG_HAS_DEPENDENTS" && err.dependencies) {
+        setDeleteDeps(err.dependencies);
+        toast.error("This variant has dependents — confirm force delete if intended");
+      } else {
+        setError(e instanceof Error ? e.message : "Delete failed");
+        toast.error(e instanceof Error ? e.message : "Delete failed");
+      }
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -231,6 +343,11 @@ export function VehicleCatalogManager() {
   const [importStep, setImportStep] = useState<VehicleCatalogImportStep>("preview");
   const [importProgress, setImportProgress] = useState<{ current: number; total: number } | null>(null);
   const [importOutcome, setImportOutcome] = useState<VehicleCatalogImportOutcome | null>(null);
+  const [importBatchId, setImportBatchId] = useState<string | null>(null);
+  const [undoingBatch, setUndoingBatch] = useState(false);
+  const [forceUndoOpen, setForceUndoOpen] = useState(false);
+  const [forceUndoDeps, setForceUndoDeps] = useState<CatalogDependencyCounts | null>(null);
+  const [forceUndoConfirmInput, setForceUndoConfirmInput] = useState("");
 
   const [purgeDialogOpen, setPurgeDialogOpen] = useState(false);
   const [purgeConfirmInput, setPurgeConfirmInput] = useState("");
@@ -252,6 +369,8 @@ export function VehicleCatalogManager() {
         setImportStep("preview");
         setImportProgress(null);
         setImportOutcome(null);
+        const existing = loadCatalogImportCheckpoint();
+        setImportBatchId(existing?.importBatchId ?? crypto.randomUUID());
         setImportDialogOpen(true);
       } catch (err) {
         toast.error(err instanceof Error ? err.message : "Could not parse CSV");
@@ -291,61 +410,132 @@ export function VehicleCatalogManager() {
       toast.error("No valid rows to import — fix the parse issues listed in the dialog, then try again.");
       return;
     }
+    const batchId = importBatchId ?? crypto.randomUUID();
+    setImportBatchId(batchId);
+    const checkpoint = loadCatalogImportCheckpoint();
+    const completed = new Set(
+      checkpoint?.importBatchId === batchId ? checkpoint.completedRowIndices : [],
+    );
+    const pending = ready.filter((r) => !completed.has(r.rowIndex));
+
     setImportStep("importing");
-    setImportProgress({ current: 0, total: ready.length });
+    setImportProgress({ current: ready.length - pending.length, total: ready.length });
     setImportOutcome(null);
     let imported = 0;
     let updated = 0;
     const apiErrors: string[] = [];
     const driftFieldSet = new Set<string>();
     let driftRowCount = 0;
-    for (let i = 0; i < ready.length; i++) {
-      const r = ready[i];
+    const createdItems: VehicleCatalogRecord[] = [];
+    const updatedItems: VehicleCatalogRecord[] = [];
+
+    for (let i = 0; i < pending.length; i += VEHICLE_CATALOG_BULK_MAX_ROWS) {
+      const slice = pending.slice(i, i + VEHICLE_CATALOG_BULK_MAX_ROWS);
       try {
-        if (r.catalogId) {
-          const patched = await updateVehicleCatalog(token, r.catalogId, r.payload);
-          const drift = catalogCreateDriftFieldNames(r.payload, patched);
-          if (drift.length) {
-            driftRowCount++;
-            drift.forEach((f) => driftFieldSet.add(f));
+        const res = await bulkUpsertVehicleCatalog(
+          token,
+          batchId,
+          slice.map((r) => ({
+            rowIndex: r.rowIndex,
+            id: r.catalogId,
+            payload: r.payload,
+          })),
+        );
+        for (const result of res.results) {
+          if (!result.ok) {
+            apiErrors.push(`Row ${result.rowIndex}: ${result.error || "failed"}`);
+            continue;
           }
-          updated++;
-        } else {
-          const created = await createVehicleCatalog(token, r.payload);
-          const drift = catalogCreateDriftFieldNames(r.payload, created);
-          if (drift.length) {
-            driftRowCount++;
-            drift.forEach((f) => driftFieldSet.add(f));
+          completed.add(result.rowIndex);
+          if (result.action === "created") imported++;
+          else updated++;
+          if (result.item) {
+            const src = slice.find((s) => s.rowIndex === result.rowIndex);
+            if (src) {
+              const drift = catalogCreateDriftFieldNames(src.payload, result.item);
+              if (drift.length) {
+                driftRowCount++;
+                drift.forEach((f) => driftFieldSet.add(f));
+              }
+            }
+            if (result.action === "created") createdItems.push(result.item);
+            else updatedItems.push(result.item);
           }
-          imported++;
         }
       } catch (err) {
-        apiErrors.push(`Row ${r.rowIndex}: ${err instanceof Error ? err.message : String(err)}`);
-      } finally {
-        setImportProgress({ current: i + 1, total: ready.length });
+        for (const r of slice) {
+          apiErrors.push(`Row ${r.rowIndex}: ${err instanceof Error ? err.message : String(err)}`);
+        }
       }
+      saveCatalogImportCheckpoint({
+        importBatchId: batchId,
+        completedRowIndices: [...completed],
+        updatedAt: new Date().toISOString(),
+      });
+      setImportProgress({ current: completed.size, total: ready.length });
     }
+
     const schemaWarnings: string[] = [];
     if (driftFieldSet.size > 0) {
       const fields = [...driftFieldSet].sort().join(", ");
       schemaWarnings.push(
         `${driftRowCount} of ${ready.length} row(s) had CSV data for: ${fields}, but the API response still had blanks. If you already added columns in SQL, run the three PostgREST reload statements from supabase/scripts/repair_vehicle_catalog_for_csv_import.sql (end of file: pg_sleep, NOTIFY pgrst, NOTIFY with reload), wait 30 seconds, purge catalog rows, then import again—or restart the project from Supabase Dashboard if reload still fails.`,
       );
-      schemaWarnings.push(
-        `If you have not added the columns yet, run supabase/scripts/repair_vehicle_catalog_for_csv_import.sql (includes NOTIFY at the end), or apply the vehicle_catalog migrations under supabase/migrations. Then deploy the make-server-37f42386 Edge function from this repo. Confirm the dashboard project ref matches the app (see projectId in src/utils/supabase/info.tsx).`,
-      );
     }
+    if (apiErrors.length === 0) clearCatalogImportCheckpoint();
+
+    setItems((prev) => {
+      const byId = new Map(prev.map((r) => [r.id, r]));
+      for (const u of updatedItems) byId.set(u.id, u);
+      for (const c of createdItems) byId.set(c.id, c);
+      return [...byId.values()];
+    });
+    if (createdItems.length) {
+      setListTotal((t) => (t == null ? null : t + createdItems.length));
+    }
+
     setImportOutcome({
       imported,
       updated,
       failed: apiErrors.length,
       errors: apiErrors,
       schemaWarnings,
+      importBatchId: batchId,
     });
     setImportStep("result");
-    if (imported > 0 || updated > 0) {
+  };
+
+  const handleUndoImportBatch = async (force = false) => {
+    if (!token || !importBatchId) return;
+    setUndoingBatch(true);
+    try {
+      const { deleted } = await undoVehicleCatalogImportBatch(token, importBatchId, { force });
+      clearCatalogImportCheckpoint();
+      setForceUndoOpen(false);
+      setForceUndoDeps(null);
+      setForceUndoConfirmInput("");
+      toast.success(`Undid import batch — removed ${deleted} row(s)`);
+      setImportDialogOpen(false);
       await load();
+    } catch (e: unknown) {
+      const err = e as Error & { code?: string; dependencies?: CatalogDependencyCounts };
+      if (err.code === "CATALOG_HAS_DEPENDENTS") {
+        setForceUndoDeps(
+          err.dependencies ?? { maintenanceTemplates: 0, partFitments: 0, fleetVehicles: 0 },
+        );
+        setForceUndoConfirmInput("");
+        setForceUndoOpen(true);
+      } else {
+        toast.error(e instanceof Error ? e.message : "Undo failed");
+      }
+    } finally {
+      setUndoingBatch(false);
     }
+  };
+
+  const confirmForceUndoBatch = async () => {
+    if (forceUndoConfirmInput.trim() !== VEHICLE_CATALOG_UNDO_BATCH_CONFIRM_PHRASE) return;
+    await handleUndoImportBatch(true);
   };
 
   const handlePurgeCatalog = async () => {
@@ -381,14 +571,31 @@ export function VehicleCatalogManager() {
   return (
     <div className="flex flex-col gap-4 p-4 sm:p-6 text-slate-900 dark:text-slate-200">
       <CatalogGateObservabilityPanel />
+      <CatalogOrphansPanel />
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Vehicle catalog</h2>
           <p className="text-sm text-slate-600 dark:text-slate-400">
             Platform-wide reference variants for cars and motorcycles. Use separate rows and year ranges for major
             facelifts or motorcycle model years. Used as reference data for fleets.
+            {listTotal != null && (
+              <span className="ml-1 text-slate-500">
+                ({items.length}
+                {listTotal !== items.length ? ` of ${listTotal}` : ""} variants)
+              </span>
+            )}
           </p>
-          <div className="mt-3 flex flex-wrap gap-1.5">
+          <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:flex-wrap">
+            <div className="relative w-full sm:max-w-xs">
+              <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+              <Input
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search make, model, chassis, engine…"
+                className="h-8 pl-8 bg-white text-sm"
+              />
+            </div>
+            <div className="flex flex-wrap gap-1.5">
             {(
               [
                 { id: "all", label: "All" },
@@ -411,6 +618,7 @@ export function VehicleCatalogManager() {
                 {opt.label}
               </Button>
             ))}
+            </div>
           </div>
         </div>
         <div className="flex flex-wrap gap-2 shrink-0">
@@ -505,7 +713,7 @@ export function VehicleCatalogManager() {
           modelGroupKey={modelGroupKey}
           onView={setViewRecord}
           onEdit={openEdit}
-          onDelete={handleDelete}
+          onDelete={openDelete}
         />
       )}
 
@@ -554,12 +762,167 @@ export function VehicleCatalogManager() {
         unknownHeaders={importUnknownHeaders}
         importProgress={importProgress}
         importOutcome={importOutcome}
+        importBatchId={importBatchId}
+        undoingBatch={undoingBatch}
         onOpenChange={(open) => {
           if (!open) handleCloseImportDialog();
         }}
         onClose={handleCloseImportDialog}
         onRunImport={handleRunCatalogImport}
+        onUndoBatch={() => void handleUndoImportBatch(false)}
       />
+
+      <AlertDialog
+        open={deleteTarget != null}
+        onOpenChange={(open) => {
+          if (!open && !deleting) {
+            setDeleteTarget(null);
+            setDeleteDeps(null);
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Delete {deleteTarget?.make} {deleteTarget?.model}?
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2 text-sm text-slate-600">
+                <p>
+                  Production window:{" "}
+                  {deleteTarget ? formatCatalogProductionWindow(deleteTarget) : "—"}
+                </p>
+                {deleteLoading && <p>Loading dependency counts…</p>}
+                {deleteDeps && (
+                  <ul className="list-disc pl-5 space-y-1">
+                    <li>{deleteDeps.maintenanceTemplates} maintenance template(s)</li>
+                    <li>{deleteDeps.partFitments} part fitment(s)</li>
+                    <li>{deleteDeps.fleetVehicles} fleet vehicle link(s)</li>
+                  </ul>
+                )}
+                {deleteDeps &&
+                  (deleteDeps.maintenanceTemplates > 0 ||
+                    deleteDeps.partFitments > 0 ||
+                    deleteDeps.fleetVehicles > 0) && (
+                    <p className="text-amber-800 bg-amber-50 border border-amber-200 rounded-md px-2 py-1.5">
+                      Force delete also permanently removes cascading maintenance templates and part
+                      fitments. Fleet vehicles will keep dangling catalog ids until rematched.
+                    </p>
+                  )}
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+            {deleteDeps &&
+            (deleteDeps.maintenanceTemplates > 0 ||
+              deleteDeps.partFitments > 0 ||
+              deleteDeps.fleetVehicles > 0) ? (
+              <AlertDialogAction
+                className="bg-rose-700 hover:bg-rose-800"
+                disabled={deleting || deleteLoading}
+                onClick={(e) => {
+                  e.preventDefault();
+                  void confirmDelete(true);
+                }}
+              >
+                {deleting ? "Deleting…" : "Delete anyway"}
+              </AlertDialogAction>
+            ) : (
+              <AlertDialogAction
+                className="bg-rose-600 hover:bg-rose-700"
+                disabled={deleting || deleteLoading}
+                onClick={(e) => {
+                  e.preventDefault();
+                  void confirmDelete(false);
+                }}
+              >
+                {deleting ? "Deleting…" : "Delete"}
+              </AlertDialogAction>
+            )}
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <Dialog
+        open={forceUndoOpen}
+        onOpenChange={(open) => {
+          if (undoingBatch) return;
+          setForceUndoOpen(open);
+          if (!open) {
+            setForceUndoDeps(null);
+            setForceUndoConfirmInput("");
+          }
+        }}
+      >
+        <DialogContent
+          className="sm:max-w-md bg-white border-slate-200"
+          hideCloseButton={undoingBatch}
+          onPointerDownOutside={(e) => {
+            if (undoingBatch) e.preventDefault();
+          }}
+          onEscapeKeyDown={(e) => {
+            if (undoingBatch) e.preventDefault();
+          }}
+        >
+          <DialogHeader>
+            <DialogTitle>Force undo this import batch?</DialogTitle>
+            <DialogDescription className="text-slate-600 text-sm leading-relaxed">
+              This permanently deletes every catalog row created by this import. Cascading maintenance
+              templates and part fitments are removed with them. Fleet vehicles that still point at those
+              rows will need rematching.
+            </DialogDescription>
+          </DialogHeader>
+          {forceUndoDeps && (
+            <ul className="list-disc pl-5 space-y-1 text-sm text-slate-700">
+              <li>{forceUndoDeps.maintenanceTemplates} maintenance template(s)</li>
+              <li>{forceUndoDeps.partFitments} part fitment(s)</li>
+              <li>{forceUndoDeps.fleetVehicles} fleet vehicle link(s)</li>
+            </ul>
+          )}
+          <div className="space-y-2 py-1">
+            <Label className="text-xs text-slate-600">Confirmation</Label>
+            <p className="text-xs text-slate-500">
+              Type{" "}
+              <code className="rounded bg-slate-100 px-1 font-mono text-slate-800">
+                {VEHICLE_CATALOG_UNDO_BATCH_CONFIRM_PHRASE}
+              </code>{" "}
+              exactly (case-sensitive).
+            </p>
+            <Input
+              value={forceUndoConfirmInput}
+              onChange={(e) => setForceUndoConfirmInput(e.target.value)}
+              placeholder={VEHICLE_CATALOG_UNDO_BATCH_CONFIRM_PHRASE}
+              className="bg-white font-mono text-sm"
+              autoComplete="off"
+              disabled={undoingBatch}
+            />
+          </div>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setForceUndoOpen(false)}
+              disabled={undoingBatch}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={
+                undoingBatch ||
+                forceUndoConfirmInput.trim() !== VEHICLE_CATALOG_UNDO_BATCH_CONFIRM_PHRASE
+              }
+              className="gap-2"
+              onClick={() => void confirmForceUndoBatch()}
+            >
+              {undoingBatch && <Loader2 className="w-4 h-4 animate-spin" />}
+              Force undo batch
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog
         open={purgeDialogOpen}
@@ -582,9 +945,9 @@ export function VehicleCatalogManager() {
           <DialogHeader>
             <DialogTitle>Delete all motor vehicles?</DialogTitle>
             <DialogDescription className="text-slate-600 text-sm leading-relaxed">
-              This permanently removes every row in the platform catalog. Maintenance templates tied to those
-              rows are removed automatically. Fleet vehicles that referenced a catalog entry may need to be
-              re-linked later.
+              This permanently removes every row in the platform catalog. Maintenance templates and part
+              fitments tied to those rows are removed automatically (CASCADE). Fleet vehicles that
+              referenced a catalog entry may need to be re-linked later.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-2 py-1">

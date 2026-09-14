@@ -141,6 +141,14 @@ export interface VehicleCatalogRecord {
   dry_weight_kg?: number | null;
   wheel_size_front?: string | null;
   wheel_size_rear?: string | null;
+  /** Auth user that created the row (edge-stamped). */
+  created_by?: string | null;
+  /** Auth user that last updated the row (edge-stamped). */
+  updated_by?: string | null;
+  /** UUID minted per CSV import run; enables undo-batch. */
+  import_batch_id?: string | null;
+  /** How the row entered the catalog. */
+  source?: "manual" | "csv_import" | "pending_approve" | null;
   created_at: string;
   updated_at: string;
 }

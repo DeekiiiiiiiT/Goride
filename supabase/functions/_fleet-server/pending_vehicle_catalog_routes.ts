@@ -739,6 +739,11 @@ export function registerPendingVehicleCatalogRoutes(
           rowRec.generation_code = rowRec.chassis_code;
         }
         row.updated_at = new Date().toISOString();
+        const actor = c.get("rbacUser") as { id?: string; userId?: string } | undefined;
+        const actorId = String(actor?.userId ?? actor?.id ?? "").trim() || null;
+        row.created_by = actorId;
+        row.updated_by = actorId;
+        row.source = "pending_approve";
         /** Prefer PostgREST insert first — see index.tsx POST /admin/vehicle-catalog. */
         let ins = await supabase.from("vehicle_catalog").insert(row).select(VEHICLE_CATALOG_SUPABASE_SELECT).single();
         if (ins.error && isLegacyVehicleCatalogYearNotNullError(ins.error)) {

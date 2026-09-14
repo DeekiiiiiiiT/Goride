@@ -69,7 +69,7 @@ export const FLEET_PAGE_REGISTRY: Record<string, FleetPageDef> = {
   'fuel-reimbursements': {
     id: 'fuel-reimbursements',
     path: '/fuel-reimbursements',
-    permission: 'nav.fuel_overview',
+    permission: 'nav.fuel_review_queue',
   },
   'toll-tags': {
     id: 'toll-tags',

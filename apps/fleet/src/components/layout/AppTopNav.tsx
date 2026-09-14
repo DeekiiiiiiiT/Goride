@@ -17,7 +17,7 @@ import {
   navDeskHasActivePage,
   navItemsHaveActivePage,
 } from './fleetNavModel';
-import { NavNewBadge, useFleetNavModel } from './useFleetNavModel';
+import { NavCountBadge, NavNewBadge, useFleetNavModel } from './useFleetNavModel';
 import type { NavLeaf } from './nav/types';
 
 type Props = {
@@ -116,7 +116,11 @@ function LeafItems({
             className={cn(active && 'bg-slate-100 font-medium dark:bg-slate-800')}
           >
             <span className="flex-1">{item.label}</span>
-            {item.showNewBadge ? <NavNewBadge /> : null}
+            {item.badgeCount != null && item.badgeCount > 0 ? (
+              <NavCountBadge count={item.badgeCount} />
+            ) : item.showNewBadge ? (
+              <NavNewBadge />
+            ) : null}
           </DropdownMenuItem>
         );
       })}

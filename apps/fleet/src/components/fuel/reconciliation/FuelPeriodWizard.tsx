@@ -4,6 +4,7 @@ import { FuelPeriodStepper } from './FuelPeriodStepper';
 import { FuelWeekMoneyStrip } from './FuelWeekMoneyStrip';
 import { FuelDataQualityStep } from './FuelDataQualityStep';
 import { FuelExceptionBlockersPanel } from './FuelExceptionBlockersPanel';
+import { FuelUnapprovedTxBlockersPanel } from './FuelUnapprovedTxBlockersPanel';
 import { useFuelWeekReports } from '../../../hooks/useFuelWeekReports';
 import { type FuelWizardDriver } from './buildFuelWizardRows';
 import { useFuelWizardDerived } from './useFuelWizardDerived';
@@ -66,7 +67,7 @@ import type {
   MileageAdjustment,
   WeeklyFuelReport,
 } from '../../../types/fuel';
-import type { Trip } from '../../../types/data';
+import type { FinancialTransaction, Trip } from '../../../types/data';
 import type { Vehicle } from '../../../types/vehicle';
 import { FUEL_STEP_ICONS } from '../../../utils/fuelStepIcons';
 import { loadFuelLeakageReview } from '../../../utils/fuelLeakageReviewStore';
@@ -84,6 +85,8 @@ interface FuelPeriodWizardProps {
   drivers: FuelWizardDriver[];
   fuelCards?: FuelCard[];
   finalizedReports: FinalizedFuelReport[];
+  /** Pending fuel Expense txs — Finalize hard-block (F3). */
+  transactions?: FinancialTransaction[];
   dateRange: DateRange;
   isRefreshing?: boolean;
   onBack: () => void;
@@ -99,6 +102,8 @@ interface FuelPeriodWizardProps {
     date?: string;
     vehicleId?: string;
   }) => void;
+  /** Jump to Review Queue for unapproved reimbursements. */
+  onOpenReviewQueue?: () => void;
   /** Accept exception in-place so Finalize can unlock without leaving recon. */
   onAcceptFuelException?: (
     entryId: string,
@@ -123,6 +128,7 @@ function FuelPeriodWizardInner({
   drivers,
   fuelCards = [],
   finalizedReports,
+  transactions = [],
   dateRange,
   onBack,
   onRefresh,
@@ -130,6 +136,7 @@ function FuelPeriodWizardInner({
   onAddAdjustment,
   onResolveDispute,
   onOpenTransactionLogs,
+  onOpenReviewQueue,
   onAcceptFuelException,
   onEditFuelEntry,
   onOpenConfiguration,
@@ -208,6 +215,7 @@ function FuelPeriodWizardInner({
     priorMedian,
     gateResult,
     exceptionBlockers,
+    unapprovedFuelTxBlockers,
     plateByVehicleId,
     canContinue,
     stepIndex,
@@ -230,6 +238,7 @@ function FuelPeriodWizardInner({
     weekTrips,
     weekLoading: weekReports.loading,
     weekError: Boolean(weekReports.error),
+    transactions,
   });
 
   // Fresh walkthrough on period open or after Reopen week
@@ -604,6 +613,27 @@ function FuelPeriodWizardInner({
               actionLabel: onResetPeriod ? 'Reopen week' : undefined,
               onAction: onResetPeriod,
             }
+          : unapprovedFuelTxBlockers.length > 0
+            ? (() => {
+                const holds = unapprovedFuelTxBlockers.filter((b) => b.holdReason === 'station_hold')
+                  .length;
+                const actionable = unapprovedFuelTxBlockers.length - holds;
+                if (actionable > 0) {
+                  return {
+                    title: 'Can’t finalize yet',
+                    body: `Approve or reject ${actionable} Pending fuel receipt(s) in Review Queue${
+                      holds > 0 ? ` (${holds} more await Station Database)` : ''
+                    } — then Finalize.`,
+                    actionLabel: onOpenReviewQueue ? 'Open Review Queue' : undefined,
+                    onAction: onOpenReviewQueue,
+                  };
+                }
+                return {
+                  title: 'Can’t finalize yet',
+                  body: `${holds} fuel receipt(s) await station match in Station Database. Review Queue cannot clear them.`,
+                  actionLabel: undefined,
+                };
+              })()
           : exceptionBlockers.length > 0
             ? {
                 title: 'Can’t finalize yet',
@@ -629,6 +659,7 @@ function FuelPeriodWizardInner({
                   finalizing ||
                   liveReports.length === 0 ||
                   !!gateResult.hasExceptionBlockers ||
+                  !!gateResult.hasUnapprovedFuelTxBlockers ||
                   !!gateResult.hasOverExplainedBlockers ||
                   (!!gateResult.hasBlockingWarnings && !financeWarningAcknowledged) ||
                   (needsHumanSecondApprover(
@@ -750,6 +781,10 @@ function FuelPeriodWizardInner({
       <div className="space-y-3">
         {activeStepId === 'data-quality' && (
           <div className="space-y-4">
+            <FuelUnapprovedTxBlockersPanel
+              blockers={unapprovedFuelTxBlockers}
+              onOpenReviewQueue={onOpenReviewQueue}
+            />
             <FuelExceptionBlockersPanel
               blockers={exceptionBlockers}
               plateByVehicleId={plateByVehicleId}
@@ -820,6 +855,8 @@ function FuelPeriodWizardInner({
           <FuelFinalizeStep
             periodLocked={periodLocked}
             exceptionBlockers={exceptionBlockers}
+            unapprovedFuelTxBlockers={unapprovedFuelTxBlockers}
+            onOpenReviewQueue={onOpenReviewQueue}
             plateByVehicleId={plateByVehicleId}
             exceptionBusyId={exceptionBusyId}
             onAcceptException={
@@ -836,6 +873,7 @@ function FuelPeriodWizardInner({
             }
             hasBlockingWarnings={gateResult.hasBlockingWarnings}
             hasExceptionBlockers={gateResult.hasExceptionBlockers}
+            hasUnapprovedFuelTxBlockers={gateResult.hasUnapprovedFuelTxBlockers}
             financeWarningAcknowledged={financeWarningAcknowledged}
             onFinanceWarningChange={setFinanceWarningAcknowledged}
             needsSecondApprover={needsSecondApprover(strip.totalSpend, secondApproverThreshold)}

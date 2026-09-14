@@ -22,7 +22,7 @@ import {
   buildCycleKpis,
   sumOdometerDeltasBetweenFills,
 } from '../../utils/fuelLogKpiMetrics';
-import { resolvePeriodDistance, buildTrustedPeriodTotals } from '../../utils/fuelPeriodTotals';
+import { buildTrustedPeriodTotals } from '../../utils/fuelPeriodTotals';
 import { partitionCyclesForPeriod } from '../../utils/fuelCycleTrust';
 import { useFleetTimezone, fleetTzDateKey } from '../../utils/timezoneDisplay';
 import { Skeleton } from '../ui/skeleton';
@@ -558,15 +558,6 @@ export function FuelLogTable({
     [trustedCycles, exceptionCycles, trustedPeriodTotals],
   );
 
-  const periodDistance = useMemo(
-    () =>
-      resolvePeriodDistance(trustedCycles, filteredEntries, {
-        start: periodStart,
-        end: periodEnd,
-      }),
-    [trustedCycles, filteredEntries, periodStart, periodEnd],
-  );
-
   const runRecalculate = async () => {
     setIsRecalculating(true);
     try {
@@ -837,8 +828,14 @@ export function FuelLogTable({
         afterTabs={
           <div>
             {activeView === 'transactions' && summaryLoading && !hasExtraTxnFilters && !serverSummary ? (
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
-                {Array.from({ length: 5 }).map((_, i) => (
+              <div
+                className={
+                  activeView === 'transactions'
+                    ? 'grid grid-cols-3 gap-2'
+                    : 'grid grid-cols-2 gap-2 sm:grid-cols-4'
+                }
+              >
+                {Array.from({ length: activeView === 'transactions' ? 3 : 4 }).map((_, i) => (
                   <Skeleton key={i} className="h-14 w-full rounded-lg" />
                 ))}
               </div>
@@ -847,11 +844,6 @@ export function FuelLogTable({
                 tiles={
                   activeView === 'transactions'
                     ? transactionKpisToTiles(transactionKpis, {
-                        distanceKm: periodDistance.primaryKm,
-                        distanceHint:
-                          periodDistance.carriedInKm > 0
-                            ? `${periodDistance.carriedInKm.toLocaleString()} km before this period excluded`
-                            : periodDistance.primaryLabel,
                         integrityActive: filterIntegrity === 'imbalanced',
                         sourceHint: `${transactionKpis.sourcePortal} portal · ${transactionKpis.sourceAdmin} admin · ${transactionKpis.sourceAnchors} anchors`,
                       })
@@ -882,13 +874,6 @@ export function FuelLogTable({
           </div>
         }
       />
-
-      {activeView === 'cycles' && isPeriodOpen && (
-        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm text-amber-900">
-          Week in progress. Totals update as driver fills and gas-card CSV arrive. Exception history
-          is excluded from period totals.
-        </div>
-      )}
 
       <div className="rounded-md border bg-white overflow-x-auto">
         {activeView === 'transactions' ? (

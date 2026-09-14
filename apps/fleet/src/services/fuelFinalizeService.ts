@@ -16,6 +16,7 @@ import {
   sumGasCardSpendForReport,
   entriesBelongingToDriverWeekReport,
 } from '../utils/fuelPaidByDriver';
+import { listUnapprovedFuelTxInWindow } from '@roam/fuel-core';
 import type {
   FuelCard,
   FuelEntry,
@@ -33,6 +34,8 @@ export type FuelFinalizeDeps = {
   fuelEntries: FuelEntry[];
   scenarios: FuelScenario[];
   trips: Trip[];
+  /** Optional — when provided, refuse if Pending fuel txs sit in any report week. */
+  transactions?: import('../types/data').FinancialTransaction[];
 };
 
 export type FuelFinalizeOptions = {
@@ -87,6 +90,31 @@ export async function finalizeFuelWeekReports(
   const snapshots: FinalizedFuelReport[] = [];
   const { vehicles, drivers, fuelCards, fuelEntries, scenarios, trips } = deps;
   const attrCtx = { vehicles, fuelCards, trips };
+
+  // Client-side refuse before any settlement mutation (server also enforces).
+  // Callers that already hold txs in state must pass them (R3); undefined skips for unit tests.
+  if (deps.transactions !== undefined) {
+    for (const report of reports) {
+      const { start, end } = reportWeekYmdBounds(report);
+      const blockers = listUnapprovedFuelTxInWindow(deps.transactions, start, end);
+      if (blockers.length) {
+        return {
+          ok: false,
+          successCount: 0,
+          snapshotCount: 0,
+          failures: [
+            {
+              driverId: report.driverId,
+              weekStart: start,
+              phase: 'snapshot',
+              error: `UNAPPROVED_FUEL_TX: ${blockers.length} Pending fuel receipt(s)`,
+            },
+          ],
+          message: `UNAPPROVED_FUEL_TX: ${blockers.length} Pending fuel receipt(s) need Review Queue action`,
+        };
+      }
+    }
+  }
 
   const settlementDeps = opts.deferSnapshotPersist
     ? null

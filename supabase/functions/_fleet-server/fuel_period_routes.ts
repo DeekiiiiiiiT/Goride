@@ -27,9 +27,34 @@ import { buildFuelSealAmountsByDriver } from "./fuel_close_amounts.ts";
 import { assertPeriodEndedForReconciliation } from "./settlement_period_freeze.ts";
 import { SettlementCommandError } from "./settlement_commands.ts";
 import { isSettlementPeriodEnded } from "../../../packages/finance-core/src/settlementPeriodGate.ts";
+import { listUnapprovedFuelTxInWindow } from "../../../packages/fuel-core/src/fuelReviewQueue.ts";
 
 const BASE = "/make-server-37f42386";
 const CRON_SECRET = () => Deno.env.get("FLEET_CRON_SECRET") || Deno.env.get("CRON_SECRET") || "";
+
+/** Refuse finalize when Pending fuel reimbursements sit in the statement window (F3). */
+async function assertNoUnapprovedFuelTxInWindow(
+  orgId: string,
+  weekStart: string,
+  weekEnd: string,
+): Promise<{ error: string; code: string; blockers: unknown[] } | null> {
+  const start = String(weekStart || "").slice(0, 10);
+  const end = String(weekEnd || "").slice(0, 10);
+  if (!start || !end) return null;
+  const rows = await kv.getByPrefix(`transaction:`);
+  const txs = (Array.isArray(rows) ? rows : []).filter((t: any) => {
+    if (!t || typeof t !== "object") return false;
+    const rowOrg = String(t.organizationId || t.orgId || "");
+    return !rowOrg || rowOrg === orgId;
+  });
+  const blockers = listUnapprovedFuelTxInWindow(txs, start, end);
+  if (!blockers.length) return null;
+  return {
+    code: "UNAPPROVED_FUEL_TX",
+    error: `${blockers.length} Pending fuel receipt(s) must be approved or rejected before finalize`,
+    blockers,
+  };
+}
 
 function periodNotEndedResponse(e: unknown) {
   if (e instanceof SettlementCommandError && e.code === "PERIOD_NOT_ENDED") {
@@ -305,6 +330,30 @@ async function processJobRow(job: Record<string, unknown>) {
           .eq("id", job.id);
         return { ok: false, error: "second_approver_required" };
       }
+    }
+
+    // Hard refuse before any snapshot/money/lock — covers HTTP finalize TOCTOU + auto-close jobs.
+    const unapprovedFuel = await assertNoUnapprovedFuelTxInWindow(
+      orgId,
+      ymd(period.week_start),
+      ymd(period.week_end),
+    );
+    if (unapprovedFuel) {
+      await sb
+        .from("fuel_period_job")
+        .update({
+          state: "failed",
+          failures: [
+            {
+              error: unapprovedFuel.code,
+              message: unapprovedFuel.error,
+              blockers: unapprovedFuel.blockers,
+            },
+          ],
+          updated_at: now,
+        })
+        .eq("id", job.id);
+      return { ok: false, error: unapprovedFuel.code };
     }
 
     const snapshots = Array.isArray(cursor.snapshots) ? (cursor.snapshots as any[]) : [];
@@ -868,6 +917,14 @@ export function registerFuelPeriodRoutes(app: Hono) {
         if (body) return c.json(body, 409);
         throw e;
       }
+      const unapproved = await assertNoUnapprovedFuelTxInWindow(
+        orgId,
+        ymd(period.week_start),
+        ymd(period.week_end),
+      );
+      if (unapproved) {
+        return c.json(unapproved, 422);
+      }
       const ifMatch = c.req.header("If-Match");
       if (ifMatch != null && ifMatch !== "" && Number(ifMatch) !== Number(period.version)) {
         return c.json({ error: "version_conflict", currentVersion: period.version }, 409);
@@ -1279,6 +1336,14 @@ export function registerFuelPeriodRoutes(app: Hono) {
           continue;
         }
 
+        const weekStart = ymd(row.week_start);
+        const weekEnd = ymd(row.week_end) || weekStart;
+        const unapprovedFuel = await assertNoUnapprovedFuelTxInWindow(orgId, weekStart, weekEnd);
+        if (unapprovedFuel) {
+          bumpSkip(orgId, periodId, "skip_unapproved_fuel");
+          continue;
+        }
+
         const version = Number(row.version) || 1;
         const idempotencyKey = `finalize:${periodId}:v${version}:autoclose`;
         const { data: existing } = await sb
@@ -1292,7 +1357,6 @@ export function registerFuelPeriodRoutes(app: Hono) {
           continue;
         }
 
-        const weekStart = ymd(row.week_start);
         // Calendar seal: never auto-lock an in-progress Mon–Sun week.
         if (!isSettlementPeriodEnded({ weekAnchor: weekStart })) {
           bumpSkip(orgId, periodId, "skip_period_not_ended");

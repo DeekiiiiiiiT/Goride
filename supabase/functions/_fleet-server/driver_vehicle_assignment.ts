@@ -322,3 +322,83 @@ export async function syncDriverRecordFromVehicleAssignment(
     vehicle.organizationId as string | undefined,
   );
 }
+
+async function clearDriverAssignedVehicleIfMatches(
+  driverId: string,
+  vehicleId: string,
+): Promise<void> {
+  const variants = await expandDriverIdVariants(driverId);
+  for (const variant of variants) {
+    const existing = await kv.get(`driver:${variant}`);
+    if (!existing || typeof existing !== "object") continue;
+    const assigned = existing.assignedVehicleId || existing.vehicle;
+    if (assigned != null && String(assigned) === vehicleId) {
+      await kv.set(`driver:${variant}`, {
+        ...existing,
+        assignedVehicleId: null,
+        assignedVehiclePlate: null,
+        assignedVehicleName: null,
+        vehicle: null,
+      });
+    }
+  }
+}
+
+/**
+ * Enforce one current driver ↔ one vehicle.
+ * Clears currentDriverId on every other vehicle matching this driver's ID variants,
+ * and clears the previous driver's assignedVehicleId mirror when they leave a car.
+ */
+export async function enforceExclusiveCurrentDriverAssignment(
+  vehicle: Record<string, unknown>,
+  previous?: Record<string, unknown> | null,
+): Promise<void> {
+  const vehicleId = vehicle.id != null ? String(vehicle.id) : "";
+  if (!vehicleId) return;
+
+  const nextDriverId =
+    vehicle.currentDriverId != null && String(vehicle.currentDriverId).trim()
+      ? String(vehicle.currentDriverId).trim()
+      : "";
+  const prevDriverId =
+    previous?.currentDriverId != null && String(previous.currentDriverId).trim()
+      ? String(previous.currentDriverId).trim()
+      : "";
+
+  if (prevDriverId && prevDriverId !== nextDriverId) {
+    await clearDriverAssignedVehicleIfMatches(prevDriverId, vehicleId);
+  }
+
+  if (!nextDriverId) return;
+
+  const variants = await expandDriverIdVariants(nextDriverId);
+  if (!variants.length) return;
+
+  const orFilter = variants
+    .map((id) => `value->>currentDriverId.eq.${id}`)
+    .join(",");
+
+  const { data, error } = await fromKvStore()
+    .select("key, value")
+    .like("key", "vehicle:%")
+    .or(orFilter);
+
+  if (error || !Array.isArray(data) || !data.length) return;
+
+  for (const row of data as Array<{ key?: string; value: unknown }>) {
+    const other = row.value as Record<string, unknown>;
+    if (!other || typeof other !== "object") continue;
+    const otherId =
+      other.id != null
+        ? String(other.id)
+        : String(row.key || "").replace(/^vehicle:/, "");
+    if (!otherId || otherId === vehicleId) continue;
+
+    const cleared = applyDriverAssignmentChangeOnVehicle(other, {
+      ...other,
+      currentDriverId: null,
+      currentDriverName: null,
+    });
+    await kv.set(`vehicle:${otherId}`, cleared);
+  }
+}

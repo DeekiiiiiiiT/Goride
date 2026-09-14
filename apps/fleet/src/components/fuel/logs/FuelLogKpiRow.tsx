@@ -37,7 +37,12 @@ export function FuelLogKpiRow({
 }) {
   if (!tiles.length) return null;
   return (
-    <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-3 sm:gap-2 lg:grid-cols-5">
+    <div
+      className={cn(
+        'grid gap-1.5 sm:gap-2',
+        tiles.length <= 3 ? 'grid-cols-3' : 'grid-cols-2 sm:grid-cols-4',
+      )}
+    >
       {tiles.map((t) => {
         const clickable = !!onTileClick && (t.filterable || t.id === 'imbalanced' || t.id === 'exceptions');
         return (
@@ -115,8 +120,6 @@ export function cycleKpisToTiles(
 export function transactionKpisToTiles(
   kpis: TransactionKpis,
   opts?: {
-    distanceKm?: number;
-    distanceHint?: string;
     integrityActive?: boolean;
     sourceHint?: string;
   },
@@ -129,13 +132,6 @@ export function transactionKpisToTiles(
       hint: opts?.sourceHint,
     },
     { id: 'spend', label: 'Spend', value: formatFuelMoney(kpis.totalSpend, 0) },
-    { id: 'volume', label: 'Volume', value: `${kpis.totalVolume.toLocaleString()} L` },
-    {
-      id: 'distance',
-      label: 'Period distance',
-      value: `${Math.round(opts?.distanceKm ?? kpis.totalKm).toLocaleString()} km`,
-      hint: opts?.distanceHint,
-    },
     {
       id: 'imbalanced',
       label: 'Imbalanced',

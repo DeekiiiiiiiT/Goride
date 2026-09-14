@@ -19,7 +19,6 @@ import {
   Plus,
   LayoutGrid,
   List,
-  ArrowRight,
   MoreVertical,
   Settings as SettingsIcon,
   Fuel,
@@ -69,7 +68,8 @@ import { isSameDay, subDays } from "date-fns";
 import { useVocab } from '../../utils/vocabulary';
 import { usePermissions } from '../../hooks/usePermissions';
 import { useServiceLineScope } from '../../contexts/ServiceLineScopeContext';
-import { vehicleMatchesLine, type VehicleServiceLine } from '../../utils/vehicleServiceLines';
+import { vehicleMatchesLine, personMatchesServiceLine, type VehicleServiceLine } from '../../utils/vehicleServiceLines';
+import { VehicleAssignmentSelect } from './VehicleAssignmentSelect';
 import type { VehicleCatalogPendingRequest } from '../../types/vehicleCatalogPending';
 import { isVehicleParked } from '../../utils/vehicleCatalogGate';
 import { showCatalogGateToastIfApplicable } from '../../utils/catalogGateErrors';
@@ -138,6 +138,7 @@ export function VehiclesPage({
   // Assignment State
   const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
   const [vehicleToAssign, setVehicleToAssign] = useState<Vehicle | null>(null);
+  const [assigningVehicleId, setAssigningVehicleId] = useState<string | null>(null);
 
   // Action States
   const [isFuelModalOpen, setIsFuelModalOpen] = useState(false);
@@ -276,32 +277,13 @@ export function VehiclesPage({
         // 'Active' client-side, even if recent trips exist (legacy data).
         const parked = isVehicleParked(vehicle);
 
-        // Preserve existing metrics or override with calculated ones if available
+        // Assignment SSOT = vehicle.currentDriverId only.
+        // Never invent an assignee from last trip — that falsely puts one driver on many cars.
         return {
             ...vehicle,
             status: parked ? 'Inactive' : (isInactive ? 'Inactive' : 'Active'),
-            // Prioritize manual/current assignment over historical trip logs
-            // Step 3.1: Resolve lastTrip?.driverId to native Roam ID through the driver list
-            currentDriverId: vehicle.currentDriverId || (() => {
-                if (!lastTrip?.driverId) return undefined;
-                const resolvedDriver = allDrivers.find((d: any) =>
-                    d.id === lastTrip.driverId ||
-                    d.driverId === lastTrip.driverId ||
-                    d.uberDriverId === lastTrip.driverId ||
-                    d.inDriveDriverId === lastTrip.driverId
-                );
-                return resolvedDriver?.id || lastTrip.driverId;
-            })(),
-            currentDriverName: vehicle.currentDriverName || (() => {
-                if (!lastTrip?.driverName) return undefined;
-                const resolvedDriver = allDrivers.find((d: any) =>
-                    d.id === lastTrip.driverId ||
-                    d.driverId === lastTrip.driverId ||
-                    d.uberDriverId === lastTrip.driverId ||
-                    d.inDriveDriverId === lastTrip.driverId
-                );
-                return resolvedDriver?.name || resolvedDriver?.driverName || lastTrip.driverName;
-            })(),
+            currentDriverId: vehicle.currentDriverId || undefined,
+            currentDriverName: vehicle.currentDriverName || undefined,
             metrics: {
                 ...vehicle.metrics,
                 todayEarnings: todayEarnings || vehicle.metrics?.todayEarnings || 0,
@@ -315,8 +297,7 @@ export function VehiclesPage({
             }
         };
     });
-  // Step 3.2: Add allDrivers to dependency array so resolution re-runs when drivers load
-  }, [trips, manualVehicles, vehicleMetrics, allDrivers]);
+  }, [trips, manualVehicles, vehicleMetrics]);
 
   // Apply Filters
   const filteredVehicles = useMemo(() => {
@@ -372,6 +353,61 @@ export function VehiclesPage({
     }
   };
 
+  const assignableDrivers = useMemo(() => {
+    const seen = new Set<string>();
+    return allDrivers
+      .filter((d: any) => personMatchesServiceLine(d, activeServiceLine))
+      .map((d: any) => {
+        const id = String(d.id || d.driverId || '').trim();
+        const name = String(d.name || d.driverName || '').trim() || 'Unknown';
+        return { id, name };
+      })
+      .filter((d) => {
+        if (!d.id || seen.has(d.id)) return false;
+        seen.add(d.id);
+        return true;
+      })
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [allDrivers, activeServiceLine]);
+
+  const personLabel = activeLineTab === 'delivery' ? 'Courier' : 'Driver';
+
+  const handleUnassignDriver = async (vehicleId: string) => {
+    const vehicleToUpdate = manualVehicles.find((v) => v.id === vehicleId);
+    if (!vehicleToUpdate) return;
+
+    if (isVehicleParked(vehicleToUpdate)) {
+      toast.warning('Vehicle is parked', {
+        description: 'This vehicle is pending catalog approval and cannot change assignment yet.',
+      });
+      return;
+    }
+
+    if (!vehicleToUpdate.currentDriverId) return;
+
+    setAssigningVehicleId(vehicleId);
+    try {
+      await api.saveVehicle({
+        ...vehicleToUpdate,
+        currentDriverId: '',
+        currentDriverName: '',
+        driverAssignmentHistory: applyDriverAssignmentChange(vehicleToUpdate, null, ''),
+      });
+      queryClient.invalidateQueries({ queryKey: ['vehicles'] });
+      toast.success(`${personLabel} unassigned`);
+    } catch (error) {
+      console.error('Failed to unassign driver', error);
+      const handled = showCatalogGateToastIfApplicable(error);
+      if (!handled) {
+        toast.error('Failed to unassign', {
+          description: 'The change could not be saved to the server.',
+        });
+      }
+    } finally {
+      setAssigningVehicleId(null);
+    }
+  };
+
   const handleAssignDriver = async (vehicleId: string, driverId: string) => {
     // 1. Find driver details
     const driver = allDrivers.find(d => (d.id === driverId) || (d.driverId === driverId));
@@ -389,7 +425,6 @@ export function VehiclesPage({
         return;
     }
 
-    // Step 2.1: Always use driver.id (native Roam ID) — never a rideshare UUID
     const resolvedDriverId = driver?.id || driverId;
 
     // Reactivate to Active only if the vehicle has been catalog-matched.
@@ -401,6 +436,22 @@ export function VehiclesPage({
       });
       return;
     }
+
+    if (String(vehicleToUpdate.currentDriverId || '') === String(resolvedDriverId)) {
+      setIsAssignModalOpen(false);
+      return;
+    }
+
+    // One driver ↔ one vehicle: release them from any other car before saving.
+    const previousVehicles = manualVehicles.filter((v) => {
+      if (v.id === vehicleId || !v.currentDriverId) return false;
+      const assigned = String(v.currentDriverId);
+      return (
+        assigned === resolvedDriverId ||
+        assigned === driverId ||
+        (driver?.driverId != null && assigned === String(driver.driverId))
+      );
+    });
 
     const updatedVehicle = {
         ...vehicleToUpdate,
@@ -414,8 +465,18 @@ export function VehiclesPage({
         ),
     };
 
+    setAssigningVehicleId(vehicleId);
     try {
-        // 3. Persist to API
+        for (const other of previousVehicles) {
+          await api.saveVehicle({
+            ...other,
+            currentDriverId: '',
+            currentDriverName: '',
+            driverAssignmentHistory: applyDriverAssignmentChange(other, null, ''),
+          });
+        }
+
+        // Persist the new exclusive assignment
         await api.saveVehicle(updatedVehicle);
         
         console.log(`Assigned driver ${resolvedDriverId} (${driverName}) to vehicle ${vehicleId} [passed ID: ${driverId}]`);
@@ -424,7 +485,9 @@ export function VehiclesPage({
         queryClient.invalidateQueries({ queryKey: ['vehicles'] });
         
         toast.success("Driver assigned successfully", {
-            description: `${driverName} is now assigned to the vehicle.`
+            description: previousVehicles.length
+              ? `${driverName} moved to this vehicle (released from ${previousVehicles.length} other).`
+              : `${driverName} is now assigned to the vehicle.`
         });
         
         setIsAssignModalOpen(false);
@@ -436,7 +499,17 @@ export function VehiclesPage({
               description: "The change could not be saved to the server."
           });
         }
+    } finally {
+        setAssigningVehicleId(null);
     }
+  };
+
+  const handleInlineAssignmentChange = async (vehicleId: string, nextDriverId: string | null) => {
+    if (!nextDriverId) {
+      await handleUnassignDriver(vehicleId);
+      return;
+    }
+    await handleAssignDriver(vehicleId, nextDriverId);
   };
 
   const handleLogService = async (id: string) => {
@@ -782,20 +855,6 @@ export function VehiclesPage({
                               <span className="text-sm text-slate-700 dark:text-slate-300">{vehicle.status}</span>
                             </div>
                           </div>
-                          <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
-                            <div>
-                              <p className="text-xs text-slate-500">Assignment</p>
-                              <p className="truncate font-medium text-slate-800 dark:text-slate-200">
-                                {vehicle.currentDriverName || 'Unassigned'}
-                              </p>
-                            </div>
-                            <div>
-                              <p className="text-xs text-slate-500">Utilization</p>
-                              <p className="font-medium text-slate-800 dark:text-slate-200">
-                                {(vehicle.metrics?.utilizationRate ?? 0).toFixed(0)}%
-                              </p>
-                            </div>
-                          </div>
                           {parked && (
                             <Badge
                               variant="secondary"
@@ -809,6 +868,19 @@ export function VehiclesPage({
                             </Badge>
                           )}
                         </button>
+                        <div className="mt-3 text-sm">
+                          <p className="mb-1 text-xs text-slate-500">Assignment</p>
+                          <VehicleAssignmentSelect
+                            valueDriverId={vehicle.currentDriverId}
+                            valueDriverName={vehicle.currentDriverName}
+                            drivers={assignableDrivers}
+                            disabled={parked}
+                            busy={assigningVehicleId === vehicle.id}
+                            personLabel={personLabel}
+                            className="max-w-none"
+                            onChange={(nextId) => void handleInlineAssignmentChange(vehicle.id, nextId)}
+                          />
+                        </div>
                         <div className="mt-3 flex justify-end border-t border-slate-100 pt-2 dark:border-slate-800">
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
@@ -856,10 +928,8 @@ export function VehiclesPage({
                             <TableRow>
                                 <TableHead className="w-[300px] pl-6">Vehicle / ID</TableHead>
                                 <TableHead>Status</TableHead>
-                                <TableHead>Utilization</TableHead>
                                 <TableHead>License plate</TableHead>
                                 <TableHead>Assignment</TableHead>
-                                <TableHead>Vehicle docs</TableHead>
                                 <TableHead className="w-[50px]">
                                     <DropdownMenu>
                                         <DropdownMenuTrigger asChild>
@@ -923,35 +993,18 @@ export function VehiclesPage({
                                         </div>
                                     </TableCell>
                                     <TableCell>
-                                        <div className="flex flex-col gap-1 w-24">
-                                            <div className="flex justify-between text-xs">
-                                                <span className="font-medium">{vehicle.metrics?.utilizationRate.toFixed(0)}%</span>
-                                            </div>
-                                            <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
-                                                <div 
-                                                    className={`h-full ${
-                                                        (vehicle.metrics?.utilizationRate || 0) > 70 ? 'bg-emerald-500' : 
-                                                        (vehicle.metrics?.utilizationRate || 0) > 40 ? 'bg-amber-500' : 'bg-slate-400'
-                                                    }`}
-                                                    style={{ width: `${vehicle.metrics?.utilizationRate}%` }}
-                                                />
-                                            </div>
-                                        </div>
-                                    </TableCell>
-                                    <TableCell>
                                         <span className="text-slate-500">{vehicle.licensePlate}</span>
                                     </TableCell>
                                     <TableCell>
-                                        {vehicle.currentDriverName ? (
-                                            <span className="font-medium text-slate-700 uppercase">{vehicle.currentDriverName}</span>
-                                        ) : (
-                                            <span className="text-slate-400">Unassigned</span>
-                                        )}
-                                    </TableCell>
-                                    <TableCell>
-                                        <Button variant="secondary" size="icon" className="h-8 w-8 rounded-full bg-slate-100 hover:bg-slate-200" onClick={() => setSelectedVehicleId(vehicle.id)}>
-                                            <ArrowRight className="h-4 w-4 text-slate-600" />
-                                        </Button>
+                                        <VehicleAssignmentSelect
+                                          valueDriverId={vehicle.currentDriverId}
+                                          valueDriverName={vehicle.currentDriverName}
+                                          drivers={assignableDrivers}
+                                          disabled={parked}
+                                          busy={assigningVehicleId === vehicle.id}
+                                          personLabel={personLabel}
+                                          onChange={(nextId) => void handleInlineAssignmentChange(vehicle.id, nextId)}
+                                        />
                                     </TableCell>
                                     <TableCell>
                                         <DropdownMenu>

@@ -223,9 +223,25 @@ export const VEHICLE_CATALOG_WRITABLE_KEYS = [
   "dry_weight_kg",
   "wheel_size_front",
   "wheel_size_rear",
+  // Provenance — stamped by edge; included so pickVehicleCatalogRow does not drop them.
+  "created_by",
+  "updated_by",
+  "import_batch_id",
+  "source",
+] as const;
+
+/** Not CSV-export columns; excluded from alias/export parity checks. */
+export const VEHICLE_CATALOG_PROVENANCE_KEYS = [
+  "created_by",
+  "updated_by",
+  "import_batch_id",
+  "source",
 ] as const;
 
 export type VehicleCatalogWritableKey = (typeof VEHICLE_CATALOG_WRITABLE_KEYS)[number];
+
+/** Max rows per POST /admin/vehicle-catalog/bulk — client chunks and server reject both use this. */
+export const VEHICLE_CATALOG_BULK_MAX_ROWS = 40 as const;
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
