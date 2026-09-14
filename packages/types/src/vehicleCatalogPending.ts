@@ -12,6 +12,8 @@ export interface VehicleCatalogPendingRequest {
   fleet_vehicle_id: string;
   proposed_make: string;
   proposed_model: string;
+  /** Mirrors `vehicle_catalog.vehicle_class` (`car` | `motorcycle`). */
+  proposed_vehicle_class?: "car" | "motorcycle";
   proposed_production_start_year: number;
   proposed_production_end_year: number | null;
   proposed_production_start_month?: number | null;

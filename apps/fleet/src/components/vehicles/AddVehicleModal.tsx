@@ -624,9 +624,15 @@ export function AddVehicleModal({
       const verifyChassisHint = trimToHint(verifySearchChassis) ?? trimToHint(formData.chassis);
       const verifyDrivetrainHint = trimToHint(verifySearchDrivetrain) ?? trimToHint(formData.drivetrain);
       const verifyTransmissionHint = trimToHint(verifySearchTransmission) ?? trimToHint(formData.transmission);
+      const catalogClassHint =
+        formData.usageCategory === "Motorcycle" || catalogClass === "motorcycle"
+          ? "motorcycle"
+          : "car";
       const catalogHints: Partial<Vehicle> = selectedCatalogRow
         ? {
             vehicle_catalog_id: selectedCatalogRow.id,
+            vehicle_catalog_class_hint:
+              selectedCatalogRow.vehicle_class === "motorcycle" ? "motorcycle" : "car",
             vehicle_catalog_trim_hint: trimToHint(selectedCatalogRow.trim_series ?? formData.trim),
             vehicle_catalog_chassis_hint:
               trimToHint(selectedCatalogRow.chassis_code) ?? verifyChassisHint,
@@ -649,6 +655,7 @@ export function AddVehicleModal({
         : {
             // No match yet — server will park + queue. Send everything we have
             // so the platform admin sees the full picture in the pending UI.
+            vehicle_catalog_class_hint: catalogClassHint,
             vehicle_catalog_trim_hint: trimToHint(formData.trim),
             vehicle_catalog_chassis_hint: verifyChassisHint,
             vehicle_catalog_drivetrain_hint: verifyDrivetrainHint,
@@ -1265,6 +1272,12 @@ export function AddVehicleModal({
                   </div>
 
                   <div className="pt-2">
+                    {catalogClass === "motorcycle" && (
+                      <p className="mb-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                        Catalog class: <span className="font-medium text-slate-900">Motorcycle</span> (from usage
+                        category). Unmatched bikes will request a motorcycle catalog entry.
+                      </p>
+                    )}
                     {verifySearchChassis.trim() &&
                     /^\d{4}$/.test(verifySearchYear.trim()) &&
                     verifySearchMake.trim().length >= 2 &&

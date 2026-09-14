@@ -20,22 +20,12 @@ import {
 } from "./vehicle_catalog_schema_fallback.ts";
 import { filterCatalogRowsByFleetMonth, type CatalogVariantRow } from "../../../packages/types/src/vehicleCatalogResolution.ts";
 import { parseCatalogMonthFromUnknown } from "../../../packages/types/src/catalogMonthParse.ts";
+import { VEHICLE_CATALOG_WRITABLE_KEYS } from "../../../packages/types/src/vehicleCatalogCsvImport.ts";
+import { resolveApproveVehicleClass } from "../../../packages/types/src/vehicleCatalog.ts";
 import { isEnforcementEnabled, listRecentCatalogGateEvents } from "./vehicle_catalog_gate.ts";
 
-const KEYS = [
-  "make", "model", "production_start_year", "production_end_year", "production_start_month", "production_end_month",
-  "trim_series", "generation",
-  "full_model_code", "catalog_trim", "emissions_prefix", "trim_suffix_code",
-  "chassis_code", "generation_code", "engine_code", "engine_type",
-  "body_type", "doors", "length_mm", "width_mm", "height_mm", "wheelbase_mm", "ground_clearance_mm",
-  "engine_displacement_l", "engine_displacement_cc", "engine_configuration", "fuel_category", "fuel_type", "fuel_grade", "transmission", "drivetrain",
-  "horsepower", "torque", "torque_unit",
-  "fuel_tank_capacity", "fuel_tank_unit", "fuel_economy_km_per_l", "estimated_km_per_refuel",
-  "seating_capacity", "curb_weight_kg", "gross_vehicle_weight_kg", "max_payload_kg", "max_towing_kg",
-  "front_brake_type", "rear_brake_type", "brake_size_mm",
-  "tire_size", "bolt_pattern", "wheel_offset_mm",
-  "engine_oil_capacity_l", "coolant_capacity_l",
-] as const;
+/** Approve insert/update allowlist — keep in sync with packages/types VEHICLE_CATALOG_WRITABLE_KEYS. */
+const KEYS = VEHICLE_CATALOG_WRITABLE_KEYS;
 
 function assertCatalogSpan(start: number, end: number | null): string | null {
   if (end != null && end < start) return "production_end_year must be >= production_start_year";
@@ -87,6 +77,7 @@ function pickRow(raw: Record<string, unknown>, partial: boolean): Record<string,
 function pendingCatalogFieldDefaults(pr: Record<string, unknown>): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   const pairs: [string, string][] = [
+    ["vehicle_class", "proposed_vehicle_class"],
     ["trim_series", "proposed_trim_series"],
     ["body_type", "proposed_body_type"],
     ["engine_code", "proposed_engine_code"],
@@ -96,6 +87,9 @@ function pendingCatalogFieldDefaults(pr: Record<string, unknown>): Record<string
     ["trim_suffix_code", "proposed_trim_suffix_code"],
     ["fuel_category", "proposed_fuel_category"],
     ["fuel_grade", "proposed_fuel_grade"],
+    ["drivetrain", "proposed_drivetrain"],
+    ["transmission", "proposed_transmission"],
+    ["fuel_type", "proposed_fuel_type"],
   ];
   for (const [k, pk] of pairs) {
     const v = pr[pk];
@@ -711,12 +705,21 @@ export function registerPendingVehicleCatalogRoutes(
         const eiErr = validateEngineType(body.engine_type);
         if (eiErr) return c.json({ error: eiErr }, 400);
 
+        const classResolved = resolveApproveVehicleClass(
+          body.vehicle_class,
+          "vehicle_class" in body,
+          (reqRow as { proposed_vehicle_class?: unknown }).proposed_vehicle_class,
+        );
+        if (!classResolved.ok) return c.json({ error: classResolved.error }, 400);
+        const vehicleClass = classResolved.value;
+
         const row = pickRow(
           {
             ...pendingCatalogFieldDefaults(reqRow as Record<string, unknown>),
             ...body,
             make,
             model,
+            vehicle_class: vehicleClass,
             production_start_year: startNum,
             production_end_year: endNum,
             production_start_month: startMonth,

@@ -2,8 +2,6 @@ import { CsvColumn, formatDateJM } from "../utils/csv-helper";
 import { FuelEntry } from "./fuel";
 import { ServiceRequest, Trip } from "./data";
 import { OdometerReading } from "./vehicle";
-import type { VehicleCatalogRecord } from "./vehicleCatalog";
-import { formatCatalogMonthEnglish } from "./vehicleCatalog";
 
 export const FUEL_CSV_COLUMNS: CsvColumn<FuelEntry>[] = [
     { key: 'date', label: 'date', formatter: formatDateJM },
@@ -295,80 +293,5 @@ export const TOLL_TRANSACTION_CSV_COLUMNS: CsvColumn<any>[] = [
     { key: 'suggestionCount', label: 'suggestionCount' },
 ];
 
-/** Motor vehicle catalog export — column order and labels match `Vehicle database - new.csv` (+ system timestamps). */
-export const VEHICLE_CATALOG_CSV_COLUMNS: CsvColumn<VehicleCatalogRecord>[] = [
-    { key: "make", label: "Make" },
-    { key: "model", label: "Model" },
-    { key: "vehicle_class", label: "Vehicle class" },
-    { key: "production_start_year", label: "Production start year" },
-    { key: "production_end_year", label: "Production end year" },
-    {
-        key: "production_start_month",
-        label: "Production start month",
-        formatter: (v) => formatCatalogMonthEnglish(v as number | null | undefined),
-    },
-    {
-        key: "production_end_month",
-        label: "Production end month",
-        formatter: (v) => formatCatalogMonthEnglish(v as number | null | undefined),
-    },
-    { key: "trim_series", label: "Series / facelift" },
-    { key: "generation", label: "Generation" },
-    { key: "full_model_code", label: "Full Model Code" },
-    { key: "chassis_code", label: "Chassis Code" },
-    { key: "catalog_trim", label: "Trim" },
-    { key: "emissions_prefix", label: "Emissions Prefix" },
-    { key: "trim_suffix_code", label: "Trim Suffix Code" },
-    { key: "engine_code", label: "Engine code" },
-    { key: "engine_type", label: "Engine type" },
-    { key: "body_type", label: "Body type" },
-    { key: "doors", label: "Doors" },
-    { key: "length_mm", label: "Length mm" },
-    { key: "width_mm", label: "Width mm" },
-    { key: "height_mm", label: "Height mm" },
-    { key: "wheelbase_mm", label: "Wheelbase mm" },
-    { key: "ground_clearance_mm", label: "Ground clearance mm" },
-    { key: "engine_displacement_l", label: "Engine displacement L" },
-    { key: "engine_displacement_cc", label: "Engine displacement cc" },
-    { key: "engine_configuration", label: "Engine configuration" },
-    { key: "fuel_category", label: "Fuel Category" },
-    { key: "fuel_type", label: "Fuel type" },
-    { key: "fuel_grade", label: "Fuel Grade" },
-    { key: "transmission", label: "Transmission" },
-    { key: "drivetrain", label: "Drivetrain" },
-    { key: "horsepower", label: "Horsepower" },
-    { key: "torque", label: "Torque" },
-    { key: "torque_unit", label: "Torque unit" },
-    { key: "fuel_tank_capacity", label: "Fuel tank capacity" },
-    { key: "fuel_tank_unit", label: "Fuel tank unit" },
-    { key: "fuel_economy_km_per_l", label: "fuel economy (km/L)" },
-    { key: "estimated_km_per_refuel", label: "Estimated (Km) per re-fuel" },
-    { key: "seating_capacity", label: "Seating capacity" },
-    { key: "curb_weight_kg", label: "Curb weight kg" },
-    { key: "gross_vehicle_weight_kg", label: "Gross vehicle weight kg" },
-    { key: "max_payload_kg", label: "Max payload kg" },
-    { key: "max_towing_kg", label: "Max towing kg" },
-    { key: "front_brake_type", label: "Front brake type" },
-    { key: "rear_brake_type", label: "Rear brake type" },
-    { key: "brake_size_mm", label: "Brake size mm" },
-    { key: "tire_size", label: "Tire size" },
-    { key: "front_tire_size", label: "Front tire size" },
-    { key: "rear_tire_size", label: "Rear tire size" },
-    { key: "bolt_pattern", label: "Bolt pattern" },
-    { key: "wheel_offset_mm", label: "Wheel offset mm" },
-    { key: "engine_oil_capacity_l", label: "Engine oil capacity L" },
-    { key: "coolant_capacity_l", label: "Coolant capacity L" },
-    { key: "final_drive", label: "Final drive" },
-    { key: "cooling_type", label: "Cooling type" },
-    { key: "starter_type", label: "Starter type" },
-    { key: "seat_height_mm", label: "Seat height mm" },
-    { key: "front_suspension", label: "Front suspension" },
-    { key: "rear_suspension", label: "Rear suspension" },
-    { key: "gear_count", label: "Gear count" },
-    { key: "dry_weight_kg", label: "Dry weight kg" },
-    { key: "wheel_size_front", label: "Wheel size front" },
-    { key: "wheel_size_rear", label: "Wheel size rear" },
-    { key: "id", label: "ID" },
-    { key: "created_at", label: "Created at", formatter: (v) => (v ? formatDateJM(String(v)) : "") },
-    { key: "updated_at", label: "Updated at", formatter: (v) => (v ? formatDateJM(String(v)) : "") },
-];
+/** Vehicle catalog export - re-export canonical columns from packages/types. */
+export { VEHICLE_CATALOG_CSV_COLUMNS } from "../../../../packages/types/src/csv-schemas";

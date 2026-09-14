@@ -84,6 +84,7 @@ export function VehicleCatalogManager() {
   /** Grouped table: make → model → variants */
   const [expandedMakes, setExpandedMakes] = useState<Set<string>>(() => new Set());
   const [expandedModels, setExpandedModels] = useState<Set<string>>(() => new Set());
+  const [classFilter, setClassFilter] = useState<"all" | "car" | "motorcycle">("all");
 
   const groupedCatalog = useMemo(() => {
     const filtered =
@@ -230,7 +231,6 @@ export function VehicleCatalogManager() {
   const [importStep, setImportStep] = useState<VehicleCatalogImportStep>("preview");
   const [importProgress, setImportProgress] = useState<{ current: number; total: number } | null>(null);
   const [importOutcome, setImportOutcome] = useState<VehicleCatalogImportOutcome | null>(null);
-  const [classFilter, setClassFilter] = useState<"all" | "car" | "motorcycle">("all");
 
   const [purgeDialogOpen, setPurgeDialogOpen] = useState(false);
   const [purgeConfirmInput, setPurgeConfirmInput] = useState("");

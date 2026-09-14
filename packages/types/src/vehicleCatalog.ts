@@ -6,6 +6,50 @@ export function vehicleClassFromUsageCategory(usage: string | null | undefined):
   return String(usage ?? "").trim() === "Motorcycle" ? "motorcycle" : "car";
 }
 
+/** Coerce any stored/API value to a valid VehicleClass (unknown → car). */
+export function normalizeVehicleClass(raw: unknown): VehicleClass {
+  return String(raw ?? "").trim().toLowerCase() === "motorcycle" ? "motorcycle" : "car";
+}
+
+/**
+ * Pending upsert: prefer explicit class hint, else derive from fleet usageCategory.
+ * Keys mirror fleet vehicle KV / Add Vehicle stamps.
+ */
+export function resolveProposedVehicleClassFromVehicle(
+  v: Record<string, unknown>,
+): VehicleClass {
+  for (const k of ["vehicle_catalog_class_hint", "vehicle_class"] as const) {
+    const x = v[k];
+    if (typeof x === "string" && x.trim() !== "") {
+      const h = x.trim().toLowerCase();
+      if (h === "motorcycle" || h === "car") return h;
+    }
+  }
+  const usage =
+    (typeof v.usageCategory === "string" && v.usageCategory) ||
+    (typeof v.usage_category === "string" && v.usage_category) ||
+    null;
+  return vehicleClassFromUsageCategory(usage);
+}
+
+/**
+ * Approve-new: body override when present; otherwise pending `proposed_vehicle_class`.
+ */
+export function resolveApproveVehicleClass(
+  bodyVehicleClass: unknown | undefined,
+  bodyHasVehicleClass: boolean,
+  proposedVehicleClass: unknown,
+): { ok: true; value: VehicleClass } | { ok: false; error: string } {
+  if (bodyHasVehicleClass && bodyVehicleClass != null && String(bodyVehicleClass).trim() !== "") {
+    const vc = String(bodyVehicleClass).trim().toLowerCase();
+    if (vc !== "car" && vc !== "motorcycle") {
+      return { ok: false, error: "vehicle_class must be car or motorcycle" };
+    }
+    return { ok: true, value: vc };
+  }
+  return { ok: true, value: normalizeVehicleClass(proposedVehicleClass) };
+}
+
 /** Row from `public.vehicle_catalog` (Super Admin vehicle master DB). */
 export interface VehicleCatalogRecord {
   id: string;

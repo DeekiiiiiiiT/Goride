@@ -82,6 +82,7 @@ export function PendingVehicleCatalogManager() {
 
   const [make, setMake] = useState("");
   const [model, setModel] = useState("");
+  const [vehicleClass, setVehicleClass] = useState<"car" | "motorcycle">("car");
   const [productionStartYear, setProductionStartYear] = useState("");
   const [productionEndYear, setProductionEndYear] = useState("");
   const [existingId, setExistingId] = useState("");
@@ -112,6 +113,7 @@ export function PendingVehicleCatalogManager() {
     setSelected(row);
     setMake(row.proposed_make);
     setModel(row.proposed_model);
+    setVehicleClass(row.proposed_vehicle_class === "motorcycle" ? "motorcycle" : "car");
     setProductionStartYear(String(row.proposed_production_start_year));
     setProductionEndYear(
       row.proposed_production_end_year == null ? "" : String(row.proposed_production_end_year),
@@ -141,6 +143,7 @@ export function PendingVehicleCatalogManager() {
       const payload: Record<string, unknown> = {
         make,
         model,
+        vehicle_class: vehicleClass,
         production_start_year: ps,
       };
       if (peTrim === "") payload.production_end_year = null;
@@ -327,7 +330,9 @@ export function PendingVehicleCatalogManager() {
             <DialogHeader className="space-y-2 text-left">
               <DialogTitle>Review pending request</DialogTitle>
               <DialogDescription className="text-pretty">
-                Approve creates a motor catalog row and links the fleet vehicle. Link existing skips catalog creation.
+                Approve creates a catalog row and links the fleet vehicle. Vehicle class controls facets, Rides
+                eligibility, and maintenance templates — set Motorcycle for two-wheelers. Link existing skips catalog
+                creation.
               </DialogDescription>
             </DialogHeader>
           </div>
@@ -362,6 +367,15 @@ export function PendingVehicleCatalogManager() {
                       // the fleet operator sent so admins can confirm without
                       // pinging back for clarifications.
                       const proposedRows: Array<{ label: string; value: string | null | undefined }> = [
+                        {
+                          label: "Vehicle class",
+                          value:
+                            selected.proposed_vehicle_class === "motorcycle"
+                              ? "Motorcycle"
+                              : selected.proposed_vehicle_class === "car"
+                                ? "Car"
+                                : selected.proposed_vehicle_class,
+                        },
                         { label: "Trim / series", value: selected.proposed_trim_series },
                         { label: "Body type", value: selected.proposed_body_type },
                         { label: "Catalog trim", value: selected.proposed_catalog_trim },
@@ -414,6 +428,24 @@ export function PendingVehicleCatalogManager() {
                 <div className="space-y-3">
                   <p className="text-sm font-medium text-foreground">Catalog values to create (editable)</p>
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                    <div className="space-y-1.5 sm:col-span-3 max-w-xs">
+                      <Label>Vehicle class</Label>
+                      <Select
+                        value={vehicleClass}
+                        onValueChange={(v) => setVehicleClass(v === "motorcycle" ? "motorcycle" : "car")}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="car">Car</SelectItem>
+                          <SelectItem value="motorcycle">Motorcycle</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-muted-foreground">
+                        Wrong class puts bikes in car dropdowns and car maintenance templates.
+                      </p>
+                    </div>
                     <div className="space-y-1.5">
                       <Label htmlFor="pending-make">Make</Label>
                       <Input id="pending-make" value={make} onChange={(e) => setMake(e.target.value)} />

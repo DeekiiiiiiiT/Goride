@@ -2,8 +2,9 @@
  * Shared vehicle catalog CSV remap / payload builders (no papaparse).
  * Apps wrap Papa.parse and call parseVehicleCatalogRowsFromRecords.
  */
-import { parseCatalogMonthFromString } from "./catalogMonthParse";
-import type { VehicleCatalogCreatePayload, VehicleClass } from "./vehicleCatalog";
+// .ts extensions required — this module is imported by Deno edge (pending catalog approve).
+import { parseCatalogMonthFromString } from "./catalogMonthParse.ts";
+import type { VehicleCatalogCreatePayload, VehicleClass } from "./vehicleCatalog.ts";
 
 /** Normalized header → API field name */
 export const ALIAS_TO_CANONICAL: Record<string, string> = {

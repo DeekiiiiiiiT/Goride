@@ -103,6 +103,8 @@ export interface Vehicle {
   catalogStatus?: VehicleCatalogStatus;
   /** Optional hints for resolving catalog when multiple variants share make/model/year */
   vehicle_catalog_trim_hint?: string;
+  /** `car` | `motorcycle` — seeded onto pending `proposed_vehicle_class`. */
+  vehicle_catalog_class_hint?: string;
   /** Market trim / grade; matches `vehicle_catalog.catalog_trim`. */
   vehicle_catalog_catalog_trim_hint?: string;
   vehicle_catalog_full_model_code_hint?: string;

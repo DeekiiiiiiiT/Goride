@@ -2,6 +2,7 @@
  * DB helpers for vehicle_catalog_pending_requests (edge service role).
  */
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
+import { resolveProposedVehicleClassFromVehicle } from "../../../packages/types/src/vehicleCatalog.ts";
 
 function parseYear(v: unknown): number {
   const n = parseInt(String(v ?? "").trim(), 10);
@@ -125,13 +126,19 @@ export async function upsertPendingFromKvVehicle(
     proposed_transmission,
     proposed_fuel_type,
     proposed_body_type,
+    proposed_vehicle_class: resolveProposedVehicleClassFromVehicle(args.vehicle),
     source: args.source,
     updated_at: new Date().toISOString(),
   };
 
   // Optional columns (added in a later migration) are stripped on legacy DBs
   // so the upsert doesn't break customers who haven't run the migration yet.
-  const OPTIONAL_NEW_COLUMNS = ["proposed_drivetrain", "proposed_transmission", "proposed_fuel_type"] as const;
+  const OPTIONAL_NEW_COLUMNS = [
+    "proposed_drivetrain",
+    "proposed_transmission",
+    "proposed_fuel_type",
+    "proposed_vehicle_class",
+  ] as const;
   const isMissingColumnError = (err: unknown): string | null => {
     const msg = err instanceof Error ? err.message : String(err ?? "");
     for (const col of OPTIONAL_NEW_COLUMNS) {
