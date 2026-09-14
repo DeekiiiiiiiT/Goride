@@ -36,8 +36,8 @@ export function FleetOwnerSignupPage({ fromRoamdriver }: { fromRoamdriver?: bool
   };
 
   return (
-    <div className="flex min-h-screen flex-col bg-slate-50 dark:bg-slate-900">
-      <div className="flex flex-1 flex-col items-center justify-center px-4 py-10">
+    <div className="flex min-h-[100dvh] flex-col bg-slate-50 safe-t safe-x safe-b dark:bg-slate-900">
+      <div className="flex flex-1 flex-col items-center justify-center py-10">
         <div className="w-full max-w-md">
           <button
             type="button"

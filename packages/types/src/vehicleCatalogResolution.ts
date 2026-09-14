@@ -9,6 +9,7 @@ export type CatalogVariantRow = {
   production_start_month?: number | null;
   production_end_year: number | null;
   production_end_month?: number | null;
+  vehicle_class?: string | null;
   trim_series?: string | null;
   generation?: string | null;
   full_model_code?: string | null;
@@ -21,6 +22,12 @@ export type CatalogVariantRow = {
   drivetrain?: string | null;
   fuel_type?: string | null;
   transmission?: string | null;
+  final_drive?: string | null;
+  starter_type?: string | null;
+  front_brake_type?: string | null;
+  rear_brake_type?: string | null;
+  front_tire_size?: string | null;
+  rear_tire_size?: string | null;
 };
 
 function norm(s: string | null | undefined): string {
@@ -70,6 +77,7 @@ export function filterCatalogRowsByFleetMonth<T extends CatalogVariantRow>(
 }
 
 export type CatalogMatchHints = {
+  vehicle_class?: string | null;
   /** Matches `vehicle_catalog.trim_series` (trim, series, or facelift phase). */
   trim_series?: string | null;
   /** Market trim / grade (`vehicle_catalog.catalog_trim`); also matches `trim_series` when catalog_trim is empty on row. */
@@ -84,7 +92,25 @@ export type CatalogMatchHints = {
   drivetrain?: string | null;
   fuel_type?: string | null;
   transmission?: string | null;
+  final_drive?: string | null;
+  starter_type?: string | null;
+  front_brake_type?: string | null;
+  rear_brake_type?: string | null;
+  front_tire_size?: string | null;
+  rear_tire_size?: string | null;
 };
+
+function narrowByField(
+  pool: CatalogVariantRow[],
+  hint: string | null | undefined,
+  get: (r: CatalogVariantRow) => string | null | undefined,
+): CatalogVariantRow[] | null {
+  const h = norm(hint);
+  if (!h) return pool;
+  const filtered = pool.filter((r) => norm(get(r)) === h);
+  if (filtered.length === 0) return null;
+  return filtered;
+}
 
 /**
  * Given candidate catalog rows (already filtered by make/model and year-in-span), return exactly one id
@@ -98,6 +124,11 @@ export function pickCatalogIdFromCandidates(
   if (candidates.length === 1) return candidates[0].id;
 
   let pool = candidates;
+
+  const vc = narrowByField(pool, hints.vehicle_class, (r) => r.vehicle_class ?? "car");
+  if (vc == null) return null;
+  pool = vc;
+  if (pool.length === 1) return pool[0].id;
 
   const tr = norm(hints.trim_series);
   if (tr) {
@@ -117,75 +148,26 @@ export function pickCatalogIdFromCandidates(
     if (pool.length === 1) return pool[0].id;
   }
 
-  const fmc = norm(hints.full_model_code);
-  if (fmc) {
-    const filtered = pool.filter((r) => norm(r.full_model_code) === fmc);
-    if (filtered.length === 0) return null;
-    pool = filtered;
-    if (pool.length === 1) return pool[0].id;
-  }
-
-  const ep = norm(hints.emissions_prefix);
-  if (ep) {
-    const filtered = pool.filter((r) => norm(r.emissions_prefix) === ep);
-    if (filtered.length === 0) return null;
-    pool = filtered;
-    if (pool.length === 1) return pool[0].id;
-  }
-
-  const tsc = norm(hints.trim_suffix_code);
-  if (tsc) {
-    const filtered = pool.filter((r) => norm(r.trim_suffix_code) === tsc);
-    if (filtered.length === 0) return null;
-    pool = filtered;
-    if (pool.length === 1) return pool[0].id;
-  }
-
-  const ch = norm(hints.chassis_code);
-  if (ch) {
-    const filtered = pool.filter((r) => norm(r.chassis_code) === ch);
-    if (filtered.length === 0) return null;
-    pool = filtered;
-    if (pool.length === 1) return pool[0].id;
-  }
-
-  const ec = norm(hints.engine_code);
-  if (ec) {
-    const filtered = pool.filter((r) => norm(r.engine_code) === ec);
-    if (filtered.length === 0) return null;
-    pool = filtered;
-    if (pool.length === 1) return pool[0].id;
-  }
-
-  const et = norm(hints.engine_type);
-  if (et) {
-    const filtered = pool.filter((r) => norm(r.engine_type) === et);
-    if (filtered.length === 0) return null;
-    pool = filtered;
-    if (pool.length === 1) return pool[0].id;
-  }
-
-  const dt = norm(hints.drivetrain);
-  if (dt) {
-    const filtered = pool.filter((r) => norm(r.drivetrain) === dt);
-    if (filtered.length === 0) return null;
-    pool = filtered;
-    if (pool.length === 1) return pool[0].id;
-  }
-
-  const ft = norm(hints.fuel_type);
-  if (ft) {
-    const filtered = pool.filter((r) => norm(r.fuel_type) === ft);
-    if (filtered.length === 0) return null;
-    pool = filtered;
-    if (pool.length === 1) return pool[0].id;
-  }
-
-  const tx = norm(hints.transmission);
-  if (tx) {
-    const filtered = pool.filter((r) => norm(r.transmission) === tx);
-    if (filtered.length === 0) return null;
-    pool = filtered;
+  for (const step of [
+    { hint: hints.full_model_code, get: (r: CatalogVariantRow) => r.full_model_code },
+    { hint: hints.emissions_prefix, get: (r: CatalogVariantRow) => r.emissions_prefix },
+    { hint: hints.trim_suffix_code, get: (r: CatalogVariantRow) => r.trim_suffix_code },
+    { hint: hints.chassis_code, get: (r: CatalogVariantRow) => r.chassis_code },
+    { hint: hints.engine_code, get: (r: CatalogVariantRow) => r.engine_code },
+    { hint: hints.engine_type, get: (r: CatalogVariantRow) => r.engine_type },
+    { hint: hints.drivetrain, get: (r: CatalogVariantRow) => r.drivetrain },
+    { hint: hints.fuel_type, get: (r: CatalogVariantRow) => r.fuel_type },
+    { hint: hints.transmission, get: (r: CatalogVariantRow) => r.transmission },
+    { hint: hints.final_drive, get: (r: CatalogVariantRow) => r.final_drive },
+    { hint: hints.starter_type, get: (r: CatalogVariantRow) => r.starter_type },
+    { hint: hints.front_brake_type, get: (r: CatalogVariantRow) => r.front_brake_type },
+    { hint: hints.rear_brake_type, get: (r: CatalogVariantRow) => r.rear_brake_type },
+    { hint: hints.front_tire_size, get: (r: CatalogVariantRow) => r.front_tire_size },
+    { hint: hints.rear_tire_size, get: (r: CatalogVariantRow) => r.rear_tire_size },
+  ] as const) {
+    const next = narrowByField(pool, step.hint, step.get);
+    if (next == null) return null;
+    pool = next;
     if (pool.length === 1) return pool[0].id;
   }
 

@@ -308,10 +308,11 @@ export const TOLL_TRANSACTION_CSV_COLUMNS: CsvColumn<any>[] = [
     { key: 'suggestionCount', label: 'suggestionCount' },
 ];
 
-/** Motor vehicle catalog export — column order and labels match `Vehicle database - new.csv` (+ system timestamps). */
+/** Vehicle catalog export — column order and labels match import aliases (+ system timestamps). */
 export const VEHICLE_CATALOG_CSV_COLUMNS: CsvColumn<VehicleCatalogRecord>[] = [
     { key: "make", label: "Make" },
     { key: "model", label: "Model" },
+    { key: "vehicle_class", label: "Vehicle class" },
     { key: "production_start_year", label: "Production start year" },
     { key: "production_end_year", label: "Production end year" },
     {
@@ -364,10 +365,22 @@ export const VEHICLE_CATALOG_CSV_COLUMNS: CsvColumn<VehicleCatalogRecord>[] = [
     { key: "rear_brake_type", label: "Rear brake type" },
     { key: "brake_size_mm", label: "Brake size mm" },
     { key: "tire_size", label: "Tire size" },
+    { key: "front_tire_size", label: "Front tire size" },
+    { key: "rear_tire_size", label: "Rear tire size" },
     { key: "bolt_pattern", label: "Bolt pattern" },
     { key: "wheel_offset_mm", label: "Wheel offset mm" },
     { key: "engine_oil_capacity_l", label: "Engine oil capacity L" },
     { key: "coolant_capacity_l", label: "Coolant capacity L" },
+    { key: "final_drive", label: "Final drive" },
+    { key: "cooling_type", label: "Cooling type" },
+    { key: "starter_type", label: "Starter type" },
+    { key: "seat_height_mm", label: "Seat height mm" },
+    { key: "front_suspension", label: "Front suspension" },
+    { key: "rear_suspension", label: "Rear suspension" },
+    { key: "gear_count", label: "Gear count" },
+    { key: "dry_weight_kg", label: "Dry weight kg" },
+    { key: "wheel_size_front", label: "Wheel size front" },
+    { key: "wheel_size_rear", label: "Wheel size rear" },
     { key: "id", label: "ID" },
     { key: "created_at", label: "Created at", formatter: (v) => (v ? formatDateJM(String(v)) : "") },
     { key: "updated_at", label: "Updated at", formatter: (v) => (v ? formatDateJM(String(v)) : "") },

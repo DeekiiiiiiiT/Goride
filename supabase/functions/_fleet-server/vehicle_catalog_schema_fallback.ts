@@ -150,10 +150,37 @@ export function stripVehicleCatalogCsvAlignmentColumns(row: Record<string, unkno
   return out;
 }
 
+/** Motorcycle class migration (`20260914010000_*`); strip when DB is behind. */
+const VEHICLE_CATALOG_MOTORCYCLE_KEYS = [
+  "vehicle_class",
+  "final_drive",
+  "cooling_type",
+  "starter_type",
+  "seat_height_mm",
+  "front_tire_size",
+  "rear_tire_size",
+  "front_suspension",
+  "rear_suspension",
+  "gear_count",
+  "dry_weight_kg",
+  "wheel_size_front",
+  "wheel_size_rear",
+] as const;
+
+export function stripVehicleCatalogMotorcycleColumns(row: Record<string, unknown>): Record<string, unknown> {
+  const out = { ...row };
+  for (const k of VEHICLE_CATALOG_MOTORCYCLE_KEYS) {
+    delete out[k];
+  }
+  return out;
+}
+
 /** Spec-pack + CSV-alignment columns removed (insert/update fallback for aged schemas). */
 export function stripVehicleCatalogOptionalMigrationColumns(row: Record<string, unknown>): Record<string, unknown> {
-  return stripVehicleCatalogSpecPackColumns(
-    stripVehicleCatalogCsvAlignmentColumns(stripVehicleCatalogFuelEconomyColumns(row)),
+  return stripVehicleCatalogMotorcycleColumns(
+    stripVehicleCatalogSpecPackColumns(
+      stripVehicleCatalogCsvAlignmentColumns(stripVehicleCatalogFuelEconomyColumns(row)),
+    ),
   );
 }
 
@@ -185,7 +212,7 @@ export function catalogRowForApi(row: Record<string, unknown>): Record<string, u
  * cache lags or the return projection omits newly added columns that still exist in Postgres).
  */
 export const VEHICLE_CATALOG_SUPABASE_SELECT =
-  "id,created_at,updated_at,make,model,production_start_year,production_end_year,production_start_month,production_end_month,trim_series,generation,full_model_code,catalog_trim,emissions_prefix,trim_suffix_code,chassis_code,generation_code,model_code,engine_code,engine_type,body_type,doors,length_mm,width_mm,height_mm,wheelbase_mm,ground_clearance_mm,engine_displacement_l,engine_displacement_cc,engine_configuration,fuel_category,fuel_type,fuel_grade,transmission,drivetrain,horsepower,torque,torque_unit,fuel_tank_capacity,fuel_tank_unit,fuel_economy_km_per_l,estimated_km_per_refuel,seating_capacity,curb_weight_kg,gross_vehicle_weight_kg,max_payload_kg,max_towing_kg,front_brake_type,rear_brake_type,brake_size_mm,tire_size,bolt_pattern,wheel_offset_mm,engine_oil_capacity_l,coolant_capacity_l";
+  "id,created_at,updated_at,make,model,vehicle_class,production_start_year,production_end_year,production_start_month,production_end_month,trim_series,generation,full_model_code,catalog_trim,emissions_prefix,trim_suffix_code,chassis_code,generation_code,model_code,engine_code,engine_type,body_type,doors,length_mm,width_mm,height_mm,wheelbase_mm,ground_clearance_mm,engine_displacement_l,engine_displacement_cc,engine_configuration,fuel_category,fuel_type,fuel_grade,transmission,drivetrain,horsepower,torque,torque_unit,fuel_tank_capacity,fuel_tank_unit,fuel_economy_km_per_l,estimated_km_per_refuel,seating_capacity,curb_weight_kg,gross_vehicle_weight_kg,max_payload_kg,max_towing_kg,front_brake_type,rear_brake_type,brake_size_mm,tire_size,bolt_pattern,wheel_offset_mm,engine_oil_capacity_l,coolant_capacity_l,final_drive,cooling_type,starter_type,seat_height_mm,front_tire_size,rear_tire_size,front_suspension,rear_suspension,gear_count,dry_weight_kg,wheel_size_front,wheel_size_rear";
 
 export async function listVehicleCatalogWithFallback(
   supabase: SupabaseClient,

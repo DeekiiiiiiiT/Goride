@@ -418,7 +418,7 @@ export function TollTagDetail({
               {isLow && <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200">Needs top-up</Badge>}
             </div>
           </div>
-          <div className="flex items-center gap-2 flex-wrap">
+          <div className="hidden md:flex items-center gap-2 flex-wrap">
             <Button
               variant="outline"
               size="sm"
@@ -455,7 +455,7 @@ export function TollTagDetail({
       </div>
 
       {differentTagCount > 0 && (
-        <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+        <div className="hidden md:block rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
           This page can include vehicle history not yet linked to this tag ({differentTagCount} row{differentTagCount === 1 ? '' : 's'}). Use “This tag only” to hide them.
         </div>
       )}
@@ -597,7 +597,7 @@ export function TollTagDetail({
                   )}
 
                   {isLow && !showAlertSettings && (
-                    <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-900">
+                    <div className="hidden md:flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-900">
                       <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
                       <div className="flex-1">
                         Balance is below your {formatJMD(lowBalanceThreshold)} alert. Top up this tag soon.

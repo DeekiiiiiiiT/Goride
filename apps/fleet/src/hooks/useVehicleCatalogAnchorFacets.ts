@@ -1,32 +1,58 @@
-// Cascading dropdown data for motor-catalog anchors (make -> model -> year).
+// Cascading dropdown data for catalog anchors (make -> model -> year).
 // Backed by GET /vehicle-catalog-facets (paginated distinct values on the server).
 
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "../components/auth/AuthContext";
 import { fetchVehicleCatalogFacets } from "../services/pendingVehicleCatalogService";
+import type { VehicleClass } from "../types/vehicleCatalog";
 
-export function useVehicleCatalogAnchorFacets(make: string, model: string) {
+export function useVehicleCatalogAnchorFacets(
+  make: string,
+  model: string,
+  vehicleClass?: VehicleClass | null,
+) {
   const { session } = useAuth();
   const token = session?.access_token;
+  const classKey = vehicleClass === "motorcycle" || vehicleClass === "car" ? vehicleClass : "";
 
   const makesQ = useQuery({
-    queryKey: ["vehicle-catalog-facets", "make"] as const,
-    queryFn: () => fetchVehicleCatalogFacets(token!, { level: "make" }),
+    queryKey: ["vehicle-catalog-facets", "make", classKey] as const,
+    queryFn: () =>
+      fetchVehicleCatalogFacets(token!, {
+        level: "make",
+        ...(classKey ? { vehicle_class: classKey } : {}),
+      }),
     enabled: Boolean(token),
     staleTime: 300_000,
   });
 
   const modelsQ = useQuery({
-    queryKey: ["vehicle-catalog-facets", "model", make.trim().toLowerCase()] as const,
-    queryFn: () => fetchVehicleCatalogFacets(token!, { level: "model", make: make.trim() }),
+    queryKey: ["vehicle-catalog-facets", "model", make.trim().toLowerCase(), classKey] as const,
+    queryFn: () =>
+      fetchVehicleCatalogFacets(token!, {
+        level: "model",
+        make: make.trim(),
+        ...(classKey ? { vehicle_class: classKey } : {}),
+      }),
     enabled: Boolean(token) && make.trim().length >= 2,
     staleTime: 300_000,
   });
 
   const yearsQ = useQuery({
-    queryKey: ["vehicle-catalog-facets", "year", make.trim().toLowerCase(), model.trim().toLowerCase()] as const,
+    queryKey: [
+      "vehicle-catalog-facets",
+      "year",
+      make.trim().toLowerCase(),
+      model.trim().toLowerCase(),
+      classKey,
+    ] as const,
     queryFn: () =>
-      fetchVehicleCatalogFacets(token!, { level: "year", make: make.trim(), model: model.trim() }),
+      fetchVehicleCatalogFacets(token!, {
+        level: "year",
+        make: make.trim(),
+        model: model.trim(),
+        ...(classKey ? { vehicle_class: classKey } : {}),
+      }),
     enabled: Boolean(token) && make.trim().length >= 2 && model.trim().length >= 2,
     staleTime: 300_000,
   });

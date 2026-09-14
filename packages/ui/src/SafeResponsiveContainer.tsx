@@ -63,15 +63,20 @@ const SafeResponsiveContainer = (props: ResponsiveContainerProps) => {
 
   const { width = '100%', height = '100%', minWidth, minHeight, className, style, children } = props;
 
+  const toCssSize = (value: string | number | undefined, fallback?: string): string | undefined => {
+    if (value == null) return fallback;
+    return typeof value === 'number' ? `${value}px` : value;
+  };
+
   return (
     <div 
       ref={divRef} 
-      className={className}
+      className={className == null ? undefined : String(className)}
       style={{ 
-        width: width, 
-        height: height, 
-        minWidth: minWidth ?? 0, 
-        minHeight: minHeight ?? 0,
+        width: toCssSize(width, '100%'), 
+        height: toCssSize(height, '100%'), 
+        minWidth: toCssSize(minWidth) ?? 0, 
+        minHeight: toCssSize(minHeight) ?? 0,
         ...style 
       }}
     >

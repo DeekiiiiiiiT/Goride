@@ -213,7 +213,7 @@ export function PendingVehicleCatalogManager() {
     <div className="p-6 space-y-4">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-xl font-semibold text-slate-900">Pending motor vehicles</h1>
+          <h1 className="text-xl font-semibold text-slate-900">Pending catalog</h1>
           <p className="text-sm text-slate-600 mt-1">
             Fleet-submitted make/model and production years queued until added to the motor catalog or linked to an existing entry.
           </p>

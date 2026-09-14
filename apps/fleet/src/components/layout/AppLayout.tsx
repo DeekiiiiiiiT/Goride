@@ -54,7 +54,7 @@ export function AppLayout({ children, currentPage, onNavigate, onLogout }: AppLa
           </div>
 
           {/* Mobile header: hamburger + page title */}
-          <header className="sticky top-0 z-40 flex h-14 items-center gap-2 border-b border-slate-200 bg-white safe-t safe-x md:hidden dark:border-slate-800 dark:bg-slate-950">
+          <header className="sticky top-0 z-40 flex min-h-14 items-center gap-2 border-b border-slate-200 bg-white safe-t safe-x md:hidden dark:border-slate-800 dark:bg-slate-950">
             <SidebarTrigger className="min-h-11 min-w-11 shrink-0" />
             <h1 className="min-w-0 flex-1 truncate pr-11 text-center text-base font-semibold text-slate-900 dark:text-slate-100">
               {pageTitle}

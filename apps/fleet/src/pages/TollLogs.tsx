@@ -390,12 +390,12 @@ function TollLogsPageInner() {
           </div>
           <div>
             <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Toll Logs</h1>
-            <p className="text-sm text-slate-500 dark:text-slate-400">
+            <p className="hidden md:block text-sm text-slate-500 dark:text-slate-400">
               Complete ledger of all toll transactions across your fleet.
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="hidden md:flex items-center gap-2">
           <Button
             variant="outline"
             size="sm"

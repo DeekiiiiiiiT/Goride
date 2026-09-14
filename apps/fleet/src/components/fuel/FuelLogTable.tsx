@@ -834,6 +834,53 @@ export function FuelLogTable({
         showRecalculate={activeView === 'cycles' && can('data.backfill')}
         isRecalculating={isRecalculating}
         onRecalculate={handleRecalculateClick}
+        afterTabs={
+          <div>
+            {activeView === 'transactions' && summaryLoading && !hasExtraTxnFilters && !serverSummary ? (
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <Skeleton key={i} className="h-14 w-full rounded-lg" />
+                ))}
+              </div>
+            ) : (
+              <FuelLogKpiRow
+                tiles={
+                  activeView === 'transactions'
+                    ? transactionKpisToTiles(transactionKpis, {
+                        distanceKm: periodDistance.primaryKm,
+                        distanceHint:
+                          periodDistance.carriedInKm > 0
+                            ? `${periodDistance.carriedInKm.toLocaleString()} km before this period excluded`
+                            : periodDistance.primaryLabel,
+                        integrityActive: filterIntegrity === 'imbalanced',
+                        sourceHint: `${transactionKpis.sourcePortal} portal · ${transactionKpis.sourceAdmin} admin · ${transactionKpis.sourceAnchors} anchors`,
+                      })
+                    : cycleKpisToTiles(cycleKpis, {
+                        distanceKm: trustedPeriodTotals.distanceKm,
+                        exceptionsActive: focusExceptions,
+                      })
+                }
+                onTileClick={(tileId) => {
+                  if (tileId === 'imbalanced') {
+                    const next = filterIntegrity === 'imbalanced' ? 'all' : 'imbalanced';
+                    setFilterIntegrity(next);
+                    setQuery({ integrity: next === 'all' ? undefined : next });
+                    return;
+                  }
+                  if (tileId === 'exceptions') {
+                    setFocusExceptions(true);
+                    requestAnimationFrame(() => {
+                      exceptionQueueRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    });
+                  }
+                }}
+              />
+            )}
+            {activeView === 'transactions' && !hasExtraTxnFilters && showLocalTotalsHint ? (
+              <div className="mt-1 text-[10px] text-slate-400">Local totals</div>
+            ) : null}
+          </div>
+        }
       />
 
       {activeView === 'cycles' && isPeriodOpen && (
@@ -842,52 +889,6 @@ export function FuelLogTable({
           is excluded from period totals.
         </div>
       )}
-
-      <div className="mb-2">
-        {activeView === 'transactions' && summaryLoading && !hasExtraTxnFilters && !serverSummary ? (
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
-            {Array.from({ length: 5 }).map((_, i) => (
-              <Skeleton key={i} className="h-14 w-full rounded-lg" />
-            ))}
-          </div>
-        ) : (
-          <FuelLogKpiRow
-            tiles={
-              activeView === 'transactions'
-                ? transactionKpisToTiles(transactionKpis, {
-                    distanceKm: periodDistance.primaryKm,
-                    distanceHint:
-                      periodDistance.carriedInKm > 0
-                        ? `${periodDistance.carriedInKm.toLocaleString()} km before this period excluded`
-                        : periodDistance.primaryLabel,
-                    integrityActive: filterIntegrity === 'imbalanced',
-                    sourceHint: `${transactionKpis.sourcePortal} portal · ${transactionKpis.sourceAdmin} admin · ${transactionKpis.sourceAnchors} anchors`,
-                  })
-                : cycleKpisToTiles(cycleKpis, {
-                    distanceKm: trustedPeriodTotals.distanceKm,
-                    exceptionsActive: focusExceptions,
-                  })
-            }
-            onTileClick={(tileId) => {
-              if (tileId === 'imbalanced') {
-                const next = filterIntegrity === 'imbalanced' ? 'all' : 'imbalanced';
-                setFilterIntegrity(next);
-                setQuery({ integrity: next === 'all' ? undefined : next });
-                return;
-              }
-              if (tileId === 'exceptions') {
-                setFocusExceptions(true);
-                requestAnimationFrame(() => {
-                  exceptionQueueRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                });
-              }
-            }}
-          />
-        )}
-        {activeView === 'transactions' && !hasExtraTxnFilters && showLocalTotalsHint ? (
-          <div className="mt-1 text-[10px] text-slate-400">Local totals</div>
-        ) : null}
-      </div>
 
       <div className="rounded-md border bg-white overflow-x-auto">
         {activeView === 'transactions' ? (

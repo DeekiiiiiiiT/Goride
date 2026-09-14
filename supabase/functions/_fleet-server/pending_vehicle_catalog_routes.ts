@@ -168,12 +168,22 @@ export function registerPendingVehicleCatalogRoutes(
         const level = (c.req.query("level") ?? "").trim().toLowerCase();
         const make = (c.req.query("make") ?? "").trim();
         const model = (c.req.query("model") ?? "").trim();
+        const vehicleClassRaw = (c.req.query("vehicle_class") ?? "").trim().toLowerCase();
+        const vehicleClass =
+          vehicleClassRaw === "car" || vehicleClassRaw === "motorcycle" ? vehicleClassRaw : "";
+
+        const applyClassFilter = <T extends { eq: (col: string, val: string) => T }>(q: T): T => {
+          if (vehicleClass) return q.eq("vehicle_class", vehicleClass);
+          return q;
+        };
 
         if (level === "make") {
           const makes = new Set<string>();
           let from = 0;
           for (;;) {
-            const { data, error } = await supabase.from("vehicle_catalog").select("make").range(from, from + FACET_PAGE - 1);
+            let q = supabase.from("vehicle_catalog").select("make");
+            q = applyClassFilter(q);
+            const { data, error } = await q.range(from, from + FACET_PAGE - 1);
             if (error) throw error;
             if (!data?.length) break;
             for (const r of data) {
@@ -193,11 +203,12 @@ export function registerPendingVehicleCatalogRoutes(
           const models = new Set<string>();
           let from = 0;
           for (;;) {
-            const { data, error } = await supabase
+            let q = supabase
               .from("vehicle_catalog")
               .select("model")
-              .ilike("make", `%${make}%`)
-              .range(from, from + FACET_PAGE - 1);
+              .ilike("make", `%${make}%`);
+            q = applyClassFilter(q);
+            const { data, error } = await q.range(from, from + FACET_PAGE - 1);
             if (error) throw error;
             if (!data?.length) break;
             for (const r of data) {
@@ -219,12 +230,13 @@ export function registerPendingVehicleCatalogRoutes(
           const acc: Record<string, unknown>[] = [];
           let from = 0;
           for (;;) {
-            const { data, error } = await supabase
+            let q = supabase
               .from("vehicle_catalog")
               .select("*")
               .ilike("make", `%${make}%`)
-              .ilike("model", `%${model}%`)
-              .range(from, from + FACET_PAGE - 1);
+              .ilike("model", `%${model}%`);
+            q = applyClassFilter(q);
+            const { data, error } = await q.range(from, from + FACET_PAGE - 1);
             if (error) throw error;
             if (!data?.length) break;
             acc.push(...(data as Record<string, unknown>[]));
@@ -266,6 +278,9 @@ export function registerPendingVehicleCatalogRoutes(
         const engineTypeQ = (c.req.query("engine_type") ?? "").trim();
         const catalogTrimQ = (c.req.query("catalog_trim") ?? "").trim();
         const fullModelCodeQ = (c.req.query("full_model_code") ?? "").trim();
+        const vehicleClassQ = (c.req.query("vehicle_class") ?? "").trim().toLowerCase();
+        const vehicleClassFilter =
+          vehicleClassQ === "car" || vehicleClassQ === "motorcycle" ? vehicleClassQ : "";
         const fleetMonth = monthQ === "" ? null : parseInt(monthQ, 10);
         const monthFilter =
           fleetMonth != null && Number.isFinite(fleetMonth) && fleetMonth >= 1 && fleetMonth <= 12
@@ -297,6 +312,7 @@ export function registerPendingVehicleCatalogRoutes(
           if (engineTypeQ.length >= 1) q = q.ilike("engine_type", `%${engineTypeQ}%`);
           if (catalogTrimQ.length >= 1) q = q.ilike("catalog_trim", `%${catalogTrimQ}%`);
           if (fullModelCodeQ.length >= 1) q = q.ilike("full_model_code", `%${fullModelCodeQ}%`);
+          if (vehicleClassFilter) q = q.eq("vehicle_class", vehicleClassFilter);
           return q.order("make").order("model");
         };
 

@@ -1,6 +1,16 @@
-/** Row from `public.vehicle_catalog` (Super Admin motor vehicle master DB). */
+/** Discriminator for car vs motorcycle catalog rows. */
+export type VehicleClass = "car" | "motorcycle";
+
+/** Map fleet `usageCategory` onto catalog class (Motorcycle → motorcycle; everything else → car). */
+export function vehicleClassFromUsageCategory(usage: string | null | undefined): VehicleClass {
+  return String(usage ?? "").trim() === "Motorcycle" ? "motorcycle" : "car";
+}
+
+/** Row from `public.vehicle_catalog` (Super Admin vehicle master DB). */
 export interface VehicleCatalogRecord {
   id: string;
+  /** `car` (default) or `motorcycle`. */
+  vehicle_class?: VehicleClass;
   make: string;
   model: string;
   /** First calendar year this variant was produced */
@@ -72,6 +82,21 @@ export interface VehicleCatalogRecord {
   wheel_offset_mm?: number | null;
   engine_oil_capacity_l?: number | null;
   coolant_capacity_l?: number | null;
+  /** Motorcycle: chain / belt / shaft. */
+  final_drive?: string | null;
+  /** Motorcycle: air / oil / liquid. */
+  cooling_type?: string | null;
+  /** Motorcycle: electric / kick / both. */
+  starter_type?: string | null;
+  seat_height_mm?: number | null;
+  front_tire_size?: string | null;
+  rear_tire_size?: string | null;
+  front_suspension?: string | null;
+  rear_suspension?: string | null;
+  gear_count?: number | null;
+  dry_weight_kg?: number | null;
+  wheel_size_front?: string | null;
+  wheel_size_rear?: string | null;
   created_at: string;
   updated_at: string;
 }

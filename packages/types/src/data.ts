@@ -1095,16 +1095,8 @@ export interface ImportAuditState {
 }
 
 // --- Phase 4: Toll Management ---
-
-export interface TollTag {
-  id: string;
-  provider: string; // e.g., 'T-Tag', 'E-ZPass'
-  tagNumber: string;
-  status: 'Active' | 'Inactive' | 'Lost';
-  assignedVehicleId?: string; // Links to vehicle
-  assignedVehiclePlate?: string; // Derived for display
-  addedOn: string; // ISO Date
-}
+// Canonical TollTag lives in ./vehicle (richer fleet shape). Do not re-export a
+// duplicate here — barrel export * from both modules collides at the package root.
 
 // --- Phase 5: Claims & Disputes ---
 

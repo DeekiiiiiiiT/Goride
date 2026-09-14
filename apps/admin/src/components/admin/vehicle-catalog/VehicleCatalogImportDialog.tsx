@@ -17,6 +17,7 @@ export type VehicleCatalogImportStep = "preview" | "importing" | "result";
 
 export type VehicleCatalogImportOutcome = {
   imported: number;
+  updated: number;
   failed: number;
   errors: string[];
   /** Present when API accepted rows but omitted columns the CSV had (remote DB / Edge out of date). */
@@ -27,6 +28,8 @@ export type VehicleCatalogImportDialogProps = {
   open: boolean;
   importStep: VehicleCatalogImportStep;
   importPreview: ParsedCatalogImportRow[] | null;
+  /** Headers with no alias — blocks Import until removed or aliases registered. */
+  unknownHeaders: string[];
   importProgress: { current: number; total: number } | null;
   importOutcome: VehicleCatalogImportOutcome | null;
   onOpenChange: (open: boolean) => void;
@@ -38,12 +41,16 @@ export function VehicleCatalogImportDialog({
   open,
   importStep,
   importPreview,
+  unknownHeaders,
   importProgress,
   importOutcome,
   onOpenChange,
   onClose,
   onRunImport,
 }: VehicleCatalogImportDialogProps) {
+  const hasUnknown = unknownHeaders.length > 0;
+  const readyCount = importPreview?.filter((r) => r.payload).length ?? 0;
+
   return (
     <Dialog
       open={open}
@@ -66,16 +73,16 @@ export function VehicleCatalogImportDialog({
               ? "Importing…"
               : importStep === "result"
                 ? "Import finished"
-                : "Import motor catalog"}
+                : "Import vehicle catalog"}
           </DialogTitle>
           {importStep === "preview" && (
             <DialogDescription className="text-slate-600 text-sm leading-relaxed">
               Required columns: <span className="font-medium text-slate-800">Make</span>,{" "}
               <span className="font-medium text-slate-800">Model</span>,{" "}
-              <span className="font-medium text-slate-800">Production start year</span>. Use{" "}
-              <span className="font-medium text-slate-800">Export CSV</span> for a compatible template. End year{" "}
-              <span className="font-medium text-slate-800">9999</span> or empty means ongoing.{" "}
-              <span className="font-medium text-slate-800">Engine type</span> is free text (e.g. N/A, Turbo, Hybrid).
+              <span className="font-medium text-slate-800">Production start year</span>. Optional{" "}
+              <span className="font-medium text-slate-800">Vehicle class</span> (car/motorcycle; defaults to car). Use{" "}
+              <span className="font-medium text-slate-800">Export CSV</span> for a compatible template. Rows with a valid{" "}
+              <span className="font-medium text-slate-800">ID</span> update existing catalog entries.
             </DialogDescription>
           )}
           {importStep === "importing" && (
@@ -85,16 +92,39 @@ export function VehicleCatalogImportDialog({
           )}
           {importStep === "result" && importOutcome && (
             <DialogDescription className="sr-only">
-              Import completed with {importOutcome.imported} imported and {importOutcome.failed} failed.
+              Import completed with {importOutcome.imported} created, {importOutcome.updated} updated, and{" "}
+              {importOutcome.failed} failed.
             </DialogDescription>
           )}
         </DialogHeader>
 
         {importStep === "preview" && importPreview && (
           <div className="space-y-3 py-1">
+            {hasUnknown && (
+              <div className="rounded-xl border border-red-300/90 bg-red-50 p-4 text-sm text-red-950">
+                <p className="font-semibold text-red-950">Unknown CSV columns — import blocked</p>
+                <p className="mt-2 leading-relaxed text-red-900/95">
+                  These headers are not recognized and would be silently dropped. Remove them or register aliases before
+                  importing:
+                </p>
+                <ul className="mt-2 list-disc space-y-1 pl-5 font-mono text-xs text-red-900">
+                  {unknownHeaders.map((h) => (
+                    <li key={h}>{h}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
             <p className="text-sm text-slate-700">
-              <span className="font-semibold text-slate-900">{importPreview.filter((r) => r.payload).length}</span>{" "}
-              row(s) ready to import
+              <span className="font-semibold text-slate-900">{readyCount}</span> row(s) ready to import
+              {importPreview.some((r) => r.catalogId) && (
+                <>
+                  {" "}
+                  ·{" "}
+                  <span className="text-slate-600">
+                    {importPreview.filter((r) => r.catalogId).length} with ID (will update)
+                  </span>
+                </>
+              )}
               {importPreview.some((r) => r.parseError) && (
                 <>
                   {" "}
@@ -156,13 +186,24 @@ export function VehicleCatalogImportDialog({
 
         {importStep === "result" && importOutcome && (
           <div className="space-y-4 py-1">
-            {importOutcome.failed === 0 && importOutcome.imported > 0 && (
+            {importOutcome.failed === 0 && (importOutcome.imported > 0 || importOutcome.updated > 0) && (
               <div className="flex gap-3 rounded-xl border border-emerald-200/80 bg-emerald-50/90 p-4">
                 <CheckCircle2 className="h-10 w-10 shrink-0 text-emerald-600" strokeWidth={1.75} aria-hidden />
                 <div className="min-w-0 space-y-1">
                   <p className="text-sm font-semibold text-emerald-950">Import successful</p>
                   <p className="text-sm text-emerald-900/90">
-                    {importOutcome.imported} vehicle{importOutcome.imported === 1 ? "" : "s"} added to the catalog.
+                    {importOutcome.imported > 0 && (
+                      <>
+                        {importOutcome.imported} entr{importOutcome.imported === 1 ? "y" : "ies"} added
+                      </>
+                    )}
+                    {importOutcome.imported > 0 && importOutcome.updated > 0 && "; "}
+                    {importOutcome.updated > 0 && (
+                      <>
+                        {importOutcome.updated} updated
+                      </>
+                    )}
+                    .
                   </p>
                 </div>
               </div>
@@ -179,7 +220,7 @@ export function VehicleCatalogImportDialog({
               </div>
             )}
 
-            {importOutcome.imported === 0 && importOutcome.failed > 0 && (
+            {importOutcome.imported === 0 && importOutcome.updated === 0 && importOutcome.failed > 0 && (
               <div className="flex gap-3 rounded-xl border border-red-200/80 bg-red-50/90 p-4">
                 <XCircle className="h-10 w-10 shrink-0 text-red-600" strokeWidth={1.75} aria-hidden />
                 <div className="min-w-0 space-y-1">
@@ -192,13 +233,14 @@ export function VehicleCatalogImportDialog({
               </div>
             )}
 
-            {importOutcome.imported > 0 && importOutcome.failed > 0 && (
+            {(importOutcome.imported > 0 || importOutcome.updated > 0) && importOutcome.failed > 0 && (
               <div className="flex gap-3 rounded-xl border border-amber-200/80 bg-amber-50/90 p-4">
                 <CheckCircle2 className="h-10 w-10 shrink-0 text-amber-600" strokeWidth={1.75} aria-hidden />
                 <div className="min-w-0 space-y-1">
                   <p className="text-sm font-semibold text-amber-950">Partially imported</p>
                   <p className="text-sm text-amber-950/90">
-                    <span className="font-medium tabular-nums">{importOutcome.imported}</span> saved,{" "}
+                    <span className="font-medium tabular-nums">{importOutcome.imported}</span> created,{" "}
+                    <span className="font-medium tabular-nums">{importOutcome.updated}</span> updated,{" "}
                     <span className="font-medium tabular-nums">{importOutcome.failed}</span> failed.
                   </p>
                 </div>
@@ -229,7 +271,7 @@ export function VehicleCatalogImportDialog({
               <Button
                 type="button"
                 onClick={() => void onRunImport()}
-                disabled={!importPreview?.some((r) => r.payload)}
+                disabled={hasUnknown || !importPreview?.some((r) => r.payload)}
                 className="gap-2"
               >
                 Import

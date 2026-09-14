@@ -289,12 +289,16 @@ export function AddVehicleModal({
   const [verifySearchDrivetrain, setVerifySearchDrivetrain] = useState('');
   const [verifySearchTransmission, setVerifySearchTransmission] = useState('');
 
+  const catalogClass =
+    formData.usageCategory === "Motorcycle" ? ("motorcycle" as const) : ("car" as const);
+
   // MMY-only fetch: distinct chassis codes for the mandatory chassis dropdown.
   const { facets: verifyMmyFacets, loading: verifyMmyLoading } = useCatalogCandidates({
     make: verifySearchMake,
     model: verifySearchModel,
     year: verifySearchYear,
     skipChassisFilter: true,
+    vehicle_class: catalogClass,
   });
   // After chassis is chosen: drivetrain / transmission facets + picker narrowing.
   const { facets: verifyFacets, loading: verifyFacetsLoading } = useCatalogCandidates({
@@ -302,6 +306,7 @@ export function AddVehicleModal({
     model: verifySearchModel,
     year: verifySearchYear,
     chassis: verifySearchChassis,
+    vehicle_class: catalogClass,
   });
 
   const {
@@ -311,7 +316,7 @@ export function AddVehicleModal({
     loadingMakes: verifyMakesLoading,
     loadingModels: verifyModelsLoading,
     loadingYears: verifyYearsLoading,
-  } = useVehicleCatalogAnchorFacets(verifySearchMake, verifySearchModel);
+  } = useVehicleCatalogAnchorFacets(verifySearchMake, verifySearchModel, catalogClass);
 
   const onVerifyMakeChange = useCallback((v: string) => {
     const next = v.trim();
@@ -1271,6 +1276,7 @@ export function AddVehicleModal({
                         drivetrain={verifySearchDrivetrain}
                         transmission={verifySearchTransmission}
                         chassis_code={verifySearchChassis}
+                        vehicle_class={catalogClass}
                         value={selectedCatalogRow?.id ?? null}
                         onChange={handleCatalogPickerChange}
                         disabled={isLoading}

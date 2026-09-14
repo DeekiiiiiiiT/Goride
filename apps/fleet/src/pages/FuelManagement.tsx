@@ -1442,6 +1442,7 @@ function FuelManagementInner({
     <FuelLayout 
         title={pageTitle}
         description={pageDescription}
+        hideDescriptionOnMobile={activeTab === 'logs'}
         embedded={embedded}
         onAddTransaction={(activeTab === 'configuration' || activeTab === 'cards' || activeTab === 'reconciliation') ? undefined : () => {
             setEditingLog(null);
@@ -1449,7 +1450,11 @@ function FuelManagementInner({
         }}
     >
       {(activeTab !== 'configuration' && activeTab !== 'cards') && (
-        <div className="flex justify-end items-center gap-3 mb-4">
+        <div
+          className={`flex justify-end items-center gap-3 mb-4${
+            activeTab === 'logs' ? ' hidden md:flex' : ''
+          }`}
+        >
             {isSyncing && (
                 <div className="flex items-center gap-2 text-xs font-bold text-amber-600 bg-amber-50 px-3 py-1.5 rounded-full border border-amber-100 animate-pulse">
                     <Loader2 className="h-3 w-3 animate-spin" />

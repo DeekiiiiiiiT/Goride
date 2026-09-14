@@ -305,7 +305,7 @@ export function LoginPage() {
   );
 
   return (
-    <div className="min-h-screen flex bg-white dark:bg-slate-950">
+    <div className="min-h-[100dvh] flex bg-white dark:bg-slate-950">
       
       {/* ── LEFT PANEL: Branding ── */}
       <div className="relative hidden lg:flex lg:w-[55%] xl:w-[58%] flex-col justify-between overflow-hidden">
@@ -384,9 +384,9 @@ export function LoginPage() {
       </div>
 
       {/* ── RIGHT PANEL: Auth Form ── */}
-      <div className="flex-1 flex flex-col min-h-screen">
+      <div className="flex-1 flex flex-col min-h-[100dvh]">
         {/* Mobile header */}
-        <div className="lg:hidden flex items-center justify-between px-6 py-4 border-b border-slate-100 dark:border-slate-800">
+        <div className="lg:hidden flex items-center justify-between py-4 border-b border-slate-100 safe-t safe-x dark:border-slate-800">
           <div className="flex items-center gap-2">
             <div className="h-8 w-8 rounded-lg bg-indigo-600 flex items-center justify-center">
               <Car className="h-4 w-4 text-white" />
@@ -396,7 +396,7 @@ export function LoginPage() {
         </div>
 
         {/* Form area */}
-        <div className="flex-1 flex items-center justify-center px-6 sm:px-10 py-10">
+        <div className="flex-1 flex items-center justify-center px-6 sm:px-10 py-10 pb-[max(1rem,env(safe-area-inset-bottom,0px))]">
           <div className="w-full max-w-[420px]">
             
             {/* Heading — hide when on step 2 (business type picker has its own heading) */}

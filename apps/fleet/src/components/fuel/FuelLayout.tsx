@@ -8,6 +8,8 @@ interface FuelLayoutProps {
   onAddTransaction?: () => void;
   title?: string;
   description?: string;
+  /** Hide subtitle under md — used to declutter Transaction Logs on phones. */
+  hideDescriptionOnMobile?: boolean;
   /** When true, omit page H1 — Week Reconciliation hub owns chrome. */
   embedded?: boolean;
 }
@@ -17,6 +19,7 @@ export function FuelLayout({
   onAddTransaction,
   title = 'Fuel Management',
   description = 'Track consumption, reconcile expenses, and manage gas cards.',
+  hideDescriptionOnMobile = false,
   embedded = false,
 }: FuelLayoutProps) {
   return (
@@ -25,7 +28,14 @@ export function FuelLayout({
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div>
             <h1 className="text-2xl font-bold text-slate-900 tracking-tight">{title}</h1>
-            <p className="text-sm text-slate-500 mt-1">{description}</p>
+            <p
+              className={cn(
+                'text-sm text-slate-500 mt-1',
+                hideDescriptionOnMobile && 'hidden md:block',
+              )}
+            >
+              {description}
+            </p>
           </div>
         </div>
       ) : null}

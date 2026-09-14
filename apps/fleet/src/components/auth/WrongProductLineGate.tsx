@@ -15,7 +15,7 @@ export function WrongProductLineGate({ message, expectedProductLine, onSignOut }
   const targetLabel = targetUrl.includes('enterprise') ? 'Roam Enterprise' : 'Roam Fleet';
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 dark:bg-slate-950 px-6">
+    <div className="min-h-[100dvh] flex flex-col items-center justify-center bg-slate-50 safe-t safe-x safe-b dark:bg-slate-950">
       <div className="max-w-md w-full rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-8 shadow-sm text-center space-y-4">
         <h1 className="text-lg font-semibold text-slate-900 dark:text-white">Wrong product</h1>
         <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">

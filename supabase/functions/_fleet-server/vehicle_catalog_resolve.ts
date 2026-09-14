@@ -31,7 +31,12 @@ function parseFleetProductionMonth(v: Record<string, unknown>): number | null {
 }
 
 function hintsFromKvVehicle(v: Record<string, unknown>): CatalogMatchHints {
+  const usage = pickStr(v, ["usageCategory", "usage_category"]);
+  const vehicle_class =
+    pickStr(v, ["vehicle_class", "vehicle_catalog_class_hint"]) ??
+    (usage === "Motorcycle" ? "motorcycle" : "car");
   return {
+    vehicle_class,
     trim_series: pickStr(v, ["vehicle_catalog_trim_hint", "catalog_trim_hint", "trim_series"]),
     catalog_trim: pickStr(v, ["vehicle_catalog_catalog_trim_hint", "catalog_trim"]),
     full_model_code: pickStr(v, ["vehicle_catalog_full_model_code_hint", "full_model_code"]),
@@ -49,6 +54,12 @@ function hintsFromKvVehicle(v: Record<string, unknown>): CatalogMatchHints {
     drivetrain: pickStr(v, ["vehicle_catalog_drivetrain_hint", "drivetrain"]),
     fuel_type: pickStr(v, ["vehicle_catalog_fuel_type_hint", "fuel_type"]),
     transmission: pickStr(v, ["vehicle_catalog_transmission_hint", "transmission"]),
+    final_drive: pickStr(v, ["vehicle_catalog_final_drive_hint", "final_drive"]),
+    starter_type: pickStr(v, ["vehicle_catalog_starter_type_hint", "starter_type"]),
+    front_brake_type: pickStr(v, ["vehicle_catalog_front_brake_hint", "front_brake_type"]),
+    rear_brake_type: pickStr(v, ["vehicle_catalog_rear_brake_hint", "rear_brake_type"]),
+    front_tire_size: pickStr(v, ["vehicle_catalog_front_tire_hint", "front_tire_size"]),
+    rear_tire_size: pickStr(v, ["vehicle_catalog_rear_tire_hint", "rear_tire_size"]),
   };
 }
 
@@ -66,7 +77,7 @@ export async function resolveVehicleCatalogIdFromMakeModelYear(
   const mo = model.trim().toLowerCase();
 
   const selModern =
-    "id, make, model, production_start_year, production_start_month, production_end_year, production_end_month, trim_series, generation, full_model_code, catalog_trim, emissions_prefix, trim_suffix_code, chassis_code, engine_code, engine_type, drivetrain, fuel_type, transmission";
+    "id, make, model, vehicle_class, production_start_year, production_start_month, production_end_year, production_end_month, trim_series, generation, full_model_code, catalog_trim, emissions_prefix, trim_suffix_code, chassis_code, engine_code, engine_type, drivetrain, fuel_type, transmission, final_drive, starter_type, front_brake_type, rear_brake_type, front_tire_size, rear_tire_size";
   const selLegacy =
     "id, make, model, trim_series, generation_code, drivetrain, fuel_type, transmission";
 

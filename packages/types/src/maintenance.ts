@@ -226,6 +226,8 @@ export interface MaintenanceTaskTemplate {
   id: string;
   vehicle_catalog_id: string | null;
   template_scope?: MaintenanceTemplateScope;
+  /** Classes this template may bootstrap onto (`car`, `motorcycle`). Defaults to car-only. */
+  applicable_vehicle_classes?: string[] | null;
   task_code?: string | null;
   task_name: string;
   description: string | null;

@@ -2,10 +2,10 @@
  * CSV helpers shared by @roam/types schema modules (csv-schemas, tollLog).
  */
 
-export function formatDateJM(value: string | Date | null | undefined): string {
-  if (!value) return '';
+export function formatDateJM(value: unknown): string {
+  if (value == null || value === '') return '';
   try {
-    const d = typeof value === 'string' ? new Date(value) : value;
+    const d = value instanceof Date ? value : new Date(String(value));
     if (isNaN(d.getTime())) return String(value);
     const day = String(d.getDate()).padStart(2, '0');
     const month = String(d.getMonth() + 1).padStart(2, '0');

@@ -22,6 +22,7 @@ export type VehicleCatalogMatchParams = {
   /** OEM chassis / frame index (e.g. M900A) */
   chassis_code?: string;
   body_type?: string;
+  vehicle_class?: string;
   // Hybrid catalog matching disambiguators (server-side ilike filters):
   drivetrain?: string;
   transmission?: string;
@@ -50,6 +51,7 @@ function buildVehicleCatalogMatchSearchParams(params: VehicleCatalogMatchParams)
   if (params.trim_series) sp.set("trim_series", params.trim_series);
   if (params.chassis_code) sp.set("chassis_code", params.chassis_code);
   if (params.body_type) sp.set("body_type", params.body_type);
+  if (params.vehicle_class) sp.set("vehicle_class", params.vehicle_class);
   if (params.drivetrain) sp.set("drivetrain", params.drivetrain);
   if (params.transmission) sp.set("transmission", params.transmission);
   if (params.fuel_type) sp.set("fuel_type", params.fuel_type);
@@ -85,12 +87,18 @@ export type VehicleCatalogFacetsResponse = {
 /** Distinct catalog values for align / picker dropdowns (fleet, vehicles.view). */
 export async function fetchVehicleCatalogFacets(
   accessToken: string,
-  params: { level: VehicleCatalogFacetLevel; make?: string; model?: string },
+  params: {
+    level: VehicleCatalogFacetLevel;
+    make?: string;
+    model?: string;
+    vehicle_class?: string;
+  },
 ): Promise<VehicleCatalogFacetsResponse> {
   const sp = new URLSearchParams();
   sp.set("level", params.level);
   if (params.make) sp.set("make", params.make);
   if (params.model) sp.set("model", params.model);
+  if (params.vehicle_class) sp.set("vehicle_class", params.vehicle_class);
   const res = await fetch(`${API_ENDPOINTS.fleet}/vehicle-catalog-facets?${sp.toString()}`, {
     headers: edgeHeaders(accessToken),
   });

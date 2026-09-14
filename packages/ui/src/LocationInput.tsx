@@ -115,17 +115,19 @@ const LocationInput = React.forwardRef<HTMLInputElement, LocationInputProps>(
 
       setInternalIsLoading(true);
       try {
-        const coords = await getCurrentPosition();
-        const address = await reverseGeocode(coords.latitude, coords.longitude);
-        
+        const position = await getCurrentPosition();
+        const { latitude, longitude } = position.coords;
+        const address = await reverseGeocode(latitude, longitude);
+
         // Call the parent's onAddressSelect if provided
         if (onAddressSelect) {
-          onAddressSelect(address, coords.latitude, coords.longitude);
-        } else {
+          const addressText = address?.display_name ?? '';
+          onAddressSelect(addressText, latitude, longitude);
+        } else if (address?.display_name) {
           // Fallback if no specific select handler, try to simulate change event
           // This is a bit hacky for controlled components, so onAddressSelect is preferred
           const event = {
-            target: { value: address },
+            target: { value: address.display_name },
           } as React.ChangeEvent<HTMLInputElement>;
           onChange?.(event);
         }
@@ -172,9 +174,9 @@ const LocationInput = React.forwardRef<HTMLInputElement, LocationInputProps>(
         try {
           const details = await getPlaceDetails(placeId);
           if (details) {
-            finalLat = details.lat;
-            finalLon = details.lon;
-            finalAddress = details.address; // Use formatted address from details if available
+            finalLat = parseFloat(details.lat);
+            finalLon = parseFloat(details.lon);
+            finalAddress = details.display_name; // Use formatted address from details if available
           }
         } catch (e) {
           console.error("Failed to get place details", e);

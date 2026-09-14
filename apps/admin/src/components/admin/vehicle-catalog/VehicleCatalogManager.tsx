@@ -86,8 +86,12 @@ export function VehicleCatalogManager() {
   const [expandedModels, setExpandedModels] = useState<Set<string>>(() => new Set());
 
   const groupedCatalog = useMemo(() => {
+    const filtered =
+      classFilter === "all"
+        ? items
+        : items.filter((r) => (r.vehicle_class ?? "car") === classFilter);
     const byMake = new Map<string, Map<string, VehicleCatalogRecord[]>>();
-    for (const row of items) {
+    for (const row of filtered) {
       const make = (row.make ?? "").trim() || "—";
       const model = (row.model ?? "").trim() || "—";
       if (!byMake.has(make)) byMake.set(make, new Map());
@@ -114,7 +118,7 @@ export function VehicleCatalogManager() {
       const variantCount = modelGroups.reduce((n, g) => n + g.rows.length, 0);
       return { make, modelGroups, variantCount };
     });
-  }, [items]);
+  }, [items, classFilter]);
 
   const modelGroupKey = (make: string, model: string) => `${make}\u001f${model}`;
 
@@ -221,10 +225,12 @@ export function VehicleCatalogManager() {
   const importFileRef = useRef<HTMLInputElement>(null);
   const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [importPreview, setImportPreview] = useState<ParsedCatalogImportRow[] | null>(null);
+  const [importUnknownHeaders, setImportUnknownHeaders] = useState<string[]>([]);
   /** preview → importing → result */
   const [importStep, setImportStep] = useState<VehicleCatalogImportStep>("preview");
   const [importProgress, setImportProgress] = useState<{ current: number; total: number } | null>(null);
   const [importOutcome, setImportOutcome] = useState<VehicleCatalogImportOutcome | null>(null);
+  const [classFilter, setClassFilter] = useState<"all" | "car" | "motorcycle">("all");
 
   const [purgeDialogOpen, setPurgeDialogOpen] = useState(false);
   const [purgeConfirmInput, setPurgeConfirmInput] = useState("");
@@ -240,8 +246,9 @@ export function VehicleCatalogManager() {
     reader.onload = () => {
       try {
         const text = String(reader.result ?? "");
-        const rows = parseVehicleCatalogCsvWithPapa(text);
-        setImportPreview(rows);
+        const parsed = parseVehicleCatalogCsvWithPapa(text);
+        setImportPreview(parsed.rows);
+        setImportUnknownHeaders(parsed.unknownHeaders);
         setImportStep("preview");
         setImportProgress(null);
         setImportOutcome(null);
@@ -258,6 +265,7 @@ export function VehicleCatalogManager() {
     if (importStep === "importing") return;
     setImportDialogOpen(false);
     setImportPreview(null);
+    setImportUnknownHeaders([]);
     setImportStep("preview");
     setImportProgress(null);
     setImportOutcome(null);
@@ -266,6 +274,10 @@ export function VehicleCatalogManager() {
   const handleRunCatalogImport = async () => {
     if (!token) return;
     if (importPreview == null) return;
+    if (importUnknownHeaders.length > 0) {
+      toast.error("Remove or map unknown CSV columns before importing.");
+      return;
+    }
     if (importPreview.length === 0) {
       toast.error(
         "No data rows found in this file. Use a comma-separated CSV with a header row (export from here for a template).",
@@ -283,19 +295,30 @@ export function VehicleCatalogManager() {
     setImportProgress({ current: 0, total: ready.length });
     setImportOutcome(null);
     let imported = 0;
+    let updated = 0;
     const apiErrors: string[] = [];
     const driftFieldSet = new Set<string>();
     let driftRowCount = 0;
     for (let i = 0; i < ready.length; i++) {
       const r = ready[i];
       try {
-        const created = await createVehicleCatalog(token, r.payload);
-        const drift = catalogCreateDriftFieldNames(r.payload, created);
-        if (drift.length) {
-          driftRowCount++;
-          drift.forEach((f) => driftFieldSet.add(f));
+        if (r.catalogId) {
+          const patched = await updateVehicleCatalog(token, r.catalogId, r.payload);
+          const drift = catalogCreateDriftFieldNames(r.payload, patched);
+          if (drift.length) {
+            driftRowCount++;
+            drift.forEach((f) => driftFieldSet.add(f));
+          }
+          updated++;
+        } else {
+          const created = await createVehicleCatalog(token, r.payload);
+          const drift = catalogCreateDriftFieldNames(r.payload, created);
+          if (drift.length) {
+            driftRowCount++;
+            drift.forEach((f) => driftFieldSet.add(f));
+          }
+          imported++;
         }
-        imported++;
       } catch (err) {
         apiErrors.push(`Row ${r.rowIndex}: ${err instanceof Error ? err.message : String(err)}`);
       } finally {
@@ -312,9 +335,15 @@ export function VehicleCatalogManager() {
         `If you have not added the columns yet, run supabase/scripts/repair_vehicle_catalog_for_csv_import.sql (includes NOTIFY at the end), or apply the vehicle_catalog migrations under supabase/migrations. Then deploy the make-server-37f42386 Edge function from this repo. Confirm the dashboard project ref matches the app (see projectId in src/utils/supabase/info.tsx).`,
       );
     }
-    setImportOutcome({ imported, failed: apiErrors.length, errors: apiErrors, schemaWarnings });
+    setImportOutcome({
+      imported,
+      updated,
+      failed: apiErrors.length,
+      errors: apiErrors,
+      schemaWarnings,
+    });
     setImportStep("result");
-    if (imported > 0) {
+    if (imported > 0 || updated > 0) {
       await load();
     }
   };
@@ -354,11 +383,35 @@ export function VehicleCatalogManager() {
       <CatalogGateObservabilityPanel />
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Motor vehicles</h2>
+          <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Vehicle catalog</h2>
           <p className="text-sm text-slate-600 dark:text-slate-400">
-            Platform-wide reference variants—use separate rows and year ranges for major facelifts (e.g.
-            Pre-Facelift vs Facelift). Used as reference data for fleets.
+            Platform-wide reference variants for cars and motorcycles. Use separate rows and year ranges for major
+            facelifts or motorcycle model years. Used as reference data for fleets.
           </p>
+          <div className="mt-3 flex flex-wrap gap-1.5">
+            {(
+              [
+                { id: "all", label: "All" },
+                { id: "car", label: "Cars" },
+                { id: "motorcycle", label: "Motorcycles" },
+              ] as const
+            ).map((opt) => (
+              <Button
+                key={opt.id}
+                type="button"
+                size="sm"
+                variant={classFilter === opt.id ? "default" : "outline"}
+                className={
+                  classFilter === opt.id
+                    ? "h-8 bg-slate-900 text-white hover:bg-slate-800"
+                    : "h-8 border-slate-300 bg-white text-slate-700"
+                }
+                onClick={() => setClassFilter(opt.id)}
+              >
+                {opt.label}
+              </Button>
+            ))}
+          </div>
         </div>
         <div className="flex flex-wrap gap-2 shrink-0">
           <input
@@ -498,6 +551,7 @@ export function VehicleCatalogManager() {
         open={importDialogOpen}
         importStep={importStep}
         importPreview={importPreview}
+        unknownHeaders={importUnknownHeaders}
         importProgress={importProgress}
         importOutcome={importOutcome}
         onOpenChange={(open) => {

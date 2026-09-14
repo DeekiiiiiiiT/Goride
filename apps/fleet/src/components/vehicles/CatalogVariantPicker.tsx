@@ -37,6 +37,7 @@ export interface CatalogVariantPickerProps {
   full_model_code?: string | null;
   /** OEM chassis / frame index prefix (e.g. M900A) — narrows results via ilike on chassis_code. */
   chassis_code?: string | null;
+  vehicle_class?: "car" | "motorcycle" | null;
   /** Currently picked catalog row id (or null when no selection yet). */
   value: string | null;
   /**
@@ -91,6 +92,7 @@ export function CatalogVariantPicker(props: CatalogVariantPickerProps) {
     catalog_trim,
     full_model_code,
     chassis_code,
+    vehicle_class,
     value,
     onChange,
     disabled,
@@ -121,6 +123,7 @@ export function CatalogVariantPicker(props: CatalogVariantPickerProps) {
       String(catalog_trim ?? "").trim().toLowerCase(),
       String(full_model_code ?? "").trim().toLowerCase(),
       String(chassis_code ?? "").trim().toUpperCase(),
+      String(vehicle_class ?? ""),
     ].join("|"),
     [
       make,
@@ -137,6 +140,7 @@ export function CatalogVariantPicker(props: CatalogVariantPickerProps) {
       catalog_trim,
       full_model_code,
       chassis_code,
+      vehicle_class,
     ],
   );
 
@@ -177,6 +181,7 @@ export function CatalogVariantPicker(props: CatalogVariantPickerProps) {
         catalog_trim: trimOrUndef(catalog_trim ?? undefined),
         full_model_code: trimOrUndef(full_model_code ?? undefined),
         chassis_code: trimOrUndef(chassis_code ?? undefined),
+        vehicle_class: vehicle_class === "car" || vehicle_class === "motorcycle" ? vehicle_class : undefined,
       })
         .then((res) => {
           if (myReqId !== reqIdRef.current) return;

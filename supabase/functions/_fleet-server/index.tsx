@@ -13206,7 +13206,7 @@ app.get("/make-server-37f42386/admin-stats", requireAuth({ strict: true }), requ
 // ---------------------------------------------------------------------------
 
 const VEHICLE_CATALOG_WRITABLE_KEYS = [
-  "make", "model", "production_start_year", "production_end_year", "production_start_month", "production_end_month",
+  "make", "model", "vehicle_class", "production_start_year", "production_end_year", "production_start_month", "production_end_month",
   "trim_series", "generation",
   "full_model_code", "catalog_trim", "emissions_prefix", "trim_suffix_code",
   "chassis_code", "generation_code", "engine_code", "engine_type",
@@ -13218,6 +13218,9 @@ const VEHICLE_CATALOG_WRITABLE_KEYS = [
   "front_brake_type", "rear_brake_type", "brake_size_mm",
   "tire_size", "bolt_pattern", "wheel_offset_mm",
   "engine_oil_capacity_l", "coolant_capacity_l",
+  "final_drive", "cooling_type", "starter_type", "seat_height_mm",
+  "front_tire_size", "rear_tire_size", "front_suspension", "rear_suspension",
+  "gear_count", "dry_weight_kg", "wheel_size_front", "wheel_size_rear",
 ] as const;
 
 function parseCatalogProductionEndYear(raw: unknown): number | null {

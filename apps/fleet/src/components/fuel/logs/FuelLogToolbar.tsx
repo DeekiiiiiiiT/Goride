@@ -52,6 +52,8 @@ export type FuelLogToolbarProps = {
   showRecalculate: boolean;
   isRecalculating: boolean;
   onRecalculate: () => void;
+  /** Rendered between tabs and filters (e.g. KPI cards). */
+  afterTabs?: React.ReactNode;
 };
 
 /**
@@ -92,6 +94,7 @@ export function FuelLogToolbar({
   showRecalculate,
   isRecalculating,
   onRecalculate,
+  afterTabs,
 }: FuelLogToolbarProps) {
   return (
     <div className="space-y-3">
@@ -120,9 +123,11 @@ export function FuelLogToolbar({
         </Tabs>
       </div>
 
+      {afterTabs ? <div className="mb-2">{afterTabs}</div> : null}
+
       <div className="flex items-center justify-between gap-4">
         <div className="flex items-center gap-2 flex-1 flex-wrap">
-          <div className="relative w-64">
+          <div className="relative w-64 hidden md:block">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
             <Input
               placeholder="Search..."
@@ -133,7 +138,12 @@ export function FuelLogToolbar({
           </div>
           <div className="flex gap-2 items-center">
             {canExport && (
-              <Button variant="outline" size="sm" className="gap-2 h-9" onClick={onExport}>
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-2 h-9 hidden md:inline-flex"
+                onClick={onExport}
+              >
                 <Download className="h-3.5 w-3.5" />
                 {selectedCount > 0 && activeView === 'transactions'
                   ? `Export selected (${selectedCount})`

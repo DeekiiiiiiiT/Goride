@@ -47,7 +47,8 @@ async function facetsFromCatalog(): Promise<CommandoBodyTypeFacet[]> {
   for (;;) {
     const { data, error } = await supabase
       .from("vehicle_catalog")
-      .select("body_type, seating_capacity")
+      .select("body_type, seating_capacity, vehicle_class")
+      .eq("vehicle_class", "car")
       .range(from, from + FACET_PAGE - 1);
     if (error) throw error;
     if (!data?.length) break;
@@ -89,6 +90,8 @@ function mergeFacets(
     byBody.set(body, { body_type: body, seating_capacity: null });
   }
   for (const f of catalogFacets) {
+    // Belt-and-suspenders: never merge motorcycle body types into Rides picklist.
+    if (f.body_type.trim().toLowerCase() === "motorcycle") continue;
     const existing = byBody.get(f.body_type);
     if (!existing) {
       byBody.set(f.body_type, f);

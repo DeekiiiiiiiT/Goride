@@ -83,8 +83,8 @@ const TOLL_MANAGEMENT_CHILDREN = [
 
 // Vehicle master data (motor variants)
 const VEHICLE_DATABASE_CHILDREN = [
-  { id: 'motor-vehicles', label: 'Motor Vehicles', icon: Car },
-  { id: 'pending-motor-vehicles', label: 'Pending motor vehicles', icon: Inbox },
+  { id: 'motor-vehicles', label: 'Vehicle Catalog', icon: Car },
+  { id: 'pending-motor-vehicles', label: 'Pending catalog', icon: Inbox },
   { id: 'maintenance-templates', label: 'Maintenance templates', icon: Wrench },
   { id: 'parts-sourcing', label: 'Parts sourcing', icon: ShoppingCart },
 ];

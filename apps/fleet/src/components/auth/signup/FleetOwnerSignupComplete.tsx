@@ -137,7 +137,7 @@ export function FleetOwnerSignupComplete({
   const needsPlanStep = serviceLines.includes('rush_delivery');
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-slate-50 px-4 py-10 dark:bg-slate-900">
+    <div className="flex min-h-[100dvh] flex-col items-center justify-center bg-slate-50 py-10 safe-t safe-x safe-b dark:bg-slate-900">
       <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-8 shadow-xl dark:border-slate-700 dark:bg-slate-800">
         <div className="mb-6 flex justify-center">
           <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-indigo-600">

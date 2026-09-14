@@ -36,6 +36,8 @@ export type CatalogCandidatesAnchors = {
   year: string;
   /** Optional chassis prefix (e.g. M900A) used to narrow the candidate set. */
   chassis?: string;
+  /** Filter catalog class so cars and motorcycles do not mix in dropdowns. */
+  vehicle_class?: "car" | "motorcycle" | null;
   /**
    * When true, the API call omits chassis_code so rows match make/model/year
    * only. Used to populate a chassis dropdown from distinct catalog values.
@@ -113,7 +115,7 @@ export function useCatalogCandidates(anchors: CatalogCandidatesAnchors): UseCata
   useEffect(() => {
     const t = setTimeout(() => setDebounced(anchors), 300);
     return () => clearTimeout(t);
-  }, [anchors.make, anchors.model, anchors.year, anchors.chassis, anchors.skipChassisFilter]);
+  }, [anchors.make, anchors.model, anchors.year, anchors.chassis, anchors.vehicle_class, anchors.skipChassisFilter]);
 
   const enabled = Boolean(token) && anchorsAreUsable(debounced);
 
@@ -123,6 +125,7 @@ export function useCatalogCandidates(anchors: CatalogCandidatesAnchors): UseCata
       debounced.make.trim().toLowerCase(),
       debounced.model.trim().toLowerCase(),
       debounced.year.trim(),
+      debounced.vehicle_class ?? "",
       debounced.skipChassisFilter === true ? "__mmy__" : (debounced.chassis ?? "").trim().toUpperCase(),
     ],
     queryFn: () =>
@@ -130,6 +133,7 @@ export function useCatalogCandidates(anchors: CatalogCandidatesAnchors): UseCata
         make: debounced.make.trim() || undefined,
         model: debounced.model.trim() || undefined,
         year: debounced.year.trim() || undefined,
+        vehicle_class: debounced.vehicle_class ?? undefined,
         chassis_code:
           debounced.skipChassisFilter === true ? undefined : debounced.chassis?.trim() || undefined,
       }),

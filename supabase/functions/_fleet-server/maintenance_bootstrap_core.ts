@@ -22,6 +22,7 @@ function maintenanceTemplateMergeKey(t: { task_code?: unknown; task_name?: unkno
 type MaintenanceTemplateRow = Record<string, unknown> & {
   id: string;
   template_scope?: string;
+  applicable_vehicle_classes?: unknown;
 };
 
 function mergeGlobalAndCatalogTemplates(
@@ -71,11 +72,28 @@ export async function executeMaintenanceBootstrap(args: {
   catalogId: string;
 }): Promise<BootstrapRunResult> {
   const sb = args.supabase;
-  const { data: globalTemplates, error: gErr } = await sb
+
+  const { data: catalogMeta, error: catalogMetaErr } = await sb
+    .from("vehicle_catalog")
+    .select("vehicle_class")
+    .eq("id", args.catalogId)
+    .maybeSingle();
+  if (catalogMetaErr) throw catalogMetaErr;
+  const vehicleClass = String((catalogMeta as { vehicle_class?: string } | null)?.vehicle_class ?? "car")
+    .trim()
+    .toLowerCase() || "car";
+
+  const { data: globalTemplatesRaw, error: gErr } = await sb
     .from("maintenance_task_templates")
     .select("*")
     .eq("template_scope", "global");
   if (gErr) throw gErr;
+  const globalTemplates = ((globalTemplatesRaw || []) as MaintenanceTemplateRow[]).filter((t) => {
+    const classes = Array.isArray(t.applicable_vehicle_classes)
+      ? (t.applicable_vehicle_classes as unknown[]).map((c) => String(c).trim().toLowerCase())
+      : ["car"];
+    return classes.includes(vehicleClass);
+  });
   const { data: catalogTemplates, error: cErr } = await sb
     .from("maintenance_task_templates")
     .select("*")
@@ -83,7 +101,7 @@ export async function executeMaintenanceBootstrap(args: {
     .eq("template_scope", "catalog");
   if (cErr) throw cErr;
   const { merged: templates, catalogOverridesGlobal } = mergeGlobalAndCatalogTemplates(
-    (globalTemplates || []) as MaintenanceTemplateRow[],
+    globalTemplates,
     (catalogTemplates || []) as MaintenanceTemplateRow[],
   );
   const globalApplied = templates.filter((t) => String(t.template_scope ?? "") === "global").length;

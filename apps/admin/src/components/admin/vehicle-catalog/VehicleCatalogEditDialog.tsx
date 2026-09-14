@@ -103,7 +103,7 @@ const DIMENSIONS_BODY_TAB_DESCRIPTION =
   "Classifies the vehicle's body style and records exterior dimensions in millimeters—used for parts fitment, garage clearance, and loading limits.";
 
 const DIMENSIONS_BODY_FIELD_HINTS = {
-  bodyType: "The general structural classification of the vehicle (e.g., Sedan, Hatchback, SUV).",
+  bodyType: "The general structural classification of the vehicle (e.g., Sedan, Hatchback, SUV, Motorcycle).",
   doors: "The total number of doors, including the rear hatch or trunk.",
   lengthMm: "The total bumper-to-bumper length of the vehicle in millimeters.",
   widthMm: "The maximum width of the vehicle in millimeters, excluding side mirrors.",
@@ -194,6 +194,7 @@ type FormState = {
   /** Used when makeSelection is Other */
   makeOther: string;
   model: string;
+  vehicle_class: "car" | "motorcycle";
   production_start_year: string;
   /** Empty string = ongoing (null in API) */
   production_end_year: string;
@@ -243,6 +244,18 @@ type FormState = {
   wheel_offset_mm: string;
   engine_oil_capacity_l: string;
   coolant_capacity_l: string;
+  final_drive: string;
+  cooling_type: string;
+  starter_type: string;
+  seat_height_mm: string;
+  front_tire_size: string;
+  rear_tire_size: string;
+  front_suspension: string;
+  rear_suspension: string;
+  gear_count: string;
+  dry_weight_kg: string;
+  wheel_size_front: string;
+  wheel_size_rear: string;
 };
 
 function resolveMake(form: FormState): string {
@@ -256,6 +269,7 @@ function emptyForm(): FormState {
     makeSelection: "Toyota",
     makeOther: "",
     model: "",
+    vehicle_class: "car",
     production_start_year: y,
     production_end_year: "",
     production_start_month: "",
@@ -304,6 +318,18 @@ function emptyForm(): FormState {
     wheel_offset_mm: "",
     engine_oil_capacity_l: "",
     coolant_capacity_l: "",
+    final_drive: "",
+    cooling_type: "",
+    starter_type: "",
+    seat_height_mm: "",
+    front_tire_size: "",
+    rear_tire_size: "",
+    front_suspension: "",
+    rear_suspension: "",
+    gear_count: "",
+    dry_weight_kg: "",
+    wheel_size_front: "",
+    wheel_size_rear: "",
   };
 }
 
@@ -316,6 +342,7 @@ function recordToForm(r: VehicleCatalogRecord): FormState {
     makeSelection: ref,
     makeOther: ref === "Other" ? r.make : "",
     model: r.model,
+    vehicle_class: r.vehicle_class === "motorcycle" ? "motorcycle" : "car",
     production_start_year: String(r.production_start_year),
     production_end_year: r.production_end_year == null ? "" : String(r.production_end_year),
     production_start_month: r.production_start_month == null ? "" : String(r.production_start_month),
@@ -364,6 +391,18 @@ function recordToForm(r: VehicleCatalogRecord): FormState {
     wheel_offset_mm: s(r.wheel_offset_mm),
     engine_oil_capacity_l: s(r.engine_oil_capacity_l),
     coolant_capacity_l: s(r.coolant_capacity_l),
+    final_drive: t(r.final_drive),
+    cooling_type: t(r.cooling_type),
+    starter_type: t(r.starter_type),
+    seat_height_mm: s(r.seat_height_mm),
+    front_tire_size: t(r.front_tire_size),
+    rear_tire_size: t(r.rear_tire_size),
+    front_suspension: t(r.front_suspension),
+    rear_suspension: t(r.rear_suspension),
+    gear_count: s(r.gear_count),
+    dry_weight_kg: s(r.dry_weight_kg),
+    wheel_size_front: t(r.wheel_size_front),
+    wheel_size_rear: t(r.wheel_size_rear),
   };
 }
 
@@ -396,6 +435,7 @@ function toCreatePayload(form: FormState): VehicleCatalogCreatePayload {
   const base: VehicleCatalogCreatePayload = {
     make,
     model: form.model.trim(),
+    vehicle_class: form.vehicle_class,
     production_start_year: ps,
     production_end_year: pe,
   };
@@ -447,7 +487,21 @@ function toCreatePayload(form: FormState): VehicleCatalogCreatePayload {
   assign("bolt_pattern", form.bolt_pattern.trim() || null);
   assign("wheel_offset_mm", optNum(form.wheel_offset_mm));
   assign("engine_oil_capacity_l", optNum(form.engine_oil_capacity_l));
-  assign("coolant_capacity_l", optNum(form.coolant_capacity_l));
+  assign("coolant_capacity_l", form.vehicle_class === "motorcycle" && form.cooling_type.trim().toLowerCase() === "air"
+    ? null
+    : optNum(form.coolant_capacity_l));
+  assign("final_drive", form.final_drive.trim() || null);
+  assign("cooling_type", form.cooling_type.trim() || null);
+  assign("starter_type", form.starter_type.trim() || null);
+  assign("seat_height_mm", optNum(form.seat_height_mm));
+  assign("front_tire_size", form.front_tire_size.trim() || null);
+  assign("rear_tire_size", form.rear_tire_size.trim() || null);
+  assign("front_suspension", form.front_suspension.trim() || null);
+  assign("rear_suspension", form.rear_suspension.trim() || null);
+  assign("gear_count", optInt(form.gear_count));
+  assign("dry_weight_kg", optNum(form.dry_weight_kg));
+  assign("wheel_size_front", form.wheel_size_front.trim() || null);
+  assign("wheel_size_rear", form.wheel_size_rear.trim() || null);
   return base;
 }
 
@@ -459,6 +513,7 @@ function toPatchPayload(form: FormState): Partial<VehicleCatalogRecord> {
   return {
     make,
     model: form.model.trim(),
+    vehicle_class: form.vehicle_class,
     production_start_year: Number.isFinite(ps) ? ps : 0,
     production_end_year: pe,
     trim_series: form.trim_series.trim() || null,
@@ -506,7 +561,22 @@ function toPatchPayload(form: FormState): Partial<VehicleCatalogRecord> {
     bolt_pattern: form.bolt_pattern.trim() || null,
     wheel_offset_mm: optNum(form.wheel_offset_mm),
     engine_oil_capacity_l: optNum(form.engine_oil_capacity_l),
-    coolant_capacity_l: optNum(form.coolant_capacity_l),
+    coolant_capacity_l:
+      form.vehicle_class === "motorcycle" && form.cooling_type.trim().toLowerCase() === "air"
+        ? null
+        : optNum(form.coolant_capacity_l),
+    final_drive: form.final_drive.trim() || null,
+    cooling_type: form.cooling_type.trim() || null,
+    starter_type: form.starter_type.trim() || null,
+    seat_height_mm: optNum(form.seat_height_mm),
+    front_tire_size: form.front_tire_size.trim() || null,
+    rear_tire_size: form.rear_tire_size.trim() || null,
+    front_suspension: form.front_suspension.trim() || null,
+    rear_suspension: form.rear_suspension.trim() || null,
+    gear_count: optInt(form.gear_count),
+    dry_weight_kg: optNum(form.dry_weight_kg),
+    wheel_size_front: form.wheel_size_front.trim() || null,
+    wheel_size_rear: form.wheel_size_rear.trim() || null,
   };
 }
 
@@ -626,6 +696,14 @@ export function VehicleCatalogEditDialog({
                   </span>
                   <span className="hidden lg:inline">Weights &amp; Payload</span>
                 </TabsTrigger>
+                {form.vehicle_class === "motorcycle" && (
+                  <TabsTrigger
+                    value="motorcycle"
+                    className="h-auto max-w-[10.5rem] rounded-lg px-2.5 py-2 text-left text-[10px] font-medium leading-snug text-slate-600 shadow-none transition-all data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm sm:max-w-none sm:px-3 sm:text-xs lg:text-sm"
+                  >
+                    Motorcycle
+                  </TabsTrigger>
+                )}
               </TabsList>
 
               <TabsContent value="identity" className="mt-4 outline-none">
@@ -633,6 +711,27 @@ export function VehicleCatalogEditDialog({
                   <p className="text-sm leading-relaxed text-slate-600">{IDENTIFICATION_TAB_DESCRIPTION}</p>
                 </div>
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-x-5 sm:gap-y-4">
+                  <div className="space-y-1.5 sm:col-span-2">
+                    <LabelWithHint label="Vehicle class" hint="Car or motorcycle — controls catalog identity, facets, and which specs apply." required />
+                    <Select
+                      value={form.vehicle_class}
+                      onValueChange={(v) =>
+                        setForm((f) => ({
+                          ...f,
+                          vehicle_class: v === "motorcycle" ? "motorcycle" : "car",
+                          body_type: v === "motorcycle" && !f.body_type.trim() ? "Motorcycle" : f.body_type,
+                        }))
+                      }
+                    >
+                      <SelectTrigger className="h-10 bg-white border-slate-200 shadow-sm focus:ring-slate-200/80 max-w-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="car">Car</SelectItem>
+                        <SelectItem value="motorcycle">Motorcycle</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
                   <div className="space-y-1.5">
                     <LabelWithHint label="Make" hint={IDENTIFICATION_FIELD_HINTS.make} required />
                     <Select
@@ -1172,6 +1271,31 @@ export function VehicleCatalogEditDialog({
               </div>
             </div>
           </TabsContent>
+
+          {form.vehicle_class === "motorcycle" && (
+            <TabsContent value="motorcycle" className="mt-4 outline-none">
+              <div className="mb-5 rounded-xl border border-slate-200/80 bg-slate-50/90 px-4 py-3.5 sm:px-5">
+                <p className="text-sm font-medium text-slate-800">Motorcycle specs</p>
+                <p className="mt-1.5 text-sm leading-relaxed text-slate-600">
+                  Final drive, cooling, starter, and separate front/rear tire sizes distinguish motorcycle variants in the catalog.
+                </p>
+              </div>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-x-5 sm:gap-y-4">
+                <FieldWithHint label="Final drive" hint="Chain, belt, or shaft." value={form.final_drive} onChange={update("final_drive")} />
+                <FieldWithHint label="Cooling type" hint="Air, oil, or liquid. Leave coolant capacity empty for air-cooled bikes." value={form.cooling_type} onChange={update("cooling_type")} />
+                <FieldWithHint label="Starter type" hint="Electric, kick, or both." value={form.starter_type} onChange={update("starter_type")} />
+                <FieldWithHint label="Seat height mm" hint="OEM seat height." value={form.seat_height_mm} onChange={update("seat_height_mm")} type="number" />
+                <FieldWithHint label="Front tire size" hint="e.g. 2.75-18" value={form.front_tire_size} onChange={update("front_tire_size")} />
+                <FieldWithHint label="Rear tire size" hint="e.g. 90/90-18" value={form.rear_tire_size} onChange={update("rear_tire_size")} />
+                <FieldWithHint label="Front suspension" hint="Fork type / travel." value={form.front_suspension} onChange={update("front_suspension")} />
+                <FieldWithHint label="Rear suspension" hint="Shock type / travel." value={form.rear_suspension} onChange={update("rear_suspension")} />
+                <FieldWithHint label="Gear count" hint="Number of gearbox ratios." value={form.gear_count} onChange={update("gear_count")} type="number" />
+                <FieldWithHint label="Dry weight kg" hint="Dry weight when curb weight is wet." value={form.dry_weight_kg} onChange={update("dry_weight_kg")} />
+                <FieldWithHint label="Wheel size front" hint="Front wheel diameter / rim." value={form.wheel_size_front} onChange={update("wheel_size_front")} />
+                <FieldWithHint label="Wheel size rear" hint="Rear wheel diameter / rim." value={form.wheel_size_rear} onChange={update("wheel_size_rear")} />
+              </div>
+            </TabsContent>
+          )}
           </Tabs>
         </div>
 
