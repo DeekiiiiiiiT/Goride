@@ -1,10 +1,22 @@
 /** Park failed COD collections so delivery never 500s (D-7). */
 
+import { courierAssignmentFields } from "../courierFleetAttribution.ts";
+
 // deno-lint-ignore no-explicit-any
 type Sb = { schema: (s: string) => any; from: (t: string) => any };
 
 function deliveryDb(sb: Sb) {
   return typeof sb.schema === "function" ? sb.schema("delivery") : sb;
+}
+
+async function courierStamp(
+  sb: Sb,
+  courierId: string | null,
+): Promise<{ courier_id: string | null; courier_fleet_id: string | null }> {
+  if (!courierId) return { courier_id: null, courier_fleet_id: null };
+  // courierAssignmentFields expects a SupabaseClient; remittance uses a narrow Sb shape.
+  const assignment = await courierAssignmentFields(sb as never, courierId);
+  return assignment;
 }
 
 export async function parkException(
@@ -19,6 +31,7 @@ export async function parkException(
     message: err instanceof Error ? err.message : String(err),
     name: err instanceof Error ? err.name : "Error",
   };
+  const assignment = await courierStamp(sb, courierId);
   const { data: existing } = await db
     .from("courier_remittance_exceptions")
     .select("id, attempts")
@@ -31,14 +44,14 @@ export async function parkException(
         attempts: Number(existing.attempts ?? 1) + 1,
         reason,
         detail,
-        courier_id: courierId,
+        ...assignment,
       })
       .eq("id", existing.id);
     return;
   }
   await db.from("courier_remittance_exceptions").insert({
     order_id: orderId,
-    courier_id: courierId,
+    ...assignment,
     reason,
     detail,
   });
