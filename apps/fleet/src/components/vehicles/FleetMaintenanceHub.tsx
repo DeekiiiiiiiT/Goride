@@ -312,7 +312,7 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
   return (
     <div className="space-y-4">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div>
+        <div className="hidden md:block">
           <h1 className="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
             <Wrench className="w-7 h-7 text-amber-600" />
             Fleet maintenance

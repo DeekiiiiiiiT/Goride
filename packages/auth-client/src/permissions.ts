@@ -286,6 +286,10 @@ export type Permission =
   | 'fuel.edit_entry'
   | 'fuel.delete_entry'
   | 'fuel.view'
+  | 'fuel.finalize'
+  | 'fuel.reopen'
+  | 'fuel.accept_unexplained'
+  | 'fuel.second_approve'
   | 'fuel.export'
   // Toll
   | 'toll.manage'
@@ -368,6 +372,7 @@ const ALL_CUSTOMER_PERMISSIONS: Permission[] = [
   // NOTE: 'vehicles.bypass_catalog_gate' is intentionally NOT granted to fleet
   // roles — only platform_owner gets it (added explicitly below).
   'fuel.approve', 'fuel.reject', 'fuel.create_entry', 'fuel.edit_entry', 'fuel.delete_entry', 'fuel.view', 'fuel.export',
+  'fuel.finalize', 'fuel.reopen', 'fuel.accept_unexplained', 'fuel.second_approve',
   'toll.manage', 'toll.view',
   'transactions.approve', 'transactions.reject', 'transactions.edit', 'transactions.view', 'transactions.export',
   'settlements.collect', 'settlements.pay', 'settlements.write_off', 'settlements.reverse', 'settlements.approve',
@@ -403,6 +408,10 @@ const FLEET_ACCOUNTANT_PERMISSIONS: Permission[] = [
   'drivers.view',
   'vehicles.view',
   'fuel.view',
+  'fuel.finalize',
+  'fuel.reopen',
+  'fuel.accept_unexplained',
+  'fuel.second_approve',
   'fuel.export',
   'toll.view',
   'transactions.view',

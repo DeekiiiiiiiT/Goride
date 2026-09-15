@@ -84,7 +84,7 @@ export function RestatementQueuePage({
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           {!embedded ? (
-            <h1 className="text-xl font-semibold text-slate-900">Restatement queue</h1>
+            <h1 className="hidden md:block text-xl font-semibold text-slate-900">Restatement queue</h1>
           ) : null}
           <p className={cn('text-sm text-slate-500', !embedded && 'mt-1')}>
             Corrections waiting to be signed after a week was already closed. Open Close Week for that week and tap{' '}

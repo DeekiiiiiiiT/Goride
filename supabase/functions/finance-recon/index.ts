@@ -430,6 +430,25 @@ Deno.serve(async (req) => {
       }
     }
 
+    // Phase 3: locked fuel weeks — snapshot vs statement vs ledger (non-fatal).
+    try {
+      const { upsertLockedFuelWeekStatementLedgerDrifts } = await import(
+        "../_fleet-server/fuel_nightly_statement_ledger.ts"
+      );
+      const fuelRecon = await upsertLockedFuelWeekStatementLedgerDrifts({
+        fromYmd,
+        activeFuelEventsByPeriod,
+      });
+      if (fuelRecon.driversChecked > 0) {
+        console.log(
+          "[finance-recon] fuel locked-week recon",
+          JSON.stringify(fuelRecon),
+        );
+      }
+    } catch (fuelReconErr) {
+      console.warn("[finance-recon] fuel locked-week recon skipped:", errMsg(fuelReconErr));
+    }
+
     const ok = drifts.length === 0;
     if (!ok) {
       const summary = `[finance-recon] runId=${runId} ${drifts.length} drift(s), nullOrg=${nullOrg}`;

@@ -59,11 +59,15 @@ export function FuelWeekMoneyStrip({
   priorMedian?: { totalSpend: number; unexplained: number };
 }) {
   const sourcesTie = Math.abs(gasCard + cashFromEarnings - totalSpend) <= FUEL_SPEND_EPS;
-  // Unexplained is an acknowledgment gap — some weeks already fold it into
-  // company/driver so company+driver ties total without adding leakage again.
-  const splitTie =
-    Math.abs(company + driver - totalSpend) <= FUEL_SPEND_EPS ||
-    Math.abs(company + driver + leakage - totalSpend) <= FUEL_SPEND_EPS;
+  // N-4: sign-based identity. Positive misc is already folded into company+driver;
+  // negative (over-explained) must include unexplained in the equation.
+  const overExplainedResidual = leakage < -FUEL_SPEND_EPS;
+  const splitTie = overExplainedResidual
+    ? Math.abs(company + driver + leakage - totalSpend) <= FUEL_SPEND_EPS
+    : Math.abs(company + driver - totalSpend) <= FUEL_SPEND_EPS;
+  const splitLabel = overExplainedResidual
+    ? 'Company + Driver + Unexplained'
+    : 'Company + Driver';
   const spendDelta =
     priorMedian != null ? totalSpend - priorMedian.totalSpend : null;
   const unexplainedDelta =
@@ -127,7 +131,11 @@ export function FuelWeekMoneyStrip({
           className={`text-xs font-medium ${splitTie ? 'text-emerald-700' : 'text-rose-700'}`}
           role="status"
         >
-          Company + Driver + Unexplained {splitTie ? '=' : '≠'} Total{' '}
+          <span className="sr-only">
+            Company {formatFuelMoney(company)}, driver {formatFuelMoney(driver)}, unexplained{' '}
+            {formatFuelMoney(leakage)}, total {formatFuelMoney(totalSpend)}.
+          </span>
+          {splitLabel} {splitTie ? '=' : '≠'} Total{' '}
           {splitTie ? '✓' : '— shared-car or calc mismatch'}
         </p>
       </section>

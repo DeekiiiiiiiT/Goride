@@ -9,16 +9,27 @@ import { settlementService } from './settlementService';
 import { tierService } from './tierService';
 import { resolveActiveFuelPolicyForDriverWeek } from '../utils/fuelPolicyVersion';
 import { toSlimFuelCycles } from '../utils/slimFuelCycles';
-import { reportWeekYmdBounds } from '../utils/fuelWeekPeriod';
-import { freezeReportMoneyThroughAssembler } from '../utils/fuelFinalizeWeekSnapAdapter';
+import { isEntryInInclusiveYmdRange, reportWeekYmdBounds } from '../utils/fuelWeekPeriod';
+import { freezeReportMoneyThroughAssembler, categoryCostsFromReport } from '../utils/fuelFinalizeWeekSnapAdapter';
 import {
   sumPaidByDriverForReport,
   sumGasCardSpendForReport,
   entriesBelongingToDriverWeekReport,
 } from '../utils/fuelPaidByDriver';
-import { listUnapprovedFuelTxInWindow } from '@roam/fuel-core';
+import {
+  assertCategoryCostsTieSpend,
+  coverageRuleIsResolved,
+  listUnapprovedFuelTxInWindow,
+  precomputeFuelFillDrivers,
+} from '@roam/fuel-core';
+import {
+  evaluateFuelWeekClosableClient,
+  fuelWeekClosableBlockerMessage,
+} from '../utils/fuelWeekClosableGate';
+import { evaluateFuelFinalizeGating } from '../utils/fuelFinalizeGating';
 import type {
   FuelCard,
+  FuelDispute,
   FuelEntry,
   FuelScenario,
   FinalizedFuelReport,
@@ -36,6 +47,13 @@ export type FuelFinalizeDeps = {
   trips: Trip[];
   /** Optional — when provided, refuse if Pending fuel txs sit in any report week. */
   transactions?: import('../types/data').FinancialTransaction[];
+  disputes?: FuelDispute[];
+  /** Org period row — empty counts triggers counts_unevaluated gate. */
+  periodCounts?: Record<string, { actionable?: number }>;
+  leakageReviewed?: boolean;
+  degradedInputs?: boolean;
+  unexplained?: number;
+  totalSpend?: number;
 };
 
 export type FuelFinalizeOptions = {
@@ -89,7 +107,19 @@ export async function finalizeFuelWeekReports(
   const failures: FuelFinalizeFailure[] = [];
   const snapshots: FinalizedFuelReport[] = [];
   const { vehicles, drivers, fuelCards, fuelEntries, scenarios, trips } = deps;
-  const attrCtx = { vehicles, fuelCards, trips };
+
+  const weekEntryPool = fuelEntries.filter((e) =>
+    reports.some((r) => {
+      const { start, end } = reportWeekYmdBounds(r);
+      return isEntryInInclusiveYmdRange(e.date, start, end);
+    }),
+  );
+  const fillDriverMap = precomputeFuelFillDrivers(weekEntryPool, vehicles, fuelCards, trips);
+  const driverByEntryId = new Map<string, string>();
+  for (const [entryId, resolution] of fillDriverMap) {
+    driverByEntryId.set(entryId, resolution.driverId);
+  }
+  const attrCtx = { vehicles, fuelCards, trips, driverByEntryId };
 
   // Client-side refuse before any settlement mutation (server also enforces).
   // Callers that already hold txs in state must pass them (R3); undefined skips for unit tests.
@@ -114,6 +144,49 @@ export async function finalizeFuelWeekReports(
         };
       }
     }
+  }
+
+  const { start: weekStartYmd, end: weekEndYmd } = reportWeekYmdBounds(reports[0]);
+  const gateResult = evaluateFuelFinalizeGating({
+    reports,
+    disputes: deps.disputes,
+    fuelEntries,
+    transactions: deps.transactions,
+    weekStartYmd,
+    weekEndYmd,
+  });
+  const openDisputesInWeek = (deps.disputes || []).some((d) => {
+    if (d.status !== 'Open') return false;
+    const dStart = String(d.weekStart || '').split('T')[0];
+    return dStart === weekStartYmd;
+  });
+  const countsUnevaluated =
+    deps.periodCounts !== undefined && Object.keys(deps.periodCounts).length === 0;
+  const closableBlockers = evaluateFuelWeekClosableClient({
+    gateResult,
+    reports,
+    scenarios,
+    leakageReviewed: deps.leakageReviewed ?? false,
+    countsUnevaluated,
+    degradedInputs: deps.degradedInputs,
+    openDisputesInWeek,
+    totalSpend: deps.totalSpend,
+    unexplained: deps.unexplained,
+  });
+  if (closableBlockers.length > 0) {
+    const first = closableBlockers[0];
+    return {
+      ok: false,
+      successCount: 0,
+      snapshotCount: 0,
+      failures: reports.map((r) => ({
+        driverId: r.driverId,
+        weekStart: weekStartYmd,
+        phase: 'snapshot' as const,
+        error: `${first.code}: ${first.message}`,
+      })),
+      message: fuelWeekClosableBlockerMessage(first),
+    };
   }
 
   const settlementDeps = opts.deferSnapshotPersist
@@ -143,7 +216,15 @@ export async function finalizeFuelWeekReports(
         : weekEntries.filter((entry) => entry.reconciliationStatus === 'Pending');
 
       if (relevantEntries.length === 0 && prior) {
-        // Prior locked week with nothing re-postable — leave settlement + snapshot untouched
+        // H-9: emit an explicit no-op snapshot so seal still gets the override.
+        snapshots.push({
+          ...prior,
+          metadata: {
+            ...((prior as any).metadata || {}),
+            noopUnchanged: true,
+            skipReason: 'no_pending_entries',
+          },
+        } as any);
         continue;
       }
 
@@ -184,14 +265,29 @@ export async function finalizeFuelWeekReports(
       const appliedFuelRule = activeScenario?.rules.find((r) => r.category === 'Fuel');
       const appliedVersion = policy?.version;
 
-      // NEW-13: freeze shares through fuel-core assembler (same math Deno build-snapshots uses).
-      const settleForSnap = relevantEntries.length ? relevantEntries : weekEntries;
+      if (!coverageRuleIsResolved(appliedFuelRule || null)) {
+        throw new Error('unresolved_coverage_rule');
+      }
+
+      // C-4: freeze against full-week entries so category costs and spend share one base.
+      // Settle pool (Pending-only) is still used for wallet posting via settledEntries metadata.
+      const weekEntriesForFreeze = weekEntries.length ? weekEntries : relevantEntries;
       const frozen = freezeReportMoneyThroughAssembler({
         report,
-        settleEntries: settleForSnap,
+        settleEntries: weekEntriesForFreeze,
         fuelRule: appliedFuelRule || null,
         builtBy: 'fuel_finalize_client',
       });
+      const cats = categoryCostsFromReport(report);
+      if (
+        !assertCategoryCostsTieSpend(
+          frozen.totalGasCardCost || Number(report.totalGasCardCost) || 0,
+          cats,
+          frozen.miscellaneousCost,
+        )
+      ) {
+        throw new Error('freeze_spend_tie_violation');
+      }
 
       const snapshot: FinalizedFuelReport = {
         ...report,
@@ -211,9 +307,14 @@ export async function finalizeFuelWeekReports(
         postedDriverShare: frozen.postedDriverShare,
         postedCompanyShare: frozen.postedCompanyShare,
         fuelCycles: toSlimFuelCycles(report.fuelCycles),
+        // C-1: emit categoryCosts + fuelRule so FUEL_SERVER_ENGINE can compare.
+        categoryCosts: cats,
+        fuelRule: appliedFuelRule || null,
         metadata: {
           ...report.metadata,
-          settledEntries: settleForSnap.map((e) => ({
+          categoryCosts: cats,
+          fuelRule: appliedFuelRule || null,
+          settledEntries: (relevantEntries.length ? relevantEntries : weekEntries).map((e) => ({
             id: e.id,
             amount: e.amount,
             date: String(e.date || '').split('T')[0],

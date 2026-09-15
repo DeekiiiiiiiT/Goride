@@ -20,6 +20,8 @@ export type DriverWeekAttributionContext = {
   vehicles: Vehicle[];
   fuelCards?: FuelCard[];
   trips?: Trip[];
+  /** P-2: optional precomputed Map<entryId, driverId> from precomputeFuelFillDrivers. */
+  driverByEntryId?: Map<string, string>;
 };
 
 /** Driver cash at the pump — never fleet gas card, even when type is still Manual_Entry after statement match. */
@@ -63,8 +65,8 @@ export function countsInGasCardSpend(entry: FuelEntry): boolean {
 }
 
 /**
- * True when resolveFuelFillDriver attributes this fill to the report's driver
- * (or Unassigned sentinel). Does not use weaker primary-vehicle-only checks.
+ * True when resolveFuelFillDriver attributes this fill to the report's driver.
+ * N-1: unassigned fills must NOT match every real driver report.
  */
 export function entryBelongsToDriverWeekReport(
   entry: FuelEntry,
@@ -74,13 +76,17 @@ export function entryBelongsToDriverWeekReport(
   const { start, end } = reportWeekYmdBounds(report);
   if (!isEntryInInclusiveYmdRange(entry.date, start, end)) return false;
 
+  if (ctx.driverByEntryId?.has(entry.id)) {
+    const mapped = ctx.driverByEntryId.get(entry.id);
+    return mapped === report.driverId;
+  }
+
   const resolved = resolveFuelFillDriver({
     entry,
     vehicles: ctx.vehicles,
     fuelCards: ctx.fuelCards || [],
-    trips: ctx.trips || [],
+    trips: (ctx.trips || []) as any,
   });
-
   return resolved.driverId === report.driverId;
 }
 

@@ -1,0 +1,103 @@
+{
+  "description": "Stage 0 characterisation goldens — Engine A (categoryCosts path) vs incomplete-input rebuild (misc defaults 0). Synthetic weeks covering known divergence classes.",
+  "eps": 0.01,
+  "weeks": [
+    {
+      "id": "price_unavailable_all_unexplained",
+      "weekStart": "2026-09-07",
+      "weekEnd": "2026-09-13",
+      "driverId": "d-char-1",
+      "totalSpend": 28800,
+      "engineA": {
+        "companyShare": 28800,
+        "driverShare": 0,
+        "miscellaneousCost": 28800,
+        "categoryCosts": {
+          "rideShareCost": 0,
+          "companyUsageCost": 0,
+          "deadheadCost": 0,
+          "personalUsageCost": 0
+        },
+        "note": "priceUnavailable forces category costs to 0; misc ≡ spend"
+      },
+      "engineB_incomplete": {
+        "companyShare": 14400,
+        "driverShare": 14400,
+        "miscellaneousCost": 0,
+        "note": "flat 50% when no categoryCosts — diverges from approved zero driverShare"
+      },
+      "expectDivergence": true
+    },
+    {
+      "id": "full_coverage_zero_driver",
+      "weekStart": "2026-08-24",
+      "weekEnd": "2026-08-30",
+      "driverId": "d-char-2",
+      "totalSpend": 10000,
+      "engineA": {
+        "companyShare": 10000,
+        "driverShare": 0,
+        "miscellaneousCost": 500,
+        "categoryCosts": {
+          "rideShareCost": 7000,
+          "companyUsageCost": 1500,
+          "deadheadCost": 500,
+          "personalUsageCost": 500
+        }
+      },
+      "engineB_incomplete": {
+        "companyShare": 10000,
+        "driverShare": 0,
+        "miscellaneousCost": 0,
+        "coverageType": "Full"
+      },
+      "expectDivergence": true,
+      "divergenceFields": ["miscellaneousCost"]
+    },
+    {
+      "id": "percentage_60_with_categories",
+      "weekStart": "2026-08-17",
+      "weekEnd": "2026-08-23",
+      "driverId": "d-char-3",
+      "totalSpend": 1000,
+      "engineA": {
+        "companyShare": 600,
+        "driverShare": 400,
+        "miscellaneousCost": 0,
+        "categoryCosts": {
+          "rideShareCost": 1000,
+          "companyUsageCost": 0,
+          "deadheadCost": 0,
+          "personalUsageCost": 0
+        },
+        "fuelRule": { "coverageType": "Percentage", "rideShareCoverage": 60 }
+      },
+      "engineB_incomplete": {
+        "companyShare": 600,
+        "driverShare": 400,
+        "miscellaneousCost": 0,
+        "fuelRule": { "coverageType": "Percentage", "rideShareCoverage": 60 }
+      },
+      "expectDivergence": false
+    },
+    {
+      "id": "deliberately_divergent_must_fail_parity",
+      "weekStart": "2026-01-01",
+      "weekEnd": "2026-01-07",
+      "driverId": "d-char-fail",
+      "totalSpend": 5000,
+      "engineA": {
+        "companyShare": 5000,
+        "driverShare": 0,
+        "miscellaneousCost": 100
+      },
+      "engineB_incomplete": {
+        "companyShare": 2500,
+        "driverShare": 2500,
+        "miscellaneousCost": 0
+      },
+      "expectDivergence": true,
+      "usedBy": "R-1 non-tautological parity test — asserting equality MUST fail"
+    }
+  ]
+}

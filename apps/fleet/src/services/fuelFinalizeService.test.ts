@@ -78,10 +78,18 @@ const vehicle = { id: 'v1', licensePlate: '5179KZ', currentDriverId: 'd1' } as V
 
 const deps = {
   vehicles: [vehicle],
-  drivers: [{ id: 'd1', name: 'Driver One' }],
+  drivers: [{ id: 'd1', name: 'Driver One', fuelScenarioId: 'fuel-scenario-1' }],
   fuelCards: [],
   fuelEntries: [pendingEntry],
-  scenarios: [],
+  leakageReviewed: true,
+  scenarios: [
+    {
+      id: 'fuel-scenario-1',
+      name: 'Standard',
+      effectiveFrom: '2020-01-01',
+      rules: [{ category: 'Fuel', coverageType: 'Percentage', coverageValue: 50 }],
+    },
+  ] as any,
   trips: [],
 };
 

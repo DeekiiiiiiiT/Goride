@@ -1,4 +1,7 @@
 import { driverIdAtCardTime } from './fuelCardAssignmentHistory';
+import { isJaaStatementLedgerRow } from './jaaStatementLedger';
+
+export { isJaaStatementLedgerRow } from './jaaStatementLedger';
 
 /** Minimal structural shape so Admin/Fleet keep their local FuelEntry types. */
 export interface FuelEntryLike {
@@ -58,12 +61,6 @@ const DAY_WINDOW_MS = 36 * 60 * 60 * 1000; // ±1.5 days
 const TWO_HOUR_MS = 2 * 60 * 60 * 1000;
 const FIFTEEN_MIN_MS = 15 * 60 * 1000;
 
-const STATEMENT_IMPORT_SOURCES = new Set([
-  'jaa_raw',
-  'jaa_statement_details',
-  'fuel_statement',
-]);
-
 function metaOf(e: FuelEntryLike): Record<string, unknown> {
   return (e.metadata || {}) as Record<string, unknown>;
 }
@@ -73,15 +70,6 @@ function normId(id?: string | null): string {
     .trim()
     .replace(/[^a-zA-Z0-9]/g, '')
     .toUpperCase();
-}
-
-/** True for JAA/CSV statement ledger rows (Card Inventory), not driver Logs. */
-export function isJaaStatementLedgerRow(entry: FuelEntryLike): boolean {
-  const m = metaOf(entry);
-  const importSource = String(m.importSource || '');
-  if (STATEMENT_IMPORT_SOURCES.has(importSource)) return true;
-  if (m.jaaRowKind != null && entry.entrySource !== 'driver-portal') return true;
-  return false;
 }
 
 /**

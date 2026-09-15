@@ -384,13 +384,13 @@ function TollLogsPageInner() {
     <div className="space-y-6">
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
+        <div className="hidden md:flex items-center gap-3">
           <div className="p-2 bg-indigo-100 dark:bg-indigo-900/30 rounded-lg">
             <Receipt className="h-6 w-6 text-indigo-600 dark:text-indigo-400" />
           </div>
           <div>
             <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Toll Logs</h1>
-            <p className="hidden md:block text-sm text-slate-500 dark:text-slate-400">
+            <p className="text-sm text-slate-500 dark:text-slate-400">
               Complete ledger of all toll transactions across your fleet.
             </p>
           </div>

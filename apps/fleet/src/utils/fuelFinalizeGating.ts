@@ -12,7 +12,8 @@ import type { FinancialTransaction } from '../types/data';
 import { isSameFuelStatement, reportWeekYmdBounds, toEntryYmd } from './fuelWeekPeriod';
 import { FUEL_MONEY_EPS } from './fuelMoneyEpsilon';
 import {
-  isOverExplainedFuelWeek,
+  isOverExplainedResidual,
+  isUnderExplainedResidual,
   listUnapprovedFuelTxInWindow,
   type FuelUnapprovedTxBlocker,
 } from '@roam/fuel-core';
@@ -51,7 +52,7 @@ export type FuelExceptionBlocker = {
   reason: string;
 };
 
-/** One over-explained week — |misc| too large vs spend; a HARD finalize blocker (C-2). */
+/** One over-explained week — negative misc; HARD finalize blocker (C-7). */
 export type FuelOverExplainedBlocker = {
   vehicleId: string;
   driverId?: string;
@@ -59,6 +60,7 @@ export type FuelOverExplainedBlocker = {
   miscellaneousCost: number;
   /** |misc| as a whole-number percent of spend (null when spend ≤ 0). */
   pctOfSpend: number | null;
+  kind: 'over_explained' | 'under_explained';
 };
 
 export type FuelFinalizeGateResult = {
@@ -70,18 +72,21 @@ export type FuelFinalizeGateResult = {
   /** Pending fuel reimbursements in the statement window — HARD block (F3). */
   unapprovedFuelTxBlockers: FuelUnapprovedTxBlocker[];
   hasUnapprovedFuelTxBlockers: boolean;
-  /** Weeks whose residual is a modelling artefact — finalize is refused (C-2). */
+  /** Negative residual beyond ratio — finalize refused (C-7). */
   overExplainedBlockers: FuelOverExplainedBlocker[];
   hasOverExplainedBlockers: boolean;
+  /** Positive residual beyond ratio — reviewable via leakage review (C-7). */
+  underExplainedBlockers: FuelOverExplainedBlocker[];
+  hasUnderExplainedBlockers: boolean;
   hasBlockingWarnings: boolean;
 };
 
-/** Over-explained weeks in the batch — never allow these to finalize. */
+/** Over-explained (negative misc) — never allow these to finalize. */
 export function listOverExplainedBlockers(
   reports: WeeklyFuelReport[],
 ): FuelOverExplainedBlocker[] {
   return reports
-    .filter((r) => isOverExplainedFuelWeek(r.totalGasCardCost, r.miscellaneousCost))
+    .filter((r) => isOverExplainedResidual(r.totalGasCardCost, r.miscellaneousCost))
     .map((r) => {
       const spend = Number(r.totalGasCardCost) || 0;
       const misc = Number(r.miscellaneousCost) || 0;
@@ -91,6 +96,27 @@ export function listOverExplainedBlockers(
         totalSpend: spend,
         miscellaneousCost: misc,
         pctOfSpend: spend > 0 ? Math.round((Math.abs(misc) / spend) * 100) : null,
+        kind: 'over_explained' as const,
+      };
+    });
+}
+
+/** Under-explained (positive misc) — reviewable with typed leakage acceptance. */
+export function listUnderExplainedBlockers(
+  reports: WeeklyFuelReport[],
+): FuelOverExplainedBlocker[] {
+  return reports
+    .filter((r) => isUnderExplainedResidual(r.totalGasCardCost, r.miscellaneousCost))
+    .map((r) => {
+      const spend = Number(r.totalGasCardCost) || 0;
+      const misc = Number(r.miscellaneousCost) || 0;
+      return {
+        vehicleId: r.vehicleId,
+        driverId: r.driverId,
+        totalSpend: spend,
+        miscellaneousCost: misc,
+        pctOfSpend: spend > 0 ? Math.round((Math.abs(misc) / spend) * 100) : null,
+        kind: 'under_explained' as const,
       };
     });
 }
@@ -250,15 +276,17 @@ export function evaluateFuelFinalizeGating(opts: {
   }, [] as FuelDataQualityWarning[]);
 
   const overExplainedBlockers = listOverExplainedBlockers(opts.reports);
+  const underExplainedBlockers = listUnderExplainedBlockers(opts.reports);
 
   const hasExceptionBlockers = exceptionBlockers.length > 0;
   const hasUnapprovedFuelTxBlockers = unapprovedFuelTxBlockers.length > 0;
   const hasOverExplainedBlockers = overExplainedBlockers.length > 0;
-  // C-2: an over-explained week is a HARD blocker — the residual is a modelling
-  // artefact, not real cash, and must never be split/finalized.
+  const hasUnderExplainedBlockers = underExplainedBlockers.length > 0;
+  // C-7: over-explained is always a hard signal; under is reviewable via leakage step.
   const hasBlockingWarnings =
     dataQualityWarnings.length > 0 ||
     hasOverExplainedBlockers ||
+    hasUnderExplainedBlockers ||
     reFinalizeWarnings.some((w) => Math.abs(w.delta) > FUEL_MONEY_EPS);
 
   return {
@@ -270,6 +298,8 @@ export function evaluateFuelFinalizeGating(opts: {
     hasUnapprovedFuelTxBlockers,
     overExplainedBlockers,
     hasOverExplainedBlockers,
+    underExplainedBlockers,
+    hasUnderExplainedBlockers,
     hasBlockingWarnings,
   };
 }

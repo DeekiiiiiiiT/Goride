@@ -1,10 +1,24 @@
 import { describe, expect, it } from 'vitest';
 import {
   FUEL_MISC_MAX_RATIO,
+  classifyFuelMiscResidual,
   floorMiscForSplit,
   isFuelMiscWithinGate,
   isOverExplainedFuelWeek,
+  isOverExplainedResidual,
+  isUnderExplainedResidual,
 } from './fuelFinalizeGate';
+
+describe('classifyFuelMiscResidual (C-7)', () => {
+  it('splits over vs under by sign', () => {
+    expect(classifyFuelMiscResidual(10000, -3000)).toBe('over_explained');
+    expect(classifyFuelMiscResidual(10000, 3000)).toBe('under_explained');
+    expect(classifyFuelMiscResidual(10000, 2000)).toBe('ok');
+    expect(isOverExplainedResidual(10000, -3000)).toBe(true);
+    expect(isUnderExplainedResidual(10000, 3000)).toBe(true);
+    expect(isOverExplainedResidual(10000, 3000)).toBe(false);
+  });
+});
 
 describe('isOverExplainedFuelWeek', () => {
   it('passes a week whose misc is inside the 25% band', () => {
@@ -18,11 +32,10 @@ describe('isOverExplainedFuelWeek', () => {
   });
 
   it('flags large negative misc (fleet owes driver) — the audit debit week', () => {
-    // audit headline #1: residual so large it flipped the driver negative
     expect(isOverExplainedFuelWeek(30000, -27898.73)).toBe(true);
   });
 
-  it('treats any nonzero misc with zero spend as over-explained', () => {
+  it('treats any nonzero misc with zero spend as residual (legacy abs)', () => {
     expect(isOverExplainedFuelWeek(0, 0.01)).toBe(true);
     expect(isOverExplainedFuelWeek(0, 0)).toBe(false);
   });

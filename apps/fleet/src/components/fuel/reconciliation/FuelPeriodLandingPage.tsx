@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Check, Flag, Loader2 } from 'lucide-react';
 import { Card, CardContent } from '../../ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../ui/tabs';
@@ -31,9 +31,14 @@ function StepStatusCell({
 }) {
   const Icon = FUEL_STEP_ICONS[stepId];
   const label = FUEL_STEP_LABELS[stepId];
-  const { actionable } = counts[stepId];
-  const isClear = actionable === 0;
-  const statusText = isClear ? 'Done' : `${actionable} to review`;
+  const { actionable, informational } = counts[stepId];
+  const unevaluated = actionable === 0 && informational > 0;
+  const isClear = actionable === 0 && !unevaluated;
+  const statusText = unevaluated
+    ? 'Not evaluated'
+    : isClear
+      ? 'Done'
+      : `${actionable} to review`;
 
   return (
     <button
@@ -49,9 +54,11 @@ function StepStatusCell({
           ? 'cursor-not-allowed opacity-60'
           : 'hover:ring-2 hover:ring-indigo-200'
       } ${
-        isClear
-          ? 'border-emerald-100 bg-emerald-50/60'
-          : 'border-amber-200 bg-amber-50'
+        unevaluated
+          ? 'border-slate-200 bg-slate-50'
+          : isClear
+            ? 'border-emerald-100 bg-emerald-50/60'
+            : 'border-amber-200 bg-amber-50'
       }`}
       aria-label={
         disabled
@@ -61,17 +68,33 @@ function StepStatusCell({
     >
       <span
         className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full ${
-          isClear ? 'bg-emerald-500 text-white' : 'bg-amber-500 text-white'
+          unevaluated
+            ? 'bg-slate-400 text-white'
+            : isClear
+              ? 'bg-emerald-500 text-white'
+              : 'bg-amber-500 text-white'
         }`}
         aria-hidden
       >
         {isClear ? <Check className="h-3.5 w-3.5" strokeWidth={2.5} /> : <Icon className="h-3.5 w-3.5" />}
       </span>
       <div className="min-w-0 flex-1">
-        <div className={`truncate text-xs font-semibold leading-tight ${isClear ? 'text-emerald-800' : 'text-amber-900'}`}>
+        <div
+          className={`truncate text-xs font-semibold leading-tight ${
+            unevaluated ? 'text-slate-700' : isClear ? 'text-emerald-800' : 'text-amber-900'
+          }`}
+        >
           {label}
         </div>
-        <div className={`text-[11px] leading-tight ${isClear ? 'text-emerald-600' : 'font-medium text-amber-700'}`}>
+        <div
+          className={`text-[11px] leading-tight ${
+            unevaluated
+              ? 'text-slate-500'
+              : isClear
+                ? 'text-emerald-600'
+                : 'font-medium text-amber-700'
+          }`}
+        >
           {statusText}
         </div>
       </div>
@@ -79,10 +102,11 @@ function StepStatusCell({
   );
 }
 
-function daysOpen(startDate: string): number {
-  const start = new Date(`${startDate}T12:00:00`);
-  if (Number.isNaN(start.getTime())) return 0;
-  return Math.max(0, Math.floor((Date.now() - start.getTime()) / 86_400_000));
+function daysOpen(endDate: string): number {
+  // U-11: age from week end — week is not workable until it ends.
+  const end = new Date(`${endDate}T12:00:00`);
+  if (Number.isNaN(end.getTime())) return 0;
+  return Math.max(0, Math.floor((Date.now() - end.getTime()) / 86_400_000));
 }
 
 function PeriodCard({
@@ -135,7 +159,7 @@ function PeriodCard({
   const sealMessage = weekSealed
     ? reconWeekSealMessage({ weekStart: period.startDate, periodEnd: period.endDate })
     : null;
-  const age = daysOpen(period.startDate);
+  const age = daysOpen(period.endDate);
   const aging = !period.locked && age >= 14;
   const ctaClass = weekSealed
     ? 'border border-amber-300 bg-amber-50 text-amber-900'
@@ -171,6 +195,14 @@ function PeriodCard({
             role="status"
           >
             {sealMessage}
+          </div>
+        )}
+        {period.locked && period.fuelSealError && (
+          <div
+            className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-950"
+            role="alert"
+          >
+            Statement missing — retry seal. {period.fuelSealError}
           </div>
         )}
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -390,15 +422,19 @@ export function FuelPeriodLandingPage({
         ? 'in_progress'
         : 'completed';
   const [tab, setTab] = useState(preferredTab);
+  const userPickedTabRef = useRef(false);
 
-  // M4: keep tab aligned when finalize drains Outstanding
+  // M4: keep tab aligned when finalize drains Outstanding — but don't yank after user pick (U-12)
   useEffect(() => {
+    if (userPickedTabRef.current) return;
     setTab(preferredTab);
   }, [preferredTab]);
 
   const portfolio = useMemo(() => {
     const open = [...outstanding, ...inProgress];
-    const totalUnexplained = open.reduce((s, p) => s + p.netLeakage, 0);
+    // U-1: headline is gross |leakage|; signed net shown beside it.
+    const totalUnexplainedGross = open.reduce((s, p) => s + Math.abs(p.netLeakage), 0);
+    const totalUnexplainedSigned = open.reduce((s, p) => s + p.netLeakage, 0);
     const oldest = open
       .slice()
       .sort((a, b) => a.startDate.localeCompare(b.startDate))[0];
@@ -413,9 +449,10 @@ export function FuelPeriodLandingPage({
     );
     return {
       openWeeks: open.length,
-      totalUnexplained,
+      totalUnexplainedGross,
+      totalUnexplainedSigned,
       oldestLabel: oldest?.label || null,
-      oldestDays: oldest ? daysOpen(oldest.startDate) : 0,
+      oldestDays: oldest ? daysOpen(oldest.endDate) : 0,
       unlockedOpenCount: unlockedOpen.length,
       sealedBanner:
         sealedOpen.length > 0
@@ -454,8 +491,11 @@ export function FuelPeriodLandingPage({
           </div>
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Unexplained (open)</p>
-            <p className={`text-2xl font-bold tabular-nums ${portfolio.totalUnexplained !== 0 ? 'text-rose-700' : 'text-slate-900'}`}>
-              {formatFuelMoney(portfolio.totalUnexplained)}
+            <p className={`text-2xl font-bold tabular-nums ${portfolio.totalUnexplainedGross !== 0 ? 'text-rose-700' : 'text-slate-900'}`}>
+              {formatFuelMoney(portfolio.totalUnexplainedGross)}
+            </p>
+            <p className="text-xs text-slate-500">
+              Gross Σ|x| · signed net {formatFuelMoney(portfolio.totalUnexplainedSigned)}
             </p>
           </div>
           <div>
@@ -525,7 +565,14 @@ export function FuelPeriodLandingPage({
           No fuel activity in recent weeks yet.
         </div>
       ) : (
-        <Tabs value={tab} onValueChange={setTab} className="w-full">
+        <Tabs
+          value={tab}
+          onValueChange={(v) => {
+            userPickedTabRef.current = true;
+            setTab(v);
+          }}
+          className="w-full"
+        >
           <TabsList className="grid w-full grid-cols-3 sm:max-w-lg">
             <TabsTrigger value="outstanding" className="gap-1.5 min-h-11 sm:min-h-9">
               Outstanding

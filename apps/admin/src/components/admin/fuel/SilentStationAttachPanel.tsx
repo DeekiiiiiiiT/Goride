@@ -98,6 +98,7 @@ export function SilentStationAttachPanel({
   const [reason, setReason] = useState('');
   const [attaching, setAttaching] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [healingLinked, setHealingLinked] = useState(false);
   const [panelHighlight, setPanelHighlight] = useState(false);
 
   const stationSearchRef = useRef<HTMLInputElement>(null);
@@ -173,6 +174,35 @@ export function SilentStationAttachPanel({
   useEffect(() => {
     void load();
   }, [load]);
+
+  const linkedPairCount = useMemo(
+    () => items.filter((i) => i.linkage === 'jaa_pair').length,
+    [items],
+  );
+
+  const healLinkedPairs = useCallback(async () => {
+    if (healingLinked) return;
+    setHealingLinked(true);
+    try {
+      const result = await api.autohealMerchantStations({
+        dryRun: false,
+        applyLinkedPairsOnly: true,
+        limit: 200,
+      });
+      const n = result.summary?.healed ?? 0;
+      if (n > 0) {
+        toast.success(result.message || `Attached ${n} linked fill(s) to GOD stations`);
+        onResolved?.();
+      } else {
+        toast.message(result.message || 'No linked pairs needed heal');
+      }
+      await load();
+    } catch (e: any) {
+      toast.error(e?.message || 'Linked-pair heal failed');
+    } finally {
+      setHealingLinked(false);
+    }
+  }, [healingLinked, load, onResolved]);
 
   /** Parent companies derived from verified station brands. */
   const parentCompanies = useMemo(() => {
@@ -458,13 +488,32 @@ export function SilentStationAttachPanel({
                 Silent Station Attach
               </h2>
               <p className="text-sm leading-relaxed text-violet-900/90">
-                Manual Roam ops only. Use the row menu to attach to a GOD station or delete the fill permanently.
+                Manual Roam ops only when merchant is ambiguous. Linked Gas Card fills auto-attach on unique GOD
+                merchant match — use Heal linked for catch-up, or row menu for Silent Attach / delete.
               </p>
             </div>
-            <Button variant="outline" size="sm" className="gap-1.5 shrink-0" onClick={() => void load()} disabled={loading}>
-              <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
-              Refresh
-            </Button>
+            <div className="flex items-center gap-2 shrink-0">
+              {linkedPairCount > 0 && (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  className="gap-1.5"
+                  onClick={() => void healLinkedPairs()}
+                  disabled={loading || healingLinked}
+                >
+                  {healingLinked ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <ShieldCheck className="h-3.5 w-3.5" />
+                  )}
+                  Heal linked ({linkedPairCount})
+                </Button>
+              )}
+              <Button variant="outline" size="sm" className="gap-1.5" onClick={() => void load()} disabled={loading}>
+                <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
+                Refresh
+              </Button>
+            </div>
           </div>
         </div>
       )}
@@ -472,13 +521,32 @@ export function SilentStationAttachPanel({
       {embedded && (
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="text-xs text-slate-500 max-w-2xl">
-            Fills waiting for a GOD station attach. Linked JAA + driver pairs update together — Fleet sees the
-            driver/ops row. Use ⋯: Silent Attach, choose a station, or delete permanently.
+            Fills waiting for a GOD station attach. Linked Gas Card fills auto-attach when the merchant uniquely
+            matches a GOD station; use Heal linked for catch-up. Fleet sees the driver/ops row. Use ⋯: Silent
+            Attach, choose a station, or delete permanently.
           </p>
-          <Button variant="outline" size="sm" className="gap-1.5 shrink-0" onClick={() => void load()} disabled={loading}>
-            <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
-            Refresh
-          </Button>
+          <div className="flex items-center gap-2 shrink-0">
+            {linkedPairCount > 0 && (
+              <Button
+                variant="secondary"
+                size="sm"
+                className="gap-1.5"
+                onClick={() => void healLinkedPairs()}
+                disabled={loading || healingLinked}
+              >
+                {healingLinked ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <ShieldCheck className="h-3.5 w-3.5" />
+                )}
+                Heal linked ({linkedPairCount})
+              </Button>
+            )}
+            <Button variant="outline" size="sm" className="gap-1.5" onClick={() => void load()} disabled={loading}>
+              <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
+              Refresh
+            </Button>
+          </div>
         </div>
       )}
 

@@ -149,7 +149,7 @@ function LedgersInner({
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
+        <div className="hidden md:block">
           <h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
             Ledgers
           </h1>

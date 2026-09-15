@@ -6,10 +6,19 @@ import { FuelDataQualityStep } from './FuelDataQualityStep';
 import { FuelExceptionBlockersPanel } from './FuelExceptionBlockersPanel';
 import { FuelUnapprovedTxBlockersPanel } from './FuelUnapprovedTxBlockersPanel';
 import { useFuelWeekReports } from '../../../hooks/useFuelWeekReports';
+import {
+  fuelWeekHasDegradedInputs,
+  type FuelWeekDegradedInputs,
+} from '../../../utils/buildFuelWeekReportsForFinalize';
 import { type FuelWizardDriver } from './buildFuelWizardRows';
 import { useFuelWizardDerived } from './useFuelWizardDerived';
 import { type FuelExceptionBlocker } from '../../../utils/fuelFinalizeGating';
+import { fuelWeekClosableBlockerMessage } from '../../../utils/fuelWeekClosableGate';
 import { FUEL_SPEND_EPS } from '../../../utils/fuelMoneyEpsilon';
+import {
+  validateDisposition,
+  type FuelResidualDisposition,
+} from '@roam/fuel-core';
 import {
   FUEL_STEP_LABELS,
   FUEL_STEP_ORDER,
@@ -34,6 +43,7 @@ import { useFuelWizardKeyboard } from './useFuelWizardKeyboard';
 import {
   applyLocalLeakageReview,
   downloadWizardEvidencePack,
+  materializeWizardPeriodCounts,
   persistLeakageReviewToServer,
   persistWizardStep,
   recordWizardSecondApproval,
@@ -168,6 +178,7 @@ function FuelPeriodWizardInner({
     useState<FuelDualApprovalUiMode>('human');
   const [exceptionBusyId, setExceptionBusyId] = useState<string | null>(null);
   const [stepNoteDraft, setStepNoteDraft] = useState('');
+  const [leakageDisposition, setLeakageDisposition] = useState<FuelResidualDisposition | ''>('');
   const [stepNotes, setStepNotes] = useState<Array<{ step: string; note: string; at: string }>>([]);
   const [queueIndex, setQueueIndex] = useState(0);
 
@@ -200,6 +211,8 @@ function FuelPeriodWizardInner({
   });
   const liveReports = weekReports.reports;
   const weekTrips = weekReports.trips.length ? weekReports.trips : trips;
+  const weekDegraded: FuelWeekDegradedInputs | undefined = weekReports.degraded;
+  const hasDegradedInputs = fuelWeekHasDegradedInputs(weekDegraded);
 
   const {
     vehicleSnaps,
@@ -214,6 +227,7 @@ function FuelPeriodWizardInner({
     policyRows,
     priorMedian,
     gateResult,
+    closableBlockers,
     exceptionBlockers,
     unapprovedFuelTxBlockers,
     plateByVehicleId,
@@ -239,6 +253,10 @@ function FuelPeriodWizardInner({
     weekLoading: weekReports.loading,
     weekError: Boolean(weekReports.error),
     transactions,
+    countsUnevaluated: !period.counts || Object.keys(period.counts).length === 0,
+    degradedInputs: hasDegradedInputs,
+    periodTotalSpend: period.totalSpend,
+    periodUnexplained: period.netLeakage,
   });
 
   // Fresh walkthrough on period open or after Reopen week
@@ -289,6 +307,22 @@ function FuelPeriodWizardInner({
       note,
     });
   };
+
+  // C-3: keep SQL counts/money in sync so auto-close is not stuck on counts_unevaluated.
+  useEffect(() => {
+    if (periodLocked || weekReports.loading || weekIsEmpty) return;
+    if (!counts || Object.keys(counts).length === 0) return;
+    void materializeWizardPeriodCounts({
+      serverPeriodId,
+      weekStart: period.startDate,
+      weekEnd: period.endDate,
+      setServerPeriodId,
+      strip,
+      counts,
+      vehicleCount: vehicleSnaps.length,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [period.id, periodLocked, weekReports.loading, weekIsEmpty, counts, strip.totalSpend, strip.leakage]);
 
   // H8/H9 + NEW-6: server period is SoT for leakage review, step resume, second approval
   useEffect(() => {
@@ -398,29 +432,40 @@ function FuelPeriodWizardInner({
   };
 
   const handleMarkLeakageReviewed = () => {
-    const note =
-      stepNoteDraft.trim() || 'Accepted unexplained / over-explained fuel for this week';
+    const note = stepNoteDraft.trim();
+    const validated = validateDisposition({
+      disposition: leakageDisposition,
+      note,
+      requireNoteMinLength: 8,
+    });
+    if (!validated.ok) {
+      toast.error(
+        validated.error === 'invalid_disposition'
+          ? 'Choose a residual disposition before accepting.'
+          : 'Add a short reason (8+ characters) before accepting unexplained fuel.',
+      );
+      return;
+    }
     const meta = applyLocalLeakageReview({
       weekStart: period.startDate,
-      note,
+      note: validated.note,
       actorLabel: user?.email || user?.id || undefined,
       actorId: user?.id || user?.email || null,
     });
     setLeakageReviewed(true);
     setLeakageReviewMeta(meta);
-    if (stepNoteDraft.trim()) {
-      setStepNotes((prev) => [
-        ...prev,
-        { step: 'leakage-gap', note: stepNoteDraft.trim(), at: new Date().toISOString() },
-      ]);
-      setStepNoteDraft('');
-    }
+    setStepNotes((prev) => [
+      ...prev,
+      { step: 'leakage-gap', note, at: new Date().toISOString() },
+    ]);
+    setStepNoteDraft('');
     void persistLeakageReviewToServer({
       serverPeriodId,
       weekStart: period.startDate,
       weekEnd: period.endDate,
       setServerPeriodId,
-      note,
+      disposition: validated.disposition,
+      note: validated.note,
     });
     const settlementIdx = settlementPreviewStepIndex();
     setProgressIndex(Math.max(progressIndex, settlementIdx));
@@ -487,12 +532,20 @@ function FuelPeriodWizardInner({
 
   const handleFinalizeClick = async () => {
     if (periodLocked || liveReports.length === 0) return;
+    if (hasDegradedInputs) return;
+    if (closableBlockers.length > 0) {
+      toast.error(fuelWeekClosableBlockerMessage(closableBlockers[0]));
+      return;
+    }
     const gate = gateResult;
     if (gate.hasExceptionBlockers) {
       return;
     }
-    // C-2: over-explained week is a HARD blocker — cannot be overridden by ack.
+    // C-7: over-explained is HARD; under-explained requires leakage review first.
     if (gate.hasOverExplainedBlockers) {
+      return;
+    }
+    if (gate.hasUnderExplainedBlockers && !leakageReviewed) {
       return;
     }
     if (gate.hasBlockingWarnings && !financeWarningAcknowledged) {
@@ -647,8 +700,25 @@ function FuelPeriodWizardInner({
                   gateResult.overExplainedBlockers[0]?.pctOfSpend != null
                     ? `${gateResult.overExplainedBlockers[0].pctOfSpend}% of spend`
                     : 'beyond spend'
-                }. The residual is a modelling artefact, not real cash — fix odometer / efficiency / distance inputs first.`,
+                }. Modelled category costs exceed gas-card spend — fix odometer / efficiency / distance inputs. This cannot be accepted away.`,
                 actionLabel: undefined,
+              }
+            : gateResult.hasUnderExplainedBlockers && !leakageReviewed
+            ? {
+                title: 'Can’t finalize — under-explained week',
+                body: `Unexplained fuel is ${
+                  gateResult.underExplainedBlockers[0]?.pctOfSpend != null
+                    ? `${gateResult.underExplainedBlockers[0].pctOfSpend}% of spend`
+                    : 'beyond spend'
+                }. Fuel spend is not fully explained — investigate missing litres / gaps, then accept Unexplained with a typed reason.`,
+                actionLabel: undefined,
+              }
+            : hasDegradedInputs
+            ? {
+                title: 'Can’t finalize — incomplete inputs',
+                body: 'Trips, deadhead, personal allowance, cards, or brain classify timed out or failed to load. Retry until provenance is complete — silent empty data must not change charges.',
+                actionLabel: 'Retry week data',
+                onAction: handleRetryWeek,
               }
             : {
                 title: 'Ready to lock this week',
@@ -658,9 +728,12 @@ function FuelPeriodWizardInner({
                 actionDisabled:
                   finalizing ||
                   liveReports.length === 0 ||
+                  hasDegradedInputs ||
+                  closableBlockers.length > 0 ||
                   !!gateResult.hasExceptionBlockers ||
                   !!gateResult.hasUnapprovedFuelTxBlockers ||
                   !!gateResult.hasOverExplainedBlockers ||
+                  (!!gateResult.hasUnderExplainedBlockers && !leakageReviewed) ||
                   (!!gateResult.hasBlockingWarnings && !financeWarningAcknowledged) ||
                   (needsHumanSecondApprover(
                     strip.totalSpend,
@@ -828,6 +901,7 @@ function FuelPeriodWizardInner({
         {activeStepId === 'leakage-gap' && (
           <FuelLeakageStep
             leakage={strip.leakage}
+            totalSpend={strip.totalSpend}
             leakageRows={leakageRows}
             queueIndex={queueIndex}
             vehicleSnaps={vehicleSnaps}
@@ -844,6 +918,8 @@ function FuelPeriodWizardInner({
             adjustments={adjustments}
             dateRange={dateRange}
             onRefresh={onRefresh}
+            leakageDisposition={leakageDisposition}
+            onLeakageDispositionChange={setLeakageDisposition}
           />
         )}
 
@@ -885,6 +961,16 @@ function FuelPeriodWizardInner({
             onExportCsv={exportSettlementCsv}
             onDownloadEvidencePack={() => void handleDownloadEvidencePack()}
             settlementRows={settlementRows}
+            provenance={{
+              tripCount: weekTrips.length,
+              tripsTimedOut: Boolean(weekDegraded?.trips),
+              deadheadTimedOut: Boolean(weekDegraded?.deadhead),
+              personalAllowanceTimedOut: Boolean(weekDegraded?.personalAllowance),
+              brainTimedOut: Boolean(weekDegraded?.brain),
+              fuelCardsLoaded: (fuelCards || []).length,
+              fuelCardsMissing: Boolean(weekDegraded?.fuelCards),
+              vehicleCount: vehicles.length,
+            }}
           />
         )}
       </div>

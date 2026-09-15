@@ -282,6 +282,23 @@ export const fuelService = {
     });
   },
 
+  /** Persist JAA↔driver links server-side (also auto GOD-station attach when merchant unique). */
+  async applyJaaFuelMatches(pairs: unknown[]): Promise<{
+    success: boolean;
+    results: Array<{ ok: boolean; statementId?: string; driverId?: string; stationHeal?: { attached?: boolean } }>;
+  }> {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/jaa/apply-matches`, {
+      method: 'POST',
+      headers: await authHeaders(),
+      body: JSON.stringify({ pairs }),
+    });
+    if (!response.ok) {
+      const errorBody = await response.json().catch(() => ({}));
+      throw new Error(errorBody.error || 'Failed to apply JAA fuel matches');
+    }
+    return response.json();
+  },
+
   async saveFuelEntry(entry: FuelEntry): Promise<FuelEntry> {
     // Phase 2: Staged Reconciliation - Default to Pending for new or legacy logs
     if (!entry.reconciliationStatus) {

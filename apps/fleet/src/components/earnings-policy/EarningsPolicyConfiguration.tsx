@@ -20,7 +20,7 @@ export function EarningsPolicyConfiguration({
 
   return (
     <Card className="border-0 shadow-none">
-      <CardHeader className="px-0 pt-0">
+      <CardHeader className="hidden px-0 pt-0 md:block">
         <div className="flex justify-between items-start">
           <div>
             <CardTitle>Earnings Policy Configuration</CardTitle>

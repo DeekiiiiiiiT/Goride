@@ -467,16 +467,16 @@ export function AdminJaaGasCardsPage() {
       statementScope && statementScope.length
         ? statementScope.filter(isJaaStatementLedgerRow)
         : all.filter(isJaaStatementLedgerRow);
-    const { updates, summary } = buildJaaMatchUpdates(statements, all, inventory);
-    for (const entry of updates) {
-      try {
-        await fuelService.saveFuelEntry({
-          ...entry,
-          correctionReason: 'JAA statement match enrichment',
-        } as FuelEntry);
-      } catch (err) {
-        console.error('[JAA match] save failed', entry.id, err);
-      }
+    const { pairs, summary } = buildJaaMatchUpdates(statements, all, inventory);
+    const toApply = pairs.filter(
+      (p) =>
+        (p.status === 'matched' || p.status === 'amount_mismatch') &&
+        p.notes !== 'Already linked' &&
+        p.statementEntry &&
+        p.driverEntry,
+    );
+    if (toApply.length > 0) {
+      await fuelService.applyJaaFuelMatches(toApply);
     }
     return summary;
   };

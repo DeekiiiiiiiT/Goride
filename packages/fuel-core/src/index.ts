@@ -61,6 +61,9 @@ export {
   getCompanyCoveragePercent,
   splitAllCategoryCosts,
   sumCategoryShare,
+  assertCategoryCostsTieSpend,
+  isKnownCoverageType,
+  coverageRuleIsResolved,
   type CategoryCosts,
   type CategorySplit,
   type FuelCoverageCategory,
@@ -81,8 +84,40 @@ export {
   isOverExplainedFuelWeek,
   isFuelMiscWithinGate,
   floorMiscForSplit,
+  classifyFuelMiscResidual,
+  isOverExplainedResidual,
+  isUnderExplainedResidual,
   type FlooredMiscSplit,
+  type FuelMiscResidualKind,
 } from './fuelFinalizeGate.ts';
+
+export {
+  evaluateFuelWeekClosable,
+  fuelWeekIsClosable,
+  type EvaluateFuelWeekClosableInput,
+  type FuelWeekClosableBlocker,
+} from './evaluateFuelWeekClosable.ts';
+
+export {
+  computeFuelWeek,
+  diffWeekCalc,
+  weekCalcMatches,
+  type ComputeFuelWeekInput,
+  type WeekCalc,
+} from './computeFuelWeek.ts';
+
+export {
+  FUEL_RESIDUAL_DISPOSITIONS,
+  isFuelResidualDisposition,
+  validateDisposition,
+  type FuelResidualDisposition,
+  type FuelResidualDispositionRecord,
+} from './fuelResidualDisposition.ts';
+
+export {
+  precomputeFuelFillDrivers,
+  indexTripsByVehicleYmd,
+} from './precomputeFuelFillDrivers.ts';
 
 export {
   unwrapFuelEntriesPayload,

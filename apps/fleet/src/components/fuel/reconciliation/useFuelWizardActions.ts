@@ -48,6 +48,40 @@ export async function persistWizardStep(input: {
   }
 }
 
+/** C-3: push wizard step counts + money strip to SQL so auto-close is not stuck unevaluated. */
+export async function materializeWizardPeriodCounts(input: {
+  serverPeriodId: string | null;
+  weekStart: string;
+  weekEnd: string;
+  setServerPeriodId: (id: string) => void;
+  strip: MoneyStripTotals;
+  counts: Record<string, { actionable: number; informational: number }>;
+  vehicleCount?: number;
+  driverCount?: number;
+}) {
+  try {
+    const pid = await ensureWizardPeriodId(input);
+    if (!pid) return;
+    await api.materializeFuelPeriod({
+      periodId: pid,
+      weekStart: input.weekStart,
+      weekEnd: input.weekEnd,
+      totalSpend: input.strip.totalSpend,
+      gasCardSpend: input.strip.gasCard,
+      cashFromEarnings: input.strip.cashFromEarnings,
+      companyShare: input.strip.company,
+      driverShare: input.strip.driver,
+      unexplained: input.strip.leakage,
+      vehicleCount: input.vehicleCount,
+      driverCount: input.driverCount,
+      counts: input.counts,
+      computedFromHash: `wizard:${input.weekStart}`,
+    });
+  } catch {
+    /* offline — counts stay local */
+  }
+}
+
 export async function refreshSecondApproveActors(periodId: string): Promise<string[]> {
   const pack = await api.getFuelPeriodEvidencePack(periodId);
   return ((pack?.audit || []) as Array<{ action?: string; actor_id?: string }>)
@@ -145,12 +179,17 @@ export async function persistLeakageReviewToServer(input: {
   weekStart: string;
   weekEnd: string;
   setServerPeriodId: (id: string) => void;
+  disposition: string;
   note: string;
 }) {
   try {
     const pid = await ensureWizardPeriodId(input);
     if (!pid) return;
-    await api.reviewFuelPeriodLeakage({ periodId: pid, note: input.note });
+    await api.reviewFuelPeriodLeakage({
+      periodId: pid,
+      disposition: input.disposition,
+      note: input.note,
+    });
     await api.updateFuelPeriodStep({
       periodId: pid,
       step: 'settlement-preview',

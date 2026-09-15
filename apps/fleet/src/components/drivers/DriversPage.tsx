@@ -838,7 +838,7 @@ export function DriversPage({
       {/* --- HEADER --- */}
       <div className="flex flex-col gap-4">
         <div className="flex justify-between items-center">
-           <div>
+           <div className="hidden md:block">
                <h2 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
                  {v('driversPageTitle')}
                </h2>

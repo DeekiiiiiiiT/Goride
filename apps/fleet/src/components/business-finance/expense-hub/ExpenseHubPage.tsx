@@ -59,7 +59,7 @@ export function ExpenseHubPage({
   return (
     <div className="space-y-4">
       <header className="flex flex-wrap items-start justify-between gap-3">
-        <div className="flex items-start gap-3">
+        <div className="hidden md:flex items-start gap-3">
           <div className="mt-0.5 rounded-md bg-indigo-50 p-2.5 dark:bg-indigo-950">
             <ReceiptText className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
           </div>

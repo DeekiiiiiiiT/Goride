@@ -66,7 +66,7 @@ export function ReportsPage() {
   return (
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
+        <div className="hidden md:block">
           <h2 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-100">Reports & Automation</h2>
           <p className="text-slate-500 dark:text-slate-400">
             Generate detailed system reports and configure automated delivery.

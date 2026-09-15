@@ -262,6 +262,23 @@ export const fuelService = {
     return result.data || result;
   },
 
+  /** Persist JAA↔driver links server-side (also auto GOD-station attach when merchant unique). */
+  async applyJaaFuelMatches(pairs: unknown[]): Promise<{
+    success: boolean;
+    results: Array<{ ok: boolean; statementId?: string; driverId?: string; stationHeal?: { attached?: boolean } }>;
+  }> {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/jaa/apply-matches`, {
+      method: 'POST',
+      headers: await requireAuthHeaders(),
+      body: JSON.stringify({ pairs }),
+    });
+    if (!response.ok) {
+      const errorBody = await response.json().catch(() => ({}));
+      throw new Error(errorBody.error || 'Failed to apply JAA fuel matches');
+    }
+    return response.json();
+  },
+
   /** Alias for ImportsPage fuel statement persistence */
   createFuelEntry(entry: FuelEntry): Promise<FuelEntry> {
     return this.saveFuelEntry(entry);

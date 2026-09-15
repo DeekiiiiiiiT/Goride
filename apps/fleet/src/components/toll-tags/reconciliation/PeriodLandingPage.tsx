@@ -266,13 +266,13 @@ export function PeriodLandingPage({
       {/* Header — Stitch premium redesign */}
       <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
-          <nav className="mb-2 flex items-center gap-2 text-[11px] font-medium text-slate-500" aria-label="Breadcrumb">
+          <nav className="mb-2 hidden items-center gap-2 text-[11px] font-medium text-slate-500 md:flex" aria-label="Breadcrumb">
             <span>Finance</span>
             <ChevronRight className="h-3 w-3" aria-hidden />
             <span className="font-bold text-indigo-700" aria-current="page">Toll Reconciliation</span>
           </nav>
-          <h2 className="text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">Toll Reconciliation</h2>
-          <p className="mt-1 max-w-2xl text-sm leading-5 text-slate-500">
+          <h2 className="hidden md:block text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">Toll Reconciliation</h2>
+          <p className="mt-1 hidden md:block max-w-2xl text-sm leading-5 text-slate-500">
             Audit and reconcile toll expenses across the fleet. Approve period-based spending and handle driver reimbursements.
           </p>
         </div>

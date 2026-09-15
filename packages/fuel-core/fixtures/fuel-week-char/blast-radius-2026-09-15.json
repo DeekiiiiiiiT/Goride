@@ -1,0 +1,55 @@
+{
+  "capturedAt": "2026-09-15",
+  "project": "GoRide",
+  "projectId": "csfllzzastacofsvcdsc",
+  "orgId": "8cfa606a-f6ea-4ccb-a2b2-1d2cc323a823",
+  "config": {
+    "PROJECTION_READS_WEEK_STATEMENTS": true,
+    "FUEL_BUILD_SNAPSHOTS_ENGINE_default": "full",
+    "autoCloseInAudit": false,
+    "note": "No fuel_period_audit action=auto_close rows — C-3 cron blast radius currently low; still fix gates before enabling."
+  },
+  "q1_lockedPeriodsSample": {
+    "lockedCount": 31,
+    "notes": "Locked weeks carry nonzero unexplained (positive and negative). Not all unexplained=0."
+  },
+  "q2_auditActions": {
+    "finalize": 34,
+    "second_approve": 4,
+    "auto_close": 0,
+    "finalize_partial": 0,
+    "money_commit_failure": 0
+  },
+  "q3_statementVsLedger": {
+    "deltaRows": [
+      {
+        "week_key": "2026-08-24",
+        "driver_id": "73e5b1dc-01b4-45ee-a34a-25a3256b9841",
+        "close_reason": "fuel_week_seal:consumption_strip",
+        "stmt_driver_minor": 578498,
+        "led_driver_minor": 0,
+        "driver_delta_minor": 578498,
+        "note": "C-2 LIVE: statement says driver owes ~JMD 5784.98; ledger fuel_deduction active sum is 0."
+      }
+    ]
+  },
+  "q4_lockedMissingStatements": [],
+  "q5_kvPrefixCounts": {
+    "fuel_entries": 0,
+    "transactions": 0,
+    "snapshots": 31,
+    "note": "fuel_entry/transaction prefixes empty — money path likely SQL-backed; KV still holds finalized_report snapshots."
+  },
+  "statementCloseReasonDist": {
+    "fuel_week_seal:finalized_report_closed": 27,
+    "fuel_week_seal:consumption_strip_closed": 3,
+    "fuel_week_seal:fuel_week_rebuild_closed_recent": true,
+    "note": "Rebuild has published closed statements — C-2b (draft-only rebuild) is required."
+  },
+  "gateToStage1": {
+    "fixturesCommitted": true,
+    "q3Documented": true,
+    "cronKnown": "no auto_close audit rows observed",
+    "c2Playbook": "Reopen/reseal week 2026-08-24 for driver 73e5b1dc… before FUEL_SERVER_ENGINE=enforce"
+  }
+}

@@ -70,7 +70,7 @@ import { FleetSetupChecklistCard } from './FleetSetupChecklistCard';
 export function SettingsPage() {
   return (
     <div className="space-y-6">
-      <div>
+      <div className="hidden md:block">
         <h2 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-100">Settings</h2>
         <p className="text-slate-500 dark:text-slate-400">
           Manage your fleet preferences, team, and system configurations.

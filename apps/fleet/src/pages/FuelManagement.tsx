@@ -602,19 +602,49 @@ function FuelManagementInner({
           const disputesP = FuelDisputeService.getAllDisputes().catch(() => []);
 
           if (scope === 'recon') {
-              const [vData, dData, scenariosData, adjsData, disputesData] =
-                  await Promise.all([
-                      vehiclesP,
-                      driversP,
-                      scenariosP,
-                      adjsP,
-                      disputesP,
-                  ]);
-              setVehicles(vData);
-              setDrivers(dData);
-              setScenarios(scenariosData);
-              setAdjustments(adjsData);
-              setDisputes(disputesData);
+              // C-6: cards are required for fill→driver attribution on the recon path.
+              const cardsP = fuelService.getFuelCards().then(
+                  (data) => data,
+                  (err) => {
+                      console.error('[FuelManagement] getFuelCards failed (recon)', err);
+                      throw err;
+                  },
+              );
+              try {
+                  const [vData, dData, scenariosData, adjsData, disputesData, cardsData] =
+                      await Promise.all([
+                          vehiclesP,
+                          driversP,
+                          scenariosP,
+                          adjsP,
+                          disputesP,
+                          cardsP,
+                      ]);
+                  setVehicles(vData);
+                  setDrivers(dData);
+                  setScenarios(scenariosData);
+                  setAdjustments(adjsData);
+                  setDisputes(disputesData);
+                  setCards(cardsData);
+                  setCardsLoadError(null);
+              } catch (cardErr: any) {
+                  console.error('[FuelManagement] Recon load failed', cardErr);
+                  // Still load non-card recon data so the landing is usable.
+                  const [vData, dData, scenariosData, adjsData, disputesData] =
+                      await Promise.all([
+                          vehiclesP,
+                          driversP,
+                          scenariosP,
+                          adjsP,
+                          disputesP,
+                      ]);
+                  setVehicles(vData);
+                  setDrivers(dData);
+                  setScenarios(scenariosData);
+                  setAdjustments(adjsData);
+                  setDisputes(disputesData);
+                  setCardsLoadError(cardErr?.message || 'Failed to load cards');
+              }
               setCardsLoading(false);
               coreLoadedRef.current = true;
               reconLoadedRef.current = true;
@@ -712,7 +742,7 @@ function FuelManagementInner({
     };
   }, [activeTab, periodsQueryReady, fuelFetchWindow.startDate, fuelFetchWindow.endDate]);
 
-  // Tab-scoped bootstrap — logs stay light; recon skips cards; cards tab loads full bundle.
+  // Tab-scoped bootstrap — logs stay light; recon loads cards (C-6); cards tab loads full bundle.
   useEffect(() => {
     if (activeTab === 'logs' || activeTab === 'reimbursements') {
       if (coreLoadedRef.current || reconLoadedRef.current || fullLoadedRef.current) return;
@@ -1314,8 +1344,22 @@ function FuelManagementInner({
               fuelEntries: logs,
               scenarios,
               trips,
-              // R3: defence-in-depth — refuse client-side if Pending fuel still in window
               transactions,
+              disputes,
+              periodCounts: (periodRow.counts || undefined) as Record<
+                string,
+                { actionable?: number }
+              >,
+              leakageReviewed: Boolean(
+                periodRow.leakageReviewedAt ||
+                  periodRow.leakage_reviewed_at ||
+                  periodRow.status === 'locked',
+              ),
+              totalSpend: spendEstimate,
+              unexplained: reports.reduce(
+                (s, r) => s + (Number(r.miscellaneousCost) || 0),
+                0,
+              ),
             },
             {
               onProgress: (msg) => setMessage(msg),

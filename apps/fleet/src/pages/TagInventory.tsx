@@ -163,11 +163,11 @@ function TagInventoryInner({
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between gap-3">
-        <div>
+        <div className="hidden md:block">
             <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
             Tag Inventory
             </h1>
-            <p className="mt-1 hidden text-sm text-slate-500 md:block">
+            <p className="mt-1 text-sm text-slate-500">
                 Manage your toll transponders and vehicle assignments.
             </p>
         </div>

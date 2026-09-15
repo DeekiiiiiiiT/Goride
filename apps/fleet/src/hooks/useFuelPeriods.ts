@@ -30,6 +30,7 @@ export type FuelPeriodRow = {
   leakageReviewedNote?: string | null;
   lockedAt?: string | null;
   computedAt?: string | null;
+  fuelSealError?: string | null;
 };
 
 export function useFuelPeriods(opts: { from?: string; to?: string; enabled?: boolean }) {

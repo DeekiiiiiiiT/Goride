@@ -91,6 +91,7 @@
     "npm:input-otp@^1.4.2": "1.5.0_react@18.3.1_react-dom@18.3.1__react@18.3.1",
     "npm:jsdom@^30.0.1": "30.0.1",
     "npm:jszip@*": "3.10.1",
+    "npm:leaflet.heat@0.2": "0.2.0",
     "npm:leaflet.heat@0.2.0": "0.2.0",
     "npm:leaflet@*": "1.9.4",
     "npm:leaflet@1.9.4": "1.9.4",
@@ -7085,6 +7086,25 @@
         "packageJson": {
           "dependencies": [
             "npm:vitest@^3.2.4"
+          ]
+        }
+      },
+      "packages/platform-ops-ui": {
+        "packageJson": {
+          "dependencies": [
+            "npm:@tanstack/react-virtual@^3.14.10",
+            "npm:@types/leaflet@*",
+            "npm:@types/react-dom@^18.3.0",
+            "npm:@types/react@^18.3.0",
+            "npm:clsx@*",
+            "npm:date-fns@*",
+            "npm:leaflet.heat@0.2",
+            "npm:leaflet@1.9.4",
+            "npm:lucide-react@0.487",
+            "npm:react-day-picker@^8.10.1",
+            "npm:recharts@*",
+            "npm:sonner@^2.0.3",
+            "npm:typescript@^5.4.0"
           ]
         }
       },

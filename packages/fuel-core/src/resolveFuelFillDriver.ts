@@ -3,7 +3,7 @@
  * Order: explicit entry.driverId → gas card history at fill time → trip proximity → vehicle assignment history → currentDriverId → unassigned.
  */
 
-import { driverIdAtCardTime } from '@roam/roam-shared';
+import { driverIdAtCardTime } from '../../roam-shared/src/fuel/fuelCardAssignmentHistory.ts';
 import { UNASSIGNED_FUEL_DRIVER_ID, type FuelCard, type FuelEntry, type FuelCalcTrip } from './fuelTypes.ts';
 import {
   driverIdAtVehicleTime,

@@ -45,7 +45,7 @@ export function EarningsPage() {
   return (
     <div className="flex h-full min-h-0 flex-col gap-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
+        <div className="hidden md:block">
           <h1 className="text-2xl font-semibold tracking-tight text-slate-900 dark:text-slate-50">
             Earnings
           </h1>

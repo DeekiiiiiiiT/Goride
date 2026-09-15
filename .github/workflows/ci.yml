@@ -113,7 +113,7 @@ jobs:
           deno-version: v2.x
 
       - name: Deno check edge functions
-        run: deno check supabase/functions/_shared/orderToFleetTrip.ts supabase/functions/_fleet-server/workforce_invite_routes.ts supabase/functions/_fleet-server/rush_settlement_routes.ts supabase/functions/_fleet-server/fleet_module_checkout.ts supabase/functions/_fleet-server/fleet_wipay.ts supabase/functions/_fleet-server/trips_org_scope.ts supabase/functions/delivery/courierFleetAttribution.ts
+        run: deno check supabase/functions/_shared/orderToFleetTrip.ts supabase/functions/_fleet-server/workforce_invite_routes.ts supabase/functions/_fleet-server/rush_settlement_routes.ts supabase/functions/_fleet-server/fleet_module_checkout.ts supabase/functions/_fleet-server/fleet_wipay.ts supabase/functions/_fleet-server/trips_org_scope.ts supabase/functions/delivery/courierFleetAttribution.ts supabase/functions/_fleet-server/fuel_week_engine.ts supabase/functions/_fleet-server/fuel_period_routes.ts
 
       - name: Typecheck fleet Rush spine
         env:

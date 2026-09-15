@@ -2,9 +2,17 @@
  * Fuel policy versioning: Rules = % template; Schedule = period + drivers.
  */
 
-import { addWeeks, endOfWeek, format, getDay, parseISO, startOfWeek } from 'date-fns';
 import type { FuelRule, FuelScenario, FuelScenarioVersion } from './fuelTypes.ts';
-import { fleetTzDateKey, ymdToLocalDate } from './fleetCalendar.ts';
+import {
+  addWeeksLocal,
+  endOfWeekSunday,
+  fleetTzDateKey,
+  formatMonthDay,
+  formatMonthDayYear,
+  formatYmd,
+  startOfWeekMonday,
+  ymdToLocalDate,
+} from './fleetCalendar.ts';
 
 /** Known Monday — used when migrating legacy scenarios with no versions. */
 export const LEGACY_POLICY_EFFECTIVE_FROM = '2000-01-03';
@@ -12,7 +20,7 @@ export const LEGACY_POLICY_EFFECTIVE_FROM = '2000-01-03';
 export function isMondayYmd(ymd: string): boolean {
   const d = ymdToLocalDate(String(ymd).split('T')[0]);
   if (isNaN(d.getTime())) return false;
-  return getDay(d) === 1;
+  return d.getDay() === 1;
 }
 
 /** Monday yyyy-MM-dd for a calendar day (fleet TZ when provided). */
@@ -23,13 +31,13 @@ export function mondayYmdForDate(d: Date = new Date(), timezone?: string): strin
     const parsed = ymd ? ymdToLocalDate(ymd) : d;
     day = isNaN(parsed.getTime()) ? d : parsed;
   }
-  return format(startOfWeek(day, { weekStartsOn: 1 }), 'yyyy-MM-dd');
+  return formatYmd(startOfWeekMonday(day));
 }
 
 /** Next Monday after this week's Monday (fleet TZ when provided). */
 export function nextMondayYmd(d: Date = new Date(), timezone?: string): string {
   const thisMon = mondayYmdForDate(d, timezone);
-  return format(addWeeks(parseISO(thisMon), 1), 'yyyy-MM-dd');
+  return formatYmd(addWeeksLocal(ymdToLocalDate(thisMon), 1));
 }
 
 /** @deprecated Prefer passing activity-based earliestMonday into upcomingMondayOptions. */
@@ -50,21 +58,23 @@ export function upcomingMondayOptions(
   const rawEarliest = earliestMonday || thisMon;
   const earliest = isMondayYmd(rawEarliest)
     ? rawEarliest
-    : mondayYmdForDate(parseISO(rawEarliest), timezone);
+    : mondayYmdForDate(ymdToLocalDate(rawEarliest), timezone);
   const startYmd = earliest <= thisMon ? earliest : thisMon;
-  const endYmd = format(addWeeks(parseISO(thisMon), Math.max(0, futureCount - 1)), 'yyyy-MM-dd');
+  const endYmd = formatYmd(
+    addWeeksLocal(ymdToLocalDate(thisMon), Math.max(0, futureCount - 1)),
+  );
 
   const options: { value: string; label: string }[] = [];
-  let cursor = parseISO(startYmd);
-  const last = parseISO(endYmd);
+  let cursor = ymdToLocalDate(startYmd);
+  const last = ymdToLocalDate(endYmd);
   while (cursor.getTime() <= last.getTime()) {
-    const end = endOfWeek(cursor, { weekStartsOn: 1 });
-    const value = format(cursor, 'yyyy-MM-dd');
+    const end = endOfWeekSunday(cursor);
+    const value = formatYmd(cursor);
     options.push({
       value,
-      label: `${format(cursor, 'MMM d')} – ${format(end, 'MMM d, yyyy')}`,
+      label: `${formatMonthDay(cursor)} – ${formatMonthDayYear(end)}`,
     });
-    cursor = addWeeks(cursor, 1);
+    cursor = addWeeksLocal(cursor, 1);
   }
   return options;
 }
@@ -535,14 +545,18 @@ export function versionWindowLabel(version: FuelScenarioVersion): string {
       ? 'Since launch'
       : (() => {
           try {
-            return format(parseISO(version.effectiveFrom), 'MMM d, yyyy');
+            const d = ymdToLocalDate(version.effectiveFrom);
+            if (isNaN(d.getTime())) return version.effectiveFrom;
+            return formatMonthDayYear(d);
           } catch {
             return version.effectiveFrom;
           }
         })();
   if (!version.effectiveUntil) return `${from} → Never`;
   try {
-    return `${from} → ${format(parseISO(version.effectiveUntil), 'MMM d, yyyy')}`;
+    const d = ymdToLocalDate(version.effectiveUntil);
+    if (isNaN(d.getTime())) return `${from} → ${version.effectiveUntil}`;
+    return `${from} → ${formatMonthDayYear(d)}`;
   } catch {
     return `${from} → ${version.effectiveUntil}`;
   }

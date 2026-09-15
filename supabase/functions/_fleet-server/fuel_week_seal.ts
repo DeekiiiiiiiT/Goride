@@ -224,10 +224,9 @@ export async function sealFuelWeek(opts: {
       Math.abs(amounts.totalSpend) > 0.005;
     if (!hasActivity && !p.fuel_finalized) continue;
 
-    // Pass 3 / H-7: only rebuild snapshot, finalized_report KV, or consumption
-    // strip overrides may close fuel. Period-column copies stay draft.
+    // Pass 3 / H-7 + C-2b: rebuild-only is draft until engine parity.
+    // Only finalized_report KV or consumption_strip overrides may close fuel.
     const verifiedSources = new Set([
-      "fuel_week_rebuild",
       "finalized_report",
       "consumption_strip",
     ]);

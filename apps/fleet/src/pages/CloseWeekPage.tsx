@@ -762,7 +762,7 @@ export function CloseWeekPage({
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           {!embedded ? (
-            <h1 className="flex items-center gap-2 text-xl font-semibold text-slate-900">
+            <h1 className="hidden md:flex items-center gap-2 text-xl font-semibold text-slate-900">
               <Lock className="h-5 w-5 text-indigo-700" />
               Close the Week
             </h1>

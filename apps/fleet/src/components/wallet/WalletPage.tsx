@@ -31,7 +31,7 @@ export function WalletPage({ onNavigate, onOpenDriver }: Props) {
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-5">
-      <div>
+      <div className="hidden md:block">
         <h1 className="text-2xl font-semibold tracking-tight text-slate-900 dark:text-slate-50">
           Wallet
         </h1>

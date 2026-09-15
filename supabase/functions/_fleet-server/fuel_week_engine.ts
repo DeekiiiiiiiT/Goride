@@ -6,7 +6,6 @@
  */
 import * as kv from "./kv_store.tsx";
 import { filterRecordsByOrganizationId } from "./org_scope.ts";
-import { classifyFuelWeek } from "../fuel-brain/classify.ts";
 import { closeOpenCyclesForWeek } from "./fuel_cycle_stamp.ts";
 import {
   assembleWeekSnapshotsFromRawEntries,
@@ -53,11 +52,6 @@ async function loadOrgScenarios(orgId: string): Promise<Record<string, unknown>[
 
 async function loadOrgDrivers(orgId: string): Promise<Record<string, unknown>[]> {
   const raw = ((await kv.getByPrefix("driver:")) || []) as Record<string, unknown>[];
-  return filterRecordsByOrganizationId(raw, orgId);
-}
-
-async function loadOrgVehicles(orgId: string): Promise<Record<string, unknown>[]> {
-  const raw = ((await kv.getByPrefix("vehicle:")) || []) as Record<string, unknown>[];
   return filterRecordsByOrganizationId(raw, orgId);
 }
 
@@ -113,7 +107,25 @@ function withScenarioMetadata(
 
 /**
  * Scenario-aware snapshot assembly — orchestration only; money math via fuel-core.
+ * H-11: callers that need closed/publishable money must supply categoryCosts via
+ * a full Engine A path; this entry path is draft-only without them.
  */
+function snapshotHasCategoryCosts(snap: BuiltSnapshot): boolean {
+  const top = snap.categoryCosts;
+  const meta = (snap.metadata && typeof snap.metadata === "object"
+    ? snap.metadata
+    : {}) as Record<string, unknown>;
+  const nested = meta.categoryCosts;
+  const cats = (top && typeof top === "object" ? top : nested) as Record<string, unknown> | null;
+  if (!cats || typeof cats !== "object") return false;
+  return (
+    "rideShareCost" in cats ||
+    "companyUsageCost" in cats ||
+    "deadheadCost" in cats ||
+    "personalUsageCost" in cats
+  );
+}
+
 export function assembleSnapshotsWithScenarios(input: {
   entries: Record<string, unknown>[];
   weekStart: string;
@@ -121,10 +133,21 @@ export function assembleSnapshotsWithScenarios(input: {
   orgId: string;
   scenarios: Record<string, unknown>[];
   drivers: Record<string, unknown>[];
-  vehicles: Record<string, unknown>[];
+  vehicles?: Record<string, unknown>[];
   brainByDriver?: Map<string, Record<string, unknown>>;
+  /** When true (default), refuse snapshots without categoryCosts (publish path). */
+  requireCategoryCosts?: boolean;
 }): BuiltSnapshot[] {
-  const { entries, weekStart, weekEnd, orgId, scenarios, drivers, brainByDriver } = input;
+  const {
+    entries,
+    weekStart,
+    weekEnd,
+    orgId,
+    scenarios,
+    drivers,
+    brainByDriver,
+    requireCategoryCosts = true,
+  } = input;
   const fuelRuleByDriver = new Map<string, WeekSnapFuelRule | null>();
   const scenarioByDriver = new Map<string, Record<string, unknown> | null>();
 
@@ -138,38 +161,33 @@ export function assembleSnapshotsWithScenarios(input: {
     fuelRuleByDriver.set(driverId, pickFuelRule(scenario));
   }
 
-  const snaps = assembleWeekSnapshotsFromRawEntries({
-    weekStart,
-    weekEnd,
-    orgId,
-    entries: toRawEntries(entries),
-    fuelRuleByDriver,
-    brainByDriver,
-    builtBy: "fuel_week_engine",
-  });
-  return withScenarioMetadata(snaps, scenarioByDriver);
+  const snaps = withScenarioMetadata(
+    assembleWeekSnapshotsFromRawEntries({
+      weekStart,
+      weekEnd,
+      orgId,
+      entries: toRawEntries(entries),
+      fuelRuleByDriver,
+      brainByDriver,
+      builtBy: "fuel_week_engine",
+    }),
+    scenarioByDriver,
+  );
+  if (!requireCategoryCosts) return snaps;
+  if (entries.length === 0) return snaps;
+  const allHaveCosts = snaps.length > 0 && snaps.every((s) => snapshotHasCategoryCosts(s));
+  if (!allHaveCosts) return [];
+  return snaps;
 }
 
-async function attachBrainHints(input: {
+/** P-6: do not invent all-zero brain metadata on closed snapshots. */
+async function attachBrainHints(_input: {
   orgId: string;
   weekStart: string;
   weekEnd: string;
   driverIds: string[];
 }): Promise<Map<string, Record<string, unknown>>> {
-  const map = new Map<string, Record<string, unknown>>();
-  for (const driverId of input.driverIds) {
-    try {
-      const result = classifyFuelWeek({
-        totalOdometerKm: 0,
-        tripRideshareKm: 0,
-        companyOpsKm: 0,
-      });
-      map.set(driverId, { ...result, source: "fuel_week_engine" });
-    } catch {
-      /* non-fatal */
-    }
-  }
-  return map;
+  return new Map();
 }
 
 /** Primary export used by routes + auto-close. */
@@ -187,15 +205,19 @@ export async function buildFuelPeriodSnapshotsFull(input: {
   try {
     const entries = await loadWeekFuelEntries(input.orgId, weekStart, weekEnd);
     if (engineMode() === "entries") {
-      const snapshots = assembleSnapshotsFromEntries(entries, weekStart, weekEnd, input.orgId);
-      const totalSpend = snapshots.reduce((s, snap) => s + (Number(snap.totalGasCardCost) || 0), 0);
-      return { ok: true, snapshots, totalSpend };
+      // H-11: entry-only path records misc=0 — refuse for auto-close publish.
+      return {
+        ok: false,
+        snapshots: [],
+        totalSpend: 0,
+        error: "missing_category_costs",
+      };
     }
 
-    const [scenarios, drivers, vehicles] = await Promise.all([
+    // P-5: do not scan vehicles — assembler never reads them.
+    const [scenarios, drivers] = await Promise.all([
       loadOrgScenarios(input.orgId),
       loadOrgDrivers(input.orgId),
-      loadOrgVehicles(input.orgId),
     ]);
 
     const driverIds = [
@@ -215,12 +237,17 @@ export async function buildFuelPeriodSnapshotsFull(input: {
       orgId: input.orgId,
       scenarios,
       drivers,
-      vehicles,
       brainByDriver,
+      requireCategoryCosts: true,
     });
 
     if (snapshots.length === 0 && entries.length > 0) {
-      snapshots = assembleSnapshotsFromEntries(entries, weekStart, weekEnd, input.orgId);
+      return {
+        ok: false,
+        snapshots: [],
+        totalSpend: 0,
+        error: "missing_category_costs",
+      };
     }
 
     const vehicleIds = [
@@ -244,14 +271,17 @@ export async function buildFuelPeriodSnapshotsFull(input: {
   } catch (e: any) {
     try {
       const entries = await loadWeekFuelEntries(input.orgId, weekStart, weekEnd);
+      if (entries.length > 0) {
+        return {
+          ok: false,
+          snapshots: [],
+          totalSpend: 0,
+          error: "missing_category_costs",
+        };
+      }
       const snapshots = assembleSnapshotsFromEntries(entries, weekStart, weekEnd, input.orgId);
       const totalSpend = snapshots.reduce((s, snap) => s + (Number(snap.totalGasCardCost) || 0), 0);
-      return {
-        ok: true,
-        snapshots,
-        totalSpend,
-        error: e?.message ? `full_engine_fallback:${e.message}` : "full_engine_fallback",
-      };
+      return { ok: true, snapshots, totalSpend };
     } catch (e2: any) {
       return {
         ok: false,

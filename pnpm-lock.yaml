@@ -1968,9 +1968,6 @@ importers:
       '@roam/roam-shared':
         specifier: workspace:*
         version: link:../roam-shared
-      date-fns:
-        specifier: '*'
-        version: 4.1.0
     devDependencies:
       vitest:
         specifier: ^3.2.4

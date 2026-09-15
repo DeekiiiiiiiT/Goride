@@ -32,6 +32,10 @@ import {
 import { fuelPeriodFinalizeIdempotencyKey } from '../../../utils/fuelPeriodIdempotency';
 import { interpretFuelFinalizeJobResult } from '../../../utils/fuelFinalizeJobResult';
 import {
+  evaluateFuelWeekClosableClient,
+  fuelWeekClosableBlockerMessage,
+} from '../../../utils/fuelWeekClosableGate';
+import {
   FUEL_SECOND_APPROVER_THRESHOLD,
   resolveFuelSecondApproverThreshold,
 } from '../../../utils/fuelDualApproval';
@@ -184,6 +188,11 @@ export function FuelBulkFinalizeDialog({
             Unexplained fuel still marked “to review” will be accepted when you confirm below
             (same as Mark reviewed in the week wizard).
           </p>
+          <p>
+            High-spend weeks need a distinct second approver on file for that period version
+            (or org <code className="text-[11px]">service_only</code> dual-approval mode).
+            Client self-approve flags are ignored.
+          </p>
           <p>Failed weeks do not undo weeks that already succeeded.</p>
         </div>
       )}
@@ -260,7 +269,8 @@ export function FuelBulkFinalizeDialog({
               });
               await api.reviewFuelPeriodLeakage({
                 periodId: periodRow.id,
-                note: 'Accepted via bulk Finalize weeks',
+                disposition: 'accepted_variance',
+                note: 'Accepted via bulk Finalize weeks (accepted_variance).',
               });
               periodForGate = { ...period, leakageReviewed: true };
             }
@@ -336,6 +346,31 @@ export function FuelBulkFinalizeDialog({
               continue;
             }
 
+            const closableBlockers = evaluateFuelWeekClosableClient({
+              gateResult,
+              reports,
+              scenarios,
+              leakageReviewed: periodForGate.leakageReviewed ?? false,
+              countsUnevaluated:
+                !periodForGate.counts || Object.keys(periodForGate.counts).length === 0,
+              openDisputesInWeek: disputes.some(
+                (d) =>
+                  d.status === 'Open' &&
+                  isYmdInFuelWeek(d.weekStart, period.startDate, period.endDate),
+              ),
+              totalSpend: period.totalSpend,
+              unexplained: period.netLeakage,
+            });
+            if (closableBlockers.length > 0) {
+              weekResults.push({
+                id: period.id,
+                label,
+                status: 'failed',
+                message: fuelWeekClosableBlockerMessage(closableBlockers[0]),
+              });
+              continue;
+            }
+
             prepared.push({ period: periodForGate, label, reports, trips, weekEntries });
           } catch (e: any) {
             console.error('[FuelBulkFinalize] prepare failed', period.id, e);
@@ -375,8 +410,12 @@ export function FuelBulkFinalizeDialog({
                 fuelEntries: weekEntries,
                 scenarios,
                 trips,
-                // R3: defence-in-depth — same Pending-fuel refuse as single-week finalize
                 transactions,
+                disputes,
+                periodCounts: periodForGate.counts,
+                leakageReviewed: periodForGate.leakageReviewed ?? false,
+                totalSpend: period.totalSpend,
+                unexplained: period.netLeakage,
               },
               {
                 priorReports,
@@ -418,7 +457,6 @@ export function FuelBulkFinalizeDialog({
                 snapshots: result.snapshots || [],
                 totalSpend,
                 secondApproverThreshold,
-                allowServiceSecondApprove: true,
               }).catch(async (lockErr: any) => {
                 // Worker may OOM after lock — treat already-locked as success.
                 const fresh = await api.getFuelReconciliationPeriod(periodRow.id).catch(() => null);

@@ -4796,13 +4796,17 @@ export const api = {
     return response.json();
   },
 
-  async reviewFuelPeriodLeakage(args: { periodId: string; note?: string }) {
+  async reviewFuelPeriodLeakage(args: {
+    periodId: string;
+    disposition: string;
+    note?: string;
+  }) {
     const response = await fetchWithRetry(
       `${API_ENDPOINTS.fuel}/fuel/periods/${encodeURIComponent(args.periodId)}/leakage-review`,
       {
         method: 'POST',
         headers: await requireAuthHeaders(),
-        body: JSON.stringify({ note: args.note }),
+        body: JSON.stringify({ disposition: args.disposition, note: args.note }),
       },
     );
     if (!response.ok) {
@@ -4841,6 +4845,7 @@ export const api = {
     vehicleCount?: number;
     driverCount?: number;
     computedFromHash?: string;
+    counts?: Record<string, { actionable: number; informational: number }>;
   }) {
     const response = await fetchWithRetry(
       `${API_ENDPOINTS.fuel}/fuel/periods/${encodeURIComponent(args.periodId)}/materialize`,

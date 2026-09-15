@@ -7,15 +7,13 @@ import React, { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { format, parseISO, startOfWeek, endOfWeek, subWeeks } from 'date-fns';
 import {
-  ArrowDownLeft,
   ArrowLeft,
-  ArrowUpRight,
   Banknote,
-  Download,
   Loader2,
+  MoreHorizontal,
   Plus,
-  RefreshCw,
-  CheckCircle2,
+  Search,
+  SlidersHorizontal,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { MONEY_EPS, periodEndForAnchor } from '@roam/finance-core';
@@ -37,7 +35,6 @@ import {
   buildDriverPayoutTx,
 } from '../../utils/driverSettlementTx';
 import { payOutstandingAmount, resolvePayQueueOwed } from '../../utils/driverSettlementsPayAmount';
-import { CSV_UTF8_BOM, csvRow } from '../../utils/csvSafeExport';
 import { DRIVER_FINANCIAL_PERIODS_KEY } from '../../hooks/useDriverFinancialPeriods';
 import {
   useSettlementQueue,
@@ -53,11 +50,19 @@ import {
 import { BusinessFinanceDeskChrome } from '../business-finance/BusinessFinanceDeskChrome';
 import {
   ApprovalQueue,
+  MovementHistoryList,
   MovementHistoryTable,
+  ReconciledList,
   ReconciledTable,
+  SettlementCollectPaySegment,
+  SettlementDirectionBar,
   SettlementFilters,
   SettlementKpiBar,
+  SettlementKpiBarCompact,
+  SettlementMobileFiltersDrawer,
+  SettlementQueueList,
   SettlementQueueTable,
+  SettlementStatusTabs,
   type SettlementMovementRow,
 } from './settlements';
 import { settlementCommandsApi, isSettlementCommandUnavailable, isPeriodFrozenError, isMoneyLockedError } from '../../services/settlementCommandsApi';
@@ -79,6 +84,13 @@ import {
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '../ui/dropdown-menu';
 import {
   Dialog,
   DialogContent,
@@ -130,7 +142,7 @@ const RestatementQueuePageLazy = lazy(() =>
 );
 
 type MoneyDirection = 'collect' | 'pay';
-type DeskMode = MoneyDirection | 'log-cash' | 'reconciled';
+type DeskMode = MoneyDirection | 'reconciled';
 type DeskTab = 'outstanding' | 'awaiting' | 'done';
 export type SettlementsHubTab = 'cash' | 'close-week' | 'restatements';
 
@@ -408,11 +420,12 @@ export function DriverSettlementsPage({
   /** When true, omit week bounds so cards + queues show all open unpaid weeks. */
   const [allOpen, setAllOpen] = useState(false);
   const [search, setSearch] = useState('');
-  const [minAmount, setMinAmount] = useState('0');
   const [deskMode, setDeskMode] = useState<DeskMode>('collect');
   const direction: MoneyDirection = deskMode === 'pay' ? 'pay' : 'collect';
   const [deskTab, setDeskTab] = useState<DeskTab>('outstanding');
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [mobileSelectMode, setMobileSelectMode] = useState(false);
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
 
   // Deep-link / sidebar → hub tab + Close Week key + cash desk week
   useEffect(() => {
@@ -513,8 +526,6 @@ export function DriverSettlementsPage({
   const rangeWeekFrom = allOpen ? undefined : weekFrom;
   const rangeWeekTo = allOpen ? undefined : weekTo;
   const rangeScopeLabel = allOpen ? 'all open' : 'in selected range';
-  const exposureScopeLabel = allOpen ? 'all open weeks' : 'in selected weeks';
-  const exportRangeTag = allOpen ? 'all-open' : `${weekFrom}-to-${weekTo}`;
 
   const [payoutModal, setPayoutModal] = useState<{
     isOpen: boolean;
@@ -568,6 +579,7 @@ export function DriverSettlementsPage({
   const [reverseReason, setReverseReason] = useState('');
   const [reverseBusy, setReverseBusy] = useState(false);
   const [logCashDriverId, setLogCashDriverId] = useState('');
+  const [logCashPickerOpen, setLogCashPickerOpen] = useState(false);
   const [reconciledOverlay, setReconciledOverlay] = useState<{
     open: boolean;
     driverId: string;
@@ -582,7 +594,7 @@ export function DriverSettlementsPage({
   const queueParamsBase = {
     weekFrom: rangeWeekFrom,
     weekTo: rangeWeekTo,
-    minAmount: minAmount ? Number(minAmount) : 0,
+    minAmount: 0,
     scope,
     search,
     pageSize: 200,
@@ -657,7 +669,7 @@ export function DriverSettlementsPage({
       });
       return (Array.isArray(page) ? page : page?.data || []) as FinancialTransaction[];
     },
-    enabled: deskMode === 'collect' || deskMode === 'pay' || deskMode === 'log-cash',
+    enabled: deskMode === 'collect' || deskMode === 'pay',
   });
 
   // P-4: overlay txs scoped to driver + week — never the 5k desk dump.
@@ -835,7 +847,6 @@ export function DriverSettlementsPage({
   const cashHeldWeekCount = collectQueueRows.filter((r) => r.collectKind === 'cash_held').length;
   const fleetOwesWeekCount =
     payQueueQuery.data?.page?.total ?? payQueueQuery.data?.rows?.length ?? 0;
-  const blockedExposure = laneMetrics.blockedExposure;
   const awaitingPayTotal = apiMovementRows.length
     ? apiMovementRows
         .filter(
@@ -999,6 +1010,24 @@ export function DriverSettlementsPage({
     setSelected(new Set(actionable.map((r) => rowKey(r))));
   };
 
+  const toggleDriverWeeks = (keys: string[], select: boolean) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      for (const k of keys) {
+        if (select) next.add(k);
+        else next.delete(k);
+      }
+      return next;
+    });
+  };
+
+  const resetMobileFilters = () => {
+    setAllOpen(false);
+    setSearch('');
+    setWeekFrom(format(subWeeks(startOfWeek(new Date(), { weekStartsOn: 1 }), 8), 'yyyy-MM-dd'));
+    setWeekTo(format(endOfWeek(new Date(), { weekStartsOn: 1 }), 'yyyy-MM-dd'));
+  };
+
   const selectedRows = outstandingQueueRows.filter((r) => selected.has(rowKey(r)));
   const selectedTotal = selectedRows.reduce((s, r) => s + queueOwedMajor(r, direction), 0);
 
@@ -1008,28 +1037,6 @@ export function DriverSettlementsPage({
     void qc.invalidateQueries({ queryKey: settlementKeys.all });
     void qc.invalidateQueries({ queryKey: ['driverSettlementsTransactions'] });
     void qc.invalidateQueries({ queryKey: [DRIVER_FINANCIAL_PERIODS_KEY] });
-  };
-
-  const repairOrphanMirrors = async () => {
-    try {
-      const repair = await api.repairOrphanSettlementMirrors({
-        ...(rangeWeekFrom ? { periodStart: rangeWeekFrom } : {}),
-        ...(rangeWeekTo ? { periodEnd: rangeWeekTo } : {}),
-      });
-      if (repair?.purged || repair?.weeksSynced) {
-        toast.success(
-          `Mirrors repaired${repair.purged ? ` · cleaned ${repair.purged} stale pays` : ''}${
-            repair.weeksSynced ? ` · recalculated ${repair.weeksSynced} weeks` : ''
-          }`,
-        );
-      } else {
-        toast.success('No orphan mirrors found');
-      }
-    } catch (e: any) {
-      console.warn('[DriverSettlements] orphan mirror repair failed:', e?.message || e);
-      toast.error(e?.message || 'Could not repair settlement mirrors');
-    }
-    await refreshAll();
   };
 
   const openReconciledPeriod = async (row: ReconciledListRow) => {
@@ -1187,166 +1194,6 @@ export function DriverSettlementsPage({
     } finally {
       setReconciledDetailLoading(false);
     }
-  };
-
-  const exportCsv = () => {
-    const rows = selectedRows.length > 0 ? selectedRows : outstandingQueueRows;
-    if (rows.length === 0) {
-      toast.error('Nothing to export');
-      return;
-    }
-    const header =
-      direction === 'collect'
-        ? [
-            'driver_id',
-            'driver_name',
-            'period_start',
-            'period_end',
-            'amount_driver_owes',
-            'amount_cash_held',
-            'collect_kind',
-            'overpaid_amount',
-            'passenger_cash',
-          ]
-        : [
-            'driver_id',
-            'driver_name',
-            'period_start',
-            'period_end',
-            'amount_owed',
-            'overpaid_amount',
-            'passenger_cash',
-            'already_paid',
-          ];
-    const lines = [
-      csvRow(header),
-      ...rows.map((r) => {
-        if (direction === 'collect') {
-          const owed = queueOwedMajor(r, 'collect');
-          const isHeld = r.collectKind === 'cash_held';
-          return csvRow([
-            r.driverId,
-            r.driverName || '',
-            r.periodAnchor,
-            r.periodEnd,
-            (isHeld ? 0 : owed).toFixed(2),
-            (isHeld ? owed : 0).toFixed(2),
-            r.collectKind || '',
-            rowOverpaidAmount(r).toFixed(2),
-            Number(r.cashCollected || 0).toFixed(2),
-          ]);
-        }
-        return csvRow([
-          r.driverId,
-          r.driverName || '',
-          r.periodAnchor,
-          r.periodEnd,
-          queueOwedMajor(r, 'pay').toFixed(2),
-          rowOverpaidAmount(r).toFixed(2),
-          Number(r.cashCollected || 0).toFixed(2),
-          Number(r.settlementPaid || 0).toFixed(2),
-        ]);
-      }),
-    ];
-    const blob = new Blob([CSV_UTF8_BOM + lines.join('\n')], { type: 'text/csv;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `driver-settlements-${direction}-${exportRangeTag}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-    toast.success(`Exported ${rows.length} row${rows.length !== 1 ? 's' : ''}`);
-  };
-
-  const exportDoneCsv = () => {
-    const rows = doneMovementRows;
-    if (rows.length === 0) {
-      toast.error('Nothing to export');
-      return;
-    }
-    const header = [
-      'id',
-      'driver_id',
-      'driver_name',
-      'date',
-      'period_start',
-      'amount',
-      'method',
-      'status',
-      'reference',
-    ];
-    const lines = [
-      csvRow(header),
-      ...rows.map((t) =>
-        csvRow([
-          t.id,
-          t.driverId || '',
-          t.driverName || '',
-          String(t.date || '').slice(0, 10),
-          ymdKey(t.periodAnchor),
-          Math.abs(Number(t.amount) || 0).toFixed(2),
-          t.method || '',
-          t.status || '',
-          t.reference || '',
-        ]),
-      ),
-    ];
-    const blob = new Blob([CSV_UTF8_BOM + lines.join('\n')], { type: 'text/csv;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `driver-settlements-done-${direction}-${exportRangeTag}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-    toast.success(`Exported ${rows.length} row${rows.length !== 1 ? 's' : ''}`);
-  };
-
-  const exportReconciledCsv = () => {
-    if (reconciledRows.length === 0) {
-      toast.error('Nothing to export');
-      return;
-    }
-    const header = [
-      'driver_id',
-      'driver_name',
-      'period_start',
-      'period_end',
-      'gross',
-      'fleet_share',
-      'driver_share',
-      'payout_net',
-      'cash_collected',
-      'cash_returned',
-      'trips',
-      'overpaid',
-    ];
-    const lines = [
-      csvRow(header),
-      ...reconciledRows.map((r) =>
-        csvRow([
-          r.driverId,
-          r.driverName || '',
-          r.periodAnchor,
-          r.periodEnd,
-          Number(r.earningsGross || 0).toFixed(2),
-          Number(r.fleetShare || 0).toFixed(2),
-          Number(r.driverShare || 0).toFixed(2),
-          Number(r.payoutNet || 0).toFixed(2),
-          Number(r.cashCollected || 0).toFixed(2),
-          Number(r.cashReturned || 0).toFixed(2),
-          r.tripCount,
-          rowOverpaidAmount(r).toFixed(2),
-        ]),
-      ),
-    ];
-    const blob = new Blob([CSV_UTF8_BOM + lines.join('\n')], { type: 'text/csv;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `driver-settlements-reconciled-${exportRangeTag}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-    toast.success(`Exported ${reconciledRows.length} row${reconciledRows.length !== 1 ? 's' : ''}`);
   };
 
   const saveSinglePayout = async (payload: RecordPayoutSavePayload) => {
@@ -1734,7 +1581,7 @@ export function DriverSettlementsPage({
         onValueChange={(v) => setHubTab(v as SettlementsHubTab)}
         className="space-y-4"
       >
-        <TabsList className="h-auto flex-wrap gap-1">
+        <TabsList className="hidden h-auto flex-wrap gap-1 md:flex">
           <TabsTrigger value="cash">Cash desk</TabsTrigger>
           <TabsTrigger value="close-week">Close Week</TabsTrigger>
           <TabsTrigger value="restatements" className="gap-1.5">
@@ -1746,6 +1593,18 @@ export function DriverSettlementsPage({
             ) : null}
           </TabsTrigger>
         </TabsList>
+
+        {hubTab !== 'cash' ? (
+          <div className="flex items-center gap-2 md:hidden">
+            <Button type="button" size="sm" variant="outline" className="h-9" onClick={() => setHubTab('cash')}>
+              <ArrowLeft className="mr-1.5 h-4 w-4" />
+              Cash desk
+            </Button>
+            <p className="text-sm font-medium text-slate-700">
+              {hubTab === 'close-week' ? 'Close Week' : 'Restatements'}
+            </p>
+          </div>
+        ) : null}
 
         <TabsContent value="close-week" className="mt-0 focus-visible:outline-none">
           <Suspense
@@ -1783,28 +1642,13 @@ export function DriverSettlementsPage({
         </TabsContent>
 
         <TabsContent value="cash" className="mt-0 space-y-6 focus-visible:outline-none">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+      <div className="hidden md:flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h1 className="text-xl font-semibold text-slate-900 flex items-center gap-2">
             <Banknote className="h-5 w-5 text-emerald-700" />
             Driver Settlements
           </h1>
         </div>
-      <Button type="button" variant="outline" size="sm" className="h-9" onClick={() => void refreshAll()} disabled={loading}>
-          {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-          <span className="ml-2">Refresh</span>
-      </Button>
-      <Button
-        type="button"
-        variant="ghost"
-        size="sm"
-        className="h-9"
-        onClick={() => void repairOrphanMirrors()}
-        disabled={loading}
-        title="Repair orphan settlement mirrors"
-      >
-        Repair mirrors
-      </Button>
       </div>
 
       {nullOrgPeriodCount > 0 ? (
@@ -1820,125 +1664,165 @@ export function DriverSettlementsPage({
         </div>
       ) : null}
 
-      <SettlementFilters
-        weekFrom={weekFrom}
-        weekTo={weekTo}
-        minAmount={minAmount}
-        search={search}
-        allOpen={allOpen}
-        onWeekFromChange={setWeekFrom}
-        onWeekToChange={setWeekTo}
-        onMinAmountChange={setMinAmount}
-        onSearchChange={setSearch}
-        onAllOpenChange={setAllOpen}
-        trailing={
-          deskMode === 'reconciled' ? (
-            <Button type="button" variant="outline" size="sm" className="h-9" onClick={exportReconciledCsv}>
-              <Download className="h-4 w-4 mr-1.5" />
-              Export CSV
+      {/* Mobile sticky cash strip */}
+      <div className="sticky top-0 z-30 -mx-4 space-y-3 border-b border-slate-200 bg-slate-50/95 px-4 py-3 backdrop-blur md:hidden">
+        <div className="flex items-center gap-2">
+          {deskMode === 'reconciled' ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-10 flex-1"
+              onClick={() => setDeskMode('collect')}
+            >
+              <ArrowLeft className="mr-1.5 h-4 w-4" />
+              Back to Collect / Pay
             </Button>
-          ) : deskMode === 'collect' || deskMode === 'pay' ? (
-            deskTab === 'outstanding' ? (
-              <>
-                <Button type="button" variant="outline" size="sm" className="h-9" onClick={exportCsv}>
-                  <Download className="h-4 w-4 mr-1.5" />
-                  Export CSV
-                </Button>
-                {selectedRows.length > 0 ? (
-                  <Button
-                    type="button"
-                    size="sm"
-                    className={cn(
-                      'h-9',
-                      direction === 'collect'
-                        ? 'bg-rose-700 hover:bg-rose-800'
-                        : 'bg-emerald-700 hover:bg-emerald-800',
-                    )}
-                    onClick={() => {
-                      setBatchSelectedKeys([...selected]);
-                      setBatchOpen(true);
-                    }}
-                  >
-                    {direction === 'collect' ? 'Collect selected' : 'Pay selected'} ({selectedRows.length})
-                  </Button>
-                ) : null}
-              </>
-            ) : deskTab === 'done' ? (
-              <Button type="button" variant="outline" size="sm" className="h-9" onClick={exportDoneCsv}>
-                <Download className="h-4 w-4 mr-1.5" />
-                Export CSV
+          ) : (
+            <SettlementCollectPaySegment
+              className="min-w-0 flex-1"
+              direction={direction}
+              onChange={(d) => setDeskMode(d)}
+            />
+          )}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button type="button" size="sm" variant="outline" className="h-10 w-10 shrink-0 p-0" aria-label="More actions">
+                <MoreHorizontal className="h-4 w-4" />
               </Button>
-            ) : undefined
-          ) : undefined
-        }
-      />
-
-      <div className="flex flex-wrap items-baseline gap-x-4 gap-y-2 rounded-lg border border-slate-200 bg-white px-4 py-3">
-        <span className="text-xs font-medium uppercase tracking-wide text-slate-500 w-full sm:w-auto">
-          Exposure
-        </span>
-        <span className="text-sm tabular-nums text-emerald-800">
-          Fleet owes{' '}
-          <span className="font-semibold">
-            {payKpiError ? '—' : MONEY(fleetOwesTotal)}
-          </span>
-        </span>
-        <span className="text-sm tabular-nums text-rose-700">
-          Drivers owe{' '}
-          <span className="font-semibold">
-            {collectKpiError ? '—' : MONEY(settledOwesTotal)}
-          </span>
-        </span>
-        <span className="text-sm tabular-nums text-amber-800">
-          Cash held{' '}
-          <span className="font-semibold">
-            {collectKpiError ? '—' : MONEY(cashHeldKpiTotal)}
-          </span>
-        </span>
-        <span className="text-sm tabular-nums text-slate-900">
-          Net{' '}
-          <span className="font-semibold">
-            {collectKpiError || payKpiError
-              ? '—'
-              : MONEY(fleetOwesTotal - settledOwesTotal)}
-          </span>
-          <span className="ml-1 text-[11px] font-normal text-slate-400">
-            Driver share applied first · Collect/Pay = leftover · {exposureScopeLabel}
-          </span>
-        </span>
-        {blockedExposure > MONEY_EPS ? (
-          <span className="ml-auto rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-800">
-            {MONEY(blockedExposure)} blocked / not finalized
-          </span>
-        ) : null}
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-48">
+              <DropdownMenuItem onClick={() => setDeskMode('reconciled')}>Reconciled weeks</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setLogCashPickerOpen(true)}>Log cash</DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => setHubTab('close-week')}>Close Week</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setHubTab('restatements')}>
+                Restatements
+                {restatementDraftCount > 0 ? ` (${restatementDraftCount})` : ''}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="relative min-w-0 flex-1">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search driver"
+              className="h-10 rounded-full border-transparent bg-white pl-9 pr-3 shadow-sm"
+              aria-label="Search driver"
+            />
+          </div>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="h-10 w-10 shrink-0 p-0"
+            aria-label="Filters"
+            onClick={() => setMobileFiltersOpen(true)}
+          >
+            <SlidersHorizontal className="h-4 w-4" />
+          </Button>
+        </div>
       </div>
 
-      <SettlementKpiBar
-        settledOwes={settledOwesTotal}
-        cashHeld={cashHeldKpiTotal}
-        fleetOwes={fleetOwesTotal}
-        awaiting={awaitingTotal}
-        cleared={clearedThisWeek}
-        loading={loading}
-        settledOwesError={collectQueueQuery.isError}
-        cashHeldError={collectQueueQuery.isError}
-        fleetOwesError={payQueueQuery.isError}
-        awaitingError={txKpiError}
-        clearedError={txKpiError}
-        settledOwesSub={`${settledOwesWeekCount} weeks · ${rangeScopeLabel}`}
-        cashHeldSub={`${cashHeldWeekCount} weeks · ${rangeScopeLabel}`}
-        fleetOwesSub={`${fleetOwesWeekCount} weeks · ${rangeScopeLabel}`}
-        awaitingSub={`${awaitingRows.length} pending (${direction})`}
-        clearedSub={
-          direction === 'pay'
-            ? 'Payouts since Mon · ignores week filter'
-            : 'Collections since Mon · ignores week filter'
-        }
-        directionLabels={{
-          awaiting: 'Awaiting bank clear',
-          cleared: 'Cleared since Monday',
-        }}
+      <SettlementMobileFiltersDrawer
+        open={mobileFiltersOpen}
+        onOpenChange={setMobileFiltersOpen}
+        weekFrom={weekFrom}
+        weekTo={weekTo}
+        allOpen={allOpen}
+        search={search}
+        onWeekFromChange={setWeekFrom}
+        onWeekToChange={setWeekTo}
+        onAllOpenChange={setAllOpen}
+        onSearchChange={setSearch}
+        onReset={resetMobileFilters}
       />
+
+      <div className="hidden md:block">
+        <SettlementFilters
+          weekFrom={weekFrom}
+          weekTo={weekTo}
+          allOpen={allOpen}
+          onWeekFromChange={setWeekFrom}
+          onWeekToChange={setWeekTo}
+          onAllOpenChange={setAllOpen}
+          trailing={
+            deskMode === 'collect' || deskMode === 'pay'
+              ? deskTab === 'outstanding' && selectedRows.length > 0
+                ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      className={cn(
+                        'h-9',
+                        direction === 'collect'
+                          ? 'bg-rose-700 hover:bg-rose-800'
+                          : 'bg-emerald-700 hover:bg-emerald-800',
+                      )}
+                      onClick={() => {
+                        setBatchSelectedKeys([...selected]);
+                        setBatchOpen(true);
+                      }}
+                    >
+                      {direction === 'collect' ? 'Collect selected' : 'Pay selected'} ({selectedRows.length})
+                    </Button>
+                  )
+                : undefined
+              : undefined
+          }
+        />
+      </div>
+
+      <div className="md:hidden">
+        {(deskMode === 'collect' || deskMode === 'pay') && (
+          <SettlementKpiBarCompact
+            direction={direction}
+            settledOwes={settledOwesTotal}
+            cashHeld={cashHeldKpiTotal}
+            fleetOwes={fleetOwesTotal}
+            awaiting={awaitingTotal}
+            cleared={clearedThisWeek}
+            loading={loading}
+            settledOwesError={collectQueueQuery.isError}
+            cashHeldError={collectQueueQuery.isError}
+            fleetOwesError={payQueueQuery.isError}
+            awaitingError={txKpiError}
+            clearedError={txKpiError}
+          />
+        )}
+      </div>
+
+      <div className="hidden md:block">
+        <SettlementKpiBar
+          settledOwes={settledOwesTotal}
+          cashHeld={cashHeldKpiTotal}
+          fleetOwes={fleetOwesTotal}
+          awaiting={awaitingTotal}
+          cleared={clearedThisWeek}
+          loading={loading}
+          settledOwesError={collectQueueQuery.isError}
+          cashHeldError={collectQueueQuery.isError}
+          fleetOwesError={payQueueQuery.isError}
+          awaitingError={txKpiError}
+          clearedError={txKpiError}
+          settledOwesSub={`${settledOwesWeekCount} weeks · ${rangeScopeLabel}`}
+          cashHeldSub={`${cashHeldWeekCount} weeks · ${rangeScopeLabel}`}
+          fleetOwesSub={`${fleetOwesWeekCount} weeks · ${rangeScopeLabel}`}
+          awaitingSub={`${awaitingRows.length} pending (${direction})`}
+          clearedSub={
+            direction === 'pay'
+              ? 'Payouts since Mon · ignores week filter'
+              : 'Collections since Mon · ignores week filter'
+          }
+          directionLabels={{
+            awaiting: 'Awaiting bank clear',
+            cleared: 'Cleared since Monday',
+          }}
+        />
+      </div>
 
       {kpiTotalsPossiblyIncomplete ? (
         <div
@@ -1969,182 +1853,48 @@ export function DriverSettlementsPage({
         </div>
       ) : null}
 
-      <div className="flex flex-wrap gap-2 items-center">
-        <Button
-          type="button"
-          size="sm"
-          variant={deskMode === 'collect' || deskMode === 'log-cash' ? 'default' : 'outline'}
-          className={cn(
-            'h-9',
-            (deskMode === 'collect' || deskMode === 'log-cash') && 'bg-rose-700 hover:bg-rose-800',
-          )}
-          onClick={() => setDeskMode('collect')}
-          title="Money drivers owe you"
-        >
-          <ArrowDownLeft className="h-4 w-4 mr-1.5" />
-          Collect
-        </Button>
-        <Button
-          type="button"
-          size="sm"
-          variant={deskMode === 'pay' ? 'default' : 'outline'}
-          className={cn('h-9', deskMode === 'pay' && 'bg-emerald-700 hover:bg-emerald-800')}
-          onClick={() => setDeskMode('pay')}
-          title="Money you owe drivers"
-        >
-          <ArrowUpRight className="h-4 w-4 mr-1.5" />
-          Pay
-        </Button>
-        <Button
-          type="button"
-          size="sm"
-          variant={deskMode === 'reconciled' ? 'default' : 'outline'}
-          className={cn('h-9', deskMode === 'reconciled' && 'bg-indigo-700 hover:bg-indigo-800')}
-          onClick={() => setDeskMode('reconciled')}
-        >
-          <CheckCircle2 className="h-4 w-4 mr-1.5" />
-          Reconciled
-        </Button>
-        {deskMode === 'collect' ? (
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            className="h-9"
-            onClick={() => setDeskMode('log-cash')}
-          >
-            <Plus className="h-4 w-4 mr-1.5" />
-            Log cash
-          </Button>
-        ) : null}
-        {deskMode === 'log-cash' ? (
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            className="h-9"
-            onClick={() => setDeskMode('collect')}
-          >
-            <ArrowLeft className="h-4 w-4 mr-1.5" />
-            Back
-          </Button>
-        ) : null}
+      <div className="hidden md:block">
+        <SettlementDirectionBar
+          deskMode={deskMode}
+          onDeskModeChange={setDeskMode}
+          onLogCash={() => setLogCashPickerOpen(true)}
+        />
       </div>
-      {(deskMode === 'collect' || deskMode === 'pay') && (
-        <p className="text-xs text-slate-500 -mt-4">
-          {deskMode === 'collect'
-            ? 'Collect = money drivers owe you'
-            : 'Pay = money you owe drivers'}
-        </p>
-      )}
-
-      {deskMode === 'log-cash' ? (
-        <div className="space-y-4">
-          <div className="rounded-lg border border-slate-200 bg-white p-4 space-y-3">
-            <div>
-              <h3 className="text-sm font-semibold text-slate-900">Log cash received</h3>
-              <p className="text-xs text-slate-500 mt-0.5">
-                Same Log Cash flow as Cash Wallet — pick a driver, then tag the Settlement Week.
-              </p>
-            </div>
-            <div className="flex flex-col sm:flex-row sm:items-end gap-3">
-              <div className="space-y-1 flex-1 min-w-[220px]">
-                <Label className="text-xs text-slate-500">Driver</Label>
-                <Select value={logCashDriverId || undefined} onValueChange={setLogCashDriverId}>
-                  <SelectTrigger className="h-9">
-                    <SelectValue placeholder={driversQuery.isLoading ? 'Loading drivers…' : 'Select driver'} />
-                  </SelectTrigger>
-                  <SelectContent className="max-h-72">
-                    {driverOptions
-                      .slice()
-                      .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }))
-                      .map((d) => (
-                        <SelectItem key={d.id} value={d.id}>
-                          {d.name}
-                        </SelectItem>
-                      ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <Button
-                type="button"
-                className="h-9 bg-emerald-600 hover:bg-emerald-700"
-                disabled={!logCashDriverId}
-                onClick={() => {
-                  if (!selectedLogCashDriver) return;
-                  openLogCashForDriver(selectedLogCashDriver.id, selectedLogCashDriver.name);
-                }}
-              >
-                <Plus className="h-4 w-4 mr-1.5" />
-                Log Cash Payment
-              </Button>
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <div className="flex items-center justify-between gap-2">
-              <p className="text-sm font-medium text-slate-800">Open weeks to collect</p>
+      {deskMode === 'reconciled' ? (
+        <>
+          <div className="hidden md:block space-y-4">
+            <div className="space-y-1">
+              <h3 className="text-sm font-semibold text-slate-900">Reconciled weeks</h3>
               <p className="text-xs text-slate-500">
-                {collectOutstanding.length} week{collectOutstanding.length !== 1 ? 's' : ''}
+                Closed Settlement Weeks — click a row for Fleet vs Driver breakdown.
               </p>
             </div>
-            <SettlementQueueTable
-              rows={collectQueueQuery.data?.rows?.filter((r) => queueOwedMajor(r, 'collect') > MONEY_EPS) || []}
-              mode="collect"
-              loading={collectQueueQuery.isLoading}
-              selected={selected}
-              onToggle={toggleSelect}
-              onToggleAll={toggleSelectAll}
+            <ReconciledTable
+              rows={reconciledRows}
+              loading={reconciledQueueQuery.isLoading}
               onOpenDriver={onOpenDriver}
-              onPay={() => {}}
-              onCollect={(r) =>
-                openLogCashForDriver(r.driverId, r.driverName || r.driverId, queueToPeriodRow(r))
-              }
-              onWriteOff={(r) => {
-                if (
-                  !isSettlementPeriodEnded({
-                    periodAnchor: r.periodAnchor,
-                    periodEnd: r.periodEnd,
-                  })
-                ) {
-                  toast.error(
-                    settlementPeriodOpenMessage({
-                      periodAnchor: r.periodAnchor,
-                      periodEnd: r.periodEnd,
-                    }),
-                  );
-                  return;
-                }
-                setWriteOffModal({
-                  isOpen: true,
-                  driverId: r.driverId,
-                  driverName: r.driverName || r.driverId,
-                  workPeriodStart: r.periodAnchor,
-                  workPeriodEnd: r.periodEnd,
-                  maxAmount: queueOwedMajor(r, 'collect'),
-                });
+              onOpenPeriod={(r) => void openReconciledPeriod(r as ReconciledListRow)}
+              onOpenCloseWeek={(weekKey) => {
+                handleHubNavigate('close-week', { weekKey });
               }}
             />
           </div>
-        </div>
-      ) : deskMode === 'reconciled' ? (
-        <div className="space-y-4">
-          <div className="space-y-1">
-            <h3 className="text-sm font-semibold text-slate-900">Reconciled weeks</h3>
-            <p className="text-xs text-slate-500">
-              Closed Settlement Weeks — click a row for Fleet vs Driver breakdown.
-            </p>
+          <div className="md:hidden space-y-4">
+            <div className="space-y-1">
+              <h3 className="text-sm font-semibold text-slate-900">Reconciled weeks</h3>
+              <p className="text-xs text-slate-500">Tap a card for Fleet vs Driver breakdown.</p>
+            </div>
+            <ReconciledList
+              rows={reconciledRows}
+              loading={reconciledQueueQuery.isLoading}
+              onOpenDriver={onOpenDriver}
+              onOpenPeriod={(r) => void openReconciledPeriod(r as ReconciledListRow)}
+              onOpenCloseWeek={(weekKey) => {
+                handleHubNavigate('close-week', { weekKey });
+              }}
+            />
           </div>
-          <ReconciledTable
-            rows={reconciledRows}
-            loading={reconciledQueueQuery.isLoading}
-            onOpenDriver={onOpenDriver}
-            onOpenPeriod={(r) => void openReconciledPeriod(r as ReconciledListRow)}
-            onOpenCloseWeek={(weekKey) => {
-              handleHubNavigate('close-week', { weekKey });
-            }}
-          />
-        </div>
+        </>
       ) : (
         <div className="space-y-4">
           {pendingApprovalRows.length > 0 ? (
@@ -2184,13 +1934,13 @@ export function DriverSettlementsPage({
           ) : null}
 
           <Tabs value={deskTab} onValueChange={(v) => setDeskTab(v as DeskTab)}>
-          <TabsList>
-            <TabsTrigger value="outstanding">Outstanding</TabsTrigger>
-            <TabsTrigger value="awaiting">Awaiting clear</TabsTrigger>
-            <TabsTrigger value="done">Done</TabsTrigger>
-          </TabsList>
+          <SettlementStatusTabs className="hidden md:inline-flex" />
+          <div className="md:hidden">
+            <SettlementStatusTabs variant="pills" />
+          </div>
 
           <TabsContent value="outstanding" className="mt-4">
+            <div className="hidden md:block">
             <SettlementQueueTable
               rows={outstandingQueueRows}
               mode={direction}
@@ -2294,51 +2044,285 @@ export function DriverSettlementsPage({
                 });
               }}
             />
+            </div>
+            <div className="md:hidden">
+              <SettlementQueueList
+                rows={outstandingQueueRows}
+                mode={direction}
+                loading={loading}
+                selected={selected}
+                selectMode={mobileSelectMode}
+                onSelectModeChange={setMobileSelectMode}
+                onToggle={toggleSelect}
+                onToggleDriverWeeks={toggleDriverWeeks}
+                showingCount={outstandingQueueRows.length}
+                totalCount={
+                  activeQueueQuery.data?.page?.total ??
+                  activeQueueQuery.data?.totals?.rowCount ??
+                  outstandingQueueRows.length
+                }
+                showingAmount={outstandingShowingAmount}
+                totalAmount={outstandingTotalAmount}
+                onOpenDriver={onOpenDriver}
+                onWeekClosed={(r) => showPeriodFrozen(r.periodAnchor, r.driverName)}
+                onPay={(r) => {
+                  if (r.periodFrozen) {
+                    showPeriodFrozen(r.periodAnchor, r.driverName);
+                    return;
+                  }
+                  if (
+                    !isSettlementPeriodEnded({
+                      periodAnchor: r.periodAnchor,
+                      periodEnd: r.periodEnd,
+                    })
+                  ) {
+                    toast.error(
+                      settlementPeriodOpenMessage({
+                        periodAnchor: r.periodAnchor,
+                        periodEnd: r.periodEnd,
+                      }),
+                    );
+                    return;
+                  }
+                  setPayoutModal({
+                    isOpen: true,
+                    driverId: r.driverId,
+                    driverName: r.driverName || r.driverId,
+                    workPeriodStart: r.periodAnchor,
+                    workPeriodEnd: r.periodEnd,
+                    maxAmount: queueOwedMajor(r, 'pay'),
+                  });
+                }}
+                onCollect={(r) => {
+                  if (r.periodFrozen) {
+                    showPeriodFrozen(r.periodAnchor, r.driverName);
+                    return;
+                  }
+                  if (
+                    !isSettlementPeriodEnded({
+                      periodAnchor: r.periodAnchor,
+                      periodEnd: r.periodEnd,
+                    })
+                  ) {
+                    toast.error(
+                      settlementPeriodOpenMessage({
+                        periodAnchor: r.periodAnchor,
+                        periodEnd: r.periodEnd,
+                      }),
+                    );
+                    return;
+                  }
+                  setCollectModal({
+                    isOpen: true,
+                    driverId: r.driverId,
+                    driverName: r.driverName || r.driverId,
+                    workPeriodStart: r.periodAnchor,
+                    workPeriodEnd: r.periodEnd,
+                    maxAmount: queueOwedMajor(r, 'collect'),
+                  });
+                }}
+                onWriteOff={(r) => {
+                  if (r.periodFrozen) {
+                    showPeriodFrozen(r.periodAnchor, r.driverName);
+                    return;
+                  }
+                  if (
+                    !isSettlementPeriodEnded({
+                      periodAnchor: r.periodAnchor,
+                      periodEnd: r.periodEnd,
+                    })
+                  ) {
+                    toast.error(
+                      settlementPeriodOpenMessage({
+                        periodAnchor: r.periodAnchor,
+                        periodEnd: r.periodEnd,
+                      }),
+                    );
+                    return;
+                  }
+                  setWriteOffModal({
+                    isOpen: true,
+                    driverId: r.driverId,
+                    driverName: r.driverName || r.driverId,
+                    workPeriodStart: r.periodAnchor,
+                    workPeriodEnd: r.periodEnd,
+                    maxAmount: queueOwedMajor(r, 'collect'),
+                  });
+                }}
+              />
+            </div>
           </TabsContent>
 
           <TabsContent value="awaiting" className="mt-4">
-            <MovementHistoryTable
-              rows={awaitingRows}
-              mode={direction}
-              onOpenDriver={onOpenDriver}
-              onVerify={verifyPending}
-              onRequestUndo={(row) => {
-                setTxToReverse({
-                  id: row.id,
-                  kind: row.kind,
-                  amount: row.amount,
-                  driverName: row.driverName,
-                  sourceTransactionId: row.sourceTransactionId,
-                });
-                setReverseReason('');
-              }}
-              onUndo={() => {}}
-            />
+            <div className="hidden md:block">
+              <MovementHistoryTable
+                rows={awaitingRows}
+                mode={direction}
+                onOpenDriver={onOpenDriver}
+                onVerify={verifyPending}
+                onRequestUndo={(row) => {
+                  setTxToReverse({
+                    id: row.id,
+                    kind: row.kind,
+                    amount: row.amount,
+                    driverName: row.driverName,
+                    sourceTransactionId: row.sourceTransactionId,
+                  });
+                  setReverseReason('');
+                }}
+                onUndo={() => {}}
+              />
+            </div>
+            <div className="md:hidden">
+              <MovementHistoryList
+                rows={awaitingRows}
+                mode={direction}
+                onOpenDriver={onOpenDriver}
+                onVerify={verifyPending}
+                onRequestUndo={(row) => {
+                  setTxToReverse({
+                    id: row.id,
+                    kind: row.kind,
+                    amount: row.amount,
+                    driverName: row.driverName,
+                    sourceTransactionId: row.sourceTransactionId,
+                  });
+                  setReverseReason('');
+                }}
+                emptyTitle="Nothing awaiting bank clear"
+                emptyHint="After you Collect or Pay, pending bank clears show here."
+              />
+            </div>
           </TabsContent>
 
           <TabsContent value="done" className="mt-4">
-            <MovementHistoryTable
-              rows={doneMovementRows}
-              mode={direction}
-              onOpenDriver={onOpenDriver}
-              onRequestUndo={(row) => {
-                setTxToReverse({
-                  id: row.id,
-                  kind: row.kind,
-                  amount: row.amount,
-                  driverName: row.driverName,
-                  sourceTransactionId: row.sourceTransactionId,
-                });
-                setReverseReason('');
-              }}
-              onUndo={() => {}}
-            />
+            <div className="hidden md:block">
+              <MovementHistoryTable
+                rows={doneMovementRows}
+                mode={direction}
+                onOpenDriver={onOpenDriver}
+                onRequestUndo={(row) => {
+                  setTxToReverse({
+                    id: row.id,
+                    kind: row.kind,
+                    amount: row.amount,
+                    driverName: row.driverName,
+                    sourceTransactionId: row.sourceTransactionId,
+                  });
+                  setReverseReason('');
+                }}
+                onUndo={() => {}}
+              />
+            </div>
+            <div className="md:hidden">
+              <MovementHistoryList
+                rows={doneMovementRows}
+                mode={direction}
+                onOpenDriver={onOpenDriver}
+                onRequestUndo={(row) => {
+                  setTxToReverse({
+                    id: row.id,
+                    kind: row.kind,
+                    amount: row.amount,
+                    driverName: row.driverName,
+                    sourceTransactionId: row.sourceTransactionId,
+                  });
+                  setReverseReason('');
+                }}
+                emptyTitle="No cleared movements yet"
+                emptyHint="Cleared collections and payouts land here."
+              />
+            </div>
           </TabsContent>
         </Tabs>
         </div>
       )}
+
+      {mobileSelectMode && selectedRows.length > 0 && (deskMode === 'collect' || deskMode === 'pay') && deskTab === 'outstanding' ? (
+        <div className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/95 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-lg backdrop-blur md:hidden">
+          <Button
+            type="button"
+            className={cn(
+              'h-11 w-full',
+              direction === 'collect' ? 'bg-rose-700 hover:bg-rose-800' : 'bg-emerald-700 hover:bg-emerald-800',
+            )}
+            onClick={() => {
+              setBatchSelectedKeys([...selected]);
+              setBatchOpen(true);
+            }}
+          >
+            {direction === 'collect' ? 'Collect' : 'Pay'} selected ({selectedRows.length}) · {MONEY(selectedTotal)}
+          </Button>
+        </div>
+      ) : null}
+
         </TabsContent>
       </Tabs>
+
+      <Dialog
+        open={logCashPickerOpen}
+        onOpenChange={(open) => {
+          setLogCashPickerOpen(open);
+          if (!open) setLogCashDriverId('');
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Log cash received</DialogTitle>
+            <DialogDescription>
+              Same Log Cash flow as Cash Wallet — pick a driver, then tag the Settlement Week.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-1">
+            <div className="space-y-1.5">
+              <Label className="text-xs text-slate-500">Driver</Label>
+              <Select value={logCashDriverId || undefined} onValueChange={setLogCashDriverId}>
+                <SelectTrigger className="h-10">
+                  <SelectValue
+                    placeholder={driversQuery.isLoading ? 'Loading drivers…' : 'Select driver'}
+                  />
+                </SelectTrigger>
+                <SelectContent className="max-h-72">
+                  {driverOptions
+                    .slice()
+                    .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }))
+                    .map((d) => (
+                      <SelectItem key={d.id} value={d.id}>
+                        {d.name}
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setLogCashPickerOpen(false);
+                setLogCashDriverId('');
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              className="bg-emerald-600 hover:bg-emerald-700"
+              disabled={!logCashDriverId || !selectedLogCashDriver}
+              onClick={() => {
+                if (!selectedLogCashDriver) return;
+                setLogCashPickerOpen(false);
+                openLogCashForDriver(selectedLogCashDriver.id, selectedLogCashDriver.name);
+                setLogCashDriverId('');
+              }}
+            >
+              <Plus className="h-4 w-4 mr-1.5" />
+              Log Cash Payment
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <RecordPayoutModal
         isOpen={payoutModal.isOpen}

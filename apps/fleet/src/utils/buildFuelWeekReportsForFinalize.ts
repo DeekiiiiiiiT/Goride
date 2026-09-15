@@ -66,21 +66,46 @@ export async function fetchTripsForFuelWeekWithMeta(
 }
 
 /** Soft deadline so wizard open never hangs on one slow dependency. */
-async function withSoftTimeout<T>(promise: Promise<T>, ms: number, fallback: T, label: string): Promise<T> {
+async function withSoftTimeout<T>(
+  promise: Promise<T>,
+  ms: number,
+  fallback: T,
+  label: string,
+): Promise<{ value: T; timedOut: boolean }> {
   let timer: ReturnType<typeof setTimeout> | undefined;
+  let timedOut = false;
   try {
-    return await Promise.race([
-      promise,
+    const value = await Promise.race([
+      promise.then((v) => {
+        if (!timedOut) return v;
+        return fallback;
+      }),
       new Promise<T>((resolve) => {
         timer = setTimeout(() => {
+          timedOut = true;
           console.warn(`[buildFuelWeekReports] ${label} timed out after ${ms}ms — continuing`);
           resolve(fallback);
         }, ms);
       }),
     ]);
+    return { value, timedOut };
   } finally {
     if (timer) clearTimeout(timer);
   }
+}
+
+/** C-5: soft-timeout / missing money inputs that must hard-block Finalize. */
+export type FuelWeekDegradedInputs = {
+  trips: boolean;
+  deadhead: boolean;
+  personalAllowance: boolean;
+  brain: boolean;
+  fuelCards: boolean;
+};
+
+export function fuelWeekHasDegradedInputs(d?: FuelWeekDegradedInputs | null): boolean {
+  if (!d) return false;
+  return d.trips || d.deadhead || d.personalAllowance || d.brain || d.fuelCards;
 }
 
 export async function fetchDeadheadMap(
@@ -176,7 +201,7 @@ export async function buildBrainMap(opts: {
  */
 export async function buildFuelWeekReportsForFinalize(
   input: BuildFuelWeekReportsInput,
-): Promise<{ reports: WeeklyFuelReport[]; trips: Trip[] }> {
+): Promise<{ reports: WeeklyFuelReport[]; trips: Trip[]; degraded: FuelWeekDegradedInputs }> {
   const weekStartYmd = String(input.weekStartYmd).slice(0, 10);
   const weekEndYmd = String(input.weekEndYmd).slice(0, 10);
   const weekStart = parseISO(`${weekStartYmd}T12:00:00`);
@@ -186,11 +211,25 @@ export async function buildFuelWeekReportsForFinalize(
   const needTripFetch = !(input.trips && input.trips.length > 0);
   const needPa = !input.personalAllowance;
 
+  const degraded: FuelWeekDegradedInputs = {
+    trips: false,
+    deadhead: false,
+    personalAllowance: false,
+    brain: false,
+    fuelCards: false,
+  };
+
+  // C-6 companion: entries with cardId require cards for attribution.
+  const needsCards = (input.fuelEntries || []).some((e) => Boolean((e as any).cardId || (e as any).fuelCardId));
+  if (needsCards && !(input.fuelCards && input.fuelCards.length > 0)) {
+    degraded.fuelCards = true;
+  }
+
   // Trips + deadhead + PA in parallel (were sequential — main wizard open cost).
-  const [trips, deadheadMap, personalAllowance] = await Promise.all([
+  const [tripsRes, deadheadRes, paRes] = await Promise.all([
     needTripFetch
       ? withSoftTimeout(fetchTripsForFuelWeek(weekStartYmd, weekEndYmd), 20_000, [], 'trips')
-      : Promise.resolve(input.trips as Trip[]),
+      : Promise.resolve({ value: input.trips as Trip[], timedOut: false }),
     withSoftTimeout(fetchDeadheadMap(weekStartYmd, weekEndYmd), 15_000, new Map(), 'deadhead'),
     needPa
       ? withSoftTimeout(
@@ -205,10 +244,24 @@ export async function buildFuelWeekReportsForFinalize(
           'personalAllowance',
         ).catch((e) => {
           console.warn('[buildFuelWeekReports] PA context failed — continuing without', e);
-          return undefined as PersonalAllowanceReconContext | undefined;
+          degraded.personalAllowance = true;
+          return {
+            value: undefined as PersonalAllowanceReconContext | undefined,
+            timedOut: false,
+          };
         })
-      : Promise.resolve(input.personalAllowance),
+      : Promise.resolve({
+          value: input.personalAllowance,
+          timedOut: false,
+        }),
   ]);
+
+  const trips = tripsRes.value;
+  const deadheadMap = deadheadRes.value;
+  const personalAllowance = paRes.value;
+  if (tripsRes.timedOut) degraded.trips = true;
+  if (deadheadRes.timedOut) degraded.deadhead = true;
+  if (paRes.timedOut) degraded.personalAllowance = true;
 
   const weekVehicleIds = new Set(
     input.fuelEntries
@@ -220,7 +273,7 @@ export async function buildFuelWeekReportsForFinalize(
       ? input.vehicles.filter((v) => weekVehicleIds.has(v.id))
       : input.vehicles;
 
-  const brainByDriverVehicle = await withSoftTimeout(
+  const brainRes = await withSoftTimeout(
     buildBrainMap({
       vehicles: brainVehicles,
       trips,
@@ -233,6 +286,8 @@ export async function buildFuelWeekReportsForFinalize(
     undefined as Map<string, FuelBrainClassificationInput> | undefined,
     'fuelBrain',
   );
+  const brainByDriverVehicle = brainRes.value;
+  if (brainRes.timedOut) degraded.brain = true;
 
   const drivers = input.drivers.map((d) => ({
     id: String(d.id || d.driverId || ''),
@@ -255,13 +310,18 @@ export async function buildFuelWeekReportsForFinalize(
     personalAllowance,
   );
 
-  return { reports, trips };
+  return { reports, trips, degraded };
 }
 
 export async function buildFuelWeekReportsWithGating(
   input: BuildFuelWeekReportsInput,
-): Promise<{ reports: WeeklyFuelReport[]; trips: Trip[]; gateResult: FuelFinalizeGateResult }> {
-  const { reports, trips } = await buildFuelWeekReportsForFinalize(input);
+): Promise<{
+  reports: WeeklyFuelReport[];
+  trips: Trip[];
+  gateResult: FuelFinalizeGateResult;
+  degraded: FuelWeekDegradedInputs;
+}> {
+  const { reports, trips, degraded } = await buildFuelWeekReportsForFinalize(input);
   const gateResult = evaluateFuelFinalizeGating({
     reports,
     disputes: input.disputes,
@@ -271,7 +331,7 @@ export async function buildFuelWeekReportsWithGating(
     weekStartYmd: input.weekStartYmd,
     weekEndYmd: input.weekEndYmd,
   });
-  return { reports, trips, gateResult };
+  return { reports, trips, gateResult, degraded };
 }
 
 /** Soft cap — keeps bulk under edge timeout risk (one week per API cycle). */

@@ -1073,12 +1073,19 @@ function ImportsPageInner({ onNavigate }: ImportsPageProps) {
                       }),
                       fuelService.getFuelCards().catch(() => []),
                   ]);
-                  const { pairs, updates, summary } = buildJaaMatchUpdates(saved, existing, inventory);
-                  for (const entry of updates) {
+                  const { pairs, summary } = buildJaaMatchUpdates(saved, existing, inventory);
+                  const toApply = pairs.filter(
+                    (p) =>
+                      (p.status === 'matched' || p.status === 'amount_mismatch') &&
+                      p.notes !== 'Already linked' &&
+                      p.statementEntry &&
+                      p.driverEntry,
+                  );
+                  if (toApply.length > 0) {
                       try {
-                          await fuelService.saveFuelEntry({ ...entry, correctionReason: 'JAA statement match enrichment' });
+                          await fuelService.applyJaaFuelMatches(toApply);
                       } catch (saveErr) {
-                          console.warn('[Import] JAA match save failed', entry.id, saveErr);
+                          console.warn('[Import] JAA match apply failed', saveErr);
                       }
                   }
                   setJaaMatchPairs(pairs as FuelMatchPair[]);
@@ -1466,7 +1473,7 @@ function ImportsPageInner({ onNavigate }: ImportsPageProps) {
   return (
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
+        <div className="hidden md:block">
           <h2 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-100">Data Center</h2>
           <p className="text-slate-500 dark:text-slate-400">
             Import and export your fleet data

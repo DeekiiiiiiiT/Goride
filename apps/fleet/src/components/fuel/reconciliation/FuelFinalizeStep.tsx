@@ -37,6 +37,17 @@ export type FuelFinalizeStepProps = {
   onExportCsv: () => void;
   onDownloadEvidencePack: () => void;
   settlementRows: FuelSettlementRow[];
+  /** U-9: data provenance shown where the operator signs. */
+  provenance?: {
+    tripCount: number;
+    tripsTimedOut?: boolean;
+    deadheadTimedOut?: boolean;
+    personalAllowanceTimedOut?: boolean;
+    brainTimedOut?: boolean;
+    fuelCardsLoaded: number;
+    fuelCardsMissing?: boolean;
+    vehicleCount: number;
+  };
 };
 
 export function FuelFinalizeStep(props: FuelFinalizeStepProps) {
@@ -63,11 +74,40 @@ export function FuelFinalizeStep(props: FuelFinalizeStepProps) {
     onExportCsv,
     onDownloadEvidencePack,
     settlementRows,
+    provenance,
   } = props;
   const serviceOnly = dualApprovalUiMode === 'service_only';
 
   return (
     <div className="space-y-3">
+      {provenance && (
+        <div
+          className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-[13px] text-slate-800"
+          role="status"
+        >
+          <p className="font-semibold text-slate-900">Data provenance (signature)</p>
+          <ul className="mt-1 list-inside list-disc space-y-0.5 text-slate-700">
+            <li>
+              Trips: {provenance.tripCount}
+              {provenance.tripsTimedOut ? ' (timed out — incomplete)' : ''}
+            </li>
+            <li>
+              Deadhead:{' '}
+              {provenance.deadheadTimedOut ? 'timed out — incomplete' : 'loaded'}
+            </li>
+            <li>
+              Personal allowance:{' '}
+              {provenance.personalAllowanceTimedOut ? 'timed out — incomplete' : 'loaded'}
+            </li>
+            <li>
+              Fuel cards: {provenance.fuelCardsLoaded}
+              {provenance.fuelCardsMissing ? ' (required cards missing)' : ''}
+            </li>
+            <li>Vehicles in scope: {provenance.vehicleCount}</li>
+            {provenance.brainTimedOut ? <li>Fuel brain: timed out (legacy residual used)</li> : null}
+          </ul>
+        </div>
+      )}
       <div className="flex flex-wrap justify-end gap-2">
         <Button type="button" variant="outline" className="min-h-11" onClick={onExportCsv}>
           Export CSV

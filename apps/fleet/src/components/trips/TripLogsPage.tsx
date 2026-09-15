@@ -351,7 +351,7 @@ function TripLogsPageInner() {
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="flex flex-col gap-2">
+        <div className="hidden md:flex flex-col gap-2">
           <h2 className="text-3xl font-bold tracking-tight text-slate-900">{v('tripsPageTitle')}</h2>
           <p className="text-slate-500">
             {v('tripsPageSubtitle')}

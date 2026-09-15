@@ -445,7 +445,7 @@ export function FleetFinancialsPage({
       )}
       {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="flex items-start gap-3">
+        <div className="hidden md:flex items-start gap-3">
           <div className="rounded-xl bg-indigo-50 dark:bg-indigo-950 p-2.5 mt-0.5">
             <Landmark className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
           </div>

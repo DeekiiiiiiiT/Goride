@@ -87,7 +87,7 @@ export function CouriersPage({ embedded = false }: { embedded?: boolean }) {
     <div className="space-y-6">
       {!embedded ? (
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
+          <div className="hidden md:block">
             <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-50">
               Couriers
             </h1>

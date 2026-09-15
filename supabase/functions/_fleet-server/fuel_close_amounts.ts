@@ -64,14 +64,8 @@ export function pickFuelCloseAmounts(input: {
 
   if (!amounts) amounts = input.periodFallback;
 
-  if (
-    amounts.source !== "fuel_week_rebuild" &&
-    Math.abs(amounts.driverShare) < 0.005 &&
-    input.fromRebuild &&
-    Math.abs(input.fromRebuild.driverShare) > 0.005
-  ) {
-    amounts = input.fromRebuild;
-  }
+  // C-2a: never overwrite an approved/override zero driverShare with rebuild.
+  // A correct company-covered / priceUnavailable / Full-rule zero is not a defect.
 
   return amounts;
 }

@@ -45,6 +45,8 @@ export interface FuelReconciliationPeriod {
   counts: Record<FuelStepId, FuelStepCounts>;
   /** True when leakage_reviewed_at set (or locked with residual treated as accepted). */
   leakageReviewed?: boolean;
+  /** N-7: locked week whose statement seal failed — retry seal. */
+  fuelSealError?: string | null;
 }
 
 export interface BuildFuelStepCountsInput {

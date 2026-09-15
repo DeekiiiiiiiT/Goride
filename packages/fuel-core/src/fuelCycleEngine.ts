@@ -5,7 +5,7 @@ import {
     resolveCycleCloseMode,
     type CycleCloseMode,
 } from './fuelCycleClosePolicy.ts';
-import { isJaaStatementLedgerRow } from '@roam/roam-shared';
+import { isJaaStatementLedgerRow } from '../../roam-shared/src/fuel/jaaStatementLedger.ts';
 
 /**
  * Groups fuel entries into tank cycles.

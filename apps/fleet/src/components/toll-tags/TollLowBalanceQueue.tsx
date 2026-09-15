@@ -58,7 +58,7 @@ export function TollLowBalanceQueue({
   return (
     <div className="p-6 space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
-        <div>
+        <div className="hidden md:block">
           <h1 className="text-2xl font-bold tracking-tight text-slate-900">Low balance tags</h1>
           <p className="text-sm text-slate-500 mt-1">
             Tags that need a top-up before drivers get stuck at a plaza.

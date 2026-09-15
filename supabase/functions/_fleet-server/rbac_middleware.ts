@@ -45,6 +45,7 @@ export type Permission =
   | 'vehicles.bypass_catalog_gate'
   | 'fuel.approve' | 'fuel.reject' | 'fuel.create_entry' | 'fuel.edit_entry'
   | 'fuel.delete_entry' | 'fuel.view' | 'fuel.export'
+  | 'fuel.finalize' | 'fuel.reopen' | 'fuel.accept_unexplained' | 'fuel.second_approve'
   | 'toll.manage' | 'toll.view'
   | 'transactions.approve' | 'transactions.reject' | 'transactions.edit'
   | 'transactions.view' | 'transactions.export'
@@ -253,6 +254,7 @@ const ALL_CUSTOMER_PERMISSIONS: Permission[] = [
   // 'vehicles.bypass_catalog_gate' is platform-only (added below).
   'fuel.approve', 'fuel.reject', 'fuel.create_entry', 'fuel.edit_entry',
   'fuel.delete_entry', 'fuel.view', 'fuel.export',
+  'fuel.finalize', 'fuel.reopen', 'fuel.accept_unexplained', 'fuel.second_approve',
   'toll.manage', 'toll.view',
   'transactions.approve', 'transactions.reject', 'transactions.edit',
   'transactions.view', 'transactions.export',
@@ -285,6 +287,7 @@ const FLEET_ACCOUNTANT_PERMISSIONS: Permission[] = [
   'nav.transaction_list', 'nav.reports',
   'drivers.view', 'vehicles.view',
   'fuel.view', 'fuel.export',
+  'fuel.finalize', 'fuel.reopen', 'fuel.accept_unexplained', 'fuel.second_approve',
   'toll.view',
   'transactions.view', 'transactions.export',
   'reports.view', 'reports.export',

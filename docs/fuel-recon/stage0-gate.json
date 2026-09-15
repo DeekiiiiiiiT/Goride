@@ -1,0 +1,19 @@
+{
+  "stage": 0,
+  "capturedAt": "2026-09-15",
+  "verdict": "C-2 live in production (1 statement↔ledger delta on 2026-08-24). No auto_close audit rows. Rebuild has published closed statements. Proceed Stage 1–6 as implemented in this branch.",
+  "fixtures": [
+    "packages/fuel-core/fixtures/fuel-week-char/blast-radius-2026-09-15.json",
+    "packages/fuel-core/fixtures/fuel-week-char/dual-engine-goldens.json"
+  ],
+  "playbookBeforeEnforce": "Reopen/reseal week 2026-08-24 for driver 73e5b1dc-01b4-45ee-a34a-25a3256b9841 before FUEL_SERVER_ENGINE=enforce",
+  "fuelServerEngineRollout": {
+    "currentProd": "off",
+    "next": "shadow",
+    "then": "enforce",
+    "shadowMinWeeks": 2,
+    "doc": "docs/fuel-recon/server-engine-rollout.md",
+    "prerequisiteWeek": "2026-08-24",
+    "prerequisiteDriverId": "73e5b1dc-01b4-45ee-a34a-25a3256b9841"
+  }
+}

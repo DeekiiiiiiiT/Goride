@@ -28,8 +28,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
-    "@roam/roam-shared": "workspace:*",
-    "date-fns": "*"
+    "@roam/roam-shared": "workspace:*"
   },
   "devDependencies": {
     "vitest": "^3.2.4"

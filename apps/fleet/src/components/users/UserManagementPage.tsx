@@ -265,7 +265,7 @@ export function UserManagementPage({ productLine = 'fleet' }: UserManagementPage
 
   return (
     <div className="space-y-6">
-      <div>
+      <div className="hidden md:block">
         <h2 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-100">Team Management</h2>
         <p className="text-slate-500 dark:text-slate-400">
           Invite and manage team members for your organization.

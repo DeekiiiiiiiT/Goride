@@ -83,6 +83,17 @@ Deno.test("pickFuelCloseAmounts skips suspicious $0-driver rebuild when KV exist
   assertEquals(picked.companyShare, 5);
 });
 
+Deno.test("pickFuelCloseAmounts keeps approved zero driverShare (C-2a)", () => {
+  const picked = pickFuelCloseAmounts({
+    override: { driverShare: 0, companyShare: 28800, totalSpend: 28800, miscellaneousCost: 28800 },
+    fromRebuild: rebuild({ driverShare: 14400, companyShare: 14400, totalSpend: 28800 }),
+    periodFallback: periodFallback(),
+  });
+  assertEquals(picked.source, "consumption_strip");
+  assertEquals(picked.driverShare, 0);
+  assertEquals(picked.companyShare, 28800);
+});
+
 Deno.test("isSuspiciousFuelRebuild detects $0 driver + company invent", () => {
   assertEquals(isSuspiciousFuelRebuild(rebuild({ driverShare: 0, companyShare: 100 })), true);
   assertEquals(isSuspiciousFuelRebuild(rebuild({ driverShare: 10, companyShare: 90 })), false);

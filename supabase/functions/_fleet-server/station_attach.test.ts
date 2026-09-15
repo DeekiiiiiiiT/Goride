@@ -74,3 +74,21 @@ Deno.test("applyMerchantHealMetadata clears review and sets verified", () => {
   assertEquals(typeof meta.autoHealedAt, "string");
   assertEquals(meta.autoHealScore, 0.95);
 });
+
+Deno.test("applyMerchantHealMetadata: jaa_match_merchant_heal method", () => {
+  const entry: Record<string, unknown> = {
+    vendor: "FESCO BEECHWOOD",
+    metadata: { locationStatus: "statement_vendor" },
+  };
+  applyMerchantHealMetadata(
+    entry,
+    { id: "st-1", name: "FESCO BEECHWOOD", status: "verified" },
+    1,
+    "FESCO BEECHWOOD",
+    "jaa_match_merchant_heal",
+  );
+  const meta = entry.metadata as Record<string, unknown>;
+  assertEquals(meta.locationStatus, "verified");
+  assertEquals(meta.verificationMethod, "jaa_match_merchant_heal");
+  assertEquals(entry.matchedStationId, "st-1");
+});

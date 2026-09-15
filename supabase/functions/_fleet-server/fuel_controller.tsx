@@ -5460,9 +5460,9 @@ app.post(`${BASE_PATH}/admin/platform-ops-delete-fills`, requirePlatformStaff(),
 });
 
 /**
- * Merchant-name auto-heal batch — dry-run or apply.
- * Scans unknown / review_required / statement_vendor / unverified fills and attaches
- * when unique GOD merchant match + healthy odometer sequence.
+ * Merchant-name auto-heal batch — dry-run by default.
+ * Unrestricted apply stays disabled. applyLinkedPairsOnly + dryRun:false heals
+ * already-linked JAA↔driver pairs only (catch-up for Silent Attach queue).
  */
 app.post(`${BASE_PATH}/admin/autoheal-merchant-stations`, requirePlatformStaff(), async (c) => {
     try {
@@ -5472,14 +5472,15 @@ app.post(`${BASE_PATH}/admin/autoheal-merchant-stations`, requirePlatformStaff()
         } catch {
             body = {};
         }
-        const dryRun = body.dryRun !== false; // default dry-run for safety unless dryRun:false
-        if (body.dryRun === false) {
+        const applyLinkedPairsOnly = body.applyLinkedPairsOnly === true;
+        const dryRun = body.dryRun !== false;
+        if (body.dryRun === false && !applyLinkedPairsOnly) {
             return c.json({
-                error: "Batch merchant auto-apply is disabled. Use Silent Attach manually with a reason.",
+                error: "Batch merchant auto-apply is disabled. Use Silent Attach manually with a reason, or applyLinkedPairsOnly for linked Gas Card catch-up.",
                 code: "AUTOHEAL_APPLY_DISABLED",
             }, 400);
         }
-        const apply = false;
+        const apply = body.dryRun === false && applyLinkedPairsOnly;
         const limit = Math.min(Number(body.limit) || 500, 2000);
 
         const stations = ((await kv.getByPrefix("station:")) || []).filter(
@@ -5521,7 +5522,7 @@ app.post(`${BASE_PATH}/admin/autoheal-merchant-stations`, requirePlatformStaff()
         }
 
         for (const entry of entries) {
-            if (candidates.length + healed >= limit && apply) break;
+            if (candidates.length >= limit) break;
             if (!entry?.id) continue;
             const status = entry.metadata?.locationStatus || "unknown";
             if (!healStatuses.has(status)) continue;
@@ -5537,7 +5538,7 @@ app.post(`${BASE_PATH}/admin/autoheal-merchant-stations`, requirePlatformStaff()
             }
 
             const timeline = byVehicle.get(entry.vehicleId) || [];
-            let odo = await odometerSequenceHealthy(entry, { vehicleTimeline: timeline });
+            const odo = await odometerSequenceHealthy(entry, { vehicleTimeline: timeline });
             // First fill requires stronger unique score (re-check)
             if (odo.isFirstFill) {
                 const strong = matchUniqueVerifiedStationForRecord(entry, stations, { preferStrong: true });
@@ -5551,7 +5552,7 @@ app.post(`${BASE_PATH}/admin/autoheal-merchant-stations`, requirePlatformStaff()
                 continue;
             }
 
-            const candidate = {
+            candidates.push({
                 entryId: entry.id,
                 stationId: match.station.id,
                 stationName: match.station.name || match.station.id,
@@ -5563,62 +5564,68 @@ app.post(`${BASE_PATH}/admin/autoheal-merchant-stations`, requirePlatformStaff()
                 time: entry.time != null ? String(entry.time) : null,
                 amount: entry.amount != null ? Number(entry.amount) : undefined,
                 liters: entry.liters != null ? Number(entry.liters) : undefined,
-            };
-
-            if (!apply) {
-                candidates.push(candidate);
-                if (candidates.length >= limit) break;
-                continue;
-            }
-
-            const stationFull = stations.find((s: any) => s.id === match.station.id) || match.station;
-            const result = await attachRecordIdToStation(entry.id, stationFull, {
-                method: "merchant_name_autoheal_batch",
-                autoHealScore: match.score,
-                autoHealMerchantText: match.merchantText,
-                reason: `Merchant auto-heal: ${match.merchantText}`,
-                dismissLearnt: true,
             });
-            if (result.ok) healed++;
-            else {
-                skipped++;
-                errors.push({ entryId: entry.id, reason: result.reason || "skipped" });
-            }
         }
 
         // Prefer fleet-visible primary + twin metadata; dedupe linked pairs to one queue row.
-        let queueCandidates = candidates;
-        if (!apply && candidates.length > 0) {
-            const seenPrimary = new Set<string>();
-            const enriched: typeof candidates = [];
-            for (const c of candidates) {
-                const pairIds = expandLinkedFuelEntryIdsFromMap(c.entryId, byId);
-                const fleetId = pickFleetVisibleEntryId(pairIds, byId) || c.entryId;
-                if (seenPrimary.has(fleetId)) continue;
-                seenPrimary.add(fleetId);
-                const primary = byId.get(fleetId) || byId.get(c.entryId);
-                const linkedTwinIds = pairIds.filter((id) => id !== fleetId);
-                enriched.push({
-                    ...c,
-                    entryId: fleetId,
-                    linkedTwinIds,
-                    fleetVisibleEntryId: fleetId,
-                    linkage: linkedTwinIds.length > 0 ? "jaa_pair" : "solo",
-                    date: primary?.date != null ? String(primary.date) : c.date,
-                    time: primary?.time != null ? String(primary.time) : c.time,
-                    amount: primary?.amount != null ? Number(primary.amount) : c.amount,
-                    liters: primary?.liters != null ? Number(primary.liters) : c.liters,
-                    merchantText:
-                        String(
-                            (primary?.metadata as any)?.jaaStation ||
-                                primary?.vendor ||
-                                primary?.location ||
-                                c.merchantText ||
-                                "",
-                        ) || c.merchantText,
-                });
+        const seenPrimary = new Set<string>();
+        const enriched: typeof candidates = [];
+        for (const c of candidates) {
+            const pairIds = expandLinkedFuelEntryIdsFromMap(c.entryId, byId);
+            const fleetId = pickFleetVisibleEntryId(pairIds, byId) || c.entryId;
+            if (seenPrimary.has(fleetId)) continue;
+            seenPrimary.add(fleetId);
+            const primary = byId.get(fleetId) || byId.get(c.entryId);
+            const linkedTwinIds = pairIds.filter((id) => id !== fleetId);
+            enriched.push({
+                ...c,
+                entryId: fleetId,
+                linkedTwinIds,
+                fleetVisibleEntryId: fleetId,
+                linkage: linkedTwinIds.length > 0 ? "jaa_pair" : "solo",
+                date: primary?.date != null ? String(primary.date) : c.date,
+                time: primary?.time != null ? String(primary.time) : c.time,
+                amount: primary?.amount != null ? Number(primary.amount) : c.amount,
+                liters: primary?.liters != null ? Number(primary.liters) : c.liters,
+                merchantText:
+                    String(
+                        (primary?.metadata as any)?.jaaStation ||
+                            primary?.vendor ||
+                            primary?.location ||
+                            c.merchantText ||
+                            "",
+                    ) || c.merchantText,
+            });
+        }
+
+        let queueCandidates = applyLinkedPairsOnly
+            ? enriched.filter((c) => c.linkage === "jaa_pair")
+            : enriched;
+
+        if (apply) {
+            for (const c of queueCandidates) {
+                const stationFull = stations.find((s: any) => s.id === c.stationId) || {
+                    id: c.stationId,
+                    name: c.stationName,
+                    status: "verified",
+                };
+                const { ids: expandedIds } = await resolveLinkedFuelEntryIdsUnion([c.entryId]);
+                for (const entryId of expandedIds) {
+                    const result = await attachRecordIdToStation(entryId, stationFull, {
+                        method: "jaa_match_merchant_heal",
+                        autoHealScore: c.score,
+                        autoHealMerchantText: c.merchantText,
+                        reason: "Auto: JAA linked + unique merchant match",
+                        dismissLearnt: true,
+                    });
+                    if (result.ok) {
+                        healed++;
+                    } else {
+                        skipped++;
+                        errors.push({ entryId, reason: result.reason || "skipped" });
+                    }
+                }
             }
-            queueCandidates = enriched;
         }
 
         const rbacUser = c.get("rbacUser") as RbacUser | undefined;
@@ -5626,16 +5633,17 @@ app.post(`${BASE_PATH}/admin/autoheal-merchant-stations`, requirePlatformStaff()
             await logAdminAction({
                 actorId: rbacUser?.userId || "unknown",
                 actorName: rbacUser?.email || "Platform ops",
-                action: "merchant_autoheal_batch",
+                action: "jaa_linked_merchant_heal_batch",
                 targetId: "platform",
                 targetEmail: "N/A",
-                details: `Healed ${healed}; skipped ${skipped}; errors ${errors.length}`,
+                details: `Linked-pair merchant heal: ${healed} fill(s); skipped ${skipped}; errors ${errors.length}`,
             });
         }
 
         return c.json({
             success: true,
             dryRun: !apply,
+            applyLinkedPairsOnly,
             summary: {
                 candidates: apply ? healed : queueCandidates.length,
                 healed: apply ? healed : 0,
@@ -5645,8 +5653,10 @@ app.post(`${BASE_PATH}/admin/autoheal-merchant-stations`, requirePlatformStaff()
             candidates: apply ? undefined : queueCandidates,
             errors: apply ? errors : undefined,
             message: apply
-                ? `Merchant auto-heal applied: ${healed} fill(s).`
-                : `Dry-run: ${candidates.length} candidate(s) would heal.`,
+                ? `Linked JAA merchant heal applied: ${healed} fill(s).`
+                : applyLinkedPairsOnly
+                  ? `Dry-run: ${queueCandidates.length} linked-pair candidate(s) would heal.`
+                  : `Dry-run: ${queueCandidates.length} candidate(s) would heal.`,
         });
     } catch (e: any) {
         console.error("[AutohealMerchant]", e);

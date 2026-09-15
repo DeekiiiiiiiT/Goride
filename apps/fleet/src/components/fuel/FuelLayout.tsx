@@ -23,8 +23,9 @@ export function FuelLayout({
 }: FuelLayoutProps) {
   return (
     <div className={cn(embedded ? 'space-y-4' : 'space-y-6')}>
+      {/* Desktop only — mobile AppLayout top bar already shows the page title */}
       {!embedded ? (
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div className="hidden md:flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div>
             <h1 className="text-2xl font-bold text-slate-900 tracking-tight">{title}</h1>
             <p
@@ -42,7 +43,7 @@ export function FuelLayout({
         </div>
       ) : null}
 
-      <div className={embedded ? undefined : 'mt-6'}>{children}</div>
+      <div className={embedded ? undefined : 'md:mt-6'}>{children}</div>
     </div>
   );
 }

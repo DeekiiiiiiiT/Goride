@@ -1126,13 +1126,23 @@ export const api = {
     }>;
   },
 
-  /** Merchant-name auto-heal dry-run or apply. Default dryRun=true. */
-  async autohealMerchantStations(opts?: { dryRun?: boolean; limit?: number }) {
+  /** Merchant-name auto-heal dry-run or linked-pair catch-up apply. Default dryRun=true. */
+  async autohealMerchantStations(opts?: {
+    dryRun?: boolean;
+    limit?: number;
+    /** When dryRun:false, only linked JAA↔driver pairs are healed (full batch apply stays blocked). */
+    applyLinkedPairsOnly?: boolean;
+  }) {
     const dryRun = opts?.dryRun !== false;
+    const applyLinkedPairsOnly = opts?.applyLinkedPairsOnly === true;
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/admin/autoheal-merchant-stations`, {
       method: 'POST',
       headers: await getHeaders(),
-      body: JSON.stringify({ dryRun, limit: opts?.limit ?? 500 }),
+      body: JSON.stringify({
+        dryRun,
+        limit: opts?.limit ?? 500,
+        ...(applyLinkedPairsOnly ? { applyLinkedPairsOnly: true } : {}),
+      }),
     });
     if (!response.ok) {
       const err = await response.json().catch(() => ({}));
@@ -1141,6 +1151,7 @@ export const api = {
     return response.json() as Promise<{
       success: boolean;
       dryRun: boolean;
+      applyLinkedPairsOnly?: boolean;
       summary: { candidates: number; healed: number; skipped: number; errors: number };
       candidates?: Array<{
         entryId: string;

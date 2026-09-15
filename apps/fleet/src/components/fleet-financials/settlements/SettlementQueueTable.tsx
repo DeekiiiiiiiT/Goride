@@ -133,7 +133,7 @@ function blockReasonDomId(scope: string, key: string): string {
 }
 
 /** Collect is allowed only when the calendar week ended AND the money is unlocked AND not frozen. */
-function canCollect(
+export function canCollect(
   r: Pick<
     SettlementQueueRow,
     'periodAnchor' | 'periodEnd' | 'moneyUnlocked' | 'periodFrozen' | 'sealBroken'
@@ -147,7 +147,7 @@ function canCollect(
   );
 }
 
-function canPay(
+export function canPay(
   r: Pick<SettlementQueueRow, 'periodAnchor' | 'periodEnd' | 'periodFrozen' | 'sealBroken'>,
 ): boolean {
   return weekActionable(r) && !periodFrozenBlocked(r) && !sealBroken(r);
@@ -167,7 +167,7 @@ const MONEY = (n: number | null | undefined) => {
   return `${n < 0 ? '-' : ''}$${body}`;
 };
 
-function weekLabel(anchor: string, end: string) {
+export function settlementWeekLabel(anchor: string, end: string) {
   try {
     return `${format(parseISO(`${anchor}T12:00:00`), 'MMM d')} – ${format(parseISO(`${end}T12:00:00`), 'MMM d, yyyy')}`;
   } catch {
@@ -175,16 +175,29 @@ function weekLabel(anchor: string, end: string) {
   }
 }
 
-function rowKey(r: Pick<SettlementQueueRow, 'driverId' | 'periodAnchor'>) {
+function weekLabel(anchor: string, end: string) {
+  return settlementWeekLabel(anchor, end);
+}
+
+export function settlementRowKey(r: Pick<SettlementQueueRow, 'driverId' | 'periodAnchor'>) {
   return `${r.driverId}|${r.periodAnchor}`;
 }
 
-function owedMajor(r: SettlementQueueRow, mode: 'collect' | 'pay'): number {
+function rowKey(r: Pick<SettlementQueueRow, 'driverId' | 'periodAnchor'>) {
+  return settlementRowKey(r);
+}
+
+export function settlementQueueOwedMajor(r: SettlementQueueRow, mode: 'collect' | 'pay'): number {
   // Pay: settlementAmount is already residual — ignore amountOwed so a bad queue cannot understate.
   if (mode === 'pay') return resolvePayQueueOwed(r);
   if (r.amountOwed != null && Number.isFinite(r.amountOwed)) return Math.max(0, Number(r.amountOwed));
   if (r.amountOwedMinor != null) return Math.max(0, (Number(r.amountOwedMinor) || 0) / 100);
   return Math.max(0, Math.abs(Number(r.settlementAmount) || 0));
+}
+
+/** @deprecated Prefer settlementQueueOwedMajor — kept for local call sites. */
+function owedMajor(r: SettlementQueueRow, mode: 'collect' | 'pay'): number {
+  return settlementQueueOwedMajor(r, mode);
 }
 
 const AGING_TONE: Record<AgingBucket, string> = {
@@ -194,7 +207,7 @@ const AGING_TONE: Record<AgingBucket, string> = {
   '90+': 'bg-rose-100 text-rose-900',
 };
 
-type DriverRollup = {
+export type DriverRollup = {
   driverId: string;
   driverName?: string;
   /** Total exposure (driverOwes + cashHeld in collect; fleet owes in pay). */
@@ -228,7 +241,7 @@ function weeksCountLabel(g: DriverRollup, mode: 'collect' | 'pay'): string {
   return String(g.weekCount);
 }
 
-function buildDriverRollups(rows: SettlementQueueRow[], mode: 'collect' | 'pay'): DriverRollup[] {
+export function buildDriverRollups(rows: SettlementQueueRow[], mode: 'collect' | 'pay'): DriverRollup[] {
   const map = new Map<string, DriverRollup>();
   for (const r of rows) {
     const owed = owedMajor(r, mode);

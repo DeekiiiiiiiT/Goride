@@ -1,9 +1,13 @@
 export { ErrorBoundary } from './ErrorBoundary';
 export {
+  isJaaStatementLedgerRow,
+  STATEMENT_IMPORT_SOURCES,
+  type JaaLedgerEntryLike,
+} from './fuel/jaaStatementLedger';
+export {
   matchJaaStatementToDriverLogs,
   applyFuelMatchLinks,
   buildJaaMatchUpdates,
-  isJaaStatementLedgerRow,
   collectJaaStatementReceiptNumbers,
   hydrateStatementsFromCards,
   type FuelEntryLike,

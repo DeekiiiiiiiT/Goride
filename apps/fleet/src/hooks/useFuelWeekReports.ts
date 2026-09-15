@@ -51,6 +51,7 @@ export function useFuelWeekReports(
     reports: query.data?.reports ?? [],
     trips: query.data?.trips ?? input?.trips ?? [],
     gateResult: query.data?.gateResult,
+    degraded: query.data?.degraded,
     loading: query.isLoading && !query.data,
     updating: query.isFetching && !!query.data,
     error: query.error,

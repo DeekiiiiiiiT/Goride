@@ -306,6 +306,14 @@ export interface FinalizedFuelReport extends Omit<WeeklyFuelReport, 'status' | '
    */
   postedDriverShare?: number;
   postedCompanyShare?: number;
+  /** C-1: category costs frozen at finalize for server engine compare. */
+  categoryCosts?: {
+    rideShareCost: number;
+    companyUsageCost: number;
+    deadheadCost: number;
+    personalUsageCost: number;
+  };
+  fuelRule?: unknown;
 }
 
 export interface OdometerBucket {

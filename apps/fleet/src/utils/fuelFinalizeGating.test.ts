@@ -166,27 +166,30 @@ describe('evaluateFuelFinalizeGating', () => {
     expect(gate.unapprovedFuelTxBlockers).toEqual([]);
   });
 
-  it('C-2: hard-blocks an over-explained week (|misc| > 25% of spend)', () => {
+  it('C-7: under-explained (positive misc > 25%) is reviewable, not over-explained', () => {
     const gate = evaluateFuelFinalizeGating({
       reports: [report({ totalGasCardCost: 100, miscellaneousCost: 60 })],
     });
-    expect(gate.hasOverExplainedBlockers).toBe(true);
+    expect(gate.hasOverExplainedBlockers).toBe(false);
+    expect(gate.hasUnderExplainedBlockers).toBe(true);
     expect(gate.hasBlockingWarnings).toBe(true);
-    expect(gate.overExplainedBlockers).toHaveLength(1);
-    expect(gate.overExplainedBlockers[0]).toMatchObject({
+    expect(gate.underExplainedBlockers).toHaveLength(1);
+    expect(gate.underExplainedBlockers[0]).toMatchObject({
       vehicleId: 'v1',
       driverId: 'd1',
       totalSpend: 100,
       miscellaneousCost: 60,
       pctOfSpend: 60,
+      kind: 'under_explained',
     });
   });
 
-  it('C-2: hard-blocks a NEGATIVE (fleet-owes) over-explained residual too', () => {
+  it('C-7: hard-blocks a NEGATIVE (fleet-owes) over-explained residual', () => {
     const gate = evaluateFuelFinalizeGating({
       reports: [report({ totalGasCardCost: 100, miscellaneousCost: -40 })],
     });
     expect(gate.hasOverExplainedBlockers).toBe(true);
+    expect(gate.hasUnderExplainedBlockers).toBe(false);
     expect(gate.overExplainedBlockers[0].pctOfSpend).toBe(40);
   });
 

@@ -2,7 +2,7 @@
  * Dual-ledger fuel eligibility — Transaction Logs & Fuel Analytics.
  * Card Inventory owns JAA statement ledger rows; ops surfaces use driver/admin fills only.
  */
-import { isJaaStatementLedgerRow } from '@roam/roam-shared';
+import { isJaaStatementLedgerRow } from '../../roam-shared/src/fuel/jaaStatementLedger.ts';
 import type { FuelEntry } from './fuelTypes.ts';
 
 /** Company / fleet gas-card charges (not driver cash). Explicit paymentSource wins over type. */

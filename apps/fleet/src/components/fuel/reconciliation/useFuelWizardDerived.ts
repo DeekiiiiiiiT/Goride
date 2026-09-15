@@ -14,8 +14,11 @@ import {
   type FuelStepId,
 } from '../../../utils/fuelPeriodGating';
 import { evaluateFuelFinalizeGating } from '../../../utils/fuelFinalizeGating';
+import { evaluateFuelWeekClosableClient } from '../../../utils/fuelWeekClosableGate';
 import { FUEL_SPEND_EPS } from '../../../utils/fuelMoneyEpsilon';
 import { sumGasCardSpendForReport, sumPaidByDriverForReport } from '../../../utils/fuelPaidByDriver';
+import { isEntryInInclusiveYmdRange } from '../../../utils/fuelWeekPeriod';
+import { precomputeFuelFillDrivers } from '@roam/fuel-core';
 import type {
   FinalizedFuelReport,
   FuelCard,
@@ -55,6 +58,10 @@ export function useFuelWizardDerived(input: {
   weekLoading: boolean;
   weekError: boolean;
   transactions?: FinancialTransaction[];
+  countsUnevaluated?: boolean;
+  degradedInputs?: boolean;
+  periodTotalSpend?: number;
+  periodUnexplained?: number;
 }) {
   const {
     periodStart,
@@ -74,9 +81,23 @@ export function useFuelWizardDerived(input: {
     weekLoading,
     weekError,
     transactions = [],
+    countsUnevaluated = false,
+    degradedInputs = false,
+    periodTotalSpend,
+    periodUnexplained,
   } = input;
 
   const { vehicleSnaps, openDisputes } = useMemo(() => {
+    const weekEntries = fuelEntries.filter((e) =>
+      isEntryInInclusiveYmdRange(e.date, periodStart, periodEnd),
+    );
+    const fillDriverMap = precomputeFuelFillDrivers(weekEntries, vehicles, fuelCards, weekTrips);
+    const driverByEntryId = new Map<string, string>();
+    for (const [entryId, resolution] of fillDriverMap) {
+      driverByEntryId.set(entryId, resolution.driverId);
+    }
+    const paidByDriverCtx = { vehicles, trips: weekTrips, fuelCards, driverByEntryId };
+
     const liveSlices = liveReportsToPrimaryClaimedSlices(liveReports);
     const built = buildFuelVehicleSnapshots({
       vehicles,
@@ -88,7 +109,6 @@ export function useFuelWizardDerived(input: {
       scenarios,
       liveSlices,
     });
-    const paidByDriverCtx = { vehicles, trips: weekTrips, fuelCards };
     const enriched = built.snapshots.map((snap) => {
       const vehicle = vehicles.find((x) => x.id === snap.vehicleId);
       const report = liveReports.find(
@@ -210,6 +230,33 @@ export function useFuelWizardDerived(input: {
     [liveReports, disputes, fuelEntries, finalizedReports, transactions, periodStart, periodEnd],
   );
 
+  const closableBlockers = useMemo(
+    () =>
+      evaluateFuelWeekClosableClient({
+        gateResult,
+        reports: liveReports,
+        scenarios,
+        leakageReviewed: leakageReviewed || periodLocked,
+        countsUnevaluated,
+        degradedInputs,
+        openDisputesInWeek: openDisputes.length > 0,
+        totalSpend: periodTotalSpend,
+        unexplained: periodUnexplained,
+      }),
+    [
+      gateResult,
+      liveReports,
+      scenarios,
+      leakageReviewed,
+      periodLocked,
+      countsUnevaluated,
+      degradedInputs,
+      openDisputes.length,
+      periodTotalSpend,
+      periodUnexplained,
+    ],
+  );
+
   const plateByVehicleId = useMemo(() => {
     const map: Record<string, string> = {};
     for (const v of vehicles) {
@@ -240,6 +287,7 @@ export function useFuelWizardDerived(input: {
     policyRows,
     priorMedian,
     gateResult,
+    closableBlockers,
     exceptionBlockers: gateResult.exceptionBlockers || [],
     unapprovedFuelTxBlockers: gateResult.unapprovedFuelTxBlockers || [],
     plateByVehicleId,

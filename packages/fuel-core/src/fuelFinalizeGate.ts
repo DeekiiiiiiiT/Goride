@@ -3,14 +3,10 @@
  *
  * "Miscellaneous cost" is the fuel spend residual after Ride Share / Ops /
  * Deadhead / Personal are allocated (see computeMiscellaneousCost). A large
- * |misc| relative to total spend means the week is *over-explained* — the
- * categorization does not add up and the leftover is being split as if it were
- * real cash. RECONCILIATION_SYSTEM_AUDIT.md headline problem #1 shows a week
- * whose residual flipped a driver into a −$27,898.73 debit.
+ * |misc| relative to total spend means the week residual needs review.
  *
- * This module adds a characterization gate: flag any week where |misc| exceeds
- * a fixed fraction of total spend, and floor a negative misc so an
- * over-explained (fleet-owes-driver) residual is never split as a driver debit.
+ * C-7: negative misc (over-explained) and positive misc (under-explained) are
+ * opposite problems — never conflate them in product copy or hard-blocks.
  */
 
 /** Misc may not exceed this fraction of total spend before a week is gated. */
@@ -21,20 +17,55 @@ function num(v: unknown): number {
   return Number.isFinite(n) ? n : 0;
 }
 
+export type FuelMiscResidualKind = 'ok' | 'over_explained' | 'under_explained';
+
 /**
- * True when the miscellaneous residual is too large relative to total spend
- * (|misc| > ratio × totalSpend). A zero/negative totalSpend with any nonzero
- * misc is over-explained by definition.
+ * Classify residual sign + magnitude. over = modelled costs exceed spend;
+ * under = spend not fully explained by categories.
+ */
+export function classifyFuelMiscResidual(
+  totalSpend: number,
+  miscellaneousCost: number,
+  ratio: number = FUEL_MISC_MAX_RATIO,
+): FuelMiscResidualKind {
+  const spend = num(totalSpend);
+  const misc = num(miscellaneousCost);
+  if (spend <= 0) {
+    if (misc === 0) return 'ok';
+    return misc < 0 ? 'over_explained' : 'under_explained';
+  }
+  if (Math.abs(misc) <= ratio * spend) return 'ok';
+  return misc < 0 ? 'over_explained' : 'under_explained';
+}
+
+/** Negative residual beyond ratio — modelling artefact; hard block. */
+export function isOverExplainedResidual(
+  totalSpend: number,
+  miscellaneousCost: number,
+  ratio: number = FUEL_MISC_MAX_RATIO,
+): boolean {
+  return classifyFuelMiscResidual(totalSpend, miscellaneousCost, ratio) === 'over_explained';
+}
+
+/** Positive residual beyond ratio — possibly real cash loss; reviewable. */
+export function isUnderExplainedResidual(
+  totalSpend: number,
+  miscellaneousCost: number,
+  ratio: number = FUEL_MISC_MAX_RATIO,
+): boolean {
+  return classifyFuelMiscResidual(totalSpend, miscellaneousCost, ratio) === 'under_explained';
+}
+
+/**
+ * True when |misc| is too large relative to total spend (legacy abs gate).
+ * Prefer classifyFuelMiscResidual / isOverExplainedResidual for new code.
  */
 export function isOverExplainedFuelWeek(
   totalSpend: number,
   miscellaneousCost: number,
   ratio: number = FUEL_MISC_MAX_RATIO,
 ): boolean {
-  const spend = num(totalSpend);
-  const misc = num(miscellaneousCost);
-  if (spend <= 0) return misc !== 0;
-  return Math.abs(misc) > ratio * spend;
+  return classifyFuelMiscResidual(totalSpend, miscellaneousCost, ratio) !== 'ok';
 }
 
 /**

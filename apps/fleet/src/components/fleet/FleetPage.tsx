@@ -196,7 +196,7 @@ export function FleetPage() {
     return (
         <div className="p-6 space-y-6">
             <div className="flex justify-between items-center">
-                <h1 className="text-3xl font-bold tracking-tight">Inventory & Asset Management</h1>
+                <h1 className="hidden md:block text-3xl font-bold tracking-tight">Inventory & Asset Management</h1>
                 <div className="flex gap-2">
                     {canSeed && (
                     <DropdownMenu>

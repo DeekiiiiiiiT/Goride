@@ -51,7 +51,9 @@ function coerceStepCounts(
   leakageReviewed: boolean,
 ): FuelReconciliationPeriod['counts'] {
   const counts = emptyFuelStepCounts();
-  if (raw && typeof raw === 'object') {
+  const hasRaw =
+    raw && typeof raw === 'object' && Object.keys(raw as object).length > 0;
+  if (hasRaw) {
     for (const stepId of Object.keys(counts) as FuelStepId[]) {
       const c = (raw as any)[stepId];
       if (c && typeof c === 'object') {
@@ -61,11 +63,20 @@ function coerceStepCounts(
         };
       }
     }
+  } else if (!locked) {
+    // H-4: never fabricate "Done" for unevaluated steps. Mark informational=1
+    // so the UI can show "Not evaluated" instead of a green check.
+    for (const stepId of Object.keys(counts) as FuelStepId[]) {
+      counts[stepId] = { actionable: 0, informational: 1 };
+    }
   }
-  // Provisional chips when SQL has money but no counts jsonb yet
+  // Provisional leakage/finalize chips when SQL has money but no counts jsonb yet
   if (!locked && Math.abs(unexplained) > FUEL_SPEND_EPS && !leakageReviewed) {
     if (counts['leakage-gap'].actionable === 0) counts['leakage-gap'].actionable = 1;
     if (counts.finalize.actionable === 0) counts.finalize.actionable = 1;
+    // Clear the "not evaluated" informational once we know leakage needs review.
+    counts['leakage-gap'].informational = 0;
+    counts.finalize.informational = 0;
   }
   if (locked) {
     for (const stepId of Object.keys(counts) as FuelStepId[]) {
@@ -134,6 +145,7 @@ export function serverRowsToLandingPeriods(rows: FuelPeriodRow[]): FuelReconcili
       exceptionCount: locked ? 0 : counts['data-quality']?.actionable || 0,
       counts,
       leakageReviewed: locked || Boolean(s.leakageReviewedAt),
+      fuelSealError: s.fuelSealError ? String(s.fuelSealError) : null,
     });
   }
   return out;

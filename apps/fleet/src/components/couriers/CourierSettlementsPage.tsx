@@ -43,7 +43,7 @@ export function CourierSettlementsPage() {
   if (!settlementEnabled) {
     return (
       <div className="space-y-4">
-        <h1 className="text-2xl font-bold tracking-tight">Courier Settlements</h1>
+        <h1 className="hidden md:block text-2xl font-bold tracking-tight">Courier Settlements</h1>
         <Card>
           <CardContent className="flex items-center gap-3 p-6 text-slate-500">
             <AlertCircle className="h-5 w-5" />
@@ -56,7 +56,7 @@ export function CourierSettlementsPage() {
 
   return (
     <div className="space-y-6">
-      <div>
+      <div className="hidden md:block">
         <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-50">
           Courier Settlements
         </h1>

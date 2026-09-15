@@ -33,7 +33,7 @@ import {
 } from './personalAllowance.ts';
 import { calculateFuelCycles } from './fuelCycleEngine.ts';
 import { FLEET_CYCLE_HEALTH, FLEET_USE_FUEL_BRAIN } from './fuelBrainFlags.ts';
-import { blendedDriverShareRatioFromReport } from '@roam/roam-shared';
+import { blendedDriverShareRatioFromReport } from '../../roam-shared/src/fuel/blendedDriverShareRatio.ts';
 import {
   filterFuelOpsLogEntries,
   fuelOpsLiters,
@@ -1136,12 +1136,19 @@ export const FuelCalculationService = {
                 .filter(a => a.type === 'Company_Misc' || a.type === 'Maintenance')
                 .reduce((sum, a) => sum + (a.distance || 0), 0);
 
-            // Option C: Hybrid Residual — personal km is the residual after subtracting
-            // ride-share trips and known company ops from the odometer delta.
-            const personalDistance = Math.max(0, bucketDistance - rideShareDistance - companyMiscDistance);
-
-            const accountedDistance = rideShareDistance + personalDistance + companyMiscDistance;
-            const unaccountedDistance = Math.max(0, bucketDistance - accountedDistance);
+            // N-6: logged personal vs inferred residual; gap anomalies use true unaccounted only.
+            const personalEvidenceDistance = bucketAdjustments
+                .filter((a) => a.type === 'Personal')
+                .reduce((sum, a) => sum + (a.distance || 0), 0);
+            const categoryEvidenceDistance =
+              rideShareDistance + companyMiscDistance + personalEvidenceDistance;
+            const inferredPersonalDistance = Math.max(
+              0,
+              bucketDistance - categoryEvidenceDistance,
+            );
+            const personalDistance = inferredPersonalDistance;
+            // True gap only when logged categories exceed the bucket (inferred cannot absorb).
+            const unaccountedDistance = Math.max(0, categoryEvidenceDistance - bucketDistance);
 
             // 7. Efficiency Variance
             const expectedFuelLiters = (bucketDistance / 100) * avgEfficiency;

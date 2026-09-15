@@ -281,9 +281,11 @@ export async function stampEntryToVerifiedStation(
     return { ok: false, skipped: "already_assigned", reason: "Already assigned to this station" };
   }
 
-  // Auto-heal must not clobber GPS verified / prior ops override
+  // Auto-heal / JAA merchant heal must not clobber GPS verified / prior ops override
   if (
-    (ctx.method === "merchant_name_autoheal" || ctx.method === "merchant_name_autoheal_batch") &&
+    (ctx.method === "merchant_name_autoheal" ||
+      ctx.method === "merchant_name_autoheal_batch" ||
+      ctx.method === "jaa_match_merchant_heal") &&
     isAttachProtected(entry)
   ) {
     return { ok: false, skipped: "protected", reason: "Protected verification method" };
@@ -320,11 +322,15 @@ export async function stampEntryToVerifiedStation(
   }
   if (
     ctx.method === "merchant_name_autoheal" ||
-    ctx.method === "merchant_name_autoheal_batch"
+    ctx.method === "merchant_name_autoheal_batch" ||
+    ctx.method === "jaa_match_merchant_heal"
   ) {
     meta.autoHealedAt = attachedAt;
     if (ctx.autoHealScore != null) meta.autoHealScore = ctx.autoHealScore;
     if (ctx.autoHealMerchantText) meta.autoHealMerchantText = ctx.autoHealMerchantText;
+    if (ctx.method === "jaa_match_merchant_heal" && ctx.reason) {
+      meta.jaaMerchantHealReason = ctx.reason;
+    }
   }
 
   entry.metadata = meta;

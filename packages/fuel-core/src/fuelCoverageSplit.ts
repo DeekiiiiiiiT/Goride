@@ -86,6 +86,17 @@ export function getCategoryCoverageSplit(
   return { company: amount, driver: 0 };
 }
 
+/** H-10: known coverage types only — unknown must become a blocker, not Fixed_Amount. */
+export function isKnownCoverageType(coverageType: unknown): boolean {
+  const t = String(coverageType || '');
+  return t === 'Full' || t === 'Percentage' || t === 'Fixed_Amount';
+}
+
+export function coverageRuleIsResolved(rule?: FuelCoverageRule | null): boolean {
+  if (!rule) return false;
+  return isKnownCoverageType(rule.coverageType);
+}
+
 export function splitAllCategoryCosts(
   costs: CategoryCosts,
   rule: FuelCoverageRule | undefined,
@@ -183,6 +194,8 @@ export function assembleLeftoverWeekMoney(input: {
   driverShare: number;
   costs: CategoryCosts;
   split: CategorySplit;
+  /** C-4: |Σ categories + misc − totalSpend| — must be ≤ ε after assemble. */
+  spendTieDelta: number;
 } {
   const miscellaneousCost = computeMiscellaneousCost(input.totalSpend, {
     rideShare: input.rideShareCost,
@@ -199,6 +212,13 @@ export function assembleLeftoverWeekMoney(input: {
     misc: miscForSplit,
   };
   const split = splitAllCategoryCosts(costs, input.rule || undefined);
+  const categorySum =
+    input.rideShareCost +
+    input.companyUsageCost +
+    input.deadheadCost +
+    input.personalUsageCost +
+    miscellaneousCost;
+  const spendTieDelta = categorySum - (Number(input.totalSpend) || 0);
   return {
     miscellaneousCost,
     overExplainedCost,
@@ -207,5 +227,27 @@ export function assembleLeftoverWeekMoney(input: {
     driverShare: sumCategoryShare(split.driver),
     costs,
     split,
+    spendTieDelta,
   };
+}
+
+/** C-4 freeze invariant — categories + misc must reconstruct spend. */
+export function assertCategoryCostsTieSpend(
+  totalSpend: number,
+  categoryCosts: {
+    rideShareCost: number;
+    companyUsageCost: number;
+    deadheadCost: number;
+    personalUsageCost: number;
+  },
+  miscellaneousCost: number,
+  eps = 0.02,
+): boolean {
+  const sum =
+    (Number(categoryCosts.rideShareCost) || 0) +
+    (Number(categoryCosts.companyUsageCost) || 0) +
+    (Number(categoryCosts.deadheadCost) || 0) +
+    (Number(categoryCosts.personalUsageCost) || 0) +
+    (Number(miscellaneousCost) || 0);
+  return Math.abs(sum - (Number(totalSpend) || 0)) <= eps;
 }

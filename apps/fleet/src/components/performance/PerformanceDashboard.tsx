@@ -38,7 +38,7 @@ export function PerformanceDashboard() {
     <div className="p-6 space-y-6 max-w-[1600px] mx-auto">
       {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div>
+        <div className="hidden md:block">
           <h1 className="text-3xl font-bold tracking-tight">Driver Performance</h1>
           <p className="text-muted-foreground mt-1">
              Monitor fleet efficiency, revenue, and driver compliance.

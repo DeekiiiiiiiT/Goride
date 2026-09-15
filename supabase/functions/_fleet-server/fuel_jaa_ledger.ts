@@ -1,28 +1,16 @@
 /**
- * Server mirror of packages/roam-shared/src/fuel/jaaFuelStatementMatcher.ts ledger rules.
- * Keep isJaaStatementLedgerRow logic in sync with roam-shared.
+ * Server mirror entry — prefer packages/roam-shared leaf for Deno edge bundling.
+ * Keep extra Gas Card helpers here; ledger-row detection is shared.
  */
 
-const STATEMENT_IMPORT_SOURCES = new Set([
-  "jaa_raw",
-  "jaa_statement_details",
-  "fuel_statement",
-]);
+export {
+  isJaaStatementLedgerRow,
+  STATEMENT_IMPORT_SOURCES,
+} from "../../../packages/roam-shared/src/fuel/jaaStatementLedger.ts";
 
 function metaOf(entry: Record<string, unknown>): Record<string, unknown> {
   const m = entry?.metadata;
   return m && typeof m === "object" ? (m as Record<string, unknown>) : {};
-}
-
-/** JAA/CSV statement ledger rows — Card Inventory only, not tank cycle volume. */
-export function isJaaStatementLedgerRow(entry: Record<string, unknown>): boolean {
-  const m = metaOf(entry);
-  const importSource = String(m.importSource || "");
-  if (STATEMENT_IMPORT_SOURCES.has(importSource)) return true;
-  const rowKind = m.jaaRowKind;
-  const entrySource = entry.entrySource ?? m.entrySource;
-  if (rowKind != null && entrySource !== "driver-portal") return true;
-  return false;
 }
 
 export function isDeclinedOrFeeRow(entry: Record<string, unknown>): boolean {
