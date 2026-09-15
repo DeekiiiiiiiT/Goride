@@ -3,10 +3,12 @@ import {
   Car,
   CheckCircle2,
   ChevronDown,
+  ChevronLeft,
   Mail,
   MoreVertical,
   Phone,
   Settings as SettingsIcon,
+  X,
 } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
 import { Badge } from '../ui/badge';
@@ -112,6 +114,7 @@ export function DashboardDriverTable({
   assignmentBusyDriverId,
 }: Props) {
   const [contactRow, setContactRow] = useState<DashboardDriverRow | null>(null);
+  const [actionsRowId, setActionsRowId] = useState<string | null>(null);
 
   const rowMeta = (row: DashboardDriverRow) => {
     const displayName = row.name.trim() || 'Unknown Driver';
@@ -144,17 +147,16 @@ export function DashboardDriverTable({
                 unassigned ? 'Unassigned' : 'Assigned',
               ].filter(Boolean);
 
+              const actionsOpen = actionsRowId === row.id;
+
               return (
-                <li key={row.id} className="px-3 py-3.5">
+                <li key={row.id} className="relative overflow-hidden px-3 py-3.5 pr-10">
                   <div className="flex items-center gap-3">
-                    <button
-                      type="button"
+                    <div
                       className={cn(
                         'flex h-14 w-20 shrink-0 items-center justify-center overflow-hidden rounded-md border border-slate-200 bg-slate-100 dark:border-slate-700 dark:bg-slate-800',
                         busy && 'opacity-60',
                       )}
-                      onClick={() => onOpenDriver?.(row.id)}
-                      aria-label={`Open driver ${displayName}`}
                     >
                       {!unassigned && row.vehicleImage ? (
                         <img
@@ -165,38 +167,12 @@ export function DashboardDriverTable({
                       ) : (
                         <Car className="h-6 w-6 text-slate-400" aria-hidden />
                       )}
-                    </button>
+                    </div>
 
                     <div className="min-w-0 flex-1">
-                      <div className="flex items-start justify-between gap-2">
-                        <button
-                          type="button"
-                          className="min-w-0 truncate text-left text-[15px] font-semibold uppercase tracking-wide text-slate-900 dark:text-slate-100"
-                          onClick={() => onOpenDriver?.(row.id)}
-                        >
-                          {displayName}
-                        </button>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="-mr-1.5 -mt-0.5 h-8 w-8 shrink-0"
-                              aria-label={`Actions for ${displayName}`}
-                            >
-                              <MoreVertical className="h-4 w-4 text-slate-400" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => onOpenDriver?.(row.id)}>
-                              View driver
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => setContactRow(row)}>
-                              Contact
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </div>
+                      <p className="min-w-0 max-w-full truncate text-[15px] font-semibold uppercase tracking-wide text-slate-900 dark:text-slate-100">
+                        {displayName}
+                      </p>
 
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
@@ -251,6 +227,72 @@ export function DashboardDriverTable({
                       </div>
                     </div>
                   </div>
+
+                  <button
+                    type="button"
+                    className={cn(
+                      'absolute inset-y-0 right-0 z-10 flex w-10 items-center justify-center text-slate-500 hover:text-slate-800 dark:hover:text-slate-200',
+                      actionsOpen && 'pointer-events-none opacity-0',
+                    )}
+                    aria-label={`More options for ${displayName}`}
+                    aria-expanded={actionsOpen}
+                    onClick={() => setActionsRowId(row.id)}
+                  >
+                    <span className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800">
+                      <ChevronLeft className="h-5 w-5 stroke-[2.75]" />
+                    </span>
+                  </button>
+
+                  {/* In-card actions panel — covers ~70% of this row */}
+                  <div
+                    className={cn(
+                      'absolute inset-y-0 right-0 z-20 flex w-[70%] flex-col border-l border-slate-200 bg-white shadow-[-8px_0_24px_rgba(15,23,42,0.08)] transition-transform duration-300 ease-out dark:border-slate-700 dark:bg-slate-900 dark:shadow-[-8px_0_24px_rgba(0,0,0,0.35)]',
+                      actionsOpen ? 'translate-x-0' : 'translate-x-full pointer-events-none',
+                    )}
+                    aria-hidden={!actionsOpen}
+                  >
+                    <div className="flex justify-end px-2 pt-2">
+                      <button
+                        type="button"
+                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800"
+                        aria-label="Close options"
+                        onClick={() => setActionsRowId(null)}
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+                    <div className="flex flex-1 flex-col justify-center px-1.5 pb-2">
+                      <button
+                        type="button"
+                        className="rounded-lg px-3 py-2.5 text-left text-sm font-medium text-slate-900 hover:bg-slate-50 dark:text-slate-100 dark:hover:bg-slate-800"
+                        onClick={() => {
+                          setActionsRowId(null);
+                          onOpenDriver?.(row.id);
+                        }}
+                      >
+                        View driver
+                      </button>
+                      <button
+                        type="button"
+                        className="rounded-lg px-3 py-2.5 text-left text-sm font-medium text-slate-900 hover:bg-slate-50 dark:text-slate-100 dark:hover:bg-slate-800"
+                        onClick={() => {
+                          setActionsRowId(null);
+                          setContactRow(row);
+                        }}
+                      >
+                        Contact
+                      </button>
+                    </div>
+                  </div>
+
+                  {actionsOpen ? (
+                    <button
+                      type="button"
+                      className="absolute inset-y-0 left-0 z-20 w-[30%] bg-slate-900/10"
+                      aria-label="Dismiss options"
+                      onClick={() => setActionsRowId(null)}
+                    />
+                  ) : null}
                 </li>
               );
             })}

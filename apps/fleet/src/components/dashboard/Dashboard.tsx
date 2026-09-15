@@ -150,6 +150,7 @@ function normalizeCourierRow(
     vehicleId: assignedVehicle?.id,
     vehicleLabel: vehicleMissing ? 'Unassigned' : fromVehicle || 'Unassigned',
     licensePlate: assignedVehicle?.licensePlate || '',
+    vehicleImage: assignedVehicle?.image || undefined,
   };
 }
 
@@ -776,7 +777,7 @@ export function Dashboard({ onSelectDriver }: Props) {
             ) : null}
             {availableLines.includes('delivery') ? (
               <TabsTrigger value="delivery" className="rounded-md px-4 max-md:w-full">
-                Delivery (Roam Rush)
+                Delivery
               </TabsTrigger>
             ) : null}
           </TabsList>
@@ -793,7 +794,12 @@ export function Dashboard({ onSelectDriver }: Props) {
         <div className="space-y-4">{rideshareBody}</div>
       )}
 
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div
+        className={cn(
+          'flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between',
+          totalPages <= 1 && 'max-md:hidden',
+        )}
+      >
         <Select
           value={String(pageSize)}
           onValueChange={(v) => {
