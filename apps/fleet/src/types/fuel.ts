@@ -314,6 +314,8 @@ export interface FinalizedFuelReport extends Omit<WeeklyFuelReport, 'status' | '
     personalUsageCost: number;
   };
   fuelRule?: unknown;
+  /** N-17: personal allowance earned $ frozen at finalize for server engine compare. */
+  personalAllowanceEarnedCost?: number;
 }
 
 export interface OdometerBucket {

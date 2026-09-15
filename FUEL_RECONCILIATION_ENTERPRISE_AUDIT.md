@@ -3,14 +3,113 @@
 **Scope:** Roam Fleet → Business Finance → Week Reconciliation → **Fuel** lane
 (landing → 6-step week wizard → Finalize → server period lock → fuel week statement).
 **Rev 1:** 2026-09-15 — read-only audit.
-**Rev 2–4:** 2026-09-15 — first through third verifications (§0C / §0B / §0A, superseded).
-**Rev 5:** 2026-09-15 — fourth verification (§0D, superseded).
-**Rev 6:** 2026-09-15 — fifth verification, working tree on `cfb6e29b`. **Read §0 first.**
+**Rev 2–5:** 2026-09-15 — first through fourth verifications (§0C / §0B / §0A / §0D, superseded).
+**Rev 6:** 2026-09-15 — fifth verification (§0E, superseded).
+**Rev 7:** 2026-09-15 — sixth verification, tree on `5991c60c`. **Read §0 first.**
 **Reviewed as:** Principal Systems Architect + Lead UI/UX + senior engineering committee, one verdict.
 
 ---
 
-## 0. Rev 6 — verification of the working tree
+## 0. Rev 7 — verification of the working tree
+
+Both Rev 6 findings are closed, the rollout posture is corrected, and every gate is green.
+**This audit is complete.** What remains is one missing upstream and a short cosmetic tail —
+nothing that gates the close.
+
+### 0.1 Gate results — measured
+
+| Gate | Rev 6 | Rev 7 |
+|---|---|---|
+| `fuel-core typecheck` | PASS | **PASS** ✅ |
+| `fuel-core test` | 71/71 | **71/71** ✅ |
+| `deno check` incl. both fuel edge files | PASS | **PASS** ✅ |
+| `deno test` — fuel control suite | 15/15 | **19/19** ✅ (8 files, all in CI) |
+| `fleet test` | 1,397 pass | **240 files / 1,397 pass** ✅ |
+
+### 0.2 Closed this pass
+
+- **N-16 ✅ — the rollout posture is corrected, and strengthened beyond what I asked.**
+  `stage0-gate.json` now reads `currentProd: "shadow"`, `next: "enforce"`, `shadowMinWeeks: 2`,
+  `shadowStartedAt: "2026-09-15"`. The deleted soak condition is back **and three more were
+  added**: *"N-17 PA parity green"*, *"Phase 4 server-tagged entries authority live"*, and
+  *"Finalize break-glass UI live"*. The `verdict` field records the rollback plainly rather than
+  quietly rewriting history — that is the right way to carry a reversed decision.
+- **N-17 ✅ — PA parity, closed at the root.** `applyPersonalAllowanceAbsorb` was extracted into
+  fuel-core, `computeFuelWeek` accepts `personalAllowanceEarnedCost`, the client stamps `earned`
+  onto the snapshot (top-level **and** metadata), and the enforce block reads it and applies the
+  same absorb. `fuelCalculationService` shed the duplicated logic (−20 lines) so there is one
+  implementation, not two. Two Deno tests: a PA week produces **zero** deltas, and a snapshot
+  with a tampered `earned` produces a mismatch. **The failing input was written.**
+- **Break-glass UI ✅** — `useFuelForceClientMoneyDialog` (132 lines) is wired into both the
+  wizard finalize ([FuelManagement.tsx:1419](apps/fleet/src/pages/FuelManagement.tsx#L1419)) and
+  the bulk dialog, capturing a reason and passing `forceReason` through. A refused close is now
+  recoverable by the person standing in front of it, not by a curl command.
+- **Phase 4 ladder ✅ built, and built well.** `resolveEngineCategoryCosts` now takes
+  `serverTaggedEntries` and exposes a four-tier `authoritySource`:
+  `server_entries → trip_agg → tagged_snap_entries → snap_category_costs`.
+  `loadServerTaggedFuelEntriesForWeek` reads them from SQL, and server rows only become
+  authority when they match the snapshot's driver or vehicle — *"Untargeted rows (no
+  driver/vehicle on entry) never become authority."* That is careful work.
+- **R-4 ✅** — the deprecated `generateFleetReport` export is gone.
+
+### 0.3 🟠 Remaining — one missing upstream, one missing field
+
+| # | Sev | What | Evidence |
+|---|---|---|---|
+| **N-18** | Medium | **Phase 4's tier 1 has no data source.** Nothing in the repository writes `usageCategory` onto a `fuel_entry` — a whole-repo grep returns only the loader's own readers and its test fixtures (the other hits are vehicle-fitness, unrelated). So `serverTagged` is always empty in production and the ladder resolves to **`trip_agg`**, which is the client's own `cats` stamp. The mechanism is correct and ready; the tagging upstream does not exist yet. Consequence: the wait condition *"Phase 4 server-tagged entries authority live"* **cannot be satisfied** until fills are tagged at capture (driver app / JAA import / manual entry). | [fuel_week_category_loader.ts:116-135](supabase/functions/_fleet-server/fuel_week_category_loader.ts#L116-L135) |
+| **N-19** | Low | **`authoritySource` is computed and never recorded.** It is absent from the `finance_recon_drift` payload and from the `fuel_engine_diff` audit row. During the shadow soak you therefore cannot tell which tier produced any given comparison — meaning you cannot verify the Phase 4 wait condition from data, only from code reading. One extra field in the drift payload closes it, and it is worth doing *before* the soak rather than after. | [fuel_period_routes.ts](supabase/functions/_fleet-server/fuel_period_routes.ts) — no `authoritySource` occurrence |
+
+Both are the same shape: the check is real, but you cannot yet *prove from data* that it is
+running on independent input. Given that this audit began because two engines disagreed with no
+way to notice, that distinction is worth holding onto right to the end.
+
+### 0.4 Still open — cosmetic tail
+
+`P-1` (dashboard still takes `trips: Trip[]` / `fuelEntries: FuelEntry[]` as whole-dataset
+props) · `P-9` (mount waterfall) · `U-10` (step notes still component state) · `U-13` (copy
+pass) · `U-14` (partial — `FuelLeakageStep` has 2 a11y attributes; focus-on-step-change still
+missing). None of it touches money, correctness, or the close.
+
+### 0.5 Verdict — audit closed
+
+**The fuel reconciliation section is enterprise-grade.** Measured against the bar set at the
+top of this document — *"when I close fuel reconciliation, it must do it to perfection"*:
+
+| | |
+|---|---|
+| Rev 1 Criticals | **8 / 8 closed** |
+| Rev 1 Highs | **13 / 13 closed** |
+| Regressions introduced and closed across Revs 2–7 | **N-1 … N-17, all closed** |
+| Production money damage found by Stage 0 | **repaired and tied to the cent** |
+| Independent nightly statement↔ledger assertion | **live, persisting drift** |
+| Server engine rollout | **`shadow`, soak running, five wait conditions, none waived** |
+
+The failure pattern that ran through every previous audit of this system — *the mechanism gets
+built and the last connection, the one that lets the control fail, gets left out* — recurred
+twice early (Rev 2, Rev 5) and then stopped. Every control added since has shipped with the
+input that makes it fail: the tampered snapshot, the stale cache bundle, the tampered `earned`,
+the deliberately divergent golden. That is the habit that matters more than any single fix in
+this document.
+
+Two judgement calls also went the right way under pressure: fixing the deno strictness backlog
+at source rather than narrowing CI scope, and reversing the premature `enforce` flip with the
+reason recorded rather than quietly re-scoped.
+
+### 0.6 Next actions
+
+1. **N-19** — add `authoritySource` to the drift payload. Do it before the soak produces data
+   you cannot interpret.
+2. **Run the soak.** Two full close cycles on `shadow`, then review `fuel_engine_diff` and
+   `finance_recon_drift`. Every diff class either fixed or signed off in the drift table.
+3. **N-18** — decide whether Phase 4 tier 1 is worth building. Tagging fills at capture is real
+   product work; if the soak shows `trip_agg` comparisons are clean, an honest alternative is to
+   drop that wait condition and record *why*, rather than leaving a condition that cannot be met.
+4. **Then `enforce`** — once the five wait conditions are genuinely satisfied, not waived.
+5. **P-1 / P-9 / U-10 / U-13 / U-14** — at leisure.
+
+---
+
+## 0E. Rev 6 — verification of the working tree (superseded by §0)
 
 **Every gate is green for the first time in this audit.** And in the same pass, production was
 moved from `FUEL_SERVER_ENGINE=off` straight to `enforce`, skipping the shadow soak — which has

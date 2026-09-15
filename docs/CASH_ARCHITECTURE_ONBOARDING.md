@@ -546,6 +546,7 @@ If any answer is unclear, stop and ask. Cash bugs are expensive and hard to reve
 | 2026-09-15 | Remediation round 2 verified (R-items + N-items). Production remittance cutover (no dual-write soak): remittance sole writer; Part 18/23 rewritten |
 | 2026-09-15 | Part 24 residuals closed: V-1 alert hygiene, V-2 kill-switch legacy failover, V-3 admin write-off; Parts 21–22 marked historical |
 | 2026-09-15 | Part 25 W-1/W-2 closed: write_off sign CHECK + desk reverse of wrong write-offs |
+| 2026-09-15 | Round 5 independently verified (12 Deno + 1397 fleet tests green). Added Part 26: ledger is finished; 3 remaining items are legacy **admin surface** — X-1 no admin event history, X-2 Pricing COD tab reads the dead table, X-3 market pause threshold is decorative |
 
 **Owners:** Platform / Fleet finance engineering + product  
 **Source analysis:** Cross-repo review of rides cashSettlement, fleet settlements, delivery courier cash ledger, and existing money docs
@@ -1952,3 +1953,114 @@ Under `DELIVERY_REMITTANCE_OFF=1`, collections use legacy `recordCashCollection`
 ## 25.4 Still deferred
 
 Q1 (netting), Q4 (fleet COD claim), Q5 (courier self-report) remain non-goals.
+
+---
+---
+
+# Part 26 — Legacy admin surface review (verified 2026-09-15)
+
+Fifth pass. **W-1 and W-2 confirmed closed.** The `write_off` sign constraint is applied, and
+`reverseWriteOffEvent` is well-built — it validates the target really is a `write_off`, guards
+double-reversal both by `reversal_of` and by idempotency key, and restores the receivable
+through a `reversal` event rather than mutating anything.
+
+## 26.1 Verification run
+
+```
+REMITTANCE_S6_DIFF=1 node scripts/check-remittance-separation.mjs   OK (S-2/S-3/S-4/S-6)
+deno test supabase/functions/delivery/remittance/                   12 passed, 0 failed
+pnpm --filter @roam/fleet test                                      240 files, 1397 passed, 0 failed
+```
+
+| Claim | Verified |
+|-------|----------|
+| W-1 | `remittance_write_off_sign` CHECK present — `collected`, `settled` and `write_off` now all sign-constrained |
+| W-2 server | `POST /remittance/reverse` accepts `settlementId` **xor** `eventId`; rejects both-or-neither |
+| W-2 client | `reverseRemittanceWriteOff` wired through the desk |
+| Legacy settle back-door | `/pricing/cod/settle` delegates to `settleRemittance` — no legacy write unless `DELIVERY_COD_LEGACY_WRITE=1` |
+
+## 26.2 Open — the admin side still reads a dead table
+
+Three findings of the same shape: **the cutover moved the write path and the courier-facing
+read path, but left the older admin COD surface pointing at legacy.** None corrupts stored
+money. All three show an operator a number that is no longer true.
+
+### X-1 — There is no admin-facing remittance history
+
+Nothing anywhere reads `courier_remittance_events` for an admin. The desk has a Settle panel, a
+reconciliation strip and an exceptions queue — **no ledger view**. An operator can see a
+courier's balance but not what built it: which collections, which settlements, which write-offs.
+
+The courier can. `GET /courier/remittance/events` returns their own history with the full
+per-order breakdown. The visibility is inverted — the person who can *move* the money sees less
+than the person who owes it.
+
+This also undercuts W-2. Reversing an older write-off means pasting its event UUID
+([`RemittanceDeskPage.tsx:534`](../packages/dash-admin/src/pages/remittance/RemittanceDeskPage.tsx)),
+with no in-product way to find it; the "last write-off" shortcut only survives the current page
+session. A mistake discovered the next morning is back to direct SQL — exactly what W-2 set out
+to prevent.
+
+**Fix:** `GET /admin/remittance/events?courier_id=…` over `courier_remittance_events`, rendered
+as a history panel in the courier drawer with a Reverse action on `write_off` rows. The
+courier-side query is already written and reuses nearly verbatim.
+
+### X-2 — The Pricing hub's "COD Ledger" tab shows frozen balances
+
+[`PricingHubPage.tsx:362`](../packages/dash-admin/src/pages/pricing/PricingHubPage.tsx) still
+calls `fetchCodBalances` → `GET /admin/pricing/cod/balances` → `courier_cash_balances`, which
+has not been written since the cutover. The tab renders those rows at line 2303, including a
+`pause_threshold_jmd` column at 2321.
+
+The settle copy on that tab correctly points at the Remittance Desk, so nobody moves money from
+here. But the **numbers** are stale and diverge further every day: Pricing → COD Ledger shows
+one balance, the Remittance Desk another, and neither screen says which is authoritative. That
+is the "two engines, no contract" pattern this build exists to remove — reintroduced by
+omission rather than by design.
+
+**Fix:** point the tab at `courier_remittance_accounts` (the fleet route is a good template), or
+delete the tab and deep-link to the Remittance Desk. Retire `fetchCodBalances` / `fetchCodEvents`
+/ `settleCourierCash` from `dashAdminService` once nothing consumes them — `settleCourierCash`
+already has no callers.
+
+### X-3 — The market COD pause threshold is decorative
+
+`rules.cod.pause_threshold_jmd` is editable in the market rules form, validated in
+`rulesBlob.ts`, shown in the Pricing hub summary, and read by `dash-pricing/engine.ts` into
+`pauseThresholdJmd`.
+
+**Nothing in the remittance path reads it.** Pausing is driven entirely by
+`courier_remittance_accounts.pause_threshold_minor`, which defaults to a hardcoded `1000000` in
+the migration and changes only via `PATCH /remittance/accounts/:courierId/threshold`.
+
+So an operator can set a market's COD pause threshold to J$5,000, save it, see it persisted and
+displayed — and no courier's pause behaviour changes. A knob that looks live and is not is worse
+than no knob, because it produces confident wrong decisions.
+
+This is Part 19 Q2 resurfacing: Q2 was closed by adding the *per-courier* control, which was
+right, but the *global* control it duplicates was left in place still looking authoritative.
+
+**Fix — decide which is the source of the default:** either seed a new account's
+`pause_threshold_minor` from the courier's market profile (Pricing sets the default, the desk
+sets per-courier overrides), or remove the setting from the market rules form and its blob.
+Prefer seeding — a global default with per-courier overrides is the shape operators expect.
+Record the decision in Part 19 Q2 either way so it does not drift back.
+
+### Note — `/pricing/cod/settle` weakens the stale-balance guard
+
+When `expected_balance_minor` is absent the shim fills it from the **current** balance
+([`pricingRoutes.ts:1261`](../supabase/functions/delivery/admin/pricingRoutes.ts)), so the 409
+concurrency check can never fire on that path. Deliberate for backwards compatibility and
+harmless while the route has no UI caller — but it should not outlive the legacy clients. Retire
+the route together with X-2.
+
+## 26.3 What is done
+
+The ledger itself is finished. Every event type is sign-constrained, every money endpoint is
+replay-first with an expected-balance check and an overdraw refusal, every correction is a new
+event rather than a mutation, and the four reconciliation views plus the exceptions queue are
+alerted and drainable.
+
+Part 26 is not ledger work — it is **retiring the old admin surface the cutover left behind**.
+Until X-1 and X-2 land, the admin experience of a finished system is a stale balance list, no
+history, and a UUID paste box.
