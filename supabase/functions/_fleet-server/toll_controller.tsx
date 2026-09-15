@@ -26,6 +26,17 @@ import {
   resolveTollOrgId,
   tollOrgSqlFilters,
 } from "./toll_org_context.ts";
+import {
+  loadAllByPrefix,
+  loadDisputeRefundRecords,
+  filterByDriver,
+  isReconcilableTollExpense,
+  loadTollLedgerWithTripsForDrivers,
+  loadTollLedgerWithTripsInRange,
+  collectLinkedTripIds,
+  tollLedgerToTxShape,
+  mergeTollLedgerAndLegacyTx,
+} from "./toll_period_inputs.ts";
 import { getServiceClient } from "./service_client.ts";
 import { fromKvStore } from "./fleet_sql_bridge.ts";
 import { checkRateLimit, recordFailedAttempt, getClientIp } from "./rate_limiter.ts";
@@ -1225,75 +1236,7 @@ function buildPersistedTripMatchSuggestion(
  * chunks of 1,000 using .range() until we get fewer rows than requested.
  * Ordered by key so pages are stable; deduped so overlaps can't double rows.
  */
-async function loadAllByPrefix(prefix: string): Promise<any[]> {
-  const ctx = getTollContext();
-  const orgId = resolveTollOrgId(ctx);
-  const orgFilters = tollOrgSqlFilters(orgId);
-
-  // Prefer native fleet SQL with organization_id in the predicate (no full-table then filter).
-  try {
-    const { domainForPrefix, iterateFleet } = await import("./repos/baseRepo.ts");
-    const def = domainForPrefix(prefix);
-    if (def) {
-      const legacyPrefix = prefix.endsWith(":") ? prefix : `${prefix}:`;
-      const out: any[] = [];
-      for await (const row of iterateFleet(def.domain, {
-        legacyPrefix,
-        order: { col: "legacy_kv_id", ascending: true },
-        filters: orgFilters.length ? orgFilters : undefined,
-      })) {
-        out.push(row);
-      }
-      return ctx
-        ? (filterByOrg(out as Record<string, unknown>[], ctx, {
-            endpoint: `loadAllByPrefix:${prefix}`,
-          }) as any[])
-        : out;
-    }
-  } catch (e: any) {
-    console.warn(
-      `[TollOrg] loadAllByPrefix SQL path failed for ${prefix}, falling back: ${e?.message || e}`,
-    );
-  }
-
-  const PAGE_SIZE = 1000;
-  const allValues: any[] = [];
-  const seenKeys = new Set<string>();
-  const seenIds = new Set<string>();
-  let offset = 0;
-
-  while (true) {
-    const { data, error } = await fromKvStore()
-      .select("key, value")
-      .like("key", `${prefix}%`)
-      .order("key", { ascending: true })
-      .range(offset, offset + PAGE_SIZE - 1);
-
-    if (error) throw error;
-    const rows = data || [];
-    for (const row of rows) {
-      const key = String(row.key || "");
-      if (key && seenKeys.has(key)) continue;
-      if (key) seenKeys.add(key);
-      const value = row.value;
-      if (!value) continue;
-      const id = value?.id != null ? String(value.id) : "";
-      if (id && seenIds.has(id)) continue;
-      if (id) seenIds.add(id);
-      allValues.push(value);
-    }
-
-    // If we got fewer rows than the page size, we've reached the end
-    if (rows.length < PAGE_SIZE) break;
-    offset += PAGE_SIZE;
-  }
-
-  return ctx
-    ? (filterByOrg(allValues as Record<string, unknown>[], ctx, {
-        endpoint: `loadAllByPrefix:${prefix}`,
-      }) as any[])
-    : allValues;
-}
+// moved to toll_period_inputs.ts
 
 async function loadAllTransactions(): Promise<any[]> {
   return loadAllByPrefix("transaction:");
@@ -1335,124 +1278,7 @@ async function loadAllTollTransactionsWithTrips(): Promise<{ tollTx: any[]; trip
  * Convert a TollLedgerRecord to the legacy transaction shape for backward compatibility.
  * This allows existing endpoint response shapes and client code to work unchanged.
  */
-function tollLedgerToTxShape(entry: TollLedgerRecord): any {
-  // Map status back to transaction status format
-  let status = "Pending";
-  if (entry.status === "voided" || entry.metadata?.voided === true) status = "Voided";
-  else if (entry.status === "approved" || entry.status === "resolved") status = "Approved";
-  else if (entry.status === "rejected") status = "Rejected";
-  else if (entry.status === "reconciled") status = "Approved";
-  else if (entry.status === "pending") status = "Pending";
-
-  // Category must reflect ledger type — Toll Logs / Tag Balance use category
-  // to decide Usage vs Top-up. Hardcoding "Toll Usage" previously labeled
-  // every top_up as Usage and forced a minus sign on the amount.
-  let category = "Toll Usage";
-  if (entry.type === "top_up") category = "Toll Top-up";
-  else if (entry.type === "refund") category = "Toll Refund";
-  else if (entry.type === "adjustment" || entry.type === "balance_transfer") {
-    category = "Toll Adjustment";
-  }
-
-  // Build the transaction-like object
-  return {
-    id: entry.id,
-    date: entry.date,
-    time: entry.time,
-    amount: entry.amount,
-    type: entry.type === "usage" ? "Usage" : entry.type === "top_up" ? "Top-up" : "Refund",
-    category,
-    description: entry.description || entry.location || entry.plaza || "",
-    vendor: entry.plaza || entry.location || "",
-    vehicleId: entry.vehicleId,
-    vehiclePlate: entry.vehiclePlate,
-    driverId: entry.driverId,
-    driverName: entry.driverName,
-    referenceNumber: entry.referenceNumber || entry.metadata?.referenceNumber || null,
-    paymentMethod: entry.paymentMethod === "cash" ? "Cash" :
-                   entry.paymentMethod === "card" ? "Card" :
-                   entry.paymentMethod === "fleet_account" ? "Fleet Account" : "Tag Balance",
-    status,
-    // Mirror apps/fleet/src/utils/tollHandledDisplay.ts deriveTollTxIsReconciled —
-    // honor ledger isReconciled so Expenses Toll Status matches toll_ledger SSOT
-    // (e.g. rejected/claim_filed rows already marked reconciled without tripId).
-    // Voided soft-deletes are handled so Expenses does not keep "1 Unmatched".
-    isReconciled: !!(
-      entry.status === "voided" ||
-      entry.metadata?.voided === true ||
-      entry.isReconciled ||
-      entry.status === "reconciled" ||
-      entry.status === "resolved" ||
-      entry.resolution ||
-      entry.tripId
-    ),
-    // Top-level for classifyTollLedgerEntry (Expenses/Cash Wallet); metadata kept too.
-    resolution: entry.resolution ?? null,
-    tripId: entry.tripId,
-    receiptUrl: entry.receiptUrl,
-    notes: entry.notes,
-    createdAt: entry.createdAt,
-    updatedAt: entry.updatedAt,
-    // RWF-1: persisted workflow position + reverse claim pointer — read path
-    // for the guided Toll Reconciliation stepper (bucketForWorkflowStage).
-    workflowStage: entry.workflowStage,
-    claimId: entry.claimId,
-    matchStatus: entry.matchStatus,
-    matchedTripId: entry.matchedTripId ?? null,
-    matchTypeCode: entry.matchTypeCode ?? null,
-    isAmbiguous: entry.metadata?.isAmbiguous === true || entry.matchStatus === "ambiguous",
-    // Surface unlinked-apply provenance on the API shape for Matched History.
-    unlinkedSourceTripId: entry.unlinkedSourceTripId ?? null,
-    unlinkedSourcePlatform: entry.unlinkedSourcePlatform ?? null,
-    unlinkedAppliedAt: entry.unlinkedAppliedAt ?? null,
-    unlinkedAppliedBy: entry.unlinkedAppliedBy ?? null,
-    preUnlinkedTripId: entry.preUnlinkedTripId ?? null,
-    // Surface ledger plaza for quarantine (vendor alone is easy to miss).
-    plaza: entry.plaza,
-    // The plaza the toll is actually attributed to. Without this on the wire the
-    // client had only the free-text name to work with and fell back to fuzzy
-    // matching, which is why three quarters of the ledger charted as "Unknown Plaza".
-    plazaId: entry.plazaId ?? null,
-    // Frozen pricing provenance — lets the UI show which rate card a settled
-    // toll was priced against instead of implying it tracks the current one.
-    rateScheduleVersionId: entry.rateScheduleVersionId ?? null,
-    officialAmount: entry.officialAmount ?? null,
-    officialEffectiveFrom: entry.officialEffectiveFrom ?? null,
-    batchId: entry.batchId,
-    metadata: {
-      tollTagId: entry.tollTagId,
-      tagNumber: entry.tagNumber,
-      highway: entry.highway,
-      plaza: entry.plaza,
-      batchId: entry.batchId,
-      batchName: entry.batchName,
-      importedAt: entry.importedAt,
-      sourceFile: entry.sourceFile,
-      matchConfidence: entry.matchConfidence,
-      matchedAt: entry.matchedAt,
-      matchedBy: entry.matchedBy,
-      resolution: entry.resolution,
-      auditTrail: entry.auditTrail,
-      autoMatchOverridden: entry.metadata?.autoMatchOverridden,
-      unlinkedSourceTripId: entry.unlinkedSourceTripId,
-      unlinkedSourcePlatform: entry.unlinkedSourcePlatform,
-      unlinkedAppliedAt: entry.unlinkedAppliedAt,
-      unlinkedAppliedBy: entry.unlinkedAppliedBy,
-      preUnlinkedTripId: entry.preUnlinkedTripId,
-      // OCR metadata may overwrite `plaza` — keep highway-as-plaza signals after spread.
-      ...entry.metadata,
-      ledgerPlaza: entry.plaza,
-      batchId: entry.batchId ?? entry.metadata?.batchId ?? null,
-      auditTrail: entry.auditTrail ?? entry.metadata?.auditTrail,
-      merchantHighway:
-        entry.highway ||
-        entry.metadata?.merchantHighway ||
-        (entry.plaza && /trans\s*jam|jamaican\s*highways/i.test(String(entry.plaza))
-          ? entry.plaza
-          : entry.metadata?.merchantHighway),
-    },
-  };
-}
+// moved to toll_period_inputs.ts
 
 /**
  * Read path: `toll_ledger:*` (canonical) plus legacy `transaction:*` rows with a toll
@@ -1552,19 +1378,7 @@ async function loadMergedTollTxArray(c?: Context): Promise<any[]> {
  * Handles both shapes: ledger tx (type "Top-up"/"Refund"), raw ledger record
  * (type "top_up" etc.), and legacy transaction:* rows (category "Toll Top-up").
  */
-function isReconcilableTollExpense(tx: any): boolean {
-  const type = String(tx?.type || "").toLowerCase().replace("-", "_");
-  if (
-    type === "top_up" ||
-    type === "refund" ||
-    type === "adjustment" ||
-    type === "balance_transfer"
-  ) {
-    return false;
-  }
-  const category = String(tx?.category || "").toLowerCase().trim();
-  return category !== "toll top-up" && category !== "toll refund" && category !== "toll adjustment";
-}
+// moved to toll_period_inputs.ts
 
 /**
  * Phase 5+ loader: merged toll rows + all trips (for reconciliation views).
@@ -1578,176 +1392,7 @@ async function loadAllTollLedgerWithTrips(): Promise<{ tollTx: any[]; trips: any
   return { tollTx, trips };
 }
 
-/** Matcher windows are request−45 → dropoff+15; ±2 calendar days covers TZ edges. */
-const RECON_TRIP_MATCH_PAD_DAYS = 2;
-
-function shiftYmdUtc(ymd: string, days: number): string {
-  const d = new Date(`${String(ymd).slice(0, 10)}T12:00:00.000Z`);
-  if (Number.isNaN(d.getTime())) return String(ymd).slice(0, 10);
-  d.setUTCDate(d.getUTCDate() + days);
-  return d.toISOString().slice(0, 10);
-}
-
-/**
- * Merge ledger + legacy toll transactions into wizard tx shape (ledger wins by id).
- * Used by date/driver-scoped loaders so we never full-scan fleet.transactions.
- */
-function mergeTollLedgerAndLegacyTx(
-  ledgerEntries: TollLedgerRecord[],
-  legacyTollTx: any[],
-): any[] {
-  const byId = new Map<string, any>();
-  for (const e of ledgerEntries) {
-    const tx = tollLedgerToTxShape(e);
-    if (tx?.id != null && String(tx.id) !== "") byId.set(String(tx.id), tx);
-  }
-  for (const tx of legacyTollTx || []) {
-    if (!tx || typeof tx !== "object") continue;
-    if (!isTollCategory(tx.category)) continue;
-    const id = tx.id;
-    if (id == null || id === "") continue;
-    const sid = String(id);
-    const existing = byId.get(sid);
-    if (!existing) {
-      byId.set(sid, tx);
-      continue;
-    }
-    const legacyTripId = tx.tripId ?? tx.metadata?.tripId ?? null;
-    if (legacyTripId && !existing.tripId && !existing.metadata?.tripId) {
-      existing.tripId = String(legacyTripId);
-      existing.metadata = { ...(existing.metadata || {}), tripId: String(legacyTripId) };
-    }
-    const legacyPre = tx.preUnlinkedTripId ?? tx.metadata?.preUnlinkedTripId ?? null;
-    if (legacyPre && !existing.preUnlinkedTripId && !existing.metadata?.preUnlinkedTripId) {
-      existing.preUnlinkedTripId = String(legacyPre);
-      existing.metadata = {
-        ...(existing.metadata || {}),
-        preUnlinkedTripId: String(legacyPre),
-      };
-    }
-  }
-  return Array.from(byId.values());
-}
-
-/** Tolls linked to any of these trip ids (trip_id column) — keeps Unlinked Refunds honest. */
-async function findTollsLinkedToTripIds(tripIds: string[]): Promise<TollLedgerRecord[]> {
-  const ids = [...new Set(tripIds.map(String).filter(Boolean))];
-  if (!ids.length) return [];
-  const { iterateFleet } = await import("./repos/baseRepo.ts");
-  const out: TollLedgerRecord[] = [];
-  const CHUNK = 100;
-  for (let i = 0; i < ids.length; i += CHUNK) {
-    const chunk = ids.slice(i, i + CHUNK);
-    for await (const row of iterateFleet("toll_ledger", {
-      filters: [{ op: "in", col: "trip_id", value: chunk }],
-      order: { col: "legacy_kv_id", ascending: true },
-    })) {
-      out.push(row as TollLedgerRecord);
-    }
-  }
-  return out;
-}
-
-/** Date-scoped legacy toll rows from fleet.transactions (not a full prefix dump). */
-async function loadLegacyTollTxInDateRange(fromYmd: string, toYmd: string): Promise<any[]> {
-  const { iterateFleet } = await import("./repos/baseRepo.ts");
-  const out: any[] = [];
-  for await (const row of iterateFleet("transactions", {
-    dateFrom: fromYmd,
-    dateTo: toYmd,
-    order: { col: "date", ascending: true },
-  })) {
-    if (isTollCategory((row as { category?: string }).category)) out.push(row);
-  }
-  return out;
-}
-
-/**
- * Week-scoped load for the reconciliation wizard / periods landing.
- * Trips are date-ranged; tolls are date-ranged plus any tolls already linked to
- * those trips (so Unlinked Refunds does not revive settled links).
- */
-async function loadTollLedgerWithTripsInRange(
-  from?: string,
-  to?: string,
-): Promise<{ tollTx: any[]; trips: any[] }> {
-  const fromDay = from ? String(from).slice(0, 10) : undefined;
-  const toDay = to ? String(to).slice(0, 10) : undefined;
-  if (!fromDay && !toDay) return loadAllTollLedgerWithTrips();
-
-  const tollFrom = fromDay ?? toDay!;
-  const tollTo = toDay ?? fromDay!;
-  const tripFrom = shiftYmdUtc(tollFrom, -RECON_TRIP_MATCH_PAD_DAYS);
-  const tripTo = shiftYmdUtc(tollTo, RECON_TRIP_MATCH_PAD_DAYS);
-
-  const [tollsInRange, trips, legacyInRange] = await Promise.all([
-    findTollsInDateRange(tollFrom, tollTo),
-    findTripsInDateRange(tripFrom, tripTo),
-    loadLegacyTollTxInDateRange(tollFrom, tollTo),
-  ]);
-  const tripList = (trips || []).filter(Boolean);
-  const linkedExtra = await findTollsLinkedToTripIds(
-    tripList.map((t: any) => String(t?.id || "")).filter(Boolean),
-  );
-
-  const ledgerById = new Map<string, TollLedgerRecord>();
-  for (const e of [...(tollsInRange || []), ...linkedExtra] as TollLedgerRecord[]) {
-    if (e?.id != null && String(e.id) !== "") ledgerById.set(String(e.id), e);
-  }
-
-  return {
-    tollTx: mergeTollLedgerAndLegacyTx([...ledgerById.values()], legacyInRange),
-    trips: tripList,
-  };
-}
-
-/**
- * Driver-scoped rebuild loader — never dumps the whole fleet into Expenses rebuild.
- * Includes platform alias IDs (Uber/InDrive) when provided.
- */
-async function loadTollLedgerWithTripsForDrivers(
-  driverIds: string[],
-): Promise<{ tollTx: any[]; trips: any[] }> {
-  const ids = [...new Set(driverIds.map(String).filter(Boolean))];
-  if (!ids.length) return { tollTx: [], trips: [] };
-
-  const { iterateFleet } = await import("./repos/baseRepo.ts");
-  const tollRows: TollLedgerRecord[] = [];
-  const tripRows: any[] = [];
-  const legacyTollTx: any[] = [];
-
-  await Promise.all([
-    (async () => {
-      for await (const row of iterateFleet("toll_ledger", {
-        filters: [{ op: "in", col: "driver_id", value: ids }],
-        order: { col: "date", ascending: true },
-      })) {
-        tollRows.push(row as TollLedgerRecord);
-      }
-    })(),
-    (async () => {
-      for await (const row of iterateFleet("trips", {
-        filters: [{ op: "in", col: "driver_id", value: ids }],
-        order: { col: "date", ascending: true },
-      })) {
-        tripRows.push(row);
-      }
-    })(),
-    (async () => {
-      for await (const row of iterateFleet("transactions", {
-        filters: [{ op: "in", col: "driver_id", value: ids }],
-        order: { col: "date", ascending: true },
-      })) {
-        if (isTollCategory((row as { category?: string }).category)) legacyTollTx.push(row);
-      }
-    })(),
-  ]);
-
-  return {
-    tollTx: mergeTollLedgerAndLegacyTx(tollRows, legacyTollTx),
-    trips: tripRows.filter(Boolean),
-  };
-}
+// moved to toll_period_inputs.ts (range loaders)
 
 /** Prefer week-scoped SQL when the wizard passes from/to. */
 async function loadTollLedgerWithTrips(
@@ -1759,12 +1404,7 @@ async function loadTollLedgerWithTrips(
 }
 
 /** Support adjustments (`dispute-refund:*`), excluding dedup index keys. */
-async function loadDisputeRefundRecords(): Promise<any[]> {
-  const raw = await loadAllByPrefix("dispute-refund:");
-  return (raw || []).filter(
-    (item: any) => item && typeof item === "object" && item.id && item.supportCaseId,
-  );
-}
+// moved to toll_period_inputs.ts
 
 /**
  * IDEA 2 unified read model: merged toll rows + unlinked trip refund signals + dispute refunds.
@@ -1929,16 +1569,7 @@ async function projectUnifiedTollEventsPage(q: UnifiedQuery): Promise<
   };
 }
 
-function filterByDriver(items: any[], driverId?: string, driverAliasMap?: Map<string, string>): any[] {
-  if (!driverId) return items;
-  if (!driverAliasMap) return items.filter((item: any) => item.driverId === driverId);
-  const canonical = driverAliasMap.get(driverId) ?? driverId;
-  return items.filter((item: any) => {
-    const id = item.driverId;
-    if (!id) return false;
-    return (driverAliasMap.get(id) ?? id) === canonical;
-  });
-}
+// moved to toll_period_inputs.ts
 
 let _driverAliasMapCache: Map<string, string> | null = null;
 let _driverAliasMapTimestamp = 0;
@@ -7902,19 +7533,7 @@ function isSafeAutoApplyServer(c: RefundClassification, minConfidence: number): 
 }
 
 /** Trips already consuming a platform refund via a confirmed toll link (tripId). */
-function collectLinkedTripIds(tollTx: any[]): Set<string> {
-  const ids = new Set<string>();
-  for (const tx of tollTx || []) {
-    if (!tx) continue;
-    // ONLY confirmed links. Do NOT use matchedTripId — suggestion / underpaid
-    // rows keep matchedTripId without tripId and must not hide Unlinked refunds.
-    const tripId = tx.tripId ?? tx.metadata?.tripId ?? null;
-    if (tripId) ids.add(String(tripId));
-    const preUnlinkedTripId = tx.preUnlinkedTripId ?? tx.metadata?.preUnlinkedTripId ?? null;
-    if (preUnlinkedTripId) ids.add(String(preUnlinkedTripId));
-  }
-  return ids;
-}
+// moved to toll_period_inputs.ts
 
 /** A trip is still "unlinked" only if it has no linked toll AND is unresolved/pending. */
 function isUnresolvedRefund(trip: any, linkedTripIds: Set<string>): boolean {

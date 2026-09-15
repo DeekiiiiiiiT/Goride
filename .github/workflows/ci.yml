@@ -47,6 +47,11 @@ jobs:
       - name: Check no settlement saveTransaction fallback
         run: node scripts/assert-no-settlement-saveTransaction-fallback.mjs
 
+      - name: Check remittance separation
+        env:
+          REMITTANCE_S6_DIFF: '1'
+        run: node scripts/check-remittance-separation.mjs
+
       - name: Check projection flags wired
         run: node scripts/check-projection-flags-wired.mjs
 
@@ -114,6 +119,24 @@ jobs:
 
       - name: Deno check edge functions
         run: deno check supabase/functions/_shared/orderToFleetTrip.ts supabase/functions/_fleet-server/workforce_invite_routes.ts supabase/functions/_fleet-server/rush_settlement_routes.ts supabase/functions/_fleet-server/fleet_module_checkout.ts supabase/functions/_fleet-server/fleet_wipay.ts supabase/functions/_fleet-server/trips_org_scope.ts supabase/functions/delivery/courierFleetAttribution.ts supabase/functions/_fleet-server/fuel_week_engine.ts supabase/functions/_fleet-server/fuel_period_routes.ts
+
+      - name: Deno test fuel recon Rev 3 controls
+        run: >
+          deno test --allow-read --allow-env
+          supabase/functions/_fleet-server/fuel_rev2_phase1_controls.test.ts
+          supabase/functions/_fleet-server/fuel_nightly_statement_ledger.test.ts
+          supabase/functions/_fleet-server/fuel_week_seal_h7.test.ts
+          supabase/functions/_fleet-server/fuel_week_category_loader.test.ts
+          supabase/functions/_fleet-server/fuel_week_category_loader_enforce.test.ts
+          supabase/functions/_fleet-server/fuel_week_closable_gate_n12.test.ts
+
+      - name: Deno test remittance money + residual + pause routes
+        run: >
+          deno test --allow-read --allow-env
+          supabase/functions/delivery/remittance/money.test.ts
+          supabase/functions/delivery/remittance/concurrency.test.ts
+          supabase/functions/delivery/remittance/trialBalanceResidual.test.ts
+          supabase/functions/delivery/remittance/pauseRoutes.test.ts
 
       - name: Typecheck fleet Rush spine
         env:

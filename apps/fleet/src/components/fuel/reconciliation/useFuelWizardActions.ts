@@ -48,14 +48,13 @@ export async function persistWizardStep(input: {
   }
 }
 
-/** C-3: push wizard step counts + money strip to SQL so auto-close is not stuck unevaluated. */
+/** C-3: push wizard money strip to SQL; counts are server-computed on /materialize. */
 export async function materializeWizardPeriodCounts(input: {
   serverPeriodId: string | null;
   weekStart: string;
   weekEnd: string;
   setServerPeriodId: (id: string) => void;
   strip: MoneyStripTotals;
-  counts: Record<string, { actionable: number; informational: number }>;
   vehicleCount?: number;
   driverCount?: number;
 }) {
@@ -74,8 +73,6 @@ export async function materializeWizardPeriodCounts(input: {
       unexplained: input.strip.leakage,
       vehicleCount: input.vehicleCount,
       driverCount: input.driverCount,
-      counts: input.counts,
-      computedFromHash: `wizard:${input.weekStart}`,
     });
   } catch {
     /* offline — counts stay local */

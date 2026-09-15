@@ -1,0 +1,21 @@
+-- Historical notes (superseded by production cutover 2026-09-15).
+-- Live authority: delivery.courier_remittance_* (see 20260915170000_*).
+-- Emergency legacy writes: DELIVERY_COD_LEGACY_WRITE=1
+-- Kill remittance: DELIVERY_REMITTANCE_OFF=1
+--
+-- Cutover checks (NOT "legacy drift empty"):
+--   v_remittance_drift = 0
+--   v_remittance_missing_collections = 0 (or triaged exceptions)
+--   unresolved exceptions = 0
+--   v_remittance_stale_pending = 0
+--
+-- Legacy tables retained for audit. Optional later rename (do not drop):
+-- ALTER TABLE delivery.courier_cash_balances RENAME TO courier_cash_balances_legacy;
+-- ALTER TABLE delivery.courier_cash_events RENAME TO courier_cash_events_legacy;
+-- REVOKE INSERT, UPDATE, DELETE ON delivery.courier_cash_balances_legacy FROM service_role;
+-- GRANT SELECT ON delivery.courier_cash_balances_legacy TO service_role;
+-- (same for events)
+--
+-- remittance_legacy_drift_explained.sql is historical/audit only — not a production blocker.
+
+SELECT 1; -- no-op placeholder so migration applies cleanly

@@ -1,0 +1,28 @@
+-- Phase 1 / R-9 gate: 200 collects → 200 events; replay no growth.
+-- Replace :courier_id with a real auth.users id before running.
+--
+-- SELECT delivery.apply_remittance_event(
+--   p_courier_id := :'courier_id'::uuid,
+--   p_event_type := 'collected',
+--   p_amount_minor := 100,
+--   p_idempotency_key := 'cod:collect:v1:soak-' || g::text,
+--   p_bag_total_minor := 100,
+--   p_platform_due_minor := 100,
+--   p_merchant_due_minor := 0,
+--   p_courier_retained_minor := 0,
+--   p_actor_type := 'ops',
+--   p_notes := 'concurrency soak'
+-- )
+-- FROM generate_series(1, 200) g;
+--
+-- Replay same key twice — must return same row, no second insert:
+-- SELECT delivery.apply_remittance_event(..., p_idempotency_key := 'cod:collect:v1:soak-1', ...);
+-- SELECT count(*) FROM delivery.courier_remittance_events WHERE idempotency_key LIKE 'cod:collect:v1:soak-%';
+-- Expect 200.
+--
+-- Recorded (GoRide / csfllzzastacofsvcdsc, 2026-09-15 production cutover):
+--   prefix cod:collect:v1:prod-cutover-soak-* → soak_event_count = 200
+--   replay of ...-soak-1 (×2) → still 200 events
+--   cleanup: settled -20000 (cod:settle:v1:prod-cutover-soak-cleanup) → balance_minor = 0
+
+SELECT 'remittance_concurrency_soak: R-9 recorded 2026-09-15 — 200 events, replay no growth'::text AS note;

@@ -38,9 +38,10 @@ export function deliveryOrderToFleetTrip(
       : order.delivered_at ?? order.updated_at ?? new Date().toISOString(),
   );
   const orderId = String(order.id ?? "");
-  const cashCollected =
-    paymentMethod === "Cash" && !isCancelled ? Number(order.total ?? 0) : 0;
-  const netPayout = amount - cashCollected;
+  // S-1 / C-6: COD bag total is Roam remittance — never fleet Layer B passenger cash.
+  // netPayout = courier earning only (fleet never receives the customer bag).
+  const cashCollected = 0;
+  const netPayout = amount;
 
   return {
     id: `rush-order:${orderId}`,
@@ -67,6 +68,9 @@ export function deliveryOrderToFleetTrip(
       rushOrderId: orderId,
       orderNumber: order.order_number,
       pricingSnapshot: order.pricing_snapshot,
+      // Ops-only bag total — never a cashCollected / weekly cash-base input (R-13).
+      codBagTotal:
+        paymentMethod === "Cash" && !isCancelled ? Number(order.total ?? 0) : 0,
     },
   };
 }
@@ -168,12 +172,45 @@ async function upsertDeliveryDetails(
   trip: Record<string, unknown>,
 ): Promise<void> {
   const { createClient } = await import("https://esm.sh/@supabase/supabase-js@2");
+  const { computeCodTrialBalance } = await import("./dashPricing.ts");
   const db = createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
   );
   const merchant = order.merchant as { id?: string; name?: string } | null;
   const snap = (order.pricing_snapshot ?? {}) as Record<string, unknown>;
+  // H-8: same trial-balance engine as COD ledger — not raw snapshot fields alone.
+  let platformDue = Number(snap.platform_fee ?? order.platform_fee ?? 0);
+  let merchantDue = Number(snap.merchant_receivable ?? 0);
+  if (isCashPayment(order)) {
+    try {
+      const bal = computeCodTrialBalance({
+        subtotal: Number(order.subtotal ?? snap.subtotal ?? 0),
+        discount: Number(order.discount ?? snap.discount ?? 0),
+        merchantCommissionAmount: Number(
+          snap.merchant_commission_amount ?? snap.commission ?? 0,
+        ),
+        serviceFee: Number(order.service_fee ?? snap.service_fee ?? 0),
+        deliveryFeePlatformAmount: Number(
+          snap.delivery_fee_platform_amount ?? snap.deliveryFeePlatformAmount ?? 0,
+        ),
+        deliveryFeeCourierAmount: Number(
+          snap.delivery_fee_courier_amount ?? snap.deliveryFeeCourierAmount ?? 0,
+        ),
+        smallOrderFee: Number(snap.small_order_fee ?? snap.smallOrderFee ?? 0),
+        taxFoodJmd: Number(snap.tax_food_jmd ?? snap.taxFoodJmd ?? 0),
+        taxPlatformJmd: Number(snap.tax_platform_jmd ?? snap.taxPlatformJmd ?? 0),
+        tax: Number(order.tax ?? snap.tax ?? 0),
+        tip: Number(order.tip ?? 0),
+        courierTipNet: Number(snap.courier_tip_net ?? snap.courierTipNet ?? order.tip ?? 0),
+        total: Number(order.total ?? 0),
+      });
+      platformDue = bal.platformDueJmd;
+      merchantDue = bal.merchantDueJmd;
+    } catch (e) {
+      console.warn("[orderToFleetTrip] COD trial balance fallback to snapshot:", e);
+    }
+  }
   const row = {
     trip_id: String(trip.id),
     organization_id: String(order.courier_fleet_id),
@@ -184,8 +221,8 @@ async function upsertDeliveryDetails(
     delivery_fee: Number(order.delivery_fee ?? 0),
     tip: Number(order.tip ?? 0),
     cod_collected: isCashPayment(order) ? Number(order.total ?? 0) : 0,
-    platform_due: Number(snap.platform_fee ?? order.platform_fee ?? 0),
-    merchant_due: Number(snap.merchant_receivable ?? 0),
+    platform_due: platformDue,
+    merchant_due: merchantDue,
     distance_km: Number(order.distance_km ?? snap.distance_km ?? 0) || null,
     accepted_at: order.accepted_at ?? null,
     picked_up_at: order.picked_up_at ?? null,

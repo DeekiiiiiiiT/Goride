@@ -29,6 +29,8 @@ import { OfferPushBanner } from '@/components/ui/OfferPushBanner';
 import { EarningsPage } from '@/pages/earnings/EarningsPage';
 import { PromotionsPage } from '@/pages/earnings/PromotionsPage';
 import { DeliveryDetailPage } from '@/pages/earnings/DeliveryDetailPage';
+import { RemittanceDetailPage } from '@/pages/remittance/RemittanceDetailPage';
+import { RemittancePausedScreen } from '@/pages/remittance/RemittancePausedScreen';
 import { hydrateCourierSettingsFromCloud } from '@/lib/courierSettingsSync';
 import { buildStackedRouteFromLegs, buildStackedOfferFromPending } from '@/lib/stackedRouteBuilder';
 import { isCourierStackedEnabled } from '@/lib/courierFeatureFlags';
@@ -130,6 +132,11 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
   const [activeDelivery, setActiveDelivery] = useState<ActiveDelivery | null>(null);
   const [stackedRoute, setStackedRoute] = useState<StackedRouteStop[]>([]);
   const [promotionsOpen, setPromotionsOpen] = useState(false);
+  const [remittanceOpen, setRemittanceOpen] = useState(false);
+  const [remittancePause, setRemittancePause] = useState<{
+    balanceMinor: number;
+    thresholdMinor: number;
+  } | null>(null);
   const [mutationSubmitting, setMutationSubmitting] = useState(false);
   const [pendingFleetInviteCount, setPendingFleetInviteCount] = useState(0);
   const [sessionRestoredApprox, setSessionRestoredApprox] = useState(false);
@@ -146,6 +153,19 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
   useEffect(() => {
     void loadMyFleetInvites().then((rows) => setPendingFleetInviteCount(rows.length));
   }, [profileScreen]);
+
+  useEffect(() => {
+    const onPaused = (ev: Event) => {
+      const detail = (ev as CustomEvent<{ balanceMinor: number; thresholdMinor: number }>).detail;
+      if (!detail) return;
+      setRemittancePause({
+        balanceMinor: detail.balanceMinor,
+        thresholdMinor: detail.thresholdMinor,
+      });
+    };
+    window.addEventListener('courier-remittance-paused', onPaused);
+    return () => window.removeEventListener('courier-remittance-paused', onPaused);
+  }, []);
 
   const getProviderPendingOrder = useCallback((): AvailableOrder | null => {
     if (
@@ -681,6 +701,7 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
           onDeliverySelect={setSelectedDeliveryId}
           onViewAllHistory={() => setActiveTab('activity')}
           onViewPromotions={() => setPromotionsOpen(true)}
+          onOpenRemittance={() => setRemittanceOpen(true)}
         />
       );
     }
@@ -1060,6 +1081,25 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
           onRetry={handleRetryConnection}
           onProfileClick={() => setActiveTab('account')}
           onMenuClick={() => setActiveTab('account')}
+        />
+      )}
+
+      {remittanceOpen && (
+        <ImmersiveScreen>
+          <RemittanceDetailPage onBack={() => setRemittanceOpen(false)} />
+        </ImmersiveScreen>
+      )}
+
+      {remittancePause && (
+        <RemittancePausedScreen
+          balanceMinor={remittancePause.balanceMinor}
+          thresholdMinor={remittancePause.thresholdMinor}
+          onViewDetail={() => {
+            setRemittancePause(null);
+            setRemittanceOpen(true);
+            setActiveTab('earnings');
+          }}
+          onDismiss={() => setRemittancePause(null)}
         />
       )}
     </AppShell>

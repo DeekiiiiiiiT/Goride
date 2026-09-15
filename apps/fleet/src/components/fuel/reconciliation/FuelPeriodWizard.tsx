@@ -181,6 +181,7 @@ function FuelPeriodWizardInner({
   const [leakageDisposition, setLeakageDisposition] = useState<FuelResidualDisposition | ''>('');
   const [stepNotes, setStepNotes] = useState<Array<{ step: string; note: string; at: string }>>([]);
   const [queueIndex, setQueueIndex] = useState(0);
+  const [gateLiveMessage, setGateLiveMessage] = useState('');
 
   const periodLocked = period.locked;
   const secondApproverConfirmed = hasDistinctSecondApprove(secondApproveActors, user?.id);
@@ -194,12 +195,20 @@ function FuelPeriodWizardInner({
     [trips, period.startDate, period.endDate],
   );
 
+  const weekFuelEntries = useMemo(
+    () =>
+      fuelEntries.filter((e) =>
+        isEntryInInclusiveYmdRange(e.date, period.startDate, period.endDate),
+      ),
+    [fuelEntries, period.startDate, period.endDate],
+  );
+
   const weekReports = useFuelWeekReports({
     weekStartYmd: period.startDate,
     weekEndYmd: period.endDate,
     vehicles,
     drivers,
-    fuelEntries,
+    fuelEntries: weekFuelEntries,
     adjustments,
     scenarios,
     fuelCards,
@@ -311,18 +320,16 @@ function FuelPeriodWizardInner({
   // C-3: keep SQL counts/money in sync so auto-close is not stuck on counts_unevaluated.
   useEffect(() => {
     if (periodLocked || weekReports.loading || weekIsEmpty) return;
-    if (!counts || Object.keys(counts).length === 0) return;
     void materializeWizardPeriodCounts({
       serverPeriodId,
       weekStart: period.startDate,
       weekEnd: period.endDate,
       setServerPeriodId,
       strip,
-      counts,
       vehicleCount: vehicleSnaps.length,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [period.id, periodLocked, weekReports.loading, weekIsEmpty, counts, strip.totalSpend, strip.leakage]);
+  }, [period.id, periodLocked, weekReports.loading, weekIsEmpty, strip.totalSpend, strip.leakage]);
 
   // H8/H9 + NEW-6: server period is SoT for leakage review, step resume, second approval
   useEffect(() => {
@@ -534,7 +541,9 @@ function FuelPeriodWizardInner({
     if (periodLocked || liveReports.length === 0) return;
     if (hasDegradedInputs) return;
     if (closableBlockers.length > 0) {
-      toast.error(fuelWeekClosableBlockerMessage(closableBlockers[0]));
+      const msg = fuelWeekClosableBlockerMessage(closableBlockers[0]);
+      setGateLiveMessage(msg);
+      toast.error(msg);
       return;
     }
     const gate = gateResult;
@@ -828,11 +837,15 @@ function FuelPeriodWizardInner({
           setActiveStepId(id);
           // Don't auto-advance progress when jumping back — only Continue marks steps done
           if (idx > progressIndex) setProgressIndex(idx);
-          persistStep(id);
+          persistStep(id, stepNoteDraft.trim() || undefined);
         }}
         labels={FUEL_STEP_LABELS}
         icons={FUEL_STEP_ICONS}
       />
+
+      <div className="sr-only" aria-live="assertive" aria-atomic="true">
+        {gateLiveMessage}
+      </div>
 
       <label className="block space-y-1">
         <span className="text-xs font-medium text-slate-500">Step note (optional)</span>
@@ -840,6 +853,10 @@ function FuelPeriodWizardInner({
           className="min-h-[64px] w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
           value={stepNoteDraft}
           onChange={(e) => setStepNoteDraft(e.target.value)}
+          onBlur={() => {
+            // U-10: persist notes via step/audit API on blur (not component-only).
+            persistStep(activeStepId, stepNoteDraft.trim() || undefined);
+          }}
           placeholder="Judgement call for this step — included in evidence pack"
         />
       </label>

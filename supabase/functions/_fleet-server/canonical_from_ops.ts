@@ -51,14 +51,25 @@ function detectTripFarePaymentMethod(trip: Record<string, unknown>): "Cash" | "C
   return undefined;
 }
 
-/** Physical cash for ledger metadata; only set when cash was actually collected. */
+/** Physical cash for ledger metadata; present cashCollected (incl. 0) is authoritative (R-5). */
 function computeTripFareCashCollected(
   trip: Record<string, unknown>,
   fareGross: number,
   netAmount: number,
 ): number {
-  const explicit = Math.abs(coerceAmount(trip.cashCollected));
-  if (explicit > 0) return explicit;
+  const serviceLine = String(trip.serviceLine ?? trip.service_line ?? "").toLowerCase();
+  if (serviceLine === "rush_delivery") return 0;
+
+  // Present including 0 — never invent from fare (align with getTripPhysicalCashCollected).
+  if (
+    trip.cashCollected != null &&
+    trip.cashCollected !== "" &&
+    Number.isFinite(Number(trip.cashCollected))
+  ) {
+    const raw = Math.abs(Number(trip.cashCollected));
+    return raw > 0.005 ? raw : 0;
+  }
+
   const pmRaw = String(trip.paymentMethod ?? "").trim().toLowerCase();
   if (pmRaw === "cash") return Math.abs(fareGross > 0 ? fareGross : netAmount);
   const platformLc = String(trip.platform ?? "").trim().toLowerCase();

@@ -70,6 +70,9 @@ const PromotionsPage = React.lazy(() =>
 const PricingHubPage = React.lazy(() =>
   import('./pages/pricing/PricingHubPage').then((m) => ({ default: m.PricingHubPage })),
 );
+const RemittanceDeskPage = React.lazy(() =>
+  import('./pages/remittance/RemittanceDeskPage').then((m) => ({ default: m.RemittanceDeskPage })),
+);
 const DashPlayStoreLaunchPage = React.lazy(() =>
   import('./pages/PlayStoreLaunchPage').then((m) => ({ default: m.DashPlayStoreLaunchPage })),
 );
@@ -266,6 +269,14 @@ export function DashAdminPortal() {
               element={
                 <Suspense fallback={<AdminRouteFallback />}>
                   <PricingHubPage />
+                </Suspense>
+              }
+            />
+            <Route
+              path="remittance"
+              element={
+                <Suspense fallback={<AdminRouteFallback />}>
+                  <RemittanceDeskPage />
                 </Suspense>
               }
             />

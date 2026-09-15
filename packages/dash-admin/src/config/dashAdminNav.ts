@@ -107,6 +107,7 @@ export const DASH_ADMIN_CONFIG: AdminConfig = {
     { id: 'finance', label: 'Finance', icon: Wallet },
     { id: 'promotions', label: 'Promotions', icon: Tag },
     { id: 'pricing', label: 'Pricing', icon: DollarSign },
+    { id: 'remittance', label: 'Remittance', icon: Wallet },
     { id: 'reviews', label: 'Reviews', icon: Star },
     { id: 'support', label: 'Support', icon: HeadphonesIcon },
     { id: 'play-store', label: 'Play Store', icon: Smartphone },
@@ -178,6 +179,7 @@ export function pathnameToNavId(pathname: string): string {
   if (pathname.startsWith('/finance') || pathname.startsWith('/disputes')) return 'finance';
   if (pathname.startsWith('/promotions')) return 'promotions';
   if (pathname.startsWith('/pricing')) return 'pricing';
+  if (pathname.startsWith('/remittance')) return 'remittance';
   if (pathname.startsWith('/reviews')) return 'reviews';
   if (pathname.startsWith('/support')) return 'support';
   if (pathname.startsWith('/play-store')) return 'play-store';
@@ -228,6 +230,8 @@ export function navIdToPath(navId: string): string {
       return '/promotions';
     case 'pricing':
       return '/pricing';
+    case 'remittance':
+      return '/remittance';
     case 'reviews':
       return '/reviews';
     case 'support':

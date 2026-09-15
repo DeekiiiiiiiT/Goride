@@ -84,6 +84,7 @@ export function FuelFinalizeStep(props: FuelFinalizeStepProps) {
         <div
           className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-[13px] text-slate-800"
           role="status"
+          aria-live="polite"
         >
           <p className="font-semibold text-slate-900">Data provenance (signature)</p>
           <ul className="mt-1 list-inside list-disc space-y-0.5 text-slate-700">

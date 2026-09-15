@@ -449,6 +449,80 @@ Deno.serve(async (req) => {
       console.warn("[finance-recon] fuel locked-week recon skipped:", errMsg(fuelReconErr));
     }
 
+    // Delivery remittance Layer A′ alerts — non-fatal if views missing.
+    try {
+      const delivery = supabase.schema("delivery");
+      const [driftV, missingV, trialV, legacyV, stalePendingV] = await Promise.all([
+        delivery.from("v_remittance_drift").select("courier_id").limit(50),
+        delivery.from("v_remittance_missing_collections").select("order_id").limit(50),
+        delivery.from("v_remittance_trial_balance_breaks").select("id").limit(50),
+        delivery.from("v_remittance_legacy_drift").select("courier_id").limit(50),
+        delivery.from("v_remittance_stale_pending").select("id, reference, courier_id").limit(50),
+      ]);
+      for (const row of driftV.data ?? []) {
+        drifts.push({
+          runId,
+          driverId: String((row as { courier_id: string }).courier_id),
+          week: fromYmd,
+          kind: "REMITTANCE_LEDGER_DRIFT",
+          field: "courier_remittance",
+          persisted: 1,
+          expected: 0,
+          severity: "critical",
+        });
+      }
+      for (const row of missingV.data ?? []) {
+        drifts.push({
+          runId,
+          driverId: String((row as { order_id: string }).order_id),
+          week: fromYmd,
+          kind: "REMITTANCE_MISSING_COLLECTION",
+          field: "order_id",
+          persisted: 1,
+          expected: 0,
+          severity: "warning",
+        });
+      }
+      for (const row of trialV.data ?? []) {
+        drifts.push({
+          runId,
+          driverId: String((row as { id: string }).id),
+          week: fromYmd,
+          kind: "REMITTANCE_TRIAL_BREAK",
+          field: "event_id",
+          persisted: 1,
+          expected: 0,
+          severity: "critical",
+        });
+      }
+      for (const row of legacyV.data ?? []) {
+        drifts.push({
+          runId,
+          driverId: String((row as { courier_id: string }).courier_id),
+          week: fromYmd,
+          kind: "REMITTANCE_LEGACY_DRIFT",
+          field: "legacy_vs_v2",
+          persisted: 1,
+          expected: 0,
+          severity: "warning",
+        });
+      }
+      for (const row of stalePendingV.data ?? []) {
+        drifts.push({
+          runId,
+          driverId: String((row as { courier_id: string }).courier_id),
+          week: fromYmd,
+          kind: "REMITTANCE_STALE_PENDING",
+          field: String((row as { reference?: string }).reference ?? "pending"),
+          persisted: 1,
+          expected: 0,
+          severity: "critical",
+        });
+      }
+    } catch (remitErr) {
+      console.warn("[finance-recon] remittance recon skipped:", errMsg(remitErr));
+    }
+
     const ok = drifts.length === 0;
     if (!ok) {
       const summary = `[finance-recon] runId=${runId} ${drifts.length} drift(s), nullOrg=${nullOrg}`;

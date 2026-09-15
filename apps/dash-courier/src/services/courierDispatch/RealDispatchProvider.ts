@@ -158,6 +158,16 @@ export class RealDispatchProvider implements CourierDispatchService {
       lng: this.lastCoords.lng,
     });
     if (!result.ok) {
+      if (result.code === 'cod_cash_paused' && typeof window !== 'undefined') {
+        window.dispatchEvent(
+          new CustomEvent('courier-remittance-paused', {
+            detail: {
+              balanceMinor: result.balanceMinor ?? 0,
+              thresholdMinor: result.thresholdMinor ?? 1000000,
+            },
+          }),
+        );
+      }
       toast.error('Could not go online', result.error || 'Try again in a moment.');
       this.setState({ mode: 'offline' });
       return;

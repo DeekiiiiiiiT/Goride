@@ -86,6 +86,32 @@ describe('computeWeekCashBase', () => {
     expect(r.passengerCash).toBe(30776.26);
     expect(r.cashSourceMismatch).toBeCloseTo(29876.26, 2);
   });
+
+  it('S-1: rush_delivery COD bag cash does not move weekly cash base', () => {
+    const r = computeWeekCashBase({
+      periodAnchor: '2026-08-03',
+      periodEnd: '2026-08-09',
+      trips: [
+        {
+          date: '2026-08-04',
+          platform: 'Roam Rush',
+          cashCollected: 2500,
+          paymentMethod: 'Cash',
+          serviceLine: 'rush_delivery',
+          amount: 300,
+        },
+        {
+          date: '2026-08-04',
+          platform: 'InDrive',
+          cashCollected: 800,
+          paymentMethod: 'Cash',
+        },
+      ],
+      transactions: [],
+    });
+    expect(r.nonUberTripCash).toBe(800);
+    expect(r.passengerCash).toBe(800);
+  });
 });
 
 describe('foldPayoutCashByWeek', () => {

@@ -167,17 +167,21 @@ export function FuelLeakageStep(props: FuelLeakageStepProps) {
                 Stop-to-Stop — {bucketVehicle.licensePlate || bucketVehicle.id}
               </h3>
               {!periodLocked && (
-                <select
-                  className="min-h-11 rounded border border-slate-200 px-2 py-1 text-sm"
-                  value={bucketVehicle.id}
-                  onChange={(e) => onBucketVehicleChange(e.target.value)}
-                >
-                  {vehicles.map((v) => (
-                    <option key={v.id} value={v.id}>
-                      {v.licensePlate || v.id}
-                    </option>
-                  ))}
-                </select>
+                <label className="flex items-center gap-2 text-sm text-slate-600">
+                  <span className="sr-only">Vehicle for gap detail</span>
+                  <select
+                    aria-label="Vehicle for gap detail"
+                    className="min-h-11 rounded border border-slate-200 px-2 py-1 text-sm"
+                    value={bucketVehicle.id}
+                    onChange={(e) => onBucketVehicleChange(e.target.value)}
+                  >
+                    {vehicles.map((v) => (
+                      <option key={v.id} value={v.id}>
+                        {v.licensePlate || v.id}
+                      </option>
+                    ))}
+                  </select>
+                </label>
               )}
             </div>
             <BucketReconciliationView

@@ -12,7 +12,7 @@ import { getServiceClient } from "./service_client.ts";
 import { publishWeekStatement, getLatestWeekStatement, RestatementDraftBlockedError } from "./week_statements.ts";
 import { periodEndForAnchor } from "../../../packages/finance-core/src/periodKey.ts";
 import { isTollIncludedInSpend } from "../../../packages/finance-core/src/tollLedgerIntegrity.ts";
-import { loadTollLedgerWithTrips } from "./toll_controller.tsx";
+import { loadTollLedgerWithTrips } from "./toll_period_inputs.ts";
 import { resolveTollCloseAmounts } from "./toll_close_amounts.ts";
 
 function sb() {

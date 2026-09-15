@@ -11,6 +11,229 @@ function ymd(v: unknown): string {
   return String(v || "").split("T")[0];
 }
 
+/** N-11/P-3: cache prefix scans per org-week (SQL date index follow-up). */
+type WeekClosableKvBundle = {
+  disputes: Record<string, unknown>[];
+  entries: Record<string, unknown>[];
+  transactions: Record<string, unknown>[];
+};
+
+type CachedClosableBundle = {
+  bundle: WeekClosableKvBundle;
+  expiresAt: number;
+};
+
+/** N-12: TTL belt — immortal Map must not survive warm isolates across evaluations. */
+export const CLOSABLE_KV_CACHE_TTL_MS = 60_000;
+
+const closableKvCache = new Map<string, CachedClosableBundle>();
+
+export function clearFuelWeekClosableKvCache(): void {
+  closableKvCache.clear();
+}
+
+/** N-12a: drop one org-week key before a fresh evaluate (finalize / auto-close period). */
+export function invalidateFuelWeekClosableKvCache(
+  orgId: string,
+  weekStart: string,
+  weekEnd: string,
+): void {
+  closableKvCache.delete(weekClosableCacheKey(orgId, weekStart, weekEnd));
+}
+
+/** Test helper — seed a stale empty bundle that would hide exceptions without invalidation. */
+export function __seedClosableKvCacheForTest(
+  orgId: string,
+  weekStart: string,
+  weekEnd: string,
+  bundle: WeekClosableKvBundle,
+  expiresAt = Date.now() + CLOSABLE_KV_CACHE_TTL_MS,
+): void {
+  closableKvCache.set(weekClosableCacheKey(orgId, weekStart, weekEnd), { bundle, expiresAt });
+}
+
+export function __closableKvCacheSizeForTest(): number {
+  return closableKvCache.size;
+}
+
+function weekClosableCacheKey(orgId: string, weekStart: string, weekEnd: string): string {
+  return `${orgId}|${weekStart}|${weekEnd}`;
+}
+
+function disputeOverlapsWeek(
+  d: Record<string, unknown>,
+  weekStart: string,
+  weekEnd: string,
+): boolean {
+  const dStart = ymd(d.weekStart || d.week_start);
+  const dEnd = ymd(d.weekEnd || d.week_end) || dStart;
+  if (!dStart) return false;
+  return !(dStart > weekEnd || dEnd < weekStart);
+}
+
+function rowOrgId(row: Record<string, unknown>): string {
+  return String(row.organizationId || row.orgId || row.org_id || "");
+}
+
+function valuesFromKvRows(rows: unknown): Record<string, unknown>[] {
+  if (!Array.isArray(rows)) return [];
+  const out: Record<string, unknown>[] = [];
+  for (const row of rows) {
+    if (!row || typeof row !== "object") continue;
+    const v = (row as { value?: unknown }).value;
+    if (v && typeof v === "object") out.push(v as Record<string, unknown>);
+    else out.push(row as Record<string, unknown>);
+  }
+  return out;
+}
+
+/**
+ * P-3: SQL pushdown via fromKvStore (like + org + date window) when PostgREST allows;
+ * full-prefix scan + in-memory filter remains the fallback for disputes / failed pushdown.
+ */
+async function loadWeekClosableKvBundle(
+  orgId: string,
+  weekStart: string,
+  weekEnd: string,
+): Promise<WeekClosableKvBundle> {
+  const cacheKey = weekClosableCacheKey(orgId, weekStart, weekEnd);
+  const hit = closableKvCache.get(cacheKey);
+  if (hit && hit.expiresAt > Date.now()) return hit.bundle;
+  if (hit) closableKvCache.delete(cacheKey);
+
+  let disputes: Record<string, unknown>[] = [];
+  let entries: Record<string, unknown>[] = [];
+  let transactions: Record<string, unknown>[] = [];
+  let pushdownComplete = false;
+
+  try {
+    const { fromKvStore } = await import("./fleet_sql_bridge.ts");
+    const orgOr =
+      `value->>organizationId.eq.${orgId},value->>orgId.eq.${orgId},value->>org_id.eq.${orgId}`;
+
+    const { data: entryRows, error: entryErr } = await fromKvStore()
+      .select("value")
+      .like("key", "fuel_entry:%")
+      .or(orgOr)
+      .gte("value->>date", weekStart)
+      .lte("value->>date", weekEnd);
+    const { data: txRows, error: txErr } = await fromKvStore()
+      .select("value")
+      .like("key", "transaction:%")
+      .or(orgOr)
+      .gte("value->>date", weekStart)
+      .lte("value->>date", weekEnd);
+    const { data: disputeRows, error: disputeErr } = await fromKvStore()
+      .select("value")
+      .like("key", "fuel_dispute:%")
+      .or(orgOr);
+
+    if (entryErr || txErr || disputeErr) {
+      throw new Error(
+        [entryErr, txErr, disputeErr]
+          .map((e) => (e && typeof e === "object" && "message" in e ? String((e as { message: unknown }).message) : String(e)))
+          .filter(Boolean)
+          .join("; "),
+      );
+    }
+
+    entries = valuesFromKvRows(entryRows).filter((e) => {
+      const rowOrg = rowOrgId(e);
+      return !rowOrg || rowOrg === orgId;
+    });
+    transactions = valuesFromKvRows(txRows).filter((t) => {
+      const rowOrg = rowOrgId(t);
+      return !rowOrg || rowOrg === orgId;
+    });
+    disputes = valuesFromKvRows(disputeRows).filter((d) =>
+      disputeOverlapsWeek(d, weekStart, weekEnd)
+    );
+    pushdownComplete = true;
+  } catch (e) {
+    console.warn("[fuel_week_closable_gate] fromKvStore pushdown failed — prefix fallback", e);
+  }
+
+  if (!pushdownComplete) {
+    // P-3: org-scoped KV queries first (not full-table prefix) when date pushdown fails.
+    try {
+      const { fromKvStore } = await import("./fleet_sql_bridge.ts");
+      const orgOr =
+        `value->>organizationId.eq.${orgId},value->>orgId.eq.${orgId},value->>org_id.eq.${orgId}`;
+      const [disputeRes, entryRes, txRes] = await Promise.all([
+        fromKvStore().select("value").like("key", "fuel_dispute:%").or(orgOr),
+        fromKvStore().select("value").like("key", "fuel_entry:%").or(orgOr),
+        fromKvStore().select("value").like("key", "transaction:%").or(orgOr),
+      ]);
+      if (disputeRes.error || entryRes.error || txRes.error) {
+        throw new Error("org-scoped fallback query error");
+      }
+      disputes = valuesFromKvRows(disputeRes.data).filter((d) =>
+        disputeOverlapsWeek(d, weekStart, weekEnd)
+      );
+      entries = valuesFromKvRows(entryRes.data).filter((e) => {
+        const day = ymd(e.date);
+        return Boolean(day && day >= weekStart && day <= weekEnd);
+      });
+      transactions = valuesFromKvRows(txRes.data).filter((t) => {
+        const day = ymd(t.date);
+        return Boolean(day && day >= weekStart && day <= weekEnd);
+      });
+      pushdownComplete = true;
+    } catch (e2) {
+      console.warn("[fuel_week_closable_gate] org-scoped fallback failed — last-resort prefix", e2);
+      const [disputeRaw, entryRaw, txRaw] = await Promise.all([
+        kv.getByPrefix("fuel_dispute:"),
+        kv.getByPrefix("fuel_entry:"),
+        kv.getByPrefix("transaction:"),
+      ]);
+
+      disputes = ((disputeRaw || []) as Record<string, unknown>[]).filter((d) => {
+        if (!d || typeof d !== "object") return false;
+        const rowOrg = rowOrgId(d);
+        if (rowOrg && rowOrg !== orgId) return false;
+        return disputeOverlapsWeek(d, weekStart, weekEnd);
+      });
+
+      entries = ((entryRaw || []) as Record<string, unknown>[]).filter((e) => {
+        if (!e || typeof e !== "object") return false;
+        const rowOrg = rowOrgId(e);
+        if (rowOrg && rowOrg !== orgId) return false;
+        const day = ymd(e.date);
+        return Boolean(day && day >= weekStart && day <= weekEnd);
+      });
+
+      transactions = ((txRaw || []) as Record<string, unknown>[]).filter((t) => {
+        if (!t || typeof t !== "object") return false;
+        const rowOrg = rowOrgId(t);
+        return !rowOrg || rowOrg === orgId;
+      });
+    }
+  }
+
+  const bundle: WeekClosableKvBundle = { disputes, entries, transactions };
+  closableKvCache.set(cacheKey, {
+    bundle,
+    expiresAt: Date.now() + CLOSABLE_KV_CACHE_TTL_MS,
+  });
+  return bundle;
+}
+
+function entryIsUnackedException(e: Record<string, unknown>): boolean {
+  const tier = String(e.reviewTier || (e.metadata as any)?.reviewTier || e.anomalyTier || "")
+    .toLowerCase();
+  const signalTier = String((e.metadata as any)?.signalTier || e.signalTier || "").toLowerCase();
+  const isException =
+    tier === "exception" ||
+    signalTier === "exception" ||
+    Boolean((e.metadata as any)?.isException);
+  if (!isException) return false;
+  const ack = (e.metadata as any)?.reconExceptionAck || e.reconExceptionAck;
+  if (ack && typeof ack === "object") return false;
+  if (ack === true || ack === "true" || ack === 1 || ack === "1") return false;
+  if ((e.metadata as any)?.exceptionResolvedAt) return false;
+  return true;
+}
+
 function snapFuelRule(snap: Record<string, unknown>): Record<string, unknown> | null {
   const meta = (snap.metadata && typeof snap.metadata === "object"
     ? snap.metadata
@@ -47,16 +270,9 @@ export async function weekHasOpenFuelDisputes(
   weekStart: string,
   weekEnd: string,
 ): Promise<boolean> {
-  const rows = ((await kv.getByPrefix("fuel_dispute:")) || []) as any[];
-  for (const d of rows) {
-    if (!d || typeof d !== "object") continue;
-    const rowOrg = String(d.organizationId || d.orgId || d.org_id || "");
-    if (rowOrg && rowOrg !== orgId) continue;
+  const { disputes } = await loadWeekClosableKvBundle(orgId, weekStart, weekEnd);
+  for (const d of disputes) {
     if (String(d.status || "") !== "Open") continue;
-    const dStart = ymd(d.weekStart || d.week_start);
-    const dEnd = ymd(d.weekEnd || d.week_end) || dStart;
-    if (!dStart) continue;
-    if (dStart > weekEnd || dEnd < weekStart) continue;
     return true;
   }
   return false;
@@ -67,25 +283,9 @@ export async function weekHasUnackedExceptionFills(
   weekStart: string,
   weekEnd: string,
 ): Promise<boolean> {
-  const rows = ((await kv.getByPrefix("fuel_entry:")) || []) as any[];
-  for (const e of rows) {
-    if (!e || typeof e !== "object") continue;
-    const rowOrg = String(e.organizationId || e.orgId || e.org_id || "");
-    if (rowOrg && rowOrg !== orgId) continue;
-    const day = ymd(e.date);
-    if (!day || day < weekStart || day > weekEnd) continue;
-    const tier = String(e.reviewTier || e.metadata?.reviewTier || e.anomalyTier || "").toLowerCase();
-    const signalTier = String(e.metadata?.signalTier || e.signalTier || "").toLowerCase();
-    const isException =
-      tier === "exception" ||
-      signalTier === "exception" ||
-      Boolean(e.metadata?.isException);
-    if (!isException) continue;
-    const ack = e.metadata?.reconExceptionAck || e.reconExceptionAck;
-    if (ack && typeof ack === "object") continue;
-    if (ack === true || ack === "true" || ack === 1 || ack === "1") continue;
-    if (e.metadata?.exceptionResolvedAt) continue;
-    return true;
+  const { entries } = await loadWeekClosableKvBundle(orgId, weekStart, weekEnd);
+  for (const e of entries) {
+    if (entryIsUnackedException(e)) return true;
   }
   return false;
 }
@@ -97,6 +297,9 @@ export async function buildFuelWeekClosableInputForPeriod(
 ): Promise<EvaluateFuelWeekClosableInput> {
   const weekStart = ymd(period.week_start);
   const weekEnd = ymd(period.week_end) || weekStart;
+  // N-12a: never evaluate against a warm-isolate stale bundle.
+  invalidateFuelWeekClosableKvCache(orgId, weekStart, weekEnd);
+
   const counts = (period.counts && typeof period.counts === "object" ? period.counts : {}) as Record<
     string,
     unknown
@@ -107,13 +310,8 @@ export async function buildFuelWeekClosableInputForPeriod(
     weekHasOpenFuelDisputes(orgId, weekStart, weekEnd),
     weekHasUnackedExceptionFills(orgId, weekStart, weekEnd),
     (async () => {
-      const rows = await kv.getByPrefix(`transaction:`);
-      const txs = (Array.isArray(rows) ? rows : []).filter((t: any) => {
-        if (!t || typeof t !== "object") return false;
-        const rowOrg = String(t.organizationId || t.orgId || "");
-        return !rowOrg || rowOrg === orgId;
-      });
-      return listUnapprovedFuelTxInWindow(txs, weekStart, weekEnd).length > 0;
+      const { transactions } = await loadWeekClosableKvBundle(orgId, weekStart, weekEnd);
+      return listUnapprovedFuelTxInWindow(transactions as any[], weekStart, weekEnd).length > 0;
     })(),
   ]);
 
@@ -175,26 +373,10 @@ export async function countUnackedExceptionFills(
   weekStart: string,
   weekEnd: string,
 ): Promise<number> {
-  const rows = ((await kv.getByPrefix("fuel_entry:")) || []) as any[];
+  const { entries } = await loadWeekClosableKvBundle(orgId, weekStart, weekEnd);
   let n = 0;
-  for (const e of rows) {
-    if (!e || typeof e !== "object") continue;
-    const rowOrg = String(e.organizationId || e.orgId || e.org_id || "");
-    if (rowOrg && rowOrg !== orgId) continue;
-    const day = ymd(e.date);
-    if (!day || day < weekStart || day > weekEnd) continue;
-    const tier = String(e.reviewTier || e.metadata?.reviewTier || e.anomalyTier || "").toLowerCase();
-    const signalTier = String(e.metadata?.signalTier || e.signalTier || "").toLowerCase();
-    const isException =
-      tier === "exception" ||
-      signalTier === "exception" ||
-      Boolean(e.metadata?.isException);
-    if (!isException) continue;
-    const ack = e.metadata?.reconExceptionAck || e.reconExceptionAck;
-    if (ack && typeof ack === "object") continue;
-    if (ack === true || ack === "true" || ack === 1 || ack === "1") continue;
-    if (e.metadata?.exceptionResolvedAt) continue;
-    n += 1;
+  for (const e of entries) {
+    if (entryIsUnackedException(e)) n += 1;
   }
   return n;
 }
@@ -204,20 +386,47 @@ export async function countOpenFuelDisputes(
   weekStart: string,
   weekEnd: string,
 ): Promise<number> {
-  const rows = ((await kv.getByPrefix("fuel_dispute:")) || []) as any[];
+  const { disputes } = await loadWeekClosableKvBundle(orgId, weekStart, weekEnd);
   let n = 0;
-  for (const d of rows) {
-    if (!d || typeof d !== "object") continue;
-    const rowOrg = String(d.organizationId || d.orgId || d.org_id || "");
-    if (rowOrg && rowOrg !== orgId) continue;
+  for (const d of disputes) {
     if (String(d.status || "") !== "Open") continue;
-    const dStart = ymd(d.weekStart || d.week_start);
-    const dEnd = ymd(d.weekEnd || d.week_end) || dStart;
-    if (!dStart) continue;
-    if (dStart > weekEnd || dEnd < weekStart) continue;
     n += 1;
   }
   return n;
+}
+
+export async function countUnapprovedFuelTxInWeek(
+  orgId: string,
+  weekStart: string,
+  weekEnd: string,
+): Promise<number> {
+  const { transactions } = await loadWeekClosableKvBundle(orgId, weekStart, weekEnd);
+  return listUnapprovedFuelTxInWindow(transactions as any[], weekStart, weekEnd).length;
+}
+
+const FUEL_COUNT_EPS = 0.009;
+
+/** H-5: server-authored step counts for /materialize and auto-close. */
+export async function serverFuelStepCountsForPeriod(
+  orgId: string,
+  weekStart: string,
+  weekEnd: string,
+  period: { unexplained?: unknown; leakage_reviewed_at?: unknown },
+): Promise<Record<string, { actionable: number; informational: number }>> {
+  const [exN, dispN, unapprovedN] = await Promise.all([
+    countUnackedExceptionFills(orgId, weekStart, weekEnd),
+    countOpenFuelDisputes(orgId, weekStart, weekEnd),
+    countUnapprovedFuelTxInWeek(orgId, weekStart, weekEnd),
+  ]);
+  const signedUnexplained = Number(period.unexplained) || 0;
+  const leakageActionable =
+    Math.abs(signedUnexplained) > FUEL_COUNT_EPS && !period.leakage_reviewed_at;
+  return buildServerFuelStepCounts({
+    exceptionFillCount: exN,
+    openDisputeCount: dispN,
+    leakageActionable,
+    unapprovedFuelTxCount: unapprovedN,
+  });
 }
 
 export function fuelClosableBlockerHttpCode(

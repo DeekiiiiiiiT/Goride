@@ -51,6 +51,9 @@ export type TripCashLike = {
   platform?: string;
   amount?: number;
   status?: string;
+  /** When rush_delivery, excluded from fleet Layer B passenger cash (S-1 / C-6). */
+  serviceLine?: string;
+  service_line?: string;
 };
 
 function fareGross(e: LedgerFareLike): number {
@@ -229,6 +232,9 @@ export function computeWeekCashBase(params: {
     if (!(d >= periodAnchor && d <= periodEnd)) continue;
     const status = String(t.status || '').toLowerCase();
     if (status.includes('cancel')) continue;
+    // S-1 / C-6: Delivery COD remittance must never inflate fleet cash held / Log Cash.
+    const line = String(t.serviceLine || t.service_line || '').toLowerCase();
+    if (line === 'rush_delivery') continue;
     const cash = getTripPhysicalCashCollected(t);
     if (cash < MONEY_EPS) continue;
     if (normalizePlatform(t.platform) === 'Uber') uberTripCashFallback += cash;

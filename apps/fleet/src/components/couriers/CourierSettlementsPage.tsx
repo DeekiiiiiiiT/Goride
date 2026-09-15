@@ -39,6 +39,7 @@ export function CourierSettlementsPage() {
   const totalGross = rows.reduce((s: number, r: { grossEarnings?: number }) => s + (r.grossEarnings ?? 0), 0);
   const codRows = cod?.balances ?? [];
   const totalOwed = codRows.reduce((s: number, r: { owedToRoam?: number }) => s + (r.owedToRoam ?? 0), 0);
+  const sourceLabel = cod?.source === 'remittance_v2' ? 'remittance ledger' : 'legacy COD ledger';
 
   if (!settlementEnabled) {
     return (
@@ -61,15 +62,21 @@ export function CourierSettlementsPage() {
           Courier Settlements
         </h1>
         <p className="text-sm text-slate-500 dark:text-slate-400">
-          Weekly delivery revenue and COD owed to Roam — read-only; Roam pays couriers directly.
+          Weekly delivery revenue (observe only). COD below is <strong>owed to Roam — you cannot
+          collect this</strong> here; Roam settles via Remittance Desk.
         </p>
+      </div>
+
+      <div className="rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-900/40 dark:bg-amber-950/30 px-4 py-3 text-sm text-amber-900 dark:text-amber-200">
+        Owed to Roam — you cannot collect this in Fleet. No Log Cash / Collect / Settlement Week
+        controls on delivery COD. Source: {sourceLabel}.
       </div>
 
       <div className="grid gap-4 sm:grid-cols-3">
         {[
           { label: 'Period start', value: summary?.since ?? 'Current week' },
           { label: 'Delivery gross', value: summaryLoading ? '…' : fmtMoney(totalGross) },
-          { label: 'COD owed to Roam', value: codLoading ? '…' : fmtMoney(totalOwed) },
+          { label: 'Owed to Roam (COD)', value: codLoading ? '…' : fmtMoney(totalOwed) },
         ].map((kpi) => (
           <Card key={kpi.label}>
             <CardHeader className="pb-2">
@@ -124,7 +131,7 @@ export function CourierSettlementsPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">COD balances (read-only)</CardTitle>
+          <CardTitle className="text-base">Owed to Roam (read-only)</CardTitle>
         </CardHeader>
         <CardContent className="p-0">
           {codLoading ? (
@@ -157,7 +164,7 @@ export function CourierSettlementsPage() {
                       <TableCell className="text-right">{fmtMoney(r.owedToRoam)}</TableCell>
                       <TableCell>
                         <Badge variant="outline" className="text-xs">
-                          Read-only
+                          Observe only
                         </Badge>
                       </TableCell>
                     </TableRow>

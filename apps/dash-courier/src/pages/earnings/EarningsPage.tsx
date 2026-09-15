@@ -7,11 +7,13 @@ import { usePullToRefresh } from '@/hooks/usePullToRefresh';
 import { fetchCourierEarnings } from '@/lib/courierApi';
 import { formatJmd } from '@/lib/formatMoney';
 import { toast } from '@/lib/toast';
+import { RemittanceCard } from '@/pages/remittance/RemittanceCard';
 
 type EarningsPageProps = {
   onDeliverySelect: (deliveryId: string) => void;
   onViewAllHistory?: () => void;
   onViewPromotions?: () => void;
+  onOpenRemittance?: () => void;
 };
 
 type EarningsPeriod = 'today' | 'week' | 'month';
@@ -22,7 +24,12 @@ const PERIOD_TABS: { id: EarningsPeriod; label: string }[] = [
   { id: 'month', label: 'This Month' },
 ];
 
-export function EarningsPage({ onDeliverySelect, onViewAllHistory, onViewPromotions }: EarningsPageProps) {
+export function EarningsPage({
+  onDeliverySelect,
+  onViewAllHistory,
+  onViewPromotions,
+  onOpenRemittance,
+}: EarningsPageProps) {
   const [period, setPeriod] = useState<EarningsPeriod>('today');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -119,6 +126,8 @@ export function EarningsPage({ onDeliverySelect, onViewAllHistory, onViewPromoti
                 </h2>
               </div>
             </section>
+
+            {onOpenRemittance && <RemittanceCard onOpenDetail={onOpenRemittance} />}
 
             <section className="grid grid-cols-2 gap-4">
               <div className="bg-surface rounded-xl p-4 shadow-soft flex flex-col items-center justify-center">

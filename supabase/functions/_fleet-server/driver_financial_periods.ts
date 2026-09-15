@@ -13,7 +13,7 @@ import {
   loadDisputeRefundRecords,
   loadAllByPrefix,
   collectLinkedTripIds,
-} from "./toll_controller.tsx";
+} from "./toll_period_inputs.ts";
 import { periodAnchorFor, periodEndForAnchor, minorToMajor } from "./financial_ledger.ts";
 import {
   resolveActiveEarningsBundleForDriverWeek,
@@ -1340,8 +1340,8 @@ export async function rebuildDriverFinancialPeriod(
       tips: share.tips,
       tipsPaidToDriver: share.tipsPaidToDriver,
       tipsWithheld: share.tipsWithheld,
-      quotaTarget: share.quotaTarget,
-      quotaPercent: share.quotaPercent,
+      quotaTarget: share.quotaTarget ?? undefined,
+      quotaPercent: share.quotaPercent ?? undefined,
       quotaMet: share.quotaMet,
       uberCash: cashBase.uberCash,
       uberTripCash: cashBase.uberTripCash,
@@ -1365,7 +1365,9 @@ export async function rebuildDriverFinancialPeriod(
     },
     forceRelease: forceRelease
       ? {
-          at: forceMeta.at || priorMeta.forceReleasedAt || new Date().toISOString(),
+          at: String(
+            forceMeta.at || priorMeta.forceReleasedAt || new Date().toISOString(),
+          ),
           by: (forceMeta.by || priorMeta.forceReleasedBy || null) as string | null,
           reason: (forceMeta.reason || priorMeta.forceReleaseReason || null) as string | null,
         }
@@ -2242,7 +2244,7 @@ export async function syncPeriodCashFromTransactions(
   const { data: existing, error } = await sb()
     .from("driver_financial_periods")
     .select(
-      "id, period_end, cash_collected, driver_share, fuel_deduction, fuel_fleet_share, toll_cash_spend, toll_charged_to_driver, fuel_finalized, settlement_status, payout_status, toll_status, toll_workflow_actionable, toll_unmatched_count, tips_paid_to_driver, tips_withheld, metadata, status, closed_at",
+      "id, period_end, cash_collected, driver_share, fuel_deduction, fuel_fleet_share, toll_cash_spend, toll_charged_to_driver, fuel_finalized, settlement_status, settlement_paid, payout_status, toll_status, toll_workflow_actionable, toll_unmatched_count, tips_paid_to_driver, tips_withheld, metadata, status, closed_at",
     )
     .eq("driver_id", driverId)
     .eq("period_anchor", periodAnchor)

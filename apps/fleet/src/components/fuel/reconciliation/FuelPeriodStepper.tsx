@@ -17,7 +17,11 @@ export function FuelPeriodStepper({
   icons,
 }: FuelPeriodStepperProps) {
   return (
-    <div className="relative flex w-full items-start justify-between overflow-x-auto pb-1">
+    <div
+      className="relative flex w-full items-start justify-between overflow-x-auto pb-1"
+      aria-live="polite"
+      aria-label="Fuel reconciliation steps"
+    >
       <div className="absolute left-6 right-6 top-[22px] z-0 h-0.5 bg-slate-200" />
       {states.map((step) => {
         const isActive = step.id === activeStepId;

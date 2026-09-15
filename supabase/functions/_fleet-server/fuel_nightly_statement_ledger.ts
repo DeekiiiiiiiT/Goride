@@ -52,6 +52,30 @@ function pushDrift(
   });
 }
 
+/** Pure #31: finalized snap vs fuel statement vs ledger → drift field names. */
+export function buildFuelSnapStatementLedgerDrifts(input: {
+  snapDriverMinor: number;
+  snapCompanyMinor: number;
+  stmtDriverMinor: number;
+  stmtCompanyMinor: number;
+  ledgerDriverMinor: number;
+  ledgerCompanyMinor: number;
+}): StatementEngineDrift[] {
+  const drifts: StatementEngineDrift[] = [];
+  pushDrift(drifts, "driverShare", input.snapDriverMinor, input.stmtDriverMinor);
+  pushDrift(drifts, "companyShare", input.snapCompanyMinor, input.stmtCompanyMinor);
+  pushDrift(drifts, "ledger_driverShare", input.stmtDriverMinor, input.ledgerDriverMinor);
+  pushDrift(drifts, "ledger_companyShare", input.stmtCompanyMinor, input.ledgerCompanyMinor);
+  pushDrift(drifts, "snapshot_ledger_driverShare", input.snapDriverMinor, input.ledgerDriverMinor);
+  pushDrift(
+    drifts,
+    "snapshot_ledger_companyShare",
+    input.snapCompanyMinor,
+    input.ledgerCompanyMinor,
+  );
+  return drifts;
+}
+
 /**
  * Compare locked org fuel weeks to statements + ledger; upsert finance_recon_drift (source nightly).
  */
@@ -116,13 +140,14 @@ export async function upsertLockedFuelWeekStatementLedgerDrifts(opts: {
         const evKey = `${driverId}|${weekStart}`;
         const ledger = sumFuelLedgerByDriver(opts.activeFuelEventsByPeriod.get(evKey) || []);
 
-        const drifts: StatementEngineDrift[] = [];
-        pushDrift(drifts, "driverShare", snapDriverMinor, stmtDriverMinor);
-        pushDrift(drifts, "companyShare", snapCompanyMinor, stmtCompanyMinor);
-        pushDrift(drifts, "ledger_driverShare", stmtDriverMinor, ledger.driverShareMinor);
-        pushDrift(drifts, "ledger_companyShare", stmtCompanyMinor, ledger.companyShareMinor);
-        pushDrift(drifts, "snapshot_ledger_driverShare", snapDriverMinor, ledger.driverShareMinor);
-        pushDrift(drifts, "snapshot_ledger_companyShare", snapCompanyMinor, ledger.companyShareMinor);
+        const drifts = buildFuelSnapStatementLedgerDrifts({
+          snapDriverMinor,
+          snapCompanyMinor,
+          stmtDriverMinor,
+          stmtCompanyMinor,
+          ledgerDriverMinor: ledger.driverShareMinor,
+          ledgerCompanyMinor: ledger.companyShareMinor,
+        });
 
         if (!drifts.length) continue;
 

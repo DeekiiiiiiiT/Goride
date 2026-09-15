@@ -200,17 +200,42 @@ export async function handleOrderDelivered(
       .from("orders")
       .update({ payment_status: "paid", updated_at: new Date().toISOString() })
       .eq("id", orderId);
+  }
 
-    if (courierId) {
-      const split = computeCodLedgerAmounts(row);
-      await recordCashCollection(sb, {
-        courierId,
-        orderId,
-        collectedAmountJmd: Number(row.total ?? 0),
-        platformDueJmd: split.platformDueJmd,
-        merchantDueJmd: split.merchantDueJmd,
-        split,
-      });
+  // COD cash: legacy ledger and/or Layer A′ remittance per flags (never break deliver — D-7/C-8).
+  if ((paymentMethod === "cash" || paymentMethod === "cod") && courierId) {
+    try {
+      const {
+        collectOnDelivery,
+        remittanceWriteEnabled,
+        legacyWriteEnabled,
+      } = await import("./remittance/collectOnDelivery.ts");
+
+      if (remittanceWriteEnabled()) {
+        await collectOnDelivery(sb, orderId, courierId);
+      }
+
+      // Legacy path: emergency only (DELIVERY_COD_LEGACY_WRITE=1).
+      if (
+        legacyWriteEnabled() &&
+        paymentStatus === "pending_collection"
+      ) {
+        try {
+          const split = computeCodLedgerAmounts(row);
+          await recordCashCollection(sb, {
+            courierId,
+            orderId,
+            collectedAmountJmd: Number(row.total ?? 0),
+            platformDueJmd: split.platformDueJmd,
+            merchantDueJmd: split.merchantDueJmd,
+            split,
+          });
+        } catch (legacyErr) {
+          console.warn("[COD] legacy cash ledger failed:", legacyErr);
+        }
+      }
+    } catch (e) {
+      console.error("[COD] remittance/ledger collect parked/failed:", e);
     }
   }
 }

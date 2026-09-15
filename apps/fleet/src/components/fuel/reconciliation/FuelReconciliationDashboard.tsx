@@ -212,7 +212,7 @@ export function FuelReconciliationDashboard({
     return (
       <>
         <FuelPeriodWizard
-          key={`${period.id}-${wizardSession}-${view.initialStepId || ''}`}
+          key={`${period.id}-${wizardSession}`}
           period={period}
           vehicles={vehicles}
           trips={trips}

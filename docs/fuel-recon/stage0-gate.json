@@ -1,19 +1,54 @@
 {
   "stage": 0,
   "capturedAt": "2026-09-15",
-  "verdict": "C-2 live in production (1 statement↔ledger delta on 2026-08-24). No auto_close audit rows. Rebuild has published closed statements. Proceed Stage 1–6 as implemented in this branch.",
+  "healedAt": "2026-09-15",
+  "enforceAt": null,
+  "verdict": "Stage 0 healed ($0). Rev 5 N-14/N-15 closed in tree. Prod FUEL_SERVER_ENGINE held at off until make-server-37f42386 deploy succeeds (413 size); then set enforce.",
   "fixtures": [
     "packages/fuel-core/fixtures/fuel-week-char/blast-radius-2026-09-15.json",
     "packages/fuel-core/fixtures/fuel-week-char/dual-engine-goldens.json"
   ],
-  "playbookBeforeEnforce": "Reopen/reseal week 2026-08-24 for driver 73e5b1dc-01b4-45ee-a34a-25a3256b9841 before FUEL_SERVER_ENGINE=enforce",
+  "playbookBeforeEnforce": "DONE in code — reopen/reseal + N-15. Ops: redeploy make-server then secrets set enforce.",
+  "playbookStatus": {
+    "reopenReseal20260824": "done",
+    "nightlyDriftProof": "implemented_rev3_phase1",
+    "fuelSealErrorLanding": "live",
+    "n15LoaderAuthority": "done",
+    "lastVerifiedAt": "2026-09-15",
+    "measuredDelta20260824": {
+      "statementDriverShareMinor": 578498,
+      "ledgerFuelDeductionMinor": 578498,
+      "statementCompanyShareMinor": 2921162,
+      "ledgerFuelFleetShareMinor": 2921162,
+      "statementVersion": 14,
+      "status": "closed",
+      "deltaDriverMinor": 0,
+      "deltaCompanyMinor": 0,
+      "note": "Healed via scripts/rev4-stage0-heal-2026-08-24.ts — snap patched to consumption_strip amounts; reverse g4; post g5; force seal v14."
+    }
+  },
+  "opsChecklistBeforeShadow": [
+    "DONE: Surgical reopen/reseal week 2026-08-24 driver 73e5b1dc… (audit action reopen_reseal_stage0)",
+    "DONE: fuel week_statements closed v14 + active ledger fuel_deduction/fleet_share match statement",
+    "DONE: Verified statement↔ledger $0; prior close_preview fuel drifts resolved for that driver/week",
+    "DONE: N-15 tripCategoryAgg + refuse untagged-entry authority",
+    "Landing card: if fuelSealError present, use Retry seal after fix — do not Close Week until statement exists"
+  ],
   "fuelServerEngineRollout": {
     "currentProd": "off",
-    "next": "shadow",
-    "then": "enforce",
-    "shadowMinWeeks": 2,
+    "next": "enforce",
+    "then": null,
+    "shadowMinWeeks": 0,
     "doc": "docs/fuel-recon/server-engine-rollout.md",
     "prerequisiteWeek": "2026-08-24",
-    "prerequisiteDriverId": "73e5b1dc-01b4-45ee-a34a-25a3256b9841"
+    "prerequisiteDriverId": "73e5b1dc-01b4-45ee-a34a-25a3256b9841",
+    "waitConditions": [
+      "playbookStatus.reopenReseal20260824 = done",
+      "N-15 production-shaped enforce fixtures green",
+      "N-14 deno check green",
+      "make-server-37f42386 deploy includes N-15 (blocked by 5MB 413 as of 2026-09-15)"
+    ],
+    "enforceReadyInTree": true,
+    "note": "Do not set enforce until N-15 code is live on make-server — old loader + enforce refuses every close. Break-glass X-Fuel-Force-Client-Money + reason ≥8"
   }
 }

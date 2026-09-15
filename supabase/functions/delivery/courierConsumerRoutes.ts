@@ -7,7 +7,6 @@ import { dualWriteDashPayment } from "../_shared/unifiedLedger/dualWriteDash.ts"
 import { getCourierRouteEstimate } from "../_shared/directionsRoute.ts";
 import { computeCourierCancelCompensation } from "../_shared/courierCancelCompensation.ts";
 import { courierDeliveryEarnings, courierTipEarnings } from "../_shared/dashMoneySplit.ts";
-import { isCourierCashPaused } from "./courierCashLedger.ts";
 import { resolvePeakPayBonus } from "../_shared/courierPeakPay.ts";
 import { ORDER_CUSTOMER_EMBED_MINIMAL } from "./orderSelectEmbeds.ts";
 import { courierAssignmentFields } from "./courierFleetAttribution.ts";
@@ -42,7 +41,18 @@ async function requireCourierUser(
 async function requireActiveCourier(
   serviceSb: Sb,
   userId: string,
-): Promise<{ ok: true } | { ok: false; status: number; error: string }> {
+  opts: { skipCashGate?: boolean } = {},
+): Promise<
+  | { ok: true }
+  | {
+    ok: false;
+    status: number;
+    error: string;
+    code?: string;
+    balanceMinor?: number;
+    thresholdMinor?: number;
+  }
+> {
   const { data: profile } = await serviceSb
     .from("courier_profiles")
     .select("status")
@@ -51,6 +61,11 @@ async function requireActiveCourier(
   if (!profile) return { ok: false, status: 403, error: "Courier profile required" };
   if (profile.status !== "active") {
     return { ok: false, status: 403, error: `Courier status is ${profile.status}` };
+  }
+  if (opts.skipCashGate !== true) {
+    const { assertCourierNotPaused } = await import("./remittance/pauseGate.ts");
+    const pause = await assertCourierNotPaused(serviceSb, userId);
+    if (!pause.ok) return pause;
   }
   return { ok: true };
 }
@@ -492,7 +507,17 @@ export function registerCourierConsumerRoutes(app: Hono, deps: Deps) {
     const serviceSb = getServiceSupabase();
     if (isOnline) {
       const gate = await requireActiveCourier(serviceSb, auth.userId);
-      if (!gate.ok) return c.json({ error: gate.error }, gate.status);
+      if (!gate.ok) {
+        return c.json(
+          {
+            error: gate.error,
+            code: gate.code,
+            balanceMinor: gate.balanceMinor,
+            thresholdMinor: gate.thresholdMinor,
+          },
+          gate.status,
+        );
+      }
     }
 
     const { upsertCourierPresence } = await import("./courierPresence.ts");
@@ -592,13 +617,16 @@ export function registerCourierConsumerRoutes(app: Hono, deps: Deps) {
     const serviceSb = getServiceSupabase();
 
     const gate = await requireActiveCourier(serviceSb, auth.userId);
-    if (!gate.ok) return c.json({ error: gate.error }, gate.status);
-
-    if (await isCourierCashPaused(serviceSb, auth.userId)) {
-      return c.json({
-        error: "Your account is paused — settle your COD cash balance before accepting new deliveries.",
-        code: "cod_cash_paused",
-      }, 403);
+    if (!gate.ok) {
+      return c.json(
+        {
+          error: gate.error,
+          code: gate.code,
+          balanceMinor: gate.balanceMinor,
+          thresholdMinor: gate.thresholdMinor,
+        },
+        gate.status,
+      );
     }
 
     const { data: offer } = await serviceSb
@@ -1499,6 +1527,40 @@ export function registerCourierConsumerRoutes(app: Hono, deps: Deps) {
     }
 
     return c.json({ ok: true, reason: body.reasonId ?? null });
+  });
+
+  // Layer A′ remittance (courier read)
+  app.get("/courier/remittance", async (c) => {
+    const auth = await requireCourierUser(c.req.header("Authorization"), getSupabase);
+    if (auth instanceof Response) return auth;
+    const { getRemittanceAccount } = await import("./remittance/remittanceLedger.ts");
+    const { fromMinor } = await import("./remittance/money.ts");
+    const acct = await getRemittanceAccount(getServiceSupabase(), auth.userId);
+    return c.json({
+      balanceMinor: acct?.balanceMinor ?? 0,
+      balanceJmd: fromMinor(acct?.balanceMinor ?? 0),
+      thresholdMinor: acct?.thresholdMinor ?? 1000000,
+      thresholdJmd: fromMinor(acct?.thresholdMinor ?? 1000000),
+      isPaused: Boolean(acct?.isPaused),
+      pausedSince: acct?.pausedSince ?? null,
+      label: "Cash you're holding for Roam",
+    });
+  });
+
+  app.get("/courier/remittance/events", async (c) => {
+    const auth = await requireCourierUser(c.req.header("Authorization"), getSupabase);
+    if (auth instanceof Response) return auth;
+    const db = getServiceSupabase().schema("delivery");
+    const { data, error } = await db
+      .from("courier_remittance_events")
+      .select(
+        "id, event_type, amount_minor, balance_after_minor, order_id, bag_total_minor, platform_due_minor, merchant_due_minor, courier_retained_minor, created_at, notes",
+      )
+      .eq("courier_id", auth.userId)
+      .order("created_at", { ascending: false })
+      .limit(50);
+    if (error) return c.json({ error: error.message }, 500);
+    return c.json({ events: data ?? [] });
   });
 }
 

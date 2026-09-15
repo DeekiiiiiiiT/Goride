@@ -2142,6 +2142,123 @@ export function settleCourierCash(
   });
 }
 
+export function fetchRemittanceAccounts(accessToken: string) {
+  return deliveryFetch<{ accounts: Array<Record<string, unknown>> }>(
+    accessToken,
+    '/admin/remittance/accounts',
+  );
+}
+
+export function fetchRemittanceExceptions(accessToken: string) {
+  return deliveryFetch<{ exceptions: Array<Record<string, unknown>> }>(
+    accessToken,
+    '/admin/remittance/exceptions',
+  );
+}
+
+export function fetchRemittanceReconciliation(accessToken: string) {
+  return deliveryFetch<{
+    drift: unknown[];
+    missingCollections: unknown[];
+    trialBreaks: unknown[];
+    legacyDrift?: unknown[];
+    stalePending?: unknown[];
+  }>(accessToken, '/admin/remittance/reconciliation');
+}
+
+export function retryRemittanceException(accessToken: string, exceptionId: string) {
+  return deliveryFetch<{ ok: boolean; error?: string; reason?: string }>(
+    accessToken,
+    `/admin/remittance/exceptions/${exceptionId}/retry`,
+    { method: 'POST', body: '{}' },
+  );
+}
+
+export function resolveRemittanceException(
+  accessToken: string,
+  exceptionId: string,
+  note?: string,
+) {
+  return deliveryFetch<{ ok: boolean; error?: string }>(
+    accessToken,
+    `/admin/remittance/exceptions/${exceptionId}/resolve`,
+    { method: 'POST', body: JSON.stringify({ note }) },
+  );
+}
+
+export function updateRemittancePauseThreshold(
+  accessToken: string,
+  courierId: string,
+  pauseThresholdMinor: number,
+) {
+  return deliveryFetch<{ ok: boolean; account?: Record<string, unknown> }>(
+    accessToken,
+    `/admin/remittance/accounts/${courierId}/threshold`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify({ pauseThresholdMinor }),
+    },
+  );
+}
+
+export async function settleRemittance(
+  accessToken: string,
+  payload: {
+    courierId: string;
+    amountMinor: number;
+    method: string;
+    expectedBalanceMinor: number;
+    idempotencyKey: string;
+    notes?: string;
+  },
+): Promise<{
+  ok: boolean;
+  status?: number;
+  error?: string;
+  reference?: string;
+  settlementId?: string;
+}> {
+  try {
+    const data = await deliveryFetch<Record<string, unknown>>(
+      accessToken,
+      '/admin/remittance/settle',
+      { method: 'POST', body: JSON.stringify(payload) },
+    );
+    if (data && data.ok === false) {
+      return {
+        ok: false,
+        status: Number(data.status ?? 400),
+        error: String(data.error ?? 'settle failed'),
+      };
+    }
+    return { ok: true, ...data } as {
+      ok: boolean;
+      reference?: string;
+      settlementId?: string;
+    };
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    const stale = /balance_changed|409|stale/i.test(msg);
+    return { ok: false, status: stale ? 409 : 500, error: msg };
+  }
+}
+
+export async function reverseRemittanceSettlement(accessToken: string, settlementId: string) {
+  try {
+    const data = await deliveryFetch<Record<string, unknown>>(
+      accessToken,
+      '/admin/remittance/reverse',
+      { method: 'POST', body: JSON.stringify({ settlementId }) },
+    );
+    if (data && data.ok === false) {
+      return { ok: false, error: String(data.error ?? 'reverse failed') };
+    }
+    return { ok: true, ...data } as { ok: boolean; error?: string };
+  } catch (e: unknown) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
 export function grantRushPass(
   accessToken: string,
   payload: { customerId: string; planSlug?: string; days?: number },

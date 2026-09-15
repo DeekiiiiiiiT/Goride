@@ -17,6 +17,7 @@ import {
   type FuelCloseAmountOverride,
   type FuelCloseAmounts,
 } from "./fuel_close_amounts.ts";
+import { unionFuelSealDriverIds } from "./fuel_week_seal_driver_union.ts";
 
 export type { FuelCloseAmountOverride, FuelCloseAmounts } from "./fuel_close_amounts.ts";
 export {
@@ -35,6 +36,14 @@ const round2 = (n: number): number => Math.round((Number(n) || 0) * 100) / 100;
 
 function finalizedReportKey(weekKey: string, driverId: string): string {
   return `finalized_report:${weekKey}:${driverId}`;
+}
+
+/** P-4: callers that probe many drivers share one rebuild map per week. */
+export async function loadFuelCloseRebuildMap(
+  organizationId: string,
+  weekKey: string,
+): Promise<Map<string, FuelCloseAmounts>> {
+  return amountsFromRebuild(organizationId, weekKey);
 }
 
 async function amountsFromRebuild(
@@ -197,6 +206,14 @@ export async function sealFuelWeek(opts: {
     .eq("period_anchor", weekKey);
   if (error) throw new Error(error.message);
 
+  const periodRows = periods ?? [];
+  const periodByDriver = new Map<string, (typeof periodRows)[number]>();
+  for (const p of periodRows) {
+    const driverId = String(p.driver_id || "");
+    if (driverId) periodByDriver.set(driverId, p);
+  }
+
+  // P-4: one rebuild map per sealFuelWeek — resolveFuelCloseAmounts reads fromRebuild per driver.
   let rebuilt = new Map<string, FuelCloseAmounts>();
   try {
     rebuilt = await amountsFromRebuild(organizationId, weekKey);
@@ -205,9 +222,13 @@ export async function sealFuelWeek(opts: {
   }
 
   let published = 0;
-  for (const p of periods ?? []) {
-    const driverId = String(p.driver_id || "");
-    if (!driverId) continue;
+  for (const driverId of unionFuelSealDriverIds(periodRows, opts.amountsByDriver)) {
+    const p = periodByDriver.get(driverId) ?? {
+      driver_id: driverId,
+      fuel_deduction: null,
+      fuel_fleet_share: null,
+      fuel_finalized: false,
+    };
 
     const amounts = await resolveFuelCloseAmounts({
       organizationId,

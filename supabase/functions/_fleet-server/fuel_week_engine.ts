@@ -6,7 +6,6 @@
  */
 import * as kv from "./kv_store.tsx";
 import { filterRecordsByOrganizationId } from "./org_scope.ts";
-import { closeOpenCyclesForWeek } from "./fuel_cycle_stamp.ts";
 import {
   assembleWeekSnapshotsFromRawEntries,
   type BuiltWeekSnapshot,
@@ -18,6 +17,12 @@ import {
   type BuildSnapshotsResult,
   type BuiltSnapshot,
 } from "./fuel_period_build_snapshots.ts";
+
+// N-9: do not statically import fuel_cycle_stamp (pulls fuel_logic KV builder debt into CI deno check).
+async function closeOpenCyclesForWeekSafe(vehicleId: string, weekEnd: string): Promise<void> {
+  const { closeOpenCyclesForWeek } = await import("./fuel_cycle_stamp.ts");
+  await closeOpenCyclesForWeek(vehicleId, weekEnd);
+}
 
 const EPS = 0.009;
 
@@ -257,7 +262,7 @@ export async function buildFuelPeriodSnapshotsFull(input: {
     ].filter(Boolean) as string[];
     for (const vid of vehicleIds) {
       try {
-        await closeOpenCyclesForWeek(String(vid), weekEnd);
+        await closeOpenCyclesForWeekSafe(String(vid), weekEnd);
       } catch {
         /* non-fatal — settle still proceeds */
       }

@@ -7,6 +7,17 @@
 
 ---
 
+## Table of contents (two audiences)
+
+| Who | Read |
+|-----|------|
+| Everyone (PM, ops, new eng) | **Parts 1–10** — layers, wallets, Fleet Log Cash, Delivery contrast, examples, glossary |
+| Implementers (Delivery remittance + Log Cash) | **Parts 11–20** — code audit, Layer A′ contract, data model, phases, tests, rollout |
+
+**Phase 2 note:** Historical backfill from `courier_cash_balances` / `courier_cash_events` into `courier_remittance_*` is a required Phase 2 deliverable (opening balances and/or event replay with audit notes) — not optional polish.
+
+---
+
 ## How to use this document
 
 Read top to bottom the first time. You do not need prior knowledge of Roam’s codebase.
@@ -270,6 +281,21 @@ Example from product docs: a driver can show Fleet cash for manual trips while R
 | `manual_start_trip_enabled` | On for fleet | Temporary Start Trip until passenger app is universal |
 | `roam_platform_fee_bps` | 0 | Layer C fee |
 
+### Delivery remittance (Layer A′) — edge env, not org flags
+
+These are **environment variables on the delivery edge function**, not per-org feature flags,
+and both are unset in normal operation. Remittance is live and is the sole COD authority.
+
+| Env var | Normal | What it does |
+|---------|--------|--------------|
+| `DELIVERY_REMITTANCE_OFF=1` | unset | Kill-switch — stops remittance collection writes |
+| `DELIVERY_COD_LEGACY_WRITE=1` | unset | Emergency — also writes legacy `courier_cash_*` |
+
+⚠️ **Set them together or not at all.** `DELIVERY_REMITTANCE_OFF=1` on its own stops *all* COD
+collection, because legacy is off by default — cash deliveries complete and nothing is
+recorded. `v_remittance_missing_collections` will catch it, but only after the fact. If you
+kill remittance, set `DELIVERY_COD_LEGACY_WRITE=1` in the same change.
+
 Never flip production flags without reading the QA matrix in `WALLET_ARCHITECTURE_QA.md`.
 
 ---
@@ -304,6 +330,22 @@ Never flip production flags without reading the QA matrix in `WALLET_ARCHITECTUR
 | Weekly cash base | `packages/finance-core/src/periodShareCash.ts` |
 | Tx builders | `apps/fleet/src/utils/driverSettlementTx.ts` |
 
+### Layer A′ (delivery remittance) — live since the 2026-09-15 cutover
+
+| Concern | Location |
+|---------|----------|
+| Collect on delivery | `supabase/functions/delivery/remittance/collectOnDelivery.ts` |
+| RPC wrapper (only caller of the ledger fn) | `.../remittance/remittanceLedger.ts` |
+| Settle + reverse | `.../remittance/settleRemittance.ts` |
+| Pause gate (folded into `requireActiveCourier`) | `.../remittance/pauseGate.ts` |
+| Exception park / retry / resolve | `.../remittance/exceptions.ts` |
+| Minor-unit boundary + idempotency keys | `.../remittance/money.ts` |
+| Courier + admin HTTP routes | `.../delivery/courierConsumerRoutes.ts`, `.../delivery/admin/pricingRoutes.ts` |
+| Courier UI | `apps/dash-courier/src/pages/remittance/` |
+| Admin desk | `packages/dash-admin/src/pages/remittance/RemittanceDeskPage.tsx` |
+| Fleet observe-only | `supabase/functions/_fleet-server/rush_settlement_routes.ts` |
+| Separation guard (CI) | `scripts/check-remittance-separation.mjs` |
+
 ### Tables / stores (mental model)
 
 | Store | Layer | Role |
@@ -311,13 +353,24 @@ Never flip production flags without reading the QA matrix in `WALLET_ARCHITECTUR
 | `rides.payment_accounts` / journal entries | A | Wallet balances + double-entry lines |
 | `rides.ride_requests` cash fields / snapshot | A | Trip settlement facts |
 | `rides.ledger_lines` | A→reporting | Trip cash/earnings lines |
-| Fleet trips / `fleet_trips` | B input | Synced / imported trips including `cashCollected` |
+| `delivery.courier_remittance_accounts` | **A′** | COD owing to Roam (minor units); `is_paused` is generated |
+| `delivery.courier_remittance_events` | **A′** | Append-only; one collection per order; bag / platform / merchant / retained |
+| `delivery.courier_remittance_settlements` | **A′** | Settle receipts — `pending` → `posted` / `void` / `reversed` |
+| `delivery.courier_remittance_exceptions` | **A′** | Collections that could not post; must be drained to zero |
+| `delivery.courier_cash_*` | A′ (retired) | Legacy COD — audit-only, not written |
+| Fleet trips / `fleet_trips` | B input | Synced / imported trips. **Delivery trips always carry `cashCollected: 0`** — COD is Roam's receivable, never fleet-held cash |
 | `ledger.driver_financial_periods` | B | Weekly cash_collected / returned / still held / settlement |
 | `ledger.settlement_movements` | B | Collect / pay / write-off movements |
 
 ---
 
 ## Part 5 — Delivery COD (different product)
+
+> **Production authority (2026-09-15 cutover):** Layer A′ remittance
+> (`delivery.courier_remittance_*` + `apply_remittance_event`) is the **only** live COD
+> ledger. Legacy `courier_cash_*` is read-only audit (emergency write only via
+> `DELIVERY_COD_LEGACY_WRITE=1`). Kill remittance writes with `DELIVERY_REMITTANCE_OFF=1`.
+> Admin settle: Remittance Desk. Fleet: observe-only. Do not use Driver Settlements Collect for COD.
 
 ### 5.1 Do not copy rideshare blindly
 
@@ -326,7 +379,7 @@ Delivery cash-on-delivery (**COD**) looks similar (“courier holds cash”) but
 | | Rideshare cash | Delivery COD |
 |--|----------------|--------------|
 | Who the cash is for | Fare economics between rider, driver, Roam; then fleet remittance | Customer pays for **order** (food/goods + fees); courier remits **platform + merchant** share to Roam |
-| Wallets | Cash / Digital / Debt + rider wallet | **One** remittance balance (`courier_cash_balances`) |
+| Wallets | Cash / Digital / Debt + rider wallet | **One** remittance balance (`courier_remittance_accounts`; legacy `courier_cash_balances` until cutover) |
 | Collection UX | Explicit cash settlement screen | Often implicit when order marked **delivered** |
 | Fleet Collect / Log Cash | Correct for rideshare Layer B | **Wrong** place to clear Roam COD |
 | Weekly settlement week | Core to Fleet Collect | COD is usually a **running balance**; settle is remittance to Roam |
@@ -341,24 +394,31 @@ ledgerAmount = platformDue + merchantDue
 
 The courier’s own fee/tip retained (`courierRetained`) generally **does not** increase the remittance balance — that is earning kept in pocket, not “owed to Roam.”
 
-Tables:
+Tables (target / v2):
 
-- `delivery.courier_cash_balances` — balance, pause threshold, pause flag  
-- `delivery.courier_cash_events` — `collected` / `settled` / `adjustment`  
+- `delivery.courier_remittance_accounts` — balance_minor, generated `is_paused`, threshold  
+- `delivery.courier_remittance_events` — append-only collected / settled / adjustment / reversal  
+- `delivery.courier_remittance_settlements` — settle receipts  
+- `delivery.courier_remittance_exceptions` — parked failures (never 500 deliver)
+
+Legacy (until Phase 7 rename to `*_legacy`):
+
+- `delivery.courier_cash_balances` / `courier_cash_events`  
 
 Code:
 
-- `recordCashCollection` — when cash order is delivered  
-- `recordCashSettlement` — when remittance is recorded (historically Dash admin)  
+- `collectOnDelivery` / `postRemittanceCollected` — cash order delivered  
+- `settleRemittance` — Remittance Desk (admin)  
 
-Pause: if remittance balance exceeds threshold (default often J$10,000), courier can be paused from new offers until settled.
+Pause: if remittance balance ≥ threshold (default J$10,000 = 1_000_000 minor), courier paused from new offers until settled (`requireActiveCourier` + `pauseGate`).
 
 ### 5.3 Fleet Courier Settlements today
 
 `CourierSettlementsPage` shows:
 
 - Delivery earnings summary (from rush delivery trips)  
-- COD balances **read-only**  
+- COD balances **read-only** (“Owed to Roam — you cannot collect this”)  
+- Always reads `courier_remittance_accounts` (no READ_V2 gate)
 
 Fleet is **not** supposed to Log Cash against Roam’s COD receivable. Copy in product: Roam owns remittance; fleet can observe exposure.
 
@@ -485,6 +545,9 @@ If any answer is unclear, stop and ask. Cash bugs are expensive and hard to reve
 |------|--------|
 | 2026-09-15 | Initial onboarding guide from architecture analysis (rideshare Layer A/B, three wallets, Fleet Log Cash, Delivery COD contrast, build recommendations) |
 | 2026-09-15 | Added Parts 11–19: code-level audit of the live COD implementation (24 findings), the Layer A′ separation contract, target data model, server/UI architecture, 7-phase build plan, test matrix, rollout + rollback |
+| 2026-09-15 | Implementation landed. Added Parts 21–22: verification of what shipped (19 of 24 original findings closed) and 13 remaining items (R-1…R-13), 2 of them Critical |
+| 2026-09-15 | Remediation round 2 verified (R-items + N-items). Production remittance cutover (no dual-write soak): remittance sole writer; Part 18/23 rewritten |
+| 2026-09-15 | Round 3 verified: all R- and N-items closed, CI green, cutover consistent (no v2 flags remain). Added Layer A′ to Parts 3–4 for onboarding readers, marked Part 16 historical, added Part 24 (V-1…V-3 residual) |
 
 **Owners:** Platform / Fleet finance engineering + product  
 **Source analysis:** Cross-repo review of rides cashSettlement, fleet settlements, delivery courier cash ledger, and existing money docs
@@ -1221,6 +1284,11 @@ No Collect button. No Log Cash. No Settlement Week. Ever. (S-5)
 
 ## Part 16 — Build phases
 
+> **Historical.** This 7-phase plan was written before the build and assumed a 14-day
+> dual-write soak. That soak was dropped at the 2026-09-15 cutover (no real delivery users
+> yet), so Phases 2 and 7 no longer describe reality. Kept for the reasoning behind each gate.
+> **For what is actually running, read Part 23.**
+
 Each phase ends at a gate. Do not start the next phase until the gate passes.
 
 ### Phase 0 — Guardrails (no behaviour change)
@@ -1251,10 +1319,10 @@ Each phase ends at a gate. Do not start the next phase until the gate passes.
 1. `collectOnDelivery.ts` + exceptions.
 2. Trigger on `payment_method === 'cash'` + delivered, not `pending_collection`.
 3. Wrap both call sites; delivery can never 500 on a COD failure.
-4. **Dual-write** behind `delivery_remittance_dual_write`: write both old and new tables, read old.
-5. Drift monitor comparing old balance to new balance per courier.
+4. ~~Dual-write soak~~ — **skipped** (no real delivery users). Remittance-only writes from day one of cutover.
+5. Drift / missing / exceptions / stale-pending views for remittance invariants (legacy drift is audit-only).
 
-**Gate:** 14 days of dual-write with zero drift between `courier_cash_balances.balance_jmd` and `courier_remittance_accounts.balance_minor / 100`. Exceptions queue empty or fully triaged.
+**Gate (historical):** dual-write soak was the original plan. **Production cutover (2026-09-15):** remittance is sole writer; see Part 18 / Part 23.
 
 ### Phase 3 — Settlement + pause
 
@@ -1288,16 +1356,16 @@ Each phase ends at a gate. Do not start the next phase until the gate passes.
 
 **Gate:** Fleet page shows identical numbers before and after. Still zero write paths.
 
-### Phase 7 — Cutover and retirement
+### Phase 7 — Cutover and retirement (done without soak)
 
-1. Flip `delivery_remittance_read_v2` — reads come from the new ledger.
-2. Soak 14 days with both ledgers written.
-3. Stop dual-write.
-4. Wire the four checks into `finance-recon` with alerting.
-5. Rename `courier_cash_balances` / `courier_cash_events` to `*_legacy`, revoke writes, keep for audit. **Do not drop.**
-6. Update Part 5 of this document to describe the built system.
+1. Remittance reads always on (fleet + desk) — no `READ_V2` gate.
+2. Remittance writes always on; legacy writes off unless `DELIVERY_COD_LEGACY_WRITE=1`.
+3. Remittance settle + pause always on.
+4. Wire remittance checks into `finance-recon` (drift, missing, exceptions, **stale pending**).
+5. Optional later: rename `courier_cash_*` → `*_legacy`, revoke writes, keep for audit. **Do not drop.**
+6. Part 5 / 18 / 23 describe production authority.
 
-**Gate:** 14 days, zero drift, zero unresolved exceptions, reconciliation green daily.
+**Gate:** remittance invariants green (`v_remittance_drift`, missing collections, exceptions, `v_remittance_stale_pending`). Legacy drift emptiness is **not** a cutover blocker.
 
 ---
 
@@ -1368,42 +1436,54 @@ Example D from Part 7, executed against a real stack:
 
 ## Part 18 — Rollout, flags, rollback
 
-### 18.1 Flags
+### 18.1 Production flags (cutover complete)
 
-| Flag | Default | Controls |
-|------|---------|----------|
-| `delivery_remittance_v2` | off | Master switch |
-| `delivery_remittance_dual_write` | off | Write both ledgers (Phase 2) |
-| `delivery_remittance_read_v2` | off | Read from new ledger (Phase 7) |
-| `delivery_remittance_courier_ui` | off | Courier surfaces |
-| `delivery_remittance_pause_v2` | off | New gate in `requireActiveCourier` |
+| Env | Default | Controls |
+|-----|---------|----------|
+| *(none)* | remittance on | Cash deliver always writes remittance |
+| `DELIVERY_REMITTANCE_OFF=1` | unset | Emergency kill-switch — stop remittance writes |
+| `DELIVERY_COD_LEGACY_WRITE=1` | unset | Emergency only — also write legacy `courier_cash_*` |
+| *(deprecated)* `DELIVERY_REMITTANCE_*_V2` / `DUAL_WRITE` | ignored | Reads, settle, and pause always use remittance |
 
 `RUSH_TRIP_PROJECTION` and `RUSH_SETTLEMENT` stay **off** until Phase 0's gate passes. Turning them on before that re-opens C-6.
 
 ### 18.2 Rollback
 
-| Phase | Rollback | Data risk |
-|-------|----------|-----------|
-| 0 | Revert commit | None — provable no-op |
-| 1 | Tables unused | None |
-| 2 | Flag off → old path only | None; new events remain as a shadow |
-| 3 | Flag off → old settle | Settlements posted to the new ledger need replay |
-| 4–5 | Flag off → UI hidden | None |
-| 6 | Point read view back | None |
-| 7 | Flag off → read old | **Requires dual-write still on.** Do not stop dual-write until the soak passes |
+| Path | Rollback | Data risk |
+|------|----------|-----------|
+| Remittance write bugs | `DELIVERY_REMITTANCE_OFF=1` | New cash delivers stop posting; park/triage required |
+| Need legacy shadow again | `DELIVERY_COD_LEGACY_WRITE=1` | Dual write resumes (emergency only) |
+| Settle / desk | Code revert | Posted settlements stay in remittance ledger |
+| Fleet COD read | Code revert to legacy tables | Observe-only; no write risk |
 
-The one-way door is step 3 of Phase 7. Everything before it is reversible with a flag.
+There is **no** dual-write soak gate. Production authority is remittance; legacy is audit.
 
-### 18.3 Ops metrics (alert on all four)
+### 18.3 Ops metrics (alert on all)
 
-- `v_remittance_drift` row count — must be 0
-- `v_remittance_missing_collections` row count — must be 0
+| Metric | Source | Alert when |
+|--------|--------|------------|
+| Ledger drift | `v_remittance_drift` | any row |
+| Missing collections | `v_remittance_missing_collections` | any row |
+| Unresolved exceptions | `courier_remittance_exceptions` where `resolved_at` is null | rising / stuck |
+| Stale pending settle | `v_remittance_stale_pending` | any row older than 15m |
+| Fleet rush cash sum | S-1 / period cash base | ≠ 0 |
+
+**R-10 restated:** do **not** require `v_remittance_legacy_drift` empty. Once legacy writes stop, unexplained legacy drift is irrelevant to cutover. Keep [`scripts/remittance_legacy_drift_explained.sql`](../scripts/remittance_legacy_drift_explained.sql) for historical/audit only.
+
+### 18.4 Daily remittance health
+
+Watch:
+
+- `v_remittance_drift` — must be 0
+- `v_remittance_missing_collections` — must be 0 (or exceptions triaged)
 - unresolved exceptions — must be 0
-- `SELECT sum(cash_collected) FROM fleet_trips WHERE service_line='rush_delivery'` — must be 0
+- `v_remittance_stale_pending` — must be 0
+- fleet rush delivery cash base contribution — must be 0
 
 ---
 
 ## Part 19 — Open product decisions
+
 
 These change the build and are not an engineer's call. Decide before Phase 3.
 
@@ -1411,7 +1491,7 @@ These change the build and are not an engineer's call. Decide before Phase 3.
 Recommendation: **no** in v1 (D-8). Add later as an explicit `payout_offset` settlement method that writes one event in each ledger sharing a correlation id, never as an implicit balance transfer.
 
 **Q2 — Is the pause threshold global, per-market, or per-courier?**  
-Schema supports per-courier (`pause_threshold_minor` on the account). Needs a product default and an admin control. Currently hardcoded J$10,000 in two places, which will drift.
+**Decided (harden):** per-courier column `pause_threshold_minor`, default J$10,000; editable on Remittance Desk. Remaining open: market-level defaults later if needed.
 
 **Q3 — What happens to a courier who stops working owing money?**  
 There is no write-off procedure, no ageing, and no collections policy. `ON DELETE RESTRICT` means they cannot be deleted while owing. Needs a decision, and the `write_off` event type is reserved for it.
@@ -1432,4 +1512,465 @@ This design says no — Roam owns the receivable and the fleet observes. If prod
 - Couriers have **no COD interface whatsoever**, and get a hard 403 with no way to resolve it (M-1).
 - The separation from Driver Settlements is achieved by making the coupling impossible, not by discipline: `cashCollected: 0` on delivery projection, a service-line filter in the weekly cash base, no write grants for fleet roles, a vocabulary lint, and a CI check that `fleet-financials/**` has an empty diff.
 - Only **Phase 0** touches shared finance code, and it is a provable no-op while the Rush flags are off. Phases 1–7 are new files.
-- Two design choices remove whole bug classes rather than fixing instances: `is_paused` as a **generated column** (partial settle can no longer clear the pause), and every validation running **before** the first write (a refused operation writes nothing).  
+- Two design choices remove whole bug classes rather than fixing instances: `is_paused` as a **generated column** (partial settle can no longer clear the pause), and every validation running **before** the first write (a refused operation writes nothing).
+
+---
+---
+
+# Part 21 — Implementation status (verified 2026-09-15)
+
+The build landed. This part records what was verified against the working tree, so the next
+engineer does not have to re-derive it. Part 22 lists what is still open.
+
+## 21.1 What shipped
+
+| Phase | Artefact | State |
+|-------|----------|-------|
+| 1 | [`20260915120000_courier_remittance_ledger.sql`](../supabase/migrations/20260915120000_courier_remittance_ledger.sql) | 4 tables, generated `is_paused`, all CHECKs, append-only trigger, `apply_remittance_event`, 3 views, grants |
+| 2 | [`20260915130000_courier_remittance_backfill_and_drift.sql`](../supabase/migrations/20260915130000_courier_remittance_backfill_and_drift.sql) | Opening balances from legacy + `v_remittance_legacy_drift` |
+| 1–3 | [`delivery/remittance/`](../supabase/functions/delivery/remittance/) | `remittanceLedger`, `collectOnDelivery`, `settleRemittance`, `pauseGate`, `exceptions`, `money`, 3 test files |
+| 4 | [`apps/dash-courier/src/pages/remittance/`](../apps/dash-courier/src/pages/remittance/) | Card, detail page, paused screen — all routed |
+| 5 | [`RemittanceDeskPage.tsx`](../packages/dash-admin/src/pages/remittance/RemittanceDeskPage.tsx) | Routed at `/remittance`, in nav |
+| 6 | [`rush_settlement_routes.ts`](../supabase/functions/_fleet-server/rush_settlement_routes.ts), [`CourierSettlementsPage.tsx`](../apps/fleet/src/components/couriers/CourierSettlementsPage.tsx) | Always remittance accounts; "you cannot collect this" copy; still zero write paths |
+| 7 | [`finance-recon/index.ts`](../supabase/functions/finance-recon/index.ts) | Drift / missing / exceptions / stale pending wired |
+| S-2/3/4 | [`scripts/check-remittance-separation.mjs`](../scripts/check-remittance-separation.mjs) | In CI, passing |
+
+## 21.2 Original findings — closed
+
+**19 of 24 closed.** Verified individually:
+
+| Finding | Closed by |
+|---------|-----------|
+| C-1 idempotency | `ux_remittance_idem` + key short-circuit in the RPC *(but see R-2)* |
+| C-2 balance race | `SELECT … FOR UPDATE` inside `apply_remittance_event` |
+| C-3 settle clears pause | `is_paused` is `GENERATED ALWAYS` — nothing can set it |
+| C-4 missing account | `INSERT … ON CONFLICT DO NOTHING` before the lock; settle 404s on absent account |
+| C-5 over-settle | 422 refusal in `settleRemittance` + `remittance_overdraw` in the RPC |
+| C-6 bag total leak | `cashCollected = 0` in `deliveryOrderToFleetTrip` **and** `rush_delivery` skip in `computeWeekCashBase`; fixture test passes *(but see R-5)* |
+| C-7 pause bypass | Folded into `requireActiveCourier`; covers all three accept paths **and** go-online |
+| C-8 throwing assert | Both call sites wrapped; failures park, delivery always completes |
+| C-9 non-positive silent skip | Zero-value event written with `non_positive_remittance` metadata |
+| C-10 float money | `bigint` minor units throughout |
+| H-1 CASCADE delete | `ON DELETE RESTRICT` on accounts, events, settlements |
+| H-2 orphan events | `order_id … ON DELETE RESTRICT` |
+| H-3 no unique per order | `ux_remittance_one_collection_per_order` |
+| H-4 trial balance unpersisted | Four money columns + `remittance_trial_balance` CHECK *(but see R-1)* |
+| H-5 no reconciliation | 4 views + finance-recon alerts |
+| H-6 no reversal | `reverseSettlement` + `reversal_of` |
+| H-8 two engines | `fleet_delivery_details` now uses `computeCodTrialBalance` |
+| M-1 no courier UI | Card, detail page, paused screen; 403 carries balance + threshold |
+| M-4 free-text method | CHECK constraint on 6 methods |
+
+M-2 (admin desk) and M-3 (RLS) are addressed in shape: the desk exists and is routed, RLS
+stays service-role-only with edge-mediated reads as designed.
+
+## 21.3 Separation contract — verified
+
+| Rule | Verified how | Result |
+|------|--------------|--------|
+| S-1 | `periodShareCash.test.ts` — COD trip + rideshare trip, asserts `passengerCash === 800` | ✅ passing |
+| S-2 | `check-remittance-separation.mjs` in CI | ✅ passing |
+| S-3 | Vocabulary lint over `delivery/remittance/**` | ✅ passing |
+| S-4 | Vocabulary lint over `fleet-financials/**` | ✅ passing |
+| S-5 | Fleet route reads only; no write grant exists | ✅ |
+| S-6 | **Zero files edited under `fleet-financials/`** during remittance work | ✅ restored — LogCashWizard removed; S-6 structural check in CI |
+
+---
+
+# Part 22 — What is left
+
+Two Criticals block the Phase 2 soak. R-6 is the one to decide on first, because it touches
+the production desk this build was supposed to leave alone.
+
+## 22.1 Critical
+
+### R-1 — The trial-balance tolerance gap parks real money
+
+`assertCodTrialBalance` tolerates `|split sum − total| ≤ 0.02` ([`codBalance.ts:72`](../packages/dash-pricing/src/codBalance.ts)).
+The DB constraint `remittance_trial_balance` requires **exact** equality in minor units.
+`collectOnDelivery` rounds all four values independently, so any order inside the tolerance
+but not exactly equal is rejected by the database.
+
+Verified against the real functions — orders that pass the JS assertion:
+
+```
+delta=0.00  total=2395.75  JS: PASS   DB: bag=239575 vs sum=239575  PASS
+delta=0.01  total=2395.76  JS: PASS   DB: bag=239576 vs sum=239575  REJECT
+delta=-0.01 total=2395.74  JS: PASS   DB: bag=239574 vs sum=239575  REJECT
+delta=0.02  total=2395.77  JS: PASS   DB: bag=239577 vs sum=239575  REJECT
+```
+
+The insert throws → `collectOnDelivery` catches → the order is parked as an exception and
+**never enters the ledger**. The tolerance exists because someone already knew this drift
+happens, so this will fire in production.
+
+**Fix:** make the retained figure the exact residual, so the constraint holds by construction.
+Remittance stays computed and authoritative; the cent lands in the display-only number.
+
+```ts
+const bagTotalMinor   = toMinorMoney(Number(row.total ?? 0));
+const platformDueMinor = toMinorMoney(split.platformDueJmd);
+const merchantDueMinor = toMinorMoney(split.merchantDueJmd);
+// Residual absorbs sub-cent drift the ±0.02 assertion already tolerates.
+const courierRetainedMinor = bagTotalMinor - platformDueMinor - merchantDueMinor;
+```
+
+Add a test that asserts an order with ±0.02 drift posts successfully.
+
+### R-2 — Concurrent duplicate collection errors instead of replaying
+
+In `apply_remittance_event` the idempotency `SELECT` (line 161) sits **outside** the row lock
+taken at line 172. Two simultaneous calls with the same key both miss, both reach the INSERT,
+and the second hits `ux_remittance_idem` — raising a unique violation rather than returning
+the original row.
+
+The whole point of the collection path is that a double-fire is free. Today it produces a
+throw, a parked exception, and a polluted "must be zero" queue.
+
+**Fix:** catch the violation and re-read.
+
+```sql
+EXCEPTION WHEN unique_violation THEN
+  SELECT * INTO v_existing FROM delivery.courier_remittance_events
+   WHERE idempotency_key = p_idempotency_key;
+  RETURN v_existing;
+```
+
+## 22.2 High
+
+### R-3 — Orphaned settlement rows are unrepresentable and unrecoverable
+
+`settleRemittance` inserts the settlement row (line 117) and *then* posts the event (line 134).
+If the event fails — the overdraw race between the balance check at line 70 and the RPC, or any
+transport error — the settlement row persists as `status='posted'` with no event and no balance
+movement. `reverseSettlement` cannot clean it up: it 404s with `settled_event_not_found`.
+
+The `status` CHECK allows only `posted` and `reversed`, so there is no way to represent
+"attempted but not applied".
+
+**Fix (either):** add `pending` and `void` to the CHECK, insert as `pending`, promote to
+`posted` only after the event lands, and void on failure — or move the settlement insert
+inside the RPC so both rows commit together.
+
+### R-4 — Settle idempotency is unreachable in the case it exists for
+
+The replay lookup (line 95) runs *after* the `expectedBalanceMinor` check (line 70). On a
+double-submit the balance has already moved, so the stale expectation fails first and the
+caller gets **409 `balance_changed`** — never the original receipt.
+
+Compounding it, the admin client generates a fresh key per click:
+
+```ts
+// RemittanceDeskPage.tsx:91
+idempotencyKey: crypto.randomUUID(),
+```
+
+so the two submissions do not even share a key.
+
+**Fix:** move the replay lookup to the top of `settleRemittance`, before every validation; and
+generate the idempotency key once when the settle dialog opens, not on submit.
+
+### R-5 — `canonical_from_ops` re-invents delivery cash from the fare
+
+Phase 0 is incomplete. `deliveryOrderToFleetTrip` now sets `cashCollected: 0`, but the trip
+still carries `paymentMethod: "Cash"`, and
+[`canonical_from_ops.ts:54-62`](../supabase/functions/_fleet-server/canonical_from_ops.ts) does:
+
+```ts
+const explicit = Math.abs(coerceAmount(trip.cashCollected));
+if (explicit > 0) return explicit;                 // 0 falls through
+const pmRaw = String(trip.paymentMethod ?? "").toLowerCase();
+if (pmRaw === "cash") return Math.abs(fareGross > 0 ? fareGross : netAmount);  // reinvents
+```
+
+so `metadata.cashCollected` is written as the courier's gross earning. This directly
+contradicts the rule documented in
+[`tripPhysicalCash.ts:29`](../packages/finance-core/src/tripPhysicalCash.ts) — *"Present
+cashCollected (including 0) is authoritative — never invent from fare."* The two helpers
+disagree, and the fleet-side one is the permissive reading.
+
+Smaller than C-6 (earning, not bag total) but the same class: delivery money surfacing as
+fleet-held cash.
+
+**Fix:** align `computeTripFareCashCollected` with `getTripPhysicalCashCollected` — a present
+`cashCollected`, including `0`, is authoritative. Add a `rush_delivery` guard as well.
+
+### R-6 — S-6 breached: a service-picker Log Cash wizard landed in the production desk
+
+[`LogCashWizard.tsx`](../apps/fleet/src/components/fleet-financials/settlements/LogCashWizard.tsx)
+is new, lives under `fleet-financials/`, and
+[`DriverSettlementsPage.tsx:2262`](../apps/fleet/src/components/fleet-financials/DriverSettlementsPage.tsx)
+now renders it in place of the previous one-step driver picker (`10 insertions, 60 deletions`).
+
+Three problems:
+
+1. **It breaches S-6**, the rule whose entire purpose was to leave the production Driver
+   Settlements desk untouched during this build.
+2. **It is the affordance Part 6.3 exists to prevent.** Step 1 is a Rideshare | Delivery
+   choice. Delivery is disabled and the copy correctly says "use Remittance desk" — but the
+   picker is now on the page, and the next person to enable that tile re-creates exactly the
+   architecture this design was written to avoid.
+3. **It delivers no remittance capability.** It is a UX change to a live money desk that turns
+   one step into three, where the added step has a single enabled option.
+
+**Recommendation: revert it.** Restore the previous dialog. If a service picker is wanted
+later, it belongs in a separate, deliberate piece of work with its own review — not folded
+into the remittance build. The vocabulary lint does not catch this, because the wizard uses
+no forbidden identifiers.
+
+**Also add the missing S-6 check to CI**, which would have caught it:
+
+```bash
+git diff --stat origin/main -- apps/fleet/src/components/fleet-financials/ | grep . && exit 1
+```
+
+## 22.3 Medium
+
+### R-7 — `delivery/remittance/routes.ts` is dead code
+
+It is never imported anywhere. The courier routes were inlined into
+[`courierConsumerRoutes.ts:1532`](../supabase/functions/delivery/courierConsumerRoutes.ts) and
+the admin routes into [`pricingRoutes.ts:1311`](../supabase/functions/delivery/admin/pricingRoutes.ts).
+`routes.ts` duplicates both and is unreachable — someone will edit it and wonder why nothing
+changes. Delete it, or register it and remove the inline copies.
+
+### R-8 — Settlement references will collide
+
+```ts
+function nextReference(): string {
+  const y = new Date().getUTCFullYear();
+  const n = Math.floor(Math.random() * 900000) + 100000;
+  return `RMT-${y}-${n}`;
+}
+```
+
+`reference` is `UNIQUE NOT NULL`. With 900,000 values per year, the birthday bound puts
+collision probability near 50% at roughly 1,100 settlements in a year. A collision fails the
+insert and returns a raw Postgres message. No money moves, but it is an avoidable outage.
+
+**Fix:** a Postgres sequence — `RMT-2026-` plus `lpad(nextval(…)::text, 6, '0')`.
+
+### R-9 — The Phase 1 and Phase 3 gates are not actually verified
+
+- `concurrency.test.ts` does not test concurrency. It asserts that
+  `collectIdempotencyKey('order-1')` is deterministic — a pure string function. The real
+  200-parallel soak is [`scripts/remittance_concurrency_soak.sql`](../scripts/remittance_concurrency_soak.sql),
+  which runs against a database and is **not in CI**.
+- `pauseRoutes.test.ts` greps source text for `requireActiveCourier` and asserts `hits >= 3`.
+  It is not the route enumeration Part 17.4 specified, and it cannot catch a new accept path
+  that never calls the gate.
+- **No remittance Deno test runs in CI at all.** The CI change added the fuel tests only.
+
+Until the soak runs somewhere repeatable, "200 concurrent collections produce exactly 200
+events" is an assertion about the design, not a measured fact — and R-2 is a concrete reason
+to doubt it.
+
+### R-10 — The Phase 2 drift gate cannot pass as written
+
+Legacy collection is still gated on `payment_status === 'pending_collection'`, while v2 fires
+on `payment_method` cash + delivered. That asymmetry is **correct** — it is the fix for the
+under-firing bug — but it guarantees `v_remittance_legacy_drift` is non-empty whenever legacy
+skips an order.
+
+The gate "14 days with zero drift" is therefore unachievable by construction.
+
+**Restate it:** drift is expected *only* for orders legacy never collected. The gate becomes:
+every row in `v_remittance_legacy_drift` is explained by an order where
+`payment_status <> 'pending_collection'` at delivery, and no row is explained by anything else.
+Write that as a query before starting the soak.
+
+### R-11 — The exceptions queue can be read but not drained
+
+`GET /admin/remittance/exceptions` exists. The planned
+`POST /admin/remittance/exceptions/:id/retry` does not, and nothing ever writes `resolved_at`
+or `resolved_by`. Given R-1 and R-2 will both park exceptions, the queue will fill with no
+way to clear it — and `v_remittance_missing_collections` suppresses orders with an unresolved
+exception, so a parked order is invisible in both places.
+
+### R-12 — `classifyRemittanceError` has no bucket for concurrency
+
+It returns `rpc_error` for unique violations, so R-2's false exceptions are indistinguishable
+from genuine failures. Add a `duplicate_concurrent` class (and once R-2 is fixed, it should
+never appear).
+
+### R-13 — `codBagTotal` on the fleet trip payload is unverified
+
+`deliveryOrderToFleetTrip` now emits `codBagTotal` alongside `cashCollected: 0`. Confirm the
+`/internal/trips/project` endpoint does not persist it anywhere a future cash query could
+pick up. It is ops-only display data and should stay that way.
+
+## 22.4 Still open from Part 19
+
+None of the product decisions have been made. Q2 is now load-bearing: the J$10,000 threshold
+is hardcoded in three places (migration default, `remittanceLedger.ts:117`, `:128`) with no
+admin control, so it will drift.
+
+## 22.5 Suggested order
+
+1. **R-6** — decide on the Log Cash wizard. It is the only item touching production today.
+2. **R-1, R-2** — both park money that should be on the books. Neither can be found later
+   without draining the exceptions queue, which R-11 makes impossible.
+3. **R-11** — you need the drain before the soak, not after.
+4. **R-3, R-4** — settlement integrity, before any real settle happens.
+5. **R-5** — completes Phase 0.
+6. **R-9, R-10** — make the Phase 2 gate real and achievable, then start the 14-day soak.
+7. **R-7, R-8, R-12, R-13** — hygiene, any time before cutover.
+
+Do not treat dual-write soak as a blocker — production cutover skipped it (no real delivery users).
+Close remittance invariants instead (Part 18 / Part 23).
+
+---
+---
+
+# Part 23 — Production remittance cutover (verified 2026-09-15)
+
+Remittance Harden + open items (N-1…N-4, R-9, R-10) closed. **No 14-day dual-write soak** —
+product lock: no real delivery users yet; remittance is the sole live COD authority.
+
+## 23.1 Item status
+
+| ID | Status | Notes |
+|----|--------|-------|
+| R-1 | Closed | Retained = bag − platform − merchant residual; test imports `remittanceMinorsFromSplit` |
+| R-2 | Closed | `unique_violation` replay in `apply_remittance_event` |
+| R-3 | Closed | Settlement `pending` → `posted` / `void` |
+| R-4 | Closed | Replay-first settle; desk idempotency key per panel open |
+| R-5 | Closed | `canonical_from_ops` respects cashCollected including 0; rush_delivery → 0 |
+| R-6 | Closed | LogCashWizard removed; S-6 filename + `REMITTANCE_S6_DIFF=1` in CI |
+| R-7 | Closed | Dead `remittance/routes.ts` deleted |
+| R-8 | Closed | `next_remittance_settlement_ref` sequence |
+| R-9 | Closed | GoRide soak 2026-09-15: **200** events (`cod:collect:v1:prod-cutover-soak-*`); replay ×2 no growth; cleanup settle → balance 0 |
+| R-10 | Closed | Cutover gate = remittance invariants only; legacy drift empty is **not** required |
+| R-11 | Closed | Exception retry + resolve APIs + desk actions |
+| R-12 | Closed | `duplicate_concurrent` classifier |
+| R-13 | Closed | `codBagTotal` under `payload_json` only |
+| N-1 | Closed | `orderToFleetTrip.test.ts` asserts `payload_json.codBagTotal` |
+| N-2 | Closed | `v_remittance_stale_pending` + finance-recon + Remittance Desk strip |
+| N-3 | Closed | CI sets `REMITTANCE_S6_DIFF: '1'` |
+| N-4 | Closed | Test imports production `remittanceMinorsFromSplit` |
+| Q2 | Closed | Desk edits `pause_threshold_minor` |
+
+## 23.2 Production authority
+
+| Path | Behavior |
+|------|----------|
+| Cash deliver write | Remittance always (`DELIVERY_REMITTANCE_OFF=1` kill-switch) |
+| Legacy write | Off unless `DELIVERY_COD_LEGACY_WRITE=1` |
+| Fleet COD balances | Always `courier_remittance_accounts` |
+| Admin settle / reverse | Remittance settle (legacy settle only if emergency legacy write) |
+| Pause | Remittance pause always; legacy pause secondary while old rows exist |
+| Recon | Drift / missing / exceptions / **stale pending** |
+
+Migration notes: [`20260915170000_remittance_production_cutover_and_stale_pending.sql`](../supabase/migrations/20260915170000_remittance_production_cutover_and_stale_pending.sql).
+
+## 23.3 Still open from Part 19 (non-goals this pass)
+
+**Q1, Q3, Q4, Q5** remain unanswered — no netting, no write-off product, no fleet COD claim, no courier self-report.
+
+## 23.4 Definition of done
+
+| Check | Pass |
+|-------|------|
+| CI | Fleet + remittance Deno + S-6 (with diff) green |
+| Write | Cash deliver → remittance only |
+| Read | Fleet + desk use remittance accounts |
+| Settle | Pending/posted/void; replay-first; sequence refs |
+| Recon | Drift / missing / exceptions / stale pending alerted |
+| Docs | One Part 23; production authority; **no soak blocker** |
+
+---
+---
+
+# Part 24 — Residual items after cutover (verified 2026-09-15)
+
+Third verification pass. **All 13 R-items and all 4 N-items are closed**, and the cutover is
+consistent end to end: writes, reads, pause, settle, and recon all use the remittance ledger,
+with no v2/dual-write flags left anywhere in the code.
+
+## 24.1 Verification run
+
+```
+REMITTANCE_S6_DIFF=1 node scripts/check-remittance-separation.mjs   OK (S-2/S-3/S-4/S-6)
+deno test supabase/functions/delivery/remittance/                   6 passed, 0 failed
+pnpm --filter @roam/fleet test                                      240 files, 1397 passed, 0 failed
+```
+
+CI is green. N-1 (the stale `codBagTotal` assertion) is fixed, and the S-6 diff gate now runs
+with `REMITTANCE_S6_DIFF: '1'` set on the CI step, so the **class** guard is active rather than
+just the filename guard.
+
+Cutover consistency spot-checks:
+
+| Path | Verified |
+|------|----------|
+| `DELIVERY_REMITTANCE_READ_V2` / `_V2` / `_PAUSE_V2` / `_DUAL_WRITE` | zero references remain in the codebase |
+| Pause gate | reads remittance unconditionally; legacy only as a secondary for pre-cutover rows |
+| Fleet COD read | `courier_remittance_accounts`, unflagged, still zero write paths |
+| Collection | remittance default-on; legacy requires `DELIVERY_COD_LEGACY_WRITE=1` |
+| R-9 soak | recorded in 23.1 — 200 events, replay ×2 no growth, cleanup settle → 0 |
+
+## 24.2 Open
+
+Three small items. None blocks operation; the first two are alert hygiene.
+
+### V-1 — The legacy-drift alert is now guaranteed noise
+
+`v_remittance_legacy_drift` is still wired as a `warning` in finance-recon
+([`index.ts:459,503`](../supabase/functions/finance-recon/index.ts)) and on the desk
+reconciliation panel ([`pricingRoutes.ts:1433`](../supabase/functions/delivery/admin/pricingRoutes.ts)).
+
+R-10 was closed by deciding legacy drift is **not** a cutover gate — correct — but the alert
+was left in place. The backfill seeded opening balances so the two ledgers matched *at* cutover;
+from the first post-cutover collection onward, remittance grows while legacy stays frozen. The
+view will therefore be non-empty for every active courier, permanently, by design.
+
+A recon alert that always fires trains people to ignore the recon alerts that matter — and
+`v_remittance_drift`, `v_remittance_missing_collections` and `v_remittance_stale_pending` are
+sitting in the same list.
+
+**Fix (either):** drop `v_remittance_legacy_drift` from the finance-recon alert set and keep it
+as an on-demand admin query only; or redefine it to compare against the frozen pre-cutover
+snapshot instead of the live legacy balance. Prefer the first — legacy is audit-only now, and
+there is nothing left to reconcile against it.
+
+### V-2 — The kill-switch is a single flag with a two-flag meaning
+
+`DELIVERY_REMITTANCE_OFF=1` stops remittance writes, and legacy is off by default, so setting
+it alone means **no COD ledger write at all**: cash orders deliver, `payment_status` flips to
+`paid`, and nothing records what the courier is holding.
+
+`v_remittance_missing_collections` detects this, so it is not silent — but it is detected after
+the fact rather than prevented, and the person reaching for a kill-switch mid-incident is the
+least likely to read the migration comment that explains the pairing.
+
+**Fix:** make `remittanceWriteEnabled() === false` imply the legacy path (ignore
+`DELIVERY_COD_LEGACY_WRITE` when the kill-switch is on), or log a loud startup warning when
+`DELIVERY_REMITTANCE_OFF=1` is set without `DELIVERY_COD_LEGACY_WRITE=1`. The pairing is now
+documented in Part 3 either way.
+
+### V-3 — Part 19 Q1, Q3, Q4, Q5 are still unanswered
+
+Acknowledged as non-goals in 23.3. **Q3 is the one that will surface first in operation:** a
+courier who stops working while owing money has no procedure, `ON DELETE RESTRICT` deliberately
+blocks deleting them, and the `write_off` event type is reserved in the CHECK constraint with
+no code path that emits it. The first such courier becomes an ad-hoc SQL decision unless the
+policy is written down before then.
+
+Q1 (netting COD against earnings payouts), Q4 (fleet claim on COD), and Q5 (courier
+self-reported remittance) can wait for real usage.
+
+## 24.3 What is genuinely done
+
+The ledger core, the separation from Driver Settlements, and the operational surfaces are
+complete and verified:
+
+- Every original Critical and High from Part 11 is closed.
+- Money moves only through `apply_remittance_event`, under a row lock, idempotent on replay
+  and on concurrent duplicate, refusing before it writes.
+- `is_paused` and the trial-balance identity are both enforced by the database rather than by
+  code that could regress.
+- Driver Settlements is untouched: `fleet-financials/**` has no remittance references, the S-6
+  diff gate guards co-changes in CI, and the S-1 fixture proves a delivered COD order moves the
+  weekly cash base by exactly zero.
+
+Remaining work is alert hygiene (V-1, V-2) and product policy (V-3) — not money logic.

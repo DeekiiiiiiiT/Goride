@@ -1253,6 +1253,41 @@ export function registerPricingAdminRoutes(app: Hono) {
     }
 
     const db = getDb();
+    // Production: Layer A′ remittance settle is the authority (legacy only if emergency).
+    if (Deno.env.get("DELIVERY_COD_LEGACY_WRITE") !== "1") {
+      const { settleRemittance } = await import("../remittance/settleRemittance.ts");
+      const { getRemittanceAccount } = await import("../remittance/remittanceLedger.ts");
+      const acct = await getRemittanceAccount(db, courierId);
+      const expected = body.expected_balance_minor != null
+        ? Math.round(Number(body.expected_balance_minor))
+        : (acct?.balanceMinor ?? Math.round(amountJmd * 100));
+      const methodMap: Record<string, string> = {
+        manual: "other",
+        lynk: "lynk",
+        wipay: "wipay",
+        bank: "bank_transfer",
+        cash: "cash_office",
+      };
+      const result = await settleRemittance(db, {
+        courierId,
+        amountMinor: Math.round(amountJmd * 100),
+        method: methodMap[settlementMethod.toLowerCase()] || "other",
+        expectedBalanceMinor: expected,
+        idempotencyKey: String(body.idempotency_key ?? body.idempotencyKey ?? crypto.randomUUID()),
+        actorId: adminUser.id,
+        notes,
+      });
+      if (!result.ok) return c.json(result, result.status as 400);
+      await writeKvAudit(
+        adminUser,
+        "roam_dash.cod_settlement_v2",
+        courierId,
+        result.reference,
+        JSON.stringify(result),
+      );
+      return c.json({ ok: true, ...result, balance_after: result.balanceAfterMinor / 100 });
+    }
+
     const result = await recordCashSettlement(
       db,
       courierId,
@@ -1271,6 +1306,140 @@ export function registerPricingAdminRoutes(app: Hono) {
     );
 
     return c.json({ ok: true, balance_after: result.balanceAfter });
+  });
+
+  admin.post("/remittance/settle", async (c) => {
+    const adminUser = adminFromCtx(c);
+    const denied = requireDashWrite(adminUser);
+    if (denied) return denied;
+    const body = await c.req.json().catch(() => ({}));
+    const { settleRemittance } = await import("../remittance/settleRemittance.ts");
+    const result = await settleRemittance(getDb(), {
+      courierId: String(body.courierId || ""),
+      amountMinor: Math.round(Number(body.amountMinor ?? (Number(body.amountJmd) || 0) * 100)),
+      method: String(body.method || "other"),
+      expectedBalanceMinor: Math.round(
+        Number(body.expectedBalanceMinor ?? (Number(body.expectedBalanceJmd) || 0) * 100),
+      ),
+      idempotencyKey: String(body.idempotencyKey || crypto.randomUUID()),
+      actorId: adminUser.id,
+      notes: body.notes ? String(body.notes) : null,
+    });
+    if (!result.ok) return c.json(result, result.status as 400);
+    return c.json(result);
+  });
+
+  admin.post("/remittance/reverse", async (c) => {
+    const adminUser = adminFromCtx(c);
+    const denied = requireDashWrite(adminUser);
+    if (denied) return denied;
+    const body = await c.req.json().catch(() => ({}));
+    const { reverseSettlement } = await import("../remittance/settleRemittance.ts");
+    const result = await reverseSettlement(
+      getDb(),
+      String(body.settlementId || body.settlement_id || ""),
+      adminUser.id,
+    );
+    if (!result.ok) return c.json(result, result.status as 400);
+    return c.json(result);
+  });
+
+  admin.get("/remittance/accounts", async (c) => {
+    const adminUser = adminFromCtx(c);
+    const denied = requireDashWrite(adminUser);
+    if (denied) return denied;
+    const db = getDb();
+    const { data, error } = await db
+      .from("courier_remittance_accounts")
+      .select(
+        "courier_id, balance_minor, pause_threshold_minor, is_paused, paused_since, updated_at",
+      )
+      .order("balance_minor", { ascending: false })
+      .limit(200);
+    if (error) return c.json({ error: error.message }, 500);
+    return c.json({ accounts: data ?? [] });
+  });
+
+  admin.get("/remittance/exceptions", async (c) => {
+    const adminUser = adminFromCtx(c);
+    const denied = requireDashWrite(adminUser);
+    if (denied) return denied;
+    const { data, error } = await getDb()
+      .from("courier_remittance_exceptions")
+      .select("*")
+      .is("resolved_at", null)
+      .order("created_at", { ascending: false })
+      .limit(100);
+    if (error) return c.json({ error: error.message }, 500);
+    return c.json({ exceptions: data ?? [] });
+  });
+
+  admin.post("/remittance/exceptions/:id/retry", async (c) => {
+    const adminUser = adminFromCtx(c);
+    const denied = requireDashWrite(adminUser);
+    if (denied) return denied;
+    const { retryException } = await import("../remittance/exceptions.ts");
+    const result = await retryException(getDb(), c.req.param("id"), adminUser.id);
+    if (!result.ok) return c.json(result, 400);
+    return c.json(result);
+  });
+
+  admin.post("/remittance/exceptions/:id/resolve", async (c) => {
+    const adminUser = adminFromCtx(c);
+    const denied = requireDashWrite(adminUser);
+    if (denied) return denied;
+    const body = await c.req.json().catch(() => ({}));
+    const { resolveException } = await import("../remittance/exceptions.ts");
+    const result = await resolveException(
+      getDb(),
+      c.req.param("id"),
+      adminUser.id,
+      body.note ? String(body.note) : null,
+    );
+    if (!result.ok) return c.json(result, 400);
+    return c.json(result);
+  });
+
+  admin.patch("/remittance/accounts/:courierId/threshold", async (c) => {
+    const adminUser = adminFromCtx(c);
+    const denied = requireDashWrite(adminUser);
+    if (denied) return denied;
+    const body = await c.req.json().catch(() => ({}));
+    const thresholdMinor = Math.round(Number(body.pauseThresholdMinor ?? body.thresholdMinor));
+    if (!(thresholdMinor > 0)) {
+      return c.json({ error: "pauseThresholdMinor required" }, 400);
+    }
+    const courierId = c.req.param("courierId");
+    const db = getDb();
+    await db.from("courier_remittance_accounts").upsert({
+      courier_id: courierId,
+      pause_threshold_minor: thresholdMinor,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: "courier_id" });
+    const { getRemittanceAccount } = await import("../remittance/remittanceLedger.ts");
+    const acct = await getRemittanceAccount(db, courierId);
+    return c.json({ ok: true, account: acct });
+  });
+
+  admin.get("/remittance/reconciliation", async (c) => {
+    const adminUser = adminFromCtx(c);
+    const denied = requireDashWrite(adminUser);
+    if (denied) return denied;
+    const db = getDb();
+    const [drift, missing, trial, legacyDrift, stalePending] = await Promise.all([
+      db.from("v_remittance_drift").select("*").limit(50),
+      db.from("v_remittance_missing_collections").select("*").limit(50),
+      db.from("v_remittance_trial_balance_breaks").select("*").limit(50),
+      db.from("v_remittance_legacy_drift").select("*").limit(50),
+      db.from("v_remittance_stale_pending").select("*").limit(50),
+    ]);
+    return c.json({
+      drift: drift.data ?? [],
+      missingCollections: missing.data ?? [],
+      trialBreaks: trial.data ?? [],
+      legacyDrift: legacyDrift.data ?? [],
+      stalePending: stalePending.data ?? [],
+    });
   });
 
   /** Replay historical orders against current rules (UX-9 backtest). */

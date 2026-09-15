@@ -12,7 +12,11 @@ import {
 } from "../../../packages/finance-core/src/statementEngineCompare.ts";
 import type { WeekStatement } from "../../../packages/finance-core/src/weekStatement.ts";
 import { computeEarningsEngineAmountsForWeek } from "./earnings_week_seal.ts";
-import { resolveFuelCloseAmounts } from "./fuel_week_seal.ts";
+import {
+  loadFuelCloseRebuildMap,
+  resolveFuelCloseAmounts,
+  type FuelCloseAmounts,
+} from "./fuel_week_seal.ts";
 import { resolveTollCloseAmounts } from "./toll_close_amounts.ts";
 
 const round2 = (n: number): number => Math.round((Number(n) || 0) * 100) / 100;
@@ -22,12 +26,15 @@ export async function probeFuelEngineAmounts(
   organizationId: string,
   weekKey: string,
   driverId: string,
+  /** P-4: pass shared week rebuild row (or null) so probe does not rebuild per driver. */
+  fromRebuild?: FuelCloseAmounts | null,
 ): Promise<FuelEngineAmounts | null> {
   try {
     const amounts = await resolveFuelCloseAmounts({
       organizationId,
       weekKey,
       driverId,
+      ...(fromRebuild !== undefined ? { fromRebuild } : {}),
     });
     return {
       driverShare: round2(amounts.driverShare),
@@ -43,8 +50,9 @@ async function probeFuelEngine(
   organizationId: string,
   weekKey: string,
   driverId: string,
+  fromRebuild?: FuelCloseAmounts | null,
 ): Promise<FuelEngineAmounts | null> {
-  return probeFuelEngineAmounts(organizationId, weekKey, driverId);
+  return probeFuelEngineAmounts(organizationId, weekKey, driverId, fromRebuild);
 }
 
 export async function probeTollEngineAmounts(
@@ -91,10 +99,21 @@ export async function compareDriverWeekStatementsToEngines(opts: {
   const { organizationId, driverId, weekKey, statements } = opts;
   const drifts: StatementEngineDrift[] = [];
 
+  // P-4: one rebuild map per compare (not per fuel statement / resolve call).
+  let fuelRebuild: FuelCloseAmounts | null | undefined = undefined;
+  if (statements.some((s) => s.status === "closed" && s.kind === "fuel")) {
+    try {
+      const map = await loadFuelCloseRebuildMap(organizationId, weekKey);
+      fuelRebuild = map.get(driverId) || null;
+    } catch {
+      fuelRebuild = null;
+    }
+  }
+
   for (const s of statements) {
     if (s.status !== "closed") continue;
     if (s.kind === "fuel") {
-      const engine = await probeFuelEngine(organizationId, weekKey, driverId);
+      const engine = await probeFuelEngine(organizationId, weekKey, driverId, fuelRebuild);
       if (engine) drifts.push(...compareFuelStatementVsEngine(s, engine));
     } else if (s.kind === "toll") {
       const engine = await probeTollEngine(organizationId, weekKey, driverId);

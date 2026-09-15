@@ -379,7 +379,9 @@ export async function stampEntryCycleMetadata(
   }
 
   const openCycleId = fuelLogic.resolveCycleIdForOpenCycle(
-    cycleEntries.map((e) => ({ metadata: e?.metadata })),
+    cycleEntries.map((e: Record<string, unknown>) => ({
+      metadata: (e?.metadata || null) as { cycleId?: string } | null,
+    })),
   );
 
   const nextMeta: Record<string, unknown> = {
@@ -494,8 +496,9 @@ export async function recalculateVehicleFuelEntries(
   let carryover = 0;
   let lastAnchorOdo = 0;
   let openCycleEntries: Record<string, unknown>[] = [];
-  let currentCycleId = fuelLogic.isStableCycleId(sorted[0]?.metadata?.cycleId)
-    ? String((sorted[0]?.metadata as Record<string, unknown>).cycleId)
+  const firstMeta = (sorted[0]?.metadata || {}) as Record<string, unknown>;
+  let currentCycleId = fuelLogic.isStableCycleId(firstMeta.cycleId)
+    ? String(firstMeta.cycleId)
     : fuelLogic.mintCycleId();
 
   const modified: Record<string, unknown>[] = [];
@@ -578,7 +581,11 @@ export async function recalculateVehicleFuelEntries(
       : signalTierRaw;
 
     const cycleId = openCycleEntries.length
-      ? fuelLogic.resolveCycleIdForOpenCycle(openCycleEntries.map((e) => ({ metadata: e.metadata })))
+      ? fuelLogic.resolveCycleIdForOpenCycle(
+        openCycleEntries.map((e) => ({
+          metadata: (e.metadata || null) as { cycleId?: string } | null,
+        })),
+      )
       : currentCycleId;
 
     const nextMeta: Record<string, unknown> = {
@@ -650,8 +657,12 @@ export async function closeOpenCyclesForWeek(
     .order("value->>date", { ascending: false })
     .limit(50);
 
-  const entries = (data || []).map((r) => r.value as Record<string, unknown>);
-  entries.sort((a, b) => String(b.date).localeCompare(String(a.date)));
+  const entries = (data || []).map((r: { value?: Record<string, unknown> }) =>
+    r.value as Record<string, unknown>
+  );
+  entries.sort((a: Record<string, unknown>, b: Record<string, unknown>) =>
+    String(b.date).localeCompare(String(a.date))
+  );
 
   let closed = 0;
   for (const entry of entries) {

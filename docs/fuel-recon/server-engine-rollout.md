@@ -1,36 +1,38 @@
-# FUEL_SERVER_ENGINE rollout (Phase 3)
+# FUEL_SERVER_ENGINE rollout (Rev 5)
 
-Production stays on `FUEL_SERVER_ENGINE=off` until this checklist is green. Do **not** set `enforce` in prod env until shadow is clean.
+## Current prod
 
-## Prerequisites (must be done first)
+**`FUEL_SERVER_ENGINE=off`** on Supabase Edge Function secrets until `make-server-37f42386` deploys with N-15.
 
-- Reopen / reseal **week 2026-08-24** for driver **73e5b1dc-01b4-45ee-a34a-25a3256b9841** (see `docs/fuel-recon/stage0-gate.json`).
-- Finalize snapshots emit **categoryCosts** + **fuelRule** on every money week (client + server build paths).
+**Ready in tree:** after that deploy, set `FUEL_SERVER_ENGINE=enforce` (Supabase secrets — not Vercel).
 
-## Rollout ladder
+Do **not** flip enforce while prod still runs the pre–N-15 loader: untagged `settledEntries` would dump all spend into `rideShareCost` and refuse every finalize.
 
-| Step | Env | Behavior |
-|------|-----|----------|
-| 0 | prod | `off` — client snapshots authoritative; server gate only via `evaluateFuelWeekClosable`. |
-| 1 | prod/staging | `shadow` — `computeFuelWeek` from snapshot categories; log + audit `fuel_engine_diff`; persist drifts to `finance_recon_drift` (`kind=fuel`, fields `driverShare` / `companyShare`, source `close`). |
-| 2 | staging | Shadow **≥ 2 full weeks** with zero unexpected drift (or documented exceptions). |
-| 3 | staging → prod | `enforce` — 422 `SNAPSHOT_MISMATCH` on diff; break-glass `X-Fuel-Force-Client-Money` + reason only during initial soak. |
+Authority for category recompute (once live): **`metadata.tripCategoryAgg`** (Engine A stamp from finalize). Untagged `settledEntries` are wallet evidence only. Server trip/odometer reload remains a follow-up.
 
-## Phase 3 loaders (not done)
+## Stage 0
 
-HTTP finalize still recomputes from **snapshot categoryCosts**. Phase 3 loaders should rebuild `WeekCalc` from entries/trips server-side; until then, shadow/enforce uses the cheap snap-category path (see TODO in `fuel_period_routes.ts` finalize handler).
+DONE (2026-09-15): week **2026-08-24** / driver **73e5b1dc…** statement↔ledger **$0**. See `docs/fuel-recon/stage0-gate.json`.
 
-## Nightly
+## N-15 (Rev 5)
 
-`finance-recon` cron calls `upsertLockedFuelWeekStatementLedgerDrifts` for **locked** `fuel_reconciliation_period` rows: finalized snapshot vs fuel `week_statements` vs active `fuel_*` ledger events → `finance_recon_drift` with `source=nightly`, `kind=fuel`.
+- Finalize emits `tripCategoryAgg` = `categoryCostsFromReport` (same Engine A costs).
+- `resolveEngineCategoryCosts` prefers tripAgg, else tagged entries, else snap `categoryCosts`.
+- Enforce CI uses **production-shaped** snaps (no invented `usageCategory`).
 
-## Four-site gate
+## Break-glass
 
-`evaluateFuelWeekClosable` runs with real inputs on:
+`X-Fuel-Force-Client-Money: 1` + body `forceReason` ≥ 8 characters — logged; not for routine closes.
 
-1. Wizard finalize (`FuelPeriodWizard` + `fuelFinalizeService`)
-2. HTTP `POST …/fuel/periods/:id/finalize`
-3. Auto-close cron (`fuel_period_routes` auto-close loop)
-4. Bulk finalize (`FuelBulkFinalizeDialog` + `fuelFinalizeService`)
+## Nightly (#31)
 
-Blockers map to user-visible errors/skips (`fuelWeekClosableBlockerMessage`, HTTP 422 `blockers[]`, auto-close `skip_<code>`).
+`finance-recon` cron → `upsertLockedFuelWeekStatementLedgerDrifts` for locked periods → `finance_recon_drift` (`source=nightly`).
+
+## Closable gate
+
+`evaluateFuelWeekClosable` on wizard finalize, HTTP finalize, auto-close, bulk finalize. KV loads: invalidate-per-eval + 60s TTL (N-12); SQL date-scoped pushdown with org-scoped fallback (P-3).
+
+## Seal / materialize
+
+- **`sealFuelWeek`**: one rebuild map per seal; probe compare hoists rebuild once (P-4).
+- **`POST …/materialize`**: money from finalized snaps when present (`server:materialize:snaps:N`).

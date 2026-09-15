@@ -1572,6 +1572,7 @@ export function DriverSettlementsPage({
   }, [collectModal, collectOutstanding]);
 
   const selectedLogCashDriver = driverOptions.find((d) => d.id === logCashDriverId);
+
   return (
     <div className="space-y-6 p-4 sm:p-6 max-w-[1400px] mx-auto">
       <BusinessFinanceDeskChrome deskLabel="Driver Settlements" onBack={onBackToBusinessFinance} />

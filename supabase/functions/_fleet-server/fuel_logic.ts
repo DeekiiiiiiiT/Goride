@@ -909,7 +909,7 @@ export async function getEntriesSinceLastAnchor(
     return [];
   }
 
-  return (data || []).map(d => d.value);
+  return (data || []).map((d: { value?: Record<string, unknown> }) => d.value);
 }
 
 /**
@@ -1551,24 +1551,25 @@ async function _queryWindowedEntries(
     // Note: we intentionally include flagged entries so the baseline stays stable
     // (excluding them causes a death spiral where each recalculate raises the average)
     const valid = (data || [])
-        .map(d => d.value)
-        .filter((e: any) => {
+        .map((d: { value?: Record<string, unknown> }) => d.value)
+        .filter((e: Record<string, unknown> | undefined) => {
+            if (!e) return false;
             const odo = Number(e.odometer) || 0;
             const liters = Number(e.liters) || 0;
             return odo > 0 && liters > 0;
-        });
+        }) as Record<string, unknown>[];
 
     if (valid.length < 3) return { avgKmPerLiter: 0, entryCount: valid.length, totalDistance: 0, totalFuel: 0 };
 
     // Sort by odometer ascending (should already be, but ensure it)
-    valid.sort((a: any, b: any) => (Number(a.odometer) || 0) - (Number(b.odometer) || 0));
+    valid.sort((a, b) => (Number(a.odometer) || 0) - (Number(b.odometer) || 0));
 
     const firstOdo = Number(valid[0].odometer);
     const lastOdo = Number(valid[valid.length - 1].odometer);
     const totalDistance = lastOdo - firstOdo;
     // Exclude the first entry's liters — that fuel was consumed BEFORE the
     // distance window (firstOdo → lastOdo). This is the standard fill-up method.
-    const totalFuel = valid.slice(1).reduce((sum: number, e: any) => sum + (Number(e.liters) || 0), 0);
+    const totalFuel = valid.slice(1).reduce((sum: number, e) => sum + (Number(e.liters) || 0), 0);
 
     if (totalDistance <= 0 || totalFuel <= 0) {
         return { avgKmPerLiter: 0, entryCount: valid.length, totalDistance: 0, totalFuel: 0 };
@@ -1620,9 +1621,9 @@ export function calculateRollingEfficiencyBatch(
     const totalFuel = valid.slice(1).reduce((sum: number, e: any) => sum + (Number(e.liters) || 0), 0);
 
     if (totalDistance <= 0 || totalFuel <= 0) {
-        return { avgKmPerLiter: 0, entryCount: valid.length, totalDistance: 0, totalFuel: 0 };
+        return { avgKmPerLiter: 0, entryCount: valid.length, totalDistance: 0, totalFuel: 0, window: 'all' };
     }
 
     const avgKmPerLiter = Number((totalDistance / totalFuel).toFixed(2));
-    return { avgKmPerLiter, entryCount: valid.length, totalDistance, totalFuel };
+    return { avgKmPerLiter, entryCount: valid.length, totalDistance, totalFuel, window: 'all' };
 }

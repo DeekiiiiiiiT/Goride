@@ -37,6 +37,7 @@ import {
   buildServerFuelStepCounts,
   countUnackedExceptionFills,
   countOpenFuelDisputes,
+  serverFuelStepCountsForPeriod,
 } from "./fuel_week_closable_gate.ts";
 
 const BASE = "/make-server-37f42386";
@@ -85,8 +86,66 @@ function actorId(c: Context): string | null {
   return null;
 }
 
+/** N-9b: reject missing :id before loadPeriod. */
+function periodIdParam(c: Context): string | null {
+  const raw = c.req.param("id");
+  if (typeof raw !== "string") return null;
+  const id = raw.trim();
+  return id || null;
+}
+
 function finalizedReportKey(weekKey: string, driverId: string): string {
   return `finalized_report:${weekKey}:${driverId}`;
+}
+
+/** H-5: when finalized_report snaps exist, materialize money from KV not client body. */
+type MaterializeSnapMoneyOk = {
+  ok: true;
+  snapCount: number;
+  totalSpend: number;
+  gasCardSpend: number;
+  companyShare: number;
+  driverShare: number;
+  unexplained: number;
+};
+type MaterializeSnapMoneyMiss = { ok: false; snapCount: number };
+
+async function aggregateMaterializeMoneyFromSnaps(
+  orgId: string,
+  weekKey: string,
+): Promise<MaterializeSnapMoneyOk | MaterializeSnapMoneyMiss> {
+  const prefix = `finalized_report:${weekKey}:`;
+  const rows = await kv.getByPrefix(prefix);
+  let snapCount = 0;
+  let totalSpend = 0;
+  let gasCardSpend = 0;
+  let companyShare = 0;
+  let driverShare = 0;
+  let unexplained = 0;
+  for (const snap of rows || []) {
+    if (!snap || typeof snap !== "object") continue;
+    const s = snap as Record<string, unknown>;
+    const snapOrg = String(s.orgId || s.org_id || s.organizationId || "");
+    if (snapOrg && snapOrg !== orgId) continue;
+    snapCount += 1;
+    const gas = Number(s.totalGasCardCost) || Number(s.gasCardSpend) || Number(s.driverSpend) || 0;
+    totalSpend += gas;
+    gasCardSpend += gas;
+    companyShare += Number(s.companyShare) || 0;
+    driverShare += Number(s.driverShare) || 0;
+    unexplained += Number(s.miscellaneousCost) || 0;
+  }
+  // N-14: literal ok discriminates the union for snapMoney.ok ? snapMoney.totalSpend reads.
+  if (snapCount <= 0) return { ok: false, snapCount: 0 };
+  return {
+    ok: true,
+    snapCount,
+    totalSpend,
+    gasCardSpend,
+    companyShare,
+    driverShare,
+    unexplained,
+  };
 }
 
 function mapPeriod(row: Record<string, unknown>) {
@@ -741,7 +800,9 @@ export function registerFuelPeriodRoutes(app: Hono) {
   app.get(`${BASE}/fuel/periods/:id`, requirePermission("fuel.view"), async (c: Context) => {
     const orgId = getOrgId(c);
     if (!orgId) return c.json({ error: "org required" }, 400);
-    const row = await loadPeriod(orgId, c.req.param("id"));
+    const periodId = periodIdParam(c);
+    if (!periodId) return c.json({ error: "period id required" }, 400);
+    const row = await loadPeriod(orgId, periodId);
     if (!row) return c.json({ error: "Not found" }, 404);
     return c.json(mapPeriod(row));
   });
@@ -968,33 +1029,59 @@ export function registerFuelPeriodRoutes(app: Hono) {
 
   app.post(
     `${BASE}/fuel/periods/:id/materialize`,
-    requirePermission("transactions.edit"),
+    requirePermission("fuel.edit_entry"),
     async (c: Context) => {
       const orgId = getOrgId(c);
       if (!orgId) return c.json({ error: "org required" }, 400);
-      const periodId = c.req.param("id");
+      const periodId = periodIdParam(c);
+      if (!periodId) return c.json({ error: "period id required" }, 400);
       const body = await c.req.json().catch(() => ({}));
       const sb = getServiceClient();
       const now = new Date().toISOString();
-      const countsPatch =
-        body.counts && typeof body.counts === "object" && !Array.isArray(body.counts)
-          ? { counts: body.counts }
-          : {};
+      let row = await loadPeriod(orgId, periodId);
+      const weekStart = ymd(row?.week_start || body.weekStart);
+      const weekEnd = ymd(row?.week_end || body.weekEnd) || weekStart;
+      const serverCounts = weekStart
+        ? await serverFuelStepCountsForPeriod(orgId, weekStart, weekEnd, {
+          unexplained: body.unexplained ?? row?.unexplained,
+          leakage_reviewed_at: row?.leakage_reviewed_at,
+        })
+        : buildServerFuelStepCounts({
+          exceptionFillCount: 0,
+          openDisputeCount: 0,
+          leakageActionable: false,
+        });
+      const snapMoney: MaterializeSnapMoneyOk | MaterializeSnapMoneyMiss = weekStart
+        ? await aggregateMaterializeMoneyFromSnaps(orgId, weekStart)
+        : { ok: false, snapCount: 0 };
       const patch = {
-        total_spend: Number(body.totalSpend) || 0,
-        gas_card_spend: Number(body.gasCardSpend) || 0,
+        total_spend: snapMoney.ok
+          ? snapMoney.totalSpend
+          : Number(body.totalSpend) || 0,
+        gas_card_spend: snapMoney.ok
+          ? snapMoney.gasCardSpend
+          : Number(body.gasCardSpend) || 0,
         cash_from_earnings: Number(body.cashFromEarnings) || 0,
-        company_share: Number(body.companyShare) || 0,
-        driver_share: Number(body.driverShare) || 0,
-        unexplained: Number(body.unexplained) || 0,
+        company_share: snapMoney.ok
+          ? snapMoney.companyShare
+          : Number(body.companyShare) || 0,
+        driver_share: snapMoney.ok
+          ? snapMoney.driverShare
+          : Number(body.driverShare) || 0,
+        unexplained: snapMoney.ok
+          ? snapMoney.unexplained
+          : Number(body.unexplained) || 0,
         vehicle_count: Number(body.vehicleCount) || 0,
         driver_count: Number(body.driverCount) || 0,
         computed_at: now,
-        computed_from_hash: String(body.computedFromHash || `client:${now}`),
+        computed_from_hash: snapMoney.ok
+          ? `server:materialize:snaps:${snapMoney.snapCount}`
+          : weekStart
+          ? `server:materialize:${weekStart}`
+          : `server:materialize:${now.slice(0, 10)}`,
         updated_at: now,
-        ...countsPatch,
+        counts: serverCounts,
       };
-      let row = await loadPeriod(orgId, periodId);
       if (!row) {
         const weekStart = ymd(body.weekStart);
         const weekEnd = ymd(body.weekEnd) || weekStart;
@@ -1027,7 +1114,9 @@ export function registerFuelPeriodRoutes(app: Hono) {
           .eq("org_id", orgId);
         if (error) return c.json({ error: error.message }, 500);
         row = await loadPeriod(orgId, periodId);
+        if (!row) return c.json({ error: "Not found" }, 404);
       }
+      if (!row) return c.json({ error: "Not found" }, 404);
       await insertAudit(orgId, String(row.id), "materialize", patch, actorId(c));
       return c.json({ ok: true, period: mapPeriod(row as any) });
     },
@@ -1039,7 +1128,8 @@ export function registerFuelPeriodRoutes(app: Hono) {
     async (c: Context) => {
       const orgId = getOrgId(c);
       if (!orgId) return c.json({ error: "org required" }, 400);
-      const periodId = c.req.param("id");
+      const periodId = periodIdParam(c);
+      if (!periodId) return c.json({ error: "period id required" }, 400);
       const period = await loadPeriod(orgId, periodId);
       if (!period) return c.json({ error: "Not found" }, 404);
       const weekKey = ymd(period.week_start);
@@ -1081,40 +1171,55 @@ export function registerFuelPeriodRoutes(app: Hono) {
       }
 
       // Stage 5: FUEL_SERVER_ENGINE=off|shadow|enforce — recompute vs client proposal.
-      // TODO(Phase 3 loaders): rebuild WeekCalc from entries/trips server-side; until then
-      // computeFuelWeek from snapshot categoryCosts is the cheap authority check.
       const engineMode = String(Deno.env.get("FUEL_SERVER_ENGINE") || "off").toLowerCase();
       if (engineMode === "shadow" || engineMode === "enforce") {
         const { computeFuelWeek, diffWeekCalc } = await import(
           "../../../packages/fuel-core/src/computeFuelWeek.ts"
         );
+        const {
+          materialCategoryCostDeltas,
+          resolveEngineCategoryCosts,
+        } = await import("./fuel_week_category_loader.ts");
         const { upsertFinanceReconDrifts } = await import("./finance_recon_drift.ts");
         const mismatches: Array<{ driverId: string; deltas: { field: string; delta: number }[] }> =
           [];
         const weekKey = ymd(period.week_start);
         for (const snap of snapshots) {
-          const cats = (snap as any)?.categoryCosts || (snap as any)?.metadata?.categoryCosts;
-          if (!cats) continue;
+          const snapObj = (snap && typeof snap === "object" ? snap : {}) as Record<string, unknown>;
+          const { authority: cats, snapCats } = resolveEngineCategoryCosts(snapObj);
+          const hasCats =
+            cats.rideShareCost + cats.companyUsageCost + cats.deadheadCost + cats.personalUsageCost >
+              0.009 ||
+            snapCats != null;
+          if (!hasCats) continue;
           const clientCalc = {
-            totalSpend: Number((snap as any).totalGasCardCost) || 0,
-            companyShare: Number((snap as any).companyShare) || 0,
-            driverShare: Number((snap as any).driverShare) || 0,
-            miscellaneousCost: Number((snap as any).miscellaneousCost) || 0,
+            totalSpend: Number(snapObj.totalGasCardCost) || 0,
+            companyShare: Number(snapObj.companyShare) || 0,
+            driverShare: Number(snapObj.driverShare) || 0,
+            miscellaneousCost: Number(snapObj.miscellaneousCost) || 0,
           };
           const recomputed = computeFuelWeek({
             totalSpend:
-              Number((snap as any).totalGasCardCost) ||
-              Number((snap as any).totalSpend) ||
+              Number(snapObj.totalGasCardCost) ||
+              Number(snapObj.totalSpend) ||
               0,
             rideShareCost: Number(cats.rideShareCost) || 0,
             companyUsageCost: Number(cats.companyUsageCost) || 0,
             deadheadCost: Number(cats.deadheadCost) || 0,
             personalUsageCost: Number(cats.personalUsageCost) || 0,
-            rule: (snap as any).fuelRule || (snap as any).metadata?.fuelRule || null,
-            driverId: String((snap as any).driverId || ""),
+            rule:
+              snapObj.fuelRule ||
+              ((snapObj.metadata && typeof snapObj.metadata === "object"
+                ? snapObj.metadata
+                : {}) as Record<string, unknown>).fuelRule ||
+              null,
+            driverId: String(snapObj.driverId || ""),
           });
-          const deltas = diffWeekCalc(clientCalc, recomputed);
-          const driverId = String((snap as any).driverId || "");
+          const deltas = [
+            ...diffWeekCalc(clientCalc, recomputed),
+            ...materialCategoryCostDeltas(snapCats, cats),
+          ];
+          const driverId = String(snapObj.driverId || "");
           if (deltas.length) {
             mismatches.push({ driverId, deltas });
             const engineDrifts = deltas
@@ -1288,7 +1393,8 @@ export function registerFuelPeriodRoutes(app: Hono) {
     async (c: Context) => {
       const orgId = getOrgId(c);
       if (!orgId) return c.json({ error: "org required" }, 400);
-      const periodId = c.req.param("id");
+      const periodId = periodIdParam(c);
+      if (!periodId) return c.json({ error: "period id required" }, 400);
       const body = await c.req.json().catch(() => ({}));
       const reason = String(body.reason || "").trim();
       if (!reason) return c.json({ error: "reason required" }, 400);
@@ -1336,7 +1442,8 @@ export function registerFuelPeriodRoutes(app: Hono) {
     async (c: Context) => {
       const orgId = getOrgId(c);
       if (!orgId) return c.json({ error: "org required" }, 400);
-      const periodId = c.req.param("id");
+      const periodId = periodIdParam(c);
+      if (!periodId) return c.json({ error: "period id required" }, 400);
       const body = await c.req.json().catch(() => ({}));
       const validated = validateDisposition({
         disposition: body.disposition,
@@ -1377,7 +1484,8 @@ export function registerFuelPeriodRoutes(app: Hono) {
     async (c: Context) => {
       const orgId = getOrgId(c);
       if (!orgId) return c.json({ error: "org required" }, 400);
-      const periodId = c.req.param("id");
+      const periodId = periodIdParam(c);
+      if (!periodId) return c.json({ error: "period id required" }, 400);
       const period = await loadPeriod(orgId, periodId);
       if (!period) return c.json({ error: "Not found" }, 404);
       const actor = actorId(c);
@@ -1398,7 +1506,8 @@ export function registerFuelPeriodRoutes(app: Hono) {
     async (c: Context) => {
       const orgId = getOrgId(c);
       if (!orgId) return c.json({ error: "org required" }, 400);
-      const periodId = c.req.param("id");
+      const periodId = periodIdParam(c);
+      if (!periodId) return c.json({ error: "period id required" }, 400);
       const period = await loadPeriod(orgId, periodId);
       if (!period) return c.json({ error: "Not found" }, 404);
       const sb = getServiceClient();
@@ -1427,7 +1536,8 @@ export function registerFuelPeriodRoutes(app: Hono) {
     async (c: Context) => {
       const orgId = getOrgId(c);
       if (!orgId) return c.json({ error: "org required" }, 400);
-      const periodId = c.req.param("id");
+      const periodId = periodIdParam(c);
+      if (!periodId) return c.json({ error: "period id required" }, 400);
       const body = await c.req.json().catch(() => ({}));
       const step = String(body.step || "").trim();
       if (!step) return c.json({ error: "step required" }, 400);
@@ -1491,7 +1601,8 @@ export function registerFuelPeriodRoutes(app: Hono) {
     if (!cronOk && !orgFromAuth) {
       return c.json({ error: "unauthorized" }, 401);
     }
-    const periodId = c.req.param("id");
+    const periodId = periodIdParam(c);
+    if (!periodId) return c.json({ error: "period id required" }, 400);
     const sb = getServiceClient();
     const { data: row } = await sb
       .from("fuel_reconciliation_period")

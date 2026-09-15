@@ -213,7 +213,8 @@ export async function listUnifiedLedgerEntries(opts: {
   const client = unifiedLedgerClient();
 
   if (opts.driverId) {
-    return await listEntriesForDriver(client, { ...opts, skipCount: opts.skipCount });
+    const driverId = opts.driverId;
+    return await listEntriesForDriver(client, { ...opts, driverId, skipCount: opts.skipCount });
   }
 
   let q = client

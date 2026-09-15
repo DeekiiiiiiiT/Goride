@@ -171,11 +171,3 @@ export function mergeServerFirstLandingPeriods(
 
   return [...byWeek.values()].sort((a, b) => b.startDate.localeCompare(a.startDate));
 }
-
-export function overlayServerFuelPeriods(
-  derived: FuelReconciliationPeriod[],
-  serverRows: FuelPeriodRow[],
-): FuelReconciliationPeriod[] {
-  // Legacy name — landing now uses server-first merge.
-  return mergeServerFirstLandingPeriods(serverRows, derived);
-}

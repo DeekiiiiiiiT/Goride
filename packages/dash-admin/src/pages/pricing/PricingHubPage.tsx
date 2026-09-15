@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useOutletContext } from 'react-router-dom';
+import { Link, useOutletContext } from 'react-router-dom';
 import { ChevronRight, HelpCircle, Loader2, X } from 'lucide-react';
 import { toast } from 'sonner';
 import {
@@ -25,7 +25,6 @@ import {
   previewPricing,
   fetchPricingAudit,
   fetchCodBalances,
-  settleCourierCash,
   grantRushPass,
   revokeRushPass,
   listRushPassMemberships,
@@ -267,9 +266,6 @@ export function PricingHubPage() {
 
   // COD
   const [codBalances, setCodBalances] = useState<Array<Record<string, unknown>>>([]);
-  const [settleCourierId, setSettleCourierId] = useState('');
-  const [settleAmount, setSettleAmount] = useState('');
-  const [settleMethod, setSettleMethod] = useState('lynk');
 
   // Audit
   const [auditEntries, setAuditEntries] = useState<Array<Record<string, unknown>>>([]);
@@ -1022,28 +1018,6 @@ export function PricingHubPage() {
     setSimBatchResults(results);
     setSimRunning(false);
     toast.success(`Ran ${results.length} scenarios`);
-  };
-
-  const handleSettle = async () => {
-    if (!canWrite) return;
-    const amount = Number(settleAmount);
-    if (!settleCourierId.trim() || !Number.isFinite(amount) || amount <= 0) {
-      toast.error('Enter courier ID and amount');
-      return;
-    }
-    try {
-      await settleCourierCash(session.access_token, {
-        courier_id: settleCourierId.trim(),
-        amount_jmd: amount,
-        settlement_method: settleMethod,
-      });
-      toast.success('Settlement recorded');
-      const r = await fetchCodBalances(session.access_token);
-      setCodBalances(r.balances ?? []);
-      setSettleAmount('');
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Settlement failed');
-    }
   };
 
   const parishGroups = groupMarketsByParish(markets);
@@ -2361,36 +2335,17 @@ export function PricingHubPage() {
           </div>
 
           {canWrite && (
-            <div className="flex flex-wrap gap-2 items-end max-w-xl">
-              <input
-                placeholder="Courier ID"
-                value={settleCourierId}
-                onChange={(e) => setSettleCourierId(e.target.value)}
-                className="flex-1 min-w-[200px] px-3 py-2 rounded-lg bg-slate-950 border border-slate-700 text-white text-sm"
-              />
-              <input
-                placeholder="Amount JMD"
-                value={settleAmount}
-                onChange={(e) => setSettleAmount(e.target.value)}
-                className="w-32 px-3 py-2 rounded-lg bg-slate-950 border border-slate-700 text-white text-sm"
-              />
-              <select
-                value={settleMethod}
-                onChange={(e) => setSettleMethod(e.target.value)}
-                className="px-3 py-2 rounded-lg bg-slate-950 border border-slate-700 text-white text-sm"
+            <div className="rounded-lg border border-slate-700 bg-slate-950/60 p-4 space-y-2 max-w-xl">
+              <p className="text-sm text-slate-300">
+                Settle COD remittance from the Remittance Desk — search by courier, confirm live
+                balance, and get a receipt. UUID paste settle is retired.
+              </p>
+              <Link
+                to="/remittance"
+                className="inline-flex px-4 py-2 rounded-lg bg-amber-600 text-white text-sm font-medium"
               >
-                <option value="lynk">Lynk</option>
-                <option value="wipay">WiPay</option>
-                <option value="bank">Bank</option>
-                <option value="manual">Manual</option>
-              </select>
-              <button
-                type="button"
-                onClick={() => void handleSettle()}
-                className="px-4 py-2 rounded-lg bg-amber-600 text-white text-sm"
-              >
-                Record settlement
-              </button>
+                Open Remittance Desk
+              </Link>
             </div>
           )}
         </div>

@@ -51,6 +51,7 @@ import { useFuelPeriods, FUEL_PERIODS_KEY } from '../hooks/useFuelPeriods';
 import {
   mergeServerFirstLandingPeriods,
   serverLeakageReviewedWeekStarts,
+  serverLockedWeekStarts,
   weekStartYmd,
 } from '../utils/fuelPeriodServerMerge';
 import { fuelPeriodFinalizeIdempotencyKey } from '../utils/fuelPeriodIdempotency';
@@ -398,6 +399,7 @@ function FuelManagementInner({
             scenarios,
             liveReportsByWeek: undefined,
             leakageReviewedWeeks,
+            lockedWeekStarts: serverLockedWeekStarts(serverFuelPeriods),
           }).filter((d) => !serverByWeek.has(d.startDate))
         : [];
     return mergeServerFirstLandingPeriods(serverFuelPeriods, derived);
@@ -1335,6 +1337,10 @@ function FuelManagementInner({
             }
           }
 
+          const priorReports = (await api
+            .getFinalizedReports({ weekStartFrom: weekStart, weekStartTo: weekStart })
+            .catch(() => [])) as FinalizedFuelReport[];
+
           const weekResult = await finalizeFuelWeekReports(
             reports,
             {
@@ -1364,6 +1370,7 @@ function FuelManagementInner({
             {
               onProgress: (msg) => setMessage(msg),
               deferSnapshotPersist: true,
+              priorReports,
             },
           );
 

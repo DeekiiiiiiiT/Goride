@@ -44,7 +44,13 @@ export type KvStoreQueryResult = {
 export interface KvStoreQueryBuilder extends PromiseLike<KvStoreQueryResult> {
   select(columns: string): KvStoreQueryBuilder;
   like(column: string, pattern: string): KvStoreQueryBuilder;
+  ilike(column: string, pattern: string): KvStoreQueryBuilder;
   eq(column: string, value: unknown): KvStoreQueryBuilder;
+  neq(column: string, value: unknown): KvStoreQueryBuilder;
+  gte(column: string, value: unknown): KvStoreQueryBuilder;
+  gt(column: string, value: unknown): KvStoreQueryBuilder;
+  lte(column: string, value: unknown): KvStoreQueryBuilder;
+  lt(column: string, value: unknown): KvStoreQueryBuilder;
   in(column: string, values: unknown[]): KvStoreQueryBuilder;
   /** PostgREST-style OR filter string (handled by executeMapped / raw replay). */
   or(filter: string): KvStoreQueryBuilder;

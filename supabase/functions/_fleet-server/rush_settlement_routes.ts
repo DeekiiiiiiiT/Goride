@@ -40,29 +40,27 @@ export function registerRushSettlementRoutes(
 
       if (cpErr) throw cpErr;
       const userIds = (couriers ?? []).map((c) => String(c.user_id)).filter(Boolean);
-      if (!userIds.length) return c.json({ enabled: true, balances: [] });
-
-      const { data: balances, error: balErr } = await delivery
-        .from("courier_cash_balances")
-        .select("courier_id, balance_jmd, is_paused, updated_at")
-        .in("courier_id", userIds);
-
-      if (balErr) throw balErr;
+      if (!userIds.length) return c.json({ enabled: true, balances: [], source: "none" });
 
       const nameById = new Map(
         (couriers ?? []).map((c) => [String(c.user_id), c.display_name ?? "Courier"]),
       );
 
-      const rows = (balances ?? []).map((b) => ({
+      // Production: remittance accounts are the COD authority (no READ_V2 flag).
+      const { data: accounts, error: acctErr } = await delivery
+        .from("courier_remittance_accounts")
+        .select("courier_id, balance_minor, is_paused, updated_at")
+        .in("courier_id", userIds);
+      if (acctErr) throw acctErr;
+      const rows = (accounts ?? []).map((b) => ({
         courierId: String(b.courier_id),
         courierName: nameById.get(String(b.courier_id)) ?? "Courier",
-        owedToRoam: Number(b.balance_jmd ?? 0),
+        owedToRoam: Number(b.balance_minor ?? 0) / 100,
         isPaused: Boolean(b.is_paused),
         updatedAt: b.updated_at,
         readOnly: true,
       }));
-
-      return c.json({ enabled: true, balances: rows });
+      return c.json({ enabled: true, balances: rows, source: "remittance_v2" });
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
       return c.json({ error: msg }, 500);

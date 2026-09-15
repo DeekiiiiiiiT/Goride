@@ -313,6 +313,8 @@ export async function finalizeFuelWeekReports(
         metadata: {
           ...report.metadata,
           categoryCosts: cats,
+          // N-15: Engine A stamp for server loader — same object as categoryCosts (not entry buckets).
+          tripCategoryAgg: cats,
           fuelRule: appliedFuelRule || null,
           settledEntries: (relevantEntries.length ? relevantEntries : weekEntries).map((e) => ({
             id: e.id,

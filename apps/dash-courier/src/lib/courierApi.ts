@@ -83,7 +83,13 @@ export async function putCourierAvailability(input: {
   lat?: number;
   lng?: number;
   activeOrderId?: string | null;
-}): Promise<{ ok: boolean; error?: string }> {
+}): Promise<{
+  ok: boolean;
+  error?: string;
+  code?: string;
+  balanceMinor?: number;
+  thresholdMinor?: number;
+}> {
   const headers = await authHeaders();
   if (!headers) return { ok: false, error: 'Not signed in' };
   try {
@@ -93,7 +99,26 @@ export async function putCourierAvailability(input: {
       body: JSON.stringify(input),
     });
     if (!res.ok) {
-      return { ok: false, error: await parseError(res) };
+      const text = await res.text();
+      try {
+        const body = text
+          ? (JSON.parse(text) as {
+              error?: string;
+              code?: string;
+              balanceMinor?: number;
+              thresholdMinor?: number;
+            })
+          : {};
+        return {
+          ok: false,
+          error: body.error || text || `HTTP ${res.status}`,
+          code: body.code,
+          balanceMinor: body.balanceMinor,
+          thresholdMinor: body.thresholdMinor,
+        };
+      } catch {
+        return { ok: false, error: text.slice(0, 200) || `HTTP ${res.status}` };
+      }
     }
     return { ok: true };
   } catch (err) {
@@ -583,4 +608,53 @@ export function orderEarnings(order: AvailableOrder): number {
     Number(order.delivery_fee_courier_amount ?? order.delivery_fee ?? 0),
   );
   return deliveryShare + (order.tip ?? 0) + (order.peak_pay_amount ?? 0);
+}
+
+export type CourierRemittanceSummary = {
+  balanceMinor: number;
+  balanceJmd: number;
+  thresholdMinor: number;
+  thresholdJmd: number;
+  isPaused: boolean;
+  pausedSince: string | null;
+  label?: string;
+};
+
+export type CourierRemittanceEvent = {
+  id: string;
+  event_type: string;
+  amount_minor: number;
+  balance_after_minor: number;
+  order_id?: string | null;
+  bag_total_minor?: number | null;
+  platform_due_minor?: number | null;
+  merchant_due_minor?: number | null;
+  courier_retained_minor?: number | null;
+  created_at: string;
+  notes?: string | null;
+};
+
+export async function fetchCourierRemittance(): Promise<CourierRemittanceSummary | null> {
+  const headers = await authHeaders(false);
+  if (!headers) return null;
+  try {
+    const res = await fetch(`${BASE}/courier/remittance`, { headers });
+    if (!res.ok) return null;
+    return (await res.json()) as CourierRemittanceSummary;
+  } catch {
+    return null;
+  }
+}
+
+export async function fetchCourierRemittanceEvents(): Promise<CourierRemittanceEvent[]> {
+  const headers = await authHeaders(false);
+  if (!headers) return [];
+  try {
+    const res = await fetch(`${BASE}/courier/remittance/events`, { headers });
+    if (!res.ok) return [];
+    const body = (await res.json()) as { events?: CourierRemittanceEvent[] };
+    return body.events ?? [];
+  } catch {
+    return [];
+  }
 }

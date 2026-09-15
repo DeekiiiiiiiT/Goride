@@ -166,6 +166,8 @@ export interface DeriveFuelPeriodsInput {
   >;
   /** Week starts (YMD) where unexplained fuel was accepted — pass from store; keep derive pure. */
   leakageReviewedWeeks?: Set<string>;
+  /** R-2: SQL-locked weeks from server merge — gap-fill derive respects Completed. */
+  lockedWeekStarts?: Set<string>;
 }
 
 function entryInWeek(e: FuelEntry, start: string, end: string): boolean {
@@ -185,6 +187,7 @@ export function deriveFuelReconciliationPeriods(input: DeriveFuelPeriodsInput): 
     scenarios,
     liveReportsByWeek,
     leakageReviewedWeeks,
+    lockedWeekStarts,
   } = input;
 
   return weekOptions.map((week) => {
@@ -226,8 +229,8 @@ export function deriveFuelReconciliationPeriods(input: DeriveFuelPeriodsInput): 
       counts['data-quality'].actionable += exceptionCount;
     }
     const withSpend = active.filter((v) => v.totalSpend > FUEL_SPEND_EPS || v.isFinalized);
-    // Period lock is SQL-only (fuel_reconciliation_period). Snapshots = money posted, not Completed.
-    const locked = false;
+    // Period lock is SQL-only — use server lockedWeekStarts when gap-filling (R-2).
+    const locked = Boolean(lockedWeekStarts?.has(startDate));
 
     const openDisputeCount = withSpend.filter((v) => v.hasOpenDispute).length;
     const status = classifyFuelReconPeriodStatus({

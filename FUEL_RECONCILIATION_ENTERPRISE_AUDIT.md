@@ -3,12 +3,398 @@
 **Scope:** Roam Fleet → Business Finance → Week Reconciliation → **Fuel** lane
 (landing → 6-step week wizard → Finalize → server period lock → fuel week statement).
 **Rev 1:** 2026-09-15 — read-only audit.
-**Rev 2:** 2026-09-15 — post-implementation verification (§0). **Read §0 first.**
+**Rev 2–3:** 2026-09-15 — first and second verifications (§0C / §0B, superseded).
+**Rev 4:** 2026-09-15 — third verification (§0A, superseded).
+**Rev 5:** 2026-09-15 — fourth verification, working tree on `22f51d0f`. **Read §0 first.**
 **Reviewed as:** Principal Systems Architect + Lead UI/UX + senior engineering committee, one verdict.
 
 ---
 
-## 0. Rev 2 — implementation verification (2026-09-15)
+## 0. Rev 5 — verification of the working tree
+
+The headline is operational, not code: **the production C-2 damage is corrected.** Two new
+code defects arrived with this pass, one of which is the familiar pattern in a new disguise.
+
+### 0.1 Gate results — measured
+
+| Gate | Rev 4 | Rev 5 |
+|---|---|---|
+| `fuel-core typecheck` | PASS | **PASS** ✅ |
+| `fuel-core test` | 71/71 | **71/71** ✅ |
+| `deno test` — fuel control suite | 10/10 | **14/14** ✅ (6 files, all in CI) |
+| `deno check` incl. both fuel edge files | PASS | ❌ **5 errors — regressed** |
+| `fleet test` | ❌ 1 (not fuel) | ❌ **1 (still not fuel)** |
+
+### 0.2 🟢 The production defect is fixed
+
+`docs/fuel-recon/stage0-gate.json` now reads:
+
+```json
+"reopenReseal20260824": "done",
+"measuredDelta20260824": {
+  "statementDriverShareMinor": 578498,
+  "ledgerFuelDeductionMinor": 578498
+}
+```
+
+Week `2026-08-24` / driver `73e5b1dc…` was **1,735,494** minor in the ledger against a
+**578,498** minor statement in Rev 4 — a ~3× discrepancy on a closed week, and the one piece of
+real C-2 damage Stage 0 had found in production. It now ties exactly. The reseal was done, the
+gate file records it honestly, and `FUEL_SERVER_ENGINE` is still held at `off` pending the
+shadow soak. That closes the last live money defect this audit found.
+
+### 0.3 Also closed this pass
+
+- **N-12 ✅ — closed properly, with the failing input written.** `closableKvCache` now carries a
+  60 s TTL enforced on read ([:101](supabase/functions/_fleet-server/fuel_week_closable_gate.ts#L101)),
+  and `invalidateFuelWeekClosableKvCache` is **called** at the top of
+  `buildFuelWeekClosableInputForPeriod` ([:273](supabase/functions/_fleet-server/fuel_week_closable_gate.ts#L273)).
+  Two tests seed a stale empty bundle and assert the exception fill **does** surface afterwards.
+  That is the "write the input that makes it fail" discipline, applied.
+- **R-2 (first half) ✅** — `deriveFuelReconciliationPeriods` no longer hardcodes
+  `const locked = false`; it now takes `lockedWeekStarts` from the server merge, so gap-filled
+  weeks respect Completed.
+- **U-14 (partial)** — `FuelPeriodStepper` picked up a11y attributes.
+- **Phase 3 loaders wired into the enforce path** — `resolveEngineCategoryCosts` and
+  `materialCategoryCostDeltas` are now called inside the `FUEL_SERVER_ENGINE` block, and
+  `category.*` deltas join the money deltas. The *shape* is right. See N-15 for the problem.
+- **H-5 money half attempted** — `/materialize` now prefers `aggregateMaterializeMoneyFromSnaps`
+  over the request body, stamping `computed_from_hash: server:materialize:snaps:N`. Right idea.
+  See N-14 for the problem.
+
+### 0.4 🔴 New — blocking CI
+
+| # | Sev | What | Evidence |
+|---|---|---|---|
+| **N-14** | **Blocking CI** | `deno check` regressed from green to **5 errors**. `aggregateMaterializeMoneyFromSnaps` returns `{ ok: boolean; snapCount; totalSpend; … }` on success and the bare literal `{ ok: false, snapCount: 0 }` on the `else` branch. Because `ok` is widened to `boolean` rather than the literals `true`/`false`, TS cannot discriminate the union, so all five `snapMoney.ok ? snapMoney.totalSpend : …` reads fail. Fix: type the return as `{ ok: true; … } \| { ok: false; snapCount: number }` (or give the fallback the full field set). | [fuel_period_routes.ts:1054-1067](supabase/functions/_fleet-server/fuel_period_routes.ts#L1054-L1067) |
+
+### 0.5 🟠 New — the pattern, in a new disguise
+
+| # | Sev | What |
+|---|---|---|
+| **N-15** | **High** | **The Phase 3 loader is wired to inputs production never sends.** `resolveEngineCategoryCosts` derives its "authority" categories from `snap.metadata.settledEntries[].usageCategory` or `snap.metadata.tripCategoryAgg`. Neither exists in a real payload: `fuelFinalizeService` emits `settledEntries` as `{id, amount, date, driverId, vehicleId}` — **no `usageCategory`** — and nothing in `apps/fleet` ever emits `tripCategoryAgg` / `tripCategoryTotals` / `categoryCostsFromTrips` (grep returns only unrelated vehicle-fitness hits). At runtime `bucketForUsage(null)` returns `"rideShareCost"`, so **the entire week's spend buckets into `rideShareCost`** and becomes the authority — `personalUsageCost` 0, misc 0. Under `shadow` that produces large `category.*` and money deltas on essentially every week; under `enforce`, **every finalize would 422 with `SNAPSHOT_MISMATCH`.** |
+
+Two things make this worth stating plainly:
+
+1. **The enforce test passes only because its fixture supplies a shape production does not
+   produce** — `{ amount: 400, usageCategory: "ride" }` and friends
+   ([fuel_week_category_loader_enforce.test.ts:11-14](supabase/functions/_fleet-server/fuel_week_category_loader_enforce.test.ts#L11)).
+   A green test over an impossible input is the same failure mode this audit has flagged four
+   times, just relocated from the code into the fixture.
+2. **Even with `usageCategory` present the two sides are not comparable.** The loader buckets
+   *entry spend* (JMD paid at the pump, by tag); Engine A's category costs are
+   *distance-derived* (`km ÷ efficiency × price`). Those are different quantities and will not
+   agree except by coincidence.
+
+Nothing breaks today — prod is `off` and the ladder mandates a staging shadow soak first, which
+is exactly the control that should catch this. But as wired, the soak will be **all noise**, and
+noise is how a drift signal gets learned-and-ignored. Resolve before turning `shadow` on:
+either have the client emit a real `tripCategoryAgg` (the Engine A per-category costs it already
+computes), or have the server load trips + odometer itself and derive categories the same way
+Engine A does. The second is the actual Phase 3 goal.
+
+### 0.6 Still open
+
+- **N-13** — `orderToFleetTrip.test.ts` still fails: `trip.codBagTotal` is `undefined`, expected
+  `5000`. Both the test and `supabase/functions/_shared/orderToFleetTrip.ts` were edited this
+  pass and they still disagree. **This is courier-remittance work, not fuel** — but it is the
+  only thing keeping `pnpm --filter @roam/fleet test` red, so it blocks the fuel branch's CI.
+- **Performance:** `P-1` · `P-3` (the three `getByPrefix` full-prefix scans remain; the TTL cache
+  bounds how often, not how much) · `P-4` (probe still rebuilds per driver) · `P-9`.
+- **Cleanup:** `U-10` (step notes still component state) · `U-13` · `U-14` (partial — the
+  `FuelLeakageStep` vehicle `<select>` is still unlabelled) · `R-2` (the dead
+  `overlayServerFuelPeriods` alias) · `R-3` · `R-4` (`generateFleetReport` still exported).
+
+### 0.7 Verdict
+
+**The close itself remains enterprise-grade, and it is now also clean in production.** No Rev 1
+Critical is open, the one piece of real money damage is repaired and tied to the cent, and the
+control that would have caught it independently runs nightly.
+
+The two new items are of different weight. N-14 is a ten-minute type fix. N-15 is not a bug in
+what ships today — it is a **readiness** problem for the next flag flip, and it is the reason to
+run the staging shadow soak before anything else: the soak would have surfaced it. Catch it at
+the design level now rather than reading a drift table full of artefacts later.
+
+### 0.8 Next actions, in order
+
+1. **N-14** — discriminate the `snapMoney` union. `deno check` back to green.
+2. **N-15** — decide the Phase 3 authority *before* enabling `shadow`. Preferred: emit
+   `tripCategoryAgg` from `fuelFinalizeService` using the Engine A category costs already on the
+   report, and make `categoryCostsFromEntriesAndTrips` refuse (rather than silently bucket to
+   `rideShareCost`) when neither a trip aggregate nor a tagged entry set is present. Then rewrite
+   the enforce test around a **production-shaped** snapshot, plus one deliberately tampered case.
+3. **N-13** — route to the remittance owner; get the fleet suite green.
+4. **`FUEL_SERVER_ENGINE=shadow` on staging** once 1–2 are done, per
+   `docs/fuel-recon/server-engine-rollout.md`. Soak ≥ 2 weeks on `fuel_engine_diff` and
+   `finance_recon_drift`.
+5. **P-3 / P-4 / P-1 / P-9** — the performance pass.
+6. **U-10 / U-13 / U-14 / R-2 / R-3 / R-4** — cosmetic tail. None of it touches money.
+
+---
+
+## 0A. Rev 4 — verification of the working tree (superseded by §0)
+
+Every Rev 3 action was taken, and two of them were taken the *harder, better* way than I
+advised. **The fuel reconciliation close is now enterprise-grade.** One new defect, one
+out-of-scope CI break, and a short tail of performance and cosmetic debt remain.
+
+### 0.1 Gate results — measured
+
+| Gate | Rev 3 | Rev 4 |
+|---|---|---|
+| `fuel-core typecheck` | PASS | **PASS** ✅ |
+| `fuel-core test` | 71/71 | **71/71** ✅ |
+| `deno check` incl. both fuel edge files | ❌ 68 errors | **PASS** ✅ |
+| `deno test` — new fuel control suite | (did not exist) | **10/10** ✅, now a CI step |
+| `fleet test` | ❌ 1 (fuel golden) | ❌ **1 — `orderToFleetTrip.test.ts`, not fuel** |
+
+### 0.2 Closed this pass
+
+- **N-9 ✅ — done better than advised.** I suggested narrowing the CI scope. Instead the
+  **underlying errors were fixed at source** across `toll_controller.tsx`, `fuel_logic.ts`,
+  `fuel_cycle_stamp.ts`, `driver_financial_periods.ts`, `unifiedLedger/queries.ts` and
+  `periodPersistBody.ts`, so both fuel edge files stay in CI *and* `deno check` is green. That
+  is the right call — it paid down the strictness backlog instead of routing around it.
+- **N-10 ✅** — `fuelFinalizeGolden.test.ts` updated; no fuel test fails.
+- **Stage 5 #31 ✅ — fully wired, the highest-value item is done.**
+  `fuel_nightly_statement_ledger.ts` compares finalized snapshot vs fuel `week_statements` vs
+  active `fuel_*` ledger events for every locked period, upserts to `finance_recon_drift`
+  (`source=nightly`), and is invoked from the `finance-recon` cron
+  ([index.ts:436](supabase/functions/finance-recon/index.ts#L436)). Three tests, including two
+  that assert drift **is** detected. This is the control that would have caught C-2 alone.
+- **H-7 ✅** — `unionFuelSealDriverIds` is wired into the seal loop
+  ([fuel_week_seal.ts:216](supabase/functions/_fleet-server/fuel_week_seal.ts#L216)), with a
+  synthesised period row for snapshot-only drivers. Two tests. A driver with fuel spend but no
+  `driver_financial_periods` row can no longer be silently skipped.
+- **H-5 ✅ — the dangerous half is closed.** `/materialize` is now `fuel.edit_entry`, and
+  **`counts` is computed server-side** by `serverFuelStepCountsForPeriod` rather than accepted
+  from the browser, with `computed_from_hash` changed from `client:…` to
+  `server:materialize:…`. The client can no longer author the gate state that governs close.
+  *(Residual: the money fields — `total_spend`, `unexplained`, shares — are still read from the
+  request body. Lower risk now that the gate is server-derived, but not zero.)*
+- **P-7 ✅** — `handleFinalize` fetches and passes week-scoped `priorReports`.
+- **P-8 ✅** — the wizard remount key no longer includes `initialStepId`.
+- **N-11 partially ✅** — the gate's KV work is now a cached bundle: 3 scans per week per
+  isolate instead of 3 per period per sweep. But see N-12.
+- **Stage 0 ops tracking ✅ — and handled with real discipline.** `stage0-gate.json` now
+  carries `playbookStatus`, a `measuredDelta20260824`, an `opsChecklistBeforeShadow`, and a
+  `fuelServerEngineRollout` ladder with explicit `waitConditions`; `docs/fuel-recon/server-engine-rollout.md`
+  documents the staged soak. Production is held at `FUEL_SERVER_ENGINE=off`. Nothing was
+  declared done that is not done.
+
+### 0.3 🔴 New defect
+
+| # | Sev | What | Evidence |
+|---|---|---|---|
+| **N-12** | **High** | **The new closable gate caches with no invalidation.** `closableKvCache` is a module-level `Map` with no TTL, and `clearFuelWeekClosableKvCache()` has **zero callers**. In a warm Deno isolate the gate can serve a stale bundle, so an **exception-tier fill or an open dispute created after the cache was populated will not block finalize**. Blast radius is bounded: `assertNoUnapprovedFuelTxInWindow` inside `processJobRow` does its own **uncached** scan, so the unapproved-receipt blocker stays fresh at the last mile — but exception fills and disputes flow only through the cached bundle. Fix: a short TTL (30–60 s), or clear the key at the start of every finalize/auto-close evaluation. | [fuel_week_closable_gate.ts:21-26](supabase/functions/_fleet-server/fuel_week_closable_gate.ts#L21-L26) |
+
+### 0.4 🟠 Breaks CI, outside this audit's scope
+
+| # | Sev | What |
+|---|---|---|
+| **N-13** | Medium | `apps/fleet/src/components/rush/__tests__/orderToFleetTrip.test.ts` fails — *"maps COD cashCollected to order total, not courier earning"*. This comes from the concurrent **courier-remittance** work in the same tree (`supabase/functions/delivery/remittance/`, `courierCashLedger.ts`, `orderToFleetTrip.ts`), not from anything in the fuel lane. Flagging it because it is the only thing keeping `pnpm --filter @roam/fleet test` red. |
+
+### 0.5 Still open
+
+**One structural item, honestly labelled:**
+- **Phase 3 loaders.** `fuel_week_category_loader.ts` is written and Deno-tested but has **zero
+  production call sites** — HTTP finalize still recomputes from the snapshot's own
+  `categoryCosts`. So `FUEL_SERVER_ENGINE` verifies the *split*, not the *categories*: a wrong
+  `rideShareCost` from a degraded trip fetch would still pass. This is disclosed in
+  `server-engine-rollout.md` under "Phase 3 loaders (partial)" rather than being passed off as
+  complete, which is the right way to carry it — but it is the last gap between "the server
+  checks the arithmetic" and "the server is the authority".
+
+**Performance:** `P-1` (whole-dataset props) · `P-3` (the three `getByPrefix` scans still read
+whole prefixes before filtering in JS) · `P-4` (probe still rebuilds per driver) · `P-9` (mount
+waterfall).
+
+**UX / cleanup:** `U-10` (step notes still component state) · `U-13` (copy pass) ·
+`U-14` (partial — three components now carry `sr-only`/`aria-live`; the select label and
+focus-on-step-change are still missing) · `R-2` (`const locked = false` at
+[fuelPeriodStatus.ts:230](apps/fleet/src/utils/fuelPeriodStatus.ts#L230) and the dead
+`overlayServerFuelPeriods` alias) · `R-3` · `R-4` (`generateFleetReport` still exported).
+
+**Operational — the one that matters:** week `2026-08-24` is still drifted and still
+`pending_ops`. The gate file now records the measured numbers:
+
+| | minor units |
+|---|---|
+| `week_statements` driverShare (v13, closed) | **578,498** |
+| active `fuel_deduction` ledger | **1,735,494** |
+
+That is a live ~3× discrepancy on a closed week for driver `73e5b1dc…`. The code that caused it
+is fixed and the nightly job will now surface it, but **the existing bad statement is still
+standing.** Reopen and reseal that week before moving `FUEL_SERVER_ENGINE` off `off`.
+
+### 0.6 Verdict
+
+**Yes — this is enterprise-grade now.** Against the bar you set ("when I close fuel
+reconciliation, it must do it to perfection"):
+
+- Every Rev 1 Critical is closed or fail-closed.
+- Every Rev 2 regression is gone; the Rev 3 blockers are gone.
+- One gate governs the wizard, HTTP finalize and auto-close, and it is fed real inputs.
+- A close cannot post a flat-ratio snapshot, an unresolved coverage rule, an untied category
+  set, a degraded-input week, an over-explained residual, or an unreviewed under-explained one.
+- A partial money commit compensates itself and files an audit row.
+- A nightly job re-derives every locked week against both the statement and the ledger and
+  persists drift where a human will see it.
+- The rollout to server authority is staged, documented, gated on measured conditions, and
+  currently held **off** — with the one known production defect tracked rather than buried.
+
+The failure pattern that ran through every previous audit of this system — *the mechanism gets
+built and the last connection, the one that lets the control fail, gets left out* — did not
+recur in Rev 3 and did not recur here. N-12 is a cache-invalidation bug, which is a different
+and more ordinary class of mistake.
+
+What is left is a short, well-understood tail: one cache fix, one out-of-scope test, the Phase 3
+loaders, a performance pass, and an ops task on one historical week.
+
+### 0.7 Next actions, in order
+
+1. **N-12** — give `closableKvCache` a TTL or clear it per evaluation. Test: populate the
+   cache, insert an unacknowledged exception fill, re-evaluate, assert `exception_fills` blocks.
+   *(Write the input that makes it fail.)*
+2. **Ops** — reopen and reseal week `2026-08-24` for driver `73e5b1dc…`, then confirm
+   `finance_recon_drift` clears. Follow `opsChecklistBeforeShadow` exactly.
+3. **N-13** — fix or re-baseline `orderToFleetTrip.test.ts` so the fleet suite is green again.
+   (Courier work, not fuel — route it to whoever owns the remittance branch.)
+4. **`FUEL_SERVER_ENGINE=shadow` on staging**, per the ladder in `server-engine-rollout.md`.
+   Soak ≥ 2 weeks, watch `fuel_engine_diff` and `finance_recon_drift`.
+5. **Phase 3 loaders** — wire `fuel_week_category_loader.ts` into the finalize recompute so the
+   server derives categories from entries/trips instead of trusting the snapshot's. This is what
+   turns `enforce` into genuine authority.
+6. **P-3 / P-4 / P-1 / P-9** — the performance pass. P-3 first: push org + date into SQL for
+   `fuel_entry:`, `fuel_dispute:` and `transaction:`.
+7. **U-10 / U-13 / U-14 / R-2 / R-3 / R-4** — the cosmetic and cleanup tail. None of it affects
+   money.
+
+---
+
+## 0B. Rev 3 — verification of commit `22f51d0f` (superseded by §0)
+
+Every Rev 2 blocker was addressed and the seven unwired controls were wired. I re-read each
+changed path and re-ran the gates. **The money path is now in good shape. Two things are red,
+and neither is a money bug.**
+
+### 0.1 Gate results — measured
+
+| Gate | Rev 2 | Rev 3 |
+|---|---|---|
+| `pnpm --filter @roam/fuel-core typecheck` | ❌ 2 errors | **PASS** ✅ |
+| `pnpm --filter @roam/fuel-core test` | 68/68 | **71/71** ✅ (new `fuelGapSemantics.test.ts`) |
+| `pnpm --filter @roam/fleet test` | ❌ 2 failed | ❌ **1 failed** / 1,395 passed |
+| `deno check` on the two newly-CI'd fuel files | ❌ broken import | ❌ **68 errors** — see N-9 |
+
+### 0.2 Closed and verified this pass
+
+**All five Rev 2 regressions are gone:**
+
+- **N-1** ✅ Both `|| … === UNASSIGNED_FUEL_DRIVER_ID` clauses removed from
+  `entryBelongsToDriverWeekReport`. The double-posting bug is dead.
+- **N-2** ✅ `fuel_week_engine.ts` now reports **zero** deno errors of its own.
+- **N-3** ✅ fuel-core typechecks clean.
+- **N-4** ✅ The money-strip tie is now **sign-based**, exactly as specified:
+  `leakage < -ε ? company+driver+leakage : company+driver`, with a matching label.
+- **N-5b / N-6** ✅ `fuelSpineGolden5179KZ` passes again and a new `fuelGapSemantics.test.ts`
+  pins the gap semantics — the H-1 re-baseline was made deliberately rather than by suppression.
+- **N-7 / H-8** ✅ Done properly: a real `fuel_seal_error` column
+  (`20260915120000_fuel_period_seal_error.sql`), cleared on a successful seal, surfaced through
+  `mapPeriod` → `FuelPeriodRow` → `serverRowsToLandingPeriods` → a **"Statement missing — retry
+  seal"** badge on the locked period card. `computed_from_hash` is no longer hijacked.
+- **N-8** ✅ The bulk dialog no longer sends `allowServiceSecondApprove`.
+
+**And all seven "cannot fail" controls from Rev 2 §0.5 are now wired:**
+
+| ID | Now |
+|---|---|
+| **C-1** | `fuelFinalizeService` attaches `categoryCosts` **and** `fuelRule` to the emitted snapshot (both top-level and in `metadata`), so `FUEL_SERVER_ENGINE=shadow\|enforce` actually compares. Drift is persisted via `upsertFinanceReconDrifts`, not just logged. The remaining depth limit — the recompute is fed the snapshot's own categories — is now an **explicit `TODO(Phase 3 loaders)` in the code**. Honest, and the right call for this stage. |
+| **C-3** | A real shared gate: `fuel_week_closable_gate.ts` (236 lines) with `weekHasOpenFuelDisputes`, `weekHasUnackedExceptionFills`, unapproved-tx, residual kind, counts, categoryCosts and coverage rule — called from **both** `POST /finalize` (:1068) and auto-close. `evaluateFuelWeekClosableClient` mirrors it in the browser. That is the "one gate, four call sites" the audit asked for. |
+| **C-3 / H-4** | `counts` finally has a writer: `/materialize` accepts a `counts` patch and the wizard pushes step counts + money on every recompute (`materializeWizardPeriodCounts`). `counts_unevaluated` is now a gate that can pass *and* fail. |
+| **C-4** | **Closed.** The freeze runs against full-week entries (`weekEntriesForFreeze`) while the settle pool stays Pending-only for `settledEntries`, and `assertCategoryCostsTieSpend` throws `freeze_spend_tie_violation` if the identity breaks. The partial-week denominator bug is gone. |
+| **H-6** | Enforced, not just stamped: the finalize check now selects `payload`, requires `payload.periodVersion === period.version`, and has a defined legacy-row fallback. |
+| **H-10** | `coverageRuleIsResolved` is wired in three places — it throws `unresolved_coverage_rule` per report in `fuelFinalizeService`, and feeds `unresolvedCoverageRule` on both the client and server gates. |
+| **H-11** | Fail-closed: the `entries` mode refuses with `missing_category_costs`, and the shared gate refuses any snapshot set without category costs. A flat-ratio week can no longer publish. |
+| **P-2** | `precomputeFuelFillDrivers` is built once per finalize and passed as `driverByEntryId`, collapsing the per-entry attribution rescan. |
+| **U-7** | Real dispositions: `validateDisposition` runs client-side (wizard) **and** server-side (`/leakage-review` 422s on an invalid code or a short note), the chosen code is persisted into the `leakage_review` audit payload, and `FuelGapAttribution` now receives `estimateLiters` so the km estimate renders. |
+
+`P-7` is half done — the bulk dialog now passes `priorReports`; `handleFinalize` still does not.
+
+### 0.3 🔴 Red — but neither is a money defect
+
+| # | Sev | What | Evidence |
+|---|---|---|---|
+| **N-9** | **Blocking CI** | Adding `fuel_week_engine.ts` **and `fuel_period_routes.ts`** to the CI `deno check` step turns that step red. `fuel_week_engine.ts` is clean, but `fuel_period_routes.ts` carries **14 pre-existing** strictness errors (every `c.req.param("id")` is `string \| undefined` passed to `loadPeriod(orgId: string, periodId: string)` — routes that predate this work), and its transitive graph adds ~54 more: `toll_controller.tsx` 25, `fuel_logic.ts` 13, `fuel_cycle_stamp.ts` 8, `driver_financial_periods.ts` 4, `periodPersistBody.ts` 3. **Verified pre-existing** — `deno check toll_match_index.ts` alone fails with 2. The coverage instinct was right; the scope was too wide in one step. | [ci.yml:116](.github/workflows/ci.yml#L116) |
+| **N-10** | Medium | `fuelFinalizeGolden.test.ts:92` fails. The fixture is a `spend = 80 / misc = 40` week (50% residual) with `scenarios: []` and no `leakageReviewed` — so it now correctly trips **both** `under_explained_unreviewed` and `unresolved_coverage_rule`. **The code is right and the fixture is stale**, but a red golden on the finalize path is not something to leave sitting. | test output |
+
+### 0.4 🟠 One thing got worse
+
+| # | Sev | What | Evidence |
+|---|---|---|---|
+| **N-11** | High (perf) | The new shared gate adds **five more unbounded `kv.getByPrefix` scans** — `fuel_dispute:`, `fuel_entry:`, `transaction:` — and they run on **every HTTP finalize and every period in every auto-close sweep**, on top of the `transaction:` scan that was already there. P-3 was already the worst server-side cost in the section; correctness was bought with roughly a 2× increase in it. Correct trade for now, but it makes P-3 urgent rather than deferrable. | [fuel_week_closable_gate.ts](supabase/functions/_fleet-server/fuel_week_closable_gate.ts) |
+
+### 0.5 Still open
+
+**High:**
+- **H-5** — `/materialize` is still `requirePermission("transactions.edit")`, still stamps
+  `computed_from_hash: "client:…"`, and the surface **widened**: it now also accepts a
+  client-supplied `counts` jsonb, which is the input to a close gate. Client-written money plus
+  client-written gate state on one unprivileged route.
+- **H-7** — `sealFuelWeek` still iterates `driver_financial_periods` only. A driver with fuel
+  spend but no DFP row for the anchor still gets no statement, silently.
+- **P-3 / N-11** — see above.
+
+**Medium / Low:** `P-1` (whole-dataset props) · `P-4` (probe still rebuilds per driver) ·
+`P-7` (handleFinalize half) · `P-8` (remount key unchanged) · `P-9` (mount waterfall) ·
+`U-10` (step notes still component state) · `U-13` · `U-14` (only the money strip got a live
+region) · `R-2` · `R-3` · `R-4`.
+
+**Strategic:** Stage 5 #30 (`evaluateFuelWeekClosable` is shared but the browser and server
+still run two different *engines*; only the gate is unified) and **#31 — the nightly
+`statement.driverShare ≈ Σ active fuel_deduction` assertion still does not exist.** That is the
+one control that would have caught C-2 in production on its own, and Stage 0 proved C-2 had
+already happened. It is now the highest-value remaining item.
+
+### 0.6 Verdict
+
+**The fuel reconciliation money path is now defensible.** Every Critical from Rev 1 is closed
+or fail-closed, every Rev 2 regression is gone, and — the part that matters most — the pattern
+that has recurred through every audit of this system **did not recur this time**. Seven controls
+that could not fail were made able to fail, with real inputs feeding them, and the one place
+where the authority is still shallow (server recompute using the client's own categories) is
+labelled in the code as a TODO instead of being passed off as done.
+
+Remaining work is operational, not structural: a CI step scoped too wide, one stale fixture, a
+known performance debt that the correctness fixes made larger, and two route-level governance
+gaps. None of them can produce a wrong number at close.
+
+### 0.7 Next actions, in order
+
+1. **N-9** — revert `fuel_period_routes.ts` out of the CI `deno check` list and keep
+   `fuel_week_engine.ts` in (it is clean and it is the file that broke). Open a separate task to
+   fix the 14 `c.req.param` narrowings, then add it back. Do not let a pre-existing strictness
+   backlog block the fuel work.
+2. **N-10** — update the golden fixture: give it a resolved `Percentage` scenario and either
+   `leakageReviewed: true` or a residual inside the 25% band. Add a second case asserting the
+   week **is** refused without those, so the fixture proves the gate rather than dodging it.
+3. **Stage 5 #31** — the nightly statement↔ledger assertion. Highest value left; §12.1 C-2 and
+   §13.2 Q3 already contain the query.
+4. **H-5** — move `/materialize` to `fuel.edit_entry` at minimum, and compute `counts`
+   server-side from the gate you already built rather than accepting them from the browser.
+5. **P-3 / N-11** — push org + date into SQL for `fuel_entry:`, `fuel_dispute:` and
+   `transaction:`. The gate made this urgent.
+6. **H-7** — seal from the union of DFP rows and snapshot driver ids.
+7. Then the Rev 1 §14 order from Stage 6 (performance) onward.
+
+One thing to confirm operationally before flipping `FUEL_SERVER_ENGINE=enforce`: the Stage 0
+gate file still instructs you to reopen and reseal week `2026-08-24` for driver `73e5b1dc…`.
+I saw no evidence in this commit that it has been done.
+
+---
+
+## 0C. Rev 2 — first implementation verification (superseded by §0)
 
 A remediation pass was implemented against Rev 1 (115 changed paths, ~1,033 insertions across
 the fuel graph, uncommitted). I re-read every changed file and ran the suites. **This is not
