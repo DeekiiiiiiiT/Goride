@@ -310,11 +310,13 @@ export async function finalizeFuelWeekReports(
         // C-1: emit categoryCosts + fuelRule so FUEL_SERVER_ENGINE can compare.
         categoryCosts: cats,
         fuelRule: appliedFuelRule || null,
+        personalAllowanceEarnedCost: frozen.personalAllowanceEarnedCost,
         metadata: {
           ...report.metadata,
           categoryCosts: cats,
           // N-15: Engine A stamp for server loader — same object as categoryCosts (not entry buckets).
           tripCategoryAgg: cats,
+          personalAllowanceEarnedCost: frozen.personalAllowanceEarnedCost,
           fuelRule: appliedFuelRule || null,
           settledEntries: (relevantEntries.length ? relevantEntries : weekEntries).map((e) => ({
             id: e.id,

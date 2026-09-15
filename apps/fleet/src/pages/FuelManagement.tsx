@@ -44,6 +44,7 @@ import { FuelDisputeService } from '../services/fuelDisputeService';
 import { api } from '../services/api';
 import { FuelReconciliationDashboard } from '../components/fuel/reconciliation/FuelReconciliationDashboard';
 import { useFuelSettlementReopenGate } from '../components/fuel/reconciliation/useFuelSettlementReopenGate';
+import { useFuelForceClientMoneyDialog } from '../components/fuel/reconciliation/useFuelForceClientMoneyDialog';
 import { deriveFuelReconciliationPeriods } from '../utils/fuelPeriodStatus';
 import { listFuelLeakageReviewedWeeks } from '../utils/fuelLeakageReviewStore';
 import { fetchTripsForFuelWeekPaged } from '../utils/fetchTripsForFuelWeek';
@@ -121,6 +122,8 @@ function FuelManagementInner({
   const { runExclusive, setMessage } = useFuelReconBusy();
   const { confirmIfNeeded: confirmSettlementReopen, dialog: settlementReopenDialog } =
     useFuelSettlementReopenGate();
+  const { confirmIfMismatch: confirmForceClientMoney, dialog: forceClientMoneyDialog } =
+    useFuelForceClientMoneyDialog();
   const [activeTab, setActiveTab] = useState(defaultTab);
   const lastFuelDataLoadAtRef = useRef(0);
 
@@ -476,9 +479,10 @@ function FuelManagementInner({
   const [selectedBucketVehicle, setSelectedBucketVehicle] = useState<Vehicle | null>(null);
   const [isBucketSheetOpen, setIsBucketSheetOpen] = useState(false);
 
-  // Effect to reload trips when Reconciliation Date Range changes — after periods first paint
+  // P-9: defer trips until bucket sheet opens — landing must not wait on trip waterfall.
+  // Wizard / finalize fetch trips via buildFuelWeekReportsWithGating when needed.
   useEffect(() => {
-    if (activeTab !== 'reconciliation' || !periodsQueryReady) return;
+    if (activeTab !== 'reconciliation' || !periodsQueryReady || !isBucketSheetOpen) return;
     const fetchTripsForRange = async () => {
         if (!reconciliationDateRange?.from) return;
         try {
@@ -492,11 +496,10 @@ function FuelManagementInner({
             if (tripsTruncated) setFuelDataTruncated(true);
         } catch (e) {
             console.error("Failed to fetch trips for range", e);
-            // Don't toast error here to avoid spamming on mount if it fails silently
         }
     };
     fetchTripsForRange();
-  }, [activeTab, periodsQueryReady, reconciliationDateRange]);
+  }, [activeTab, periodsQueryReady, reconciliationDateRange, isBucketSheetOpen]);
 
   const loadLogsAndTransactions = useCallback(async () => {
     const { startDate, endDate } = fuelFetchWindow;
@@ -1398,22 +1401,44 @@ function FuelManagementInner({
           };
 
           let jobRes: Awaited<ReturnType<typeof api.enqueueFuelPeriodFinalize>>;
+          const enqueueArgs = {
+            periodId: periodRow.id,
+            version: periodRow.version || 1,
+            idempotencyKey: fuelPeriodFinalizeIdempotencyKey(
+              periodRow.id,
+              periodRow.version || 1,
+            ),
+            snapshots: weekResult.snapshots || [],
+            totalSpend,
+            secondApproverThreshold: threshold,
+          };
           try {
-            jobRes = await api.enqueueFuelPeriodFinalize({
-              periodId: periodRow.id,
-              version: periodRow.version || 1,
-              idempotencyKey: fuelPeriodFinalizeIdempotencyKey(
-                periodRow.id,
-                periodRow.version || 1,
-              ),
-              snapshots: weekResult.snapshots || [],
-              totalSpend,
-              secondApproverThreshold: threshold,
-            });
+            jobRes = await api.enqueueFuelPeriodFinalize(enqueueArgs);
           } catch (lockErr: any) {
-            // Worker may OOM after lock, or retry hits version_conflict — both can mean success.
-            if (await recoverIfAlreadyLocked()) return true;
-            throw lockErr;
+            if (lockErr?.code === 'SNAPSHOT_MISMATCH') {
+              const forceReason = await confirmForceClientMoney(
+                Array.isArray(lockErr.mismatches) ? lockErr.mismatches : [],
+              );
+              if (!forceReason) {
+                toast.message(
+                  'Finalize blocked — server mismatch. An admin can force close with a reason, or fix the week and retry.',
+                );
+                return false;
+              }
+              try {
+                jobRes = await api.enqueueFuelPeriodFinalize({
+                  ...enqueueArgs,
+                  forceReason,
+                });
+              } catch (forceErr: any) {
+                if (await recoverIfAlreadyLocked()) return true;
+                throw forceErr;
+              }
+            } else {
+              // Worker may OOM after lock, or retry hits version_conflict — both can mean success.
+              if (await recoverIfAlreadyLocked()) return true;
+              throw lockErr;
+            }
           }
           const jobInterp = interpretFuelFinalizeJobResult(jobRes);
           if (jobInterp.incomplete) {
@@ -1878,6 +1903,7 @@ function FuelManagementInner({
       </AlertDialog>
 
       {settlementReopenDialog}
+      {forceClientMoneyDialog}
 
       <AlertDialog open={!!deleteLogConfirmationId} onOpenChange={(open) => !open && setDeleteLogConfirmationId(null)}>
         <AlertDialogContent>

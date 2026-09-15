@@ -84,11 +84,9 @@ export function FuelLeakageStep(props: FuelLeakageStepProps) {
           role="alert"
           className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-[13px] text-amber-950"
         >
-          Unexplained is {overPct != null ? `${overPct}%` : 'beyond'} of spend — this week
-          is not fit to finalize until inputs are fixed
-          {leakage < 0
-            ? ' (modelled costs exceed gas-card spend).'
-            : ' (fuel spend is not fully explained by distance categories).'}
+          {overExplained && leakage < 0
+            ? `Over-explained is ${overPct != null ? `${overPct}%` : 'beyond'} of spend — this week is not fit to finalize until inputs are fixed (modelled costs exceed gas-card spend).`
+            : `${unexplainedLabel(leakage)} is ${overPct != null ? `${overPct}%` : 'beyond'} of spend — this week is not fit to finalize until inputs are fixed (fuel spend is not fully explained by distance categories).`}
         </div>
       )}
       <h3 className="px-1 text-[12px] font-semibold uppercase tracking-wide text-slate-500">

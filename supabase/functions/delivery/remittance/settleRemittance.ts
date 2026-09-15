@@ -247,3 +247,103 @@ export async function reverseSettlement(
     stillPaused: Boolean(after?.isPaused),
   };
 }
+
+export type ReverseWriteOffResult =
+  | {
+    ok: true;
+    eventId: string;
+    reversalEventId: string;
+    balanceBeforeMinor: number;
+    balanceAfterMinor: number;
+    stillPaused: boolean;
+  }
+  | { ok: false; status: number; error: string; code?: string };
+
+/** Pure guards for Deno unit tests (W-2). */
+export function validateWriteOffReversalTarget(event: {
+  event_type?: string | null;
+  amount_minor?: number | null;
+} | null): { ok: true; restoreMinor: number } | { ok: false; status: number; error: string } {
+  if (!event) return { ok: false, status: 404, error: "event_not_found" };
+  if (String(event.event_type) !== "write_off") {
+    return { ok: false, status: 422, error: "only_write_off_reversible" };
+  }
+  const restoreMinor = Math.abs(Number(event.amount_minor) || 0);
+  if (!(restoreMinor > 0)) {
+    return { ok: false, status: 422, error: "zero_write_off" };
+  }
+  return { ok: true, restoreMinor };
+}
+
+/** W-2: reverse a write_off event — restores receivable; no settlement row. */
+export async function reverseWriteOffEvent(
+  sb: Sb,
+  eventId: string,
+  actorId: string,
+): Promise<ReverseWriteOffResult> {
+  const id = String(eventId || "").trim();
+  if (!id) return { ok: false, status: 400, error: "event_id_required" };
+
+  const db = deliveryDb(sb);
+  const { data: event, error: loadErr } = await db
+    .from("courier_remittance_events")
+    .select("id, courier_id, event_type, amount_minor")
+    .eq("id", id)
+    .maybeSingle();
+  if (loadErr) return { ok: false, status: 500, error: loadErr.message };
+
+  const validated = validateWriteOffReversalTarget(event);
+  if (!validated.ok) return validated;
+
+  const { data: priorRev } = await db
+    .from("courier_remittance_events")
+    .select("id")
+    .eq("reversal_of", id)
+    .eq("event_type", "reversal")
+    .maybeSingle();
+  if (priorRev?.id) {
+    return { ok: false, status: 409, error: "already_reversed" };
+  }
+
+  const reverseKey = reverseIdempotencyKey(id);
+  const { data: priorByKey } = await db
+    .from("courier_remittance_events")
+    .select("id, balance_before_minor, balance_after_minor")
+    .eq("idempotency_key", reverseKey)
+    .maybeSingle();
+  if (priorByKey?.id) {
+    const after = await getRemittanceAccount(sb, String(event!.courier_id));
+    return {
+      ok: true,
+      eventId: id,
+      reversalEventId: String(priorByKey.id),
+      balanceBeforeMinor: Number(priorByKey.balance_before_minor ?? 0),
+      balanceAfterMinor: Number(priorByKey.balance_after_minor ?? 0),
+      stillPaused: Boolean(after?.isPaused),
+    };
+  }
+
+  const { data, error } = await db.rpc("apply_remittance_event", {
+    p_courier_id: event!.courier_id,
+    p_event_type: "reversal",
+    p_amount_minor: validated.restoreMinor,
+    p_idempotency_key: reverseKey,
+    p_reversal_of: id,
+    p_actor_id: actorId,
+    p_actor_type: "admin",
+    p_notes: `Reversal of write-off ${id}`,
+  });
+  if (error) {
+    return { ok: false, status: 500, error: error.message };
+  }
+
+  const after = await getRemittanceAccount(sb, String(event!.courier_id));
+  return {
+    ok: true,
+    eventId: id,
+    reversalEventId: String(data?.id ?? ""),
+    balanceBeforeMinor: Number(data?.balance_before_minor ?? 0),
+    balanceAfterMinor: Number(data?.balance_after_minor ?? 0),
+    stillPaused: Boolean(after?.isPaused),
+  };
+}

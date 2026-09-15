@@ -11,9 +11,11 @@ import {
   fetchRemittanceReconciliation,
   settleRemittance,
   reverseRemittanceSettlement,
+  reverseRemittanceWriteOff,
   retryRemittanceException,
   resolveRemittanceException,
   updateRemittancePauseThreshold,
+  writeOffRemittance,
 } from '@roam/dash-admin-client';
 import { canWriteDashAdmin } from '../../utils/dashAdminRoles';
 import type { AdminOutletContext } from '../../DashAdminPortal';
@@ -24,6 +26,13 @@ function fmtMinor(minor: number): string {
     maximumFractionDigits: 2,
   })}`;
 }
+
+const WRITE_OFF_REASONS = [
+  { value: 'inactive_courier', label: 'Inactive courier' },
+  { value: 'uncollectible', label: 'Uncollectible' },
+  { value: 'ops_error', label: 'Ops / pricing error' },
+  { value: 'other', label: 'Other' },
+] as const;
 
 export function RemittanceDeskPage() {
   const { session } = useOutletContext<AdminOutletContext>();
@@ -36,7 +45,6 @@ export function RemittanceDeskPage() {
     drift: unknown[];
     missingCollections: unknown[];
     trialBreaks: unknown[];
-    legacyDrift?: unknown[];
     stalePending?: Array<Record<string, unknown>>;
   } | null>(null);
   const [loading, setLoading] = useState(true);
@@ -50,6 +58,14 @@ export function RemittanceDeskPage() {
   /** R-4: one key per settle panel open — not per click. */
   const [settleIdempotencyKey, setSettleIdempotencyKey] = useState(() => crypto.randomUUID());
   const [thresholdJmd, setThresholdJmd] = useState('10000');
+  const [writeOffOpen, setWriteOffOpen] = useState(false);
+  const [writeOffReason, setWriteOffReason] = useState<string>('uncollectible');
+  const [writeOffNotes, setWriteOffNotes] = useState('');
+  const [writeOffConfirm, setWriteOffConfirm] = useState('');
+  const [writeOffIdempotencyKey, setWriteOffIdempotencyKey] = useState(() =>
+    crypto.randomUUID(),
+  );
+  const [lastWriteOffEventId, setLastWriteOffEventId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -87,7 +103,12 @@ export function RemittanceDeskPage() {
     setAmountJmd(String(balanceMinor / 100));
     setThresholdJmd(String((pauseThresholdMinor ?? 1000000) / 100));
     setSettleIdempotencyKey(crypto.randomUUID());
+    setWriteOffIdempotencyKey(crypto.randomUUID());
     setLastReceipt(null);
+    setLastWriteOffEventId(null);
+    setWriteOffOpen(false);
+    setWriteOffNotes('');
+    setWriteOffConfirm('');
   };
 
   const handleSettle = async () => {
@@ -147,6 +168,25 @@ export function RemittanceDeskPage() {
     }
   };
 
+  const handleReverseWriteOff = async (eventId: string) => {
+    if (!canWrite) return;
+    setBusy(true);
+    try {
+      const result = await reverseRemittanceWriteOff(token, eventId);
+      if (!result.ok) {
+        toast.error(result.error || 'Write-off reverse failed');
+        return;
+      }
+      toast.success('Write-off reversed — balance restored');
+      if (lastWriteOffEventId === eventId) setLastWriteOffEventId(null);
+      await load();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Write-off reverse failed');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const handleRetryException = async (id: string) => {
     if (!canWrite) return;
     setBusy(true);
@@ -191,6 +231,55 @@ export function RemittanceDeskPage() {
       await load();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Threshold update failed');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleWriteOff = async () => {
+    if (!selectedId || !canWrite) return;
+    const amount = Number(amountJmd);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      toast.error('Enter a positive amount to write off');
+      return;
+    }
+    if (writeOffNotes.trim().length < 8) {
+      toast.error('Write-off notes must explain why (min 8 characters)');
+      return;
+    }
+    if (writeOffConfirm.trim().toUpperCase() !== 'WRITE OFF') {
+      toast.error('Type WRITE OFF to confirm');
+      return;
+    }
+    setBusy(true);
+    try {
+      const result = await writeOffRemittance(token, {
+        courierId: selectedId,
+        amountMinor: Math.round(amount * 100),
+        reasonCode: writeOffReason,
+        notes: writeOffNotes.trim(),
+        expectedBalanceMinor: expectedMinor,
+        idempotencyKey: writeOffIdempotencyKey,
+      });
+      if (!result.ok) {
+        if (result.status === 409) {
+          toast.error('Balance changed — refresh and try again');
+          await load();
+        } else {
+          toast.error(result.error || 'Write-off failed');
+        }
+        return;
+      }
+      setLastWriteOffEventId(result.eventId ?? null);
+      toast.success(`Wrote off — event ${result.eventId?.slice(0, 8) ?? ''}…`);
+      setWriteOffOpen(false);
+      setWriteOffNotes('');
+      setWriteOffConfirm('');
+      setWriteOffIdempotencyKey(crypto.randomUUID());
+      setAmountJmd('');
+      await load();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Write-off failed');
     } finally {
       setBusy(false);
     }
@@ -270,12 +359,11 @@ export function RemittanceDeskPage() {
       )}
 
       {recon && (
-        <div className="grid gap-3 sm:grid-cols-5 text-sm">
+        <div className="grid gap-3 sm:grid-cols-4 text-sm">
           {[
             { label: 'Ledger drift', n: recon.drift?.length ?? 0 },
             { label: 'Missing collections', n: recon.missingCollections?.length ?? 0 },
             { label: 'Trial breaks', n: recon.trialBreaks?.length ?? 0 },
-            { label: 'Legacy drift', n: recon.legacyDrift?.length ?? 0 },
             { label: 'Stale pending', n: recon.stalePending?.length ?? 0 },
           ].map((k) => (
             <div
@@ -430,6 +518,103 @@ export function RemittanceDeskPage() {
                     >
                       Reverse a settlement by ID…
                     </button>
+                    <button
+                      type="button"
+                      className="block text-xs text-slate-500 underline"
+                      onClick={() => {
+                        const eid = window.prompt(
+                          'Write-off event UUID to reverse\n\nRestores what the courier owes Roam. Does not create a cash receipt.',
+                        );
+                        if (!eid?.trim()) return;
+                        const confirm = window.prompt('Type REVERSE to confirm');
+                        if (confirm?.trim().toUpperCase() !== 'REVERSE') {
+                          toast.error('Type REVERSE to confirm');
+                          return;
+                        }
+                        void handleReverseWriteOff(eid.trim());
+                      }}
+                    >
+                      Reverse a write-off by event ID…
+                    </button>
+
+                    <div className="border-t border-slate-800 pt-4 space-y-3">
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => setWriteOffOpen((o) => !o)}
+                        className="text-xs text-red-400/90 underline disabled:opacity-50"
+                      >
+                        {writeOffOpen ? 'Hide write-off' : 'Write off balance (forgiveness)…'}
+                      </button>
+                      {writeOffOpen && (
+                        <div className="rounded-lg border border-red-900/60 bg-red-950/20 p-3 space-y-3">
+                          <p className="text-xs text-red-200/90">
+                            This forgives what the courier owes Roam. It is not a payment. Prefer
+                            Settle when cash/Lynk was received.
+                          </p>
+                          <p className="text-[11px] text-slate-400">
+                            Amount above will be written off. Remaining after:{' '}
+                            <span className="text-white">
+                              {fmtMinor(
+                                Math.max(
+                                  0,
+                                  expectedMinor - Math.round((Number(amountJmd) || 0) * 100),
+                                ),
+                              )}
+                            </span>
+                          </p>
+                          <select
+                            value={writeOffReason}
+                            onChange={(e) => setWriteOffReason(e.target.value)}
+                            className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-red-900/50 text-white text-sm"
+                          >
+                            {WRITE_OFF_REASONS.map((r) => (
+                              <option key={r.value} value={r.value}>
+                                {r.label}
+                              </option>
+                            ))}
+                          </select>
+                          <textarea
+                            value={writeOffNotes}
+                            onChange={(e) => setWriteOffNotes(e.target.value)}
+                            placeholder="Required: why this debt is forgiven"
+                            className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-red-900/50 text-white text-sm min-h-[72px]"
+                          />
+                          <input
+                            value={writeOffConfirm}
+                            onChange={(e) => setWriteOffConfirm(e.target.value)}
+                            placeholder='Type WRITE OFF to confirm'
+                            className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-red-900/50 text-white text-sm"
+                          />
+                          <button
+                            type="button"
+                            disabled={busy}
+                            onClick={() => void handleWriteOff()}
+                            className="px-4 py-2 rounded-lg bg-red-800 text-white text-sm font-medium disabled:opacity-50"
+                          >
+                            {busy ? 'Working…' : 'Confirm write-off'}
+                          </button>
+                          {lastWriteOffEventId && (
+                            <div className="space-y-2 pt-1">
+                              <p className="text-xs text-red-300/80">
+                                Last write-off event: {lastWriteOffEventId.slice(0, 8)}…
+                              </p>
+                              <button
+                                type="button"
+                                disabled={busy}
+                                onClick={() => void handleReverseWriteOff(lastWriteOffEventId)}
+                                className="px-3 py-1.5 rounded-lg border border-red-700/60 text-red-200 text-xs font-medium disabled:opacity-50"
+                              >
+                                Reverse this write-off
+                              </button>
+                              <p className="text-[11px] text-slate-500">
+                                Restores what the courier owes Roam. Does not create a cash receipt.
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </>
                 ) : (
                   <p className="text-sm text-slate-500">Read-only role — cannot settle.</p>

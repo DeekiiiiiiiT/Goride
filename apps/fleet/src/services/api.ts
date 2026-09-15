@@ -4691,7 +4691,11 @@ export const api = {
     secondApproverThreshold?: number;
     /** Bulk finalize ack — server may stamp system second_approve for high-spend weeks. */
     allowServiceSecondApprove?: boolean;
+    /** Rev6 break-glass: force client money despite SNAPSHOT_MISMATCH (reason ≥8). */
+    forceReason?: string;
   }) {
+    const forceReason = String(args.forceReason || '').trim();
+    const force = forceReason.length >= 8;
     const response = await fetchWithRetry(
       `${API_ENDPOINTS.fuel}/fuel/periods/${encodeURIComponent(args.periodId)}/finalize`,
       {
@@ -4700,12 +4704,14 @@ export const api = {
           ...(await requireAuthHeaders()),
           'Idempotency-Key': args.idempotencyKey,
           'If-Match': String(args.version),
+          ...(force ? { 'X-Fuel-Force-Client-Money': '1' } : {}),
         },
         body: JSON.stringify({
           snapshots: args.snapshots || [],
           totalSpend: args.totalSpend,
           secondApproverThreshold: args.secondApproverThreshold,
           allowServiceSecondApprove: args.allowServiceSecondApprove === true,
+          ...(force ? { forceReason } : {}),
         }),
       },
     );
@@ -4715,6 +4721,31 @@ export const api = {
       err.status = 409;
       err.body = body;
       throw err;
+    }
+    if (response.status === 422) {
+      const body = (await response.json().catch(() => ({}))) as {
+        code?: string;
+        error?: string;
+        mismatches?: unknown;
+        message?: string;
+      };
+      if (body.code === 'SNAPSHOT_MISMATCH' || body.error === 'SNAPSHOT_MISMATCH') {
+        const err = new Error(
+          body.message ||
+            'Server money check refused this close (SNAPSHOT_MISMATCH). Review mismatches or force with a reason.',
+        ) as Error & {
+          status?: number;
+          code?: string;
+          mismatches?: unknown;
+          body?: unknown;
+        };
+        err.status = 422;
+        err.code = 'SNAPSHOT_MISMATCH';
+        err.mismatches = body.mismatches;
+        err.body = body;
+        throw err;
+      }
+      throw new Error(body.message || body.error || 'Finalize refused');
     }
     if (!response.ok) {
       const errText = await response.text().catch(() => '');

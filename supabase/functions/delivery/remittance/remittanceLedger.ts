@@ -91,6 +91,35 @@ export async function postRemittanceSettled(
   return data as RemittanceEventRow;
 }
 
+export async function postRemittanceWriteOff(
+  sb: Sb,
+  input: {
+    courierId: string;
+    amountMinor: number;
+    idempotencyKey: string;
+    actorId: string | null;
+    notes: string;
+    reasonCode: string;
+  },
+): Promise<RemittanceEventRow> {
+  const db = deliveryDb(sb);
+  const key = input.idempotencyKey.startsWith("cod:writeoff:")
+    ? input.idempotencyKey
+    : `cod:writeoff:v1:${input.idempotencyKey}`;
+  const { data, error } = await db.rpc("apply_remittance_event", {
+    p_courier_id: input.courierId,
+    p_event_type: "write_off",
+    p_amount_minor: -Math.abs(input.amountMinor),
+    p_idempotency_key: key,
+    p_actor_id: input.actorId,
+    p_actor_type: "admin",
+    p_notes: input.notes,
+    p_metadata: { reason_code: input.reasonCode },
+  });
+  if (error) throw new Error(error.message || "apply_remittance_event write_off failed");
+  return data as RemittanceEventRow;
+}
+
 export async function getRemittanceAccount(
   sb: Sb,
   courierId: string,

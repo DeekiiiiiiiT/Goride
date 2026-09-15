@@ -288,13 +288,10 @@ and both are unset in normal operation. Remittance is live and is the sole COD a
 
 | Env var | Normal | What it does |
 |---------|--------|--------------|
-| `DELIVERY_REMITTANCE_OFF=1` | unset | Kill-switch — stops remittance collection writes |
-| `DELIVERY_COD_LEGACY_WRITE=1` | unset | Emergency — also writes legacy `courier_cash_*` |
+| `DELIVERY_REMITTANCE_OFF=1` | unset | Kill-switch — stops remittance collection writes; **auto-fails over to legacy `courier_cash_*`** so COD is never unrecorded (V-2) |
+| `DELIVERY_COD_LEGACY_WRITE=1` | unset | Emergency dual-write — also writes legacy while remittance stays on |
 
-⚠️ **Set them together or not at all.** `DELIVERY_REMITTANCE_OFF=1` on its own stops *all* COD
-collection, because legacy is off by default — cash deliveries complete and nothing is
-recorded. `v_remittance_missing_collections` will catch it, but only after the fact. If you
-kill remittance, set `DELIVERY_COD_LEGACY_WRITE=1` in the same change.
+⚠️ **Kill-switch alone is safe for recording:** with remittance off, legacy posts automatically (loud `REMITTANCE_KILL_SWITCH_LEGACY_FAILOVER` log). Use `DELIVERY_COD_LEGACY_WRITE=1` only when you intentionally want **both** ledgers while remittance is still on.
 
 Never flip production flags without reading the QA matrix in `WALLET_ARCHITECTURE_QA.md`.
 
@@ -379,7 +376,7 @@ Delivery cash-on-delivery (**COD**) looks similar (“courier holds cash”) but
 | | Rideshare cash | Delivery COD |
 |--|----------------|--------------|
 | Who the cash is for | Fare economics between rider, driver, Roam; then fleet remittance | Customer pays for **order** (food/goods + fees); courier remits **platform + merchant** share to Roam |
-| Wallets | Cash / Digital / Debt + rider wallet | **One** remittance balance (`courier_remittance_accounts`; legacy `courier_cash_balances` until cutover) |
+| Wallets | Cash / Digital / Debt + rider wallet | **One** remittance balance (`courier_remittance_accounts`; legacy `courier_cash_*` audit-only) |
 | Collection UX | Explicit cash settlement screen | Often implicit when order marked **delivered** |
 | Fleet Collect / Log Cash | Correct for rideshare Layer B | **Wrong** place to clear Roam COD |
 | Weekly settlement week | Core to Fleet Collect | COD is usually a **running balance**; settle is remittance to Roam |
@@ -502,8 +499,8 @@ That is the unstable architecture this analysis exists to prevent.
 
 1. Customer pays J$2,500 cash for an order.  
 2. Suppose remittance due to Roam (platform + merchant) = J$2,200; courier retains J$300 earning.  
-3. `courier_cash_balances` increases by ~J$2,200 — **not** J$2,500.  
-4. Settling that balance is Roam remittance, **not** Fleet Driver Settlements Log Cash for a rideshare week.
+3. `courier_remittance_accounts.balance_minor` increases by ~J$2,200 (**not** J$2,500).  
+4. Settling that balance is Roam remittance on Remittance Desk, **not** Fleet Driver Settlements Log Cash for a rideshare week.
 
 ---
 
@@ -547,7 +544,8 @@ If any answer is unclear, stop and ask. Cash bugs are expensive and hard to reve
 | 2026-09-15 | Added Parts 11–19: code-level audit of the live COD implementation (24 findings), the Layer A′ separation contract, target data model, server/UI architecture, 7-phase build plan, test matrix, rollout + rollback |
 | 2026-09-15 | Implementation landed. Added Parts 21–22: verification of what shipped (19 of 24 original findings closed) and 13 remaining items (R-1…R-13), 2 of them Critical |
 | 2026-09-15 | Remediation round 2 verified (R-items + N-items). Production remittance cutover (no dual-write soak): remittance sole writer; Part 18/23 rewritten |
-| 2026-09-15 | Round 3 verified: all R- and N-items closed, CI green, cutover consistent (no v2 flags remain). Added Layer A′ to Parts 3–4 for onboarding readers, marked Part 16 historical, added Part 24 (V-1…V-3 residual) |
+| 2026-09-15 | Part 24 residuals closed: V-1 alert hygiene, V-2 kill-switch legacy failover, V-3 admin write-off; Parts 21–22 marked historical |
+| 2026-09-15 | Part 25 W-1/W-2 closed: write_off sign CHECK + desk reverse of wrong write-offs |
 
 **Owners:** Platform / Fleet finance engineering + product  
 **Source analysis:** Cross-repo review of rides cashSettlement, fleet settlements, delivery courier cash ledger, and existing money docs
@@ -1441,8 +1439,8 @@ Example D from Part 7, executed against a real stack:
 | Env | Default | Controls |
 |-----|---------|----------|
 | *(none)* | remittance on | Cash deliver always writes remittance |
-| `DELIVERY_REMITTANCE_OFF=1` | unset | Emergency kill-switch — stop remittance writes |
-| `DELIVERY_COD_LEGACY_WRITE=1` | unset | Emergency only — also write legacy `courier_cash_*` |
+| `DELIVERY_REMITTANCE_OFF=1` | unset | Emergency kill-switch — stop remittance writes; **auto legacy failover** (V-2) |
+| `DELIVERY_COD_LEGACY_WRITE=1` | unset | Emergency dual-write while remittance stays on |
 | *(deprecated)* `DELIVERY_REMITTANCE_*_V2` / `DUAL_WRITE` | ignored | Reads, settle, and pause always use remittance |
 
 `RUSH_TRIP_PROJECTION` and `RUSH_SETTLEMENT` stay **off** until Phase 0's gate passes. Turning them on before that re-opens C-6.
@@ -1451,7 +1449,7 @@ Example D from Part 7, executed against a real stack:
 
 | Path | Rollback | Data risk |
 |------|----------|-----------|
-| Remittance write bugs | `DELIVERY_REMITTANCE_OFF=1` | New cash delivers stop posting; park/triage required |
+| Remittance write bugs | `DELIVERY_REMITTANCE_OFF=1` | Remittance stops; **legacy auto-writes** (V-2) so COD still records |
 | Need legacy shadow again | `DELIVERY_COD_LEGACY_WRITE=1` | Dual write resumes (emergency only) |
 | Settle / desk | Code revert | Posted settlements stay in remittance ledger |
 | Fleet COD read | Code revert to legacy tables | Observe-only; no write risk |
@@ -1494,7 +1492,10 @@ Recommendation: **no** in v1 (D-8). Add later as an explicit `payout_offset` set
 **Decided (harden):** per-courier column `pause_threshold_minor`, default J$10,000; editable on Remittance Desk. Remaining open: market-level defaults later if needed.
 
 **Q3 — What happens to a courier who stops working owing money?**  
-There is no write-off procedure, no ageing, and no collections policy. `ON DELETE RESTRICT` means they cannot be deleted while owing. Needs a decision, and the `write_off` event type is reserved for it.
+**Decided (Part 24 V-3 / Part 25 W-2):** Dash admin Write Off on Remittance Desk posts a
+`write_off` ledger event (reason + notes required; not a cash receipt). Wrong write-offs are
+reversible on the desk (restores owed balance). Prefer Settle when money was received.
+`ON DELETE RESTRICT` still blocks deleting a courier who owes until balance is cleared (settle or write-off).
 
 **Q4 — Does a fleet owner have any claim on COD cash from their courier?**  
 This design says no — Roam owns the receivable and the fleet observes. If product ever says yes, that is a genuine Layer B obligation and needs its own design. Do not solve it by re-opening C-6.
@@ -1518,6 +1519,8 @@ This design says no — Roam owns the receivable and the fleet observes. If prod
 ---
 
 # Part 21 — Implementation status (verified 2026-09-15)
+
+> **Historical audit.** Superseded by Part 23 (production cutover) and Part 24 (residuals). Do not treat open items below as current.
 
 The build landed. This part records what was verified against the working tree, so the next
 engineer does not have to re-derive it. Part 22 lists what is still open.
@@ -1578,6 +1581,8 @@ stays service-role-only with edge-mediated reads as designed.
 ---
 
 # Part 22 — What is left
+
+> **Historical audit.** Superseded by Part 23 (production cutover) and Part 24 (residuals). Do not treat Criticals / soak language below as current blockers.
 
 Two Criticals block the Phase 2 soak. R-6 is the one to decide on first, because it touches
 the production desk this build was supposed to leave alone.
@@ -1865,7 +1870,8 @@ Migration notes: [`20260915170000_remittance_production_cutover_and_stale_pendin
 
 ## 23.3 Still open from Part 19 (non-goals this pass)
 
-**Q1, Q3, Q4, Q5** remain unanswered — no netting, no write-off product, no fleet COD claim, no courier self-report.
+**Q1, Q4, Q5** remain deferred — no netting, no fleet COD claim, no courier self-report.
+**Q3** closed in Part 24 (admin Write Off on Remittance Desk).
 
 ## 23.4 Definition of done
 
@@ -1881,96 +1887,68 @@ Migration notes: [`20260915170000_remittance_production_cutover_and_stale_pendin
 ---
 ---
 
-# Part 24 — Residual items after cutover (verified 2026-09-15)
+# Part 24 — Residual items after cutover (closed 2026-09-15)
 
-Third verification pass. **All 13 R-items and all 4 N-items are closed**, and the cutover is
-consistent end to end: writes, reads, pause, settle, and recon all use the remittance ledger,
-with no v2/dual-write flags left anywhere in the code.
+Fourth pass closed V-1 / V-2 / V-3. Remittance remains sole production COD authority.
 
 ## 24.1 Verification run
 
 ```
 REMITTANCE_S6_DIFF=1 node scripts/check-remittance-separation.mjs   OK (S-2/S-3/S-4/S-6)
-deno test supabase/functions/delivery/remittance/                   6 passed, 0 failed
-pnpm --filter @roam/fleet test                                      240 files, 1397 passed, 0 failed
+deno test supabase/functions/delivery/remittance/                   write-off + prior suites green
 ```
-
-CI is green. N-1 (the stale `codBagTotal` assertion) is fixed, and the S-6 diff gate now runs
-with `REMITTANCE_S6_DIFF: '1'` set on the CI step, so the **class** guard is active rather than
-just the filename guard.
-
-Cutover consistency spot-checks:
 
 | Path | Verified |
 |------|----------|
-| `DELIVERY_REMITTANCE_READ_V2` / `_V2` / `_PAUSE_V2` / `_DUAL_WRITE` | zero references remain in the codebase |
-| Pause gate | reads remittance unconditionally; legacy only as a secondary for pre-cutover rows |
-| Fleet COD read | `courier_remittance_accounts`, unflagged, still zero write paths |
-| Collection | remittance default-on; legacy requires `DELIVERY_COD_LEGACY_WRITE=1` |
-| R-9 soak | recorded in 23.1 — 200 events, replay ×2 no growth, cleanup settle → 0 |
+| V-1 legacy drift | Removed from finance-recon alerts + desk recon strip; view/script remain for audit |
+| V-2 kill-switch | `DELIVERY_REMITTANCE_OFF=1` auto-enables legacy COD write + `REMITTANCE_KILL_SWITCH_LEGACY_FAILOVER` log |
+| V-3 / Q3 write-off | `POST /admin/remittance/write-off` + Remittance Desk Write Off (reason + notes + type-confirm) |
+| Q1 / Q4 / Q5 | Still deferred (non-goals) |
 
-## 24.2 Open
+## 24.2 Closed residuals
 
-Three small items. None blocks operation; the first two are alert hygiene.
-
-### V-1 — The legacy-drift alert is now guaranteed noise
-
-`v_remittance_legacy_drift` is still wired as a `warning` in finance-recon
-([`index.ts:459,503`](../supabase/functions/finance-recon/index.ts)) and on the desk
-reconciliation panel ([`pricingRoutes.ts:1433`](../supabase/functions/delivery/admin/pricingRoutes.ts)).
-
-R-10 was closed by deciding legacy drift is **not** a cutover gate — correct — but the alert
-was left in place. The backfill seeded opening balances so the two ledgers matched *at* cutover;
-from the first post-cutover collection onward, remittance grows while legacy stays frozen. The
-view will therefore be non-empty for every active courier, permanently, by design.
-
-A recon alert that always fires trains people to ignore the recon alerts that matter — and
-`v_remittance_drift`, `v_remittance_missing_collections` and `v_remittance_stale_pending` are
-sitting in the same list.
-
-**Fix (either):** drop `v_remittance_legacy_drift` from the finance-recon alert set and keep it
-as an on-demand admin query only; or redefine it to compare against the frozen pre-cutover
-snapshot instead of the live legacy balance. Prefer the first — legacy is audit-only now, and
-there is nothing left to reconcile against it.
-
-### V-2 — The kill-switch is a single flag with a two-flag meaning
-
-`DELIVERY_REMITTANCE_OFF=1` stops remittance writes, and legacy is off by default, so setting
-it alone means **no COD ledger write at all**: cash orders deliver, `payment_status` flips to
-`paid`, and nothing records what the courier is holding.
-
-`v_remittance_missing_collections` detects this, so it is not silent — but it is detected after
-the fact rather than prevented, and the person reaching for a kill-switch mid-incident is the
-least likely to read the migration comment that explains the pairing.
-
-**Fix:** make `remittanceWriteEnabled() === false` imply the legacy path (ignore
-`DELIVERY_COD_LEGACY_WRITE` when the kill-switch is on), or log a loud startup warning when
-`DELIVERY_REMITTANCE_OFF=1` is set without `DELIVERY_COD_LEGACY_WRITE=1`. The pairing is now
-documented in Part 3 either way.
-
-### V-3 — Part 19 Q1, Q3, Q4, Q5 are still unanswered
-
-Acknowledged as non-goals in 23.3. **Q3 is the one that will surface first in operation:** a
-courier who stops working while owing money has no procedure, `ON DELETE RESTRICT` deliberately
-blocks deleting them, and the `write_off` event type is reserved in the CHECK constraint with
-no code path that emits it. The first such courier becomes an ad-hoc SQL decision unless the
-policy is written down before then.
-
-Q1 (netting COD against earnings payouts), Q4 (fleet claim on COD), and Q5 (courier
-self-reported remittance) can wait for real usage.
+| ID | Status | Notes |
+|----|--------|-------|
+| V-1 | Closed | No `REMITTANCE_LEGACY_DRIFT` alerts; desk strip is drift / missing / trial / stale pending only |
+| V-2 | Closed | Kill-switch ⇒ legacy failover (any cash deliver, not only `pending_collection`) |
+| V-3 | Closed | Admin write-off event; no fake settlement receipt; Q3 decided in Part 19 |
 
 ## 24.3 What is genuinely done
 
-The ledger core, the separation from Driver Settlements, and the operational surfaces are
-complete and verified:
+- Ledger core + Driver Settlements separation remain intact.
+- Ops alerts are actionable (no permanent legacy-drift noise).
+- Incident kill-switch cannot orphan COD.
+- Stuck owing couriers have an auditable desk write-off path.
 
-- Every original Critical and High from Part 11 is closed.
-- Money moves only through `apply_remittance_event`, under a row lock, idempotent on replay
-  and on concurrent duplicate, refusing before it writes.
-- `is_paused` and the trial-balance identity are both enforced by the database rather than by
-  code that could regress.
-- Driver Settlements is untouched: `fleet-financials/**` has no remittance references, the S-6
-  diff gate guards co-changes in CI, and the S-1 fixture proves a delivered COD order moves the
-  weekly cash base by exactly zero.
+Deferred only: Q1 netting, Q4 fleet COD claim, Q5 courier self-report.
 
-Remaining work is alert hygiene (V-1, V-2) and product policy (V-3) — not money logic.
+---
+---
+
+# Part 25 — Post-write-off review (closed 2026-09-15)
+
+Write-off hardening complete. **W-1 and W-2 closed.** V-1–V-3 remain closed from Part 24.
+
+## 25.1 Verification
+
+| Claim | Status |
+|-------|--------|
+| W-1 write_off sign CHECK | [`20260915180000_remittance_write_off_sign.sql`](../supabase/migrations/20260915180000_remittance_write_off_sign.sql) applied on GoRide |
+| W-2 reverse write-off | `POST /remittance/reverse` accepts `eventId` → `reverseWriteOffEvent`; desk has Reverse this write-off + by event ID |
+| Settlements reverse | Unchanged (`settlementId` path) |
+| Failover caveat | Ops note only — legacy C-1/C-2 under kill-switch; drain back to remittance after incidents |
+
+## 25.2 Closed residuals
+
+| ID | Status | Notes |
+|----|--------|-------|
+| W-1 | Closed | `remittance_write_off_sign`: write_off ⇒ amount_minor ≤ 0 |
+| W-2 | Closed | Reversal restores receivable; idempotent; 409 if already reversed |
+
+## 25.3 Ops note — kill-switch failover
+
+Under `DELIVERY_REMITTANCE_OFF=1`, collections use legacy `recordCashCollection` (no idempotency / race-safe RPC). Short-term incident only — drain back to remittance and use `v_remittance_missing_collections` when restoring.
+
+## 25.4 Still deferred
+
+Q1 (netting), Q4 (fleet COD claim), Q5 (courier self-report) remain non-goals.

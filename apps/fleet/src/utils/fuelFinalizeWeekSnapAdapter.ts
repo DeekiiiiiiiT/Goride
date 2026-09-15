@@ -4,6 +4,7 @@
  */
 import {
   assembleWeekSnapshotsFromCalcInput,
+  computeFuelWeek,
   type BuiltWeekSnapshot,
   type WeekSnapEntry,
   type WeekSnapFuelRule,
@@ -23,6 +24,8 @@ export type FreezeSnapMoney = {
   blendedRatio: number;
   postedDriverShare: number;
   postedCompanyShare: number;
+  /** N-17: earned PA absorbed into company (0 when inactive). */
+  personalAllowanceEarnedCost: number;
   built: BuiltWeekSnapshot;
 };
 
@@ -148,13 +151,23 @@ export function freezeReportMoneyThroughAssembler(args: {
   const miscellaneousCost = built.miscellaneousCost;
   const totalGasCardCost = built.totalGasCardCost || Number(report.totalGasCardCost) || 0;
 
-  // PA: FCS moves earned personal fully to company after category split.
-  const earned = personalEarnedCostAbsorbed(report);
+  // N-17: PA absorb via shared computeFuelWeek (same path as server enforce/shadow).
+  const earnedRaw = personalEarnedCostAbsorbed(report);
   const overage = personalCostForCoverageSplit(report);
-  if (earned > 0.009 && Math.abs((Number(report.personalUsageCost) || 0) - overage - earned) < 0.02) {
-    driverShare = Math.max(0, driverShare - earned);
-    companyShare = companyShare + earned;
-  }
+  const earnedEligible =
+    earnedRaw > 0.009 &&
+    Math.abs((Number(report.personalUsageCost) || 0) - overage - earnedRaw) < 0.02;
+  const cats = categoryCostsFromReport(report);
+  const weekMoney = computeFuelWeek({
+    totalSpend: totalGasCardCost,
+    ...cats,
+    rule: toWeekSnapFuelRule(fuelRule) || null,
+    driverId: report.driverId,
+    personalAllowanceEarnedCost: earnedEligible ? earnedRaw : 0,
+  });
+  driverShare = weekMoney.driverShare;
+  companyShare = weekMoney.companyShare;
+  const personalAllowanceEarnedCost = weekMoney.personalAllowanceEarnedCost;
 
   const blendedRatio = totalGasCardCost > 0 ? driverShare / totalGasCardCost : 0;
   const settleSpend = snapEntries.reduce((s, e) => s + (Number(e.amount) || 0), 0);
@@ -169,6 +182,7 @@ export function freezeReportMoneyThroughAssembler(args: {
     blendedRatio,
     postedDriverShare,
     postedCompanyShare,
+    personalAllowanceEarnedCost,
     built: {
       ...built,
       driverShare,
@@ -179,6 +193,7 @@ export function freezeReportMoneyThroughAssembler(args: {
       metadata: {
         ...built.metadata,
         blendedRatio,
+        personalAllowanceEarnedCost,
       },
     },
   };

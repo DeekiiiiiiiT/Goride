@@ -1329,17 +1329,54 @@ export function registerPricingAdminRoutes(app: Hono) {
     return c.json(result);
   });
 
+  admin.post("/remittance/write-off", async (c) => {
+    const adminUser = adminFromCtx(c);
+    const denied = requireDashWrite(adminUser);
+    if (denied) return denied;
+    const body = await c.req.json().catch(() => ({}));
+    const { writeOffRemittance } = await import("../remittance/writeOffRemittance.ts");
+    const result = await writeOffRemittance(getDb(), {
+      courierId: String(body.courierId || ""),
+      amountMinor: Math.round(Number(body.amountMinor ?? (Number(body.amountJmd) || 0) * 100)),
+      reasonCode: String(body.reasonCode || ""),
+      notes: String(body.notes || ""),
+      expectedBalanceMinor: Math.round(
+        Number(body.expectedBalanceMinor ?? (Number(body.expectedBalanceJmd) || 0) * 100),
+      ),
+      idempotencyKey: String(body.idempotencyKey || crypto.randomUUID()),
+      actorId: adminUser.id,
+    });
+    if (!result.ok) return c.json(result, result.status as 400);
+    await writeKvAudit(
+      adminUser,
+      "roam_dash.remittance_write_off",
+      String(body.courierId || ""),
+      result.eventId,
+      JSON.stringify(result),
+    );
+    return c.json(result);
+  });
+
   admin.post("/remittance/reverse", async (c) => {
     const adminUser = adminFromCtx(c);
     const denied = requireDashWrite(adminUser);
     if (denied) return denied;
     const body = await c.req.json().catch(() => ({}));
-    const { reverseSettlement } = await import("../remittance/settleRemittance.ts");
-    const result = await reverseSettlement(
-      getDb(),
-      String(body.settlementId || body.settlement_id || ""),
-      adminUser.id,
-    );
+    const settlementId = String(body.settlementId || body.settlement_id || "").trim();
+    const eventId = String(body.eventId || body.event_id || "").trim();
+    if (settlementId && eventId) {
+      return c.json({ ok: false, error: "provide_settlementId_or_eventId_not_both" }, 400);
+    }
+    if (!settlementId && !eventId) {
+      return c.json({ ok: false, error: "settlementId_or_eventId_required" }, 400);
+    }
+    const {
+      reverseSettlement,
+      reverseWriteOffEvent,
+    } = await import("../remittance/settleRemittance.ts");
+    const result = eventId
+      ? await reverseWriteOffEvent(getDb(), eventId, adminUser.id)
+      : await reverseSettlement(getDb(), settlementId, adminUser.id);
     if (!result.ok) return c.json(result, result.status as 400);
     return c.json(result);
   });
@@ -1426,18 +1463,17 @@ export function registerPricingAdminRoutes(app: Hono) {
     const denied = requireDashWrite(adminUser);
     if (denied) return denied;
     const db = getDb();
-    const [drift, missing, trial, legacyDrift, stalePending] = await Promise.all([
+    // V-1: legacy drift kept as on-demand SQL only — not desk recon noise.
+    const [drift, missing, trial, stalePending] = await Promise.all([
       db.from("v_remittance_drift").select("*").limit(50),
       db.from("v_remittance_missing_collections").select("*").limit(50),
       db.from("v_remittance_trial_balance_breaks").select("*").limit(50),
-      db.from("v_remittance_legacy_drift").select("*").limit(50),
       db.from("v_remittance_stale_pending").select("*").limit(50),
     ]);
     return c.json({
       drift: drift.data ?? [],
       missingCollections: missing.data ?? [],
       trialBreaks: trial.data ?? [],
-      legacyDrift: legacyDrift.data ?? [],
       stalePending: stalePending.data ?? [],
     });
   });

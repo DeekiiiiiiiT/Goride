@@ -22,6 +22,7 @@ import { ymdToLocalDate } from '../../../utils/timezoneDisplay';
 import type { DateRange } from 'react-day-picker';
 import type { FuelAutoCloseDualApprovalMode } from '../../../utils/fuelDualApproval';
 import { isReconWeekSealed, reconWeekSealMessage } from '../../../utils/reconWeekSeal';
+import { isEntryInInclusiveYmdRange } from '../../../utils/fuelWeekPeriod';
 
 export const FUEL_RECON_WIZARD_PRIMARY =
   import.meta.env.VITE_FUEL_RECON_WIZARD_PRIMARY !== '0';
@@ -209,20 +210,33 @@ export function FuelReconciliationDashboard({
       from: ymdToLocalDate(period.startDate),
       to: ymdToLocalDate(period.endDate),
     };
+    // P-1: week-scoped props — wizard must not re-render on whole-fleet array churn.
+    const weekFuelEntries = fuelEntries.filter((e) =>
+      isEntryInInclusiveYmdRange(e.date, period.startDate, period.endDate),
+    );
+    const weekAdjustments = adjustments.filter((a) =>
+      isEntryInInclusiveYmdRange(a.date, period.startDate, period.endDate),
+    );
+    const weekTrips = trips.filter((t) =>
+      isEntryInInclusiveYmdRange(t.date, period.startDate, period.endDate),
+    );
+    const weekFinalized = finalizedReports.filter(
+      (f) => String(f.weekStart || '').split('T')[0] === period.startDate,
+    );
     return (
       <>
         <FuelPeriodWizard
           key={`${period.id}-${wizardSession}`}
           period={period}
           vehicles={vehicles}
-          trips={trips}
-          fuelEntries={fuelEntries}
-          adjustments={adjustments}
+          trips={weekTrips}
+          fuelEntries={weekFuelEntries}
+          adjustments={weekAdjustments}
           disputes={disputes}
           scenarios={scenarios}
           drivers={drivers}
           fuelCards={fuelCards}
-          finalizedReports={finalizedReports}
+          finalizedReports={weekFinalized}
           transactions={transactions}
           dateRange={dateRange}
           isRefreshing={isRefreshing}
@@ -249,7 +263,7 @@ export function FuelReconciliationDashboard({
             onOpenChange={(open) => !open && setResetPeriod(null)}
             period={resetPeriod}
             finalizedReports={finalizedReports}
-            fuelEntries={fuelEntries}
+            fuelEntries={weekFuelEntries}
             onComplete={() => {
               setResetPeriod(null);
               setWizardSession((n) => n + 1);

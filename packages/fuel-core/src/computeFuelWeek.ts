@@ -19,6 +19,8 @@ export type ComputeFuelWeekInput = {
   vehicleId?: string;
   weekStart?: string;
   weekEnd?: string;
+  /** N-17: PA earned personal absorbed fully to company after category split (major units). */
+  personalAllowanceEarnedCost?: number;
 };
 
 export type WeekCalc = {
@@ -32,7 +34,25 @@ export type WeekCalc = {
   vehicleId?: string;
   weekStart?: string;
   weekEnd?: string;
+  personalAllowanceEarnedCost: number;
 };
+
+/** Apply FCS Personal Allowance absorb: earned personal moves fully to company. */
+export function applyPersonalAllowanceAbsorb(
+  companyShare: number,
+  driverShare: number,
+  earnedRaw: number | null | undefined,
+): { companyShare: number; driverShare: number; earned: number } {
+  const earned = Number(earnedRaw) || 0;
+  if (earned <= 0.009) {
+    return { companyShare, driverShare, earned: 0 };
+  }
+  return {
+    driverShare: Math.max(0, driverShare - earned),
+    companyShare: companyShare + earned,
+    earned,
+  };
+}
 
 export function computeFuelWeek(input: ComputeFuelWeekInput): WeekCalc {
   const money = assembleLeftoverWeekMoney({
@@ -43,10 +63,15 @@ export function computeFuelWeek(input: ComputeFuelWeekInput): WeekCalc {
     personalUsageCost: Number(input.personalUsageCost) || 0,
     rule: input.rule,
   });
+  const absorbed = applyPersonalAllowanceAbsorb(
+    money.companyShare,
+    money.driverShare,
+    input.personalAllowanceEarnedCost,
+  );
   return {
     totalSpend: Number(input.totalSpend) || 0,
-    companyShare: money.companyShare,
-    driverShare: money.driverShare,
+    companyShare: absorbed.companyShare,
+    driverShare: absorbed.driverShare,
     miscellaneousCost: money.miscellaneousCost,
     overExplainedCost: money.overExplainedCost,
     residualKind: classifyFuelMiscResidual(
@@ -57,6 +82,7 @@ export function computeFuelWeek(input: ComputeFuelWeekInput): WeekCalc {
     vehicleId: input.vehicleId,
     weekStart: input.weekStart,
     weekEnd: input.weekEnd,
+    personalAllowanceEarnedCost: absorbed.earned,
   };
 }
 

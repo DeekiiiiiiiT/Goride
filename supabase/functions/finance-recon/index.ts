@@ -452,11 +452,11 @@ Deno.serve(async (req) => {
     // Delivery remittance Layer A′ alerts — non-fatal if views missing.
     try {
       const delivery = supabase.schema("delivery");
-      const [driftV, missingV, trialV, legacyV, stalePendingV] = await Promise.all([
+      // V-1: legacy drift is audit-only post-cutover (always noisy) — not alerted.
+      const [driftV, missingV, trialV, stalePendingV] = await Promise.all([
         delivery.from("v_remittance_drift").select("courier_id").limit(50),
         delivery.from("v_remittance_missing_collections").select("order_id").limit(50),
         delivery.from("v_remittance_trial_balance_breaks").select("id").limit(50),
-        delivery.from("v_remittance_legacy_drift").select("courier_id").limit(50),
         delivery.from("v_remittance_stale_pending").select("id, reference, courier_id").limit(50),
       ]);
       for (const row of driftV.data ?? []) {
@@ -493,18 +493,6 @@ Deno.serve(async (req) => {
           persisted: 1,
           expected: 0,
           severity: "critical",
-        });
-      }
-      for (const row of legacyV.data ?? []) {
-        drifts.push({
-          runId,
-          driverId: String((row as { courier_id: string }).courier_id),
-          week: fromYmd,
-          kind: "REMITTANCE_LEGACY_DRIFT",
-          field: "legacy_vs_v2",
-          persisted: 1,
-          expected: 0,
-          severity: "warning",
         });
       }
       for (const row of stalePendingV.data ?? []) {

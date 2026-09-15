@@ -986,26 +986,6 @@ export const FuelCalculationService = {
     },
 
     /**
-     * Generates reconciliation reports for the entire fleet (legacy vehicle-week).
-     * @deprecated Prefer generateDriverFleetReport
-     */
-    generateFleetReport: (
-        vehicles: FuelCalcVehicle[],
-        weekStart: Date,
-        weekEnd: Date,
-        trips: FuelCalcTrip[],
-        fuelEntries: FuelEntry[],
-        adjustments: MileageAdjustment[],
-        checkIns: any[],
-        scenarios: FuelScenario[],
-        deadheadMap?: Map<string, VehicleDeadheadInput>
-    ): WeeklyFuelReport[] => {
-        return vehicles.map(v => 
-            FuelCalculationService.calculateReconciliation(v, weekStart, weekEnd, trips, fuelEntries, adjustments, scenarios, deadheadMap?.get(v.id))
-        );
-    },
-
-    /**
      * Groups fuel entries and trips into odometer-based buckets.
      * Each bucket represents the distance traveled between two verified odometer scans (Anchors),
      * accumulating any "Floating" receipts that occurred between those scans.

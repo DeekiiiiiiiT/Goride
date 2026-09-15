@@ -1179,14 +1179,24 @@ export function registerFuelPeriodRoutes(app: Hono) {
         const {
           materialCategoryCostDeltas,
           resolveEngineCategoryCosts,
+          loadServerTaggedFuelEntriesForWeek,
         } = await import("./fuel_week_category_loader.ts");
         const { upsertFinanceReconDrifts } = await import("./finance_recon_drift.ts");
         const mismatches: Array<{ driverId: string; deltas: { field: string; delta: number }[] }> =
           [];
         const weekKey = ymd(period.week_start);
+        const weekEnd = ymd(period.week_end) || weekKey;
+        const serverTaggedEntries = await loadServerTaggedFuelEntriesForWeek(
+          orgId,
+          weekKey,
+          weekEnd,
+        );
         for (const snap of snapshots) {
           const snapObj = (snap && typeof snap === "object" ? snap : {}) as Record<string, unknown>;
-          const { authority: cats, snapCats } = resolveEngineCategoryCosts(snapObj);
+          const { authority: cats, snapCats } = resolveEngineCategoryCosts(
+            snapObj,
+            serverTaggedEntries,
+          );
           const hasCats =
             cats.rideShareCost + cats.companyUsageCost + cats.deadheadCost + cats.personalUsageCost >
               0.009 ||
@@ -1198,6 +1208,13 @@ export function registerFuelPeriodRoutes(app: Hono) {
             driverShare: Number(snapObj.driverShare) || 0,
             miscellaneousCost: Number(snapObj.miscellaneousCost) || 0,
           };
+          const meta = (snapObj.metadata && typeof snapObj.metadata === "object"
+            ? snapObj.metadata
+            : {}) as Record<string, unknown>;
+          const paEarned =
+            Number(snapObj.personalAllowanceEarnedCost) ||
+            Number(meta.personalAllowanceEarnedCost) ||
+            0;
           const recomputed = computeFuelWeek({
             totalSpend:
               Number(snapObj.totalGasCardCost) ||
@@ -1209,11 +1226,11 @@ export function registerFuelPeriodRoutes(app: Hono) {
             personalUsageCost: Number(cats.personalUsageCost) || 0,
             rule:
               snapObj.fuelRule ||
-              ((snapObj.metadata && typeof snapObj.metadata === "object"
-                ? snapObj.metadata
-                : {}) as Record<string, unknown>).fuelRule ||
+              meta.fuelRule ||
               null,
             driverId: String(snapObj.driverId || ""),
+            // N-17: same PA absorb as client freeze.
+            personalAllowanceEarnedCost: paEarned,
           });
           const deltas = [
             ...diffWeekCalc(clientCalc, recomputed),
@@ -1273,6 +1290,17 @@ export function registerFuelPeriodRoutes(app: Hono) {
                 422,
               );
             }
+            await insertAudit(
+              orgId,
+              periodId,
+              "fuel_force_client_money",
+              {
+                forceReason: String(body.forceReason || "").trim(),
+                mismatches,
+                mode: engineMode,
+              },
+              actorId(c),
+            );
           }
         }
       }

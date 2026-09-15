@@ -28,13 +28,29 @@ function remittanceWriteEnabled(): boolean {
   return Deno.env.get("DELIVERY_REMITTANCE_OFF") !== "1";
 }
 
-/** Legacy courier_cash_* only as emergency. Default off. */
+/**
+ * Legacy courier_cash_* :
+ * - Emergency dual-write: DELIVERY_COD_LEGACY_WRITE=1 (with remittance on)
+ * - V-2 failover: remittance kill-switch ON ⇒ always write legacy (never silent COD)
+ */
 function legacyWriteEnabled(): boolean {
+  if (!remittanceWriteEnabled()) return true;
   return Deno.env.get("DELIVERY_COD_LEGACY_WRITE") === "1";
 }
 
 function dualWriteEnabled(): boolean {
   return legacyWriteEnabled() && remittanceWriteEnabled();
+}
+
+/** Loud once per isolate when kill-switch forces legacy COD writes. */
+let killSwitchFailoverLogged = false;
+export function logKillSwitchLegacyFailover(orderId?: string): void {
+  if (remittanceWriteEnabled() || killSwitchFailoverLogged) return;
+  killSwitchFailoverLogged = true;
+  console.error(
+    "[REMITTANCE_KILL_SWITCH_LEGACY_FAILOVER] DELIVERY_REMITTANCE_OFF=1 — posting COD to legacy courier_cash_* only",
+    orderId ? { orderId } : {},
+  );
 }
 
 /** R-1 / N-4: remittance minors with retained as residual (DB CHECK by construction). */

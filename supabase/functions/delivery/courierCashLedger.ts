@@ -215,23 +215,30 @@ export async function handleOrderDelivered(
         await collectOnDelivery(sb, orderId, courierId);
       }
 
-      // Legacy path: emergency only (DELIVERY_COD_LEGACY_WRITE=1).
-      if (
-        legacyWriteEnabled() &&
-        paymentStatus === "pending_collection"
-      ) {
-        try {
-          const split = computeCodLedgerAmounts(row);
-          await recordCashCollection(sb, {
-            courierId,
-            orderId,
-            collectedAmountJmd: Number(row.total ?? 0),
-            platformDueJmd: split.platformDueJmd,
-            merchantDueJmd: split.merchantDueJmd,
-            split,
-          });
-        } catch (legacyErr) {
-          console.warn("[COD] legacy cash ledger failed:", legacyErr);
+      // Legacy: emergency dual-write, or V-2 kill-switch failover (never silent COD).
+      if (legacyWriteEnabled()) {
+        const killSwitchFailover = !remittanceWriteEnabled();
+        // Normal dual-write still gated on pending_collection; failover posts any cash deliver.
+        if (killSwitchFailover || paymentStatus === "pending_collection") {
+          try {
+            if (killSwitchFailover) {
+              const { logKillSwitchLegacyFailover } = await import(
+                "./remittance/collectOnDelivery.ts"
+              );
+              logKillSwitchLegacyFailover(orderId);
+            }
+            const split = computeCodLedgerAmounts(row);
+            await recordCashCollection(sb, {
+              courierId,
+              orderId,
+              collectedAmountJmd: Number(row.total ?? 0),
+              platformDueJmd: split.platformDueJmd,
+              merchantDueJmd: split.merchantDueJmd,
+              split,
+            });
+          } catch (legacyErr) {
+            console.warn("[COD] legacy cash ledger failed:", legacyErr);
+          }
         }
       }
     } catch (e) {

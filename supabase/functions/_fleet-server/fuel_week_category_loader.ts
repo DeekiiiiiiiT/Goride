@@ -4,6 +4,8 @@ import type { WeekSnapCategoryCosts } from "../../../packages/fuel-core/src/week
 export type FuelCategoryLoaderEntry = {
   amount: number;
   usageCategory?: string | null;
+  driverId?: string | null;
+  vehicleId?: string | null;
 };
 
 export type FuelCategoryLoaderTripAgg = Partial<WeekSnapCategoryCosts>;
@@ -96,26 +98,106 @@ function hasTaggedUsage(entries: FuelCategoryLoaderEntry[]): boolean {
 }
 
 /** Shadow/enforce: tripAgg or tagged entries beat top-level categoryCosts; untagged entries alone never dump to rideShare. */
-export function resolveEngineCategoryCosts(snap: Record<string, unknown>): {
+export function resolveEngineCategoryCosts(
+  snap: Record<string, unknown>,
+  /** Phase 4: server-loaded week entries with usage tags override client stamp. */
+  serverTaggedEntries?: FuelCategoryLoaderEntry[] | null,
+): {
   authority: WeekSnapCategoryCosts;
   snapCats: WeekSnapCategoryCosts | null;
   fromLoader: boolean;
+  authoritySource: "server_entries" | "trip_agg" | "tagged_snap_entries" | "snap_category_costs";
 } {
   const snapCats = snapCategoryCostsRaw(snap);
   const entries = settledEntriesFromSnap(snap);
   const tripAgg = tripAggFromSnap(snap);
-  // N-15: untagged settledEntries are wallet evidence only — not category authority.
-  const hasLoaderInputs = tripAgg != null || hasTaggedUsage(entries);
-  if (hasLoaderInputs) {
-    const tagged = entries.filter((e) => String(e.usageCategory || "").trim().length > 0);
+  const snapDriver = String(snap.driverId || "").trim();
+  const snapVehicle = String(snap.vehicleId || "").trim();
+  const serverTagged = (serverTaggedEntries || []).filter((e) => {
+    if (!String(e.usageCategory || "").trim()) return false;
+    const did = String(e.driverId || "").trim();
+    const vid = String(e.vehicleId || "").trim();
+    if (snapDriver && did && did === snapDriver) return true;
+    if (snapVehicle && vid && vid === snapVehicle) return true;
+    // Untargeted rows (no driver/vehicle on entry) never become authority.
+    return false;
+  });
+
+  // Phase 4: server week entries with usage tags are independent of client stamp.
+  if (serverTagged.length > 0) {
     return {
-      authority: categoryCostsFromEntriesAndTrips(tagged, tripAgg),
+      authority: categoryCostsFromEntriesAndTrips(serverTagged, null),
       snapCats,
       fromLoader: true,
+      authoritySource: "server_entries",
+    };
+  }
+
+  // N-15: untagged settledEntries are wallet evidence only — not category authority.
+  const hasTaggedSnap = hasTaggedUsage(entries);
+  if (tripAgg != null) {
+    return {
+      authority: categoryCostsFromEntriesAndTrips(
+        hasTaggedSnap ? entries.filter((e) => String(e.usageCategory || "").trim().length > 0) : [],
+        tripAgg,
+      ),
+      snapCats,
+      fromLoader: true,
+      authoritySource: "trip_agg",
+    };
+  }
+  if (hasTaggedSnap) {
+    const tagged = entries.filter((e) => String(e.usageCategory || "").trim().length > 0);
+    return {
+      authority: categoryCostsFromEntriesAndTrips(tagged, null),
+      snapCats,
+      fromLoader: true,
+      authoritySource: "tagged_snap_entries",
     };
   }
   const fallback = snapCats ?? { ...EMPTY };
-  return { authority: fallback, snapCats, fromLoader: false };
+  return {
+    authority: fallback,
+    snapCats,
+    fromLoader: false,
+    authoritySource: "snap_category_costs",
+  };
+}
+
+/** Phase 4: load org-week fuel entries that carry usageCategory for independent authority. */
+export async function loadServerTaggedFuelEntriesForWeek(
+  orgId: string,
+  weekStart: string,
+  weekEnd: string,
+): Promise<FuelCategoryLoaderEntry[]> {
+  try {
+    const { fromKvStore } = await import("./fleet_sql_bridge.ts");
+    const orgOr =
+      `value->>organizationId.eq.${orgId},value->>orgId.eq.${orgId},value->>org_id.eq.${orgId}`;
+    const { data, error } = await fromKvStore()
+      .select("value")
+      .like("key", "fuel_entry:%")
+      .or(orgOr)
+      .gte("value->>date", weekStart)
+      .lte("value->>date", weekEnd);
+    if (error) return [];
+    const out: FuelCategoryLoaderEntry[] = [];
+    for (const row of data || []) {
+      const v = (row as { value?: Record<string, unknown> })?.value;
+      if (!v || typeof v !== "object") continue;
+      const usage = (v.usageCategory ?? v.usage_category ?? null) as string | null;
+      if (!String(usage || "").trim()) continue;
+      out.push({
+        amount: Number(v.amount) || 0,
+        usageCategory: usage,
+        driverId: (v.driverId ?? v.driver_id ?? null) as string | null,
+        vehicleId: (v.vehicleId ?? v.vehicle_id ?? null) as string | null,
+      });
+    }
+    return out;
+  } catch {
+    return [];
+  }
 }
 
 export function materialCategoryCostDeltas(

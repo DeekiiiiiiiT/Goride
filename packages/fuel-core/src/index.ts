@@ -100,6 +100,7 @@ export {
 
 export {
   computeFuelWeek,
+  applyPersonalAllowanceAbsorb,
   diffWeekCalc,
   weekCalcMatches,
   type ComputeFuelWeekInput,

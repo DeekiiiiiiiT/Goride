@@ -129,6 +129,8 @@ jobs:
           supabase/functions/_fleet-server/fuel_week_category_loader.test.ts
           supabase/functions/_fleet-server/fuel_week_category_loader_enforce.test.ts
           supabase/functions/_fleet-server/fuel_week_closable_gate_n12.test.ts
+          supabase/functions/_fleet-server/fuel_week_n17_pa.test.ts
+          supabase/functions/_fleet-server/fuel_week_phase4_server_cats.test.ts
 
       - name: Deno test remittance money + residual + pause routes
         run: >

@@ -2161,7 +2161,6 @@ export function fetchRemittanceReconciliation(accessToken: string) {
     drift: unknown[];
     missingCollections: unknown[];
     trialBreaks: unknown[];
-    legacyDrift?: unknown[];
     stalePending?: unknown[];
   }>(accessToken, '/admin/remittance/reconciliation');
 }
@@ -2256,6 +2255,75 @@ export async function reverseRemittanceSettlement(accessToken: string, settlemen
     return { ok: true, ...data } as { ok: boolean; error?: string };
   } catch (e: unknown) {
     return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+export async function reverseRemittanceWriteOff(accessToken: string, eventId: string) {
+  try {
+    const data = await deliveryFetch<Record<string, unknown>>(
+      accessToken,
+      '/admin/remittance/reverse',
+      { method: 'POST', body: JSON.stringify({ eventId }) },
+    );
+    if (data && data.ok === false) {
+      return {
+        ok: false,
+        status: Number(data.status ?? 400),
+        error: String(data.error ?? 'reverse write-off failed'),
+      };
+    }
+    return { ok: true, ...data } as {
+      ok: boolean;
+      eventId?: string;
+      reversalEventId?: string;
+      stillPaused?: boolean;
+    };
+  } catch (e: unknown) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+export async function writeOffRemittance(
+  accessToken: string,
+  payload: {
+    courierId: string;
+    amountMinor: number;
+    reasonCode: string;
+    notes: string;
+    expectedBalanceMinor: number;
+    idempotencyKey: string;
+  },
+): Promise<{
+  ok: boolean;
+  status?: number;
+  error?: string;
+  eventId?: string;
+  balanceAfterMinor?: number;
+  stillPaused?: boolean;
+}> {
+  try {
+    const data = await deliveryFetch<Record<string, unknown>>(
+      accessToken,
+      '/admin/remittance/write-off',
+      { method: 'POST', body: JSON.stringify(payload) },
+    );
+    if (data && data.ok === false) {
+      return {
+        ok: false,
+        status: Number(data.status ?? 400),
+        error: String(data.error ?? 'write-off failed'),
+      };
+    }
+    return { ok: true, ...data } as {
+      ok: boolean;
+      eventId?: string;
+      balanceAfterMinor?: number;
+      stillPaused?: boolean;
+    };
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    const stale = /balance_changed|409|stale/i.test(msg);
+    return { ok: false, status: stale ? 409 : 500, error: msg };
   }
 }
 

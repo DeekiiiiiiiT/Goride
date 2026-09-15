@@ -866,6 +866,7 @@ function FuelPeriodWizardInner({
         actionLabel={stepHero.actionLabel}
         onAction={stepHero.onAction}
         actionDisabled={stepHero.actionDisabled}
+        focusKey={activeStepId}
       />
 
       <div className="space-y-3">

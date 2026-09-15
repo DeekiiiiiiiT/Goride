@@ -3,14 +3,130 @@
 **Scope:** Roam Fleet → Business Finance → Week Reconciliation → **Fuel** lane
 (landing → 6-step week wizard → Finalize → server period lock → fuel week statement).
 **Rev 1:** 2026-09-15 — read-only audit.
-**Rev 2–3:** 2026-09-15 — first and second verifications (§0C / §0B, superseded).
-**Rev 4:** 2026-09-15 — third verification (§0A, superseded).
-**Rev 5:** 2026-09-15 — fourth verification, working tree on `22f51d0f`. **Read §0 first.**
+**Rev 2–4:** 2026-09-15 — first through third verifications (§0C / §0B / §0A, superseded).
+**Rev 5:** 2026-09-15 — fourth verification (§0D, superseded).
+**Rev 6:** 2026-09-15 — fifth verification, working tree on `cfb6e29b`. **Read §0 first.**
 **Reviewed as:** Principal Systems Architect + Lead UI/UX + senior engineering committee, one verdict.
 
 ---
 
-## 0. Rev 5 — verification of the working tree
+## 0. Rev 6 — verification of the working tree
+
+**Every gate is green for the first time in this audit.** And in the same pass, production was
+moved from `FUEL_SERVER_ENGINE=off` straight to `enforce`, skipping the shadow soak — which has
+surfaced a concrete, predictable way for week close to start refusing. That is the whole of §0.
+
+### 0.1 Gate results — measured
+
+| Gate | Rev 5 | Rev 6 |
+|---|---|---|
+| `fuel-core typecheck` | PASS | **PASS** ✅ |
+| `fuel-core test` | 71/71 | **71/71** ✅ |
+| `deno check` incl. both fuel edge files | ❌ 5 errors | **PASS** ✅ |
+| `deno test` — fuel control suite | 14/14 | **15/15** ✅ |
+| `fleet test` | ❌ 1 | **240 files / 1,397 passed** ✅ |
+
+### 0.2 Closed this pass
+
+- **N-14 ✅** — the `snapMoney` union is discriminated; `deno check` is green.
+- **N-13 ✅** — `orderToFleetTrip` / `codBagTotal` reconciled; the fleet suite is fully green.
+- **N-15 (noise) ✅ — and the fixture was fixed the right way.** `fuelFinalizeService` now stamps
+  `metadata.tripCategoryAgg`, so `resolveEngineCategoryCosts` no longer falls through to the
+  "bucket everything into `rideShareCost`" path. The enforce test was rewritten
+  **production-shaped** — *"wallet settledEntries without usageCategory + Engine A
+  tripCategoryAgg"* — with both a no-false-mismatch case and a **tampered** case that must
+  produce deltas. That is the correction applied at the fixture level, which is where I flagged it.
+- **P-3 ✅** — real SQL pushdown: `fromKvStore()` with `like("key", "fuel_entry:%")` plus an org
+  predicate and a `gte`/`lte` date window, with the full-prefix scan kept only as a fallback.
+  This was the worst server-side cost in the section.
+- **P-4 ✅** — `statement_engine_probe` accepts and threads `fromRebuild`, so the rebuild map is
+  hoisted instead of rebuilt per driver.
+- **R-2 ✅** — the dead `overlayServerFuelPeriods` alias is gone.
+- **Housekeeping** — the `fuel_period_seal_error` migration was renamed to `…120500` to clear a
+  timestamp collision with the courier-remittance migration. Good catch; that class of collision
+  is painful to unpick later.
+
+### 0.3 🔴 New — production was moved to `enforce` without the soak
+
+| # | Sev | What |
+|---|---|---|
+| **N-16** | **Critical (governance)** | `docs/fuel-recon/stage0-gate.json` now reads `"currentProd": "enforce"`, `"next": null`, `"shadowMinWeeks": 0`. Revs 4 and 5 both gated this explicitly — the ladder required **staging shadow → ≥ 2 full weeks with zero unexpected drift → prod shadow → enforce** — and the `waitConditions` that carried *"shadowMinWeeks met with zero unexpected `fuel_engine_diff`"* were **rewritten to remove it**, replaced with "fixtures green / deno check green / deploy live". Green fixtures are not a soak. A soak is the only thing that tells you which divergence classes exist in **your** data. |
+
+`enforce` is not a logging mode. On any delta it returns **422 `SNAPSHOT_MISMATCH` and refuses
+the finalize.** The recovery path is a header-only break-glass
+(`X-Fuel-Force-Client-Money: 1` + an 8-char `forceReason`) that has **no UI affordance** — an
+operator hitting it sees "Finalization failed: SNAPSHOT_MISMATCH" and cannot self-recover.
+
+### 0.4 🔴 And here is the divergence class the soak would have found
+
+| # | Sev | What | Evidence |
+|---|---|---|---|
+| **N-17** | **High** | **Personal Allowance is applied on the client and not on the server.** `freezeReportMoneyThroughAssembler` runs `assembleLeftoverWeekMoney`, then **shifts the result**: `driverShare = max(0, driverShare − earned)` and `companyShare += earned`, where `earned = personalEarnedCostAbsorbed(report)`. The server's `computeFuelWeek` has **no PA handling at all** (no `earned`, no `personalAllowance`), and the enforce block does not compensate. So for any driver-week with an active PA earned-absorb, `diffWeekCalc` reports `driverShare` and `companyShare` deltas of **exactly `earned`** → 422 → **finalize blocked**. | [fuelFinalizeWeekSnapAdapter.ts:151-157](apps/fleet/src/utils/fuelFinalizeWeekSnapAdapter.ts#L151-L157) vs [computeFuelWeek.ts](packages/fuel-core/src/computeFuelWeek.ts) |
+
+This fires for every org with Personal Allowance enabled and any driver over the earned band —
+which, per `FUEL_SYSTEM_AUDIT`, is a deliberate live feature, not an edge case. It is exactly
+the kind of finding a two-week shadow soak exists to produce **as a drift row instead of as a
+blocked close**.
+
+### 0.5 🟠 The category check is still not independent
+
+`fuelFinalizeService` sets both `categoryCosts: cats` and `metadata.tripCategoryAgg: cats` — the
+**same object** — and the code comment says so outright:
+`// N-15: Engine A stamp for server loader — same object as categoryCosts (not entry buckets).`
+
+So `materialCategoryCostDeltas(snapCats, loaderCats)` compares a value to itself in production.
+It is not strictly a tautology — it will fire if a payload is altered selectively in transit,
+and the tampered test proves that — but it **cannot** catch the failure that actually matters:
+a client that computed its categories *wrongly but self-consistently*, which is precisely what a
+timed-out trip fetch produces (C-5's degraded path). Phase 3 independence — the server deriving
+categories from entries, trips and odometer itself — is still not achieved.
+
+That was an acceptable, honestly-labelled gap while prod was `off`. With prod on `enforce`, the
+posture inverts: the system now **refuses** closes on the strength of a check that is partly
+self-referential, while still not verifying the input class it was built for.
+
+### 0.6 Still open
+
+**Performance:** `P-1` (the dashboard still takes `trips: Trip[]` / `fuelEntries: FuelEntry[]`
+as whole-dataset props) · `P-9` (mount waterfall).
+**Cleanup:** `U-10` (step notes still component state) · `U-13` · `U-14` (partial — `FuelLeakageStep`
+now has 2 a11y attributes; focus-on-step-change still missing) · `R-3` · `R-4`
+(`generateFleetReport` still exported).
+
+### 0.7 Verdict
+
+**The engineering is done and it is good.** Every gate is green, every Rev 1 Critical is closed,
+the production money damage is repaired, P-3 and P-4 — the two real performance debts on the
+close path — are fixed properly, and the N-15 fixture was corrected at exactly the level I
+flagged rather than patched around.
+
+**The rollout decision is the problem, not the code.** Moving `off → enforce` in one step
+removed the only mechanism that converts unknown divergence into a drift row instead of a
+refused close, and N-17 is a concrete instance sitting in the codebase right now. Nothing here
+can post a *wrong* number — the failure mode is refusal, which is the safe direction — but a
+finance team that cannot close a week is an outage, and the break-glass for it is a curl command.
+
+### 0.8 Next actions, in order
+
+1. **Set `FUEL_SERVER_ENGINE=shadow` in prod today.** Same code path, same drift rows, no
+   refusals. Restore `shadowMinWeeks: 2` and the removed wait condition in `stage0-gate.json`.
+   If a week has already failed to close since the flip, that is N-17 and step 2 is the fix.
+2. **N-17** — mirror the PA absorb server-side. Cleanest: move the shift into `computeFuelWeek`
+   behind an optional `personalAllowanceEarnedCost` input, and stamp `earned` onto the snapshot
+   so the server has it. Test: a PA week must produce **zero** deltas, and a PA week with a
+   tampered `earned` must produce deltas.
+3. **Re-derive the soak exit criteria from data**, not from fixtures: zero unexpected
+   `fuel_engine_diff` rows across two full close cycles, with every diff class either fixed or
+   signed off in `finance_recon_drift`.
+4. **Expose the break-glass** as an admin-only confirm in the Finalize step, with the reason
+   captured — so a refused close is recoverable by the person standing in front of it.
+5. **Phase 3 independence** — derive `tripCategoryAgg` server-side from entries/trips/odometer
+   rather than accepting the client's stamp. This is what makes `enforce` mean what it says.
+6. **P-1 / P-9**, then **U-10 / U-13 / U-14 / R-3 / R-4**. None of it touches money.
+
+---
+
+## 0D. Rev 5 — verification of the working tree (superseded by §0)
 
 The headline is operational, not code: **the production C-2 damage is corrected.** Two new
 code defects arrived with this pass, one of which is the familiar pattern in a new disguise.

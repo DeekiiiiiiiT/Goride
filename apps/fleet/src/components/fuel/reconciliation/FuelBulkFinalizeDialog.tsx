@@ -22,6 +22,7 @@ import type { Vehicle } from '../../../types/vehicle';
 import { toast } from 'sonner';
 import { BulkWeekActionDialog, type BulkWeekActionResult } from './BulkWeekActionDialog';
 import { useFuelSettlementReopenGate } from './useFuelSettlementReopenGate';
+import { useFuelForceClientMoneyDialog } from './useFuelForceClientMoneyDialog';
 import { FUEL_SPEND_EPS } from '../../../utils/fuelMoneyEpsilon';
 import { isYmdInFuelWeek } from '../../../utils/fuelWeekPeriod';
 import { isFuelExceptionAcknowledged } from '../../../utils/fuelFinalizeGating';
@@ -137,6 +138,8 @@ export function FuelBulkFinalizeDialog({
   const queryClient = useQueryClient();
   const { confirmIfNeeded: confirmSettlementReopen, dialog: settlementReopenDialog } =
     useFuelSettlementReopenGate();
+  const { confirmIfMismatch: confirmForceClientMoney, dialog: forceClientMoneyDialog } =
+    useFuelForceClientMoneyDialog();
   const outstanding = periods
     .filter((p) => !p.locked && (p.status === 'outstanding' || p.status === 'in_progress'))
     .slice()
@@ -447,7 +450,7 @@ export function FuelBulkFinalizeDialog({
                 (s, r) => s + (Number(r.totalGasCardCost) || 0),
                 0,
               );
-              const jobRes = await api.enqueueFuelPeriodFinalize({
+              const enqueueArgs = {
                 periodId: periodRow.id,
                 version: periodRow.version || 1,
                 idempotencyKey: fuelPeriodFinalizeIdempotencyKey(
@@ -457,7 +460,15 @@ export function FuelBulkFinalizeDialog({
                 snapshots: result.snapshots || [],
                 totalSpend,
                 secondApproverThreshold,
-              }).catch(async (lockErr: any) => {
+              };
+              const jobRes = await api.enqueueFuelPeriodFinalize(enqueueArgs).catch(async (lockErr: any) => {
+                if (lockErr?.code === 'SNAPSHOT_MISMATCH') {
+                  const forceReason = await confirmForceClientMoney(
+                    Array.isArray(lockErr.mismatches) ? lockErr.mismatches : [],
+                  );
+                  if (!forceReason) throw lockErr;
+                  return api.enqueueFuelPeriodFinalize({ ...enqueueArgs, forceReason });
+                }
                 // Worker may OOM after lock — treat already-locked as success.
                 const fresh = await api.getFuelReconciliationPeriod(periodRow.id).catch(() => null);
                 if (fresh && (fresh.status === 'locked' || fresh.lockedAt || fresh.locked_at)) {
@@ -517,6 +528,7 @@ export function FuelBulkFinalizeDialog({
       }}
     />
     {settlementReopenDialog}
+    {forceClientMoneyDialog}
     </>
   );
 }

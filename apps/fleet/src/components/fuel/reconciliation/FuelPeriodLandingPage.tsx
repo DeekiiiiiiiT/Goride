@@ -202,7 +202,7 @@ function PeriodCard({
             className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-950"
             role="alert"
           >
-            Statement missing — Retry seal after fixing the cause. {period.fuelSealError}
+            Seal missing — retry after fixing the cause. {period.fuelSealError}
           </div>
         )}
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">

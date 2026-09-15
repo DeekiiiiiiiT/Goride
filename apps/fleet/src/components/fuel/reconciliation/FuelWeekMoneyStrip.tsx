@@ -99,6 +99,10 @@ export function FuelWeekMoneyStrip({
           className={`text-xs font-medium ${sourcesTie ? 'text-emerald-700' : 'text-rose-700'}`}
           role="status"
         >
+          <span className="sr-only">
+            Gas card {formatFuelMoney(gasCard)}, cash {formatFuelMoney(cashFromEarnings)}, total{' '}
+            {formatFuelMoney(totalSpend)}.
+          </span>
           Gas card + Cash {sourcesTie ? '=' : '≠'} Total {sourcesTie ? '✓' : '— check attribution'}
         </p>
       </section>

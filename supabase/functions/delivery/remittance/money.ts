@@ -21,3 +21,10 @@ export function settleIdempotencyKey(settlementId: string): string {
 export function reverseIdempotencyKey(eventId: string): string {
   return `cod:reverse:v1:${eventId}`;
 }
+
+export function writeOffIdempotencyKey(clientKey: string): string {
+  return clientKey.startsWith("cod:writeoff:")
+    ? clientKey
+    : `cod:writeoff:v1:${clientKey}`;
+}
+
